@@ -339,3 +339,4 @@ A task is complete only when
 - one logical Git commit is created
 
 Only then is the task ready for review.
+A passing test suite does not guarantee a successful implementation. Human review is always required before merging into develop.
