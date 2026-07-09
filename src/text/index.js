@@ -4,6 +4,11 @@ export {
 } from './IFontProvider.js';
 
 export {
+  FontProviderRegistry,
+  createFontProviderRegistry
+} from './FontProviderRegistry.js';
+
+export {
   Point2D,
   BoundingBox,
   PathCommand,

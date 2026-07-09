@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "python3 -m http.server 5173",
     "start": "python3 -m http.server 5173",
-    "test": "node tools/test-core-model.mjs && node tools/test-font-manager.mjs && node tools/test-vector-path.mjs",
+    "test": "node tools/test-core-model.mjs && node tools/test-font-manager.mjs && node tools/test-vector-path.mjs && node tools/test-font-provider-registry.mjs",
     "doctor": "npm run test"
   }
 }
