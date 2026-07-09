@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment/local config
+.env
+.env.local
+.env.*.local
+
+# Generated exports and QA output
+exports/
+release/
+releases/
+screenshots/generated/
+tests/output/
+golden-output/
+
+# Archives
+*.zip
+*.tar.gz
+
+# Python helper caches
+__pycache__/
+*.pyc

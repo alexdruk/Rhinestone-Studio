@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "product": "mug",
+  "units": "mm",
+  "canvas": {
+    "width": 210,
+    "height": 90
+  },
+  "layers": [
+    {
+      "id": "text-vitalina-serbin",
+      "type": "text",
+      "name": "Vitalina Serbin",
+      "visible": true,
+      "text": "Vitalina Serbin",
+      "font": "Courier Prime",
+      "mode": "centerline",
+      "heightMm": 18,
+      "stoneSizeMm": 2.0,
+      "gapMm": 0.3,
+      "color": "Crystal AB",
+      "autoFit": true
+    }
+  ]
+}

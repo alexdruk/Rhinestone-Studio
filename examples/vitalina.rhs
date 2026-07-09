@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "product": "mug",
+  "units": "mm",
+  "canvas": {
+    "width": 210,
+    "height": 90
+  },
+  "layers": [
+    {
+      "id": "text-vitalina",
+      "type": "text",
+      "name": "Vitalina",
+      "visible": true,
+      "text": "Vitalina",
+      "font": "Courier Prime",
+      "mode": "centerline",
+      "heightMm": 18,
+      "stoneSizeMm": 2.0,
+      "gapMm": 0.3,
+      "color": "Crystal AB"
+    }
+  ]
+}

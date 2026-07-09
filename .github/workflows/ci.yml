@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  repository-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check required project files
+        run: |
+          test -f README.md
+          test -f .gitignore
+          test -f docs/adr/ADR-0001-geometry-engine-single-source.md
+          test -f docs/architecture/architecture.md
+          test -d src/geometry
+          test -d examples
