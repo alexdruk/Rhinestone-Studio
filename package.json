@@ -4,6 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node tools/test-core-model.mjs"
+    "test": "node tools/test-core-model.mjs && node tools/test-font-manager.mjs"
   }
 }

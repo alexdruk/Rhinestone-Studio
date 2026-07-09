@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "fonts": [
+    {
+      "id": "courier-prime-regular",
+      "family": "Courier Prime",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/CourierPrime-Regular.ttf",
+      "role": "monospace",
+      "enabled": false,
+      "notes": "Placeholder registry entry. Add the font file before enabling OpenType rendering."
+    },
+    {
+      "id": "roboto-mono-regular",
+      "family": "Roboto Mono",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/RobotoMono-Regular.ttf",
+      "role": "monospace",
+      "enabled": false,
+      "notes": "Placeholder registry entry. Add the font file before enabling OpenType rendering."
+    },
+    {
+      "id": "great-vibes-regular",
+      "family": "Great Vibes",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/GreatVibes-Regular.ttf",
+      "role": "script",
+      "enabled": false,
+      "notes": "Placeholder registry entry. Add the font file before enabling OpenType rendering."
+    }
+  ]
+}
