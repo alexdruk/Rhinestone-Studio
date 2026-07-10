@@ -14,7 +14,7 @@ RS-0003.5A
 
 # Status
 
-IMPLEMENTED
+APPROVED
 
 Allowed values:
 
@@ -243,8 +243,4 @@ unchanged (only the `scripts.test` string was extended).
 
 # Next Recommended Task
 
-Integrate `GeometryEngine` into the live browser application (a later
-milestone per TASK.md's Background section), replacing the inline
-`GeometryEngine` currently defined in `index.html`, or add shape-layer
-support (circle/rectangle) to `GeometryEngine` following the same pattern
-established here.
+Ready for merge
