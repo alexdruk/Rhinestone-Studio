@@ -1,14 +1,12 @@
 # Rhinestone Studio — Current Task
 
----
-
 ## Task ID
 
-RS-0003.5
+RS-PROCESS-001
 
 ## Title
 
-OpenType Integration
+Validate AI Engineering Workflow
 
 ## Status
 
@@ -22,60 +20,45 @@ feature/m2-vector-text
 
 # Objective
 
-Replace the existing canvas-based text sampling with the new OpenTypeProvider.
+Validate the AI engineering workflow by implementing one small, low-risk feature.
 
-The Geometry Engine remains the single source of truth.
+Register the existing OpenTypeProvider with the FontProviderRegistry.
 
-The renderer must only render the generated StoneLayout.
+This task validates that the engineering workflow, documentation, testing,
+commit process and reporting all work correctly.
+
+No user-visible functionality should change.
 
 ---
 
 # Expected Visible Change
 
-YES
+NONE
 
-Text quality should improve.
-
-The following controls should begin working correctly:
-
-- Font
-- Font Size
-- Letter Spacing
-- Horizontal Alignment
-- Fill
-- Outline
-
-The Production Layout and Cup Preview must always display the same StoneLayout.
+The application should behave exactly as before.
 
 ---
 
 # Allowed Files
 
-src/text/**
-
-src/geometry/**
-
-src/**
-
-tools/**
-
-package.json
-
-app.js (ONLY if required for integration)
+- src/text/**
+- package.json
+- tools/**
+- TASK_RESULT.md
 
 ---
 
 # Forbidden Files
 
-index.html
+- index.html
+- style.css
+- app.js
+- renderer/**
+- geometry/**
 
-style.css
+Do not redesign the architecture.
 
-Do not redesign the UI.
-
-Do not redesign repository structure.
-
-Do not redesign architecture.
+Do not implement future milestones.
 
 ---
 
@@ -83,30 +66,25 @@ Do not redesign architecture.
 
 npm test
 
-If available
-
-npm run build
-
-Run the application.
+git status
 
 ---
 
 # Acceptance Criteria
 
-- [ ] Application starts.
-- [ ] No JavaScript console errors.
-- [ ] Existing automated tests pass.
-- [ ] Font selection changes text.
-- [ ] Font size changes layout.
-- [ ] Letter spacing changes layout.
-- [ ] Production Layout equals Cup Preview.
-- [ ] Geometry Engine generates the layout.
+- [ ] OpenTypeProvider is registered correctly.
+- [ ] Existing tests pass.
+- [ ] No UI files changed.
+- [ ] No renderer files changed.
+- [ ] TASK_RESULT.md updated.
+- [ ] One logical Git commit created.
+- [ ] Feature branch pushed.
 
 ---
 
 # Commit Message
 
-feat(text): integrate OpenType provider into text engine
+chore(process): register OpenType provider
 
 ---
 
@@ -115,3 +93,5 @@ feat(text): integrate OpenType provider into text engine
 Update TASK_RESULT.md.
 
 Return the standard implementation report.
+
+Do not explain the implementation.
