@@ -100,11 +100,13 @@ await test('OpenTypeProvider is not instantiated anywhere in the probe or app.js
   assert.ok(!/new\s+OpenTypeProvider\s*\(/.test(appJs), 'app.js must not instantiate OpenTypeProvider');
 });
 
-// 13. `FontManager` is not used for live font loading.
-await test('FontManager is not instantiated or used for live font loading in the probe or app.js', () => {
+// 13. `FontManager` is not used for live font loading — this was RS-0003.5B2's explicit
+// out-of-scope restriction. RS-0003.5B3 implements exactly that live usage by design, in
+// app.js only; the diagnostic probe itself must still never instantiate or use FontManager.
+await test('FontManager is not instantiated by the diagnostic probe; app.js uses it live (RS-0003.5B3)', () => {
   assert.ok(!/new\s+FontManager\s*\(/.test(probeSource), 'the probe must not instantiate FontManager');
-  assert.ok(!/new\s+FontManager\s*\(/.test(appJs), 'app.js must not instantiate FontManager');
   assert.ok(!/\.getFont\s*\(/.test(probeSource), 'the probe must not call FontManager.getFont()');
+  assert.match(appJs, /FontManager\.fromUrl\(/, 'app.js is expected to load FontManager live as of RS-0003.5B3');
 });
 
 await test('the probe does not instantiate the permanent GeometryEngine or generate stones', () => {

@@ -56,23 +56,48 @@ await test('DOM IDs referenced by app.js exist in index.html', () => {
   }
 });
 
-await test('app.js does not import OpenTypeProvider', () => {
-  assert.ok(!appJs.includes('OpenTypeProvider'), 'app.js must not reference OpenTypeProvider in this migration task');
-  assert.ok(!appJs.includes('opentype.js'), 'app.js must not reference opentype.js in this migration task');
+await test('app.js does not import OpenTypeProvider directly', () => {
+  // RS-0003.5B3 requires app.js to drive OpenTypeProvider indirectly, through
+  // FontProviderRegistry / the permanent GeometryEngine, so the module boundary from
+  // docs/ARCHITECTURE.md ("Text Engine" providers are consumed only via the registry) holds.
+  // app.js must never import or reference the provider class itself.
+  assert.ok(!appJs.includes('OpenTypeProvider'), 'app.js must not reference OpenTypeProvider directly');
+  assert.ok(!appJs.includes("'opentype.js'") && !appJs.includes('"opentype.js"'), 'app.js must not reference the opentype.js bare specifier directly');
 });
 
-await test('app.js does not import src/geometry/GeometryEngine.js', () => {
-  assert.ok(!appJs.includes('src/geometry/GeometryEngine'), 'app.js must not import the permanent vector-text GeometryEngine yet');
+await test('app.js imports the permanent GeometryEngine for live text generation (RS-0003.5B3)', () => {
+  assert.match(
+    appJs,
+    /import\s*\{\s*GeometryEngine\s+as\s+\w+\s*\}\s*from\s*['"]\.\/src\/geometry\/index\.js['"]/,
+    'app.js must import the permanent GeometryEngine from src/geometry/index.js'
+  );
+  assert.ok(appJs.includes('generateTextLayout'), 'app.js must call generateTextLayout for live text generation');
 });
 
-await test('app.js only imports the RS-0003.5B2 browser dependency probe', () => {
+await test('app.js only imports the RS-0003.5B2 probe and the RS-0003.5B3 permanent-module entry points', () => {
   const importLines = appJs.match(/^\s*import\b.*$/gm) || [];
+  const allowed = [
+    /BrowserDependencyProbe\.js/,
+    /from\s*['"]\.\/src\/geometry\/index\.js['"]/,
+    /from\s*['"]\.\/src\/fonts\/index\.js['"]/,
+    /from\s*['"]\.\/src\/text\/index\.js['"]/
+  ];
   for (const line of importLines) {
     assert.ok(
-      /BrowserDependencyProbe\.js/.test(line),
-      `app.js must only import the browser dependency probe, found: ${line}`
+      allowed.some((pattern) => pattern.test(line)),
+      `app.js must only import the browser probe or the permanent geometry/fonts/text barrel modules, found: ${line}`
     );
   }
+  assert.ok(!appJs.includes('node_modules'), 'app.js must not import directly from node_modules');
+  // A blanket http(s):// scan would false-positive on the SVG exporter's
+  // `xmlns="http://www.w3.org/2000/svg"` namespace URI, which is not a network
+  // request. Check for actual CDN hostnames instead.
+  const cdnHostPattern = /\b(unpkg\.com|cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|jspm\.dev|esm\.sh|skypack\.dev)\b/;
+  assert.ok(!cdnHostPattern.test(appJs), 'app.js must not reference a public CDN URL');
+});
+
+await test('app.js does not import the permanent src/core Project/Layer model (RS-0003.5B3 out of scope)', () => {
+  assert.ok(!appJs.includes('src/core/'), 'app.js must not import src/core/** in this task');
 });
 
 await test('the three updated legacy guard tests no longer reject app.js or index.html', async () => {
