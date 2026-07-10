@@ -1,16 +1,24 @@
 # Rhinestone Studio Architecture
 
-Version: 1.0
+Version: 2.0
+
+Last synchronized with the live repository at commit `5fb768c` (`develop`), which merges
+`feature/rs-0003.5c2-unified-rendering-pipeline` (task RS-0003.5C2). Where this document and the
+repository disagree, the repository is the source of truth — see `docs/AI_ENGINEER.md`.
 
 ---
 
 # Purpose
 
-This document describes the architectural principles of Rhinestone Studio.
+This document describes the architectural principles of Rhinestone Studio, and — starting with
+this revision — the actual state of the implementation against those principles.
 
 Every implementation must follow these principles.
 
-If an implementation conflicts with this document, the implementation is wrong.
+If an implementation conflicts with this document's **principles** (the sections below "Core
+Principle" through "Layers"), the implementation is wrong. Where the document's **implementation
+status** sections describe orchestration code, adapters, legacy code, or limitations, they are a
+factual snapshot, not a license to add more of the same.
 
 Architecture changes require explicit approval.
 
@@ -49,6 +57,13 @@ Every consumer uses exactly the same StoneLayout.
 
 No consumer generates geometry.
 
+**Implementation status:** true in the live application as of RS-0003.5C2. Text and shape layers
+both resolve through the permanent `src/geometry/GeometryEngine.js`, and the 2D canvas, cup
+preview, SVG export, and Generated Layout JSON export are all driven from one merged `StoneLayout`
+object built once per update in `app.js`. See "Current Implementation" below for the exact call
+graph and for the one respect in which the merge step (not stone generation) still lives outside
+`src/geometry/**`.
+
 ---
 
 # Project Model
@@ -69,6 +84,13 @@ The project never contains pixels.
 
 Everything is stored in millimeters.
 
+**Implementation status:** two project models currently exist and are not the same object.
+`src/core/Project.js` / `src/core/Layer.js` implement this principle exactly (a validated,
+serializable project/layer model, mm-only, no pixels). `app.js`, however, builds and edits its own
+ad hoc plain-object project (`defaultProject()` in `app.js`) and never imports `src/core/**` — a
+deliberate, test-enforced exclusion carried forward from RS-0003.5B3 through RS-0003.5C2, not an
+oversight. See "Current Architectural Limitations".
+
 ---
 
 # Geometry Engine
@@ -85,6 +107,15 @@ Responsibilities:
 - normalization
 
 The Geometry Engine never renders.
+
+**Implementation status:** `src/geometry/GeometryEngine.js` implements text layout
+(`generateTextLayout()`) and shape layout (`generateShapeLayout()`, circle/rectangle) with shared
+contour-flattening (`ContourGeometry.js`) and outline/fill sampling (`StoneSampler.js`). It has no
+dependency on the DOM, Canvas, or any renderer/exporter. "Collision detection" and cross-layer
+"normalization" are not implemented inside the Geometry Engine — proximity deduplication across
+layers is currently performed by `app.js`'s orchestration code, one layer at a time never re-runs
+inside the permanent engine (see "Current Implementation" and "Current Architectural
+Limitations").
 
 ---
 
@@ -104,6 +135,13 @@ Example
 
 Nothing else should invent stone positions.
 
+**Implementation status:** implemented as `src/geometry/Stone.js` (a single stone) and
+`src/geometry/StoneLayout.js` (an immutable collection with `count`, `getBoundingBox()`,
+`widthMm`/`heightMm`, and `toJSON()`/`fromJSON()`). `StoneLayout` requires exactly one non-empty
+`layerId` per instance — it was designed as a per-generation-call product. `app.js`'s merged,
+cross-layer product uses `layerId: 'project'` as a sentinel container id; every `Stone` inside it
+still carries its own real per-layer id.
+
 ---
 
 # Renderer
@@ -119,6 +157,14 @@ Responsibilities
 - interaction
 
 The renderer never computes geometry.
+
+**Implementation status:** `src/renderer/CanvasRenderer2D.js` (2D production canvas) and
+`src/renderer/CupRenderer.js` (cup/mug preview) both consume only `StoneLayout` and plain
+viewport/display options — neither references `Project`, `Layer`, or a layer `type`. Both are 2D
+Canvas-2D-API renderers; there is no 3D/WebGL renderer yet, so "camera" and "materials" in the
+list above are aspirational. Layer-aware interaction (selection outline/handles, drag/resize) is
+intentionally kept in `app.js`, not in these modules, since it requires layer awareness the
+renderer contract deliberately excludes.
 
 ---
 
@@ -136,6 +182,14 @@ Examples
 
 Exporters never generate geometry.
 
+**Implementation status:** `src/export/SvgExporter.js` (`stoneLayoutToSvg()`) is a pure
+string-generation exporter with no DOM/Canvas dependency — implemented and consuming only
+`StoneLayout`. "Generated Layout JSON" export uses `StoneLayout.toJSON()` directly (no separate
+exporter module needed). "PNG" export is `canvas.toBlob()` against whichever canvas
+`CanvasRenderer2D`/`CupRenderer` last drew — a real export of the rendered `StoneLayout`, but
+implemented as a render-then-capture step rather than a standalone `src/export/**` module. DXF
+export and Stone Reports do not exist yet.
+
 ---
 
 # Validation Engine
@@ -151,6 +205,13 @@ Examples
 
 Validation never changes data.
 
+**Implementation status:** not implemented as a dedicated module. `src/core/Project.js.validate()`
+checks canvas dimensions, units, and duplicate layer ids, but it operates on the unused
+`src/core/Project` model, not on `app.js`'s live ad hoc project object — so this validation does
+not currently run against anything the live app edits. There is no overlap or missing-font
+validation anywhere in the codebase; a missing font manifest is instead handled as a runtime error
+surfaced in the status bar (see "Current Architectural Limitations").
+
 ---
 
 # Units
@@ -162,6 +223,11 @@ millimeters
 Rendering may convert to pixels.
 
 Manufacturing always remains millimeters.
+
+**Implementation status:** true everywhere in `src/geometry/**`, `src/text/**`, and
+`src/renderer/**`/`src/export/**` — all internal fields are named with an explicit `Mm` suffix
+(`xMm`, `heightMm`, `stoneSizeMm`, ...), and pixel conversion happens only inside
+`CanvasRenderer2D.fitTransform()` / `CupRenderer`'s local transform math.
 
 ---
 
@@ -184,6 +250,10 @@ Every product supplies:
 
 Products never generate layouts.
 
+**Implementation status:** not implemented. `app.js`'s ad hoc project object carries a `product`
+field (default `'mug'`), but nothing in the codebase reads it — there is exactly one hardcoded cup
+preview (`CupRenderer.renderCup()`), not a plugin system. This is future work, not a regression.
+
 ---
 
 # Text Engine
@@ -201,6 +271,13 @@ Every provider returns vector paths.
 
 The Geometry Engine samples those paths.
 
+**Implementation status:** implemented via `src/text/IFontProvider.js` (the provider contract),
+`src/text/OpenTypeProvider.js` (the only OpenType-aware module in the codebase), and
+`src/text/FontProviderRegistry.js` (provider selection). `src/text/defaultFontProviders.js` wires
+one `OpenTypeProvider` as the default/only registered provider. No SVG-font, variable-font, or
+Hershey-font provider exists yet — the registry supports registering more, but only OpenType is
+implemented.
+
 ---
 
 # Layers
@@ -216,6 +293,12 @@ Examples
 - SVG
 
 Layers never render themselves.
+
+**Implementation status:** `src/core/Layer.js` defines `TextLayer`/`CircleLayer`/`RectangleLayer`
+(plus generic `svg`/`manual` layer type slots that have no generator yet). `app.js`'s live project
+object independently supports the same three editable layer types (text/circle/rectangle) as
+plain objects, not `Layer` instances. Neither model implements `svg` or `manual` (logo) layers
+yet.
 
 ---
 
@@ -240,6 +323,313 @@ StoneLayout
 ↓
 
 Renderer + Exporters
+
+**Implementation status:** true in the live app. All layer edits (typing text, dragging a shape,
+changing stone size/color/gap) mutate `app.js`'s project object only; every mutation calls
+`updateAll()`, which regenerates the whole `StoneLayout` from scratch and redraws every consumer
+from it. Nothing in `app.js` mutates a `Stone` or `StoneLayout` in place.
+
+---
+
+# Current Implementation
+
+This section describes how the principles above are actually realized in the live browser
+application as of RS-0003.5C2, and is expected to change as future milestones land. The
+normative principles above this section do not change; this section is the map from principle to
+code.
+
+## Layer map
+
+| Layer | Modules | Depends on |
+|---|---|---|
+| Project/Layer model (unused by the live app) | `src/core/**` | nothing else in `src/**` |
+| Font registry | `src/fonts/**` | nothing else in `src/**` |
+| Vector text/shape providers | `src/text/**` | `src/fonts/**` (for font records), `opentype.js` |
+| Geometry generation | `src/geometry/**` | `src/text/**` (VectorPath primitives, FontProviderRegistry) |
+| 2D + cup rendering | `src/renderer/**` | `src/geometry/**` (StoneLayout, Stone) |
+| Export | `src/export/**` | `src/geometry/**`, `src/renderer/StoneColors.js` |
+| Browser compatibility | `src/browser/**` | `src/text/**`, `src/fonts/**`, `src/geometry/**` (proves resolution), `opentype.js` |
+| Orchestration | `app.js` | every barrel module above except `src/core/**` |
+
+Every permanent module (`src/core`, `src/fonts`, `src/text`, `src/geometry`, `src/renderer`,
+`src/export`) is consumed only through its `index.js` barrel — `app.js` never imports an internal
+file directly, and `src/renderer/**`/`src/export/**` contain no reference to `Project`, `Layer`,
+or a layer `type` string, enforced by `tools/test-render-export-pipeline.mjs`.
+
+## 1. Overall application data flow
+
+```mermaid
+flowchart TD
+    subgraph AppState["app.js — orchestration"]
+        Project["app.js project object\n(ad hoc; NOT src/core/Project)"]
+        LocalGE["local GeometryEngine bridge\n(app.js: generate())"]
+        MergeDedupe["merge per-layer StoneLayouts\n+ proximity dedupe()"]
+        MergedSL["merged StoneLayout\nlayerId: 'project'"]
+    end
+
+    subgraph Permanent["permanent modules (src/**)"]
+        FM["FontManager\nsrc/fonts/FontManager.js"]
+        FPR["FontProviderRegistry / OpenTypeProvider\nsrc/text/**"]
+        PermGE["GeometryEngine\nsrc/geometry/GeometryEngine.js"]
+        PerLayerSL["StoneLayout (per layer)\nsrc/geometry/StoneLayout.js"]
+        R2D["CanvasRenderer2D\nsrc/renderer/CanvasRenderer2D.js"]
+        RCup["CupRenderer\nsrc/renderer/CupRenderer.js"]
+        Svg["SvgExporter\nsrc/export/SvgExporter.js"]
+    end
+
+    Project --> LocalGE
+    FM --> FPR
+    FPR --> PermGE
+    LocalGE -->|"per visible layer"| PermGE
+    PermGE --> PerLayerSL
+    PerLayerSL --> MergeDedupe
+    MergeDedupe --> MergedSL
+
+    MergedSL --> R2D --> LayoutCanvas["layoutCanvas"]
+    MergedSL --> RCup --> CupCanvas["cupCanvas"]
+    MergedSL --> Svg --> SVGOut["2D SVG export"]
+    MergedSL --> LayoutJSON["Generated Layout JSON\n(StoneLayout.toJSON())"]
+    LayoutCanvas --> PNG2D["2D PNG export"]
+    CupCanvas --> PNGCup["Cup PNG export"]
+    Project --> ProjectJSON["Project JSON export\n(JSON.stringify(project))"]
+```
+
+The box labeled "app.js — orchestration" is not part of the permanent architecture: it is the one
+place the cross-layer merge/dedupe step and the two competing project models currently meet. See
+"Orchestration Layer" and "Current Architectural Limitations" below.
+
+## 2. Browser startup and dependency loading
+
+```mermaid
+flowchart TD
+    IndexHTML["index.html"]
+    ImportMap["import map\n'opentype.js' -> ./src/browser/OpenTypeBrowserAdapter.js"]
+    AppJS["app.js\n(type=module script)"]
+    Probe["import './src/browser/BrowserDependencyProbe.js'\n(side-effect only; not called again)"]
+    ProbeModule["BrowserDependencyProbe.js\nimports OpenTypeProvider, FontManager,\nsrc/text/index.js, src/geometry/index.js"]
+    Adapter["OpenTypeBrowserAdapter.js"]
+    OpenTypeESM["node_modules/opentype.js/dist/opentype.mjs\n(named exports only)"]
+    FontManifest["FontManager.fromUrl('./assets/fonts/manifest.json')"]
+    Registry["createDefaultFontProviderRegistry(fontManager)\n-> registers OpenTypeProvider"]
+    PermGE["new PermanentGeometryEngine({ fontProviderRegistry })"]
+
+    IndexHTML --> ImportMap
+    IndexHTML --> AppJS
+    AppJS -->|"1. first import"| Probe --> ProbeModule
+    ProbeModule -.->|"bare specifier 'opentype.js'"| ImportMap
+    ImportMap --> Adapter --> OpenTypeESM
+    AppJS -->|"2. await"| FontManifest --> Registry --> PermGE
+```
+
+`BrowserDependencyProbe.js` exists solely to force the whole permanent-module import graph
+(`src/text/**`, `src/fonts/**`, `src/geometry/**`, and transitively `opentype.js` through the
+import map) to resolve before `app.js` runs any live logic. Its exported
+`getBrowserDependencyProbeStatus()` function is never called by `app.js` or by any test — the
+import's side effect (throwing at load time if resolution fails) is the entire contract.
+
+`OpenTypeBrowserAdapter.js` exists because `src/text/OpenTypeProvider.js` imports `opentype.js` as
+a default import (matching Node's CommonJS/UMD resolution of the package), while the browser's
+import map instead resolves the same bare specifier to `opentype.js`'s native ES-module build,
+which has no default export. The adapter re-exports that build's named `parse` export as a
+default export so `OpenTypeProvider.js` itself needs no browser-specific branch.
+
+## 3. Text-generation flow
+
+```mermaid
+flowchart TD
+    Layer["Text layer params\ntext, font, height, textMode, stoneSize, gap, color, autoFit"]
+    Resolve["app.js generateTextStonesLive()\nresolve fontId (courier-prime-regular /\ngreat-vibes-regular only, else default),\nmode = textMode==='fill' ? 'fill' : 'outline'"]
+    PermGen["GeometryEngine.generateTextLayout()"]
+    PerChar["per character:\nFontProviderRegistry.getTextPath()"]
+    OTP["OpenTypeProvider\nparse font (cached per fontId),\ncharToGlyph + kerning"]
+    VP["VectorPath / Contour\n(already in mm)"]
+    Translate["translateContour()\nposition along the pen line"]
+    Flatten["flattenContourToPolygon()\nfixed 16-segment bezier subdivision"]
+    Sample["sampleOutlinePoints()\nor sampleFillPoints() (even-odd rule\nkeeps glyph holes, e.g. 'o')"]
+    Stones["Stone[] -> StoneLayout\n(sourceMode set, per-layer)"]
+    AutoFit["app.js: if autoFit and width\nexceeds canvas, regenerate once\nat a scaled heightMm"]
+    Center["app.js: center on canvas\nvia bounding box offset"]
+    Merge["merged into project StoneLayout"]
+
+    Layer --> Resolve --> PermGen
+    PermGen --> PerChar --> OTP --> VP --> Translate --> Flatten --> Sample --> Stones
+    Stones --> AutoFit --> Center --> Merge
+```
+
+Auto-fit is a single deterministic rescale, not an iterative fitter: if the first pass's
+`widthMm` exceeds `canvas.width - 10`, `app.js` calls `generateTextLayout()` exactly once more at
+a linearly scaled `heightMm`. It does not loop or re-check the second result.
+
+## 4. Shape-generation flow
+
+```mermaid
+flowchart TD
+    Layer["Circle/Rectangle layer params\ncx/cy/r or x/y/w/h, stoneSize, gap, color"]
+    Resolve["app.js generateShapeStonesLive()"]
+    PermGen["GeometryEngine.generateShapeLayout()"]
+    VPCreate["createCircleVectorPath() /\ncreateRectangleVectorPath()\n(src/text/VectorPath.js)"]
+    Flatten["flattenContourToPolygon()"]
+    Sample["sampleOutlinePoints()\n(mode is always 'outline' from app.js today)"]
+    Stones["Stone[] -> StoneLayout\n(per layer)"]
+    Merge["merged into project StoneLayout"]
+
+    Layer --> Resolve --> PermGen --> VPCreate --> Flatten --> Sample --> Stones --> Merge
+```
+
+Shape generation is synchronous (no font provider to await) and converges on the exact same
+`flattenContourToPolygon()` / `sampleOutlinePoints()` / `Stone`/`StoneLayout` pipeline that text
+generation uses — this is the "one Geometry Engine, one product" principle holding in practice,
+not just in the diagram at the top of this document. `generateShapeLayout()` supports a `'fill'`
+mode identical in shape to text's, but `app.js` never requests it for circle/rectangle layers
+today (always passes `mode: 'outline'`).
+
+## 5. Export flow
+
+```mermaid
+flowchart TD
+    MergedSL["merged StoneLayout\n(layerId: 'project')"]
+    ProjectObj["app.js project object\n(ad hoc, not src/core/Project)"]
+
+    MergedSL -->|"StoneLayout.toJSON()"| LayoutJSON["Export: Generated Layout JSON\n{layerId, sourceMode, count,\nboundingBox, widthMm, heightMm, stones[]}"]
+    ProjectObj -->|"JSON.stringify(project)"| ProjectJSON["Export: Project JSON"]
+    MergedSL -->|"stoneLayoutToSvg()"| SVGOut["Export: 2D SVG\n(one <circle> per stone)"]
+    MergedSL -->|"renderProductionLayout()"| LayoutCanvas["layoutCanvas (drawn)"]
+    LayoutCanvas -->|"canvas.toBlob('image/png')"| PNG2D["Export: 2D PNG"]
+    MergedSL -->|"renderCup()"| CupCanvasEl["cupCanvas (drawn)"]
+    CupCanvasEl -->|"canvas.toBlob('image/png')"| PNGCup["Export: Cup PNG"]
+```
+
+All five export buttons share one `download()`/`exportCanvas()` helper in `app.js` that creates an
+object URL and clicks a synthetic `<a download>` element. None of the exporters mutate the
+`StoneLayout` or the project object they read from. "PNG" exports are not driven by a dedicated
+`src/export/**` PNG module — they capture whatever `CanvasRenderer2D`/`CupRenderer` most recently
+drew onto the two `<canvas>` elements, so a PNG export is only correct if it runs after the
+corresponding render call in the same `updateAll()` pass (true today, since both happen
+synchronously in sequence).
+
+---
+
+# Orchestration Layer (`app.js`)
+
+`app.js` is the browser entry point loaded by `index.html` (`<script type="module" src="./app.js">`).
+It is explicitly **not** part of the permanent architecture — it is the composition root that
+wires permanent modules together and owns everything that requires simultaneous knowledge of
+layers, UI state, and the DOM. Per its own header comment and `tools/test-app-module-migration.mjs`,
+it may only import the barrel (`index.js`) entry points of `src/geometry`, `src/fonts`, `src/text`,
+`src/renderer`, `src/export`, and the side-effect-only `src/browser/BrowserDependencyProbe.js` — it
+is test-enforced to never import `src/core/**` or any internal file of another module directly.
+
+`app.js` owns:
+
+- **The ad hoc project/layer state** — `defaultProject()` and all layer mutation functions
+  (`writeSelectedControlsToLayer()`, `duplicateLayer()`, `deleteLayer()`, drag/resize handlers).
+  This is a parallel, unreconciled implementation of what `src/core/Project.js`/`Layer.js` already
+  model (see "Current Architectural Limitations").
+- **A local bridge `GeometryEngine` class** (confusingly same-named as the permanent
+  `src/geometry/GeometryEngine.js`, imported into `app.js` as `PermanentGeometryEngine`) whose live
+  methods (`generate()`, `generateTextStonesLive()`, `generateShapeStonesLive()`) call into the
+  permanent engine per layer, then merge the resulting per-layer `StoneLayout`s and run a
+  proximity `dedupe()` before wrapping the survivors into one project-level `StoneLayout`.
+- **Editor-only overlay drawing** — selection outline/handles, the reference grid's HUD text, and
+  pointer-driven drag/resize/hit-testing — layered on top of (not inside) the permanent renderers'
+  output, reusing the `{s, ox, oy}` transform `renderProductionLayout()` returns.
+- **Canvas lifecycle** — DPR-aware resize (`resizeCanvas()`), and calling
+  `renderProductionLayout()` / `renderCup()` once per `updateAll()`.
+- **Export button wiring** — see the export flow diagram above.
+- **UI event wiring** — every `<input>`/`<select>`/`<button>` listener in `index.html`.
+
+---
+
+# Browser Compatibility Adapters
+
+Two files exist solely to reconcile Node-oriented module code with the browser's native ES-module
+resolution; neither contains product logic:
+
+- **`src/browser/OpenTypeBrowserAdapter.js`** — re-exports `opentype.js`'s ES-module build
+  (`node_modules/opentype.js/dist/opentype.mjs`, named exports only) as a default export, matching
+  what `src/text/OpenTypeProvider.js` expects from the bare `opentype.js` specifier under Node.
+  Activated only via `index.html`'s import map (`"opentype.js": "./src/browser/OpenTypeBrowserAdapter.js"`);
+  Node-side tests never touch it, since Node resolves the real npm package directly.
+- **`src/browser/BrowserDependencyProbe.js`** — a side-effect-only import that forces the entire
+  permanent module graph (and, transitively, the import map) to resolve at page load, before any
+  live font/geometry call happens. See the startup diagram above.
+
+---
+
+# Remaining Legacy / Dead Code
+
+The following code is physically present but not reachable from any live code path in the running
+application. It is retained, not removed, per `docs/AI_ENGINEER.md`'s "do not refactor unrelated
+code" and prior milestones' explicit "do not remove until no live behavior depends on it":
+
+- **`app.js`'s legacy bitmap text engine** — the `FONT5` 5x7 glyph grid constant and the
+  `GeometryEngine` class methods `generateText()`, `sampleGlyphFill()`, `sampleGlyphStroke()`.
+  Superseded by `generateTextStonesLive()` (the permanent `GeometryEngine`/OpenType path) as of
+  RS-0003.5B3.
+- **`app.js`'s legacy shape generators** — `generateCircle()`, `generateRect()`. Superseded by
+  `generateShapeStonesLive()` as of RS-0003.5C1.
+- **`app.js`'s `engine.bbox()` and `layerBBox()`** — both fully unused as of RS-0003.5C2 (their
+  two remaining call sites were replaced by real `StoneLayout`/`getLayerBBox()` usage this
+  milestone).
+- **Shared helpers still live because dead code depends on them** — `line()` (used only by
+  `sampleGlyphStroke()`/`generateRect()`) and `dedupe()` (used by both the dead legacy generators
+  *and* the live cross-layer merge in `generate()` — do not rename or remove `dedupe()`'s `.x/.y/.d`
+  field convention without first deleting or migrating the legacy callers, or it silently becomes
+  a no-op filter for them).
+
+A future cleanup milestone should delete the bitmap text engine, the legacy shape generators, and
+`bbox()`/`layerBBox()` together, once a human confirms the permanent-engine/renderer output is
+production-acceptable (recommended in every `TASK_RESULT.md` since RS-0003.5C1 and still not
+scheduled).
+
+---
+
+# Current Architectural Limitations
+
+1. **Two unreconciled project/layer models.** `src/core/Project.js`/`Layer.js` fully implement
+   this document's Project Model principle (validation, serialization, typed layers) but are not
+   imported by `app.js` — enforced as a deliberate exclusion by
+   `tools/test-app-module-migration.mjs`. The live app instead edits an ad hoc plain-object
+   project. Until these converge, `src/core/**`'s validation and serialization guarantees do not
+   apply to anything a user actually edits.
+2. **Cross-layer merge lives outside the Geometry Engine.** The proximity `dedupe()` that merges
+   per-layer `StoneLayout`s into one project-level `StoneLayout` runs in `app.js`'s orchestration
+   code, not in `src/geometry/GeometryEngine.js`. It only filters already-generated stones by
+   proximity (it invents no new positions), so it does not violate "only the Geometry Engine
+   generates stone positions" — but it means the permanent engine has no native multi-layer
+   aggregation API, and `StoneLayout`'s single-`layerId` constructor is worked around with a
+   `'project'` sentinel rather than a real multi-layer representation.
+3. **Legacy dead code remains physically present** in `app.js` (see above), sharing helper
+   functions with live code, which is a latent-bug risk if those helpers are ever changed without
+   accounting for the dead callers.
+4. **The font manifest's `enabled` flag does not gate what can actually be loaded.**
+   `assets/fonts/manifest.json` marks all three registered fonts (`courier-prime-regular`,
+   `roboto-mono-regular`, `great-vibes-regular`) as `"enabled": false`, but
+   `FontManager.getFont()` — which `OpenTypeProvider` calls — does not check `enabled` (only
+   `listFonts()`/`listFamilies()`/`getDefaultFont()` do). `app.js` calls `getFont()` directly by
+   id, so the two fonts it actually offers (`courier-prime-regular`, `great-vibes-regular`) load
+   and render live text despite being marked disabled. `roboto-mono-regular`'s font file
+   (`assets/fonts/RobotoMono-Regular.ttf`) is a 14-byte placeholder stub, not a real font — it is
+   unreferenced by `app.js` today, but would throw from `opentype.parse()` if ever selected.
+5. **No Validation Engine, product-plugin system, DXF export, manufacturing reports, or 3D/WebGL
+   renderer exist yet.** These remain future milestones per "Future Direction" below, not
+   regressions.
+6. **PNG export is a render-capture, not a standalone exporter module.** Unlike SVG/JSON export,
+   PNG/Cup-PNG export has no `src/export/**` counterpart; it depends on `canvas.toBlob()` running
+   after the corresponding renderer call in the same update pass.
+7. **`getBrowserDependencyProbeStatus()` is unused.** The function exists but nothing calls it;
+   only the module's side effect (import-time resolution) is exercised, by both `app.js` and its
+   guard test.
+
+---
+
+# Repository Documentation Note
+
+`docs/architecture/architecture.md` and `docs/adr/ADR-0001-geometry-engine-single-source.md`
+predate this revision and restate a condensed version of the same principles (single
+Geometry-Engine source of truth, mm-only internals, renderer/exporter independence). They were not
+updated as part of this revision and are not authoritative over this document; consult this file
+first, and treat the shorter documents as historical context.
 
 ---
 
@@ -284,19 +674,29 @@ verify exporter
 
 Regression tests are more valuable than visual tests.
 
+**Implementation status:** `npm test` runs twelve suites under `tools/**` covering the core model,
+font manager, vector path primitives, font provider registry, OpenType provider, geometry engine
+(text and shape), stone color palette, the render/export pipeline, and structural guards on
+`app.js` (approved-import allowlists, forbidden-file lists per milestone). Several suites use a
+dependency-free fake `CanvasRenderingContext2D` to test renderer output without a browser.
+Interactive browser verification (drag/resize gestures, layer visibility, exports) is performed
+manually per milestone via headless Chrome driven over raw CDP and recorded in `TASK_RESULT.md`,
+not by an automated browser test suite.
+
 ---
 
 # Future Direction
 
 Planned milestones include
 
-- OpenType sampling
-- Product plugin system
-- Manufacturing reports
-- DXF export
-- Mouse editing
-- Undo/Redo
-- AI-assisted design
+- OpenType sampling — **done** (`src/text/OpenTypeProvider.js`, live since RS-0003.5B3)
+- Product plugin system — not started
+- Manufacturing reports — not started
+- DXF export — not started
+- Mouse editing — **done** for circle/rectangle shapes (drag to move, handle-drag to resize);
+  text layers are select-only, not draggable
+- Undo/Redo — not started
+- AI-assisted design — not started
 
 These features extend the architecture.
 
