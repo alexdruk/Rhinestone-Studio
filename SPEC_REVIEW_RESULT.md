@@ -5,6 +5,10 @@
 RS-0003.5B2 — Browser Dependency Loading
 (`docs/specifications/RS-0003.5B2-BrowserDependencyLoading.md`)
 
+## Review Round
+
+2
+
 ## Reviewer
 
 Claude
@@ -17,55 +21,59 @@ CHANGES REQUESTED
 
 ## Summary
 
-The specification's intent, scope boundary, and runtime-isolation guarantees are sound and consistent with `docs/ARCHITECTURE.md` (single source of truth via `GeometryEngine`, millimeters internally, renderer/exporter never generate geometry) and with `docs/AI_ENGINEER.md` / `docs/CLAUDE_GUIDE.md` (narrow scope, one commit, no architecture change, explicit allowed/forbidden files). No scope creep or architecture violation was found. However, two sections contain a concrete ambiguity or an infeasible ordering that a compliant implementer would either have to guess at or would waste effort attempting before falling back to the only strategy that actually works. Both are fixable with small wording changes and do not require rethinking the approach.
+Both required changes from round 1 are fully resolved:
+
+- The `OpenTypeProvider`/`FontManager` instantiation ambiguity is gone. "Required Outcome" and "Required Implementation" item 2 now state plainly that `OpenTypeProvider` must be **imported but not instantiated**, and `FontManager` is now named explicitly throughout (Required Outcome, Architecture Requirements, probe imports, Allowed Files, Out of Scope, tests, acceptance criteria). No remaining ambiguity.
+- "Dependency Strategy" now states directly that an import map (or documented equivalent) is required, rather than presenting three co-equal options — the round-1 concern about a misleading "preferred order" is resolved.
+- The MIME-type risk flagged as a non-blocking recommendation in round 1 is now a required, first-class part of the spec: "Every imported `.js` or `.mjs` module is served with a browser-acceptable JavaScript MIME type" is a browser-verification checklist item, and observed `Content-Type` values are now a required `TASK_RESULT.md` field.
+
+One new, concrete correctness problem was found while re-verifying the spec's central technical claim against the actual installed package.
 
 ---
 
 ## Required Changes
 
-### 1. "Browser module probe" (Required Implementation, item 2) — clarify "make OpenTypeProvider load successfully"
+### 1. "Dependency Strategy" / "Required Implementation" item 1 — the expected import map target has no default export
 
-The probe requirements list two adjacent, seemingly overlapping bullets:
+The spec's expected fix is: add an import map that resolves the bare specifier `opentype.js` to "a local browser-loadable module from the installed npm package," implying `node_modules/opentype.js/dist/opentype.mjs` (the package's declared `"module"` entry point, per its `package.json`).
 
-- "import the required permanent text exports"
-- "make `OpenTypeProvider` load successfully"
+`OpenTypeProvider.js:11` imports it as a **default** import:
 
-If the second bullet means only "the ES import completes without throwing," it is redundant with the first and should be merged or reworded.
+```js
+import opentype from 'opentype.js';
+```
 
-If it means "construct an `OpenTypeProvider` instance" (e.g. to prove the class is usable, not just importable), that has a real consequence the spec does not account for: `OpenTypeProvider`'s constructor (`src/text/OpenTypeProvider.js:104-119`) throws a `TypeError` unless it is given a `fontManager` argument exposing `getFont()`. Constructing one requires importing and instantiating `FontManager` from `src/fonts/FontManager.js`. `src/fonts/**` is not mentioned anywhere in "Required Outcome," "Dependency Strategy," or "Allowed Files" — it is an implicit fifth dependency in the chain the probe would need to touch.
+`dist/opentype.mjs` (and `dist/opentype.min.mjs`) do not have a default export — they only export named bindings (`Font`, `Glyph`, `Path`, `parse`, `load`, `loadSync`, `BoundingBox`). This was verified directly:
 
-This is easy to resolve safely (`new FontManager()` with no arguments is a zero-cost, side-effect-free construction — confirmed by reading the class), so this is not a blocking architectural problem. But the spec should say explicitly which of the two readings is intended, and if instantiation is intended, name `FontManager` alongside `OpenTypeProvider` in "Required Outcome" so the implementer isn't left inferring an undocumented dependency mid-task. Left as-is, an implementer following `AI_ENGINEER.md`'s "If You Are Uncertain: Stop" rule would have grounds to halt here.
+```
+$ node --input-type=module -e "import opentype from './node_modules/opentype.js/dist/opentype.mjs'; console.log(opentype);"
+SyntaxError: The requested module './node_modules/opentype.js/dist/opentype.mjs' does not provide an export named 'default'
+```
 
-### 2. "Dependency Strategy" — the "preferred order" is not actually viable in order
+This is a hard ES-module linking error, not a silent `undefined`. If the import map is wired straight to the package's `.mjs` build as the spec currently implies, importing `OpenTypeProvider.js` fails immediately in the browser — breaking the probe, and directly contradicting "Importing `OpenTypeProvider` must cause its `opentype.js` dependency to resolve successfully," the "`OpenTypeProvider` resolves without a module error" verification checkbox, and the "`OpenTypeProvider` imports successfully" acceptance criterion. This would surface only during browser verification, after the automated (Node-based) tests already pass, since Node's `npm test` suite presumably exercises `OpenTypeProvider` through Node's own `node_modules` resolution (CJS/UMD `main`, not the `.mjs` `module` build), masking the failure until the browser-verification step.
 
-The strategy lists, in preference order:
+The fix is small and stays within already-allowed files — but the spec should pick and state one explicitly, since both are legitimate:
 
-1. Native ES modules with browser-resolvable relative paths.
-2. An import map for bare package imports such as `opentype.js`.
-3. A narrowly scoped browser adapter module.
+- **Option A** (touches `src/text/**`, justified as a minimal browser-compatibility correction, already permitted by "Allowed Files"): change the import to a namespace import, `import * as opentype from 'opentype.js'`, and keep the existing `opentype.parse(buffer)` call — `parse` is a named export, so this works unmodified otherwise.
+- **Option B** (stays entirely inside `src/browser/**`, no `src/text/**` touch at all): point the import map's `opentype.js` key at a small adapter module (the "narrowly scoped browser adapter" already anticipated as option 3 in "Dependency Strategy") that re-exports the package's named `parse` binding as a default export, e.g. `export { parse as default } from '<local opentype.js module path>';`. This is a re-export, not a copy of the package source, so it does not conflict with "Do not copy the `opentype.js` source into project-owned source files."
 
-`src/text/OpenTypeProvider.js:11` already contains a hard bare specifier: `import opentype from 'opentype.js'`. Option 1 cannot satisfy this without editing that import statement in a permanent, already-tested module — a larger and riskier touch than adding an import-map entry, and one this same document only conditionally permits ("`src/text/**` only when a minimal browser-compatibility correction is required"). Given the current code, option 2 (import map) is the only strategy that resolves the existing bare specifier without touching `src/text/**` at all, which is also the smallest change per "Implementation Constraints."
-
-Please state directly that an import map is the expected mechanism for the existing `opentype.js` bare import, rather than presenting three co-equal options — this avoids the implementer trying and discarding option 1 first.
+Please state which option is expected (or explicitly leave the choice to the implementer with both pre-approved), so this doesn't surface as a mid-implementation stop.
 
 ---
 
 ## Non-Blocking Recommendations
 
-1. **`.mjs` MIME type risk.** `npm run dev` runs `python3 -m http.server`, a static file server with no server-side logic. On this machine's Python 3.11, `mimetypes.guess_type('foo.mjs')` correctly returns `application/javascript`, so an import map pointing at `node_modules/opentype.js/dist/opentype.mjs` should serve with a script-compatible `Content-Type`. This mapping is not guaranteed across all Python builds/OSes (older or platform-specific `mimetypes` registries have shipped without a `.mjs` entry), and a wrong `Content-Type` causes browsers to reject module scripts outright. Recommend the "Required Browser Verification" section explicitly ask the implementer to confirm the served `Content-Type` for the chosen dependency file (e.g. via browser dev tools or `curl -I`) and record it in `TASK_RESULT.md`, rather than relying on "no console error" alone to catch this class of failure.
-2. **Minor:** once change #1 above is resolved, consider adding `src/fonts/**` to "Allowed Files" as read-only-import scope (no modification expected) purely for documentation completeness, so the full dependency chain touched by the probe is enumerated in one place.
+1. Whichever option is chosen for change #1, the implementation report should note that the package's declared `"module"` entry (`dist/opentype.mjs`) exports no default — this is package-shape information worth preserving in `TASK_RESULT.md` for future milestones (RS-0003.5B3 will instantiate `OpenTypeProvider` for real and will hit the same import shape).
+2. Consider consolidating Required Automated Tests items 5 and 16 ("no public CDN" checked twice, once at the mapping level and once repo-wide) — harmless duplication, not worth blocking on.
 
 ---
 
 ## Consistency Check
 
-- `docs/ARCHITECTURE.md`: No violation. The spec correctly keeps `GeometryEngine` as sole geometry source, forbids the probe from generating stones or mutating project state, and keeps units in millimeters.
-- `docs/AI_ENGINEER.md`: No violation. Scope, allowed/forbidden files, one-commit rule, and "never silently fall back" error handling are all honored.
-- `docs/CLAUDE_GUIDE.md`: No violation. Required output format (`TASK_RESULT.md`) and git rules are consistent with what the spec asks for.
-- Verified against actual repository state: `src/geometry/**` and `src/text/**` currently have no `window`/`document`/Canvas/WebGL dependency (confirmed by inspection), `opentype.js` ships a self-contained ESM build at `node_modules/opentype.js/dist/opentype.mjs` with no further bare imports, and `index.html` currently has exactly one `<script type="module" src="./app.js">` entry point — all preconditions the spec assumes are actually true today.
+Re-verified against `docs/ARCHITECTURE.md`, `docs/AI_ENGINEER.md`, and `docs/CLAUDE_GUIDE.md`: no violations. Scope remains limited to the dependency-loading boundary, `GeometryEngine` remains the single source of truth, units remain millimeters, and file allow/forbid lists are internally consistent (`src/fonts/**` is now correctly included alongside `src/text/**` and `src/geometry/**` as conditionally editable, `node_modules/**` is now correctly listed under "Forbidden Files" rather than only mentioned in prose).
 
 ---
 
 ## Final Decision
 
-CHANGES REQUESTED. Resolve items 1 and 2 above (both are wording/clarification fixes, not redesigns) and this specification is ready for implementation.
+CHANGES REQUESTED. Resolve item 1 above — a factual correction to the dependency-loading mechanism, not a scope or architecture change — and this specification is ready for implementation.
