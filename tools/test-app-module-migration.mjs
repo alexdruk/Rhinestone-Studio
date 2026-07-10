@@ -119,13 +119,16 @@ await test('no forbidden files changed', () => {
   const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
   const changedPaths = output
     .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
+    .filter((line) => line.trim().length > 0)
+    // Porcelain lines are exactly "XY path" (2 status chars + 1 space); slicing must happen on
+    // the untrimmed line, since trimming first (the previous, buggy implementation) eats the
+    // leading status character for common single-letter-in-column-2 statuses like " M", silently
+    // truncating the path and making this guard a no-op for modified (not new) files.
     .map((line) => line.slice(3).trim());
 
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
   const forbiddenPrefixes = [
-    'src/geometry/',
+    // src/geometry/ is legitimately changed by RS-0003.5C1 (permanent shape generation).
     'src/text/',
     'src/core/',
     'src/renderer/',

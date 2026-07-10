@@ -130,8 +130,10 @@ await test('no forbidden file changed', () => {
   const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
   const changedPaths = output
     .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
+    .filter((line) => line.trim().length > 0)
+    // Porcelain lines are exactly "XY path" (2 status chars + 1 space); slicing must happen on
+    // the untrimmed line, since trimming first eats the leading status character for common
+    // single-letter-in-column-2 statuses like " M", silently truncating the path.
     .map((line) => line.slice(3).trim());
 
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
