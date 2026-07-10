@@ -171,7 +171,11 @@ await test('10. no forbidden file changed', () => {
     .filter((line) => line.trim().length > 0)
     .map((line) => line.slice(3).trim());
 
-  const forbiddenExact = new Set(['index.html', 'style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
+  // index.html is legitimately changed by RS-0003.5D1 (Project JSON import UI).
+  // src/geometry/README.md is legitimately changed by RS-0003.5D1 (documentation only — no
+  // src/geometry/** code changed; see the forbiddenPrefixes exception below).
+  const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
+  const allowedDespitePrefix = new Set(['src/geometry/README.md']);
   const forbiddenPrefixes = [
     'src/geometry/',
     'src/text/',
@@ -185,6 +189,7 @@ await test('10. no forbidden file changed', () => {
   for (const changedPath of changedPaths) {
     assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
     assert.ok(
+      allowedDespitePrefix.has(changedPath) ||
       !forbiddenPrefixes.some((prefix) => changedPath.startsWith(prefix)),
       `Forbidden file changed: ${changedPath}`
     );

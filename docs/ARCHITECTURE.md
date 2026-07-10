@@ -185,10 +185,23 @@ Exporters never generate geometry.
 **Implementation status:** `src/export/SvgExporter.js` (`stoneLayoutToSvg()`) is a pure
 string-generation exporter with no DOM/Canvas dependency — implemented and consuming only
 `StoneLayout`. "Generated Layout JSON" export uses `StoneLayout.toJSON()` directly (no separate
-exporter module needed). "PNG" export is `canvas.toBlob()` against whichever canvas
-`CanvasRenderer2D`/`CupRenderer` last drew — a real export of the rendered `StoneLayout`, but
-implemented as a render-then-capture step rather than a standalone `src/export/**` module. DXF
-export and Stone Reports do not exist yet.
+exporter module needed); its schema is documented in `src/geometry/README.md`. "PNG" export is
+`canvas.toBlob()` against whichever canvas `CanvasRenderer2D`/`CupRenderer` last drew — a real
+export of the rendered `StoneLayout`, but implemented as a render-then-capture step rather than a
+standalone `src/export/**` module. DXF export and Stone Reports do not exist yet.
+
+As of RS-0003.5D1, `stoneLayoutToSvg()` validates its inputs (throws a clear `TypeError` for a
+malformed `stoneLayout` or a non-positive/non-finite `widthMm`/`heightMm`) and each `<circle>`
+carries the stone's original color id as a `data-color` attribute, alongside the existing display
+`fill`/`stroke`. `app.js`'s five export button handlers now guard on the generated `layout` being
+present and are wrapped in `try`/`catch`, so a not-yet-ready layout or a thrown exporter error
+surfaces a specific message in the status bar instead of an uncaught exception. `app.js` also
+gained a Project JSON *import* path (`#importProject`/`#importProjectFile`) — the first import
+capability for either export format — which validates a parsed file against the same ad hoc
+project/layer shape `#exportProject` already produces and rejects anything else with a specific
+error, leaving the current in-memory project untouched on failure. A repository-wide search found
+no code depending on the pre-RS-0003.5C2 Generated Layout JSON shape (`{version,units,canvas,
+stones:[{x,y,d}],bbox,stats}`), so no versioned compatibility layer for it exists or is needed.
 
 ---
 
