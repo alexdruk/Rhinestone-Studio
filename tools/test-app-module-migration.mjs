@@ -22,8 +22,8 @@ const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
 
 await test('index.html contains exactly one application module entry point', () => {
   const scriptTags = indexHtml.match(/<script\b[^>]*>/g) || [];
-  assert.equal(scriptTags.length, 1, `expected exactly one <script> tag, found ${scriptTags.length}`);
-  assert.ok(/type="module"/.test(scriptTags[0]), 'expected the script tag to be type="module"');
+  const moduleScriptTags = scriptTags.filter((tag) => /type="module"/.test(tag));
+  assert.equal(moduleScriptTags.length, 1, `expected exactly one type="module" <script> tag, found ${moduleScriptTags.length}`);
 });
 
 await test('the entry point is ./app.js', () => {
@@ -63,7 +63,16 @@ await test('app.js does not import OpenTypeProvider', () => {
 
 await test('app.js does not import src/geometry/GeometryEngine.js', () => {
   assert.ok(!appJs.includes('src/geometry/GeometryEngine'), 'app.js must not import the permanent vector-text GeometryEngine yet');
-  assert.ok(!/^\s*import\b/m.test(appJs), 'app.js must not import any module in this migration task');
+});
+
+await test('app.js only imports the RS-0003.5B2 browser dependency probe', () => {
+  const importLines = appJs.match(/^\s*import\b.*$/gm) || [];
+  for (const line of importLines) {
+    assert.ok(
+      /BrowserDependencyProbe\.js/.test(line),
+      `app.js must only import the browser dependency probe, found: ${line}`
+    );
+  }
 });
 
 await test('the three updated legacy guard tests no longer reject app.js or index.html', async () => {

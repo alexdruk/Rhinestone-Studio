@@ -2,6 +2,9 @@
 // `<script type="module" src="./app.js">`. Owns application state, UI event
 // wiring, the legacy inline GeometryEngine, 2D/3D rendering, and exports.
 // Migrated from the previous inline <script> block in index.html (RS-0003.5B1).
+// RS-0003.5B2: imports the browser dependency probe only to prove the
+// permanent module graph resolves; it is not used for live generation.
+import './src/browser/BrowserDependencyProbe.js';
 'use strict';
 const STONE_COLORS={crystal:{name:'Crystal AB',fill:'#e9f7ff',stroke:'#5e7080',shine:'#ffffff',accent:'#92d5ff'},gold:{name:'Gold',fill:'#f3bd32',stroke:'#926400',shine:'#fff1a6',accent:'#d18a00'},silver:{name:'Silver',fill:'#d8dde4',stroke:'#737b86',shine:'#ffffff',accent:'#a7b0bf'},jet:{name:'Jet Black',fill:'#141414',stroke:'#d9d9d9',shine:'#555',accent:'#000'},rose:{name:'Rose',fill:'#ef8fb0',stroke:'#8a2c4d',shine:'#ffe2ed',accent:'#d75384'},sapphire:{name:'Sapphire',fill:'#2269d3',stroke:'#0f356f',shine:'#b8d8ff',accent:'#174ca2'},emerald:{name:'Emerald',fill:'#2aa66a',stroke:'#0b5633',shine:'#c7ffdf',accent:'#16814e'}};
 const FONT5={
