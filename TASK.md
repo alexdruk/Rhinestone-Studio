@@ -2,28 +2,24 @@
 
 ## Pre-Implementation Check
 
-Before writing any code, verify:
+Before writing code, verify:
 
 - TASK.md is internally consistent.
-- The requested work does not violate ARCHITECTURE.md.
+- The requested work follows docs/ARCHITECTURE.md.
 - Allowed and forbidden file lists are sufficient.
 - Acceptance criteria are testable.
 
-If any check fails:
+If any check fails, stop without modifying files and report the problem.
 
-STOP.
-
-Do not implement.
-
-Report the issue instead.
+---
 
 ## Task ID
 
-RS-0003.5
+RS-0003.5A
 
 ## Title
 
-Integrate OpenTypeProvider into Text Generation
+Create the Vector Text Geometry Engine
 
 ## Status
 
@@ -35,153 +31,43 @@ feature/m2-vector-text
 
 ---
 
-# Objective
+## Objective
 
-Replace the existing canvas-based text sampling with the OpenTypeProvider.
+Create the real Geometry Engine module under `src/geometry/`.
 
-The Geometry Engine must generate text geometry from vector glyph outlines instead of rasterized canvas pixels.
+The new engine must consume the existing font-provider architecture and produce
+a renderer-independent stone layout in millimeters.
 
-This task integrates the provider into the existing pipeline.
+This is a library and automated-test task.
 
-This task does NOT redesign the renderer.
+Do not connect it to the live application yet.
 
----
-
-# Expected Visible Change
-
-YES
-
-Compared to the previous version:
-
-- text edges should become noticeably cleaner
-- different fonts should produce visibly different layouts
-- font size should affect layout correctly
-- letter spacing should affect layout correctly
-
-The following MUST remain unchanged:
-
-- overall UI
-- application workflow
-- export functionality
-- renderer architecture
+Do not modify or duplicate the inline application engine in `index.html`.
 
 ---
 
-# Architecture Requirements
+## Expected Visible Change
 
-The Geometry Engine remains the single source of truth.
+NONE
 
-The renderer consumes StoneLayout.
+The live application should behave exactly as before.
 
-The renderer must never generate geometry.
-
-The exporter must consume StoneLayout.
-
-No duplicated geometry calculations.
+The purpose of this task is to create and test the permanent text-geometry
+pipeline before integrating it into the browser application.
 
 ---
 
-# Allowed Files
+## Required Pipeline
 
-src/text/**
-
-src/geometry/**
-
-src/**
-
-tools/**
-
-package.json
-
-app.js (ONLY if required to connect the new pipeline)
-
-TASK_RESULT.md
-
----
-
-# Forbidden Files
-
-index.html
-
-style.css
-
-renderer/**
-
-export/**
-
-Do not redesign the UI.
-
-Do not redesign the project architecture.
-
-Do not implement future milestones.
-
----
-
-# Out of Scope
-
-Do NOT implement:
-
-- product plugins
-- DXF export
-- SVG improvements
-- AI design
-- undo/redo
-- mouse editing
-- cup improvements
-
-Those belong to later milestones.
-
----
-
-# Required Commands
-
-npm test
-
-git status
-
-If the application can be started:
-
-npm run dev
-
----
-
-# Acceptance Criteria
-
-## Automated
-
-- [ ] Existing tests pass.
-- [ ] New integration tests added where appropriate.
-
-## Functional
-
-- [ ] OpenTypeProvider is used by text generation.
-- [ ] Canvas text sampling is no longer used for text generation.
-- [ ] Font selection changes the generated layout.
-- [ ] Font size changes the generated layout.
-- [ ] Letter spacing changes the generated layout.
-
-## Regression
-
-- [ ] No renderer files modified.
-- [ ] No UI files modified.
-- [ ] Existing exports continue to work.
-
----
-
-# Commit Message
-
-feat(text): integrate OpenType provider into text engine
-
----
-
-# Deliverables
-
-1. Update TASK_RESULT.md.
-
-2. Run required tests.
-
-3. Create ONE logical commit.
-
-4. Push the feature branch.
-
-5. Return ONLY the completed implementation report.
+```text
+Text layer parameters
+        ↓
+FontProviderRegistry
+        ↓
+OpenTypeProvider
+        ↓
+VectorPath
+        ↓
+GeometryEngine
+        ↓
+StoneLayout in millimeters
