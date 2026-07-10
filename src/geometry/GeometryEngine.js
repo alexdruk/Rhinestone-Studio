@@ -65,6 +65,7 @@ export class GeometryEngine {
       xMm: point.xMm,
       yMm: point.yMm,
       sizeMm: options.stoneSizeMm,
+      color: options.color,
       layerId: options.layerId,
       index
     }));
@@ -133,6 +134,11 @@ function normalizeTextParams(params) {
     throw new TypeError(`Unsupported geometry mode: ${mode}. Expected one of: ${[...TEXT_MODES].join(', ')}`);
   }
 
+  if (params.color !== undefined && params.color !== null &&
+    (typeof params.color !== 'string' || params.color.length === 0)) {
+    throw new TypeError('GeometryEngine.generateTextLayout color must be a non-empty string when provided.');
+  }
+
   return {
     text: params.text,
     fontId: params.fontId,
@@ -142,6 +148,7 @@ function normalizeTextParams(params) {
     gapMm,
     letterSpacingMm,
     mode,
+    color: params.color ?? null,
     providerId: params.providerId ?? null
   };
 }

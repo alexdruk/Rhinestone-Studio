@@ -48,3 +48,12 @@ counters (e.g. "o") keep their holes.
 `GeometryEngine` has no dependency on the DOM, Canvas, WebGL, the renderer, or
 any exporter. It is not yet wired into the browser application — that is a
 later integration milestone.
+
+## Stone Color (RS-0003.5A1)
+
+Every `Stone` carries a `color`. Pass `color` to `generateTextLayout()` to
+propagate an explicit layer/request color to every generated stone; when
+omitted, each `Stone` falls back to `DEFAULT_STONE_COLOR` (`'Crystal AB'`,
+exported from `Stone.js`), matching the default already used for layer params
+in `src/core/Layer.js`. Color is part of `Stone`'s plain-object shape, so it
+survives `toJSON()`/`fromJSON()` round trips and is preserved by `StoneLayout`.

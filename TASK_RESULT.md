@@ -8,13 +8,13 @@ Do not delete sections.
 
 # Task ID
 
-RS-0003.5A
+RS-0003.5A1
 
 ---
 
 # Status
 
-APPROVED
+IMPLEMENTED
 
 Allowed values:
 
@@ -48,21 +48,22 @@ git log -1 --oneline
 # Files Changed
 
 ```
-src/geometry/GeometryEngine.js      (added)
-src/geometry/ContourGeometry.js     (added)
-src/geometry/StoneSampler.js        (added)
-src/geometry/Stone.js               (added)
-src/geometry/StoneLayout.js         (added)
-src/geometry/index.js               (added)
-src/geometry/README.md              (modified — document the new public API)
-tools/test-geometry-engine.mjs      (added)
+src/geometry/Stone.js               (modified — add color field + DEFAULT_STONE_COLOR)
+src/geometry/GeometryEngine.js      (modified — accept/propagate color to generated stones)
+src/geometry/index.js               (modified — export DEFAULT_STONE_COLOR)
+src/geometry/README.md              (modified — document the color field and default)
+tools/test-stone-color.mjs          (added)
 package.json                        (modified — add new test to the test script)
 TASK_RESULT.md                      (modified)
 ```
 
-No files under `src/text/**` or `src/core/**` were modified. The new engine
-only consumes their existing public exports (`FontProviderRegistry`,
-`VectorPath`, `Contour`, `BoundingBox`, `Point2D`).
+`src/geometry/StoneLayout.js` was NOT modified. It already maps every stone
+through `Stone`/`Stone.fromJSON`, so `color` is preserved automatically
+without any change to that file.
+
+No forbidden file was touched: `index.html`, `app.js`, `style.css`,
+`src/renderer/**`, `src/export/**`, `src/text/**`, and `assets/**` are
+unmodified.
 
 ---
 
@@ -73,12 +74,11 @@ npm test
 
 git status
 
-git add src/geometry/GeometryEngine.js src/geometry/ContourGeometry.js \
-  src/geometry/StoneSampler.js src/geometry/Stone.js src/geometry/StoneLayout.js \
-  src/geometry/index.js src/geometry/README.md tools/test-geometry-engine.mjs \
-  package.json TASK_RESULT.md
+git add package.json src/geometry/GeometryEngine.js src/geometry/README.md \
+  src/geometry/Stone.js src/geometry/index.js tools/test-stone-color.mjs \
+  TASK_RESULT.md
 
-git commit -m "feat(geometry): add vector text geometry engine"
+git commit -m "fix(geometry): include color in stone metadata"
 
 git push
 ```
@@ -95,7 +95,7 @@ Details:
 
 ```
 > rhinestone-studio@0.1.0 test
-> node tools/test-core-model.mjs && node tools/test-font-manager.mjs && node tools/test-vector-path.mjs && node tools/test-font-provider-registry.mjs && node tools/test-opentype-provider.mjs && node tools/test-default-font-provider-registry.mjs && node tools/test-geometry-engine.mjs
+> node tools/test-core-model.mjs && node tools/test-font-manager.mjs && node tools/test-vector-path.mjs && node tools/test-font-provider-registry.mjs && node tools/test-opentype-provider.mjs && node tools/test-default-font-provider-registry.mjs && node tools/test-geometry-engine.mjs && node tools/test-stone-color.mjs
 
 ✓ Project creates default millimeter canvas
 ✓ Project adds text, circle, and rectangle layers
@@ -147,6 +147,16 @@ Default font provider registry tests passed.
 ✓ every stone carries the requested layerId
 ✓ this task did not modify forbidden UI, renderer, or exporter files
 GeometryEngine tests passed.
+✓ 1. Stone stores an explicit color
+✓ 2. Stone applies DEFAULT_STONE_COLOR when color is omitted
+✓ 3. explicit color survives serialization
+✓ 4. explicit color survives deserialization
+✓ 5. StoneLayout preserves stone colors
+✓ 6. GeometryEngine outline stones contain color
+✓ 7. GeometryEngine fill stones contain color
+✓ 8. repeated generation produces identical colors
+✓ this task did not modify forbidden UI, renderer, or exporter files
+Stone color tests passed.
 ```
 
 No `build` script exists in package.json, so `npm run build` was not run
@@ -156,9 +166,10 @@ No `build` script exists in package.json, so `npm run build` was not run
 
 Application startup
 
-- [x] N/A — TASK.md states "Application startup is NOT required." app.js,
-      index.html, and style.css were not touched, and nothing in the shipped
-      app imports src/geometry yet.
+- [x] N/A — TASK.md states "Application startup is not required." No
+      forbidden file (`index.html`, `app.js`, `style.css`, `src/renderer/**`,
+      `src/export/**`) was touched, and `GeometryEngine` is still not wired
+      into the live app.
 
 Expected visible change achieved
 
@@ -169,78 +180,74 @@ Expected visible change achieved
 # Visible Changes
 
 None. `index.html`, `app.js`, `style.css`, `src/renderer/**`, and
-`src/export/**` were not touched. The new engine lives entirely under
-`src/geometry/**` and is not imported by any application entry point.
+`src/export/**` were not touched. `GeometryEngine` is still not imported by
+any application entry point, so this change has no runtime effect on the
+live browser app.
 
 ---
 
 # Architecture Notes
 
-Implements the pipeline required by TASK.md and docs/ARCHITECTURE.md:
+Resolves the mismatch between `docs/ARCHITECTURE.md` (which lists `color` as
+part of every `StoneLayout` stone) and the previous `Stone` implementation
+(which omitted it):
 
-```
-Text Parameters -> FontProviderRegistry -> OpenTypeProvider -> VectorPath -> GeometryEngine -> StoneLayout
-```
-
-- `GeometryEngine.generateTextLayout(params)` resolves each character
-  individually through the existing `FontProviderRegistry.getTextPath()`,
-  then translates each character's glyph contours along a pen line
-  (`ContourGeometry.translateContour`) so `letterSpacingMm` can be applied
-  between glyphs — the registry's own multi-character call already handles
-  kerning for a whole string, but exposes no per-character advance
-  breakdown, so per-character resolution was necessary to support
-  letter-spacing as its own parameter.
-- `ContourGeometry.flattenContourToPolygon` flattens quadratic/cubic bezier
-  contours into polygons using a fixed subdivision count
-  (`CURVE_FLATTEN_SEGMENTS = 16`), keeping output deterministic regardless
-  of curve length.
-- `StoneSampler` provides two deterministic placement strategies over those
-  polygons: `sampleOutlinePoints` (arc-length walk at `stoneSizeMm + gapMm`
-  spacing) for outline mode, and `sampleFillPoints` (a grid filtered by an
-  even-odd point-in-polygon test) for fill mode. Even-odd correctly excludes
-  glyph counters (e.g. the hole in "o") because inner and outer contours are
-  both included in the polygon list.
-- `Stone` and `StoneLayout` are new classes under `src/geometry/`, reusing
-  the existing `BoundingBox` from `src/text/VectorPath.js` rather than
-  duplicating bounding-box math.
-- No file under `src/text/**` or `src/core/**` was modified — the engine
-  only consumes their already-public exports, keeping this task's blast
-  radius limited to `src/geometry/**` plus tests, even though those
-  directories were technically in scope per Allowed Files.
-- The engine has no dependency on DOM, Canvas, WebGL, the renderer, or any
-  exporter (verified by an automated grep-based test in
-  `tools/test-geometry-engine.mjs`).
-- Per TASK.md, this engine is **not** wired into `app.js` / `index.html` in
-  this task. It coexists with the inline `GeometryEngine` in `index.html`,
-  which is unmodified.
+- `Stone` (`src/geometry/Stone.js`) now accepts an optional `color` in its
+  constructor, validates it is a non-empty string when provided, and stores
+  it on the instance. `color` is included in `toJSON()`, and `fromJSON()`
+  already forwards its input object to the constructor, so deserialization
+  picks up `color` with no additional code.
+- Added `export const DEFAULT_STONE_COLOR = 'Crystal AB'` in `Stone.js`.
+  This reuses the crystal color already used as the default for layer params
+  in `src/core/Layer.js` (`TextLayer`/`CircleLayer`/`RectangleLayer` all
+  default `params.color` to `'Crystal AB'`), per TASK.md's instruction to
+  reuse an existing project default rather than inventing a new one.
+  Exported from `src/geometry/index.js` so callers/tests can reference it
+  instead of duplicating the literal string.
+- `StoneLayout` (`src/geometry/StoneLayout.js`) required **no code change**.
+  It already builds every stone through `Stone`/`Stone.fromJSON`, so once
+  `Stone` carries color, `StoneLayout` preserves it automatically, including
+  through `toJSON()`/`fromJSON()` round trips.
+- `GeometryEngine.generateTextLayout()` (`src/geometry/GeometryEngine.js`)
+  now accepts an optional `color` parameter, validates it the same way as
+  `Stone`, and passes it through to every generated `Stone` (both `outline`
+  and `fill` sampling modes share the same stone-construction code path, so
+  both were covered by one change). When `color` is omitted, each `Stone`
+  falls back to `DEFAULT_STONE_COLOR` on its own — the engine does not
+  duplicate that default.
+- Output remains deterministic: color is a plain, static value copied
+  through to every stone in a generation call, so repeated calls with the
+  same parameters produce identical colors (verified by test 8 in
+  `tools/test-stone-color.mjs`).
+- No unit, DOM, renderer, or exporter dependency was introduced. All
+  millimeter-based fields are unchanged.
 
 ---
 
 # Warnings
 
 None. No new dependency was added; `package.json`'s `dependencies` field is
-unchanged (only the `scripts.test` string was extended).
+unchanged (only the `scripts.test` string was extended to include the new
+test file).
 
 ---
 
 # Known Limitations
 
-- Shape layers (circle/rectangle) are out of scope for this task and are not
-  handled by `GeometryEngine` yet — only `generateTextLayout` exists.
-- Letter spacing is applied via independent per-character glyph resolution
-  rather than the font's native multi-character kerning table, so kerning
-  pairs are not applied between adjacent characters when `letterSpacingMm`
-  is used. This is a deliberate, documented tradeoff (see Architecture
-  Notes) — not a defect to silently work around.
-- Fill mode's grid sampling can leave thin glyph strokes (e.g. in cursive
-  fonts like Great Vibes at small sizes) with very few or zero interior
-  stones if `stoneSizeMm + gapMm` exceeds the stroke width; this mirrors the
-  real manufacturing constraint that stones cannot be smaller than the
-  material they're placed on, so it was left as truthful behavior rather
-  than "fixed" with synthetic stones.
+- `color` is currently a free-form non-empty string (e.g. `'Crystal AB'`,
+  `'Aurora Borealis'`) with no enum/catalog validation against a known set of
+  crystal finishes. TASK.md did not request such validation, so none was
+  added.
+- Shape layers (circle/rectangle) still are not handled by `GeometryEngine`
+  (only `generateTextLayout` exists) — unchanged from RS-0003.5A and out of
+  scope for this task per TASK.md's Out of Scope section.
+- `GeometryEngine` remains unwired from the live browser application, as
+  required by this task ("Do not implement browser integration").
 
 ---
 
 # Next Recommended Task
 
-Ready for merge
+RS-0003.5B — browser integration, per docs/specifications (not started as
+part of this task, per TASK.md's explicit instruction not to begin browser
+integration).

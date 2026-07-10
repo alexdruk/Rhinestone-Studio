@@ -4,7 +4,8 @@ export {
 } from './GeometryEngine.js';
 
 export {
-  Stone
+  Stone,
+  DEFAULT_STONE_COLOR
 } from './Stone.js';
 
 export {
