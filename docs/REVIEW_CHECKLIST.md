@@ -1,192 +1,109 @@
-# Rhinestone Studio Review Checklist
+# Rhinestone Studio — Milestone Review Checklist
 
-Version: 1.0
+## Review Inputs
 
----
+The reviewer should receive:
 
-# Purpose
+- milestone specification,
+- `TASK_RESULT.md`,
+- commit hash,
+- commit summary,
+- changed-file list,
+- automated test result,
+- browser/manual verification result,
+- warnings and known limitations.
 
-This checklist is used before every merge into `develop`.
-
-Passing automated tests is necessary but not sufficient.
-
-Every implementation must also pass architecture review and human QA.
-
----
-
-# Review Outcome
-
-One of:
-
-- APPROVED
-- CHANGES REQUESTED
-- REJECTED
-
-Record the outcome in the pull request or task review.
+A full diff is requested only when needed.
 
 ---
 
-# 1. Scope Review
+## 1. Milestone Outcome
 
-Does the implementation match TASK.md?
-
-- [ ] Yes
-- [ ] No
-
-Were unrelated files modified?
-
-- [ ] No
-- [ ] Yes
-
-If yes, explain why.
+- [ ] The milestone's required outcome is complete.
+- [ ] Visible behavior matches the specification.
+- [ ] No required behavior is merely described but not implemented.
+- [ ] The implementation did not begin the next milestone.
 
 ---
 
-# 2. Architecture Review
+## 2. Architecture
 
-Does the implementation follow ARCHITECTURE.md?
-
-- [ ] Geometry Engine remains the single source of truth.
-- [ ] Renderer contains no geometry generation.
-- [ ] Exporters contain no geometry generation.
-- [ ] Validation does not modify data.
-- [ ] No duplicated business logic.
-- [ ] Internal units remain millimeters.
-- [ ] No architecture violations.
-
-Comments
-
-______________________________
+- [ ] The geometry model remains the source of truth.
+- [ ] Production geometry remains in millimeters.
+- [ ] UI and rendering do not own permanent geometry.
+- [ ] Text, geometry, rendering, and exporting responsibilities remain separated.
+- [ ] No unnecessary parallel implementation was introduced.
+- [ ] New dependencies or adapters are justified.
 
 ---
 
-# 3. Code Quality
+## 3. Scope
 
-- [ ] Code is readable.
-- [ ] No unnecessary complexity.
-- [ ] No obvious duplication.
-- [ ] Public API is documented.
-- [ ] Error handling is appropriate.
-- [ ] No unexplained magic constants.
-
-Comments
-
-______________________________
+- [ ] Changed files match the allowed scope.
+- [ ] Forbidden files were not modified.
+- [ ] Unrelated cleanup was avoided.
+- [ ] Existing APIs were not changed without need.
+- [ ] Documentation matches the implemented state.
 
 ---
 
-# 4. Testing
+## 4. Tests
 
-Required
-
-- [ ] npm test passes.
-
-If applicable
-
-- [ ] npm run build passes.
-- [ ] Application starts.
-- [ ] No browser console errors.
-
-Comments
-
-______________________________
+- [ ] All existing tests pass.
+- [ ] New behavior has meaningful tests.
+- [ ] Tests verify behavior or architecture rather than fragile formatting.
+- [ ] Browser/module work includes real browser verification when possible.
+- [ ] Manual checks are clearly distinguished from automated checks.
+- [ ] Unverified behavior is not presented as passing.
 
 ---
 
-# 5. Human QA
+## 5. User-Visible Quality
 
-Expected visible change matches TASK.md.
+When the milestone affects the application:
 
-Examples
-
-- text quality improved
-- cup preview unchanged
-- export still works
-
-Result
-
-- [ ] PASS
-- [ ] FAIL
-
-Comments
-
-______________________________
+- [ ] Default project loads.
+- [ ] Text remains readable.
+- [ ] 2D layout remains usable.
+- [ ] 3D preview remains usable.
+- [ ] Shapes and layers remain operable.
+- [ ] Exports remain operable.
+- [ ] No relevant console error occurs.
+- [ ] Expected visible changes are present.
+- [ ] Unexpected visible regressions are absent.
 
 ---
 
-# 6. Regression Review
+## 6. Delivery Quality
 
-Verify that unrelated functionality still works.
-
-Examples
-
-- [ ] Existing text still renders.
-- [ ] Existing projects still open.
-- [ ] Export still works.
-- [ ] Production Layout still matches Cup Preview.
-- [ ] No new warnings.
-
-Comments
-
-______________________________
+- [ ] `TASK_RESULT.md` is complete and honest.
+- [ ] Commit is focused.
+- [ ] Commit message is appropriate.
+- [ ] Branch was pushed.
+- [ ] Known limitations are acceptable.
+- [ ] Follow-up work is clearly separated.
 
 ---
 
-# 7. Documentation
+## Review Decision
 
-- [ ] TASK_RESULT.md completed.
-- [ ] Public API documented.
-- [ ] Architecture documentation updated if required.
-- [ ] README updated if necessary.
+Use exactly one:
 
-Comments
+### APPROVED
 
-______________________________
+The milestone satisfies its acceptance criteria and is ready to merge.
 
----
+### APPROVED WITH MINOR COMMENTS
 
-# 8. Git Review
+The milestone is ready to merge. Comments are non-blocking and should be considered in later work.
 
-- [ ] One logical commit.
-- [ ] Commit message follows Conventional Commits.
-- [ ] Feature branch only.
-- [ ] No accidental files committed.
-- [ ] package-lock.json included when dependencies changed.
+### CHANGES REQUESTED
 
-Comments
+The milestone must not merge until the listed blocking issues are corrected.
 
-______________________________
+For `CHANGES REQUESTED`, identify:
 
----
-
-# 9. Decision
-
-Result
-
-- [ ] APPROVED
-- [ ] CHANGES REQUESTED
-- [ ] REJECTED
-
-Reason
-
-__________________________________________________
-
-__________________________________________________
-
----
-
-# 10. Next Task
-
-Recommended next milestone
-
-_____________________________________
-
-Estimated risk
-
-- LOW
-- MEDIUM
-- HIGH
-
-Estimated effort
-
-_____________________________________
+- the blocking issue,
+- the affected requirement,
+- the smallest acceptable correction,
+- the required regression test.

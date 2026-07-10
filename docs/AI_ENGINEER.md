@@ -1,342 +1,177 @@
-# AI Engineer Guide
+# Rhinestone Studio — AI Engineer Rules
 
-Version: 1.0
+## Source of Truth
 
----
+The live repository is the source of truth.
 
-# Purpose
+Before changing code, inspect the relevant files, current tests, current task, and recent implementation report.
 
-This document defines the responsibilities and engineering rules for any AI
-that modifies the Rhinestone Studio repository.
-
-Examples:
-
-- Claude
-- ChatGPT (future repository integration)
-- GitHub Copilot
-- Gemini
-- Future coding assistants
-
-This document is repository policy.
-
-Every implementation task must follow these rules.
+Do not rely on an older chat description when it conflicts with the repository.
 
 ---
 
-# Your Role
+## Engineering Objective
 
-You are the **Implementation Engineer**.
+Build Rhinestone Studio as a maintainable product, not as a sequence of visual demos.
 
-You are **NOT** the:
+The geometry model remains the source of truth:
 
-- Product Owner
-- Software Architect
-- UI Designer
+```text
+Project data in millimeters
+→ GeometryEngine
+→ StoneLayout in millimeters
+→ 2D production view
+→ 3D preview
+→ exporters
+```
 
-Your responsibility is to implement the current task exactly as specified.
-
-Do not redesign the project.
-
-Do not invent new architecture.
-
----
-
-# Project Philosophy
-
-Rhinestone Studio is a manufacturing application.
-
-The production layout is the product.
-
-The renderer is only a preview.
-
-Everything must support accurate manufacturing.
+Rendering must not become the source of geometry.
 
 ---
 
-# Architecture
+## Scope Discipline
 
-The Geometry Engine is the single source of truth.
+Follow `TASK.md` and its referenced specification.
 
-The application pipeline is
+Make the smallest coherent change that completes the milestone.
 
-Project
+Do not:
 
-↓
+- refactor unrelated code,
+- rename unrelated APIs,
+- reformat large untouched files,
+- add dependencies without need,
+- start the next milestone,
+- replace working architecture with a parallel implementation.
 
-Geometry Engine
-
-↓
-
-StoneLayout
-
-↓
-
-Validation Engine
-
-↓
-
-Renderer
-
-↓
-
-Export
-
-Only the Geometry Engine generates stone positions.
-
-The renderer must never generate geometry.
-
-Export must never generate geometry.
-
-Validation must never generate geometry.
+When a conflict exists between `TASK.md`, the specification, and the repository, stop only for a blocking architectural contradiction. Otherwise document the discrepancy in `TASK_RESULT.md` and use the most recent explicit milestone direction.
 
 ---
 
-# Units
+## Implementation Workflow
 
-Internally everything uses millimeters.
+For each milestone:
 
-Never use pixels for geometry calculations.
+1. inspect the repository,
+2. draft or update the specification,
+3. write `TASK.md`,
+4. implement,
+5. add or update tests,
+6. run required checks,
+7. perform browser/manual verification where applicable,
+8. complete `TASK_RESULT.md`,
+9. create a logical commit,
+10. push the branch.
 
-Pixels exist only inside rendering code.
-
----
-
-# Source of Truth
-
-Never duplicate business logic.
-
-Every feature should have one owner.
-
-Example
-
-GOOD
-
-Geometry Engine computes stone positions.
-
-Renderer displays them.
-
-SVG exporter exports them.
-
-BAD
-
-Renderer computes its own positions.
-
-Exporter computes another set.
+A separate specification-review-only phase is not required unless `docs/MILESTONE_WORKFLOW.md` classifies the work as requiring one.
 
 ---
 
-# Scope
+## Testing
 
-Read TASK.md before making changes.
+Automated tests must verify behavior and architecture, not only exact source text.
 
-Only implement the current task.
+Always run:
 
-Never implement future milestones.
-
----
-
-# Allowed Files
-
-Only modify files allowed by TASK.md.
-
-If another file must change
-
-STOP.
-
-Explain why.
-
-Wait for approval.
-
----
-
-# Forbidden Files
-
-Never modify files listed as forbidden by TASK.md.
-
-Never "clean up" unrelated code.
-
-Never perform unrelated refactoring.
-
----
-
-# Git
-
-Never work directly on
-
-main
-
-or
-
-develop.
-
-Work only on the active feature branch.
-
-One task
-
-↓
-
-One commit.
-
----
-
-# Commit Messages
-
-Use Conventional Commits.
-
-Examples
-
-feat(text): integrate OpenType provider
-
-fix(renderer): synchronize cup preview
-
-docs(process): improve review workflow
-
-refactor(geometry): simplify contour sampling
-
----
-
-# Testing
-
-Before every commit run
-
+```bash
 npm test
+git diff --check
+git status
+```
 
-If available
+Run these when available or applicable:
 
+```bash
 npm run build
+npm run dev
+```
 
-If the task changes visible behavior
+For browser work, verify:
 
-Run the application.
+- page loads,
+- modules resolve,
+- no relevant console errors,
+- expected output appears,
+- important controls still work,
+- MIME types are valid for modules when relevant.
 
-Never commit failing tests.
+Do not claim a manual test that was not performed.
 
----
-
-# Documentation
-
-If a public API changes
-
-update documentation.
-
-If architecture changes
-
-STOP.
-
-Architecture changes require approval.
+A passing automated suite does not replace user-visible verification.
 
 ---
 
-# Coding Rules
+## Dependencies
 
-Prefer readability.
+Prefer existing dependencies and browser-native capabilities.
 
-Prefer deterministic algorithms.
+Do not add a dependency unless it materially reduces risk or complexity.
 
-Avoid unnecessary dependencies.
+Do not repeatedly ask the user to reinstall dependencies when no dependency changed.
 
-Avoid magic constants.
+Do not use a public CDN for production runtime dependencies unless the architecture explicitly approves it.
 
-Name everything clearly.
-
-Files should normally stay under 500 lines.
-
-Functions should do one thing.
-
-Never duplicate code.
+Never modify files inside `node_modules/**`.
 
 ---
 
-# Performance
+## Architecture Boundaries
 
-Optimize only when necessary.
+Keep these concerns separate:
 
-Correctness comes before speed.
+- project model,
+- font loading,
+- vector path extraction,
+- stone generation,
+- rendering,
+- UI state,
+- exporting.
 
-Deterministic output is more important than micro-optimizations.
+Permanent geometry, text, renderer, and exporter modules must not depend on DOM controls unless the architecture explicitly assigns them that responsibility.
 
----
+Use millimeters for production geometry.
 
-# Error Handling
-
-Fail early.
-
-Produce meaningful error messages.
-
-Never silently ignore errors.
-
----
-
-# Dependencies
-
-Only introduce new dependencies when they clearly simplify the project.
-
-Document why the dependency is required.
-
-Update package.json and package-lock.json together.
+Preserve deterministic output where deterministic output is expected.
 
 ---
 
-# Security
+## Documentation
 
-Never execute downloaded code.
+Update only documentation needed for the milestone.
 
-Never introduce network requests unless the specification requires them.
+`TASK_RESULT.md` must honestly report:
 
-Never expose secrets.
+- what changed,
+- commands run,
+- tests passed or failed,
+- browser/manual verification,
+- visible changes,
+- warnings,
+- known limitations,
+- recommended next milestone.
 
----
-
-# User Interface
-
-Do not redesign the interface unless explicitly requested.
-
-Do not change styling during architecture tasks.
-
-Do not change layout during backend tasks.
-
----
-
-# Communication
-
-When the task is complete
-
-do NOT explain the code.
-
-Instead complete TASK_RESULT.md.
-
-Include
-
-- files changed
-- commands executed
-- test results
-- warnings
-- known limitations
-- next recommended task
+Do not present unverified behavior as passing.
 
 ---
 
-# If You Are Uncertain
+## Git
 
-Do not guess.
+Prefer one logical commit per milestone.
 
-Stop.
+Use the task's required commit message when specified.
 
-Explain exactly what is unclear.
+Before committing:
 
-Wait for instructions.
+```bash
+git diff --check
+git status
+```
 
----
+After committing:
 
-# Success
+```bash
+git log -1 --oneline
+git push
+```
 
-A task is complete only when
-
-- the implementation matches TASK.md
-- tests pass
-- documentation is updated
-- TASK_RESULT.md is completed
-- one logical Git commit is created
-
-Only then is the task ready for review.
-A passing test suite does not guarantee a successful implementation. Human review is always required before merging into develop.
+Do not merge unless the human owner or ChatGPT explicitly directs it.
