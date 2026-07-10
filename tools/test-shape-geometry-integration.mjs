@@ -96,9 +96,10 @@ await test('9. no forbidden file changed', () => {
     .filter((line) => line.trim().length > 0)
     .map((line) => line.slice(3).trim());
 
-  const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md', 'index.html']);
+  const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
   const forbiddenPrefixes = [
     // src/renderer/ and src/export/ are legitimately changed by RS-0003.5C2.
+    // index.html is legitimately changed by RS-0003.5D1 (Project JSON import UI).
     'src/text/',
     'src/fonts/',
     'src/core/',
