@@ -14,6 +14,10 @@ export {
 } from './OpenTypeProvider.js';
 
 export {
+  createDefaultFontProviderRegistry
+} from './defaultFontProviders.js';
+
+export {
   Point2D,
   BoundingBox,
   PathCommand,
