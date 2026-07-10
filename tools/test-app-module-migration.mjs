@@ -66,26 +66,33 @@ await test('app.js does not import OpenTypeProvider directly', () => {
 });
 
 await test('app.js imports the permanent GeometryEngine for live text generation (RS-0003.5B3)', () => {
+  // RS-0003.5C2 also imports Stone/StoneLayout from the same barrel module (generate() now
+  // constructs a real StoneLayout), so this only requires GeometryEngine-as-X to appear
+  // somewhere in the same import statement's named-import list, not to be its sole member.
   assert.match(
     appJs,
-    /import\s*\{\s*GeometryEngine\s+as\s+\w+\s*\}\s*from\s*['"]\.\/src\/geometry\/index\.js['"]/,
+    /import\s*\{\s*GeometryEngine\s+as\s+\w+[^}]*\}\s*from\s*['"]\.\/src\/geometry\/index\.js['"]/,
     'app.js must import the permanent GeometryEngine from src/geometry/index.js'
   );
   assert.ok(appJs.includes('generateTextLayout'), 'app.js must call generateTextLayout for live text generation');
 });
 
-await test('app.js only imports the RS-0003.5B2 probe and the RS-0003.5B3 permanent-module entry points', () => {
+await test('app.js only imports the RS-0003.5B2 probe, the RS-0003.5B3 permanent-module entry points, and the RS-0003.5C2 renderer/exporter modules', () => {
   const importLines = appJs.match(/^\s*import\b.*$/gm) || [];
   const allowed = [
     /BrowserDependencyProbe\.js/,
     /from\s*['"]\.\/src\/geometry\/index\.js['"]/,
     /from\s*['"]\.\/src\/fonts\/index\.js['"]/,
-    /from\s*['"]\.\/src\/text\/index\.js['"]/
+    /from\s*['"]\.\/src\/text\/index\.js['"]/,
+    /from\s*['"]\.\/src\/renderer\/CanvasRenderer2D\.js['"]/,
+    /from\s*['"]\.\/src\/renderer\/CupRenderer\.js['"]/,
+    /from\s*['"]\.\/src\/renderer\/StoneColors\.js['"]/,
+    /from\s*['"]\.\/src\/export\/SvgExporter\.js['"]/
   ];
   for (const line of importLines) {
     assert.ok(
       allowed.some((pattern) => pattern.test(line)),
-      `app.js must only import the browser probe or the permanent geometry/fonts/text barrel modules, found: ${line}`
+      `app.js must only import the browser probe or the permanent geometry/fonts/text/renderer/export barrel modules, found: ${line}`
     );
   }
   assert.ok(!appJs.includes('node_modules'), 'app.js must not import directly from node_modules');
@@ -129,10 +136,9 @@ await test('no forbidden files changed', () => {
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
   const forbiddenPrefixes = [
     // src/geometry/ is legitimately changed by RS-0003.5C1 (permanent shape generation).
+    // src/renderer/ and src/export/ are legitimately changed by RS-0003.5C2 (rendering pipeline).
     'src/text/',
     'src/core/',
-    'src/renderer/',
-    'src/export/',
     'assets/',
     'examples/'
   ];
