@@ -64,15 +64,21 @@ await test('6. the legacy generateCircle/generateRect methods are no longer call
   );
 });
 
-await test('7. app.js does not import any new module for this milestone', () => {
+await test('7. app.js does not import any new module for this milestone (RS-0003.5C1 scope)', () => {
+  // RS-0003.5C2 legitimately added four more imports (src/renderer/**, src/export/**) for the
+  // rendering-pipeline extraction; this assertion now checks that every import line matches one
+  // of the allowed modules across both milestones, rather than a hard-coded count of 4.
   const importLines = appJs.match(/^\s*import\b.*$/gm) || [];
   const allowed = [
     /BrowserDependencyProbe\.js/,
     /from\s*['"]\.\/src\/geometry\/index\.js['"]/,
     /from\s*['"]\.\/src\/fonts\/index\.js['"]/,
-    /from\s*['"]\.\/src\/text\/index\.js['"]/
+    /from\s*['"]\.\/src\/text\/index\.js['"]/,
+    /from\s*['"]\.\/src\/renderer\/CanvasRenderer2D\.js['"]/,
+    /from\s*['"]\.\/src\/renderer\/CupRenderer\.js['"]/,
+    /from\s*['"]\.\/src\/renderer\/StoneColors\.js['"]/,
+    /from\s*['"]\.\/src\/export\/SvgExporter\.js['"]/
   ];
-  assert.equal(importLines.length, 4, `expected exactly the four pre-existing import lines, found ${importLines.length}`);
   for (const line of importLines) {
     assert.ok(allowed.some((pattern) => pattern.test(line)), `unexpected import: ${line}`);
   }
@@ -92,11 +98,10 @@ await test('9. no forbidden file changed', () => {
 
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md', 'index.html']);
   const forbiddenPrefixes = [
+    // src/renderer/ and src/export/ are legitimately changed by RS-0003.5C2.
     'src/text/',
     'src/fonts/',
     'src/core/',
-    'src/renderer/',
-    'src/export/',
     'assets/',
     'examples/'
   ];

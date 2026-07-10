@@ -128,7 +128,8 @@ await test('this task did not modify forbidden UI, renderer, or exporter files',
     .map((line) => line.slice(3).trim());
 
   const forbiddenExact = new Set(['style.css']);
-  const forbiddenPrefixes = ['src/renderer/', 'src/export/', 'src/text/', 'assets/'];
+  // src/renderer/ and src/export/ are legitimately changed by RS-0003.5C2 (rendering pipeline).
+  const forbiddenPrefixes = ['src/text/', 'assets/'];
 
   for (const changedPath of changedPaths) {
     assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
