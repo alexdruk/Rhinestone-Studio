@@ -1,13 +1,53 @@
 # Task
 
-**Task ID:** RS-0003.5B1
-**Task Type:** Implementation
-**Specification:** `docs/specifications/RS-0003.5B1-BrowserMigration.md`
-**Status:** COMPLETED
-**Implementation Commit:** `e6f5b81`
+Task ID: RS-0003.5B2-SPEC-REVIEW
 
-RS-0003.5B1 was reviewed, approved, implemented, tested, and pushed.
+Goal
 
-The implementation moved the live browser application from the inline script in `index.html` into the module entry point `app.js`.
+Review only the specification:
 
-All automated tests pass. Full human interactive QA remains required before merge.
+docs/specifications/RS-0003.5B2-BrowserDependencyLoading.md
+
+Do NOT implement anything.
+
+Your job is to act as a senior software architect and reviewer.
+
+Review the specification for:
+
+- correctness
+- missing edge cases
+- architecture
+- testability
+- scope creep
+- consistency with:
+    - docs/ARCHITECTURE.md
+    - docs/AI_ENGINEER.md
+    - docs/CLAUDE_GUIDE.md
+
+If the specification is acceptable:
+
+Create SPEC_REVIEW_RESULT.md containing:
+
+Status: SPECIFICATION APPROVED
+
+plus any optional recommendations.
+
+If the specification is not acceptable:
+
+Create SPEC_REVIEW_RESULT.md containing:
+
+Status: CHANGES REQUESTED
+
+List every required change with section numbers.
+
+Rules
+
+- Do not edit application code.
+- Do not edit tests.
+- Do not edit package.json.
+- Do not edit src/.
+- Do not edit app.js.
+- Do not edit index.html.
+- Do not implement any part of the specification.
+- Only review.
+- Return SPEC_REVIEW_RESULT.md.
