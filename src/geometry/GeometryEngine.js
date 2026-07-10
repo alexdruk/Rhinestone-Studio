@@ -1,11 +1,17 @@
 /**
- * Vector Text Geometry Engine.
+ * Vector Text and Shape Geometry Engine.
  *
  * Per docs/ARCHITECTURE.md, the Geometry Engine is the only component
- * allowed to generate stone positions. This module converts text
- * parameters into a deterministic StoneLayout via:
+ * allowed to generate stone positions. This module converts text and shape
+ * (circle/rectangle) parameters into a deterministic StoneLayout via:
  *
  *   Text Parameters -> FontProviderRegistry -> VectorPath -> GeometryEngine -> StoneLayout
+ *   Shape Parameters -> VectorPath -> GeometryEngine -> StoneLayout
+ *
+ * Both paths share the same contour-flattening (ContourGeometry.js) and
+ * outline/fill sampling (StoneSampler.js) primitives, and produce the same
+ * Stone/StoneLayout product, so callers never need to distinguish text-
+ * generated stones from shape-generated stones.
  *
  * This module has no dependency on the DOM, Canvas, WebGL, the renderer, or
  * any exporter. It only consumes the neutral FontProviderRegistry / VectorPath
@@ -14,25 +20,40 @@
  * Units are millimeters throughout.
  */
 
-import { BoundingBox } from '../text/VectorPath.js';
+import { BoundingBox, createCircleVectorPath, createRectangleVectorPath } from '../text/VectorPath.js';
 import { flattenContourToPolygon, translateContour } from './ContourGeometry.js';
 import { sampleFillPoints, sampleOutlinePoints } from './StoneSampler.js';
 import { Stone } from './Stone.js';
 import { StoneLayout } from './StoneLayout.js';
 
-const TEXT_MODES = new Set(['outline', 'fill']);
+const SAMPLE_MODES = new Set(['outline', 'fill']);
 const DEFAULT_MODE = 'outline';
+const SHAPE_TYPES = new Set(['circle', 'rectangle']);
 
 export class GeometryEngine {
   /**
-   * @param {object} options
-   * @param {import('../text/FontProviderRegistry.js').FontProviderRegistry} options.fontProviderRegistry
+   * @param {object} [options]
+   * @param {import('../text/FontProviderRegistry.js').FontProviderRegistry} [options.fontProviderRegistry]
+   *   Required by generateTextLayout(); optional here so shape-only generation does not depend
+   *   on font infrastructure being available.
    */
-  constructor({ fontProviderRegistry } = {}) {
-    if (!fontProviderRegistry || typeof fontProviderRegistry.getTextPath !== 'function') {
-      throw new TypeError('GeometryEngine requires a fontProviderRegistry with getTextPath().');
+  constructor({ fontProviderRegistry = null } = {}) {
+    if (fontProviderRegistry !== null && typeof fontProviderRegistry.getTextPath !== 'function') {
+      throw new TypeError('GeometryEngine fontProviderRegistry must implement getTextPath().');
     }
     this._fontProviderRegistry = fontProviderRegistry;
+  }
+
+  /**
+   * Whether this engine was constructed with a fontProviderRegistry, i.e. whether
+   * generateTextLayout() can be called without throwing. Callers that want to degrade text
+   * generation gracefully (rather than catching a thrown error) can check this first; shape
+   * generation via generateShapeLayout() never depends on it.
+   *
+   * @returns {boolean}
+   */
+  get canGenerateText() {
+    return this._fontProviderRegistry !== null;
   }
 
   /**
@@ -51,6 +72,9 @@ export class GeometryEngine {
    * @returns {Promise<StoneLayout>}
    */
   async generateTextLayout(params = {}) {
+    if (!this._fontProviderRegistry) {
+      throw new TypeError('GeometryEngine.generateTextLayout requires a fontProviderRegistry (none was supplied to the constructor).');
+    }
     const options = normalizeTextParams(params);
 
     const contours = await this._buildPositionedContours(options);
@@ -106,6 +130,56 @@ export class GeometryEngine {
 
     return contours;
   }
+
+  /**
+   * Generate a StoneLayout for a circle or rectangle shape layer.
+   *
+   * Reuses the same contour-flattening and outline/fill sampling primitives as
+   * generateTextLayout(), via the neutral shape helpers in src/text/VectorPath.js, so text and
+   * shapes share one Geometry Engine and one StoneLayout/Stone product (see
+   * docs/ARCHITECTURE.md's single-source-of-truth principle).
+   *
+   * @param {object} params
+   * @param {'circle'|'rectangle'} params.shape
+   * @param {string} params.layerId
+   * @param {number} params.stoneSizeMm
+   * @param {number} [params.gapMm]
+   * @param {'outline'|'fill'} [params.mode]
+   * @param {string} [params.color]
+   * @param {number} [params.cxMm] Circle center X, required when shape is 'circle'.
+   * @param {number} [params.cyMm] Circle center Y, required when shape is 'circle'.
+   * @param {number} [params.radiusMm] Circle radius, required when shape is 'circle'.
+   * @param {number} [params.xMm] Rectangle top-left X, required when shape is 'rectangle'.
+   * @param {number} [params.yMm] Rectangle top-left Y, required when shape is 'rectangle'.
+   * @param {number} [params.widthMm] Rectangle width, required when shape is 'rectangle'.
+   * @param {number} [params.heightMm] Rectangle height, required when shape is 'rectangle'.
+   * @returns {StoneLayout}
+   */
+  generateShapeLayout(params = {}) {
+    const options = normalizeShapeParams(params);
+
+    const path = options.shape === 'circle'
+      ? createCircleVectorPath({ cxMm: options.cxMm, cyMm: options.cyMm, radiusMm: options.radiusMm, id: options.layerId })
+      : createRectangleVectorPath({ xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm, id: options.layerId });
+
+    const polygons = path.contours.map((contour) => flattenContourToPolygon(contour));
+    const spacingMm = options.stoneSizeMm + options.gapMm;
+
+    const points = options.mode === 'fill'
+      ? sampleFillPoints(polygons, BoundingBox.fromPoints(polygons.flat()), spacingMm)
+      : polygons.flatMap((polygon) => sampleOutlinePoints(polygon, spacingMm));
+
+    const stones = points.map((point, index) => new Stone({
+      xMm: point.xMm,
+      yMm: point.yMm,
+      sizeMm: options.stoneSizeMm,
+      color: options.color,
+      layerId: options.layerId,
+      index
+    }));
+
+    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
+  }
 }
 
 function normalizeTextParams(params) {
@@ -130,8 +204,8 @@ function normalizeTextParams(params) {
   const letterSpacingMm = assertFiniteNumber(params.letterSpacingMm ?? 0, 'letterSpacingMm');
 
   const mode = params.mode ?? DEFAULT_MODE;
-  if (!TEXT_MODES.has(mode)) {
-    throw new TypeError(`Unsupported geometry mode: ${mode}. Expected one of: ${[...TEXT_MODES].join(', ')}`);
+  if (!SAMPLE_MODES.has(mode)) {
+    throw new TypeError(`Unsupported geometry mode: ${mode}. Expected one of: ${[...SAMPLE_MODES].join(', ')}`);
   }
 
   if (params.color !== undefined && params.color !== null &&
@@ -150,6 +224,58 @@ function normalizeTextParams(params) {
     mode,
     color: params.color ?? null,
     providerId: params.providerId ?? null
+  };
+}
+
+function normalizeShapeParams(params) {
+  if (typeof params.shape !== 'string' || !SHAPE_TYPES.has(params.shape)) {
+    throw new TypeError(`GeometryEngine.generateShapeLayout requires shape to be one of: ${[...SHAPE_TYPES].join(', ')}.`);
+  }
+  if (typeof params.layerId !== 'string' || params.layerId.length === 0) {
+    throw new TypeError('GeometryEngine.generateShapeLayout requires a non-empty layerId.');
+  }
+
+  const stoneSizeMm = assertPositiveNumber(params.stoneSizeMm, 'stoneSizeMm');
+
+  const gapMm = assertFiniteNumber(params.gapMm ?? 0, 'gapMm');
+  if (gapMm < 0) {
+    throw new RangeError('gapMm must be zero or positive.');
+  }
+
+  const mode = params.mode ?? DEFAULT_MODE;
+  if (!SAMPLE_MODES.has(mode)) {
+    throw new TypeError(`Unsupported geometry mode: ${mode}. Expected one of: ${[...SAMPLE_MODES].join(', ')}`);
+  }
+
+  if (params.color !== undefined && params.color !== null &&
+    (typeof params.color !== 'string' || params.color.length === 0)) {
+    throw new TypeError('GeometryEngine.generateShapeLayout color must be a non-empty string when provided.');
+  }
+
+  const base = {
+    shape: params.shape,
+    layerId: params.layerId,
+    stoneSizeMm,
+    gapMm,
+    mode,
+    color: params.color ?? null
+  };
+
+  if (params.shape === 'circle') {
+    return {
+      ...base,
+      cxMm: assertFiniteNumber(params.cxMm, 'cxMm'),
+      cyMm: assertFiniteNumber(params.cyMm, 'cyMm'),
+      radiusMm: assertPositiveNumber(params.radiusMm, 'radiusMm')
+    };
+  }
+
+  return {
+    ...base,
+    xMm: assertFiniteNumber(params.xMm, 'xMm'),
+    yMm: assertFiniteNumber(params.yMm, 'yMm'),
+    widthMm: assertPositiveNumber(params.widthMm, 'widthMm'),
+    heightMm: assertPositiveNumber(params.heightMm, 'heightMm')
   };
 }
 

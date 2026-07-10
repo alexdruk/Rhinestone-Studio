@@ -185,13 +185,146 @@ await test('every stone carries the requested layerId', async () => {
   }
 });
 
+// RS-0003.5C1 — generateShapeLayout() (circle/rectangle), sharing the same contour-flattening
+// and outline/fill sampling primitives as generateTextLayout() above.
+
+const BASE_CIRCLE_PARAMS = {
+  shape: 'circle',
+  layerId: 'circle-1',
+  cxMm: 105,
+  cyMm: 45,
+  radiusMm: 18,
+  stoneSizeMm: 2,
+  gapMm: 0.3,
+  mode: 'outline',
+  color: 'gold'
+};
+
+const BASE_RECT_PARAMS = {
+  shape: 'rectangle',
+  layerId: 'rect-1',
+  xMm: 65,
+  yMm: 30,
+  widthMm: 80,
+  heightMm: 30,
+  stoneSizeMm: 2,
+  gapMm: 0.3,
+  mode: 'outline',
+  color: 'gold'
+};
+
+await test('13. circle shape generation succeeds', () => {
+  const engine = createEngine();
+  const layout = engine.generateShapeLayout(BASE_CIRCLE_PARAMS);
+
+  assert.ok(layout.count > 0, 'expected at least one stone');
+});
+
+await test('14. rectangle shape generation succeeds', () => {
+  const engine = createEngine();
+  const layout = engine.generateShapeLayout(BASE_RECT_PARAMS);
+
+  assert.ok(layout.count > 0, 'expected at least one stone');
+});
+
+await test('15. stone size changes circle/rectangle stone count', () => {
+  const engine = createEngine();
+  const smallCircle = engine.generateShapeLayout({ ...BASE_CIRCLE_PARAMS, stoneSizeMm: 2 });
+  const largeCircle = engine.generateShapeLayout({ ...BASE_CIRCLE_PARAMS, stoneSizeMm: 4 });
+  assert.notEqual(smallCircle.count, largeCircle.count);
+
+  const smallRect = engine.generateShapeLayout({ ...BASE_RECT_PARAMS, stoneSizeMm: 2 });
+  const largeRect = engine.generateShapeLayout({ ...BASE_RECT_PARAMS, stoneSizeMm: 4 });
+  assert.notEqual(smallRect.count, largeRect.count);
+});
+
+await test('16. gap changes circle/rectangle stone count', () => {
+  const engine = createEngine();
+  const tightCircle = engine.generateShapeLayout({ ...BASE_CIRCLE_PARAMS, gapMm: 0.2 });
+  const looseCircle = engine.generateShapeLayout({ ...BASE_CIRCLE_PARAMS, gapMm: 2 });
+  assert.notEqual(tightCircle.count, looseCircle.count);
+
+  const tightRect = engine.generateShapeLayout({ ...BASE_RECT_PARAMS, gapMm: 0.2 });
+  const looseRect = engine.generateShapeLayout({ ...BASE_RECT_PARAMS, gapMm: 2 });
+  assert.notEqual(tightRect.count, looseRect.count);
+});
+
+await test('17. circle and rectangle outline generation is deterministic', () => {
+  const engine = createEngine();
+
+  const circleFirst = engine.generateShapeLayout(BASE_CIRCLE_PARAMS);
+  const circleSecond = engine.generateShapeLayout(BASE_CIRCLE_PARAMS);
+  assert.deepEqual(circleFirst.toJSON(), circleSecond.toJSON());
+
+  const rectFirst = engine.generateShapeLayout(BASE_RECT_PARAMS);
+  const rectSecond = engine.generateShapeLayout(BASE_RECT_PARAMS);
+  assert.deepEqual(rectFirst.toJSON(), rectSecond.toJSON());
+});
+
+await test('18. circle generated coordinates are finite, in millimeters, and scale with radius', () => {
+  const engine = createEngine();
+  const small = engine.generateShapeLayout({ ...BASE_CIRCLE_PARAMS, radiusMm: 10 });
+  const large = engine.generateShapeLayout({ ...BASE_CIRCLE_PARAMS, radiusMm: 20 });
+
+  assert.ok(small.count > 0 && large.count > 0);
+  for (const stone of [...small.stones, ...large.stones]) {
+    assert.ok(Number.isFinite(stone.xMm));
+    assert.ok(Number.isFinite(stone.yMm));
+    assert.ok(Number.isFinite(stone.sizeMm));
+  }
+
+  const ratio = large.widthMm / small.widthMm;
+  assert.ok(ratio > 1.5 && ratio < 2.5, `expected bounding box width to scale with radiusMm, got ratio ${ratio}`);
+});
+
+await test('19. every circle/rectangle stone carries the requested layerId and color', () => {
+  const engine = createEngine();
+
+  const circle = engine.generateShapeLayout({ ...BASE_CIRCLE_PARAMS, layerId: 'circle-42', color: 'sapphire' });
+  assert.equal(circle.layerId, 'circle-42');
+  for (const stone of circle.stones) {
+    assert.equal(stone.layerId, 'circle-42');
+    assert.equal(stone.color, 'sapphire');
+  }
+
+  const rect = engine.generateShapeLayout({ ...BASE_RECT_PARAMS, layerId: 'rect-42', color: 'jet' });
+  assert.equal(rect.layerId, 'rect-42');
+  for (const stone of rect.stones) {
+    assert.equal(stone.layerId, 'rect-42');
+    assert.equal(stone.color, 'jet');
+  }
+});
+
+await test('20. an invalid shape value throws a clear error', () => {
+  const engine = createEngine();
+  assert.throws(
+    () => engine.generateShapeLayout({ ...BASE_CIRCLE_PARAMS, shape: 'triangle' }),
+    /shape to be one of/
+  );
+});
+
+await test('21. generateShapeLayout works with no fontProviderRegistry; generateTextLayout throws in that case', async () => {
+  const engine = new GeometryEngine();
+
+  assert.equal(engine.canGenerateText, false);
+  const layout = engine.generateShapeLayout(BASE_CIRCLE_PARAMS);
+  assert.ok(layout.count > 0, 'expected shape generation to work without a fontProviderRegistry');
+
+  await assert.rejects(
+    () => engine.generateTextLayout(BASE_PARAMS),
+    /requires a fontProviderRegistry/
+  );
+});
+
 await test('this task did not modify forbidden UI, renderer, or exporter files', async () => {
   const { execSync } = await import('node:child_process');
   const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
   const changedPaths = output
     .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
+    .filter((line) => line.trim().length > 0)
+    // Porcelain lines are exactly "XY path" (2 status chars + 1 space); slicing must happen on
+    // the untrimmed line, since trimming first eats the leading status character for common
+    // single-letter-in-column-2 statuses like " M", silently truncating the path.
     .map((line) => line.slice(3).trim());
 
   const forbiddenExact = new Set(['style.css', 'README.md']);

@@ -48,7 +48,9 @@ await test('5. app.js constructs the permanent GeometryEngine with a fontProvide
 });
 
 await test('6. app.js calls generateTextLayout for live text generation, not just import-only resolution', () => {
-  assert.match(appJs, /permanentTextEngine\.generateTextLayout\(/);
+  // The field holding the permanent engine was renamed permanentTextEngine -> permanentEngine in
+  // RS-0003.5C1, since the engine is no longer text-only (it also generates shape stones).
+  assert.match(appJs, /permanentEngine\.generateTextLayout\(/);
 });
 
 await test('7. text-layer generation is async and consumes the awaited result', () => {
@@ -72,9 +74,27 @@ await test('9. the legacy bitmap text path is no longer called for text layers',
   );
 });
 
-await test('10. shape generation still uses the legacy engine (unchanged per spec)', () => {
-  assert.match(appJs, /type==='circle'\)raw\.push\(\.\.\.this\.generateCircle\(l\)\)/);
-  assert.match(appJs, /type==='rectangle'\)raw\.push\(\.\.\.this\.generateRect\(l\)\)/);
+await test('10. shape generation now uses the permanent engine (RS-0003.5C1)', () => {
+  assert.match(
+    appJs,
+    /l\.type==='circle'\|\|l\.type==='rectangle'\)raw\.push\(\.\.\.await this\.generateShapeStonesLive\(l\)\)/,
+    'expected generate() to route circle/rectangle layers through a live shape-generation method'
+  );
+  assert.match(
+    appJs,
+    /this\.permanentEngine\.generateShapeLayout\(/,
+    'expected the live shape method to call the permanent engine\'s generateShapeLayout'
+  );
+  assert.ok(
+    !/type==='circle'\)raw\.push\(\.\.\.this\.generateCircle\(l\)\)/.test(appJs),
+    'the legacy generateCircle() must no longer be invoked directly from generate()'
+  );
+  assert.ok(
+    !/type==='rectangle'\)raw\.push\(\.\.\.this\.generateRect\(l\)\)/.test(appJs),
+    'the legacy generateRect() must no longer be invoked directly from generate()'
+  );
+  assert.ok(appJs.includes('generateCircle(l){'), 'expected the legacy generateCircle() to still be present (preserved, not deleted)');
+  assert.ok(appJs.includes('generateRect(l){'), 'expected the legacy generateRect() to still be present (preserved, not deleted)');
 });
 
 await test('11. app.js does not import src/core/** (Project/Layer model migration is out of scope)', () => {
@@ -99,13 +119,16 @@ await test('14. no forbidden file changed', () => {
   const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
   const changedPaths = output
     .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
+    .filter((line) => line.trim().length > 0)
+    // Porcelain lines are exactly "XY path" (2 status chars + 1 space); slicing must happen on
+    // the untrimmed line, since trimming first (the previous, buggy implementation) eats the
+    // leading status character for common single-letter-in-column-2 statuses like " M", silently
+    // truncating the path and making this guard a no-op for modified (not new) files.
     .map((line) => line.slice(3).trim());
 
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
   const forbiddenPrefixes = [
-    'src/geometry/',
+    // src/geometry/ is legitimately changed by RS-0003.5C1 (permanent shape generation).
     'src/text/',
     'src/fonts/',
     'src/core/',
