@@ -1,5 +1,22 @@
 # Rhinestone Studio — Current Task
 
+## Pre-Implementation Check
+
+Before writing any code, verify:
+
+- TASK.md is internally consistent.
+- The requested work does not violate ARCHITECTURE.md.
+- Allowed and forbidden file lists are sufficient.
+- Acceptance criteria are testable.
+
+If any check fails:
+
+STOP.
+
+Do not implement.
+
+Report the issue instead.
+
 ## Task ID
 
 RS-0003.5
