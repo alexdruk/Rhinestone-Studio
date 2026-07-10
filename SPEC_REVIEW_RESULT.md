@@ -7,7 +7,7 @@ RS-0003.5B2 — Browser Dependency Loading
 
 ## Review Round
 
-2
+3
 
 ## Reviewer
 
@@ -21,59 +21,62 @@ CHANGES REQUESTED
 
 ## Summary
 
-Both required changes from round 1 are fully resolved:
+Round 2's finding (the browser ESM build of `opentype.js` has no default export, so `import opentype from 'opentype.js'` cannot resolve against it as-is) was correctly diagnosed in this revision — "Required Implementation" item 1 now names the exact problem and Allowed Files now permits a minimal import-form change in `src/text/OpenTypeProvider.js`.
 
-- The `OpenTypeProvider`/`FontManager` instantiation ambiguity is gone. "Required Outcome" and "Required Implementation" item 2 now state plainly that `OpenTypeProvider` must be **imported but not instantiated**, and `FontManager` is now named explicitly throughout (Required Outcome, Architecture Requirements, probe imports, Allowed Files, Out of Scope, tests, acceptance criteria). No remaining ambiguity.
-- "Dependency Strategy" now states directly that an import map (or documented equivalent) is required, rather than presenting three co-equal options — the round-1 concern about a misleading "preferred order" is resolved.
-- The MIME-type risk flagged as a non-blocking recommendation in round 1 is now a required, first-class part of the spec: "Every imported `.js` or `.mjs` module is served with a browser-acceptable JavaScript MIME type" is a browser-verification checklist item, and observed `Content-Type` values are now a required `TASK_RESULT.md` field.
-
-One new, concrete correctness problem was found while re-verifying the spec's central technical claim against the actual installed package.
+However, the fix this revision actually specifies — change `OpenTypeProvider.js` to a namespace import (`import * as opentype from 'opentype.js'`) — breaks the other runtime this same import statement must serve. This was verified directly and is a blocking correctness problem, not a style preference.
 
 ---
 
 ## Required Changes
 
-### 1. "Dependency Strategy" / "Required Implementation" item 1 — the expected import map target has no default export
+### 1. "Required Implementation" item 1, sub-item 2 / "Allowed Files" — the mandated `OpenTypeProvider.js` import change breaks Node, not just the browser
 
-The spec's expected fix is: add an import map that resolves the bare specifier `opentype.js` to "a local browser-loadable module from the installed npm package," implying `node_modules/opentype.js/dist/opentype.mjs` (the package's declared `"module"` entry point, per its `package.json`).
+`OpenTypeProvider.js` is loaded by two different resolvers today, and this task cannot change that:
 
-`OpenTypeProvider.js:11` imports it as a **default** import:
+- **Node** (`npm test`) resolves the bare specifier `opentype.js` via the package's `package.json` `"main"` field — `dist/opentype.js`, a UMD/CJS bundle.
+- **Browser** (once this task adds an import map) resolves the same bare specifier to the package's `"module"` field — `dist/opentype.mjs`, a real ES module.
 
-```js
-import opentype from 'opentype.js';
-```
-
-`dist/opentype.mjs` (and `dist/opentype.min.mjs`) do not have a default export — they only export named bindings (`Font`, `Glyph`, `Path`, `parse`, `load`, `loadSync`, `BoundingBox`). This was verified directly:
+These two files have incompatible export shapes, verified directly:
 
 ```
-$ node --input-type=module -e "import opentype from './node_modules/opentype.js/dist/opentype.mjs'; console.log(opentype);"
-SyntaxError: The requested module './node_modules/opentype.js/dist/opentype.mjs' does not provide an export named 'default'
+$ node --input-type=module -e "import opentype from 'opentype.js'; console.log(typeof opentype.parse)"
+function          # current default import: works today under Node
+
+$ node --input-type=module -e "import * as opentype from 'opentype.js'; console.log(typeof opentype.parse, typeof opentype.default)"
+undefined object  # namespace import under Node: .parse is gone, only .default (whole CJS exports) survives cjs-module-lexer's static analysis
+
+$ node --input-type=module -e "import opentype from './node_modules/opentype.js/dist/opentype.mjs'; ..."
+SyntaxError: does not provide an export named 'default'   # round-2 finding: default import fails against the real ESM build
 ```
 
-This is a hard ES-module linking error, not a silent `undefined`. If the import map is wired straight to the package's `.mjs` build as the spec currently implies, importing `OpenTypeProvider.js` fails immediately in the browser — breaking the probe, and directly contradicting "Importing `OpenTypeProvider` must cause its `opentype.js` dependency to resolve successfully," the "`OpenTypeProvider` resolves without a module error" verification checkbox, and the "`OpenTypeProvider` imports successfully" acceptance criterion. This would surface only during browser verification, after the automated (Node-based) tests already pass, since Node's `npm test` suite presumably exercises `OpenTypeProvider` through Node's own `node_modules` resolution (CJS/UMD `main`, not the `.mjs` `module` build), masking the failure until the browser-verification step.
+So: the **default** import (current code) works under Node but fails under the browser's real ESM build (round 2's finding, correctly identified this round). The **namespace** import (this round's mandated fix) works under the browser's real ESM build, but breaks under Node — `opentype.parse` becomes `undefined`, since Node's CJS interop only exposes the UMD bundle's exports as `.default`, not as statically-analyzed named properties.
 
-The fix is small and stays within already-allowed files — but the spec should pick and state one explicitly, since both are legitimate:
+There is no single import statement in `OpenTypeProvider.js` that is correct against both resolvers simultaneously, because the two resolvers are being pointed at two structurally different files. Applying this round's mandated namespace-import change would satisfy the browser probe while silently breaking `npm run tools/test-opentype-provider.mjs` (confirmed: that suite currently passes 8/8 against the default import) — directly violating "No functional behavior of `OpenTypeProvider` may change," "while preserving existing runtime behavior," and "Existing tests continue to pass" (Required Automated Tests #20), all in the same document that mandates the change.
 
-- **Option A** (touches `src/text/**`, justified as a minimal browser-compatibility correction, already permitted by "Allowed Files"): change the import to a namespace import, `import * as opentype from 'opentype.js'`, and keep the existing `opentype.parse(buffer)` call — `parse` is a named export, so this works unmodified otherwise.
-- **Option B** (stays entirely inside `src/browser/**`, no `src/text/**` touch at all): point the import map's `opentype.js` key at a small adapter module (the "narrowly scoped browser adapter" already anticipated as option 3 in "Dependency Strategy") that re-exports the package's named `parse` binding as a default export, e.g. `export { parse as default } from '<local opentype.js module path>';`. This is a re-export, not a copy of the package source, so it does not conflict with "Do not copy the `opentype.js` source into project-owned source files."
+**Recommended correction:** revert "Required Implementation" item 1 to *not* touch `OpenTypeProvider.js` at all, and solve the mismatch entirely on the browser-mapping side, which the spec already anticipated as option 3 in "Dependency Strategy" ("a narrowly scoped browser adapter module... if the installed package cannot be loaded directly through the import map" — this is exactly that case). Concretely: add a small adapter module confined to `src/browser/**` that imports the real `opentype.js` ESM build by relative path and re-exports its named `parse` binding as a default export (e.g. `export { parse as default } from '<relative path to node_modules/opentype.js/dist/opentype.mjs>';`), and point the import map's `opentype.js` key at that adapter instead of at the package file directly. Then:
 
-Please state which option is expected (or explicitly leave the choice to the implementer with both pre-approved), so this doesn't surface as a mid-implementation stop.
+- Node's resolution of `OpenTypeProvider.js`'s existing unmodified default import is completely untouched (import maps are an HTML/browser mechanism; Node's ESM loader has no knowledge of them), so `npm test` keeps passing exactly as today.
+- The browser's import map resolves `opentype.js` → the adapter → a genuine default export with `.parse`, matching what `OpenTypeProvider.js`'s existing, unmodified code already expects.
+
+This keeps `src/text/**` fully out of scope again (reverting the new conditional allowance added this round), stays inside files already unconditionally allowed (`src/browser/**`), and requires zero behavior change to the permanent module — a stronger fit for "Import-only browser compatibility must be preferred over changing permanent module behavior," which this document already states as a principle but then contradicts with the mandated `OpenTypeProvider.js` edit.
+
+If there is a reason the adapter approach was rejected in favor of editing `OpenTypeProvider.js` directly, please state it — otherwise this should revert to the adapter-only approach.
 
 ---
 
 ## Non-Blocking Recommendations
 
-1. Whichever option is chosen for change #1, the implementation report should note that the package's declared `"module"` entry (`dist/opentype.mjs`) exports no default — this is package-shape information worth preserving in `TASK_RESULT.md` for future milestones (RS-0003.5B3 will instantiate `OpenTypeProvider` for real and will hit the same import shape).
-2. Consider consolidating Required Automated Tests items 5 and 16 ("no public CDN" checked twice, once at the mapping level and once repo-wide) — harmless duplication, not worth blocking on.
+1. Minor typo: Allowed Files — "only for the minimal ES-module import compatibility change described **i** this specification" → "in this specification." Harmless, but worth a pass since this line is being cited as scope authority.
+2. If the adapter approach (recommendation above) is adopted, Required Automated Tests item 21 ("OpenTypeProvider imports the browser ES-module build using the browser-compatible import form required by opentype.js") should be reworded — it currently presumes `OpenTypeProvider.js` itself changes its import form, which would no longer be true.
 
 ---
 
 ## Consistency Check
 
-Re-verified against `docs/ARCHITECTURE.md`, `docs/AI_ENGINEER.md`, and `docs/CLAUDE_GUIDE.md`: no violations. Scope remains limited to the dependency-loading boundary, `GeometryEngine` remains the single source of truth, units remain millimeters, and file allow/forbid lists are internally consistent (`src/fonts/**` is now correctly included alongside `src/text/**` and `src/geometry/**` as conditionally editable, `node_modules/**` is now correctly listed under "Forbidden Files" rather than only mentioned in prose).
+`docs/ARCHITECTURE.md`, `docs/AI_ENGINEER.md`, `docs/CLAUDE_GUIDE.md`: no violations found beyond the item above. The rest of this revision (explicit `FontManager` naming, instantiation rules, MIME-type verification, forbidden-file list) remains internally consistent and matches actual repository state.
 
 ---
 
 ## Final Decision
 
-CHANGES REQUESTED. Resolve item 1 above — a factual correction to the dependency-loading mechanism, not a scope or architecture change — and this specification is ready for implementation.
+CHANGES REQUESTED. Item 1 is a factual/correctness problem in the mandated fix, not a scope or architecture disagreement — resolving it (most likely by reverting to an adapter-only strategy) should make this specification implementation-ready.
