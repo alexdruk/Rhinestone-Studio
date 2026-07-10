@@ -2,11 +2,11 @@
 
 ## Task ID
 
-RS-PROCESS-001
+RS-0003.5
 
 ## Title
 
-Validate AI Engineering Workflow
+Integrate OpenTypeProvider into Text Generation
 
 ## Status
 
@@ -20,45 +20,99 @@ feature/m2-vector-text
 
 # Objective
 
-Validate the AI engineering workflow by implementing one small, low-risk feature.
+Replace the existing canvas-based text sampling with the OpenTypeProvider.
 
-Register the existing OpenTypeProvider with the FontProviderRegistry.
+The Geometry Engine must generate text geometry from vector glyph outlines instead of rasterized canvas pixels.
 
-This task validates that the engineering workflow, documentation, testing,
-commit process and reporting all work correctly.
+This task integrates the provider into the existing pipeline.
 
-No user-visible functionality should change.
+This task does NOT redesign the renderer.
 
 ---
 
 # Expected Visible Change
 
-NONE
+YES
 
-The application should behave exactly as before.
+Compared to the previous version:
+
+- text edges should become noticeably cleaner
+- different fonts should produce visibly different layouts
+- font size should affect layout correctly
+- letter spacing should affect layout correctly
+
+The following MUST remain unchanged:
+
+- overall UI
+- application workflow
+- export functionality
+- renderer architecture
+
+---
+
+# Architecture Requirements
+
+The Geometry Engine remains the single source of truth.
+
+The renderer consumes StoneLayout.
+
+The renderer must never generate geometry.
+
+The exporter must consume StoneLayout.
+
+No duplicated geometry calculations.
 
 ---
 
 # Allowed Files
 
-- src/text/**
-- package.json
-- tools/**
-- TASK_RESULT.md
+src/text/**
+
+src/geometry/**
+
+src/**
+
+tools/**
+
+package.json
+
+app.js (ONLY if required to connect the new pipeline)
+
+TASK_RESULT.md
 
 ---
 
 # Forbidden Files
 
-- index.html
-- style.css
-- app.js
-- renderer/**
-- geometry/**
+index.html
 
-Do not redesign the architecture.
+style.css
+
+renderer/**
+
+export/**
+
+Do not redesign the UI.
+
+Do not redesign the project architecture.
 
 Do not implement future milestones.
+
+---
+
+# Out of Scope
+
+Do NOT implement:
+
+- product plugins
+- DXF export
+- SVG improvements
+- AI design
+- undo/redo
+- mouse editing
+- cup improvements
+
+Those belong to later milestones.
 
 ---
 
@@ -68,30 +122,49 @@ npm test
 
 git status
 
+If the application can be started:
+
+npm run dev
+
 ---
 
 # Acceptance Criteria
 
-- [ ] OpenTypeProvider is registered correctly.
+## Automated
+
 - [ ] Existing tests pass.
-- [ ] No UI files changed.
-- [ ] No renderer files changed.
-- [ ] TASK_RESULT.md updated.
-- [ ] One logical Git commit created.
-- [ ] Feature branch pushed.
+- [ ] New integration tests added where appropriate.
+
+## Functional
+
+- [ ] OpenTypeProvider is used by text generation.
+- [ ] Canvas text sampling is no longer used for text generation.
+- [ ] Font selection changes the generated layout.
+- [ ] Font size changes the generated layout.
+- [ ] Letter spacing changes the generated layout.
+
+## Regression
+
+- [ ] No renderer files modified.
+- [ ] No UI files modified.
+- [ ] Existing exports continue to work.
 
 ---
 
 # Commit Message
 
-chore(process): register OpenType provider
+feat(text): integrate OpenType provider into text engine
 
 ---
 
-# Deliverable
+# Deliverables
 
-Update TASK_RESULT.md.
+1. Update TASK_RESULT.md.
 
-Return the standard implementation report.
+2. Run required tests.
 
-Do not explain the implementation.
+3. Create ONE logical commit.
+
+4. Push the feature branch.
+
+5. Return ONLY the completed implementation report.
