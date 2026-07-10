@@ -1,250 +1,40 @@
-const $ = (id) => document.getElementById(id);
-const layoutCanvas = $('layoutCanvas');
-const cupCanvas = $('cupCanvas');
-const lctx = layoutCanvas.getContext('2d');
-const cctx = cupCanvas.getContext('2d');
-
-const state = {
-  text: 'Vitalina', font: 'Courier New', stoneSize: 2.0, gap: 0.3,
-  stoneColor: 'crystal', cupColor: '#ffffff', wrap: 0.42, rotation: 0, stones: []
+// Live browser application entry point. Loaded by index.html as
+// `<script type="module" src="./app.js">`. Owns application state, UI event
+// wiring, the legacy inline GeometryEngine, 2D/3D rendering, and exports.
+// Migrated from the previous inline <script> block in index.html (RS-0003.5B1).
+'use strict';
+const STONE_COLORS={crystal:{name:'Crystal AB',fill:'#e9f7ff',stroke:'#5e7080',shine:'#ffffff',accent:'#92d5ff'},gold:{name:'Gold',fill:'#f3bd32',stroke:'#926400',shine:'#fff1a6',accent:'#d18a00'},silver:{name:'Silver',fill:'#d8dde4',stroke:'#737b86',shine:'#ffffff',accent:'#a7b0bf'},jet:{name:'Jet Black',fill:'#141414',stroke:'#d9d9d9',shine:'#555',accent:'#000'},rose:{name:'Rose',fill:'#ef8fb0',stroke:'#8a2c4d',shine:'#ffe2ed',accent:'#d75384'},sapphire:{name:'Sapphire',fill:'#2269d3',stroke:'#0f356f',shine:'#b8d8ff',accent:'#174ca2'},emerald:{name:'Emerald',fill:'#2aa66a',stroke:'#0b5633',shine:'#c7ffdf',accent:'#16814e'}};
+const FONT5={
+' ':['00000','00000','00000','00000','00000','00000','00000'],
+'A':['01110','10001','10001','11111','10001','10001','10001'],B:['11110','10001','10001','11110','10001','10001','11110'],C:['01111','10000','10000','10000','10000','10000','01111'],D:['11110','10001','10001','10001','10001','10001','11110'],E:['11111','10000','10000','11110','10000','10000','11111'],F:['11111','10000','10000','11110','10000','10000','10000'],G:['01111','10000','10000','10011','10001','10001','01111'],H:['10001','10001','10001','11111','10001','10001','10001'],I:['11111','00100','00100','00100','00100','00100','11111'],J:['00111','00010','00010','00010','10010','10010','01100'],K:['10001','10010','10100','11000','10100','10010','10001'],L:['10000','10000','10000','10000','10000','10000','11111'],M:['10001','11011','10101','10101','10001','10001','10001'],N:['10001','11001','10101','10011','10001','10001','10001'],O:['01110','10001','10001','10001','10001','10001','01110'],P:['11110','10001','10001','11110','10000','10000','10000'],Q:['01110','10001','10001','10001','10101','10010','01101'],R:['11110','10001','10001','11110','10100','10010','10001'],S:['01111','10000','10000','01110','00001','00001','11110'],T:['11111','00100','00100','00100','00100','00100','00100'],U:['10001','10001','10001','10001','10001','10001','01110'],V:['10001','10001','10001','10001','10001','01010','00100'],W:['10001','10001','10001','10101','10101','10101','01010'],X:['10001','10001','01010','00100','01010','10001','10001'],Y:['10001','10001','01010','00100','00100','00100','00100'],Z:['11111','00001','00010','00100','01000','10000','11111'],
+'a':['00000','00000','01110','00001','01111','10001','01111'],b:['10000','10000','10110','11001','10001','10001','11110'],c:['00000','00000','01111','10000','10000','10000','01111'],d:['00001','00001','01101','10011','10001','10001','01111'],e:['00000','00000','01110','10001','11111','10000','01111'],f:['00111','01000','01000','11110','01000','01000','01000'],g:['00000','01111','10001','10001','01111','00001','01110'],h:['10000','10000','10110','11001','10001','10001','10001'],i:['00100','00000','01100','00100','00100','00100','01110'],j:['00010','00000','00110','00010','00010','10010','01100'],k:['10000','10001','10010','10100','11000','10100','10010'],l:['01100','00100','00100','00100','00100','00100','01110'],m:['00000','00000','11010','10101','10101','10101','10101'],n:['00000','00000','10110','11001','10001','10001','10001'],o:['00000','00000','01110','10001','10001','10001','01110'],p:['00000','11110','10001','10001','11110','10000','10000'],q:['00000','01111','10001','10001','01111','00001','00001'],r:['00000','00000','10110','11001','10000','10000','10000'],s:['00000','00000','01111','10000','01110','00001','11110'],t:['01000','01000','11110','01000','01000','01001','00110'],u:['00000','00000','10001','10001','10001','10011','01101'],v:['00000','00000','10001','10001','10001','01010','00100'],w:['00000','00000','10001','10001','10101','10101','01010'],x:['00000','00000','10001','01010','00100','01010','10001'],y:['00000','10001','10001','10001','01111','00001','01110'],z:['00000','00000','11111','00010','00100','01000','11111'],
+'0':['01110','10001','10011','10101','11001','10001','01110'],'1':['00100','01100','00100','00100','00100','00100','01110'],'2':['01110','10001','00001','00010','00100','01000','11111'],'3':['11110','00001','00001','01110','00001','00001','11110'],'4':['00010','00110','01010','10010','11111','00010','00010'],'5':['11111','10000','10000','11110','00001','00001','11110'],'6':['01110','10000','10000','11110','10001','10001','01110'],'7':['11111','00001','00010','00100','01000','01000','01000'],'8':['01110','10001','10001','01110','10001','10001','01110'],'9':['01110','10001','10001','01111','00001','00001','01110'],'.':['00000','00000','00000','00000','00000','01100','01100'],'-':['00000','00000','00000','11111','00000','00000','00000'],':':['00000','01100','01100','00000','01100','01100','00000']
 };
-
-const colors = {
-  crystal: ['#f8fbff','#a7d9ff','#ffe072','#dc9cff','#ffffff'],
-  clear: ['#ffffff','#d8e9ff','#f6f6f6','#ffffff','#cfd6dd'],
-  gold: ['#ffe27a','#c58a10','#fff0a8','#f8c232','#805300'],
-  pink: ['#ffd4e6','#f478b1','#fff','#f7a3c7','#a81658'],
-  sapphire: ['#8ec7ff','#145bc0','#e8f4ff','#357ee4','#06316c'],
-  black: ['#333','#050505','#777','#111','#000']
-};
-
-function syncState(){
-  state.text = $('textInput').value || ' ';
-  state.font = $('fontSelect').value;
-  state.stoneSize = parseFloat($('stoneSizeSelect').value);
-  state.gap = parseFloat($('gapInput').value) || 0;
-  state.stoneColor = $('stoneColorSelect').value;
-  state.cupColor = $('cupColorSelect').value;
-  state.wrap = parseFloat($('wrapSelect').value);
-  state.rotation = (parseFloat($('rotationSlider')?.value || '0') * Math.PI) / 180;
-}
-
-function sampleText(){
-  const mmW = 170, mmH = 100;
-  const pxPerMm = 6;
-  const off = document.createElement('canvas');
-  off.width = Math.round(mmW * pxPerMm);
-  off.height = Math.round(mmH * pxPerMm);
-  const ctx = off.getContext('2d', { willReadFrequently: true });
-  ctx.clearRect(0,0,off.width,off.height);
-  ctx.fillStyle = '#000';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  const fontPx = 32 * pxPerMm;
-  ctx.font = `bold ${fontPx}px "${state.font}", monospace`;
-  let w = ctx.measureText(state.text).width;
-  const maxW = off.width * 0.88;
-  const sizePx = Math.min(fontPx, fontPx * maxW / Math.max(1,w));
-  ctx.font = `bold ${sizePx}px "${state.font}", monospace`;
-  ctx.fillText(state.text, off.width/2, off.height/2 + sizePx*0.05);
-  const img = ctx.getImageData(0,0,off.width,off.height).data;
-  const stepMm = state.stoneSize + state.gap;
-  const stones = [];
-  for(let y=0; y<mmH; y+=stepMm){
-    const rowOffset = Math.round(y / stepMm) % 2 ? stepMm/2 : 0;
-    for(let x=0; x<mmW; x+=stepMm){
-      const sx = Math.round((x + rowOffset) * pxPerMm);
-      const sy = Math.round(y * pxPerMm);
-      if(sx<0 || sx>=off.width || sy<0 || sy>=off.height) continue;
-      const a = img[(sy*off.width + sx)*4 + 3];
-      if(a > 30) stones.push({x:x + rowOffset, y, d:state.stoneSize, color:state.stoneColor});
-    }
-  }
-  state.stones = stones;
-}
-
-function drawStone2D(ctx,x,y,r,type){
-  const p = colors[type] || colors.crystal;
-  const g = ctx.createRadialGradient(x-r*.35,y-r*.45,r*.1,x,y,r);
-  g.addColorStop(0,p[2]); g.addColorStop(.42,p[0]); g.addColorStop(.72,p[1]); g.addColorStop(1,p[3]);
-  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
-  ctx.strokeStyle='rgba(80,80,80,.45)'; ctx.lineWidth=Math.max(.45,r*.11); ctx.stroke();
-  ctx.fillStyle='rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(x-r*.25,y-r*.32,Math.max(.5,r*.18),0,Math.PI*2); ctx.fill();
-}
-
-function drawLayout(){
-  const ctx = lctx, W = layoutCanvas.width, H = layoutCanvas.height;
-  ctx.clearRect(0,0,W,H); ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
-  const pad=55, mmW=170, mmH=100, scale=Math.min((W-pad*2)/mmW,(H-pad*2)/mmH);
-  ctx.strokeStyle='#e7ebef'; ctx.lineWidth=1;
-  for(let x=0;x<=mmW;x+=10){ctx.beginPath();ctx.moveTo(pad+x*scale,pad);ctx.lineTo(pad+x*scale,pad+mmH*scale);ctx.stroke();}
-  for(let y=0;y<=mmH;y+=10){ctx.beginPath();ctx.moveTo(pad,pad+y*scale);ctx.lineTo(pad+mmW*scale,pad+y*scale);ctx.stroke();}
-  ctx.strokeStyle='#b9c0c8'; ctx.strokeRect(pad,pad,mmW*scale,mmH*scale);
-  ctx.fillStyle='#555'; ctx.font='13px Arial'; ctx.fillText('0',pad-20,pad+4); ctx.fillText('170 mm',pad+mmW*scale-42,pad-12); ctx.fillText('100 mm',pad-48,pad+mmH*scale);
-  for(const s of state.stones){ drawStone2D(ctx,pad+s.x*scale,pad+s.y*scale,(s.d*scale)/2,state.stoneColor); }
-  $('stats').textContent = `${state.stones.length} stones · layout ${mmW} × ${mmH} mm`;
-}
-
-function hexToRgb(hex){const v=parseInt(hex.slice(1),16);return {r:(v>>16)&255,g:(v>>8)&255,b:v&255};}
-function mix(hex,a){const c=hexToRgb(hex); return `rgb(${Math.round(c.r*a+255*(1-a))},${Math.round(c.g*a+255*(1-a))},${Math.round(c.b*a+255*(1-a))})`;}
-
-function roundedRectPath(ctx,x,y,w,h,r){
-  ctx.beginPath();
-  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
-  ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
-  ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
-  ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath();
-}
-
-function drawCup(){
-  const ctx=cctx,W=cupCanvas.width,H=cupCanvas.height; ctx.clearRect(0,0,W,H);
-
-  // softer studio background
-  const bg=ctx.createLinearGradient(0,0,0,H);
-  bg.addColorStop(0,'#d8d0c4'); bg.addColorStop(.68,'#bfb4a6'); bg.addColorStop(.681,'#aaa398'); bg.addColorStop(1,'#8f8a83');
-  ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
-
-  const cup={x:W*.5,y:H*.50,w:390,h:520,top:345,bottom:390};
-  const topY=cup.y-cup.h/2, bottomY=cup.y+cup.h/2;
-  const leftTop=cup.x-cup.top/2, rightTop=cup.x+cup.top/2;
-  const leftBottom=cup.x-cup.bottom/2, rightBottom=cup.x+cup.bottom/2;
-  const isBlack = state.cupColor.toLowerCase()==='#111111' || state.cupColor.toLowerCase()==='#000000';
-
-  const bodyGrad=ctx.createLinearGradient(leftBottom,0,rightBottom,0);
-  if(isBlack){
-    bodyGrad.addColorStop(0,'#090909'); bodyGrad.addColorStop(.18,'#151515'); bodyGrad.addColorStop(.46,'#20201e');
-    bodyGrad.addColorStop(.58,'#2c2c2a'); bodyGrad.addColorStop(.74,'#181817'); bodyGrad.addColorStop(1,'#080808');
-  } else {
-    bodyGrad.addColorStop(0,mix(state.cupColor,.76)); bodyGrad.addColorStop(.18,mix(state.cupColor,.96)); bodyGrad.addColorStop(.46,mix(state.cupColor,.9));
-    bodyGrad.addColorStop(.60,mix(state.cupColor,.72)); bodyGrad.addColorStop(.78,mix(state.cupColor,.93)); bodyGrad.addColorStop(1,mix(state.cupColor,.76));
-  }
-
-  // Handle is now connected with ceramic sockets, not floating.
-  const side = Math.cos(state.rotation) >= 0 ? 1 : -1;
-  const handleVisible = Math.abs(Math.cos(state.rotation)) > .18;
-  const handleBehind = Math.cos(state.rotation) > 0;
-  const handleRootX = cup.x + side*(cup.top/2 - 8);
-  const handleCenterX = cup.x + side*(cup.top/2 + 100*Math.abs(Math.cos(state.rotation)) + 25);
-  function drawHandle(behind=false){
-    if(!handleVisible) return;
-    ctx.save();
-    ctx.globalAlpha = behind ? .72 : 1;
-    ctx.lineCap='round';
-    ctx.lineJoin='round';
-    // outer ceramic loop
-    ctx.lineWidth=56; ctx.strokeStyle=isBlack ? '#151514' : mix(state.cupColor,.84);
-    ctx.beginPath();
-    ctx.ellipse(handleCenterX,cup.y+22,102,176,0,side<0?Math.PI/2:-Math.PI/2,side<0?Math.PI*1.5:Math.PI/2, side<0);
-    ctx.stroke();
-    // inner shadow cutout
-    ctx.lineWidth=31; ctx.strokeStyle=isBlack ? '#2a2a28' : mix(state.cupColor,.55);
-    ctx.stroke();
-    // attachment pads: cover the seam so the handle visually grows from the mug.
-    const padW=56, padH=72;
-    ctx.fillStyle=isBlack ? '#171716' : mix(state.cupColor,.88);
-    roundedRectPath(ctx, handleRootX - (side>0?8:padW-8), cup.y-102, padW, padH, 22); ctx.fill();
-    roundedRectPath(ctx, handleRootX - (side>0?8:padW-8), cup.y+88, padW, padH, 22); ctx.fill();
-    // soft dark inner edge
-    ctx.strokeStyle='rgba(0,0,0,.18)'; ctx.lineWidth=3;
-    roundedRectPath(ctx, handleRootX - (side>0?8:padW-8), cup.y-102, padW, padH, 22); ctx.stroke();
-    roundedRectPath(ctx, handleRootX - (side>0?8:padW-8), cup.y+88, padW, padH, 22); ctx.stroke();
-    ctx.restore();
-  }
-  if(handleBehind) drawHandle(true);
-
-  // cup body path
-  ctx.beginPath();
-  ctx.ellipse(cup.x,topY,cup.top/2,34,0,Math.PI,0,true);
-  ctx.bezierCurveTo(rightTop,topY+110,rightBottom,bottomY-120,rightBottom,bottomY-25);
-  ctx.quadraticCurveTo(cup.x,bottomY+28,leftBottom,bottomY-25);
-  ctx.bezierCurveTo(leftBottom,bottomY-120,leftTop,topY+110,leftTop,topY);
-  ctx.closePath(); ctx.fillStyle=bodyGrad; ctx.fill();
-  ctx.strokeStyle=isBlack?'rgba(255,255,255,.07)':'rgba(0,0,0,.16)'; ctx.lineWidth=2; ctx.stroke();
-
-  // Lip and inside.
-  ctx.fillStyle=isBlack ? '#252522' : mix(state.cupColor,.82);
-  ctx.beginPath(); ctx.ellipse(cup.x,topY,cup.top/2,34,0,0,Math.PI*2); ctx.fill();
-  ctx.strokeStyle=isBlack?'rgba(255,255,255,.38)':'rgba(255,255,255,.70)'; ctx.lineWidth=4; ctx.stroke();
-  ctx.fillStyle=isBlack ? 'rgba(0,0,0,.58)' : 'rgba(0,0,0,.20)';
-  ctx.beginPath(); ctx.ellipse(cup.x,topY+2,cup.top/2-30,20,0,0,Math.PI*2); ctx.fill();
-
-  // Much softer studio reflections. No more hard white blocks.
-  const h1 = cup.x + Math.sin(state.rotation + 0.35) * 90;
-  const h2 = cup.x + Math.sin(state.rotation + 0.80) * 122;
-  const gloss = isBlack ? .16 : .20;
-  const g1=ctx.createLinearGradient(h1-20,0,h1+34,0);
-  g1.addColorStop(0,'rgba(255,255,255,0)'); g1.addColorStop(.48,`rgba(255,255,255,${gloss})`); g1.addColorStop(1,'rgba(255,255,255,0)');
-  ctx.fillStyle=g1; ctx.fillRect(h1-20,topY+40,54,cup.h-95);
-  const g2=ctx.createLinearGradient(h2-13,0,h2+22,0);
-  g2.addColorStop(0,'rgba(255,255,255,0)'); g2.addColorStop(.5,`rgba(255,255,255,${gloss*.55})`); g2.addColorStop(1,'rgba(255,255,255,0)');
-  ctx.fillStyle=g2; ctx.fillRect(h2-13,topY+58,35,cup.h-135);
-
-  if(!handleBehind) drawHandle(false);
-
-  // stones on curved cup surface
-  const mmW=170, mmH=100;
-  const minY=cup.y-72, maxY=cup.y+92;
-  const visualWidth = cup.w * state.wrap;
-  const radiusScale = visualWidth/mmW;
-  for(const s of state.stones){
-    const nx=(s.x/mmW-.5)*state.wrap;
-    const theta=nx*Math.PI + state.rotation;
-    const curveDepth=Math.cos(theta);
-    if(curveDepth < .08) continue;
-    const cx=cup.x + Math.sin(theta)*(cup.w*.495);
-    const cy=minY+(s.y/mmH)*(maxY-minY);
-    const r=Math.max(1.25,(s.d*radiusScale)/2);
-    drawFacetedStone3D(ctx,cx,cy,r*curveDepth,r,state.stoneColor,curveDepth);
-  }
-}
-
-function drawFacetedStone3D(ctx,x,y,rx,ry,type,light){
-  const p=colors[type]||colors.crystal;
-  ctx.save();
-  ctx.shadowColor='rgba(0,0,0,.18)'; ctx.shadowBlur=3; ctx.shadowOffsetY=1;
-  const g=ctx.createRadialGradient(x-rx*.35,y-ry*.45,0.5,x,y,Math.max(rx,ry));
-  g.addColorStop(0,p[2]); g.addColorStop(.22,'#fff'); g.addColorStop(.5,p[0]); g.addColorStop(.78,p[1]); g.addColorStop(1,p[3]);
-  ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2); ctx.fill();
-  ctx.shadowColor='transparent';
-  ctx.strokeStyle='rgba(70,70,70,.35)'; ctx.lineWidth=Math.max(.6,ry*.12); ctx.stroke();
-  ctx.strokeStyle='rgba(255,255,255,.8)'; ctx.lineWidth=Math.max(.4,ry*.06);
-  for(let i=0;i<6;i++){const a=i*Math.PI/3;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+Math.cos(a)*rx*.88,y+Math.sin(a)*ry*.88);ctx.stroke();}
-  ctx.fillStyle=`rgba(255,255,255,${.45+.35*light})`; ctx.beginPath(); ctx.ellipse(x-rx*.25,y-ry*.35,rx*.22,ry*.16,0,0,Math.PI*2); ctx.fill();
-  ctx.restore();
-}
-
-function render(){ syncState(); sampleText(); drawLayout(); drawCup(); }
-
-function download(name, blob){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); }
-function exportCanvas(canvas,name){ canvas.toBlob(b=>download(name,b),'image/png'); }
-function exportJSON(){ download('rhinestone-project.json', new Blob([JSON.stringify(state,null,2)],{type:'application/json'})); }
-function exportSVG(){
-  const mmW=170,mmH=100; let s=`<svg xmlns="http://www.w3.org/2000/svg" width="${mmW}mm" height="${mmH}mm" viewBox="0 0 ${mmW} ${mmH}">\n<rect width="100%" height="100%" fill="white"/>\n`;
-  for(const st of state.stones) s+=`<circle cx="${st.x.toFixed(2)}" cy="${st.y.toFixed(2)}" r="${(st.d/2).toFixed(2)}" fill="none" stroke="black" stroke-width="0.12"/>\n`;
-  s+='</svg>'; download('rhinestone-production-layout.svg', new Blob([s],{type:'image/svg+xml'}));
-}
-
-['textInput','fontSelect','stoneSizeSelect','gapInput','stoneColorSelect','cupColorSelect','wrapSelect','rotationSlider'].forEach(id=>$(id).addEventListener('input',render));
-function setRotation(deg){ $('rotationSlider').value=String(deg); render(); }
-$('frontViewBtn').onclick=()=>setRotation(0);
-$('leftViewBtn').onclick=()=>setRotation(-90);
-$('rightViewBtn').onclick=()=>setRotation(90);
-$('backViewBtn').onclick=()=>setRotation(180);
-let dragging=false, lastX=0;
-cupCanvas.addEventListener('pointerdown', e=>{ dragging=true; lastX=e.clientX; cupCanvas.setPointerCapture(e.pointerId); });
-cupCanvas.addEventListener('pointermove', e=>{
-  if(!dragging) return;
-  const dx=e.clientX-lastX; lastX=e.clientX;
-  const slider=$('rotationSlider');
-  let deg=parseFloat(slider.value)+dx*0.55;
-  while(deg>180) deg-=360; while(deg<-180) deg+=360;
-  slider.value=String(deg); render();
-});
-cupCanvas.addEventListener('pointerup', ()=>{ dragging=false; });
-cupCanvas.addEventListener('pointercancel', ()=>{ dragging=false; });
-$('newBtn').onclick=()=>{$('textInput').value='Vitalina'; setRotation(0);};
-$('exportJsonBtn').onclick=exportJSON; $('exportSvgBtn').onclick=exportSVG; $('exportPngBtn').onclick=()=>exportCanvas(layoutCanvas,'rhinestone-2d-layout.png'); $('export3dBtn').onclick=()=>exportCanvas(cupCanvas,'rhinestone-cup-preview.png');
-$('importJsonBtn').onclick=()=>$('importFile').click();
-$('importFile').addEventListener('change', async e=>{ const file=e.target.files[0]; if(!file)return; const data=JSON.parse(await file.text()); Object.assign(state,data); $('textInput').value=state.text; $('fontSelect').value=state.font; $('stoneSizeSelect').value=String(state.stoneSize); $('gapInput').value=state.gap; $('stoneColorSelect').value=state.stoneColor; $('cupColorSelect').value=state.cupColor; $('wrapSelect').value=String(state.wrap); $('rotationSlider').value=String(Math.round((state.rotation||0)*180/Math.PI)); render(); });
-
-render();
+class GeometryEngine{generate(project){let raw=[];for(const l of project.layers){if(!l.visible)continue;if(l.type==='text')raw.push(...this.generateText(l,project));if(l.type==='circle')raw.push(...this.generateCircle(l));if(l.type==='rectangle')raw.push(...this.generateRect(l));}const stones=this.dedupe(raw,Math.min(...raw.map(s=>s.d||2),2)*0.58);return{version:'M2.2',units:'mm',canvas:project.canvas,stones,bbox:this.bbox(stones),stats:{count:stones.length}}}
+ generateText(layer,project){const d=layer.stoneSize,g=layer.gap,step=d+g;const mode=layer.textMode||'stroke';const unit=mode==='fill'?layer.height/7:layer.height/8.5;const charW=5*unit,charGap=1.55*unit;let width=0;for(const ch of layer.text)width+=(FONT5[ch]||FONT5['?']||FONT5[' '])?charW+charGap:charW+charGap;width=Math.max(0,width-charGap);let scale=1;if(layer.autoFit&&width>project.canvas.width-10)scale=(project.canvas.width-10)/width;const u=unit*scale;const sx=(project.canvas.width-width*scale)/2;const sy=(project.canvas.height-7*u)/2;const stones=[];let cursor=sx;for(const ch of layer.text){const grid=FONT5[ch]||FONT5[ch.toUpperCase()]||FONT5[' '];if(mode==='fill')this.sampleGlyphFill(grid,cursor,sy,u,step,d,layer.color,layer.id,stones);else this.sampleGlyphStroke(grid,cursor,sy,u,step,d,layer.color,layer.id,stones);cursor+=(5*unit+charGap)*scale;}return this.dedupe(stones,step*0.62)}
+ sampleGlyphFill(grid,x0,y0,u,step,d,color,layerId,out){const pitch=Math.max(step,u*.88);for(let r=0;r<7;r++)for(let c=0;c<5;c++)if(grid[r][c]==='1'){const cx=x0+(c+.5)*u,cy=y0+(r+.5)*u;for(let y=cy-u*.28;y<=cy+u*.28;y+=pitch)for(let x=cx-u*.28;x<=cx+u*.28;x+=pitch)out.push({x,y,d,color,layerId});}}
+ sampleGlyphStroke(grid,x0,y0,u,step,d,color,layerId,out){const pitch=step;const cell=(r,c)=>r>=0&&r<7&&c>=0&&c<5&&grid[r][c]==='1';for(let r=0;r<7;r++)for(let c=0;c<5;c++)if(cell(r,c)){const cx=x0+(c+.5)*u,cy=y0+(r+.5)*u;if(cell(r,c+1))this.line(out,cx,cy,x0+(c+1.5)*u,cy,pitch,d,color,layerId);if(cell(r+1,c))this.line(out,cx,cy,cx,y0+(r+1.5)*u,pitch,d,color,layerId);if(!cell(r,c+1)&&!cell(r+1,c)&&!cell(r,c-1)&&!cell(r-1,c))out.push({x:cx,y:cy,d,color,layerId});}}
+ line(out,x1,y1,x2,y2,pitch,d,color,layerId){const len=Math.hypot(x2-x1,y2-y1),n=Math.max(1,Math.round(len/pitch));for(let i=0;i<=n;i++){const t=i/n;out.push({x:x1+(x2-x1)*t,y:y1+(y2-y1)*t,d,color,layerId});}}
+ generateCircle(l){const out=[],d=l.stoneSize,step=d+l.gap,r=Math.max(1,l.r);const n=Math.max(8,Math.round(2*Math.PI*r/step));for(let i=0;i<n;i++){const a=i/n*Math.PI*2;out.push({x:l.cx+Math.cos(a)*r,y:l.cy+Math.sin(a)*r,d,color:l.color,layerId:l.id});}return out}
+ generateRect(l){const out=[],d=l.stoneSize,step=d+l.gap,x0=l.x,y0=l.y,x1=l.x+l.w,y1=l.y+l.h;const addLine=(a,b,c,d2)=>this.line(out,a,b,c,d2,step,d,l.color,l.id);addLine(x0,y0,x1,y0);addLine(x1,y0,x1,y1);addLine(x1,y1,x0,y1);addLine(x0,y1,x0,y0);return this.dedupe(out,step*.62)}
+ dedupe(stones,minDist){const cell=Math.max(minDist,0.5),grid=new Map(),out=[],m2=minDist*minDist;for(const s of stones){const gx=Math.floor(s.x/cell),gy=Math.floor(s.y/cell);let ok=true;for(let yy=gy-1;yy<=gy+1;yy++)for(let xx=gx-1;xx<=gx+1;xx++){const arr=grid.get(xx+','+yy)||[];for(const o of arr){const dx=s.x-o.x,dy=s.y-o.y;if(dx*dx+dy*dy<m2){ok=false;break}}if(!ok)break}if(ok){out.push(s);const k=gx+','+gy;if(!grid.has(k))grid.set(k,[]);grid.get(k).push(s)}}return out}
+ bbox(stones){if(!stones.length)return{x:0,y:0,width:0,height:0,x2:0,y2:0};let x=Infinity,y=Infinity,x2=-Infinity,y2=-Infinity;for(const s of stones){x=Math.min(x,s.x-s.d/2);y=Math.min(y,s.y-s.d/2);x2=Math.max(x2,s.x+s.d/2);y2=Math.max(y2,s.y+s.d/2)}return{x,y,x2,y2,width:x2-x,height:y2-y}}
+ layerBBox(layer){if(layer.type==='circle')return{x:layer.cx-layer.r,y:layer.cy-layer.r,width:layer.r*2,height:layer.r*2,x2:layer.cx+layer.r,y2:layer.cy+layer.r};if(layer.type==='rectangle')return{x:layer.x,y:layer.y,width:layer.w,height:layer.h,x2:layer.x+layer.w,y2:layer.y+layer.h};const stones=this.generateText(layer,project);return this.bbox(stones)} }
+function defaultProject(){return{version:2,units:'mm',product:'mug',canvas:{width:210,height:90},cupColor:'#1f3556',wrap:'front',layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:'stroke',height:25,textMode:'stroke',stoneSize:2,gap:.3,color:'gold',autoFit:true}]}}
+const engine=new GeometryEngine();let project=defaultProject(),selectedLayerId='text',layout=null,rotation=0,zoom=1,layoutTransform=null,drag=null;const el=id=>document.getElementById(id);const layoutCanvas=el('layout'),cupCanvas=el('cup');function selectedLayer(){return project.layers.find(l=>l.id===selectedLayerId)||project.layers[0]}function syncSelectedControlsFromLayer(){const l=selectedLayer();el('selectedLayer').value=l.id;const isText=l.type==='text';el('textControls').style.display=isText?'block':'none';el('shapeControls').style.display=isText?'none':'block';if(isText){el('text').value=l.text;el('font').value=l.font;el('height').value=l.height;el('autoFit').value=l.autoFit?'on':'off';el('textMode').value=l.textMode||'stroke'}else{el('shapeX').value=l.type==='circle'?l.cx:l.x;el('shapeY').value=l.type==='circle'?l.cy:l.y;el('shapeW').value=l.type==='circle'?l.r:l.w;el('shapeH').value=l.type==='circle'?'':l.h}el('stoneSize').value=String(l.stoneSize);el('gap').value=l.gap;el('stoneColor').value=l.color}
+function writeSelectedControlsToLayer(){const l=selectedLayer();if(l.type==='text'){l.text=el('text').value;l.font=el('font').value;l.height=parseFloat(el('height').value)||25;l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value}else if(l.type==='circle'){l.cx=parseFloat(el('shapeX').value)||105;l.cy=parseFloat(el('shapeY').value)||45;l.r=Math.max(1,parseFloat(el('shapeW').value)||18)}else if(l.type==='rectangle'){l.x=parseFloat(el('shapeX').value)||65;l.y=parseFloat(el('shapeY').value)||30;l.w=Math.max(1,parseFloat(el('shapeW').value)||80);l.h=Math.max(1,parseFloat(el('shapeH').value)||30)}l.stoneSize=parseFloat(el('stoneSize').value)||2;l.gap=parseFloat(el('gap').value)||.3;l.color=el('stoneColor').value;project.cupColor=el('cupColor').value;project.wrap=el('wrap').value;rotation=parseFloat(el('rotation').value)||0;zoom=(parseFloat(el('zoom').value)||100)/100}
+function updateAll(skipWrite=false){if(!skipWrite)writeSelectedControlsToLayer();layout=engine.generate(project);renderLayerUI();drawLayout();drawCup();updateStats()}function renderLayerUI(){el('selectedLayer').innerHTML=project.layers.map(l=>`<option value="${l.id}">${escapeHtml(layerLabel(l))}</option>`).join('');el('selectedLayer').value=selectedLayerId;el('layersList').innerHTML=project.layers.map(l=>`<div class="layer ${l.id===selectedLayerId?'selected':''}" data-layer="${l.id}"><input type="checkbox" ${l.visible?'checked':''} data-action="visible"><div class="name" data-action="select">${escapeHtml(layerLabel(l))}</div><div class="type">${l.type.toUpperCase()}</div><button data-action="select">✎</button><button data-action="duplicate">⧉</button><button data-action="delete">🗑</button></div>`).join('')}function layerLabel(l){return l.type==='text'?(l.text||'Text'):l.type==='circle'?'Circle':'Rectangle'}function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function resizeCanvas(c){const r=c.getBoundingClientRect(),dpr=Math.max(1,devicePixelRatio||1),w=Math.floor(r.width*dpr),h=Math.floor(r.height*dpr);if(c.width!==w||c.height!==h){c.width=w;c.height=h}return{w,h,dpr}}
+function layoutMmToPx(p){return{x:layoutTransform.ox+p.x*layoutTransform.s,y:layoutTransform.oy+p.y*layoutTransform.s}}function layoutPxToMm(x,y){return{x:(x-layoutTransform.ox)/layoutTransform.s,y:(y-layoutTransform.oy)/layoutTransform.s}}
+function drawStone2D(ctx,x,y,r,colorKey,style='layout'){const c=STONE_COLORS[colorKey]||STONE_COLORS.crystal;const g=ctx.createRadialGradient(x-r*.35,y-r*.45,r*.1,x,y,r);g.addColorStop(0,c.shine);g.addColorStop(.45,c.fill);g.addColorStop(1,c.accent);ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.lineWidth=style==='cup'?Math.max(.35,r*.06):Math.max(.55,r*.10);ctx.strokeStyle=style==='cup'?c.stroke:c.stroke;ctx.stroke();if(r>2.4){ctx.beginPath();ctx.moveTo(x-r*.42,y);ctx.lineTo(x,y-r*.42);ctx.lineTo(x+r*.42,y);ctx.lineTo(x,y+r*.42);ctx.closePath();ctx.strokeStyle='rgba(255,255,255,.42)';ctx.lineWidth=Math.max(.3,r*.05);ctx.stroke()}}
+function drawLayout(){const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');ctx.clearRect(0,0,w,h);ctx.fillStyle='#fbfdff';ctx.fillRect(0,0,w,h);const pad=38*dpr,b=layout.bbox,viewW=Math.max(70,b.width+24),viewH=Math.max(45,b.height+24),s=Math.min((w-pad*2)/viewW,(h-pad*2)/viewH);const ox=w/2-(b.x+b.width/2)*s,oy=h/2-(b.y+b.height/2)*s;layoutTransform={s,ox,oy,dpr};const gx0=Math.floor((b.x-15)/5)*5,gx1=Math.ceil((b.x+b.width+15)/5)*5,gy0=Math.floor((b.y-15)/5)*5,gy1=Math.ceil((b.y+b.height+15)/5)*5;ctx.strokeStyle='#e9eef5';ctx.lineWidth=1;for(let x=gx0;x<=gx1;x+=5){ctx.beginPath();ctx.moveTo(ox+x*s,oy+gy0*s);ctx.lineTo(ox+x*s,oy+gy1*s);ctx.stroke()}for(let y=gy0;y<=gy1;y+=5){ctx.beginPath();ctx.moveTo(ox+gx0*s,oy+y*s);ctx.lineTo(ox+gx1*s,oy+y*s);ctx.stroke()}ctx.strokeStyle='#d2dae8';ctx.lineWidth=1.5;for(let x=Math.floor(gx0/20)*20;x<=gx1;x+=20){ctx.beginPath();ctx.moveTo(ox+x*s,oy+gy0*s);ctx.lineTo(ox+x*s,oy+gy1*s);ctx.stroke()}for(let y=Math.floor(gy0/20)*20;y<=gy1;y+=20){ctx.beginPath();ctx.moveTo(ox+gx0*s,oy+y*s);ctx.lineTo(ox+gx1*s,oy+y*s);ctx.stroke()}for(const st of layout.stones)drawStone2D(ctx,ox+st.x*s,oy+st.y*s,Math.max(2,st.d*s/2),st.color,'layout');drawSelection(ctx,s,ox,oy,dpr);ctx.fillStyle='#516071';ctx.font=`${12*dpr}px Arial`;ctx.fillText(`${layout.stats.count} stones · ${layout.bbox.width.toFixed(1)}×${layout.bbox.height.toFixed(1)} mm · ${selectedLayer().textMode||''}`,20*dpr,h-18*dpr);el('fitNotice').textContent='Drag shapes with mouse. Text uses readable stroke font.'}
+function getLayerBBox(l){if(l.type==='circle')return{x:l.cx-l.r,y:l.cy-l.r,width:l.r*2,height:l.r*2,x2:l.cx+l.r,y2:l.cy+l.r};if(l.type==='rectangle')return{x:l.x,y:l.y,width:l.w,height:l.h,x2:l.x+l.w,y2:l.y+l.h};return engine.bbox(layout.stones.filter(s=>s.layerId===l.id))}
+function drawSelection(ctx,s,ox,oy,dpr){const l=selectedLayer();const b=getLayerBBox(l);ctx.strokeStyle='#1478ff';ctx.lineWidth=1.5*dpr;ctx.setLineDash([5*dpr,3*dpr]);ctx.strokeRect(ox+b.x*s,oy+b.y*s,b.width*s,b.height*s);ctx.setLineDash([]);if(l.type!=='text'){for(const h of handlesFor(b)){ctx.fillStyle='white';ctx.strokeStyle='#1478ff';ctx.lineWidth=1.5*dpr;ctx.beginPath();ctx.rect(ox+h.x*s-5*dpr,oy+h.y*s-5*dpr,10*dpr,10*dpr);ctx.fill();ctx.stroke()}}}
+function handlesFor(b){return[{name:'nw',x:b.x,y:b.y},{name:'ne',x:b.x2,y:b.y},{name:'se',x:b.x2,y:b.y2},{name:'sw',x:b.x,y:b.y2},{name:'n',x:b.x+b.width/2,y:b.y},{name:'e',x:b.x2,y:b.y+b.height/2},{name:'s',x:b.x+b.width/2,y:b.y2},{name:'w',x:b.x,y:b.y+b.height/2}]}
+function drawCup(){const{w,h,dpr}=resizeCanvas(cupCanvas),ctx=cupCanvas.getContext('2d');ctx.clearRect(0,0,w,h);const bg=ctx.createLinearGradient(0,0,0,h);bg.addColorStop(0,'#fbfdff');bg.addColorStop(1,'#e9eef5');ctx.fillStyle=bg;ctx.fillRect(0,0,w,h);const cx=w/2,cy=h*.54,cupH=h*.64*zoom,topW=w*.52*zoom,botW=w*.43*zoom,topY=cy-cupH/2,botY=cy+cupH/2,cupColor=project.cupColor;const rot=rotation*Math.PI/180,side=Math.cos(rot)>=0?1:-1,showHandle=Math.cos(rot)>-.35;if(showHandle){ctx.lineCap='round';ctx.lineWidth=w*.054*zoom;ctx.strokeStyle=shade(cupColor,-28);ctx.beginPath();ctx.ellipse(cx+side*topW*.50,cy,h*.125*zoom,h*.23*zoom,0,-Math.PI/2,Math.PI/2,side<0);ctx.stroke();ctx.lineWidth=w*.036*zoom;ctx.strokeStyle=shade(cupColor,12);ctx.beginPath();ctx.ellipse(cx+side*topW*.50,cy,h*.125*zoom,h*.23*zoom,0,-Math.PI/2,Math.PI/2,side<0);ctx.stroke()}const body=ctx.createLinearGradient(cx-topW/2,0,cx+topW/2,0);body.addColorStop(0,shade(cupColor,-15));body.addColorStop(.28,shade(cupColor,4));body.addColorStop(.52,shade(cupColor,12));body.addColorStop(.75,cupColor);body.addColorStop(1,shade(cupColor,-18));ctx.fillStyle=body;ctx.beginPath();ctx.moveTo(cx-topW/2,topY);ctx.lineTo(cx+topW/2,topY);ctx.lineTo(cx+botW/2,botY);ctx.quadraticCurveTo(cx,botY+h*.018,cx-botW/2,botY);ctx.closePath();ctx.fill();ctx.strokeStyle='rgba(0,0,0,.18)';ctx.lineWidth=1.5*dpr;ctx.stroke();ctx.fillStyle=shade(cupColor,-22);ctx.beginPath();ctx.ellipse(cx,topY,topW/2,h*.032*zoom,0,0,Math.PI*2);ctx.fill();ctx.strokeStyle=shade(cupColor,35);ctx.lineWidth=4*dpr*zoom;ctx.stroke();ctx.fillStyle=shade(cupColor,-50);ctx.beginPath();ctx.ellipse(cx,topY,topW*.42,h*.019*zoom,0,0,Math.PI*2);ctx.fill();const b=layout.bbox,labelW=topW*.72,labelH=cupH*.32,stoneScale=Math.min(labelW/Math.max(1,b.width),labelH/Math.max(1,b.height));const ly=topY+cupH*.52-(b.y+b.height/2)*stoneScale;if(project.wrap==='front'){const lx=cx-(b.x+b.width/2)*stoneScale;for(const st of layout.stones){drawStone2D(ctx,lx+st.x*stoneScale,ly+st.y*stoneScale,Math.max(1.15,st.d*stoneScale*.45),st.color,'cup')}return}const wrapDeg={wide:115,half:180,full:300}[project.wrap]||115,maxTheta=wrapDeg*Math.PI/180;for(const st of layout.stones){const theta=((st.x-(b.x+b.width/2))/Math.max(b.width,1))*maxTheta+rot;const front=Math.cos(theta);if(front<.10)continue;const yy=ly+st.y*stoneScale;const t=(yy-topY)/cupH;if(t<.06||t>.95)continue;const radius=(topW*(1-t)+botW*t)/2;const xx=cx+Math.sin(theta)*radius*.82;const persp=.62+.38*front;drawStone2D(ctx,xx,yy,Math.max(1.1,st.d*stoneScale*.42*persp),st.color,'cup')}}
+function shade(hex,pct){let c=hex.replace('#','');if(c.length===3)c=c.split('').map(x=>x+x).join('');let r=parseInt(c.slice(0,2),16),g=parseInt(c.slice(2,4),16),b=parseInt(c.slice(4,6),16);const f=pct>=0?255:0,p=Math.abs(pct)/100;r=Math.round(r+(f-r)*p);g=Math.round(g+(f-g)*p);b=Math.round(b+(f-b)*p);return`rgb(${r},${g},${b})`}function updateStats(){el('layoutStats').innerHTML=`<b>${layout.stats.count}</b> stones <span>${layout.bbox.width.toFixed(1)}×${layout.bbox.height.toFixed(1)} mm</span><span>selected: ${escapeHtml(layerLabel(selectedLayer()))}</span>`;el('cupStats').innerHTML=`<span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span><span>rotation ${Math.round(rotation)}°</span>`}
+function download(name,mime,data){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:mime}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800);el('status').textContent=`Downloaded ${name}`}function exportCanvas(name,canvas){canvas.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800)},'image/png')}function svg(){let out=`<svg xmlns="http://www.w3.org/2000/svg" width="${project.canvas.width}mm" height="${project.canvas.height}mm" viewBox="0 0 ${project.canvas.width} ${project.canvas.height}">\n<rect width="100%" height="100%" fill="white"/>\n`;for(const s of layout.stones){const c=STONE_COLORS[s.color]||STONE_COLORS.crystal;out+=`<circle cx="${s.x.toFixed(3)}" cy="${s.y.toFixed(3)}" r="${(s.d/2).toFixed(3)}" fill="${c.fill}" stroke="${c.stroke}" stroke-width="0.12"/>\n`}return out+'</svg>'}
+function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(copy.type==='rectangle'){copy.x+=8;copy.y+=8}if(copy.type==='text'){copy.text+=' copy'}project.layers.push(copy);selectedLayerId=copy.id;syncSelectedControlsFromLayer();updateAll()}function deleteLayer(id){if(project.layers.length<=1){el('status').textContent='Cannot delete the last layer';return}project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;syncSelectedControlsFromLayer();updateAll(true)}
+function pointerToLayout(e){const r=layoutCanvas.getBoundingClientRect(),dpr=layoutTransform.dpr;return layoutPxToMm((e.clientX-r.left)*dpr,(e.clientY-r.top)*dpr)}function hitTest(mm){const layers=[...project.layers].reverse();for(const l of layers){const b=getLayerBBox(l);for(const h of handlesFor(b)){if(Math.abs(mm.x-h.x)<3&&Math.abs(mm.y-h.y)<3&&l.type!=='text')return{layer:l,kind:'resize',handle:h.name,b0:b}}if(mm.x>=b.x&&mm.x<=b.x2&&mm.y>=b.y&&mm.y<=b.y2)return{layer:l,kind:l.type==='text'?'select':'move',b0:b}}return null}
+layoutCanvas.addEventListener('pointerdown',e=>{const mm=pointerToLayout(e);const hit=hitTest(mm);if(!hit)return;selectedLayerId=hit.layer.id;syncSelectedControlsFromLayer();if(hit.kind==='select'){updateAll();return}drag={kind:hit.kind,handle:hit.handle,layerId:hit.layer.id,start:mm,b0:hit.b0,l0:JSON.parse(JSON.stringify(hit.layer))};layoutCanvas.setPointerCapture(e.pointerId);updateAll(true)});layoutCanvas.addEventListener('pointermove',e=>{if(!drag)return;const mm=pointerToLayout(e),dx=mm.x-drag.start.x,dy=mm.y-drag.start.y,l=project.layers.find(x=>x.id===drag.layerId);if(!l)return;if(drag.kind==='move'){if(l.type==='circle'){l.cx=drag.l0.cx+dx;l.cy=drag.l0.cy+dy}else if(l.type==='rectangle'){l.x=drag.l0.x+dx;l.y=drag.l0.y+dy}}else if(drag.kind==='resize'){if(l.type==='circle'){l.r=Math.max(2,Math.hypot(mm.x-drag.l0.cx,mm.y-drag.l0.cy))}else if(l.type==='rectangle'){let x0=drag.b0.x,y0=drag.b0.y,x1=drag.b0.x2,y1=drag.b0.y2;if(drag.handle.includes('w'))x0=mm.x;if(drag.handle.includes('e'))x1=mm.x;if(drag.handle.includes('n'))y0=mm.y;if(drag.handle.includes('s'))y1=mm.y;l.x=Math.min(x0,x1);l.y=Math.min(y0,y1);l.w=Math.max(2,Math.abs(x1-x0));l.h=Math.max(2,Math.abs(y1-y0))}}syncSelectedControlsFromLayer();updateAll(true)});window.addEventListener('pointerup',()=>drag=null);window.addEventListener('keydown',e=>{if(e.key==='Delete'||e.key==='Backspace'){const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;deleteLayer(selectedLayerId)}});
+for(const id of ['text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','rotation','wrap','zoom','textMode','shapeX','shapeY','shapeW','shapeH'])el(id).addEventListener('input',updateAll);el('selectedLayer').addEventListener('change',()=>{selectedLayerId=el('selectedLayer').value;syncSelectedControlsFromLayer();updateAll(true)});el('layersList').addEventListener('click',e=>{const row=e.target.closest('.layer');if(!row)return;const id=row.dataset.layer,action=e.target.dataset.action;if(action==='visible'){const l=project.layers.find(x=>x.id===id);l.visible=e.target.checked;updateAll(true);return}if(action==='duplicate'){duplicateLayer(id);return}if(action==='delete'){deleteLayer(id);return}selectedLayerId=id;syncSelectedControlsFromLayer();updateAll(true)});el('deleteSelected').onclick=()=>deleteLayer(selectedLayerId);document.querySelectorAll('.viewBtn').forEach(b=>b.onclick=()=>{rotation=parseFloat(b.dataset.view);el('rotation').value=rotation;updateAll()});el('resetView').onclick=()=>{rotation=0;zoom=1;el('rotation').value=0;el('zoom').value=100;updateAll()};el('addCircle').onclick=()=>{const l=selectedLayer();const layer={id:'circle'+Date.now(),type:'circle',visible:true,cx:105,cy:45,r:18,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};project.layers.push(layer);selectedLayerId=layer.id;syncSelectedControlsFromLayer();updateAll(true)};el('addRect').onclick=()=>{const l=selectedLayer();const layer={id:'rect'+Date.now(),type:'rectangle',visible:true,x:65,y:30,w:80,h:30,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};project.layers.push(layer);selectedLayerId=layer.id;syncSelectedControlsFromLayer();updateAll(true)};el('exportProject').onclick=()=>download('rhinestone-project.json','application/json',JSON.stringify(project,null,2));el('exportLayout').onclick=()=>download('rhinestone-generated-layout.json','application/json',JSON.stringify(layout,null,2));el('exportSVG').onclick=()=>download('rhinestone-layout.svg','image/svg+xml',svg());el('exportPNG').onclick=()=>exportCanvas('rhinestone-layout.png',layoutCanvas);el('exportCup').onclick=()=>exportCanvas('rhinestone-cup-preview.png',cupCanvas);let cupDrag=false,lastX=0;cupCanvas.addEventListener('pointerdown',e=>{cupDrag=true;lastX=e.clientX;cupCanvas.setPointerCapture(e.pointerId)});cupCanvas.addEventListener('pointermove',e=>{if(!cupDrag)return;rotation+=e.clientX-lastX;lastX=e.clientX;rotation=Math.max(-180,Math.min(180,rotation));el('rotation').value=rotation;updateAll()});window.addEventListener('pointerup',()=>cupDrag=false);window.addEventListener('resize',()=>updateAll(true));syncSelectedControlsFromLayer();updateAll(true);

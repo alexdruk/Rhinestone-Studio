@@ -8,7 +8,7 @@ Do not delete sections.
 
 # Task ID
 
-RS-0003.5A1
+RS-0003.5B1
 
 ---
 
@@ -45,25 +45,46 @@ git log -1 --oneline
 
 ---
 
+# Process Note (read first)
+
+`TASK.md` in this repository currently defines `RS-0003.5B1-SPEC-REVIEW-V2`, a
+**review-only** task that explicitly forbids implementing RS-0003.5B1 and
+requires returning `SPECIFICATION APPROVED` / `CHANGES REQUESTED` instead of
+code changes. `SPEC_REVIEW_RESULT.md` (Round 2) also still shows
+`Status: NOT REVIEWED`.
+
+The user's chat instruction for this session explicitly stated "The
+specification has been approved. Implement RS-0003.5B1 exactly as
+specified," and, after this conflict was raised, explicitly chose to proceed
+with implementation on that basis rather than first updating `TASK.md` /
+`SPEC_REVIEW_RESULT.md` in the repository.
+
+This implementation therefore proceeded under direct user authorization,
+**not** because `TASK.md` was updated to reflect an implementation task. A
+human reviewer should reconcile `TASK.md` and `SPEC_REVIEW_RESULT.md` with
+this change before merging.
+
+---
+
 # Files Changed
 
 ```
-src/geometry/Stone.js               (modified — add color field + DEFAULT_STONE_COLOR)
-src/geometry/GeometryEngine.js      (modified — accept/propagate color to generated stones)
-src/geometry/index.js               (modified — export DEFAULT_STONE_COLOR)
-src/geometry/README.md              (modified — document the color field and default)
-tools/test-stone-color.mjs          (added)
-package.json                        (modified — add new test to the test script)
-TASK_RESULT.md                      (modified)
+index.html                              (modified — removed inline application script, now loads app.js as a module)
+app.js                                  (replaced — orphaned prototype replaced with the live browser application, moved verbatim from the former inline script)
+tools/test-opentype-provider.mjs        (modified — forbidden-file guard no longer rejects app.js/index.html)
+tools/test-stone-color.mjs              (modified — forbidden-file guard no longer rejects app.js/index.html)
+tools/test-geometry-engine.mjs          (modified — forbidden-file guard no longer rejects app.js/index.html)
+tools/test-app-module-migration.mjs     (added — new structural tests for the module migration)
+package.json                            (modified — added new test to the test script)
+TASK_RESULT.md                          (modified)
 ```
 
-`src/geometry/StoneLayout.js` was NOT modified. It already maps every stone
-through `Stone`/`Stone.fromJSON`, so `color` is preserved automatically
-without any change to that file.
+`style.css` was NOT modified and is NOT linked from `index.html` (it remains
+the orphaned artifact the specification requires leaving untouched).
 
-No forbidden file was touched: `index.html`, `app.js`, `style.css`,
-`src/renderer/**`, `src/export/**`, `src/text/**`, and `assets/**` are
-unmodified.
+No permanent-engine file was touched: `src/geometry/**`, `src/text/**`,
+`src/core/**`, `src/renderer/**`, `src/export/**`, `assets/**`,
+`examples/**`, `README.md`, `LICENSE`, and `CONTRIBUTING.md` are unmodified.
 
 ---
 
@@ -72,13 +93,16 @@ unmodified.
 ```text
 npm test
 
+npm run dev
+# headless-Chrome smoke test against http://localhost:5173/ (see Manual QA)
+
 git status
 
-git add package.json src/geometry/GeometryEngine.js src/geometry/README.md \
-  src/geometry/Stone.js src/geometry/index.js tools/test-stone-color.mjs \
-  TASK_RESULT.md
+git add app.js index.html package.json tools/test-opentype-provider.mjs \
+  tools/test-stone-color.mjs tools/test-geometry-engine.mjs \
+  tools/test-app-module-migration.mjs TASK_RESULT.md
 
-git commit -m "fix(geometry): include color in stone metadata"
+git commit -m "refactor(app): move live browser code into app module"
 
 git push
 ```
@@ -95,7 +119,7 @@ Details:
 
 ```
 > rhinestone-studio@0.1.0 test
-> node tools/test-core-model.mjs && node tools/test-font-manager.mjs && node tools/test-vector-path.mjs && node tools/test-font-provider-registry.mjs && node tools/test-opentype-provider.mjs && node tools/test-default-font-provider-registry.mjs && node tools/test-geometry-engine.mjs && node tools/test-stone-color.mjs
+> node tools/test-core-model.mjs && node tools/test-font-manager.mjs && node tools/test-vector-path.mjs && node tools/test-font-provider-registry.mjs && node tools/test-opentype-provider.mjs && node tools/test-default-font-provider-registry.mjs && node tools/test-geometry-engine.mjs && node tools/test-stone-color.mjs && node tools/test-app-module-migration.mjs
 
 ✓ Project creates default millimeter canvas
 ✓ Project adds text, circle, and rectangle layers
@@ -157,97 +181,157 @@ GeometryEngine tests passed.
 ✓ 8. repeated generation produces identical colors
 ✓ this task did not modify forbidden UI, renderer, or exporter files
 Stone color tests passed.
+✓ index.html contains exactly one application module entry point
+✓ the entry point is ./app.js
+✓ the previous large inline application script is absent
+✓ app.js contains the live startup logic
+✓ DOM IDs referenced by app.js exist in index.html
+✓ app.js does not import OpenTypeProvider
+✓ app.js does not import src/geometry/GeometryEngine.js
+✓ the three updated legacy guard tests no longer reject app.js or index.html
+✓ no forbidden files changed
+App module migration tests passed.
 ```
 
-No `build` script exists in package.json, so `npm run build` was not run
+No `build` script exists in `package.json`, so `npm run build` was not run
 (AI_ENGINEER.md: run it "if available").
 
 ## Manual QA
 
-Application startup
+Ran `npm run dev` (`python3 -m http.server 5173`) and drove
+`http://localhost:5173/` with a headless instance of the system's installed
+Google Chrome (no browser-automation dependency was added to the project —
+this used the OS-installed browser binary directly, consistent with "Do not
+add a browser automation dependency in this task").
 
-- [x] N/A — TASK.md states "Application startup is not required." No
-      forbidden file (`index.html`, `app.js`, `style.css`, `src/renderer/**`,
-      `src/export/**`) was touched, and `GeometryEngine` is still not wired
-      into the live app.
+### Application startup
 
-Expected visible change achieved
+- [x] The page loads (`GET /` → 200, `GET /app.js` → 200,
+      `content-type: application/javascript`).
+- [x] No console errors attributable to the page (headless Chrome verbose
+      log captured; the only "error"/"404" strings present are Chrome's own
+      background telemetry/network-service noise, none referencing
+      `localhost`, `app.js`, or `index.html`).
+- [x] No directory listing appears (server returns `index.html` at `/`).
 
-- [x] PASS — TASK.md specifies NONE; confirmed none (see Visible Changes below).
+### Existing text behavior
+
+- [x] Default text "Vitalina Serbin" renders identically to the pre-migration
+      baseline (verified visually via screenshot: 169 stones, 199.9×14.4 mm).
+- [x] `stoneSize` control reflects the correct default (`2.0 mm`, confirmed
+      via rendered DOM `selected` attribute).
+- [~] Changing text mode / stone size / gap / stone color, shape
+      add/select/move/resize/delete, layer visibility/duplication/deletion,
+      cup rotation/zoom, and all five export buttons were verified by static
+      code inspection (the migrated `app.js` is byte-for-byte identical to
+      the former inline script for all logic — see Architecture Notes) but
+      were **not** each individually clicked through in this session, since
+      no interactive browser session (only headless screenshot/DOM dump) was
+      available in this environment.
+
+### Shapes / Layer management / Views / Exports
+
+- [~] Same caveat as above: code is verified unchanged and the app loads and
+      renders correctly, but a full interactive click-through of every
+      checkbox in spec section 10 was not performed by a human or an
+      interactive browser session in this run.
+
+A human reviewer should still click through the full manual QA checklist in
+`docs/specifications/RS-0003.5B1-BrowserMigration.md` section 10 before
+merging, per AI_ENGINEER.md's standing rule that "a passing test suite does
+not guarantee a successful implementation."
 
 ---
 
 # Visible Changes
 
-None. `index.html`, `app.js`, `style.css`, `src/renderer/**`, and
-`src/export/**` were not touched. `GeometryEngine` is still not imported by
-any application entry point, so this change has no runtime effect on the
-live browser app.
+None intended. `index.html` now loads `app.js` as an ES module instead of
+containing the application inline; `app.js` contains exactly the same
+application logic that was previously inline (diffed byte-for-byte during
+implementation — see Architecture Notes). `style.css` remains unlinked and
+unmodified. No `src/**` permanent engine code was touched, so this task has
+no effect on the vector-text pipeline.
 
 ---
 
 # Architecture Notes
 
-Resolves the mismatch between `docs/ARCHITECTURE.md` (which lists `color` as
-part of every `StoneLayout` stone) and the previous `Stone` implementation
-(which omitted it):
-
-- `Stone` (`src/geometry/Stone.js`) now accepts an optional `color` in its
-  constructor, validates it is a non-empty string when provided, and stores
-  it on the instance. `color` is included in `toJSON()`, and `fromJSON()`
-  already forwards its input object to the constructor, so deserialization
-  picks up `color` with no additional code.
-- Added `export const DEFAULT_STONE_COLOR = 'Crystal AB'` in `Stone.js`.
-  This reuses the crystal color already used as the default for layer params
-  in `src/core/Layer.js` (`TextLayer`/`CircleLayer`/`RectangleLayer` all
-  default `params.color` to `'Crystal AB'`), per TASK.md's instruction to
-  reuse an existing project default rather than inventing a new one.
-  Exported from `src/geometry/index.js` so callers/tests can reference it
-  instead of duplicating the literal string.
-- `StoneLayout` (`src/geometry/StoneLayout.js`) required **no code change**.
-  It already builds every stone through `Stone`/`Stone.fromJSON`, so once
-  `Stone` carries color, `StoneLayout` preserves it automatically, including
-  through `toJSON()`/`fromJSON()` round trips.
-- `GeometryEngine.generateTextLayout()` (`src/geometry/GeometryEngine.js`)
-  now accepts an optional `color` parameter, validates it the same way as
-  `Stone`, and passes it through to every generated `Stone` (both `outline`
-  and `fill` sampling modes share the same stone-construction code path, so
-  both were covered by one change). When `color` is omitted, each `Stone`
-  falls back to `DEFAULT_STONE_COLOR` on its own — the engine does not
-  duplicate that default.
-- Output remains deterministic: color is a plain, static value copied
-  through to every stone in a generation call, so repeated calls with the
-  same parameters produce identical colors (verified by test 8 in
-  `tools/test-stone-color.mjs`).
-- No unit, DOM, renderer, or exporter dependency was introduced. All
-  millimeter-based fields are unchanged.
+- The entire former inline `<script>` block in `index.html` (state, the
+  legacy inline `GeometryEngine`, bitmap text sampling, shape generation,
+  mouse editing, 2D/cup rendering, exports, and UI event wiring) was moved
+  verbatim into the root `app.js`. A `diff` between the extracted original
+  inline script and the new `app.js` body confirmed byte-for-byte identity
+  before `index.html` was edited, so this is a mechanical relocation, not a
+  rewrite.
+- `index.html` now contains exactly one `<script>` tag:
+  `<script type="module" src="./app.js"></script>`. The previous inline
+  application script was deleted (not just disabled), so there is no
+  duplicate live implementation left in the page.
+- The old orphaned `app.js` (which targeted DOM IDs like `layoutCanvas`,
+  `textInput`, `fontSelect` that do not exist in the live `index.html`) was
+  fully replaced.
+- `style.css` is still not referenced by `index.html` and was not edited,
+  per the specification's instruction to leave that orphaned artifact alone.
+- `app.js` contains no `import` statements — it does not reference
+  `OpenTypeProvider`, `opentype.js`, or `src/geometry/GeometryEngine.js`,
+  per the specification's "no premature OpenType/vector-text integration"
+  constraint. Verified both by manual inspection and by
+  `tools/test-app-module-migration.mjs`.
+- The three legacy forbidden-file guard tests
+  (`tools/test-opentype-provider.mjs`, `tools/test-stone-color.mjs`,
+  `tools/test-geometry-engine.mjs`) had `app.js` and `index.html` removed
+  from their `forbiddenExact` sets. `style.css` (and `README.md` in the
+  geometry-engine test) remain forbidden in all three, so the guards stay
+  meaningful for future tasks.
+- Added `tools/test-app-module-migration.mjs`, covering all ten checks in
+  specification section 9: single module entry point, `./app.js` as the
+  entry, absence of the old inline script, `app.js` owning startup logic,
+  DOM-ID cross-reference between `app.js` and `index.html`, absence of
+  OpenType/GeometryEngine imports, the updated guard tests, and the
+  no-forbidden-files-changed check. It is wired into `package.json`'s `test`
+  script.
+- No new dependency was added and no bundler/import map was introduced.
 
 ---
 
 # Warnings
 
-None. No new dependency was added; `package.json`'s `dependencies` field is
-unchanged (only the `scripts.test` string was extended to include the new
-test file).
+- See "Process Note" above: this implementation was carried out despite
+  `TASK.md` (as committed in the repository) still describing a
+  review-only task that forbids implementation. It proceeded strictly on
+  the user's explicit, informed instruction in this session after the
+  conflict was raised and confirmed. `TASK.md` and `SPEC_REVIEW_RESULT.md`
+  were left unmodified (per the spec's Allowed Files list and Forbidden
+  Files list, `TASK.md` is not in the allowed-files set for RS-0003.5B1
+  either) and should be reconciled by a human before this branch merges.
+- Manual QA was performed via a headless-Chrome smoke test (page load,
+  console-error check, screenshot, DOM state inspection) rather than a full
+  interactive click-through of every checkbox in the specification's manual
+  QA section, because no interactive browser/display was available in this
+  execution environment. Flagging explicitly per AI_ENGINEER.md's UI-testing
+  rule rather than claiming full manual QA coverage.
 
 ---
 
 # Known Limitations
 
-- `color` is currently a free-form non-empty string (e.g. `'Crystal AB'`,
-  `'Aurora Borealis'`) with no enum/catalog validation against a known set of
-  crystal finishes. TASK.md did not request such validation, so none was
-  added.
-- Shape layers (circle/rectangle) still are not handled by `GeometryEngine`
-  (only `generateTextLayout` exists) — unchanged from RS-0003.5A and out of
-  scope for this task per TASK.md's Out of Scope section.
-- `GeometryEngine` remains unwired from the live browser application, as
-  required by this task ("Do not implement browser integration").
+- `app.js` still contains the legacy bitmap-font `GeometryEngine`
+  implementation; the permanent vector-text `src/geometry/GeometryEngine.js`
+  remains unwired from the live app, exactly as scoped ("Do not connect the
+  new src/geometry/GeometryEngine.js in this task").
+- `app.js` is a single dense file mirroring the original inline script's
+  formatting (long, minified-style lines). It was intentionally not
+  reformatted or split into smaller modules, since the specification
+  requires a "mechanical and behavior-preserving" move and explicitly says
+  not to replace the legacy engine in this task.
+- Full interactive manual QA (every checkbox in specification section 10)
+  is still outstanding and should be completed by a human reviewer.
 
 ---
 
 # Next Recommended Task
 
-RS-0003.5B — browser integration, per docs/specifications (not started as
-part of this task, per TASK.md's explicit instruction not to begin browser
-integration).
+RS-0003.5B2 — browser loading of OpenType dependencies (import map or
+equivalent), as referenced in the specification's Browser Dependency
+Strategy section, followed by wiring the permanent vector-text
+`GeometryEngine` into `app.js`.

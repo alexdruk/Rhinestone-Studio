@@ -110,7 +110,7 @@ await test('this task did not modify forbidden UI, renderer, or exporter files',
     .filter(Boolean)
     .map((line) => line.slice(3).trim());
 
-  const forbiddenExact = new Set(['app.js', 'index.html', 'style.css']);
+  const forbiddenExact = new Set(['style.css']);
   const forbiddenPrefixes = ['src/renderer/', 'src/export/'];
 
   for (const changedPath of changedPaths) {
