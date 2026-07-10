@@ -2,11 +2,11 @@
 
 ## Task ID
 
-RS-0003.5B1-SPEC-REVIEW
+RS-0003.5B1-SPEC-REVIEW-V2
 
 ## Title
 
-Review Browser Module Migration Specification
+Review Corrected Browser Module Migration Specification
 
 ## Status
 
@@ -22,7 +22,7 @@ feature/m2-vector-text
 
 ## Objective
 
-Review the specification against the current repository.
+Review the corrected specification against the current repository.
 
 Do not implement the migration.
 
@@ -43,16 +43,18 @@ Do not implement the migration.
 
 ## Review Questions
 
-1. Does the specification describe the live repository accurately?
-2. Are all required files allowed?
-3. Are any required files forbidden?
-4. Can the migration preserve all current behavior?
-5. Are the automated tests feasible without new dependencies?
-6. Is the manual QA complete enough?
-7. Does the task avoid premature OpenType integration?
-8. Is the rollback plan safe?
-9. Are the acceptance criteria testable?
-10. Is the commit scope small enough for one logical commit?
+1. Does the corrected specification describe the live repository accurately?
+2. Does it now account for the three existing forbidden-file guard tests?
+3. Does it accurately state that the live app has project export but no project import?
+4. Are all required files allowed?
+5. Are any required files forbidden?
+6. Can the migration preserve all current behavior?
+7. Are the automated tests feasible without new dependencies?
+8. Is the manual QA complete enough, including layer management?
+9. Does the task avoid premature OpenType integration?
+10. Is the rollback plan safe?
+11. Are the acceptance criteria testable?
+12. Is the commit scope small enough for one logical commit?
 
 ## Required Result
 
