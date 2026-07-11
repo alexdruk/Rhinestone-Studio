@@ -26,6 +26,7 @@ import { sampleFillPoints, sampleOutlinePoints } from './StoneSampler.js';
 import { Stone } from './Stone.js';
 import { StoneLayout } from './StoneLayout.js';
 import { parseSvgDocument } from '../svg/index.js';
+import { CURVE_ALIGNMENTS, CURVE_DIRECTIONS, projectPolygonToArc } from './ArcProjection.js';
 
 const SAMPLE_MODES = new Set(['outline', 'fill']);
 const DEFAULT_MODE = 'outline';
@@ -78,8 +79,26 @@ export class GeometryEngine {
     }
     const options = normalizeTextParams(params);
 
-    const contours = await this._buildPositionedContours(options);
-    const polygons = contours.map((contour) => flattenContourToPolygon(contour));
+    const { contours, totalAdvanceWidthMm } = await this._buildPositionedContours(options);
+    let polygons = contours.map((contour) => flattenContourToPolygon(contour));
+
+    // RS-1003: Arc projection stage. Runs after flattening (so it warps dense polygon vertices,
+    // not bezier control points — see src/geometry/ArcProjection.js) and before sampling (so
+    // outline/fill sampling walks the already-curved polygons exactly like it walks straight ones,
+    // with no changes to ContourGeometry.js/StoneSampler.js). curveEnabled defaults to false, so
+    // straight text takes none of this path and is byte-identical to before this milestone.
+    if (options.curveEnabled) {
+      const arcOptions = {
+        totalAdvanceWidthMm,
+        radiusMm: options.curveRadiusMm,
+        direction: options.curveDirection,
+        startAngleDeg: options.curveStartAngleDeg,
+        sweepAngleDeg: options.curveSweepAngleDeg,
+        alignment: options.curveAlignment
+      };
+      polygons = polygons.map((polygon) => projectPolygonToArc(polygon, arcOptions));
+    }
+
     const spacingMm = options.stoneSizeMm + options.gapMm;
 
     const points = options.mode === 'fill'
@@ -104,7 +123,7 @@ export class GeometryEngine {
    * position, honoring letter spacing between characters.
    *
    * @param {ReturnType<typeof normalizeTextParams>} options
-   * @returns {Promise<import('../text/VectorPath.js').Contour[]>}
+   * @returns {Promise<{contours: import('../text/VectorPath.js').Contour[], totalAdvanceWidthMm: number}>}
    */
   async _buildPositionedContours(options) {
     const characters = Array.from(options.text);
@@ -129,7 +148,7 @@ export class GeometryEngine {
       }
     }
 
-    return contours;
+    return { contours, totalAdvanceWidthMm: penXMm };
   }
 
   /**
@@ -294,6 +313,15 @@ function normalizeTextParams(params) {
     throw new TypeError('GeometryEngine.generateTextLayout color must be a non-empty string when provided.');
   }
 
+  const curveEnabled = Boolean(params.curveEnabled);
+  const curve = curveEnabled ? normalizeCurveParams(params) : {
+    curveRadiusMm: null,
+    curveDirection: null,
+    curveStartAngleDeg: null,
+    curveSweepAngleDeg: null,
+    curveAlignment: null
+  };
+
   return {
     text: params.text,
     fontId: params.fontId,
@@ -304,8 +332,35 @@ function normalizeTextParams(params) {
     letterSpacingMm,
     mode,
     color: params.color ?? null,
-    providerId: params.providerId ?? null
+    providerId: params.providerId ?? null,
+    curveEnabled,
+    ...curve
   };
+}
+
+// RS-1003: validated only when curveEnabled is truthy, so straight text (the default) never reads
+// or validates these fields — a hard requirement for "straight text unchanged".
+function normalizeCurveParams(params) {
+  const curveRadiusMm = assertPositiveNumber(params.curveRadiusMm, 'curveRadiusMm');
+
+  const curveSweepAngleDeg = assertFiniteNumber(params.curveSweepAngleDeg, 'curveSweepAngleDeg');
+  if (curveSweepAngleDeg === 0) {
+    throw new RangeError('curveSweepAngleDeg must not be zero.');
+  }
+
+  const curveStartAngleDeg = assertFiniteNumber(params.curveStartAngleDeg ?? 0, 'curveStartAngleDeg');
+
+  const curveDirection = params.curveDirection ?? 'outside';
+  if (!CURVE_DIRECTIONS.has(curveDirection)) {
+    throw new TypeError(`curveDirection must be one of: ${[...CURVE_DIRECTIONS].join(', ')}`);
+  }
+
+  const curveAlignment = params.curveAlignment ?? 'center';
+  if (!CURVE_ALIGNMENTS.has(curveAlignment)) {
+    throw new TypeError(`curveAlignment must be one of: ${[...CURVE_ALIGNMENTS].join(', ')}`);
+  }
+
+  return { curveRadiusMm, curveDirection, curveStartAngleDeg, curveSweepAngleDeg, curveAlignment };
 }
 
 function normalizeShapeParams(params) {

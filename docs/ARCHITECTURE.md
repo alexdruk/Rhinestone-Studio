@@ -120,6 +120,16 @@ inside the Geometry Engine — proximity deduplication across layers is currentl
 `app.js`'s orchestration code, one layer at a time never re-runs inside the permanent engine (see
 "Current Implementation" and "Current Architectural Limitations").
 
+As of RS-1003, `generateTextLayout()` supports an optional circular-arc layout ("curved text") via
+six new per-call params (`curveEnabled`/`curveRadiusMm`/`curveDirection`/`curveStartAngleDeg`/
+`curveSweepAngleDeg`/`curveAlignment`). The new `src/geometry/ArcProjection.js` module implements
+the "Arc projection" pipeline stage: it remaps already-flattened polygon vertices (millimeters,
+straight pen-line space) onto a circle, running after `ContourGeometry.js`'s flattening and before
+`StoneSampler.js`'s outline/fill sampling, so neither of those modules — nor `StoneLayout`, nor any
+renderer/exporter — needed any change. `curveEnabled` defaults to `false`, so straight text is a
+byte-identical no-op through this new code path. See
+`docs/specifications/RS-1003-CurvedText.md`.
+
 ---
 
 # StoneLayout

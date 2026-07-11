@@ -23,3 +23,10 @@ export {
   sampleFillPoints,
   isPointInsidePolygons
 } from './StoneSampler.js';
+
+export {
+  projectPointToArc,
+  projectPolygonToArc,
+  CURVE_DIRECTIONS,
+  CURVE_ALIGNMENTS
+} from './ArcProjection.js';
