@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "product": "mug",
+  "units": "mm",
+  "canvas": { "width": 210, "height": 90 },
+  "cupColor": "#f1d7a9",
+  "wrap": "front",
+  "layers": [
+    {
+      "id": "text-zoe",
+      "type": "text",
+      "name": "Zoe",
+      "visible": true,
+      "text": "Zoe",
+      "font": "Courier Prime",
+      "mode": "centerline",
+      "heightMm": 18,
+      "stoneSizeMm": 1.8,
+      "gapMm": 0.3,
+      "color": "gold"
+    },
+    {
+      "id": "circle-frame",
+      "type": "circle",
+      "name": "Frame",
+      "visible": true,
+      "cxMm": 105,
+      "cyMm": 45,
+      "radiusMm": 35,
+      "stoneSizeMm": 2.0,
+      "gapMm": 0.3,
+      "color": "crystal"
+    }
+  ]
+}

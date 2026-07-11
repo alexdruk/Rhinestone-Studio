@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "product": "mug",
+  "units": "mm",
+  "canvas": { "width": 210, "height": 90 },
+  "cupColor": "#0b0b0b",
+  "wrap": "wide",
+  "layers": [
+    {
+      "id": "text-nathaniel",
+      "type": "text",
+      "name": "Nathaniel",
+      "visible": true,
+      "text": "Nathaniel",
+      "font": "Courier Prime",
+      "mode": "centerline",
+      "heightMm": 20,
+      "stoneSizeMm": 2.0,
+      "gapMm": 0.3,
+      "color": "silver"
+    }
+  ]
+}

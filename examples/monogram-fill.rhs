@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "product": "mug",
+  "units": "mm",
+  "canvas": { "width": 100, "height": 100 },
+  "cupColor": "#95d5b2",
+  "wrap": "front",
+  "layers": [
+    {
+      "id": "text-ab",
+      "type": "text",
+      "name": "AB Monogram",
+      "visible": true,
+      "text": "AB",
+      "font": "Courier Prime",
+      "mode": "fill",
+      "heightMm": 40,
+      "stoneSizeMm": 1.2,
+      "gapMm": 0.2,
+      "color": "jet"
+    }
+  ]
+}

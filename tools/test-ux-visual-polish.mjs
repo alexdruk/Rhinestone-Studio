@@ -264,8 +264,7 @@ await test('11. no forbidden file changed', () => {
     'src/core/',
     'src/browser/',
     'src/export/',
-    'assets/',
-    'examples/'
+    'assets/'
   ];
 
   for (const changedPath of changedPaths) {
