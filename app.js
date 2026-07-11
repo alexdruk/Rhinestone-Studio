@@ -53,12 +53,22 @@
 // (like rotation/zoom), read live from their controls at export-click time, not part of `project`.
 // project.name is the one new project-level field, following the exact permissive-default pattern
 // cupColor/wrap/product already use. See docs/specifications/RS-1005-ProductionSheetGenerator.md.
+// RS-1006 replaced the Object Preview panel's fake 2D schematic (CupRenderer.js) with a real,
+// interactive Three.js 3D preview: src/preview3d/** consumes the same merged StoneLayout plus the
+// same category of plain display options (cupColor/wrap/objectTemplate) CupRenderer.js already
+// took, plus the live project.canvas mm size (needed so the mesh and its canvas texture share one
+// real millimeter scale). drawCup() is the only changed call site; CupRenderer.js itself is
+// untouched and still covered by its own pre-existing tests, simply no longer imported here. The
+// old custom pointer-drag-to-rotate handler on #cup is removed -- OrbitControls (inside
+// src/preview3d/Preview3DRenderer.js) now owns pointer interaction on that canvas natively, and
+// does strictly more (rotate, zoom, and pan, with damping). See
+// docs/specifications/RS-1006-Real3DPreview.md.
 import './src/browser/BrowserDependencyProbe.js';
 import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
 import { createDefaultFontProviderRegistry } from './src/text/index.js';
 import { renderProductionLayout } from './src/renderer/CanvasRenderer2D.js';
-import { renderCup } from './src/renderer/CupRenderer.js';
+import { createPreview3D } from './src/preview3d/index.js';
 import { STONE_COLORS } from './src/renderer/StoneColors.js';
 import { stoneLayoutToSvg } from './src/export/SvgExporter.js';
 import { computeProductionSheetLayout, productionSheetToSvg, productionSheetToPdf } from './src/export/ProductionSheetExporter.js';
@@ -74,12 +84,11 @@ const FONT5={
 };
 const TEXT_ENGINE_FONT_IDS=new Set(['courier-prime-regular','great-vibes-regular']);
 const DEFAULT_TEXT_FONT_ID='courier-prime-regular';
-// RS-0003.5D2: named UI-interaction constants (previously an unexplained inline 1:1 multiplier
-// and no explicit zoom clamp). CUP_ROTATION_SENSITIVITY is degrees of cup rotation per pixel of
-// horizontal drag on the cup preview canvas — substantially below 1 so small mouse movements stay
-// controllable. ZOOM_MIN/ZOOM_MAX mirror the #zoom range input's min="70"/max="140" (percent) and
-// defensively clamp zoom in case an out-of-range or non-finite value ever reaches it.
-const CUP_ROTATION_SENSITIVITY=0.35;
+// RS-0003.5D2: named UI-interaction constants (previously no explicit zoom clamp). ZOOM_MIN/
+// ZOOM_MAX mirror the #zoom range input's min="70"/max="140" (percent) and defensively clamp zoom
+// in case an out-of-range or non-finite value ever reaches it. RS-1006 removed the sibling
+// CUP_ROTATION_SENSITIVITY constant along with the custom pointer-drag-to-rotate handler it drove —
+// OrbitControls (src/preview3d/**) now owns pointer interaction on the cup canvas natively.
 const ZOOM_MIN=0.7,ZOOM_MAX=1.4;
 // S-001: how close `rotation` must be to a .viewBtn's data-view (in degrees, mod 360, so -180 and
 // 180 both match Back) for that button to show as the active/highlighted view.
@@ -170,7 +179,11 @@ function validateProject(obj){
 let fontProviderRegistry=null,permanentEngineError=null;
 try{const fontManager=await FontManager.fromUrl('./assets/fonts/manifest.json');fontProviderRegistry=createDefaultFontProviderRegistry(fontManager)}catch(error){permanentEngineError=error;console.error('Font manifest failed to load; text layers will render empty until this is resolved. Shape layers are unaffected.',error)}
 const permanentEngine=new PermanentGeometryEngine({fontProviderRegistry});
-const engine=new GeometryEngine(permanentEngine);let project=defaultProject(),selectedLayerId='text',layout=null,rotation=0,zoom=1,layoutTransform=null,drag=null,generationToken=0;const el=id=>document.getElementById(id);const layoutCanvas=el('layout'),cupCanvas=el('cup');function selectedLayer(){return project.layers.find(l=>l.id===selectedLayerId)||project.layers[0]}
+const engine=new GeometryEngine(permanentEngine);let project=defaultProject(),selectedLayerId='text',layout=null,rotation=0,zoom=1,layoutTransform=null,drag=null,generationToken=0;const el=id=>document.getElementById(id);const layoutCanvas=el('layout'),cupCanvas=el('cup');
+// RS-1006: createPreview3D() returns a synchronous facade immediately -- Three.js itself loads
+// lazily inside it, so this line never blocks app.js's own startup.
+const preview3D=createPreview3D(cupCanvas);
+function selectedLayer(){return project.layers.find(l=>l.id===selectedLayerId)||project.layers[0]}
 // RS-1004: resolves project.product (the pre-existing, previously-unread ad hoc field) to its real
 // ObjectTemplate record. getObjectTemplate() itself falls back to 'mug' for any unknown/missing id,
 // so this never throws.
@@ -234,13 +247,21 @@ function getLayerBBox(l){if(l.type==='circle')return{x:l.cx-l.r,y:l.cy-l.r,width
 const SELECTION_HANDLE_SIZE_PX=11;
 function drawSelection(ctx,s,ox,oy,dpr){const l=selectedLayer();const b=getLayerBBox(l);const rx=ox+b.x*s,ry=oy+b.y*s,rw=b.width*s,rh=b.height*s;ctx.save();ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=4*dpr;ctx.setLineDash([]);ctx.strokeRect(rx,ry,rw,rh);ctx.strokeStyle='#1478ff';ctx.lineWidth=1.75*dpr;ctx.setLineDash([6*dpr,3*dpr]);ctx.strokeRect(rx,ry,rw,rh);ctx.setLineDash([]);if(l.type!=='text'){for(const h of handlesFor(b)){const hs=SELECTION_HANDLE_SIZE_PX*dpr;ctx.shadowColor='rgba(20,30,50,.35)';ctx.shadowBlur=3*dpr;ctx.fillStyle='white';ctx.strokeStyle='#1478ff';ctx.lineWidth=1.75*dpr;ctx.beginPath();ctx.rect(ox+h.x*s-hs/2,oy+h.y*s-hs/2,hs,hs);ctx.fill();ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.stroke()}}ctx.restore()}
 function handlesFor(b){return[{name:'nw',x:b.x,y:b.y},{name:'ne',x:b.x2,y:b.y},{name:'se',x:b.x2,y:b.y2},{name:'sw',x:b.x,y:b.y2},{name:'n',x:b.x+b.width/2,y:b.y},{name:'e',x:b.x2,y:b.y+b.height/2},{name:'s',x:b.x+b.width/2,y:b.y2},{name:'w',x:b.x,y:b.y+b.height/2}]}
-function drawCup(){const{w,h,dpr}=resizeCanvas(cupCanvas),ctx=cupCanvas.getContext('2d');renderCup(ctx,layout,{widthPx:w,heightPx:h,dpr,cupColor:project.cupColor,wrap:project.wrap,rotationDeg:rotation,zoom,objectTemplate:currentObjectTemplate()})}
+// RS-1006: the 3D preview manages its own canvas sizing (a ResizeObserver inside
+// Preview3DRenderer.js), so unlike drawLayout() there is no resizeCanvas()/2D-context call here.
+// update() only rebuilds the mesh/texture when the StoneLayout or display options actually
+// changed; syncView() only repositions the camera when rotation/zoom actually changed -- neither
+// call disturbs a manual orbit/pan the operator has mid-way through with the mouse.
+function drawCup(){preview3D.update(layout,{cupColor:project.cupColor,wrap:project.wrap,objectTemplate:currentObjectTemplate(),canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height});preview3D.syncView(rotation,zoom)}
 // S-001: keeps the Front/Left/Right/Back buttons' highlighted state synchronized with `rotation`
 // regardless of how it changed (view-button click, reset, slider, or manual cup-drag), since this
 // is called from updateAll() rather than duplicated at each rotation-changing call site.
 function angleDiffDeg(a,b){const norm=x=>((x%360)+360)%360;const d=Math.abs(norm(a)-norm(b))%360;return Math.min(d,360-d)}
 function updateViewButtons(){document.querySelectorAll('.viewBtn').forEach(b=>b.classList.toggle('primary',angleDiffDeg(rotation,parseFloat(b.dataset.view))<VIEW_ANGLE_EPSILON_DEG))}
-function updateStats(){el('layoutStats').innerHTML=`<b>${layout.count}</b> stones <span>${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm</span><span>selected: ${escapeHtml(layerLabel(selectedLayer()))}</span>`;el('cupStats').innerHTML=`<span>${escapeHtml(currentObjectTemplate().displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span><span>rotation ${Math.round(rotation)}°</span>`}
+// RS-1006: dropped the previous `rotation ${Math.round(rotation)}°` readout here -- now that
+// OrbitControls allows free mouse orbit, that number only ever reflected the last preset/slider
+// value, not the camera's actual live orientation, so displaying it would be misleading.
+function updateStats(){el('layoutStats').innerHTML=`<b>${layout.count}</b> stones <span>${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm</span><span>selected: ${escapeHtml(layerLabel(selectedLayer()))}</span>`;el('cupStats').innerHTML=`<span>${escapeHtml(currentObjectTemplate().displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span>`}
 function download(name,mime,data){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:mime}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800);el('status').textContent=`Downloaded ${name}`}function exportCanvas(name,canvas){canvas.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800)},'image/png')}
 function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(copy.type==='rectangle'){copy.x+=8;copy.y+=8}if(copy.type==='svg'){copy.x+=8;copy.y+=8}if(copy.type==='text'){copy.text+=' copy'}project.layers.push(copy);selectedLayerId=copy.id;syncSelectedControlsFromLayer();updateAll()}function deleteLayer(id){if(project.layers.length<=1){el('status').textContent='Cannot delete the last layer';const hint=el('layerRuleHint');hint.style.display='block';hint.scrollIntoView({block:'nearest'});return}commitHistory();project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;syncSelectedControlsFromLayer();updateAll(true)}
 function pointerToLayout(e){const r=layoutCanvas.getBoundingClientRect(),dpr=layoutTransform.dpr;return layoutPxToMm((e.clientX-r.left)*dpr,(e.clientY-r.top)*dpr)}function hitTest(mm){const layers=[...project.layers].reverse();for(const l of layers){const b=getLayerBBox(l);for(const h of handlesFor(b)){if(Math.abs(mm.x-h.x)<3&&Math.abs(mm.y-h.y)<3&&l.type!=='text')return{layer:l,kind:'resize',handle:h.name,b0:b}}if(mm.x>=b.x&&mm.x<=b.x2&&mm.y>=b.y&&mm.y<=b.y2)return{layer:l,kind:l.type==='text'?'select':'move',b0:b}}return null}
@@ -263,7 +284,7 @@ el('selectedLayer').addEventListener('change',()=>{selectedLayerId=el('selectedL
 // addRect/deleteLayer's commitHistory()-then-mutate pattern below), not a continuous-session field
 // -- it also resets project.canvas/project.wrap to the new template's own defaults, so those two
 // resets are always committed together with the switch, never independently.
-el('objectType').addEventListener('change',()=>{commitHistory();const template=getObjectTemplate(el('objectType').value);project.product=template.id;project.canvas={width:template.productionWidthMm,height:template.productionHeightMm};project.wrap=template.wrap.default;syncSelectedControlsFromLayer();updateAll(true)});el('layersList').addEventListener('click',e=>{const row=e.target.closest('.layer');if(!row)return;const id=row.dataset.layer,action=e.target.dataset.action;if(action==='visible'){const l=project.layers.find(x=>x.id===id);commitHistory();l.visible=e.target.checked;updateAll(true);return}if(action==='duplicate'){duplicateLayer(id);return}if(action==='delete'){deleteLayer(id);return}selectedLayerId=id;syncSelectedControlsFromLayer();updateAll(true)});el('deleteSelected').onclick=()=>deleteLayer(selectedLayerId);document.querySelectorAll('.viewBtn').forEach(b=>b.onclick=()=>{rotation=parseFloat(b.dataset.view);el('rotation').value=rotation;updateAll()});el('resetView').onclick=()=>{rotation=0;zoom=1;el('rotation').value=0;el('zoom').value=100;updateAll()};el('undoBtn').onclick=()=>performUndo();el('redoBtn').onclick=()=>performRedo();el('addCircle').onclick=()=>{const l=selectedLayer();commitHistory();const layer={id:'circle'+Date.now(),type:'circle',visible:true,cx:105,cy:45,r:18,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};project.layers.push(layer);selectedLayerId=layer.id;syncSelectedControlsFromLayer();updateAll(true)};el('addRect').onclick=()=>{const l=selectedLayer();commitHistory();const layer={id:'rect'+Date.now(),type:'rectangle',visible:true,x:65,y:30,w:80,h:30,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};project.layers.push(layer);selectedLayerId=layer.id;syncSelectedControlsFromLayer();updateAll(true)};el('importProject').onclick=()=>el('importProjectFile').click();
+el('objectType').addEventListener('change',()=>{commitHistory();const template=getObjectTemplate(el('objectType').value);project.product=template.id;project.canvas={width:template.productionWidthMm,height:template.productionHeightMm};project.wrap=template.wrap.default;syncSelectedControlsFromLayer();updateAll(true)});el('layersList').addEventListener('click',e=>{const row=e.target.closest('.layer');if(!row)return;const id=row.dataset.layer,action=e.target.dataset.action;if(action==='visible'){const l=project.layers.find(x=>x.id===id);commitHistory();l.visible=e.target.checked;updateAll(true);return}if(action==='duplicate'){duplicateLayer(id);return}if(action==='delete'){deleteLayer(id);return}selectedLayerId=id;syncSelectedControlsFromLayer();updateAll(true)});el('deleteSelected').onclick=()=>deleteLayer(selectedLayerId);document.querySelectorAll('.viewBtn').forEach(b=>b.onclick=()=>{rotation=parseFloat(b.dataset.view);el('rotation').value=rotation;updateAll()});el('resetView').onclick=()=>{rotation=0;zoom=1;el('rotation').value=0;el('zoom').value=100;preview3D.resetView();updateAll()};el('undoBtn').onclick=()=>performUndo();el('redoBtn').onclick=()=>performRedo();el('addCircle').onclick=()=>{const l=selectedLayer();commitHistory();const layer={id:'circle'+Date.now(),type:'circle',visible:true,cx:105,cy:45,r:18,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};project.layers.push(layer);selectedLayerId=layer.id;syncSelectedControlsFromLayer();updateAll(true)};el('addRect').onclick=()=>{const l=selectedLayer();commitHistory();const layer={id:'rect'+Date.now(),type:'rectangle',visible:true,x:65,y:30,w:80,h:30,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};project.layers.push(layer);selectedLayerId=layer.id;syncSelectedControlsFromLayer();updateAll(true)};el('importProject').onclick=()=>el('importProjectFile').click();
 el('importProjectFile').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{const parsed=validateProject(JSON.parse(await file.text()));project=parsed;selectedLayerId=project.layers[0].id;
   // RS-1002: loading a project is a fresh start, not an undoable edit -- clear history entirely
   // (matches "history cleared on project load") and reset the dirty baseline to this load.
@@ -306,4 +327,8 @@ el('exportProdSheetPNG').onclick=async()=>{if(!layout){el('status').textContent=
   URL.revokeObjectURL(svgUrl);
   exportCanvas('rhinestone-production-sheet.png',c)
 }catch(error){el('status').textContent=`Export failed: ${error.message}`}};
-let cupDrag=false,lastX=0;cupCanvas.addEventListener('pointerdown',e=>{cupDrag=true;lastX=e.clientX;cupCanvas.setPointerCapture(e.pointerId)});cupCanvas.addEventListener('pointermove',e=>{if(!cupDrag)return;rotation+=(e.clientX-lastX)*CUP_ROTATION_SENSITIVITY;lastX=e.clientX;rotation=Math.max(-180,Math.min(180,rotation));el('rotation').value=rotation;updateAll()});window.addEventListener('pointerup',()=>cupDrag=false);window.addEventListener('resize',()=>updateAll(true));syncSelectedControlsFromLayer();updateAll(true);
+// RS-1006: the previous custom pointerdown/pointermove drag-to-rotate handler on cupCanvas is
+// removed here -- OrbitControls (inside src/preview3d/Preview3DRenderer.js) now owns pointer
+// interaction on that canvas natively, and does strictly more (rotate, zoom, and pan, with
+// damping) without fighting over the same pointer events.
+window.addEventListener('resize',()=>updateAll(true));syncSelectedControlsFromLayer();updateAll(true);

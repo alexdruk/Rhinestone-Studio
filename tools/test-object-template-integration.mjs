@@ -126,8 +126,8 @@ await test('6. syncSelectedControlsFromLayer() resyncs #objectType from project.
   assert.match(appJs, /el\('objectType'\)\.value=project\.product/);
 });
 
-await test('7. drawCup() forwards the active object template to renderCup()', () => {
-  assert.match(appJs, /renderCup\(ctx,layout,\{[^}]*objectTemplate:currentObjectTemplate\(\)/);
+await test('7. drawCup() forwards the active object template to the 3D preview (RS-1006: preview3D.update(), not renderCup())', () => {
+  assert.match(appJs, /preview3D\.update\(layout,\{[^}]*objectTemplate:currentObjectTemplate\(\)/);
 });
 
 await test('8. a safe-area guide is drawn as an app.js editor overlay (not inside CanvasRenderer2D.js)', () => {

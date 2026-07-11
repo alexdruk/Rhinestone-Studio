@@ -149,7 +149,13 @@ await test('8. neither renderer nor the SVG exporter references a layer type or 
 
 await test('9. app.js imports the renderer/exporter modules and no longer contains the inline stone-drawing/SVG logic they replace', () => {
   assert.match(appJs, /import\s*\{\s*renderProductionLayout\s*\}\s*from\s*['"]\.\/src\/renderer\/CanvasRenderer2D\.js['"]/);
-  assert.match(appJs, /import\s*\{\s*renderCup\s*\}\s*from\s*['"]\.\/src\/renderer\/CupRenderer\.js['"]/);
+  // RS-1006: app.js no longer imports renderCup/CupRenderer.js for its live Object Preview panel --
+  // it was replaced by the real 3D preview (src/preview3d/**, imported via its own barrel module).
+  // CupRenderer.js itself is untouched and still covered by its own dedicated test suites (see
+  // tools/test-object-preview-renderer.mjs / tools/test-cup-rotation-stabilization.mjs), which is
+  // exactly what test 2 above (CupRenderer exports renderCup) and test 8 above (neither renderer
+  // references a layer type) both still exercise directly against the module, unmodified.
+  assert.match(appJs, /import\s*\{\s*createPreview3D\s*\}\s*from\s*['"]\.\/src\/preview3d\/index\.js['"]/);
   assert.match(appJs, /import\s*\{\s*STONE_COLORS\s*\}\s*from\s*['"]\.\/src\/renderer\/StoneColors\.js['"]/);
   assert.match(appJs, /import\s*\{\s*stoneLayoutToSvg\s*\}\s*from\s*['"]\.\/src\/export\/SvgExporter\.js['"]/);
 
@@ -160,7 +166,10 @@ await test('9. app.js imports the renderer/exporter modules and no longer contai
 
   assert.match(appJs, /new StoneLayout\(/, "generate() must construct a real StoneLayout");
   assert.match(appJs, /renderProductionLayout\(ctx,layout,/, 'drawLayout() must call renderProductionLayout with the generated layout');
-  assert.match(appJs, /renderCup\(ctx,layout,/, 'drawCup() must call renderCup with the generated layout');
+  // RS-1006: drawCup() now calls preview3D.update(layout, ...) instead of renderCup(ctx,layout,...)
+  // -- the 3D preview owns its own canvas/context internally (see src/preview3d/**), so there is
+  // no local `ctx` at this call site anymore.
+  assert.match(appJs, /preview3D\.update\(layout,/, 'drawCup() must call preview3D.update with the generated layout');
   assert.match(appJs, /stoneLayoutToSvg\(layout,/, 'the SVG export button must call stoneLayoutToSvg with the generated layout');
 });
 

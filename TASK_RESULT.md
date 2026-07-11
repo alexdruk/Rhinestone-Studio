@@ -6,7 +6,7 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-RS-1005 — Production Sheet Generator
+RS-1006 — Real 3D Preview
 
 ---
 
@@ -18,7 +18,7 @@ IMPLEMENTED
 
 # Branch
 
-feature/rs-1005-production-sheet-generator
+feature/rs-1006-real-3d-preview
 
 ---
 
@@ -35,229 +35,273 @@ git log -1 --oneline
 
 # Summary
 
-Added a new export, the **Production Sheet**: a one-page, millimeter-accurate, printable
-manufacturing document generated only from the canonical `StoneLayout`, available as SVG, PNG, and
-PDF.
+Replaced the Object Preview panel's fake 2D schematic (`src/renderer/CupRenderer.js`, a flat
+Canvas-2D silhouette with hand-drawn gradients standing in for lighting) with a real, interactive
+Three.js 3D preview: an actual revolved mesh per object template (mug/tumbler/bottle), a canvas
+texture generated directly from `StoneLayout`, simple ambient+directional lighting, and mouse
+rotate/zoom/pan via `OrbitControls`.
 
-Two new modules under `src/export/**`:
+New module family `src/preview3d/**`:
 
-* `ProductionSheetExporter.js` — `PAGE_SIZES` (A4/Letter), `computeProductionSheetLayout()` (the
-  single pure geometry-projection pass both output formats render — header text lines, the centered
-  production rect, every stone re-projected into page space with an optional horizontal mirror,
-  registration-mark line segments, and the scale-reference bar geometry), `productionSheetToSvg()`,
-  `productionSheetToPdf()`.
-* `PdfDocument.js` — a minimal, dependency-free, deterministic single-page vector PDF writer
-  (lines/rects/circles/text) over the standard, non-embedded Helvetica font (WinAnsiEncoding). No
-  external PDF library was added — `package.json`'s only dependency is still `opentype.js`.
+* `ObjectDimensions.js` — pure mm-scale math (no Three.js, no DOM). Derives real body radius/height
+  (and, for bottles, neck/shoulder/cap extents) from an `ObjectTemplate` record plus the live
+  `project.canvas` mm size. The body radius is anchored so a 180-degree ("half wrap") arc equals
+  `canvasWidthMm` exactly — the one wrap mode with a literal mm-accurate circumference; every other
+  wrap mode reuses that same fixed radius and only changes how much of the surface the texture
+  covers (a real object does not resize when the operator picks a different wrap mode).
+* `StoneLayoutTexture.js` — pure Canvas-2D texture drawing (no Three.js, no canvas element creation
+  — the caller supplies the 2D context, exactly like `CanvasRenderer2D.js`'s `drawStone()` already
+  does). Draws the object's base color plus every stone at its true mm position, at a fixed
+  `TEXTURE_PX_PER_MM` resolution.
+* `ObjectGeometryBuilder.js` — Three.js geometry construction: a tapered open cylinder
+  (`CylinderGeometry`) for mug/tumbler, a `LatheGeometry`-revolved profile for the bottle's
+  body+shoulder+neck+cap, and a `TubeGeometry` handle for the mug. Also exports `applyWrapUv()`,
+  which writes a custom per-vertex U coordinate (`atan2(x,z)` azimuth mapped onto the current wrap
+  mode's angular window, centered on the front) so the shared texture wraps only across the
+  selected wrap angle and shows plain background elsewhere.
+* `Preview3DRenderer.js` — the actual Three.js orchestration: a `WebGLRenderer`
+  (`preserveDrawingBuffer: true`, so `#exportCup`'s existing `canvas.toBlob()` capture keeps
+  working unmodified), one ambient + one directional light (no shadows, no PBR/HDR environment), a
+  `PerspectiveCamera` framed to fit the object's actual height *and* diameter against the panel's
+  real aspect ratio, `OrbitControls` (damped rotate/zoom/pan, `screenSpacePanning`, polar-angle
+  limits), a `ResizeObserver`-driven resize, and a persistent `requestAnimationFrame` loop. Rebuilds
+  the mesh only when the object template or live mm canvas size actually changes; every other
+  `update()` call only redraws/reassigns the texture — the camera is left alone so an in-progress
+  manual orbit/pan is never reset by an unrelated project edit elsewhere in the app.
+* `index.js` — the only module `app.js` imports statically. `createPreview3D(canvas)` returns a
+  synchronous facade immediately (so `app.js`'s own module graph/startup are never blocked waiting
+  on a dynamic import + WebGL context creation) that queues the latest `update()`/`syncView()` call
+  while `Preview3DRenderer.js` — and, inside it, Three.js itself and `OrbitControls` — load via a
+  dynamic `import()`, replaying the most recent call once mounted. This is the "lazy-load Three.js"
+  requirement: nothing that statically imports `'three'` is ever reached until a 3D preview is
+  actually created.
 
-`SvgExporter.js` gained a small, output-preserving `stoneCircleSvg()` extraction so the new
-exporter reuses the exact same per-stone `<circle>` string template instead of duplicating it
-(`stoneLayoutToSvg()`'s own output is byte-for-byte unchanged — its full pre-existing test suite
-passes unmodified).
+Three.js is loaded exactly the way `opentype.js` already is (no bundler, no CDN): `three` was added
+as an ordinary npm dependency; `index.html`'s import map gained one entry,
+`"three": "./node_modules/three/build/three.module.js"` (Three's own native ES module build);
+`OrbitControls` is imported by relative path straight into
+`node_modules/three/examples/jsm/controls/OrbitControls.js` (mirroring
+`OpenTypeBrowserAdapter.js`'s existing pattern for `opentype.js`) — its own internal
+`import ... from 'three'` bare specifier is what the import map resolves.
 
-`app.js`/`index.html` gained: a new `project.name` field (permissive default `'Untitled Project'`,
-following the exact pattern `cupColor`/`wrap`/`product` already use — old Project JSON files with
-no `name` field still import cleanly); a "Production Sheet" UI section (page size A4/Letter, margin
-mm, mirror on/off, registration marks on/off — all view/export-only options read live at
-export-click time, like `rotation`/`zoom`, not part of `project`, not undo/redo-tracked); three
-guarded, try/catch-wrapped export buttons following the exact pattern the five pre-existing export
-handlers already use. PNG export has no new `src/export/**` module: `app.js` rasterizes the
-generated SVG via an offscreen `Image`+`<canvas>` at a fixed, documented DPI
-(`PRODUCTION_SHEET_PNG_DPI = 200`), matching the existing "PNG is a render capture, not a standalone
-exporter" precedent `#exportPNG`/`#exportCup` already use.
+`app.js` changes: swapped the `renderCup` import for `createPreview3D`; `drawCup()` now calls
+`preview3D.update(layout, {cupColor, wrap, objectTemplate, canvasWidthMm, canvasHeightMm})` plus
+`preview3D.syncView(rotation, zoom)` (the latter only actually repositions the camera when
+`rotation`/`zoom` differ from the preview's last-known slider values, so an unrelated project edit's
+`updateAll()` never yanks the camera out from under a manual orbit/pan in progress); the old custom
+`pointerdown`/`pointermove` drag-to-rotate handler on `#cup` and its `CUP_ROTATION_SENSITIVITY`
+constant are removed (`OrbitControls` now owns pointer interaction on that canvas natively, and does
+strictly more — rotate, zoom, and pan, with damping); the Reset view button additionally calls
+`preview3D.resetView()` (restores the camera via `OrbitControls`' own `saveState()`/`reset()`, not
+just the `rotation`/`zoom` numbers); the cup stats line drops the `rotation °` readout (once free
+orbit is possible, that number only ever reflected the last preset/slider value, not the camera's
+actual live orientation). `index.html` gained the import-map entry and an updated Object Preview
+hint ("drag to rotate · scroll to zoom · right-drag to pan"); every id (`#cup`, `#cupColor`,
+`#rotation`, `#zoom`, `#resetView`, `.viewBtn`, `#exportCup`) is unchanged.
 
-`StoneLayout.js` and `GeometryEngine.js` are byte-for-byte untouched. No new stone position is
-invented anywhere — the exporter only re-projects already-generated `stone.xMm/yMm` (a centering
-translate, an optional mirror, mm→pt for PDF), the same category of transform
-`CanvasRenderer2D.fitTransform()` already applies for the on-screen canvas. A production size that
-cannot fit the chosen page (in either portrait or landscape orientation) at the requested margin
-throws a clear `RangeError` naming the page/orientation tried — the sheet is never silently
-rescaled ("no scaling" is a hard requirement, not a soft default).
+`StoneLayout.js`/`GeometryEngine.js` are byte-for-byte untouched — no new stone position is invented
+anywhere. `CupRenderer.js` is not modified or deleted — its own pre-existing test suites
+(`tools/test-object-preview-renderer.mjs`, `tools/test-cup-rotation-stabilization.mjs`, etc.) keep
+passing unchanged; it is simply no longer imported/called by `app.js`.
 
-**Mid-implementation fix (found via browser verification, not by the automated suite):** the first
-rendered production sheet showed the last header line visually crowding the production rect's top
-border and its registration marks. Root cause: the header's line-height arithmetic was duplicated
-between `productionSheetToSvg()` and `productionSheetToPdf()`, and the fixed `HEADER_HEIGHT_MM`
-constant was slightly too tight for 8 lines of text. Fixed by moving per-line baseline computation
-(`yMm`) into `computeProductionSheetLayout()` itself — computed once, consumed identically by both
-renderers — and deriving `HEADER_HEIGHT_MM` analytically from the actual line count/sizes plus a
-10mm bottom padding constant, instead of a hand-picked magic number. Re-verified visually
-(screenshots) and via the full automated suite after the fix; both passed.
+**Mid-implementation fix (found via browser verification, not the automated suite):** the first
+rendered 3D preview framed the camera using only the object's height, ignoring the Object Preview
+panel's actual (portrait) aspect ratio — the bottle's wide shoulder/cap were clipped left/right, and
+every object was framed a bit too tight. Root cause: `_frameCamera()`'s distance formula used a
+single height-based heuristic (`max(radius*3.4, height*1.5, 40)`) with no aspect-ratio term. Fixed
+by computing the camera distance required to fit the height *and* the full diameter independently
+(the latter using `camera.aspect`), taking the larger of the two plus a named `FRAME_MARGIN`. Also
+tuned `DEFAULT_POLAR_RAD` from ~66° to ~74.5° from vertical so the default view reads as looking at
+the object from slightly above eye level, not down into its open mouth. Re-verified visually
+(screenshots) after the fix for all three templates.
 
 ---
 
 # Files Changed
 
 **New:**
-* `src/export/ProductionSheetExporter.js`, `src/export/PdfDocument.js`
-* `docs/specifications/RS-1005-ProductionSheetGenerator.md`
-* `tools/test-pdf-document.mjs` (12 tests), `tools/test-production-sheet-exporter.mjs` (23 tests)
+* `src/preview3d/ObjectDimensions.js`, `src/preview3d/StoneLayoutTexture.js`,
+  `src/preview3d/ObjectGeometryBuilder.js`, `src/preview3d/Preview3DRenderer.js`,
+  `src/preview3d/index.js`, `src/preview3d/README.md`
+* `docs/specifications/RS-1006-Real3DPreview.md`
+* `tools/test-object-dimensions.mjs` (11 tests), `tools/test-stone-layout-texture.mjs` (7 tests),
+  `tools/test-object-geometry-builder.mjs` (8 tests, using the real `three` package),
+  `tools/test-preview3d-integration.mjs` (11 tests)
 
 **Modified:**
-* `src/export/SvgExporter.js` (`stoneCircleSvg()` extraction; output unchanged)
-* `src/export/README.md`, `docs/ARCHITECTURE.md` (implementation-status notes)
-* `app.js`, `index.html` (`project.name`; Production Sheet UI + 3 export handlers)
-* `package.json` (registered the 2 new test files)
+* `app.js`, `index.html` (3D preview wiring; see Summary)
+* `package.json` (new `three` dependency; registered the 4 new test files), `package-lock.json`
+* `docs/ARCHITECTURE.md` (Renderer implementation-status note)
 * `TASK.md` (this milestone's task)
-* Eleven existing guard tests, each narrowly updated for one specific, documented reason (no guard
-  test's actual protection was weakened beyond what this milestone legitimately changed — see the
-  specification's "Allowed Files" section for the itemized list):
-  * `tools/test-svg-integration.mjs`, `tools/test-undo-redo-integration.mjs`,
-    `tools/test-cup-rotation-stabilization.mjs`, `tools/test-ux-visual-polish.mjs`,
-    `tools/test-examples-regression.mjs`, `tools/test-object-template-integration.mjs` — removed
-    `src/export/` from each's forbidden-prefix list.
+* Five existing guard tests, each narrowly updated for one specific, documented reason (`app.js`
+  legitimately no longer imports/calls `renderCup`/`CupRenderer.js`):
   * `tools/test-app-module-migration.mjs`, `tools/test-shape-geometry-integration.mjs` — added
-    `ProductionSheetExporter.js` to `app.js`'s approved direct-import allowlist (`src/export/**`
-    has no barrel `index.js`).
-  * `tools/test-curved-text-integration.mjs`, `tools/test-default-text-layer-editing.mjs` — each
-    had its own dedicated, milestone-specific "`src/export/**` untouched" assertion; narrowed to
-    name the specific files RS-1005 now legitimately touches.
-  * `tools/test-svg-integration.mjs`, `tools/test-examples-regression.mjs`,
-    `tools/test-default-text-layer-editing.mjs` — widened the source-text slice each extracts
-    `validateProject()`/`defaultProject()` from, so it includes the new top-level
-    `DEFAULT_PROJECT_NAME` constant those functions now reference.
-  * `tools/test-production-export-validation.mjs` — updated its "every export handler reports via
-    `#status`" catch-block count from 5 to 8 (5 original + 3 new Production Sheet handlers).
+    `src/preview3d/index.js` to `app.js`'s approved direct-import allowlist.
+  * `tools/test-render-export-pipeline.mjs`, `tools/test-object-template-integration.mjs` — updated
+    the assertion checking `renderCup(ctx,layout,...)` to check `preview3D.update(layout,...)`
+    instead.
+  * `tools/test-ux-visual-polish.mjs` — its two tests for the old `CUP_ROTATION_SENSITIVITY`
+    pixel-drag handler updated to verify the successor `OrbitControls` configuration (damping,
+    panning, polar-angle limits) instead — an architectural replacement of the exact interaction
+    model those two tests covered, not a regression.
 
-No forbidden file was changed beyond this itemized, documented list (`src/geometry/**`,
-`src/renderer/**`, `src/text/**`, `src/fonts/**`, `src/core/**`, `src/svg/**`, `src/history/**`,
-`src/products/**`, `assets/**`, `examples/**`, `style.css`, `README.md`, `LICENSE`,
-`CONTRIBUTING.md` are all untouched).
+No forbidden file was changed beyond this itemized list (`src/geometry/**`, `src/export/**`,
+`src/core/**`, `src/text/**`, `src/fonts/**`, `src/browser/**`, `src/svg/**`, `src/history/**`,
+`src/products/**`, `src/renderer/**` — including `CupRenderer.js`, present but untouched —
+`assets/**`, `examples/**`, `style.css`, `README.md`, `LICENSE`, `CONTRIBUTING.md` are all
+untouched).
 
 ---
 
 # Commands Executed
 
 ```bash
-npm test              # full suite, see below
-git diff --check      # clean, no whitespace errors
-git status             # reviewed before every commit
-npm run dev            # python3 -m http.server 5173, used for browser verification
+npm install three@0.169.0 --save   # new runtime dependency
+npm test                            # full suite, see below
+git diff --check                    # clean, no whitespace errors
+git status                          # reviewed before every commit
+npm run dev                         # python3 -m http.server 5173, used for browser verification
 ```
+
+Browser verification additionally used a temporary, not-committed Puppeteer (`puppeteer-core`,
+installed with `--no-save --no-package-lock` and uninstalled afterward — `package.json`/
+`package-lock.json` show only the `three` dependency) session against a locally cached "Chrome for
+Testing" binary, with software WebGL enabled (`--use-angle=swiftshader
+--enable-unsafe-swiftshader`), since headless Chrome has no GPU in this environment.
 
 ---
 
 # Automated Test Results
 
-`npm test` — **27/27 suites pass**, exit code 0 (25 pre-existing suites + the 2 new ones, all
-unmodified pre-existing suites still pass after the 11 narrow guard-test updates above).
+`npm test` — **32/32 suites pass**, exit code 0 (28 pre-existing suites, all passing unmodified or
+with the 5 narrowly-updated guard tests above, + the 4 new suites).
 
 New suites:
 
-* `tools/test-pdf-document.mjs` — 12/12 passed. Covers: valid `%PDF-1.4`/`%%EOF` framing; every
-  xref byte offset verified to point at its own `"N 0 obj"`; `/MediaBox` matches requested
-  dimensions; byte-identical determinism for identical draw calls, different output for different
-  calls; circle draws emit exactly 4 Bézier `c` operators + correct fill/stroke operator; text
-  draws emit a correct `BT/Tf/Td/Tj/ET` sequence with escaped parentheses; non-Latin-1 text
-  degrades to `?` without corrupting the byte stream (documented limitation, not a defect);
-  `PT_PER_MM` conversion is exact; constructor input validation.
-* `tools/test-production-sheet-exporter.mjs` — 23/23 passed. Covers: input validation
-  (`TypeError`/`RangeError`, including "doesn't fit either orientation" with a clear message);
-  determinism for both SVG and PDF; header stone count/size(s)/color(s) derived from
-  `stoneLayout.stones` (not passed-in options), including the empty-layout case; registration
-  marks (exactly 4 corner marks, toggle on/off changes nothing else); mirror mode (exact reflected
-  X, Y/size/color/order unaffected); A4 vs Letter page dimensions and automatic landscape
-  orientation selection; margin behavior (symmetric clearance — the centered rect's position is
-  margin-invariant while it fits, and the margin actually taken is reported in the header; a
-  too-large margin throws the same clear error); SVG structural correctness (circle count/cx/cy/r/
-  data-color, page-size root attributes); PDF structural correctness (`/MediaBox`, one 4-`c`-op
-  circle per stone, correct `Tj` count for header + scale-bar labels); **every object template**
-  (`OBJECT_TEMPLATE_IDS`) fits both page sizes at the default margin with the correct
-  `displayName`; **every layer type** (text, curved text, SVG, circle, rectangle) generated via the
-  real permanent `GeometryEngine` and merged into one `StoneLayout`, proving the exporter handles
-  it identically to any other layout (exported circle count === merged stone count); architecture
-  guards (neither new module references the permanent stone-generation engine, geometry-generation
-  calls, `project.layers`, or a layer's `type`); `app.js`/`index.html` wiring structural checks; no
+* `tools/test-object-dimensions.mjs` — 11/11 passed. Covers: the mm-accurate 180-degree-arc radius
+  formula and its linear scaling; positive-input validation; `wrapAngleRad()`'s ordering
+  (front < wide < half < full) and permissive fallback; mug/tumbler/bottle dimension derivation
+  (equal top/bottom radius for the tumbler, positive bottle neck/shoulder/cap heights with
+  `totalHeightMm > bodyHeightMm`); object size is wrap-mode-invariant by construction (no wrap
+  parameter exists on `computeObjectDimensionsMm()` at all).
+* `tools/test-stone-layout-texture.mjs` — 7/7 passed. Covers: `textureSizeForMm()`'s linear px/mm
+  scaling and 2px floor; exactly one background `fillRect` using `backgroundColor`; exactly one
+  `arc()` per stone at the correct mm-scaled position/radius; an unknown stone color degrades to
+  the gold palette instead of throwing; deterministic output for identical inputs. Uses the same
+  dependency-free fake-`ctx` convention already established by
+  `tools/test-object-preview-renderer.mjs`.
+* `tools/test-object-geometry-builder.mjs` — 8/8 passed, using the real `three` npm package (pure
+  geometry/math classes run fine under plain Node with no WebGL context, so this is a real test of
+  the actual geometry, not a mock). Covers: no throw for any of the three templates; mug has exactly
+  a body + a handle mesh, tumbler/bottle have body-only; real `THREE.Mesh`/`BufferGeometry`
+  instances; body bounding-box height matches `ObjectDimensions.js`'s numbers for mug/tumbler and
+  the bottle's total height (body+shoulder+neck+cap); tumbler radius is constant top-to-bottom;
+  `applyWrapUv()` maps the front azimuth to `u≈0.5` for every wrap mode, and the same off-front
+  azimuth maps further from center under a narrower wrap window (`front`) than a wider one
+  (`full`).
+* `tools/test-preview3d-integration.mjs` — 11/11 passed. Covers: the `three` import-map entry (no
+  CDN); `#cup`/`#cupColor`/`#rotation`/`#zoom`/`#resetView`/`#exportCup`/`.viewBtn` ids unchanged;
+  `app.js` imports `createPreview3D` (not `renderCup`/`CupRenderer.js`); `drawCup()` wires
+  `preview3D.update()`/`syncView()` with the live mm canvas size; the old pointer-drag handler and
+  `CUP_ROTATION_SENSITIVITY` are gone; Reset view calls `preview3D.resetView()`; `#exportCup`'s
+  button/filename unchanged; `package.json` declares `three` and registers all 4 new suites;
+  `ObjectDimensions.js`/`StoneLayoutTexture.js` have no Three.js import and never touch
+  `Project`/`Layer`; `CupRenderer.js` still exists, still exports `renderCup`, unmodified; no
   forbidden file changed.
 
 ---
 
 # Browser/Manual Verification
 
-Real headless-Chrome session via Puppeteer (CDP) against `python3 -m http.server 5173`, per
-`docs/AI_ENGINEER.md`. Console `error`/`warning` and `pageerror` events were explicitly captured for
-the entire session, not inferred.
+Real headless-Chrome session via Puppeteer (CDP, software WebGL) against
+`python3 -m http.server 5173`, per `docs/AI_ENGINEER.md`. Console `error`/`warning` and `pageerror`
+events were explicitly captured for the entire session, not inferred.
 
-Actual observed values:
+Actual observed results:
 
-* **Default project (mug, "Vitalina Serbin" text layer), Export Production Sheet SVG:** downloaded
-  and opened. Header present and correct: `Untitled Project`, `Object: Mug`,
-  `Production size: 210 × 90 mm`, `Stone count: 375`, `Stone size: 2 mm`, `Gap: 0.3 mm`,
-  `Crystal color: Gold`, `Page: A4 (landscape) · Margin: 10 mm · Mirror: Off · Registration marks:
-  On`. 375 `<circle>` elements — matches the on-screen "375 stones" stat exactly. Scale reference
-  bar with "0mm"/"50mm" labels and caption present. 4 corner registration marks present (14 total
-  black `<line>` elements = 8 registration-mark segments + 6 scale-bar ticks).
-* **Mirror toggle:** with Mirror On, the first stone's exported `cx` changed from `61.706` to
-  `235.294` (a real reflection about the production rect, not a no-op); toggled back off afterward.
-* **Registration marks toggle:** with Registration marks Off, the header read
-  `Registration marks: Off` and line-element count dropped from 14 to 6 (only the scale-bar ticks
-  remained) — confirms the toggle removes exactly the registration-mark elements and nothing else.
-* **Object type switch:** Tumbler → header `Object: Straight Tumbler`,
-  `Production size: 230 × 100 mm`; Bottle → `Object: Bottle`, `Production size: 180 × 90 mm`. Both
-  exported with zero console errors; switched back to Mug afterward.
-* **All layer types combined:** added a circle layer and a rectangle layer, imported a small SVG
-  layer, and enabled curved text on the default text layer — on-screen stat read "638 stones";
-  the exported Production Sheet SVG contained exactly 638 `<circle>` elements. Visual inspection
-  (rendered screenshot) confirmed straight-vs-curved text, the imported SVG shape, the circle, and
-  the rectangle all appear correctly as stones on one sheet, alongside the correct header/scale
-  bar/registration marks.
-* **Page size A4 vs Letter:** A4 export root was
-  `<svg ... width="297mm" height="210mm" viewBox="0 0 297 210">`; Letter export root was
-  `<svg ... width="279.4mm" height="215.9mm" viewBox="0 0 279.4 215.9">` — genuinely different
-  dimensions, both landscape (this project's 210×90mm/230×100mm/180×90mm production sizes are all
-  wider than tall, so landscape is selected automatically for every template at the default
-  margin).
-* **PNG export:** downloaded a real `image/png` blob, 460,895 bytes (well above a trivial/blank
-  threshold).
-* **PDF export:** downloaded a real `application/pdf` blob, 170,544 bytes; first bytes confirmed
-  `%PDF-1.4`.
-* **Console/errors:** the only network/console event across the entire session was a single
-  `404 Failed to load resource` for `/favicon.ico` — the browser's automatic favicon request; the
-  app defines no favicon and never has (confirmed unrelated to this milestone: `index.html` has no
-  favicon `<link>` before or after this change). **Zero application-originated console errors or
-  warnings, and zero page (uncaught exception/unhandled rejection) errors**, across every
-  interaction above.
-* Visual regression check: took full-app and exported-sheet screenshots before and after a
-  mid-implementation header-spacing fix (see Summary) to confirm the fix actually resolved the
-  crowding and introduced no new issue.
+* **Default project (mug, "Vitalina Serbin" text layer):** a real lit 3D mug renders on `#cup` — a
+  WebGL context is genuinely attached (`canvas.getContext('webgl2')` truthy), the body shows a
+  smooth lighting gradient (not the old hand-drawn 2D shading), the handle is visible when rotated
+  to the back, and the gold "Vitalina Serbin" text is correctly wrapped onto the front of the body
+  at true mm scale.
+* **Mouse rotate:** a drag from the canvas center visibly orbits the camera (screenshot comparison:
+  the design rotates out of view, the handle becomes visible on the far side) — smooth, damped
+  motion, not a jump.
+* **Scroll zoom:** mouse wheel visibly moves the camera closer/farther (screenshot comparison
+  confirms a materially closer framing after `wheel({deltaY:-300})`).
+* **Right-drag pan:** visibly translates the camera's target (screenshot confirms a different part
+  of the object framed, at the same zoom level).
+* **Reset view:** restores the exact "home" framing (pixel-identical screenshot to the initial
+  load), after rotate+zoom+pan — confirms `OrbitControls`' `saveState()`/`reset()` round-trips
+  correctly through `Preview3DRenderer.js`'s own `_frameCamera()`.
+* **Object type switch:** Mug → Straight Tumbler → Bottle, each rendering a genuinely distinct mesh
+  (tumbler: true constant-radius cylinder, no handle; bottle: shoulder taper + neck + cap, no
+  handle) with the correct default wrap mode's coverage, correct new production size shown in the
+  2D layout stats (`220.3×18.5 mm` design bbox for the wider tumbler canvas, `169.8×14.7 mm` for the
+  narrower bottle canvas), and zero console errors on each switch.
+* **Wrap modes:** front/wide/half/full each visibly change how much of the body surface the design
+  covers (screenshot comparison across all four), confirming `applyWrapUv()`'s per-mode angular
+  window is live-wired to the `#wrap` control.
+* **Curved text, circle layer, rectangle layer, imported SVG layer:** enabling curved text, then
+  adding a circle layer, a rectangle layer, and importing a small SVG (via a real
+  `page.waitForFileChooser()` + `fileChooser.accept()` flow, not a synthetic DOM event) all appear
+  correctly as textured stones on the 3D body — the 2D layout's "542 stones" stat matches what
+  renders on the mesh (visually confirmed via screenshot; the same merged `StoneLayout` feeds both
+  renderers, so this is expected, not separately re-derived).
+* **Existing exports unchanged:** 2D SVG, 2D PNG, Cup PNG, Generated Layout JSON, Project JSON, and
+  Production Sheet SVG all downloaded successfully. The Cup PNG (`rhinestone-cup-preview.png`,
+  516×635 real RGBA PNG, 58KB) is a genuine capture of the current 3D-rendered content (visually
+  confirmed) — proves `preserveDrawingBuffer: true` on the new `WebGLRenderer` keeps
+  `canvas.toBlob()` working unmodified.
+* **Console/errors:** the only console event across the entire session (initial load + every
+  interaction above) was a single `404` for `/favicon.ico` — the browser's automatic favicon
+  request; `index.html` defines no favicon `<link>` before or after this milestone (same
+  pre-existing, unrelated event RS-1005's own browser verification documented). **Zero
+  application-originated console errors or warnings, and zero page (uncaught
+  exception/unhandled rejection) errors.**
+* One test-script-level observation, not an application defect: `#exportPNG`/`#exportCup` do not
+  update `#status` at all (`exportCanvas()` is a fire-and-forget `canvas.toBlob()` callback with no
+  status-bar write) — this is pre-existing behavior, unchanged by this milestone; only
+  `download()` (used by the SVG/JSON/Production-Sheet-SVG exports) writes to `#status`.
 
-Not performed: printing an exported sheet on physical paper to verify the 50mm scale bar measures
-exactly 50mm off a real printer (no physical printer available in this environment) — the bar's mm
-dimensions are verified programmatically (`SCALE_BAR_LENGTH_MM = 50`, unit-tested) and the SVG/PDF
-both declare explicit millimeter page dimensions, but true print-fidelity requires a human with a
-printer and ruler.
+Not performed: real-device/GPU verification (this environment's headless Chrome has no GPU; WebGL
+was exercised via software rendering/SwiftShader) and mobile touch-gesture verification (out of
+scope per the specification — `OrbitControls`' default touch handling was not separately exercised
+beyond what its own library test suite already covers).
 
 ---
 
 # Warnings
 
-* PDF text is Latin-1/WinAnsiEncoding only (standard Helvetica font, no embedding) — characters
-  outside that range render as `?` instead of correctly. Documented in the specification's "Out of
-  Scope" and in `PdfDocument.js`'s own header comment; unit-tested (`test-pdf-document.mjs` #9) to
-  confirm graceful degradation rather than corruption. SVG/PNG output has no such limitation.
-* PNG rasterization goes through the browser's native SVG image decoder (offscreen `Image` +
-  `drawImage` at a fixed 200 DPI); this is a real, undistorted, mm-accurate raster (destination
-  canvas pixel dimensions are computed directly from the page's mm size, never from a
-  fit-to-viewport step), but sharpness at very high requested DPI depends on that native decoder,
-  not a custom rasterizer.
-* Margins are a single uniform value (not configurable per side) and only A4/Letter page sizes are
-  offered, both explicitly scoped this way in the specification ("Out of Scope").
+* The default camera framing/lighting is a judgment call (not a spec-mandated exact number) — tuned
+  visually during this milestone (see "Mid-implementation fix" above) but not tied to a real
+  physical camera/lighting reference.
+* `OrbitControls`-driven free rotation is decoupled from the Rotation slider/Front-Left-Right-Back
+  buttons' displayed values by design (see the specification's "Next Milestone" note) — the slider
+  shows the last preset value, not the camera's live orientation, after a manual mouse drag. This
+  was a deliberate scope decision (syncing it back would need a continuous polling/eventing loop)
+  documented in the spec, not an oversight.
+* The mug/tumbler body is open at both ends (no cap geometry) — a deliberate simplification (avoids
+  a UV-mapping special case for cap faces that would otherwise pick up a radial slice of the design
+  texture) rather than a modeled wall thickness; visible only if the camera is panned to look
+  directly into the mouth or straight up from below.
 
 ---
 
 # Known Limitations
 
-* Same as the "Warnings" above: Latin-1-only PDF text, browser-native PNG rasterization, uniform
-  margin, two page sizes.
-* Multi-page nesting, automatic stone packing, print-spooler/printer-driver integration, and color
-  separation are explicitly out of scope per the milestone brief and were not built.
+* Same as the "Warnings" above.
+* No PBR materials, HDR/environment lighting, shadows, animation, multiple simultaneous objects,
+  custom mesh/GLTF import, or DXF export — all explicitly out of scope per the specification.
+* Print-fidelity / physical-device verification was not performed (same limitation category as
+  prior milestones' PDF/PNG export verification).
 
 ---
 
 # Recommended Next Milestone
 
-DXF export; multi-page nested production sheets for large production runs; per-side margins;
-custom page sizes; embedding a Unicode-capable font in `PdfDocument.js`; consolidating the
-cross-layer `dedupe()` merge step into `src/geometry/GeometryEngine.js` (still the one remaining
-architectural gap documented in `docs/ARCHITECTURE.md`); migrating `app.js`'s ad hoc project/layer
-objects onto `src/core/Project`/`Layer`.
+DXF export; syncing the Rotation slider's displayed value to live free-orbit camera state (read
+`OrbitControls.getAzimuthalAngle()` each frame) as a UX polish item; consolidating the cross-layer
+`dedupe()` merge step into `src/geometry/GeometryEngine.js` (still the one remaining architectural
+gap documented in `docs/ARCHITECTURE.md`); migrating `app.js`'s ad hoc project/layer objects onto
+`src/core/Project`/`Layer`.

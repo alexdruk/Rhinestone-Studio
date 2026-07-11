@@ -76,26 +76,30 @@ function createFakeCtx() {
   return { ctx, bezierCalls };
 }
 
-await test('1. CUP_ROTATION_SENSITIVITY is a named constant strictly between 0 and 1, used in the cup drag handler', () => {
-  const match = appJs.match(/const CUP_ROTATION_SENSITIVITY=([\d.]+)/);
-  assert.ok(match, 'expected a CUP_ROTATION_SENSITIVITY constant declaration');
-  const value = Number(match[1]);
-  assert.ok(value > 0 && value < 1, `expected 0 < CUP_ROTATION_SENSITIVITY < 1, got ${value}`);
-  assert.match(
-    appJs,
-    /rotation\+=\(e\.clientX-lastX\)\*CUP_ROTATION_SENSITIVITY;/,
-    'expected the cup pointermove handler to scale the pixel delta by CUP_ROTATION_SENSITIVITY'
-  );
-  assert.ok(!/rotation\+=e\.clientX-lastX;/.test(appJs), 'the previous unscaled 1:1 rotation mapping must be gone');
+// RS-1006 superseded this milestone's own hand-tuned CUP_ROTATION_SENSITIVITY pixel-drag handler
+// with a real Three.js 3D preview whose rotate/zoom/pan is provided by OrbitControls (see
+// src/preview3d/Preview3DRenderer.js) -- not a regression, an architectural replacement of the
+// entire interaction model these two tests originally covered. Updated in place (not deleted) to
+// verify the successor behavior, per this repository's "narrow, documented guard-test update"
+// precedent (see docs/specifications/RS-1006-Real3DPreview.md).
+const preview3DRendererSource = await readFile(path.join(repoRoot, 'src/preview3d/Preview3DRenderer.js'), 'utf8');
+
+await test('1. the old CUP_ROTATION_SENSITIVITY pixel-drag handler is gone; free 3D rotation now comes from OrbitControls (RS-1006)', () => {
+  assert.ok(!/const CUP_ROTATION_SENSITIVITY=/.test(appJs), 'expected the old CUP_ROTATION_SENSITIVITY constant declaration to be removed');
+  assert.ok(!/rotation\+=\(e\.clientX-lastX\)\*CUP_ROTATION_SENSITIVITY;/.test(appJs), 'expected the old cup pointermove handler to be removed');
+  assert.ok(!/rotation\+=e\.clientX-lastX;/.test(appJs), 'the previous unscaled 1:1 rotation mapping must still be gone');
+  assert.ok(/new orbitModule\.OrbitControls\(/.test(preview3DRendererSource), 'expected Preview3DRenderer.js to construct a real OrbitControls instance');
 });
 
-await test('2. drag rotation delta behavior is substantially reduced and still clamped to -180..180', () => {
-  const value = Number(appJs.match(/const CUP_ROTATION_SENSITIVITY=([\d.]+)/)[1]);
-  const rawPixelDelta = 120;
-  const rotationDelta = rawPixelDelta * value;
-  assert.ok(rotationDelta < rawPixelDelta / 2, 'expected a 120px drag to produce well under 60deg of rotation');
-  assert.ok(rotationDelta > 0, 'expected a positive drag to still produce positive rotation (not inverted/zeroed)');
-  assert.match(appJs, /rotation=Math\.max\(-180,Math\.min\(180,rotation\)\);/, 'expected the existing -180..180 clamp to remain');
+await test('2. OrbitControls interaction is configured for smooth (damped), non-jumpy rotate/zoom/pan', () => {
+  assert.match(preview3DRendererSource, /this\.controls\.enableDamping\s*=\s*true/, 'expected damping enabled for smooth interaction');
+  const dampingMatch = preview3DRendererSource.match(/this\.controls\.dampingFactor\s*=\s*([\d.]+)/);
+  assert.ok(dampingMatch, 'expected a named dampingFactor');
+  const dampingFactor = Number(dampingMatch[1]);
+  assert.ok(dampingFactor > 0 && dampingFactor < 1, `expected 0 < dampingFactor < 1, got ${dampingFactor}`);
+  assert.match(preview3DRendererSource, /this\.controls\.screenSpacePanning\s*=\s*true/, 'expected panning to be enabled');
+  assert.match(preview3DRendererSource, /this\.controls\.minPolarAngle\s*=/, 'expected a polar-angle floor (avoids flipping through the pole)');
+  assert.match(preview3DRendererSource, /this\.controls\.maxPolarAngle\s*=/, 'expected a polar-angle ceiling (avoids flipping through the pole)');
 });
 
 await test('3. ZOOM_MIN/ZOOM_MAX constants match the #zoom range input and are used to clamp zoom', () => {
