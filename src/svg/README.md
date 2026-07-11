@@ -29,7 +29,8 @@ after skipping unsupported/degenerate elements.
 ## Supported subset
 
 * Shapes: `path` (full `M/L/H/V/C/S/Q/T/A/Z` grammar, absolute and relative, elliptical arcs
-  converted to cubic Beziers), `circle`, `rect` (sharp corners only), `line`, `polyline`, `polygon`.
+  converted to cubic Beziers), `circle`, `ellipse`, `rect` (sharp corners only), `line`, `polyline`,
+  `polygon`.
 * Containers: `g`, `a`, `switch` (all children walked; `switch`'s conditional-child selection is not
   evaluated — every child is imported).
 * Not walked for shapes (matches SVG's own "not directly rendered" semantics, or explicitly out of

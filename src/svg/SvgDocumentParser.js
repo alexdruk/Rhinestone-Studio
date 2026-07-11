@@ -17,7 +17,7 @@ import { IDENTITY_MATRIX, composeMatrix, applyMatrix, parseTransformList } from 
 const MM_PER_INCH = 25.4;
 const CSS_PX_PER_INCH = 96;
 
-const SUPPORTED_SHAPE_ELEMENTS = new Set(['path', 'circle', 'rect', 'line', 'polyline', 'polygon']);
+const SUPPORTED_SHAPE_ELEMENTS = new Set(['path', 'circle', 'rect', 'ellipse', 'line', 'polyline', 'polygon']);
 const CONTAINER_ELEMENTS = new Set(['g', 'a', 'switch']);
 // Legitimate non-shape SVG constructs: not directly rendered (defs/symbol/clipPath/mask/pattern),
 // not geometry (style/title/desc/metadata), or explicitly out of scope (nested svg). These are
@@ -98,6 +98,26 @@ function shapeElementToContours(element, warnings) {
       if (!(r > 0)) return [];
       const vectorPath = createCircleVectorPath({ cxMm: cx, cyMm: cy, radiusMm: r });
       return [{ contour: vectorPath.contours[0], closed: true }];
+    }
+    case 'ellipse': {
+      const cx = optionalNumAttr(attrs, 'cx', 0);
+      const cy = optionalNumAttr(attrs, 'cy', 0);
+      const rx = requiredNumAttr(attrs, 'rx');
+      const ry = requiredNumAttr(attrs, 'ry');
+      if (!(rx > 0) || !(ry > 0)) return [];
+      // Same four-cubic-Bezier construction as createCircleVectorPath(), generalized to
+      // independent rx/ry (a circle is the rx === ry special case).
+      const k = 0.5522847498307936;
+      const ox = rx * k;
+      const oy = ry * k;
+      const contour = new Contour()
+        .moveTo(cx + rx, cy)
+        .cubicTo(cx + rx, cy + oy, cx + ox, cy + ry, cx, cy + ry)
+        .cubicTo(cx - ox, cy + ry, cx - rx, cy + oy, cx - rx, cy)
+        .cubicTo(cx - rx, cy - oy, cx - ox, cy - ry, cx, cy - ry)
+        .cubicTo(cx + ox, cy - ry, cx + rx, cy - oy, cx + rx, cy)
+        .closePath();
+      return [{ contour, closed: true }];
     }
     case 'rect': {
       const x = optionalNumAttr(attrs, 'x', 0);
@@ -277,7 +297,7 @@ export function parseSvgDocument(svgSource) {
   walk(svgRoot, rootMatrix);
 
   if (shapes.length === 0) {
-    throw new Error('SVG parse error: the document contains no supported shapes (path/circle/rect/line/polyline/polygon).');
+    throw new Error('SVG parse error: the document contains no supported shapes (path/circle/rect/ellipse/line/polyline/polygon).');
   }
 
   return { naturalWidthMm, naturalHeightMm, shapes, warnings };

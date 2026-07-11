@@ -50,6 +50,17 @@ await test('2. circle/line/polyline/polygon parse to the expected shape/closedne
   assert.equal(polygon.closed, true);
 });
 
+await test('2b. <ellipse> parses to a closed contour spanning its independent rx/ry extents', () => {
+  const result = parseSvgDocument(svg('<ellipse cx="5" cy="5" rx="3" ry="2"/>'));
+  assert.equal(result.shapes.length, 1);
+  assert.equal(result.shapes[0].closed, true);
+  const points = result.shapes[0].contour.getPointsUsedByCommands();
+  const xs = points.map((p) => p.xMm);
+  const ys = points.map((p) => p.yMm);
+  assert.ok(Math.abs(Math.min(...xs) - 2) < 1e-9 && Math.abs(Math.max(...xs) - 8) < 1e-9);
+  assert.ok(Math.abs(Math.min(...ys) - 3) < 1e-9 && Math.abs(Math.max(...ys) - 7) < 1e-9);
+});
+
 await test('3. <path> parses M L H V C S Q T Z (absolute/relative); multiple M subpaths split into multiple contours; unclosed subpath is open', () => {
   const contours = pathDataToContours('M0,0 L10,0 H20 V10 C20,20 10,20 10,10 S0,20 0,10 Q-5,5 0,0 T0,0 Z M5,5 l5,0');
   assert.equal(contours.length, 2, 'expected two subpaths (one closed with Z, one open)');
@@ -177,8 +188,11 @@ await test('extra: rounded rect corners are imported as a sharp rectangle with a
   assert.match(result.warnings[0], /Rounded rectangle corners/);
 });
 
-await test('extra: zero-radius circle and zero-size rect are valid-but-empty (SVG "not rendered" rule), not errors', () => {
-  const result = parseSvgDocument(svg('<circle cx="0" cy="0" r="0"/><rect x="0" y="0" width="0" height="5"/><rect x="0" y="0" width="5" height="5"/>'));
+await test('extra: zero-radius circle/ellipse and zero-size rect are valid-but-empty (SVG "not rendered" rule), not errors', () => {
+  const result = parseSvgDocument(svg(
+    '<circle cx="0" cy="0" r="0"/><ellipse cx="0" cy="0" rx="0" ry="5"/>' +
+    '<rect x="0" y="0" width="0" height="5"/><rect x="0" y="0" width="5" height="5"/>'
+  ));
   assert.equal(result.shapes.length, 1);
   assert.equal(result.warnings.length, 0);
 });
