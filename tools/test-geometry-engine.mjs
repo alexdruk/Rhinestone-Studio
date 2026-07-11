@@ -441,6 +441,118 @@ await test('30. an extreme placement size producing a very large fill stone coun
   }
 });
 
+// RS-1003 — curved text. BASE_PARAMS is reused with curveEnabled omitted/false above, confirming
+// straight text; the tests below turn curveEnabled on and exercise the arc-projection stage of
+// generateTextLayout() end-to-end (real fonts, real GeometryEngine), complementing
+// tools/test-arc-projection.mjs's isolated math-only unit tests.
+
+const BASE_CURVE_PARAMS = {
+  ...BASE_PARAMS,
+  curveEnabled: true,
+  curveRadiusMm: 40,
+  curveDirection: 'outside',
+  curveStartAngleDeg: 0,
+  curveSweepAngleDeg: 120,
+  curveAlignment: 'center'
+};
+
+await test('31. curveEnabled omitted/false reproduces the exact straight-text layout (regression)', async () => {
+  const engine = createEngine();
+  const withoutField = await engine.generateTextLayout(BASE_PARAMS);
+  const explicitlyFalse = await engine.generateTextLayout({ ...BASE_PARAMS, curveEnabled: false });
+  assert.deepEqual(withoutField.toJSON(), explicitlyFalse.toJSON());
+});
+
+await test('32. curved (outside) text produces a valid, non-empty layout distinct from straight text', async () => {
+  const engine = createEngine();
+  const straight = await engine.generateTextLayout(BASE_PARAMS);
+  const curved = await engine.generateTextLayout(BASE_CURVE_PARAMS);
+  assert.ok(curved.count > 0, 'expected at least one stone');
+  assert.notDeepEqual(straight.toJSON().stones, curved.toJSON().stones);
+});
+
+await test('33. outside and inside curves produce different layouts for identical other params', async () => {
+  const engine = createEngine();
+  const outside = await engine.generateTextLayout({ ...BASE_CURVE_PARAMS, curveDirection: 'outside' });
+  const inside = await engine.generateTextLayout({ ...BASE_CURVE_PARAMS, curveDirection: 'inside' });
+  assert.notDeepEqual(outside.toJSON().stones, inside.toJSON().stones);
+});
+
+await test('34. positive (clockwise) and negative (counter-clockwise) sweep produce different layouts', async () => {
+  const engine = createEngine();
+  const clockwise = await engine.generateTextLayout({ ...BASE_CURVE_PARAMS, curveSweepAngleDeg: 120 });
+  const counterClockwise = await engine.generateTextLayout({ ...BASE_CURVE_PARAMS, curveSweepAngleDeg: -120 });
+  assert.notDeepEqual(clockwise.toJSON().stones, counterClockwise.toJSON().stones);
+});
+
+await test('35. start/center/end alignment produce different bounding boxes', async () => {
+  const engine = createEngine();
+  const start = await engine.generateTextLayout({ ...BASE_CURVE_PARAMS, curveAlignment: 'start' });
+  const center = await engine.generateTextLayout({ ...BASE_CURVE_PARAMS, curveAlignment: 'center' });
+  const end = await engine.generateTextLayout({ ...BASE_CURVE_PARAMS, curveAlignment: 'end' });
+  assert.notDeepEqual(start.getBoundingBox().toJSON(), center.getBoundingBox().toJSON());
+  assert.notDeepEqual(center.getBoundingBox().toJSON(), end.getBoundingBox().toJSON());
+  assert.notDeepEqual(start.getBoundingBox().toJSON(), end.getBoundingBox().toJSON());
+});
+
+await test('36. curved text works in fill mode', async () => {
+  const engine = createEngine();
+  const layout = await engine.generateTextLayout({ ...BASE_CURVE_PARAMS, mode: 'fill' });
+  assert.equal(layout.sourceMode, 'fill');
+  assert.ok(layout.count > 0);
+});
+
+await test('37. curved text works in outline mode', async () => {
+  const engine = createEngine();
+  const layout = await engine.generateTextLayout({ ...BASE_CURVE_PARAMS, mode: 'outline' });
+  assert.equal(layout.sourceMode, 'outline');
+  assert.ok(layout.count > 0);
+});
+
+await test('38. curved text generation is deterministic', async () => {
+  const engine = createEngine();
+  const first = await engine.generateTextLayout(BASE_CURVE_PARAMS);
+  const second = await engine.generateTextLayout(BASE_CURVE_PARAMS);
+  assert.deepEqual(first.toJSON(), second.toJSON());
+});
+
+await test('39. every curved-text stone coordinate is finite (small radius stress case included)', async () => {
+  const engine = createEngine();
+  const layout = await engine.generateTextLayout({ ...BASE_CURVE_PARAMS, curveRadiusMm: 2, curveSweepAngleDeg: 360 });
+  assert.ok(layout.count > 0);
+  for (const stone of layout.stones) {
+    assert.ok(Number.isFinite(stone.xMm));
+    assert.ok(Number.isFinite(stone.yMm));
+  }
+});
+
+await test('40. rejects curveRadiusMm <= 0, NaN, and Infinity', async () => {
+  const engine = createEngine();
+  await assert.rejects(() => engine.generateTextLayout({ ...BASE_CURVE_PARAMS, curveRadiusMm: 0 }));
+  await assert.rejects(() => engine.generateTextLayout({ ...BASE_CURVE_PARAMS, curveRadiusMm: -5 }));
+  await assert.rejects(() => engine.generateTextLayout({ ...BASE_CURVE_PARAMS, curveRadiusMm: NaN }));
+  await assert.rejects(() => engine.generateTextLayout({ ...BASE_CURVE_PARAMS, curveRadiusMm: Infinity }));
+});
+
+await test('41. rejects curveSweepAngleDeg of 0, NaN, and Infinity', async () => {
+  const engine = createEngine();
+  await assert.rejects(() => engine.generateTextLayout({ ...BASE_CURVE_PARAMS, curveSweepAngleDeg: 0 }));
+  await assert.rejects(() => engine.generateTextLayout({ ...BASE_CURVE_PARAMS, curveSweepAngleDeg: NaN }));
+  await assert.rejects(() => engine.generateTextLayout({ ...BASE_CURVE_PARAMS, curveSweepAngleDeg: Infinity }));
+});
+
+await test('42. rejects an invalid curveDirection or curveAlignment', async () => {
+  const engine = createEngine();
+  await assert.rejects(() => engine.generateTextLayout({ ...BASE_CURVE_PARAMS, curveDirection: 'sideways' }));
+  await assert.rejects(() => engine.generateTextLayout({ ...BASE_CURVE_PARAMS, curveAlignment: 'middle' }));
+});
+
+await test('43. curveEnabled:false ignores otherwise-invalid curve fields (straight text never validates them)', async () => {
+  const engine = createEngine();
+  const layout = await engine.generateTextLayout({ ...BASE_PARAMS, curveEnabled: false, curveRadiusMm: -1, curveSweepAngleDeg: 0, curveDirection: 'nonsense' });
+  assert.ok(layout.count > 0, 'expected straight text to generate normally despite garbage curve fields');
+});
+
 await test('this task did not modify forbidden UI, renderer, or exporter files', async () => {
   const { execSync } = await import('node:child_process');
   const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
