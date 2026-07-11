@@ -113,10 +113,26 @@ export function renderCup(ctx, stoneLayout, { widthPx: w, heightPx: h, dpr, cupC
   const stoneScale = Math.min(labelW / Math.max(1, b.width), labelH / Math.max(1, b.height));
   const ly = topY + cupH * .52 - (b.y + b.height / 2) * stoneScale;
 
+  // S-001: 'front' used to render the design at a fixed screen position, entirely ignoring `rot` —
+  // the design never appeared to rotate with the cup (only the handle did). It is now treated as a
+  // single rigid flat label mounted at azimuth 0 (facing the camera at rot=0, matching its previous
+  // fixed appearance exactly): the whole group shares one `front = cos(rot)` and one horizontal
+  // `xShift`, instead of each stone getting its own per-stone azimuth (which would fragment the
+  // design into a partial sliver right around the angle where it crosses the cull threshold,
+  // instead of appearing/disappearing as one clean, believable unit). At rot=0 this reduces to
+  // exactly the previous fixed layout (front=1, xShift=0) — no visual regression at the default
+  // angle — and now continuously slides/foreshortens/hides in sync with the handle and body as
+  // rotation changes, using the same cull threshold and size-foreshortening formula as every other
+  // wrap mode below.
   if (wrap === 'front') {
-    const lx = cx - (b.x + b.width / 2) * stoneScale;
+    const front = Math.cos(rot);
+    if (front < .10) return;
+    const persp = .62 + .38 * front;
+    const xShift = Math.sin(rot) * (topW / 2) * .55;
+    const centerXMm = b.x + b.width / 2;
+    const lx = cx + xShift - centerXMm * stoneScale * front;
     for (const st of stoneLayout.stones) {
-      drawStone(ctx, lx + st.xMm * stoneScale, ly + st.yMm * stoneScale, Math.max(1.15, st.sizeMm * stoneScale * .45), st.color, 'cup');
+      drawStone(ctx, lx + st.xMm * stoneScale * front, ly + st.yMm * stoneScale, Math.max(1.15, st.sizeMm * stoneScale * .45 * persp), st.color, 'cup');
     }
     return;
   }
@@ -193,34 +209,51 @@ function drawHandle(ctx, geom, cupColor) {
     ctx.fill();
   }
 
-  const path = () => {
+  // Traces the same centerline, optionally shifted sideways by `dx` — a fixed (not
+  // rotation-dependent) horizontal offset, matching the body's own fixed-direction sheen. A single
+  // centerline can only ever look like a flat ribbon; stacking several parallel offset strokes of
+  // shrinking width — dark core-shadow on one side, a narrow specular highlight on the other — is
+  // what actually reads as a rounded tube instead of a schematic flat band.
+  const path = (dx = 0) => {
     ctx.beginPath();
-    ctx.moveTo(attachTopX, attachTopY);
-    ctx.bezierCurveTo(cp1x, midY1, cp2x, midY2, attachBotX, attachBotY);
+    ctx.moveTo(attachTopX + dx, attachTopY);
+    ctx.bezierCurveTo(cp1x + dx, midY1, cp2x + dx, midY2, attachBotX + dx, attachBotY);
   };
 
   ctx.lineCap = 'round';
 
   // A soft dark underlay slightly wider than the colored tube reads as an edge/ambient-occlusion
-  // line without needing a second parallel curve.
+  // line without needing a second parallel curve. This is also the render's first bezierCurveTo
+  // call, at the true (unshifted) wall-attachment point.
   path();
   ctx.strokeStyle = 'rgba(0,0,0,.28)';
   ctx.lineWidth = thickness + Math.max(1, 1.1 * dpr);
   ctx.stroke();
 
   const grad = ctx.createLinearGradient(attachTopX, attachTopY, attachTopX + bulge, (attachTopY + attachBotY) / 2);
-  grad.addColorStop(0, shade(cupColor, -24));
-  grad.addColorStop(.55, shade(cupColor, 14));
-  grad.addColorStop(1, shade(cupColor, -8));
+  grad.addColorStop(0, shade(cupColor, -18));
+  grad.addColorStop(.55, shade(cupColor, 6));
+  grad.addColorStop(1, shade(cupColor, -14));
   path();
   ctx.strokeStyle = grad;
   ctx.lineWidth = thickness;
   ctx.stroke();
 
-  // A thin, lighter highlight along the same centerline suggests a rounded (not flat) tube.
-  path();
-  ctx.strokeStyle = 'rgba(255,255,255,.35)';
-  ctx.lineWidth = Math.max(.8, thickness * 0.22);
+  // Core shadow, offset toward one side of the tube's cross-section...
+  path(-thickness * 0.24);
+  ctx.strokeStyle = 'rgba(0,0,0,.22)';
+  ctx.lineWidth = Math.max(1, thickness * 0.42);
+  ctx.stroke();
+
+  // ...and a narrower specular highlight offset toward the other side — the two together are what
+  // sell the roundness (a single centerline highlight reads as a flat painted stripe instead).
+  path(thickness * 0.22);
+  ctx.strokeStyle = 'rgba(255,255,255,.5)';
+  ctx.lineWidth = Math.max(.8, thickness * 0.2);
+  ctx.stroke();
+  path(thickness * 0.08);
+  ctx.strokeStyle = 'rgba(255,255,255,.16)';
+  ctx.lineWidth = Math.max(1, thickness * 0.45);
   ctx.stroke();
 }
 

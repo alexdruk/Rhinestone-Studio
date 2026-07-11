@@ -42,19 +42,33 @@ src/renderer/CupRenderer.js               (rewritten handle: real azimuthally-an
                                             as a single stroked, round-capped tube instead of a
                                             separately-outlined filled ribbon so it cannot twist and
                                             never thins to a hairline; depth-ordered before/after the
-                                            body fill based on facing direction, not opacity)
+                                            body fill based on facing direction, not opacity; tube
+                                            shading upgraded from one flat gradient stroke + one
+                                            centerline highlight to layered offset strokes [dark
+                                            underlay, base gradient, off-center core-shadow, two
+                                            off-center highlight passes] so it reads as a rounded
+                                            tube rather than a flat schematic band; 'front' wrap mode
+                                            — the default — no longer renders the design at a fixed
+                                            screen position ignoring `rot` entirely: it is now a
+                                            single rigid group sharing one `front=cos(rot)`/`xShift`,
+                                            identical to its previous fixed layout at rotationDeg=0,
+                                            that now slides/foreshortens/hides in sync with the
+                                            handle and body as rotation changes)
 app.js                                    (modified — VIEW_ANGLE_EPSILON_DEG constant,
                                             angleDiffDeg()/updateViewButtons() helpers, called from
                                             updateAll() so Front/Left/Right/Back button highlighting
                                             stays synchronized with rotation from any source: button
                                             click, reset, slider, or manual cup-drag)
-tools/test-cup-rotation-stabilization.mjs (new — 9 tests: rotation sweep never throws, handle
+tools/test-cup-rotation-stabilization.mjs (new — 11 tests: rotation sweep never throws, handle
                                             attachment sweeps continuously with no jump, attachment
                                             is signed/bidirectional, handle azimuth shares stones'
                                             `+ rot` term, no opacity-fade/side-flip code remains,
                                             CupRenderer stays StoneLayout-only, view-button sync
                                             helper exists and is called from updateAll(), epsilon
-                                            constant present, no forbidden file changed)
+                                            constant present, 'front' wrap mode moves/hides with
+                                            rotation instead of staying frozen, 'front' wrap mode is
+                                            unchanged at rotationDeg=0 [no regression at the default
+                                            angle], no forbidden file changed)
 package.json                              (modified — test script runs the new suite)
 tools/test-svg-integration.mjs            (modified — removed `src/renderer/` from this RS-1001
                                             milestone's own "no forbidden file changed" snapshot
@@ -134,6 +148,28 @@ No file under `src/geometry/**`, `src/core/**`, `src/text/**`, `src/fonts/**`, `
 * **No schema changes.** `Stone`, `StoneLayout`, Generated Layout JSON, SVG export, and the ad hoc
   Project JSON schema are untouched. This milestone only changes how an already-generated
   `StoneLayout` is drawn onto the cup canvas, plus a UI-only button-highlight sync in `app.js`.
+* **Two further fixes made after direct visual review of screenshots (both before the branch was
+  first pushed for review):**
+  1. **The design itself didn't rotate in the default wrap mode.** `wrap: 'front'` — the default
+     selected option in `index.html` — drew every stone at a fixed screen position, built only from
+     the bounding box and never reading `rot` at all. So the *only* thing that visibly rotated, in
+     the mode virtually every user sees by default, was the handle; the design text sat frozen on
+     screen through every angle. This was a second, independent instance of the same class of bug
+     as the original S-002 report, just in the wrap-mode branch instead of the handle. Fixed by
+     treating `'front'` as a single rigid group (one shared `front = cos(rot)` and `xShift`, not a
+     per-stone azimuth) that slides/foreshortens/hides together, instead of fragmenting into a
+     partial sliver right at the angle where individual stones would otherwise cross the cull
+     threshold independently. At `rotationDeg=0` this reduces to exactly the previous fixed formula
+     (`front=1`, `xShift=0`), so the default view is pixel-identical to before — verified by
+     `tools/test-cup-rotation-stabilization.mjs` test 10.
+  2. **The handle read as flat/schematic, not like a real tube.** The first working version shaded
+     the handle with one gradient stroke along its length plus a single thin centerline highlight —
+     structurally correct (attached, non-twisting, foreshortening properly) but visually flat, like
+     a painted ribbon rather than a rounded object. Replaced with layered offset strokes on the same
+     centerline (dark underlay, base color, an off-center darker core-shadow, and two off-center
+     lighter highlight passes) — a standard 2D-canvas technique for implying a round cross-section
+     without true 3D geometry. The light/shadow offset direction is fixed in screen space (not tied
+     to rotation), matching the body's own fixed-direction sheen.
 
 ---
 
@@ -172,7 +208,7 @@ node tools/test-core-model.mjs && node tools/test-font-manager.mjs && node tools
   && node tools/test-cup-rotation-stabilization.mjs && node tools/test-examples-regression.mjs
 ```
 
-New `tools/test-cup-rotation-stabilization.mjs` (9 tests): `renderCup` never throws across a full
+New `tools/test-cup-rotation-stabilization.mjs` (11 tests): `renderCup` never throws across a full
 `-180..180` sweep at 5° steps, both zoom extremes, all four wrap modes; the handle's wall-attachment
 x sweeps continuously with no single-step jump greater than 25px across 5° steps, and is drawn
 (visible) at every one of the 73 sampled angles (no opacity-hidden gaps, unlike the previous
@@ -182,8 +218,12 @@ textually uses `HANDLE_AZIMUTH_RAD + rot`, the same `+ rot` term stone placement
 uses; no `HANDLE_FADE_LOW`/`HIGH`, `smoothstep`, or `globalAlpha` remains anywhere in
 `CupRenderer.js`; `CupRenderer.js` remains `StoneLayout`-only; `app.js` defines
 `updateViewButtons()` and calls it from `updateAll()` (not only from the view-button click handler);
-a named `VIEW_ANGLE_EPSILON_DEG` and mod-360-aware `angleDiffDeg()` exist; no forbidden file changed
-(this milestone's own list).
+a named `VIEW_ANGLE_EPSILON_DEG` and mod-360-aware `angleDiffDeg()` exist; `'front'` wrap mode draws
+all stones at `rotationDeg=0` but fully hides them (as one clean unit, not a fragment) at
+`rotationDeg=180`, and its screen position at `rotationDeg=60` differs from `rotationDeg=0` (proving
+it no longer ignores `rot`); `'front'` wrap mode's design centroid still lands exactly on `cx` at
+`rotationDeg=0` (no regression at the default angle); no forbidden file changed (this milestone's
+own list).
 
 Updated `tools/test-svg-integration.mjs`, `tools/test-undo-redo-integration.mjs`,
 `tools/test-examples-regression.mjs`: each removed `src/renderer/` from its own, independent
@@ -204,18 +244,24 @@ throughout the entire run:
 * Page load: title correct, no console errors, Front button highlighted (rotation starts at 0),
   Undo/Redo buttons render disabled.
 * **Front (0°)**: handle not visible (`renderCup` draws it before the body fill and its bulge is 0,
-  fully occluded) — screenshot confirms a clean cup with no handle. Front button highlighted.
+  fully occluded); the "Vitalina Serbin" design is fully visible, centered — screenshot matches the
+  pre-S-001 default appearance exactly. Front button highlighted.
 * **Left (-90°)**: clicking Left sets `rotation=-90`; screenshot shows the handle in full side
-  profile on the right side of the frame (mirrored from Right, as expected for opposite rotation
-  signs). Left button highlighted, the other three are not.
+  profile with clearly rounded, layered tube shading (dark edge, lit core, subtle highlight —
+  visibly more three-dimensional than the first working version's flat single-highlight band); the
+  design is fully hidden (rotated out of view), not a leftover fragment. Left button highlighted,
+  the other three are not.
 * **Right (90°)**: clicking Right sets `rotation=90`; screenshot shows the handle in full profile on
-  the opposite side from Left. Right button highlighted, others not.
+  the opposite side from Left, same rounded tube shading; design hidden. Right button highlighted,
+  others not.
 * **Back (180°)**: clicking Back sets `rotation=180`; screenshot shows the handle as a solid,
-  rounded, centered vertical tube with a highlight stripe (foreshortened but clearly a handle, not a
-  hairline). Back button highlighted, others not.
+  rounded, centered vertical tube with layered shading (foreshortened but clearly a handle, not a
+  hairline); design hidden (rotated fully away). Back button highlighted, others not.
 * **45°/135°** (via the rotation slider, since these are not view-button angles): screenshots show
-  the handle at believable intermediate positions/sizes between the adjacent view states, and no
-  view button is highlighted at either angle (correctly outside the epsilon of all four).
+  the handle at believable intermediate positions/sizes between the adjacent view states, and the
+  design visibly shifted/foreshortened from its Front position instead of staying frozen (at 45°:
+  shifted left and slightly compressed, still fully readable). No view button is highlighted at
+  either angle (correctly outside the epsilon of all four).
 * Returning the slider to exactly `-90` re-highlighted Left, confirming the sync works for any
   rotation source, not just button clicks.
 * **Manual drag rotation**: a real CDP mouse press/move×10/release across the cup canvas changed
