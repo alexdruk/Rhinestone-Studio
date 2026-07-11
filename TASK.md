@@ -1,55 +1,58 @@
 # Task
 
-**Task ID:** RS-1004
-**Task Type:** Feature
-**Specification:** `docs/specifications/RS-1004-MultiObjectTemplates.md`
-**Status:** IN PROGRESS
-**Branch:** feature/rs-1004-multi-object-templates
+**Task ID:** S-003
+**Task Type:** Stabilization / Bug Fix
+**Specification:** none (milestone brief supplied directly; scoped enough not to require a separate
+`docs/specifications/` doc per `docs/MILESTONE_WORKFLOW.md`'s "ordinary implementation milestone"
+path)
+**Status:** IMPLEMENTED
+**Branch:** fix/s-003-default-text-layer-editing
 
 ## Goal
 
-Allow one rhinestone design to be previewed and produced against multiple physical object
-templates (Mug, Straight Tumbler, Bottle), by activating the already-existing but inert
-`src/products/**` abstraction and `project.product` field — not by creating a second
-object/product model. See the specification for the full template schema, renderer generalization,
-and file scope.
+Fix the reported blocking defect: "the default 'Vitalina Serbin' text layer cannot be edited or
+deleted through the normal UI."
+
+## Investigation (done before any code change)
+
+A real headless-Chrome session (Puppeteer against `python3 -m http.server`) against the unmodified
+repository showed that select / edit (text, font, textMode, curve fields) / duplicate / hide-show /
+undo / redo all already worked correctly for the default layer — no crash, no stale state, layer
+list and controls stayed synchronized. The one genuinely broken path was deletion: `deleteLayer()`'s
+existing "never drop below one layer" guard only ever surfaced feedback via `#status.textContent`,
+an element at the very bottom of the `.side` panel (1648px of content against a 726–800px
+viewport in this session — the same panel `tools/test-ui-discoverability.mjs` already documented as
+overflowing). Since a brand-new project always starts with exactly one layer (the default text
+layer), clicking "Delete selected layer" — the single most obvious affordance for removing it —
+produced zero visible effect anywhere on screen. That silent failure is what the report described as
+"cannot be deleted."
 
 ## Required Outcome
 
-* `src/products/**` defines a validated object-template registry (`mug`, `tumbler`, `bottle`), each
-  with display name, production width/height (mm), preview silhouette parameters, wrap
-  behavior/default, and a safe-area inset.
-* `project.product` selects the active template; switching it via a new, always-visible "Object
-  type" UI control is one discrete, undoable action that also resets `project.canvas` and
-  `project.wrap` to that template's defaults.
-* `src/renderer/CupRenderer.js`'s `renderCup()` is generalized (shared frustum + wrap math, three
-  silhouette variants) to draw all three templates; omitting `objectTemplate` falls back to the
-  exact pre-milestone mug silhouette.
-* A safe-area guide is drawn as an `app.js` editor overlay on the 2D Production Layout canvas — not
-  inside `CanvasRenderer2D.js`.
-* `StoneLayout` and `GeometryEngine` are unchanged. Existing Mug projects open identically. All
-  exports/layer editing/curved text/SVG import/undo-redo keep working for every object type.
+* The default text layer can be selected. (already true — confirmed, unchanged)
+* Its text and all text properties can be edited. (already true — confirmed, unchanged)
+* It can be deleted (once at least one other layer exists). (already true — confirmed, unchanged)
+* Duplicate, hide/show, undo, redo work. (already true — confirmed, unchanged)
+* Deleting the last remaining layer must not crash the app. (already true — confirmed, unchanged)
+* The "at least one layer" rule is enforced **visibly and consistently**: both delete affordances
+  (row trash icon, sidebar "Delete selected layer" button) are disabled with an explanatory title,
+  and an always-in-viewport `#layerRuleHint` note appears, the moment only one layer remains.
+* The layer list and selected-layer controls stay synchronized after every action.
+* Project save/load preserves the corrected behavior.
+* `GeometryEngine`, `StoneLayout`, and export schemas are unchanged.
 
 ## Rules
 
 * Follow `docs/AI_ENGINEER.md` and `docs/CLAUDE_GUIDE.md`.
-* Follow the "Allowed Files" / "Forbidden Files" lists in the specification exactly.
-* Do not modify `node_modules/**`.
-* Two pre-existing guard tests (`tools/test-undo-redo-integration.mjs`,
-  `tools/test-curved-text-integration.mjs`) have forbidden-file lists that would incorrectly block
-  this milestone's legitimate `src/products/**`/`src/renderer/CupRenderer.js` changes — narrow them
-  with an explanatory comment, matching established precedent (see the specification's
-  "Implementation Notes / Known Discrepancies"). Do not touch any other guard test.
-* No unrelated refactoring; no new features beyond this milestone's scope.
+* Smallest coherent change; no unrelated refactoring.
+* Do not touch any other guard test's forbidden-file list.
 * Do not commit failing tests.
 
 ## Deliverables
 
-* Specification (`docs/specifications/RS-1004-MultiObjectTemplates.md`) — done.
-* Implementation.
-* Automated tests (`tools/test-object-template.mjs`, `tools/test-object-preview-renderer.mjs`,
-  `tools/test-object-template-integration.mjs`), registered in `package.json`.
+* Implementation (`app.js`, `index.html`).
+* Automated test (`tools/test-default-text-layer-editing.mjs`), registered in `package.json`.
 * `npm test` passing in full.
-* Browser verification via headless Chrome/CDP, with one screenshot per object type.
+* Browser verification via a real headless-Chrome session, before and after the fix.
 * `TASK_RESULT.md` completed.
-* One commit, pushed to `feature/rs-1004-multi-object-templates`.
+* One commit on `fix/s-003-default-text-layer-editing`.

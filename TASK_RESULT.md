@@ -6,7 +6,7 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-RS-1004 — Multi-Object Templates
+S-003 — Default Text Layer Editing (stabilization)
 
 ---
 
@@ -18,7 +18,7 @@ IMPLEMENTED
 
 # Branch
 
-feature/rs-1004-multi-object-templates
+fix/s-003-default-text-layer-editing
 
 ---
 
@@ -35,250 +35,173 @@ git log -1 --oneline
 
 # Summary
 
-One rhinestone design can now be previewed and produced against three physical object templates —
-Mug, Straight Tumbler, and Bottle — switchable from a new, always-visible "Object type" control at
-the top of the sidebar. This activates the previously-inert `src/products/**` module and
-`project.product` field (both existed since earlier milestones but nothing read them) instead of
-creating a second product abstraction, per the milestone's implementation rule.
+The reported defect was "the default 'Vitalina Serbin' text layer cannot be edited or deleted
+through the normal UI." A real headless-Chrome session against the unmodified repository (not just
+source reading) was used to reproduce this before writing any fix.
 
-`src/products/ObjectTemplate.js` defines a small, validated registry of three templates, each a
-plain data record: display name, `productionWidthMm`/`productionHeightMm`, a `safeAreaInsetMm`, a
-supported/default wrap mode, and schematic preview-silhouette parameters. Switching the control is
-one discrete, undoable action (matching the existing `addCircle`/`addRect`/`deleteLayer` pattern):
-it sets `project.product` and resets `project.canvas`/`project.wrap` to the new template's
-defaults, then regenerates/redraws exactly like any other discrete edit.
+**Findings:** selecting the default layer (via the layer list, the "Selected layer" dropdown, or
+clicking it on the 2D canvas), editing its text/font/text mode/curve properties, duplicating it,
+toggling visibility, and undo/redo all already worked correctly — no crash, no stale DOM, layer list
+and selected-layer controls stayed synchronized. Every one of those paths was exercised
+interactively and produced the expected result.
 
-`src/renderer/CupRenderer.js`'s `renderCup()` was generalized — not duplicated — into three
-silhouette variants (mug: tapered body + handle; straight tumbler: equal top/bottom width, no
-handle; bottle: narrower body + shoulder/neck/cap, no handle) sharing one frustum + stone-wrap-
-placement math that was already object-agnostic. Omitting the new `objectTemplate` option falls
-back to `DEFAULT_PREVIEW`, whose values are byte-identical to the pre-milestone hardcoded mug
-constants — proven by a test that asserts an omitted-option call and an explicit-mug-template call
-produce identical draw-call sequences.
+**Root cause (the one genuinely broken path):** `deleteLayer()` has always refused to drop a
+project below one layer — correct, and it never crashed. But the *only* feedback for that refusal
+was `#status.textContent`, an element at the very bottom of the `.side` sidebar panel. In this
+session's viewport (1400×800), `.side`'s content was 1648px tall against a 726px visible client
+height, so `#status` was scrolled out of view. Because every new project starts with exactly one
+layer — the default text layer — clicking "Delete selected layer" (the single most obvious way to
+remove it) produced **zero visible effect anywhere on screen**: no dialog, no disabled state, no
+scroll, nothing in the viewport changed. That is indistinguishable from a dead button, which is what
+the report described as "cannot be deleted." This is the same category of defect
+`tools/test-ui-discoverability.mjs` already documented once before for other controls in this same
+overflowing panel (see that file's header comment).
 
-A safe-area guide (a dashed rectangle derived from the active template's `safeAreaInsetMm` at the
-current canvas size) is drawn on the 2D Production Layout canvas as a new `app.js` editor overlay
-(`drawSafeAreaGuide()`), alongside the pre-existing selection-outline/HUD-text overlays — not inside
-`CanvasRenderer2D.js`, which (like `StoneLayout.js` and `GeometryEngine.js`) is untouched by this
-milestone.
+**Fix:** `renderLayerUI()` now disables both delete affordances (the per-row trash icon and the
+sidebar "Delete selected layer" button, each with an explanatory `title`) and reveals
+`#layerRuleHint` — a small, always-in-viewport note placed directly under the button — the moment
+`project.layers.length<=1`. This is recomputed on every `renderLayerUI()` call, i.e. after every
+add/delete/duplicate/undo/redo/import, so it never goes stale. `deleteLayer()`'s guard itself is
+unchanged in behavior (still commits nothing and filters nothing when blocked, still the single
+source of truth for the rule) but now also reveals/scrolls `#layerRuleHint` into view, covering the
+keyboard Delete/Backspace shortcut path (which isn't gated by a DOM `disabled` attribute).
 
-`src/geometry/**` was not touched. `StoneLayout` was not touched. A dedicated test proves the merged
-`StoneLayout` for the default text layer is byte-identical across all three object templates —
-object type only ever changes what is drawn, never what is generated.
+No other behavior changed. Editing/select/duplicate/visibility/undo-redo were not modified because
+they were not broken.
 
 ---
 
 # Files Changed
 
-```
-src/products/ObjectTemplate.js        (new — template registry: createObjectTemplate() validation,
-                                       getObjectTemplate()/isValidObjectTemplateId() with permissive
-                                       mug fallback, getSafeAreaRectMm(), the mug/tumbler/bottle
-                                       definitions)
-src/products/index.js                 (new — barrel export)
-src/products/README.md                (documents the new object-template registry)
-src/renderer/CupRenderer.js           (renderCup(): generalized to three preview.kind variants from
-                                       one shared frustum/wrap-math core; new DEFAULT_PREVIEW
-                                       fallback = exact pre-milestone mug constants; new
-                                       drawBottleTop()/roundRectPath() helpers)
-app.js                                (imports getObjectTemplate/getSafeAreaRectMm;
-                                       currentObjectTemplate() helper; validateProject() normalizes
-                                       project.product via getObjectTemplate() [permissive mug
-                                       fallback]; syncSelectedControlsFromLayer() resyncs
-                                       #objectType; drawCup() forwards objectTemplate;
-                                       drawSafeAreaGuide() new editor-overlay helper, called from
-                                       drawLayout(); updateStats() shows the active template's
-                                       display name; #objectType change handler: discrete
-                                       commitHistory()-then-mutate action resetting
-                                       canvas/wrap to the new template's defaults)
-index.html                            (new #objectType <select> at the very top of the sidebar,
-                                       before #selectedLayer; "Cup Preview"/"Cup background"
-                                       relabeled to "Object Preview"/"Preview background" — #cup
-                                       canvas id, #cupColor control id, and the exported PNG
-                                       filename are all unchanged)
-docs/ARCHITECTURE.md                  ("Product Plugins" implementation-status section updated from
-                                       "not implemented" to describe the live implementation; Layer
-                                       map table and Orchestration Layer section note the new
-                                       src/products/** module)
-docs/specifications/RS-1004-MultiObjectTemplates.md (new specification)
-TASK.md                               (replaced with this task)
-TASK_RESULT.md                        (this file)
-package.json                          (registers the three new test files in the `test` script)
-tools/test-object-template.mjs               (new — 17 tests, template registry validation)
-tools/test-object-preview-renderer.mjs       (new — 8 tests, renderCup() silhouette/wrap-math tests
-                                              against a fake CanvasRenderingContext2D)
-tools/test-object-template-integration.mjs   (new — 21 tests, app.js/index.html wiring, backward
-                                              compatibility, save/load round-trip, undo/redo,
-                                              deterministic StoneLayout across templates, export
-                                              compatibility, discoverability)
-tools/test-app-module-migration.mjs          (narrow: added ./src/products/index.js to app.js's
-                                              allowed-import list)
-tools/test-shape-geometry-integration.mjs    (narrow: same allowed-import addition, this test has
-                                              its own independent copy of that check)
-tools/test-undo-redo-integration.mjs         (narrow: removed 'src/products/' from its
-                                              forbidden-file-prefix list, with a comment explaining
-                                              why — it was correctly forbidden at RS-1002 time when
-                                              src/products/ had no code)
-tools/test-curved-text-integration.mjs       (narrow: removed the src/renderer/ half of its
-                                              "byte-for-byte untouched" check [kept the src/export/
-                                              half, since this milestone does not touch
-                                              src/export/**], with a comment explaining why)
-tools/test-svg-integration.mjs               (its own extracted-validateProject() eval now injects
-                                              the real getObjectTemplate as a function parameter,
-                                              since validateProject() gained a new import dependency)
-tools/test-examples-regression.mjs           (same extractValidateProject() fix as above)
-```
+* `app.js` — `renderLayerUI()` computes `onlyOneLayer` and disables the row/sidebar delete buttons +
+  toggles `#layerRuleHint`; `deleteLayer()`'s existing guard also reveals/scrolls that hint into
+  view. No other function changed.
+* `index.html` — added `#layerRuleHint` directly after `#deleteSelected`; added `.ruleHint` and
+  `button:disabled`/`.layer button:disabled` CSS.
+* `package.json` — registered the new test in the `test` script.
+* `tools/test-default-text-layer-editing.mjs` — new structural regression test (see below).
+* `TASK.md` / `TASK_RESULT.md` — this milestone's task/result docs.
 
-No other file was changed. `src/geometry/**`, `src/text/**`, `src/fonts/**`, `src/core/**`,
-`src/browser/**`, `src/svg/**`, `src/history/**`, `src/export/**`,
-`src/renderer/CanvasRenderer2D.js`, `src/renderer/StoneColors.js`, `assets/**`, and `examples/**`
-were not touched — verified by `tools/test-object-template-integration.mjs` test 21 and
-`tools/test-object-preview-renderer.mjs` test 8.
+`GeometryEngine.js`, `StoneLayout.js`, and every exporter are untouched (enforced by an automated
+`git status` check inside the new test).
 
 ---
 
 # Commands Executed
 
 ```bash
-npm test                # 27 suites, all pass (0 failures)
-git diff --check         # clean
-git status                 # only the files listed above
-npm run dev                 # static file server on :5173, used for browser verification
+npm test
+git diff --check
+git status
 ```
+
+Also, ad hoc, for interactive investigation and verification (not part of `npm test`):
+
+```bash
+python3 -m http.server 5173   # dev server, per package.json's own "dev"/"start" scripts
+node <puppeteer-driven scripts against http://localhost:5173/index.html>
+```
+
+(Puppeteer/Chrome were available on this machine outside the project's own `node_modules`; no new
+dependency was added to the project itself.)
 
 ---
 
 # Automated Test Results
 
-`npm test` passes in full — 27 suites, zero failures (24 pre-existing suites unchanged and green,
-plus 3 new suites totaling 46 new tests):
+`npm test` — **all passing**, 332 assertions across 27 test files, 0 failures.
 
-```
-Core model / Font manager / Vector path / FontProviderRegistry / OpenTypeProvider /
-Default font provider registry / SVG parser / Arc projection / GeometryEngine /
-Stone color / History manager tests passed.
-Object template tests passed.                    (new, 17/17)
-App module migration / Browser dependency loading / Live text integration /
-Shape geometry integration / SVG integration / Undo/redo integration /
-Curved text integration / UI discoverability tests passed.
-Render/export pipeline / Production export validation / UX visual polish /
-Cup rotation stabilization tests passed.
-Object preview renderer tests passed.             (new, 8/8)
-Object template integration tests passed.         (new, 21/21)
-Examples regression suite passed.
-```
+The new file, `tools/test-default-text-layer-editing.mjs` (8 assertions), specifically checks:
 
-Regression-proof highlights:
-
-* `tools/test-object-preview-renderer.mjs` test 2 proves an omitted `objectTemplate` option
-  produces the exact same draw-call sequence as explicitly passing the mug template — the
-  strongest available proof that this milestone introduced zero behavior change for any caller
-  that doesn't know about object templates.
-* `tools/test-object-template-integration.mjs` test 15 generates the default project's `StoneLayout`
-  under all three templates and asserts the stone arrays are byte-identical — proving object type
-  never perturbs geometry.
-* `tools/test-object-template-integration.mjs` tests 9-12 prove a pre-RS-1004 Project JSON (no
-  `product` field) and an unrecognized `product` value both resolve to `'mug'` without throwing.
-* All four pre-existing cup/renderer-related suites (`test-cup-rotation-stabilization.mjs`,
-  `test-ux-visual-polish.mjs`, `test-production-export-validation.mjs`,
-  `test-render-export-pipeline.mjs`) pass unmodified against the generalized `renderCup()`.
+1. `defaultProject()` still starts with exactly one text layer, id `"text"`, text
+   `"Vitalina Serbin"`.
+2. `#layerRuleHint` exists exactly once, immediately after `#deleteSelected`, starts hidden.
+3. `renderLayerUI()` computes `onlyOneLayer` fresh every call and disables the row delete button /
+   `#deleteSelected` / reveals `#layerRuleHint` accordingly.
+4. `deleteLayer()`'s guard is unchanged (still commits history before filtering when allowed, still
+   guards first) and additionally surfaces `#layerRuleHint`.
+5. The keyboard Delete/Backspace shortcut still calls `deleteLayer(selectedLayerId)` and is still
+   suppressed while an `INPUT`/`SELECT` has focus.
+6. Every default-text-layer edit control (`text`, `font`, `textMode`, all curve fields) remains
+   wired through `HISTORY_TRACKED_CONTROL_IDS`; layer-dropdown selection and canvas hit-testing for
+   text layers remain wired.
+7. Duplicate/visibility toggle remain unchanged (still commit history, still nudge a duplicated
+   text layer's text so the copy is visibly distinct).
+8. `GeometryEngine.js`/`StoneLayout.js`/`SvgExporter.js` are untouched (via `git status --porcelain`).
 
 ---
 
 # Browser / Manual Verification
 
-Performed via a from-scratch headless-Chrome/CDP driver (raw DevTools Protocol over Node's native
-`WebSocket`, no new dependency — matching this repository's established precedent), against
-`npm run dev` (static file server on `:5173`), Chrome launched headless with
-`--window-size=1440,960`.
+Performed in a real headless-Chrome session (Puppeteer) against `python3 -m http.server 5173`,
+viewport 1400×800 — both **before** and **after** the fix.
 
-Verified, in one continuous session (screenshots captured, session-local, not committed):
+**Before the fix** (confirms the root cause):
+* Fresh load → click "Delete selected layer" → `#status` sets to `"Cannot delete the last layer"`,
+  but `document.querySelector('.side').getBoundingClientRect()` / `scrollHeight` (1648px) vs.
+  `clientHeight` (726px) confirms `#status` is off-screen. Screenshot taken: the button, layer list,
+  and canvas all look completely unchanged after the click — no visible feedback anywhere.
 
-* [x] Default project loads as Mug (`#objectType` = `mug`, `#wrap` = `front`, preview stats say
-      "Mug") — unchanged from before this milestone (375 stones, 199.4×17.0mm).
-* [x] Switch Mug → Straight Tumbler: `#objectType`/preview stats update, `#wrap` resets to the
-      tumbler's default (`half`), the preview silhouette becomes a true straight-walled cylinder
-      with no handle (416 stones after re-centering at the new 230×100mm canvas).
-* [x] Switch Straight Tumbler → Bottle: `#wrap` resets to the bottle's default (`wide`), the preview
-      silhouette becomes a neck+shoulder+cap bottle with no handle (323 stones at the new 180×90mm
-      canvas).
-* [x] Design remains visible (non-zero stone count, rendered in both the 2D layout and the object
-      preview) for all three object types.
-* [x] Swept all four wrap modes (`front`/`wide`/`half`/`full`) for all three object types — no
-      thrown errors, cup canvas updates each time.
-* [x] Safe-area guide: confirmed visually via full-resolution `#layout` canvas captures — a light
-      dashed rectangle distinct from the (darker, tighter) selection outline, present and
-      differently sized for mug vs. bottle (matching each template's own `safeAreaInsetMm` at its
-      own canvas size).
-* [x] Save/load round-trip: exported Project JSON while on Bottle (intercepted the real
-      `URL.createObjectURL` Blob, not a re-implementation) — confirmed `product:"bottle"`,
-      `canvas:{width:180,height:90}`, `wrap:"wide"` in the exported file; switched to Mug; imported
-      the exported file back through the real `#importProjectFile` change handler via a genuine
-      `File`+`DataTransfer` — `#objectType`/`#wrap` correctly restored to `bottle`/`wide`.
-* [x] Undo/redo across an object-type switch: switched Bottle → Tumbler, clicked `#undoBtn` —
-      `#objectType` correctly reverted to `bottle`; clicked `#redoBtn` — correctly reapplied
-      `tumbler`.
-* [x] All five exports (Project JSON, Generated Layout JSON, SVG, 2D PNG, Object Preview PNG)
-      succeeded for Bottle — captured filenames are byte-identical to the pre-milestone names:
-      `rhinestone-project.json`, `rhinestone-generated-layout.json`, `rhinestone-layout.svg`,
-      `rhinestone-layout.png`, `rhinestone-cup-preview.png`.
-* [x] Zero console errors/exceptions across the entire session (0 of 0 captured console messages
-      were errors).
-* [x] Screenshots captured for all three objects: `01-mug-default.png`, `02-tumbler.png`,
-      `03-bottle.png` (full-panel), plus `layout-only-{mug,tumbler,bottle}.png` (zoomed 2D
-      production canvas, showing the safe-area guide clearly) and `04`–`06` covering wrap sweep/
-      import/undo-redo states.
+**After the fix** (confirms the fix; each step observed via `page.evaluate`/screenshots, not
+assumed):
+1. **Select default text layer** — selected on load (layer list highlight, dropdown value, blue
+   canvas selection outline all agree).
+2. **Edit text** — `#text` → `"New Name"` (`page.type`), layer list label updates immediately,
+   dirty indicator flips to "Unsaved changes".
+3. **Edit font/mode/curve** — font → Great Vibes, text mode → fill, curve → on: all three
+   propagate to the underlying layer and regenerate stones (stone count changed each time, no
+   console/page error).
+4. **Delete default text layer** — blocked while it's the only layer:
+   `#deleteSelected.disabled === true`, row trash button `disabled === true`,
+   `#layerRuleHint` visible (screenshot: greyed-out button + red inline note, both in the visible
+   viewport with zero scrolling). Forced JS `.click()` on the disabled button is a no-op (layer
+   count stays 1, matching disabled-button semantics). Keyboard `Delete` (focus moved off any
+   input first) is also blocked, hint reconfirmed visible, no crash. After adding a second layer,
+   deleting the original text layer succeeds (`#deleteSelected` re-enables, layer count 2 → 1) and
+   the hint reappears once back down to 1 layer.
+5. **Undo/redo delete** — undo restores the deleted layer (count 1 → 2); redo re-deletes it
+   (count 2 → 1); both confirmed by direct DOM inspection, not just button-enabled state.
+6. **Duplicate** — duplicating a layer while at 2 layers produces 3, confirmed by DOM count.
+7. **Visibility** — toggling a row's checkbox flips `project.layers[i].visible` and updates the
+   generated stone count.
+8. **Layer-list/control synchronization** — `#selectedLayer`'s dropdown value, the layer list's
+   `.selected` row, and the text/font/mode/curve fields were re-checked after every action above and
+   always agreed with the currently-selected layer.
+9. **Console/page errors** — zero, across the entire sequence, except a pre-existing, unrelated
+   `favicon.ico` 404 (present before this fix too; the app defines no favicon).
+
+Save/load was verified via `#exportProject` (downloads without throwing, `#status` confirms
+"Downloaded rhinestone-project.json") and via the pre-existing
+`tools/test-production-export-validation.mjs`/`tools/test-object-template-integration.mjs` coverage
+of `validateProject()`'s round-trip, neither of which this milestone touched.
+
+Dev server and all Puppeteer sessions were stopped after verification; no server process was left
+running.
 
 ---
 
 # Warnings
 
-* **Bottle/tumbler production canvas sizes are new defaults, not tuned to any specific commercial
-  SKU.** `tumbler` (230×100mm) and `bottle` (180×90mm) were chosen to keep the same
-  landscape-wrap-band aspect ratio the existing mug (210×90mm) already uses, so the default design
-  stays visible and reasonably proportioned across all three without per-template layer
-  repositioning (out of scope). A future milestone calibrating these against real product
-  dimensions is a reasonable follow-up, not a defect — the milestone brief scoped preview/switching
-  behavior, not manufacturing-calibrated dimensions for specific SKUs.
-* **The bottle's schematic preview has no "mouth" ellipse** (unlike mug/tumbler) — its neck/cap
-  drawing covers the top of the silhouette instead. This is an intentional, documented difference
-  (see `CupRenderer.js`'s inline comments and `tools/test-object-preview-renderer.mjs` test 5), not
-  an oversight.
-* **Switching object type always resets `project.canvas`/`project.wrap` to the new template's
-  defaults**, even if the user had customized `wrap` for the previous object type. There is no UI to
-  edit `project.canvas` independently of object type today (true before this milestone too), so this
-  is the only sane behavior; `wrap` reset is called out explicitly in the milestone brief ("wrap
-  defaults where appropriate"). A future milestone could remember per-template wrap preferences if
-  that proves desirable in practice.
-* **Two pre-existing guard tests' forbidden-file lists were narrowed** (`tools/test-undo-redo-
-  integration.mjs`, `tools/test-curved-text-integration.mjs`) and **two pre-existing tests' source-
-  extraction eval calls were updated** (`tools/test-svg-integration.mjs`,
-  `tools/test-examples-regression.mjs`) to inject the real `getObjectTemplate` as a function
-  parameter, since `validateProject()` gained a new import dependency those tests extract and
-  `eval()` in isolation. All four changes are narrow, commented, and necessitated by this
-  milestone's legitimate scope — see `docs/specifications/RS-1004-MultiObjectTemplates.md`
-  "Implementation Notes / Known Discrepancies" for the two forbidden-list changes specifically.
+* A pre-existing, unrelated `favicon.ico` 404 appears in the console on every load (no favicon is
+  defined anywhere in the repo). Cosmetic, out of scope for this milestone, not a regression.
 
 ---
 
 # Known Limitations
 
-* No custom template editor (out of scope per the milestone brief) — templates are code-defined in
-  `src/products/ObjectTemplate.js`.
-* No arbitrary 3D meshes/WebGL — the object preview remains a schematic 2D Canvas rendering, exactly
-  like the pre-existing mug preview.
-* No per-object-type production-safe layer-placement warnings (a layer can still be positioned
-  outside the active template's safe area; the safe-area guide is visual guidance only, not a
-  validation gate) — flagged as a candidate next milestone below.
-* Shirts/hats/bags, manufacturing nesting, and any `StoneLayout`/`GeometryEngine` schema change
-  remain explicitly out of scope, unchanged from the milestone brief.
+* The fix disables delete affordances for *any* layer once only one remains (not specifically the
+  default text layer) — this matches the existing `deleteLayer()` guard, which has always applied to
+  whichever single layer remains, not specifically to the original default layer. This is correct:
+  the rule is "a project needs ≥1 layer," not "the default layer is special."
+* `#layerRuleHint`'s wording is generic ("add another layer before you can delete this one"); it does
+  not name the specific layer. Acceptable given the rule is layer-count-based, not layer-identity-
+  based.
 
 ---
 
 # Recommended Next Milestone
 
-Per-object-type production-safe layer-placement guardrails (warn, don't block, when a layer's
-stones fall outside the active template's safe area) — the safe-area guide added this milestone is
-purely visual; turning it into an active (non-blocking) validation signal is a natural, contained
-follow-up. Calibrating `tumbler`/`bottle` production dimensions against real commercial SKUs (see
-"Warnings") is a second, independent candidate.
+None required for this defect. If a future stabilization pass revisits the `.side` panel again, it
+may be worth consolidating `#status` and `#layerRuleHint` into one general "in-context feedback"
+mechanism rather than two separate ad hoc elements — flagged here, not built, since it is out of
+this milestone's scope.
