@@ -169,20 +169,39 @@ list above are aspirational. Layer-aware interaction (selection outline/handles,
 intentionally kept in `app.js`, not in these modules, since it requires layer awareness the
 renderer contract deliberately excludes.
 
-As of RS-0003.5D2, `CupRenderer.js`'s handle is anchored to the tapered cup-body wall at both
-attachment points (using the same linear interpolation the body's own straight sides use) and its
-opacity/bulge are continuous functions of `cos(rotationDeg)` with no discrete side-flip branch —
-the handle is drawn on a fixed screen-space flank (matching the body silhouette, which this
-renderer never rotates in screen space; only stone placement responds to `rotationDeg`), so there
-is no rotation angle at which the attachment jumps. The body fill gradient was replaced with a
-10-stop cosine falloff (smooth cylindrical shading) plus a soft translucent sheen, replacing the
-previous 5-stop abrupt gradient. `CanvasRenderer2D.js`'s `drawStone()` gained a faint contrast ring
-for the `'cup'` style only (`'layout'` style unchanged) so stone colors stay readable against any
-configurable cup color. `app.js` gained named `CUP_ROTATION_SENSITIVITY` and `ZOOM_MIN`/`ZOOM_MAX`
-constants (replacing an unexplained inline 1:1 drag multiplier and adding an explicit zoom clamp),
-a `setNumericSelectValue()` helper fixing the `#stoneSize` dropdown's blank-selection bug, and a
+As of RS-0003.5D2, the body fill gradient uses a 10-stop cosine falloff (smooth cylindrical
+shading) plus a soft translucent sheen, replacing the previous 5-stop abrupt gradient.
+`CanvasRenderer2D.js`'s `drawStone()` gained a faint contrast ring for the `'cup'` style only
+(`'layout'` style unchanged) so stone colors stay readable against any configurable cup color.
+`app.js` gained named `CUP_ROTATION_SENSITIVITY` and `ZOOM_MIN`/`ZOOM_MAX` constants (replacing an
+unexplained inline 1:1 drag multiplier and adding an explicit zoom clamp), a
+`setNumericSelectValue()` helper fixing the `#stoneSize` dropdown's blank-selection bug, and a
 selection-outline/handle contrast halo. None of this changed `StoneLayout`, geometry generation, or
 export schemas — see `docs/specifications/RS-0003.5D2-UXVisualPolish.md`.
+
+As of S-001, `CupRenderer.js`'s handle is a real azimuthally-anchored 3D feature rather than a
+fixed-flank decal: its azimuth is `HANDLE_AZIMUTH_RAD + rot` (`HANDLE_AZIMUTH_RAD = Math.PI`,
+mounted opposite the front-facing design, the same convention a real mug uses), reusing the exact
+`rot` term stone placement already used, so handle and stones always stay synchronized under one
+rotation value. Both the wall-attachment x-offset and the outward bulge scale by the same signed
+`sideFactor = sin(theta)`, giving a full "D" profile at Left/Right and a straight, constant-width
+tube seen end-on at Front/Back — never a discrete side flip and never an opacity fade. Whether the
+handle draws before or after the body fill is decided by `depthFactor = cos(theta)`'s sign (real
+depth ordering, so the wall correctly occludes the part of the loop facing away from the camera);
+because `sideFactor`/`depthFactor` are 90 degrees out of phase, that draw-order switch always
+coincides with the handle's maximum lateral extent (fully clear of the body silhouette), so it is
+never visible as a pop. The handle itself is drawn as a single stroked, round-capped tube (not a
+separately outlined fill), so it cannot self-intersect/twist at any angle and its thickness never
+collapses to a hairline even when the bulge does. `app.js` gained a small `updateViewButtons()`
+helper (using a named `VIEW_ANGLE_EPSILON_DEG` and mod-360-aware `angleDiffDeg()`) called from
+`updateAll()`, so the Front/Left/Right/Back buttons' highlighted state stays synchronized with
+`rotation` regardless of how it changed (button click, reset, slider, or manual cup-drag). Per
+`docs/ARCHITECTURE.md`'s own note above, a true right-cylinder/frustum body silhouette is
+rotation-invariant around its own vertical axis under a fixed camera (a real mug's outline does not
+change when spun) — the body silhouette/shading are therefore deliberately left unchanged; faking a
+silhouette or shading response to rotation would be a visual hack, not a fix. No `StoneLayout`,
+geometry, or export schema changed — see
+`docs/specifications/S-001-CupRenderingStabilization.md`.
 
 ---
 

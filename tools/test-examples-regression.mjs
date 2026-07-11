@@ -303,8 +303,10 @@ await test('17. no forbidden file changed (this milestone\'s own forbidden list)
 
   // app.js, index.html, src/geometry/**, and the new src/svg/** are legitimately changed by
   // RS-1001 (SVG import); everything else this suite originally protected stays forbidden.
+  // src/renderer/ is legitimately changed by S-001 (cup rendering/rotation stabilization) — see
+  // tools/test-cup-rotation-stabilization.mjs for that milestone's own forbidden-file guard.
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
-  const forbiddenPrefixes = ['src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'src/renderer/', 'src/export/', 'assets/'];
+  const forbiddenPrefixes = ['src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'src/export/', 'assets/'];
 
   for (const changedPath of changedPaths) {
     assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
