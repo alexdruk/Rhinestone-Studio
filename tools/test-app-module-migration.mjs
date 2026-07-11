@@ -89,7 +89,9 @@ await test('app.js only imports the RS-0003.5B2 probe, the RS-0003.5B3 permanent
     /from\s*['"]\.\/src\/renderer\/StoneColors\.js['"]/,
     /from\s*['"]\.\/src\/export\/SvgExporter\.js['"]/,
     /from\s*['"]\.\/src\/svg\/index\.js['"]/,
-    /from\s*['"]\.\/src\/history\/index\.js['"]/
+    /from\s*['"]\.\/src\/history\/index\.js['"]/,
+    // RS-1004: activates the previously-inert src/products/** module (object-template registry).
+    /from\s*['"]\.\/src\/products\/index\.js['"]/
   ];
   for (const line of importLines) {
     assert.ok(

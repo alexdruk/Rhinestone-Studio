@@ -105,13 +105,12 @@ await test('9. validateProject() needs no curve-specific code: it already spread
   assert.ok(match, 'expected validateProject() to spread every layer field (...l) so curve fields round-trip with no extra validation code');
 });
 
-await test('10. src/renderer/** and src/export/** are byte-for-byte untouched by this milestone', () => {
+await test('10. src/export/** is byte-for-byte untouched by this milestone (src/renderer/** was correctly forbidden at RS-1003 time but is now legitimately generalized by RS-1004\'s multi-object preview support — see tools/test-object-template-integration.mjs for that milestone\'s own forbidden-file guard)', () => {
   const output = execSync('git diff --name-only HEAD', { cwd: repoRoot, encoding: 'utf8' })
     + execSync('git diff --name-only --cached HEAD', { cwd: repoRoot, encoding: 'utf8' })
     + execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' }).split('\n').filter((l) => l.startsWith('??')).map((l) => l.slice(3)).join('\n');
   const changedPaths = output.split('\n').map((p) => p.trim()).filter(Boolean);
   for (const changedPath of changedPaths) {
-    assert.ok(!changedPath.startsWith('src/renderer/'), `Forbidden file changed: ${changedPath}`);
     assert.ok(!changedPath.startsWith('src/export/'), `Forbidden file changed: ${changedPath}`);
   }
 });

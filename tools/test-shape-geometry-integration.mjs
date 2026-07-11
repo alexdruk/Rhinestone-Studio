@@ -80,7 +80,9 @@ await test('7. app.js only imports modules allowed as of this milestone', () => 
     /from\s*['"]\.\/src\/renderer\/StoneColors\.js['"]/,
     /from\s*['"]\.\/src\/export\/SvgExporter\.js['"]/,
     /from\s*['"]\.\/src\/svg\/index\.js['"]/,
-    /from\s*['"]\.\/src\/history\/index\.js['"]/
+    /from\s*['"]\.\/src\/history\/index\.js['"]/,
+    // RS-1004: activates the previously-inert src/products/** module (object-template registry).
+    /from\s*['"]\.\/src\/products\/index\.js['"]/
   ];
   for (const line of importLines) {
     assert.ok(allowed.some((pattern) => pattern.test(line)), `unexpected import: ${line}`);

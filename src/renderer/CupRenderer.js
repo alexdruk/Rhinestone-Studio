@@ -1,13 +1,36 @@
 /**
- * Cup/mug preview renderer.
+ * Object preview renderer (mug / straight tumbler / bottle).
  *
- * Draws a StoneLayout wrapped onto a schematic cup body. Per docs/ARCHITECTURE.md, the renderer
+ * Draws a StoneLayout wrapped onto a schematic object body. Per docs/ARCHITECTURE.md, the renderer
  * visualizes StoneLayout and never computes geometry: it has no knowledge of Project, Layer, or
  * any layer type (text/circle/rectangle/future shapes) — only the StoneLayout it is handed and
- * plain display options (cup color, wrap mode, rotation, zoom).
+ * plain display options (cup color, wrap mode, rotation, zoom, and — as of RS-1004 — an optional
+ * `objectTemplate` option carrying plain preview-silhouette parameters, exactly the same kind of
+ * plain display option `cupColor`/`wrap` already are, not a Project/Layer/template-class
+ * reference).
+ *
+ * RS-1004 generalized the single hardcoded mug silhouette this file used to draw into three
+ * variants (mug/tumbler/bottle) sharing one frustum + stone-wrap-placement math — see
+ * `computeHandleGeometry()`/`wallHalfWidthAt()` and the wrap-mode loop at the bottom of
+ * `renderCup()`, none of which changed. Only the silhouette drawing itself (body taper, optional
+ * handle, optional bottle neck/shoulder/cap) now branches on `preview.kind`. Omitting
+ * `objectTemplate` (or passing one whose `preview` is absent) falls back to `DEFAULT_PREVIEW`,
+ * whose values are byte-identical to this file's pre-RS-1004 hardcoded mug constants — any
+ * existing direct caller/test that never passes `objectTemplate` sees no behavior change.
  */
 
 import { drawStone } from './CanvasRenderer2D.js';
+
+// RS-1004: the exact pre-milestone hardcoded mug silhouette, kept as the fallback so a caller that
+// omits `objectTemplate` (e.g. an existing test, or a future caller with no template concept) gets
+// identical output to before this milestone.
+const DEFAULT_PREVIEW = Object.freeze({
+  kind: 'mug',
+  topWidthFactor: 0.52,
+  bottomWidthFactor: 0.43,
+  bodyHeightFactor: 0.64,
+  hasHandle: true
+});
 
 // Handle geometry/behavior constants (S-001). Named here instead of left as unexplained inline
 // numbers so the handle's attachment/rotation behavior is auditable in one place.
@@ -48,8 +71,13 @@ const BODY_SHADE_STOPS = 10; // number of gradient stops used to approximate smo
  * @param {'front'|'wide'|'half'|'full'} options.wrap
  * @param {number} options.rotationDeg
  * @param {number} options.zoom
+ * @param {{preview:object}} [options.objectTemplate] RS-1004: plain preview-silhouette parameters
+ *   (see src/products/ObjectTemplate.js). Omitted/absent falls back to DEFAULT_PREVIEW (mug).
  */
-export function renderCup(ctx, stoneLayout, { widthPx: w, heightPx: h, dpr, cupColor, wrap, rotationDeg, zoom }) {
+export function renderCup(ctx, stoneLayout, { widthPx: w, heightPx: h, dpr, cupColor, wrap, rotationDeg, zoom, objectTemplate }) {
+  const preview = objectTemplate?.preview || DEFAULT_PREVIEW;
+  const isBottle = preview.kind === 'bottle';
+
   ctx.clearRect(0, 0, w, h);
   const bg = ctx.createLinearGradient(0, 0, 0, h);
   bg.addColorStop(0, '#fbfdff');
@@ -57,12 +85,19 @@ export function renderCup(ctx, stoneLayout, { widthPx: w, heightPx: h, dpr, cupC
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, w, h);
 
-  const cx = w / 2, cy = h * .54, cupH = h * .64 * zoom, topW = w * .52 * zoom, botW = w * .43 * zoom;
-  const topY = cy - cupH / 2, botY = cy + cupH / 2;
+  const cx = w / 2, cy = h * .54;
+  const bodyH = h * preview.bodyHeightFactor * zoom, topW = w * preview.topWidthFactor * zoom, botW = w * preview.bottomWidthFactor * zoom;
+  // Bottle: reserve vertical space above the body for the shoulder/neck/cap, so the whole
+  // silhouette (not just the body) fits the same overall viewport allowance the mug/tumbler use.
+  const neckH = isBottle ? h * preview.neckHeightFactor * zoom : 0;
+  const shoulderH = isBottle ? h * preview.shoulderHeightFactor * zoom : 0;
+  const capH = isBottle ? h * preview.capHeightFactor * zoom : 0;
+  const topExtraH = neckH + shoulderH + capH;
+  const topY = cy - (bodyH + topExtraH) / 2 + topExtraH, botY = topY + bodyH;
   const rot = rotationDeg * Math.PI / 180;
 
-  const handle = computeHandleGeometry({ cx, topY, botY, topW, botW, cupH, w, h, dpr, zoom, rot });
-  if (handle.depthFactor <= 0) drawHandle(ctx, handle, cupColor);
+  const handle = preview.hasHandle ? computeHandleGeometry({ cx, topY, botY, topW, botW, cupH: bodyH, w, h, dpr, zoom, rot }) : null;
+  if (handle && handle.depthFactor <= 0) drawHandle(ctx, handle, cupColor);
 
   const body = ctx.createLinearGradient(cx - topW / 2, 0, cx + topW / 2, 0);
   for (let i = 0; i <= BODY_SHADE_STOPS; i++) {
@@ -91,27 +126,35 @@ export function renderCup(ctx, stoneLayout, { widthPx: w, heightPx: h, dpr, cupC
   ctx.lineWidth = 1.5 * dpr;
   ctx.stroke();
 
-  ctx.fillStyle = shade(cupColor, -22);
-  ctx.beginPath();
-  ctx.ellipse(cx, topY, topW / 2, h * .032 * zoom, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = shade(cupColor, 35);
-  ctx.lineWidth = 4 * dpr * zoom;
-  ctx.stroke();
-  ctx.fillStyle = shade(cupColor, -50);
-  ctx.beginPath();
-  ctx.ellipse(cx, topY, topW * .42, h * .019 * zoom, 0, 0, Math.PI * 2);
-  ctx.fill();
+  if (isBottle) {
+    drawBottleTop(ctx, {
+      cx, bodyTopY: topY, bodyTopW: topW,
+      neckW: w * preview.neckWidthFactor * zoom, neckH, shoulderH, capH, cupColor, dpr
+    });
+  } else {
+    // Mouth rim — mug/tumbler only; a bottle's mouth is covered by the cap drawn above instead.
+    ctx.fillStyle = shade(cupColor, -22);
+    ctx.beginPath();
+    ctx.ellipse(cx, topY, topW / 2, h * .032 * zoom, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = shade(cupColor, 35);
+    ctx.lineWidth = 4 * dpr * zoom;
+    ctx.stroke();
+    ctx.fillStyle = shade(cupColor, -50);
+    ctx.beginPath();
+    ctx.ellipse(cx, topY, topW * .42, h * .019 * zoom, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
-  if (handle.depthFactor > 0) drawHandle(ctx, handle, cupColor);
+  if (handle && handle.depthFactor > 0) drawHandle(ctx, handle, cupColor);
 
   const boundingBoxMm = stoneLayout.getBoundingBox();
   const b = boundingBoxMm
     ? { x: boundingBoxMm.minXmm, y: boundingBoxMm.minYmm, width: boundingBoxMm.widthMm, height: boundingBoxMm.heightMm }
     : { x: 0, y: 0, width: 0, height: 0 };
-  const labelW = topW * .72, labelH = cupH * .32;
+  const labelW = topW * .72, labelH = bodyH * .32;
   const stoneScale = Math.min(labelW / Math.max(1, b.width), labelH / Math.max(1, b.height));
-  const ly = topY + cupH * .52 - (b.y + b.height / 2) * stoneScale;
+  const ly = topY + bodyH * .52 - (b.y + b.height / 2) * stoneScale;
 
   // S-001: 'front' used to render the design at a fixed screen position, entirely ignoring `rot` —
   // the design never appeared to rotate with the cup (only the handle did). It is now treated as a
@@ -144,7 +187,7 @@ export function renderCup(ctx, stoneLayout, { widthPx: w, heightPx: h, dpr, cupC
     const front = Math.cos(theta);
     if (front < .10) continue;
     const yy = ly + st.yMm * stoneScale;
-    const t = (yy - topY) / cupH;
+    const t = (yy - topY) / bodyH;
     if (t < .06 || t > .95) continue;
     const radius = (topW * (1 - t) + botW * t) / 2;
     const xx = cx + Math.sin(theta) * radius * .82;
@@ -256,6 +299,56 @@ function drawHandle(ctx, geom, cupColor) {
   ctx.strokeStyle = rimGrad;
   ctx.lineWidth = thickness * 0.9;
   ctx.stroke();
+}
+
+// RS-1004 — bottle-only silhouette above the body: a shoulder taper from the body's top width
+// down to the neck width, a straight neck, and a cap. Schematic, matching this file's existing
+// 2D-canvas-only style (no 3D mesh) — drawn as three flat-shaded fills, not lit/textured.
+function drawBottleTop(ctx, { cx, bodyTopY, bodyTopW, neckW, neckH, shoulderH, capH, cupColor, dpr }) {
+  const shoulderTopY = bodyTopY - shoulderH;
+  const neckTopY = shoulderTopY - neckH;
+  const capTopY = neckTopY - capH;
+
+  ctx.fillStyle = shade(cupColor, -14);
+  ctx.beginPath();
+  ctx.moveTo(cx - bodyTopW / 2, bodyTopY);
+  ctx.quadraticCurveTo(cx - bodyTopW / 2, shoulderTopY, cx - neckW / 2, shoulderTopY);
+  ctx.lineTo(cx + neckW / 2, shoulderTopY);
+  ctx.quadraticCurveTo(cx + bodyTopW / 2, shoulderTopY, cx + bodyTopW / 2, bodyTopY);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = shade(cupColor, -18);
+  ctx.fillRect(cx - neckW / 2, neckTopY, neckW, shoulderTopY - neckTopY);
+  ctx.strokeStyle = 'rgba(0,0,0,.15)';
+  ctx.lineWidth = 1 * dpr;
+  ctx.strokeRect(cx - neckW / 2, neckTopY, neckW, shoulderTopY - neckTopY);
+
+  // The cap is drawn in a fixed neutral color (not derived from cupColor), matching how a real
+  // bottle cap is commonly a different material/color from the body it sits on.
+  const capW = neckW * 1.22;
+  const capRadius = Math.min(5 * dpr, (neckTopY - capTopY) / 2);
+  ctx.fillStyle = '#4b5563';
+  roundRectPath(ctx, cx - capW / 2, capTopY, capW, neckTopY - capTopY, capRadius);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,.25)';
+  ctx.lineWidth = 1 * dpr;
+  ctx.stroke();
+}
+
+function roundRectPath(ctx, x, y, width, height, radius) {
+  const r = Math.max(0, Math.min(radius, width / 2, height / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
 }
 
 function shade(hex, pct) {
