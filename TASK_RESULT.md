@@ -254,3 +254,148 @@ Unchanged candidates from prior `TASK_RESULT.md`s remain open: multi-object grou
 rotation for shape/SVG layers, migrating `app.js`'s ad hoc project model onto
 `src/core/Project.js`/`Layer.js`. No new candidate is added by this milestone beyond the two minor,
 pre-existing nuances recorded above under "Warnings" (neither blocks merge).
+
+---
+
+# Addendum — UI Discoverability Fix
+
+**Branch:** fix/rs-1003-ui-discoverability
+**Status:** IMPLEMENTED
+
+## Root Cause
+
+After RS-1003 merged into `develop`, manual testing reported that Curved Text, SVG Import, and Shape
+tools (Add circle/Add rectangle) could not be found in the running app. Investigation (headless
+Chrome/CDP, `getBoundingClientRect()` measurements at four realistic viewport sizes) found:
+
+* **Not missing, not disconnected, not developer-only.** Every control existed in the DOM with
+  correct `id`s, every event listener in `app.js` was correctly wired, and `GeometryEngine`/
+  `StoneLayout` were unaffected — confirmed by re-running the full RS-1003 browser verification
+  script, which drove every one of these controls successfully via real DOM events.
+* **Not a non-user-interaction artifact of the original RS-1003 verification.** That verification
+  used the same real `dispatchEvent`/`click()` DOM interactions a user's mouse/keyboard would
+  trigger; it did not call any internal JS function directly for these three features.
+* **The actual defect: layout/discoverability.** The left sidebar (`.side` in `index.html`) had grown
+  to `scrollHeight` 1615px, while `.side`'s own `clientHeight` (the visible viewport) was only
+  694-1006px at every tested size except one. `overflow-y` was already `auto` (scrolling was
+  technically possible), but:
+  1. "Add circle"/"Add rectangle"/"Import SVG" sat at `top: 807-863px` — below the fold (`clientHeight`
+     694-826px) at 1440×900, 1366×768, and 1280×800; only visible without scrolling at 1920×1080.
+  2. The panel gave **zero visual indication** that more content existed below the fold — no shadow,
+     fade, "more" affordance, or any cue distinguishing "the panel has ended" from "there is more if
+     you scroll." A user has no reason to suspect three major feature buttons are one scroll away.
+  3. RS-1003 made this measurably worse by inserting a "Curved text" row into the already-long
+     `#textControls` block sitting above the Layers/shape-tools section, pushing everything below it
+     (shape tools, SVG import, 3D view, exports) further down.
+
+Screenshot evidence (`inspect-common-laptop.png`, pre-fix, 1366×768): the visible panel ends exactly
+at the "Layers" label with nothing else shown — "Add circle"/"Add rectangle"/"Import SVG" are 100%
+invisible with no hint they exist, matching the report exactly.
+
+## Fix
+
+`index.html` only — no `app.js`, `GeometryEngine.js`, or `StoneLayout.js` change (verified by a new
+test, see below):
+
+1. **Reordered** the Layers section (layer list, "Add circle", "Add rectangle", "Import SVG" + its
+   hidden file input, "Delete selected layer") to sit immediately after the "Selected layer" dropdown,
+   before any per-layer-type detail controls (`#textControls`/`#shapeControls`/`#svgControls`). This
+   is a pure move — no element was duplicated, removed, or given new behavior; `app.js`'s `el(id)`
+   lookups are ID-based and do not depend on DOM order, so no JS change was needed.
+2. **Added a CSS-only scroll-shadow** to `.side` (a well-established, `background-attachment:local`-
+   based technique, no JavaScript): a soft shadow now appears at the bottom edge of the panel whenever
+   there is more scrollable content below, and disappears once the user has actually scrolled to the
+   true end — giving the remaining content (curved-text detail fields, stone/cup settings, 3D view,
+   exports) a genuine, always-correct "scroll for more" cue instead of relying on an easy-to-miss
+   native scrollbar.
+
+## Files Changed
+
+```
+index.html                         (moved the Layers/shape-tools/SVG-import block; added a
+                                     scroll-shadow background to .side)
+tools/test-ui-discoverability.mjs  (new — 7 structural tests: layer-creation tools now precede all
+                                     per-layer detail controls and sit immediately after the layer
+                                     selector; no duplicated elements; the pre-existing
+                                     #textControls/#shapeControls adjacency other tests depend on
+                                     still holds; .side declares a real scroll-shadow; app.js still
+                                     wires every id; GeometryEngine.js/StoneLayout.js untouched)
+package.json                       (registers the new test)
+TASK.md, TASK_RESULT.md            (this addendum)
+```
+
+No other file was changed. `app.js`, `src/geometry/**`, `src/renderer/**`, `src/export/**`, and every
+other module are byte-for-byte untouched.
+
+## Commands Executed
+
+```bash
+npm test        # 23 suites, all pass (0 failures)
+git diff --check # clean
+git status        # only the files listed above
+npm run dev       # static file server on :5173 (already running), used for browser verification
+```
+
+## Browser / Manual Verification
+
+Headless Chrome/CDP (raw DevTools Protocol, no new dependency), against `npm run dev`, at four
+realistic viewport sizes: 1280×800, 1366×768, 1440×900 (my own RS-1003 verification size), 1920×1080.
+
+**Before the fix** — `getBoundingClientRect()` measurements:
+
+| Size | curveEnabled visible? | addCircle/addRect visible? | importSvg visible? |
+|---|---|---|---|
+| 1280×800 | yes | **no** | **no** |
+| 1366×768 | yes | **no** | **no** |
+| 1440×900 | yes | **no** | **no** |
+| 1920×1080 | yes | yes | yes |
+
+**After the fix** — same measurements, all four sizes:
+
+| Size | curveEnabled visible? | addCircle/addRect visible? | importSvg visible? |
+|---|---|---|---|
+| 1280×800 | yes | yes | yes |
+| 1366×768 | yes | yes | yes |
+| 1440×900 | yes | yes | yes |
+| 1920×1080 | yes | yes | yes |
+
+Functional smoke test at 1366×768 (post-fix), one continuous session:
+
+* [x] Clicked `#addCircle` — a "Circle" layer was added, layout regenerated (418 stones).
+* [x] Clicked `#addRect` — a "Rectangle" layer was added, layout regenerated (496 stones).
+* [x] Selected the circle layer — `#shapeControls` correctly became visible (`display:block`).
+* [x] Clicked `#importSvg` — correctly triggers the hidden `#importSvgFile` file input's `click()`.
+* [x] Imported a real SVG (`<circle>`, via a genuine `File`+`DataTransfer`+`change` event) — added a
+      "test.svg" layer, status showed "Imported test.svg: 1 shape(s)".
+* [x] Re-selected the text layer and enabled Curved text — regenerated correctly (a 4-layer project:
+      text + circle + rectangle + SVG, all visible together in the 2D layout and cup preview,
+      screenshot `func-03-curved-text-still-works.png`).
+* [x] Zero console errors, zero page exceptions throughout.
+
+Screenshots captured (session-local, not committed): `inspect-common-laptop.png` (before, showing the
+cut-off panel), `after-fix-common-laptop.png` and `bottom-crop.png` (after, showing Add circle/Add
+rectangle/Import SVG at the top and the scroll-shadow at the bottom edge), `func-01`–`func-03` (the
+functional smoke test above).
+
+## Warnings
+
+* Export buttons (`#exportProject` etc.) still require scrolling to reach at every tested size except
+  1920×1080 — this was not part of the reported issue (exports were separately verified reachable and
+  working in RS-1003's original browser verification) and is now clearly signaled by the new
+  scroll-shadow, so it was left as-is rather than also reordered, to keep this fix minimal and
+  targeted at the three specifically-reported capabilities.
+* The underlying total sidebar content height (1615px) is unchanged by this fix — it is a reordering
+  and affordance fix, not a content-reduction fix. If a future milestone adds more per-layer controls,
+  the same class of problem can recur; a longer-term fix (e.g. splitting the sidebar into a
+  fixed-header toolbar plus an independently scrolling properties region) is a reasonable follow-up
+  but was intentionally not done here per "do not implement new features."
+
+## Known Limitations
+
+None beyond the "Warnings" above.
+
+## Recommended Next Milestone
+
+Consider a structural sidebar redesign (fixed toolbar + independently scrolling properties panel) if
+future milestones continue to add per-layer controls — flagged as a warning above, not a blocking
+issue today.
