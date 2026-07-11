@@ -305,3 +305,43 @@ DXF export; syncing the Rotation slider's displayed value to live free-orbit cam
 `dedupe()` merge step into `src/geometry/GeometryEngine.js` (still the one remaining architectural
 gap documented in `docs/ARCHITECTURE.md`); migrating `app.js`'s ad hoc project/layer objects onto
 `src/core/Project`/`Layer`.
+
+---
+
+# Review Fix — Reported Startup SyntaxError (2026-07-11)
+
+**Reported issue:** browser startup failure — `Uncaught SyntaxError: The requested module
+'./SvgExporter.js' does not provide an export named 'stoneCircleSvg' (at
+ProductionSheetExporter.js:23:10)`.
+
+**Root cause:** not reproducible against the committed code. `src/export/SvgExporter.js` exports
+`stoneCircleSvg` (added in RS-1005) and `src/export/ProductionSheetExporter.js` imports it
+correctly; both files are unmodified by RS-1006 (forbidden). A fresh, cache-disabled headless
+Chrome session (new profile, `setCacheEnabled(false)`, a brand-new dev-server port) loading the
+exact code on this branch produced zero module errors and a working 3D preview — see screenshot
+verification below. The most likely explanation is a stale cached copy of a module served to the
+reporter's browser session from an earlier point in this repository's history (before RS-1005 added
+`stoneCircleSvg`), not a defect in the current source. `python -m http.server` sends no
+`Cache-Control` header, which can allow a browser to skip revalidation under heuristic freshness
+rules.
+
+**Action taken:** rather than leave this as "cannot reproduce," added a permanent regression test,
+`tools/test-module-graph-exports.mjs`, that uses Node's real ES module loader (not a simulation) to
+walk the *actual* module graph reachable from `app.js` — following both `import ... from` and
+`export { ... } from` edges — and fails loudly if any module in that graph is missing a named/
+default export an importer requires. This is Node's own loader doing the validation (the same
+mechanism that produces this exact class of `SyntaxError` in a browser), so it structurally cannot
+pass while silently tolerating a broken export contract anywhere in the graph. Registered in
+`package.json`. No source file needed a code change — `stoneCircleSvg`'s contract was already
+correct.
+
+**Tests:** `npm test` — 33/33 suites pass (32 prior + the new one), exit code 0.
+
+**Browser verification:** a fresh, cache-disabled Puppeteer session (new Chrome profile, cache
+disabled, new server port) loading `index.html` from scratch produced zero page errors and zero
+module-resolution errors — the only console event was the same pre-existing, unrelated
+`/favicon.ico` 404 documented in the original verification. Screenshot confirms the 3D mug preview
+renders correctly (WebGL context active on `#cup`).
+
+**Files changed:** `tools/test-module-graph-exports.mjs` (new), `package.json` (registered the new
+test).
