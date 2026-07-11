@@ -166,6 +166,21 @@ list above are aspirational. Layer-aware interaction (selection outline/handles,
 intentionally kept in `app.js`, not in these modules, since it requires layer awareness the
 renderer contract deliberately excludes.
 
+As of RS-0003.5D2, `CupRenderer.js`'s handle is anchored to the tapered cup-body wall at both
+attachment points (using the same linear interpolation the body's own straight sides use) and its
+opacity/bulge are continuous functions of `cos(rotationDeg)` with no discrete side-flip branch —
+the handle is drawn on a fixed screen-space flank (matching the body silhouette, which this
+renderer never rotates in screen space; only stone placement responds to `rotationDeg`), so there
+is no rotation angle at which the attachment jumps. The body fill gradient was replaced with a
+10-stop cosine falloff (smooth cylindrical shading) plus a soft translucent sheen, replacing the
+previous 5-stop abrupt gradient. `CanvasRenderer2D.js`'s `drawStone()` gained a faint contrast ring
+for the `'cup'` style only (`'layout'` style unchanged) so stone colors stay readable against any
+configurable cup color. `app.js` gained named `CUP_ROTATION_SENSITIVITY` and `ZOOM_MIN`/`ZOOM_MAX`
+constants (replacing an unexplained inline 1:1 drag multiplier and adding an explicit zoom clamp),
+a `setNumericSelectValue()` helper fixing the `#stoneSize` dropdown's blank-selection bug, and a
+selection-outline/handle contrast halo. None of this changed `StoneLayout`, geometry generation, or
+export schemas — see `docs/specifications/RS-0003.5D2-UXVisualPolish.md`.
+
 ---
 
 # Exporters
