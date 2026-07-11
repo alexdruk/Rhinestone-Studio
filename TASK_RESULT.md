@@ -43,12 +43,13 @@ src/renderer/CupRenderer.js               (rewritten handle: real azimuthally-an
                                             separately-outlined filled ribbon so it cannot twist and
                                             never thins to a hairline; depth-ordered before/after the
                                             body fill based on facing direction, not opacity; tube
-                                            shading iterated twice after direct visual review (see
-                                            Design Summary) and now uses several offset strokes
-                                            banded from a dark (shadowed) edge through the base color
-                                            to a bright specular edge, approximating a smooth
-                                            cross-section gradient by superposition, so it reads as a
-                                            rounded tube rather than a flat schematic band; 'front' wrap mode
+                                            shading iterated four times across two rounds of human
+                                            visual review (see Design Summary — two attempts were
+                                            regressions caught by screenshot) and now uses one real
+                                            createLinearGradient() spanning the loop's wall side to
+                                            its outward/tip side as the stroke's strokeStyle, giving
+                                            genuine smooth cross-section shading (no seams, no hard
+                                            band edges) at every point along the curve; 'front' wrap mode
                                             — the default — no longer renders the design at a fixed
                                             screen position ignoring `rot` entirely: it is now a
                                             single rigid group sharing one `front=cos(rot)`/`xShift`,
@@ -163,20 +164,32 @@ No file under `src/geometry/**`, `src/core/**`, `src/text/**`, `src/fonts/**`, `
      threshold independently. At `rotationDeg=0` this reduces to exactly the previous fixed formula
      (`front=1`, `xShift=0`), so the default view is pixel-identical to before — verified by
      `tools/test-cup-rotation-stabilization.mjs` test 10.
-  2. **The handle read as flat/schematic, not like a real tube — three iterations, the middle one a
-     regression caught before commit.** (a) The first working version shaded the handle with one
-     gradient stroke along its length plus a single thin centerline highlight — structurally correct
-     (attached, non-twisting, foreshortening properly) but visually flat, like a painted ribbon. (b)
-     Tried stamping many small radially-shaded discs along the centerline (reusing `drawStone()`'s
-     own shine/fill/accent gradient convention, for visual consistency with the rhinestones). A
-     browser screenshot showed this was a regression, not an improvement: overlapping discs left
-     visible seams, reading as a corrugated hose/screw-thread rather than a smooth tube — worse than
-     (a), not better, and reverted before ever being committed. (c) Replaced with several parallel
-     offset *strokes* on the same centerline — continuous shapes, so no stamping seams are possible
-     — banded from a dark (shadowed) edge through the base color to a bright specular edge, which
-     reads as a genuine smooth cross-section gradient by superposition (confirmed by screenshot: no
-     ribbing, clean rounded profile at Left/Right/Back/45°). The light/shadow offset direction is
-     fixed in screen space (not tied to rotation), matching the body's own fixed-direction sheen.
+  2. **The handle read as flat/schematic, not like a real tube — four iterations across two rounds
+     of human review, two of them regressions caught by screenshot before/after push.**
+     (a) The first working version shaded the handle with one gradient stroke along its length plus
+     a single thin centerline highlight — structurally correct (attached, non-twisting,
+     foreshortening properly) but visually flat, like a painted ribbon. Pushed; a human reviewer
+     confirmed rotation was fixed but said the handle still looked schematic.
+     (b) Tried stamping many small radially-shaded discs along the centerline (reusing
+     `drawStone()`'s own shine/fill/accent gradient convention). A screenshot showed this was a
+     regression: overlapping discs left visible seams, reading as a corrugated hose/screw-thread —
+     reverted before commit.
+     (c) Replaced with several parallel offset *strokes* on the same centerline, banded from a dark
+     edge through the base color to a bright edge. This looked smoother in isolation and was pushed,
+     but a human reviewer's screenshot showed hard, visible ring-like color boundaries between each
+     band — solid-color strokes drawn on top of each other, however many, still have hard edges;
+     stacking more of them cannot produce a true gradient.
+     (d) Root-caused it correctly: a canvas gradient varies by *absolute position*, not by distance
+     along a stroked path, so the fix is a single stroke whose `strokeStyle` is one real
+     `createLinearGradient()` spanning from the loop's wall side to its outward/tip side (axis
+     centered on the loop's own midpoint, offset toward the bulge direction, with a floor on its
+     half-width so it stays a meaningful gradient rather than a near-zero-width cutoff at Front/Back
+     where the bulge itself is nearly zero). Because the gradient is evaluated per-pixel across the
+     whole canvas, it shades the near-straight top/bottom segments *and* the curved tip consistently
+     by which side of the loop each point is on — no seams, no bands, no per-segment special-casing.
+     Confirmed by screenshot at Left/Right/Back/45°: smooth continuous shading, no ribbing, no hard
+     boundaries. The light/shadow direction is fixed in screen space (not tied to rotation),
+     matching the body's own fixed-direction sheen.
 
 ---
 

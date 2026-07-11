@@ -209,51 +209,54 @@ function drawHandle(ctx, geom, cupColor) {
     ctx.fill();
   }
 
-  // Traces the same centerline, shifted sideways by `dx` — a fixed (not rotation-dependent)
-  // horizontal offset, matching the body's own fixed-direction sheen. A stroke can only ever shade
-  // uniformly along its own length, never across its width — which is what a rounded cross-section
-  // actually needs. So the tube's roundness comes from layering several of these offset strokes,
-  // each narrower and lighter than the last as `dx` sweeps from the dark (shadowed) edge to the
-  // light (lit) edge — approximating a smooth perpendicular gradient by superimposition, the same
-  // way traditional airbrush/vector-illustration cylinder shading is built from banded tones. This
-  // stays a stroke technique (not stamped discs), so it renders as one continuous shape with no
-  // seams, unlike a series of overlapping filled circles.
-  const path = (dx = 0) => {
+  const path = () => {
     ctx.beginPath();
-    ctx.moveTo(attachTopX + dx, attachTopY);
-    ctx.bezierCurveTo(cp1x + dx, midY1, cp2x + dx, midY2, attachBotX + dx, attachBotY);
+    ctx.moveTo(attachTopX, attachTopY);
+    ctx.bezierCurveTo(cp1x, midY1, cp2x, midY2, attachBotX, attachBotY);
   };
 
   ctx.lineCap = 'round';
 
   // A dark underlay, wider than the tube, reads as its outer edge/ambient-occlusion line. This is
-  // also the render's first bezierCurveTo call, at the true (unshifted) wall-attachment point.
+  // also the render's first bezierCurveTo call, at the true wall-attachment point.
   path();
   ctx.strokeStyle = shade(cupColor, -46);
   ctx.lineWidth = thickness + Math.max(1, 1.1 * dpr);
   ctx.stroke();
 
-  // Dark (shadowed) edge of the cross-section through to the light (lit) edge, each band narrower
-  // than the last so earlier/wider bands still show at their own edges once later ones are drawn
-  // on top — this superposition is what reads as a smooth gradient instead of flat stripes.
-  const bands = [
-    { dx: -0.34, shade: -34, wf: 1.00 },
-    { dx: -0.18, shade: -18, wf: 0.82 },
-    { dx: -0.02, shade: 0, wf: 0.64 },
-    { dx: 0.12, shade: 16, wf: 0.46 },
-    { dx: 0.24, shade: 30, wf: 0.30 }
-  ];
-  for (const b of bands) {
-    path(b.dx * thickness);
-    ctx.strokeStyle = shade(cupColor, b.shade);
-    ctx.lineWidth = Math.max(1, thickness * b.wf);
-    ctx.stroke();
-  }
+  // A canvas gradient varies by absolute position, not by distance along a stroked path — so a
+  // *linear* gradient whose axis runs from the wall side of the loop to its outward/tip side
+  // shades every part of the tube (the near-straight top/bottom segments *and* the curved tip)
+  // consistently by which side of the loop each point is on, with no seams and no hard band edges.
+  // The axis is centered on the loop's own midpoint, offset toward the bulge direction, with a
+  // floor on its half-width so it stays a meaningful gradient (not a near-zero-width, all-or-
+  // nothing cutoff) even at Front/Back where the bulge itself is nearly zero.
+  const midX = (attachTopX + attachBotX) / 2, midY = (attachTopY + attachBotY) / 2;
+  const dir = bulge >= 0 ? 1 : -1;
+  const halfSpan = Math.max(thickness * 0.9, Math.abs(bulge) * 0.65);
+  const centerX = midX + bulge * .5;
+  const wallX = centerX - dir * halfSpan; // inner, nearer the cup wall: shadowed
+  const tipX = centerX + dir * halfSpan; // outer, away from the wall: lit
 
-  // A thin, crisp specular rim-light on the lit edge sharpens the sense of a polished round tube.
-  path(0.30 * thickness);
-  ctx.strokeStyle = 'rgba(255,255,255,.5)';
-  ctx.lineWidth = Math.max(.8, thickness * 0.12);
+  const grad = ctx.createLinearGradient(wallX, midY, tipX, midY);
+  grad.addColorStop(0, shade(cupColor, -30));
+  grad.addColorStop(.62, shade(cupColor, 32));
+  grad.addColorStop(1, shade(cupColor, -10));
+
+  path();
+  ctx.strokeStyle = grad;
+  ctx.lineWidth = thickness;
+  ctx.stroke();
+
+  // A thin, crisp specular rim-light near the outer/lit edge sharpens the sense of a polished tube.
+  const rimGrad = ctx.createLinearGradient(wallX, midY, tipX, midY);
+  rimGrad.addColorStop(0, 'rgba(255,255,255,0)');
+  rimGrad.addColorStop(.68, 'rgba(255,255,255,0)');
+  rimGrad.addColorStop(.82, 'rgba(255,255,255,.55)');
+  rimGrad.addColorStop(1, 'rgba(255,255,255,0)');
+  path();
+  ctx.strokeStyle = rimGrad;
+  ctx.lineWidth = thickness * 0.9;
   ctx.stroke();
 }
 
