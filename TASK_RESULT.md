@@ -6,7 +6,7 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-S-003 — Default Text Layer Editing (stabilization)
+RS-1005 — Production Sheet Generator
 
 ---
 
@@ -18,7 +18,7 @@ IMPLEMENTED
 
 # Branch
 
-fix/s-003-default-text-layer-editing
+feature/rs-1005-production-sheet-generator
 
 ---
 
@@ -35,173 +35,229 @@ git log -1 --oneline
 
 # Summary
 
-The reported defect was "the default 'Vitalina Serbin' text layer cannot be edited or deleted
-through the normal UI." A real headless-Chrome session against the unmodified repository (not just
-source reading) was used to reproduce this before writing any fix.
+Added a new export, the **Production Sheet**: a one-page, millimeter-accurate, printable
+manufacturing document generated only from the canonical `StoneLayout`, available as SVG, PNG, and
+PDF.
 
-**Findings:** selecting the default layer (via the layer list, the "Selected layer" dropdown, or
-clicking it on the 2D canvas), editing its text/font/text mode/curve properties, duplicating it,
-toggling visibility, and undo/redo all already worked correctly — no crash, no stale DOM, layer list
-and selected-layer controls stayed synchronized. Every one of those paths was exercised
-interactively and produced the expected result.
+Two new modules under `src/export/**`:
 
-**Root cause (the one genuinely broken path):** `deleteLayer()` has always refused to drop a
-project below one layer — correct, and it never crashed. But the *only* feedback for that refusal
-was `#status.textContent`, an element at the very bottom of the `.side` sidebar panel. In this
-session's viewport (1400×800), `.side`'s content was 1648px tall against a 726px visible client
-height, so `#status` was scrolled out of view. Because every new project starts with exactly one
-layer — the default text layer — clicking "Delete selected layer" (the single most obvious way to
-remove it) produced **zero visible effect anywhere on screen**: no dialog, no disabled state, no
-scroll, nothing in the viewport changed. That is indistinguishable from a dead button, which is what
-the report described as "cannot be deleted." This is the same category of defect
-`tools/test-ui-discoverability.mjs` already documented once before for other controls in this same
-overflowing panel (see that file's header comment).
+* `ProductionSheetExporter.js` — `PAGE_SIZES` (A4/Letter), `computeProductionSheetLayout()` (the
+  single pure geometry-projection pass both output formats render — header text lines, the centered
+  production rect, every stone re-projected into page space with an optional horizontal mirror,
+  registration-mark line segments, and the scale-reference bar geometry), `productionSheetToSvg()`,
+  `productionSheetToPdf()`.
+* `PdfDocument.js` — a minimal, dependency-free, deterministic single-page vector PDF writer
+  (lines/rects/circles/text) over the standard, non-embedded Helvetica font (WinAnsiEncoding). No
+  external PDF library was added — `package.json`'s only dependency is still `opentype.js`.
 
-**Fix:** `renderLayerUI()` now disables both delete affordances (the per-row trash icon and the
-sidebar "Delete selected layer" button, each with an explanatory `title`) and reveals
-`#layerRuleHint` — a small, always-in-viewport note placed directly under the button — the moment
-`project.layers.length<=1`. This is recomputed on every `renderLayerUI()` call, i.e. after every
-add/delete/duplicate/undo/redo/import, so it never goes stale. `deleteLayer()`'s guard itself is
-unchanged in behavior (still commits nothing and filters nothing when blocked, still the single
-source of truth for the rule) but now also reveals/scrolls `#layerRuleHint` into view, covering the
-keyboard Delete/Backspace shortcut path (which isn't gated by a DOM `disabled` attribute).
+`SvgExporter.js` gained a small, output-preserving `stoneCircleSvg()` extraction so the new
+exporter reuses the exact same per-stone `<circle>` string template instead of duplicating it
+(`stoneLayoutToSvg()`'s own output is byte-for-byte unchanged — its full pre-existing test suite
+passes unmodified).
 
-No other behavior changed. Editing/select/duplicate/visibility/undo-redo were not modified because
-they were not broken.
+`app.js`/`index.html` gained: a new `project.name` field (permissive default `'Untitled Project'`,
+following the exact pattern `cupColor`/`wrap`/`product` already use — old Project JSON files with
+no `name` field still import cleanly); a "Production Sheet" UI section (page size A4/Letter, margin
+mm, mirror on/off, registration marks on/off — all view/export-only options read live at
+export-click time, like `rotation`/`zoom`, not part of `project`, not undo/redo-tracked); three
+guarded, try/catch-wrapped export buttons following the exact pattern the five pre-existing export
+handlers already use. PNG export has no new `src/export/**` module: `app.js` rasterizes the
+generated SVG via an offscreen `Image`+`<canvas>` at a fixed, documented DPI
+(`PRODUCTION_SHEET_PNG_DPI = 200`), matching the existing "PNG is a render capture, not a standalone
+exporter" precedent `#exportPNG`/`#exportCup` already use.
+
+`StoneLayout.js` and `GeometryEngine.js` are byte-for-byte untouched. No new stone position is
+invented anywhere — the exporter only re-projects already-generated `stone.xMm/yMm` (a centering
+translate, an optional mirror, mm→pt for PDF), the same category of transform
+`CanvasRenderer2D.fitTransform()` already applies for the on-screen canvas. A production size that
+cannot fit the chosen page (in either portrait or landscape orientation) at the requested margin
+throws a clear `RangeError` naming the page/orientation tried — the sheet is never silently
+rescaled ("no scaling" is a hard requirement, not a soft default).
+
+**Mid-implementation fix (found via browser verification, not by the automated suite):** the first
+rendered production sheet showed the last header line visually crowding the production rect's top
+border and its registration marks. Root cause: the header's line-height arithmetic was duplicated
+between `productionSheetToSvg()` and `productionSheetToPdf()`, and the fixed `HEADER_HEIGHT_MM`
+constant was slightly too tight for 8 lines of text. Fixed by moving per-line baseline computation
+(`yMm`) into `computeProductionSheetLayout()` itself — computed once, consumed identically by both
+renderers — and deriving `HEADER_HEIGHT_MM` analytically from the actual line count/sizes plus a
+10mm bottom padding constant, instead of a hand-picked magic number. Re-verified visually
+(screenshots) and via the full automated suite after the fix; both passed.
 
 ---
 
 # Files Changed
 
-* `app.js` — `renderLayerUI()` computes `onlyOneLayer` and disables the row/sidebar delete buttons +
-  toggles `#layerRuleHint`; `deleteLayer()`'s existing guard also reveals/scrolls that hint into
-  view. No other function changed.
-* `index.html` — added `#layerRuleHint` directly after `#deleteSelected`; added `.ruleHint` and
-  `button:disabled`/`.layer button:disabled` CSS.
-* `package.json` — registered the new test in the `test` script.
-* `tools/test-default-text-layer-editing.mjs` — new structural regression test (see below).
-* `TASK.md` / `TASK_RESULT.md` — this milestone's task/result docs.
+**New:**
+* `src/export/ProductionSheetExporter.js`, `src/export/PdfDocument.js`
+* `docs/specifications/RS-1005-ProductionSheetGenerator.md`
+* `tools/test-pdf-document.mjs` (12 tests), `tools/test-production-sheet-exporter.mjs` (23 tests)
 
-`GeometryEngine.js`, `StoneLayout.js`, and every exporter are untouched (enforced by an automated
-`git status` check inside the new test).
+**Modified:**
+* `src/export/SvgExporter.js` (`stoneCircleSvg()` extraction; output unchanged)
+* `src/export/README.md`, `docs/ARCHITECTURE.md` (implementation-status notes)
+* `app.js`, `index.html` (`project.name`; Production Sheet UI + 3 export handlers)
+* `package.json` (registered the 2 new test files)
+* `TASK.md` (this milestone's task)
+* Eleven existing guard tests, each narrowly updated for one specific, documented reason (no guard
+  test's actual protection was weakened beyond what this milestone legitimately changed — see the
+  specification's "Allowed Files" section for the itemized list):
+  * `tools/test-svg-integration.mjs`, `tools/test-undo-redo-integration.mjs`,
+    `tools/test-cup-rotation-stabilization.mjs`, `tools/test-ux-visual-polish.mjs`,
+    `tools/test-examples-regression.mjs`, `tools/test-object-template-integration.mjs` — removed
+    `src/export/` from each's forbidden-prefix list.
+  * `tools/test-app-module-migration.mjs`, `tools/test-shape-geometry-integration.mjs` — added
+    `ProductionSheetExporter.js` to `app.js`'s approved direct-import allowlist (`src/export/**`
+    has no barrel `index.js`).
+  * `tools/test-curved-text-integration.mjs`, `tools/test-default-text-layer-editing.mjs` — each
+    had its own dedicated, milestone-specific "`src/export/**` untouched" assertion; narrowed to
+    name the specific files RS-1005 now legitimately touches.
+  * `tools/test-svg-integration.mjs`, `tools/test-examples-regression.mjs`,
+    `tools/test-default-text-layer-editing.mjs` — widened the source-text slice each extracts
+    `validateProject()`/`defaultProject()` from, so it includes the new top-level
+    `DEFAULT_PROJECT_NAME` constant those functions now reference.
+  * `tools/test-production-export-validation.mjs` — updated its "every export handler reports via
+    `#status`" catch-block count from 5 to 8 (5 original + 3 new Production Sheet handlers).
+
+No forbidden file was changed beyond this itemized, documented list (`src/geometry/**`,
+`src/renderer/**`, `src/text/**`, `src/fonts/**`, `src/core/**`, `src/svg/**`, `src/history/**`,
+`src/products/**`, `assets/**`, `examples/**`, `style.css`, `README.md`, `LICENSE`,
+`CONTRIBUTING.md` are all untouched).
 
 ---
 
 # Commands Executed
 
 ```bash
-npm test
-git diff --check
-git status
+npm test              # full suite, see below
+git diff --check      # clean, no whitespace errors
+git status             # reviewed before every commit
+npm run dev            # python3 -m http.server 5173, used for browser verification
 ```
-
-Also, ad hoc, for interactive investigation and verification (not part of `npm test`):
-
-```bash
-python3 -m http.server 5173   # dev server, per package.json's own "dev"/"start" scripts
-node <puppeteer-driven scripts against http://localhost:5173/index.html>
-```
-
-(Puppeteer/Chrome were available on this machine outside the project's own `node_modules`; no new
-dependency was added to the project itself.)
 
 ---
 
 # Automated Test Results
 
-`npm test` — **all passing**, 332 assertions across 27 test files, 0 failures.
+`npm test` — **27/27 suites pass**, exit code 0 (25 pre-existing suites + the 2 new ones, all
+unmodified pre-existing suites still pass after the 11 narrow guard-test updates above).
 
-The new file, `tools/test-default-text-layer-editing.mjs` (8 assertions), specifically checks:
+New suites:
 
-1. `defaultProject()` still starts with exactly one text layer, id `"text"`, text
-   `"Vitalina Serbin"`.
-2. `#layerRuleHint` exists exactly once, immediately after `#deleteSelected`, starts hidden.
-3. `renderLayerUI()` computes `onlyOneLayer` fresh every call and disables the row delete button /
-   `#deleteSelected` / reveals `#layerRuleHint` accordingly.
-4. `deleteLayer()`'s guard is unchanged (still commits history before filtering when allowed, still
-   guards first) and additionally surfaces `#layerRuleHint`.
-5. The keyboard Delete/Backspace shortcut still calls `deleteLayer(selectedLayerId)` and is still
-   suppressed while an `INPUT`/`SELECT` has focus.
-6. Every default-text-layer edit control (`text`, `font`, `textMode`, all curve fields) remains
-   wired through `HISTORY_TRACKED_CONTROL_IDS`; layer-dropdown selection and canvas hit-testing for
-   text layers remain wired.
-7. Duplicate/visibility toggle remain unchanged (still commit history, still nudge a duplicated
-   text layer's text so the copy is visibly distinct).
-8. `GeometryEngine.js`/`StoneLayout.js`/`SvgExporter.js` are untouched (via `git status --porcelain`).
+* `tools/test-pdf-document.mjs` — 12/12 passed. Covers: valid `%PDF-1.4`/`%%EOF` framing; every
+  xref byte offset verified to point at its own `"N 0 obj"`; `/MediaBox` matches requested
+  dimensions; byte-identical determinism for identical draw calls, different output for different
+  calls; circle draws emit exactly 4 Bézier `c` operators + correct fill/stroke operator; text
+  draws emit a correct `BT/Tf/Td/Tj/ET` sequence with escaped parentheses; non-Latin-1 text
+  degrades to `?` without corrupting the byte stream (documented limitation, not a defect);
+  `PT_PER_MM` conversion is exact; constructor input validation.
+* `tools/test-production-sheet-exporter.mjs` — 23/23 passed. Covers: input validation
+  (`TypeError`/`RangeError`, including "doesn't fit either orientation" with a clear message);
+  determinism for both SVG and PDF; header stone count/size(s)/color(s) derived from
+  `stoneLayout.stones` (not passed-in options), including the empty-layout case; registration
+  marks (exactly 4 corner marks, toggle on/off changes nothing else); mirror mode (exact reflected
+  X, Y/size/color/order unaffected); A4 vs Letter page dimensions and automatic landscape
+  orientation selection; margin behavior (symmetric clearance — the centered rect's position is
+  margin-invariant while it fits, and the margin actually taken is reported in the header; a
+  too-large margin throws the same clear error); SVG structural correctness (circle count/cx/cy/r/
+  data-color, page-size root attributes); PDF structural correctness (`/MediaBox`, one 4-`c`-op
+  circle per stone, correct `Tj` count for header + scale-bar labels); **every object template**
+  (`OBJECT_TEMPLATE_IDS`) fits both page sizes at the default margin with the correct
+  `displayName`; **every layer type** (text, curved text, SVG, circle, rectangle) generated via the
+  real permanent `GeometryEngine` and merged into one `StoneLayout`, proving the exporter handles
+  it identically to any other layout (exported circle count === merged stone count); architecture
+  guards (neither new module references the permanent stone-generation engine, geometry-generation
+  calls, `project.layers`, or a layer's `type`); `app.js`/`index.html` wiring structural checks; no
+  forbidden file changed.
 
 ---
 
-# Browser / Manual Verification
+# Browser/Manual Verification
 
-Performed in a real headless-Chrome session (Puppeteer) against `python3 -m http.server 5173`,
-viewport 1400×800 — both **before** and **after** the fix.
+Real headless-Chrome session via Puppeteer (CDP) against `python3 -m http.server 5173`, per
+`docs/AI_ENGINEER.md`. Console `error`/`warning` and `pageerror` events were explicitly captured for
+the entire session, not inferred.
 
-**Before the fix** (confirms the root cause):
-* Fresh load → click "Delete selected layer" → `#status` sets to `"Cannot delete the last layer"`,
-  but `document.querySelector('.side').getBoundingClientRect()` / `scrollHeight` (1648px) vs.
-  `clientHeight` (726px) confirms `#status` is off-screen. Screenshot taken: the button, layer list,
-  and canvas all look completely unchanged after the click — no visible feedback anywhere.
+Actual observed values:
 
-**After the fix** (confirms the fix; each step observed via `page.evaluate`/screenshots, not
-assumed):
-1. **Select default text layer** — selected on load (layer list highlight, dropdown value, blue
-   canvas selection outline all agree).
-2. **Edit text** — `#text` → `"New Name"` (`page.type`), layer list label updates immediately,
-   dirty indicator flips to "Unsaved changes".
-3. **Edit font/mode/curve** — font → Great Vibes, text mode → fill, curve → on: all three
-   propagate to the underlying layer and regenerate stones (stone count changed each time, no
-   console/page error).
-4. **Delete default text layer** — blocked while it's the only layer:
-   `#deleteSelected.disabled === true`, row trash button `disabled === true`,
-   `#layerRuleHint` visible (screenshot: greyed-out button + red inline note, both in the visible
-   viewport with zero scrolling). Forced JS `.click()` on the disabled button is a no-op (layer
-   count stays 1, matching disabled-button semantics). Keyboard `Delete` (focus moved off any
-   input first) is also blocked, hint reconfirmed visible, no crash. After adding a second layer,
-   deleting the original text layer succeeds (`#deleteSelected` re-enables, layer count 2 → 1) and
-   the hint reappears once back down to 1 layer.
-5. **Undo/redo delete** — undo restores the deleted layer (count 1 → 2); redo re-deletes it
-   (count 2 → 1); both confirmed by direct DOM inspection, not just button-enabled state.
-6. **Duplicate** — duplicating a layer while at 2 layers produces 3, confirmed by DOM count.
-7. **Visibility** — toggling a row's checkbox flips `project.layers[i].visible` and updates the
-   generated stone count.
-8. **Layer-list/control synchronization** — `#selectedLayer`'s dropdown value, the layer list's
-   `.selected` row, and the text/font/mode/curve fields were re-checked after every action above and
-   always agreed with the currently-selected layer.
-9. **Console/page errors** — zero, across the entire sequence, except a pre-existing, unrelated
-   `favicon.ico` 404 (present before this fix too; the app defines no favicon).
+* **Default project (mug, "Vitalina Serbin" text layer), Export Production Sheet SVG:** downloaded
+  and opened. Header present and correct: `Untitled Project`, `Object: Mug`,
+  `Production size: 210 × 90 mm`, `Stone count: 375`, `Stone size: 2 mm`, `Gap: 0.3 mm`,
+  `Crystal color: Gold`, `Page: A4 (landscape) · Margin: 10 mm · Mirror: Off · Registration marks:
+  On`. 375 `<circle>` elements — matches the on-screen "375 stones" stat exactly. Scale reference
+  bar with "0mm"/"50mm" labels and caption present. 4 corner registration marks present (14 total
+  black `<line>` elements = 8 registration-mark segments + 6 scale-bar ticks).
+* **Mirror toggle:** with Mirror On, the first stone's exported `cx` changed from `61.706` to
+  `235.294` (a real reflection about the production rect, not a no-op); toggled back off afterward.
+* **Registration marks toggle:** with Registration marks Off, the header read
+  `Registration marks: Off` and line-element count dropped from 14 to 6 (only the scale-bar ticks
+  remained) — confirms the toggle removes exactly the registration-mark elements and nothing else.
+* **Object type switch:** Tumbler → header `Object: Straight Tumbler`,
+  `Production size: 230 × 100 mm`; Bottle → `Object: Bottle`, `Production size: 180 × 90 mm`. Both
+  exported with zero console errors; switched back to Mug afterward.
+* **All layer types combined:** added a circle layer and a rectangle layer, imported a small SVG
+  layer, and enabled curved text on the default text layer — on-screen stat read "638 stones";
+  the exported Production Sheet SVG contained exactly 638 `<circle>` elements. Visual inspection
+  (rendered screenshot) confirmed straight-vs-curved text, the imported SVG shape, the circle, and
+  the rectangle all appear correctly as stones on one sheet, alongside the correct header/scale
+  bar/registration marks.
+* **Page size A4 vs Letter:** A4 export root was
+  `<svg ... width="297mm" height="210mm" viewBox="0 0 297 210">`; Letter export root was
+  `<svg ... width="279.4mm" height="215.9mm" viewBox="0 0 279.4 215.9">` — genuinely different
+  dimensions, both landscape (this project's 210×90mm/230×100mm/180×90mm production sizes are all
+  wider than tall, so landscape is selected automatically for every template at the default
+  margin).
+* **PNG export:** downloaded a real `image/png` blob, 460,895 bytes (well above a trivial/blank
+  threshold).
+* **PDF export:** downloaded a real `application/pdf` blob, 170,544 bytes; first bytes confirmed
+  `%PDF-1.4`.
+* **Console/errors:** the only network/console event across the entire session was a single
+  `404 Failed to load resource` for `/favicon.ico` — the browser's automatic favicon request; the
+  app defines no favicon and never has (confirmed unrelated to this milestone: `index.html` has no
+  favicon `<link>` before or after this change). **Zero application-originated console errors or
+  warnings, and zero page (uncaught exception/unhandled rejection) errors**, across every
+  interaction above.
+* Visual regression check: took full-app and exported-sheet screenshots before and after a
+  mid-implementation header-spacing fix (see Summary) to confirm the fix actually resolved the
+  crowding and introduced no new issue.
 
-Save/load was verified via `#exportProject` (downloads without throwing, `#status` confirms
-"Downloaded rhinestone-project.json") and via the pre-existing
-`tools/test-production-export-validation.mjs`/`tools/test-object-template-integration.mjs` coverage
-of `validateProject()`'s round-trip, neither of which this milestone touched.
-
-Dev server and all Puppeteer sessions were stopped after verification; no server process was left
-running.
+Not performed: printing an exported sheet on physical paper to verify the 50mm scale bar measures
+exactly 50mm off a real printer (no physical printer available in this environment) — the bar's mm
+dimensions are verified programmatically (`SCALE_BAR_LENGTH_MM = 50`, unit-tested) and the SVG/PDF
+both declare explicit millimeter page dimensions, but true print-fidelity requires a human with a
+printer and ruler.
 
 ---
 
 # Warnings
 
-* A pre-existing, unrelated `favicon.ico` 404 appears in the console on every load (no favicon is
-  defined anywhere in the repo). Cosmetic, out of scope for this milestone, not a regression.
+* PDF text is Latin-1/WinAnsiEncoding only (standard Helvetica font, no embedding) — characters
+  outside that range render as `?` instead of correctly. Documented in the specification's "Out of
+  Scope" and in `PdfDocument.js`'s own header comment; unit-tested (`test-pdf-document.mjs` #9) to
+  confirm graceful degradation rather than corruption. SVG/PNG output has no such limitation.
+* PNG rasterization goes through the browser's native SVG image decoder (offscreen `Image` +
+  `drawImage` at a fixed 200 DPI); this is a real, undistorted, mm-accurate raster (destination
+  canvas pixel dimensions are computed directly from the page's mm size, never from a
+  fit-to-viewport step), but sharpness at very high requested DPI depends on that native decoder,
+  not a custom rasterizer.
+* Margins are a single uniform value (not configurable per side) and only A4/Letter page sizes are
+  offered, both explicitly scoped this way in the specification ("Out of Scope").
 
 ---
 
 # Known Limitations
 
-* The fix disables delete affordances for *any* layer once only one remains (not specifically the
-  default text layer) — this matches the existing `deleteLayer()` guard, which has always applied to
-  whichever single layer remains, not specifically to the original default layer. This is correct:
-  the rule is "a project needs ≥1 layer," not "the default layer is special."
-* `#layerRuleHint`'s wording is generic ("add another layer before you can delete this one"); it does
-  not name the specific layer. Acceptable given the rule is layer-count-based, not layer-identity-
-  based.
+* Same as the "Warnings" above: Latin-1-only PDF text, browser-native PNG rasterization, uniform
+  margin, two page sizes.
+* Multi-page nesting, automatic stone packing, print-spooler/printer-driver integration, and color
+  separation are explicitly out of scope per the milestone brief and were not built.
 
 ---
 
 # Recommended Next Milestone
 
-None required for this defect. If a future stabilization pass revisits the `.side` panel again, it
-may be worth consolidating `#status` and `#layerRuleHint` into one general "in-context feedback"
-mechanism rather than two separate ad hoc elements — flagged here, not built, since it is out of
-this milestone's scope.
+DXF export; multi-page nested production sheets for large production runs; per-side margins;
+custom page sizes; embedding a Unicode-capable font in `PdfDocument.js`; consolidating the
+cross-layer `dedupe()` merge step into `src/geometry/GeometryEngine.js` (still the one remaining
+architectural gap documented in `docs/ARCHITECTURE.md`); migrating `app.js`'s ad hoc project/layer
+objects onto `src/core/Project`/`Layer`.

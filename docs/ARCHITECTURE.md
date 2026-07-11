@@ -237,6 +237,25 @@ exporter module needed); its schema is documented in `src/geometry/README.md`. "
 export of the rendered `StoneLayout`, but implemented as a render-then-capture step rather than a
 standalone `src/export/**` module. DXF export and Stone Reports do not exist yet.
 
+As of RS-1005, a **Production Sheet** export exists: `src/export/ProductionSheetExporter.js`
+(`computeProductionSheetLayout()`, `productionSheetToSvg()`, `productionSheetToPdf()`) turns the
+same merged `StoneLayout` plus plain display metadata (project name, active object template's
+`displayName`, `project.canvas`, visible layers' `gap` values, page size, margin, mirror,
+registration-marks) into a one-page, millimeter-accurate manufacturing document: header metadata,
+a labeled 50mm scale-reference bar, optional corner registration marks, and the stones themselves
+drawn at true 1:1 size (never fit-to-viewport-scaled), optionally horizontally mirrored, centered
+in the printable area. A production size that cannot fit the chosen page (A4 or Letter) in either
+orientation at the requested margin throws a clear error rather than silently rescaling. SVG output
+reuses a new `stoneCircleSvg()` helper extracted from `SvgExporter.js` (output byte-for-byte
+unchanged for the pre-existing `stoneLayoutToSvg()` export). PDF output is produced by a new,
+generic, dependency-free `src/export/PdfDocument.js` — a minimal single-page vector PDF writer
+(lines/rects/circles/text) over the standard, non-embedded Helvetica font (WinAnsiEncoding; text
+outside Latin-1 degrades to `?`, a documented limitation). PNG export of the production sheet has
+no new `src/export/**` module: `app.js` rasterizes the generated SVG via an offscreen `Image`+
+`<canvas>` at a fixed DPI, the same "capture, not a standalone exporter" shape `#exportPNG`/
+`#exportCup` already use. Neither new module depends on `GeometryEngine`, `Project`, `Layer`, or a
+layer `type` — see `docs/specifications/RS-1005-ProductionSheetGenerator.md`.
+
 As of RS-0003.5D1, `stoneLayoutToSvg()` validates its inputs (throws a clear `TypeError` for a
 malformed `stoneLayout` or a non-positive/non-finite `widthMm`/`heightMm`) and each `<circle>`
 carries the stone's original color id as a `data-color` attribute, alongside the existing display

@@ -264,7 +264,9 @@ await test('21. no forbidden file changed (this milestone\'s own forbidden list)
   const changedPaths = output.split('\n').filter((l) => l.trim().length > 0).map((l) => l.slice(3).trim());
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
   const forbiddenExactWithinPrefix = new Set(['src/renderer/CanvasRenderer2D.js', 'src/renderer/StoneColors.js']);
-  const forbiddenPrefixes = ['src/geometry/', 'src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'src/svg/', 'src/history/', 'src/export/', 'assets/', 'examples/'];
+  // src/export/ is legitimately changed by RS-1005 (Production Sheet export) — see
+  // tools/test-production-sheet-exporter.mjs for that milestone's own forbidden-file guard.
+  const forbiddenPrefixes = ['src/geometry/', 'src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'src/svg/', 'src/history/', 'assets/', 'examples/'];
   for (const changedPath of changedPaths) {
     assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
     assert.ok(!forbiddenExactWithinPrefix.has(changedPath), `Forbidden file changed: ${changedPath}`);
