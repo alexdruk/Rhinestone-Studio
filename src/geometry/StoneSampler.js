@@ -9,14 +9,18 @@
 import { Point2D } from '../text/VectorPath.js';
 
 /**
- * Walk a closed polygon's perimeter and return points spaced spacingMm apart
- * along the outline, starting at the polygon's first vertex.
+ * Walk a polygon's perimeter and return points spaced spacingMm apart along the outline, starting
+ * at the polygon's first vertex. By default the polygon is treated as closed (a final segment
+ * connects the last vertex back to the first, matching a filled shape's true outline); pass
+ * `{ closed: false }` to walk an open path instead (e.g. an SVG `<line>`/`<polyline>` or an
+ * unclosed `<path>` subpath), which omits that wrap-around segment.
  *
  * @param {Point2D[]} polygon
  * @param {number} spacingMm
+ * @param {{closed?: boolean}} [options]
  * @returns {Point2D[]}
  */
-export function sampleOutlinePoints(polygon, spacingMm) {
+export function sampleOutlinePoints(polygon, spacingMm, { closed = true } = {}) {
   if (spacingMm <= 0) {
     throw new RangeError('sampleOutlinePoints requires a positive spacingMm.');
   }
@@ -24,12 +28,12 @@ export function sampleOutlinePoints(polygon, spacingMm) {
     return [];
   }
 
-  const closed = [...polygon, polygon[0]];
+  const pathPoints = closed ? [...polygon, polygon[0]] : polygon;
   const segmentLengthsMm = [];
   let perimeterMm = 0;
 
-  for (let i = 0; i < closed.length - 1; i++) {
-    const length = closed[i].distanceTo(closed[i + 1]);
+  for (let i = 0; i < pathPoints.length - 1; i++) {
+    const length = pathPoints[i].distanceTo(pathPoints[i + 1]);
     segmentLengthsMm.push(length);
     perimeterMm += length;
   }
@@ -53,8 +57,8 @@ export function sampleOutlinePoints(polygon, spacingMm) {
 
     const segmentLengthMm = segmentLengthsMm[segmentIndex];
     const t = segmentLengthMm === 0 ? 0 : (targetMm - segmentStartMm) / segmentLengthMm;
-    const start = closed[segmentIndex];
-    const end = closed[segmentIndex + 1];
+    const start = pathPoints[segmentIndex];
+    const end = pathPoints[segmentIndex + 1];
 
     samples.push(new Point2D(
       start.xMm + (end.xMm - start.xMm) * t,

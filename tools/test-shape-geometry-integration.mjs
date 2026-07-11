@@ -64,10 +64,11 @@ await test('6. the legacy generateCircle/generateRect methods are no longer call
   );
 });
 
-await test('7. app.js does not import any new module for this milestone (RS-0003.5C1 scope)', () => {
+await test('7. app.js only imports modules allowed as of this milestone', () => {
   // RS-0003.5C2 legitimately added four more imports (src/renderer/**, src/export/**) for the
-  // rendering-pipeline extraction; this assertion now checks that every import line matches one
-  // of the allowed modules across both milestones, rather than a hard-coded count of 4.
+  // rendering-pipeline extraction; RS-1001 legitimately added src/svg/index.js for SVG import
+  // pre-validation. This assertion checks that every import line matches one of the allowed
+  // modules across all of those milestones, rather than a hard-coded count.
   const importLines = appJs.match(/^\s*import\b.*$/gm) || [];
   const allowed = [
     /BrowserDependencyProbe\.js/,
@@ -77,7 +78,8 @@ await test('7. app.js does not import any new module for this milestone (RS-0003
     /from\s*['"]\.\/src\/renderer\/CanvasRenderer2D\.js['"]/,
     /from\s*['"]\.\/src\/renderer\/CupRenderer\.js['"]/,
     /from\s*['"]\.\/src\/renderer\/StoneColors\.js['"]/,
-    /from\s*['"]\.\/src\/export\/SvgExporter\.js['"]/
+    /from\s*['"]\.\/src\/export\/SvgExporter\.js['"]/,
+    /from\s*['"]\.\/src\/svg\/index\.js['"]/
   ];
   for (const line of importLines) {
     assert.ok(allowed.some((pattern) => pattern.test(line)), `unexpected import: ${line}`);

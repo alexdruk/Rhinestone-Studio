@@ -20,11 +20,12 @@
  * Units are millimeters throughout.
  */
 
-import { BoundingBox, createCircleVectorPath, createRectangleVectorPath } from '../text/VectorPath.js';
+import { BoundingBox, Point2D, createCircleVectorPath, createRectangleVectorPath } from '../text/VectorPath.js';
 import { flattenContourToPolygon, translateContour } from './ContourGeometry.js';
 import { sampleFillPoints, sampleOutlinePoints } from './StoneSampler.js';
 import { Stone } from './Stone.js';
 import { StoneLayout } from './StoneLayout.js';
+import { parseSvgDocument } from '../svg/index.js';
 
 const SAMPLE_MODES = new Set(['outline', 'fill']);
 const DEFAULT_MODE = 'outline';
@@ -180,6 +181,76 @@ export class GeometryEngine {
 
     return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
   }
+
+  /**
+   * Generate a StoneLayout for an SVG layer, parsing `svgSource` via src/svg (the vector path
+   * extraction module for SVG, the counterpart to src/text's font glyph extraction) and reusing
+   * the same contour-flattening and outline/fill sampling primitives as
+   * generateTextLayout()/generateShapeLayout().
+   *
+   * The SVG's own natural bounding box (top-left corner at its own origin, per src/svg's viewBox
+   * normalization) is mapped independently in X and Y onto the requested
+   * {xMm,yMm,widthMm,heightMm} placement box — the same "place at x,y with an explicit width/
+   * height" model generateShapeLayout()'s rectangle already uses. Closed contours participate in
+   * `fill`-mode even-odd sampling (combined across the whole document, matching how
+   * generateTextLayout() combines all of one text run's character contours for fill mode) and in
+   * per-contour closed-outline sampling; open contours (an SVG <line>/<polyline> or an unclosed
+   * <path> subpath) are always outline-sampled as an open polyline, regardless of `mode` — an open
+   * path has no interior to fill.
+   *
+   * @param {object} params
+   * @param {string} params.svgSource Raw SVG document text.
+   * @param {string} params.layerId
+   * @param {number} [params.xMm] Placement top-left X, default 0.
+   * @param {number} [params.yMm] Placement top-left Y, default 0.
+   * @param {number} [params.widthMm] Target placed width; defaults to the SVG's natural width.
+   * @param {number} [params.heightMm] Target placed height; defaults to the SVG's natural height.
+   * @param {number} params.stoneSizeMm
+   * @param {number} [params.gapMm]
+   * @param {'outline'|'fill'} [params.mode]
+   * @param {string} [params.color]
+   * @returns {StoneLayout}
+   */
+  generateSvgLayout(params = {}) {
+    const options = normalizeSvgParams(params);
+    const parsed = parseSvgDocument(options.svgSource);
+
+    const targetWidthMm = options.widthMm ?? parsed.naturalWidthMm;
+    const targetHeightMm = options.heightMm ?? parsed.naturalHeightMm;
+    const scaleX = targetWidthMm / parsed.naturalWidthMm;
+    const scaleY = targetHeightMm / parsed.naturalHeightMm;
+
+    const closedPolygons = [];
+    const openPolygons = [];
+    for (const { contour, closed } of parsed.shapes) {
+      const placed = flattenContourToPolygon(contour).map((point) => new Point2D(
+        options.xMm + point.xMm * scaleX,
+        options.yMm + point.yMm * scaleY
+      ));
+      (closed ? closedPolygons : openPolygons).push(placed);
+    }
+
+    const spacingMm = options.stoneSizeMm + options.gapMm;
+    const points = [];
+
+    if (options.mode === 'fill') {
+      points.push(...sampleFillPoints(closedPolygons, BoundingBox.fromPoints(closedPolygons.flat()), spacingMm));
+    } else {
+      for (const polygon of closedPolygons) points.push(...sampleOutlinePoints(polygon, spacingMm, { closed: true }));
+    }
+    for (const polygon of openPolygons) points.push(...sampleOutlinePoints(polygon, spacingMm, { closed: false }));
+
+    const stones = points.map((point, index) => new Stone({
+      xMm: point.xMm,
+      yMm: point.yMm,
+      sizeMm: options.stoneSizeMm,
+      color: options.color,
+      layerId: options.layerId,
+      index
+    }));
+
+    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
+  }
 }
 
 function normalizeTextParams(params) {
@@ -276,6 +347,55 @@ function normalizeShapeParams(params) {
     yMm: assertFiniteNumber(params.yMm, 'yMm'),
     widthMm: assertPositiveNumber(params.widthMm, 'widthMm'),
     heightMm: assertPositiveNumber(params.heightMm, 'heightMm')
+  };
+}
+
+function normalizeSvgParams(params) {
+  if (typeof params.svgSource !== 'string' || params.svgSource.trim().length === 0) {
+    throw new TypeError('GeometryEngine.generateSvgLayout requires a non-empty svgSource string.');
+  }
+  if (typeof params.layerId !== 'string' || params.layerId.length === 0) {
+    throw new TypeError('GeometryEngine.generateSvgLayout requires a non-empty layerId.');
+  }
+
+  const stoneSizeMm = assertPositiveNumber(params.stoneSizeMm, 'stoneSizeMm');
+
+  const gapMm = assertFiniteNumber(params.gapMm ?? 0, 'gapMm');
+  if (gapMm < 0) {
+    throw new RangeError('gapMm must be zero or positive.');
+  }
+
+  const mode = params.mode ?? DEFAULT_MODE;
+  if (!SAMPLE_MODES.has(mode)) {
+    throw new TypeError(`Unsupported geometry mode: ${mode}. Expected one of: ${[...SAMPLE_MODES].join(', ')}`);
+  }
+
+  if (params.color !== undefined && params.color !== null &&
+    (typeof params.color !== 'string' || params.color.length === 0)) {
+    throw new TypeError('GeometryEngine.generateSvgLayout color must be a non-empty string when provided.');
+  }
+
+  const xMm = assertFiniteNumber(params.xMm ?? 0, 'xMm');
+  const yMm = assertFiniteNumber(params.yMm ?? 0, 'yMm');
+
+  const widthMm = params.widthMm === undefined || params.widthMm === null
+    ? null
+    : assertPositiveNumber(params.widthMm, 'widthMm');
+  const heightMm = params.heightMm === undefined || params.heightMm === null
+    ? null
+    : assertPositiveNumber(params.heightMm, 'heightMm');
+
+  return {
+    svgSource: params.svgSource,
+    layerId: params.layerId,
+    xMm,
+    yMm,
+    widthMm,
+    heightMm,
+    stoneSizeMm,
+    gapMm,
+    mode,
+    color: params.color ?? null
   };
 }
 
