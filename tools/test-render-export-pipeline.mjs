@@ -171,13 +171,12 @@ await test('10. no forbidden file changed', () => {
     .filter((line) => line.trim().length > 0)
     .map((line) => line.slice(3).trim());
 
-  // index.html is legitimately changed by RS-0003.5D1 (Project JSON import UI).
-  // src/geometry/README.md is legitimately changed by RS-0003.5D1 (documentation only — no
-  // src/geometry/** code changed; see the forbiddenPrefixes exception below).
+  // index.html is legitimately changed by RS-0003.5D1 (Project JSON import UI) and RS-1001 (SVG
+  // import UI). src/geometry/ is legitimately changed by RS-1001 (generateSvgLayout()); see the
+  // forbiddenPrefixes exception below for the documentation-only precedent this replaces.
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
   const allowedDespitePrefix = new Set(['src/geometry/README.md']);
   const forbiddenPrefixes = [
-    'src/geometry/',
     'src/text/',
     'src/fonts/',
     'src/core/',

@@ -316,6 +316,106 @@ await test('21. generateShapeLayout works with no fontProviderRegistry; generate
   );
 });
 
+// RS-1001 — generateSvgLayout(), sharing the same contour-flattening and outline/fill sampling
+// primitives as generateTextLayout()/generateShapeLayout() above, via src/svg's parseSvgDocument().
+
+function makeSvgSource({ width = '50mm', height = '20mm', body } = {}) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">${body}</svg>`;
+}
+
+const MULTI_SHAPE_SVG = makeSvgSource({
+  body: '<rect x="5" y="5" width="15" height="10"/><circle cx="35" cy="10" r="6"/>'
+});
+
+const OPEN_ONLY_SVG = makeSvgSource({ body: '<line x1="0" y1="0" x2="40" y2="15"/>' });
+
+const BASE_SVG_PARAMS = {
+  svgSource: MULTI_SHAPE_SVG,
+  layerId: 'svg-1',
+  stoneSizeMm: 2,
+  gapMm: 0.3,
+  mode: 'outline',
+  color: 'gold'
+};
+
+await test('22. SVG generation succeeds and produces stones for a multi-shape document', () => {
+  const engine = createEngine();
+  const layout = engine.generateSvgLayout(BASE_SVG_PARAMS);
+  assert.ok(layout.count > 0, 'expected at least one stone');
+});
+
+await test('23. requested widthMm/heightMm placement scales the generated bounding box (independent X/Y scaling)', () => {
+  const engine = createEngine();
+  const natural = engine.generateSvgLayout(BASE_SVG_PARAMS);
+  const scaledBoth = engine.generateSvgLayout({ ...BASE_SVG_PARAMS, xMm: 0, yMm: 0, widthMm: 100, heightMm: 40 });
+  const scaledWidthOnly = engine.generateSvgLayout({ ...BASE_SVG_PARAMS, xMm: 0, yMm: 0, widthMm: 500, heightMm: 20 });
+
+  assert.ok(scaledBoth.widthMm > natural.widthMm * 1.5, 'expected doubling declared width/height to widen the bounding box');
+  assert.ok(scaledBoth.heightMm > natural.heightMm * 1.5, 'expected doubling declared width/height to heighten the bounding box');
+  assert.ok(scaledWidthOnly.widthMm > scaledBoth.widthMm, 'expected a much larger independent widthMm to widen further without affecting height the same way');
+  assert.ok(scaledWidthOnly.heightMm < scaledBoth.heightMm, 'expected independent X/Y scaling: a huge widthMm alone must not inflate heightMm');
+});
+
+await test('24. fill mode places stones inside closed shapes only; an open-only document in fill mode still outline-samples (no error)', () => {
+  const engine = createEngine();
+  const outline = engine.generateSvgLayout({ ...BASE_SVG_PARAMS, mode: 'outline' });
+  const fill = engine.generateSvgLayout({ ...BASE_SVG_PARAMS, mode: 'fill' });
+  assert.notEqual(outline.count, fill.count, 'expected fill mode to place a different stone count than outline mode');
+  assert.ok(fill.count > 0);
+
+  const openOutline = engine.generateSvgLayout({ ...BASE_SVG_PARAMS, svgSource: OPEN_ONLY_SVG, mode: 'outline' });
+  const openFill = engine.generateSvgLayout({ ...BASE_SVG_PARAMS, svgSource: OPEN_ONLY_SVG, mode: 'fill' });
+  assert.ok(openOutline.count > 0 && openFill.count > 0, 'expected an open-only document to still produce outline stones in fill mode');
+  assert.deepEqual(openOutline.toJSON().stones, openFill.toJSON().stones, 'expected fill mode to be identical to outline mode when no closed shape exists to fill');
+});
+
+await test('25. outline/fill SVG generation is deterministic', () => {
+  const engine = createEngine();
+  const outlineFirst = engine.generateSvgLayout({ ...BASE_SVG_PARAMS, mode: 'outline' });
+  const outlineSecond = engine.generateSvgLayout({ ...BASE_SVG_PARAMS, mode: 'outline' });
+  assert.deepEqual(outlineFirst.toJSON(), outlineSecond.toJSON());
+
+  const fillFirst = engine.generateSvgLayout({ ...BASE_SVG_PARAMS, mode: 'fill' });
+  const fillSecond = engine.generateSvgLayout({ ...BASE_SVG_PARAMS, mode: 'fill' });
+  assert.deepEqual(fillFirst.toJSON(), fillSecond.toJSON());
+});
+
+await test('26. SVG generated coordinates are finite and in millimeters', () => {
+  const engine = createEngine();
+  const layout = engine.generateSvgLayout(BASE_SVG_PARAMS);
+  assert.ok(layout.count > 0);
+  for (const stone of layout.stones) {
+    assert.ok(Number.isFinite(stone.xMm));
+    assert.ok(Number.isFinite(stone.yMm));
+    assert.ok(Number.isFinite(stone.sizeMm));
+  }
+});
+
+await test('27. every SVG stone carries the requested layerId and color', () => {
+  const engine = createEngine();
+  const layout = engine.generateSvgLayout({ ...BASE_SVG_PARAMS, layerId: 'svg-42', color: 'emerald' });
+  assert.equal(layout.layerId, 'svg-42');
+  for (const stone of layout.stones) {
+    assert.equal(stone.layerId, 'svg-42');
+    assert.equal(stone.color, 'emerald');
+  }
+});
+
+await test('28. a malformed/empty svgSource throws a clear error from generateSvgLayout()', () => {
+  const engine = createEngine();
+  assert.throws(() => engine.generateSvgLayout({ ...BASE_SVG_PARAMS, svgSource: '' }), /non-empty svgSource/);
+  assert.throws(
+    () => engine.generateSvgLayout({ ...BASE_SVG_PARAMS, svgSource: '<svg width="1mm" height="1mm"><image href="x"/></svg>' }),
+    /no supported shapes/
+  );
+});
+
+await test('29. generateSvgLayout works with no fontProviderRegistry supplied', () => {
+  const engine = new GeometryEngine();
+  const layout = engine.generateSvgLayout(BASE_SVG_PARAMS);
+  assert.ok(layout.count > 0, 'expected SVG generation to work without a fontProviderRegistry');
+});
+
 await test('this task did not modify forbidden UI, renderer, or exporter files', async () => {
   const { execSync } = await import('node:child_process');
   const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });

@@ -100,6 +100,53 @@ without one). Check `engine.canGenerateText` to see whether text generation
 is available without triggering that error. Shape generation never depends on
 it, so shape-only projects work even if font-manifest loading fails.
 
+## SVG Geometry Engine (RS-1001)
+
+`generateSvgLayout()` generates a StoneLayout for an SVG layer, parsing `svgSource` via
+`src/svg/index.js`'s `parseSvgDocument()` (the SVG counterpart to `src/text`'s font glyph
+extraction) and reusing the same contour-flattening (`ContourGeometry.js`) and outline/fill
+sampling (`StoneSampler.js`) primitives as `generateTextLayout()`/`generateShapeLayout()`.
+
+```js
+import { GeometryEngine } from './src/geometry/index.js';
+
+const engine = new GeometryEngine();
+
+const layout = engine.generateSvgLayout({
+  svgSource: '<svg xmlns="http://www.w3.org/2000/svg" width="50mm" height="20mm">...</svg>',
+  layerId: 'layer-1',
+  xMm: 10,       // placement top-left, defaults to 0
+  yMm: 10,
+  widthMm: 50,   // target placed size; defaults to the SVG's own natural mm size
+  heightMm: 20,
+  stoneSizeMm: 2,
+  gapMm: 0.3,
+  mode: 'outline', // or 'fill'
+  color: 'gold'
+});
+```
+
+The SVG's natural bounding box (top-left at its own origin, after `src/svg` resolves any
+`viewBox`/`transform`) is mapped independently in X and Y onto the requested
+`{xMm,yMm,widthMm,heightMm}` box — the same "place at x,y with an explicit width/height" model
+`generateShapeLayout()`'s rectangle already uses (non-uniform stretch is allowed by design, not an
+oversight).
+
+Closed contours (a `<circle>`, `<rect>`, `<polygon>`, or a `<path>` subpath closed with `Z`)
+participate in `fill`-mode even-odd sampling, combined across the whole document — matching how
+`generateTextLayout()` combines every character's contours into one fill pass — and in per-contour
+closed-outline sampling. Open contours (a `<line>`, `<polyline>`, or an unclosed `<path>` subpath)
+are always outline-sampled as an open polyline regardless of `mode`, since an open path has no
+interior to fill; `sampleOutlinePoints()`'s new `{ closed: false }` option (see below) implements
+this without a wrap-around segment back to the first vertex.
+
+`generateSvgLayout()` is synchronous, like `generateShapeLayout()` (no font provider to await), and
+does not require a `fontProviderRegistry`.
+
+`StoneSampler.js`'s `sampleOutlinePoints(polygon, spacingMm, { closed = true })` gained the
+`closed` option this milestone; every pre-existing two-argument call site (text, circle, rectangle)
+is unaffected, since `closed` defaults to `true`.
+
 ## Stone Color (RS-0003.5A1)
 
 Every `Stone` carries a `color`. Pass `color` to `generateTextLayout()` to

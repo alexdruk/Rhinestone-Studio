@@ -87,7 +87,8 @@ await test('app.js only imports the RS-0003.5B2 probe, the RS-0003.5B3 permanent
     /from\s*['"]\.\/src\/renderer\/CanvasRenderer2D\.js['"]/,
     /from\s*['"]\.\/src\/renderer\/CupRenderer\.js['"]/,
     /from\s*['"]\.\/src\/renderer\/StoneColors\.js['"]/,
-    /from\s*['"]\.\/src\/export\/SvgExporter\.js['"]/
+    /from\s*['"]\.\/src\/export\/SvgExporter\.js['"]/,
+    /from\s*['"]\.\/src\/svg\/index\.js['"]/
   ];
   for (const line of importLines) {
     assert.ok(
