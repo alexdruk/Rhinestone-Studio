@@ -42,11 +42,13 @@ function makeLayout(stoneParams, layerId = 'layer-1') {
 
 function createFakeCtx() {
   const bezierCalls = [];
+  const arcCalls = [];
   const gradientStub = { addColorStop() {} };
   const target = {
     createLinearGradient() { return gradientStub; },
     createRadialGradient() { return gradientStub; },
-    bezierCurveTo(...args) { bezierCalls.push(args); }
+    bezierCurveTo(...args) { bezierCalls.push(args); },
+    arc(x, y, r) { arcCalls.push({ x, y, r }); }
   };
   const ctx = new Proxy(target, {
     get(obj, prop) {
@@ -58,7 +60,7 @@ function createFakeCtx() {
       return true;
     }
   });
-  return { ctx, bezierCalls };
+  return { ctx, bezierCalls, arcCalls };
 }
 
 const baseLayout = makeLayout([{ xMm: 0, yMm: 0, sizeMm: 2, color: 'gold' }]);
@@ -136,7 +138,46 @@ await test('8. the view-button sync helper compares rotation to data-view mod-36
   assert.match(appJs, /const VIEW_ANGLE_EPSILON_DEG=[\d.]+;/, 'expected a named epsilon constant for the view-button match tolerance');
 });
 
-await test('9. no forbidden file changed (this milestone\'s own forbidden list)', () => {
+await test('9. "front" wrap mode is no longer frozen in place — it moves and hides with rotation like every other wrap mode', () => {
+  const layout = makeLayout([
+    { xMm: 0, yMm: 0, sizeMm: 2, color: 'gold' },
+    { xMm: 10, yMm: 3, sizeMm: 2, color: 'silver' },
+    { xMm: -8, yMm: -4, sizeMm: 2, color: 'jet' }
+  ]);
+  const stoneXAt = (deg) => {
+    const { ctx, arcCalls } = createFakeCtx();
+    renderCup(ctx, layout, { widthPx: 480, heightPx: 380, dpr: 1, cupColor: '#1f3556', wrap: 'front', rotationDeg: deg, zoom: 1 });
+    return arcCalls;
+  };
+  const at0 = stoneXAt(0);
+  const at60 = stoneXAt(60);
+  assert.equal(at0.length, 3, 'expected all 3 stones drawn at rotationDeg=0 (facing the camera)');
+  assert.notDeepEqual(
+    at60.map((c) => c.x),
+    at0.map((c) => c.x),
+    'expected the front-wrap design\'s screen position to change with rotation instead of staying frozen'
+  );
+  const at180 = stoneXAt(180);
+  assert.equal(at180.length, 0, 'expected the front-wrap design to be fully hidden at rotationDeg=180 (facing directly away), as one clean unit');
+});
+
+await test('10. "front" wrap mode stays centered (matching its pre-S-001 fixed layout) at rotationDeg=0 — no regression at the default angle', () => {
+  const layout = makeLayout([
+    { xMm: 0, yMm: 0, sizeMm: 2, color: 'gold' },
+    { xMm: 10, yMm: 3, sizeMm: 2, color: 'silver' }
+  ]);
+  const { ctx, arcCalls } = createFakeCtx();
+  renderCup(ctx, layout, { widthPx: 480, heightPx: 380, dpr: 1, cupColor: '#1f3556', wrap: 'front', rotationDeg: 0, zoom: 1 });
+  // At rotationDeg=0, front=cos(0)=1 and xShift=sin(0)=0 — exactly the previous (pre-S-001)
+  // fixed-position formula (lx = cx - centerXMm*stoneScale), so the design's centroid must land on
+  // cx, same as before this milestone.
+  assert.equal(arcCalls.length, 2, 'expected both stones drawn (not culled) at rotationDeg=0');
+  const cx = 480 / 2;
+  const centroidX = (arcCalls[0].x + arcCalls[1].x) / 2;
+  assert.ok(Math.abs(centroidX - cx) < 5, `expected the design centered on cx=${cx} at rotationDeg=0, got centroid ${centroidX}`);
+});
+
+await test('11. no forbidden file changed (this milestone\'s own forbidden list)', () => {
   const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
   const changedPaths = output
     .split('\n')

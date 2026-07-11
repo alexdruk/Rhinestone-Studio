@@ -113,10 +113,26 @@ export function renderCup(ctx, stoneLayout, { widthPx: w, heightPx: h, dpr, cupC
   const stoneScale = Math.min(labelW / Math.max(1, b.width), labelH / Math.max(1, b.height));
   const ly = topY + cupH * .52 - (b.y + b.height / 2) * stoneScale;
 
+  // S-001: 'front' used to render the design at a fixed screen position, entirely ignoring `rot` —
+  // the design never appeared to rotate with the cup (only the handle did). It is now treated as a
+  // single rigid flat label mounted at azimuth 0 (facing the camera at rot=0, matching its previous
+  // fixed appearance exactly): the whole group shares one `front = cos(rot)` and one horizontal
+  // `xShift`, instead of each stone getting its own per-stone azimuth (which would fragment the
+  // design into a partial sliver right around the angle where it crosses the cull threshold,
+  // instead of appearing/disappearing as one clean, believable unit). At rot=0 this reduces to
+  // exactly the previous fixed layout (front=1, xShift=0) — no visual regression at the default
+  // angle — and now continuously slides/foreshortens/hides in sync with the handle and body as
+  // rotation changes, using the same cull threshold and size-foreshortening formula as every other
+  // wrap mode below.
   if (wrap === 'front') {
-    const lx = cx - (b.x + b.width / 2) * stoneScale;
+    const front = Math.cos(rot);
+    if (front < .10) return;
+    const persp = .62 + .38 * front;
+    const xShift = Math.sin(rot) * (topW / 2) * .55;
+    const centerXMm = b.x + b.width / 2;
+    const lx = cx + xShift - centerXMm * stoneScale * front;
     for (const st of stoneLayout.stones) {
-      drawStone(ctx, lx + st.xMm * stoneScale, ly + st.yMm * stoneScale, Math.max(1.15, st.sizeMm * stoneScale * .45), st.color, 'cup');
+      drawStone(ctx, lx + st.xMm * stoneScale * front, ly + st.yMm * stoneScale, Math.max(1.15, st.sizeMm * stoneScale * .45 * persp), st.color, 'cup');
     }
     return;
   }
@@ -185,42 +201,60 @@ function drawHandle(ctx, geom, cupColor) {
   const { attachTopX, attachTopY, attachBotX, attachBotY, bulge, thickness, midY1, midY2, dpr } = geom;
   const cp1x = attachTopX + bulge * .95, cp2x = attachBotX + bulge * .95;
 
-  // Soft contact shadows fuse the handle ends into the wall instead of leaving a visible seam.
-  ctx.fillStyle = 'rgba(0,0,0,.15)';
-  for (const [ax, ay] of [[attachTopX, attachTopY], [attachBotX, attachBotY]]) {
-    ctx.beginPath();
-    ctx.ellipse(ax, ay, thickness * 0.65, thickness * 0.4, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
   const path = () => {
     ctx.beginPath();
     ctx.moveTo(attachTopX, attachTopY);
     ctx.bezierCurveTo(cp1x, midY1, cp2x, midY2, attachBotX, attachBotY);
   };
 
+  // Round line caps make the underlay stroke below (wider than the tube) naturally form a soft,
+  // circular dark base exactly at each wall-attachment point — this is what fuses the handle into
+  // the wall without a visible seam. A separate flat-opacity contact-shadow ellipse used to be
+  // drawn here too, but at a different aspect ratio than the round cap it sat next to, it read as
+  // a disconnected dark smudge rather than a blended shadow (most visible against a light cup
+  // color) — removed rather than tuned, since the round cap alone already does this job.
   ctx.lineCap = 'round';
 
-  // A soft dark underlay slightly wider than the colored tube reads as an edge/ambient-occlusion
-  // line without needing a second parallel curve.
+  // A dark underlay, wider than the tube, reads as its outer edge/ambient-occlusion line. This is
+  // also the render's first bezierCurveTo call, at the true wall-attachment point.
   path();
-  ctx.strokeStyle = 'rgba(0,0,0,.28)';
+  ctx.strokeStyle = shade(cupColor, -46);
   ctx.lineWidth = thickness + Math.max(1, 1.1 * dpr);
   ctx.stroke();
 
-  const grad = ctx.createLinearGradient(attachTopX, attachTopY, attachTopX + bulge, (attachTopY + attachBotY) / 2);
-  grad.addColorStop(0, shade(cupColor, -24));
-  grad.addColorStop(.55, shade(cupColor, 14));
-  grad.addColorStop(1, shade(cupColor, -8));
+  // A canvas gradient varies by absolute position, not by distance along a stroked path — so a
+  // *linear* gradient whose axis runs from the wall side of the loop to its outward/tip side
+  // shades every part of the tube (the near-straight top/bottom segments *and* the curved tip)
+  // consistently by which side of the loop each point is on, with no seams and no hard band edges.
+  // The axis is centered on the loop's own midpoint, offset toward the bulge direction, with a
+  // floor on its half-width so it stays a meaningful gradient (not a near-zero-width, all-or-
+  // nothing cutoff) even at Front/Back where the bulge itself is nearly zero.
+  const midX = (attachTopX + attachBotX) / 2, midY = (attachTopY + attachBotY) / 2;
+  const dir = bulge >= 0 ? 1 : -1;
+  const halfSpan = Math.max(thickness * 0.9, Math.abs(bulge) * 0.65);
+  const centerX = midX + bulge * .5;
+  const wallX = centerX - dir * halfSpan; // inner, nearer the cup wall: shadowed
+  const tipX = centerX + dir * halfSpan; // outer, away from the wall: lit
+
+  const grad = ctx.createLinearGradient(wallX, midY, tipX, midY);
+  grad.addColorStop(0, shade(cupColor, -30));
+  grad.addColorStop(.62, shade(cupColor, 32));
+  grad.addColorStop(1, shade(cupColor, -10));
+
   path();
   ctx.strokeStyle = grad;
   ctx.lineWidth = thickness;
   ctx.stroke();
 
-  // A thin, lighter highlight along the same centerline suggests a rounded (not flat) tube.
+  // A thin, crisp specular rim-light near the outer/lit edge sharpens the sense of a polished tube.
+  const rimGrad = ctx.createLinearGradient(wallX, midY, tipX, midY);
+  rimGrad.addColorStop(0, 'rgba(255,255,255,0)');
+  rimGrad.addColorStop(.68, 'rgba(255,255,255,0)');
+  rimGrad.addColorStop(.82, 'rgba(255,255,255,.55)');
+  rimGrad.addColorStop(1, 'rgba(255,255,255,0)');
   path();
-  ctx.strokeStyle = 'rgba(255,255,255,.35)';
-  ctx.lineWidth = Math.max(.8, thickness * 0.22);
+  ctx.strokeStyle = rimGrad;
+  ctx.lineWidth = thickness * 0.9;
   ctx.stroke();
 }
 
