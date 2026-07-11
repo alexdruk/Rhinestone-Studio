@@ -6,7 +6,7 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-RS-1002
+S-001
 
 ---
 
@@ -18,7 +18,7 @@ IMPLEMENTED
 
 # Branch
 
-feature/rs-1002-undo-redo
+feature/s-001-cup-rendering-stabilization
 
 ---
 
@@ -36,97 +36,104 @@ git log -1 --oneline
 # Files Changed
 
 ```
-src/history/HistoryManager.js           (new — generic, dependency-free undo/redo stack: commit(),
-                                          beginSession()/endSession() session coalescing, undo(),
-                                          redo(), clear(), canUndo/canRedo, configurable maxSize)
-src/history/index.js                    (new — barrel)
-src/history/README.md                   (new — module documentation)
-app.js                                  (modified — HistoryManager wiring: HISTORY_MAX_SIZE
-                                          constant, history/currentSnapshot/commitHistory/
-                                          openHistorySession/closeHistorySession/performUndo/
-                                          performRedo/applyHistorySnapshot/updateHistoryUI;
-                                          commitHistory() at every discrete mutation site
-                                          (duplicate/delete/visibility/addCircle/addRect/SVG-import/
-                                          drag-start); openHistorySession()/closeHistorySession()
-                                          wired to continuous project-affecting controls (text,
-                                          font, height, stone size, gap, colors, wrap, text mode,
-                                          shape x/y/w/h, svg mode), explicitly excluding
-                                          rotation/zoom (view-only); Ctrl/Cmd+Z / +Shift+Z / Ctrl/
-                                          Cmd+Y keyboard shortcuts; Project JSON import calls
-                                          history.clear() instead of committing; Export Project
-                                          JSON updates the dirty baseline; also fixes a real bug in
-                                          syncSelectedControlsFromLayer() — see "Design Summary")
-index.html                              (modified — #undoBtn/#redoBtn/#dirtyIndicator in the top
-                                          toolbar, minimal scoped CSS)
-package.json                            (modified — test script runs the two new suites)
-tools/test-history-manager.mjs          (new — 8 unit tests for src/history/HistoryManager.js)
-tools/test-undo-redo-integration.mjs    (new — 10 structural tests for app.js/index.html wiring)
-tools/test-app-module-migration.mjs     (modified — added src/history/index.js to the allowed-
-                                          import list)
-tools/test-shape-geometry-integration.mjs (modified — added src/history/index.js to its own,
-                                          separate allowed-import list)
-docs/specifications/RS-1002-UndoRedo.md (new — milestone specification)
-docs/ARCHITECTURE.md                    (modified — new "History (Undo/Redo)" principle section,
-                                          Layer map/Orchestration rows, Future Direction status,
-                                          Testing Philosophy paragraph)
-docs/BACKLOG.md                         (modified — Undo/Redo row marked Done (RS-1002))
-TASK.md                                 (replaced — RS-1002 task)
-TASK_RESULT.md                          (this file)
+src/renderer/CupRenderer.js               (rewritten handle: real azimuthally-anchored 3D sweep
+                                            [HANDLE_AZIMUTH_RAD + rot, signed sideFactor/depthFactor]
+                                            replacing the old fixed-flank/opacity-fade design; drawn
+                                            as a single stroked, round-capped tube instead of a
+                                            separately-outlined filled ribbon so it cannot twist and
+                                            never thins to a hairline; depth-ordered before/after the
+                                            body fill based on facing direction, not opacity)
+app.js                                    (modified — VIEW_ANGLE_EPSILON_DEG constant,
+                                            angleDiffDeg()/updateViewButtons() helpers, called from
+                                            updateAll() so Front/Left/Right/Back button highlighting
+                                            stays synchronized with rotation from any source: button
+                                            click, reset, slider, or manual cup-drag)
+tools/test-cup-rotation-stabilization.mjs (new — 9 tests: rotation sweep never throws, handle
+                                            attachment sweeps continuously with no jump, attachment
+                                            is signed/bidirectional, handle azimuth shares stones'
+                                            `+ rot` term, no opacity-fade/side-flip code remains,
+                                            CupRenderer stays StoneLayout-only, view-button sync
+                                            helper exists and is called from updateAll(), epsilon
+                                            constant present, no forbidden file changed)
+package.json                              (modified — test script runs the new suite)
+tools/test-svg-integration.mjs            (modified — removed `src/renderer/` from this RS-1001
+                                            milestone's own "no forbidden file changed" snapshot
+                                            guard, since it is now legitimately changed by S-001;
+                                            same pattern already established for
+                                            tools/test-production-export-validation.mjs at RS-0003.5D2)
+tools/test-undo-redo-integration.mjs      (modified — same narrow removal, for this RS-1002
+                                            milestone's own forbidden-file guard)
+tools/test-examples-regression.mjs        (modified — same narrow removal, for this suite's own
+                                            forbidden-file guard)
+docs/specifications/S-001-CupRenderingStabilization.md (new — milestone specification)
+docs/ARCHITECTURE.md                      (modified — CupRenderer implementation-status section
+                                            updated for the S-001 handle/view-button redesign)
+TASK.md                                   (replaced — S-001 task)
+TASK_RESULT.md                            (this file)
 ```
 
-No file under `src/text/**`, `src/fonts/**`, `src/core/**`, `src/browser/**`, `src/renderer/**`,
-`src/export/**`, `src/geometry/**`, `src/svg/**`, `src/products/**`, `assets/**`, `examples/**`, or
-`style.css` was changed.
+No file under `src/geometry/**`, `src/core/**`, `src/text/**`, `src/fonts/**`, `src/svg/**`,
+`src/export/**`, `src/browser/**`, `src/history/**`, `src/renderer/CanvasRenderer2D.js`,
+`src/renderer/StoneColors.js`, `assets/**`, `examples/**`, or `style.css` was changed.
 
 ---
 
 # Design Summary (read before reviewing the diff)
 
-* **New permanent module `src/history/**`** (peer of `src/svg/**`, `src/core/**`): `HistoryManager`
-  is a small, dependency-free, DOM-free undo/redo stack. It only ever operates on
-  `JSON.stringify`-able snapshots handed to it by the caller and stores them as JSON strings, not
-  live object graphs — this is the enforcement point for "history must never contain generated
-  geometry" (it never sees `layout`/`StoneLayout`/`Stone`) and for "minimize memory usage" /
-  "do not duplicate StoneLayout." `commit(state)` records one discrete undo step and clears the
-  redo stack (branch-after-undo). `beginSession(state)`/`endSession()` coalesce many rapid calls —
-  one per keystroke or slider-drag tick — into a single undo step. `maxSize` (constructor option,
-  default 100 in `app.js`'s `HISTORY_MAX_SIZE`) bounds memory; undo/redo is otherwise unlimited.
-* **`app.js` wiring is a thin orchestration layer**, matching the existing architecture principle
-  (permanent modules own logic, `app.js` wires them together). `currentSnapshot()` returns
-  `{project: <deep clone>, selectedLayerId}` — never `layout`. `commitHistory()` is called
-  immediately before every discrete mutation (add circle/rectangle, SVG import, duplicate, delete,
-  visibility toggle, the start of a shape drag on `pointerdown`). Continuous controls (text, font,
-  height, auto-fit, text mode, stone size, gap, stone color, cup color, wrap, shape X/Y/W/H, SVG
-  fill mode) open a session on their shared `'input'` listener and close it on a new shared
-  `'change'` listener — `rotation`/`zoom` are deliberately excluded (they are view state, not part
-  of `project`, and not in the required operation list). `applyHistorySnapshot()` restores
-  `project`/`selectedLayerId` and calls `updateAll(true)`, which always regenerates `layout` from
-  scratch via `engine.generate(project)` — "geometry regenerated after restore" required no new
-  geometry code, only correct wiring. Project JSON import calls `history.clear()` instead of
-  `commitHistory()` (a fresh project is not an undoable edit); none of the five export handlers
-  reference `history` at all, so history survives exports by construction. `Ctrl/Cmd+Z`
-  (`+Shift` redoes) and `Ctrl/Cmd+Y` (redo) are wired globally with `preventDefault()`, taking
-  precedence over any native browser input-level undo even while a text field has focus.
-* **Dirty-state tracking**: a `cleanProjectJson` baseline (a plain `JSON.stringify(project)` string)
-  is set at boot, reset on Project JSON import, and reset on successful Export Project JSON.
-  `updateHistoryUI()` (called from `updateAll()` and after every undo/redo/commit) compares the
-  live project against that baseline to drive the `#dirtyIndicator` ("Saved" / "Unsaved changes").
-  Undoing back to the saved state correctly clears the indicator again (verified in the browser).
-* **A real, pre-existing bug was found and fixed as directly necessary for this milestone**:
-  `syncSelectedControlsFromLayer()` never synced `project.cupColor`/`project.wrap` (project-level,
-  not per-layer, fields) back into the `#cupColor`/`#wrap` `<select>` elements. This was latent
-  since RS-0003.5D1 (Project JSON import never refreshed these two controls either) but was
-  functionally invisible until now because nothing ever restored `project` out from under the DOM.
-  Undo/redo does exactly that: without this fix, undoing a wrap/cup-color change would correctly
-  revert `project` internally (cup preview would render correctly), but the `#wrap`/`#cupColor`
-  dropdowns would stay stale, and the *next* edit's `writeSelectedControlsToLayer()` call would
-  silently write the stale (wrong, pre-undo) value from the DOM back into `project` — invisibly
-  undoing the undo. Fixed by adding two lines to `syncSelectedControlsFromLayer()` (already called
-  by every restore path: undo/redo, Project JSON import, layer selection). Discovered via real
-  browser testing of "wrap mode change undoes" / "cup color change undoes" (see below).
-* **No schema changes**: `Stone`, `StoneLayout`, Generated Layout JSON, SVG export, and the ad hoc
-  Project JSON schema are byte-identical in shape. Undo/redo operates one layer below all of those,
-  on `app.js`'s in-memory `project` object only.
+* **S-001 (attachment/shape) + S-002 (rotation) — one redesign.** The handle's azimuth is
+  `theta = HANDLE_AZIMUTH_RAD + rot` (`HANDLE_AZIMUTH_RAD = Math.PI`, mounted opposite the
+  front-facing design — the same convention a real mug uses), reusing the *exact* `rot` term the
+  stone-placement code already used. This is what keeps handle and stones synchronized under one
+  rotation value (S-002's "body and handle remain synchronized"). From `theta`:
+  `sideFactor = sin(theta)` (signed) drives both the wall-attachment x-offset and the outward bulge
+  — full "D" profile at Left/Right (`|sideFactor| = 1`), smoothly thinning toward a straight,
+  end-on tube at Front/Back (`sideFactor = 0`). `depthFactor = cos(theta)` decides whether the
+  handle is drawn before the body fill (facing away — the wall then naturally occludes the
+  overlapping part, real depth ordering) or after it (facing the camera). Because `sideFactor` and
+  `depthFactor` are 90 degrees out of phase, the draw-order switch always lands exactly where the
+  handle has swung fully clear of the body silhouette, so it is never visible as a pop — the only
+  discrete branch in the file is provably invisible.
+* **A mid-implementation redesign based on actual rendered output.** The first pass kept the
+  original filled-ribbon shape (separate outer/inner bezier curves) but made both curves scale by
+  signed `sideFactor`. All automated tests passed, but a real browser screenshot at the Back view
+  (180°) showed the loop collapsing to a barely-visible hairline — correct in the strict geometric
+  sense (a loop viewed exactly end-on is thin) but not "believable" per the milestone's visual-
+  quality bar. Rather than patch this with an arbitrary opacity/size floor (which would have
+  reintroduced a hack), the handle was redrawn as a single stroked, round-capped tube of constant
+  `thickness` (a stroked centerline, not a separately outlined fill) — physically like a rounded rod
+  whose own diameter doesn't collapse when foreshortened. This is simpler (no inner/outer curve
+  pair, so no twisting is even possible) and reads correctly at every angle, including Back, where
+  it now shows as a solid rounded vertical bar with a highlight stripe rather than a hairline. See
+  screenshots below.
+* **S-003 (view buttons).** A single `updateViewButtons()` helper (using a named
+  `VIEW_ANGLE_EPSILON_DEG` and a mod-360-aware `angleDiffDeg()`, so `-180`/`180` both match Back) is
+  called once, from inside `updateAll()` — the one function every rotation-changing path already
+  calls (view-button click, `resetView`, the rotation slider, and manual cup-drag). This is what
+  keeps the highlighted button in sync regardless of how `rotation` changed, instead of only on
+  button click (the previous behavior — actually, previously there was no sync logic anywhere at
+  all; only the Front button's `primary` class was hardcoded in `index.html` and never updated).
+* **Existing stone-placement rotation code, body silhouette, and body shading are unchanged.** A
+  true right-cylinder/frustum body is rotation-invariant around its own vertical axis under a fixed
+  camera by definition (a real mug's outline does not change when spun) — faking a silhouette or
+  shading response to rotation would itself be the "visual hack" the milestone brief explicitly
+  disallows. The handle fix (now a real azimuthally-anchored 3D feature instead of a fading decal)
+  is what makes the whole object read as rotating, together with the already-correct stone sweep.
+* **Stale milestone-scoped "no forbidden file changed" guards.** Three older suites
+  (`tools/test-svg-integration.mjs`, `tools/test-undo-redo-integration.mjs`,
+  `tools/test-examples-regression.mjs`) each run `git status --porcelain` against their own
+  milestone's forbidden-file snapshot, and each still listed `src/renderer/` as forbidden (accurate
+  when written, since neither RS-1001, RS-1002, nor the examples-regression milestone touched the
+  renderer). Since `src/renderer/CupRenderer.js` is this milestone's whole point, all three would
+  fail permanently otherwise. This repo already has a precedent for exactly this situation:
+  `tools/test-production-export-validation.mjs` (written for RS-0003.5D1) has a comment explaining
+  that `src/renderer/**` was later legitimately changed by RS-0003.5D2 and was removed from *that*
+  test's own forbidden list, pointing at RS-0003.5D2's own guard instead. The same narrow fix
+  (removing only `src/renderer/` from each of the three lists, with a comment pointing at this
+  milestone's own guard test) was applied here — no other part of any of those three lists changed,
+  and no other test file was touched.
+* **No schema changes.** `Stone`, `StoneLayout`, Generated Layout JSON, SVG export, and the ad hoc
+  Project JSON schema are untouched. This milestone only changes how an already-generated
+  `StoneLayout` is drawn onto the cup canvas, plus a UI-only button-highlight sync in `app.js`.
 
 ---
 
@@ -139,9 +146,8 @@ git status
 npm run dev                                     # python3 -m http.server 5173
 # headless Google Chrome (OS-installed binary at
 # "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"), isolated ephemeral
-# --user-data-dir, --window-size=1600,2600 (so the full sidebar is on-screen without needing
-# scroll-aware click coordinates), no browser-automation dependency added, driven over raw CDP via
-# Node 22's built-in fetch + WebSocket (matching the RS-0003.5B2-RS-1001 precedent) — a
+# --user-data-dir, --window-size=1600,1000, no browser-automation dependency added, driven over raw
+# CDP via Node 22's built-in fetch + WebSocket (matching the RS-0003.5B2-RS-1002 precedent) — a
 # from-scratch driver script in the session scratchpad (cdp.mjs + verify.mjs)
 ```
 
@@ -151,7 +157,7 @@ npm run dev                                     # python3 -m http.server 5173
 
 ## Automated Tests
 
-PASS (20 suites, 219 assertions total, including 2 new suites):
+PASS (21 suites, including 1 new suite):
 
 ```
 node tools/test-core-model.mjs && node tools/test-font-manager.mjs && node tools/test-vector-path.mjs
@@ -163,39 +169,26 @@ node tools/test-core-model.mjs && node tools/test-font-manager.mjs && node tools
   && node tools/test-shape-geometry-integration.mjs && node tools/test-svg-integration.mjs
   && node tools/test-undo-redo-integration.mjs && node tools/test-render-export-pipeline.mjs
   && node tools/test-production-export-validation.mjs && node tools/test-ux-visual-polish.mjs
-  && node tools/test-examples-regression.mjs
+  && node tools/test-cup-rotation-stabilization.mjs && node tools/test-examples-regression.mjs
 ```
 
-New `tools/test-history-manager.mjs` (8 tests, `src/history/HistoryManager.js` in isolation, no
-DOM/app.js): sequential undo/redo replays states in the correct order; branch after undo truly
-discards (not just hides) the redo stack; a `maxSize:3` history evicts the oldest entries so only
-the 3 most recent are undoable; `beginSession()`/`endSession()` coalesce multiple rapid calls into
-exactly one committed entry, and a new session after `endSession()` commits a separate entry;
-`clear()` empties both stacks and closes an open session; snapshots are isolated from later
-mutation of the caller's object in both directions (commit-time and return-value mutation);
-`undo()`/`redo()` on an empty history return `null` without throwing; the constructor validates
-`maxSize` (throws on zero/negative/non-integer/non-numeric).
+New `tools/test-cup-rotation-stabilization.mjs` (9 tests): `renderCup` never throws across a full
+`-180..180` sweep at 5° steps, both zoom extremes, all four wrap modes; the handle's wall-attachment
+x sweeps continuously with no single-step jump greater than 25px across 5° steps, and is drawn
+(visible) at every one of the 73 sampled angles (no opacity-hidden gaps, unlike the previous
+design); the attachment is signed/bidirectional (measurably left of center at one rotation,
+measurably right at another — impossible under the old fixed-flank code); the handle azimuth
+textually uses `HANDLE_AZIMUTH_RAD + rot`, the same `+ rot` term stone placement's own `theta` still
+uses; no `HANDLE_FADE_LOW`/`HIGH`, `smoothstep`, or `globalAlpha` remains anywhere in
+`CupRenderer.js`; `CupRenderer.js` remains `StoneLayout`-only; `app.js` defines
+`updateViewButtons()` and calls it from `updateAll()` (not only from the view-button click handler);
+a named `VIEW_ANGLE_EPSILON_DEG` and mod-360-aware `angleDiffDeg()` exist; no forbidden file changed
+(this milestone's own list).
 
-New `tools/test-undo-redo-integration.mjs` (10 tests, structural, mirroring
-`tools/test-svg-integration.mjs`'s convention since `app.js` is a browser entry point not
-`import()`-able under plain Node): `HistoryManager` is imported and constructed with a named
-`HISTORY_MAX_SIZE`; `currentSnapshot()`/`commitHistory()`/`openHistorySession()`/
-`closeHistorySession()`/`performUndo()`/`performRedo()`/`applyHistorySnapshot()`/`updateHistoryUI()`
-are all defined, and `currentSnapshot()`'s body never references `layout`; every discrete mutation
-site (`duplicateLayer`, `deleteLayer`, visibility toggle, `addCircle`, `addRect`, the
-`#importSvgFile` handler, the `pointerdown` drag-start handler) calls `commitHistory()` textually
-before its first mutation; the tracked-control-id list includes every continuous project field and
-explicitly excludes `rotation`/`zoom`; `#importProjectFile` calls `history.clear()` (not
-`commitHistory()`) and resets the dirty baseline; none of the five export handlers reference
-`history` in any way; `applyHistorySnapshot()` calls `updateAll(true)` and `updateAll()` calls
-`updateHistoryUI()`; the `keydown` listener handles Ctrl/Cmd+Z/+Shift+Z/Ctrl/Cmd+Y with
-`preventDefault()`; `index.html` exposes `#undoBtn`/`#redoBtn`/`#dirtyIndicator` wired correctly; no
-forbidden file changed.
-
-Updated `tools/test-app-module-migration.mjs` and `tools/test-shape-geometry-integration.mjs`: each
-has its own independent "app.js only imports allowed modules" guard (a duplicated pattern from
-RS-1001, not something this milestone introduced) — both needed the same one-line addition for
-`./src/history/index.js`. Both were updated; no other guard test required any change.
+Updated `tools/test-svg-integration.mjs`, `tools/test-undo-redo-integration.mjs`,
+`tools/test-examples-regression.mjs`: each removed `src/renderer/` from its own, independent
+forbidden-file snapshot list (see Design Summary above) — no other assertion in any of the three
+changed.
 
 `git diff --check` reported no whitespace errors. No `build` script exists in `package.json`, so
 `npm run build` was not run (unchanged from prior milestones).
@@ -203,94 +196,78 @@ RS-1001, not something this milestone introduced) — both needed the same one-l
 ## Browser Verification
 
 Ran `npm run dev` and drove `http://localhost:5173/` with a from-scratch, dependency-free CDP driver
-(headless Chrome, Node 22's built-in `fetch`/`WebSocket`, real `Input.dispatchMouseEvent`/
-`Input.dispatchKeyEvent` — genuine OS-level-equivalent input, not JS `dispatchEvent()` synthetic
-events). 57 real interactive checks, **57 passed, 0 failed**, 0 console errors, 0 uncaught page
-errors throughout the entire run:
+(headless Chrome, Node 22's built-in `fetch`/`WebSocket`, real `Input.dispatchMouseEvent` for the
+manual-drag check — genuine OS-level-equivalent input, not JS `dispatchEvent()` synthetic events).
+**27 real interactive checks, 27 passed, 0 failed**, 0 console errors, 0 uncaught page errors
+throughout the entire run:
 
-* Page load: title correct, no console errors, Undo/Redo buttons render disabled, dirty indicator
-  shows "Saved".
-* **Text edit**: typed a full replacement string character-by-character (real per-keystroke `input`
-  events), confirmed the field reflects it, confirmed one Undo click restores the *original* text in
-  a single step (proving session coalescing — many keystrokes, one undo step), confirmed Redo brings
-  the edit back.
-* **Keyboard shortcuts**: `Ctrl+Z` undid a completed text edit *while the text field still had
-  focus* (proving the app's history takes precedence over any native input-level undo);
-  `Ctrl+Shift+Z` and `Ctrl+Y` both redid correctly.
-* **Font, stone size, gap, stone color, wrap mode, text mode, cup color**: each changed via a real
-  `<select>`/`<input>` interaction, each undoes and redoes correctly, verified by reading the actual
-  control's value after each step.
-* **Add circle / add rectangle**: each adds a layer (verified via `#layersList` child count), Undo
-  removes it, Redo re-adds it.
-* **Duplicate layer**: real click on the layer row's duplicate button adds a copy; Undo removes it,
-  Redo restores it.
-* **Visibility toggle**: real click on the layer's visibility checkbox toggles it; Undo/Redo
-  restore/reapply correctly.
-* **Delete layer**: real click on Delete; Undo restores the deleted layer, Redo re-deletes it.
-* **Move**: a real mouse drag (`Input.dispatchMouseEvent` press/move/release) on the circle layer's
-  body in the 2D layout canvas moved it (`#shapeX` changed from 105 to ~130.8mm); Undo restored the
-  exact pre-drag position; Redo re-applied the move.
-* **Resize**: the mm-per-pixel scale was calibrated empirically from the verified move above (no
-  app.js instrumentation added), used to compute the on-screen position of the circle's east resize
-  handle, then a real mouse drag on that handle resized it (`#shapeW`/radius changed from 18mm to
-  ~30.9mm); Undo restored the exact pre-resize size; Redo re-applied the resize.
-* **SVG import**: imported a real synthetic `<svg>` file via the file input (`DataTransfer`/`File`,
-  dispatching a real `change` event); confirmed a new layer was added and the import succeeded
-  (`"Imported test.svg: 1 shape(s)"`); Undo removed the SVG layer, Redo restored it.
-* **Branch after undo**: undid twice, made a brand-new edit (gap change), confirmed Redo became
-  disabled (the old redo branch was truly discarded, matching the `HistoryManager` unit test).
-* **History limit, precisely**: from a freshly-cleared history (right after a Project JSON import),
-  committed exactly 105 single-field edits (`HISTORY_MAX_SIZE` in `app.js` is 100), then clicked
-  Undo repeatedly until it disabled itself: **exactly 100 clicks**, confirming the oldest 5 commits
-  were evicted and the app remained fully responsive throughout (no crash, no console error).
-* **Exports + history survives**: clicked all five export buttons (Project JSON, Generated Layout
-  JSON, 2D SVG, 2D PNG, Cup PNG) in sequence — all completed without error (`#status` showed
-  "Downloaded rhinestone-layout.svg" etc.) — and confirmed Undo's enabled/disabled state was
-  identical before and after (history untouched by exports).
-* **Dirty-state tracking**: showed "Saved" at boot and immediately after Export Project JSON;
-  flipped to "Unsaved changes" after a further edit; correctly returned to "Saved" after undoing
-  back to the exported state (not just after any undo — the *saved* state specifically).
-* **Project JSON import clears history**: imported a synthetic project file; confirmed the new
-  project's text loaded, confirmed Undo *was* enabled beforehand and both Undo and Redo were
-  disabled immediately after the import, and confirmed the dirty indicator showed "Saved".
-* No uncaught exception / unhandled rejection was observed at any point across the entire 57-check
-  run (`pageErrors.length === 0` checked repeatedly throughout).
+* Page load: title correct, no console errors, Front button highlighted (rotation starts at 0),
+  Undo/Redo buttons render disabled.
+* **Front (0°)**: handle not visible (`renderCup` draws it before the body fill and its bulge is 0,
+  fully occluded) — screenshot confirms a clean cup with no handle. Front button highlighted.
+* **Left (-90°)**: clicking Left sets `rotation=-90`; screenshot shows the handle in full side
+  profile on the right side of the frame (mirrored from Right, as expected for opposite rotation
+  signs). Left button highlighted, the other three are not.
+* **Right (90°)**: clicking Right sets `rotation=90`; screenshot shows the handle in full profile on
+  the opposite side from Left. Right button highlighted, others not.
+* **Back (180°)**: clicking Back sets `rotation=180`; screenshot shows the handle as a solid,
+  rounded, centered vertical tube with a highlight stripe (foreshortened but clearly a handle, not a
+  hairline). Back button highlighted, others not.
+* **45°/135°** (via the rotation slider, since these are not view-button angles): screenshots show
+  the handle at believable intermediate positions/sizes between the adjacent view states, and no
+  view button is highlighted at either angle (correctly outside the epsilon of all four).
+* Returning the slider to exactly `-90` re-highlighted Left, confirming the sync works for any
+  rotation source, not just button clicks.
+* **Manual drag rotation**: a real CDP mouse press/move×10/release across the cup canvas changed
+  `rotation` from its prior value (0), stayed within the `-180..180` clamp, and (since the resulting
+  angle did not land on an exact view angle) cleared all four button highlights — confirming
+  `updateViewButtons()` runs on the drag path too, not just clicks/slider.
+* **Zoom**: set to both the minimum (70) and maximum (140) extremes; no console errors either time.
+* **Light cup color** (white) and **dark cup color** (black): both rendered without error;
+  screenshots confirm the handle/body shading and stone contrast ring remain readable against both.
+* No console error / uncaught exception was observed at any point across the entire run.
 
-Not separately re-verified in the browser (already covered by automated tests / by the mechanism
-being identical across operations): the exact `HistoryManager` eviction unit-test assertions (numeric
-step-for-step correctness — covered by `tools/test-history-manager.mjs`); `StoneLayout` determinism
-after restore (already guaranteed by `GeometryEngine`'s existing determinism tests plus the fact that
-`updateAll()` is the same regeneration path used for every live edit, restored or not — no new
-geometry code was written for this milestone to separately re-verify).
+Screenshots captured (cup-panel-only crops, saved during this session; not committed, matching the
+RS-1001/RS-1002 precedent of not committing verification-only driver output):
+`front.png`, `left.png`, `right.png`, `back.png`, `45deg.png`, `135deg.png`, plus `cup-light.png`/
+`cup-dark.png` for the color check.
 
 ---
 
 # Warnings
 
 * None from `npm test` / `git diff --check`.
-* The CDP driver script used for browser verification lives only in the session scratchpad
-  (`/private/tmp/.../scratchpad/cdp.mjs`, `verify.mjs`) and was not committed — it is a one-off
-  verification tool, not a product artifact, matching the RS-1001 precedent (its driver was also not
-  committed).
+* The CDP driver script used for browser verification (`cdp.mjs`, `verify.mjs`) and the screenshot
+  PNGs live only in the session scratchpad, not committed — one-off verification tooling/output, not
+  a product artifact, matching the RS-1001/RS-1002 precedent.
+* Three older milestones' own "no forbidden file changed" guard tests needed a one-line-per-file
+  narrowing (see Design Summary) because they snapshot forbidden paths via live `git status` rather
+  than history; this is a pre-existing test-design pattern in this repo (already seen once before at
+  RS-0003.5D2), not something introduced by this milestone.
 
 ---
 
 # Known Limitations
 
-* History is in-memory only; it does not survive a page reload/navigation (out of scope per the
-  specification — no `localStorage` backing was requested or added).
-* There is no explicit "New Project" toolbar action in the live UI today, so "history cleared on new
-  project" is satisfied by (a) history starting empty at app boot and (b) Project JSON import
-  explicitly clearing it — the two project-reset affordances that actually exist.
-* `rotation` (cup rotation) and `zoom` (cup preview zoom) are intentionally not undoable — they are
-  view-only state, not part of `project`, and are not in the milestone's required operation list.
-* Per-layer rotation, curved text, and migrating `app.js`'s ad hoc project/layer model onto
-  `src/core/Project`/`Layer` remain out of scope, as before.
+* At exactly the Back view (180°) and nearby angles, the handle's outward bulge is small by design
+  (a real handle viewed nearly end-on genuinely does foreshorten) — it is deliberately kept
+  visible as a full-thickness rounded tube rather than a hairline, but it will never show the full
+  "D" loop shape you see at Left/Right. This is physically correct, not a bug.
+* The cup body silhouette and shading are, and remain, rotation-invariant around the vertical axis
+  (true for any right cylinder/frustum under a fixed camera) — only the handle and the stones sweep
+  visibly. This was a deliberate design decision (see Design Summary) rather than an oversight;
+  faking a silhouette/shading response would itself have been a disallowed visual hack.
+* No 3D/WebGL renderer was introduced; `CupRenderer` remains a dependency-free 2D Canvas renderer,
+  per the existing architecture (a rewrite to a new rendering technology was not necessary to reach
+  a good result).
+* `GeometryEngine`, `StoneLayout`, exporters, SVG import, text generation, and shape generation were
+  not touched, per the milestone's explicit out-of-scope list.
 
 ---
 
 # Next Milestone
 
-Candidates: curved text, multi-object support/grouping, an optional "lock aspect ratio" toggle for
-SVG/rectangle layers, per-layer rotation, and migrating `app.js`'s ad hoc project/layer objects onto
-`src/core/Project`/`Layer`.
+Candidates: curved text, multi-object support/grouping, per-layer rotation, migrating `app.js`'s ad
+hoc project/layer objects onto `src/core/Project`/`Layer`, and the long-standing recommendation
+(repeated since RS-0003.5C1) to delete the dead legacy bitmap text engine and legacy shape
+generators once a human confirms the permanent-engine/renderer output is production-acceptable.
