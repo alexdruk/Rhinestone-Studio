@@ -209,11 +209,15 @@ function drawHandle(ctx, geom, cupColor) {
     ctx.fill();
   }
 
-  // Traces the same centerline, optionally shifted sideways by `dx` — a fixed (not
-  // rotation-dependent) horizontal offset, matching the body's own fixed-direction sheen. A single
-  // centerline can only ever look like a flat ribbon; stacking several parallel offset strokes of
-  // shrinking width — dark core-shadow on one side, a narrow specular highlight on the other — is
-  // what actually reads as a rounded tube instead of a schematic flat band.
+  // Traces the same centerline, shifted sideways by `dx` — a fixed (not rotation-dependent)
+  // horizontal offset, matching the body's own fixed-direction sheen. A stroke can only ever shade
+  // uniformly along its own length, never across its width — which is what a rounded cross-section
+  // actually needs. So the tube's roundness comes from layering several of these offset strokes,
+  // each narrower and lighter than the last as `dx` sweeps from the dark (shadowed) edge to the
+  // light (lit) edge — approximating a smooth perpendicular gradient by superimposition, the same
+  // way traditional airbrush/vector-illustration cylinder shading is built from banded tones. This
+  // stays a stroke technique (not stamped discs), so it renders as one continuous shape with no
+  // seams, unlike a series of overlapping filled circles.
   const path = (dx = 0) => {
     ctx.beginPath();
     ctx.moveTo(attachTopX + dx, attachTopY);
@@ -222,38 +226,34 @@ function drawHandle(ctx, geom, cupColor) {
 
   ctx.lineCap = 'round';
 
-  // A soft dark underlay slightly wider than the colored tube reads as an edge/ambient-occlusion
-  // line without needing a second parallel curve. This is also the render's first bezierCurveTo
-  // call, at the true (unshifted) wall-attachment point.
+  // A dark underlay, wider than the tube, reads as its outer edge/ambient-occlusion line. This is
+  // also the render's first bezierCurveTo call, at the true (unshifted) wall-attachment point.
   path();
-  ctx.strokeStyle = 'rgba(0,0,0,.28)';
+  ctx.strokeStyle = shade(cupColor, -46);
   ctx.lineWidth = thickness + Math.max(1, 1.1 * dpr);
   ctx.stroke();
 
-  const grad = ctx.createLinearGradient(attachTopX, attachTopY, attachTopX + bulge, (attachTopY + attachBotY) / 2);
-  grad.addColorStop(0, shade(cupColor, -18));
-  grad.addColorStop(.55, shade(cupColor, 6));
-  grad.addColorStop(1, shade(cupColor, -14));
-  path();
-  ctx.strokeStyle = grad;
-  ctx.lineWidth = thickness;
-  ctx.stroke();
+  // Dark (shadowed) edge of the cross-section through to the light (lit) edge, each band narrower
+  // than the last so earlier/wider bands still show at their own edges once later ones are drawn
+  // on top — this superposition is what reads as a smooth gradient instead of flat stripes.
+  const bands = [
+    { dx: -0.34, shade: -34, wf: 1.00 },
+    { dx: -0.18, shade: -18, wf: 0.82 },
+    { dx: -0.02, shade: 0, wf: 0.64 },
+    { dx: 0.12, shade: 16, wf: 0.46 },
+    { dx: 0.24, shade: 30, wf: 0.30 }
+  ];
+  for (const b of bands) {
+    path(b.dx * thickness);
+    ctx.strokeStyle = shade(cupColor, b.shade);
+    ctx.lineWidth = Math.max(1, thickness * b.wf);
+    ctx.stroke();
+  }
 
-  // Core shadow, offset toward one side of the tube's cross-section...
-  path(-thickness * 0.24);
-  ctx.strokeStyle = 'rgba(0,0,0,.22)';
-  ctx.lineWidth = Math.max(1, thickness * 0.42);
-  ctx.stroke();
-
-  // ...and a narrower specular highlight offset toward the other side — the two together are what
-  // sell the roundness (a single centerline highlight reads as a flat painted stripe instead).
-  path(thickness * 0.22);
+  // A thin, crisp specular rim-light on the lit edge sharpens the sense of a polished round tube.
+  path(0.30 * thickness);
   ctx.strokeStyle = 'rgba(255,255,255,.5)';
-  ctx.lineWidth = Math.max(.8, thickness * 0.2);
-  ctx.stroke();
-  path(thickness * 0.08);
-  ctx.strokeStyle = 'rgba(255,255,255,.16)';
-  ctx.lineWidth = Math.max(1, thickness * 0.45);
+  ctx.lineWidth = Math.max(.8, thickness * 0.12);
   ctx.stroke();
 }
 
