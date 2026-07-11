@@ -24,6 +24,15 @@ import { STONE_COLORS } from './StoneColors.js';
  */
 export function drawStone(ctx, xPx, yPx, radiusPx, colorKey, style = 'layout') {
   const c = STONE_COLORS[colorKey] || STONE_COLORS.crystal;
+  if (style === 'cup') {
+    // A faint dark contrast ring keeps light stone colors readable on light cup backgrounds and
+    // dark stone colors readable on dark cup backgrounds — the cup preview has no fixed
+    // background color (cupColor is configurable), unlike the 2D layout's white canvas.
+    ctx.beginPath();
+    ctx.ellipse(xPx, yPx, radiusPx * 1.12, radiusPx * 1.12, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,.16)';
+    ctx.fill();
+  }
   const g = ctx.createRadialGradient(xPx - radiusPx * .35, yPx - radiusPx * .45, radiusPx * .1, xPx, yPx, radiusPx);
   g.addColorStop(0, c.shine);
   g.addColorStop(.45, c.fill);

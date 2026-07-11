@@ -241,8 +241,9 @@ await test('16. no forbidden file changed', () => {
 
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
   const forbiddenPrefixes = [
-    'src/renderer/CanvasRenderer2D.js',
-    'src/renderer/CupRenderer.js',
+    // src/renderer/CanvasRenderer2D.js and src/renderer/CupRenderer.js are legitimately changed by
+    // RS-0003.5D2 (cup handle/body/selection visual polish) — see tools/test-ux-visual-polish.mjs
+    // for that milestone's own forbidden-file guard.
     'src/text/',
     'src/fonts/',
     'src/core/',
