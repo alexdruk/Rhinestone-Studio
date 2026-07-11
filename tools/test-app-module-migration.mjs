@@ -91,7 +91,10 @@ await test('app.js only imports the RS-0003.5B2 probe, the RS-0003.5B3 permanent
     /from\s*['"]\.\/src\/svg\/index\.js['"]/,
     /from\s*['"]\.\/src\/history\/index\.js['"]/,
     // RS-1004: activates the previously-inert src/products/** module (object-template registry).
-    /from\s*['"]\.\/src\/products\/index\.js['"]/
+    /from\s*['"]\.\/src\/products\/index\.js['"]/,
+    // RS-1005: Production Sheet export. src/export/** has no barrel index.js (SvgExporter.js above
+    // is likewise imported directly), so each individual export module app.js uses is listed here.
+    /from\s*['"]\.\/src\/export\/ProductionSheetExporter\.js['"]/
   ];
   for (const line of importLines) {
     assert.ok(

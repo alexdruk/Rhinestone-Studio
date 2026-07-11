@@ -52,7 +52,10 @@ function sha256(buffer) {
 async function extractValidateProject() {
   const match = appJs.match(/function validateProject\(obj\)\{[\s\S]*?\n\}\n/);
   assert.ok(match, 'expected to find validateProject() in app.js');
-  const source = appJs.slice(appJs.indexOf('const SUPPORTED_LAYER_TYPES=new Set'), appJs.indexOf(match[0]) + match[0].length);
+  // RS-1005: validateProject() now also references the top-level DEFAULT_PROJECT_NAME constant
+  // (project.name's permissive default), so the extracted slice must start there instead of at
+  // SUPPORTED_LAYER_TYPES -- the extra intervening source (defaultProject(), etc.) is harmless.
+  const source = appJs.slice(appJs.indexOf('const DEFAULT_PROJECT_NAME='), appJs.indexOf(match[0]) + match[0].length);
   const { getObjectTemplate } = await import('../src/products/index.js');
   // eslint-disable-next-line no-new-func
   return new Function('getObjectTemplate', `${source}\nreturn validateProject;`)(getObjectTemplate);
@@ -310,8 +313,10 @@ await test('17. no forbidden file changed (this milestone\'s own forbidden list)
   // RS-1001 (SVG import); everything else this suite originally protected stays forbidden.
   // src/renderer/ is legitimately changed by S-001 (cup rendering/rotation stabilization) — see
   // tools/test-cup-rotation-stabilization.mjs for that milestone's own forbidden-file guard.
+  // src/export/ is legitimately changed by RS-1005 (Production Sheet export) — see
+  // tools/test-production-sheet-exporter.mjs for that milestone's own forbidden-file guard.
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
-  const forbiddenPrefixes = ['src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'src/export/', 'assets/'];
+  const forbiddenPrefixes = ['src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'assets/'];
 
   for (const changedPath of changedPaths) {
     assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);

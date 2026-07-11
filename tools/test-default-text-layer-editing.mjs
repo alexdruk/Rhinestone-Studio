@@ -53,8 +53,11 @@ await test('1. defaultProject() still starts with exactly one text layer, id "te
   assert.ok(match, 'expected to find defaultProject()');
   const fontIdMatch = appJs.match(/const DEFAULT_TEXT_FONT_ID='([^']*)'/);
   assert.ok(fontIdMatch, 'expected DEFAULT_TEXT_FONT_ID constant');
+  // RS-1005: defaultProject() now also references the top-level DEFAULT_PROJECT_NAME constant.
+  const projectNameMatch = appJs.match(/const DEFAULT_PROJECT_NAME='([^']*)'/);
+  assert.ok(projectNameMatch, 'expected DEFAULT_PROJECT_NAME constant');
   // eslint-disable-next-line no-new-func
-  const project = new Function('DEFAULT_TEXT_FONT_ID', `return ${match[1]}`)(fontIdMatch[1]);
+  const project = new Function('DEFAULT_TEXT_FONT_ID', 'DEFAULT_PROJECT_NAME', `return ${match[1]}`)(fontIdMatch[1], projectNameMatch[1]);
   assert.equal(project.layers.length, 1, 'defaultProject() must start with exactly one layer');
   assert.equal(project.layers[0].id, 'text');
   assert.equal(project.layers[0].type, 'text');
@@ -112,14 +115,14 @@ await test('7. duplicate/visibility toggle for the default layer are unchanged (
   assert.match(appJs, /if\(copy\.type==='text'\)\{copy\.text\+=' copy'\}/, 'expected duplicating a text layer to still nudge its text so the copy is visibly distinct');
 });
 
-await test('8. GeometryEngine.js, StoneLayout.js, and export modules are untouched by this fix', () => {
+await test('8. GeometryEngine.js and StoneLayout.js are untouched by this fix (src/export/SvgExporter.js is now legitimately changed by RS-1005\'s Production Sheet export — see tools/test-production-sheet-exporter.mjs for that milestone\'s own forbidden-file guard)', () => {
   const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
   const changedPaths = output
     .split('\n')
     .filter((line) => line.trim().length > 0)
     .map((line) => line.slice(3).trim());
 
-  for (const forbidden of ['src/geometry/GeometryEngine.js', 'src/geometry/StoneLayout.js', 'src/export/SvgExporter.js']) {
+  for (const forbidden of ['src/geometry/GeometryEngine.js', 'src/geometry/StoneLayout.js']) {
     assert.ok(!changedPaths.includes(forbidden), `this fix must not touch ${forbidden}`);
   }
 });

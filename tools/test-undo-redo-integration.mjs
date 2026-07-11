@@ -156,8 +156,10 @@ await test('10. no forbidden file changed (this milestone\'s own forbidden list)
   // src/products/ was correctly forbidden at RS-1002 time (empty besides a README) but is now
   // legitimately activated by RS-1004 (object-template registry) — see
   // tools/test-object-template-integration.mjs for that milestone's own forbidden-file guard.
+  // src/export/ is legitimately changed by RS-1005 (Production Sheet export) — see
+  // tools/test-production-sheet-exporter.mjs for that milestone's own forbidden-file guard.
   const forbiddenPrefixes = [
-    'src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'src/export/',
+    'src/text/', 'src/fonts/', 'src/core/', 'src/browser/',
     'assets/', 'examples/'
   ];
 

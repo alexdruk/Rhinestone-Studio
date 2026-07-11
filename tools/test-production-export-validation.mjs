@@ -221,10 +221,11 @@ await test('14. every export button handler guards on layout readiness and is wr
     assert.match(appJs, re, `expected #${id} handler to guard on !layout before a try block`);
   }
   assert.match(appJs, /el\('exportProject'\)\.onclick=\(\)=>\{try\{/, 'expected #exportProject handler to be wrapped in try/catch');
-  // Every one of the five export handlers must catch and report failures via #status.
+  // Every one of the five original export handlers plus RS-1005's three new Production Sheet
+  // handlers (exportProdSheetSVG/PNG/PDF) must catch and report failures via #status.
   const exportSection = appJs.slice(appJs.indexOf("el('exportProject')"), appJs.indexOf('let cupDrag'));
   const catchCount = (exportSection.match(/catch\(error\)\{el\('status'\)\.textContent=`Export failed:/g) || []).length;
-  assert.equal(catchCount, 5, 'expected all 5 export handlers to report failures via #status');
+  assert.equal(catchCount, 8, 'expected all 5 original + 3 Production Sheet export handlers to report failures via #status');
 });
 
 await test('15. index.html exposes the import controls app.js expects', () => {

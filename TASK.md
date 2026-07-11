@@ -1,58 +1,60 @@
 # Task
 
-**Task ID:** S-003
-**Task Type:** Stabilization / Bug Fix
-**Specification:** none (milestone brief supplied directly; scoped enough not to require a separate
-`docs/specifications/` doc per `docs/MILESTONE_WORKFLOW.md`'s "ordinary implementation milestone"
-path)
-**Status:** IMPLEMENTED
-**Branch:** fix/s-003-default-text-layer-editing
+**Task ID:** RS-1005
+**Task Type:** Feature — Production Sheet Generator
+**Specification:** `docs/specifications/RS-1005-ProductionSheetGenerator.md`
+**Status:** IN PROGRESS
+**Branch:** feature/rs-1005-production-sheet-generator
 
 ## Goal
 
-Fix the reported blocking defect: "the default 'Vitalina Serbin' text layer cannot be edited or
-deleted through the normal UI."
-
-## Investigation (done before any code change)
-
-A real headless-Chrome session (Puppeteer against `python3 -m http.server`) against the unmodified
-repository showed that select / edit (text, font, textMode, curve fields) / duplicate / hide-show /
-undo / redo all already worked correctly for the default layer — no crash, no stale state, layer
-list and controls stayed synchronized. The one genuinely broken path was deletion: `deleteLayer()`'s
-existing "never drop below one layer" guard only ever surfaced feedback via `#status.textContent`,
-an element at the very bottom of the `.side` panel (1648px of content against a 726–800px
-viewport in this session — the same panel `tools/test-ui-discoverability.mjs` already documented as
-overflowing). Since a brand-new project always starts with exactly one layer (the default text
-layer), clicking "Delete selected layer" — the single most obvious affordance for removing it —
-produced zero visible effect anywhere on screen. That silent failure is what the report described as
-"cannot be deleted."
+Add a new export, the **Production Sheet**: a one-page, millimeter-accurate, printable
+manufacturing document generated only from the canonical `StoneLayout` — project/object metadata,
+stone count/size/color, a scale reference, optional registration marks, optional horizontal
+mirror — available as SVG, PNG, and PDF.
 
 ## Required Outcome
 
-* The default text layer can be selected. (already true — confirmed, unchanged)
-* Its text and all text properties can be edited. (already true — confirmed, unchanged)
-* It can be deleted (once at least one other layer exists). (already true — confirmed, unchanged)
-* Duplicate, hide/show, undo, redo work. (already true — confirmed, unchanged)
-* Deleting the last remaining layer must not crash the app. (already true — confirmed, unchanged)
-* The "at least one layer" rule is enforced **visibly and consistently**: both delete affordances
-  (row trash icon, sidebar "Delete selected layer" button) are disabled with an explanatory title,
-  and an always-in-viewport `#layerRuleHint` note appears, the moment only one layer remains.
-* The layer list and selected-layer controls stay synchronized after every action.
-* Project save/load preserves the corrected behavior.
-* `GeometryEngine`, `StoneLayout`, and export schemas are unchanged.
+See `docs/specifications/RS-1005-ProductionSheetGenerator.md` in full. Summary:
+
+* New `src/export/ProductionSheetExporter.js` (`PAGE_SIZES`, `computeProductionSheetLayout()`,
+  `productionSheetToSvg()`, `productionSheetToPdf()`) and `src/export/PdfDocument.js` (a minimal,
+  dependency-free, deterministic, single-page vector PDF writer using the standard Helvetica font).
+* `src/export/SvgExporter.js` gains a small, output-preserving `stoneCircleSvg()` extraction so the
+  new exporter reuses it instead of duplicating the circle string template.
+* `app.js`/`index.html`: a new `project.name` field (permissive default, like `cupColor`/`wrap`);
+  a new "Production Sheet" UI section (page size A4/Letter, margin mm, mirror on/off, registration
+  marks on/off) and three guarded, try/catch-wrapped export buttons (SVG/PNG/PDF), following the
+  exact pattern of the five existing export handlers.
+* PNG export has no new `src/export/**` module: `app.js` rasterizes the generated production-sheet
+  SVG via an offscreen `Image`+`<canvas>` at a fixed documented DPI (no fit-to-viewport scaling),
+  matching the existing "PNG is a capture, not a standalone exporter" precedent.
+* `StoneLayout.js` and `GeometryEngine.js` are not modified. No new stone position is invented
+  anywhere — the exporter only re-projects already-generated `stone.xMm/yMm` for centering/mirror/
+  mm→pt, the same category of transform `CanvasRenderer2D.fitTransform()` already performs.
+* A production size that cannot fit a chosen page (in either orientation) at the requested margin
+  fails with a clear error — never silently rescaled ("no scaling" is a hard requirement).
 
 ## Rules
 
-* Follow `docs/AI_ENGINEER.md` and `docs/CLAUDE_GUIDE.md`.
-* Smallest coherent change; no unrelated refactoring.
-* Do not touch any other guard test's forbidden-file list.
+* Follow `docs/AI_ENGINEER.md`, `docs/CLAUDE_GUIDE.md`, `docs/ARCHITECTURE.md`.
+* Smallest coherent change; no unrelated refactoring; no new dependency/bundler/CDN.
+* Update only the guard tests that structurally required it for one specific, documented reason
+  each (forbidden-`src/export/`-prefix removal, `app.js` import-allowlist addition, a milestone-
+  specific dedicated "export untouched" assertion, or a `validateProject()`/`defaultProject()`
+  source-slice extraction that needed widening to reach the new `DEFAULT_PROJECT_NAME` constant) —
+  see the specification's "Allowed Files" section for the full, itemized list (eleven files) and
+  reasons. Narrow updates only, matching the established precedent.
 * Do not commit failing tests.
 
 ## Deliverables
 
-* Implementation (`app.js`, `index.html`).
-* Automated test (`tools/test-default-text-layer-editing.mjs`), registered in `package.json`.
-* `npm test` passing in full.
-* Browser verification via a real headless-Chrome session, before and after the fix.
+* Implementation: `src/export/ProductionSheetExporter.js`, `src/export/PdfDocument.js`,
+  `src/export/SvgExporter.js`, `src/export/README.md`, `app.js`, `index.html`,
+  `docs/ARCHITECTURE.md`.
+* Automated tests: `tools/test-pdf-document.mjs`, `tools/test-production-sheet-exporter.mjs`,
+  registered in `package.json`; eleven existing guard tests narrowly updated (see specification).
+* `npm test` passing in full (all prior suites + the two new ones).
+* Browser verification via a real headless-Chrome session per the specification's checklist.
 * `TASK_RESULT.md` completed.
-* One commit on `fix/s-003-default-text-layer-editing`.
+* One commit on `feature/rs-1005-production-sheet-generator`.

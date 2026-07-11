@@ -259,12 +259,13 @@ await test('11. no forbidden file changed', () => {
   // src/geometry/ is legitimately changed by RS-1001 (generateSvgLayout(), open-path outline
   // sampling).
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
+  // src/export/ is legitimately changed by RS-1005 (Production Sheet export) — see
+  // tools/test-production-sheet-exporter.mjs for that milestone's own forbidden-file guard.
   const forbiddenPrefixes = [
     'src/text/',
     'src/fonts/',
     'src/core/',
     'src/browser/',
-    'src/export/',
     'assets/'
   ];
 

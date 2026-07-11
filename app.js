@@ -43,7 +43,16 @@
 // exactly like cupColor/wrap already are, not a new geometry concept. GeometryEngine/StoneLayout
 // are untouched; only the schematic preview silhouette and a new safe-area editor-overlay guide
 // (drawn here, not inside CanvasRenderer2D.js) vary by object type. See
-// docs/specifications/RS-1004-MultiObjectTemplates.md.
+// docs/specifications/RS-1004-MultiObjectTemplates.md. RS-1005 added the Production Sheet export
+// (SVG/PNG/PDF): a new src/export/ProductionSheetExporter.js consumes the same merged StoneLayout
+// (plus plain metadata: project.name, the active object template's displayName, project.canvas,
+// and the visible layers' gap values) to produce a one-page, mm-accurate manufacturing document.
+// PNG export has no new src/export/** module -- it rasterizes the generated SVG via an offscreen
+// Image+canvas at a fixed DPI, the same "capture, not a standalone exporter" shape #exportPNG/
+// #exportCup already use. Page size/margin/mirror/registration-marks are view/export-only options
+// (like rotation/zoom), read live from their controls at export-click time, not part of `project`.
+// project.name is the one new project-level field, following the exact permissive-default pattern
+// cupColor/wrap/product already use. See docs/specifications/RS-1005-ProductionSheetGenerator.md.
 import './src/browser/BrowserDependencyProbe.js';
 import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
@@ -52,6 +61,7 @@ import { renderProductionLayout } from './src/renderer/CanvasRenderer2D.js';
 import { renderCup } from './src/renderer/CupRenderer.js';
 import { STONE_COLORS } from './src/renderer/StoneColors.js';
 import { stoneLayoutToSvg } from './src/export/SvgExporter.js';
+import { computeProductionSheetLayout, productionSheetToSvg, productionSheetToPdf } from './src/export/ProductionSheetExporter.js';
 import { parseSvgDocument } from './src/svg/index.js';
 import { HistoryManager } from './src/history/index.js';
 import { getObjectTemplate, getSafeAreaRectMm } from './src/products/index.js';
@@ -77,6 +87,10 @@ const VIEW_ANGLE_EPSILON_DEG=0.5;
 // RS-1002: bounds HistoryManager's undo/redo depth. Undo/redo is otherwise unlimited -- normal
 // editing sessions never come close to 100 steps -- this only caps worst-case memory use.
 const HISTORY_MAX_SIZE=100;
+// RS-1005: pixels-per-mm used only when rasterizing the Production Sheet SVG to PNG. Fixed and
+// documented (not derived from devicePixelRatio/viewport fit) so the PNG's pixel dimensions are
+// always a clean, undistorted multiple of the page's mm size -- never a fit-to-viewport scale.
+const PRODUCTION_SHEET_PNG_DPI=200;
 // RS-0003.5D2: resolves a <select>'s value by nearest numeric match instead of an exact string
 // match. Fixes the #stoneSize dropdown showing blank on load: a layer's stoneSize is a plain JS
 // number (e.g. 2), but String(2)==='2' matches no <option> (index.html's options are formatted
@@ -113,7 +127,8 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  dedupe(stones,minDist){const cell=Math.max(minDist,0.5),grid=new Map(),out=[],m2=minDist*minDist;for(const s of stones){const gx=Math.floor(s.x/cell),gy=Math.floor(s.y/cell);let ok=true;for(let yy=gy-1;yy<=gy+1;yy++)for(let xx=gx-1;xx<=gx+1;xx++){const arr=grid.get(xx+','+yy)||[];for(const o of arr){const dx=s.x-o.x,dy=s.y-o.y;if(dx*dx+dy*dy<m2){ok=false;break}}if(!ok)break}if(ok){out.push(s);const k=gx+','+gy;if(!grid.has(k))grid.set(k,[]);grid.get(k).push(s)}}return out}
  bbox(stones){if(!stones.length)return{x:0,y:0,width:0,height:0,x2:0,y2:0};let x=Infinity,y=Infinity,x2=-Infinity,y2=-Infinity;for(const s of stones){x=Math.min(x,s.x-s.d/2);y=Math.min(y,s.y-s.d/2);x2=Math.max(x2,s.x+s.d/2);y2=Math.max(y2,s.y+s.d/2)}return{x,y,x2,y2,width:x2-x,height:y2-y}}
  layerBBox(layer){if(layer.type==='circle')return{x:layer.cx-layer.r,y:layer.cy-layer.r,width:layer.r*2,height:layer.r*2,x2:layer.cx+layer.r,y2:layer.cy+layer.r};if(layer.type==='rectangle')return{x:layer.x,y:layer.y,width:layer.w,height:layer.h,x2:layer.x+layer.w,y2:layer.y+layer.h};const stones=this.generateText(layer,project);return this.bbox(stones)} }
-function defaultProject(){return{version:2,units:'mm',product:'mug',canvas:{width:210,height:90},cupColor:'#1f3556',wrap:'front',layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:2,gap:.3,color:'gold',autoFit:true,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:360,curveAlignment:'center'}]}}
+const DEFAULT_PROJECT_NAME='Untitled Project';
+function defaultProject(){return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,product:'mug',canvas:{width:210,height:90},cupColor:'#1f3556',wrap:'front',layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:2,gap:.3,color:'gold',autoFit:true,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:360,curveAlignment:'center'}]}}
 // RS-0003.5D1: validates an imported Project JSON file against the exact ad hoc project/layer
 // shape #exportProject already produces (JSON.stringify(project)). Throws a specific Error
 // describing the first problem found instead of silently accepting a malformed project; the
@@ -147,7 +162,10 @@ function validateProject(obj){
   // or missing ids resolve to 'mug'), so project.product is always a real, known template id —
   // matching this function's existing permissive style for cupColor/wrap (never throws for
   // unrecognized values).
-  return{version:Number(obj.version)||2,units:'mm',product:getObjectTemplate(obj.product).id,canvas:{width:canvas.width,height:canvas.height},cupColor:typeof obj.cupColor==='string'?obj.cupColor:'#1f3556',wrap:typeof obj.wrap==='string'?obj.wrap:'front',layers:obj.layers.map(l=>({...l,visible:l.visible!==false}))}
+  // RS-1005: project.name follows the exact same permissive-default style — a missing/non-string
+  // name (e.g. every pre-RS-1005 Project JSON file) resolves to DEFAULT_PROJECT_NAME rather than
+  // throwing, so old files keep importing cleanly.
+  return{version:Number(obj.version)||2,units:'mm',name:typeof obj.name==='string'&&obj.name.length>0?obj.name:DEFAULT_PROJECT_NAME,product:getObjectTemplate(obj.product).id,canvas:{width:canvas.width,height:canvas.height},cupColor:typeof obj.cupColor==='string'?obj.cupColor:'#1f3556',wrap:typeof obj.wrap==='string'?obj.wrap:'front',layers:obj.layers.map(l=>({...l,visible:l.visible!==false}))}
 }
 let fontProviderRegistry=null,permanentEngineError=null;
 try{const fontManager=await FontManager.fromUrl('./assets/fonts/manifest.json');fontProviderRegistry=createDefaultFontProviderRegistry(fontManager)}catch(error){permanentEngineError=error;console.error('Font manifest failed to load; text layers will render empty until this is resolved. Shape layers are unaffected.',error)}
@@ -186,8 +204,10 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
   // RS-1004: project.product is likewise project-level, not per-layer -- resync on every selection
   // change/undo/redo/import for the same reason cupColor/wrap are resynced above.
   el('objectType').value=project.product;
+  // RS-1005: project.name is likewise project-level -- resync for the same reason.
+  el('projectName').value=project.name;
 }
-function writeSelectedControlsToLayer(){const l=selectedLayer();if(l.type==='text'){l.text=el('text').value;l.font=el('font').value;l.height=parseFloat(el('height').value)||25;l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;l.curveEnabled=el('curveEnabled').value==='on';l.curveRadiusMm=Math.max(0.1,parseFloat(el('curveRadiusMm').value)||40);l.curveDirection=el('curveDirection').value==='inside'?'inside':'outside';l.curveStartAngleDeg=parseFloat(el('curveStartAngleDeg').value)||0;l.curveSweepAngleDeg=parseFloat(el('curveSweepAngleDeg').value)||360;l.curveAlignment=el('curveAlignment').value;el('curveControls').style.display=l.curveEnabled?'block':'none'}else if(l.type==='circle'){l.cx=parseFloat(el('shapeX').value)||105;l.cy=parseFloat(el('shapeY').value)||45;l.r=Math.max(1,parseFloat(el('shapeW').value)||18)}else if(l.type==='rectangle'){l.x=parseFloat(el('shapeX').value)||65;l.y=parseFloat(el('shapeY').value)||30;l.w=Math.max(1,parseFloat(el('shapeW').value)||80);l.h=Math.max(1,parseFloat(el('shapeH').value)||30)}else if(l.type==='svg'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.mode=el('svgMode').value==='fill'?'fill':'outline'}l.stoneSize=parseFloat(el('stoneSize').value)||2;l.gap=parseFloat(el('gap').value)||.3;l.color=el('stoneColor').value;project.cupColor=el('cupColor').value;project.wrap=el('wrap').value;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
+function writeSelectedControlsToLayer(){const l=selectedLayer();if(l.type==='text'){l.text=el('text').value;l.font=el('font').value;l.height=parseFloat(el('height').value)||25;l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;l.curveEnabled=el('curveEnabled').value==='on';l.curveRadiusMm=Math.max(0.1,parseFloat(el('curveRadiusMm').value)||40);l.curveDirection=el('curveDirection').value==='inside'?'inside':'outside';l.curveStartAngleDeg=parseFloat(el('curveStartAngleDeg').value)||0;l.curveSweepAngleDeg=parseFloat(el('curveSweepAngleDeg').value)||360;l.curveAlignment=el('curveAlignment').value;el('curveControls').style.display=l.curveEnabled?'block':'none'}else if(l.type==='circle'){l.cx=parseFloat(el('shapeX').value)||105;l.cy=parseFloat(el('shapeY').value)||45;l.r=Math.max(1,parseFloat(el('shapeW').value)||18)}else if(l.type==='rectangle'){l.x=parseFloat(el('shapeX').value)||65;l.y=parseFloat(el('shapeY').value)||30;l.w=Math.max(1,parseFloat(el('shapeW').value)||80);l.h=Math.max(1,parseFloat(el('shapeH').value)||30)}else if(l.type==='svg'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.mode=el('svgMode').value==='fill'?'fill':'outline'}l.stoneSize=parseFloat(el('stoneSize').value)||2;l.gap=parseFloat(el('gap').value)||.3;l.color=el('stoneColor').value;project.cupColor=el('cupColor').value;project.wrap=el('wrap').value;project.name=el('projectName').value||DEFAULT_PROJECT_NAME;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
 async function updateAll(skipWrite=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated;try{generated=await engine.generate(project)}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Text generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;renderLayerUI();drawLayout();drawCup();updateStats();updateHistoryUI();updateViewButtons();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}// S-003: a project must always keep at least one layer (deleteLayer()'s guard below), so once
 // only one layer remains, every delete affordance -- the per-row trash icon and the sidebar
 // "Delete selected layer" button -- is disabled here (not just left clickable-but-a-no-op) and
@@ -235,7 +255,7 @@ layoutCanvas.addEventListener('pointerdown',e=>{const mm=pointerToLayout(e);cons
 // RS-1002: these controls edit `project` fields, so one undo step is committed per edit session
 // (opened on the first 'input' event, closed on 'change'). `rotation`/`zoom` are view-only (not
 // part of `project`) and keep their original plain 'input' listener, untouched.
-const HISTORY_TRACKED_CONTROL_IDS=['text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment'];
+const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
 el('selectedLayer').addEventListener('change',()=>{selectedLayerId=el('selectedLayer').value;syncSelectedControlsFromLayer();updateAll(true)});
@@ -260,4 +280,30 @@ el('exportLayout').onclick=()=>{if(!layout){el('status').textContent='Export fai
 el('exportSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-layout.svg','image/svg+xml',stoneLayoutToSvg(layout,{widthMm:project.canvas.width,heightMm:project.canvas.height}))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportPNG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-layout.png',layoutCanvas)}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportCup').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-cup-preview.png',cupCanvas)}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+// RS-1005: Production Sheet export. Page size/margin/mirror/registration-marks are view/export-
+// only options (like rotation/zoom) -- read live from their controls at click time, not part of
+// `project`, not undo/redo-tracked. gapMm is collected from every currently visible layer (the one
+// piece of header metadata Stone itself never carries -- see
+// docs/specifications/RS-1005-ProductionSheetGenerator.md, "Current Repository State").
+function currentProductionSheetOptions(){return{projectName:project.name,objectType:currentObjectTemplate().displayName,productionWidthMm:project.canvas.width,productionHeightMm:project.canvas.height,gapMm:[...new Set(project.layers.filter(l=>l.visible).map(l=>l.gap))],pageSize:el('prodSheetPageSize').value,marginMm:parseFloat(el('prodSheetMargin').value)||0,mirror:el('prodSheetMirror').value==='on',registrationMarks:el('prodSheetRegMarks').value==='on'}}
+el('exportProdSheetSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-production-sheet.svg','image/svg+xml',productionSheetToSvg(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+el('exportProdSheetPDF').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-production-sheet.pdf','application/pdf',productionSheetToPdf(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+// PNG has no dedicated src/export/** module (matching #exportPNG/#exportCup's existing "capture,
+// not a standalone exporter" precedent): it rasterizes the already-generated production-sheet SVG
+// via an offscreen Image+canvas at a fixed PRODUCTION_SHEET_PNG_DPI, so the raster's pixel
+// dimensions are always an undistorted multiple of the page's mm size -- never fit-to-viewport
+// scaled the way the on-screen 2D canvas is.
+el('exportProdSheetPNG').onclick=async()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{
+  const options=currentProductionSheetOptions();
+  const svgMarkup=productionSheetToSvg(layout,options);
+  const{pageWidthMm,pageHeightMm}=computeProductionSheetLayout(layout,options);
+  const pxPerMm=PRODUCTION_SHEET_PNG_DPI/25.4;
+  const c=document.createElement('canvas');c.width=Math.round(pageWidthMm*pxPerMm);c.height=Math.round(pageHeightMm*pxPerMm);
+  const svgUrl=URL.createObjectURL(new Blob([svgMarkup],{type:'image/svg+xml'}));
+  const img=new Image();
+  await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error('Failed to rasterize the production sheet SVG'));img.src=svgUrl});
+  const ctx=c.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(img,0,0,c.width,c.height);
+  URL.revokeObjectURL(svgUrl);
+  exportCanvas('rhinestone-production-sheet.png',c)
+}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 let cupDrag=false,lastX=0;cupCanvas.addEventListener('pointerdown',e=>{cupDrag=true;lastX=e.clientX;cupCanvas.setPointerCapture(e.pointerId)});cupCanvas.addEventListener('pointermove',e=>{if(!cupDrag)return;rotation+=(e.clientX-lastX)*CUP_ROTATION_SENSITIVITY;lastX=e.clientX;rotation=Math.max(-180,Math.min(180,rotation));el('rotation').value=rotation;updateAll()});window.addEventListener('pointerup',()=>cupDrag=false);window.addEventListener('resize',()=>updateAll(true));syncSelectedControlsFromLayer();updateAll(true);
