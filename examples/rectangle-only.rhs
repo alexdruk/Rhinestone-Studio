@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "product": "mug",
+  "units": "mm",
+  "canvas": { "width": 210, "height": 90 },
+  "cupColor": "#8f8f8f",
+  "wrap": "half",
+  "layers": [
+    {
+      "id": "rect-main",
+      "type": "rectangle",
+      "name": "Rectangle",
+      "visible": true,
+      "xMm": 40,
+      "yMm": 20,
+      "widthMm": 130,
+      "heightMm": 50,
+      "stoneSizeMm": 2.0,
+      "gapMm": 0.3,
+      "color": "emerald"
+    }
+  ]
+}

@@ -6,7 +6,7 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-RS-0003.5D2
+RS-0003.5E1
 
 ---
 
@@ -18,7 +18,7 @@ IMPLEMENTED
 
 # Branch
 
-feature/rs-0003.5d2-ux-visual-polish
+feature/rs-0003.5e1-real-production-validation
 
 ---
 
@@ -36,105 +36,67 @@ git log -1 --oneline
 # Files Changed
 
 ```
-src/renderer/CupRenderer.js     (modified — handle rewritten as a filled loop anchored to the
-                                 tapered cup wall at both attachment points, with continuous
-                                 rotation-driven opacity/bulge (no discrete side-flip branch
-                                 anywhere in the file, so no jump at any rotation angle); body fill
-                                 gradient replaced with a 10-stop cosine falloff + soft translucent
-                                 sheen instead of the previous 5-stop abrupt gradient)
-src/renderer/CanvasRenderer2D.js (modified — drawStone() gained a faint contrast ring for the
-                                 'cup' style only, improving stone readability against any
-                                 configurable cup color; 'layout' style unchanged)
-app.js                          (modified — see below)
-tools/test-production-export-validation.mjs   (modified — "no forbidden file changed" guard:
-                                 removed src/renderer/CanvasRenderer2D.js/CupRenderer.js from the
-                                 forbidden-prefix list, legitimately changed this milestone, same
-                                 precedent RS-0003.5D1 used for index.html)
-tools/test-ux-visual-polish.mjs (added — 11 tests, see below)
-package.json                    (modified — added tools/test-ux-visual-polish.mjs to the "test"
-                                 script)
-docs/ARCHITECTURE.md            (modified — "Renderer" implementation-status note describing the
-                                 handle/body/selection changes)
-docs/specifications/RS-0003.5D2-UXVisualPolish.md   (added)
-TASK.md                         (rewritten for RS-0003.5D2)
-TASK_RESULT.md                  (this file)
+examples/short-name-block.rhs          (new — short name, block font, outline mode, light cup)
+examples/long-name-autofit.rhs         (new — long name, block font, auto-fit, dark cup, wide wrap)
+examples/script-name-great-vibes.rhs   (new — Great Vibes script font, light cup)
+examples/monogram-outline.rhs          (new — 3-letter monogram, outline sampling, dark cup)
+examples/monogram-fill.rhs             (new — 2-letter monogram, fill sampling, light cup)
+examples/front-wrap-light-cup.rhs      (new — dedicated front-wrap + white cup case)
+examples/wide-wrap-dark-cup.rhs        (new — dedicated wide-wrap + black cup case)
+examples/circle-only.rhs               (new — single circle layer, full wrap)
+examples/rectangle-only.rhs            (new — single rectangle layer, half wrap)
+examples/mixed-text-circle.rhs         (new — text + circle layers)
+examples/mixed-text-rectangle.rhs      (new — text + rectangle layers)
+examples/mixed-all-layers.rhs          (new — text + circle + a hidden (visible:false) rectangle;
+                                         the suite's dedicated layerCount vs visibleLayerCount case)
+examples/small-stones-tight-gap.rhs    (new — 0.8mm stones, 0.1mm gap)
+examples/large-stones-wide-gap.rhs     (new — 3.0mm stones, 1.5mm gap)
+examples/long-script-name.rhs          (new — long 3-word Great Vibes name, auto-fit, wide wrap)
+examples/vitalina.rhs                  (unchanged — preserved, checksum-verified byte-identical)
+examples/vitalina-serbin.rhs           (unchanged — preserved, checksum-verified byte-identical)
+examples/manifest.json                 (new — machine-readable manifest, 17 entries)
+examples/baselines.json                (new — committed baseline geometry, 17 entries)
+tools/lib/rhsProject.mjs               (new — .rhs loader/validator/generator/app-shape translator)
+tools/generate-example-baselines.mjs   (new — manual, human-run baseline generator; not run by
+                                         `npm test`)
+tools/test-examples-regression.mjs     (new — 17-assertion regression suite, wired into `npm test`)
+package.json                           (modified — test script now runs the new suite)
+tools/test-app-module-migration.mjs           (modified — removed `examples/` from forbidden list)
+tools/test-live-text-integration.mjs          (modified — removed `examples/` from forbidden list)
+tools/test-shape-geometry-integration.mjs     (modified — removed `examples/` from forbidden list)
+tools/test-render-export-pipeline.mjs         (modified — removed `examples/` from forbidden list)
+tools/test-browser-dependency-loading.mjs     (modified — removed `examples/` from forbidden list)
+tools/test-production-export-validation.mjs   (modified — removed `examples/` from forbidden list)
+tools/test-ux-visual-polish.mjs               (modified — removed `examples/` from forbidden list)
+docs/specifications/RS-0003.5E1-RealProductionValidation.md   (new — milestone specification)
+docs/ARCHITECTURE.md                   (modified — Testing Philosophy implementation-status
+                                         paragraph updated to mention the new suite and fixed a
+                                         pre-existing stale suite count, "twelve" -> "sixteen")
+TASK.md                                (replaced — RS-0003.5E1 task)
+TASK_RESULT.md                         (this file)
 ```
 
-No file under `src/geometry/**`, `src/text/**`, `src/fonts/**`, `src/core/**`, `src/browser/**`,
-`src/export/**`, `assets/**`, `examples/**`, `style.css`, `README.md`, `LICENSE`, or
-`CONTRIBUTING.md` was changed — verified by `git status --porcelain` and by the "no forbidden file
-changed" assertions across all affected test files, including the new
-`tools/test-ux-visual-polish.mjs`.
+No file under `app.js`, `index.html`, `style.css`, `src/**`, or `assets/**` was changed.
 
-## What changed in `app.js`
+---
 
-* Added named constants `CUP_ROTATION_SENSITIVITY = 0.35` (degrees of rotation per pixel of
-  horizontal drag) and `ZOOM_MIN = 0.7` / `ZOOM_MAX = 1.4` (matching `#zoom`'s `min="70"`/
-  `max="140"`).
-* The cup-drag `pointermove` handler now computes
-  `rotation += (e.clientX - lastX) * CUP_ROTATION_SENSITIVITY` instead of the previous unscaled
-  1:1 `rotation += e.clientX - lastX`. The handler stays delta-based (no reset-to-absolute on
-  drag start/end) and keeps the existing `-180..180` clamp.
-* `writeSelectedControlsToLayer()` now clamps zoom:
-  `zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, (parseFloat(el('zoom').value) || 100) / 100))`.
-* Added `setNumericSelectValue(select, num)`, which sets a `<select>`'s value to the option whose
-  parsed numeric value is closest to `num`. `syncSelectedControlsFromLayer()` now calls
-  `setNumericSelectValue(el('stoneSize'), l.stoneSize)` instead of the previous
-  `el('stoneSize').value = String(l.stoneSize)`, which showed a blank dropdown because
-  `String(2)` (`"2"`) matched no `<option>` (`index.html`'s options are `"0.8"`, `"1.0"`, ...,
-  `"2.0"`, ...). The underlying millimeter value is unchanged; only the displayed selection is
-  corrected.
-* `drawSelection()` now strokes a 4px white contrast halo behind the existing dashed blue
-  selection outline, and resize handles are drawn slightly larger (`SELECTION_HANDLE_SIZE_PX = 11`,
-  was a bare `10`) with a soft drop shadow. Hit-testing (`hitTest()`), drag, and resize math for
-  circle/rectangle layers are byte-for-byte unchanged.
-* No other function, event listener, generation logic, export handler, or geometry-adjacent code
-  was touched.
+# Resolved Discrepancy (read before reviewing the diff)
 
-## Cup handle redesign (`src/renderer/CupRenderer.js`)
-
-The previous handle was a stroked half-ellipse arc whose two endpoints shared a single fixed
-x-coordinate, independent of the cup wall's actual taper — producing a visible gap at the bottom
-attachment point ("detached schematic loop"), and its visible side was chosen by a discrete
-`Math.cos(rot) >= 0 ? 1 : -1` sign flip that changed exactly at `rotationDeg = ±90°` (the Left/Right
-view-button angles) while still fully opaque — a visible jump.
-
-The rewritten handle:
-
-* Computes both attachment points from `wallHalfWidthAt(y)`, the same linear interpolation the
-  body silhouette's straight sides already use, so both ends always land exactly on the tapered
-  wall.
-* Is drawn as a filled loop (outer + inset-inner bezier boundary, closed path) with a real visible
-  opening, a gradient fill for roundness, a rim stroke, and small soft contact-shadow patches at
-  both wall attachment points that visually fuse the seam into the body.
-* Is anchored to a **fixed** screen-space flank rather than swinging between sides. This matches
-  the rest of the renderer: the cup body silhouette itself never changes shape with `rotationDeg`
-  (only stone placement does, via the wrap-mode `theta` calculation), so pinning the handle to a
-  fixed position on that silhouette keeps it visually consistent with everything else in the
-  scene — and, since there is no side-flip branch anywhere in the function, there is structurally
-  no rotation angle at which a jump can occur.
-* Fades in/out via `smoothstep(HANDLE_FADE_LOW, HANDLE_FADE_HIGH, Math.cos(rotationDeg))` — fully
-  visible for front/left/right and most intermediate angles, smoothly fading to hidden only as
-  rotation approaches the true back view (`180°`/`-180°`), with a small matching bulge reduction
-  for a subtle foreshortening feel as it fades.
-
-An earlier draft of this fix used a full sin/cos "azimuth" model to make the handle sweep between
-left and right flanks continuously. Browser verification caught a real defect in that draft: because
-the wall-attachment x-coordinate was scaled by the same continuous factor used for the bulge, at
-intermediate factor values the attachment point landed *inside* the cup body outline instead of on
-the wall edge, so the handle appeared to float inside the body rather than being attached to it —
-worse than the original bug in one respect. That model was discarded in favor of the fixed-flank
-design above before this was included in the final implementation; see "Known Limitations" for what
-this simplification does and does not cover.
-
-## Cup body shading (`src/renderer/CupRenderer.js`)
-
-The body fill gradient was a 5-stop `createLinearGradient` with abrupt stop percentages
-(`0/.28/.52/.75/1`), which read as banded/blocky. It is replaced with a 10-stop gradient sampling a
-cosine (Lambertian-style) falloff across the body's width — bright center, darker toward both
-silhouette edges — plus one additional translucent, alpha-faded vertical "sheen" repaint of the
-same path for subtle depth. `shade()` and the `cupColor` option are unchanged; cup colors remain
-fully configurable.
+The two preserved `.rhs` fixtures use a flat, mm-suffixed schema
+(`heightMm`/`stoneSizeMm`/`gapMm`, `mode: "centerline"|"fill"`, `font` as a family name) that is
+**not** the same schema `app.js`'s own `validateProject()` accepts (confirmed by running the real
+`validateProject()` against `vitalina.rhs` before writing any code — it throws:
+`Layer "text-vitalina" is missing a positive numeric stoneSize`). Three project schemas already
+coexist in this repository (`app.js`'s ad hoc schema, `src/core/Project.js`/`Layer.js`, and this
+`.rhs` schema); this is pre-existing, not introduced here. Since the milestone brief requires both
+preserving the two `.rhs` files unmodified and using "the existing `.rhs` format," the mm-suffixed
+schema they already use is treated as the permanent `.rhs` interchange format. A pure,
+side-effect-free translator (`toAppProjectShape()`) bridges it to `app.js`'s schema only for
+verification (cross-checking the real `validateProject()`, and driving browser-import
+verification) — `app.js`/`index.html` are unmodified. Full reasoning is in
+`docs/specifications/RS-0003.5E1-RealProductionValidation.md`'s "Resolved discrepancy" section.
+This was judged a documentable discrepancy, not a blocking architectural contradiction, per
+`docs/AI_ENGINEER.md`.
 
 ---
 
@@ -144,14 +106,15 @@ fully configurable.
 npm test
 git diff --check
 git status
-npm run dev            # python3 -m http.server 5173
+node tools/generate-example-baselines.mjs      # one deliberate run to produce the committed baseline
+npm run dev                                     # python3 -m http.server 5173
 # headless Google Chrome (OS-installed binary at
 # "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"), isolated ephemeral
 # --user-data-dir, no browser-automation dependency added, driven over raw CDP via Node 22's
-# built-in fetch + WebSocket (matching the RS-0003.5B2/5B3/5C1/5C2/5D1 precedent) — a from-scratch
-# driver script in the session scratchpad that navigates, clicks view/export buttons, dispatches
-# input/change events on every relevant control, simulates pointer drags, reads on-screen
-# stats/status text, listens for Runtime.exceptionThrown/consoleAPICalled, and captures screenshots
+# built-in fetch + WebSocket (matching the RS-0003.5B2-5D2 precedent) — a from-scratch driver
+# script in the session scratchpad that imports each example's app-shape translation through the
+# live #importProjectFile control, reads #layoutStats/#status, clicks the Export Layout JSON/SVG
+# buttons, listens for Runtime.exceptionThrown/consoleAPICalled, and captures screenshots
 ```
 
 ---
@@ -160,8 +123,8 @@ npm run dev            # python3 -m http.server 5173
 
 ## Automated Tests
 
-PASS (all 14 suites, 154 assertions total, including the new suite and the one updated
-forbidden-file guard):
+PASS (all 16 suites, 171 assertions total, including the new suite and the seven updated
+forbidden-file guards):
 
 ```
 node tools/test-core-model.mjs && node tools/test-font-manager.mjs && node tools/test-vector-path.mjs
@@ -171,39 +134,43 @@ node tools/test-core-model.mjs && node tools/test-font-manager.mjs && node tools
   && node tools/test-browser-dependency-loading.mjs && node tools/test-live-text-integration.mjs
   && node tools/test-shape-geometry-integration.mjs && node tools/test-render-export-pipeline.mjs
   && node tools/test-production-export-validation.mjs && node tools/test-ux-visual-polish.mjs
+  && node tools/test-examples-regression.mjs
 ```
 
-New `tools/test-ux-visual-polish.mjs` (11 assertions):
+New `tools/test-examples-regression.mjs` (17 assertions):
 
-1. `CUP_ROTATION_SENSITIVITY` is a named constant strictly between 0 and 1, used in the cup drag
-   handler; the previous unscaled 1:1 mapping is gone.
-2. Drag rotation delta behavior: a 120px raw pixel delta produces well under 60° of rotation
-   (computed from the extracted constant); the `-180..180` clamp is still present.
-3. `ZOOM_MIN`/`ZOOM_MAX` equal `0.7`/`1.4`, matching `#zoom`'s `min="70"`/`max="140"` in
-   `index.html`; `writeSelectedControlsToLayer()` clamps `zoom` with
-   `Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,...))`.
-4. `setNumericSelectValue()` is defined and wired for `#stoneSize`; the previous brittle
-   `String(l.stoneSize)` assignment is gone. The function is extracted from `app.js`'s actual
-   source via regex and executed directly (`new Function`) against a mock `<select>` built from
-   `index.html`'s real `#stoneSize` option values, proving `2` → `"2.0"`, `1.5` → `"1.5"`,
-   `0.8` → `"0.8"` — no blank selection.
-5. `drawSelection()` includes the contrast-halo stroke pass and the named, enlarged handle-size
-   constant.
-6. `CupRenderer.js`/`CanvasRenderer2D.js` still reference no `Project`/`Layer`/layer-type literal/
-   `GeometryEngine`/geometry-generation call.
-7. `renderCup()` never throws across a full `-180°..180°` rotation sweep (5° steps... 15° steps for
-   this test), at both zoom extremes, for every wrap mode.
-8. The handle's wall-attachment x-coordinate (tracked via the fake canvas's `bezierCurveTo` calls,
-   unique to the handle) never jumps by more than a bounded threshold between consecutive 5°
-   rotation samples — proving no discrete-flip discontinuity.
-9. Geometry regression: calling the permanent `GeometryEngine.generateTextLayout()` with the exact
-   two-pass (base + auto-fit-rescaled) parameters `app.js`'s default project's text layer uses
-   reproduces the same stone count (391) and bounding box
-   (`199.385118mm × 16.978695mm`) recorded before this milestone's renderer-only changes.
-10. Export regression: `stoneLayoutToSvg()`/`StoneLayout.toJSON()` output for a fixed,
-    representative `StoneLayout` matches recorded expected values exactly (`src/export/**` and
-    `src/geometry/**` were not touched this milestone).
-11. No forbidden file changed (this milestone's own forbidden list).
+1. Bidirectional coverage between `examples/manifest.json` and the `.rhs` files on disk (>= 17
+   files).
+2. The two preserved legacy fixtures exist and are byte-for-byte unmodified (SHA-256 + length
+   checked against the values recorded before this milestone made any change).
+3. `examples/baselines.json` has exactly one entry per example, no orphans.
+4. Every example parses as valid JSON and passes `validateRhsProject()` structural validation.
+5. Every example, translated to `app.js`'s ad hoc schema, is accepted by the **real**
+   `validateProject()` function, extracted verbatim from `app.js`'s literal source and executed
+   (not reimplemented) — proves the translation genuinely satisfies the live import path's own
+   validation, not a re-derived approximation of it.
+6. Every example round-trips through `JSON.parse(JSON.stringify(...))` with no data loss, in both
+   its native `.rhs` shape and its translated app-shape.
+7. Every visible layer of every example generates a non-throwing merged `StoneLayout` via the
+   permanent `GeometryEngine`.
+8. Every example produces a deterministic `StoneLayout` (two independent generation runs match
+   exactly).
+9. Actual stone count and bounding box match `examples/baselines.json` (exact count equality,
+   0.001mm bounds tolerance).
+10. Every stone has finite `xMm`/`yMm` and a positive finite `sizeMm`; no `NaN`/`Infinity` anywhere.
+11. Observed stone colors match the committed baseline color set for every example.
+12. `StoneLayout.toJSON()`/`fromJSON()` round-trips every example within floating-point tolerance
+    (see "Defects Discovered" below for why exact `deepEqual` was replaced with a `1e-5` tolerance
+    on derived width/height fields).
+13. `stoneLayoutToSvg()` output is well-formed: `<circle>` count equals `StoneLayout.count`, and
+    every circle's `cx`/`cy`/`r` matches its source stone exactly.
+14. No stone lies wildly outside the project canvas (50mm generous manufacturing tolerance).
+15. `validateRhsProject()` rejects obviously invalid projects (negative stone size, empty layers,
+    unsupported layer type, invalid wrap, non-finite canvas dimensions).
+16. Examples were only ever read during the suite — SHA-256 checksums taken before and after the
+    run prove no example file was silently modified.
+17. No forbidden file changed (this milestone's own forbidden list: `app.js`, `index.html`,
+    `style.css`, `src/**`, `assets/**`).
 
 `git diff --check` reported no whitespace errors. No `build` script exists in `package.json`, so
 `npm run build` was not run (unchanged from prior milestones).
@@ -212,136 +179,156 @@ New `tools/test-ux-visual-polish.mjs` (11 assertions):
 
 Ran `npm run dev` and drove `http://localhost:5173/` with a from-scratch, dependency-free CDP
 driver (headless Chrome, Node 22's built-in `fetch`/`WebSocket`). `Runtime.exceptionThrown` and
-`Runtime.consoleAPICalled` listeners were attached before navigation.
+`Runtime.consoleAPICalled` listeners were attached before navigation. 9 examples were imported
+(exceeding the required minimum of 8), covering every category the milestone brief names: short
+block text, long auto-fit text, Great Vibes script text, outline mode, fill mode, circle-only,
+mixed text+shapes, dark cup with wider wrap, plus a long auto-fit script name for extra coverage.
 
-* [x] Page loads, default project renders: **375 stones, 199.4×17.0 mm** — byte-identical to the
-      RS-0003.5D1 baseline (this milestone changes no geometry).
-* [x] **Front / Left / Right / Back cup views** (view buttons): handle visibly attached at both
-      wall points on front/left/right, cleanly hidden on back — no detached loop.
-* [x] **Intermediate rotation angles** (`-135°, -90°, -45°, 45°, 90°, 135°, 180°` via the slider):
-      handle attachment stays visually consistent at every angle, including exactly `±90°` where
-      the old code jumped.
-* [x] **Cup drag rotation**: a simulated 120px horizontal drag on the cup canvas produced exactly
-      **42° of rotation** (`120 × 0.35`), confirming the reduced, controllable sensitivity (the
-      previous code would have produced 120°).
-* [x] **Zoom minimum (70%), default (100%), maximum (140%)**: cup preview scales smoothly at all
-      three; no distortion or invalid state observed.
-* [x] **Light (White) and dark (Black) cup colors**: smooth cylindrical body shading on both, no
-      banding; gold stones remain clearly readable on both.
-* [x] **Courier Prime and Great Vibes** fonts: both render legibly in the 2D layout and cup front
-      view.
-* [x] **Outline and fill text modes**: both render without error; stroke/outline stayed the
-      default readable mode used for the primary verification pass.
-* [x] **Front and wider (`wide`, `full`) wrap modes**: all render without error.
-* [x] **Circle selection, drag, and resize**: added a circle layer, selected it (visibly larger
-      selection outline + white halo + enlarged handles), dragged it via simulated pointer events
-      — position updated, geometry/mm values unaffected.
-* [x] **Rectangle selection**: added a rectangle layer, selection visuals confirmed.
-* [x] **`#stoneSize` dropdown**: read `"2.0"` (not blank) for the default text layer on load, and
-      `"2.0"` again after selecting the newly added circle layer — the blank-selection bug is
-      fixed.
-* [x] **2D PNG export and Cup PNG export**: both completed without throwing (pre-existing
-      `exportCanvas()` does not set a `#status` message on success — unchanged, unrelated
-      pre-existing behavior, not a regression from this milestone).
-* [x] **Console errors**: zero (`Runtime.consoleAPICalled` with `type: 'error'` recorded none).
+For each example, the app-shape translation (see "Resolved Discrepancy") was written to a temp
+file and loaded through the real `#importProjectFile` control via `DOM.setFileInputFiles` + a
+dispatched `change` event — the same code path a human user's file picker triggers.
 
-Screenshots captured (in the session scratchpad, reviewed visually):
+| Example | Import | Live stone count | Baseline stone count | Match | Export (Layout JSON + SVG) | Console errors |
+|---|---|---|---|---|---|---|
+| short-name-block.rhs | OK | 124 | 124 | yes | OK | 0 |
+| long-name-autofit.rhs | OK | 393 | 393 | yes | OK | 0 |
+| script-name-great-vibes.rhs | OK | 234 | 234 | yes | OK | 0 |
+| monogram-outline.rhs | OK | 134 | 134 | yes | OK | 0 |
+| monogram-fill.rhs | OK | 216 | 216 | yes | OK | 0 |
+| circle-only.rhs | OK | 82 | 82 | yes | OK | 0 |
+| mixed-all-layers.rhs | OK | 327 | 327 | yes | OK | 0 |
+| wide-wrap-dark-cup.rhs | OK | 229 | 229 | yes | OK | 0 |
+| long-script-name.rhs | OK | 595 | 595 | yes | OK | 0 |
 
-* `01-initial-front-view.png` — front view, handle attached at both ends, smooth body shading.
-* `03-rotation--90.png` / `03-rotation-90.png` — left/right intermediate views, handle attached
-  and consistent, no floating/detached appearance.
-* `09-circle-selected.png` — selected circle with the new white-halo outline and enlarged
-  resize handles clearly visible.
-* `12-text-on-dark-cup.png` — Great Vibes text on a black cup, clearly readable.
+**Every live browser-driven stone count matched the Node-computed committed baseline exactly.**
+This is a meaningful cross-check, not a tautology: the browser path runs entirely inside `app.js`'s
+own unmodified `GeometryEngine.generate()`/`generateTextStonesLive()`/`generateShapeStonesLive()`/
+`dedupe()` (real DOM, real event handlers, real `updateAll()`), while the Node path runs
+`tools/lib/rhsProject.mjs`'s independent port of the same algorithm against the permanent engine
+directly. Their agreement across all 9 imported examples confirms the port is faithful and that
+the app-shape translation preserves every parameter that affects geometry.
 
-**One harness-only artifact, not an application regression:** simulating a pointer drag via
-`dispatchEvent(new PointerEvent(...))` (rather than a real OS-level pointer input) throws
-`NotFoundError: Failed to execute 'setPointerCapture'... No active pointer with the given id is
-found` from the pre-existing (unmodified this milestone) `layoutCanvas`/`cupCanvas` `pointerdown`
-handlers, because headless Chrome does not register a genuinely capturable pointer session for a
-synthetic event. This is the same class of caveat RS-0003.5D1 recorded for
-`DOM.setFileInputFiles`'s `change`-event dispatch. The functional result was correct despite the
-thrown error (the rotation delta and circle drag both applied correctly, confirmed by reading
-`#rotation`/`#layoutStats` afterward), because `setPointerCapture()` is called *after* the state
-mutation in both handlers. A human should still verify a real mouse-driven drag once before merge.
+Total console errors across all 9 imports + exports: **0**. Total uncaught exceptions: **0**.
+`document.getElementById('layoutStats')` and `#cupStats` updated correctly after every import;
+`#status` read `Imported <file>: N layer(s)` on success and `Downloaded rhinestone-layout.json` /
+`Downloaded rhinestone-layout.svg` after each export click — no `Import failed:` or
+`Export failed:` message was ever observed.
+
+Screenshots captured (in the session scratchpad, reviewed visually) for all 9 examples:
+`short-name-block.png`, `long-name-autofit.png`, `script-name-great-vibes.png`,
+`monogram-outline.png`, `monogram-fill.png`, `circle-only.png`, `mixed-all-layers.png`,
+`wide-wrap-dark-cup.png`, `long-script-name.png`.
+
+---
+
+# Readability Review (human-review, screenshots inspected visually)
+
+Automated tests cannot prove readability. This table covers only the 9 examples actually
+visually inspected above; no readability claim is made for the other 6 new examples or the 2
+preserved fixtures, which were verified only for correct generation/geometry, not visual
+readability.
+
+| Example | Readable in 2D | Readable on cup | Clipping | Obvious overlaps | Visual note |
+|---|---|---|---|---|---|
+| short-name-block.rhs | PASS | PASS | No | No | Clean gold block letters, high contrast. |
+| long-name-autofit.rhs | PASS | PASS | No | No | Auto-fit compresses text to 11.2mm tall (200.8mm wide); legible but visibly dense — expected for a 24-character name auto-fit to a 210mm mug wrap. |
+| script-name-great-vibes.rhs | PASS | PASS | No | No | Great Vibes cursive is crisp and fully connected at this size/stone density. |
+| monogram-outline.rhs | PASS | PASS | No | No | Bold 3-letter monogram, strong contrast (Crystal AB on black). |
+| monogram-fill.rhs | PASS | PASS | No | No | Dense fill sampling reads as solid letterforms, not a sparse dot pattern. |
+| circle-only.rhs | PASS | **PARTIAL** | No | No | `wrap:"full"` spreads the 30mm-radius circle's stones around the entire cup circumference; only a thin front-facing arc is visible from a single view angle. This is `wrap:"full"`'s intended behavior (matches the existing per-wrap-mode geometry, unchanged by this milestone), not a defect — but it is a genuinely low cup-readability case worth flagging for anyone authoring a full-wrap circular design. |
+| mixed-all-layers.rhs | PASS | PASS (circle subtle) | No | No | Hidden rectangle layer correctly excluded from generation and shown unchecked in the Layers list, confirming visible:false round-trips correctly end-to-end. The visible accent circle renders faintly against the red cup. |
+| wide-wrap-dark-cup.rhs | PASS | PASS | No | No | Silver-on-black is high contrast, fully legible. |
+| long-script-name.rhs | PASS | **MARGINAL** | No | No | Auto-fit compresses a 34-character 3-word script name to 21.2mm tall over 200.3mm; readable in the zoomed 2D layout, but individual letters visually blur together at the cup preview's actual on-screen scale. A real product characteristic of long script names under auto-fit, not a code defect — no fix was made (see "Defects Discovered"). |
 
 ---
 
 # Visible Changes
 
-* Cup handle now visibly wraps and touches the cup wall at both ends on front/left/right/
-  intermediate views, with a real opening, gradient shading, and a rim stroke — no longer a
-  detached, floating loop; fades smoothly (not abruptly) near the back view.
-* Cup body shading is smoother (10-stop cosine falloff + soft sheen) instead of banded.
-* Dragging the cup preview now requires roughly 3× the mouse movement for the same rotation
-  (`CUP_ROTATION_SENSITIVITY = 0.35`), making small adjustments controllable.
-* Zoom is defensively clamped to `[0.7, 1.4]` regardless of how the `#zoom` value is set.
-* The `#stoneSize` dropdown now always shows the actual selected layer's stone size instead of
-  appearing blank.
-* Selected-shape outline now has a white contrast halo and slightly larger, soft-shadowed resize
-  handles, visible against any background.
-* No change to 2D layout appearance, stone positions/sizes/colors, or any exported file's schema
-  or content for unchanged input — verified byte-identical stone count/bounds (375 stones,
-  199.4×17.0 mm) before and after this milestone's changes.
+None to the live application (`app.js`/`index.html`/`style.css`/`src/**` are unmodified). This
+milestone is additive test/fixture infrastructure: `examples/` now contains 17 `.rhs` fixtures, a
+manifest, and a committed baseline, plus a new `npm test` suite and a manual baseline-regeneration
+script.
+
+---
+
+# Defects Discovered
+
+1. **`StoneLayout.toJSON()`/`fromJSON()` round-trip is not bit-exact for `widthMm`/`heightMm`/
+   `boundingBox` on some real inputs** (found via `large-stones-wide-gap.rhs`:
+   `widthMm: 40.527652` vs `40.527651` — a 1-nanometer discrepancy). Root cause: `toJSON()` rounds
+   `widthMm`/`heightMm` (derived from un-rounded stone coordinates) to 6 decimals, but `fromJSON()`
+   rebuilds stones from those *already-rounded* coordinates, so re-deriving width/height from the
+   *reconstructed* layout can differ from the original by up to 1 unit in the 6th decimal. This is
+   an inherent property of rounding twice, not a bug introduced by this milestone, and it is
+   manufacturing-irrelevant (sub-nanometer at this scale). **Not fixed** — `src/geometry/**` is
+   forbidden for this milestone, the discrepancy is real but harmless, and a real fix (e.g.
+   deriving bounds strictly from already-rounded stones in both directions) is a `src/geometry`
+   design decision outside this milestone's scope. Test 12 was written with a `1e-5mm` tolerance
+   on the affected derived fields instead, documented inline with the root cause. Recorded here as
+   a candidate for a future `src/geometry` precision-hygiene milestone.
+2. **The `#cupColor`/`#wrap` `<select>` elements do not resync after a Project JSON import**
+   (found via browser screenshot review, not the automated suite). `app.js`'s
+   `syncSelectedControlsFromLayer()` only syncs layer-level fields (text/font/height/stoneSize/
+   gap/color) from the imported project; it never sets `el('cupColor').value`/`el('wrap').value`
+   from `project.cupColor`/`project.wrap`. The underlying render is correct — `drawCup()` reads
+   `project.cupColor`/`project.wrap` directly and every screenshot shows the *correct* cup color —
+   only the sidebar dropdown's displayed label can be stale immediately after import (e.g.
+   `short-name-block.rhs` sets `cupColor:"#f1d7a9"` and the cup renders cream/tan correctly, but
+   the `#cupColor` dropdown still reads "Navy" until the user touches it). **Not fixed** — `app.js`
+   is a forbidden file for this milestone, and the defect is cosmetic (a stale dropdown label), not
+   a geometry/manufacturing/export defect. Documented here as a genuine, small, pre-existing gap
+   for a future UI milestone to pick up (one-line fix:
+   `syncSelectedControlsFromLayer()` should also set `el('cupColor').value=project.cupColor` and
+   `el('wrap').value=project.wrap`).
+
+Neither defect affects `StoneLayout`, exported files, or manufacturing accuracy. Both are recorded
+per the milestone brief's "document the defect" instruction for issues outside this milestone's
+small-and-necessary-fix threshold.
 
 ---
 
 # Warnings
 
-* An earlier implementation draft modeled the handle's rotation with a continuous sin/cos
-  "azimuth" that swept it between left and right flanks. Browser verification (not the automated
-  suite, which does not visually inspect pixels) caught that this draft's wall-attachment
-  x-coordinate was scaled by the same factor as its bulge, so at intermediate rotation values the
-  attachment point landed inside the body outline instead of on the wall edge — a "floating inside
-  the cup" artifact, worse in one respect than the original bug. This was found and replaced with
-  the fixed-flank design actually shipped, before any commit. Recorded here as a reminder that this
-  class of visual defect is not caught by the automated (non-pixel) test suite — screenshot review
-  is required, consistent with `docs/AI_ENGINEER.md`'s "a passing automated suite does not replace
-  user-visible verification."
-* The fixed-flank handle design means the handle's on-screen bulge/attachment position does not
-  differ between the "Left" and "Right" view buttons (both show the same flank, since the cup body
-  silhouette itself is also rotation-invariant in this 2D schematic renderer — only stone placement
-  responds to `rotationDeg`). It fades smoothly and correctly hides near the true back view. This is
-  a deliberate simplification for a dependency-free 2D canvas renderer, not a partial fix; a
-  genuinely different handle appearance per view angle would require a real 3D
-  renderer, which is explicitly out of scope for this milestone.
-* `exportCanvas()` (2D PNG / Cup PNG export) does not set a `#status` success message — this is
-  pre-existing behavior (unchanged by this milestone, and unrelated to its scope) already recorded
-  informally in prior verification; noted here for completeness.
-* The synthetic-pointer-event `setPointerCapture` console exception described in Browser
-  Verification is a CDP-driver artifact, not an application regression — see that section for the
-  full explanation.
+* The `.rhs` schema and `app.js`'s ad hoc schema are genuinely different pre-existing formats (see
+  "Resolved Discrepancy"). Anyone hand-authoring a new `.rhs` example must use the mm-suffixed
+  field names (`heightMm`/`stoneSizeMm`/`gapMm`, `cxMm`/`cyMm`/`radiusMm`,
+  `xMm`/`yMm`/`widthMm`/`heightMm`), not `app.js`'s field names — `tools/lib/rhsProject.mjs`'s
+  `validateRhsProject()` will reject the wrong shape with a specific error either way.
+* `examples/baselines.json` is a committed, human-reviewed artifact. It was generated once this
+  milestone via `node tools/generate-example-baselines.mjs` and reviewed before committing. Anyone
+  intentionally changing example geometry in the future must re-run that script deliberately and
+  review the diff — `npm test` will never regenerate it silently.
+* Circle/rectangle shape layers are always sampled in `'outline'` mode in both the `.rhs` loader
+  and the live app (`generateShapeStonesLive()` hardcodes `mode:'outline'`) — a per-layer `mode`
+  field on a shape layer would be silently ignored by both paths. No example relies on shape fill
+  mode; this mirrors existing, unchanged `app.js` behavior.
 
 ---
 
 # Known Limitations
 
-* The cup handle's screen-space position does not rotate with the cup body's own silhouette (which
-  is itself rotation-invariant in this renderer) — only its opacity and a small bulge/foreshorten
-  factor respond to `rotationDeg`. A handle that visually swings to the opposite flank between
-  "Left" and "Right" views would require either re-introducing a continuous position sweep (with a
-  more careful attachment-point formula than the discarded draft) or a real 3D renderer; both are
-  beyond this milestone's scope (no WebGL/Three.js, no geometry/renderer architecture change).
 * `app.js`'s ad hoc project/layer object shape remains unmigrated to `src/core/Project.js`/
-  `Layer.js` — out of scope, unchanged from RS-0003.5B3/5C1/5C2/5D1.
-* The cross-layer `dedupe()` merge step still lives in `app.js`'s local orchestration class, not in
-  the permanent `src/geometry/GeometryEngine.js` — unchanged, unrelated to this milestone.
-* The legacy bitmap text engine and legacy `generateCircle`/`generateRect`/`engine.bbox`/
-  `layerBBox` remain present, unused, in `app.js` — unchanged, not in scope.
-* Text readability (Courier Prime, Great Vibes; outline/fill modes; front/wide/full wrap) was
-  verified visually in the browser pass above; no renderer-side sizing/presentation defect was
-  found requiring a change, so none was made, per the milestone's "improve only if a genuine defect
-  is demonstrated" constraint.
+  `Layer.js`, and now a *third* schema (`.rhs`) is formally documented as a permanent fixture
+  format — out of scope to reconcile this milestone (see "Next Recommended Task").
+  `docs/specifications/RS-0003.5E1-RealProductionValidation.md` records the full reasoning.
+* The cross-layer `dedupe()` merge step still lives only in `app.js`'s local orchestration class
+  (and, for this milestone's test purposes, is faithfully ported into
+  `tools/lib/rhsProject.mjs`) — not in the permanent `src/geometry/GeometryEngine.js`. Unchanged,
+  pre-existing architectural gap.
+* The two `StoneLayout`/UI defects above are documented, not fixed (out of scope / cosmetic).
+* Readability was visually verified only for the 9 examples actually imported into the browser;
+  the other 6 new examples and both preserved fixtures are verified only for correct, deterministic
+  geometry generation (automated suite), not visual readability.
+* No DXF export, manufacturing reports, product-plugin system, or 3D/WebGL renderer exist yet —
+  unchanged from all prior milestones.
 
 ---
 
 # Next Recommended Task
 
-Either: (a) migrate `app.js`'s ad hoc project/layer objects onto `src/core/Project.js`/`Layer.js`;
-(b) consolidate the cross-layer `dedupe()` merge step into the permanent
-`src/geometry/GeometryEngine.js` as a proper multi-layer aggregation API; (c) delete the now-fully-
-dead legacy bitmap text engine, legacy shape generators, and `engine.bbox()`/`layerBBox()` together
-once a human confirms the permanent-engine/renderer output is production-acceptable; or (d), if a
-genuinely per-view-angle handle position is wanted, design a real 3D (or carefully-verified
-pseudo-3D) cup preview as its own milestone with dedicated pixel-level visual regression tooling,
-rather than folding it into a general polish pass.
+Reconcile the now-three project schemas (`app.js`'s ad hoc live-editor schema, `src/core/Project.js`/
+`Layer.js`, and this milestone's formally-documented `.rhs` interchange schema) into one, so the
+live app, its import/export, and the permanent regression fixtures all speak the same project
+format. A smaller, faster follow-up: fix the two cosmetic/precision defects recorded above
+(`#cupColor`/`#wrap` dropdown resync on import; `StoneLayout` round-trip rounding-composition
+tolerance) in a dedicated small UI/precision-hygiene milestone.

@@ -1,0 +1,328 @@
+{
+  "version": 1,
+  "generatedNote": "Committed baseline. Regenerate deliberately via `node tools/generate-example-baselines.mjs`, review the diff, and commit — never regenerated automatically by npm test.",
+  "baselines": [
+    {
+      "file": "vitalina.rhs",
+      "layerCount": 1,
+      "visibleLayerCount": 1,
+      "stoneCount": 170,
+      "bounds": {
+        "minXmm": 61.311948,
+        "minYmm": 37.918558,
+        "maxXmm": 148.688052,
+        "maxYmm": 52.081442
+      },
+      "fontIds": [
+        "courier-prime-regular"
+      ],
+      "colors": [
+        "Crystal AB"
+      ],
+      "validationCategory": "text-only"
+    },
+    {
+      "file": "vitalina-serbin.rhs",
+      "layerCount": 1,
+      "visibleLayerCount": 1,
+      "stoneCount": 308,
+      "bounds": {
+        "minXmm": 23.712175,
+        "minYmm": 37.914671,
+        "maxXmm": 186.287825,
+        "maxYmm": 52.085329
+      },
+      "fontIds": [
+        "courier-prime-regular"
+      ],
+      "colors": [
+        "Crystal AB"
+      ],
+      "validationCategory": "text-only"
+    },
+    {
+      "file": "short-name-block.rhs",
+      "layerCount": 1,
+      "visibleLayerCount": 1,
+      "stoneCount": 124,
+      "bounds": {
+        "minXmm": 80.838918,
+        "minYmm": 38.113665,
+        "maxXmm": 129.161082,
+        "maxYmm": 51.886335
+      },
+      "fontIds": [
+        "courier-prime-regular"
+      ],
+      "colors": [
+        "gold"
+      ],
+      "validationCategory": "text-only"
+    },
+    {
+      "file": "long-name-autofit.rhs",
+      "layerCount": 1,
+      "visibleLayerCount": 1,
+      "stoneCount": 393,
+      "bounds": {
+        "minXmm": 4.594076,
+        "minYmm": 39.402798,
+        "maxXmm": 205.405924,
+        "maxYmm": 50.597202
+      },
+      "fontIds": [
+        "courier-prime-regular"
+      ],
+      "colors": [
+        "silver"
+      ],
+      "validationCategory": "text-only"
+    },
+    {
+      "file": "script-name-great-vibes.rhs",
+      "layerCount": 1,
+      "visibleLayerCount": 1,
+      "stoneCount": 234,
+      "bounds": {
+        "minXmm": 71.282441,
+        "minYmm": 32.921494,
+        "maxXmm": 138.717559,
+        "maxYmm": 57.078506
+      },
+      "fontIds": [
+        "great-vibes-regular"
+      ],
+      "colors": [
+        "rose"
+      ],
+      "validationCategory": "text-only"
+    },
+    {
+      "file": "monogram-outline.rhs",
+      "layerCount": 1,
+      "visibleLayerCount": 1,
+      "stoneCount": 134,
+      "bounds": {
+        "minXmm": 18.021249,
+        "minYmm": 38.43239,
+        "maxXmm": 81.978751,
+        "maxYmm": 61.56761
+      },
+      "fontIds": [
+        "courier-prime-regular"
+      ],
+      "colors": [
+        "crystal"
+      ],
+      "validationCategory": "text-only"
+    },
+    {
+      "file": "monogram-fill.rhs",
+      "layerCount": 1,
+      "visibleLayerCount": 1,
+      "stoneCount": 216,
+      "bounds": {
+        "minXmm": 27.7,
+        "minYmm": 38.2,
+        "maxXmm": 72.3,
+        "maxYmm": 61.8
+      },
+      "fontIds": [
+        "courier-prime-regular"
+      ],
+      "colors": [
+        "jet"
+      ],
+      "validationCategory": "text-only"
+    },
+    {
+      "file": "front-wrap-light-cup.rhs",
+      "layerCount": 1,
+      "visibleLayerCount": 1,
+      "stoneCount": 142,
+      "bounds": {
+        "minXmm": 72.754418,
+        "minYmm": 36.305176,
+        "maxXmm": 137.245582,
+        "maxYmm": 53.694824
+      },
+      "fontIds": [
+        "courier-prime-regular"
+      ],
+      "colors": [
+        "gold"
+      ],
+      "validationCategory": "text-only"
+    },
+    {
+      "file": "wide-wrap-dark-cup.rhs",
+      "layerCount": 1,
+      "visibleLayerCount": 1,
+      "stoneCount": 229,
+      "bounds": {
+        "minXmm": 51.12837,
+        "minYmm": 37.237719,
+        "maxXmm": 158.87163,
+        "maxYmm": 52.762281
+      },
+      "fontIds": [
+        "courier-prime-regular"
+      ],
+      "colors": [
+        "silver"
+      ],
+      "validationCategory": "text-only"
+    },
+    {
+      "file": "circle-only.rhs",
+      "layerCount": 1,
+      "visibleLayerCount": 1,
+      "stoneCount": 82,
+      "bounds": {
+        "minXmm": 74.003878,
+        "minYmm": 14.052179,
+        "maxXmm": 136,
+        "maxYmm": 75.943943
+      },
+      "fontIds": [],
+      "colors": [
+        "sapphire"
+      ],
+      "validationCategory": "shape-only"
+    },
+    {
+      "file": "rectangle-only.rhs",
+      "layerCount": 1,
+      "visibleLayerCount": 1,
+      "stoneCount": 157,
+      "bounds": {
+        "minXmm": 39,
+        "minYmm": 19,
+        "maxXmm": 171,
+        "maxYmm": 71
+      },
+      "fontIds": [],
+      "colors": [
+        "emerald"
+      ],
+      "validationCategory": "shape-only"
+    },
+    {
+      "file": "mixed-text-circle.rhs",
+      "layerCount": 2,
+      "visibleLayerCount": 2,
+      "stoneCount": 171,
+      "bounds": {
+        "minXmm": 69.023857,
+        "minYmm": 9.035785,
+        "maxXmm": 141,
+        "maxYmm": 80.988072
+      },
+      "fontIds": [
+        "courier-prime-regular"
+      ],
+      "colors": [
+        "crystal",
+        "gold"
+      ],
+      "validationCategory": "mixed"
+    },
+    {
+      "file": "mixed-text-rectangle.rhs",
+      "layerCount": 2,
+      "visibleLayerCount": 2,
+      "stoneCount": 352,
+      "bounds": {
+        "minXmm": 19,
+        "minYmm": 14,
+        "maxXmm": 191,
+        "maxYmm": 76
+      },
+      "fontIds": [
+        "courier-prime-regular"
+      ],
+      "colors": [
+        "emerald",
+        "sapphire"
+      ],
+      "validationCategory": "mixed"
+    },
+    {
+      "file": "mixed-all-layers.rhs",
+      "layerCount": 3,
+      "visibleLayerCount": 2,
+      "stoneCount": 327,
+      "bounds": {
+        "minXmm": 14.256982,
+        "minYmm": 29.283654,
+        "maxXmm": 162.404543,
+        "maxYmm": 60.709364
+      },
+      "fontIds": [
+        "courier-prime-regular"
+      ],
+      "colors": [
+        "gold",
+        "silver"
+      ],
+      "validationCategory": "mixed"
+    },
+    {
+      "file": "small-stones-tight-gap.rhs",
+      "layerCount": 1,
+      "visibleLayerCount": 1,
+      "stoneCount": 185,
+      "bounds": {
+        "minXmm": 89.352307,
+        "minYmm": 38.514069,
+        "maxXmm": 120.647693,
+        "maxYmm": 51.485931
+      },
+      "fontIds": [
+        "courier-prime-regular"
+      ],
+      "colors": [
+        "jet"
+      ],
+      "validationCategory": "text-only"
+    },
+    {
+      "file": "large-stones-wide-gap.rhs",
+      "layerCount": 1,
+      "visibleLayerCount": 1,
+      "stoneCount": 50,
+      "bounds": {
+        "minXmm": 84.736174,
+        "minYmm": 37.049386,
+        "maxXmm": 125.263826,
+        "maxYmm": 52.950614
+      },
+      "fontIds": [
+        "courier-prime-regular"
+      ],
+      "colors": [
+        "gold"
+      ],
+      "validationCategory": "text-only"
+    },
+    {
+      "file": "long-script-name.rhs",
+      "layerCount": 1,
+      "visibleLayerCount": 1,
+      "stoneCount": 595,
+      "bounds": {
+        "minXmm": 4.834872,
+        "minYmm": 34.401801,
+        "maxXmm": 205.165128,
+        "maxYmm": 55.598199
+      },
+      "fontIds": [
+        "great-vibes-regular"
+      ],
+      "colors": [
+        "rose"
+      ],
+      "validationCategory": "text-only"
+    }
+  ]
+}

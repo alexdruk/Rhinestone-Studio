@@ -141,7 +141,6 @@ await test('no forbidden file changed', () => {
     // src/renderer/ and src/export/ are legitimately changed by RS-0003.5C2 (rendering pipeline).
     'src/core/',
     'assets/fonts/',
-    'examples/',
     'node_modules/'
   ];
 

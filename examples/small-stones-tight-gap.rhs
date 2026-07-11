@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "product": "mug",
+  "units": "mm",
+  "canvas": { "width": 210, "height": 90 },
+  "cupColor": "#ffffff",
+  "wrap": "front",
+  "layers": [
+    {
+      "id": "text-kai",
+      "type": "text",
+      "name": "Kai",
+      "visible": true,
+      "text": "Kai",
+      "font": "Courier Prime",
+      "mode": "centerline",
+      "heightMm": 18,
+      "stoneSizeMm": 0.8,
+      "gapMm": 0.1,
+      "color": "jet"
+    }
+  ]
+}

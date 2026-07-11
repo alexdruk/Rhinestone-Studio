@@ -139,8 +139,7 @@ await test('no forbidden files changed', () => {
     // src/renderer/ and src/export/ are legitimately changed by RS-0003.5C2 (rendering pipeline).
     'src/text/',
     'src/core/',
-    'assets/',
-    'examples/'
+    'assets/'
   ];
 
   for (const changedPath of changedPaths) {

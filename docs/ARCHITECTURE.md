@@ -702,11 +702,16 @@ verify exporter
 
 Regression tests are more valuable than visual tests.
 
-**Implementation status:** `npm test` runs twelve suites under `tools/**` covering the core model,
+**Implementation status:** `npm test` runs sixteen suites under `tools/**` covering the core model,
 font manager, vector path primitives, font provider registry, OpenType provider, geometry engine
-(text and shape), stone color palette, the render/export pipeline, and structural guards on
-`app.js` (approved-import allowlists, forbidden-file lists per milestone). Several suites use a
-dependency-free fake `CanvasRenderingContext2D` to test renderer output without a browser.
+(text and shape), stone color palette, the render/export pipeline, structural guards on `app.js`
+(approved-import allowlists, forbidden-file lists per milestone), and — as of RS-0003.5E1 — a
+permanent real-production regression suite (`tools/test-examples-regression.mjs`) that loads every
+`examples/*.rhs` fixture (17 as of this milestone: 2 preserved, 15 representative additions),
+generates each one's `StoneLayout` via the permanent `GeometryEngine`, and checks stone
+count/bounds/colors against a committed baseline (`examples/baselines.json`, regenerated only by
+deliberately running `tools/generate-example-baselines.mjs`, never by `npm test`). Several suites
+use a dependency-free fake `CanvasRenderingContext2D` to test renderer output without a browser.
 Interactive browser verification (drag/resize gestures, layer visibility, exports) is performed
 manually per milestone via headless Chrome driven over raw CDP and recorded in `TASK_RESULT.md`,
 not by an automated browser test suite.

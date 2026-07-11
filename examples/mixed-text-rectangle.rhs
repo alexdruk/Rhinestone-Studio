@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "product": "mug",
+  "units": "mm",
+  "canvas": { "width": 210, "height": 90 },
+  "cupColor": "#e67aa0",
+  "wrap": "wide",
+  "layers": [
+    {
+      "id": "text-marcus",
+      "type": "text",
+      "name": "Marcus",
+      "visible": true,
+      "text": "Marcus",
+      "font": "Courier Prime",
+      "mode": "centerline",
+      "heightMm": 18,
+      "stoneSizeMm": 1.8,
+      "gapMm": 0.3,
+      "color": "sapphire"
+    },
+    {
+      "id": "rect-frame",
+      "type": "rectangle",
+      "name": "Frame",
+      "visible": true,
+      "xMm": 20,
+      "yMm": 15,
+      "widthMm": 170,
+      "heightMm": 60,
+      "stoneSizeMm": 2.0,
+      "gapMm": 0.3,
+      "color": "emerald"
+    }
+  ]
+}
