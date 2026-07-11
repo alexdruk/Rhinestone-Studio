@@ -233,12 +233,22 @@ export class GeometryEngine {
     const spacingMm = options.stoneSizeMm + options.gapMm;
     const points = [];
 
+    // Appended one-by-one (not `points.push(...bigArray)`): spreading a very large sample array
+    // as call arguments overflows the JS call stack, which is reachable here (unlike
+    // generateShapeLayout()/generateTextLayout()'s flatMap-based accumulation) because an SVG
+    // layer's placement box can scale a document to an arbitrarily large physical size.
     if (options.mode === 'fill') {
-      points.push(...sampleFillPoints(closedPolygons, BoundingBox.fromPoints(closedPolygons.flat()), spacingMm));
+      for (const point of sampleFillPoints(closedPolygons, BoundingBox.fromPoints(closedPolygons.flat()), spacingMm)) {
+        points.push(point);
+      }
     } else {
-      for (const polygon of closedPolygons) points.push(...sampleOutlinePoints(polygon, spacingMm, { closed: true }));
+      for (const polygon of closedPolygons) {
+        for (const point of sampleOutlinePoints(polygon, spacingMm, { closed: true })) points.push(point);
+      }
     }
-    for (const polygon of openPolygons) points.push(...sampleOutlinePoints(polygon, spacingMm, { closed: false }));
+    for (const polygon of openPolygons) {
+      for (const point of sampleOutlinePoints(polygon, spacingMm, { closed: false })) points.push(point);
+    }
 
     const stones = points.map((point, index) => new Stone({
       xMm: point.xMm,

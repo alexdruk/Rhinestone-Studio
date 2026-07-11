@@ -416,6 +416,31 @@ await test('29. generateSvgLayout works with no fontProviderRegistry supplied', 
   assert.ok(layout.count > 0, 'expected SVG generation to work without a fontProviderRegistry');
 });
 
+await test('30. an extreme placement size producing a very large fill stone count does not overflow the call stack', () => {
+  // Regression: generateSvgLayout()'s fill mode used to accumulate samples via
+  // `points.push(...sampleFillPoints(...))`, a single spread of the entire sample array. Once that
+  // array grows past the JS engine's call-argument limit (~100k-150k on this engine, empirically
+  // verified), it throws "RangeError: Maximum call stack size exceeded" instead of producing a
+  // layout. A user stretching an SVG layer to a large placed size (e.g. a large-format banner,
+  // well within plausible manufacturing scale) reaches that count through ordinary UI resizing,
+  // not a contrived input.
+  const engine = createEngine();
+  const layout = engine.generateSvgLayout({
+    ...BASE_SVG_PARAMS,
+    xMm: 0,
+    yMm: 0,
+    widthMm: 1000,
+    heightMm: 1000,
+    stoneSizeMm: 1,
+    gapMm: 0,
+    mode: 'fill'
+  });
+  assert.ok(layout.count > 150000, `expected a very large stone count, got ${layout.count}`);
+  for (const stone of layout.stones) {
+    assert.ok(Number.isFinite(stone.xMm) && Number.isFinite(stone.yMm), 'expected finite stone coordinates');
+  }
+});
+
 await test('this task did not modify forbidden UI, renderer, or exporter files', async () => {
   const { execSync } = await import('node:child_process');
   const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });

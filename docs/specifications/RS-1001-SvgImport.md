@@ -341,3 +341,35 @@ Candidates: curved text (P0 backlog item, complementary to this milestone's arc/
 handling), multi-object support / grouping (P0 backlog item), an optional "lock aspect ratio" toggle
 for SVG/rectangle layers, per-layer rotation support in the live editor, and migrating `app.js`'s ad
 hoc project/layer objects onto `src/core/Project.js`/`Layer.js`.
+
+---
+
+## Audit Addendum (2026-07-11)
+
+RS-1001 was implemented and merged into `develop` (`393af48`) before this addendum; a subsequent
+milestone request to "start RS-1001" prompted an audit of the live implementation against the
+supported-element list and export/edit requirements instead of a from-scratch reimplementation. The
+audit found the implementation otherwise matches this specification, with two gaps fixed under the
+same milestone id (see `TASK.md`/`TASK_RESULT.md` for the corresponding session):
+
+* **`<ellipse>` was never a supported shape element.** The original "Required Outcome" shape list
+  above (`path`, `circle`, `rect`, `line`, `polyline`, `polygon`) omitted it. `SvgDocumentParser.js`
+  now also accepts `<ellipse cx cy rx ry>`, constructed with the same four-cubic-Bezier technique
+  `createCircleVectorPath()` already uses, generalized to independent `rx`/`ry` (a circle is the
+  `rx === ry` case) — implemented directly in `src/svg/**`, not by changing
+  `src/text/VectorPath.js` (forbidden by this spec's own file list). A zero `rx`/`ry` ellipse is
+  valid-but-empty, matching the existing zero-radius-circle/zero-size-rect rule.
+* **`generateSvgLayout()` could crash with `RangeError: Maximum call stack size exceeded`** for a
+  placed size large enough that a single sampled-points array exceeded the JS engine's
+  call-argument spread limit (empirically ~100k-150k on the engine used for this audit). The bug was
+  `points.push(...bigArray)` in `src/geometry/GeometryEngine.js`'s `generateSvgLayout()` — unlike
+  `generateShapeLayout()`/`generateTextLayout()`, which accumulate via `polygons.flatMap(...)` and
+  never hit this limit. Reachable through ordinary UI resizing of an SVG layer to a large placed
+  size (e.g. a large-format banner), not a contrived input. Fixed by appending samples one at a time
+  instead of spreading the whole array into `push()`; behavior is unchanged for normal-sized layers.
+
+Both fixes are covered by new automated tests (`tools/test-svg-parser.mjs` test 2b and the extra
+zero-size test; `tools/test-geometry-engine.mjs` test 30, verified to fail on the pre-fix code and
+pass after). No other gap was found: transforms, `viewBox`, nested groups, editing (select/move/
+resize/duplicate/hide/delete), and all five export formats were re-verified in a live browser session
+(see `TASK_RESULT.md`).
