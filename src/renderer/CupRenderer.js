@@ -201,20 +201,18 @@ function drawHandle(ctx, geom, cupColor) {
   const { attachTopX, attachTopY, attachBotX, attachBotY, bulge, thickness, midY1, midY2, dpr } = geom;
   const cp1x = attachTopX + bulge * .95, cp2x = attachBotX + bulge * .95;
 
-  // Soft contact shadows fuse the handle ends into the wall instead of leaving a visible seam.
-  ctx.fillStyle = 'rgba(0,0,0,.15)';
-  for (const [ax, ay] of [[attachTopX, attachTopY], [attachBotX, attachBotY]]) {
-    ctx.beginPath();
-    ctx.ellipse(ax, ay, thickness * 0.65, thickness * 0.4, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
   const path = () => {
     ctx.beginPath();
     ctx.moveTo(attachTopX, attachTopY);
     ctx.bezierCurveTo(cp1x, midY1, cp2x, midY2, attachBotX, attachBotY);
   };
 
+  // Round line caps make the underlay stroke below (wider than the tube) naturally form a soft,
+  // circular dark base exactly at each wall-attachment point — this is what fuses the handle into
+  // the wall without a visible seam. A separate flat-opacity contact-shadow ellipse used to be
+  // drawn here too, but at a different aspect ratio than the round cap it sat next to, it read as
+  // a disconnected dark smudge rather than a blended shadow (most visible against a light cup
+  // color) — removed rather than tuned, since the round cap alone already does this job.
   ctx.lineCap = 'round';
 
   // A dark underlay, wider than the tube, reads as its outer edge/ambient-occlusion line. This is

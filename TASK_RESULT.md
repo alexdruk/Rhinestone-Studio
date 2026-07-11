@@ -190,6 +190,15 @@ No file under `src/geometry/**`, `src/core/**`, `src/text/**`, `src/fonts/**`, `
      Confirmed by screenshot at Left/Right/Back/45°: smooth continuous shading, no ribbing, no hard
      boundaries. The light/shadow direction is fixed in screen space (not tied to rotation),
      matching the body's own fixed-direction sheen.
+  3. **Dark blob-like shadows at the wall-attachment points**, most visible against light cup
+     colors (white/cream) — a third round of human review. A separate flat-opacity, hard-edged
+     contact-shadow ellipse was drawn at each attach point (present since before this milestone,
+     originally meant to blend the seam), but at a different aspect ratio than the round line cap
+     sitting right next to it, it read as a disconnected dark smudge rather than a blended shadow.
+     Removed rather than tuned: the dark underlay stroke (wider than the tube, round-capped)
+     already forms a soft, correctly-shaped dark base at each attachment point on its own, so the
+     separate ellipse was redundant as well as wrong-looking. Confirmed by screenshot with Cream and
+     White cup colors: clean join, no blob.
 
 ---
 
