@@ -367,6 +367,30 @@ from it. Nothing in `app.js` mutates a `Stone` or `StoneLayout` in place.
 
 ---
 
+# History (Undo/Redo)
+
+History records Project state, never generated geometry.
+
+Undo/redo restores a prior Project; it never restores or duplicates a `StoneLayout` — the layout is
+always regenerated from the restored Project, exactly like a live edit.
+
+**Implementation status:** implemented via `src/history/HistoryManager.js` (RS-1002), a generic,
+dependency-free undo/redo stack consumed only through `src/history/index.js`. It knows nothing about
+`Project`/`Layer`/`StoneLayout`/the DOM — `app.js` is the only caller, and it only ever passes
+`{project,selectedLayerId}` snapshots (JSON-serialized, never a live object graph). Every discrete
+editing action (add/duplicate/delete a layer, toggle visibility, import an SVG layer, start a
+shape drag) commits one undo step immediately before mutating; continuous field edits (typing,
+slider drags) coalesce every event of one edit session into a single undo step via
+`HistoryManager.beginSession()`/`endSession()`. Undo/redo depth is bounded by a configurable
+`maxSize` (`HISTORY_MAX_SIZE` in `app.js`, default 100) — otherwise unlimited. Importing a Project
+JSON file clears history entirely (a fresh project is not an undoable edit); none of the five export
+actions touch history in any way, so history survives exports. `Ctrl/Cmd+Z` (`+Shift` redoes) and
+`Ctrl/Cmd+Y` (redo) are wired globally, taking precedence over any native browser input-level undo.
+A "Saved"/"Unsaved changes" indicator compares the live project against a baseline updated on load,
+Project JSON import, and Project JSON export.
+
+---
+
 # Current Implementation
 
 This section describes how the principles above are actually realized in the live browser
@@ -386,7 +410,8 @@ code.
 | 2D + cup rendering | `src/renderer/**` | `src/geometry/**` (StoneLayout, Stone) |
 | Export | `src/export/**` | `src/geometry/**`, `src/renderer/StoneColors.js` |
 | Browser compatibility | `src/browser/**` | `src/text/**`, `src/fonts/**`, `src/geometry/**` (proves resolution), `opentype.js` |
-| Orchestration | `app.js` | every barrel module above except `src/core/**`, plus `src/svg/index.js` (pre-import validation only, not stone generation) |
+| Undo/redo history (RS-1002) | `src/history/**` | nothing else in `src/**` (pure JSON-snapshot bookkeeping; no `Project`/`Layer`/`StoneLayout`/DOM dependency) |
+| Orchestration | `app.js` | every barrel module above except `src/core/**`, plus `src/svg/index.js` (pre-import validation only, not stone generation) and `src/history/index.js` (undo/redo) |
 
 Every permanent module (`src/core`, `src/fonts`, `src/text`, `src/geometry`, `src/renderer`,
 `src/export`) is consumed only through its `index.js` barrel — `app.js` never imports an internal
@@ -741,11 +766,13 @@ verify exporter
 
 Regression tests are more valuable than visual tests.
 
-**Implementation status:** `npm test` runs eighteen suites under `tools/**` covering the core model,
+**Implementation status:** `npm test` runs twenty suites under `tools/**` covering the core model,
 font manager, vector path primitives, font provider registry, OpenType provider, SVG import parsing
 (`tools/test-svg-parser.mjs`, RS-1001), geometry engine (text, shape, and SVG), stone color
-palette, the render/export pipeline, structural guards on `app.js` (approved-import allowlists,
-forbidden-file lists per milestone, including `tools/test-svg-integration.mjs`, RS-1001), and — as
+palette, the generic undo/redo stack (`tools/test-history-manager.mjs`, RS-1002), the render/export
+pipeline, structural guards on `app.js` (approved-import allowlists, forbidden-file lists per
+milestone, including `tools/test-svg-integration.mjs` (RS-1001) and
+`tools/test-undo-redo-integration.mjs` (RS-1002)), and — as
 of RS-0003.5E1 — a permanent real-production regression suite (`tools/test-examples-regression.mjs`)
 that loads every
 `examples/*.rhs` fixture (17 as of this milestone: 2 preserved, 15 representative additions),
@@ -769,7 +796,9 @@ Planned milestones include
 - DXF export — not started
 - Mouse editing — **done** for circle/rectangle shapes (drag to move, handle-drag to resize);
   text layers are select-only, not draggable
-- Undo/Redo — not started
+- Undo/Redo — **done** (`src/history/HistoryManager.js`, live since RS-1002; unlimited,
+  configurably bounded undo/redo over every editing operation, keyboard shortcuts, toolbar buttons,
+  dirty-state tracking)
 - AI-assisted design — not started
 
 These features extend the architecture.

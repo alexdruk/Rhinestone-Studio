@@ -79,7 +79,8 @@ await test('7. app.js only imports modules allowed as of this milestone', () => 
     /from\s*['"]\.\/src\/renderer\/CupRenderer\.js['"]/,
     /from\s*['"]\.\/src\/renderer\/StoneColors\.js['"]/,
     /from\s*['"]\.\/src\/export\/SvgExporter\.js['"]/,
-    /from\s*['"]\.\/src\/svg\/index\.js['"]/
+    /from\s*['"]\.\/src\/svg\/index\.js['"]/,
+    /from\s*['"]\.\/src\/history\/index\.js['"]/
   ];
   for (const line of importLines) {
     assert.ok(allowed.some((pattern) => pattern.test(line)), `unexpected import: ${line}`);

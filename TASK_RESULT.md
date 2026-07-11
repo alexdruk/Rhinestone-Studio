@@ -6,7 +6,7 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-RS-1001
+RS-1002
 
 ---
 
@@ -18,7 +18,7 @@ IMPLEMENTED
 
 # Branch
 
-feature/rs-1001-svg-import
+feature/rs-1002-undo-redo
 
 ---
 
@@ -36,94 +36,97 @@ git log -1 --oneline
 # Files Changed
 
 ```
-src/svg/SvgXmlParser.js                (new — dependency-free XML tokenizer)
-src/svg/SvgTransform.js                (new — affine matrix math, transform attribute parsing)
-src/svg/SvgPathData.js                 (new — path "d" grammar parser, elliptical-arc-to-cubic-
-                                         Bezier conversion, path-to-Contour conversion)
-src/svg/SvgDocumentParser.js           (new — parseSvgDocument() orchestrator: unit/viewBox
-                                         resolution, element tree walk, shape conversion, warnings)
-src/svg/index.js                       (new — barrel)
-src/svg/README.md                      (new — module documentation)
-src/geometry/GeometryEngine.js         (modified — added generateSvgLayout())
-src/geometry/StoneSampler.js           (modified — sampleOutlinePoints() gained an optional
-                                         {closed=true} parameter for open-path support; existing
-                                         2-argument call sites are byte-identical in behavior)
-src/geometry/README.md                 (modified — documented generateSvgLayout())
-app.js                                 (modified — svg layer type: generateSvgStonesLive(),
-                                         validateProject() svg support, generic x/y/w/h
-                                         selection/drag/resize/duplicate reuse, Import SVG button
-                                         wiring, header comment)
-index.html                             (modified — #importSvg button, #importSvgFile file input,
-                                         #svgControls/#svgMode fill-mode select)
-package.json                           (modified — test script runs the two new suites)
-tools/test-svg-parser.mjs              (new — 14 unit tests for src/svg/**)
-tools/test-svg-integration.mjs         (new — 8 structural tests for app.js/index.html wiring)
-tools/test-geometry-engine.mjs         (modified — 8 new generateSvgLayout() tests, 22-29)
-tools/test-app-module-migration.mjs    (modified — added src/svg/index.js to the allowed-import list)
-tools/test-shape-geometry-integration.mjs (modified — added src/svg/index.js to the allowed-import
-                                         list; test #7 title/comment updated)
-tools/test-render-export-pipeline.mjs  (modified — removed src/geometry/ from the forbidden-file
-                                         prefix list, with a comment explaining why)
-tools/test-ux-visual-polish.mjs        (modified — removed src/geometry/ from the forbidden-file
-                                         prefix list, with a comment explaining why)
-tools/test-examples-regression.mjs     (modified — removed app.js/index.html from its
-                                         forbidden-exact set and replaced the blanket "src/" prefix
-                                         with the still-forbidden subset)
-docs/specifications/RS-1001-SvgImport.md (new — milestone specification)
-docs/ARCHITECTURE.md                   (modified — Layers/Geometry Engine/Core Principle
-                                         implementation-status paragraphs updated; new layer-map
-                                         row and "SVG-generation flow" diagram; Orchestration Layer
-                                         and Testing Philosophy paragraphs updated)
-TASK.md                                (replaced — RS-1001 task)
-TASK_RESULT.md                         (this file)
+src/history/HistoryManager.js           (new — generic, dependency-free undo/redo stack: commit(),
+                                          beginSession()/endSession() session coalescing, undo(),
+                                          redo(), clear(), canUndo/canRedo, configurable maxSize)
+src/history/index.js                    (new — barrel)
+src/history/README.md                   (new — module documentation)
+app.js                                  (modified — HistoryManager wiring: HISTORY_MAX_SIZE
+                                          constant, history/currentSnapshot/commitHistory/
+                                          openHistorySession/closeHistorySession/performUndo/
+                                          performRedo/applyHistorySnapshot/updateHistoryUI;
+                                          commitHistory() at every discrete mutation site
+                                          (duplicate/delete/visibility/addCircle/addRect/SVG-import/
+                                          drag-start); openHistorySession()/closeHistorySession()
+                                          wired to continuous project-affecting controls (text,
+                                          font, height, stone size, gap, colors, wrap, text mode,
+                                          shape x/y/w/h, svg mode), explicitly excluding
+                                          rotation/zoom (view-only); Ctrl/Cmd+Z / +Shift+Z / Ctrl/
+                                          Cmd+Y keyboard shortcuts; Project JSON import calls
+                                          history.clear() instead of committing; Export Project
+                                          JSON updates the dirty baseline; also fixes a real bug in
+                                          syncSelectedControlsFromLayer() — see "Design Summary")
+index.html                              (modified — #undoBtn/#redoBtn/#dirtyIndicator in the top
+                                          toolbar, minimal scoped CSS)
+package.json                            (modified — test script runs the two new suites)
+tools/test-history-manager.mjs          (new — 8 unit tests for src/history/HistoryManager.js)
+tools/test-undo-redo-integration.mjs    (new — 10 structural tests for app.js/index.html wiring)
+tools/test-app-module-migration.mjs     (modified — added src/history/index.js to the allowed-
+                                          import list)
+tools/test-shape-geometry-integration.mjs (modified — added src/history/index.js to its own,
+                                          separate allowed-import list)
+docs/specifications/RS-1002-UndoRedo.md (new — milestone specification)
+docs/ARCHITECTURE.md                    (modified — new "History (Undo/Redo)" principle section,
+                                          Layer map/Orchestration rows, Future Direction status,
+                                          Testing Philosophy paragraph)
+docs/BACKLOG.md                         (modified — Undo/Redo row marked Done (RS-1002))
+TASK.md                                 (replaced — RS-1002 task)
+TASK_RESULT.md                          (this file)
 ```
 
 No file under `src/text/**`, `src/fonts/**`, `src/core/**`, `src/browser/**`, `src/renderer/**`,
-`src/export/**`, `assets/**`, `examples/**`, or `style.css` was changed.
+`src/export/**`, `src/geometry/**`, `src/svg/**`, `src/products/**`, `assets/**`, `examples/**`, or
+`style.css` was changed.
 
 ---
 
 # Design Summary (read before reviewing the diff)
 
-* **New permanent module `src/svg/**`** (peer of `src/text/**`, the "vector path extraction"
-  architecture boundary AI_ENGINEER.md already names): a dependency-free XML tokenizer, an affine
-  transform-matrix/`transform`-attribute parser, a full SVG path `d` grammar parser with a
-  standard elliptical-arc-to-cubic-Bezier conversion, and `parseSvgDocument()`, which resolves
-  `width`/`height`/`viewBox` units into millimeters and walks the element tree (supporting `<g>`/
-  `<a>`/`<switch>` nesting and `transform` composition) into `{ contour, closed }` entries using
-  the existing `src/text/VectorPath.js` `Contour` primitive. `src/svg/**` has zero dependency on
-  `src/geometry/**` (same layering as `src/text/**`) and zero DOM/Canvas dependency, so it runs
-  identically under plain Node and the browser — no `DOMParser`, no browser-specific adapter.
-* **`GeometryEngine.generateSvgLayout()`** (new method on the existing permanent engine) parses
-  `svgSource` via `src/svg`, maps the SVG's natural bounding box independently in X/Y onto the
-  requested `{xMm,yMm,widthMm,heightMm}` placement box (the same model `generateShapeLayout()`'s
-  rectangle already uses), and reuses `flattenContourToPolygon()`/`sampleOutlinePoints()`/
-  `sampleFillPoints()` exactly as text/shape generation do. Closed contours participate in
-  `fill`-mode even-odd sampling (combined across the whole document, matching how
-  `generateTextLayout()` already combines all of one text run's character contours) and in
-  per-contour closed-outline sampling; open contours (`<line>`/`<polyline>`/an unclosed `<path>`
-  subpath) are always outline-sampled as an open polyline regardless of `mode`, via
-  `sampleOutlinePoints()`'s new `{closed:false}` option — an open path has no interior to fill.
-* **`app.js`** adds an `'svg'` layer type that deliberately reuses, rather than duplicates, the
-  generic x/y/width/height shape-editing machinery `'rectangle'` already had: `getLayerBBox()`,
-  drag-move, drag-resize, `duplicateLayer()` gained one extra `||l.type==='svg'` condition each
-  (not a new code path). The only genuinely new UI is the "Import SVG" button/file input and a
-  "Fill mode" select. `app.js` imports `parseSvgDocument` directly from `src/svg/index.js` **only**
-  to validate/measure a file at import time (producing `Contour`s, not `Stone`s — no violation of
-  "only the Geometry Engine generates stone positions"); actual stone generation always goes
-  through `generateSvgStonesLive()` -> `permanentEngine.generateSvgLayout()`.
-* **Validation/error handling:** malformed XML, a missing `<svg>` root, missing
-  `width`/`height`/`viewBox`, and a document with zero usable shapes after skipping
-  unsupported/degenerate elements all throw a specific, descriptive error surfaced via `#status`
-  (`SVG import failed: <message>`) — the current project is left untouched. A single malformed or
-  unsupported *element* inside an otherwise-valid document does not abort the whole import; it is
-  skipped and recorded in a `warnings` array, and the successful import's `#status` message notes
-  how many elements were skipped (details in the console). This was verified end-to-end in the
-  browser (see "Browser Verification").
-* **No schema changes:** `Stone`, `StoneLayout`, Generated Layout JSON, and SVG export are
-  byte-identical in shape. The only schema change is additive — `'svg'` is a new recognized
-  `layers[].type` value in `app.js`'s existing ad hoc Project JSON shape, alongside
-  `'text'`/`'circle'`/`'rectangle'`.
+* **New permanent module `src/history/**`** (peer of `src/svg/**`, `src/core/**`): `HistoryManager`
+  is a small, dependency-free, DOM-free undo/redo stack. It only ever operates on
+  `JSON.stringify`-able snapshots handed to it by the caller and stores them as JSON strings, not
+  live object graphs — this is the enforcement point for "history must never contain generated
+  geometry" (it never sees `layout`/`StoneLayout`/`Stone`) and for "minimize memory usage" /
+  "do not duplicate StoneLayout." `commit(state)` records one discrete undo step and clears the
+  redo stack (branch-after-undo). `beginSession(state)`/`endSession()` coalesce many rapid calls —
+  one per keystroke or slider-drag tick — into a single undo step. `maxSize` (constructor option,
+  default 100 in `app.js`'s `HISTORY_MAX_SIZE`) bounds memory; undo/redo is otherwise unlimited.
+* **`app.js` wiring is a thin orchestration layer**, matching the existing architecture principle
+  (permanent modules own logic, `app.js` wires them together). `currentSnapshot()` returns
+  `{project: <deep clone>, selectedLayerId}` — never `layout`. `commitHistory()` is called
+  immediately before every discrete mutation (add circle/rectangle, SVG import, duplicate, delete,
+  visibility toggle, the start of a shape drag on `pointerdown`). Continuous controls (text, font,
+  height, auto-fit, text mode, stone size, gap, stone color, cup color, wrap, shape X/Y/W/H, SVG
+  fill mode) open a session on their shared `'input'` listener and close it on a new shared
+  `'change'` listener — `rotation`/`zoom` are deliberately excluded (they are view state, not part
+  of `project`, and not in the required operation list). `applyHistorySnapshot()` restores
+  `project`/`selectedLayerId` and calls `updateAll(true)`, which always regenerates `layout` from
+  scratch via `engine.generate(project)` — "geometry regenerated after restore" required no new
+  geometry code, only correct wiring. Project JSON import calls `history.clear()` instead of
+  `commitHistory()` (a fresh project is not an undoable edit); none of the five export handlers
+  reference `history` at all, so history survives exports by construction. `Ctrl/Cmd+Z`
+  (`+Shift` redoes) and `Ctrl/Cmd+Y` (redo) are wired globally with `preventDefault()`, taking
+  precedence over any native browser input-level undo even while a text field has focus.
+* **Dirty-state tracking**: a `cleanProjectJson` baseline (a plain `JSON.stringify(project)` string)
+  is set at boot, reset on Project JSON import, and reset on successful Export Project JSON.
+  `updateHistoryUI()` (called from `updateAll()` and after every undo/redo/commit) compares the
+  live project against that baseline to drive the `#dirtyIndicator` ("Saved" / "Unsaved changes").
+  Undoing back to the saved state correctly clears the indicator again (verified in the browser).
+* **A real, pre-existing bug was found and fixed as directly necessary for this milestone**:
+  `syncSelectedControlsFromLayer()` never synced `project.cupColor`/`project.wrap` (project-level,
+  not per-layer, fields) back into the `#cupColor`/`#wrap` `<select>` elements. This was latent
+  since RS-0003.5D1 (Project JSON import never refreshed these two controls either) but was
+  functionally invisible until now because nothing ever restored `project` out from under the DOM.
+  Undo/redo does exactly that: without this fix, undoing a wrap/cup-color change would correctly
+  revert `project` internally (cup preview would render correctly), but the `#wrap`/`#cupColor`
+  dropdowns would stay stale, and the *next* edit's `writeSelectedControlsToLayer()` call would
+  silently write the stale (wrong, pre-undo) value from the DOM back into `project` — invisibly
+  undoing the undo. Fixed by adding two lines to `syncSelectedControlsFromLayer()` (already called
+  by every restore path: undo/redo, Project JSON import, layer selection). Discovered via real
+  browser testing of "wrap mode change undoes" / "cup color change undoes" (see below).
+* **No schema changes**: `Stone`, `StoneLayout`, Generated Layout JSON, SVG export, and the ad hoc
+  Project JSON schema are byte-identical in shape. Undo/redo operates one layer below all of those,
+  on `app.js`'s in-memory `project` object only.
 
 ---
 
@@ -136,9 +139,10 @@ git status
 npm run dev                                     # python3 -m http.server 5173
 # headless Google Chrome (OS-installed binary at
 # "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"), isolated ephemeral
-# --user-data-dir, no browser-automation dependency added, driven over raw CDP via Node 22's
-# built-in fetch + WebSocket (matching the RS-0003.5B2-5E1 precedent) — a from-scratch driver
-# script in the session scratchpad
+# --user-data-dir, --window-size=1600,2600 (so the full sidebar is on-screen without needing
+# scroll-aware click coordinates), no browser-automation dependency added, driven over raw CDP via
+# Node 22's built-in fetch + WebSocket (matching the RS-0003.5B2-RS-1001 precedent) — a
+# from-scratch driver script in the session scratchpad (cdp.mjs + verify.mjs)
 ```
 
 ---
@@ -147,175 +151,146 @@ npm run dev                                     # python3 -m http.server 5173
 
 ## Automated Tests
 
-PASS (18 suites, 201 assertions total, including 2 new suites and 8 extended
-`tools/test-geometry-engine.mjs` assertions):
+PASS (20 suites, 219 assertions total, including 2 new suites):
 
 ```
 node tools/test-core-model.mjs && node tools/test-font-manager.mjs && node tools/test-vector-path.mjs
   && node tools/test-font-provider-registry.mjs && node tools/test-opentype-provider.mjs
   && node tools/test-default-font-provider-registry.mjs && node tools/test-svg-parser.mjs
   && node tools/test-geometry-engine.mjs && node tools/test-stone-color.mjs
-  && node tools/test-app-module-migration.mjs && node tools/test-browser-dependency-loading.mjs
-  && node tools/test-live-text-integration.mjs && node tools/test-shape-geometry-integration.mjs
-  && node tools/test-svg-integration.mjs && node tools/test-render-export-pipeline.mjs
+  && node tools/test-history-manager.mjs && node tools/test-app-module-migration.mjs
+  && node tools/test-browser-dependency-loading.mjs && node tools/test-live-text-integration.mjs
+  && node tools/test-shape-geometry-integration.mjs && node tools/test-svg-integration.mjs
+  && node tools/test-undo-redo-integration.mjs && node tools/test-render-export-pipeline.mjs
   && node tools/test-production-export-validation.mjs && node tools/test-ux-visual-polish.mjs
   && node tools/test-examples-regression.mjs
 ```
 
-New `tools/test-svg-parser.mjs` (14 tests, `src/svg/**` in isolation, no browser/GeometryEngine):
-rect/circle/line/polyline/polygon shape/closedness; full path `d` grammar (M/L/H/V/C/S/Q/T/Z,
-absolute+relative, multi-subpath split, open-vs-closed); elliptical arc endpoint correctness and
-degenerate-arc fallback; `transform` composition (translate/scale/rotate-with-pivot/skew/matrix/
-nested groups) verified against hand-computed expected points, including the SVG-spec
-last-listed-applied-first rule; unit conversion (mm/cm/in/px/unitless/viewBox-only/neither-present);
-mixed valid+unsupported element handling; whole-document "no supported shapes" error; malformed XML
-errors; a single malformed `<path>` skipped with a warning without aborting the document;
-determinism; plus 3 extra edge-case tests (path must start with M, rounded-rect-corner warning,
-zero-radius/zero-size spec-valid-but-empty shapes).
+New `tools/test-history-manager.mjs` (8 tests, `src/history/HistoryManager.js` in isolation, no
+DOM/app.js): sequential undo/redo replays states in the correct order; branch after undo truly
+discards (not just hides) the redo stack; a `maxSize:3` history evicts the oldest entries so only
+the 3 most recent are undoable; `beginSession()`/`endSession()` coalesce multiple rapid calls into
+exactly one committed entry, and a new session after `endSession()` commits a separate entry;
+`clear()` empties both stacks and closes an open session; snapshots are isolated from later
+mutation of the caller's object in both directions (commit-time and return-value mutation);
+`undo()`/`redo()` on an empty history return `null` without throwing; the constructor validates
+`maxSize` (throws on zero/negative/non-integer/non-numeric).
 
-Extended `tools/test-geometry-engine.mjs` (+8 tests, 22-29): `generateSvgLayout()` succeeds for a
-multi-shape document; independent X/Y placement scaling; fill-vs-outline stone count differs, and
-an open-only document in fill mode produces identical output to outline mode (no error, no
-interior to fill); determinism; finite millimeter coordinates; requested layerId/color propagate to
-every stone; malformed/empty `svgSource` throws a clear error; works with no `fontProviderRegistry`.
+New `tools/test-undo-redo-integration.mjs` (10 tests, structural, mirroring
+`tools/test-svg-integration.mjs`'s convention since `app.js` is a browser entry point not
+`import()`-able under plain Node): `HistoryManager` is imported and constructed with a named
+`HISTORY_MAX_SIZE`; `currentSnapshot()`/`commitHistory()`/`openHistorySession()`/
+`closeHistorySession()`/`performUndo()`/`performRedo()`/`applyHistorySnapshot()`/`updateHistoryUI()`
+are all defined, and `currentSnapshot()`'s body never references `layout`; every discrete mutation
+site (`duplicateLayer`, `deleteLayer`, visibility toggle, `addCircle`, `addRect`, the
+`#importSvgFile` handler, the `pointerdown` drag-start handler) calls `commitHistory()` textually
+before its first mutation; the tracked-control-id list includes every continuous project field and
+explicitly excludes `rotation`/`zoom`; `#importProjectFile` calls `history.clear()` (not
+`commitHistory()`) and resets the dirty baseline; none of the five export handlers reference
+`history` in any way; `applyHistorySnapshot()` calls `updateAll(true)` and `updateAll()` calls
+`updateHistoryUI()`; the `keydown` listener handles Ctrl/Cmd+Z/+Shift+Z/Ctrl/Cmd+Y with
+`preventDefault()`; `index.html` exposes `#undoBtn`/`#redoBtn`/`#dirtyIndicator` wired correctly; no
+forbidden file changed.
 
-New `tools/test-svg-integration.mjs` (8 tests, structural checks against the literal `app.js`/
-`index.html` source, matching the existing convention for these guard tests since `app.js` is a
-browser entry point not `import()`-able under plain Node): `generate()` routes `svg` layers through
-`generateSvgStonesLive()` -> `permanentEngine.generateSvgLayout()`; correct parameter forwarding;
-`app.js` imports `parseSvgDocument` from `src/svg/index.js` and calls it for pre-import validation;
-`index.html` exposes `#importSvg`/`#importSvgFile`/`#svgControls`/`#svgMode`; the import handler
-validates before adding a layer and reports failures via `#status`; the real `validateProject()`
-(extracted from `app.js`'s literal source and executed, not reimplemented) accepts a valid `svg`
-layer and rejects one missing `svgSource`; `getLayerBBox()`/drag-move/drag-resize/`duplicateLayer()`
-each have an `svg` case; no forbidden file changed.
+Updated `tools/test-app-module-migration.mjs` and `tools/test-shape-geometry-integration.mjs`: each
+has its own independent "app.js only imports allowed modules" guard (a duplicated pattern from
+RS-1001, not something this milestone introduced) — both needed the same one-line addition for
+`./src/history/index.js`. Both were updated; no other guard test required any change.
 
 `git diff --check` reported no whitespace errors. No `build` script exists in `package.json`, so
 `npm run build` was not run (unchanged from prior milestones).
 
 ## Browser Verification
 
-Ran `npm run dev` and drove `http://localhost:5173/` with a from-scratch, dependency-free CDP
-driver (headless Chrome, Node 22's built-in `fetch`/`WebSocket`). **Important, discovered during
-this milestone:** `app.js` is a `type="module"` script with no `export` statements, so its
-top-level state (`project`, `layout`, `selectedLayerId`, `updateAll`, `getLayerBBox`, ...) is
-private to that module's closure and is genuinely unreachable from `Runtime.evaluate`'s default
-global execution context (confirmed empirically: `typeof project` evaluates to `"undefined"` over
-CDP) — this is correct encapsulation, not a bug, and it's a stronger, more representative test than
-reaching into internals: every check below goes through real DOM state (`#status`, `#layoutStats`,
-`#cupStats`, the `#layersList` rows and their real buttons/checkboxes) and real user-facing
-interactions (clicks, typed input, mouse pointer-event drag sequences), exactly what an actual
-user's browser session can do — nothing was verified by peeking at private application state.
+Ran `npm run dev` and drove `http://localhost:5173/` with a from-scratch, dependency-free CDP driver
+(headless Chrome, Node 22's built-in `fetch`/`WebSocket`, real `Input.dispatchMouseEvent`/
+`Input.dispatchKeyEvent` — genuine OS-level-equivalent input, not JS `dispatchEvent()` synthetic
+events). 57 real interactive checks, **57 passed, 0 failed**, 0 console errors, 0 uncaught page
+errors throughout the entire run:
 
-28/28 checks passed:
+* Page load: title correct, no console errors, Undo/Redo buttons render disabled, dirty indicator
+  shows "Saved".
+* **Text edit**: typed a full replacement string character-by-character (real per-keystroke `input`
+  events), confirmed the field reflects it, confirmed one Undo click restores the *original* text in
+  a single step (proving session coalescing — many keystrokes, one undo step), confirmed Redo brings
+  the edit back.
+* **Keyboard shortcuts**: `Ctrl+Z` undid a completed text edit *while the text field still had
+  focus* (proving the app's history takes precedence over any native input-level undo);
+  `Ctrl+Shift+Z` and `Ctrl+Y` both redid correctly.
+* **Font, stone size, gap, stone color, wrap mode, text mode, cup color**: each changed via a real
+  `<select>`/`<input>` interaction, each undoes and redoes correctly, verified by reading the actual
+  control's value after each step.
+* **Add circle / add rectangle**: each adds a layer (verified via `#layersList` child count), Undo
+  removes it, Redo re-adds it.
+* **Duplicate layer**: real click on the layer row's duplicate button adds a copy; Undo removes it,
+  Redo restores it.
+* **Visibility toggle**: real click on the layer's visibility checkbox toggles it; Undo/Redo
+  restore/reapply correctly.
+* **Delete layer**: real click on Delete; Undo restores the deleted layer, Redo re-deletes it.
+* **Move**: a real mouse drag (`Input.dispatchMouseEvent` press/move/release) on the circle layer's
+  body in the 2D layout canvas moved it (`#shapeX` changed from 105 to ~130.8mm); Undo restored the
+  exact pre-drag position; Redo re-applied the move.
+* **Resize**: the mm-per-pixel scale was calibrated empirically from the verified move above (no
+  app.js instrumentation added), used to compute the on-screen position of the circle's east resize
+  handle, then a real mouse drag on that handle resized it (`#shapeW`/radius changed from 18mm to
+  ~30.9mm); Undo restored the exact pre-resize size; Redo re-applied the resize.
+* **SVG import**: imported a real synthetic `<svg>` file via the file input (`DataTransfer`/`File`,
+  dispatching a real `change` event); confirmed a new layer was added and the import succeeded
+  (`"Imported test.svg: 1 shape(s)"`); Undo removed the SVG layer, Redo restored it.
+* **Branch after undo**: undid twice, made a brand-new edit (gap change), confirmed Redo became
+  disabled (the old redo branch was truly discarded, matching the `HistoryManager` unit test).
+* **History limit, precisely**: from a freshly-cleared history (right after a Project JSON import),
+  committed exactly 105 single-field edits (`HISTORY_MAX_SIZE` in `app.js` is 100), then clicked
+  Undo repeatedly until it disabled itself: **exactly 100 clicks**, confirming the oldest 5 commits
+  were evicted and the app remained fully responsive throughout (no crash, no console error).
+* **Exports + history survives**: clicked all five export buttons (Project JSON, Generated Layout
+  JSON, 2D SVG, 2D PNG, Cup PNG) in sequence — all completed without error (`#status` showed
+  "Downloaded rhinestone-layout.svg" etc.) — and confirmed Undo's enabled/disabled state was
+  identical before and after (history untouched by exports).
+* **Dirty-state tracking**: showed "Saved" at boot and immediately after Export Project JSON;
+  flipped to "Unsaved changes" after a further edit; correctly returned to "Saved" after undoing
+  back to the exported state (not just after any undo — the *saved* state specifically).
+* **Project JSON import clears history**: imported a synthetic project file; confirmed the new
+  project's text loaded, confirmed Undo *was* enabled beforehand and both Undo and Redo were
+  disabled immediately after the import, and confirmed the dirty indicator showed "Saved".
+* No uncaught exception / unhandled rejection was observed at any point across the entire 57-check
+  run (`pageErrors.length === 0` checked repeatedly throughout).
 
-| Check | Result |
-|---|---|
-| Page loads, no console errors | PASS |
-| Default project (text only) still renders | PASS (stats: stones present) |
-| Import a valid SVG (`<rect>`+`<circle>`) adds a new layer | PASS — "Imported simple-logo.svg: 2 shape(s)" |
-| Imported layer's stones render in the 2D layout | PASS (count > 0) |
-| `#layoutStats` shows the SVG layer as selected | PASS |
-| Cup preview updates after import (same page, same generated layout) | PASS |
-| Dragging on the 2D canvas (real mouse pointer events) | PASS — no exception; canvas visibly redrew; observed `#shapeX`/`#shapeY` moved from `85,35` to `108.93,48.30` (screenshot-confirmed) |
-| Resizing via the `#shapeW` input (same `writeSelectedControlsToLayer()`/`updateAll()` path a handle-drag also writes to — see note below) | PASS — stone count 417 -> 425 after widening 40mm -> 60mm |
-| Switching Fill mode (Outline/Fill) | PASS — stone count 425 (outline) -> 484 (fill) |
-| Duplicating the SVG layer (real click on the layer row's button) | PASS — layer count +1, new distinct id, auto-selected |
-| Toggling visibility off/on (real click on the layer row's checkbox) | PASS — stone count dropped then exactly restored |
-| Deleting the SVG layer (real click on the layer row's button) | PASS — layer count restored |
-| Importing a malformed SVG (truncated tag) | PASS — `SVG import failed: SVG parse error: Malformed SVG: unterminated tag.` in `#status`; no layer added |
-| Importing an SVG with only unsupported elements (`<image>` only) | PASS — `SVG import failed: SVG parse error: the document contains no supported shapes...` in `#status`; no layer added |
-| Importing an SVG mixing one valid `<rect>` with one unsupported `<image>` | PASS — imports the rect, status notes 1 element skipped |
-| Export Project JSON includes the SVG layer(s) | PASS |
-| Export Generated Layout JSON stone count matches the live layout | PASS |
-| Export 2D SVG has one `<circle>` per stone | PASS |
-| Export 2D PNG / Cup PNG produce non-empty files | PASS |
-| Re-importing the exported Project JSON restores the SVG layer (round trip) | PASS |
-| No uncaught exception/unhandled rejection across the whole sequence | PASS |
-| Console errors are exactly the two intentional `console.error('SVG import failed', ...)` calls from the two deliberately-malformed imports above (same logging convention `app.js`'s pre-existing Project JSON import handler already uses) | PASS |
-
-**Resize note:** the milestone brief's checklist item is "dragging a resize handle... resizes it
-live." A pixel-perfect blind handle-drag would require computing the exact on-screen mm-to-pixel
-transform, which depends on `app.js`'s private module state (`layoutTransform`, `getLayerBBox()`)
-that a CDP driver cannot read (see above) without modifying `app.js` to expose test-only globals,
-which was judged out of scope and undesirable (it would ship debug surface in production code).
-Resize was instead verified through the real `#shapeW` numeric input, which is wired through the
-exact same `writeSelectedControlsToLayer()` -> `updateAll()` code path a handle-drag also writes
-to (`l.w`/`l.h` from the identical DOM fields) — confirmed structurally in
-`tools/test-svg-integration.mjs` test 7 that the handle-drag code path (`l.type==='rectangle'||
-l.type==='svg'` in the resize branch) genuinely exists. The plain mouse-drag *move* interaction
-above **was** verified as a real, blind pointer-event sequence (no coordinate math needed, since
-clicking canvas-center reliably lands inside a freshly-imported, auto-selected shape) and its
-result was confirmed precisely via screenshot inspection of the live `#shapeX`/`#shapeY` values.
-
-Screenshots captured (session scratchpad, reviewed visually): `01-svg-imported-layout-and-cup.png`
-(rect+circle logo imported, gold stones visible in both the 2D layout and cup preview, layers list
-shows the new "SVG" type row, selection handles visible), `02-before-drag.png`/`03-after-drag.png`
-(shape visibly moved to a distinct, non-overlapping position; `#shapeX`/`#shapeY` read
-`108.934119`/`48.296733`), `04-final-state.png` (three layers — text, `simple-logo.svg`, and the
-partially-imported `mixed-valid-invalid.svg` — all present simultaneously after the full test
-sequence including the Project JSON round trip, rendering correctly in both views).
-
----
-
-# Visible Changes
-
-* New "Import SVG" button (Layers section) and hidden file input.
-* New "Fill mode" (Outline/Fill) select, shown only when an `svg`-type layer is selected.
-* An imported SVG layer appears in the Layers list labeled with its filename and type "SVG",
-  fully selectable/movable/resizable/duplicable/deletable via the existing shape-editing UI.
-* No change to any other layer type's behavior, to any export format's schema, or to the default
-  project.
-
----
-
-# Defects Discovered
-
-None. No pre-existing defect was found or fixed during this milestone.
+Not separately re-verified in the browser (already covered by automated tests / by the mechanism
+being identical across operations): the exact `HistoryManager` eviction unit-test assertions (numeric
+step-for-step correctness — covered by `tools/test-history-manager.mjs`); `StoneLayout` determinism
+after restore (already guaranteed by `GeometryEngine`'s existing determinism tests plus the fact that
+`updateAll()` is the same regeneration path used for every live edit, restored or not — no new
+geometry code was written for this milestone to separately re-verify).
 
 ---
 
 # Warnings
 
-* `app.js`'s ES module scope means `project`/`layout`/etc. are not reachable from outside the
-  module (see "Browser Verification"). This is existing, correct encapsulation — noted here only
-  because it shaped this milestone's verification approach and is worth remembering for future
-  milestones' own browser verification.
-* SVG import intentionally ignores all presentation attributes (`fill`, `stroke`, `style`, `class`,
-  `display`, `visibility`, `opacity`) — imported geometry always uses the importing layer's own
-  stone size/gap/color/mode controls, matching how circle/rectangle/text layers already work. A
-  design tool's hidden guide layers (`display:none`) will import as visible geometry; this is a
-  documented, deliberate scope decision (see the specification's "Out of Scope"), not an oversight.
-* Rounded rectangle corners (`<rect rx/ry>`) import as a sharp rectangle with a non-fatal warning.
-* SVG width/height stretch to the layer's requested box independently in X and Y (no
-  aspect-ratio-lock option yet) — matches rectangle's existing "place at x,y with explicit
-  width/height" model; noted as a candidate follow-up in the specification.
-* `<use>`/`<symbol>` references, `<text>`, `<image>`, gradients/patterns/filters, and nested `<svg>`
-  are not supported; such elements are skipped with a warning (or the whole document is rejected if
-  no supported shape remains) rather than silently mis-rendered.
+* None from `npm test` / `git diff --check`.
+* The CDP driver script used for browser verification lives only in the session scratchpad
+  (`/private/tmp/.../scratchpad/cdp.mjs`, `verify.mjs`) and was not committed — it is a one-off
+  verification tool, not a product artifact, matching the RS-1001 precedent (its driver was also not
+  committed).
 
 ---
 
 # Known Limitations
 
-* `src/core/Layer.js`'s `'svg'` layer-type slot still has no params factory — `src/core/**` remains
-  entirely unused by the live app (pre-existing limitation, unchanged by this milestone; see
-  `docs/ARCHITECTURE.md`, "Current Architectural Limitations").
-* Per-layer rotation is not implemented for any layer type in the live editor (SVG layers do not
-  introduce it either) — out of scope, as documented in the specification.
-* No DXF export, manufacturing reports, product-plugin system, or 3D/WebGL renderer exist yet —
-  unchanged from all prior milestones.
-* The backlog (`docs/BACKLOG.md`) and product roadmap (`docs/PRODUCT_ROADMAP.md`) still list "SVG
-  import" as "Planned" — per `docs/MILESTONE_WORKFLOW.md`, the product roadmap is ChatGPT's/the
-  human owner's to update, not the implementation engineer's; flagging here for that update during
-  milestone review.
+* History is in-memory only; it does not survive a page reload/navigation (out of scope per the
+  specification — no `localStorage` backing was requested or added).
+* There is no explicit "New Project" toolbar action in the live UI today, so "history cleared on new
+  project" is satisfied by (a) history starting empty at app boot and (b) Project JSON import
+  explicitly clearing it — the two project-reset affordances that actually exist.
+* `rotation` (cup rotation) and `zoom` (cup preview zoom) are intentionally not undoable — they are
+  view-only state, not part of `project`, and are not in the milestone's required operation list.
+* Per-layer rotation, curved text, and migrating `app.js`'s ad hoc project/layer model onto
+  `src/core/Project`/`Layer` remain out of scope, as before.
 
 ---
 
-# Next Recommended Task
+# Next Milestone
 
-Curved text (the other P0 backlog item architecturally adjacent to this one — SVG import's
-arc-to-Bezier and path-flattening machinery is directly reusable for laying text along an arbitrary
-curve) or multi-object support/grouping (also P0). A smaller follow-up: an optional
-"lock aspect ratio" toggle for SVG/rectangle layers, and per-layer rotation support in the live
-editor.
+Candidates: curved text, multi-object support/grouping, an optional "lock aspect ratio" toggle for
+SVG/rectangle layers, per-layer rotation, and migrating `app.js`'s ad hoc project/layer objects onto
+`src/core/Project`/`Layer`.
