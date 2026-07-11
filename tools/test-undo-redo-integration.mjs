@@ -153,9 +153,12 @@ await test('10. no forbidden file changed (this milestone\'s own forbidden list)
   // src/svg/ and src/geometry/ are legitimately changed by the RS-1001 audit follow-up (added
   // <ellipse> support, fixed a call-stack overflow in generateSvgLayout()) — see
   // tools/test-svg-parser.mjs / tools/test-geometry-engine.mjs for that follow-up's own scope.
+  // src/products/ was correctly forbidden at RS-1002 time (empty besides a README) but is now
+  // legitimately activated by RS-1004 (object-template registry) — see
+  // tools/test-object-template-integration.mjs for that milestone's own forbidden-file guard.
   const forbiddenPrefixes = [
     'src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'src/export/',
-    'src/products/', 'assets/', 'examples/'
+    'assets/', 'examples/'
   ];
 
   for (const changedPath of changedPaths) {

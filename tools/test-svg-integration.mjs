@@ -62,12 +62,17 @@ await test('5. the #importSvgFile change handler validates before adding a layer
   assert.match(body, /el\('status'\)\.textContent=`SVG import failed/, 'handler must report failures via #status');
 });
 
-await test('6. validateProject() accepts a valid svg layer and rejects one missing svgSource', () => {
+await test('6. validateProject() accepts a valid svg layer and rejects one missing svgSource', async () => {
   const match = appJs.match(/function validateProject\(obj\)\{[\s\S]*?\n\}\n/);
   assert.ok(match, 'expected to find validateProject() in app.js');
   const source = appJs.slice(appJs.indexOf('const SUPPORTED_LAYER_TYPES=new Set'), appJs.indexOf(match[0]) + match[0].length);
+  // RS-1004: validateProject() now calls the real getObjectTemplate() (imported at the top of
+  // app.js) to normalize project.product; the extracted source snippet above does not include that
+  // import, so it is injected as a function parameter instead, matching the precedent in
+  // tools/test-examples-regression.mjs's extractValidateProject().
+  const { getObjectTemplate } = await import('../src/products/index.js');
   // eslint-disable-next-line no-new-func
-  const validateProject = new Function(`${source}\nreturn validateProject;`)();
+  const validateProject = new Function('getObjectTemplate', `${source}\nreturn validateProject;`)(getObjectTemplate);
 
   const baseProject = () => ({
     version: 2,

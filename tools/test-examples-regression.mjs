@@ -45,12 +45,17 @@ function sha256(buffer) {
 // The real validateProject() from app.js, extracted from its literal source and executed (not
 // reimplemented), matching the precedent in tools/test-ux-visual-polish.mjs. Proves the app-shape
 // translation is genuinely accepted by the live import path's own validation function.
-function extractValidateProject() {
+//
+// RS-1004: validateProject() now calls the real getObjectTemplate() (imported at the top of
+// app.js) to normalize project.product; the extracted source slice below does not include that
+// import, so it is injected as a function parameter instead of being reimplemented/stubbed.
+async function extractValidateProject() {
   const match = appJs.match(/function validateProject\(obj\)\{[\s\S]*?\n\}\n/);
   assert.ok(match, 'expected to find validateProject() in app.js');
   const source = appJs.slice(appJs.indexOf('const SUPPORTED_LAYER_TYPES=new Set'), appJs.indexOf(match[0]) + match[0].length);
+  const { getObjectTemplate } = await import('../src/products/index.js');
   // eslint-disable-next-line no-new-func
-  return new Function(`${source}\nreturn validateProject;`)();
+  return new Function('getObjectTemplate', `${source}\nreturn validateProject;`)(getObjectTemplate);
 }
 
 async function buildPermanentEngine() {
@@ -74,7 +79,7 @@ const PRESERVED_CHECKSUMS = {
 };
 
 const engine = await buildPermanentEngine();
-const validateProjectFromAppJs = extractValidateProject();
+const validateProjectFromAppJs = await extractValidateProject();
 
 // Snapshot every example's bytes up front; re-checked at the very end to prove the suite never
 // wrote to examples/**.

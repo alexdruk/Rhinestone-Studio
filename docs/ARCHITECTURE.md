@@ -310,9 +310,27 @@ Every product supplies:
 
 Products never generate layouts.
 
-**Implementation status:** not implemented. `app.js`'s ad hoc project object carries a `product`
-field (default `'mug'`), but nothing in the codebase reads it — there is exactly one hardcoded cup
-preview (`CupRenderer.renderCup()`), not a plugin system. This is future work, not a regression.
+**Implementation status:** implemented as of RS-1004, by activating the previously-inert
+`src/products/**` module and `project.product` field (RS-0003.5B1 already carried `product:'mug'`
+on the ad hoc project object; nothing read it until now). `src/products/ObjectTemplate.js` defines
+a small, validated registry of three templates (`mug`, `tumbler`, `bottle`) — each a plain data
+record (display name, `productionWidthMm`/`productionHeightMm`, a `safeAreaInsetMm`, a supported/
+default wrap mode, and schematic preview-silhouette parameters). A template never generates a
+`StoneLayout` and is never referenced by `src/geometry/**`; `app.js`'s new "Object type" control
+sets `project.product` (one discrete, undoable action that also resets `project.canvas`/
+`project.wrap` to that template's defaults) and forwards the resolved template to
+`CupRenderer.renderCup()` as a plain `objectTemplate` display option — exactly the same kind of
+plain option `cupColor`/`wrap` already were, not a `Project`/`Layer` reference. `renderCup()` now
+draws three silhouette variants (mug: tapered + handle; straight tumbler: equal top/bottom width,
+no handle; bottle: narrower body + shoulder/neck/cap, no handle) from one shared frustum + stone-
+wrap-placement math; omitting `objectTemplate` falls back to the exact pre-RS-1004 hardcoded mug
+constants, so no other caller/test changed behavior. A safe-area guide rectangle (derived from the
+active template's `safeAreaInsetMm` at the current `project.canvas` size) is drawn on the 2D
+Production Layout canvas as an `app.js` editor overlay (`drawSafeAreaGuide()`, alongside the
+pre-existing selection-outline/HUD-text overlays) — not inside `CanvasRenderer2D.js`, which remains
+untouched. Unknown/missing `product` values fall back to `'mug'` (matching this file's existing
+permissive style for `cupColor`/`wrap`), so every pre-RS-1004 Project JSON opens identically. See
+`docs/specifications/RS-1004-MultiObjectTemplates.md`.
 
 ---
 
@@ -440,7 +458,8 @@ code.
 | Export | `src/export/**` | `src/geometry/**`, `src/renderer/StoneColors.js` |
 | Browser compatibility | `src/browser/**` | `src/text/**`, `src/fonts/**`, `src/geometry/**` (proves resolution), `opentype.js` |
 | Undo/redo history (RS-1002) | `src/history/**` | nothing else in `src/**` (pure JSON-snapshot bookkeeping; no `Project`/`Layer`/`StoneLayout`/DOM dependency) |
-| Orchestration | `app.js` | every barrel module above except `src/core/**`, plus `src/svg/index.js` (pre-import validation only, not stone generation) and `src/history/index.js` (undo/redo) |
+| Object templates (RS-1004) | `src/products/**` | nothing else in `src/**` (pure data + validation; never referenced by `src/geometry/**` or `src/renderer/**`, only consumed by `app.js` as plain display-option data) |
+| Orchestration | `app.js` | every barrel module above except `src/core/**`, plus `src/svg/index.js` (pre-import validation only, not stone generation), `src/history/index.js` (undo/redo), and `src/products/index.js` (RS-1004, object templates) |
 
 Every permanent module (`src/core`, `src/fonts`, `src/text`, `src/geometry`, `src/renderer`,
 `src/export`) is consumed only through its `index.js` barrel — `app.js` never imports an internal
@@ -636,9 +655,9 @@ It is explicitly **not** part of the permanent architecture — it is the compos
 wires permanent modules together and owns everything that requires simultaneous knowledge of
 layers, UI state, and the DOM. Per its own header comment and `tools/test-app-module-migration.mjs`,
 it may only import the barrel (`index.js`) entry points of `src/geometry`, `src/fonts`, `src/text`,
-`src/renderer`, `src/export`, `src/svg` (RS-1001), and the side-effect-only
-`src/browser/BrowserDependencyProbe.js` — it is test-enforced to never import `src/core/**` or any
-internal file of another module directly.
+`src/renderer`, `src/export`, `src/svg` (RS-1001), `src/history` (RS-1002), `src/products`
+(RS-1004), and the side-effect-only `src/browser/BrowserDependencyProbe.js` — it is test-enforced
+to never import `src/core/**` or any internal file of another module directly.
 
 `app.js` owns:
 
@@ -795,12 +814,14 @@ verify exporter
 
 Regression tests are more valuable than visual tests.
 
-**Implementation status:** `npm test` runs twenty suites under `tools/**` covering the core model,
-font manager, vector path primitives, font provider registry, OpenType provider, SVG import parsing
-(`tools/test-svg-parser.mjs`, RS-1001), geometry engine (text, shape, and SVG), stone color
-palette, the generic undo/redo stack (`tools/test-history-manager.mjs`, RS-1002), the render/export
-pipeline, structural guards on `app.js` (approved-import allowlists, forbidden-file lists per
-milestone, including `tools/test-svg-integration.mjs` (RS-1001) and
+**Implementation status:** `npm test` runs twenty-seven suites under `tools/**` covering the core
+model, font manager, vector path primitives, font provider registry, OpenType provider, SVG import
+parsing (`tools/test-svg-parser.mjs`, RS-1001), geometry engine (text, shape, and SVG), stone color
+palette, the generic undo/redo stack (`tools/test-history-manager.mjs`, RS-1002), the object-
+template registry and generalized preview renderer (`tools/test-object-template.mjs`,
+`tools/test-object-preview-renderer.mjs`, `tools/test-object-template-integration.mjs`, RS-1004),
+the render/export pipeline, structural guards on `app.js` (approved-import allowlists,
+forbidden-file lists per milestone, including `tools/test-svg-integration.mjs` (RS-1001) and
 `tools/test-undo-redo-integration.mjs` (RS-1002)), and — as
 of RS-0003.5E1 — a permanent real-production regression suite (`tools/test-examples-regression.mjs`)
 that loads every

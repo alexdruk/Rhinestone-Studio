@@ -6,7 +6,7 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-RS-1003 — Curved Text
+RS-1004 — Multi-Object Templates
 
 ---
 
@@ -18,7 +18,7 @@ IMPLEMENTED
 
 # Branch
 
-feature/rs-1003-curved-text
+feature/rs-1004-multi-object-templates
 
 ---
 
@@ -35,111 +35,153 @@ git log -1 --oneline
 
 # Summary
 
-Every text layer now supports a Straight (unchanged) or Curved layout. Curved text is implemented
-entirely as a new "Arc projection" stage inside the permanent `src/geometry/GeometryEngine.js`
-(`generateTextLayout()`), between contour flattening and outline/fill stone sampling — exactly the
-pipeline position the milestone brief specified (`Text -> OpenTypeProvider -> VectorPath ->
-GeometryEngine -> Arc projection -> StoneLayout -> existing renderers`). `StoneLayout`,
-`src/renderer/**`, and `src/export/**` were not touched: the 2D canvas, cup preview, and all five
-export formats picked up curved text automatically, with zero code changes, because they only ever
-consume `StoneLayout`.
+One rhinestone design can now be previewed and produced against three physical object templates —
+Mug, Straight Tumbler, and Bottle — switchable from a new, always-visible "Object type" control at
+the top of the sidebar. This activates the previously-inert `src/products/**` module and
+`project.product` field (both existed since earlier milestones but nothing read them) instead of
+creating a second product abstraction, per the milestone's implementation rule.
 
-Six new per-text-layer fields (`curveEnabled`, `curveRadiusMm`, `curveDirection`,
-`curveStartAngleDeg`, `curveSweepAngleDeg`, `curveAlignment`) are forwarded straight through from
-`app.js`'s layer object to `GeometryEngine.generateTextLayout()`; `app.js` generates no geometry
-itself. Curved text is fully editable: every parameter is wired into live regeneration, the
-existing undo/redo history mechanism, Project JSON save/load, and layer duplication — the last
-three needed **zero new code**, because `app.js`'s existing generic deep-clone (`duplicateLayer()`)
-and verbatim field-spread (`validateProject()`) already preserve arbitrary layer fields.
+`src/products/ObjectTemplate.js` defines a small, validated registry of three templates, each a
+plain data record: display name, `productionWidthMm`/`productionHeightMm`, a `safeAreaInsetMm`, a
+supported/default wrap mode, and schematic preview-silhouette parameters. Switching the control is
+one discrete, undoable action (matching the existing `addCircle`/`addRect`/`deleteLayer` pattern):
+it sets `project.product` and resets `project.canvas`/`project.wrap` to the new template's
+defaults, then regenerates/redraws exactly like any other discrete edit.
 
-Full detail, including the geometric model and the reasoning behind each parameter's semantics, is
-in `docs/specifications/RS-1003-CurvedText.md`.
+`src/renderer/CupRenderer.js`'s `renderCup()` was generalized — not duplicated — into three
+silhouette variants (mug: tapered body + handle; straight tumbler: equal top/bottom width, no
+handle; bottle: narrower body + shoulder/neck/cap, no handle) sharing one frustum + stone-wrap-
+placement math that was already object-agnostic. Omitting the new `objectTemplate` option falls
+back to `DEFAULT_PREVIEW`, whose values are byte-identical to the pre-milestone hardcoded mug
+constants — proven by a test that asserts an omitted-option call and an explicit-mug-template call
+produce identical draw-call sequences.
+
+A safe-area guide (a dashed rectangle derived from the active template's `safeAreaInsetMm` at the
+current canvas size) is drawn on the 2D Production Layout canvas as a new `app.js` editor overlay
+(`drawSafeAreaGuide()`), alongside the pre-existing selection-outline/HUD-text overlays — not inside
+`CanvasRenderer2D.js`, which (like `StoneLayout.js` and `GeometryEngine.js`) is untouched by this
+milestone.
+
+`src/geometry/**` was not touched. `StoneLayout` was not touched. A dedicated test proves the merged
+`StoneLayout` for the default text layer is byte-identical across all three object templates —
+object type only ever changes what is drawn, never what is generated.
 
 ---
 
 # Files Changed
 
 ```
-src/geometry/ArcProjection.js        (new — pure arc-projection math: projectPointToArc(),
-                                       projectPolygonToArc(), CURVE_DIRECTIONS, CURVE_ALIGNMENTS)
-src/geometry/GeometryEngine.js       (generateTextLayout(): _buildPositionedContours() now also
-                                       returns totalAdvanceWidthMm; new arc-projection step between
-                                       flattening and sampling, gated on options.curveEnabled;
-                                       normalizeTextParams()/new normalizeCurveParams() validate the
-                                       six curve fields only when curveEnabled is truthy)
-src/geometry/index.js                (barrel export for ArcProjection.js)
-app.js                               (defaultProject(): six curve fields on the default text layer;
-                                       generateTextStonesLive(): forwards all six fields;
-                                       syncSelectedControlsFromLayer()/writeSelectedControlsToLayer():
-                                       read/write all six + curveControls visibility toggle;
-                                       HISTORY_TRACKED_CONTROL_IDS: six new ids; header comment note)
-index.html                           (#textControls: curveEnabled select, #curveControls block with
-                                       radius/direction/start angle/sweep angle/alignment controls)
-package.json                         (registers the two new test files in the `test` script)
-tools/test-arc-projection.mjs        (new — 15 tests, pure math unit tests of ArcProjection.js)
-tools/test-geometry-engine.mjs       (13 new numbered tests, 31-43: straight-text regression,
-                                       outside/inside, clockwise/counter-clockwise, start/center/end
-                                       alignment, fill/outline modes, determinism, small-radius
-                                       finite-coordinate stress case, and all four required rejection
-                                       cases)
-tools/test-curved-text-integration.mjs (new — 11 tests, structural checks against live app.js/
-                                       index.html: field wiring, history tracking, UI controls,
-                                       duplicate/import needing no new code, renderer/exporter
-                                       untouched, other forbidden paths untouched)
-docs/specifications/RS-1003-CurvedText.md (new specification)
-docs/ARCHITECTURE.md                 (Geometry Engine implementation-status note)
-TASK.md                              (replaced with this task)
-TASK_RESULT.md                       (this file)
+src/products/ObjectTemplate.js        (new — template registry: createObjectTemplate() validation,
+                                       getObjectTemplate()/isValidObjectTemplateId() with permissive
+                                       mug fallback, getSafeAreaRectMm(), the mug/tumbler/bottle
+                                       definitions)
+src/products/index.js                 (new — barrel export)
+src/products/README.md                (documents the new object-template registry)
+src/renderer/CupRenderer.js           (renderCup(): generalized to three preview.kind variants from
+                                       one shared frustum/wrap-math core; new DEFAULT_PREVIEW
+                                       fallback = exact pre-milestone mug constants; new
+                                       drawBottleTop()/roundRectPath() helpers)
+app.js                                (imports getObjectTemplate/getSafeAreaRectMm;
+                                       currentObjectTemplate() helper; validateProject() normalizes
+                                       project.product via getObjectTemplate() [permissive mug
+                                       fallback]; syncSelectedControlsFromLayer() resyncs
+                                       #objectType; drawCup() forwards objectTemplate;
+                                       drawSafeAreaGuide() new editor-overlay helper, called from
+                                       drawLayout(); updateStats() shows the active template's
+                                       display name; #objectType change handler: discrete
+                                       commitHistory()-then-mutate action resetting
+                                       canvas/wrap to the new template's defaults)
+index.html                            (new #objectType <select> at the very top of the sidebar,
+                                       before #selectedLayer; "Cup Preview"/"Cup background"
+                                       relabeled to "Object Preview"/"Preview background" — #cup
+                                       canvas id, #cupColor control id, and the exported PNG
+                                       filename are all unchanged)
+docs/ARCHITECTURE.md                  ("Product Plugins" implementation-status section updated from
+                                       "not implemented" to describe the live implementation; Layer
+                                       map table and Orchestration Layer section note the new
+                                       src/products/** module)
+docs/specifications/RS-1004-MultiObjectTemplates.md (new specification)
+TASK.md                               (replaced with this task)
+TASK_RESULT.md                        (this file)
+package.json                          (registers the three new test files in the `test` script)
+tools/test-object-template.mjs               (new — 17 tests, template registry validation)
+tools/test-object-preview-renderer.mjs       (new — 8 tests, renderCup() silhouette/wrap-math tests
+                                              against a fake CanvasRenderingContext2D)
+tools/test-object-template-integration.mjs   (new — 21 tests, app.js/index.html wiring, backward
+                                              compatibility, save/load round-trip, undo/redo,
+                                              deterministic StoneLayout across templates, export
+                                              compatibility, discoverability)
+tools/test-app-module-migration.mjs          (narrow: added ./src/products/index.js to app.js's
+                                              allowed-import list)
+tools/test-shape-geometry-integration.mjs    (narrow: same allowed-import addition, this test has
+                                              its own independent copy of that check)
+tools/test-undo-redo-integration.mjs         (narrow: removed 'src/products/' from its
+                                              forbidden-file-prefix list, with a comment explaining
+                                              why — it was correctly forbidden at RS-1002 time when
+                                              src/products/ had no code)
+tools/test-curved-text-integration.mjs       (narrow: removed the src/renderer/ half of its
+                                              "byte-for-byte untouched" check [kept the src/export/
+                                              half, since this milestone does not touch
+                                              src/export/**], with a comment explaining why)
+tools/test-svg-integration.mjs               (its own extracted-validateProject() eval now injects
+                                              the real getObjectTemplate as a function parameter,
+                                              since validateProject() gained a new import dependency)
+tools/test-examples-regression.mjs           (same extractValidateProject() fix as above)
 ```
 
-No other file was changed. `src/text/**`, `src/fonts/**`, `src/core/**`, `src/browser/**`,
-`src/svg/**`, `src/history/**`, `src/renderer/**`, `src/export/**`, and `assets/**` were not
-touched — the milestone required no change to any of them, and this is now verified by
-`tools/test-curved-text-integration.mjs` tests 10-11.
+No other file was changed. `src/geometry/**`, `src/text/**`, `src/fonts/**`, `src/core/**`,
+`src/browser/**`, `src/svg/**`, `src/history/**`, `src/export/**`,
+`src/renderer/CanvasRenderer2D.js`, `src/renderer/StoneColors.js`, `assets/**`, and `examples/**`
+were not touched — verified by `tools/test-object-template-integration.mjs` test 21 and
+`tools/test-object-preview-renderer.mjs` test 8.
 
 ---
 
 # Commands Executed
 
 ```bash
-npm test              # 22 suites, all pass (0 failures)
-git diff --check       # clean
-git status              # only the files listed above
-npm run dev             # static file server on :5173 (already running from a prior session), used
-                         # for browser verification
+npm test                # 27 suites, all pass (0 failures)
+git diff --check         # clean
+git status                 # only the files listed above
+npm run dev                 # static file server on :5173, used for browser verification
 ```
 
 ---
 
 # Automated Test Results
 
-`npm test` passes in full — 22 suites, zero failures:
+`npm test` passes in full — 27 suites, zero failures (24 pre-existing suites unchanged and green,
+plus 3 new suites totaling 46 new tests):
 
 ```
-Core model tests passed. / Font manager tests passed. / Vector path tests passed. /
-FontProviderRegistry tests passed. / OpenTypeProvider tests passed. /
-Default font provider registry tests passed. / SVG parser tests passed. /
-Arc projection tests passed.                    (new, 15/15)
-GeometryEngine tests passed.                     (47 tests total, incl. 13 new curved-text tests
-                                                   numbered 31-43)
-Stone color tests passed. / History manager tests passed. /
-App module migration tests passed. / Browser dependency loading tests passed. /
-Live text integration tests passed. / Shape geometry integration tests passed. /
-SVG integration tests passed. / Undo/redo integration tests passed. /
-Curved text integration tests passed.            (new, 11/11)
-Render/export pipeline tests passed. / Production export validation tests passed. /
-UX visual polish tests passed.                   (includes the pre-existing pinned straight-text
-                                                   regression: exactly 391 stones, widthMm~=199.385,
-                                                   heightMm~=16.979 for the default project — proves
-                                                   straight text is genuinely unchanged)
-Cup rotation stabilization tests passed. / Examples regression suite passed.
+Core model / Font manager / Vector path / FontProviderRegistry / OpenTypeProvider /
+Default font provider registry / SVG parser / Arc projection / GeometryEngine /
+Stone color / History manager tests passed.
+Object template tests passed.                    (new, 17/17)
+App module migration / Browser dependency loading / Live text integration /
+Shape geometry integration / SVG integration / Undo/redo integration /
+Curved text integration / UI discoverability tests passed.
+Render/export pipeline / Production export validation / UX visual polish /
+Cup rotation stabilization tests passed.
+Object preview renderer tests passed.             (new, 8/8)
+Object template integration tests passed.         (new, 21/21)
+Examples regression suite passed.
 ```
 
-Regression-test verification (not part of the normal `npm test` run — done manually to prove the
-new tests are real): re-ran `tools/test-geometry-engine.mjs` test 31 (straight-text regression)
-against the pre-milestone `GeometryEngine.js` via `git stash` — it passed unchanged (confirming
-`curveEnabled` genuinely defaults to a no-op), then confirmed tests 32-43 all fail against the
-pre-milestone code (no `curveEnabled` param existed) and pass after restoring the fix.
+Regression-proof highlights:
+
+* `tools/test-object-preview-renderer.mjs` test 2 proves an omitted `objectTemplate` option
+  produces the exact same draw-call sequence as explicitly passing the mug template — the
+  strongest available proof that this milestone introduced zero behavior change for any caller
+  that doesn't know about object templates.
+* `tools/test-object-template-integration.mjs` test 15 generates the default project's `StoneLayout`
+  under all three templates and asserts the stone arrays are byte-identical — proving object type
+  never perturbs geometry.
+* `tools/test-object-template-integration.mjs` tests 9-12 prove a pre-RS-1004 Project JSON (no
+  `product` field) and an unrecognized `product` value both resolve to `'mug'` without throwing.
+* All four pre-existing cup/renderer-related suites (`test-cup-rotation-stabilization.mjs`,
+  `test-ux-visual-polish.mjs`, `test-production-export-validation.mjs`,
+  `test-render-export-pipeline.mjs`) pass unmodified against the generalized `renderCup()`.
 
 ---
 
@@ -148,254 +190,95 @@ pre-milestone code (no `curveEnabled` param existed) and pass after restoring th
 Performed via a from-scratch headless-Chrome/CDP driver (raw DevTools Protocol over Node's native
 `WebSocket`, no new dependency — matching this repository's established precedent), against
 `npm run dev` (static file server on `:5173`), Chrome launched headless with
-`--window-size=1440,960` and `Emulation.setDeviceMetricsOverride(1440x900)`.
+`--window-size=1440,960`.
 
 Verified, in one continuous session (screenshots captured, session-local, not committed):
 
-* [x] Page loads, no console errors on load.
-* [x] Default project (straight text, `curveEnabled:false`) renders unchanged — 375 stones,
-      199.4×17.0mm, matching the pre-milestone baseline.
-* [x] Enabling curved text (`curveEnabled:on`) live-regenerates the layout with no reload: 495
-      stones, arced into a circle.
-* [x] **Small radius** (10mm, sweep 360°, 25mm-tall text): text overlaps through the circle's
-      center, producing a dense flower-like pattern — the honest, finite-coordinate consequence of
-      text taller than the radius (verified: all coordinates finite, no NaN/crash). See "Warnings".
-* [x] **Large radius** (150mm): 1081 stones, a gentle 315.6×317.5mm arc.
-* [x] **Sweep 180°/270°/360°**: distinct stone counts and bounding boxes at each (408/514/625
-      stones), confirming sweep genuinely controls how much of the circle the text occupies.
-* [x] **Inside vs. outside direction**: visually confirmed via screenshot — outside produces
-      upright, outward-facing letters (readable arching over the top, like a badge); inside produces
-      letters flipped toward the center (the documented, honest consequence of the inside/outside
-      rule applied at a top-of-circle placement — see the specification's "Geometry Model").
-* [x] **Font switching while curved**: Great Vibes (script font) renders as a smooth, continuous
-      curved ribbon; switching back to Courier Prime live-updates correctly.
-* [x] **Outline and fill modes while curved**: both produce valid, non-empty curved layouts.
-* [x] **Start/center/end alignment**: at a partial sweep (120°, distinguishable from a full circle)
-      produced three visibly different placements (77.2×110.2mm / 125.6×44.9mm / 77.0×113.7mm) — the
-      `align-center` screenshot shows "Vitalina Serbin" cleanly centered and arching over the top,
-      the canonical curved-text look.
-* [x] **Cup preview**: reflects curved text automatically in every screenshot (a visible ring/arc of
-      gold stones on the cup), with zero renderer changes — confirms "Cup preview works
-      automatically."
-* [x] **Undo/redo across curve edits**: status changed to "Undo"/"Redo" and the layout reverted/
-      reapplied correctly.
-* [x] **Duplicate layer preserves curve**: duplicating the curved layer auto-selected the new layer,
-      whose curve controls showed identical values to the original (radius 60, direction outside,
-      sweep 180, alignment center).
-* [x] **Save/load round-trip**: exported the live Project JSON (intercepting the real
-      `URL.createObjectURL` Blob, not a re-implementation), then re-imported it through the real
-      `#importProjectFile` change handler via a genuine `File`+`DataTransfer`; every curve field
-      round-tripped exactly.
-* [x] **Validation rejection**: imported a Project JSON with `curveRadiusMm:0` through the real
-      import path — `GeometryEngine` threw `RangeError: curveRadiusMm must be positive.`, caught by
-      `updateAll()`, logged once to `console.error`, with zero uncaught page exceptions. See
-      "Warnings" for a related, pre-existing display nuance found during this check.
-* [x] **All five exports** (Project JSON, Generated Layout JSON, SVG, PNG, Cup PNG) succeeded for a
-      curved layer — confirmed via a `download`-click filename capture that survives the async
-      `canvas.toBlob()` callback (`rhinestone-project.json`, `rhinestone-generated-layout.json`,
-      `rhinestone-layout.svg`, `rhinestone-layout.png`, `rhinestone-cup-preview.png`).
-* [x] Zero console errors across all normal editing/exporting steps. Exactly one `console.error` was
-      logged, during the deliberate validation-rejection check above — the correct, intended
-      behavior (proving the rejection path works), not a regression.
+* [x] Default project loads as Mug (`#objectType` = `mug`, `#wrap` = `front`, preview stats say
+      "Mug") — unchanged from before this milestone (375 stones, 199.4×17.0mm).
+* [x] Switch Mug → Straight Tumbler: `#objectType`/preview stats update, `#wrap` resets to the
+      tumbler's default (`half`), the preview silhouette becomes a true straight-walled cylinder
+      with no handle (416 stones after re-centering at the new 230×100mm canvas).
+* [x] Switch Straight Tumbler → Bottle: `#wrap` resets to the bottle's default (`wide`), the preview
+      silhouette becomes a neck+shoulder+cap bottle with no handle (323 stones at the new 180×90mm
+      canvas).
+* [x] Design remains visible (non-zero stone count, rendered in both the 2D layout and the object
+      preview) for all three object types.
+* [x] Swept all four wrap modes (`front`/`wide`/`half`/`full`) for all three object types — no
+      thrown errors, cup canvas updates each time.
+* [x] Safe-area guide: confirmed visually via full-resolution `#layout` canvas captures — a light
+      dashed rectangle distinct from the (darker, tighter) selection outline, present and
+      differently sized for mug vs. bottle (matching each template's own `safeAreaInsetMm` at its
+      own canvas size).
+* [x] Save/load round-trip: exported Project JSON while on Bottle (intercepted the real
+      `URL.createObjectURL` Blob, not a re-implementation) — confirmed `product:"bottle"`,
+      `canvas:{width:180,height:90}`, `wrap:"wide"` in the exported file; switched to Mug; imported
+      the exported file back through the real `#importProjectFile` change handler via a genuine
+      `File`+`DataTransfer` — `#objectType`/`#wrap` correctly restored to `bottle`/`wide`.
+* [x] Undo/redo across an object-type switch: switched Bottle → Tumbler, clicked `#undoBtn` —
+      `#objectType` correctly reverted to `bottle`; clicked `#redoBtn` — correctly reapplied
+      `tumbler`.
+* [x] All five exports (Project JSON, Generated Layout JSON, SVG, 2D PNG, Object Preview PNG)
+      succeeded for Bottle — captured filenames are byte-identical to the pre-milestone names:
+      `rhinestone-project.json`, `rhinestone-generated-layout.json`, `rhinestone-layout.svg`,
+      `rhinestone-layout.png`, `rhinestone-cup-preview.png`.
+* [x] Zero console errors/exceptions across the entire session (0 of 0 captured console messages
+      were errors).
+* [x] Screenshots captured for all three objects: `01-mug-default.png`, `02-tumbler.png`,
+      `03-bottle.png` (full-panel), plus `layout-only-{mug,tumbler,bottle}.png` (zoomed 2D
+      production canvas, showing the safe-area guide clearly) and `04`–`06` covering wrap sweep/
+      import/undo-redo states.
 
 ---
 
 # Warnings
 
-* **Small-radius overlap is expected, not a bug.** When `curveRadiusMm` is small relative to the
-  text's height, ascenders/descenders (whose effective radius is `curveRadiusMm ∓ v`) can extend
-  past the circle's center, producing overlapping/crossing glyph geometry. All coordinates stay
-  finite (tested explicitly, `tools/test-geometry-engine.mjs` test 39, at `curveRadiusMm:2`).
-  Clamping or warning about this was not in scope (interactive curve handles / live visual
-  guardrails are explicitly out of scope per the milestone brief) — a future milestone could add a
-  soft warning if this proves confusing in practice.
-* **`'inside'` direction is a fixed geometric rule, not placement-aware.** It always points glyph
-  "up" toward the circle's center, which reads correctly for bottom-of-circle or ring-interior text
-  but produces upside-down-looking text if paired with a top-of-circle placement. This is documented
-  behavior (see the specification's "Geometry Model"), matching how existing circular-text tools'
-  inside/outside toggles already work — not a bug.
-* **Pre-existing status-message quirk found (not introduced by this milestone).** When a Project
-  JSON import triggers a `GeometryEngine` generation error (curved-text-invalid or otherwise —
-  reproducible with e.g. an invalid font id too, unrelated to curves), `updateAll()`'s internal
-  `catch` briefly sets `#status` to the specific error message, but the `importProjectFile` change
-  handler's `await updateAll(true)` call returns normally afterward (the error is swallowed inside
-  `updateAll()`, by design, so a single failed regeneration never crashes the surrounding action) and
-  immediately overwrites `#status` with its own "Imported X: N layer(s)" success message — so the
-  user briefly sees a success message even though the layout actually failed to regenerate and is
-  showing a stale layout. The `console.error` and the underlying rejection are both real and correct;
-  only the final displayed status text is misleading in this one scenario. This is a pre-existing
-  `app.js` behavior (the same code path existed, unchanged, before this milestone, for every layer
-  type) — fixing it is a cross-cutting `app.js` import-flow change outside RS-1003's scope, and is
-  recorded here rather than fixed silently.
-* **UI-level `parseFloat(...)||default` coercion for `curveRadiusMm`/`curveSweepAngleDeg`.** Typing a
-  literal `0` into either field is silently coerced to a safe default (`40`/`360`) before it ever
-  reaches `GeometryEngine`, matching the exact pattern every other numeric text-layer field
-  (`height`, `stoneSize`, `gap`) already uses in this app. This means a user cannot literally type
-  `0` into these two fields and see the engine's rejection message — the engine's own validation
-  (tested directly, and reachable via Project JSON import) is the real, verified guarantee; the UI
-  guard is an intentional, pre-existing-pattern-consistent extra layer, not a gap.
+* **Bottle/tumbler production canvas sizes are new defaults, not tuned to any specific commercial
+  SKU.** `tumbler` (230×100mm) and `bottle` (180×90mm) were chosen to keep the same
+  landscape-wrap-band aspect ratio the existing mug (210×90mm) already uses, so the default design
+  stays visible and reasonably proportioned across all three without per-template layer
+  repositioning (out of scope). A future milestone calibrating these against real product
+  dimensions is a reasonable follow-up, not a defect — the milestone brief scoped preview/switching
+  behavior, not manufacturing-calibrated dimensions for specific SKUs.
+* **The bottle's schematic preview has no "mouth" ellipse** (unlike mug/tumbler) — its neck/cap
+  drawing covers the top of the silhouette instead. This is an intentional, documented difference
+  (see `CupRenderer.js`'s inline comments and `tools/test-object-preview-renderer.mjs` test 5), not
+  an oversight.
+* **Switching object type always resets `project.canvas`/`project.wrap` to the new template's
+  defaults**, even if the user had customized `wrap` for the previous object type. There is no UI to
+  edit `project.canvas` independently of object type today (true before this milestone too), so this
+  is the only sane behavior; `wrap` reset is called out explicitly in the milestone brief ("wrap
+  defaults where appropriate"). A future milestone could remember per-template wrap preferences if
+  that proves desirable in practice.
+* **Two pre-existing guard tests' forbidden-file lists were narrowed** (`tools/test-undo-redo-
+  integration.mjs`, `tools/test-curved-text-integration.mjs`) and **two pre-existing tests' source-
+  extraction eval calls were updated** (`tools/test-svg-integration.mjs`,
+  `tools/test-examples-regression.mjs`) to inject the real `getObjectTemplate` as a function
+  parameter, since `validateProject()` gained a new import dependency those tests extract and
+  `eval()` in isolation. All four changes are narrow, commented, and necessitated by this
+  milestone's legitimate scope — see `docs/specifications/RS-1004-MultiObjectTemplates.md`
+  "Implementation Notes / Known Discrepancies" for the two forbidden-list changes specifically.
 
 ---
 
 # Known Limitations
 
-Unchanged from prior milestones' recorded scope, plus this milestone's own explicit out-of-scope
-list: Bezier text, text on arbitrary/freehand paths, perspective text, interactive curve handles
-(drag handles on canvas), multiple baselines, non-uniform/variable per-character spacing. As noted in
-the specification, `curveSweepAngleDeg` uniformly stretches the text's existing pen-position axis
-onto the requested angle (matching `CupRenderer`'s existing wrap-mode precedent) — this is a
-deliberate, documented design decision, not an oversight.
+* No custom template editor (out of scope per the milestone brief) — templates are code-defined in
+  `src/products/ObjectTemplate.js`.
+* No arbitrary 3D meshes/WebGL — the object preview remains a schematic 2D Canvas rendering, exactly
+  like the pre-existing mug preview.
+* No per-object-type production-safe layer-placement warnings (a layer can still be positioned
+  outside the active template's safe area; the safe-area guide is visual guidance only, not a
+  validation gate) — flagged as a candidate next milestone below.
+* Shirts/hats/bags, manufacturing nesting, and any `StoneLayout`/`GeometryEngine` schema change
+  remain explicitly out of scope, unchanged from the milestone brief.
 
 ---
 
 # Recommended Next Milestone
 
-Unchanged candidates from prior `TASK_RESULT.md`s remain open: multi-object grouping, per-layer
-rotation for shape/SVG layers, migrating `app.js`'s ad hoc project model onto
-`src/core/Project.js`/`Layer.js`. No new candidate is added by this milestone beyond the two minor,
-pre-existing nuances recorded above under "Warnings" (neither blocks merge).
-
----
-
-# Addendum — UI Discoverability Fix
-
-**Branch:** fix/rs-1003-ui-discoverability
-**Status:** IMPLEMENTED
-
-## Root Cause
-
-After RS-1003 merged into `develop`, manual testing reported that Curved Text, SVG Import, and Shape
-tools (Add circle/Add rectangle) could not be found in the running app. Investigation (headless
-Chrome/CDP, `getBoundingClientRect()` measurements at four realistic viewport sizes) found:
-
-* **Not missing, not disconnected, not developer-only.** Every control existed in the DOM with
-  correct `id`s, every event listener in `app.js` was correctly wired, and `GeometryEngine`/
-  `StoneLayout` were unaffected — confirmed by re-running the full RS-1003 browser verification
-  script, which drove every one of these controls successfully via real DOM events.
-* **Not a non-user-interaction artifact of the original RS-1003 verification.** That verification
-  used the same real `dispatchEvent`/`click()` DOM interactions a user's mouse/keyboard would
-  trigger; it did not call any internal JS function directly for these three features.
-* **The actual defect: layout/discoverability.** The left sidebar (`.side` in `index.html`) had grown
-  to `scrollHeight` 1615px, while `.side`'s own `clientHeight` (the visible viewport) was only
-  694-1006px at every tested size except one. `overflow-y` was already `auto` (scrolling was
-  technically possible), but:
-  1. "Add circle"/"Add rectangle"/"Import SVG" sat at `top: 807-863px` — below the fold (`clientHeight`
-     694-826px) at 1440×900, 1366×768, and 1280×800; only visible without scrolling at 1920×1080.
-  2. The panel gave **zero visual indication** that more content existed below the fold — no shadow,
-     fade, "more" affordance, or any cue distinguishing "the panel has ended" from "there is more if
-     you scroll." A user has no reason to suspect three major feature buttons are one scroll away.
-  3. RS-1003 made this measurably worse by inserting a "Curved text" row into the already-long
-     `#textControls` block sitting above the Layers/shape-tools section, pushing everything below it
-     (shape tools, SVG import, 3D view, exports) further down.
-
-Screenshot evidence (`inspect-common-laptop.png`, pre-fix, 1366×768): the visible panel ends exactly
-at the "Layers" label with nothing else shown — "Add circle"/"Add rectangle"/"Import SVG" are 100%
-invisible with no hint they exist, matching the report exactly.
-
-## Fix
-
-`index.html` only — no `app.js`, `GeometryEngine.js`, or `StoneLayout.js` change (verified by a new
-test, see below):
-
-1. **Reordered** the Layers section (layer list, "Add circle", "Add rectangle", "Import SVG" + its
-   hidden file input, "Delete selected layer") to sit immediately after the "Selected layer" dropdown,
-   before any per-layer-type detail controls (`#textControls`/`#shapeControls`/`#svgControls`). This
-   is a pure move — no element was duplicated, removed, or given new behavior; `app.js`'s `el(id)`
-   lookups are ID-based and do not depend on DOM order, so no JS change was needed.
-2. **Added a CSS-only scroll-shadow** to `.side` (a well-established, `background-attachment:local`-
-   based technique, no JavaScript): a soft shadow now appears at the bottom edge of the panel whenever
-   there is more scrollable content below, and disappears once the user has actually scrolled to the
-   true end — giving the remaining content (curved-text detail fields, stone/cup settings, 3D view,
-   exports) a genuine, always-correct "scroll for more" cue instead of relying on an easy-to-miss
-   native scrollbar.
-
-## Files Changed
-
-```
-index.html                         (moved the Layers/shape-tools/SVG-import block; added a
-                                     scroll-shadow background to .side)
-tools/test-ui-discoverability.mjs  (new — 7 structural tests: layer-creation tools now precede all
-                                     per-layer detail controls and sit immediately after the layer
-                                     selector; no duplicated elements; the pre-existing
-                                     #textControls/#shapeControls adjacency other tests depend on
-                                     still holds; .side declares a real scroll-shadow; app.js still
-                                     wires every id; GeometryEngine.js/StoneLayout.js untouched)
-package.json                       (registers the new test)
-TASK.md, TASK_RESULT.md            (this addendum)
-```
-
-No other file was changed. `app.js`, `src/geometry/**`, `src/renderer/**`, `src/export/**`, and every
-other module are byte-for-byte untouched.
-
-## Commands Executed
-
-```bash
-npm test        # 23 suites, all pass (0 failures)
-git diff --check # clean
-git status        # only the files listed above
-npm run dev       # static file server on :5173 (already running), used for browser verification
-```
-
-## Browser / Manual Verification
-
-Headless Chrome/CDP (raw DevTools Protocol, no new dependency), against `npm run dev`, at four
-realistic viewport sizes: 1280×800, 1366×768, 1440×900 (my own RS-1003 verification size), 1920×1080.
-
-**Before the fix** — `getBoundingClientRect()` measurements:
-
-| Size | curveEnabled visible? | addCircle/addRect visible? | importSvg visible? |
-|---|---|---|---|
-| 1280×800 | yes | **no** | **no** |
-| 1366×768 | yes | **no** | **no** |
-| 1440×900 | yes | **no** | **no** |
-| 1920×1080 | yes | yes | yes |
-
-**After the fix** — same measurements, all four sizes:
-
-| Size | curveEnabled visible? | addCircle/addRect visible? | importSvg visible? |
-|---|---|---|---|
-| 1280×800 | yes | yes | yes |
-| 1366×768 | yes | yes | yes |
-| 1440×900 | yes | yes | yes |
-| 1920×1080 | yes | yes | yes |
-
-Functional smoke test at 1366×768 (post-fix), one continuous session:
-
-* [x] Clicked `#addCircle` — a "Circle" layer was added, layout regenerated (418 stones).
-* [x] Clicked `#addRect` — a "Rectangle" layer was added, layout regenerated (496 stones).
-* [x] Selected the circle layer — `#shapeControls` correctly became visible (`display:block`).
-* [x] Clicked `#importSvg` — correctly triggers the hidden `#importSvgFile` file input's `click()`.
-* [x] Imported a real SVG (`<circle>`, via a genuine `File`+`DataTransfer`+`change` event) — added a
-      "test.svg" layer, status showed "Imported test.svg: 1 shape(s)".
-* [x] Re-selected the text layer and enabled Curved text — regenerated correctly (a 4-layer project:
-      text + circle + rectangle + SVG, all visible together in the 2D layout and cup preview,
-      screenshot `func-03-curved-text-still-works.png`).
-* [x] Zero console errors, zero page exceptions throughout.
-
-Screenshots captured (session-local, not committed): `inspect-common-laptop.png` (before, showing the
-cut-off panel), `after-fix-common-laptop.png` and `bottom-crop.png` (after, showing Add circle/Add
-rectangle/Import SVG at the top and the scroll-shadow at the bottom edge), `func-01`–`func-03` (the
-functional smoke test above).
-
-## Warnings
-
-* Export buttons (`#exportProject` etc.) still require scrolling to reach at every tested size except
-  1920×1080 — this was not part of the reported issue (exports were separately verified reachable and
-  working in RS-1003's original browser verification) and is now clearly signaled by the new
-  scroll-shadow, so it was left as-is rather than also reordered, to keep this fix minimal and
-  targeted at the three specifically-reported capabilities.
-* The underlying total sidebar content height (1615px) is unchanged by this fix — it is a reordering
-  and affordance fix, not a content-reduction fix. If a future milestone adds more per-layer controls,
-  the same class of problem can recur; a longer-term fix (e.g. splitting the sidebar into a
-  fixed-header toolbar plus an independently scrolling properties region) is a reasonable follow-up
-  but was intentionally not done here per "do not implement new features."
-
-## Known Limitations
-
-None beyond the "Warnings" above.
-
-## Recommended Next Milestone
-
-Consider a structural sidebar redesign (fixed toolbar + independently scrolling properties panel) if
-future milestones continue to add per-layer controls — flagged as a warning above, not a blocking
-issue today.
+Per-object-type production-safe layer-placement guardrails (warn, don't block, when a layer's
+stones fall outside the active template's safe area) — the safe-area guide added this milestone is
+purely visual; turning it into an active (non-blocking) validation signal is a natural, contained
+follow-up. Calibrating `tumbler`/`bottle` production dimensions against real commercial SKUs (see
+"Warnings") is a second, independent candidate.

@@ -20,6 +20,8 @@
 <div class="app">
   <aside class="panel side">
     <div class="cardTitle">Project controls</div>
+    <label>Object type</label><select id="objectType"><option value="mug" selected>Mug</option><option value="tumbler">Straight Tumbler</option><option value="bottle">Bottle</option></select>
+    <hr>
     <label>Selected layer</label><select id="selectedLayer"></select>
     <label>Layers</label><div id="layersList"></div><div class="btnrow"><button id="addCircle">Add circle</button><button id="addRect">Add rectangle</button></div><div class="btnrow"><button id="importSvg">Import SVG</button></div><input id="importSvgFile" type="file" accept="image/svg+xml,.svg" style="display:none"><button id="deleteSelected" class="danger" style="width:100%;margin-top:8px">Delete selected layer</button>
     <hr>
@@ -45,14 +47,14 @@
     </div>
     <div class="row"><div><label>Stone size</label><select id="stoneSize"><option value="0.8">0.8 mm</option><option value="1.0">1.0 mm</option><option value="1.2">1.2 mm</option><option value="1.5">1.5 mm</option><option value="1.8">1.8 mm</option><option value="2.0" selected>2.0 mm</option><option value="2.5">2.5 mm</option><option value="3.0">3.0 mm</option></select></div><div><label>Gap (mm)</label><input id="gap" type="number" min="0" max="5" step="0.1" value="0.3"></div></div>
     <label>Stone color</label><select id="stoneColor"><option value="crystal">Crystal AB</option><option value="gold" selected>Gold</option><option value="silver">Silver</option><option value="jet">Jet Black</option><option value="rose">Rose</option><option value="sapphire">Sapphire</option><option value="emerald">Emerald</option></select>
-    <label>Cup background</label><select id="cupColor"><option value="#ffffff">White</option><option value="#0b0b0b">Black</option><option value="#1f3556" selected>Navy</option><option value="#bf1d1d">Red</option><option value="#f1d7a9">Cream</option><option value="#95d5b2">Mint</option><option value="#8f8f8f">Gray</option><option value="#e67aa0">Pink</option></select>
+    <label>Preview background</label><select id="cupColor"><option value="#ffffff">White</option><option value="#0b0b0b">Black</option><option value="#1f3556" selected>Navy</option><option value="#bf1d1d">Red</option><option value="#f1d7a9">Cream</option><option value="#95d5b2">Mint</option><option value="#8f8f8f">Gray</option><option value="#e67aa0">Pink</option></select>
     <hr><label>3D view</label><div class="btnrow"><button data-view="0" class="viewBtn primary">Front</button><button data-view="-90" class="viewBtn">Left</button><button data-view="90" class="viewBtn">Right</button><button data-view="180" class="viewBtn">Back</button></div>
     <label>Rotation</label><input id="rotation" type="range" min="-180" max="180" value="0"><label>Wrap mode</label><select id="wrap"><option value="front" selected>Front only - readable</option><option value="wide">Wide front</option><option value="half">Half wrap</option><option value="full">Full wrap</option></select>
     <hr><label>Project file</label><div class="btnrow"><button id="importProject">Import Project JSON</button></div><input id="importProjectFile" type="file" accept="application/json,.json" style="display:none">
     <hr><label>Export</label><div class="export"><button id="exportProject" class="primary">Export Project JSON</button><button id="exportLayout" class="primary">Export Generated Layout JSON</button><button id="exportSVG" class="primary">Export 2D SVG</button><button id="exportPNG" class="primary">Export 2D PNG</button><button id="exportCup" class="primary">Export Cup PNG</button></div><div id="status" class="status">Ready</div>
   </aside>
   <section class="panel viewer layoutPanel"><div class="viewerHead">Production Layout <small>mouse-edit shapes · auto-fit view</small></div><div class="canvasWrap"><canvas id="layout"></canvas><div class="fitNotice" id="fitNotice"></div></div><div class="stats" id="layoutStats"></div></section>
-  <section class="panel viewer cupPanel"><div class="viewerHead">Cup Preview <small>front mode preserves readability</small></div><div class="canvasWrap"><canvas id="cup"></canvas></div><div class="viewControls"><span class="small">Zoom</span><input id="zoom" type="range" min="70" max="140" value="100"><button id="resetView">Reset view</button></div><div class="stats" id="cupStats"></div></section>
+  <section class="panel viewer cupPanel"><div class="viewerHead">Object Preview <small>front mode preserves readability</small></div><div class="canvasWrap"><canvas id="cup"></canvas></div><div class="viewControls"><span class="small">Zoom</span><input id="zoom" type="range" min="70" max="140" value="100"><button id="resetView">Reset view</button></div><div class="stats" id="cupStats"></div></section>
 </div>
 <script type="importmap">
 {

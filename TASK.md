@@ -1,83 +1,55 @@
 # Task
 
-**Task ID:** RS-1003
+**Task ID:** RS-1004
 **Task Type:** Feature
-**Specification:** `docs/specifications/RS-1003-CurvedText.md`
+**Specification:** `docs/specifications/RS-1004-MultiObjectTemplates.md`
 **Status:** IN PROGRESS
-**Branch:** feature/rs-1003-curved-text
+**Branch:** feature/rs-1004-multi-object-templates
 
 ## Goal
 
-Let any text layer follow a circular arc (curved text) while reusing the existing
-`OpenTypeProvider -> VectorPath -> GeometryEngine -> StoneLayout` pipeline unchanged in every other
-respect. See the specification for the full geometry model, validation rules, and file scope.
+Allow one rhinestone design to be previewed and produced against multiple physical object
+templates (Mug, Straight Tumbler, Bottle), by activating the already-existing but inert
+`src/products/**` abstraction and `project.product` field — not by creating a second
+object/product model. See the specification for the full template schema, renderer generalization,
+and file scope.
 
 ## Required Outcome
 
-* Every text layer supports `curveEnabled` (straight/curved toggle), `curveRadiusMm`,
-  `curveDirection` (`outside`/`inside`), `curveStartAngleDeg`, `curveSweepAngleDeg`, and
-  `curveAlignment` (`start`/`center`/`end`).
-* Arc projection happens inside `src/geometry/GeometryEngine.js` (new
-  `src/geometry/ArcProjection.js` helper), between contour flattening and stone sampling. No stone
-  generation in `app.js`.
-* `StoneLayout`, `src/renderer/**`, and `src/export/**` require zero changes.
-* Curved text is fully editable: live regeneration on any parameter change, full undo/redo, save/load
-  round-trip, duplicate-preserves-curve.
-* Invalid params (`radius<=0`, `NaN`, `Infinity`, `sweep===0`) are rejected with a specific,
-  status-bar-surfaced error message.
-* `curveEnabled:false` (default) is byte-identical to the pre-milestone straight-text pipeline.
+* `src/products/**` defines a validated object-template registry (`mug`, `tumbler`, `bottle`), each
+  with display name, production width/height (mm), preview silhouette parameters, wrap
+  behavior/default, and a safe-area inset.
+* `project.product` selects the active template; switching it via a new, always-visible "Object
+  type" UI control is one discrete, undoable action that also resets `project.canvas` and
+  `project.wrap` to that template's defaults.
+* `src/renderer/CupRenderer.js`'s `renderCup()` is generalized (shared frustum + wrap math, three
+  silhouette variants) to draw all three templates; omitting `objectTemplate` falls back to the
+  exact pre-milestone mug silhouette.
+* A safe-area guide is drawn as an `app.js` editor overlay on the 2D Production Layout canvas — not
+  inside `CanvasRenderer2D.js`.
+* `StoneLayout` and `GeometryEngine` are unchanged. Existing Mug projects open identically. All
+  exports/layer editing/curved text/SVG import/undo-redo keep working for every object type.
 
 ## Rules
 
 * Follow `docs/AI_ENGINEER.md` and `docs/CLAUDE_GUIDE.md`.
 * Follow the "Allowed Files" / "Forbidden Files" lists in the specification exactly.
 * Do not modify `node_modules/**`.
-* Any pre-existing guard test (`tools/test-*.mjs`) whose own forbidden-file list would incorrectly
-  block a legitimately-needed change here must be updated narrowly, with a comment explaining why —
-  matching established precedent (e.g. the RS-1001 audit's `src/renderer/` carve-out). Based on
-  inspection, no existing guard test currently forbids `src/geometry/**`, `app.js`, `index.html`, or
-  `tools/**`, so none are expected to need this — recheck before assuming.
+* Two pre-existing guard tests (`tools/test-undo-redo-integration.mjs`,
+  `tools/test-curved-text-integration.mjs`) have forbidden-file lists that would incorrectly block
+  this milestone's legitimate `src/products/**`/`src/renderer/CupRenderer.js` changes — narrow them
+  with an explanatory comment, matching established precedent (see the specification's
+  "Implementation Notes / Known Discrepancies"). Do not touch any other guard test.
 * No unrelated refactoring; no new features beyond this milestone's scope.
 * Do not commit failing tests.
 
 ## Deliverables
 
-* Specification (`docs/specifications/RS-1003-CurvedText.md`) — done.
+* Specification (`docs/specifications/RS-1004-MultiObjectTemplates.md`) — done.
 * Implementation.
-* Automated tests (new `tools/test-arc-projection.mjs`, new
-  `tools/test-curved-text-integration.mjs`, additions to `tools/test-geometry-engine.mjs`).
+* Automated tests (`tools/test-object-template.mjs`, `tools/test-object-preview-renderer.mjs`,
+  `tools/test-object-template-integration.mjs`), registered in `package.json`.
 * `npm test` passing in full.
-* Browser verification via headless Chrome/CDP.
+* Browser verification via headless Chrome/CDP, with one screenshot per object type.
 * `TASK_RESULT.md` completed.
-* One commit, pushed to `feature/rs-1003-curved-text`.
-
----
-
-## Addendum — UI Discoverability Fix
-
-**Task Type:** Bug fix (human-reported, post-merge)
-**Branch:** fix/rs-1003-ui-discoverability
-
-After RS-1003 merged, manual testing reported that Curved Text, SVG Import, and Shape tools (Add
-circle/Add rectangle) were not discoverable in the running app.
-
-**Investigation:** all three features were fully implemented and correctly wired (confirmed: DOM
-elements present, event listeners attached, `GeometryEngine`/`StoneLayout` unaffected). The defect
-was a pure layout/discoverability issue: the left sidebar (`.side` in `index.html`) had grown to
-~1615px of stacked content, while a typical browser viewport only exposes ~700-900px of it, and the
-panel's native scroll had zero visual affordance. "Add circle"/"Add rectangle"/"Import SVG" sat
-~800px down the panel — past the fold on every realistic screen size tested except 1920×1080.
-
-**Fix (`index.html` only):** moved the Layers list + "Add circle"/"Add rectangle"/"Import
-SVG"/"Delete selected layer" controls to immediately follow the "Selected layer" dropdown, before
-any per-layer-type detail controls, so layer-creation tools are always reachable with zero scrolling.
-Added a CSS-only scroll-shadow affordance to `.side` so the remaining scrollable content has a
-visible cue. `app.js`, `GeometryEngine.js`, and `StoneLayout.js` were not touched.
-
-**Tests:** new `tools/test-ui-discoverability.mjs` (7 tests), registered in `package.json`. Full
-`npm test` (23 suites) passes.
-
-**Browser verification:** headless Chrome/CDP at 1280×800, 1366×768, 1440×900, 1920×1080 — Add
-circle/Add rectangle/Import SVG/Curved text are all now visible with zero scrolling at every size
-tested. Functional smoke test (add circle, add rectangle, import a real SVG, enable curved text)
-confirmed no regression. See `TASK_RESULT.md` for full detail and screenshots list.
+* One commit, pushed to `feature/rs-1004-multi-object-templates`.
