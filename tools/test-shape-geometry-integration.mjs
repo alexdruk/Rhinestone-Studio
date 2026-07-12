@@ -89,7 +89,9 @@ await test('7. app.js only imports modules allowed as of this milestone', () => 
     // RS-1006: the real 3D preview's own barrel module.
     /from\s*['"]\.\/src\/preview3d\/index\.js['"]/,
     // RS-1008: Image Trace's own barrel module, mirroring the src/svg/index.js entry above.
-    /from\s*['"]\.\/src\/image\/index\.js['"]/
+    /from\s*['"]\.\/src\/image\/index\.js['"]/,
+    // RS-1009: Alignment & Snapping's own barrel module.
+    /from\s*['"]\.\/src\/editing\/index\.js['"]/
   ];
   for (const line of importLines) {
     assert.ok(allowed.some((pattern) => pattern.test(line)), `unexpected import: ${line}`);

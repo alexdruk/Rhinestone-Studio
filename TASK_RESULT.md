@@ -6,7 +6,7 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-RS-1008A — Image Trace Architecture Correction
+RS-1009 — Alignment & Snapping
 
 ---
 
@@ -18,9 +18,7 @@ IMPLEMENTED
 
 # Branch
 
-feature/rs-1008-image-trace (continuation of the still-unmerged RS-1008 branch — this correction
-lands as a second commit on the same branch, since RS-1008 had not yet merged to `develop` when
-this correction was requested; see "Warnings" for why a new branch was not used)
+feature/rs-1009-alignment-snapping
 
 ---
 
@@ -37,247 +35,228 @@ git log -1 --oneline
 
 # Summary
 
-Corrected a real architectural regression in RS-1008 (Image Trace): `src/image/**` originally
-constructed `Stone`/`StoneLayout` directly instead of going through the permanent `GeometryEngine`
-— a second, independent stone-generating implementation. This milestone moves stone construction
-into the permanent engine, exactly like every other layer type, with zero visible behavior change.
+Added multi-select, six align commands, two distribute commands, and drag/keyboard snapping to
+the 2D Production Layout editor, in a new permanent module (`src/editing/**`) kept fully separate
+from `src/geometry/**`/`src/renderer/**`/`src/export/**`. `app.js` is the only consumer.
 
-**What moved where.**
-* `src/geometry/GeometryEngine.js` gained `generateImageLayout(params)`: takes an already-decoded
-  `imageBuffer` plus placement/stone/bitmap-processing params, calls `prepareImageField()`
-  internally (imported from `../image/index.js`, mirroring exactly how `generateSvgLayout()`
-  already imports and calls `parseSvgDocument()` from `../svg/index.js`), samples the resulting
-  field, and constructs `Stone`/`StoneLayout` — the same "normalize params → sample points →
-  `Stone[]` → `StoneLayout`" shape every other `generate*Layout()` method already uses.
-* `src/geometry/StoneSampler.js` gained `sampleFieldFillPoints(field, placementBox, spacingMm)`:
-  the raster analogue of the existing `sampleFillPoints()` (grid-walk-and-keep-if-on-field instead
-  of grid-walk-and-keep-if-inside-polygon). Exported from `src/geometry/index.js`.
-* `src/image/**` is now pure field-preparation only. `ImageTracePipeline.js` and
-  `ImageStoneSampler.js` are **deleted** (not deprecated, not left alongside the new code); a new
-  `ImageFieldPipeline.js` exports `prepareImageField()` — the unchanged grayscale → threshold →
-  invert → blur → resize logic, now stopping at a neutral field instead of continuing into stone
-  construction. `src/image/**` has zero dependency on `src/geometry/**` and never constructs a
-  `Stone`/`StoneLayout` — verified by a dedicated regression test, not just claimed.
-* `app.js`'s `generateImageStonesLive()` now calls `this.permanentEngine.generateImageLayout(params)`,
-  matching `generateSvgStonesLive()`/`generateShapeStonesLive()`'s exact shape (the only one of the
-  four `generate*StonesLive()` methods that did not already do this). The preview-before-commit
-  panel's live density-mask canvas now calls `prepareImageField()` once (replacing a manually
-  chained `toGrayscale`→`applyThreshold`→`invertMask`→`blurMask`→`resizeField` sequence that
-  duplicated pipeline logic), and its approximate-stone-count readout now calls
-  `permanentEngine.generateImageLayout()` directly — the exact same code path a real commit uses,
-  not a separate implementation.
+**Selection.** A single `Set<string>` (`selectedLayerIds`) is the one multi-selection model,
+mutated only through three pure functions in `src/editing/Selection.js`
+(`selectOnly`/`toggleSelection`/`clearSelection`) — every entry point that changes selection
+(canvas click, layers-list click, the layer dropdown, new/duplicate/delete/import) goes through
+the same three functions. Shift-click toggles a layer on the canvas or the layers list; clicking
+empty canvas clears the selection; a plain click on a layer not already selected collapses the
+selection to just that layer (preserving pre-existing single-selection behavior exactly).
+`selectedLayerId` (pre-existing) keeps driving the single-layer property panel unchanged.
 
-**Proof, not just claims.** A new `tools/test-image-trace-regression.mjs` proves three things the
-milestone brief asked for directly:
-1. **Byte-identical output.** Before touching any code, 8 representative test cases were run
-   through the pre-correction `traceImageBufferToStoneLayout()` and their exact `StoneLayout.toJSON()`
-   output committed as `tools/image-trace-regression-baselines.json`
-   (`tools/generate-image-trace-baselines.mjs`, a one-time capture script mirroring
-   `tools/generate-example-baselines.mjs`'s existing precedent, not run by `npm test`). The
-   regression test replays the identical inputs (shared via `tools/lib/imageTraceFixtures.mjs`, so
-   generator and test can never drift apart) through the corrected
-   `GeometryEngine.generateImageLayout()` and asserts `deepEqual` against that baseline for every
-   case — verified to pass before writing this report.
-2. **Uses the permanent pipeline.** Structural assertions confirm `app.js` calls
-   `this.permanentEngine.generateImageLayout(params)`, `GeometryEngine.js` defines the method and
-   imports `prepareImageField`/calls `sampleFieldFillPoints`, and the barrel exports it.
-3. **The old implementation was actually removed.** Assertions confirm `src/image/index.js` no
-   longer exports `traceImageBufferToStoneLayout`/`sampleImageFillPoints`, the two files no longer
-   exist on disk, and no file under `src/image/**` imports from `../geometry/` or constructs
-   `new Stone(...)`/`new StoneLayout(...)` — proving this isn't a "leave the old one around too"
-   half-fix.
+**Alignment/distribution.** `src/editing/AlignmentEngine.js` exports pure `alignLayers(items,
+direction)` (2+ items, aligns to the selection's union bounding box) and `distributeLayers(items,
+axis)` (3+ items, equal center-to-center spacing, holding the two extreme layers fixed). Both
+operate only on `{id, bbox:{xMm,yMm,widthMm,heightMm}}` — never on layer type or generated stones.
 
-**Guard-test maintenance.** Nine pre-existing suites hard-coded a forbidden-file assumption that
-`src/geometry/GeometryEngine.js` (and, in six cases, also `StoneLayout.js`) would never change again
-— a reasonable assumption at the time each was written, now legitimately broken by this milestone.
-Each was updated with a narrow, documented carve-out (the established "narrow, surgical" pattern
-this repo has used for every prior milestone that extended a previously-forbidden file, e.g.
-RS-1005's `src/export/` carve-outs, RS-1007's `src/renderer/StoneColors.js` carve-outs) —
-`StoneLayout.js`/`Stone.js`/`ContourGeometry.js`/`ArcProjection.js` remain forbidden everywhere;
-only `GeometryEngine.js`/`StoneSampler.js`/`index.js`/`README.md` are newly allowed.
+**Snapping.** `src/editing/SnapEngine.js` exports `buildSnapTargets()` (canvas center/edges,
+safe-area edges/center via the existing `src/products/index.js` `getSafeAreaRectMm()`, and every
+other visible layer's edges/centers) and `computeSnapOffset()` (nearest match per axis within a
+named `SNAP_TOLERANCE_MM`, returning a delta plus guide-line descriptors). Guides are drawn as
+temporary magenta lines during a drag and cleared on pointerup. A sidebar "Snap to guides" toggle
+(`snapEnabled`, view-only state like `rotation`/`zoom`) fully gates the snap computation.
+
+**Movement.** Two small new `app.js` helpers, `getLayerPosition(layer)`/
+`setLayerPosition(layer,xMm,yMm)`, are the one place that knows a layer's position field names
+(`cx`/`cy` for circle, `x`/`y` for everything else) — used uniformly by mouse drag, keyboard nudge,
+align, and distribute, replacing the old drag code's three-type-special-case branch. Arrow keys
+nudge the selection by `NUDGE_STEP_MM` (0.5mm); Shift+Arrow uses `NUDGE_STEP_LARGE_MM` (5mm); both
+are guarded against hijacking text/number-field or `<select>` focus, exactly like the pre-existing
+Delete/Backspace guard. A multi-layer drag moves every selected layer by one shared delta (computed
+once from the selection's union bbox at drag start), preserving relative positions. Exactly one
+`commitHistory()` call happens per completed drag (at drag start, pre-existing pattern) and per key
+press (one keydown = one undo step).
+
+**Text layers become movable.** Previously `text` layers had no position field at all — always
+auto-centered on the canvas, and `hitTest()` returned a non-draggable `'select'` kind for them.
+RS-1009 adds optional `x`/`y` mm offset fields (default `0`, read via `layer.x||0`), added on top
+of the existing auto-center math with zero change to that math — a Project JSON file saved before
+this milestone (no `x`/`y` on its text layers) renders byte-identical to before. `hitTest()` now
+returns `'move'` for every layer type; text still never gets resize handles (unchanged). Curved
+text (`curveEnabled:true`) uses the exact same `x`/`y` fields since it is still `type:'text'`.
+
+**Selection/snap state is intentionally not persisted.** Like `rotation`/`zoom`, `selectedLayerIds`
+and `snapEnabled` are never part of `project`, never in the undo/redo snapshot
+(`currentSnapshot()`), and never in exported Project JSON. Reopening a saved project always starts
+with a single-layer selection.
 
 ---
 
 # Files Changed
 
 **New:**
-* `src/image/ImageFieldPipeline.js` — replaces `ImageTracePipeline.js`.
-* `tools/lib/imageTraceFixtures.mjs` — shared synthetic-buffer test cases.
-* `tools/generate-image-trace-baselines.mjs` — one-time baseline capture script (not run by `npm test`).
-* `tools/image-trace-regression-baselines.json` — committed baseline fixture (captured from the
-  pre-correction implementation before any refactor code was written).
-* `tools/test-image-trace-regression.mjs` — the RS-1008A proof suite (8 assertions).
-* `docs/specifications/RS-1008A-ImageTraceArchitectureCorrection.md`.
+* `src/editing/EditingConstants.js`, `src/editing/AlignmentEngine.js`, `src/editing/SnapEngine.js`,
+  `src/editing/Selection.js`, `src/editing/index.js`, `src/editing/README.md`.
+* `tools/test-alignment-engine.mjs` (14 assertions), `tools/test-snap-engine.mjs` (12 assertions),
+  `tools/test-editing-selection.mjs` (7 assertions), `tools/test-alignment-snapping-integration.mjs`
+  (28 assertions).
+* `docs/specifications/RS-1009-AlignmentSnapping.md`.
 * `TASK_RESULT.md` (this file).
 
-**Deleted:**
-* `src/image/ImageTracePipeline.js`, `src/image/ImageStoneSampler.js`.
-* `tools/test-image-trace-pipeline.mjs` (superseded by a new `generateImageLayout()` block in
-  `tools/test-geometry-engine.mjs`, mirroring how RS-1001's SVG coverage lives there).
-
 **Modified:**
-* `src/geometry/GeometryEngine.js` — new `generateImageLayout()` method, `normalizeImageParams()`,
-  new import of `prepareImageField`/`sampleFieldFillPoints`.
-* `src/geometry/StoneSampler.js` — new `sampleFieldFillPoints()`.
-* `src/geometry/index.js` — exports `sampleFieldFillPoints`.
-* `src/geometry/README.md` — new "Image Trace Geometry Engine (RS-1008A)" section.
-* `src/image/index.js` — exports `prepareImageField` instead of `traceImageBufferToStoneLayout`/
-  `sampleImageFillPoints`.
-* `src/image/README.md` — rewritten to describe the corrected pure-field-preparation design.
-* `app.js` — `generateImageStonesLive()` now calls the permanent engine; the preview panel's
-  `updateImagePreview()` now calls `prepareImageField()` + `permanentEngine.generateImageLayout()`
-  instead of the old manual chain + `traceImageBufferToStoneLayout()`; import line updated; a new
-  milestone header comment.
-* `tools/test-image-pipeline.mjs` — `sampleImageFillPoints` test replaced with a `prepareImageField()`
-  orchestration/validation test; other pure-stage tests unchanged (those functions did not move).
-* `tools/test-geometry-engine.mjs` — new `generateImageLayout()` coverage block (tests 44-53,
-  mirroring the existing `generateSvgLayout()` block), new `createImageBuffer` import.
-* `tools/test-image-integration.mjs` — tests 1/2 updated for the new call shape; test 9's
-  forbidden-file list narrowed (no longer forbids `src/geometry/`).
-* `tools/test-ui-discoverability.mjs`, `tools/test-object-template-integration.mjs`,
-  `tools/test-default-text-layer-editing.mjs`, `tools/test-production-sheet-exporter.mjs`,
-  `tools/test-preview3d-integration.mjs`, `tools/test-crystal-color-catalog.mjs`,
-  `tools/test-crystal-color-integration.mjs` — each narrowed to keep forbidding `StoneLayout.js`
-  (and `Stone.js`/`ContourGeometry.js`/`ArcProjection.js` where applicable) while allowing
-  `GeometryEngine.js`/`StoneSampler.js`/`index.js`/`README.md`, each pointing at
-  `tools/test-image-trace-regression.mjs` for the dedicated proof.
-* `package.json` — removes `test-image-trace-pipeline.mjs`, adds `test-image-trace-regression.mjs`.
-* `docs/ARCHITECTURE.md` — the RS-1008 "deliberate exception" paragraph is left in place (as an
-  honest record) but followed by a correction paragraph and a new "Image Trace Geometry Engine
-  (RS-1008A)" account; the "Layers" section and "Current Implementation" layer-map table row are
-  updated to reflect the corrected design.
-* `TASK.md` — this milestone's task file (replaces RS-1008's, since this correction supersedes it
-  on the same open branch).
+* `app.js` — imports `src/editing/index.js`; new `selectedLayerIds`/`snapEnabled`/`activeGuides`
+  state; `getLayerPosition()`/`setLayerPosition()`/`unionBBoxOfLayers()`/
+  `selectedItemsForEditing()`/`applyPositionDeltas()`/`runAlign()`/`runDistribute()`/
+  `nudgeSelection()`/`updateEditingUI()` helpers; rewritten `pointerdown`/`pointermove`/`pointerup`
+  handlers on `#layout` (multi-select, group drag, drag-time snapping); `hitTest()` returns `'move'`
+  for every layer type; `drawSelection()` draws every selected layer's box (handles only when
+  exactly one is selected) and a new `drawGuides()`; arrow-key nudge in the global `keydown`
+  handler; `defaultProject()`'s text layer gains explicit `x:0,y:0`; `generateTextStonesLive()`'s
+  offset math adds `layer.x||0`/`layer.y||0` on top of the existing auto-center calculation;
+  `duplicateLayer()` nudges a duplicated text layer's new `x`/`y` by +8mm (matching every other
+  layer type's existing convention); every layer-creation/deletion/import site now also resets
+  `selectedLayerIds`; Align/Snap button and `snapEnabled` wiring.
+* `index.html` — new "Align & Snap" sidebar section (six align buttons, two distribute buttons,
+  snap toggle, selection-count summary, a Shift-click/arrow-key usage hint), placed immediately
+  after the Layers list (visible without scrolling, before any per-layer-type detail controls).
+* `package.json` — four new test files added to the `test` script.
+* `docs/ARCHITECTURE.md` — new "Editing (Alignment & Snapping)" section; a `src/editing/**` row in
+  the "Layer map" table; a paragraph in "Layers" documenting the new text `x`/`y` fields.
+* `tools/test-app-module-migration.mjs`, `tools/test-shape-geometry-integration.mjs` — added
+  `src/editing/index.js` to each file's own app.js-import allow-list (the same "each new permanent
+  module gets an allow-list entry" pattern every prior milestone that added a barrel module used).
+* `tools/test-default-text-layer-editing.mjs`, `tools/test-undo-redo-integration.mjs`,
+  `tools/test-svg-integration.mjs`, `tools/test-image-integration.mjs` — narrow carve-outs updating
+  four pre-existing structural assertions whose exact-substring matches against `app.js` were
+  legitimately superseded by this milestone's rewrite (text now returns `'move'` not `'select'`
+  from `hitTest()`; the dropdown's change handler and duplicateLayer's text case gained one more
+  statement each; the old per-type drag-move branch was replaced by
+  `getLayerPosition()`/`setLayerPosition()`; the old single-drag pointerdown commit-history
+  assertion was split into the new resize/move drag-start paths). Each carve-out is commented
+  in place with the specific reason, following this repository's established pattern.
 
-**Untouched (verified by `tools/test-image-trace-regression.mjs`'s own forbidden-file guard):**
-`src/geometry/StoneLayout.js`, `Stone.js`, `ContourGeometry.js`, `ArcProjection.js`, `src/export/**`,
-`src/text/**`, `src/fonts/**`, `src/core/**`, `src/browser/**`, `src/renderer/**`,
-`src/preview3d/**`, `src/svg/**`, `src/history/**`, `src/products/**`, `index.html`, `assets/**`,
-`examples/**`, `style.css`, `README.md`, `LICENSE`, `CONTRIBUTING.md`.
+**Untouched (verified by this milestone's own forbidden-file guard in
+`tools/test-alignment-snapping-integration.mjs`):** `src/geometry/**`, `src/renderer/**`,
+`src/export/**`, `src/text/**`, `src/fonts/**`, `src/core/**`, `src/browser/**`, `src/svg/**`,
+`src/image/**`, `src/history/**`, `src/products/**`, `src/preview3d/**`, `style.css`, `README.md`,
+`LICENSE`, `CONTRIBUTING.md`, `assets/**`, `examples/**`.
 
 ---
 
 # Commands Executed
 
 ```bash
-# (continuing on feature/rs-1008-image-trace, already checked out)
-node -e "... capture baseline via pre-refactor traceImageBufferToStoneLayout ..." > baseline
-node tools/generate-image-trace-baselines.mjs        # committed baseline, run once before refactor
-npm test                                              # full suite, iterated to green (472/472)
+git checkout -b feature/rs-1009-alignment-snapping
+node --check app.js
+npm test                                              # iterated to green, 39/39 suites
 git diff --check
 git status
-python3 -m http.server 5199                           # browser verification
 npm install --no-save --no-package-lock puppeteer-core   # temporary, browser verification only
+python3 -m http.server 5199                           # browser verification
 npm uninstall puppeteer-core --no-save                    # removed afterward
 ```
 
-`package.json`/`package-lock.json` carry only the test-script entry swap
-(`test-image-trace-pipeline.mjs` → `test-image-trace-regression.mjs`) — `git status` confirms no
-dependency changes remain after the temporary Puppeteer install/uninstall.
+`package.json`/`package-lock.json` carry only the four new test-file entries in the `test` script
+— `git status` confirms no dependency changes remain after the temporary Puppeteer install/uninstall.
 
 ---
 
 # Automated Test Results
 
-`npm test` — **35/35 suites pass, 472/472 individual assertions, exit code 0**.
+`npm test` — **39/39 suites pass, exit code 0.**
 
-**`tools/test-image-trace-regression.mjs` (8 assertions, new):** byte-identical output against the
-committed pre-correction baseline for all 8 regression cases; `app.js`/`GeometryEngine.js` wiring
-proof; `sampleFieldFillPoints()` exported from the permanent barrel; old implementation actually
-removed (unexported and off disk); one-way dependency proof (`src/image/**` never imports
-`../geometry/` or constructs `Stone`/`StoneLayout`); a full-shape functional sanity check; this
-suite's own forbidden-file guard.
+**New suites (61 new assertions):**
+* `tools/test-alignment-engine.mjs` (14 assertions) — all six align directions, union-bbox
+  reference, 2+/3+ item requirements, invalid-direction/axis errors, order-independence,
+  axis-isolation (align never moves the orthogonal axis), non-numeric-bbox rejection.
+* `tools/test-snap-engine.mjs` (12 assertions) — canvas center/edge snap, safe-area edge/center
+  snap, layer edge/center snap (with `layerId` on the guide), tolerance boundary (exactly-at vs.
+  just-beyond), no-match returns zero offset/no guides, closest-of-several-matches, axis
+  independence.
+* `tools/test-editing-selection.mjs` (7 assertions) — add/remove/clear, double-toggle no-op,
+  immutability (never mutates the input `Set`), removing the last id empties the selection.
+* `tools/test-alignment-snapping-integration.mjs` (28 assertions) — structural wiring (imports,
+  selection state, every selection-changing site routes through `src/editing/Selection.js`,
+  empty-canvas clear, Shift-click toggle on canvas and layers-list, grouped-drag delta
+  application, snap gating/target exclusion/resize-never-snaps, guide clearing, align/distribute
+  wiring and history-commit-once, arrow-key wiring and guard, selection excluded from
+  history/export, Project-JSON-import selection reset, text `x`/`y` fields, sidebar
+  labels/tooltips/initial-disabled-state/placement, `updateEditingUI()` thresholds) plus
+  behavioral checks combining the real `src/editing/**` module with the extracted, pure
+  `getLayerPosition()`/`setLayerPosition()` from `app.js`: round-trip for all 6 layer-type
+  categories (text, curved text, circle, rectangle, svg, image), a mixed-type 5-layer align across
+  all six directions verified against the resulting bounding boxes, 3-layer distribute verified
+  for equal center spacing and fixed extremes, keyboard-nudge grouped movement preserving relative
+  offsets, `computeSnapOffset`/`buildSnapTargets` integration against a realistic
+  canvas+safe-area+other-layers input, this milestone's own forbidden-file guard.
 
-**`tools/test-geometry-engine.mjs` (extended, 53 assertions total, 10 new):** `generateImageLayout()`
-coverage — foreground-only placement, `invert` flip, monotonic threshold behavior, blur not
-crashing, `maxWidthPx`/`maxHeightPx` bounding, correct placement/scaling, correct
-`layerId`/`color`/`sizeMm`, determinism, six malformed-param cases, empty-background/no-font-registry
-case — directly replacing the equivalent coverage the now-deleted
-`tools/test-image-trace-pipeline.mjs` had against the removed direct-construction function.
-
-**`tools/test-image-pipeline.mjs` (9 assertions, 1 changed):** the `prepareImageField()` test
-verifies the five pipeline stages thread together in the documented order and that the function
-validates its own threshold/blurRadiusPx/maxWidthPx/maxHeightPx params — everything else unchanged.
-
-**`tools/test-image-integration.mjs` (9 assertions, 2 changed):** tests 1/2 now assert the
-`this.permanentEngine.generateImageLayout(params)` call shape and the `prepareImageField` import
-(plus that `traceImageBufferToStoneLayout` no longer appears anywhere in `app.js`).
-
-All other suites (including the seven with narrow guard updates) pass unchanged in substance —
-their assertions about actual behavior are untouched; only their forbidden-file lists were narrowed
-where `src/geometry/GeometryEngine.js`/`StoneSampler.js` needed to newly become allowed.
+**All 35 pre-existing suites remain green** (472+ prior assertions), including the six suites
+given narrow, documented carve-outs (see "Files Changed") for structural assertions this
+milestone's rewrite legitimately superseded.
 
 ---
 
 # Browser/Manual Verification
 
-Re-ran the exact same real headless-Chrome/CDP verification script used for the original RS-1008
-milestone (same synthetic PNG/JPEG/WebP generation, same 20 numbered checks, 35 total assertions)
-against the corrected implementation, via `python3 -m http.server 5199` and a temporary
-`puppeteer-core` install (`--use-gl=swiftshader --enable-unsafe-swiftshader`).
+Real headless-Chrome/CDP verification (system Google Chrome via a temporary `puppeteer-core`
+install, `--use-gl=swiftshader --enable-unsafe-swiftshader`), served via `python3 -m http.server
+5199`, against the actual `index.html`/`app.js`/`src/editing/**`.
 
-**35/35 checks passed, with observed values identical to the pre-correction RS-1008 run:**
+**22/22 functional checks passed** (4 additional "failures" reported below are all the exact same
+single, pre-existing, already-documented `/favicon.ico` 404 console message — confirmed via a
+`response`-event listener to be that one request and nothing else; unrelated to this milestone):
 
-* Default project regression: 375 stones, 199.4×17.0mm — identical.
-* PNG import preview: "28 stones (approx.)" at default settings — identical.
-* Invert changes preview to "21 stones (approx.)" — identical.
-* Threshold=0 (nothing qualifies) → "0 stones (approx.)" — identical.
-* Cancel: 1→1 layers, panel hidden — identical.
-* Commit: 1→2 layers, "392 stones 199.4×17.0mm" — identical.
-* Post-commit threshold=0 edit: 392→375 stones — identical.
-* JPEG/WebP import: both succeed, layer count increments correctly — identical.
-* Unsupported file: rejected with the same specific `#status` message — identical.
-* Move: same drag delta produces the same x/y change (96.53→117.81mm, 36.53→54.92mm) — identical.
-* Duplicate: 4→5 layers — identical.
-* Visibility toggle: 401→395→401 stones — identical.
-* Delete: 5→4 layers — identical.
-* Undo/redo: 4→5→4 layers — identical.
-* Large 1500×1500px image: decode+preview open in 328ms, threshold recompute in 175ms, page
-  responsive (18ms trivial-evaluate probe) immediately after — comparable timing to the
-  pre-correction run (327ms/162ms/15ms), no regression.
-* All 7 export buttons: succeed with the same "Downloaded ..." status messages — identical.
-* Project JSON round trip: exported JSON contains `"type":"image"` and `"imageSrc":"data:image/…"`;
-  re-import restores all 4 image layers — identical.
-* 3D preview: live WebGL context, renders without error — identical.
-* Console/network: zero application-originated console errors or page errors; only the
-  pre-existing, already-documented `/favicon.ico` 404 — identical.
+* Page loads; default project generates (375 stones, as in every prior milestone's baseline).
+* Added a circle and rectangle layer (3 layers total).
+* Real pointer drag: dragging the default-centered rectangle away from center, then back, actually
+  moved it, and the final position snapped the rectangle's **center** to within `SNAP_TOLERANCE_MM`
+  of the canvas center (105mm on the 210mm-wide default canvas) — captured in a screenshot showing
+  live magenta vertical+horizontal snap guides through the canvas center and the selection handles
+  centered exactly on the crosshair.
+* Shift-click multi-select across three **mixed layer types** (text, circle, rectangle): 3 selected
+  → Shift-click removes one (3→2) → Shift-click re-adds it (2→3).
+* Align/Distribute buttons enabled only once 3 layers were selected.
+* Align Left, then Distribute Horizontal, both completed without error; screenshot confirms all
+  three selected layers' left edges are now flush and the sidebar summary reads "3 layers
+  selected."
+* Clicking empty canvas cleared the selection ("No layers selected"); align/distribute buttons
+  disabled again.
+* Toggling "Snap to guides" to Off switched the control's value.
+* Arrow-key nudge moved the selected layer by the small step; Shift+Arrow moved it by a visibly
+  larger step (0.5mm vs. 5mm, confirmed numerically).
+* Undo restored the pre-nudge position; Redo re-applied it.
+* Project JSON import (a hand-built 3-layer save file, simulating save/reopen) succeeded, and the
+  selection reset to exactly one layer afterward — confirming selection is not part of saved/loaded
+  state.
+* Export 2D SVG and Export Project JSON both still succeed ("Downloaded ..." status messages).
+* Zero uncaught page errors throughout the entire session.
 
-This is direct evidence (not just the automated-suite proof) that the refactor changed nothing
-observable: every stone count, every timing figure, and every status message matches the
-pre-correction session exactly.
-
-Not performed: real-GPU/real-device verification (same documented limitation as every prior
-milestone), mobile touch-gesture verification.
+Not performed: real-GPU/real-device verification, mobile touch-gesture verification, DXF/PNG/PDF/
+Cup-preview export spot-checks beyond the two already covered (same documented scope limitation as
+every prior milestone's browser session; these exporters are untouched by this milestone and their
+own dedicated suites already cover them).
 
 ---
 
 # Warnings
 
-* **This correction landed on the same branch as RS-1008 (`feature/rs-1008-image-trace`), not a new
-  `feature/rs-1008a-...` branch**, because RS-1008 had not yet merged to `develop` when this
-  correction was requested — the precedent milestone `RS-1006A` used a separate branch because
-  RS-1006 had already merged by that point. Treating this as a same-branch fix (per
-  `docs/CLAUDE_GUIDE.md`'s "Review Fixes" workflow) avoids an unnecessary branch/merge dance for
-  work that has not shipped. If a separate branch/commit history is actually wanted for this
-  correction specifically, say so and it can be re-organized before merge.
-* Nine pre-existing guard tests needed narrow forbidden-file-list updates (see "Files Changed").
-  Each carve-out is documented inline at its exact location, following this repository's
-  established pattern — flagged here as a concentration of guard-test churn worth a reviewer's
-  attention, even though each individual change is small and mechanical.
-* Same synchronous-main-thread and `imageBufferCache`-has-no-eviction limitations as RS-1008,
-  unchanged by this refactor.
+* Six pre-existing structural/integration test files needed narrow, documented carve-outs because
+  this milestone's `pointerdown`/`pointermove`/`hitTest()`/`duplicateLayer()`/dropdown-handler
+  rewrite legitimately changed exact substrings those tests matched against. Each carve-out is
+  commented in place with the specific reason (see "Files Changed") — flagged here as a
+  concentration of guard-test churn worth a reviewer's attention, even though each individual
+  change is small, mechanical, and preserves the original test's intent (verified behaviorally,
+  not just re-matched).
+* Resize-handle drags are deliberately not snap-aware (only move drags call the snap engine) — an
+  explicit scope decision recorded in the specification, not an oversight.
+* Multi-layer delete was not added (Delete/Backspace and the sidebar button still target one layer)
+  — grouping/locking/multi-delete were not part of the required outcome and are out of scope.
 
 ---
 
 # Known Limitations
 
-* Same as RS-1008's "Known Limitations" (only PNG/JPG/JPEG/WebP; no per-layer rotation; S-004
-  remains deferred) — unaffected by this refactor.
+* Same as every prior milestone: no rotation support (explicitly out of scope for this milestone
+  too), no arbitrary user-created guides, no rulers/grid customization.
+* S-004 (duplicated text in some 3D preview cases) remains deferred, unrelated to this milestone.
 
 ---
 
 # Recommended Next Milestone
 
-Merge RS-1008 (now including this correction) to `develop`; Web Worker-based off-main-thread image
-processing; an `imageBufferCache` eviction policy; migrating `app.js`'s ad hoc project/layer objects
-onto `src/core/Project.js`/`Layer.js`; DXF export; investigating S-004.
+Rotation support for layers; user-created (arbitrary) guides; layer grouping/locking; investigating
+S-004.

@@ -97,6 +97,13 @@ import { parseSvgDocument } from './src/svg/index.js';
 import { HistoryManager } from './src/history/index.js';
 import { getObjectTemplate, getSafeAreaRectMm } from './src/products/index.js';
 import { prepareImageField, maskFieldToRgba, decodeImageFileToBuffer, decodeDataUrlToBuffer, readFileAsDataUrl, isSupportedImageFile } from './src/image/index.js';
+// RS-1009 (Alignment & Snapping): src/editing/** is a new, pure, DOM-free module -- multi-select,
+// align/distribute, and drag/keyboard snapping math over layer bounding boxes in mm. It has no
+// dependency on src/geometry/**/StoneLayout/Stone and never generates stone positions itself;
+// app.js is the only caller, and is the only place that knows a given layer's position field
+// names (cx/cy vs x/y) via the new getLayerPosition()/setLayerPosition() helpers below. See
+// docs/specifications/RS-1009-AlignmentSnapping.md.
+import { SNAP_TOLERANCE_MM, NUDGE_STEP_MM, NUDGE_STEP_LARGE_MM, alignLayers, distributeLayers, buildSnapTargets, computeSnapOffset, selectOnly, toggleSelection, clearSelection } from './src/editing/index.js';
 'use strict';
 const FONT5={
 ' ':['00000','00000','00000','00000','00000','00000','00000'],
@@ -118,6 +125,9 @@ const VIEW_ANGLE_EPSILON_DEG=0.5;
 // RS-1002: bounds HistoryManager's undo/redo depth. Undo/redo is otherwise unlimited -- normal
 // editing sessions never come close to 100 steps -- this only caps worst-case memory use.
 const HISTORY_MAX_SIZE=100;
+// RS-1009: arrow key -> unit direction vector (mm), scaled by NUDGE_STEP_MM/NUDGE_STEP_LARGE_MM
+// (src/editing/EditingConstants.js) at keydown time depending on Shift.
+const ARROW_KEY_DELTAS={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
 // RS-1005: pixels-per-mm used only when rasterizing the Production Sheet SVG to PNG. Fixed and
 // documented (not derived from devicePixelRatio/viewport fit) so the PNG's pixel dimensions are
 // always a clean, undistorted multiple of the page's mm size -- never a fit-to-viewport scale.
@@ -162,7 +172,12 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // one non-empty layerId per instance; each Stone still carries its own real layer id) so every
  // renderer/exporter downstream consumes the same canonical product.
  async generate(project){let raw=[];for(const l of project.layers){if(!l.visible)continue;if(l.type==='text')raw.push(...await this.generateTextStonesLive(l,project));if(l.type==='circle'||l.type==='rectangle')raw.push(...await this.generateShapeStonesLive(l));if(l.type==='svg')raw.push(...await this.generateSvgStonesLive(l));if(l.type==='image')raw.push(...await this.generateImageStonesLive(l));}const stones=this.dedupe(raw,Math.min(...raw.map(s=>s.d||2),2)*0.58).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId}));return new StoneLayout({layerId:'project',stones})}
- async generateTextStonesLive(layer,project){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text)return[];const fontId=TEXT_ENGINE_FONT_IDS.has(layer.font)?layer.font:DEFAULT_TEXT_FONT_ID;const mode=layer.textMode==='fill'?'fill':'outline';const base={text:layer.text,fontId,layerId:layer.id,heightMm:layer.height,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const maxWidth=project.canvas.width-10;if(result.widthMm>maxWidth&&result.widthMm>0){const scale=maxWidth/result.widthMm;const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();const offsetX=bb?(project.canvas.width-bb.widthMm)/2-bb.minXmm:0;const offsetY=bb?(project.canvas.height-bb.heightMm)/2-bb.minYmm:0;return result.stones.map(s=>({x:s.xMm+offsetX,y:s.yMm+offsetY,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
+ async generateTextStonesLive(layer,project){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text)return[];const fontId=TEXT_ENGINE_FONT_IDS.has(layer.font)?layer.font:DEFAULT_TEXT_FONT_ID;const mode=layer.textMode==='fill'?'fill':'outline';const base={text:layer.text,fontId,layerId:layer.id,heightMm:layer.height,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const maxWidth=project.canvas.width-10;if(result.widthMm>maxWidth&&result.widthMm>0){const scale=maxWidth/result.widthMm;const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
+  // RS-1009: text layers previously had no position field -- stones were always centered on the
+  // canvas. layer.x/layer.y (mm, default 0) are a further offset applied on top of that same
+  // auto-centered base position, so pre-RS-1009 Project JSON (no x/y on its text layers) renders
+  // byte-identical to before, and dragging/nudging/aligning a text layer just moves this offset.
+  const offsetX=(bb?(project.canvas.width-bb.widthMm)/2-bb.minXmm:0)+(layer.x||0);const offsetY=(bb?(project.canvas.height-bb.heightMm)/2-bb.minYmm:0)+(layer.y||0);return result.stones.map(s=>({x:s.xMm+offsetX,y:s.yMm+offsetY,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
  // RS-0003.5C1: circle/rectangle layers are generated by the same permanent engine's
  // generateShapeLayout(), mirroring generateTextStonesLive() above.
  async generateShapeStonesLive(layer){if(!this.permanentEngine)return[];const isCircle=layer.type==='circle';const params={shape:layer.type,layerId:layer.id,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:'outline',color:layer.color,...(isCircle?{cxMm:layer.cx,cyMm:layer.cy,radiusMm:layer.r}:{xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h})};const result=this.permanentEngine.generateShapeLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
@@ -192,7 +207,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  bbox(stones){if(!stones.length)return{x:0,y:0,width:0,height:0,x2:0,y2:0};let x=Infinity,y=Infinity,x2=-Infinity,y2=-Infinity;for(const s of stones){x=Math.min(x,s.x-s.d/2);y=Math.min(y,s.y-s.d/2);x2=Math.max(x2,s.x+s.d/2);y2=Math.max(y2,s.y+s.d/2)}return{x,y,x2,y2,width:x2-x,height:y2-y}}
  layerBBox(layer){if(layer.type==='circle')return{x:layer.cx-layer.r,y:layer.cy-layer.r,width:layer.r*2,height:layer.r*2,x2:layer.cx+layer.r,y2:layer.cy+layer.r};if(layer.type==='rectangle')return{x:layer.x,y:layer.y,width:layer.w,height:layer.h,x2:layer.x+layer.w,y2:layer.y+layer.h};const stones=this.generateText(layer,project);return this.bbox(stones)} }
 const DEFAULT_PROJECT_NAME='Untitled Project';
-function defaultProject(){return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,product:'mug',canvas:{width:210,height:90},cupColor:'#1f3556',wrap:'front',layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:2,gap:.3,color:'gold',autoFit:true,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:360,curveAlignment:'center'}]}}
+function defaultProject(){return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,product:'mug',canvas:{width:210,height:90},cupColor:'#1f3556',wrap:'front',layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:2,gap:.3,color:'gold',autoFit:true,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:360,curveAlignment:'center',x:0,y:0}]}}
 // RS-0003.5D1: validates an imported Project JSON file against the exact ad hoc project/layer
 // shape #exportProject already produces (JSON.stringify(project)). Throws a specific Error
 // describing the first problem found instead of silently accepting a malformed project; the
@@ -245,6 +260,14 @@ let fontProviderRegistry=null,permanentEngineError=null;
 try{const fontManager=await FontManager.fromUrl('./assets/fonts/manifest.json');fontProviderRegistry=createDefaultFontProviderRegistry(fontManager)}catch(error){permanentEngineError=error;console.error('Font manifest failed to load; text layers will render empty until this is resolved. Shape layers are unaffected.',error)}
 const permanentEngine=new PermanentGeometryEngine({fontProviderRegistry});
 const engine=new GeometryEngine(permanentEngine);let project=defaultProject(),selectedLayerId='text',layout=null,rotation=0,zoom=1,layoutTransform=null,drag=null,generationToken=0;const el=id=>document.getElementById(id);const layoutCanvas=el('layout'),cupCanvas=el('cup');
+// RS-1009: the one multi-selection model (src/editing/Selection.js is the only place that
+// computes a new Set from an old one). selectedLayerId (above, pre-existing) keeps driving the
+// single-layer property panel exactly as before -- it always points at the most recently
+// interacted-with layer, even when selectedLayerIds is empty (clicking empty canvas clears the
+// multi-selection but intentionally leaves the panel showing the last-edited layer's fields, the
+// same way it already did before this milestone). snapEnabled/activeGuides are view-only editor
+// state (like rotation/zoom): never part of `project`, never undo/redo-tracked, never exported.
+let selectedLayerIds=new Set([selectedLayerId]),snapEnabled=true,activeGuides=[];
 // RS-1006: createPreview3D() returns a synchronous facade immediately -- Three.js itself loads
 // lazily inside it, so this line never blocks app.js's own startup.
 const preview3D=createPreview3D(cupCanvas);
@@ -286,16 +309,16 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
   el('projectName').value=project.name;
 }
 function writeSelectedControlsToLayer(){const l=selectedLayer();if(l.type==='text'){l.text=el('text').value;l.font=el('font').value;l.height=parseFloat(el('height').value)||25;l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;l.curveEnabled=el('curveEnabled').value==='on';l.curveRadiusMm=Math.max(0.1,parseFloat(el('curveRadiusMm').value)||40);l.curveDirection=el('curveDirection').value==='inside'?'inside':'outside';l.curveStartAngleDeg=parseFloat(el('curveStartAngleDeg').value)||0;l.curveSweepAngleDeg=parseFloat(el('curveSweepAngleDeg').value)||360;l.curveAlignment=el('curveAlignment').value;el('curveControls').style.display=l.curveEnabled?'block':'none'}else if(l.type==='circle'){l.cx=parseFloat(el('shapeX').value)||105;l.cy=parseFloat(el('shapeY').value)||45;l.r=Math.max(1,parseFloat(el('shapeW').value)||18)}else if(l.type==='rectangle'){l.x=parseFloat(el('shapeX').value)||65;l.y=parseFloat(el('shapeY').value)||30;l.w=Math.max(1,parseFloat(el('shapeW').value)||80);l.h=Math.max(1,parseFloat(el('shapeH').value)||30)}else if(l.type==='svg'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.mode=el('svgMode').value==='fill'?'fill':'outline'}else if(l.type==='image'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX))}l.stoneSize=parseFloat(el('stoneSize').value)||2;l.gap=parseFloat(el('gap').value)||.3;l.color=el('stoneColor').value;project.cupColor=el('cupColor').value;project.wrap=el('wrap').value;project.name=el('projectName').value||DEFAULT_PROJECT_NAME;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
-async function updateAll(skipWrite=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated;try{generated=await engine.generate(project)}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Text generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;renderLayerUI();drawLayout();drawCup();updateStats();updateHistoryUI();updateViewButtons();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}// S-003: a project must always keep at least one layer (deleteLayer()'s guard below), so once
+async function updateAll(skipWrite=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated;try{generated=await engine.generate(project)}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Text generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;renderLayerUI();drawLayout();drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}// S-003: a project must always keep at least one layer (deleteLayer()'s guard below), so once
 // only one layer remains, every delete affordance -- the per-row trash icon and the sidebar
 // "Delete selected layer" button -- is disabled here (not just left clickable-but-a-no-op) and
 // #layerRuleHint (sitting directly under the button, always in view) explains why. This runs on
 // every renderLayerUI() call (i.e. after every add/delete/duplicate/undo/redo/import), so the
 // disabled state and hint never go stale relative to the current layer count.
-function renderLayerUI(){const onlyOneLayer=project.layers.length<=1;el('selectedLayer').innerHTML=project.layers.map(l=>`<option value="${l.id}">${escapeHtml(layerLabel(l))}</option>`).join('');el('selectedLayer').value=selectedLayerId;el('layersList').innerHTML=project.layers.map(l=>`<div class="layer ${l.id===selectedLayerId?'selected':''}" data-layer="${l.id}"><input type="checkbox" ${l.visible?'checked':''} data-action="visible"><div class="name" data-action="select">${escapeHtml(layerLabel(l))}</div><div class="type">${l.type.toUpperCase()}</div><button data-action="select">✎</button><button data-action="duplicate">⧉</button><button data-action="delete" ${onlyOneLayer?'disabled title="At least one layer is required"':''}>🗑</button></div>`).join('');el('deleteSelected').disabled=onlyOneLayer;el('deleteSelected').title=onlyOneLayer?'At least one layer is required':'';el('layerRuleHint').style.display=onlyOneLayer?'block':'none'}function layerLabel(l){return l.type==='text'?(l.text||'Text'):l.type==='circle'?'Circle':l.type==='svg'?(l.svgName||'SVG'):l.type==='image'?(l.imageName||'Image'):'Rectangle'}function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function renderLayerUI(){const onlyOneLayer=project.layers.length<=1;el('selectedLayer').innerHTML=project.layers.map(l=>`<option value="${l.id}">${escapeHtml(layerLabel(l))}</option>`).join('');el('selectedLayer').value=selectedLayerId;el('layersList').innerHTML=project.layers.map(l=>`<div class="layer ${selectedLayerIds.has(l.id)?'selected':''}" data-layer="${l.id}"><input type="checkbox" ${l.visible?'checked':''} data-action="visible"><div class="name" data-action="select">${escapeHtml(layerLabel(l))}</div><div class="type">${l.type.toUpperCase()}</div><button data-action="select">✎</button><button data-action="duplicate">⧉</button><button data-action="delete" ${onlyOneLayer?'disabled title="At least one layer is required"':''}>🗑</button></div>`).join('');el('deleteSelected').disabled=onlyOneLayer;el('deleteSelected').title=onlyOneLayer?'At least one layer is required':'';el('layerRuleHint').style.display=onlyOneLayer?'block':'none'}function layerLabel(l){return l.type==='text'?(l.text||'Text'):l.type==='circle'?'Circle':l.type==='svg'?(l.svgName||'SVG'):l.type==='image'?(l.imageName||'Image'):'Rectangle'}function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function resizeCanvas(c){const r=c.getBoundingClientRect(),dpr=Math.max(1,devicePixelRatio||1),w=Math.floor(r.width*dpr),h=Math.floor(r.height*dpr);if(c.width!==w||c.height!==h){c.width=w;c.height=h}return{w,h,dpr}}
 function layoutMmToPx(p){return{x:layoutTransform.ox+p.x*layoutTransform.s,y:layoutTransform.oy+p.y*layoutTransform.s}}function layoutPxToMm(x,y){return{x:(x-layoutTransform.ox)/layoutTransform.s,y:(y-layoutTransform.oy)/layoutTransform.s}}
-function drawLayout(){const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr});layoutTransform={s,ox,oy,dpr};drawSafeAreaGuide(ctx,s,ox,oy,dpr,getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height));drawSelection(ctx,s,ox,oy,dpr);ctx.fillStyle='#516071';ctx.font=`${12*dpr}px Arial`;ctx.fillText(`${layout.count} stones · ${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm · ${selectedLayer().textMode||''}`,20*dpr,h-18*dpr);el('fitNotice').textContent='Drag shapes with mouse. Text uses readable stroke font.'}
+function drawLayout(){const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr});layoutTransform={s,ox,oy,dpr};drawSafeAreaGuide(ctx,s,ox,oy,dpr,getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height));drawSelection(ctx,s,ox,oy,dpr);drawGuides(ctx,s,ox,oy,dpr);ctx.fillStyle='#516071';ctx.font=`${12*dpr}px Arial`;ctx.fillText(`${layout.count} stones · ${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm · ${selectedLayer().textMode||''}`,20*dpr,h-18*dpr);el('fitNotice').textContent='Drag to move · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step).'}
 // RS-1004: a dashed guide rectangle for the active object template's safe design area, derived from
 // the current project.canvas size. This is a layer-agnostic editor overlay (like drawSelection()
 // below), not a CanvasRenderer2D.js change -- it reuses the exact mm->px transform
@@ -306,11 +329,37 @@ function drawSafeAreaGuide(ctx,s,ox,oy,dpr,rectMm){const rx=ox+rectMm.xMm*s,ry=o
 // rectangle), so their selection bbox is derived from the already-generated StoneLayout, filtered
 // to this layer's stones and wrapped in a fresh StoneLayout to reuse its getBoundingBox() math.
 function getLayerBBox(l){if(l.type==='circle')return{x:l.cx-l.r,y:l.cy-l.r,width:l.r*2,height:l.r*2,x2:l.cx+l.r,y2:l.cy+l.r};if(l.type==='rectangle'||l.type==='svg'||l.type==='image')return{x:l.x,y:l.y,width:l.w,height:l.h,x2:l.x+l.w,y2:l.y+l.h};const stones=layout.stones.filter(s=>s.layerId===l.id);if(!stones.length)return{x:0,y:0,x2:0,y2:0,width:0,height:0};const b=new StoneLayout({layerId:l.id,stones}).getBoundingBox();return{x:b.minXmm,y:b.minYmm,x2:b.maxXmm,y2:b.maxYmm,width:b.widthMm,height:b.heightMm}}
+// RS-1009: the one pair of functions that know a layer's position field names (cx/cy for circle,
+// x/y for everything else, including the new text-layer offset fields) -- src/editing/** never
+// sees a layer `type`, it only ever returns a translation delta; these two functions turn that
+// delta into the right field write for drag, keyboard nudge, align, and distribute alike.
+function getLayerPosition(l){if(l.type==='circle')return{xMm:l.cx,yMm:l.cy};return{xMm:l.x||0,yMm:l.y||0}}
+function setLayerPosition(l,xMm,yMm){if(l.type==='circle'){l.cx=xMm;l.cy=yMm}else{l.x=xMm;l.y=yMm}}
+function unionBBoxOfLayers(layers){let x=Infinity,y=Infinity,x2=-Infinity,y2=-Infinity;for(const l of layers){const b=getLayerBBox(l);x=Math.min(x,b.x);y=Math.min(y,b.y);x2=Math.max(x2,b.x2);y2=Math.max(y2,b.y2)}return{x,y,x2,y2,width:x2-x,height:y2-y}}
+// RS-1009: adapts a live project layer into the plain {id,bbox:{xMm,yMm,widthMm,heightMm}} shape
+// src/editing/AlignmentEngine.js expects, for every currently multi-selected layer.
+function selectedItemsForEditing(){return[...selectedLayerIds].map(id=>project.layers.find(l=>l.id===id)).filter(Boolean).map(l=>{const b=getLayerBBox(l);return{id:l.id,bbox:{xMm:b.x,yMm:b.y,widthMm:b.width,heightMm:b.height}}})}
+function applyPositionDeltas(deltas){for(const[id,{dxMm,dyMm}]of deltas){const l=project.layers.find(x=>x.id===id);if(!l)continue;const p=getLayerPosition(l);setLayerPosition(l,p.xMm+dxMm,p.yMm+dyMm)}}
+function runAlign(direction){const items=selectedItemsForEditing();if(items.length<2)return;commitHistory();applyPositionDeltas(alignLayers(items,direction));syncSelectedControlsFromLayer();updateAll(true)}
+function runDistribute(axis){const items=selectedItemsForEditing();if(items.length<3)return;commitHistory();applyPositionDeltas(distributeLayers(items,axis));syncSelectedControlsFromLayer();updateAll(true)}
+function nudgeSelection(dxMm,dyMm){if(selectedLayerIds.size===0)return;commitHistory();for(const id of selectedLayerIds){const l=project.layers.find(x=>x.id===id);if(!l)continue;const p=getLayerPosition(l);setLayerPosition(l,p.xMm+dxMm,p.yMm+dyMm)}syncSelectedControlsFromLayer();updateAll(true)}
+// RS-1009: keeps the Align/Snap sidebar section in sync with the current selection count -- align
+// needs 2+, distribute needs 3+, matching this milestone's required outcome exactly. Called from
+// updateAll() so it never goes stale after an edit/undo/redo/import.
+function updateEditingUI(){const n=selectedLayerIds.size;el('selectionSummary').textContent=n===0?'No layers selected':n===1?'1 layer selected':`${n} layers selected`;const alignDisabled=n<2;for(const id of['alignLeft','alignCenterH','alignRight','alignTop','alignCenterV','alignBottom'])el(id).disabled=alignDisabled;const distDisabled=n<3;el('distributeH').disabled=distDisabled;el('distributeV').disabled=distDisabled}
 // RS-0003.5D2: SELECTION_HANDLE_SIZE_PX enlarges the resize handles slightly (was a bare 10px
 // square) and a white halo is stroked behind the dashed outline so the selection reads clearly
 // against any background (light grid, light/dark stones), not just against the plain canvas.
 const SELECTION_HANDLE_SIZE_PX=11;
-function drawSelection(ctx,s,ox,oy,dpr){const l=selectedLayer();const b=getLayerBBox(l);const rx=ox+b.x*s,ry=oy+b.y*s,rw=b.width*s,rh=b.height*s;ctx.save();ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=4*dpr;ctx.setLineDash([]);ctx.strokeRect(rx,ry,rw,rh);ctx.strokeStyle='#1478ff';ctx.lineWidth=1.75*dpr;ctx.setLineDash([6*dpr,3*dpr]);ctx.strokeRect(rx,ry,rw,rh);ctx.setLineDash([]);if(l.type!=='text'){for(const h of handlesFor(b)){const hs=SELECTION_HANDLE_SIZE_PX*dpr;ctx.shadowColor='rgba(20,30,50,.35)';ctx.shadowBlur=3*dpr;ctx.fillStyle='white';ctx.strokeStyle='#1478ff';ctx.lineWidth=1.75*dpr;ctx.beginPath();ctx.rect(ox+h.x*s-hs/2,oy+h.y*s-hs/2,hs,hs);ctx.fill();ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.stroke()}}ctx.restore()}
+// RS-1009: draws one selection box (+ optional resize handles); drawSelection() below calls this
+// once per multi-selected layer. Handles only ever draw when exactly one layer is selected
+// (multi-layer resize is out of scope for this milestone) -- unchanged single-selection visuals.
+function drawSelectionBox(ctx,s,ox,oy,dpr,b,showHandles){const rx=ox+b.x*s,ry=oy+b.y*s,rw=b.width*s,rh=b.height*s;ctx.save();ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=4*dpr;ctx.setLineDash([]);ctx.strokeRect(rx,ry,rw,rh);ctx.strokeStyle='#1478ff';ctx.lineWidth=1.75*dpr;ctx.setLineDash([6*dpr,3*dpr]);ctx.strokeRect(rx,ry,rw,rh);ctx.setLineDash([]);if(showHandles){for(const h of handlesFor(b)){const hs=SELECTION_HANDLE_SIZE_PX*dpr;ctx.shadowColor='rgba(20,30,50,.35)';ctx.shadowBlur=3*dpr;ctx.fillStyle='white';ctx.strokeStyle='#1478ff';ctx.lineWidth=1.75*dpr;ctx.beginPath();ctx.rect(ox+h.x*s-hs/2,oy+h.y*s-hs/2,hs,hs);ctx.fill();ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.stroke()}}ctx.restore()}
+function drawSelection(ctx,s,ox,oy,dpr){const selected=project.layers.filter(l=>selectedLayerIds.has(l.id));const single=selected.length===1;for(const l of selected)drawSelectionBox(ctx,s,ox,oy,dpr,getLayerBBox(l),single&&l.type!=='text')}
+// RS-1009: temporary drag-snap guide lines (magenta, full canvas span), populated only while a
+// move-drag is actively snapped and cleared on pointerup -- never persisted, never a user-created
+// guide (out of scope).
+function drawGuides(ctx,s,ox,oy,dpr){if(!activeGuides.length)return;ctx.save();ctx.strokeStyle='#ff3b8d';ctx.lineWidth=1.25*dpr;ctx.setLineDash([4*dpr,3*dpr]);for(const g of activeGuides){ctx.beginPath();if(g.axis==='vertical'){const x=ox+g.valueMm*s;ctx.moveTo(x,oy);ctx.lineTo(x,oy+project.canvas.height*s)}else{const y=oy+g.valueMm*s;ctx.moveTo(ox,y);ctx.lineTo(ox+project.canvas.width*s,y)}ctx.stroke()}ctx.restore()}
 function handlesFor(b){return[{name:'nw',x:b.x,y:b.y},{name:'ne',x:b.x2,y:b.y},{name:'se',x:b.x2,y:b.y2},{name:'sw',x:b.x,y:b.y2},{name:'n',x:b.x+b.width/2,y:b.y},{name:'e',x:b.x2,y:b.y+b.height/2},{name:'s',x:b.x+b.width/2,y:b.y2},{name:'w',x:b.x,y:b.y+b.height/2}]}
 // RS-1006: the 3D preview manages its own canvas sizing (a ResizeObserver inside
 // Preview3DRenderer.js), so unlike drawLayout() there is no resizeCanvas()/2D-context call here.
@@ -328,15 +377,83 @@ function updateViewButtons(){document.querySelectorAll('.viewBtn').forEach(b=>b.
 // value, not the camera's actual live orientation, so displaying it would be misleading.
 function updateStats(){el('layoutStats').innerHTML=`<b>${layout.count}</b> stones <span>${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm</span><span>selected: ${escapeHtml(layerLabel(selectedLayer()))}</span>`;el('cupStats').innerHTML=`<span>${escapeHtml(currentObjectTemplate().displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span>`;updateStoneColorSwatch()}
 function download(name,mime,data){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:mime}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800);el('status').textContent=`Downloaded ${name}`}function exportCanvas(name,canvas){canvas.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800)},'image/png')}
-function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(copy.type==='rectangle'){copy.x+=8;copy.y+=8}if(copy.type==='svg'){copy.x+=8;copy.y+=8}if(copy.type==='image'){copy.x+=8;copy.y+=8}if(copy.type==='text'){copy.text+=' copy'}project.layers.push(copy);selectedLayerId=copy.id;syncSelectedControlsFromLayer();updateAll()}function deleteLayer(id){if(project.layers.length<=1){el('status').textContent='Cannot delete the last layer';const hint=el('layerRuleHint');hint.style.display='block';hint.scrollIntoView({block:'nearest'});return}commitHistory();project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;syncSelectedControlsFromLayer();updateAll(true)}
-function pointerToLayout(e){const r=layoutCanvas.getBoundingClientRect(),dpr=layoutTransform.dpr;return layoutPxToMm((e.clientX-r.left)*dpr,(e.clientY-r.top)*dpr)}function hitTest(mm){const layers=[...project.layers].reverse();for(const l of layers){const b=getLayerBBox(l);for(const h of handlesFor(b)){if(Math.abs(mm.x-h.x)<3&&Math.abs(mm.y-h.y)<3&&l.type!=='text')return{layer:l,kind:'resize',handle:h.name,b0:b}}if(mm.x>=b.x&&mm.x<=b.x2&&mm.y>=b.y&&mm.y<=b.y2)return{layer:l,kind:l.type==='text'?'select':'move',b0:b}}return null}
-layoutCanvas.addEventListener('pointerdown',e=>{const mm=pointerToLayout(e);const hit=hitTest(mm);if(!hit)return;selectedLayerId=hit.layer.id;syncSelectedControlsFromLayer();if(hit.kind==='select'){updateAll();return}commitHistory();drag={kind:hit.kind,handle:hit.handle,layerId:hit.layer.id,start:mm,b0:hit.b0,l0:JSON.parse(JSON.stringify(hit.layer))};layoutCanvas.setPointerCapture(e.pointerId);updateAll(true)});layoutCanvas.addEventListener('pointermove',e=>{if(!drag)return;const mm=pointerToLayout(e),dx=mm.x-drag.start.x,dy=mm.y-drag.start.y,l=project.layers.find(x=>x.id===drag.layerId);if(!l)return;if(drag.kind==='move'){if(l.type==='circle'){l.cx=drag.l0.cx+dx;l.cy=drag.l0.cy+dy}else if(l.type==='rectangle'||l.type==='svg'||l.type==='image'){l.x=drag.l0.x+dx;l.y=drag.l0.y+dy}}else if(drag.kind==='resize'){if(l.type==='circle'){l.r=Math.max(2,Math.hypot(mm.x-drag.l0.cx,mm.y-drag.l0.cy))}else if(l.type==='rectangle'||l.type==='svg'||l.type==='image'){let x0=drag.b0.x,y0=drag.b0.y,x1=drag.b0.x2,y1=drag.b0.y2;if(drag.handle.includes('w'))x0=mm.x;if(drag.handle.includes('e'))x1=mm.x;if(drag.handle.includes('n'))y0=mm.y;if(drag.handle.includes('s'))y1=mm.y;l.x=Math.min(x0,x1);l.y=Math.min(y0,y1);l.w=Math.max(2,Math.abs(x1-x0));l.h=Math.max(2,Math.abs(y1-y0))}}syncSelectedControlsFromLayer();updateAll(true)});window.addEventListener('pointerup',()=>drag=null);window.addEventListener('keydown',e=>{
+function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(copy.type==='rectangle'){copy.x+=8;copy.y+=8}if(copy.type==='svg'){copy.x+=8;copy.y+=8}if(copy.type==='image'){copy.x+=8;copy.y+=8}if(copy.type==='text'){copy.text+=' copy';copy.x=(copy.x||0)+8;copy.y=(copy.y||0)+8}project.layers.push(copy);selectedLayerId=copy.id;selectedLayerIds=selectOnly(copy.id);syncSelectedControlsFromLayer();updateAll()}function deleteLayer(id){if(project.layers.length<=1){el('status').textContent='Cannot delete the last layer';const hint=el('layerRuleHint');hint.style.display='block';hint.scrollIntoView({block:'nearest'});return}commitHistory();project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true)}
+function pointerToLayout(e){const r=layoutCanvas.getBoundingClientRect(),dpr=layoutTransform.dpr;return layoutPxToMm((e.clientX-r.left)*dpr,(e.clientY-r.top)*dpr)}function hitTest(mm){const layers=[...project.layers].reverse();for(const l of layers){const b=getLayerBBox(l);for(const h of handlesFor(b)){if(Math.abs(mm.x-h.x)<3&&Math.abs(mm.y-h.y)<3&&l.type!=='text')return{layer:l,kind:'resize',handle:h.name,b0:b}}if(mm.x>=b.x&&mm.x<=b.x2&&mm.y>=b.y&&mm.y<=b.y2)return{layer:l,kind:'move',b0:b}}return null}
+// RS-1009: pointerdown now resolves one of three outcomes: (1) empty canvas -> clear selection;
+// (2) a resize handle -> unchanged single-layer resize (never snaps, never multi-selects); (3) a
+// layer body -> Shift toggles it in the multi-selection (no drag starts on that click, matching
+// this milestone's spec), a plain click on a layer already in the current multi-selection starts
+// a *group* drag of the whole selection, and a plain click on any other layer collapses the
+// selection to just that layer first (preserving pre-existing single-selection behavior) before
+// starting its drag. Exactly one commitHistory() call happens per drag, at drag start.
+layoutCanvas.addEventListener('pointerdown',e=>{
+  const mm=pointerToLayout(e);const hit=hitTest(mm);
+  if(!hit){if(selectedLayerIds.size){selectedLayerIds=clearSelection();renderLayerUI();updateEditingUI();drawLayout()}return}
+  if(hit.kind==='resize'){
+    selectedLayerIds=selectOnly(hit.layer.id);selectedLayerId=hit.layer.id;
+    syncSelectedControlsFromLayer();renderLayerUI();updateEditingUI();
+    commitHistory();
+    drag={kind:'resize',handle:hit.handle,layerId:hit.layer.id,start:mm,b0:hit.b0,l0:JSON.parse(JSON.stringify(hit.layer))};
+    layoutCanvas.setPointerCapture(e.pointerId);updateAll(true);return;
+  }
+  if(e.shiftKey){
+    selectedLayerIds=toggleSelection(selectedLayerIds,hit.layer.id);
+    if(selectedLayerIds.has(hit.layer.id))selectedLayerId=hit.layer.id;else if(selectedLayerIds.size)selectedLayerId=[...selectedLayerIds][selectedLayerIds.size-1];
+    syncSelectedControlsFromLayer();renderLayerUI();updateEditingUI();updateAll(true);
+    return;
+  }
+  if(!selectedLayerIds.has(hit.layer.id))selectedLayerIds=selectOnly(hit.layer.id);
+  selectedLayerId=hit.layer.id;
+  syncSelectedControlsFromLayer();renderLayerUI();updateEditingUI();
+  commitHistory();
+  const dragIds=[...selectedLayerIds];
+  const l0Map=new Map(dragIds.map(id=>[id,JSON.parse(JSON.stringify(project.layers.find(x=>x.id===id)))]));
+  const groupBBox0=unionBBoxOfLayers(dragIds.map(id=>project.layers.find(x=>x.id===id)));
+  drag={kind:'move',layerIds:dragIds,start:mm,l0Map,groupBBox0};
+  layoutCanvas.setPointerCapture(e.pointerId);updateAll(true);
+});
+layoutCanvas.addEventListener('pointermove',e=>{
+  if(!drag)return;
+  const mm=pointerToLayout(e),rawDx=mm.x-drag.start.x,rawDy=mm.y-drag.start.y;
+  if(drag.kind==='move'){
+    let dx=rawDx,dy=rawDy;
+    activeGuides=[];
+    // RS-1009: snapping is drag-only (never keyboard nudge/align/distribute), independently
+    // computed on x/y, and only ever checked against OTHER visible layers -- the dragged
+    // selection's own pre-drag bbox (groupBBox0, captured once at pointerdown) is what moves,
+    // never a snap target for itself.
+    if(snapEnabled){
+      const dragBBoxMm={xMm:drag.groupBBox0.x+dx,yMm:drag.groupBBox0.y+dy,widthMm:drag.groupBBox0.width,heightMm:drag.groupBBox0.height};
+      const others=project.layers.filter(l=>l.visible&&!drag.layerIds.includes(l.id)).map(l=>{const b=getLayerBBox(l);return{layerId:l.id,xMm:b.x,yMm:b.y,widthMm:b.width,heightMm:b.height}});
+      const targets=buildSnapTargets({canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height,safeAreaRectMm:getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height),layerBBoxes:others});
+      const snap=computeSnapOffset(dragBBoxMm,targets,SNAP_TOLERANCE_MM);
+      dx+=snap.dxMm;dy+=snap.dyMm;
+      activeGuides=snap.guides;
+    }
+    for(const id of drag.layerIds){
+      const l=project.layers.find(x=>x.id===id);if(!l)continue;
+      const p0=getLayerPosition(drag.l0Map.get(id));
+      setLayerPosition(l,p0.xMm+dx,p0.yMm+dy);
+    }
+  }else if(drag.kind==='resize'){
+    const l=project.layers.find(x=>x.id===drag.layerId);if(!l)return;
+    if(l.type==='circle'){l.r=Math.max(2,Math.hypot(mm.x-drag.l0.cx,mm.y-drag.l0.cy))}
+    else if(l.type==='rectangle'||l.type==='svg'||l.type==='image'){let x0=drag.b0.x,y0=drag.b0.y,x1=drag.b0.x2,y1=drag.b0.y2;if(drag.handle.includes('w'))x0=mm.x;if(drag.handle.includes('e'))x1=mm.x;if(drag.handle.includes('n'))y0=mm.y;if(drag.handle.includes('s'))y1=mm.y;l.x=Math.min(x0,x1);l.y=Math.min(y0,y1);l.w=Math.max(2,Math.abs(x1-x0));l.h=Math.max(2,Math.abs(y1-y0))}
+  }
+  syncSelectedControlsFromLayer();updateAll(true);
+});
+window.addEventListener('pointerup',()=>{drag=null;if(activeGuides.length){activeGuides=[];drawLayout()}});
+window.addEventListener('keydown',e=>{
   const key=e.key.toLowerCase(),mod=e.ctrlKey||e.metaKey;
   // RS-1002: app-level undo/redo takes precedence over any native browser input-level undo, so
   // these fire (and preventDefault) even while a text/number field has focus.
   if(mod&&key==='z'){e.preventDefault();if(e.shiftKey)performRedo();else performUndo();return}
   if(mod&&key==='y'){e.preventDefault();performRedo();return}
   if(e.key==='Delete'||e.key==='Backspace'){const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;deleteLayer(selectedLayerId)}
+  // RS-1009: arrow keys nudge the current multi-selection by a named mm step (NUDGE_STEP_MM,
+  // src/editing/EditingConstants.js); Shift+Arrow uses the larger step. Guarded exactly like
+  // Delete/Backspace above so typing in a text/number field or using a <select> is never hijacked.
+  if(ARROW_KEY_DELTAS[e.key]){const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;e.preventDefault();const step=e.shiftKey?NUDGE_STEP_LARGE_MM:NUDGE_STEP_MM;const[ux,uy]=ARROW_KEY_DELTAS[e.key];nudgeSelection(ux*step,uy*step)}
 });
 // RS-1002: these controls edit `project` fields, so one undo step is committed per edit session
 // (opened on the first 'input' event, closed on 'change'). `rotation`/`zoom` are view-only (not
@@ -344,13 +461,21 @@ layoutCanvas.addEventListener('pointerdown',e=>{const mm=pointerToLayout(e);cons
 const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
-el('selectedLayer').addEventListener('change',()=>{selectedLayerId=el('selectedLayer').value;syncSelectedControlsFromLayer();updateAll(true)});
+el('selectedLayer').addEventListener('change',()=>{selectedLayerId=el('selectedLayer').value;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true)});
 // RS-1004: switching the object template is one discrete, undoable action (matching addCircle/
 // addRect/deleteLayer's commitHistory()-then-mutate pattern below), not a continuous-session field
 // -- it also resets project.canvas/project.wrap to the new template's own defaults, so those two
 // resets are always committed together with the switch, never independently.
-el('objectType').addEventListener('change',()=>{commitHistory();const template=getObjectTemplate(el('objectType').value);project.product=template.id;project.canvas={width:template.productionWidthMm,height:template.productionHeightMm};project.wrap=template.wrap.default;syncSelectedControlsFromLayer();updateAll(true)});el('layersList').addEventListener('click',e=>{const row=e.target.closest('.layer');if(!row)return;const id=row.dataset.layer,action=e.target.dataset.action;if(action==='visible'){const l=project.layers.find(x=>x.id===id);commitHistory();l.visible=e.target.checked;updateAll(true);return}if(action==='duplicate'){duplicateLayer(id);return}if(action==='delete'){deleteLayer(id);return}selectedLayerId=id;syncSelectedControlsFromLayer();updateAll(true)});el('deleteSelected').onclick=()=>deleteLayer(selectedLayerId);document.querySelectorAll('.viewBtn').forEach(b=>b.onclick=()=>{rotation=parseFloat(b.dataset.view);el('rotation').value=rotation;updateAll()});el('resetView').onclick=()=>{rotation=0;zoom=1;el('rotation').value=0;el('zoom').value=100;preview3D.resetView();updateAll()};el('undoBtn').onclick=()=>performUndo();el('redoBtn').onclick=()=>performRedo();el('addCircle').onclick=()=>{const l=selectedLayer();commitHistory();const layer={id:'circle'+Date.now(),type:'circle',visible:true,cx:105,cy:45,r:18,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};project.layers.push(layer);selectedLayerId=layer.id;syncSelectedControlsFromLayer();updateAll(true)};el('addRect').onclick=()=>{const l=selectedLayer();commitHistory();const layer={id:'rect'+Date.now(),type:'rectangle',visible:true,x:65,y:30,w:80,h:30,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};project.layers.push(layer);selectedLayerId=layer.id;syncSelectedControlsFromLayer();updateAll(true)};el('importProject').onclick=()=>el('importProjectFile').click();
-el('importProjectFile').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{const parsed=validateProject(JSON.parse(await file.text()));project=parsed;selectedLayerId=project.layers[0].id;
+el('objectType').addEventListener('change',()=>{commitHistory();const template=getObjectTemplate(el('objectType').value);project.product=template.id;project.canvas={width:template.productionWidthMm,height:template.productionHeightMm};project.wrap=template.wrap.default;syncSelectedControlsFromLayer();updateAll(true)});el('layersList').addEventListener('click',e=>{const row=e.target.closest('.layer');if(!row)return;const id=row.dataset.layer,action=e.target.dataset.action;if(action==='visible'){const l=project.layers.find(x=>x.id===id);commitHistory();l.visible=e.target.checked;updateAll(true);return}if(action==='duplicate'){duplicateLayer(id);return}if(action==='delete'){deleteLayer(id);return}
+  // RS-1009: Shift-click toggles a layer row in the multi-selection, the same shared toggle a
+  // canvas Shift-click uses (src/editing/Selection.js) -- a plain click still selects only that
+  // one layer, preserving pre-existing single-selection behavior.
+  if(e.shiftKey){selectedLayerIds=toggleSelection(selectedLayerIds,id);if(selectedLayerIds.has(id))selectedLayerId=id;else if(selectedLayerIds.size)selectedLayerId=[...selectedLayerIds][selectedLayerIds.size-1]}else{selectedLayerIds=selectOnly(id);selectedLayerId=id}
+  syncSelectedControlsFromLayer();updateEditingUI();updateAll(true)});el('deleteSelected').onclick=()=>deleteLayer(selectedLayerId);document.querySelectorAll('.viewBtn').forEach(b=>b.onclick=()=>{rotation=parseFloat(b.dataset.view);el('rotation').value=rotation;updateAll()});el('resetView').onclick=()=>{rotation=0;zoom=1;el('rotation').value=0;el('zoom').value=100;preview3D.resetView();updateAll()};el('undoBtn').onclick=()=>performUndo();el('redoBtn').onclick=()=>performRedo();
+// RS-1009: Align/Snap sidebar section. snapEnabled is view-only editor state (like rotation/zoom
+// above) -- not part of `project`, not undo/redo-tracked, not exported.
+el('alignLeft').onclick=()=>runAlign('left');el('alignCenterH').onclick=()=>runAlign('centerH');el('alignRight').onclick=()=>runAlign('right');el('alignTop').onclick=()=>runAlign('top');el('alignCenterV').onclick=()=>runAlign('centerV');el('alignBottom').onclick=()=>runAlign('bottom');el('distributeH').onclick=()=>runDistribute('horizontal');el('distributeV').onclick=()=>runDistribute('vertical');el('snapEnabled').addEventListener('change',()=>{snapEnabled=el('snapEnabled').value==='on'});el('addCircle').onclick=()=>{const l=selectedLayer();commitHistory();const layer={id:'circle'+Date.now(),type:'circle',visible:true,cx:105,cy:45,r:18,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};project.layers.push(layer);selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);syncSelectedControlsFromLayer();updateAll(true)};el('addRect').onclick=()=>{const l=selectedLayer();commitHistory();const layer={id:'rect'+Date.now(),type:'rectangle',visible:true,x:65,y:30,w:80,h:30,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};project.layers.push(layer);selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);syncSelectedControlsFromLayer();updateAll(true)};el('importProject').onclick=()=>el('importProjectFile').click();
+el('importProjectFile').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{const parsed=validateProject(JSON.parse(await file.text()));project=parsed;selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);
   // RS-1002: loading a project is a fresh start, not an undoable edit -- clear history entirely
   // (matches "history cleared on project load") and reset the dirty baseline to this load.
   history.clear();cleanProjectJson=JSON.stringify(project);
@@ -360,7 +485,7 @@ el('importSvg').onclick=()=>el('importSvgFile').click();
 // shape count, warnings) — it invents no stone positions, so this direct src/svg call does not
 // violate "only the Geometry Engine generates stone positions". Actual stone generation for the
 // new layer still runs through generate() -> generateSvgStonesLive() -> permanentEngine.generateSvgLayout().
-el('importSvgFile').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{const svgSource=await file.text();const parsed=parseSvgDocument(svgSource);const maxW=project.canvas.width-20,maxH=project.canvas.height-20;let w=parsed.naturalWidthMm,h=parsed.naturalHeightMm;if(w>maxW||h>maxH){const s=Math.min(maxW/w,maxH/h);w*=s;h*=s}const x=(project.canvas.width-w)/2,y=(project.canvas.height-h)/2;const base=selectedLayer();const layer={id:'svg'+Date.now(),type:'svg',visible:true,svgSource,svgName:file.name,x,y,w,h,mode:'outline',stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold'};commitHistory();project.layers.push(layer);selectedLayerId=layer.id;syncSelectedControlsFromLayer();await updateAll(true);const warningNote=parsed.warnings.length?` (${parsed.warnings.length} element(s) skipped, see console)`:'';if(parsed.warnings.length)console.warn('SVG import warnings for',file.name,parsed.warnings);el('status').textContent=`Imported ${file.name}: ${parsed.shapes.length} shape(s)${warningNote}`}catch(error){console.error('SVG import failed',error);el('status').textContent=`SVG import failed: ${error.message}`}});
+el('importSvgFile').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{const svgSource=await file.text();const parsed=parseSvgDocument(svgSource);const maxW=project.canvas.width-20,maxH=project.canvas.height-20;let w=parsed.naturalWidthMm,h=parsed.naturalHeightMm;if(w>maxW||h>maxH){const s=Math.min(maxW/w,maxH/h);w*=s;h*=s}const x=(project.canvas.width-w)/2,y=(project.canvas.height-h)/2;const base=selectedLayer();const layer={id:'svg'+Date.now(),type:'svg',visible:true,svgSource,svgName:file.name,x,y,w,h,mode:'outline',stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold'};commitHistory();project.layers.push(layer);selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);syncSelectedControlsFromLayer();await updateAll(true);const warningNote=parsed.warnings.length?` (${parsed.warnings.length} element(s) skipped, see console)`:'';if(parsed.warnings.length)console.warn('SVG import warnings for',file.name,parsed.warnings);el('status').textContent=`Imported ${file.name}: ${parsed.shapes.length} shape(s)${warningNote}`}catch(error){console.error('SVG import failed',error);el('status').textContent=`SVG import failed: ${error.message}`}});
 // RS-1008: Image Trace import. Unlike SVG import (which commits a layer directly on file select),
 // this opens a "preview before commit" panel first -- the milestone brief's own required control --
 // since threshold/invert/blur/resize meaningfully change the traced result and are worth seeing
@@ -430,6 +555,7 @@ el('imageImportCommit').onclick=async()=>{
   commitHistory();
   project.layers.push(layer);
   selectedLayerId=layer.id;
+  selectedLayerIds=selectOnly(layer.id);
   pendingImageImport=null;
   el('imageImportPanel').style.display='none';
   syncSelectedControlsFromLayer();

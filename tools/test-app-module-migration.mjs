@@ -101,7 +101,10 @@ await test('app.js only imports the RS-0003.5B2 probe, the RS-0003.5B3 permanent
     /from\s*['"]\.\/src\/preview3d\/index\.js['"]/,
     // RS-1008: Image Trace's own barrel module (see src/image/index.js), mirroring the
     // src/svg/index.js entry RS-1001 already added above.
-    /from\s*['"]\.\/src\/image\/index\.js['"]/
+    /from\s*['"]\.\/src\/image\/index\.js['"]/,
+    // RS-1009: Alignment & Snapping's own barrel module (see src/editing/index.js), mirroring
+    // every other permanent module's "consumed only through its barrel" entry above.
+    /from\s*['"]\.\/src\/editing\/index\.js['"]/
   ];
   for (const line of importLines) {
     assert.ok(

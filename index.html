@@ -32,6 +32,25 @@ button:disabled{opacity:.5;cursor:not-allowed}.ruleHint{font-size:12px;color:#b4
     <label>Selected layer</label><select id="selectedLayer"></select>
     <label>Layers</label><div id="layersList"></div><div class="btnrow"><button id="addCircle">Add circle</button><button id="addRect">Add rectangle</button></div><div class="btnrow"><button id="importSvg">Import SVG</button><button id="importImage">Import Image...</button></div><input id="importSvgFile" type="file" accept="image/svg+xml,.svg" style="display:none"><input id="importImageFile" type="file" accept="image/png,image/jpeg,image/webp" style="display:none"><button id="deleteSelected" class="danger" style="width:100%;margin-top:8px">Delete selected layer</button><div id="layerRuleHint" class="ruleHint" style="display:none">At least one layer is required — add another layer before you can delete this one.</div>
     <hr>
+    <div class="cardTitle">Align &amp; Snap</div>
+    <div class="small" id="selectionSummary">No layers selected</div>
+    <label>Align</label>
+    <div class="btnrow" style="grid-template-columns:repeat(3,1fr)">
+      <button id="alignLeft" title="Align left (2+ layers selected)" disabled>⯇ Left</button>
+      <button id="alignCenterH" title="Align horizontal center (2+ layers selected)" disabled>↔ Center</button>
+      <button id="alignRight" title="Align right (2+ layers selected)" disabled>Right ⯈</button>
+      <button id="alignTop" title="Align top (2+ layers selected)" disabled>⯅ Top</button>
+      <button id="alignCenterV" title="Align vertical middle (2+ layers selected)" disabled>↕ Middle</button>
+      <button id="alignBottom" title="Align bottom (2+ layers selected)" disabled>Bottom ⯆</button>
+    </div>
+    <label>Distribute</label>
+    <div class="btnrow">
+      <button id="distributeH" title="Distribute horizontally, equal center spacing (3+ layers selected)" disabled>Distribute ↔</button>
+      <button id="distributeV" title="Distribute vertically, equal center spacing (3+ layers selected)" disabled>Distribute ↕</button>
+    </div>
+    <label>Snap to guides</label><select id="snapEnabled" title="Snap to canvas center/edges, safe area, and other layers while dragging"><option value="on" selected>On</option><option value="off">Off</option></select>
+    <div class="selectionHint">Shift-click a layer (canvas or list) to add/remove it from the selection. Click empty canvas to clear. Arrow keys nudge the selection; Shift+Arrow moves further.</div>
+    <hr>
     <div id="textControls">
       <label>Text</label><input id="text" value="Vitalina Serbin">
       <label>Font</label><select id="font"><option value="courier-prime-regular" selected>Courier Prime (monospace)</option><option value="great-vibes-regular">Great Vibes (script)</option></select>

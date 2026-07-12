@@ -1,64 +1,54 @@
 # Task
 
-**Task ID:** RS-1008A
-**Task Type:** Architecture Correction — Image Trace
-**Specification:** `docs/specifications/RS-1008A-ImageTraceArchitectureCorrection.md`
+**Task ID:** RS-1009
+**Task Type:** Feature — Alignment & Snapping
+**Specification:** `docs/specifications/RS-1009-AlignmentSnapping.md`
 **Status:** IN PROGRESS
-**Branch:** feature/rs-1008-image-trace (continuation of the still-unmerged RS-1008 branch)
+**Branch:** feature/rs-1009-alignment-snapping
 
 ## Goal
 
-RS-1008 (Image Trace) had `src/image/**` construct `Stone`/`StoneLayout` directly instead of going
-through the permanent `GeometryEngine`, creating a second geometry implementation. Refactor so
-image tracing feeds the existing permanent `GeometryEngine` pipeline instead, while preserving all
-current functionality, browser behavior, exports, Project JSON compatibility, and tests.
+Make layer placement fast, precise, and predictable: multi-select, align/distribute commands, and
+snapping (canvas center/edges, safe area, other layers) during drag and keyboard movement.
 
 ## Required Outcome
 
-See `docs/specifications/RS-1008A-ImageTraceArchitectureCorrection.md` in full. Summary:
+See `docs/specifications/RS-1009-AlignmentSnapping.md` in full. Summary:
 
-* `src/geometry/GeometryEngine.js` gains `generateImageLayout()`: the only component that
-  constructs `Stone`/`StoneLayout` for image-traced layers, mirroring
-  `generateSvgLayout()`/`generateShapeLayout()`'s exact shape.
-* `src/geometry/StoneSampler.js` gains `sampleFieldFillPoints()` (raster grid sampling), exported
-  from the permanent barrel — no sampling logic duplicated anywhere.
-* `src/image/**` is reduced to pure field-preparation only (`prepareImageField()`): zero dependency
-  on `src/geometry/**`, never constructs a `Stone`/`StoneLayout`, mirroring `src/svg/**`'s existing
-  "produces neutral input only" rule.
-* `app.js`'s `generateImageStonesLive()` calls `this.permanentEngine.generateImageLayout(params)`,
-  matching every other layer type's live-generation method.
-* A dedicated regression suite proves: (1) Image Trace uses the permanent pipeline, (2) output is
-  byte-identical to the pre-correction implementation for a committed baseline, (3) the old
-  implementation was actually removed, not left duplicated.
-* No visible behavior change: same layer fields, same Project JSON shape, same UI, same exports.
+* Multi-select layers (Shift-click toggles, empty-canvas click clears, plain click preserves
+  single-selection behavior).
+* Align left/center-h/right/top/center-v/bottom (2+ layers); Distribute horizontal/vertical
+  (3+ layers).
+* Snap to canvas center/edges, safe-area edges/center, other visible layers' edges/centers, using a
+  named tolerance; temporary visual guides while snapping; a UI toggle to disable snapping.
+* Mouse drag uses snapping; arrow keys nudge by a small mm step, Shift+Arrow by a larger step;
+  multi-selected layers move together preserving relative positions; one undo entry per completed
+  drag/key action.
+* All six layer types (text, curved text, circle, rectangle, svg, image) support movement.
+* New `src/editing/**` module: pure, DOM-free alignment/snapping/selection logic, consumed only by
+  `app.js`. No `StoneLayout`/`GeometryEngine` change.
 
 ## Rules
 
 * Follow `docs/AI_ENGINEER.md`, `docs/CLAUDE_GUIDE.md`, `docs/ARCHITECTURE.md`.
-* Smallest coherent change; this is a refactor, not a feature — no UI/control changes.
-* `src/geometry/StoneLayout.js`, `Stone.js`, `ContourGeometry.js`, `ArcProjection.js` stay
-  untouched — only `GeometryEngine.js`/`StoneSampler.js`/`index.js`/`README.md` change within
-  `src/geometry/**`.
-* Forbidden files: `src/geometry/StoneLayout.js`, `src/geometry/Stone.js`,
-  `src/geometry/ContourGeometry.js`, `src/geometry/ArcProjection.js`, `src/export/**`,
-  `src/text/**`, `src/fonts/**`, `src/core/**`, `src/browser/**`, `src/renderer/**`,
-  `src/preview3d/**`, `src/svg/**`, `src/history/**`, `src/products/**`, `index.html`,
-  `assets/**`, `examples/**`, `style.css`, `README.md`, `LICENSE`, `CONTRIBUTING.md`.
-* Do not commit failing tests. Preserve every existing test's intent even where its assertions must
-  be updated to match the corrected architecture.
+* Smallest coherent change within the approved scope.
+* Forbidden files: `src/geometry/**`, `src/renderer/**`, `src/export/**`, `src/text/**`,
+  `src/fonts/**`, `src/core/**`, `src/browser/**`, `src/svg/**`, `src/image/**`, `src/history/**`,
+  `src/products/**`, `src/preview3d/**`, `style.css`, `README.md`, `LICENSE`, `CONTRIBUTING.md`,
+  `assets/**`, `examples/**`.
+* No rotation, no arbitrary user guides, no rulers/grid customization, no layer
+  locking/grouping/boolean ops, no geometry-algorithm or export-schema changes.
+* Do not commit failing tests.
 
 ## Deliverables
 
-* Implementation: `src/geometry/GeometryEngine.js`, `src/geometry/StoneSampler.js`,
-  `src/geometry/index.js`, `src/geometry/README.md`, `src/image/ImageFieldPipeline.js` (new,
-  replaces deleted `ImageTracePipeline.js`/`ImageStoneSampler.js`), `src/image/index.js`,
-  `src/image/README.md`, `app.js`.
-* Tests: `tools/lib/imageTraceFixtures.mjs`, `tools/generate-image-trace-baselines.mjs`,
-  `tools/image-trace-regression-baselines.json`, `tools/test-image-trace-regression.mjs` (new);
-  `tools/test-image-pipeline.mjs`, `tools/test-geometry-engine.mjs`,
-  `tools/test-image-integration.mjs` (updated); narrow guard updates to six pre-existing suites;
-  `package.json`.
-* `npm test` passing in full (472/472 assertions).
-* Browser verification confirming identical behavior to the RS-1008 verification session.
+* Implementation: `src/editing/EditingConstants.js`, `src/editing/AlignmentEngine.js`,
+  `src/editing/SnapEngine.js`, `src/editing/Selection.js`, `src/editing/index.js`,
+  `src/editing/README.md`, `app.js`, `index.html`.
+* Tests: `tools/test-alignment-engine.mjs`, `tools/test-snap-engine.mjs`,
+  `tools/test-editing-selection.mjs`, `tools/test-alignment-snapping-integration.mjs`;
+  `package.json` test script updated.
+* `npm test` passing in full.
+* Browser verification.
 * `TASK_RESULT.md` completed.
-* One commit on `feature/rs-1008-image-trace`.
+* One commit on `feature/rs-1009-alignment-snapping`, branch pushed.
