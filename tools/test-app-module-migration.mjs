@@ -104,7 +104,11 @@ await test('app.js only imports the RS-0003.5B2 probe, the RS-0003.5B3 permanent
     /from\s*['"]\.\/src\/image\/index\.js['"]/,
     // RS-1009: Alignment & Snapping's own barrel module (see src/editing/index.js), mirroring
     // every other permanent module's "consumed only through its barrel" entry above.
-    /from\s*['"]\.\/src\/editing\/index\.js['"]/
+    /from\s*['"]\.\/src\/editing\/index\.js['"]/,
+    // UI-001: the new generic Lightbox/dialog-controller module's own barrel (see
+    // src/ui/index.js), mirroring every other permanent module's "consumed only through its
+    // barrel" entry above -- pure DOM dialog behavior only, no Project/Layer/StoneLayout knowledge.
+    /from\s*['"]\.\/src\/ui\/index\.js['"]/
   ];
   for (const line of importLines) {
     assert.ok(

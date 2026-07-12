@@ -104,6 +104,12 @@ import { prepareImageField, maskFieldToRgba, decodeImageFileToBuffer, decodeData
 // names (cx/cy vs x/y) via the new getLayerPosition()/setLayerPosition() helpers below. See
 // docs/specifications/RS-1009-AlignmentSnapping.md.
 import { SNAP_TOLERANCE_MM, NUDGE_STEP_MM, NUDGE_STEP_LARGE_MM, alignLayers, distributeLayers, buildSnapTargets, computeSnapOffset, selectOnly, toggleSelection, clearSelection } from './src/editing/index.js';
+// UI-001 (Complete Application Redesign): src/ui/** is a new, pure, DOM-only module -- a generic
+// Lightbox/dialog controller (open/close, focus trap, Escape, backdrop click). It has no knowledge
+// of Project/Layer/StoneLayout/layer type; app.js is the only caller, and is the only place that
+// wires a Lightbox to a top-menu button or a layer-aware "which fields to show" decision. See
+// docs/specifications/UI-001-CompleteRedesign.md.
+import { Lightbox } from './src/ui/index.js';
 'use strict';
 const FONT5={
 ' ':['00000','00000','00000','00000','00000','00000','00000'],
@@ -268,6 +274,15 @@ const engine=new GeometryEngine(permanentEngine);let project=defaultProject(),se
 // same way it already did before this milestone). snapEnabled/activeGuides are view-only editor
 // state (like rotation/zoom): never part of `project`, never undo/redo-tracked, never exported.
 let selectedLayerIds=new Set([selectedLayerId]),snapEnabled=true,activeGuides=[];
+// UI-001: safe-area guide visibility is view-only editor state, exactly like snapEnabled/rotation/
+// zoom above -- never part of `project`, never undo/redo-tracked, never exported. It gates the
+// pre-existing app.js-local drawSafeAreaGuide() call only; default true, so leaving it untouched
+// renders byte-identical to before UI-001. (A reference-grid toggle was considered but is not
+// wired to anything real: the grid is drawn unconditionally inside the permanent
+// src/renderer/CanvasRenderer2D.js, and this milestone deliberately does not touch permanent
+// renderer/export/geometry modules to build one UI toggle -- see
+// docs/specifications/UI-001-CompleteRedesign.md, "Known Limitations".)
+let showSafeArea=true;
 // RS-1006: createPreview3D() returns a synchronous facade immediately -- Three.js itself loads
 // lazily inside it, so this line never blocks app.js's own startup.
 const preview3D=createPreview3D(cupCanvas);
@@ -296,7 +311,16 @@ function closeHistorySession(){history.endSession()}
 function applyHistorySnapshot(snap){project=snap.project;selectedLayerId=snap.selectedLayerId;syncSelectedControlsFromLayer();updateAll(true)}
 function performUndo(){closeHistorySession();const snap=history.undo(currentSnapshot());if(!snap){el('status').textContent='Nothing to undo';updateHistoryUI();return}applyHistorySnapshot(snap);el('status').textContent='Undo'}
 function performRedo(){closeHistorySession();const snap=history.redo(currentSnapshot());if(!snap){el('status').textContent='Nothing to redo';updateHistoryUI();return}applyHistorySnapshot(snap);el('status').textContent='Redo'}
-function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dirtyEl=el('dirtyIndicator');if(undoBtn)undoBtn.disabled=!history.canUndo;if(redoBtn)redoBtn.disabled=!history.canRedo;if(dirtyEl)dirtyEl.textContent=JSON.stringify(project)!==cleanProjectJson?'Unsaved changes':'Saved'}function syncSelectedControlsFromLayer(){const l=selectedLayer();el('selectedLayer').value=l.id;const isText=l.type==='text';el('textControls').style.display=isText?'block':'none';el('shapeControls').style.display=isText?'none':'block';el('svgControls').style.display=l.type==='svg'?'block':'none';el('imageControls').style.display=l.type==='image'?'block':'none';if(isText){el('text').value=l.text;el('font').value=l.font;el('height').value=l.height;el('autoFit').value=l.autoFit?'on':'off';el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';el('curveRadiusMm').value=l.curveRadiusMm??40;el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??360;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none'}else{el('shapeX').value=l.type==='circle'?l.cx:l.x;el('shapeY').value=l.type==='circle'?l.cy:l.y;el('shapeW').value=l.type==='circle'?l.r:l.w;el('shapeH').value=l.type==='circle'?'':l.h;if(l.type==='svg')el('svgMode').value=l.mode||'outline';if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}setNumericSelectValue(el('stoneSize'),l.stoneSize);el('gap').value=l.gap;el('stoneColor').value=l.color;
+function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dirtyEl=el('dirtyIndicator');if(undoBtn)undoBtn.disabled=!history.canUndo;if(redoBtn)redoBtn.disabled=!history.canRedo;if(dirtyEl)dirtyEl.textContent=JSON.stringify(project)!==cleanProjectJson?'Unsaved changes':'Saved';
+  // UI-001: the left panel's Actions-section Undo/Redo buttons mirror the top bar's undoBtn/redoBtn
+  // disabled state exactly -- both call the same performUndo()/performRedo(), never a second history.
+  const actionUndoBtn=el('actionUndo'),actionRedoBtn=el('actionRedo');if(actionUndoBtn)actionUndoBtn.disabled=!history.canUndo;if(actionRedoBtn)actionRedoBtn.disabled=!history.canRedo;
+}function syncSelectedControlsFromLayer(){const l=selectedLayer();el('selectedLayer').value=l.id;const isText=l.type==='text';el('textControls').style.display=isText?'block':'none';el('shapeControls').style.display=isText?'none':'block';
+  // UI-001: sharedPositionFields (shapeX/Y/W/H) is relocated between the inspector and a Lightbox
+  // slot (see relocateFieldGroups()) and is no longer always a child of #shapeControls, so it needs
+  // its own visibility toggle mirroring the exact same isText condition #shapeControls already uses.
+  el('sharedPositionFields').style.display=isText?'none':'block';
+  el('svgControls').style.display=l.type==='svg'?'block':'none';el('imageControls').style.display=l.type==='image'?'block':'none';if(isText){el('text').value=l.text;el('font').value=l.font;el('height').value=l.height;el('autoFit').value=l.autoFit?'on':'off';el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';el('curveRadiusMm').value=l.curveRadiusMm??40;el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??360;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';el('textX').value=l.x||0;el('textY').value=l.y||0}else{el('shapeX').value=l.type==='circle'?l.cx:l.x;el('shapeY').value=l.type==='circle'?l.cy:l.y;el('shapeW').value=l.type==='circle'?l.r:l.w;el('shapeH').value=l.type==='circle'?'':l.h;if(l.type==='svg')el('svgMode').value=l.mode||'outline';if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}setNumericSelectValue(el('stoneSize'),l.stoneSize);el('gap').value=l.gap;el('stoneColor').value=l.color;
   // RS-1002: project.cupColor/project.wrap are project-level (not per-layer) fields, so they must
   // be resynced here too -- otherwise an undo/redo restore (or a Project JSON import) leaves these
   // two dropdowns stale, and the *next* edit's writeSelectedControlsToLayer() would silently write
@@ -308,17 +332,24 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
   // RS-1005: project.name is likewise project-level -- resync for the same reason.
   el('projectName').value=project.name;
 }
-function writeSelectedControlsToLayer(){const l=selectedLayer();if(l.type==='text'){l.text=el('text').value;l.font=el('font').value;l.height=parseFloat(el('height').value)||25;l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;l.curveEnabled=el('curveEnabled').value==='on';l.curveRadiusMm=Math.max(0.1,parseFloat(el('curveRadiusMm').value)||40);l.curveDirection=el('curveDirection').value==='inside'?'inside':'outside';l.curveStartAngleDeg=parseFloat(el('curveStartAngleDeg').value)||0;l.curveSweepAngleDeg=parseFloat(el('curveSweepAngleDeg').value)||360;l.curveAlignment=el('curveAlignment').value;el('curveControls').style.display=l.curveEnabled?'block':'none'}else if(l.type==='circle'){l.cx=parseFloat(el('shapeX').value)||105;l.cy=parseFloat(el('shapeY').value)||45;l.r=Math.max(1,parseFloat(el('shapeW').value)||18)}else if(l.type==='rectangle'){l.x=parseFloat(el('shapeX').value)||65;l.y=parseFloat(el('shapeY').value)||30;l.w=Math.max(1,parseFloat(el('shapeW').value)||80);l.h=Math.max(1,parseFloat(el('shapeH').value)||30)}else if(l.type==='svg'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.mode=el('svgMode').value==='fill'?'fill':'outline'}else if(l.type==='image'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX))}l.stoneSize=parseFloat(el('stoneSize').value)||2;l.gap=parseFloat(el('gap').value)||.3;l.color=el('stoneColor').value;project.cupColor=el('cupColor').value;project.wrap=el('wrap').value;project.name=el('projectName').value||DEFAULT_PROJECT_NAME;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
+function writeSelectedControlsToLayer(){const l=selectedLayer();if(l.type==='text'){l.text=el('text').value;l.font=el('font').value;l.height=parseFloat(el('height').value)||25;l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;l.curveEnabled=el('curveEnabled').value==='on';l.curveRadiusMm=Math.max(0.1,parseFloat(el('curveRadiusMm').value)||40);l.curveDirection=el('curveDirection').value==='inside'?'inside':'outside';l.curveStartAngleDeg=parseFloat(el('curveStartAngleDeg').value)||0;l.curveSweepAngleDeg=parseFloat(el('curveSweepAngleDeg').value)||360;l.curveAlignment=el('curveAlignment').value;el('curveControls').style.display=l.curveEnabled?'block':'none';
+  // UI-001: manual X/Y mm fields for the Text Lightbox, writing to the same layer.x/layer.y fields
+  // RS-1009 already added (previously settable only by drag/nudge/align/distribute).
+  l.x=parseFloat(el('textX').value)||0;l.y=parseFloat(el('textY').value)||0}else if(l.type==='circle'){l.cx=parseFloat(el('shapeX').value)||105;l.cy=parseFloat(el('shapeY').value)||45;l.r=Math.max(1,parseFloat(el('shapeW').value)||18)}else if(l.type==='rectangle'){l.x=parseFloat(el('shapeX').value)||65;l.y=parseFloat(el('shapeY').value)||30;l.w=Math.max(1,parseFloat(el('shapeW').value)||80);l.h=Math.max(1,parseFloat(el('shapeH').value)||30)}else if(l.type==='svg'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.mode=el('svgMode').value==='fill'?'fill':'outline'}else if(l.type==='image'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX))}l.stoneSize=parseFloat(el('stoneSize').value)||2;l.gap=parseFloat(el('gap').value)||.3;l.color=el('stoneColor').value;project.cupColor=el('cupColor').value;project.wrap=el('wrap').value;project.name=el('projectName').value||DEFAULT_PROJECT_NAME;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
 async function updateAll(skipWrite=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated;try{generated=await engine.generate(project)}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Text generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;renderLayerUI();drawLayout();drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}// S-003: a project must always keep at least one layer (deleteLayer()'s guard below), so once
 // only one layer remains, every delete affordance -- the per-row trash icon and the sidebar
 // "Delete selected layer" button -- is disabled here (not just left clickable-but-a-no-op) and
 // #layerRuleHint (sitting directly under the button, always in view) explains why. This runs on
 // every renderLayerUI() call (i.e. after every add/delete/duplicate/undo/redo/import), so the
 // disabled state and hint never go stale relative to the current layer count.
-function renderLayerUI(){const onlyOneLayer=project.layers.length<=1;el('selectedLayer').innerHTML=project.layers.map(l=>`<option value="${l.id}">${escapeHtml(layerLabel(l))}</option>`).join('');el('selectedLayer').value=selectedLayerId;el('layersList').innerHTML=project.layers.map(l=>`<div class="layer ${selectedLayerIds.has(l.id)?'selected':''}" data-layer="${l.id}"><input type="checkbox" ${l.visible?'checked':''} data-action="visible"><div class="name" data-action="select">${escapeHtml(layerLabel(l))}</div><div class="type">${l.type.toUpperCase()}</div><button data-action="select">✎</button><button data-action="duplicate">⧉</button><button data-action="delete" ${onlyOneLayer?'disabled title="At least one layer is required"':''}>🗑</button></div>`).join('');el('deleteSelected').disabled=onlyOneLayer;el('deleteSelected').title=onlyOneLayer?'At least one layer is required':'';el('layerRuleHint').style.display=onlyOneLayer?'block':'none'}function layerLabel(l){return l.type==='text'?(l.text||'Text'):l.type==='circle'?'Circle':l.type==='svg'?(l.svgName||'SVG'):l.type==='image'?(l.imageName||'Image'):'Rectangle'}function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function renderLayerUI(){const onlyOneLayer=project.layers.length<=1;el('selectedLayer').innerHTML=project.layers.map(l=>`<option value="${l.id}">${escapeHtml(layerLabel(l))}</option>`).join('');el('selectedLayer').value=selectedLayerId;el('layersList').innerHTML=project.layers.map(l=>`<div class="layer ${selectedLayerIds.has(l.id)?'selected':''}" data-layer="${l.id}"><input type="checkbox" ${l.visible?'checked':''} data-action="visible"><div class="name" data-action="select">${escapeHtml(layerLabel(l))}</div><div class="type">${l.type.toUpperCase()}</div><button data-action="select">✎</button><button data-action="duplicate">⧉</button><button data-action="delete" ${onlyOneLayer?'disabled title="At least one layer is required"':''}>🗑</button></div>`).join('');el('deleteSelected').disabled=onlyOneLayer;el('deleteSelected').title=onlyOneLayer?'At least one layer is required':'';el('layerRuleHint').style.display=onlyOneLayer?'block':'none';
+  // UI-001: keep the right inspector's layer name and the left panel's project/template summary
+  // in sync on every render (add/delete/duplicate/undo/redo/import/selection change).
+  el('inspectorLayerName').textContent=layerLabel(selectedLayer());updateObjectTemplateDetail();
+}function layerLabel(l){return l.type==='text'?(l.text||'Text'):l.type==='circle'?'Circle':l.type==='svg'?(l.svgName||'SVG'):l.type==='image'?(l.imageName||'Image'):'Rectangle'}function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function resizeCanvas(c){const r=c.getBoundingClientRect(),dpr=Math.max(1,devicePixelRatio||1),w=Math.floor(r.width*dpr),h=Math.floor(r.height*dpr);if(c.width!==w||c.height!==h){c.width=w;c.height=h}return{w,h,dpr}}
 function layoutMmToPx(p){return{x:layoutTransform.ox+p.x*layoutTransform.s,y:layoutTransform.oy+p.y*layoutTransform.s}}function layoutPxToMm(x,y){return{x:(x-layoutTransform.ox)/layoutTransform.s,y:(y-layoutTransform.oy)/layoutTransform.s}}
-function drawLayout(){const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr});layoutTransform={s,ox,oy,dpr};drawSafeAreaGuide(ctx,s,ox,oy,dpr,getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height));drawSelection(ctx,s,ox,oy,dpr);drawGuides(ctx,s,ox,oy,dpr);ctx.fillStyle='#516071';ctx.font=`${12*dpr}px Arial`;ctx.fillText(`${layout.count} stones · ${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm · ${selectedLayer().textMode||''}`,20*dpr,h-18*dpr);el('fitNotice').textContent='Drag to move · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step).'}
+function drawLayout(){const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr});layoutTransform={s,ox,oy,dpr};if(showSafeArea)drawSafeAreaGuide(ctx,s,ox,oy,dpr,getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height));drawSelection(ctx,s,ox,oy,dpr);drawGuides(ctx,s,ox,oy,dpr);ctx.fillStyle='#516071';ctx.font=`${12*dpr}px Arial`;ctx.fillText(`${layout.count} stones · ${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm · ${selectedLayer().textMode||''}`,20*dpr,h-18*dpr);el('fitNotice').textContent='Drag to move · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step).'}
 // RS-1004: a dashed guide rectangle for the active object template's safe design area, derived from
 // the current project.canvas size. This is a layer-agnostic editor overlay (like drawSelection()
 // below), not a CanvasRenderer2D.js change -- it reuses the exact mm->px transform
@@ -375,7 +406,11 @@ function updateViewButtons(){document.querySelectorAll('.viewBtn').forEach(b=>b.
 // RS-1006: dropped the previous `rotation ${Math.round(rotation)}°` readout here -- now that
 // OrbitControls allows free mouse orbit, that number only ever reflected the last preset/slider
 // value, not the camera's actual live orientation, so displaying it would be misleading.
-function updateStats(){el('layoutStats').innerHTML=`<b>${layout.count}</b> stones <span>${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm</span><span>selected: ${escapeHtml(layerLabel(selectedLayer()))}</span>`;el('cupStats').innerHTML=`<span>${escapeHtml(currentObjectTemplate().displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span>`;updateStoneColorSwatch()}
+// UI-001: workspace status strip now also reports canvas size, units, safe-area size, and (when
+// any layers are selected) the current selection's bounding box -- purely additional display text,
+// computed from data updateAll() already has (project.canvas, getSafeAreaRectMm(), unionBBoxOfLayers()).
+function selectionBoundsText(){if(!selectedLayerIds.size)return'';const sel=[...selectedLayerIds].map(id=>project.layers.find(x=>x.id===id)).filter(Boolean);if(!sel.length)return'';const b=unionBBoxOfLayers(sel);return`<span>selection: ${b.width.toFixed(1)}×${b.height.toFixed(1)} mm</span>`}
+function updateStats(){const safe=getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height);el('layoutStats').innerHTML=`<b>${layout.count}</b> stones <span>${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm</span><span>canvas: ${project.canvas.width}×${project.canvas.height} mm</span><span>safe area: ${safe.widthMm.toFixed(1)}×${safe.heightMm.toFixed(1)} mm</span><span>units: mm</span>${selectionBoundsText()}<span>selected: ${escapeHtml(layerLabel(selectedLayer()))}</span>`;el('cupStats').innerHTML=`<span>${escapeHtml(currentObjectTemplate().displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span>`;updateStoneColorSwatch()}
 function download(name,mime,data){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:mime}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800);el('status').textContent=`Downloaded ${name}`}function exportCanvas(name,canvas){canvas.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800)},'image/png')}
 function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(copy.type==='rectangle'){copy.x+=8;copy.y+=8}if(copy.type==='svg'){copy.x+=8;copy.y+=8}if(copy.type==='image'){copy.x+=8;copy.y+=8}if(copy.type==='text'){copy.text+=' copy';copy.x=(copy.x||0)+8;copy.y=(copy.y||0)+8}project.layers.push(copy);selectedLayerId=copy.id;selectedLayerIds=selectOnly(copy.id);syncSelectedControlsFromLayer();updateAll()}function deleteLayer(id){if(project.layers.length<=1){el('status').textContent='Cannot delete the last layer';const hint=el('layerRuleHint');hint.style.display='block';hint.scrollIntoView({block:'nearest'});return}commitHistory();project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true)}
 function pointerToLayout(e){const r=layoutCanvas.getBoundingClientRect(),dpr=layoutTransform.dpr;return layoutPxToMm((e.clientX-r.left)*dpr,(e.clientY-r.top)*dpr)}function hitTest(mm){const layers=[...project.layers].reverse();for(const l of layers){const b=getLayerBBox(l);for(const h of handlesFor(b)){if(Math.abs(mm.x-h.x)<3&&Math.abs(mm.y-h.y)<3&&l.type!=='text')return{layer:l,kind:'resize',handle:h.name,b0:b}}if(mm.x>=b.x&&mm.x<=b.x2&&mm.y>=b.y&&mm.y<=b.y2)return{layer:l,kind:'move',b0:b}}return null}
@@ -458,7 +493,8 @@ window.addEventListener('keydown',e=>{
 // RS-1002: these controls edit `project` fields, so one undo step is committed per edit session
 // (opened on the first 'input' event, closed on 'change'). `rotation`/`zoom` are view-only (not
 // part of `project`) and keep their original plain 'input' listener, untouched.
-const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight'];
+// UI-001: 'textX'/'textY' are the new manual Text Lightbox position fields (see writeSelectedControlsToLayer()).
+const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
 el('selectedLayer').addEventListener('change',()=>{selectedLayerId=el('selectedLayer').value;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true)});
@@ -597,4 +633,166 @@ el('exportProdSheetPNG').onclick=async()=>{if(!layout){el('status').textContent=
 // removed here -- OrbitControls (inside src/preview3d/Preview3DRenderer.js) now owns pointer
 // interaction on that canvas natively, and does strictly more (rotate, zoom, and pan, with
 // damping) without fighting over the same pointer events.
-window.addEventListener('resize',()=>updateAll(true));populateStoneColorOptions();syncSelectedControlsFromLayer();updateAll(true);
+window.addEventListener('resize',()=>updateAll(true));
+
+// ============================================================================
+// UI-001 (Complete Application Redesign): top menu / Lightbox / workspace-tab /
+// inspector orchestration. Pure UI wiring only -- no project/geometry/history/export logic is
+// added or changed below; every function here only opens/closes dialogs, toggles a display:none,
+// or calls an existing function (performUndo/performRedo/duplicateLayer/deleteLayer/click()).
+// See docs/specifications/UI-001-CompleteRedesign.md.
+// ============================================================================
+
+// ---- Shared field-group relocation: one physical DOM node per field (sharedPositionFields =
+// shapeX/Y/W/H, sharedStoneFields = stoneSize/gap/stoneColor+swatch), moved via appendChild
+// (preserves bound listeners) between the right inspector's "home" slot and whichever Lightbox
+// that needs the same field is currently open -- never a duplicate id, never a second live copy
+// that could disagree with the first. ----
+const FIELD_GROUPS={
+  position:{field:'sharedPositionFields',home:'inspectorPositionSlot',lightboxSlots:{shapes:'shapesPositionSlot',import:'importPositionSlot',imagetrace:'imageTracePositionSlot'}},
+  stone:{field:'sharedStoneFields',home:'inspectorStoneSlot',lightboxSlots:{text:'textStoneSlot',shapes:'shapesStoneSlot',import:'importStoneSlot',imagetrace:'imageTraceStoneSlot'}}
+};
+let activeFieldLightbox=null;
+function relocateFieldGroups(){
+  for(const group of Object.values(FIELD_GROUPS)){
+    const fieldEl=el(group.field);
+    const destId=(activeFieldLightbox&&group.lightboxSlots[activeFieldLightbox])||group.home;
+    const dest=el(destId);
+    if(fieldEl&&dest&&fieldEl.parentElement!==dest)dest.appendChild(fieldEl);
+  }
+}
+relocateFieldGroups();
+
+// ---- Lightboxes ----
+const lightboxes={
+  text:new Lightbox('lightboxText',{onOpen(){activeFieldLightbox='text';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  shapes:new Lightbox('lightboxShapes',{onOpen(){activeFieldLightbox='shapes';relocateFieldGroups();updateObjectTemplateDetail()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  importBox:new Lightbox('lightboxImport',{onOpen(){activeFieldLightbox='import';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  imagetrace:new Lightbox('lightboxImageTrace',{onOpen(){activeFieldLightbox='imagetrace';relocateFieldGroups();updateImageTraceSections()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  exportBox:new Lightbox('lightboxExport'),
+  prodSheet:new Lightbox('lightboxProdSheet'),
+  shipping:new Lightbox('lightboxShipping',{onOpen(){syncShippingFieldsFromState()}}),
+  settings:new Lightbox('lightboxSettings',{onOpen(){syncSettingsFieldsFromState()}}),
+  help:new Lightbox('lightboxHelp')
+};
+
+el('menuText').onclick=()=>lightboxes.text.open();
+el('menuShapes').onclick=()=>lightboxes.shapes.open();
+el('menuImport').onclick=()=>lightboxes.importBox.open();
+el('menuImageTrace').onclick=()=>lightboxes.imagetrace.open();
+el('menuExport').onclick=()=>lightboxes.exportBox.open();
+el('exportShortcut').onclick=()=>lightboxes.exportBox.open();
+el('menuProdSheet').onclick=()=>lightboxes.prodSheet.open();
+el('menuShipping').onclick=()=>lightboxes.shipping.open();
+el('menuSettings').onclick=()=>lightboxes.settings.open();
+el('menuHelp').onclick=()=>lightboxes.help.open();
+
+// The right inspector's "More Options" opens the Lightbox that matches the selected layer's type.
+el('moreOptionsBtn').onclick=()=>{
+  const t=selectedLayer().type;
+  if(t==='text')lightboxes.text.open();
+  else if(t==='circle'||t==='rectangle')lightboxes.shapes.open();
+  else if(t==='svg')lightboxes.importBox.open();
+  else if(t==='image')lightboxes.imagetrace.open();
+};
+
+// ---- Shapes Lightbox: Design Shapes / Object Templates tabs ----
+function setShapesTab(tab){
+  const isDesign=tab==='design';
+  el('shapesTabDesign').classList.toggle('active',isDesign);el('shapesTabDesign').setAttribute('aria-selected',String(isDesign));
+  el('shapesTabTemplates').classList.toggle('active',!isDesign);el('shapesTabTemplates').setAttribute('aria-selected',String(!isDesign));
+  el('shapesPanelDesign').hidden=!isDesign;el('shapesPanelTemplates').hidden=isDesign;
+}
+el('shapesTabDesign').onclick=()=>setShapesTab('design');
+el('shapesTabTemplates').onclick=()=>setShapesTab('templates');
+el('addCircleLightbox').onclick=()=>el('addCircle').click();
+el('addRectLightbox').onclick=()=>el('addRect').click();
+function updateObjectTemplateDetail(){
+  const t=currentObjectTemplate(),s=t.safeAreaInsetMm;
+  const detailEl=el('objectTemplateDetail');
+  if(detailEl)detailEl.textContent=`Production ${t.productionWidthMm}×${t.productionHeightMm}mm · Safe area inset ${s.top}/${s.right}/${s.bottom}/${s.left}mm · Default wrap: ${t.wrap.default}`;
+  const summaryEl=el('projectTemplateSummary');
+  if(summaryEl)summaryEl.textContent=`${t.displayName} · ${project.canvas.width}×${project.canvas.height}mm`;
+}
+
+// ---- Import Lightbox: SVG Import / Project Import tabs ----
+function setImportTab(tab){
+  const isSvg=tab==='svg';
+  el('importTabSvg').classList.toggle('active',isSvg);el('importTabSvg').setAttribute('aria-selected',String(isSvg));
+  el('importTabProject').classList.toggle('active',!isSvg);el('importTabProject').setAttribute('aria-selected',String(!isSvg));
+  el('importPanelSvg').hidden=!isSvg;el('importPanelProject').hidden=isSvg;
+}
+el('importTabSvg').onclick=()=>setImportTab('svg');
+el('importTabProject').onclick=()=>setImportTab('project');
+
+// ---- Image Trace Lightbox: "new trace" vs "edit selected image layer" sections. Reuses the
+// pre-existing pendingImageImport state and imageImportCommit/imageImportCancel handlers verbatim
+// -- these two listeners only decide which section of the same dialog is visible. ----
+function updateImageTraceSections(){
+  const isImageLayer=selectedLayer().type==='image'&&!pendingImageImport;
+  el('imageTraceEditSection').style.display=isImageLayer?'block':'none';
+  el('imageTraceNewSection').style.display=pendingImageImport||!isImageLayer?'block':'none';
+}
+el('imageImportCommit').addEventListener('click',updateImageTraceSections);
+el('imageImportCancel').addEventListener('click',updateImageTraceSections);
+
+// ---- Workspace 2D / 3D tabs. Only one canvas panel is laid out at a time (more area than the
+// previous fixed side-by-side split); updateAll(true) after the switch lets the just-shown
+// canvas's resizeCanvas()/ResizeObserver pick up its real, now non-zero box size. ----
+function setWorkspaceTab(tab){
+  const is2D=tab==='2d';
+  el('viewTab2D').classList.toggle('active',is2D);el('viewTab2D').setAttribute('aria-selected',String(is2D));
+  el('viewTab3D').classList.toggle('active',!is2D);el('viewTab3D').setAttribute('aria-selected',String(!is2D));
+  el('panel2D').classList.toggle('tab-hidden',!is2D);el('panel3D').classList.toggle('tab-hidden',is2D);
+  el('toolbar2D').style.display=is2D?'flex':'none';el('toolbar3D').style.display=is2D?'none':'flex';
+  el('layoutStats').style.display=is2D?'flex':'none';el('cupStats').style.display=is2D?'none':'flex';
+  updateAll(true);
+}
+el('viewTab2D').onclick=()=>setWorkspaceTab('2d');
+el('viewTab3D').onclick=()=>setWorkspaceTab('3d');
+
+// ---- Safe-area toggle (view-only editor state; see the showSafeArea declaration above and
+// drawLayout()). No grid toggle exists here -- see the showSafeArea declaration's comment above. ----
+el('safeAreaToggle').onclick=()=>{showSafeArea=!showSafeArea;el('safeAreaToggle').setAttribute('aria-pressed',String(showSafeArea));el('settingsSafeAreaDefault').checked=showSafeArea;drawLayout()};
+
+// ---- Left panel Actions shortcuts: each calls the exact same function as its top-bar/per-row
+// equivalent -- no new history, selection, or export logic. ----
+el('actionUndo').onclick=()=>performUndo();
+el('actionRedo').onclick=()=>performRedo();
+el('actionDuplicate').onclick=()=>duplicateLayer(selectedLayerId);
+el('actionDelete').onclick=()=>deleteLayer(selectedLayerId);
+function saveProjectDownload(){el('exportProject').click()}
+el('actionSave').onclick=saveProjectDownload;
+el('saveProject').onclick=saveProjectDownload;
+
+// ---- Shipping & Handling: local, session-scoped metadata only. Deliberately not part of
+// `project` / Project JSON / undo-redo this milestone -- see
+// docs/specifications/UI-001-CompleteRedesign.md, "Shipping & Handling". ----
+const shippingInfo={packageType:'box',lengthMm:'',widthMm:'',heightMm:'',weightG:'',notes:'',fragile:false};
+function syncShippingFieldsFromState(){
+  el('shipPackageType').value=shippingInfo.packageType;el('shipLengthMm').value=shippingInfo.lengthMm;
+  el('shipWidthMm').value=shippingInfo.widthMm;el('shipHeightMm').value=shippingInfo.heightMm;
+  el('shipWeightG').value=shippingInfo.weightG;el('shipNotes').value=shippingInfo.notes;el('shipFragile').checked=shippingInfo.fragile;
+}
+el('shipApply').onclick=()=>{
+  shippingInfo.packageType=el('shipPackageType').value;shippingInfo.lengthMm=el('shipLengthMm').value;
+  shippingInfo.widthMm=el('shipWidthMm').value;shippingInfo.heightMm=el('shipHeightMm').value;
+  shippingInfo.weightG=el('shipWeightG').value;shippingInfo.notes=el('shipNotes').value;shippingInfo.fragile=el('shipFragile').checked;
+  el('status').textContent='Shipping & Handling notes updated (this session only).';
+};
+
+// ---- Settings: mirrors the live grid/safe-area/snap toggle state (one boolean each, never a
+// second independent copy). Default stone size/gap are session-local preference fields not yet
+// wired into new-layer creation (addCircle/addRect already default sensibly from the currently
+// selected layer) -- documented, not faked; see the specification. ----
+function syncSettingsFieldsFromState(){
+  el('settingsGridDefault').checked=true;el('settingsGridDefault').disabled=true;
+  el('settingsSafeAreaDefault').checked=showSafeArea;el('settingsSnapDefault').checked=snapEnabled;
+}
+el('settingsApply').onclick=()=>{
+  showSafeArea=el('settingsSafeAreaDefault').checked;el('safeAreaToggle').setAttribute('aria-pressed',String(showSafeArea));
+  snapEnabled=el('settingsSnapDefault').checked;el('snapEnabled').value=snapEnabled?'on':'off';
+  drawLayout();
+};
+
+populateStoneColorOptions();syncSelectedControlsFromLayer();updateAll(true);

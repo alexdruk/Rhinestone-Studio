@@ -19,6 +19,41 @@ const indexHtml = await readFile(path.join(repoRoot, 'index.html'), 'utf8');
 
 const CURVE_FIELDS = ['curveEnabled', 'curveRadiusMm', 'curveDirection', 'curveStartAngleDeg', 'curveSweepAngleDeg', 'curveAlignment'];
 
+// UI-001 (Complete Application Redesign) moved #textControls into the Text Lightbox and
+// #shapeControls into the Shapes Lightbox -- they are no longer adjacent siblings, so the original
+// `/<div id="textControls">([\s\S]*?)<\/div>\s*<div id="shapeControls"/` non-greedy regex no longer
+// bounds its capture to #textControls itself: it now expands across the entire rest of the document
+// looking for any later `</div><div id="shapeControls"` adjacency (which still exists, coincidentally,
+// inside the unrelated Shapes Lightbox), so test 7 below used to "pass" without actually checking
+// only #textControls's own content. This tag-depth-aware helper extracts exactly one element's inner
+// HTML regardless of what follows it.
+function extractElementHtml(html, id) {
+  const openTagMatch = html.match(new RegExp(`<([a-zA-Z]+)[^>]*\\bid="${id}"[^>]*>`));
+  assert.ok(openTagMatch, `expected to find an element with id="${id}"`);
+  const tag = openTagMatch[1];
+  const start = openTagMatch.index + openTagMatch[0].length;
+  const openRe = new RegExp(`<${tag}\\b`, 'g');
+  const closeRe = new RegExp(`</${tag}>`, 'g');
+  let depth = 1;
+  let cursor = start;
+  while (depth > 0) {
+    openRe.lastIndex = cursor;
+    closeRe.lastIndex = cursor;
+    const nextOpen = openRe.exec(html);
+    const nextClose = closeRe.exec(html);
+    assert.ok(nextClose, `unbalanced <${tag}> for id="${id}"`);
+    if (nextOpen && nextOpen.index < nextClose.index) {
+      depth++;
+      cursor = nextOpen.index + nextOpen[0].length;
+    } else {
+      depth--;
+      cursor = nextClose.index + nextClose[0].length;
+      if (depth === 0) return html.slice(start, nextClose.index);
+    }
+  }
+  throw new Error(`unreachable: failed to extract #${id}`);
+}
+
 async function test(name, fn) {
   try {
     await fn();
@@ -83,9 +118,7 @@ await test('6. writeSelectedControlsToLayer() writes all six curve fields from t
 });
 
 await test('7. index.html exposes all six curve controls plus a curveControls container, inside #textControls', () => {
-  const match = indexHtml.match(/<div id="textControls">([\s\S]*?)<\/div>\s*<div id="shapeControls"/);
-  assert.ok(match, 'expected to find #textControls in index.html');
-  const body = match[1];
+  const body = extractElementHtml(indexHtml, 'textControls');
   for (const field of CURVE_FIELDS) {
     assert.ok(body.includes(`id="${field}"`), `expected #textControls to contain an element with id="${field}"`);
   }
