@@ -696,11 +696,12 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
       </div>
       <div class="field-section">
         <h3>Alignment &amp; Snapping</h3>
-        <label class="checkbox-row"><input type="checkbox" id="settingsSnapDefault" checked> Enable Snapping</label>
+        <label class="checkbox-row" title="Automatically aligns objects to the canvas, safe area, and other objects while dragging."><input type="checkbox" id="settingsSnapDefault" checked> Enable Snapping</label>
         <div class="field-row">
-          <div class="field"><label for="settingsSnapDistance">Snap Distance (mm)</label><input id="settingsSnapDistance" type="number" min="0.5" max="5" step="0.1" value="1.5"></div>
+          <div class="field"><label for="settingsSnapDistance">Snap Distance</label><input id="settingsSnapDistance" type="number" min="0.5" max="5" step="0.1" value="1.5"></div>
         </div>
-        <label class="checkbox-row"><input type="checkbox" id="settingsShowGuides" checked> Show Alignment Guides</label>
+        <p class="hint">How close two elements need to be, in millimeters, before they snap together. Lower values require more precise alignment.</p>
+        <label class="checkbox-row" title="Shows temporary guide lines when objects snap into alignment while dragging."><input type="checkbox" id="settingsShowGuides" checked> Show Alignment Guides</label>
       </div>
       <div class="field-section">
         <h3>New-layer defaults</h3>
