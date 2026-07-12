@@ -230,11 +230,12 @@ await test('17. switching object type and back leaves layer geometry fields unto
 
 // --- 6. GeometryEngine/StoneLayout untouched, export compatibility --------------------------------
 
-await test('18. GeometryEngine.js and StoneLayout.js are untouched by this milestone', () => {
+await test('18. StoneLayout.js is untouched by this milestone (GeometryEngine.js is now legitimately changed by RS-1008A)', () => {
   const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
   const changedPaths = output.split('\n').filter((l) => l.trim().length > 0).map((l) => l.slice(3).trim());
+  // RS-1008A (Image Trace Architecture Correction) legitimately adds
+  // GeometryEngine.generateImageLayout() -- see tools/test-image-trace-regression.mjs.
   for (const changedPath of changedPaths) {
-    assert.notEqual(changedPath, 'src/geometry/GeometryEngine.js', 'this milestone must not touch GeometryEngine.js');
     assert.notEqual(changedPath, 'src/geometry/StoneLayout.js', 'this milestone must not touch StoneLayout.js');
   }
 });
@@ -270,7 +271,9 @@ await test('21. no forbidden file changed (this milestone\'s own forbidden list)
   const forbiddenExactWithinPrefix = new Set(['src/renderer/CanvasRenderer2D.js']);
   // src/export/ is legitimately changed by RS-1005 (Production Sheet export) — see
   // tools/test-production-sheet-exporter.mjs for that milestone's own forbidden-file guard.
-  const forbiddenPrefixes = ['src/geometry/', 'src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'src/svg/', 'src/history/', 'assets/', 'examples/'];
+  // src/geometry/ is legitimately changed by RS-1008A (Image Trace Architecture Correction) — see
+  // tools/test-image-trace-regression.mjs for that milestone's own forbidden-file guard.
+  const forbiddenPrefixes = ['src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'src/svg/', 'src/history/', 'assets/', 'examples/'];
   for (const changedPath of changedPaths) {
     assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
     assert.ok(!forbiddenExactWithinPrefix.has(changedPath), `Forbidden file changed: ${changedPath}`);

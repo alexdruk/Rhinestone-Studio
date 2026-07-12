@@ -93,15 +93,17 @@ await test('6. app.js is untouched by this fix (the discoverability issue was a 
   }
 });
 
-await test('7. GeometryEngine.js and StoneLayout.js are untouched by this fix', () => {
+await test('7. StoneLayout.js is untouched by this fix (GeometryEngine.js is now legitimately changed by RS-1008A)', () => {
   const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
   const changedPaths = output
     .split('\n')
     .filter((line) => line.trim().length > 0)
     .map((line) => line.slice(3).trim());
 
+  // RS-1008A (Image Trace Architecture Correction) legitimately adds
+  // GeometryEngine.generateImageLayout() -- see tools/test-image-trace-regression.mjs for that
+  // milestone's own forbidden-file guard and its proof of correct, non-duplicated usage.
   for (const changedPath of changedPaths) {
-    assert.notEqual(changedPath, 'src/geometry/GeometryEngine.js', 'this fix must not touch GeometryEngine.js');
     assert.notEqual(changedPath, 'src/geometry/StoneLayout.js', 'this fix must not touch StoneLayout.js');
   }
 });

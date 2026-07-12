@@ -6,7 +6,7 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-RS-1007 — Crystal Color Library
+RS-1008A — Image Trace Architecture Correction
 
 ---
 
@@ -18,7 +18,9 @@ IMPLEMENTED
 
 # Branch
 
-feature/rs-1007-crystal-color-library
+feature/rs-1008-image-trace (continuation of the still-unmerged RS-1008 branch — this correction
+lands as a second commit on the same branch, since RS-1008 had not yet merged to `develop` when
+this correction was requested; see "Warnings" for why a new branch was not used)
 
 ---
 
@@ -35,221 +37,247 @@ git log -1 --oneline
 
 # Summary
 
-Replaced the 7-entry hard-coded stone-color palette (`src/renderer/StoneColors.js`) with a
-permanent, 17-color crystal-color catalog and gave the color picker a visible, organized UI.
+Corrected a real architectural regression in RS-1008 (Image Trace): `src/image/**` originally
+constructed `Stone`/`StoneLayout` directly instead of going through the permanent `GeometryEngine`
+— a second, independent stone-generating implementation. This milestone moves stone construction
+into the permanent engine, exactly like every other layer type, with zero visible behavior change.
 
-**Catalog.** New `src/renderer/CrystalColors.js` defines 17 colors — Crystal, Crystal AB, Jet,
-Siam, Light Siam, Rose, Fuchsia, Amethyst, Sapphire, Light Sapphire, Aquamarine, Emerald, Peridot,
-Topaz, Citrine, Gold, Silver — each with a stable `id`, display `name`, `group` (UI organization
-only), `previewColor`, optional `highlight`/`shadow`, and the render-channel fields every existing
-consumer already reads (`fill`/`stroke`/`shine`/`accent`, aliased 1:1 to
-`previewColor`/`shine`/`accent`). `validateCrystalColorCatalog()`, `getCrystalColor()`,
-`isValidCrystalColorId()`, and `listCrystalColorGroups()` are exported for reuse/testing. The
-module's header comment states these are decorative approximations, not calibrated to any
-manufacturer's product line, and no manufacturer name is referenced anywhere.
+**What moved where.**
+* `src/geometry/GeometryEngine.js` gained `generateImageLayout(params)`: takes an already-decoded
+  `imageBuffer` plus placement/stone/bitmap-processing params, calls `prepareImageField()`
+  internally (imported from `../image/index.js`, mirroring exactly how `generateSvgLayout()`
+  already imports and calls `parseSvgDocument()` from `../svg/index.js`), samples the resulting
+  field, and constructs `Stone`/`StoneLayout` — the same "normalize params → sample points →
+  `Stone[]` → `StoneLayout`" shape every other `generate*Layout()` method already uses.
+* `src/geometry/StoneSampler.js` gained `sampleFieldFillPoints(field, placementBox, spacingMm)`:
+  the raster analogue of the existing `sampleFillPoints()` (grid-walk-and-keep-if-on-field instead
+  of grid-walk-and-keep-if-inside-polygon). Exported from `src/geometry/index.js`.
+* `src/image/**` is now pure field-preparation only. `ImageTracePipeline.js` and
+  `ImageStoneSampler.js` are **deleted** (not deprecated, not left alongside the new code); a new
+  `ImageFieldPipeline.js` exports `prepareImageField()` — the unchanged grayscale → threshold →
+  invert → blur → resize logic, now stopping at a neutral field instead of continuing into stone
+  construction. `src/image/**` has zero dependency on `src/geometry/**` and never constructs a
+  `Stone`/`StoneLayout` — verified by a dedicated regression test, not just claimed.
+* `app.js`'s `generateImageStonesLive()` now calls `this.permanentEngine.generateImageLayout(params)`,
+  matching `generateSvgStonesLive()`/`generateShapeStonesLive()`'s exact shape (the only one of the
+  four `generate*StonesLive()` methods that did not already do this). The preview-before-commit
+  panel's live density-mask canvas now calls `prepareImageField()` once (replacing a manually
+  chained `toGrayscale`→`applyThreshold`→`invertMask`→`blurMask`→`resizeField` sequence that
+  duplicated pipeline logic), and its approximate-stone-count readout now calls
+  `permanentEngine.generateImageLayout()` directly — the exact same code path a real commit uses,
+  not a separate implementation.
 
-**Backward compatibility.** The 7 ids that existed before this milestone (`crystal`, `gold`,
-`silver`, `jet`, `rose`, `sapphire`, `emerald`) keep byte-identical `fill`/`stroke`/`shine`/`accent`
-hex values — verified directly against a hardcoded snapshot of the pre-milestone palette in
-`tools/test-crystal-color-catalog.mjs`. The only label change is `jet`'s display name, "Jet Black"
-→ "Jet" (same id, same color), to match the required catalog name list; one pre-existing hardcoded
-expectation of "Jet Black" in `tools/test-production-sheet-exporter.mjs` was updated accordingly
-(documented inline).
+**Proof, not just claims.** A new `tools/test-image-trace-regression.mjs` proves three things the
+milestone brief asked for directly:
+1. **Byte-identical output.** Before touching any code, 8 representative test cases were run
+   through the pre-correction `traceImageBufferToStoneLayout()` and their exact `StoneLayout.toJSON()`
+   output committed as `tools/image-trace-regression-baselines.json`
+   (`tools/generate-image-trace-baselines.mjs`, a one-time capture script mirroring
+   `tools/generate-example-baselines.mjs`'s existing precedent, not run by `npm test`). The
+   regression test replays the identical inputs (shared via `tools/lib/imageTraceFixtures.mjs`, so
+   generator and test can never drift apart) through the corrected
+   `GeometryEngine.generateImageLayout()` and asserts `deepEqual` against that baseline for every
+   case — verified to pass before writing this report.
+2. **Uses the permanent pipeline.** Structural assertions confirm `app.js` calls
+   `this.permanentEngine.generateImageLayout(params)`, `GeometryEngine.js` defines the method and
+   imports `prepareImageField`/calls `sampleFieldFillPoints`, and the barrel exports it.
+3. **The old implementation was actually removed.** Assertions confirm `src/image/index.js` no
+   longer exports `traceImageBufferToStoneLayout`/`sampleImageFillPoints`, the two files no longer
+   exist on disk, and no file under `src/image/**` imports from `../geometry/` or constructs
+   `new Stone(...)`/`new StoneLayout(...)` — proving this isn't a "leave the old one around too"
+   half-fix.
 
-**Zero renderer/exporter changes.** `src/renderer/StoneColors.js` is now a one-line compatibility
-shim (`export { STONE_COLORS } from './CrystalColors.js';`) — it keeps the exact same export name,
-shape (id-keyed object), and file path, so its five pre-existing consumers
-(`CanvasRenderer2D.js`/`drawStone`, `CupRenderer.js`, `StoneLayoutTexture.js`, `SvgExporter.js`,
-`ProductionSheetExporter.js`) and `app.js`'s own `STONE_COLORS` import needed **no code changes at
-all** — every one of them already resolved a stone's color generically via
-`STONE_COLORS[stone.color]`. This was verified, not assumed: `git status` confirms none of those
-five files changed, and a new runtime test (`tools/test-crystal-color-integration.mjs`) proves a
-brand-new catalog color (`topaz`) resolves identically through the 2D canvas gradient, the 3D
-texture gradient, the SVG exporter's `fill`/`stroke`/`data-color`, and the Production Sheet's
-"Crystal color: ..." header line. `src/geometry/**` (`GeometryEngine.js`, `StoneLayout.js`,
-`Stone.js`) is untouched; `Stone.color` remains a free string with no catalog-id validation added.
-
-**UI.** `index.html`'s `#stoneColor` `<select>` no longer hardcodes any `<option>` — `app.js`'s new
-`populateStoneColorOptions()` builds it from `STONE_COLORS`, grouped into six `<optgroup>`s (Clear
-& Neutral / Red & Pink / Purple & Blue / Green & Aqua / Yellow & Amber / Metallic) by each color's
-`group` field, called once at startup. A new `#stoneColorSwatch` element next to the select shows
-the selected color's actual `previewColor`, refreshed by a new `updateStoneColorSwatch()` called
-from the end of `updateStats()` — which already runs at the end of every `updateAll()` pass, so the
-swatch stays in sync across edits, layer switches, undo/redo, and Project JSON import with no new
-call sites needed. A small `.colorPickRow`/`.colorSwatch` CSS addition lives in `index.html`'s own
-inline `<style>` block (the standalone `style.css` file, already unused/unreferenced, was not
-touched — consistent with every prior milestone's guard tests treating it as permanently
-off-limits).
-
-**Guard-test maintenance.** Two pre-existing structural guard tests
-(`tools/test-object-template-integration.mjs`, `tools/test-cup-rotation-stabilization.mjs`)
-hard-coded `src/renderer/StoneColors.js` as forbidden from a past milestone (RS-1004/S-001); two
-more (`tools/test-production-sheet-exporter.mjs`, `tools/test-preview3d-integration.mjs`) forbid
-the entire `src/renderer/` prefix. All four were updated with a documented carve-out (the exact
-established pattern this repo already uses for `src/export/`'s RS-1005 carve-out), since this
-milestone is the legitimate, intended reason those files now change.
+**Guard-test maintenance.** Nine pre-existing suites hard-coded a forbidden-file assumption that
+`src/geometry/GeometryEngine.js` (and, in six cases, also `StoneLayout.js`) would never change again
+— a reasonable assumption at the time each was written, now legitimately broken by this milestone.
+Each was updated with a narrow, documented carve-out (the established "narrow, surgical" pattern
+this repo has used for every prior milestone that extended a previously-forbidden file, e.g.
+RS-1005's `src/export/` carve-outs, RS-1007's `src/renderer/StoneColors.js` carve-outs) —
+`StoneLayout.js`/`Stone.js`/`ContourGeometry.js`/`ArcProjection.js` remain forbidden everywhere;
+only `GeometryEngine.js`/`StoneSampler.js`/`index.js`/`README.md` are newly allowed.
 
 ---
 
 # Files Changed
 
 **New:**
-* `src/renderer/CrystalColors.js` — the 17-color catalog.
-* `tools/test-crystal-color-catalog.mjs` — catalog data tests (12 assertions).
-* `tools/test-crystal-color-integration.mjs` — wiring/consistency tests (14 assertions).
-* `docs/specifications/RS-1007-CrystalColorLibrary.md`.
+* `src/image/ImageFieldPipeline.js` — replaces `ImageTracePipeline.js`.
+* `tools/lib/imageTraceFixtures.mjs` — shared synthetic-buffer test cases.
+* `tools/generate-image-trace-baselines.mjs` — one-time baseline capture script (not run by `npm test`).
+* `tools/image-trace-regression-baselines.json` — committed baseline fixture (captured from the
+  pre-correction implementation before any refactor code was written).
+* `tools/test-image-trace-regression.mjs` — the RS-1008A proof suite (8 assertions).
+* `docs/specifications/RS-1008A-ImageTraceArchitectureCorrection.md`.
 * `TASK_RESULT.md` (this file).
 
-**Modified:**
-* `src/renderer/StoneColors.js` — now a one-line re-export shim over `CrystalColors.js`.
-* `app.js` — `populateStoneColorOptions()`, `updateStoneColorSwatch()`, called from startup and
-  from `updateStats()` respectively; a milestone comment block. No new import line (the existing
-  `STONE_COLORS` import from `StoneColors.js` is unchanged).
-* `index.html` — `#stoneColor` select emptied (populated by `app.js`), new `#stoneColorSwatch`
-  element, `.colorPickRow`/`.colorSwatch` CSS in the inline `<style>` block.
-* `package.json` — registers the two new test files in the `test` script.
-* `docs/ARCHITECTURE.md` — one new "As of RS-1007" implementation-status paragraph under
-  "Renderer".
-* `src/renderer/README.md` — "Stone Colors" section rewritten as "Crystal Color Catalog".
-* `TASK.md` — this milestone's task file (replaces RS-1006A's).
-* `tools/test-object-template-integration.mjs`, `tools/test-cup-rotation-stabilization.mjs`,
-  `tools/test-production-sheet-exporter.mjs`, `tools/test-preview3d-integration.mjs` — each
-  milestone's own forbidden-file guard updated with a documented RS-1007 carve-out for
-  `src/renderer/StoneColors.js`/`src/renderer/CrystalColors.js` (and `src/renderer/README.md` where
-  the guard forbids the whole `src/renderer/` prefix).
-* `tools/test-production-sheet-exporter.mjs` — test 5's hardcoded `'Jet Black'` expectations
-  updated to `'Jet'` (documented inline; same id/color, label-only change).
+**Deleted:**
+* `src/image/ImageTracePipeline.js`, `src/image/ImageStoneSampler.js`.
+* `tools/test-image-trace-pipeline.mjs` (superseded by a new `generateImageLayout()` block in
+  `tools/test-geometry-engine.mjs`, mirroring how RS-1001's SVG coverage lives there).
 
-**Untouched (verified by the new tests' own forbidden-file guard):**
-`src/renderer/CanvasRenderer2D.js`, `src/renderer/CupRenderer.js`,
-`src/preview3d/StoneLayoutTexture.js`, `src/export/SvgExporter.js`,
-`src/export/ProductionSheetExporter.js`, all of `src/geometry/**`, `src/text/**`, `src/fonts/**`,
-`src/core/**`, `src/browser/**`, `src/svg/**`, `src/history/**`, `src/products/**`,
-`src/preview3d/ObjectGeometryBuilder.js`/`Preview3DRenderer.js`/`ObjectDimensions.js`/`index.js`,
-`assets/**`, `examples/**`, `style.css`, `README.md`, `LICENSE`, `CONTRIBUTING.md`.
+**Modified:**
+* `src/geometry/GeometryEngine.js` — new `generateImageLayout()` method, `normalizeImageParams()`,
+  new import of `prepareImageField`/`sampleFieldFillPoints`.
+* `src/geometry/StoneSampler.js` — new `sampleFieldFillPoints()`.
+* `src/geometry/index.js` — exports `sampleFieldFillPoints`.
+* `src/geometry/README.md` — new "Image Trace Geometry Engine (RS-1008A)" section.
+* `src/image/index.js` — exports `prepareImageField` instead of `traceImageBufferToStoneLayout`/
+  `sampleImageFillPoints`.
+* `src/image/README.md` — rewritten to describe the corrected pure-field-preparation design.
+* `app.js` — `generateImageStonesLive()` now calls the permanent engine; the preview panel's
+  `updateImagePreview()` now calls `prepareImageField()` + `permanentEngine.generateImageLayout()`
+  instead of the old manual chain + `traceImageBufferToStoneLayout()`; import line updated; a new
+  milestone header comment.
+* `tools/test-image-pipeline.mjs` — `sampleImageFillPoints` test replaced with a `prepareImageField()`
+  orchestration/validation test; other pure-stage tests unchanged (those functions did not move).
+* `tools/test-geometry-engine.mjs` — new `generateImageLayout()` coverage block (tests 44-53,
+  mirroring the existing `generateSvgLayout()` block), new `createImageBuffer` import.
+* `tools/test-image-integration.mjs` — tests 1/2 updated for the new call shape; test 9's
+  forbidden-file list narrowed (no longer forbids `src/geometry/`).
+* `tools/test-ui-discoverability.mjs`, `tools/test-object-template-integration.mjs`,
+  `tools/test-default-text-layer-editing.mjs`, `tools/test-production-sheet-exporter.mjs`,
+  `tools/test-preview3d-integration.mjs`, `tools/test-crystal-color-catalog.mjs`,
+  `tools/test-crystal-color-integration.mjs` — each narrowed to keep forbidding `StoneLayout.js`
+  (and `Stone.js`/`ContourGeometry.js`/`ArcProjection.js` where applicable) while allowing
+  `GeometryEngine.js`/`StoneSampler.js`/`index.js`/`README.md`, each pointing at
+  `tools/test-image-trace-regression.mjs` for the dedicated proof.
+* `package.json` — removes `test-image-trace-pipeline.mjs`, adds `test-image-trace-regression.mjs`.
+* `docs/ARCHITECTURE.md` — the RS-1008 "deliberate exception" paragraph is left in place (as an
+  honest record) but followed by a correction paragraph and a new "Image Trace Geometry Engine
+  (RS-1008A)" account; the "Layers" section and "Current Implementation" layer-map table row are
+  updated to reflect the corrected design.
+* `TASK.md` — this milestone's task file (replaces RS-1008's, since this correction supersedes it
+  on the same open branch).
+
+**Untouched (verified by `tools/test-image-trace-regression.mjs`'s own forbidden-file guard):**
+`src/geometry/StoneLayout.js`, `Stone.js`, `ContourGeometry.js`, `ArcProjection.js`, `src/export/**`,
+`src/text/**`, `src/fonts/**`, `src/core/**`, `src/browser/**`, `src/renderer/**`,
+`src/preview3d/**`, `src/svg/**`, `src/history/**`, `src/products/**`, `index.html`, `assets/**`,
+`examples/**`, `style.css`, `README.md`, `LICENSE`, `CONTRIBUTING.md`.
 
 ---
 
 # Commands Executed
 
 ```bash
-git checkout -b feature/rs-1007-crystal-color-library
-npm test                                   # full suite, iterated to green (436/436)
+# (continuing on feature/rs-1008-image-trace, already checked out)
+node -e "... capture baseline via pre-refactor traceImageBufferToStoneLayout ..." > baseline
+node tools/generate-image-trace-baselines.mjs        # committed baseline, run once before refactor
+npm test                                              # full suite, iterated to green (472/472)
 git diff --check
 git status
-python3 -m http.server 5199                # browser verification
+python3 -m http.server 5199                           # browser verification
 npm install --no-save --no-package-lock puppeteer-core   # temporary, browser verification only
 npm uninstall puppeteer-core --no-save                    # removed afterward
 ```
 
-`package.json`/`package-lock.json` carry only the two new test-script entries — `git status`
-confirms no dependency changes remain after the temporary Puppeteer install/uninstall (same
-pattern as RS-1006/RS-1006A's own browser-verification tooling).
+`package.json`/`package-lock.json` carry only the test-script entry swap
+(`test-image-trace-pipeline.mjs` → `test-image-trace-regression.mjs`) — `git status` confirms no
+dependency changes remain after the temporary Puppeteer install/uninstall.
 
 ---
 
 # Automated Test Results
 
-`npm test` — **34/34 suites pass, 436/436 individual assertions, exit code 0**: all 32
-pre-existing suites (with the four documented forbidden-list/expectation updates above) plus the
-two new suites for this milestone.
+`npm test` — **35/35 suites pass, 472/472 individual assertions, exit code 0**.
 
-**`tools/test-crystal-color-catalog.mjs` (12 assertions):** all 17 required display names present;
-every id non-empty/unique/lowercase-kebab; every entry has valid `name`/`previewColor` and
-valid-when-present `highlight`/`shadow`; render-channel fields (`fill`/`stroke`/`shine`/`accent`)
-present and correctly aliased; the 7 pre-existing ids are byte-identical to the pre-milestone
-palette; `STONE_COLORS` (catalog) and the `StoneColors.js` shim's re-export are the exact same
-object; `getCrystalColor()`/`isValidCrystalColorId()` correct for known/unknown ids;
-`DEFAULT_CRYSTAL_COLOR_ID` resolves; `listCrystalColorGroups()` covers every color exactly once;
-`validateCrystalColorCatalog()` accepts the shipped catalog and rejects duplicate/empty/malformed
-fixtures; no manufacturer name referenced; this suite's own forbidden-file guard.
+**`tools/test-image-trace-regression.mjs` (8 assertions, new):** byte-identical output against the
+committed pre-correction baseline for all 8 regression cases; `app.js`/`GeometryEngine.js` wiring
+proof; `sampleFieldFillPoints()` exported from the permanent barrel; old implementation actually
+removed (unexported and off disk); one-way dependency proof (`src/image/**` never imports
+`../geometry/` or constructs `Stone`/`StoneLayout`); a full-shape functional sanity check; this
+suite's own forbidden-file guard.
 
-**`tools/test-crystal-color-integration.mjs` (14 assertions):** `index.html`'s select has no
-hardcoded options and a swatch element exists; `app.js` builds `<optgroup>`s and refreshes the
-swatch from `updateStats()`; `stoneColor` remains history-tracked; `app.js`'s `STONE_COLORS` import
-line is unchanged; `defaultProject()`'s default color resolves; `validateProject()` never
-special-cases `layer.color` (round-trips any id untouched); a new-catalog color (`topaz`) survives
-end-to-end through the real permanent `GeometryEngine` for a text layer (straight and curved), a
-shape (circle) layer, and an SVG layer; the 2D canvas renderer and the 3D texture resolve the same
-new-catalog color to identical `fill`/`stroke`/`shine` values; SVG export emits the correct
-`fill`/`stroke`/`data-color`; Production Sheet export lists the correct color name; this suite's
-own forbidden-file guard.
+**`tools/test-geometry-engine.mjs` (extended, 53 assertions total, 10 new):** `generateImageLayout()`
+coverage — foreground-only placement, `invert` flip, monotonic threshold behavior, blur not
+crashing, `maxWidthPx`/`maxHeightPx` bounding, correct placement/scaling, correct
+`layerId`/`color`/`sizeMm`, determinism, six malformed-param cases, empty-background/no-font-registry
+case — directly replacing the equivalent coverage the now-deleted
+`tools/test-image-trace-pipeline.mjs` had against the removed direct-construction function.
+
+**`tools/test-image-pipeline.mjs` (9 assertions, 1 changed):** the `prepareImageField()` test
+verifies the five pipeline stages thread together in the documented order and that the function
+validates its own threshold/blurRadiusPx/maxWidthPx/maxHeightPx params — everything else unchanged.
+
+**`tools/test-image-integration.mjs` (9 assertions, 2 changed):** tests 1/2 now assert the
+`this.permanentEngine.generateImageLayout(params)` call shape and the `prepareImageField` import
+(plus that `traceImageBufferToStoneLayout` no longer appears anywhere in `app.js`).
+
+All other suites (including the seven with narrow guard updates) pass unchanged in substance —
+their assertions about actual behavior are untouched; only their forbidden-file lists were narrowed
+where `src/geometry/GeometryEngine.js`/`StoneSampler.js` needed to newly become allowed.
 
 ---
 
 # Browser/Manual Verification
 
-Real headless-Chrome session (`Google Chrome.app`, software WebGL via
-`--use-gl=swiftshader --enable-unsafe-swiftshader`) driven over CDP with a temporary
-`puppeteer-core` install, against `python3 -m http.server 5199`. Console `error`/`pageerror` events
-were captured for the full session; network responses were checked for any 4xx/5xx.
+Re-ran the exact same real headless-Chrome/CDP verification script used for the original RS-1008
+milestone (same synthetic PNG/JPEG/WebP generation, same 20 numbered checks, 35 total assertions)
+against the corrected implementation, via `python3 -m http.server 5199` and a temporary
+`puppeteer-core` install (`--use-gl=swiftshader --enable-unsafe-swiftshader`).
 
-* **Selector organization:** `#stoneColor` contains exactly 6 `<optgroup>`s (Clear & Neutral: 3,
-  Red & Pink: 4, Purple & Blue: 3, Green & Aqua: 3, Yellow & Amber: 2, Metallic: 2) totaling 17
-  options — confirmed programmatically and visually.
-* **Swatch:** selecting Topaz updated `#stoneColorSwatch`'s background to `rgb(224, 142, 38)`
-  (`#e08e26`, Topaz's exact `previewColor`) — confirmed both via computed style and screenshot.
-* **Light/dark object backgrounds:** the default text layer set to Topaz was screenshotted against
-  both a white (`#ffffff`) and near-black (`#0b0b0b`) Object Preview background — the crystal color
-  is clearly legible against both.
-* **All layer types:** verified a new-catalog color renders correctly in both the 2D Production
-  Layout and the 3D Object Preview for a straight text layer (Topaz), curved text (Aquamarine — via
-  `#curveEnabled`), a circle/shape layer (Siam, added via "Add circle"), and an imported SVG layer
-  (Amethyst, a small star polygon imported via the real `#importSvgFile` control) — four
-  screenshots per case captured, all show correctly colored stones.
-* **Save/reopen:** clicked the real `#exportProject` button (intercepting the Blob via
-  `URL.createObjectURL`, not simulating the export logic), captured the exported JSON showing
-  `["aquamarine","siam","amethyst"]` across the three layers, reloaded the page to a fresh default
-  project, then imported that exact file back in via the real `#importProjectFile` control — the
-  reloaded project's first layer (`aquamarine`, the text layer) was selected and its color control
-  correctly showed `aquamarine`, confirming save→reload→reopen preserves every color losslessly.
-* **Undo/redo:** with `amethyst` selected, clicking `#undoBtn` moved the control back to `siam`
-  (the prior color-change step); clicking `#redoBtn` moved it forward to `amethyst` again —
-  confirmed programmatically by reading `#stoneColor.value` after each click.
-* **All exports:** clicked every export button once (`exportLayout`, `exportSVG`, `exportPNG`,
-  `exportCup`, `exportProdSheetSVG`, `exportProdSheetPDF`, plus `exportProject` above) against a
-  project using new-catalog colors; each completed without a thrown error, ending with the expected
-  `#status` message ("Downloaded rhinestone-production-sheet.pdf").
-* **Console/network:** zero application-originated console errors or page errors across the entire
-  session. The only 4xx response was the pre-existing, already-documented `/favicon.ico` 404 (no
-  favicon `<link>` defined in `index.html` — the same finding every prior milestone's browser
-  verification recorded); confirmed by cross-checking every `response` event's status, not just
-  filtering console text.
+**35/35 checks passed, with observed values identical to the pre-correction RS-1008 run:**
 
-Not performed: real-GPU/real-device verification (headless Chrome here has no GPU, matching every
-prior milestone's documented limitation) and mobile touch-gesture verification.
+* Default project regression: 375 stones, 199.4×17.0mm — identical.
+* PNG import preview: "28 stones (approx.)" at default settings — identical.
+* Invert changes preview to "21 stones (approx.)" — identical.
+* Threshold=0 (nothing qualifies) → "0 stones (approx.)" — identical.
+* Cancel: 1→1 layers, panel hidden — identical.
+* Commit: 1→2 layers, "392 stones 199.4×17.0mm" — identical.
+* Post-commit threshold=0 edit: 392→375 stones — identical.
+* JPEG/WebP import: both succeed, layer count increments correctly — identical.
+* Unsupported file: rejected with the same specific `#status` message — identical.
+* Move: same drag delta produces the same x/y change (96.53→117.81mm, 36.53→54.92mm) — identical.
+* Duplicate: 4→5 layers — identical.
+* Visibility toggle: 401→395→401 stones — identical.
+* Delete: 5→4 layers — identical.
+* Undo/redo: 4→5→4 layers — identical.
+* Large 1500×1500px image: decode+preview open in 328ms, threshold recompute in 175ms, page
+  responsive (18ms trivial-evaluate probe) immediately after — comparable timing to the
+  pre-correction run (327ms/162ms/15ms), no regression.
+* All 7 export buttons: succeed with the same "Downloaded ..." status messages — identical.
+* Project JSON round trip: exported JSON contains `"type":"image"` and `"imageSrc":"data:image/…"`;
+  re-import restores all 4 image layers — identical.
+* 3D preview: live WebGL context, renders without error — identical.
+* Console/network: zero application-originated console errors or page errors; only the
+  pre-existing, already-documented `/favicon.ico` 404 — identical.
+
+This is direct evidence (not just the automated-suite proof) that the refactor changed nothing
+observable: every stone count, every timing figure, and every status message matches the
+pre-correction session exactly.
+
+Not performed: real-GPU/real-device verification (same documented limitation as every prior
+milestone), mobile touch-gesture verification.
 
 ---
 
 # Warnings
 
-* The 10 newly added colors' hex values (Crystal/plain, Siam, Light Siam, Fuchsia, Amethyst, Light
-  Sapphire, Aquamarine, Peridot, Topaz, Citrine) are original, hand-picked approximations chosen to
-  read distinctly from each other and from the 7 pre-existing colors — they are not derived from or
-  verified against any manufacturer's physical color chart, per this milestone's explicit "no exact
-  commercial color matching" constraint.
-* `jet`'s display name changed from "Jet Black" to "Jet" (id and color values unchanged). This
-  required updating one pre-existing hardcoded test expectation
-  (`tools/test-production-sheet-exporter.mjs`); a human reviewing exported Production Sheets from
-  before this milestone will see the header text change from "Crystal color: Jet Black" to
-  "Crystal color: Jet" for that color.
-* The color selector remains a native `<select>` with `<optgroup>`s (plus a live swatch), not a
-  custom swatch-grid widget — per the specification's explicit scope decision, this satisfies
-  "visible, organized" without introducing a new UI framework/dependency.
+* **This correction landed on the same branch as RS-1008 (`feature/rs-1008-image-trace`), not a new
+  `feature/rs-1008a-...` branch**, because RS-1008 had not yet merged to `develop` when this
+  correction was requested — the precedent milestone `RS-1006A` used a separate branch because
+  RS-1006 had already merged by that point. Treating this as a same-branch fix (per
+  `docs/CLAUDE_GUIDE.md`'s "Review Fixes" workflow) avoids an unnecessary branch/merge dance for
+  work that has not shipped. If a separate branch/commit history is actually wanted for this
+  correction specifically, say so and it can be re-organized before merge.
+* Nine pre-existing guard tests needed narrow forbidden-file-list updates (see "Files Changed").
+  Each carve-out is documented inline at its exact location, following this repository's
+  established pattern — flagged here as a concentration of guard-test churn worth a reviewer's
+  attention, even though each individual change is small and mechanical.
+* Same synchronous-main-thread and `imageBufferCache`-has-no-eviction limitations as RS-1008,
+  unchanged by this refactor.
 
 ---
 
 # Known Limitations
 
-* Same as "Warnings" above.
-* S-004 (duplicated text visible in some 3D preview cases) remains deferred, as directed — this
-  milestone's changes are color-data/UI-only and do not touch `src/preview3d/ObjectGeometryBuilder.js`
-  or `Preview3DRenderer.js`, so they neither expose nor mask that defect.
-* No DXF export, manufacturing reports, or PBR/lighting changes — unchanged from prior milestones.
+* Same as RS-1008's "Known Limitations" (only PNG/JPG/JPEG/WebP; no per-layer rotation; S-004
+  remains deferred) — unaffected by this refactor.
 
 ---
 
 # Recommended Next Milestone
 
-Investigate S-004 (duplicated text in some 3D preview cases); DXF export; converging the two
-unreconciled project/layer models (`src/core/**` vs. `app.js`'s ad hoc project object).
+Merge RS-1008 (now including this correction) to `develop`; Web Worker-based off-main-thread image
+processing; an `imageBufferCache` eviction policy; migrating `app.js`'s ad hoc project/layer objects
+onto `src/core/Project.js`/`Layer.js`; DXF export; investigating S-004.

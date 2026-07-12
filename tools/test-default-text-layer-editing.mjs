@@ -115,14 +115,14 @@ await test('7. duplicate/visibility toggle for the default layer are unchanged (
   assert.match(appJs, /if\(copy\.type==='text'\)\{copy\.text\+=' copy'\}/, 'expected duplicating a text layer to still nudge its text so the copy is visibly distinct');
 });
 
-await test('8. GeometryEngine.js and StoneLayout.js are untouched by this fix (src/export/SvgExporter.js is now legitimately changed by RS-1005\'s Production Sheet export — see tools/test-production-sheet-exporter.mjs for that milestone\'s own forbidden-file guard)', () => {
+await test('8. StoneLayout.js is untouched by this fix (src/export/SvgExporter.js is now legitimately changed by RS-1005\'s Production Sheet export — see tools/test-production-sheet-exporter.mjs; GeometryEngine.js is now legitimately changed by RS-1008A — see tools/test-image-trace-regression.mjs)', () => {
   const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
   const changedPaths = output
     .split('\n')
     .filter((line) => line.trim().length > 0)
     .map((line) => line.slice(3).trim());
 
-  for (const forbidden of ['src/geometry/GeometryEngine.js', 'src/geometry/StoneLayout.js']) {
+  for (const forbidden of ['src/geometry/StoneLayout.js']) {
     assert.ok(!changedPaths.includes(forbidden), `this fix must not touch ${forbidden}`);
   }
 });

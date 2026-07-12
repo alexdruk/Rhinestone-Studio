@@ -21,6 +21,7 @@ export {
 export {
   sampleOutlinePoints,
   sampleFillPoints,
+  sampleFieldFillPoints,
   isPointInsidePolygons
 } from './StoneSampler.js';
 
