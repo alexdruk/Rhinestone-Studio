@@ -371,8 +371,12 @@ function unionBBoxOfLayers(layers){let x=Infinity,y=Infinity,x2=-Infinity,y2=-In
 // src/editing/AlignmentEngine.js expects, for every currently multi-selected layer.
 function selectedItemsForEditing(){return[...selectedLayerIds].map(id=>project.layers.find(l=>l.id===id)).filter(Boolean).map(l=>{const b=getLayerBBox(l);return{id:l.id,bbox:{xMm:b.x,yMm:b.y,widthMm:b.width,heightMm:b.height}}})}
 function applyPositionDeltas(deltas){for(const[id,{dxMm,dyMm}]of deltas){const l=project.layers.find(x=>x.id===id);if(!l)continue;const p=getLayerPosition(l);setLayerPosition(l,p.xMm+dxMm,p.yMm+dyMm)}}
-function runAlign(direction){const items=selectedItemsForEditing();if(items.length<2)return;commitHistory();applyPositionDeltas(alignLayers(items,direction));syncSelectedControlsFromLayer();updateAll(true)}
-function runDistribute(axis){const items=selectedItemsForEditing();if(items.length<3)return;commitHistory();applyPositionDeltas(distributeLayers(items,axis));syncSelectedControlsFromLayer();updateAll(true)}
+// UI-001B: align/distribute were the only two mutating editor actions with no #status confirmation
+// at all (every other action -- import/export/duplicate/delete/undo/redo -- already reports what it
+// did); a click that moves a layer by a subtle, easy-to-miss amount could look like nothing happened.
+const ALIGN_DIRECTION_LABELS={left:'left edges',centerH:'horizontal centers',right:'right edges',top:'top edges',centerV:'vertical centers',bottom:'bottom edges'};
+function runAlign(direction){const items=selectedItemsForEditing();if(items.length<2)return;commitHistory();applyPositionDeltas(alignLayers(items,direction));syncSelectedControlsFromLayer();updateAll(true);el('status').textContent=`Aligned ${items.length} layers to ${ALIGN_DIRECTION_LABELS[direction]||direction}`}
+function runDistribute(axis){const items=selectedItemsForEditing();if(items.length<3)return;commitHistory();applyPositionDeltas(distributeLayers(items,axis));syncSelectedControlsFromLayer();updateAll(true);el('status').textContent=`Distributed ${items.length} layers ${axis==='horizontal'?'horizontally':'vertically'}`}
 function nudgeSelection(dxMm,dyMm){if(selectedLayerIds.size===0)return;commitHistory();for(const id of selectedLayerIds){const l=project.layers.find(x=>x.id===id);if(!l)continue;const p=getLayerPosition(l);setLayerPosition(l,p.xMm+dxMm,p.yMm+dyMm)}syncSelectedControlsFromLayer();updateAll(true)}
 // RS-1009: keeps the Align/Snap sidebar section in sync with the current selection count -- align
 // needs 2+, distribute needs 3+, matching this milestone's required outcome exactly. Called from
@@ -511,11 +515,18 @@ el('objectType').addEventListener('change',()=>{commitHistory();const template=g
 // RS-1009: Align/Snap sidebar section. snapEnabled is view-only editor state (like rotation/zoom
 // above) -- not part of `project`, not undo/redo-tracked, not exported.
 el('alignLeft').onclick=()=>runAlign('left');el('alignCenterH').onclick=()=>runAlign('centerH');el('alignRight').onclick=()=>runAlign('right');el('alignTop').onclick=()=>runAlign('top');el('alignCenterV').onclick=()=>runAlign('centerV');el('alignBottom').onclick=()=>runAlign('bottom');el('distributeH').onclick=()=>runDistribute('horizontal');el('distributeV').onclick=()=>runDistribute('vertical');el('snapEnabled').addEventListener('change',()=>{snapEnabled=el('snapEnabled').value==='on'});el('addCircle').onclick=()=>{const l=selectedLayer();commitHistory();const layer={id:'circle'+Date.now(),type:'circle',visible:true,cx:105,cy:45,r:18,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};project.layers.push(layer);selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);syncSelectedControlsFromLayer();updateAll(true)};el('addRect').onclick=()=>{const l=selectedLayer();commitHistory();const layer={id:'rect'+Date.now(),type:'rectangle',visible:true,x:65,y:30,w:80,h:30,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};project.layers.push(layer);selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);syncSelectedControlsFromLayer();updateAll(true)};el('importProject').onclick=()=>el('importProjectFile').click();
-el('importProjectFile').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{const parsed=validateProject(JSON.parse(await file.text()));project=parsed;selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);
+el('importProjectFile').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;
+  // UI-001B fix: the Import Lightbox is a full-viewport overlay (position:fixed;inset:0), so it
+  // covers #status (in the left panel) the whole time this dialog is open -- writing only to
+  // #status left both success and failure completely invisible to the user while the modal was up,
+  // which is what made Project Import look broken. #importProjectValidation already existed in the
+  // markup for exactly this (built by UI-001, never wired up); this handler now writes into it too.
+  const validationEl=el('importProjectValidation');validationEl.textContent='';validationEl.style.display='none';
+  try{const parsed=validateProject(JSON.parse(await file.text()));project=parsed;selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);
   // RS-1002: loading a project is a fresh start, not an undoable edit -- clear history entirely
   // (matches "history cleared on project load") and reset the dirty baseline to this load.
   history.clear();cleanProjectJson=JSON.stringify(project);
-  syncSelectedControlsFromLayer();await updateAll(true);el('status').textContent=`Imported ${file.name}: ${project.layers.length} layer(s)`}catch(error){console.error('Project import failed',error);el('status').textContent=`Import failed: ${error.message}`}});
+  syncSelectedControlsFromLayer();await updateAll(true);el('status').textContent=`Imported ${file.name}: ${project.layers.length} layer(s)`;lightboxes.importBox.close()}catch(error){console.error('Project import failed',error);el('status').textContent=`Import failed: ${error.message}`;validationEl.textContent=`Import failed: ${error.message} The current project was left untouched.`;validationEl.style.display='block'}});
 el('importSvg').onclick=()=>el('importSvgFile').click();
 // RS-1001: parseSvgDocument() here only validates/measures the file (naturalWidthMm/heightMm,
 // shape count, warnings) — it invents no stone positions, so this direct src/svg call does not
@@ -736,20 +747,36 @@ function updateImageTraceSections(){
 el('imageImportCommit').addEventListener('click',updateImageTraceSections);
 el('imageImportCancel').addEventListener('click',updateImageTraceSections);
 
-// ---- Workspace 2D / 3D tabs. Only one canvas panel is laid out at a time (more area than the
-// previous fixed side-by-side split); updateAll(true) after the switch lets the just-shown
-// canvas's resizeCanvas()/ResizeObserver pick up its real, now non-zero box size. ----
-function setWorkspaceTab(tab){
-  const is2D=tab==='2d';
-  el('viewTab2D').classList.toggle('active',is2D);el('viewTab2D').setAttribute('aria-selected',String(is2D));
-  el('viewTab3D').classList.toggle('active',!is2D);el('viewTab3D').setAttribute('aria-selected',String(!is2D));
-  el('panel2D').classList.toggle('tab-hidden',!is2D);el('panel3D').classList.toggle('tab-hidden',is2D);
-  el('toolbar2D').style.display=is2D?'flex':'none';el('toolbar3D').style.display=is2D?'none':'flex';
-  el('layoutStats').style.display=is2D?'flex':'none';el('cupStats').style.display=is2D?'none':'flex';
-  updateAll(true);
+// ---- Workspace view mode (UI-001B: Dual Workspace). Three modes: 'dual' (2D Canvas and Object
+// Preview shown together -- the default desktop layout), '2d' (2D Canvas only), 'preview' (Object
+// Preview only). The single-view modes keep the pre-existing "only one canvas panel laid out at a
+// time" behavior (more area than a fixed split); dual mode instead lays both canvas panels out
+// side by side via the '.dual' CSS class. In every mode both canvases keep a real, non-zero pixel
+// box (visibility, never display:none -- see the .tab-hidden rule), so the existing Export Cup PNG
+// sizing fix keeps applying unchanged. updateAll(true) after a switch lets whichever canvas(es)
+// just became visible/resized pick up their real box size via resizeCanvas()/ResizeObserver.
+let workspaceMode='dual';
+function setWorkspaceMode(mode,skipUpdate){
+  workspaceMode=mode;
+  const show2D=mode==='dual'||mode==='2d',show3D=mode==='dual'||mode==='preview';
+  el('viewTabDual').classList.toggle('active',mode==='dual');el('viewTabDual').setAttribute('aria-selected',String(mode==='dual'));
+  el('viewTab2D').classList.toggle('active',mode==='2d');el('viewTab2D').setAttribute('aria-selected',String(mode==='2d'));
+  el('viewTab3D').classList.toggle('active',mode==='preview');el('viewTab3D').setAttribute('aria-selected',String(mode==='preview'));
+  el('workspaceCanvasArea').classList.toggle('dual',mode==='dual');
+  el('panel2D').classList.toggle('tab-hidden',!show2D);el('panel3D').classList.toggle('tab-hidden',!show3D);
+  el('toolbar2D').style.display=show2D?'flex':'none';el('toolbar3D').style.display=show3D?'flex':'none';
+  el('layoutStats').style.display=show2D?'flex':'none';el('cupStats').style.display=show3D?'flex':'none';
+  if(!skipUpdate)updateAll(true);
 }
-el('viewTab2D').onclick=()=>setWorkspaceTab('2d');
-el('viewTab3D').onclick=()=>setWorkspaceTab('3d');
+el('viewTabDual').onclick=()=>setWorkspaceMode('dual');
+el('viewTab2D').onclick=()=>setWorkspaceMode('2d');
+el('viewTab3D').onclick=()=>setWorkspaceMode('preview');
+// Desktop always starts in Dual Workspace (matching the static HTML default); narrower/smaller
+// screens start collapsed to the 2D Canvas alone so neither panel is squeezed unusably thin. This
+// is only the *starting* mode -- the three tab buttons above let the user switch freely afterward
+// at any screen size. skipUpdate=true here: this runs before the boot-time updateAll(true) at the
+// bottom of this file, so there is no generated layout yet to redraw.
+if(!window.matchMedia('(min-width: 900px)').matches)setWorkspaceMode('2d',true);
 
 // ---- Safe-area toggle (view-only editor state; see the showSafeArea declaration above and
 // drawLayout()). No grid toggle exists here -- see the showSafeArea declaration's comment above. ----

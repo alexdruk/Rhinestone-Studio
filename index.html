@@ -150,6 +150,12 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .canvas-panel{position:absolute;inset:var(--space-4);background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);overflow:hidden}
 .canvas-panel.tab-hidden{visibility:hidden;pointer-events:none}
 .canvas-panel canvas{width:100%;height:100%;display:block;background:var(--color-canvas-bg)}
+/* Dual Workspace (UI-001B): the default desktop layout shows the 2D Canvas and Object Preview
+   side by side instead of one-at-a-time. Both panels switch from absolute stacking to a normal
+   flex row -- each still gets a real, non-zero pixel box at all times (same "never display:none"
+   rule the single-view tab modes rely on), so no canvas-sizing/export regression is reintroduced. */
+.workspace-canvas-area.dual{display:flex;gap:var(--space-3);padding:var(--space-4)}
+.workspace-canvas-area.dual .canvas-panel{position:relative;inset:auto;flex:1 1 0;min-width:0;height:100%}
 .fitNotice{position:absolute;left:var(--space-4);bottom:var(--space-4);color:var(--color-text-muted);font-size:var(--font-size-xs);background:#ffffffe6;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:4px 9px}
 .workspace-status{display:flex;align-items:center;gap:var(--space-4);padding:var(--space-2) var(--space-4);border-top:1px solid var(--color-border);background:var(--color-surface);font-size:var(--font-size-sm);white-space:nowrap;overflow-x:auto}
 .workspace-status b{font-weight:700}
@@ -284,15 +290,16 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
   <!-- ===================== CENTRAL WORKSPACE ===================== -->
   <main class="workspace" aria-label="Design workspace">
     <div class="workspace-toolbar">
-      <div class="tabs" role="tablist" aria-label="Canvas view">
-        <button class="tab active" id="viewTab2D" role="tab" aria-selected="true">2D Canvas</button>
-        <button class="tab" id="viewTab3D" role="tab" aria-selected="false">Object Preview</button>
+      <div class="tabs" role="tablist" aria-label="Workspace view">
+        <button class="tab active" id="viewTabDual" role="tab" aria-selected="true" title="Show the 2D Canvas and Object Preview side by side">Dual Workspace</button>
+        <button class="tab" id="viewTab2D" role="tab" aria-selected="false" title="Show only the 2D Canvas">2D Canvas</button>
+        <button class="tab" id="viewTab3D" role="tab" aria-selected="false" title="Show only the Object Preview">Object Preview</button>
       </div>
 
       <div class="toolbar-cluster" id="toolbar2D">
         <div class="toolbar-group">
           <button class="icon-btn" id="safeAreaToggle" title="Toggle safe-area guide" aria-pressed="true">▢</button>
-          <span class="hint" title="The reference grid is always shown; it is drawn by the permanent 2D renderer and has no toggle in this milestone" style="cursor:help">#&nbsp;always on</span>
+          <span class="hint" title="The reference grid helps align stones to the canvas; it is drawn by the permanent 2D renderer and cannot be turned off in this milestone" style="cursor:help">⊞&nbsp;Grid: always on</span>
         </div>
         <div class="toolbar-group">
           <span class="toolbar-label">Align &amp; Snap</span>
@@ -311,7 +318,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         </div>
       </div>
 
-      <div class="toolbar-cluster view3d-toolbar" id="toolbar3D" style="display:none">
+      <div class="toolbar-cluster view3d-toolbar" id="toolbar3D">
         <div class="toolbar-group">
           <div class="view-buttons">
             <button data-view="0" class="viewBtn primary">Front</button><button data-view="-90" class="viewBtn">Left</button><button data-view="90" class="viewBtn">Right</button><button data-view="180" class="viewBtn">Back</button>
@@ -331,18 +338,18 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
       </div>
     </div>
 
-    <div class="workspace-canvas-area">
+    <div class="workspace-canvas-area dual" id="workspaceCanvasArea">
       <section class="canvas-panel" id="panel2D" aria-label="2D production canvas">
         <canvas id="layout"></canvas>
         <div class="fitNotice" id="fitNotice"></div>
       </section>
-      <section class="canvas-panel tab-hidden" id="panel3D" aria-label="3D object preview">
+      <section class="canvas-panel" id="panel3D" aria-label="3D object preview">
         <canvas id="cup"></canvas>
       </section>
     </div>
 
     <div class="workspace-status" id="layoutStats"></div>
-    <div class="workspace-status" id="cupStats" style="display:none"></div>
+    <div class="workspace-status" id="cupStats"></div>
   </main>
 
   <!-- ===================== RIGHT INSPECTOR (compact quick-edit) ===================== -->
