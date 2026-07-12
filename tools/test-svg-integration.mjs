@@ -98,9 +98,13 @@ await test('6. validateProject() accepts a valid svg layer and rejects one missi
 });
 
 await test('7. getLayerBBox()/drag-move/drag-resize/duplicateLayer() each have an svg case', () => {
-  assert.match(appJs, /if\(l\.type==='rectangle'\|\|l\.type==='svg'\)return\{x:l\.x,y:l\.y,width:l\.w,height:l\.h,x2:l\.x\+l\.w,y2:l\.y\+l\.h\}/, 'expected getLayerBBox to treat svg like rectangle');
-  assert.match(appJs, /l\.type==='rectangle'\|\|l\.type==='svg'\)\{l\.x=drag\.l0\.x\+dx;l\.y=drag\.l0\.y\+dy\}/, 'expected drag-move to treat svg like rectangle');
-  assert.match(appJs, /l\.type==='rectangle'\|\|l\.type==='svg'\)\{let x0=drag\.b0\.x/, 'expected drag-resize to treat svg like rectangle');
+  // RS-1008 extended these same shared branches to also cover 'image' layers
+  // (l.type==='rectangle'||l.type==='svg'||l.type==='image') -- the svg case itself is
+  // unchanged, just no longer the last type in the condition. See tools/test-image-integration.mjs
+  // for the RS-1008-specific assertions against the same lines.
+  assert.match(appJs, /if\(l\.type==='rectangle'\|\|l\.type==='svg'\|\|l\.type==='image'\)return\{x:l\.x,y:l\.y,width:l\.w,height:l\.h,x2:l\.x\+l\.w,y2:l\.y\+l\.h\}/, 'expected getLayerBBox to treat svg like rectangle');
+  assert.match(appJs, /l\.type==='rectangle'\|\|l\.type==='svg'\|\|l\.type==='image'\)\{l\.x=drag\.l0\.x\+dx;l\.y=drag\.l0\.y\+dy\}/, 'expected drag-move to treat svg like rectangle');
+  assert.match(appJs, /l\.type==='rectangle'\|\|l\.type==='svg'\|\|l\.type==='image'\)\{let x0=drag\.b0\.x/, 'expected drag-resize to treat svg like rectangle');
   assert.match(appJs, /if\(copy\.type==='svg'\)\{copy\.x\+=8;copy\.y\+=8\}/, 'expected duplicateLayer to nudge svg layers');
 });
 

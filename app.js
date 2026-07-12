@@ -68,7 +68,19 @@
 // is now populated at startup from STONE_COLORS (grouped into <optgroup>s by each color's `group`
 // field) instead of index.html's previous hardcoded 7 <option>s, and a live swatch next to it
 // shows the selected color's previewColor. No renderer/exporter file changed -- every consumer
-// already resolved colors generically through STONE_COLORS[stone.color].
+// already resolved colors generically through STONE_COLORS[stone.color]. RS-1008 added Image
+// Trace: an 'image' layer type reusing the same generic x/y/w/h shape-editing UI/drag/resize code
+// rectangle/svg already use. src/image/** (a new peer pipeline module, parallel to src/svg/**) does
+// the actual grayscale/threshold/invert/blur/resize/grid-sample work and constructs the real
+// Stone/StoneLayout classes directly -- src/geometry/GeometryEngine.js/StoneLayout.js are
+// deliberately untouched (this milestone's own explicit constraint); see
+// docs/specifications/RS-1008-ImageTrace.md, "Architecture Requirements". app.js never decodes or
+// processes image pixels itself: decodeImageFileToBuffer()/readFileAsDataUrl() (browser-only) run
+// once at import time (from the new "Import Image..." preview-before-commit panel), and
+// traceImageBufferToStoneLayout() runs on every regeneration from the cached decoded buffer
+// (imageBufferCache, keyed by the layer's persisted imageSrc data: URL) -- the pure pipeline
+// stages re-run on every threshold/invert/blur/resize edit, but the (comparatively expensive)
+// browser image decode only ever runs once per distinct imageSrc value.
 import './src/browser/BrowserDependencyProbe.js';
 import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
@@ -81,6 +93,7 @@ import { computeProductionSheetLayout, productionSheetToSvg, productionSheetToPd
 import { parseSvgDocument } from './src/svg/index.js';
 import { HistoryManager } from './src/history/index.js';
 import { getObjectTemplate, getSafeAreaRectMm } from './src/products/index.js';
+import { traceImageBufferToStoneLayout, toGrayscale, applyThreshold, invertMask, blurMask, resizeField, maskFieldToRgba, decodeImageFileToBuffer, decodeDataUrlToBuffer, readFileAsDataUrl, isSupportedImageFile } from './src/image/index.js';
 'use strict';
 const FONT5={
 ' ':['00000','00000','00000','00000','00000','00000','00000'],
@@ -106,11 +119,28 @@ const HISTORY_MAX_SIZE=100;
 // documented (not derived from devicePixelRatio/viewport fit) so the PNG's pixel dimensions are
 // always a clean, undistorted multiple of the page's mm size -- never a fit-to-viewport scale.
 const PRODUCTION_SHEET_PNG_DPI=200;
+// RS-1008: defaults for a freshly-imported image layer's Threshold/Maximum width/Maximum height
+// controls (the preview panel and the committed layer both start here). 400px is a deliberate
+// middle ground between trace fidelity and staying comfortably inside the "avoid freezing the UI"
+// performance target for the documented up-to-2000x2000px source size.
+const DEFAULT_IMAGE_THRESHOLD=128;
+const DEFAULT_IMAGE_MAX_DIMENSION_PX=400;
+// RS-1008: caches the one (comparatively expensive) browser image decode per distinct imageSrc
+// data: URL, so every subsequent threshold/invert/blur/resize edit, undo/redo, or duplicate only
+// re-runs the pure/fast pixel-processing stages, not the decode itself. Grows for the life of the
+// page session (no eviction) -- acceptable at this milestone's scope, see
+// docs/specifications/RS-1008-ImageTrace.md, "Out of Scope".
+const imageBufferCache=new Map();
 // RS-0003.5D2: resolves a <select>'s value by nearest numeric match instead of an exact string
 // match. Fixes the #stoneSize dropdown showing blank on load: a layer's stoneSize is a plain JS
 // number (e.g. 2), but String(2)==='2' matches no <option> (index.html's options are formatted
 // like "2.0"), so the browser rendered no selection even though the underlying mm value was
 // valid. Never mutates the numeric value itself, only the displayed selection.
+// RS-1008: `parseFloat(...)||fallback` (the pattern the rest of this file already uses for numeric
+// field reads) silently discards an explicit, meaningful 0 -- harmless for fields whose fallback is
+// also a sensible default at 0 (e.g. curveStartAngleDeg), but wrong for imgThreshold, whose valid
+// range starts at 0. parseIntOr() only falls back on genuinely invalid (NaN) input.
+function parseIntOr(value,fallback){const n=Math.round(parseFloat(value));return Number.isFinite(n)?n:fallback}
 function setNumericSelectValue(select,num){let best=null,bestDiff=Infinity;for(const opt of select.options){const v=parseFloat(opt.value);if(Number.isFinite(v)){const diff=Math.abs(v-num);if(diff<bestDiff){bestDiff=diff;best=opt.value}}}select.value=best!==null?best:String(num)}
 // RS-1007: builds the Stone color <optgroup>s from STONE_COLORS (17 entries) grouped by each
 // color's `group` field, in catalog order (Object.values() preserves insertion order for the
@@ -128,7 +158,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // are wrapped into one real StoneLayout ('project' is a sentinel layerId — StoneLayout requires
  // one non-empty layerId per instance; each Stone still carries its own real layer id) so every
  // renderer/exporter downstream consumes the same canonical product.
- async generate(project){let raw=[];for(const l of project.layers){if(!l.visible)continue;if(l.type==='text')raw.push(...await this.generateTextStonesLive(l,project));if(l.type==='circle'||l.type==='rectangle')raw.push(...await this.generateShapeStonesLive(l));if(l.type==='svg')raw.push(...await this.generateSvgStonesLive(l));}const stones=this.dedupe(raw,Math.min(...raw.map(s=>s.d||2),2)*0.58).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId}));return new StoneLayout({layerId:'project',stones})}
+ async generate(project){let raw=[];for(const l of project.layers){if(!l.visible)continue;if(l.type==='text')raw.push(...await this.generateTextStonesLive(l,project));if(l.type==='circle'||l.type==='rectangle')raw.push(...await this.generateShapeStonesLive(l));if(l.type==='svg')raw.push(...await this.generateSvgStonesLive(l));if(l.type==='image')raw.push(...await this.generateImageStonesLive(l));}const stones=this.dedupe(raw,Math.min(...raw.map(s=>s.d||2),2)*0.58).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId}));return new StoneLayout({layerId:'project',stones})}
  async generateTextStonesLive(layer,project){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text)return[];const fontId=TEXT_ENGINE_FONT_IDS.has(layer.font)?layer.font:DEFAULT_TEXT_FONT_ID;const mode=layer.textMode==='fill'?'fill':'outline';const base={text:layer.text,fontId,layerId:layer.id,heightMm:layer.height,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const maxWidth=project.canvas.width-10;if(result.widthMm>maxWidth&&result.widthMm>0){const scale=maxWidth/result.widthMm;const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();const offsetX=bb?(project.canvas.width-bb.widthMm)/2-bb.minXmm:0;const offsetY=bb?(project.canvas.height-bb.heightMm)/2-bb.minYmm:0;return result.stones.map(s=>({x:s.xMm+offsetX,y:s.yMm+offsetY,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
  // RS-0003.5C1: circle/rectangle layers are generated by the same permanent engine's
  // generateShapeLayout(), mirroring generateTextStonesLive() above.
@@ -136,6 +166,12 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // RS-1001: svg layers reuse the same x/y/w/h placement box rectangle layers use; src/svg/**
  // (not app.js) does the actual SVG parsing, inside generateSvgLayout().
  async generateSvgStonesLive(layer){if(!this.permanentEngine)return[];const params={svgSource:layer.svgSource,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:layer.mode==='fill'?'fill':'outline',color:layer.color};const result=this.permanentEngine.generateSvgLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
+ // RS-1008: image layers do not go through the permanent engine at all -- src/image/** is a peer
+ // pipeline (see the top-of-file milestone comment and docs/specifications/RS-1008-ImageTrace.md)
+ // that constructs the real Stone/StoneLayout classes directly. imageBufferCache means the
+ // (comparatively expensive) browser image decode only re-runs the first time a given imageSrc is
+ // seen; every subsequent call here only re-runs the pure/fast pixel-processing pipeline.
+ async generateImageStonesLive(layer){if(!layer.imageSrc)return[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}const params={layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx};const result=traceImageBufferToStoneLayout(buffer,params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
  // Legacy bitmap text path below (generateText/sampleGlyphFill/sampleGlyphStroke) and the legacy
  // generateCircle/generateRect shape path are kept but no longer called now that
  // generateTextStonesLive/generateShapeStonesLive use the permanent engine. Retained per
@@ -159,7 +195,7 @@ function defaultProject(){return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,
 // caller (the #importProjectFile change handler) surfaces that message via #status and leaves
 // the current `project` untouched on failure. Returns a normalized copy on success — it never
 // mutates its input.
-const SUPPORTED_LAYER_TYPES=new Set(['text','circle','rectangle','svg']);
+const SUPPORTED_LAYER_TYPES=new Set(['text','circle','rectangle','svg','image']);
 function validateProject(obj){
   if(!obj||typeof obj!=='object'||Array.isArray(obj))throw new Error('Project file must contain a JSON object.');
   const canvas=obj.canvas;
@@ -179,6 +215,16 @@ function validateProject(obj){
     if(l.type==='rectangle'&&![l.x,l.y,l.w,l.h].every(n=>typeof n==='number'&&Number.isFinite(n)))throw new Error(`Rectangle layer "${l.id}" is missing numeric x/y/w/h fields.`);
     if(l.type==='svg'&&(typeof l.svgSource!=='string'||l.svgSource.length===0))throw new Error(`SVG layer "${l.id}" is missing a non-empty 'svgSource' string.`);
     if(l.type==='svg'&&![l.x,l.y,l.w,l.h].every(n=>typeof n==='number'&&Number.isFinite(n)))throw new Error(`SVG layer "${l.id}" is missing numeric x/y/w/h fields.`);
+    // RS-1008: image layers mirror the svg case above (a non-empty self-contained source string
+    // plus a numeric x/y/w/h placement box), plus their own threshold/blurRadiusPx/maxWidthPx/
+    // maxHeightPx pipeline fields. 'invert' is a plain boolean UI toggle, not strictly validated
+    // here, matching this function's existing permissive style for other boolean-ish fields
+    // (e.g. layer.visible/autoFit).
+    if(l.type==='image'&&(typeof l.imageSrc!=='string'||l.imageSrc.length===0))throw new Error(`Image layer "${l.id}" is missing a non-empty 'imageSrc' string.`);
+    if(l.type==='image'&&![l.x,l.y,l.w,l.h].every(n=>typeof n==='number'&&Number.isFinite(n)))throw new Error(`Image layer "${l.id}" is missing numeric x/y/w/h fields.`);
+    if(l.type==='image'&&(typeof l.threshold!=='number'||!Number.isFinite(l.threshold)||l.threshold<0||l.threshold>255))throw new Error(`Image layer "${l.id}" is missing a valid 'threshold' (0-255).`);
+    if(l.type==='image'&&(typeof l.blurRadiusPx!=='number'||!Number.isFinite(l.blurRadiusPx)||l.blurRadiusPx<0))throw new Error(`Image layer "${l.id}" is missing a valid non-negative 'blurRadiusPx'.`);
+    if(l.type==='image'&&![l.maxWidthPx,l.maxHeightPx].every(n=>typeof n==='number'&&Number.isFinite(n)&&n>0))throw new Error(`Image layer "${l.id}" is missing valid positive 'maxWidthPx'/'maxHeightPx'.`);
     if(typeof l.stoneSize!=='number'||!Number.isFinite(l.stoneSize)||l.stoneSize<=0)throw new Error(`Layer "${l.id}" is missing a positive numeric stoneSize.`);
     if(typeof l.gap!=='number'||!Number.isFinite(l.gap)||l.gap<0)throw new Error(`Layer "${l.id}" is missing a non-negative numeric gap.`);
   }
@@ -223,7 +269,7 @@ function closeHistorySession(){history.endSession()}
 function applyHistorySnapshot(snap){project=snap.project;selectedLayerId=snap.selectedLayerId;syncSelectedControlsFromLayer();updateAll(true)}
 function performUndo(){closeHistorySession();const snap=history.undo(currentSnapshot());if(!snap){el('status').textContent='Nothing to undo';updateHistoryUI();return}applyHistorySnapshot(snap);el('status').textContent='Undo'}
 function performRedo(){closeHistorySession();const snap=history.redo(currentSnapshot());if(!snap){el('status').textContent='Nothing to redo';updateHistoryUI();return}applyHistorySnapshot(snap);el('status').textContent='Redo'}
-function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dirtyEl=el('dirtyIndicator');if(undoBtn)undoBtn.disabled=!history.canUndo;if(redoBtn)redoBtn.disabled=!history.canRedo;if(dirtyEl)dirtyEl.textContent=JSON.stringify(project)!==cleanProjectJson?'Unsaved changes':'Saved'}function syncSelectedControlsFromLayer(){const l=selectedLayer();el('selectedLayer').value=l.id;const isText=l.type==='text';el('textControls').style.display=isText?'block':'none';el('shapeControls').style.display=isText?'none':'block';el('svgControls').style.display=l.type==='svg'?'block':'none';if(isText){el('text').value=l.text;el('font').value=l.font;el('height').value=l.height;el('autoFit').value=l.autoFit?'on':'off';el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';el('curveRadiusMm').value=l.curveRadiusMm??40;el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??360;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none'}else{el('shapeX').value=l.type==='circle'?l.cx:l.x;el('shapeY').value=l.type==='circle'?l.cy:l.y;el('shapeW').value=l.type==='circle'?l.r:l.w;el('shapeH').value=l.type==='circle'?'':l.h;if(l.type==='svg')el('svgMode').value=l.mode||'outline'}setNumericSelectValue(el('stoneSize'),l.stoneSize);el('gap').value=l.gap;el('stoneColor').value=l.color;
+function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dirtyEl=el('dirtyIndicator');if(undoBtn)undoBtn.disabled=!history.canUndo;if(redoBtn)redoBtn.disabled=!history.canRedo;if(dirtyEl)dirtyEl.textContent=JSON.stringify(project)!==cleanProjectJson?'Unsaved changes':'Saved'}function syncSelectedControlsFromLayer(){const l=selectedLayer();el('selectedLayer').value=l.id;const isText=l.type==='text';el('textControls').style.display=isText?'block':'none';el('shapeControls').style.display=isText?'none':'block';el('svgControls').style.display=l.type==='svg'?'block':'none';el('imageControls').style.display=l.type==='image'?'block':'none';if(isText){el('text').value=l.text;el('font').value=l.font;el('height').value=l.height;el('autoFit').value=l.autoFit?'on':'off';el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';el('curveRadiusMm').value=l.curveRadiusMm??40;el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??360;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none'}else{el('shapeX').value=l.type==='circle'?l.cx:l.x;el('shapeY').value=l.type==='circle'?l.cy:l.y;el('shapeW').value=l.type==='circle'?l.r:l.w;el('shapeH').value=l.type==='circle'?'':l.h;if(l.type==='svg')el('svgMode').value=l.mode||'outline';if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}setNumericSelectValue(el('stoneSize'),l.stoneSize);el('gap').value=l.gap;el('stoneColor').value=l.color;
   // RS-1002: project.cupColor/project.wrap are project-level (not per-layer) fields, so they must
   // be resynced here too -- otherwise an undo/redo restore (or a Project JSON import) leaves these
   // two dropdowns stale, and the *next* edit's writeSelectedControlsToLayer() would silently write
@@ -235,14 +281,14 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
   // RS-1005: project.name is likewise project-level -- resync for the same reason.
   el('projectName').value=project.name;
 }
-function writeSelectedControlsToLayer(){const l=selectedLayer();if(l.type==='text'){l.text=el('text').value;l.font=el('font').value;l.height=parseFloat(el('height').value)||25;l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;l.curveEnabled=el('curveEnabled').value==='on';l.curveRadiusMm=Math.max(0.1,parseFloat(el('curveRadiusMm').value)||40);l.curveDirection=el('curveDirection').value==='inside'?'inside':'outside';l.curveStartAngleDeg=parseFloat(el('curveStartAngleDeg').value)||0;l.curveSweepAngleDeg=parseFloat(el('curveSweepAngleDeg').value)||360;l.curveAlignment=el('curveAlignment').value;el('curveControls').style.display=l.curveEnabled?'block':'none'}else if(l.type==='circle'){l.cx=parseFloat(el('shapeX').value)||105;l.cy=parseFloat(el('shapeY').value)||45;l.r=Math.max(1,parseFloat(el('shapeW').value)||18)}else if(l.type==='rectangle'){l.x=parseFloat(el('shapeX').value)||65;l.y=parseFloat(el('shapeY').value)||30;l.w=Math.max(1,parseFloat(el('shapeW').value)||80);l.h=Math.max(1,parseFloat(el('shapeH').value)||30)}else if(l.type==='svg'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.mode=el('svgMode').value==='fill'?'fill':'outline'}l.stoneSize=parseFloat(el('stoneSize').value)||2;l.gap=parseFloat(el('gap').value)||.3;l.color=el('stoneColor').value;project.cupColor=el('cupColor').value;project.wrap=el('wrap').value;project.name=el('projectName').value||DEFAULT_PROJECT_NAME;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
+function writeSelectedControlsToLayer(){const l=selectedLayer();if(l.type==='text'){l.text=el('text').value;l.font=el('font').value;l.height=parseFloat(el('height').value)||25;l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;l.curveEnabled=el('curveEnabled').value==='on';l.curveRadiusMm=Math.max(0.1,parseFloat(el('curveRadiusMm').value)||40);l.curveDirection=el('curveDirection').value==='inside'?'inside':'outside';l.curveStartAngleDeg=parseFloat(el('curveStartAngleDeg').value)||0;l.curveSweepAngleDeg=parseFloat(el('curveSweepAngleDeg').value)||360;l.curveAlignment=el('curveAlignment').value;el('curveControls').style.display=l.curveEnabled?'block':'none'}else if(l.type==='circle'){l.cx=parseFloat(el('shapeX').value)||105;l.cy=parseFloat(el('shapeY').value)||45;l.r=Math.max(1,parseFloat(el('shapeW').value)||18)}else if(l.type==='rectangle'){l.x=parseFloat(el('shapeX').value)||65;l.y=parseFloat(el('shapeY').value)||30;l.w=Math.max(1,parseFloat(el('shapeW').value)||80);l.h=Math.max(1,parseFloat(el('shapeH').value)||30)}else if(l.type==='svg'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.mode=el('svgMode').value==='fill'?'fill':'outline'}else if(l.type==='image'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX))}l.stoneSize=parseFloat(el('stoneSize').value)||2;l.gap=parseFloat(el('gap').value)||.3;l.color=el('stoneColor').value;project.cupColor=el('cupColor').value;project.wrap=el('wrap').value;project.name=el('projectName').value||DEFAULT_PROJECT_NAME;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
 async function updateAll(skipWrite=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated;try{generated=await engine.generate(project)}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Text generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;renderLayerUI();drawLayout();drawCup();updateStats();updateHistoryUI();updateViewButtons();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}// S-003: a project must always keep at least one layer (deleteLayer()'s guard below), so once
 // only one layer remains, every delete affordance -- the per-row trash icon and the sidebar
 // "Delete selected layer" button -- is disabled here (not just left clickable-but-a-no-op) and
 // #layerRuleHint (sitting directly under the button, always in view) explains why. This runs on
 // every renderLayerUI() call (i.e. after every add/delete/duplicate/undo/redo/import), so the
 // disabled state and hint never go stale relative to the current layer count.
-function renderLayerUI(){const onlyOneLayer=project.layers.length<=1;el('selectedLayer').innerHTML=project.layers.map(l=>`<option value="${l.id}">${escapeHtml(layerLabel(l))}</option>`).join('');el('selectedLayer').value=selectedLayerId;el('layersList').innerHTML=project.layers.map(l=>`<div class="layer ${l.id===selectedLayerId?'selected':''}" data-layer="${l.id}"><input type="checkbox" ${l.visible?'checked':''} data-action="visible"><div class="name" data-action="select">${escapeHtml(layerLabel(l))}</div><div class="type">${l.type.toUpperCase()}</div><button data-action="select">✎</button><button data-action="duplicate">⧉</button><button data-action="delete" ${onlyOneLayer?'disabled title="At least one layer is required"':''}>🗑</button></div>`).join('');el('deleteSelected').disabled=onlyOneLayer;el('deleteSelected').title=onlyOneLayer?'At least one layer is required':'';el('layerRuleHint').style.display=onlyOneLayer?'block':'none'}function layerLabel(l){return l.type==='text'?(l.text||'Text'):l.type==='circle'?'Circle':l.type==='svg'?(l.svgName||'SVG'):'Rectangle'}function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function renderLayerUI(){const onlyOneLayer=project.layers.length<=1;el('selectedLayer').innerHTML=project.layers.map(l=>`<option value="${l.id}">${escapeHtml(layerLabel(l))}</option>`).join('');el('selectedLayer').value=selectedLayerId;el('layersList').innerHTML=project.layers.map(l=>`<div class="layer ${l.id===selectedLayerId?'selected':''}" data-layer="${l.id}"><input type="checkbox" ${l.visible?'checked':''} data-action="visible"><div class="name" data-action="select">${escapeHtml(layerLabel(l))}</div><div class="type">${l.type.toUpperCase()}</div><button data-action="select">✎</button><button data-action="duplicate">⧉</button><button data-action="delete" ${onlyOneLayer?'disabled title="At least one layer is required"':''}>🗑</button></div>`).join('');el('deleteSelected').disabled=onlyOneLayer;el('deleteSelected').title=onlyOneLayer?'At least one layer is required':'';el('layerRuleHint').style.display=onlyOneLayer?'block':'none'}function layerLabel(l){return l.type==='text'?(l.text||'Text'):l.type==='circle'?'Circle':l.type==='svg'?(l.svgName||'SVG'):l.type==='image'?(l.imageName||'Image'):'Rectangle'}function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function resizeCanvas(c){const r=c.getBoundingClientRect(),dpr=Math.max(1,devicePixelRatio||1),w=Math.floor(r.width*dpr),h=Math.floor(r.height*dpr);if(c.width!==w||c.height!==h){c.width=w;c.height=h}return{w,h,dpr}}
 function layoutMmToPx(p){return{x:layoutTransform.ox+p.x*layoutTransform.s,y:layoutTransform.oy+p.y*layoutTransform.s}}function layoutPxToMm(x,y){return{x:(x-layoutTransform.ox)/layoutTransform.s,y:(y-layoutTransform.oy)/layoutTransform.s}}
 function drawLayout(){const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr});layoutTransform={s,ox,oy,dpr};drawSafeAreaGuide(ctx,s,ox,oy,dpr,getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height));drawSelection(ctx,s,ox,oy,dpr);ctx.fillStyle='#516071';ctx.font=`${12*dpr}px Arial`;ctx.fillText(`${layout.count} stones · ${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm · ${selectedLayer().textMode||''}`,20*dpr,h-18*dpr);el('fitNotice').textContent='Drag shapes with mouse. Text uses readable stroke font.'}
@@ -255,7 +301,7 @@ function drawSafeAreaGuide(ctx,s,ox,oy,dpr,rectMm){const rx=ox+rectMm.xMm*s,ry=o
 // Text layers have no plain layer fields to compute a bbox from directly (unlike circle/
 // rectangle), so their selection bbox is derived from the already-generated StoneLayout, filtered
 // to this layer's stones and wrapped in a fresh StoneLayout to reuse its getBoundingBox() math.
-function getLayerBBox(l){if(l.type==='circle')return{x:l.cx-l.r,y:l.cy-l.r,width:l.r*2,height:l.r*2,x2:l.cx+l.r,y2:l.cy+l.r};if(l.type==='rectangle'||l.type==='svg')return{x:l.x,y:l.y,width:l.w,height:l.h,x2:l.x+l.w,y2:l.y+l.h};const stones=layout.stones.filter(s=>s.layerId===l.id);if(!stones.length)return{x:0,y:0,x2:0,y2:0,width:0,height:0};const b=new StoneLayout({layerId:l.id,stones}).getBoundingBox();return{x:b.minXmm,y:b.minYmm,x2:b.maxXmm,y2:b.maxYmm,width:b.widthMm,height:b.heightMm}}
+function getLayerBBox(l){if(l.type==='circle')return{x:l.cx-l.r,y:l.cy-l.r,width:l.r*2,height:l.r*2,x2:l.cx+l.r,y2:l.cy+l.r};if(l.type==='rectangle'||l.type==='svg'||l.type==='image')return{x:l.x,y:l.y,width:l.w,height:l.h,x2:l.x+l.w,y2:l.y+l.h};const stones=layout.stones.filter(s=>s.layerId===l.id);if(!stones.length)return{x:0,y:0,x2:0,y2:0,width:0,height:0};const b=new StoneLayout({layerId:l.id,stones}).getBoundingBox();return{x:b.minXmm,y:b.minYmm,x2:b.maxXmm,y2:b.maxYmm,width:b.widthMm,height:b.heightMm}}
 // RS-0003.5D2: SELECTION_HANDLE_SIZE_PX enlarges the resize handles slightly (was a bare 10px
 // square) and a white halo is stroked behind the dashed outline so the selection reads clearly
 // against any background (light grid, light/dark stones), not just against the plain canvas.
@@ -278,9 +324,9 @@ function updateViewButtons(){document.querySelectorAll('.viewBtn').forEach(b=>b.
 // value, not the camera's actual live orientation, so displaying it would be misleading.
 function updateStats(){el('layoutStats').innerHTML=`<b>${layout.count}</b> stones <span>${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm</span><span>selected: ${escapeHtml(layerLabel(selectedLayer()))}</span>`;el('cupStats').innerHTML=`<span>${escapeHtml(currentObjectTemplate().displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span>`;updateStoneColorSwatch()}
 function download(name,mime,data){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:mime}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800);el('status').textContent=`Downloaded ${name}`}function exportCanvas(name,canvas){canvas.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800)},'image/png')}
-function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(copy.type==='rectangle'){copy.x+=8;copy.y+=8}if(copy.type==='svg'){copy.x+=8;copy.y+=8}if(copy.type==='text'){copy.text+=' copy'}project.layers.push(copy);selectedLayerId=copy.id;syncSelectedControlsFromLayer();updateAll()}function deleteLayer(id){if(project.layers.length<=1){el('status').textContent='Cannot delete the last layer';const hint=el('layerRuleHint');hint.style.display='block';hint.scrollIntoView({block:'nearest'});return}commitHistory();project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;syncSelectedControlsFromLayer();updateAll(true)}
+function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(copy.type==='rectangle'){copy.x+=8;copy.y+=8}if(copy.type==='svg'){copy.x+=8;copy.y+=8}if(copy.type==='image'){copy.x+=8;copy.y+=8}if(copy.type==='text'){copy.text+=' copy'}project.layers.push(copy);selectedLayerId=copy.id;syncSelectedControlsFromLayer();updateAll()}function deleteLayer(id){if(project.layers.length<=1){el('status').textContent='Cannot delete the last layer';const hint=el('layerRuleHint');hint.style.display='block';hint.scrollIntoView({block:'nearest'});return}commitHistory();project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;syncSelectedControlsFromLayer();updateAll(true)}
 function pointerToLayout(e){const r=layoutCanvas.getBoundingClientRect(),dpr=layoutTransform.dpr;return layoutPxToMm((e.clientX-r.left)*dpr,(e.clientY-r.top)*dpr)}function hitTest(mm){const layers=[...project.layers].reverse();for(const l of layers){const b=getLayerBBox(l);for(const h of handlesFor(b)){if(Math.abs(mm.x-h.x)<3&&Math.abs(mm.y-h.y)<3&&l.type!=='text')return{layer:l,kind:'resize',handle:h.name,b0:b}}if(mm.x>=b.x&&mm.x<=b.x2&&mm.y>=b.y&&mm.y<=b.y2)return{layer:l,kind:l.type==='text'?'select':'move',b0:b}}return null}
-layoutCanvas.addEventListener('pointerdown',e=>{const mm=pointerToLayout(e);const hit=hitTest(mm);if(!hit)return;selectedLayerId=hit.layer.id;syncSelectedControlsFromLayer();if(hit.kind==='select'){updateAll();return}commitHistory();drag={kind:hit.kind,handle:hit.handle,layerId:hit.layer.id,start:mm,b0:hit.b0,l0:JSON.parse(JSON.stringify(hit.layer))};layoutCanvas.setPointerCapture(e.pointerId);updateAll(true)});layoutCanvas.addEventListener('pointermove',e=>{if(!drag)return;const mm=pointerToLayout(e),dx=mm.x-drag.start.x,dy=mm.y-drag.start.y,l=project.layers.find(x=>x.id===drag.layerId);if(!l)return;if(drag.kind==='move'){if(l.type==='circle'){l.cx=drag.l0.cx+dx;l.cy=drag.l0.cy+dy}else if(l.type==='rectangle'||l.type==='svg'){l.x=drag.l0.x+dx;l.y=drag.l0.y+dy}}else if(drag.kind==='resize'){if(l.type==='circle'){l.r=Math.max(2,Math.hypot(mm.x-drag.l0.cx,mm.y-drag.l0.cy))}else if(l.type==='rectangle'||l.type==='svg'){let x0=drag.b0.x,y0=drag.b0.y,x1=drag.b0.x2,y1=drag.b0.y2;if(drag.handle.includes('w'))x0=mm.x;if(drag.handle.includes('e'))x1=mm.x;if(drag.handle.includes('n'))y0=mm.y;if(drag.handle.includes('s'))y1=mm.y;l.x=Math.min(x0,x1);l.y=Math.min(y0,y1);l.w=Math.max(2,Math.abs(x1-x0));l.h=Math.max(2,Math.abs(y1-y0))}}syncSelectedControlsFromLayer();updateAll(true)});window.addEventListener('pointerup',()=>drag=null);window.addEventListener('keydown',e=>{
+layoutCanvas.addEventListener('pointerdown',e=>{const mm=pointerToLayout(e);const hit=hitTest(mm);if(!hit)return;selectedLayerId=hit.layer.id;syncSelectedControlsFromLayer();if(hit.kind==='select'){updateAll();return}commitHistory();drag={kind:hit.kind,handle:hit.handle,layerId:hit.layer.id,start:mm,b0:hit.b0,l0:JSON.parse(JSON.stringify(hit.layer))};layoutCanvas.setPointerCapture(e.pointerId);updateAll(true)});layoutCanvas.addEventListener('pointermove',e=>{if(!drag)return;const mm=pointerToLayout(e),dx=mm.x-drag.start.x,dy=mm.y-drag.start.y,l=project.layers.find(x=>x.id===drag.layerId);if(!l)return;if(drag.kind==='move'){if(l.type==='circle'){l.cx=drag.l0.cx+dx;l.cy=drag.l0.cy+dy}else if(l.type==='rectangle'||l.type==='svg'||l.type==='image'){l.x=drag.l0.x+dx;l.y=drag.l0.y+dy}}else if(drag.kind==='resize'){if(l.type==='circle'){l.r=Math.max(2,Math.hypot(mm.x-drag.l0.cx,mm.y-drag.l0.cy))}else if(l.type==='rectangle'||l.type==='svg'||l.type==='image'){let x0=drag.b0.x,y0=drag.b0.y,x1=drag.b0.x2,y1=drag.b0.y2;if(drag.handle.includes('w'))x0=mm.x;if(drag.handle.includes('e'))x1=mm.x;if(drag.handle.includes('n'))y0=mm.y;if(drag.handle.includes('s'))y1=mm.y;l.x=Math.min(x0,x1);l.y=Math.min(y0,y1);l.w=Math.max(2,Math.abs(x1-x0));l.h=Math.max(2,Math.abs(y1-y0))}}syncSelectedControlsFromLayer();updateAll(true)});window.addEventListener('pointerup',()=>drag=null);window.addEventListener('keydown',e=>{
   const key=e.key.toLowerCase(),mod=e.ctrlKey||e.metaKey;
   // RS-1002: app-level undo/redo takes precedence over any native browser input-level undo, so
   // these fire (and preventDefault) even while a text/number field has focus.
@@ -291,7 +337,7 @@ layoutCanvas.addEventListener('pointerdown',e=>{const mm=pointerToLayout(e);cons
 // RS-1002: these controls edit `project` fields, so one undo step is committed per edit session
 // (opened on the first 'input' event, closed on 'change'). `rotation`/`zoom` are view-only (not
 // part of `project`) and keep their original plain 'input' listener, untouched.
-const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment'];
+const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
 el('selectedLayer').addEventListener('change',()=>{selectedLayerId=el('selectedLayer').value;syncSelectedControlsFromLayer();updateAll(true)});
@@ -311,6 +357,83 @@ el('importSvg').onclick=()=>el('importSvgFile').click();
 // violate "only the Geometry Engine generates stone positions". Actual stone generation for the
 // new layer still runs through generate() -> generateSvgStonesLive() -> permanentEngine.generateSvgLayout().
 el('importSvgFile').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{const svgSource=await file.text();const parsed=parseSvgDocument(svgSource);const maxW=project.canvas.width-20,maxH=project.canvas.height-20;let w=parsed.naturalWidthMm,h=parsed.naturalHeightMm;if(w>maxW||h>maxH){const s=Math.min(maxW/w,maxH/h);w*=s;h*=s}const x=(project.canvas.width-w)/2,y=(project.canvas.height-h)/2;const base=selectedLayer();const layer={id:'svg'+Date.now(),type:'svg',visible:true,svgSource,svgName:file.name,x,y,w,h,mode:'outline',stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold'};commitHistory();project.layers.push(layer);selectedLayerId=layer.id;syncSelectedControlsFromLayer();await updateAll(true);const warningNote=parsed.warnings.length?` (${parsed.warnings.length} element(s) skipped, see console)`:'';if(parsed.warnings.length)console.warn('SVG import warnings for',file.name,parsed.warnings);el('status').textContent=`Imported ${file.name}: ${parsed.shapes.length} shape(s)${warningNote}`}catch(error){console.error('SVG import failed',error);el('status').textContent=`SVG import failed: ${error.message}`}});
+// RS-1008: Image Trace import. Unlike SVG import (which commits a layer directly on file select),
+// this opens a "preview before commit" panel first -- the milestone brief's own required control --
+// since threshold/invert/blur/resize meaningfully change the traced result and are worth seeing
+// before adding a layer. pendingImageImport holds the decoded buffer + persisted data: URL +
+// default placement between file-select and Import/Cancel; nothing is written to `project` until
+// Import is clicked.
+let pendingImageImport=null;
+function computeDefaultImagePlacement(naturalWidthPx,naturalHeightPx){
+  const PX_PER_MM=96/25.4; // CSS px/inch, the same fallback src/svg/** uses for unitless SVG sizing
+  const maxW=project.canvas.width-20,maxH=project.canvas.height-20;
+  let w=naturalWidthPx/PX_PER_MM,h=naturalHeightPx/PX_PER_MM;
+  if(w>maxW||h>maxH){const s=Math.min(maxW/w,maxH/h);w*=s;h*=s}
+  return{x:(project.canvas.width-w)/2,y:(project.canvas.height-h)/2,w,h}
+}
+function currentImagePreviewParams(){
+  return{
+    threshold:Math.max(0,Math.min(255,parseIntOr(el('imgPreviewThreshold').value,DEFAULT_IMAGE_THRESHOLD))),
+    invert:el('imgPreviewInvert').value==='on',
+    blurRadiusPx:Math.max(0,parseIntOr(el('imgPreviewBlur').value,0)),
+    maxWidthPx:Math.max(8,parseIntOr(el('imgPreviewMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX)),
+    maxHeightPx:Math.max(8,parseIntOr(el('imgPreviewMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX))
+  }
+}
+// Recomputes the live density preview canvas and an approximate stone count. Only the pure
+// pipeline stages run here (never a re-decode), so this stays fast enough to call on every slider
+// 'input' event even at the full documented working resolution.
+function updateImagePreview(){
+  if(!pendingImageImport)return;
+  const{threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx}=currentImagePreviewParams();
+  const gray=toGrayscale(pendingImageImport.buffer);
+  let mask=applyThreshold(gray,threshold);
+  if(invert)mask=invertMask(mask);
+  const density=blurMask(mask,blurRadiusPx);
+  const resized=resizeField(density,maxWidthPx,maxHeightPx);
+  const canvas=el('imageImportPreviewCanvas');
+  canvas.width=resized.widthPx;canvas.height=resized.heightPx;
+  canvas.getContext('2d').putImageData(new ImageData(maskFieldToRgba(resized),resized.widthPx,resized.heightPx),0,0);
+  const base=selectedLayer();
+  const{x,y,w,h}=pendingImageImport.placement;
+  try{
+    const result=traceImageBufferToStoneLayout(pendingImageImport.buffer,{layerId:'preview',xMm:x,yMm:y,widthMm:w,heightMm:h,stoneSizeMm:base.stoneSize||2,gapMm:base.gap||.3,color:base.color||'gold',threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx});
+    el('imageImportStoneCount').textContent=`${result.count} stones (approx.)`;
+  }catch(error){console.error('Image preview trace failed',error);el('imageImportStoneCount').textContent='—'}
+}
+el('importImage').onclick=()=>el('importImageFile').click();
+el('importImageFile').addEventListener('change',async e=>{
+  const file=e.target.files[0];e.target.value='';if(!file)return;
+  if(!isSupportedImageFile(file)){el('status').textContent='Image import failed: unsupported file type. Supported formats: PNG, JPG/JPEG, WebP.';return}
+  try{
+    const buffer=await decodeImageFileToBuffer(file);
+    const dataUrl=await readFileAsDataUrl(file);
+    imageBufferCache.set(dataUrl,buffer);
+    pendingImageImport={buffer,dataUrl,fileName:file.name,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,placement:computeDefaultImagePlacement(buffer.widthPx,buffer.heightPx)};
+    el('imgPreviewThreshold').value=DEFAULT_IMAGE_THRESHOLD;el('imgPreviewInvert').value='off';el('imgPreviewBlur').value=0;el('imgPreviewMaxWidth').value=DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgPreviewMaxHeight').value=DEFAULT_IMAGE_MAX_DIMENSION_PX;
+    updateImagePreview();
+    el('imageImportPanel').style.display='block';
+    el('status').textContent=`Previewing ${file.name} (${buffer.widthPx}×${buffer.heightPx}px)`;
+  }catch(error){console.error('Image import failed',error);el('status').textContent=`Image import failed: ${error.message}`}
+});
+for(const id of['imgPreviewThreshold','imgPreviewInvert','imgPreviewBlur','imgPreviewMaxWidth','imgPreviewMaxHeight'])el(id).addEventListener('input',updateImagePreview);
+el('imageImportCancel').onclick=()=>{pendingImageImport=null;el('imageImportPanel').style.display='none';el('status').textContent='Image import cancelled'};
+el('imageImportCommit').onclick=async()=>{
+  if(!pendingImageImport)return;
+  const{threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx}=currentImagePreviewParams();
+  const base=selectedLayer();
+  const{x,y,w,h}=pendingImageImport.placement;
+  const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:pendingImageImport.dataUrl,imageName:pendingImageImport.fileName,naturalWidthPx:pendingImageImport.naturalWidthPx,naturalHeightPx:pendingImageImport.naturalHeightPx,x,y,w,h,threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx,stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold'};
+  const importedName=layer.imageName;
+  commitHistory();
+  project.layers.push(layer);
+  selectedLayerId=layer.id;
+  pendingImageImport=null;
+  el('imageImportPanel').style.display='none';
+  syncSelectedControlsFromLayer();
+  await updateAll(true);
+  el('status').textContent=`Imported ${importedName}`;
+};
 el('exportProject').onclick=()=>{try{download('rhinestone-project.json','application/json',JSON.stringify(project,null,2));cleanProjectJson=JSON.stringify(project);updateHistoryUI()}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportLayout').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-generated-layout.json','application/json',JSON.stringify(layout,null,2))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-layout.svg','image/svg+xml',stoneLayoutToSvg(layout,{widthMm:project.canvas.width,heightMm:project.canvas.height}))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};

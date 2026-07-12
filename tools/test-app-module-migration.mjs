@@ -98,7 +98,10 @@ await test('app.js only imports the RS-0003.5B2 probe, the RS-0003.5B3 permanent
     // RS-1006: the real 3D preview's own barrel module (see src/preview3d/index.js) -- the only
     // module app.js imports from src/preview3d/**, matching the same "barrel module" shape every
     // other permanent module entry point above already has.
-    /from\s*['"]\.\/src\/preview3d\/index\.js['"]/
+    /from\s*['"]\.\/src\/preview3d\/index\.js['"]/,
+    // RS-1008: Image Trace's own barrel module (see src/image/index.js), mirroring the
+    // src/svg/index.js entry RS-1001 already added above.
+    /from\s*['"]\.\/src\/image\/index\.js['"]/
   ];
   for (const line of importLines) {
     assert.ok(

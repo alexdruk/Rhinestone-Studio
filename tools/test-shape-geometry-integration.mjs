@@ -87,7 +87,9 @@ await test('7. app.js only imports modules allowed as of this milestone', () => 
     // is likewise imported directly), so each individual export module app.js uses is listed here.
     /from\s*['"]\.\/src\/export\/ProductionSheetExporter\.js['"]/,
     // RS-1006: the real 3D preview's own barrel module.
-    /from\s*['"]\.\/src\/preview3d\/index\.js['"]/
+    /from\s*['"]\.\/src\/preview3d\/index\.js['"]/,
+    // RS-1008: Image Trace's own barrel module, mirroring the src/svg/index.js entry above.
+    /from\s*['"]\.\/src\/image\/index\.js['"]/
   ];
   for (const line of importLines) {
     assert.ok(allowed.some((pattern) => pattern.test(line)), `unexpected import: ${line}`);
