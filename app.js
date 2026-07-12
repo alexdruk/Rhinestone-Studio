@@ -62,7 +62,13 @@
 // old custom pointer-drag-to-rotate handler on #cup is removed -- OrbitControls (inside
 // src/preview3d/Preview3DRenderer.js) now owns pointer interaction on that canvas natively, and
 // does strictly more (rotate, zoom, and pan, with damping). See
-// docs/specifications/RS-1006-Real3DPreview.md.
+// docs/specifications/RS-1006-Real3DPreview.md. RS-1007 replaced the 7-color hard-coded palette
+// with a permanent 17-color crystal catalog (src/renderer/CrystalColors.js, re-exported unchanged
+// as STONE_COLORS from src/renderer/StoneColors.js -- this import line is unchanged). #stoneColor
+// is now populated at startup from STONE_COLORS (grouped into <optgroup>s by each color's `group`
+// field) instead of index.html's previous hardcoded 7 <option>s, and a live swatch next to it
+// shows the selected color's previewColor. No renderer/exporter file changed -- every consumer
+// already resolved colors generically through STONE_COLORS[stone.color].
 import './src/browser/BrowserDependencyProbe.js';
 import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
@@ -106,6 +112,15 @@ const PRODUCTION_SHEET_PNG_DPI=200;
 // like "2.0"), so the browser rendered no selection even though the underlying mm value was
 // valid. Never mutates the numeric value itself, only the displayed selection.
 function setNumericSelectValue(select,num){let best=null,bestDiff=Infinity;for(const opt of select.options){const v=parseFloat(opt.value);if(Number.isFinite(v)){const diff=Math.abs(v-num);if(diff<bestDiff){bestDiff=diff;best=opt.value}}}select.value=best!==null?best:String(num)}
+// RS-1007: builds the Stone color <optgroup>s from STONE_COLORS (17 entries) grouped by each
+// color's `group` field, in catalog order (Object.values() preserves insertion order for the
+// string keys STONE_COLORS is built from). Called once at startup -- index.html no longer
+// hardcodes any <option> for this select.
+function populateStoneColorOptions(){const groups=new Map();for(const c of Object.values(STONE_COLORS)){if(!groups.has(c.group))groups.set(c.group,[]);groups.get(c.group).push(c)}el('stoneColor').innerHTML=[...groups.entries()].map(([group,colors])=>`<optgroup label="${escapeHtml(group)}">${colors.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`).join('')}
+// RS-1007: keeps the small swatch next to #stoneColor showing the currently selected color's
+// actual previewColor. Called from updateStats() (itself called at the end of every updateAll()),
+// so the swatch always reflects the live selection after an edit, undo/redo, or import.
+function updateStoneColorSwatch(){const c=STONE_COLORS[el('stoneColor').value];el('stoneColorSwatch').style.background=c?c.previewColor:'transparent'}
 class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=permanentEngine}
  // Geometry generation happens exactly once here, per docs/ARCHITECTURE.md: every layer's stones
  // come straight from the permanent engine's per-layer StoneLayout; dedupe() below only filters
@@ -261,7 +276,7 @@ function updateViewButtons(){document.querySelectorAll('.viewBtn').forEach(b=>b.
 // RS-1006: dropped the previous `rotation ${Math.round(rotation)}°` readout here -- now that
 // OrbitControls allows free mouse orbit, that number only ever reflected the last preset/slider
 // value, not the camera's actual live orientation, so displaying it would be misleading.
-function updateStats(){el('layoutStats').innerHTML=`<b>${layout.count}</b> stones <span>${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm</span><span>selected: ${escapeHtml(layerLabel(selectedLayer()))}</span>`;el('cupStats').innerHTML=`<span>${escapeHtml(currentObjectTemplate().displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span>`}
+function updateStats(){el('layoutStats').innerHTML=`<b>${layout.count}</b> stones <span>${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm</span><span>selected: ${escapeHtml(layerLabel(selectedLayer()))}</span>`;el('cupStats').innerHTML=`<span>${escapeHtml(currentObjectTemplate().displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span>`;updateStoneColorSwatch()}
 function download(name,mime,data){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:mime}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800);el('status').textContent=`Downloaded ${name}`}function exportCanvas(name,canvas){canvas.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800)},'image/png')}
 function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(copy.type==='rectangle'){copy.x+=8;copy.y+=8}if(copy.type==='svg'){copy.x+=8;copy.y+=8}if(copy.type==='text'){copy.text+=' copy'}project.layers.push(copy);selectedLayerId=copy.id;syncSelectedControlsFromLayer();updateAll()}function deleteLayer(id){if(project.layers.length<=1){el('status').textContent='Cannot delete the last layer';const hint=el('layerRuleHint');hint.style.display='block';hint.scrollIntoView({block:'nearest'});return}commitHistory();project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;syncSelectedControlsFromLayer();updateAll(true)}
 function pointerToLayout(e){const r=layoutCanvas.getBoundingClientRect(),dpr=layoutTransform.dpr;return layoutPxToMm((e.clientX-r.left)*dpr,(e.clientY-r.top)*dpr)}function hitTest(mm){const layers=[...project.layers].reverse();for(const l of layers){const b=getLayerBBox(l);for(const h of handlesFor(b)){if(Math.abs(mm.x-h.x)<3&&Math.abs(mm.y-h.y)<3&&l.type!=='text')return{layer:l,kind:'resize',handle:h.name,b0:b}}if(mm.x>=b.x&&mm.x<=b.x2&&mm.y>=b.y&&mm.y<=b.y2)return{layer:l,kind:l.type==='text'?'select':'move',b0:b}}return null}
@@ -331,4 +346,4 @@ el('exportProdSheetPNG').onclick=async()=>{if(!layout){el('status').textContent=
 // removed here -- OrbitControls (inside src/preview3d/Preview3DRenderer.js) now owns pointer
 // interaction on that canvas natively, and does strictly more (rotate, zoom, and pan, with
 // damping) without fighting over the same pointer events.
-window.addEventListener('resize',()=>updateAll(true));syncSelectedControlsFromLayer();updateAll(true);
+window.addEventListener('resize',()=>updateAll(true));populateStoneColorOptions();syncSelectedControlsFromLayer();updateAll(true);

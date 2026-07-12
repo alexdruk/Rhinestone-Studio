@@ -38,8 +38,28 @@ renderCup(ctx, layout, {
 });
 ```
 
-## Stone Colors (RS-0003.5C2)
+## Crystal Color Catalog (RS-1007, supersedes RS-0003.5C2)
 
-`StoneColors.js` exports the `STONE_COLORS` display palette (fill/stroke/shine/accent per color
-id) shared by both renderers and `src/export/SvgExporter.js`, so there is exactly one definition
-instead of one copy per consumer.
+`CrystalColors.js` is the permanent crystal-color catalog: at least 17 named colors (Crystal,
+Crystal AB, Jet, Siam, Light Siam, Rose, Fuchsia, Amethyst, Sapphire, Light Sapphire, Aquamarine,
+Emerald, Peridot, Topaz, Citrine, Gold, Silver), each with a stable `id`, display `name`, `group`
+(UI-organization only), a `previewColor` hex, optional `highlight`/`shadow` hex accents, and the
+render-channel fields (`fill`/`stroke`/`shine`/`accent`) every consumer reads — `previewColor`/
+`highlight`/`shadow` are aliases of `fill`/`shine`/`accent` respectively, so both naming schemes
+always agree. These are decorative approximations, not calibrated to any specific manufacturer's
+commercial color line.
+
+`StoneColors.js` is now a one-line compatibility shim re-exporting the same `STONE_COLORS`
+(id-keyed) map from `CrystalColors.js`, so every existing consumer — both renderers
+(`CanvasRenderer2D.js`, `CupRenderer.js` via `drawStone`), `src/preview3d/StoneLayoutTexture.js`,
+`src/export/SvgExporter.js`, `src/export/ProductionSheetExporter.js`, and `app.js` — keeps working
+unchanged. The 7 ids that existed before RS-1007 (`crystal`, `gold`, `silver`, `jet`, `rose`,
+`sapphire`, `emerald`) keep byte-identical `fill`/`stroke`/`shine`/`accent` values.
+
+```js
+import { STONE_COLORS } from './src/renderer/StoneColors.js'; // unchanged import path/shape
+import { CRYSTAL_COLORS, getCrystalColor, listCrystalColorGroups } from './src/renderer/CrystalColors.js';
+
+listCrystalColorGroups(); // [{ group: 'Clear & Neutral', colors: [...] }, ...] -- what app.js's
+                           // #stoneColor <optgroup> selector iterates
+```

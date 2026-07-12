@@ -242,6 +242,24 @@ ever triggers. `StoneLayout`/`GeometryEngine` are untouched; no exporter is touc
 existing `canvas.toBlob()` capture keeps working unmodified because the new `WebGLRenderer` is
 created with `preserveDrawingBuffer: true`. See `docs/specifications/RS-1006-Real3DPreview.md`.
 
+As of RS-1007, the 7-entry hard-coded stone-color palette is replaced by a permanent 17-color
+crystal-color catalog: `src/renderer/CrystalColors.js` (id/name/`previewColor`/optional
+`highlight`/`shadow`/`group`, plus the pre-existing `fill`/`stroke`/`shine`/`accent` render-channel
+fields, aliased 1:1 so both naming schemes always agree). `src/renderer/StoneColors.js` becomes a
+one-line compatibility re-export of the same `STONE_COLORS` id-keyed map from that catalog, so its
+five pre-existing consumers (`CanvasRenderer2D.js`, `CupRenderer.js` via `drawStone`,
+`StoneLayoutTexture.js`, `SvgExporter.js`, `ProductionSheetExporter.js`) and `app.js`'s own
+`STONE_COLORS` import needed zero changes — every one of them already resolved a stone's color
+generically via `STONE_COLORS[stone.color]`, so growing the catalog's *content* required no
+renderer/exporter change, only the catalog module itself and the color-picker UI. The 7
+pre-existing ids keep byte-identical `fill`/`stroke`/`shine`/`accent` values (backward
+compatibility for projects saved before this milestone); `jet`'s display name changed from "Jet
+Black" to "Jet" (same id/color) to match the new catalog's required name list. `app.js`'s
+`#stoneColor` select is now populated at startup from `STONE_COLORS`, grouped into `<optgroup>`s by
+each color's `group` field, with a live swatch (`#stoneColorSwatch`) showing the selected
+`previewColor`. `Stone.color` remains a free string; no catalog-id validation was added to
+`src/geometry/**`. See `docs/specifications/RS-1007-CrystalColorLibrary.md`.
+
 ---
 
 # Exporters
