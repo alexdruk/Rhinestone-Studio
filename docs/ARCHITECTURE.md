@@ -512,13 +512,35 @@ delta or the drag-time snap offset (in mm), and applies the result itself throug
 per-type helpers, `getLayerPosition(layer)`/`setLayerPosition(layer,xMm,yMm)` — the one place that
 knows a given layer's position field names (`cx`/`cy` for `circle`, `x`/`y` for everything else).
 Multi-selection is one `Set<string>` (`selectedLayerIds` in `app.js`), mutated only through
-`src/editing/Selection.js`'s three pure functions (`selectOnly`/`toggleSelection`/
-`clearSelection`) — every entry point that changes selection (canvas click, layers-list click, the
-layer dropdown, new/duplicate/delete/import) goes through the same three functions, so there is
-exactly one selection model. Selection, the drag-time snap-guide overlay, and the snap-enabled
-toggle are view-only editor state, exactly like `rotation`/`zoom` already were: never part of
-`project`, never in the undo/redo snapshot, never in exported Project JSON. See
-`docs/specifications/RS-1009-AlignmentSnapping.md`.
+`src/editing/Selection.js`'s four pure functions (`selectOnly`/`toggleSelection`/
+`clearSelection`/`selectMany`, the last added by RS-1010 — see below) — every entry point that
+changes selection (canvas click, layers-list click, the layer dropdown, new/duplicate/delete/
+import, Alt-drag duplicate) goes through the same functions, so there is exactly one selection
+model. Selection, the drag-time snap-guide overlay, the snap-enabled toggle, the configurable snap
+distance, and the show-guides toggle are view-only editor state, exactly like `rotation`/`zoom`
+already were: never part of `project`, never in the undo/redo snapshot, never in exported Project
+JSON. See `docs/specifications/RS-1009-AlignmentSnapping.md`.
+
+**RS-1010 (Alignment & Snapping Upgrade):** extends the RS-1009 `app.js` wiring, not
+`src/editing/**`'s snapping/alignment math (`SnapEngine.js`/`AlignmentEngine.js` already accepted
+a configurable tolerance and already snapped each axis independently, which is what
+corner-to-corner snapping needs — no new target type was required). Four additions, all in
+`app.js`/`index.html`:
+* `snapToleranceMm` (view-only state, default `SNAP_TOLERANCE_MM`) replaces the fixed constant as
+  `computeSnapOffset()`'s third argument — the Settings Lightbox's "Snap Distance" field.
+* `showSnapGuides` (view-only state, default `true`) gates only the temporary guide *lines drawn*
+  during a snap; snapping itself stays governed by `snapEnabled` alone — the Settings Lightbox's
+  "Show Alignment Guides" checkbox.
+* Shift held during a move-drag constrains movement to whichever axis moved further from the drag
+  start, applied *after* snapping so the locked axis is exactly the drag-start value, never nudged
+  by a nearby snap target.
+* Alt/Option held on pointerdown duplicates the whole current selection (deep-cloned, pushed onto
+  `project.layers`, one `commitHistory()` shared with the following move so duplicate+drag is one
+  undo step) and drags the copies, leaving the originals in place. Selecting the new copies needed
+  a genuinely new primitive — `src/editing/Selection.js`'s `selectMany(ids)` — since no existing
+  function expressed "select several specific ids at once"; it is the one, small (three-line)
+  change to `src/editing/**` this milestone made, preserving "no second selection model."
+See `docs/specifications/RS-1010-AlignmentSnappingUpgrade.md`.
 
 ---
 
@@ -645,7 +667,7 @@ code.
 | Undo/redo history (RS-1002) | `src/history/**` | nothing else in `src/**` (pure JSON-snapshot bookkeeping; no `Project`/`Layer`/`StoneLayout`/DOM dependency) |
 | Object templates (RS-1004) | `src/products/**` | nothing else in `src/**` (pure data + validation; never referenced by `src/geometry/**` or `src/renderer/**`, only consumed by `app.js` as plain display-option data) |
 | Bitmap image trace (RS-1008, corrected RS-1008A) | `src/image/**` | nothing else in `src/**` (pure field-preparation only: grayscale/threshold/invert/blur/resize -> a neutral density field; zero dependency on `src/geometry/**`, mirroring `src/svg/**`) |
-| Alignment, distribution, snapping, selection (RS-1009) | `src/editing/**` | nothing else in `src/**` (pure mm-geometry and `Set<string>` selection helpers only; zero dependency on `src/geometry/**`/`src/renderer/**`/`src/export/**`/`Project`/`Layer`/`StoneLayout`) |
+| Alignment, distribution, snapping, selection (RS-1009; `selectMany` added RS-1010) | `src/editing/**` | nothing else in `src/**` (pure mm-geometry and `Set<string>` selection helpers only; zero dependency on `src/geometry/**`/`src/renderer/**`/`src/export/**`/`Project`/`Layer`/`StoneLayout`) |
 | Lightbox/dialog controller (UI-001) | `src/ui/**` | nothing else in `src/**` (pure DOM dialog behavior only: open/close, focus trap, Escape, backdrop click, ARIA; zero dependency on `Project`/`Layer`/`StoneLayout`/layer type) |
 | Orchestration | `app.js` | every barrel module above except `src/core/**`, plus `src/svg/index.js` (pre-import validation only, not stone generation), `src/history/index.js` (undo/redo), `src/products/index.js` (RS-1004, object templates), `src/image/index.js` (RS-1008, image field preparation only as of RS-1008A), `src/editing/index.js` (RS-1009, alignment/snapping/selection decisions only, never geometry), and `src/ui/index.js` (UI-001, dialog open/close/focus behavior only, never geometry) |
 

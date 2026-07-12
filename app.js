@@ -103,7 +103,7 @@ import { prepareImageField, maskFieldToRgba, decodeImageFileToBuffer, decodeData
 // app.js is the only caller, and is the only place that knows a given layer's position field
 // names (cx/cy vs x/y) via the new getLayerPosition()/setLayerPosition() helpers below. See
 // docs/specifications/RS-1009-AlignmentSnapping.md.
-import { SNAP_TOLERANCE_MM, NUDGE_STEP_MM, NUDGE_STEP_LARGE_MM, alignLayers, distributeLayers, buildSnapTargets, computeSnapOffset, selectOnly, toggleSelection, clearSelection } from './src/editing/index.js';
+import { SNAP_TOLERANCE_MM, NUDGE_STEP_MM, NUDGE_STEP_LARGE_MM, alignLayers, distributeLayers, buildSnapTargets, computeSnapOffset, selectOnly, toggleSelection, clearSelection, selectMany } from './src/editing/index.js';
 // UI-001 (Complete Application Redesign): src/ui/** is a new, pure, DOM-only module -- a generic
 // Lightbox/dialog controller (open/close, focus trap, Escape, backdrop click). It has no knowledge
 // of Project/Layer/StoneLayout/layer type; app.js is the only caller, and is the only place that
@@ -273,7 +273,11 @@ const engine=new GeometryEngine(permanentEngine);let project=defaultProject(),se
 // multi-selection but intentionally leaves the panel showing the last-edited layer's fields, the
 // same way it already did before this milestone). snapEnabled/activeGuides are view-only editor
 // state (like rotation/zoom): never part of `project`, never undo/redo-tracked, never exported.
-let selectedLayerIds=new Set([selectedLayerId]),snapEnabled=true,activeGuides=[];
+// RS-1010: snapToleranceMm/showSnapGuides join them as the same kind of view-only state --
+// snapToleranceMm is the configurable replacement for the fixed SNAP_TOLERANCE_MM default (still
+// imported and used as the fallback/reset value), showSnapGuides gates only the temporary guide
+// *lines drawn* while snapping (snapping itself stays governed by snapEnabled alone).
+let selectedLayerIds=new Set([selectedLayerId]),snapEnabled=true,snapToleranceMm=SNAP_TOLERANCE_MM,showSnapGuides=true,activeGuides=[];
 // UI-001: safe-area guide visibility is view-only editor state, exactly like snapEnabled/rotation/
 // zoom above -- never part of `project`, never undo/redo-tracked, never exported. It gates the
 // pre-existing app.js-local drawSafeAreaGuide() call only; default true, so leaving it untouched
@@ -349,7 +353,7 @@ function renderLayerUI(){const onlyOneLayer=project.layers.length<=1;el('selecte
 }function layerLabel(l){return l.type==='text'?(l.text||'Text'):l.type==='circle'?'Circle':l.type==='svg'?(l.svgName||'SVG'):l.type==='image'?(l.imageName||'Image'):'Rectangle'}function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function resizeCanvas(c){const r=c.getBoundingClientRect(),dpr=Math.max(1,devicePixelRatio||1),w=Math.floor(r.width*dpr),h=Math.floor(r.height*dpr);if(c.width!==w||c.height!==h){c.width=w;c.height=h}return{w,h,dpr}}
 function layoutMmToPx(p){return{x:layoutTransform.ox+p.x*layoutTransform.s,y:layoutTransform.oy+p.y*layoutTransform.s}}function layoutPxToMm(x,y){return{x:(x-layoutTransform.ox)/layoutTransform.s,y:(y-layoutTransform.oy)/layoutTransform.s}}
-function drawLayout(){const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr});layoutTransform={s,ox,oy,dpr};if(showSafeArea)drawSafeAreaGuide(ctx,s,ox,oy,dpr,getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height));drawSelection(ctx,s,ox,oy,dpr);drawGuides(ctx,s,ox,oy,dpr);ctx.fillStyle='#516071';ctx.font=`${12*dpr}px Arial`;ctx.fillText(`${layout.count} stones · ${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm · ${selectedLayer().textMode||''}`,20*dpr,h-18*dpr);el('fitNotice').textContent='Drag to move · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step).'}
+function drawLayout(){const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr});layoutTransform={s,ox,oy,dpr};if(showSafeArea)drawSafeAreaGuide(ctx,s,ox,oy,dpr,getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height));drawSelection(ctx,s,ox,oy,dpr);drawGuides(ctx,s,ox,oy,dpr);ctx.fillStyle='#516071';ctx.font=`${12*dpr}px Arial`;ctx.fillText(`${layout.count} stones · ${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm · ${selectedLayer().textMode||''}`,20*dpr,h-18*dpr);el('fitNotice').textContent='Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step).'}
 // RS-1004: a dashed guide rectangle for the active object template's safe design area, derived from
 // the current project.canvas size. This is a layer-agnostic editor overlay (like drawSelection()
 // below), not a CanvasRenderer2D.js change -- it reuses the exact mm->px transform
@@ -445,7 +449,18 @@ layoutCanvas.addEventListener('pointerdown',e=>{
   selectedLayerId=hit.layer.id;
   syncSelectedControlsFromLayer();renderLayerUI();updateEditingUI();
   commitHistory();
-  const dragIds=[...selectedLayerIds];
+  let dragIds=[...selectedLayerIds];
+  // RS-1010: Alt/Option-drag duplicates the current selection in place and drags the copies,
+  // leaving the originals untouched -- one undo step covers duplicate+move together (the
+  // commitHistory() above already opened it), matching the existing "one commit per completed
+  // drag" convention. Preserves pre-existing behavior for a plain (non-Alt) drag entirely.
+  if(e.altKey){
+    const copies=dragIds.map((id,i)=>{const l=project.layers.find(x=>x.id===id);const copy=JSON.parse(JSON.stringify(l));copy.id=`${l.type}${Date.now()}${i}`;return copy});
+    project.layers.push(...copies);
+    dragIds=copies.map(c=>c.id);
+    selectedLayerIds=selectMany(dragIds);selectedLayerId=dragIds[dragIds.length-1];
+    renderLayerUI();
+  }
   const l0Map=new Map(dragIds.map(id=>[id,JSON.parse(JSON.stringify(project.layers.find(x=>x.id===id)))]));
   const groupBBox0=unionBBoxOfLayers(dragIds.map(id=>project.layers.find(x=>x.id===id)));
   drag={kind:'move',layerIds:dragIds,start:mm,l0Map,groupBBox0};
@@ -465,9 +480,16 @@ layoutCanvas.addEventListener('pointermove',e=>{
       const dragBBoxMm={xMm:drag.groupBBox0.x+dx,yMm:drag.groupBBox0.y+dy,widthMm:drag.groupBBox0.width,heightMm:drag.groupBBox0.height};
       const others=project.layers.filter(l=>l.visible&&!drag.layerIds.includes(l.id)).map(l=>{const b=getLayerBBox(l);return{layerId:l.id,xMm:b.x,yMm:b.y,widthMm:b.width,heightMm:b.height}});
       const targets=buildSnapTargets({canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height,safeAreaRectMm:getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height),layerBBoxes:others});
-      const snap=computeSnapOffset(dragBBoxMm,targets,SNAP_TOLERANCE_MM);
+      const snap=computeSnapOffset(dragBBoxMm,targets,snapToleranceMm);
       dx+=snap.dxMm;dy+=snap.dyMm;
-      activeGuides=snap.guides;
+      activeGuides=showSnapGuides?snap.guides:[];
+    }
+    // RS-1010: Shift constrains movement to whichever axis has moved further from the drag start,
+    // applied after snapping so the locked axis lands exactly on its start position (never nudged
+    // by a nearby snap target) -- matches Illustrator/Figma's shift-drag axis lock.
+    if(e.shiftKey){
+      if(Math.abs(dx)>=Math.abs(dy)){dy=0;activeGuides=activeGuides.filter(g=>g.axis!=='horizontal')}
+      else{dx=0;activeGuides=activeGuides.filter(g=>g.axis!=='vertical')}
     }
     for(const id of drag.layerIds){
       const l=project.layers.find(x=>x.id===id);if(!l)continue;
@@ -815,10 +837,13 @@ el('shipApply').onclick=()=>{
 function syncSettingsFieldsFromState(){
   el('settingsGridDefault').checked=true;el('settingsGridDefault').disabled=true;
   el('settingsSafeAreaDefault').checked=showSafeArea;el('settingsSnapDefault').checked=snapEnabled;
+  el('settingsSnapDistance').value=snapToleranceMm;el('settingsShowGuides').checked=showSnapGuides;
 }
 el('settingsApply').onclick=()=>{
   showSafeArea=el('settingsSafeAreaDefault').checked;el('safeAreaToggle').setAttribute('aria-pressed',String(showSafeArea));
   snapEnabled=el('settingsSnapDefault').checked;el('snapEnabled').value=snapEnabled?'on':'off';
+  snapToleranceMm=Math.min(5,Math.max(0.5,parseFloat(el('settingsSnapDistance').value)||SNAP_TOLERANCE_MM));
+  showSnapGuides=el('settingsShowGuides').checked;
   drawLayout();
 };
 

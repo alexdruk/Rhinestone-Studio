@@ -29,7 +29,9 @@ plain millimeter numbers, ids, and `Set<string>`s. `app.js` is the only consumer
     within tolerance independently on each axis (checking the dragged box's near edge, center,
     and far edge against every target line) and returns `{dxMm,dyMm,guides}`, where `guides` are
     the matched target line(s) for drawing a temporary visual guide.
-- `Selection.js` — `selectOnly(id)`, `toggleSelection(selectedIds, id)`, `clearSelection()`: the
+- `Selection.js` — `selectOnly(id)`, `toggleSelection(selectedIds, id)`, `clearSelection()`,
+  `selectMany(ids)` (RS-1010, for Alt/Option-drag duplicate selecting every new copy at once): the
   one selection-mutation implementation; see the file's own doc comment.
 
-See `docs/specifications/RS-1009-AlignmentSnapping.md` for the full design rationale.
+See `docs/specifications/RS-1009-AlignmentSnapping.md` and
+`docs/specifications/RS-1010-AlignmentSnappingUpgrade.md` for the full design rationale.

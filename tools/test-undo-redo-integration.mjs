@@ -69,7 +69,7 @@ await test('3. every discrete mutation site commits history before its first pro
   // immediately before constructing the `drag` object -- see
   // tools/test-alignment-snapping-integration.mjs for that milestone's own dedicated coverage.
   assert.match(appJs, /commitHistory\(\);\s*drag=\{kind:'resize'/, 'the resize drag-start path must commit history before entering drag mode');
-  assert.match(appJs, /commitHistory\(\);\s*const dragIds=\[\.\.\.selectedLayerIds\];[\s\S]*?drag=\{kind:'move'/, 'the move drag-start path must commit history before entering drag mode');
+  assert.match(appJs, /commitHistory\(\);\s*let dragIds=\[\.\.\.selectedLayerIds\];[\s\S]*?drag=\{kind:'move'/, 'the move drag-start path must commit history before entering drag mode');
 });
 
 await test('4. continuous project-affecting controls open/close a history session; rotation/zoom are excluded', () => {

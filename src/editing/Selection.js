@@ -25,3 +25,13 @@ export function toggleSelection(selectedIds, id) {
 export function clearSelection() {
   return new Set();
 }
+
+/**
+ * RS-1010: the one place a multi-id selection is ever constructed directly (Alt/Option-drag
+ * duplicate needs to select every newly created copy at once, which selectOnly/toggleSelection
+ * can't express) -- still routes through this module, preserving "no second selection model."
+ * @returns {Set<string>} A new selection containing exactly the given ids.
+ */
+export function selectMany(ids) {
+  return new Set(ids);
+}
