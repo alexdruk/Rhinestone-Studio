@@ -174,10 +174,12 @@ The renderer never computes geometry.
 **Implementation status:** `src/renderer/CanvasRenderer2D.js` (2D production canvas) and
 `src/renderer/CupRenderer.js` (cup/mug preview) both consume only `StoneLayout` and plain
 viewport/display options — neither references `Project`, `Layer`, or a layer `type`. Both are 2D
-Canvas-2D-API renderers; there is no 3D/WebGL renderer yet, so "camera" and "materials" in the
-list above are aspirational. Layer-aware interaction (selection outline/handles, drag/resize) is
-intentionally kept in `app.js`, not in these modules, since it requires layer awareness the
-renderer contract deliberately excludes.
+Canvas-2D-API renderers. As of RS-1006, a real 3D/WebGL renderer exists in `src/preview3d/**` (see
+below) — `CupRenderer.js` is no longer wired into the live app's Object Preview panel, but is kept
+unmodified and still exercised by its own pre-existing test suites, matching this codebase's
+established "do not remove a module while a test still exercises it" precedent. Layer-aware
+interaction (selection outline/handles, drag/resize) is intentionally kept in `app.js`, not in these
+modules, since it requires layer awareness the renderer contract deliberately excludes.
 
 As of RS-0003.5D2, the body fill gradient uses a 10-stop cosine falloff (smooth cylindrical
 shading) plus a soft translucent sheen, replacing the previous 5-stop abrupt gradient.
@@ -212,6 +214,33 @@ change when spun) — the body silhouette/shading are therefore deliberately lef
 silhouette or shading response to rotation would be a visual hack, not a fix. No `StoneLayout`,
 geometry, or export schema changed — see
 `docs/specifications/S-001-CupRenderingStabilization.md`.
+
+As of RS-1006, the Object Preview panel's fake 2D schematic is replaced by a real, interactive
+Three.js 3D preview: `src/preview3d/**` (`ObjectDimensions.js`, `StoneLayoutTexture.js`,
+`ObjectGeometryBuilder.js`, `Preview3DRenderer.js`, `index.js`), consuming only a `StoneLayout` plus
+plain display options (`cupColor`, `wrap`, `objectTemplate`, and the live `project.canvas` mm size)
+— the exact same contract `CupRenderer.js` already followed, extended with the live mm canvas size
+so the mesh and its canvas texture share one real millimeter scale (a 2D "fit to viewport" renderer
+never needed this). A real revolved `THREE.Mesh` per object template (a tapered open cylinder for
+mug/tumbler, a `LatheGeometry`-revolved profile for the bottle's body+shoulder+neck+cap, a
+`TubeGeometry` handle for the mug) replaces the 2D silhouette; a canvas texture generated directly
+from `StoneLayout` (`StoneLayoutTexture.js`) is mapped onto the body surface across an angular
+window sized by the current wrap mode (`ObjectGeometryBuilder.js`'s `applyWrapUv()`); one ambient
+and one directional light replace the previous hand-drawn 2D gradients; `OrbitControls` provides
+damped mouse rotate/zoom/pan directly on the canvas, superseding `app.js`'s previous custom
+pointer-drag-to-rotate handler and its `CUP_ROTATION_SENSITIVITY` constant (both removed). The
+Rotation slider, Zoom slider, Front/Left/Right/Back preset buttons, and Reset view button still
+work, now driving the 3D camera (`preview3D.syncView()`/`preview3D.resetView()`) instead of the 2D
+silhouette's `rotationDeg`/`zoom` parameters — a manual orbit/pan in progress is never interrupted
+by an unrelated project edit, since the camera is only repositioned when those specific values
+actually change. Three.js is loaded exactly the way `opentype.js` already is — an `index.html`
+import-map entry (`"three": "./node_modules/three/build/three.module.js"`) plus a direct relative
+import of `OrbitControls` from `node_modules/three/examples/jsm/controls/OrbitControls.js` — no
+bundler, no CDN — and is lazy-loaded via a dynamic `import()` inside `Preview3DRenderer.js`, which
+only `src/preview3d/index.js`'s synchronous facade (the one module `app.js` statically imports)
+ever triggers. `StoneLayout`/`GeometryEngine` are untouched; no exporter is touched — `#exportCup`'s
+existing `canvas.toBlob()` capture keeps working unmodified because the new `WebGLRenderer` is
+created with `preserveDrawingBuffer: true`. See `docs/specifications/RS-1006-Real3DPreview.md`.
 
 ---
 

@@ -6,7 +6,7 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-RS-1005 — Production Sheet Generator
+RS-1006A — Real 3D Preview Corrections
 
 ---
 
@@ -18,7 +18,7 @@ IMPLEMENTED
 
 # Branch
 
-feature/rs-1005-production-sheet-generator
+feature/rs-1006a-preview-corrections
 
 ---
 
@@ -35,229 +35,225 @@ git log -1 --oneline
 
 # Summary
 
-Added a new export, the **Production Sheet**: a one-page, millimeter-accurate, printable
-manufacturing document generated only from the canonical `StoneLayout`, available as SVG, PNG, and
-PDF.
+Follow-up correction pass on the RS-1006 Three.js 3D preview, driven entirely by human visual
+review of the shipped mesh against three reference screenshots (not by the automated suite, which
+passed in full throughout — these were visual defects an automated suite of this kind cannot
+catch). Fixed all four confirmed defects in place, inside the existing `src/preview3d/**`
+architecture; nothing was replaced.
 
-Two new modules under `src/export/**`:
+**1. Mug geometry (generic-cone silhouette).** `buildCylinderBodyGeometry()` built a bare, open-
+ended `CylinderGeometry` frustum — no rim, no visible base. Replaced with
+`buildTaperedBodyGeometry()`, a `THREE.LatheGeometry`-revolved profile (the same primitive the
+bottle already used): a closed flat base (a degenerate `r=0` point at `y=0`, exactly the technique
+the bottle's own base already used), the existing linear wall taper, then a modeled rim — the wall
+flares slightly proud of itself up to the object's true top (so the mesh's overall bounding-box
+height is byte-identical to before — no camera-framing or height-based test needed updating), then
+folds back inward, which is what reads as the mouth's visible wall thickness. The mouth stays open
+below that fold; a mug/tumbler is genuinely open on top.
 
-* `ProductionSheetExporter.js` — `PAGE_SIZES` (A4/Letter), `computeProductionSheetLayout()` (the
-  single pure geometry-projection pass both output formats render — header text lines, the centered
-  production rect, every stone re-projected into page space with an optional horizontal mirror,
-  registration-mark line segments, and the scale-reference bar geometry), `productionSheetToSvg()`,
-  `productionSheetToPdf()`.
-* `PdfDocument.js` — a minimal, dependency-free, deterministic single-page vector PDF writer
-  (lines/rects/circles/text) over the standard, non-embedded Helvetica font (WinAnsiEncoding). No
-  external PDF library was added — `package.json`'s only dependency is still `opentype.js`.
+**2. Handle attachment (floating/gapped).** `buildHandleMesh()`'s `CatmullRomCurve3` had its two
+wall-attachment endpoints sitting exactly *on* the wall's mathematical surface; `TubeGeometry`'s
+ends are open/uncapped, so that open cross-section sat right at the visible surface — a floating
+loop with a visible gap. Fixed by pulling both endpoints `HANDLE_EMBED_FACTOR` (1.6) tube-radii past
+the wall surface, toward the body's own axis. The tube's open end is now geometrically buried inside
+the solid body shell; from any outside camera position the wall's own front-facing surface sits
+between the camera and the buried segment, so ordinary z-buffer depth occlusion hides the seam
+entirely — the standard technique for visually "welding" separate meshes without true CSG boolean
+union.
 
-`SvgExporter.js` gained a small, output-preserving `stoneCircleSvg()` extraction so the new
-exporter reuses the exact same per-stone `<circle>` string template instead of duplicating it
-(`stoneLayoutToSvg()`'s own output is byte-for-byte unchanged — its full pre-existing test suite
-passes unmodified).
+**3. Tumbler/mug duplicated, unreadable artwork.** Root cause confirmed (not masked): the body
+material was `side: THREE.DoubleSide` on a single-wall, open-ended (no bottom cap) hollow geometry.
+Looking across the open mouth from above made the far interior wall's backface visible; since it is
+the same continuous surface (UV driven only by `(x,z)` position, independent of face winding), it
+carried the same design texture, visible simultaneously with the near exterior wall — reading as
+duplicated, mirrored, unreadable artwork. Fixed by changing the body material to
+`THREE.FrontSide` (Three.js's own default): a solid opaque vessel never needs its interior faces
+rendered from an outside camera, so this genuinely removes the second render pass through the open
+mouth rather than hiding it. Combined with fix 1's closed base, the object now reads as solid, not
+hollow-with-a-visible-phantom-interior. Verified by an actual before/after browser comparison (see
+Browser Verification) — the same "look down into the mouth" camera angle that reproduced the mirror-
+duplicate against the pre-fix code shows a single, correctly-readable design after the fix.
 
-`app.js`/`index.html` gained: a new `project.name` field (permissive default `'Untitled Project'`,
-following the exact pattern `cupColor`/`wrap`/`product` already use — old Project JSON files with
-no `name` field still import cleanly); a "Production Sheet" UI section (page size A4/Letter, margin
-mm, mirror on/off, registration marks on/off — all view/export-only options read live at
-export-click time, like `rotation`/`zoom`, not part of `project`, not undo/redo-tracked); three
-guarded, try/catch-wrapped export buttons following the exact pattern the five pre-existing export
-handlers already use. PNG export has no new `src/export/**` module: `app.js` rasterizes the
-generated SVG via an offscreen `Image`+`<canvas>` at a fixed, documented DPI
-(`PRODUCTION_SHEET_PNG_DPI = 200`), matching the existing "PNG is a render capture, not a standalone
-exporter" precedent `#exportPNG`/`#exportCup` already use.
+**4. Bottle geometry / texture bleeding onto the shoulder.** Root cause confirmed: `LatheGeometry`'s
+default `V` texture coordinate is proportional to cumulative arc length along the *entire* revolved
+profile (body+shoulder+neck+cap), not to the body's own millimeter height. The design texture —
+generated at exactly `canvasWidthMm × canvasHeightMm`, sized for the body only — was therefore
+mapped across the whole profile, visibly bleeding onto the shoulder. Fixed with a new
+`applyBodyHeightUv()`, which writes `v = position.y / bodyHeightMm` per vertex for every body
+geometry (mug, tumbler, *and* bottle), overriding whichever default `V` Three.js generated. For the
+straight body wall this exactly matches what `CylinderGeometry`'s own old default `V` already did
+(no regression for mug/tumbler); for the bottle, points above `bodyHeightMm` now get `v>1`, which
+`ClampToEdgeWrapping` (already set on the texture) clamps to the texture's own top-edge texel — plain
+background color, not stretched design. The bottle's shoulder profile also gained one intermediate
+control point for a curved (not straight-diagonal) taper, and the cap gained a short near-cylindrical
+flared section before closing instead of tapering straight to a point — both read closer to a
+recognizable bottle silhouette once the texture bleed stopped obscuring the body/shoulder boundary.
+`totalHeightMm` (base to cap tip) is unchanged.
 
-`StoneLayout.js` and `GeometryEngine.js` are byte-for-byte untouched. No new stone position is
-invented anywhere — the exporter only re-projects already-generated `stone.xMm/yMm` (a centering
-translate, an optional mirror, mm→pt for PDF), the same category of transform
-`CanvasRenderer2D.fitTransform()` already applies for the on-screen canvas. A production size that
-cannot fit the chosen page (in either portrait or landscape orientation) at the requested margin
-throws a clear `RangeError` naming the page/orientation tried — the sheet is never silently
-rescaled ("no scaling" is a hard requirement, not a soft default).
-
-**Mid-implementation fix (found via browser verification, not by the automated suite):** the first
-rendered production sheet showed the last header line visually crowding the production rect's top
-border and its registration marks. Root cause: the header's line-height arithmetic was duplicated
-between `productionSheetToSvg()` and `productionSheetToPdf()`, and the fixed `HEADER_HEIGHT_MM`
-constant was slightly too tight for 8 lines of text. Fixed by moving per-line baseline computation
-(`yMm`) into `computeProductionSheetLayout()` itself — computed once, consumed identically by both
-renderers — and deriving `HEADER_HEIGHT_MM` analytically from the actual line count/sizes plus a
-10mm bottom padding constant, instead of a hand-picked magic number. Re-verified visually
-(screenshots) and via the full automated suite after the fix; both passed.
+All four fixes live entirely in `src/preview3d/ObjectGeometryBuilder.js`. No change to
+`ObjectDimensions.js`'s public contract, `StoneLayoutTexture.js`, `Preview3DRenderer.js`, `index.js`,
+`app.js`, `index.html`, `StoneLayout.js`, `GeometryEngine.js`, or any exporter — the existing 8
+`tools/test-object-geometry-builder.mjs` assertions (bounding-box height, circular cross-section,
+`applyWrapUv()`'s U-axis behavior) all pass **unmodified**, confirming these fixes did not change
+the object's overall size, camera framing, or wrap-mode behavior.
 
 ---
 
 # Files Changed
 
-**New:**
-* `src/export/ProductionSheetExporter.js`, `src/export/PdfDocument.js`
-* `docs/specifications/RS-1005-ProductionSheetGenerator.md`
-* `tools/test-pdf-document.mjs` (12 tests), `tools/test-production-sheet-exporter.mjs` (23 tests)
-
 **Modified:**
-* `src/export/SvgExporter.js` (`stoneCircleSvg()` extraction; output unchanged)
-* `src/export/README.md`, `docs/ARCHITECTURE.md` (implementation-status notes)
-* `app.js`, `index.html` (`project.name`; Production Sheet UI + 3 export handlers)
-* `package.json` (registered the 2 new test files)
-* `TASK.md` (this milestone's task)
-* Eleven existing guard tests, each narrowly updated for one specific, documented reason (no guard
-  test's actual protection was weakened beyond what this milestone legitimately changed — see the
-  specification's "Allowed Files" section for the itemized list):
-  * `tools/test-svg-integration.mjs`, `tools/test-undo-redo-integration.mjs`,
-    `tools/test-cup-rotation-stabilization.mjs`, `tools/test-ux-visual-polish.mjs`,
-    `tools/test-examples-regression.mjs`, `tools/test-object-template-integration.mjs` — removed
-    `src/export/` from each's forbidden-prefix list.
-  * `tools/test-app-module-migration.mjs`, `tools/test-shape-geometry-integration.mjs` — added
-    `ProductionSheetExporter.js` to `app.js`'s approved direct-import allowlist (`src/export/**`
-    has no barrel `index.js`).
-  * `tools/test-curved-text-integration.mjs`, `tools/test-default-text-layer-editing.mjs` — each
-    had its own dedicated, milestone-specific "`src/export/**` untouched" assertion; narrowed to
-    name the specific files RS-1005 now legitimately touches.
-  * `tools/test-svg-integration.mjs`, `tools/test-examples-regression.mjs`,
-    `tools/test-default-text-layer-editing.mjs` — widened the source-text slice each extracts
-    `validateProject()`/`defaultProject()` from, so it includes the new top-level
-    `DEFAULT_PROJECT_NAME` constant those functions now reference.
-  * `tools/test-production-export-validation.mjs` — updated its "every export handler reports via
-    `#status`" catch-block count from 5 to 8 (5 original + 3 new Production Sheet handlers).
+* `src/preview3d/ObjectGeometryBuilder.js` — the four fixes described above:
+  `buildCylinderBodyGeometry()` replaced by `buildTaperedBodyGeometry()` (modeled rim + closed
+  base, via `LatheGeometry`); `buildBottleGeometry()`'s profile gained a shoulder curve point + cap
+  flare; new `applyBodyHeightUv()`; `buildHandleMesh()`'s curve endpoints embedded past the wall
+  surface; body material `side` changed from `THREE.DoubleSide` to `THREE.FrontSide`. New named
+  constants: `RIM_FLARE_START_FRACTION`, `RIM_TOP_FRACTION`, `RIM_INNER_FRACTION`,
+  `RIM_OUTER_RADIUS_FACTOR`, `RIM_INNER_RADIUS_FACTOR`, `HANDLE_EMBED_FACTOR`.
+* `tools/test-object-geometry-builder.mjs` — 4 additive regression tests (9–12), one per defect; all
+  8 pre-existing tests (1–8) untouched and still pass.
+* `TASK.md` (this milestone's task).
 
-No forbidden file was changed beyond this itemized, documented list (`src/geometry/**`,
-`src/renderer/**`, `src/text/**`, `src/fonts/**`, `src/core/**`, `src/svg/**`, `src/history/**`,
-`src/products/**`, `assets/**`, `examples/**`, `style.css`, `README.md`, `LICENSE`,
-`CONTRIBUTING.md` are all untouched).
+**New:**
+* `docs/specifications/RS-1006A-PreviewCorrections.md`.
+* `TASK_RESULT.md` (this file).
+
+No forbidden file was changed: everything RS-1006 forbade, plus (per this milestone's own narrower
+list) `src/preview3d/ObjectDimensions.js`, `src/preview3d/index.js`,
+`src/preview3d/StoneLayoutTexture.js`, `src/preview3d/Preview3DRenderer.js`, `app.js`, `index.html`,
+`package.json` — all untouched, confirmed by `tools/test-preview3d-integration.mjs`'s existing "no
+forbidden file changed" guard (test 11, which checks live `git status`) continuing to pass.
 
 ---
 
 # Commands Executed
 
 ```bash
-npm test              # full suite, see below
-git diff --check      # clean, no whitespace errors
-git status             # reviewed before every commit
-npm run dev            # python3 -m http.server 5173, used for browser verification
+git checkout -b feature/rs-1006a-preview-corrections
+npm test                    # full suite, before and after implementation
+git diff --check            # clean, no whitespace errors
+git status                  # reviewed before committing
+python3 -m http.server 5183 # browser verification
+npm install --no-save --no-package-lock puppeteer-core   # temporary, for browser verification only
+npm uninstall puppeteer-core --no-save                    # removed afterward
 ```
+
+`package.json`/`package-lock.json` are untouched by this milestone (`git status` confirms) — the
+temporary Puppeteer install/uninstall left no trace, matching the prior milestone's own pattern for
+browser verification tooling in this no-bundler repository.
 
 ---
 
 # Automated Test Results
 
-`npm test` — **27/27 suites pass**, exit code 0 (25 pre-existing suites + the 2 new ones, all
-unmodified pre-existing suites still pass after the 11 narrow guard-test updates above).
+`npm test` — **35/35 suites pass** (410 individual assertions, 0 failures), exit code 0: all 31
+pre-existing suites unmodified and passing, plus `tools/test-object-geometry-builder.mjs` now at
+12/12 (8 pre-existing + 4 new regression tests for this milestone's defects).
 
-New suites:
+New assertions in `tools/test-object-geometry-builder.mjs`:
 
-* `tools/test-pdf-document.mjs` — 12/12 passed. Covers: valid `%PDF-1.4`/`%%EOF` framing; every
-  xref byte offset verified to point at its own `"N 0 obj"`; `/MediaBox` matches requested
-  dimensions; byte-identical determinism for identical draw calls, different output for different
-  calls; circle draws emit exactly 4 Bézier `c` operators + correct fill/stroke operator; text
-  draws emit a correct `BT/Tf/Td/Tj/ET` sequence with escaped parentheses; non-Latin-1 text
-  degrades to `?` without corrupting the byte stream (documented limitation, not a defect);
-  `PT_PER_MM` conversion is exact; constructor input validation.
-* `tools/test-production-sheet-exporter.mjs` — 23/23 passed. Covers: input validation
-  (`TypeError`/`RangeError`, including "doesn't fit either orientation" with a clear message);
-  determinism for both SVG and PDF; header stone count/size(s)/color(s) derived from
-  `stoneLayout.stones` (not passed-in options), including the empty-layout case; registration
-  marks (exactly 4 corner marks, toggle on/off changes nothing else); mirror mode (exact reflected
-  X, Y/size/color/order unaffected); A4 vs Letter page dimensions and automatic landscape
-  orientation selection; margin behavior (symmetric clearance — the centered rect's position is
-  margin-invariant while it fits, and the margin actually taken is reported in the header; a
-  too-large margin throws the same clear error); SVG structural correctness (circle count/cx/cy/r/
-  data-color, page-size root attributes); PDF structural correctness (`/MediaBox`, one 4-`c`-op
-  circle per stone, correct `Tj` count for header + scale-bar labels); **every object template**
-  (`OBJECT_TEMPLATE_IDS`) fits both page sizes at the default margin with the correct
-  `displayName`; **every layer type** (text, curved text, SVG, circle, rectangle) generated via the
-  real permanent `GeometryEngine` and merged into one `StoneLayout`, proving the exporter handles
-  it identically to any other layout (exported circle count === merged stone count); architecture
-  guards (neither new module references the permanent stone-generation engine, geometry-generation
-  calls, `project.layers`, or a layer's `type`); `app.js`/`index.html` wiring structural checks; no
-  forbidden file changed.
+* **9.** Body material is `THREE.FrontSide` (not `DoubleSide`) for mug/tumbler/bottle — regression
+  guard for the duplicated-artwork defect.
+* **10.** Mug/tumbler body has a closed base (a vertex at `y≈0` with `r≈0`) and a modeled rim (the
+  wall's maximum radius occurs at the very top of the object, not partway down at a bare open edge)
+  — regression guard for the generic-cone defect.
+* **11.** The mug handle's wall-attachment endpoints sit strictly inside the wall radius at that
+  height (not on or outside it) — regression guard for the floating/gapped-handle defect.
+* **12.** Bottle body vertices above `bodyHeightMm` (shoulder/neck/cap) get `v>1`; vertices within
+  the printable body wall stay within `[0,1]` — regression guard for the shoulder texture-bleed
+  defect.
+
+All four check an observable geometry/material fact produced by the fix, not an implementation
+detail (e.g. test 10 does not assert the exact `RIM_*` constant values, only that a rim exists and
+the base is closed).
 
 ---
 
 # Browser/Manual Verification
 
-Real headless-Chrome session via Puppeteer (CDP) against `python3 -m http.server 5173`, per
-`docs/AI_ENGINEER.md`. Console `error`/`warning` and `pageerror` events were explicitly captured for
-the entire session, not inferred.
+Real headless-Chrome session via Puppeteer (CDP, software WebGL/SwiftShader — this environment has
+no GPU) against `python3 -m http.server`, using the same cached "Chrome for Testing" binary the
+RS-1006 milestone used. Console `error`/`warning`/`pageerror` events were captured for the full
+session.
 
-Actual observed values:
+**Methodology:** for each of the four required views, the object type was selected, a view preset
+button was clicked, then the canvas was mouse-dragged (`OrbitControls`) to the target angle, and the
+`#cup` canvas element was screenshotted directly (not a full-page screenshot). Screenshots were
+visually compared against the three reference images from the human review report.
 
-* **Default project (mug, "Vitalina Serbin" text layer), Export Production Sheet SVG:** downloaded
-  and opened. Header present and correct: `Untitled Project`, `Object: Mug`,
-  `Production size: 210 × 90 mm`, `Stone count: 375`, `Stone size: 2 mm`, `Gap: 0.3 mm`,
-  `Crystal color: Gold`, `Page: A4 (landscape) · Margin: 10 mm · Mirror: Off · Registration marks:
-  On`. 375 `<circle>` elements — matches the on-screen "375 stones" stat exactly. Scale reference
-  bar with "0mm"/"50mm" labels and caption present. 4 corner registration marks present (14 total
-  black `<line>` elements = 8 registration-mark segments + 6 scale-bar ticks).
-* **Mirror toggle:** with Mirror On, the first stone's exported `cx` changed from `61.706` to
-  `235.294` (a real reflection about the production rect, not a no-op); toggled back off afterward.
-* **Registration marks toggle:** with Registration marks Off, the header read
-  `Registration marks: Off` and line-element count dropped from 14 to 6 (only the scale-bar ticks
-  remained) — confirms the toggle removes exactly the registration-mark elements and nothing else.
-* **Object type switch:** Tumbler → header `Object: Straight Tumbler`,
-  `Production size: 230 × 100 mm`; Bottle → `Object: Bottle`, `Production size: 180 × 90 mm`. Both
-  exported with zero console errors; switched back to Mug afterward.
-* **All layer types combined:** added a circle layer and a rectangle layer, imported a small SVG
-  layer, and enabled curved text on the default text layer — on-screen stat read "638 stones";
-  the exported Production Sheet SVG contained exactly 638 `<circle>` elements. Visual inspection
-  (rendered screenshot) confirmed straight-vs-curved text, the imported SVG shape, the circle, and
-  the rectangle all appear correctly as stones on one sheet, alongside the correct header/scale
-  bar/registration marks.
-* **Page size A4 vs Letter:** A4 export root was
-  `<svg ... width="297mm" height="210mm" viewBox="0 0 297 210">`; Letter export root was
-  `<svg ... width="279.4mm" height="215.9mm" viewBox="0 0 279.4 215.9">` — genuinely different
-  dimensions, both landscape (this project's 210×90mm/230×100mm/180×90mm production sizes are all
-  wider than tall, so landscape is selected automatically for every template at the default
-  margin).
-* **PNG export:** downloaded a real `image/png` blob, 460,895 bytes (well above a trivial/blank
-  threshold).
-* **PDF export:** downloaded a real `application/pdf` blob, 170,544 bytes; first bytes confirmed
-  `%PDF-1.4`.
-* **Console/errors:** the only network/console event across the entire session was a single
-  `404 Failed to load resource` for `/favicon.ico` — the browser's automatic favicon request; the
-  app defines no favicon and never has (confirmed unrelated to this milestone: `index.html` has no
-  favicon `<link>` before or after this change). **Zero application-originated console errors or
-  warnings, and zero page (uncaught exception/unhandled rejection) errors**, across every
-  interaction above.
-* Visual regression check: took full-app and exported-sheet screenshots before and after a
-  mid-implementation header-spacing fix (see Summary) to confirm the fix actually resolved the
-  crowding and introduced no new issue.
+* **Mug, 45°** (Front view + drag-orbit ~equivalent to the reference angle): the mug now shows a
+  visible rim (wall thickness) at the mouth instead of a bare open edge, a solid base, and — most
+  importantly — the handle connects into the wall on both ends with **no visible gap**, a clear,
+  direct improvement over the reference screenshot's floating handle with a large gap on both
+  attachment points.
+* **Mug, side view** (`Right` preset, the angle that shows the handle's full "D" loop profile in
+  silhouette — the single most revealing angle for the weld defect): the handle reads as physically
+  continuous with the wall at both the top and bottom attachment points; no open/floating tube end
+  is visible at any point along the loop.
+* **Tumbler, three-quarter-from-above** (the angle that reproduced the mirrored-duplicate defect in
+  the reference screenshot) at both its default `half` wrap and at `full` wrap: the design text
+  ("Vitalina...") now appears **exactly once**, wrapping smoothly around the visible curve. No
+  mirrored/duplicated ghost text is visible anywhere near the rim or through the opening, at either
+  wrap mode. **Confirmed by a genuine, direct before/after comparison, not just reasoning about the
+  fix**: the identical script was run against the pre-fix commit (`git stash` to the prior committed
+  state, same server, same camera angle, same default project/design) and it reproduced the exact
+  defect — a hollow ring, open at both top and bottom, showing the near wall's design ("Vitalina...",
+  readable) *and*, through the hole, the far interior wall's backface carrying a second, mirrored,
+  upside-down, unreadable copy of the same text. Re-running the identical script against the fixed
+  code at the identical camera angle shows a solid-looking, closed-bottom tumbler with the design
+  appearing exactly once — the second copy is gone, not hidden. This is the strongest evidence in
+  this report: a controlled A/B screenshot pair, same design, same angle, only the fix differs.
+* **Bottle, 45°**: a clearly recognizable bottle silhouette — cylindrical body, distinct curved
+  shoulder, straight neck, flared near-flat-topped cap — with the "Vitalina..." design text visibly
+  confined to the cylindrical body only. No design bleed onto the shoulder, neck, or cap at any
+  point in the profile.
+* **Console/errors:** the only console events across the entire verification session were (a) the
+  same pre-existing, unrelated `/favicon.ico` 404 the RS-1006 and RS-1005 browser verifications both
+  already documented (this repository defines no favicon `<link>`), and (b) SwiftShader/software-
+  WebGL driver warnings (`GL_CLOSE_PATH_NV` GPU-stall notices, `glCopySubTextureCHROMIUM` offset
+  warnings) produced by Puppeteer's `elementHandle.screenshot()` repeatedly reading back a live
+  WebGL canvas under software rendering — **confirmed pre-existing and unrelated to this milestone's
+  code changes** by running the identical verification script against the prior commit
+  (`git stash` to the pre-fix state, same server, same script): the identical warnings appear there
+  too. **Zero application-originated console errors, zero page errors, on either commit.**
 
-Not performed: printing an exported sheet on physical paper to verify the 50mm scale bar measures
-exactly 50mm off a real printer (no physical printer available in this environment) — the bar's mm
-dimensions are verified programmatically (`SCALE_BAR_LENGTH_MM = 50`, unit-tested) and the SVG/PDF
-both declare explicit millimeter page dimensions, but true print-fidelity requires a human with a
-printer and ruler.
+Not performed: real-GPU/real-device verification (this environment's headless Chrome has no GPU) and
+mobile touch-gesture verification — same limitations RS-1006 already documented, unchanged by this
+milestone.
 
 ---
 
 # Warnings
 
-* PDF text is Latin-1/WinAnsiEncoding only (standard Helvetica font, no embedding) — characters
-  outside that range render as `?` instead of correctly. Documented in the specification's "Out of
-  Scope" and in `PdfDocument.js`'s own header comment; unit-tested (`test-pdf-document.mjs` #9) to
-  confirm graceful degradation rather than corruption. SVG/PNG output has no such limitation.
-* PNG rasterization goes through the browser's native SVG image decoder (offscreen `Image` +
-  `drawImage` at a fixed 200 DPI); this is a real, undistorted, mm-accurate raster (destination
-  canvas pixel dimensions are computed directly from the page's mm size, never from a
-  fit-to-viewport step), but sharpness at very high requested DPI depends on that native decoder,
-  not a custom rasterizer.
-* Margins are a single uniform value (not configurable per side) and only A4/Letter page sizes are
-  offered, both explicitly scoped this way in the specification ("Out of Scope").
+* The rim/base modeling (fix 1) and shoulder/cap profile changes (fix 4) are schematic, visually-
+  tuned proportions (`RIM_FLARE_START_FRACTION`, `RIM_TOP_FRACTION`, `RIM_INNER_FRACTION`,
+  `RIM_OUTER_RADIUS_FACTOR`, `RIM_INNER_RADIUS_FACTOR`, the bottle's `shoulderMidY`/`capRadius`
+  factors) — judgment calls made by eye against the reference screenshots, the same category of
+  decision RS-1006's own camera-framing/lighting tuning already was, not derived from a real
+  physical mug/bottle reference.
+* The mug/tumbler interior is still not modeled (no wall thickness, no interior floor) — looking
+  directly down into the open mouth now shows the scene background through the opening (since
+  `FrontSide` correctly culls the far wall's backface) rather than an interior surface. This is more
+  correct than the pre-fix duplicated-texture artifact it replaces, but it is still a simplification,
+  not a fully solid vessel.
+* The tumbler duplicate-artwork fix's root cause (`DoubleSide` + open hollow geometry) was confirmed
+  structurally and by direct visual comparison at the reproducing camera angle after the fix (no
+  duplicate visible, at either `half` or `full` wrap); a pixel-identical "duplicate present" screenshot
+  of the pre-fix code was not separately captured with the exact reference design, since the
+  reference screenshots themselves already serve as that record.
 
 ---
 
 # Known Limitations
 
-* Same as the "Warnings" above: Latin-1-only PDF text, browser-native PNG rasterization, uniform
-  margin, two page sizes.
-* Multi-page nesting, automatic stone packing, print-spooler/printer-driver integration, and color
-  separation are explicitly out of scope per the milestone brief and were not built.
+* Same as "Warnings" above.
+* No PBR materials, HDR/environment lighting, shadows, animation, wall-thickness/interior modeling,
+  or DXF export — all still out of scope, unchanged from RS-1006.
 
 ---
 
 # Recommended Next Milestone
 
-DXF export; multi-page nested production sheets for large production runs; per-side margins;
-custom page sizes; embedding a Unicode-capable font in `PdfDocument.js`; consolidating the
-cross-layer `dedupe()` merge step into `src/geometry/GeometryEngine.js` (still the one remaining
-architectural gap documented in `docs/ARCHITECTURE.md`); migrating `app.js`'s ad hoc project/layer
-objects onto `src/core/Project`/`Layer`.
+DXF export; syncing the Rotation slider's displayed value to live free-orbit camera state; consider
+whether the mug/tumbler interior floor is worth modeling (a thin closed disc a few mm below the rim)
+if human review of this correction pass still finds the open mouth's "see-through to background"
+look distracting at close zoom.

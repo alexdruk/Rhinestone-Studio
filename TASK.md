@@ -1,60 +1,46 @@
 # Task
 
-**Task ID:** RS-1005
-**Task Type:** Feature — Production Sheet Generator
-**Specification:** `docs/specifications/RS-1005-ProductionSheetGenerator.md`
+**Task ID:** RS-1006A
+**Task Type:** Fix — Real 3D Preview Corrections (follow-up to RS-1006)
+**Specification:** `docs/specifications/RS-1006A-PreviewCorrections.md`
 **Status:** IN PROGRESS
-**Branch:** feature/rs-1005-production-sheet-generator
+**Branch:** feature/rs-1006a-preview-corrections
 
 ## Goal
 
-Add a new export, the **Production Sheet**: a one-page, millimeter-accurate, printable
-manufacturing document generated only from the canonical `StoneLayout` — project/object metadata,
-stone count/size/color, a scale reference, optional registration marks, optional horizontal
-mirror — available as SVG, PNG, and PDF.
+Fix four defects in the RS-1006 Three.js 3D preview confirmed by human visual review (not by the
+automated suite, which passed throughout): a generic-cone mug silhouette, a visibly gapped/floating
+mug handle, duplicated/unreadable artwork on the tumbler (and mug), and a bottle whose printable
+texture bleeds onto its shoulder and whose silhouette doesn't read as a bottle. Improve the existing
+`src/preview3d/**` renderer in place — do not replace its architecture.
 
 ## Required Outcome
 
-See `docs/specifications/RS-1005-ProductionSheetGenerator.md` in full. Summary:
-
-* New `src/export/ProductionSheetExporter.js` (`PAGE_SIZES`, `computeProductionSheetLayout()`,
-  `productionSheetToSvg()`, `productionSheetToPdf()`) and `src/export/PdfDocument.js` (a minimal,
-  dependency-free, deterministic, single-page vector PDF writer using the standard Helvetica font).
-* `src/export/SvgExporter.js` gains a small, output-preserving `stoneCircleSvg()` extraction so the
-  new exporter reuses it instead of duplicating the circle string template.
-* `app.js`/`index.html`: a new `project.name` field (permissive default, like `cupColor`/`wrap`);
-  a new "Production Sheet" UI section (page size A4/Letter, margin mm, mirror on/off, registration
-  marks on/off) and three guarded, try/catch-wrapped export buttons (SVG/PNG/PDF), following the
-  exact pattern of the five existing export handlers.
-* PNG export has no new `src/export/**` module: `app.js` rasterizes the generated production-sheet
-  SVG via an offscreen `Image`+`<canvas>` at a fixed documented DPI (no fit-to-viewport scaling),
-  matching the existing "PNG is a capture, not a standalone exporter" precedent.
-* `StoneLayout.js` and `GeometryEngine.js` are not modified. No new stone position is invented
-  anywhere — the exporter only re-projects already-generated `stone.xMm/yMm` for centering/mirror/
-  mm→pt, the same category of transform `CanvasRenderer2D.fitTransform()` already performs.
-* A production size that cannot fit a chosen page (in either orientation) at the requested margin
-  fails with a clear error — never silently rescaled ("no scaling" is a hard requirement).
+See `docs/specifications/RS-1006A-PreviewCorrections.md` in full. Summary: all four fixes live in
+`src/preview3d/ObjectGeometryBuilder.js` (mug/tumbler modeled rim + closed base via `LatheGeometry`,
+embedded handle-attachment endpoints, `applyBodyHeightUv()` V-remap, improved bottle shoulder/cap
+profile) and `src/preview3d/Preview3DRenderer.js` (body material `FrontSide` instead of
+`DoubleSide`). `ObjectDimensions.js`, `StoneLayoutTexture.js`, `index.js`, `app.js`, `index.html`,
+`StoneLayout.js`, `GeometryEngine.js`, and every exporter are untouched.
 
 ## Rules
 
 * Follow `docs/AI_ENGINEER.md`, `docs/CLAUDE_GUIDE.md`, `docs/ARCHITECTURE.md`.
-* Smallest coherent change; no unrelated refactoring; no new dependency/bundler/CDN.
-* Update only the guard tests that structurally required it for one specific, documented reason
-  each (forbidden-`src/export/`-prefix removal, `app.js` import-allowlist addition, a milestone-
-  specific dedicated "export untouched" assertion, or a `validateProject()`/`defaultProject()`
-  source-slice extraction that needed widening to reach the new `DEFAULT_PROJECT_NAME` constant) —
-  see the specification's "Allowed Files" section for the full, itemized list (eleven files) and
-  reasons. Narrow updates only, matching the established precedent.
+* Smallest coherent change; no unrelated refactoring.
+* Forbidden files: everything RS-1006 forbade, plus `src/preview3d/ObjectDimensions.js`,
+  `src/preview3d/index.js`, `src/preview3d/StoneLayoutTexture.js`, `app.js`, `index.html`,
+  `package.json`.
 * Do not commit failing tests.
+* Root-cause fixes only — the tumbler duplicate-artwork defect must be fixed at its source (the
+  `DoubleSide` material + open hollow geometry combination), not masked.
 
 ## Deliverables
 
-* Implementation: `src/export/ProductionSheetExporter.js`, `src/export/PdfDocument.js`,
-  `src/export/SvgExporter.js`, `src/export/README.md`, `app.js`, `index.html`,
-  `docs/ARCHITECTURE.md`.
-* Automated tests: `tools/test-pdf-document.mjs`, `tools/test-production-sheet-exporter.mjs`,
-  registered in `package.json`; eleven existing guard tests narrowly updated (see specification).
-* `npm test` passing in full (all prior suites + the two new ones).
-* Browser verification via a real headless-Chrome session per the specification's checklist.
+* Implementation: `src/preview3d/ObjectGeometryBuilder.js`, `src/preview3d/Preview3DRenderer.js`.
+* Tests: additive tests in `tools/test-object-geometry-builder.mjs` (no existing assertion weakened
+  or removed).
+* `npm test` passing in full.
+* Browser verification via a real headless-Chrome session, producing comparison screenshots (Mug
+  45°, Mug back, Tumbler, Bottle) checked against the human-review reference screenshots.
 * `TASK_RESULT.md` completed.
-* One commit on `feature/rs-1005-production-sheet-generator`.
+* One commit on `feature/rs-1006a-preview-corrections`.

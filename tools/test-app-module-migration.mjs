@@ -94,7 +94,11 @@ await test('app.js only imports the RS-0003.5B2 probe, the RS-0003.5B3 permanent
     /from\s*['"]\.\/src\/products\/index\.js['"]/,
     // RS-1005: Production Sheet export. src/export/** has no barrel index.js (SvgExporter.js above
     // is likewise imported directly), so each individual export module app.js uses is listed here.
-    /from\s*['"]\.\/src\/export\/ProductionSheetExporter\.js['"]/
+    /from\s*['"]\.\/src\/export\/ProductionSheetExporter\.js['"]/,
+    // RS-1006: the real 3D preview's own barrel module (see src/preview3d/index.js) -- the only
+    // module app.js imports from src/preview3d/**, matching the same "barrel module" shape every
+    // other permanent module entry point above already has.
+    /from\s*['"]\.\/src\/preview3d\/index\.js['"]/
   ];
   for (const line of importLines) {
     assert.ok(
