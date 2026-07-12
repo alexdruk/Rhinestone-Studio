@@ -189,7 +189,10 @@ await test('15. runBooleanOp() requires 2+ layers, commits history before mutati
   const commitIndex = fnBody.indexOf('commitHistory();');
   const filterIndex = fnBody.indexOf('project.layers=project.layers.filter(l=>!ids.includes(l.id));');
   assert.ok(commitIndex > -1 && filterIndex > -1 && commitIndex < filterIndex, 'expected commitHistory() to run before source layers are removed');
-  assert.match(fnBody, /combineManyShapeSources\(sources,operation\)/);
+  // RS-1012A: the resolution options object now threads the destination layer's own stone pitch
+  // through as a resolution hint (see src/geometry/PathBoolean.js's computeAdaptiveCellSizeMm()).
+  assert.match(fnBody, /combineManyShapeSources\(sources,operation,\{targetSpacingMm\}\)/);
+  assert.match(fnBody, /const targetSpacingMm=\(layers\[0\]\.stoneSize\|\|2\)\+\(layers\[0\]\.gap\?\?0\.3\);/);
   assert.match(fnBody, /type:'path'/);
 });
 

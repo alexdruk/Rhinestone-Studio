@@ -32,6 +32,24 @@
  * an outer contour "just works" without this module needing to know which contour is a hole.
  *
  * No DOM/Canvas/WebGL dependency. Pure functions of plain {xMm,yMm} points.
+ *
+ * RS-1012A (Production Precision Validation) measured this engine against production-scale
+ * examples (see tools/measure-boolean-precision.mjs and docs/specifications/
+ * RS-1012A-ProductionPrecisionValidation.md) and made two changes as a direct result:
+ *
+ *   1. Grid resolution is now adaptive, not purely a function of the combined bounding box (see
+ *      computeAdaptiveCellSizeMm() below) -- it also tightens for a small shape combined with a
+ *      much larger one (so a tiny cutout/detail isn't starved of resolution by an unrelated big
+ *      shape sharing the operation) and, when the caller supplies the destination layer's
+ *      stoneSizeMm+gapMm (`options.targetSpacingMm`), tightens further so boundary error stays a
+ *      small, bounded fraction of the actual stone pitch regardless of document size -- see
+ *      "Precision Requirements" and "Adaptive Precision" in the RS-1012A spec.
+ *   2. `combineShapeSources()`/`combineManyShapeSources()` now throw a `BooleanPrecisionError`
+ *      instead of silently coarsening when the accuracy-driven resolution would need more grid
+ *      cells than a fixed performance budget allows (MAX_GRID_CELLS_BUDGET) -- this can only
+ *      happen when the two shapes differ enormously in scale (e.g. a sub-millimeter detail
+ *      combined with a multi-meter shape); ordinary rhinestone-design-scale operations never hit
+ *      it (see the spec's "Fail Safe" section for the measured margin).
  */
 
 import { isPointInsidePolygons } from './StoneSampler.js';
@@ -42,15 +60,85 @@ export const BOOLEAN_OPERATIONS = new Set(['union', 'subtract', 'intersect', 'xo
 // Trace pipeline (src/image/**): a field value at/above this level counts as foreground.
 const FIELD_ON_THRESHOLD = 128;
 
-// Grid resolution. cellSizeMm is derived from the combined bounding box's longer dimension so a
-// small shape (a few mm) and a large one (a whole canvas) both get a proportionate, bounded number
-// of grid cells -- clamped so neither a tiny shape (which would otherwise get a sub-micron cell) nor
-// a huge one (which would otherwise allocate an enormous grid) can make this pathological. At the
-// clamp bounds this is roughly 0.08-1mm per cell -- far finer than any stoneSizeMm+gapMm spacing
-// used elsewhere in this app (stones are >=~1mm), so it never becomes the limiting precision.
+// Grid resolution. cellSizeMm starts from the combined bounding box's longer dimension so a small
+// shape (a few mm) and a large one (a whole canvas) both get a proportionate number of grid cells,
+// then computeAdaptiveCellSizeMm() below tightens it further for a small feature or a fine stone
+// pitch (RS-1012A) -- clamped so neither a tiny shape/spacing (which would otherwise get a
+// sub-micron cell) nor a huge simple shape (which would otherwise allocate an enormous grid for no
+// accuracy benefit -- "avoid unnecessary computation on simple designs") can make this pathological.
 const TARGET_GRID_CELLS = 220;
 const MIN_CELL_SIZE_MM = 0.08;
 const MAX_CELL_SIZE_MM = 1;
+
+// RS-1012A: a shape's own bounding-box diagonal must span at least this many grid cells, even when
+// combined with a much larger shape in the same operation -- otherwise a small cutout/detail's
+// resolution would be dictated entirely by an unrelated, much bigger, shape sharing the operation.
+// Measured against production-scale examples: without this, a 50mm-square-minus-circle-cutout
+// operation reliably preserved cutout radii down to only ~0.25mm at the square's own (unrelated,
+// coarser) grid resolution; this brings small-feature preservation in line with what a shape's own
+// scale would otherwise resolve if it were being combined with something its own size.
+const MIN_CELLS_ACROSS_SMALLER_SOURCE = 60;
+
+// RS-1012A: when the caller knows the destination layer's stone pitch (stoneSizeMm + gapMm), keep
+// the grid at least this many cells finer than that pitch, so boundary error stays a small,
+// bounded fraction of stone placement regardless of document size -- directly answers "resolution
+// should scale with stone size/gap" from the milestone brief. Optional: callers that don't have a
+// concrete destination pitch yet (e.g. this module's own unit tests) simply don't pass it.
+const SPACING_RESOLUTION_DIVISOR = 6;
+
+// RS-1012A fail-safe: the hard ceiling on total grid cells (cols*rows) this engine will ever
+// allocate. Sized so that two shapes spanning up to ~2100mm combined (comfortably covering a large
+// production sheet -- most rhinestone designs are garment/product scale, well under a meter) still
+// succeed even at the coarsest allowed resolution (MAX_CELL_SIZE_MM, i.e. no small-feature/stone-
+// pitch constraint pulling it finer): (2100/MAX_CELL_SIZE_MM + 2)^2 ~= 4.4M. Measured
+// production-scale scenarios (a 210x90mm mug-wrap canvas, an 800x600mm production-sheet-scale
+// operation, a 1000x800mm large-document-scale operation, a 60mm chain of overlapping circles) all
+// complete in well under this budget with room to spare, in well under a second (see
+// tools/measure-boolean-precision.mjs, sections 9/11). Only a combination whose two shapes differ
+// enormously in scale (e.g. a sub-mm detail unioned with a multi-meter shape) can exceed it -- see
+// computeAdaptiveCellSizeMm().
+const MAX_GRID_CELLS_BUDGET = 4_500_000;
+
+export class BooleanPrecisionError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'BooleanPrecisionError';
+  }
+}
+
+// Computes the grid cell size for one combineShapeSources() call. See the module-level RS-1012A
+// comment above for the rationale; throws BooleanPrecisionError (rather than silently coarsening)
+// when the accuracy-driven size would need an unreasonable grid.
+function computeAdaptiveCellSizeMm({ subjectBox, clipBox, combinedSpanMm, targetSpacingMm }) {
+  let idealCellSizeMm = combinedSpanMm / TARGET_GRID_CELLS;
+
+  const diagonalsMm = [subjectBox, clipBox]
+    .filter(Boolean)
+    .map((box) => Math.hypot(box.maxXmm - box.minXmm, box.maxYmm - box.minYmm))
+    .filter((diagonal) => diagonal > 1e-9);
+  if (diagonalsMm.length > 0) {
+    idealCellSizeMm = Math.min(idealCellSizeMm, Math.min(...diagonalsMm) / MIN_CELLS_ACROSS_SMALLER_SOURCE);
+  }
+
+  if (typeof targetSpacingMm === 'number' && Number.isFinite(targetSpacingMm) && targetSpacingMm > 0) {
+    idealCellSizeMm = Math.min(idealCellSizeMm, targetSpacingMm / SPACING_RESOLUTION_DIVISOR);
+  }
+
+  idealCellSizeMm = Math.max(idealCellSizeMm, MIN_CELL_SIZE_MM);
+  const cellSizeMm = Math.min(idealCellSizeMm, MAX_CELL_SIZE_MM);
+
+  const totalCells = (combinedSpanMm / cellSizeMm + 2) ** 2; // +2 mirrors the one-cell padding on every side
+  if (totalCells > MAX_GRID_CELLS_BUDGET) {
+    throw new BooleanPrecisionError(
+      'This combination cannot be computed at a safe, well-defined precision: the shapes differ too ' +
+      'much in size or detail for the requested area (a very small detail combined with a very large ' +
+      'shape). Try scaling the shapes closer in size, simplifying the smaller one, or splitting the ' +
+      'operation into smaller parts.'
+    );
+  }
+
+  return cellSizeMm;
+}
 
 function sourceBoundingBox(source) {
   if (!source) return null;
@@ -104,14 +192,22 @@ function combineValues(subjectValue, clipValue, operation) {
  * @param {{kind:'polygons',polygons:{xMm:number,yMm:number}[][]}|{kind:'field',field:object,xMm:number,yMm:number,widthMm:number,heightMm:number}} subjectSource
  * @param {*} clipSource Same shape as subjectSource.
  * @param {'union'|'subtract'|'intersect'|'xor'} operation
+ * @param {object} [options]
+ * @param {number} [options.targetSpacingMm] The destination layer's stoneSizeMm+gapMm, if known --
+ *   RS-1012A: used to tighten grid resolution so boundary error stays a bounded fraction of the
+ *   actual stone pitch. Optional; omitting it falls back to bounding-box/feature-size sizing alone.
  * @returns {{contours:{xMm:number,yMm:number}[][], boundingBox:{minXmm:number,minYmm:number,maxXmm:number,maxYmm:number}|null}}
+ * @throws {BooleanPrecisionError} If the accuracy-driven resolution would need an unreasonable grid
+ *   (the two shapes differ enormously in scale) -- see computeAdaptiveCellSizeMm().
  */
-export function combineShapeSources(subjectSource, clipSource, operation) {
+export function combineShapeSources(subjectSource, clipSource, operation, options = {}) {
   if (!BOOLEAN_OPERATIONS.has(operation)) {
     throw new TypeError(`Unsupported boolean operation: ${operation}. Expected one of: ${[...BOOLEAN_OPERATIONS].join(', ')}`);
   }
 
-  const boxes = [sourceBoundingBox(subjectSource), sourceBoundingBox(clipSource)].filter(Boolean);
+  const subjectBox = sourceBoundingBox(subjectSource);
+  const clipBox = sourceBoundingBox(clipSource);
+  const boxes = [subjectBox, clipBox].filter(Boolean);
   if (boxes.length === 0) {
     return { contours: [], boundingBox: null };
   }
@@ -122,7 +218,12 @@ export function combineShapeSources(subjectSource, clipSource, operation) {
   const maxYmm = Math.max(...boxes.map((box) => box.maxYmm));
 
   const spanMm = Math.max(maxXmm - minXmm, maxYmm - minYmm, 1e-6);
-  const cellSizeMm = Math.min(MAX_CELL_SIZE_MM, Math.max(MIN_CELL_SIZE_MM, spanMm / TARGET_GRID_CELLS));
+  const cellSizeMm = computeAdaptiveCellSizeMm({
+    subjectBox,
+    clipBox,
+    combinedSpanMm: spanMm,
+    targetSpacingMm: options.targetSpacingMm
+  });
 
   // Pad by one cell on every side so a shape flush against the raw bounding box still closes into a
   // proper loop (the grid border always samples 0/outside).
@@ -146,9 +247,10 @@ export function combineShapeSources(subjectSource, clipSource, operation) {
  *
  * @param {Array} sources 2 or more shape sources (see combineShapeSources()).
  * @param {'union'|'subtract'|'intersect'|'xor'} operation
+ * @param {object} [options] Same as combineShapeSources()'s options, applied to every fold step.
  * @returns {{contours:{xMm:number,yMm:number}[][], boundingBox:object|null}}
  */
-export function combineManyShapeSources(sources, operation) {
+export function combineManyShapeSources(sources, operation, options = {}) {
   if (!Array.isArray(sources) || sources.length < 2) {
     throw new RangeError('combineManyShapeSources requires at least two shape sources.');
   }
@@ -156,7 +258,7 @@ export function combineManyShapeSources(sources, operation) {
   let subject = sources[0];
   let result = null;
   for (let i = 1; i < sources.length; i++) {
-    result = combineShapeSources(subject, sources[i], operation);
+    result = combineShapeSources(subject, sources[i], operation, options);
     subject = { kind: 'polygons', polygons: result.contours };
   }
   return result;
@@ -295,31 +397,59 @@ function stitchSegmentsIntoContours(segments, cellSizeMm) {
   return contours;
 }
 
-// Single-pass perpendicular-distance simplification: drops a vertex when it sits within epsilonMm
-// of the straight line between its neighbors. Not full Douglas-Peucker (no recursive worst-point
-// search), but sufficient to collapse the many collinear midpoints marching squares emits along a
-// straight edge (e.g. a rectangle side) back down to just its corners.
+function perpendicularDistanceMm(point, lineStart, lineEnd) {
+  const dx = lineEnd.xMm - lineStart.xMm, dy = lineEnd.yMm - lineStart.yMm;
+  const lenMm = Math.hypot(dx, dy);
+  if (lenMm < 1e-9) return Math.hypot(point.xMm - lineStart.xMm, point.yMm - lineStart.yMm);
+  const cross = (point.xMm - lineStart.xMm) * dy - (point.yMm - lineStart.yMm) * dx;
+  return Math.abs(cross) / lenMm;
+}
+
+// RS-1012A: anchor-based greedy simplification (an "Opheim"-style forward scan), replacing an
+// earlier single-pass version that measured each point only against its ORIGINAL immediate
+// neighbors. That approach cascaded on smooth curves: at fine grid resolution, any three
+// consecutive points on a circle's boundary are locally near-collinear (the sagitta over a short
+// arc is far smaller than the simplification tolerance), so nearly every point looked individually
+// safe to drop even though the arc as a whole curves substantially -- on at least one measured
+// case (two concentric circles, radius 10mm/8mm, ~0.09mm grid cells) this collapsed a 65-point
+// flattened circle boundary down to a degenerate, non-simple 3-point shape covering only half the
+// circle (see docs/specifications/RS-1012A-ProductionPrecisionValidation.md, "Audit Findings").
+//
+// This version keeps a fixed anchor point and only advances it once a candidate point would place
+// some already-passed-over point more than epsilonMm from the straight line (anchor -> candidate) --
+// i.e. every dropped point's deviation is always measured against the line it will actually be
+// approximated by once simplified, not against its own original neighbors, so error cannot
+// compound silently across a long smooth run the way the neighbor-only version did.
 function simplifyContour(points, epsilonMm) {
   const deduped = [];
   for (const point of points) {
     const prev = deduped[deduped.length - 1];
     if (!prev || Math.hypot(point.xMm - prev.xMm, point.yMm - prev.yMm) > 1e-9) deduped.push(point);
   }
-  if (deduped.length < 3) return deduped;
+  if (deduped.length < 4) return deduped;
 
   const n = deduped.length;
-  const result = [];
-  for (let i = 0; i < n; i++) {
-    const prev = deduped[(i - 1 + n) % n];
-    const curr = deduped[i];
-    const next = deduped[(i + 1) % n];
-    const cross = (curr.xMm - prev.xMm) * (next.yMm - prev.yMm) - (curr.yMm - prev.yMm) * (next.xMm - prev.xMm);
-    const segLenMm = Math.hypot(next.xMm - prev.xMm, next.yMm - prev.yMm);
-    const distanceMm = segLenMm > 1e-9 ? Math.abs(cross) / segLenMm : 0;
-    if (distanceMm > epsilonMm) result.push(curr);
-  }
+  const kept = [deduped[0]];
+  let anchorIndex = 0;
 
-  return result.length >= 3 ? result : deduped;
+  for (let i = 1; i < n; i++) {
+    const anchor = deduped[anchorIndex];
+    const candidate = deduped[i];
+    let withinTolerance = true;
+    for (let k = anchorIndex + 1; k < i; k++) {
+      if (perpendicularDistanceMm(deduped[k], anchor, candidate) > epsilonMm) {
+        withinTolerance = false;
+        break;
+      }
+    }
+    if (!withinTolerance) {
+      kept.push(deduped[i - 1]);
+      anchorIndex = i - 1;
+    }
+  }
+  kept.push(deduped[n - 1]);
+
+  return kept.length >= 3 ? kept : deduped;
 }
 
 function contourAreaAbs(points) {
