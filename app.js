@@ -70,17 +70,20 @@
 // shows the selected color's previewColor. No renderer/exporter file changed -- every consumer
 // already resolved colors generically through STONE_COLORS[stone.color]. RS-1008 added Image
 // Trace: an 'image' layer type reusing the same generic x/y/w/h shape-editing UI/drag/resize code
-// rectangle/svg already use. src/image/** (a new peer pipeline module, parallel to src/svg/**) does
-// the actual grayscale/threshold/invert/blur/resize/grid-sample work and constructs the real
-// Stone/StoneLayout classes directly -- src/geometry/GeometryEngine.js/StoneLayout.js are
-// deliberately untouched (this milestone's own explicit constraint); see
-// docs/specifications/RS-1008-ImageTrace.md, "Architecture Requirements". app.js never decodes or
+// rectangle/svg already use. src/image/** (a new peer pipeline module, parallel to src/svg/**)
+// prepares image-derived input only (grayscale/threshold/invert/blur/resize -> a neutral density
+// field); the permanent GeometryEngine.generateImageLayout() (src/geometry/GeometryEngine.js) is
+// the only place that turns that field into Stone/StoneLayout, exactly like generateSvgLayout()
+// is the only caller that turns parseSvgDocument()'s output into stones. (RS-1008A architecture
+// correction: the original RS-1008 design had src/image/** construct Stone/StoneLayout directly, a
+// second stone-generating implementation -- see
+// docs/specifications/RS-1008A-ImageTraceArchitectureCorrection.md.) app.js never decodes or
 // processes image pixels itself: decodeImageFileToBuffer()/readFileAsDataUrl() (browser-only) run
 // once at import time (from the new "Import Image..." preview-before-commit panel), and
-// traceImageBufferToStoneLayout() runs on every regeneration from the cached decoded buffer
-// (imageBufferCache, keyed by the layer's persisted imageSrc data: URL) -- the pure pipeline
-// stages re-run on every threshold/invert/blur/resize edit, but the (comparatively expensive)
-// browser image decode only ever runs once per distinct imageSrc value.
+// generateImageStonesLive() below calls the permanent engine on every regeneration from the cached
+// decoded buffer (imageBufferCache, keyed by the layer's persisted imageSrc data: URL) -- the pure
+// pipeline stages re-run on every threshold/invert/blur/resize edit, but the (comparatively
+// expensive) browser image decode only ever runs once per distinct imageSrc value.
 import './src/browser/BrowserDependencyProbe.js';
 import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
@@ -93,7 +96,7 @@ import { computeProductionSheetLayout, productionSheetToSvg, productionSheetToPd
 import { parseSvgDocument } from './src/svg/index.js';
 import { HistoryManager } from './src/history/index.js';
 import { getObjectTemplate, getSafeAreaRectMm } from './src/products/index.js';
-import { traceImageBufferToStoneLayout, toGrayscale, applyThreshold, invertMask, blurMask, resizeField, maskFieldToRgba, decodeImageFileToBuffer, decodeDataUrlToBuffer, readFileAsDataUrl, isSupportedImageFile } from './src/image/index.js';
+import { prepareImageField, maskFieldToRgba, decodeImageFileToBuffer, decodeDataUrlToBuffer, readFileAsDataUrl, isSupportedImageFile } from './src/image/index.js';
 'use strict';
 const FONT5={
 ' ':['00000','00000','00000','00000','00000','00000','00000'],
@@ -166,12 +169,13 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // RS-1001: svg layers reuse the same x/y/w/h placement box rectangle layers use; src/svg/**
  // (not app.js) does the actual SVG parsing, inside generateSvgLayout().
  async generateSvgStonesLive(layer){if(!this.permanentEngine)return[];const params={svgSource:layer.svgSource,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:layer.mode==='fill'?'fill':'outline',color:layer.color};const result=this.permanentEngine.generateSvgLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
- // RS-1008: image layers do not go through the permanent engine at all -- src/image/** is a peer
- // pipeline (see the top-of-file milestone comment and docs/specifications/RS-1008-ImageTrace.md)
- // that constructs the real Stone/StoneLayout classes directly. imageBufferCache means the
- // (comparatively expensive) browser image decode only re-runs the first time a given imageSrc is
- // seen; every subsequent call here only re-runs the pure/fast pixel-processing pipeline.
- async generateImageStonesLive(layer){if(!layer.imageSrc)return[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}const params={layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx};const result=traceImageBufferToStoneLayout(buffer,params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
+ // RS-1008A: image layers go through the permanent engine's generateImageLayout(), mirroring
+ // generateSvgStonesLive()/generateShapeStonesLive() above -- src/image/** only prepares the
+ // decoded pixel buffer (decode/cache happens here since that's the one async, DOM-only step;
+ // generateImageLayout() itself is synchronous, like generateShapeLayout()). imageBufferCache means
+ // the (comparatively expensive) browser image decode only re-runs the first time a given imageSrc
+ // is seen; every subsequent call here only re-runs the permanent engine's pure/fast pipeline.
+ async generateImageStonesLive(layer){if(!this.permanentEngine||!layer.imageSrc)return[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx};const result=this.permanentEngine.generateImageLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
  // Legacy bitmap text path below (generateText/sampleGlyphFill/sampleGlyphStroke) and the legacy
  // generateCircle/generateRect shape path are kept but no longer called now that
  // generateTextStonesLive/generateShapeStonesLive use the permanent engine. Retained per
@@ -380,24 +384,22 @@ function currentImagePreviewParams(){
     maxHeightPx:Math.max(8,parseIntOr(el('imgPreviewMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX))
   }
 }
-// Recomputes the live density preview canvas and an approximate stone count. Only the pure
-// pipeline stages run here (never a re-decode), so this stays fast enough to call on every slider
-// 'input' event even at the full documented working resolution.
+// RS-1008A: recomputes the live density preview canvas (prepareImageField() -- src/image/**'s
+// pure field-preparation only, never a re-decode) and an approximate stone count (via the real
+// permanent engine's generateImageLayout(), the exact code path a real commit uses, with a
+// throwaway 'preview' layerId). This stays fast enough to call on every slider 'input' event even
+// at the full documented working resolution.
 function updateImagePreview(){
   if(!pendingImageImport)return;
   const{threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx}=currentImagePreviewParams();
-  const gray=toGrayscale(pendingImageImport.buffer);
-  let mask=applyThreshold(gray,threshold);
-  if(invert)mask=invertMask(mask);
-  const density=blurMask(mask,blurRadiusPx);
-  const resized=resizeField(density,maxWidthPx,maxHeightPx);
+  const field=prepareImageField(pendingImageImport.buffer,{threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx});
   const canvas=el('imageImportPreviewCanvas');
-  canvas.width=resized.widthPx;canvas.height=resized.heightPx;
-  canvas.getContext('2d').putImageData(new ImageData(maskFieldToRgba(resized),resized.widthPx,resized.heightPx),0,0);
+  canvas.width=field.widthPx;canvas.height=field.heightPx;
+  canvas.getContext('2d').putImageData(new ImageData(maskFieldToRgba(field),field.widthPx,field.heightPx),0,0);
   const base=selectedLayer();
   const{x,y,w,h}=pendingImageImport.placement;
   try{
-    const result=traceImageBufferToStoneLayout(pendingImageImport.buffer,{layerId:'preview',xMm:x,yMm:y,widthMm:w,heightMm:h,stoneSizeMm:base.stoneSize||2,gapMm:base.gap||.3,color:base.color||'gold',threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx});
+    const result=permanentEngine.generateImageLayout({imageBuffer:pendingImageImport.buffer,layerId:'preview',xMm:x,yMm:y,widthMm:w,heightMm:h,stoneSizeMm:base.stoneSize||2,gapMm:base.gap||.3,color:base.color||'gold',threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx});
     el('imageImportStoneCount').textContent=`${result.count} stones (approx.)`;
   }catch(error){console.error('Image preview trace failed',error);el('imageImportStoneCount').textContent='—'}
 }

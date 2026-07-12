@@ -6,7 +6,7 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-RS-1008 — Image Trace
+RS-1008A — Image Trace Architecture Correction
 
 ---
 
@@ -18,7 +18,9 @@ IMPLEMENTED
 
 # Branch
 
-feature/rs-1008-image-trace
+feature/rs-1008-image-trace (continuation of the still-unmerged RS-1008 branch — this correction
+lands as a second commit on the same branch, since RS-1008 had not yet merged to `develop` when
+this correction was requested; see "Warnings" for why a new branch was not used)
 
 ---
 
@@ -35,285 +37,247 @@ git log -1 --oneline
 
 # Summary
 
-Added the ability to import a bitmap image (PNG/JPG/JPEG/WebP) and automatically trace it into an
-editable rhinestone layer, without modifying `GeometryEngine`, `StoneLayout`, or any exporter — the
-milestone brief's own explicit constraint.
+Corrected a real architectural regression in RS-1008 (Image Trace): `src/image/**` originally
+constructed `Stone`/`StoneLayout` directly instead of going through the permanent `GeometryEngine`
+— a second, independent stone-generating implementation. This milestone moves stone construction
+into the permanent engine, exactly like every other layer type, with zero visible behavior change.
 
-**Pipeline (`src/image/**`, new).** `ImageBuffer.js`/`Grayscale.js`/`Threshold.js`/`Invert.js`/
-`Blur.js`/`Resize.js`/`ImageStoneSampler.js` are small, pure, DOM-free functions operating on plain
-pixel buffers (`{widthPx,heightPx,data}`), each independently unit-tested with synthetic pixel data.
-They implement the documented pipeline in order: grayscale (alpha composited onto white) →
-threshold (0-255, darker-than-threshold = foreground) → optional invert → optional blur (a
-linear-time separable box blur, not the naive O(radius²) form) → optional resize (a summed-area-
-table box-average downscale, never upscales) → a fixed-spacing grid sample over the layer's mm
-placement box. `ImageTracePipeline.js`'s `traceImageBufferToStoneLayout()` orchestrates all of the
-above and constructs the real `Stone`/`StoneLayout` classes, imported unmodified from
-`src/geometry/index.js` — mirroring `generateSvgLayout()`'s "normalize params → sample points →
-`Stone[]` → `StoneLayout`" shape without touching `src/geometry/GeometryEngine.js` (forbidden by
-this milestone). `ImageDecoder.js` isolates the one unavoidable browser-only step
-(`createImageBitmap`/`<canvas>` decode, `FileReader` for the persisted data URL), matching
-`src/browser/OpenTypeBrowserAdapter.js`'s existing "isolate the DOM-only glue" precedent; its
-`isSupportedImageFile()` MIME/extension check is itself pure and Node-tested.
+**What moved where.**
+* `src/geometry/GeometryEngine.js` gained `generateImageLayout(params)`: takes an already-decoded
+  `imageBuffer` plus placement/stone/bitmap-processing params, calls `prepareImageField()`
+  internally (imported from `../image/index.js`, mirroring exactly how `generateSvgLayout()`
+  already imports and calls `parseSvgDocument()` from `../svg/index.js`), samples the resulting
+  field, and constructs `Stone`/`StoneLayout` — the same "normalize params → sample points →
+  `Stone[]` → `StoneLayout`" shape every other `generate*Layout()` method already uses.
+* `src/geometry/StoneSampler.js` gained `sampleFieldFillPoints(field, placementBox, spacingMm)`:
+  the raster analogue of the existing `sampleFillPoints()` (grid-walk-and-keep-if-on-field instead
+  of grid-walk-and-keep-if-inside-polygon). Exported from `src/geometry/index.js`.
+* `src/image/**` is now pure field-preparation only. `ImageTracePipeline.js` and
+  `ImageStoneSampler.js` are **deleted** (not deprecated, not left alongside the new code); a new
+  `ImageFieldPipeline.js` exports `prepareImageField()` — the unchanged grayscale → threshold →
+  invert → blur → resize logic, now stopping at a neutral field instead of continuing into stone
+  construction. `src/image/**` has zero dependency on `src/geometry/**` and never constructs a
+  `Stone`/`StoneLayout` — verified by a dedicated regression test, not just claimed.
+* `app.js`'s `generateImageStonesLive()` now calls `this.permanentEngine.generateImageLayout(params)`,
+  matching `generateSvgStonesLive()`/`generateShapeStonesLive()`'s exact shape (the only one of the
+  four `generate*StonesLive()` methods that did not already do this). The preview-before-commit
+  panel's live density-mask canvas now calls `prepareImageField()` once (replacing a manually
+  chained `toGrayscale`→`applyThreshold`→`invertMask`→`blurMask`→`resizeField` sequence that
+  duplicated pipeline logic), and its approximate-stone-count readout now calls
+  `permanentEngine.generateImageLayout()` directly — the exact same code path a real commit uses,
+  not a separate implementation.
 
-**Why this is architecturally an exception, documented as one.** `docs/ARCHITECTURE.md`'s Core
-Principle is "the Geometry Engine is the only component allowed to generate stone positions." This
-milestone's own brief explicitly forbids editing `GeometryEngine.js`/`StoneLayout.js`/
-`StoneSampler.js`, so `src/image/**` is a second, independent module that also constructs
-`Stone`/`StoneLayout` directly — a real, deliberate exception, not an oversight. This is recorded
-plainly in `docs/ARCHITECTURE.md` (new paragraph under "Geometry Engine") and in
-`docs/specifications/RS-1008-ImageTrace.md` ("Architecture Requirements"), including the
-recommended follow-up (converge `src/image/**`'s sampler into `src/geometry/**` once the
-forbidden-file constraint is lifted by a future milestone).
+**Proof, not just claims.** A new `tools/test-image-trace-regression.mjs` proves three things the
+milestone brief asked for directly:
+1. **Byte-identical output.** Before touching any code, 8 representative test cases were run
+   through the pre-correction `traceImageBufferToStoneLayout()` and their exact `StoneLayout.toJSON()`
+   output committed as `tools/image-trace-regression-baselines.json`
+   (`tools/generate-image-trace-baselines.mjs`, a one-time capture script mirroring
+   `tools/generate-example-baselines.mjs`'s existing precedent, not run by `npm test`). The
+   regression test replays the identical inputs (shared via `tools/lib/imageTraceFixtures.mjs`, so
+   generator and test can never drift apart) through the corrected
+   `GeometryEngine.generateImageLayout()` and asserts `deepEqual` against that baseline for every
+   case — verified to pass before writing this report.
+2. **Uses the permanent pipeline.** Structural assertions confirm `app.js` calls
+   `this.permanentEngine.generateImageLayout(params)`, `GeometryEngine.js` defines the method and
+   imports `prepareImageField`/calls `sampleFieldFillPoints`, and the barrel exports it.
+3. **The old implementation was actually removed.** Assertions confirm `src/image/index.js` no
+   longer exports `traceImageBufferToStoneLayout`/`sampleImageFillPoints`, the two files no longer
+   exist on disk, and no file under `src/image/**` imports from `../geometry/` or constructs
+   `new Stone(...)`/`new StoneLayout(...)` — proving this isn't a "leave the old one around too"
+   half-fix.
 
-**`app.js`/`index.html`.** A new `image` layer type reuses the exact generic x/y/w/h placement-box
-editing (`getLayerBBox`, drag-move, drag-resize, `duplicateLayer`, `layerLabel`,
-`writeSelectedControlsToLayer`, `syncSelectedControlsFromLayer`) `rectangle`/`svg` layers already
-share — no new editing machinery. A new "Import Image..." control opens a "preview before commit"
-modal panel (`#imageImportPanel`): live density-mask preview canvas, an approximate stone count,
-and Threshold/Invert/Blur radius/Maximum width/Maximum height controls, recomputed synchronously on
-every control change (fast enough at the documented 2000×2000px working size — see Performance
-below). "Import" commits the layer at the previewed settings; "Cancel" discards it, mutating
-nothing. After commit, the same five controls remain live-editable in a post-commit
-`#imageControls` sidebar section, history-tracked like every other continuous control.
-`imageBufferCache` (a `Map` keyed by the layer's persisted `imageSrc` data: URL) means the
-(comparatively expensive) browser image decode only runs once per distinct source image — every
-subsequent threshold/invert/blur/resize edit, undo/redo, or duplicate only re-runs the pure, fast
-pixel-processing stages.
-
-**"Stone spacing" and "Maximum width/height".** Per the specification's documented design decision:
-"Stone spacing" reuses the existing shared Stone size + Gap controls (`spacingMm =
-stoneSizeMm + gapMm`, the same derivation every other layer type already uses) rather than adding a
-redundant field. "Maximum width"/"Maximum height" are read as pixel caps on the bitmap pipeline's
-"Optional resize" stage (bounding the working resolution for performance), independent of the
-layer's mm placement size, which is already covered by the generic, always-present x/y/w/h editing.
-
-**Persistence.** `layer.imageSrc` (a `data:` URL of the original source image) makes an image layer
-fully self-contained, the same shape `svgSource` already established for SVG layers — Project JSON
-export/import round-trips it with zero new exporter code, and undo/redo (already whole-project JSON
-snapshots) carries it for free. `validateProject()` gained an `image` case (non-empty `imageSrc`,
-numeric x/y/w/h, `threshold` in [0,255], non-negative `blurRadiusPx`, positive
-`maxWidthPx`/`maxHeightPx`).
-
-**Bug found and fixed during browser verification.** `ImageDecoder.js`'s original
-`decodeImageFileToBuffer()` called `bitmap.close()` before reading `bitmap.width`/`bitmap.height` on
-the next line — per spec, closing an `ImageBitmap` zeroes those properties, so every real import
-threw `TypeError: widthPx must be a positive integer.` immediately. This was invisible to the
-Node-only pipeline tests (they never call the decoder) and only surfaced once real image bytes were
-decoded in an actual browser — exactly the scenario `AI_ENGINEER.md`'s "a passing automated suite
-does not replace user-visible verification" describes. Fixed by capturing `widthPx`/`heightPx` into
-local variables before the `close()` call. Re-verified end to end afterward (see Browser
-Verification below).
+**Guard-test maintenance.** Nine pre-existing suites hard-coded a forbidden-file assumption that
+`src/geometry/GeometryEngine.js` (and, in six cases, also `StoneLayout.js`) would never change again
+— a reasonable assumption at the time each was written, now legitimately broken by this milestone.
+Each was updated with a narrow, documented carve-out (the established "narrow, surgical" pattern
+this repo has used for every prior milestone that extended a previously-forbidden file, e.g.
+RS-1005's `src/export/` carve-outs, RS-1007's `src/renderer/StoneColors.js` carve-outs) —
+`StoneLayout.js`/`Stone.js`/`ContourGeometry.js`/`ArcProjection.js` remain forbidden everywhere;
+only `GeometryEngine.js`/`StoneSampler.js`/`index.js`/`README.md` are newly allowed.
 
 ---
 
 # Files Changed
 
 **New:**
-* `src/image/` — `ImageBuffer.js`, `Grayscale.js`, `Threshold.js`, `Invert.js`, `Blur.js`,
-  `Resize.js`, `ImageStoneSampler.js`, `ImageTracePipeline.js`, `ImagePreviewRender.js`,
-  `ImageDecoder.js`, `index.js`, `README.md`.
-* `tools/test-image-pipeline.mjs` — pure-stage unit tests (9 assertions).
-* `tools/test-image-trace-pipeline.mjs` — full-pipeline integration tests (10 assertions).
-* `tools/test-image-integration.mjs` — structural app.js/index.html wiring tests (9 assertions).
-* `docs/specifications/RS-1008-ImageTrace.md`.
+* `src/image/ImageFieldPipeline.js` — replaces `ImageTracePipeline.js`.
+* `tools/lib/imageTraceFixtures.mjs` — shared synthetic-buffer test cases.
+* `tools/generate-image-trace-baselines.mjs` — one-time baseline capture script (not run by `npm test`).
+* `tools/image-trace-regression-baselines.json` — committed baseline fixture (captured from the
+  pre-correction implementation before any refactor code was written).
+* `tools/test-image-trace-regression.mjs` — the RS-1008A proof suite (8 assertions).
+* `docs/specifications/RS-1008A-ImageTraceArchitectureCorrection.md`.
 * `TASK_RESULT.md` (this file).
 
-**Modified:**
-* `app.js` — `image` layer type throughout (dispatch in `generate()`, new
-  `generateImageStonesLive()`, `SUPPORTED_LAYER_TYPES`, `validateProject()`, `getLayerBBox()`,
-  drag-move/drag-resize, `duplicateLayer()`, `layerLabel()`, `syncSelectedControlsFromLayer()`,
-  `writeSelectedControlsToLayer()`, `HISTORY_TRACKED_CONTROL_IDS`), the new Import Image
-  preview-panel logic (`pendingImageImport`, `computeDefaultImagePlacement()`,
-  `currentImagePreviewParams()`, `updateImagePreview()`, event wiring), a new `parseIntOr()` helper
-  (fixes a real footgun: the file's existing `parseFloat(...)||fallback` pattern silently discards
-  an explicit `0`, which matters for `imgThreshold`'s valid `0` value), `imageBufferCache`, two new
-  named constants (`DEFAULT_IMAGE_THRESHOLD`, `DEFAULT_IMAGE_MAX_DIMENSION_PX`), a milestone header
-  comment.
-* `index.html` — "Import Image..." button + hidden file input, `#imageImportPanel` (modal overlay,
-  new `.modalOverlay`/`.modalPanel`/`.modalStoneCount` CSS), `#imageControls` sidebar section.
-* `package.json` — registers the three new test files in the `test` script.
-* `docs/ARCHITECTURE.md` — new "As of RS-1008" paragraphs under "Geometry Engine" (documenting the
-  architectural exception) and "Layers", plus a new `src/image/**` row in the "Layer map" table.
-* `tools/test-app-module-migration.mjs`, `tools/test-shape-geometry-integration.mjs` — added
-  `src/image/index.js` to each file's allowed-import-pattern list (mirroring the `src/svg/index.js`
-  entry RS-1001 already added to both).
-* `tools/test-svg-integration.mjs` — test 7's hardcoded `getLayerBBox`/drag regexes updated to
-  match the now-three-way `l.type==='rectangle'||l.type==='svg'||l.type==='image'` condition (the
-  `svg` case itself is unchanged; documented inline, matching this repo's established guard-test-
-  maintenance precedent).
+**Deleted:**
+* `src/image/ImageTracePipeline.js`, `src/image/ImageStoneSampler.js`.
+* `tools/test-image-trace-pipeline.mjs` (superseded by a new `generateImageLayout()` block in
+  `tools/test-geometry-engine.mjs`, mirroring how RS-1001's SVG coverage lives there).
 
-**Untouched (verified by `tools/test-image-integration.mjs`'s own forbidden-file guard):**
-`src/geometry/**`, `src/export/**`, `src/text/**`, `src/fonts/**`, `src/core/**`, `src/browser/**`,
-`src/renderer/**`, `src/preview3d/**`, `src/svg/**`, `src/history/**`, `src/products/**`,
-`assets/**`, `examples/**`, `style.css`, `README.md`, `LICENSE`, `CONTRIBUTING.md`.
+**Modified:**
+* `src/geometry/GeometryEngine.js` — new `generateImageLayout()` method, `normalizeImageParams()`,
+  new import of `prepareImageField`/`sampleFieldFillPoints`.
+* `src/geometry/StoneSampler.js` — new `sampleFieldFillPoints()`.
+* `src/geometry/index.js` — exports `sampleFieldFillPoints`.
+* `src/geometry/README.md` — new "Image Trace Geometry Engine (RS-1008A)" section.
+* `src/image/index.js` — exports `prepareImageField` instead of `traceImageBufferToStoneLayout`/
+  `sampleImageFillPoints`.
+* `src/image/README.md` — rewritten to describe the corrected pure-field-preparation design.
+* `app.js` — `generateImageStonesLive()` now calls the permanent engine; the preview panel's
+  `updateImagePreview()` now calls `prepareImageField()` + `permanentEngine.generateImageLayout()`
+  instead of the old manual chain + `traceImageBufferToStoneLayout()`; import line updated; a new
+  milestone header comment.
+* `tools/test-image-pipeline.mjs` — `sampleImageFillPoints` test replaced with a `prepareImageField()`
+  orchestration/validation test; other pure-stage tests unchanged (those functions did not move).
+* `tools/test-geometry-engine.mjs` — new `generateImageLayout()` coverage block (tests 44-53,
+  mirroring the existing `generateSvgLayout()` block), new `createImageBuffer` import.
+* `tools/test-image-integration.mjs` — tests 1/2 updated for the new call shape; test 9's
+  forbidden-file list narrowed (no longer forbids `src/geometry/`).
+* `tools/test-ui-discoverability.mjs`, `tools/test-object-template-integration.mjs`,
+  `tools/test-default-text-layer-editing.mjs`, `tools/test-production-sheet-exporter.mjs`,
+  `tools/test-preview3d-integration.mjs`, `tools/test-crystal-color-catalog.mjs`,
+  `tools/test-crystal-color-integration.mjs` — each narrowed to keep forbidding `StoneLayout.js`
+  (and `Stone.js`/`ContourGeometry.js`/`ArcProjection.js` where applicable) while allowing
+  `GeometryEngine.js`/`StoneSampler.js`/`index.js`/`README.md`, each pointing at
+  `tools/test-image-trace-regression.mjs` for the dedicated proof.
+* `package.json` — removes `test-image-trace-pipeline.mjs`, adds `test-image-trace-regression.mjs`.
+* `docs/ARCHITECTURE.md` — the RS-1008 "deliberate exception" paragraph is left in place (as an
+  honest record) but followed by a correction paragraph and a new "Image Trace Geometry Engine
+  (RS-1008A)" account; the "Layers" section and "Current Implementation" layer-map table row are
+  updated to reflect the corrected design.
+* `TASK.md` — this milestone's task file (replaces RS-1008's, since this correction supersedes it
+  on the same open branch).
+
+**Untouched (verified by `tools/test-image-trace-regression.mjs`'s own forbidden-file guard):**
+`src/geometry/StoneLayout.js`, `Stone.js`, `ContourGeometry.js`, `ArcProjection.js`, `src/export/**`,
+`src/text/**`, `src/fonts/**`, `src/core/**`, `src/browser/**`, `src/renderer/**`,
+`src/preview3d/**`, `src/svg/**`, `src/history/**`, `src/products/**`, `index.html`, `assets/**`,
+`examples/**`, `style.css`, `README.md`, `LICENSE`, `CONTRIBUTING.md`.
 
 ---
 
 # Commands Executed
 
 ```bash
-git checkout -b feature/rs-1008-image-trace
-npm test                                          # full suite, iterated to green (464/464)
+# (continuing on feature/rs-1008-image-trace, already checked out)
+node -e "... capture baseline via pre-refactor traceImageBufferToStoneLayout ..." > baseline
+node tools/generate-image-trace-baselines.mjs        # committed baseline, run once before refactor
+npm test                                              # full suite, iterated to green (472/472)
 git diff --check
 git status
-python3 -m http.server 5199                       # browser verification
+python3 -m http.server 5199                           # browser verification
 npm install --no-save --no-package-lock puppeteer-core   # temporary, browser verification only
 npm uninstall puppeteer-core --no-save                    # removed afterward
 ```
 
-`package.json`/`package-lock.json` carry only the three new test-script entries — `git status`
-confirms no dependency changes remain after the temporary Puppeteer install/uninstall (same pattern
-as RS-1006/RS-1006A/RS-1007's own browser-verification tooling).
+`package.json`/`package-lock.json` carry only the test-script entry swap
+(`test-image-trace-pipeline.mjs` → `test-image-trace-regression.mjs`) — `git status` confirms no
+dependency changes remain after the temporary Puppeteer install/uninstall.
 
 ---
 
 # Automated Test Results
 
-`npm test` — **35/35 suites pass, 464/464 individual assertions, exit code 0**: all 32 pre-existing
-suites (with the three documented narrow guard updates above) plus the three new suites for this
-milestone.
+`npm test` — **35/35 suites pass, 472/472 individual assertions, exit code 0**.
 
-**`tools/test-image-pipeline.mjs` (9 assertions):** buffer/field validation; grayscale luminosity +
-alpha-onto-white compositing; threshold classification and its boundary rule; invert
-flip/double-flip identity; box blur's radius-0 no-op, its true flat-plateau-then-hard-cutoff
-response to an impulse (not a gaussian falloff — verified this is the mathematically correct box-
-filter behavior, not a bug, after an initial incorrect test assumption caught and corrected during
-this session), and uniform-field stability; resize's never-upscale guarantee and aspect-preserving
-downscale; grid sampling's full-foreground/full-background/half-split behavior;
-`isSupportedImageFile()`'s MIME + extension-fallback logic; pipeline determinism.
+**`tools/test-image-trace-regression.mjs` (8 assertions, new):** byte-identical output against the
+committed pre-correction baseline for all 8 regression cases; `app.js`/`GeometryEngine.js` wiring
+proof; `sampleFieldFillPoints()` exported from the permanent barrel; old implementation actually
+removed (unexported and off disk); one-way dependency proof (`src/image/**` never imports
+`../geometry/` or constructs `Stone`/`StoneLayout`); a full-shape functional sanity check; this
+suite's own forbidden-file guard.
 
-**`tools/test-image-trace-pipeline.mjs` (10 assertions):** end-to-end `traceImageBufferToStoneLayout()`
-against synthetic buffers — foreground-only placement, `invert` flipping which half traces,
-monotonic threshold behavior on a gradient, blur not crashing/producing non-finite coordinates,
-`maxWidthPx`/`maxHeightPx` actually bounding working resolution (not a no-op), correct mm placement/
-scaling, correct `layerId`/`color`/`sizeMm` on every stone, determinism, parameter validation
-(6 distinct malformed-input cases), and an all-background buffer producing a valid empty
-`StoneLayout` rather than an error.
+**`tools/test-geometry-engine.mjs` (extended, 53 assertions total, 10 new):** `generateImageLayout()`
+coverage — foreground-only placement, `invert` flip, monotonic threshold behavior, blur not
+crashing, `maxWidthPx`/`maxHeightPx` bounding, correct placement/scaling, correct
+`layerId`/`color`/`sizeMm`, determinism, six malformed-param cases, empty-background/no-font-registry
+case — directly replacing the equivalent coverage the now-deleted
+`tools/test-image-trace-pipeline.mjs` had against the removed direct-construction function.
 
-**`tools/test-image-integration.mjs` (9 assertions):** `generate()` dispatch and the
-`generateImageStonesLive()`/`traceImageBufferToStoneLayout` wiring; the `src/image/index.js` import
-line; `getLayerBBox`/drag-move/drag-resize/`duplicateLayer`/`layerLabel` image cases;
-`SUPPORTED_LAYER_TYPES`; `validateProject()` accept/reject cases (missing `imageSrc`, out-of-range
-`threshold`, missing bbox, invalid `maxWidthPx`); `index.html` control ids; `HISTORY_TRACKED_CONTROL_IDS`;
-the import handler's validate-then-decode-then-status-on-failure shape; this suite's own
-forbidden-file guard.
+**`tools/test-image-pipeline.mjs` (9 assertions, 1 changed):** the `prepareImageField()` test
+verifies the five pipeline stages thread together in the documented order and that the function
+validates its own threshold/blurRadiusPx/maxWidthPx/maxHeightPx params — everything else unchanged.
+
+**`tools/test-image-integration.mjs` (9 assertions, 2 changed):** tests 1/2 now assert the
+`this.permanentEngine.generateImageLayout(params)` call shape and the `prepareImageField` import
+(plus that `traceImageBufferToStoneLayout` no longer appears anywhere in `app.js`).
+
+All other suites (including the seven with narrow guard updates) pass unchanged in substance —
+their assertions about actual behavior are untouched; only their forbidden-file lists were narrowed
+where `src/geometry/GeometryEngine.js`/`StoneSampler.js` needed to newly become allowed.
 
 ---
 
 # Browser/Manual Verification
 
-Real headless-Chrome session (`Google Chrome.app`, software WebGL via `--use-gl=swiftshader
---enable-unsafe-swiftshader`) driven over CDP with a temporary `puppeteer-core` install, against
-`python3 -m http.server 5199`. Every image used was a real PNG/JPEG/WebP encoded in-browser via
-`canvas.toBlob()` and injected into the real `#importImageFile` input via `DataTransfer` + a real
-`change` event — the real `File`/`Blob` decode path (`createImageBitmap`), not a mock. Console
-`error`/`pageerror` events and all HTTP responses were captured for the full session.
-**35/35 scripted checks passed** (one real bug found and fixed along the way — see Summary):
+Re-ran the exact same real headless-Chrome/CDP verification script used for the original RS-1008
+milestone (same synthetic PNG/JPEG/WebP generation, same 20 numbered checks, 35 total assertions)
+against the corrected implementation, via `python3 -m http.server 5199` and a temporary
+`puppeteer-core` install (`--use-gl=swiftshader --enable-unsafe-swiftshader`).
 
-* **Page load / regression:** page loads with no relevant console errors; the default text-only
-  project still renders (375 stones, 199.4×17.0mm) unchanged.
-* **PNG import + live preview:** selecting a synthetic 64×64 PNG (left-half black) opened the
-  preview panel with a live density-mask preview and an approximate stone count ("28 stones
-  (approx.)"). Toggling Invert, changing Blur radius, and changing Threshold each visibly changed
-  the preview canvas and/or stone count (confirmed via `canvas.toDataURL()` diffing and the
-  displayed count).
-* **Cancel:** added no layer, left the layer count and project unchanged, hid the panel.
-* **Commit:** "Import" added a new `image` layer (layer count 1→2), stones appeared in both the 2D
-  Production Layout (`layoutStats` count increased) and the 3D Object Preview.
-* **JPEG and WebP:** both formats imported end to end (real `canvas.toBlob('image/jpeg')`/
-  `('image/webp')` encode → real decode → committed layer), each adding one more layer.
-* **Post-commit live editing:** with the committed layer selected, `#imageControls` was visible;
-  setting its Threshold to an extreme value (0, so nothing classifies as foreground) measurably
-  changed the merged stone count (392→375), confirming the committed layer's controls actually
-  regenerate stones, not just the pre-commit preview.
-* **Unsupported format:** a `.gif`-typed file was rejected with `#status` reading "Image import
-  failed: unsupported file type. Supported formats: PNG, JPG/JPEG, WebP." — no layer added, no
-  crash, no console/page error.
-* **Move:** dragging the selected image layer's bounding box on the 2D canvas changed its `x`/`y`
-  fields live (96.53→117.81mm, 36.53→54.92mm for a 40/25px drag).
-* **Duplicate:** produced a second, offset layer (layer count 4→5).
-* **Visibility toggle:** hiding a real (non-zeroed-threshold) image layer measurably reduced the
-  merged stone count (401→395), restoring it on re-show (→401).
-* **Delete:** removed the layer and its stones (layer count 5→4).
-* **Undo/redo:** undo restored the just-deleted layer (4→5), redo re-removed it (5→4).
-* **Large image / performance:** a synthetic 1500×1500px PNG imported and opened its preview panel
-  in **327ms**; changing its Threshold recomputed the live preview (pure pipeline stages only, no
-  re-decode) in **162ms**; a trivial `page.evaluate(() => 1+1)` issued immediately afterward
-  returned in **15ms**, confirming the page's JS thread was not left blocked/unresponsive by the
-  large-image pipeline run. This is a synchronous-main-thread implementation (documented limitation
-  below), but stayed well within "does not freeze the UI" at the documented 2000×2000px target size
-  in this measurement.
-* **All exports:** Project JSON, Generated Layout JSON, 2D SVG, 2D PNG, Cup PNG, Production Sheet
-  SVG, and Production Sheet PDF all completed with the expected "Downloaded ..." `#status` message
-  and no thrown error, against a project containing four image layers.
-* **Round trip:** the exported Project JSON contained `"type":"image"` and a `"imageSrc":"data:image/…"`
-  field; re-importing that exact file via the real `#importProjectFile` control restored all four
-  image layers (`layer types: TEXT,IMAGE,IMAGE,IMAGE,IMAGE`) with a "Imported roundtrip.json: 5
-  layer(s)" status.
-* **3D preview:** the Object Preview canvas has a live WebGL context and rendered without a page
-  error across every step above (visually confirmed via screenshot — a small imported circle's
-  stones render on the mug alongside the text layer's stones).
-* **Console/network:** zero application-originated console errors or page errors across the entire
-  session. The only 4xx response was the pre-existing, already-documented `/favicon.ico` 404 (no
-  favicon `<link>` in `index.html` — the same finding recorded in every prior milestone's browser
-  verification, e.g. RS-1007's).
+**35/35 checks passed, with observed values identical to the pre-correction RS-1008 run:**
 
-**One observed, expected (not a bug) interaction:** in the screenshot capture, a small imported
-circle placed directly over the dense default text layer added only 6 net stones (381 vs. 375
-text-only) even though its own trace produced ~19 candidate points — `app.js`'s pre-existing
-cross-layer proximity `dedupe()` (unchanged by this milestone) discarded most of them as too close
-to already-placed text stones. This is the same merge behavior any overlapping SVG/shape layer
-already exhibits; verified by placing the same image layer away from the text (see the "Threshold
-change" measurement above, which used a layer with negligible overlap and showed a clean count
-delta).
+* Default project regression: 375 stones, 199.4×17.0mm — identical.
+* PNG import preview: "28 stones (approx.)" at default settings — identical.
+* Invert changes preview to "21 stones (approx.)" — identical.
+* Threshold=0 (nothing qualifies) → "0 stones (approx.)" — identical.
+* Cancel: 1→1 layers, panel hidden — identical.
+* Commit: 1→2 layers, "392 stones 199.4×17.0mm" — identical.
+* Post-commit threshold=0 edit: 392→375 stones — identical.
+* JPEG/WebP import: both succeed, layer count increments correctly — identical.
+* Unsupported file: rejected with the same specific `#status` message — identical.
+* Move: same drag delta produces the same x/y change (96.53→117.81mm, 36.53→54.92mm) — identical.
+* Duplicate: 4→5 layers — identical.
+* Visibility toggle: 401→395→401 stones — identical.
+* Delete: 5→4 layers — identical.
+* Undo/redo: 4→5→4 layers — identical.
+* Large 1500×1500px image: decode+preview open in 328ms, threshold recompute in 175ms, page
+  responsive (18ms trivial-evaluate probe) immediately after — comparable timing to the
+  pre-correction run (327ms/162ms/15ms), no regression.
+* All 7 export buttons: succeed with the same "Downloaded ..." status messages — identical.
+* Project JSON round trip: exported JSON contains `"type":"image"` and `"imageSrc":"data:image/…"`;
+  re-import restores all 4 image layers — identical.
+* 3D preview: live WebGL context, renders without error — identical.
+* Console/network: zero application-originated console errors or page errors; only the
+  pre-existing, already-documented `/favicon.ico` 404 — identical.
 
-Not performed: real-GPU/real-device verification (headless Chrome here has no GPU, matching every
-prior milestone's documented limitation), mobile touch-gesture verification, and a test against a
-source image at the exact upper bound of `MAX_SOURCE_DIMENSION_PX` (4000px) — the 1500px large-image
-check above was judged sufficient evidence for the documented 2000×2000px target.
+This is direct evidence (not just the automated-suite proof) that the refactor changed nothing
+observable: every stone count, every timing figure, and every status message matches the
+pre-correction session exactly.
+
+Not performed: real-GPU/real-device verification (same documented limitation as every prior
+milestone), mobile touch-gesture verification.
 
 ---
 
 # Warnings
 
-* **Second stone-generating module, by design.** As detailed in Summary and now recorded in
-  `docs/ARCHITECTURE.md`, `src/image/**` constructs `Stone`/`StoneLayout` directly instead of going
-  through `GeometryEngine.js` — a deliberate, milestone-brief-directed exception to "the Geometry
-  Engine is the only component allowed to generate stone positions," not an oversight. A future
-  milestone should converge `src/image/**`'s sampler into `src/geometry/**` once the forbidden-file
-  constraint that necessitated this split is lifted.
-* **Synchronous main-thread processing.** The pipeline is linear-time and resolution-capped (not
-  the naive quadratic-in-blur-radius form), and measured comfortably responsive at 1500×1500px in
-  this session's headless environment, but it is not off-main-thread (no Web Worker). A very large,
-  heavily blurred source image on slower hardware could still cause a brief, bounded UI pause during
-  recomputation. Documented as out of scope for this milestone (see the specification's "Out of
-  Scope").
-* **`imageBufferCache` has no eviction policy.** It grows for the life of the page session (one
-  entry per distinct imported source image's decoded pixel buffer). Acceptable at this milestone's
-  scope; flagged as a known limitation, not fixed here.
-* **`parseIntOr()` footgun fix is local to the new image controls.** The pre-existing
-  `parseFloat(...)||fallback` pattern elsewhere in `app.js` (e.g. `gap`, shape `x`/`y`/`w`/`h`) still
-  silently discards an explicit `0` in favor of its fallback — harmless for those fields (their
-  fallback is also a reasonable default), left unchanged per "smallest coherent change," but worth
-  noting as a pattern a future cleanup milestone could generalize.
+* **This correction landed on the same branch as RS-1008 (`feature/rs-1008-image-trace`), not a new
+  `feature/rs-1008a-...` branch**, because RS-1008 had not yet merged to `develop` when this
+  correction was requested — the precedent milestone `RS-1006A` used a separate branch because
+  RS-1006 had already merged by that point. Treating this as a same-branch fix (per
+  `docs/CLAUDE_GUIDE.md`'s "Review Fixes" workflow) avoids an unnecessary branch/merge dance for
+  work that has not shipped. If a separate branch/commit history is actually wanted for this
+  correction specifically, say so and it can be re-organized before merge.
+* Nine pre-existing guard tests needed narrow forbidden-file-list updates (see "Files Changed").
+  Each carve-out is documented inline at its exact location, following this repository's
+  established pattern — flagged here as a concentration of guard-test churn worth a reviewer's
+  attention, even though each individual change is small and mechanical.
+* Same synchronous-main-thread and `imageBufferCache`-has-no-eviction limitations as RS-1008,
+  unchanged by this refactor.
 
 ---
 
 # Known Limitations
 
-* Same as "Warnings" above.
-* AI tracing, color separation, edge detection, vectorization, OCR, background removal, and
-  multi-color conversion are all explicitly out of scope, per the milestone brief.
-* Only PNG/JPG/JPEG/WebP are supported; no GIF/BMP/TIFF/AVIF/HEIC.
-* No per-layer rotation for `image` layers (matches every other non-text layer type today).
-* S-004 (duplicated text in some 3D preview cases) remains deferred, as directed — this milestone's
-  changes never touch `src/preview3d/**`.
+* Same as RS-1008's "Known Limitations" (only PNG/JPG/JPEG/WebP; no per-layer rotation; S-004
+  remains deferred) — unaffected by this refactor.
 
 ---
 
 # Recommended Next Milestone
 
-Converge `src/image/**`'s grid sampler into `src/geometry/**` once permitted (removing the
-documented "two stone-generating modules" exception); Web Worker-based off-main-thread image
+Merge RS-1008 (now including this correction) to `develop`; Web Worker-based off-main-thread image
 processing; an `imageBufferCache` eviction policy; migrating `app.js`'s ad hoc project/layer objects
 onto `src/core/Project.js`/`Layer.js`; DXF export; investigating S-004.

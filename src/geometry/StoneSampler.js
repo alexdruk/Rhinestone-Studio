@@ -138,3 +138,54 @@ function isPointInsidePolygon(point, polygon) {
 
   return inside;
 }
+
+// Density field "on" (RS-1008A): a field value at/above this level counts as foreground for
+// sampleFieldFillPoints(), the same 0-255 density scale Blur.js/Threshold.js already use
+// (thresholded/uninverted 0/1 masks rescale to 0/255, so 128 is the natural midpoint cutoff).
+const FIELD_ON_THRESHOLD = 128;
+
+/**
+ * Fill a placement box with a regular grid of points spaced spacingMm apart, keeping only points
+ * whose corresponding pixel in a raster density field (RS-1008 Image Trace: grayscale -> threshold
+ * -> optional invert -> optional blur -> optional resize) is at/above FIELD_ON_THRESHOLD.
+ *
+ * This is the raster analogue of sampleFillPoints() above: "inside a polygon" (even-odd point-in-
+ * polygon test) becomes "at/above the field's density threshold" (nearest-pixel field lookup), but
+ * the grid-walk-and-keep-if-on shape is otherwise identical. It lives here (not in src/image/**)
+ * so every stone-sampling algorithm — vector outline, vector fill, and now raster fill — has
+ * exactly one home, per docs/ARCHITECTURE.md's single-source-of-truth principle; src/image/**
+ * prepares the neutral field input, GeometryEngine.generateImageLayout() is the only caller of
+ * this function, matching how it is the only caller of sampleFillPoints()/sampleOutlinePoints().
+ *
+ * @param {{widthPx: number, heightPx: number, data: Uint8ClampedArray}} field Density field (0-255).
+ * @param {object} placement
+ * @param {number} placement.xMm Placement top-left X.
+ * @param {number} placement.yMm Placement top-left Y.
+ * @param {number} placement.widthMm Placement width (must be positive).
+ * @param {number} placement.heightMm Placement height (must be positive).
+ * @param {number} spacingMm Grid spacing (must be positive).
+ * @returns {Point2D[]}
+ */
+export function sampleFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm) {
+  if (spacingMm <= 0) {
+    throw new RangeError('sampleFieldFillPoints requires a positive spacingMm.');
+  }
+  if (widthMm <= 0 || heightMm <= 0) {
+    return [];
+  }
+
+  const { widthPx, heightPx, data } = field;
+  const points = [];
+
+  for (let localYMm = spacingMm / 2; localYMm <= heightMm; localYMm += spacingMm) {
+    const pixelY = Math.min(heightPx - 1, Math.max(0, Math.floor((localYMm / heightMm) * heightPx)));
+    for (let localXMm = spacingMm / 2; localXMm <= widthMm; localXMm += spacingMm) {
+      const pixelX = Math.min(widthPx - 1, Math.max(0, Math.floor((localXMm / widthMm) * widthPx)));
+      if (data[pixelY * widthPx + pixelX] >= FIELD_ON_THRESHOLD) {
+        points.push(new Point2D(xMm + localXMm, yMm + localYMm));
+      }
+    }
+  }
+
+  return points;
+}

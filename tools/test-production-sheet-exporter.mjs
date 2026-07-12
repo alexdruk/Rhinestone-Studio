@@ -410,7 +410,12 @@ await test('23. no forbidden file changed (this milestone\'s own forbidden list)
   // tools/test-crystal-color-catalog.mjs / tools/test-crystal-color-integration.mjs for that
   // milestone's own forbidden-file guard. CanvasRenderer2D.js/CupRenderer.js are unaffected and
   // stay covered by the src/renderer/ prefix below.
-  const allowedDespitePrefix = new Set(['src/renderer/StoneColors.js', 'src/renderer/CrystalColors.js', 'src/renderer/README.md']);
+  // RS-1008A (Image Trace Architecture Correction) legitimately changes
+  // src/geometry/GeometryEngine.js (adds generateImageLayout()) and src/geometry/StoneSampler.js
+  // (adds sampleFieldFillPoints()) — see tools/test-image-trace-regression.mjs for that
+  // milestone's own forbidden-file guard. src/geometry/StoneLayout.js/Stone.js stay covered by the
+  // src/geometry/ prefix below (untouched by RS-1008A).
+  const allowedDespitePrefix = new Set(['src/renderer/StoneColors.js', 'src/renderer/CrystalColors.js', 'src/renderer/README.md', 'src/geometry/GeometryEngine.js', 'src/geometry/StoneSampler.js', 'src/geometry/index.js', 'src/geometry/README.md']);
   const forbiddenPrefixes = [
     'src/geometry/', 'src/renderer/', 'src/text/', 'src/fonts/', 'src/core/',
     'src/browser/', 'src/svg/', 'src/history/', 'src/products/', 'assets/', 'examples/'

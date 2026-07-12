@@ -4,13 +4,19 @@ import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// RS-1008 — verifies app.js is actually wired to src/image/**'s traceImageBufferToStoneLayout()
-// for 'image' layers, that the ad hoc Project JSON validator accepts/rejects 'image' layers
-// correctly, that the generic shape-editing code (bbox/drag/resize/duplicate/label) was extended
-// to cover 'image', and that index.html exposes the controls app.js expects. Structural checks
-// against the live app.js source, matching the existing convention in
+// RS-1008 — verifies app.js is actually wired to the permanent GeometryEngine's
+// generateImageLayout() for 'image' layers, that the ad hoc Project JSON validator accepts/rejects
+// 'image' layers correctly, that the generic shape-editing code (bbox/drag/resize/duplicate/label)
+// was extended to cover 'image', and that index.html exposes the controls app.js expects.
+// Structural checks against the live app.js source, matching the existing convention in
 // tools/test-svg-integration.mjs, because app.js is a browser entry point and is not
 // import()-able directly under plain Node the way the permanent src/** modules are.
+//
+// RS-1008A updated tests 1/2 (generateImageStonesLive() now calls
+// this.permanentEngine.generateImageLayout(), not a src/image/**-only function) and test 9's
+// forbidden-file list (src/geometry/** is legitimately changed by this milestone's architecture
+// correction — see tools/test-image-trace-regression.mjs for the dedicated proof that Image Trace
+// actually uses the permanent pipeline and produces byte-identical output).
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
@@ -27,14 +33,15 @@ async function test(name, fn) {
   }
 }
 
-await test('1. generate() routes image layers through a live generation method calling traceImageBufferToStoneLayout', () => {
+await test('1. generate() routes image layers through a live generation method calling the permanent engine\'s generateImageLayout', () => {
   assert.match(appJs, /if\(l\.type==='image'\)raw\.push\(\.\.\.await this\.generateImageStonesLive\(l\)\)/);
   assert.match(appJs, /async generateImageStonesLive\s*\(/, 'expected an async generateImageStonesLive method');
-  assert.match(appJs, /traceImageBufferToStoneLayout\(buffer,params\)/, 'expected a call to traceImageBufferToStoneLayout');
+  assert.match(appJs, /this\.permanentEngine\.generateImageLayout\(params\)/, 'expected a call to this.permanentEngine.generateImageLayout');
 });
 
-await test('2. app.js imports the image pipeline from src/image/index.js, not a reimplementation', () => {
-  assert.match(appJs, /import\s*\{[^}]*traceImageBufferToStoneLayout[^}]*\}\s*from\s*['"]\.\/src\/image\/index\.js['"]/);
+await test('2. app.js imports src/image/**\'s field-preparation only (prepareImageField), not a Stone/StoneLayout-constructing function', () => {
+  assert.match(appJs, /import\s*\{[^}]*prepareImageField[^}]*\}\s*from\s*['"]\.\/src\/image\/index\.js['"]/);
+  assert.ok(!appJs.includes('traceImageBufferToStoneLayout'), 'app.js must not reference the removed direct-Stone/StoneLayout-construction function');
 });
 
 await test('3. getLayerBBox()/drag-move/drag-resize/duplicateLayer()/layerLabel() each have an image case', () => {
@@ -123,8 +130,11 @@ await test('9. no forbidden file changed (this milestone\'s own forbidden list)'
     .map((line) => line.slice(3).trim());
 
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
+  // src/geometry/ is legitimately changed by RS-1008A (the architecture correction this suite's
+  // own header comment describes) -- see tools/test-image-trace-regression.mjs for that
+  // milestone's own forbidden-file guard and its dedicated proof of correct, non-duplicated usage.
   const forbiddenPrefixes = [
-    'src/geometry/', 'src/export/', 'src/text/', 'src/fonts/', 'src/core/', 'src/browser/',
+    'src/export/', 'src/text/', 'src/fonts/', 'src/core/', 'src/browser/',
     'src/renderer/', 'src/preview3d/', 'src/svg/', 'src/history/', 'src/products/',
     'assets/', 'examples/'
   ];

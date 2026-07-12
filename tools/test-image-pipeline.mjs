@@ -7,13 +7,20 @@ import {
   invertMask,
   blurMask,
   resizeField,
-  sampleImageFillPoints,
+  prepareImageField,
   isSupportedImageFile
 } from '../src/image/index.js';
 
-// RS-1008 — unit tests for each pure stage of the Image Trace pipeline, using synthetic pixel
-// buffers (no real image decode, no browser). Mirrors tools/test-svg-parser.mjs's convention of
-// unit-testing each stage independently before the integration suite exercises the full pipeline.
+// RS-1008/RS-1008A — unit tests for each pure stage of the Image Trace *field-preparation*
+// pipeline (grayscale/threshold/invert/blur/resize -> a neutral density field), using synthetic
+// pixel buffers (no real image decode, no browser). Mirrors tools/test-svg-parser.mjs's convention
+// of unit-testing each stage independently before the integration suite exercises the full
+// pipeline. As of RS-1008A, this file covers src/image/**'s field-preparation only -- grid
+// sampling (turning a field into stone points) and Stone/StoneLayout construction moved to the
+// permanent src/geometry/** (sampleFieldFillPoints() in StoneSampler.js,
+// GeometryEngine.generateImageLayout()), covered by tools/test-geometry-engine.mjs and
+// tools/test-image-trace-regression.mjs instead — see docs/specifications/
+// RS-1008A-ImageTraceArchitectureCorrection.md.
 
 async function test(name, fn) {
   try {
@@ -124,23 +131,29 @@ await test('6. resizeField never upscales; downsizes preserving aspect ratio wit
   assert.ok(Array.from(downsized.data).every((v) => v === 255));
 });
 
-await test('7. sampleImageFillPoints: full-foreground yields a regular grid, full-background yields none, half/half only samples the foreground half', () => {
-  const on = createField({ widthPx: 2, heightPx: 2, data: Uint8ClampedArray.from([255, 255, 255, 255]) });
-  const onPoints = sampleImageFillPoints(on, { xMm: 0, yMm: 0, widthMm: 10, heightMm: 10, spacingMm: 2 });
-  assert.ok(onPoints.length > 0);
+await test('7. prepareImageField() threads grayscale->threshold->invert->blur->resize in order and validates its own params', () => {
+  const buffer = createImageBuffer({
+    widthPx: 4,
+    heightPx: 4,
+    data: rgba(Array.from({ length: 16 }, (_, i) => (i < 8 ? [0, 0, 0, 255] : [255, 255, 255, 255])))
+  });
 
-  const off = createField({ widthPx: 2, heightPx: 2, data: Uint8ClampedArray.from([0, 0, 0, 0]) });
-  const offPoints = sampleImageFillPoints(off, { xMm: 0, yMm: 0, widthMm: 10, heightMm: 10, spacingMm: 2 });
-  assert.equal(offPoints.length, 0);
+  const field = prepareImageField(buffer, { threshold: 128, invert: false, blurRadiusPx: 0, maxWidthPx: 4, maxHeightPx: 4 });
+  assert.equal(field.widthPx, 4);
+  assert.equal(field.heightPx, 4);
+  assert.deepEqual(Array.from(field.data), [255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0]);
 
-  // Left half on, right half off (2px wide field, column 0 = left half, column 1 = right half).
-  const split = createField({ widthPx: 2, heightPx: 1, data: Uint8ClampedArray.from([255, 0]) });
-  const splitPoints = sampleImageFillPoints(split, { xMm: 0, yMm: 0, widthMm: 10, heightMm: 1, spacingMm: 1 });
-  assert.ok(splitPoints.length > 0);
-  assert.ok(splitPoints.every((p) => p.xMm < 5), 'only the left (foreground) half should produce points');
+  const inverted = prepareImageField(buffer, { threshold: 128, invert: true, blurRadiusPx: 0, maxWidthPx: 4, maxHeightPx: 4 });
+  assert.deepEqual(Array.from(inverted.data), Array.from(field.data).map((v) => (v ? 0 : 255)));
 
-  assert.throws(() => sampleImageFillPoints(on, { xMm: 0, yMm: 0, widthMm: 10, heightMm: 10, spacingMm: 0 }), RangeError);
-  assert.deepEqual(sampleImageFillPoints(on, { xMm: 0, yMm: 0, widthMm: 0, heightMm: 10, spacingMm: 1 }), []);
+  const capped = prepareImageField(buffer, { threshold: 128, maxWidthPx: 2, maxHeightPx: 2 });
+  assert.equal(capped.widthPx, 2);
+  assert.equal(capped.heightPx, 2);
+
+  assert.throws(() => prepareImageField(buffer, { threshold: 999, maxWidthPx: 4, maxHeightPx: 4 }), /threshold/);
+  assert.throws(() => prepareImageField(buffer, { blurRadiusPx: -1, maxWidthPx: 4, maxHeightPx: 4 }), /blurRadiusPx/);
+  assert.throws(() => prepareImageField(buffer, { maxWidthPx: 0, maxHeightPx: 4 }), /maxWidthPx/);
+  assert.throws(() => prepareImageField(buffer, { maxWidthPx: 4, maxHeightPx: -1 }), /maxHeightPx/);
 });
 
 await test('8. isSupportedImageFile accepts PNG/JPEG/WebP by MIME, rejects others, falls back to extension', () => {

@@ -147,6 +147,54 @@ does not require a `fontProviderRegistry`.
 `closed` option this milestone; every pre-existing two-argument call site (text, circle, rectangle)
 is unaffected, since `closed` defaults to `true`.
 
+## Image Trace Geometry Engine (RS-1008A)
+
+`generateImageLayout()` generates a StoneLayout for a bitmap-traced (`image`) layer, processing an
+already-decoded `imageBuffer` via `src/image/index.js`'s `prepareImageField()` (the raster
+counterpart to `src/svg`'s vector path extraction: grayscale → threshold → optional invert →
+optional blur → optional resize, producing a neutral density field) and sampling it with
+`StoneSampler.js`'s `sampleFieldFillPoints()` — the raster counterpart to `sampleFillPoints()`,
+using the same fixed-spacing-grid-over-a-bounding-box shape but testing "at/above the field's
+density threshold" instead of "inside a polygon" (even-odd).
+
+```js
+import { GeometryEngine } from './src/geometry/index.js';
+import { createImageBuffer } from './src/image/index.js';
+
+const engine = new GeometryEngine();
+
+const layout = engine.generateImageLayout({
+  imageBuffer: createImageBuffer({ widthPx, heightPx, data }), // decoded RGBA pixels
+  layerId: 'layer-1',
+  xMm: 10,       // placement top-left, defaults to 0
+  yMm: 10,
+  widthMm: 50,   // target placed size (required — an image has no "natural mm size")
+  heightMm: 20,
+  stoneSizeMm: 2,
+  gapMm: 0.3,
+  color: 'gold',
+  threshold: 128,    // 0-255, default 128
+  invert: false,
+  blurRadiusPx: 0,
+  maxWidthPx: 400,   // working-resolution cap for the internal resize stage
+  maxHeightPx: 400
+});
+```
+
+This is a deliberate architecture correction (RS-1008A) over the original RS-1008 milestone, which
+had `src/image/**` construct `Stone`/`StoneLayout` directly — a second, independent stone-
+generating implementation. `src/image/**` now only prepares image-derived input (`prepareImageField()`
+never imports `src/geometry/**` or constructs a `Stone`); `generateImageLayout()` is the only
+caller that turns that field into stones, exactly as `generateSvgLayout()` is the only caller that
+turns `parseSvgDocument()`'s output into stones. See
+`docs/specifications/RS-1008A-ImageTraceArchitectureCorrection.md`.
+
+`generateImageLayout()` is synchronous, like `generateShapeLayout()`/`generateSvgLayout()` (no font
+provider to await), and does not require a `fontProviderRegistry`. Decoding raw image bytes into
+`imageBuffer` is a browser-only, asynchronous concern handled entirely by the caller (`app.js`, via
+`src/image/index.js`'s `decodeImageFileToBuffer()`/`decodeDataUrlToBuffer()`) before this method is
+ever called — `GeometryEngine.js` itself has no DOM dependency.
+
 ## Stone Color (RS-0003.5A1)
 
 Every `Stone` carries a `color`. Pass `color` to `generateTextLayout()` to

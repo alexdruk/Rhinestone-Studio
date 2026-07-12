@@ -130,25 +130,29 @@ renderer/exporter — needed any change. `curveEnabled` defaults to `false`, so 
 byte-identical no-op through this new code path. See
 `docs/specifications/RS-1003-CurvedText.md`.
 
-As of RS-1008, one deliberate, milestone-brief-directed exception to "the Geometry Engine is the
-only component allowed to generate stone positions" exists: `src/image/**` (Image Trace) is a
-second, independent input-processing-and-sampling module that constructs real `Stone`/`StoneLayout`
-instances (imported unmodified from `src/geometry/index.js`) directly, without going through
-`GeometryEngine.js`. This milestone's own brief explicitly forbade modifying
-`GeometryEngine.js`/`StoneLayout.js`/`StoneSampler.js`, so `src/image/**`'s
-`ImageStoneSampler.js`/`ImageTracePipeline.js` reimplement the same "fixed-spacing grid over a
-bounding box, keep a point that satisfies a containment test" shape `StoneSampler.js`'s
-`sampleFillPoints()` already uses for vector fill — for a raster density-field containment test
-instead of a polygon point-in-polygon test — as parallel, not shared, code. This is recorded here
-plainly because it is a real exception to this document's Core Principle, not merely an
-implementation-status footnote: two independent modules can now each construct a `Stone`/
-`StoneLayout`. Both still produce the exact same product shape, both are still consumed identically
-by every renderer/exporter downstream, and neither depends on the other, so "one product,
-`StoneLayout`" still holds even though "one producer" temporarily does not. See
-`docs/specifications/RS-1008-ImageTrace.md` ("Architecture Requirements") for the full reasoning,
-and treat converging `src/image/**`'s sampler into `src/geometry/**` (once the forbidden-file
-constraint is lifted by a future milestone) as recommended follow-up, not required for RS-1008 to
-be considered complete.
+RS-1008 (Image Trace) briefly introduced a real exception to "the Geometry Engine is the only
+component allowed to generate stone positions": `src/image/**` constructed `Stone`/`StoneLayout`
+instances directly, because that milestone's own brief explicitly forbade modifying
+`GeometryEngine.js`/`StoneLayout.js`/`StoneSampler.js`. **This was corrected the same day by
+RS-1008A** (Image Trace Architecture Correction) before merge, once the resulting second
+stone-generating implementation was flagged as unacceptable for long-term maintenance. As of
+RS-1008A, `GeometryEngine.generateImageLayout()` is the only component that constructs `Stone`/
+`StoneLayout` for image-traced layers, exactly like every other layer type — see "Image Trace
+Geometry Engine (RS-1008A)" below. This paragraph is left in place, rather than deleted, as a
+record that the exception existed and was corrected, not merely avoided from the start; see
+`docs/specifications/RS-1008A-ImageTraceArchitectureCorrection.md` for the full correction.
+
+As of RS-1008A, `GeometryEngine.js` gained `generateImageLayout()`: it processes an already-decoded
+`imageBuffer` via `src/image/index.js`'s `prepareImageField()` (grayscale → threshold → optional
+invert → optional blur → optional resize, producing a neutral density field — the raster
+counterpart to `src/svg/**`'s vector `Contour`s) and samples it with the new
+`StoneSampler.sampleFieldFillPoints()` (grid-walk-and-keep-if-on-field, the raster counterpart to
+`sampleFillPoints()`'s grid-walk-and-keep-if-inside-polygon). `src/image/**` now has zero
+dependency on `src/geometry/**` and never constructs a `Stone`/`StoneLayout` — mirroring `src/svg/**`'s
+existing "only produces neutral input, GeometryEngine is the only caller that turns it into stones"
+rule exactly. `generateImageLayout()` is synchronous (no font provider to await), like
+`generateShapeLayout()`/`generateSvgLayout()`. See
+`docs/specifications/RS-1008A-ImageTraceArchitectureCorrection.md`.
 
 ---
 
@@ -470,13 +474,14 @@ UI logic was needed beyond a fill/outline mode control and an import button. `ma
 remain unimplemented in both models.
 
 As of RS-1008, `app.js` also supports a fifth editable layer type, `image` (Image Trace): a bitmap
-(PNG/JPG/JPEG/WebP) traced through `src/image/**`'s grayscale/threshold/invert/blur/resize/grid-
-sample pipeline into stones, reusing the exact same generic x/y/w/h placement-box editing
-(move/resize/duplicate/hide/delete/undo/redo) `rectangle`/`svg` layers already share. Unlike `svg`,
-`image` stones are not produced by the permanent `GeometryEngine` at all — see the "Geometry
-Engine" section above for why, and `docs/specifications/RS-1008-ImageTrace.md` for the full
-reasoning. `src/core/Layer.js` gains no new reserved layer-type slot for `image` (it remains unused
-by the live app, same documented gap as `svg`/`manual`).
+(PNG/JPG/JPEG/WebP) traced through `src/image/**`'s grayscale/threshold/invert/blur/resize
+pipeline and the permanent `GeometryEngine`'s grid-sample stage into stones, reusing the exact same
+generic x/y/w/h placement-box editing (move/resize/duplicate/hide/delete/undo/redo) `rectangle`/`svg`
+layers already share. As of RS-1008A, `image` stones ARE produced by the permanent `GeometryEngine`
+(`generateImageLayout()`), exactly like every other layer type — see the "Geometry Engine" section
+above for the correction's history, and `docs/specifications/RS-1008A-ImageTraceArchitectureCorrection.md`
+for the full reasoning. `src/core/Layer.js` gains no new reserved layer-type slot for `image` (it
+remains unused by the live app, same documented gap as `svg`/`manual`).
 
 ---
 
@@ -554,8 +559,8 @@ code.
 | Browser compatibility | `src/browser/**` | `src/text/**`, `src/fonts/**`, `src/geometry/**` (proves resolution), `opentype.js` |
 | Undo/redo history (RS-1002) | `src/history/**` | nothing else in `src/**` (pure JSON-snapshot bookkeeping; no `Project`/`Layer`/`StoneLayout`/DOM dependency) |
 | Object templates (RS-1004) | `src/products/**` | nothing else in `src/**` (pure data + validation; never referenced by `src/geometry/**` or `src/renderer/**`, only consumed by `app.js` as plain display-option data) |
-| Bitmap image trace (RS-1008) | `src/image/**` | `src/geometry/index.js` (`Stone`/`StoneLayout`, imported unmodified -- constructs them directly, does not call `GeometryEngine`), `src/text/VectorPath.js` (`Point2D`, the same neutral primitive `src/svg/**` uses) |
-| Orchestration | `app.js` | every barrel module above except `src/core/**`, plus `src/svg/index.js` (pre-import validation only, not stone generation), `src/history/index.js` (undo/redo), `src/products/index.js` (RS-1004, object templates), and `src/image/index.js` (RS-1008, image trace pipeline) |
+| Bitmap image trace (RS-1008, corrected RS-1008A) | `src/image/**` | nothing else in `src/**` (pure field-preparation only: grayscale/threshold/invert/blur/resize -> a neutral density field; zero dependency on `src/geometry/**`, mirroring `src/svg/**`) |
+| Orchestration | `app.js` | every barrel module above except `src/core/**`, plus `src/svg/index.js` (pre-import validation only, not stone generation), `src/history/index.js` (undo/redo), `src/products/index.js` (RS-1004, object templates), and `src/image/index.js` (RS-1008, image field preparation only as of RS-1008A) |
 
 Every permanent module (`src/core`, `src/fonts`, `src/text`, `src/geometry`, `src/renderer`,
 `src/export`) is consumed only through its `index.js` barrel — `app.js` never imports an internal

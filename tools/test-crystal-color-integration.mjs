@@ -229,10 +229,18 @@ await test('14. no forbidden file changed (this milestone\'s own forbidden list)
     'src/renderer/CanvasRenderer2D.js',
     'src/renderer/CupRenderer.js',
     'src/export/SvgExporter.js',
-    'src/export/ProductionSheetExporter.js'
+    'src/export/ProductionSheetExporter.js',
+    // RS-1008A (Image Trace Architecture Correction) legitimately changes
+    // src/geometry/GeometryEngine.js/StoneSampler.js/index.js/README.md — see
+    // tools/test-image-trace-regression.mjs for that milestone's own forbidden-file guard.
+    // StoneLayout.js/Stone.js/ContourGeometry.js/ArcProjection.js stay forbidden below.
+    'src/geometry/StoneLayout.js',
+    'src/geometry/Stone.js',
+    'src/geometry/ContourGeometry.js',
+    'src/geometry/ArcProjection.js'
   ]);
   const forbiddenPrefixes = [
-    'src/geometry/', 'src/text/', 'src/fonts/', 'src/core/', 'src/browser/',
+    'src/text/', 'src/fonts/', 'src/core/', 'src/browser/',
     'src/svg/', 'src/history/', 'src/products/', 'src/preview3d/',
     'assets/', 'examples/'
   ];

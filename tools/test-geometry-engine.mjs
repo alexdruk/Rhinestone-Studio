@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { FontManager } from '../src/fonts/index.js';
 import { createDefaultFontProviderRegistry } from '../src/text/index.js';
 import { GeometryEngine } from '../src/geometry/index.js';
+import { createImageBuffer } from '../src/image/index.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const manifest = JSON.parse(await readFile(path.join(repoRoot, 'assets/fonts/manifest.json'), 'utf8'));
@@ -551,6 +552,141 @@ await test('43. curveEnabled:false ignores otherwise-invalid curve fields (strai
   const engine = createEngine();
   const layout = await engine.generateTextLayout({ ...BASE_PARAMS, curveEnabled: false, curveRadiusMm: -1, curveSweepAngleDeg: 0, curveDirection: 'nonsense' });
   assert.ok(layout.count > 0, 'expected straight text to generate normally despite garbage curve fields');
+});
+
+// RS-1008A — generateImageLayout() coverage (mirroring the generateSvgLayout() block above).
+// Image Trace's grid sampling (sampleFieldFillPoints() in StoneSampler.js) and Stone/StoneLayout
+// construction now live in the permanent engine, exactly like every other layer type — this
+// replaces the equivalent behavioral coverage that tools/test-image-trace-pipeline.mjs (RS-1008)
+// had against the now-removed src/image/ImageTracePipeline.js. See
+// docs/specifications/RS-1008A-ImageTraceArchitectureCorrection.md.
+function halfBlackHalfWhiteImageBuffer(widthPx, heightPx) {
+  const data = new Uint8ClampedArray(widthPx * heightPx * 4);
+  for (let y = 0; y < heightPx; y++) {
+    for (let x = 0; x < widthPx; x++) {
+      const i = (y * widthPx + x) * 4;
+      const v = x < widthPx / 2 ? 0 : 255;
+      data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = 255;
+    }
+  }
+  return createImageBuffer({ widthPx, heightPx, data });
+}
+function gradientImageBuffer(widthPx, heightPx) {
+  const data = new Uint8ClampedArray(widthPx * heightPx * 4);
+  for (let y = 0; y < heightPx; y++) {
+    for (let x = 0; x < widthPx; x++) {
+      const i = (y * widthPx + x) * 4;
+      const v = Math.round((x / (widthPx - 1)) * 255);
+      data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = 255;
+    }
+  }
+  return createImageBuffer({ widthPx, heightPx, data });
+}
+function solidColorImageBuffer(widthPx, heightPx, [r, g, b, a]) {
+  const data = new Uint8ClampedArray(widthPx * heightPx * 4);
+  for (let i = 0; i < widthPx * heightPx; i++) {
+    data[i * 4] = r; data[i * 4 + 1] = g; data[i * 4 + 2] = b; data[i * 4 + 3] = a;
+  }
+  return createImageBuffer({ widthPx, heightPx, data });
+}
+const BASE_IMAGE_PARAMS = { layerId: 'image-1', xMm: 0, yMm: 0, widthMm: 20, heightMm: 20, stoneSizeMm: 1, gapMm: 0.2, color: 'gold', maxWidthPx: 64, maxHeightPx: 64 };
+
+await test('44. generateImageLayout(): a shape buffer traces to a non-empty StoneLayout with stones only over the foreground half', () => {
+  const engine = createEngine();
+  const buffer = halfBlackHalfWhiteImageBuffer(20, 20);
+  const layout = engine.generateImageLayout({ imageBuffer: buffer, ...BASE_IMAGE_PARAMS });
+  assert.ok(layout.count > 0);
+  assert.ok(layout.stones.every((s) => s.xMm < BASE_IMAGE_PARAMS.xMm + BASE_IMAGE_PARAMS.widthMm / 2 + 0.5));
+});
+
+await test('45. generateImageLayout(): invert:true flips which half produces stones', () => {
+  const engine = createEngine();
+  const buffer = halfBlackHalfWhiteImageBuffer(20, 20);
+  const layout = engine.generateImageLayout({ imageBuffer: buffer, ...BASE_IMAGE_PARAMS, invert: true });
+  assert.ok(layout.count > 0);
+  assert.ok(layout.stones.every((s) => s.xMm > BASE_IMAGE_PARAMS.xMm + BASE_IMAGE_PARAMS.widthMm / 2 - 0.5));
+});
+
+await test('46. generateImageLayout(): increasing threshold (lighter cutoff) increases traced foreground area for a gradient', () => {
+  const engine = createEngine();
+  const buffer = gradientImageBuffer(40, 10);
+  const low = engine.generateImageLayout({ imageBuffer: buffer, ...BASE_IMAGE_PARAMS, threshold: 60 });
+  const high = engine.generateImageLayout({ imageBuffer: buffer, ...BASE_IMAGE_PARAMS, threshold: 200 });
+  assert.ok(high.count > low.count, `expected higher threshold to trace more area (${high.count} vs ${low.count})`);
+});
+
+await test('47. generateImageLayout(): blurRadiusPx softens a sharp edge without crashing or producing non-finite coordinates', () => {
+  const engine = createEngine();
+  const buffer = halfBlackHalfWhiteImageBuffer(20, 20);
+  const sharp = engine.generateImageLayout({ imageBuffer: buffer, ...BASE_IMAGE_PARAMS, blurRadiusPx: 0 });
+  const blurred = engine.generateImageLayout({ imageBuffer: buffer, ...BASE_IMAGE_PARAMS, blurRadiusPx: 3 });
+  for (const layout of [sharp, blurred]) {
+    for (const stone of layout.stones) {
+      assert.ok(Number.isFinite(stone.xMm) && Number.isFinite(stone.yMm));
+    }
+  }
+  assert.ok(blurred.count >= sharp.count * 0.5, 'blur should not drastically shrink the traced area');
+});
+
+await test('48. generateImageLayout(): maxWidthPx/maxHeightPx actually bound the working resolution (resize is applied, not a no-op)', () => {
+  const engine = createEngine();
+  const buffer = halfBlackHalfWhiteImageBuffer(200, 200);
+  const capped = engine.generateImageLayout({ imageBuffer: buffer, ...BASE_IMAGE_PARAMS, maxWidthPx: 8, maxHeightPx: 8 });
+  const uncapped = engine.generateImageLayout({ imageBuffer: buffer, ...BASE_IMAGE_PARAMS, maxWidthPx: 200, maxHeightPx: 200 });
+  assert.ok(capped.count > 0);
+  assert.ok(uncapped.count > 0);
+  const maxXCapped = Math.max(...capped.stones.map((s) => s.xMm));
+  const maxXUncapped = Math.max(...uncapped.stones.map((s) => s.xMm));
+  assert.ok(Math.abs(maxXCapped - maxXUncapped) < 3, 'traced extent should be comparable regardless of working resolution');
+});
+
+await test('49. generateImageLayout(): requested xMm/yMm/widthMm/heightMm correctly place and scale the bounding box', () => {
+  const engine = createEngine();
+  const buffer = solidColorImageBuffer(10, 10, [0, 0, 0, 255]);
+  const layout = engine.generateImageLayout({ imageBuffer: buffer, ...BASE_IMAGE_PARAMS, xMm: 50, yMm: 30, widthMm: 10, heightMm: 5 });
+  const box = layout.getBoundingBox();
+  assert.ok(box.minXmm >= 49 && box.maxXmm <= 61.5, `expected placement near x=50..60, got ${box.minXmm}..${box.maxXmm}`);
+  assert.ok(box.minYmm >= 29 && box.maxYmm <= 36.5, `expected placement near y=30..35, got ${box.minYmm}..${box.maxYmm}`);
+});
+
+await test('50. generateImageLayout(): every stone carries the requested layerId/color/sizeMm and finite mm coordinates', () => {
+  const engine = createEngine();
+  const buffer = solidColorImageBuffer(10, 10, [0, 0, 0, 255]);
+  const layout = engine.generateImageLayout({ imageBuffer: buffer, ...BASE_IMAGE_PARAMS, layerId: 'my-layer', color: 'sapphire', stoneSizeMm: 1.5 });
+  assert.ok(layout.count > 0);
+  for (const stone of layout.stones) {
+    assert.equal(stone.layerId, 'my-layer');
+    assert.equal(stone.color, 'sapphire');
+    assert.equal(stone.sizeMm, 1.5);
+    assert.ok(Number.isFinite(stone.xMm) && Number.isFinite(stone.yMm));
+  }
+});
+
+await test('51. generateImageLayout() is deterministic (deepEqual StoneLayout.toJSON() across two calls)', () => {
+  const engine = createEngine();
+  const buffer = halfBlackHalfWhiteImageBuffer(20, 20);
+  const a = engine.generateImageLayout({ imageBuffer: buffer, ...BASE_IMAGE_PARAMS });
+  const b = engine.generateImageLayout({ imageBuffer: buffer, ...BASE_IMAGE_PARAMS });
+  assert.deepEqual(a.toJSON(), b.toJSON());
+});
+
+await test('52. generateImageLayout(): malformed params throw clear, parameter-naming errors', () => {
+  const engine = createEngine();
+  const buffer = solidColorImageBuffer(4, 4, [0, 0, 0, 255]);
+  assert.throws(() => engine.generateImageLayout({ imageBuffer: buffer, ...BASE_IMAGE_PARAMS, layerId: '' }), /layerId/);
+  assert.throws(() => engine.generateImageLayout({ imageBuffer: buffer, ...BASE_IMAGE_PARAMS, stoneSizeMm: 0 }), /stoneSizeMm/);
+  assert.throws(() => engine.generateImageLayout({ imageBuffer: buffer, ...BASE_IMAGE_PARAMS, threshold: 300 }), /threshold/);
+  assert.throws(() => engine.generateImageLayout({ imageBuffer: buffer, ...BASE_IMAGE_PARAMS, blurRadiusPx: -1 }), /blurRadiusPx/);
+  assert.throws(() => engine.generateImageLayout({ imageBuffer: buffer, ...BASE_IMAGE_PARAMS, maxWidthPx: 0 }), /maxWidthPx/);
+  assert.throws(() => engine.generateImageLayout({ imageBuffer: buffer, ...BASE_IMAGE_PARAMS, maxHeightPx: -5 }), /maxHeightPx/);
+  assert.throws(() => engine.generateImageLayout({ ...BASE_IMAGE_PARAMS }), /imageBuffer/, 'a missing imageBuffer must throw');
+});
+
+await test('53. generateImageLayout(): an all-background buffer produces a valid, empty StoneLayout (not an error); works with no fontProviderRegistry', () => {
+  const engineNoFonts = new GeometryEngine();
+  const buffer = solidColorImageBuffer(10, 10, [255, 255, 255, 255]);
+  const layout = engineNoFonts.generateImageLayout({ imageBuffer: buffer, ...BASE_IMAGE_PARAMS });
+  assert.equal(layout.count, 0);
 });
 
 await test('this task did not modify forbidden UI, renderer, or exporter files', async () => {

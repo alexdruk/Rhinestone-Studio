@@ -22,10 +22,11 @@
 
 import { BoundingBox, Point2D, createCircleVectorPath, createRectangleVectorPath } from '../text/VectorPath.js';
 import { flattenContourToPolygon, translateContour } from './ContourGeometry.js';
-import { sampleFillPoints, sampleOutlinePoints } from './StoneSampler.js';
+import { sampleFillPoints, sampleOutlinePoints, sampleFieldFillPoints } from './StoneSampler.js';
 import { Stone } from './Stone.js';
 import { StoneLayout } from './StoneLayout.js';
 import { parseSvgDocument } from '../svg/index.js';
+import { prepareImageField } from '../image/index.js';
 import { CURVE_ALIGNMENTS, CURVE_DIRECTIONS, projectPolygonToArc } from './ArcProjection.js';
 
 const SAMPLE_MODES = new Set(['outline', 'fill']);
@@ -280,6 +281,68 @@ export class GeometryEngine {
 
     return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
   }
+
+  /**
+   * Generate a StoneLayout for an image (bitmap trace) layer, processing `imageBuffer` via
+   * src/image (the raster path-extraction module for bitmap art, the counterpart to src/svg's
+   * vector path extraction) and reusing the same "normalize params -> sample points -> Stone[] ->
+   * StoneLayout" shape generateSvgLayout()/generateShapeLayout() use.
+   *
+   * RS-1008A: this method (and sampleFieldFillPoints() in StoneSampler.js) replace the earlier
+   * RS-1008 design, which had src/image/** construct Stone/StoneLayout directly — a second,
+   * independent stone-generating implementation the architecture correction in
+   * docs/specifications/RS-1008A-ImageTraceArchitectureCorrection.md removed. src/image/**'s
+   * prepareImageField() runs the bitmap-processing pipeline (grayscale -> threshold -> optional
+   * invert -> optional blur -> optional resize) and returns a neutral density field; this method is
+   * the only caller that turns that field into stones, exactly as it is the only caller of
+   * parseSvgDocument() for SVG layers.
+   *
+   * @param {object} params
+   * @param {{widthPx: number, heightPx: number, data: Uint8ClampedArray}} params.imageBuffer RGBA source pixels.
+   * @param {string} params.layerId
+   * @param {number} [params.xMm] Placement top-left X, default 0.
+   * @param {number} [params.yMm] Placement top-left Y, default 0.
+   * @param {number} params.widthMm Placement width.
+   * @param {number} params.heightMm Placement height.
+   * @param {number} params.stoneSizeMm
+   * @param {number} [params.gapMm]
+   * @param {string} [params.color]
+   * @param {number} [params.threshold] 0-255, default 128.
+   * @param {boolean} [params.invert]
+   * @param {number} [params.blurRadiusPx]
+   * @param {number} params.maxWidthPx
+   * @param {number} params.maxHeightPx
+   * @returns {StoneLayout}
+   */
+  generateImageLayout(params = {}) {
+    const options = normalizeImageParams(params);
+
+    const field = prepareImageField(options.imageBuffer, {
+      threshold: options.threshold,
+      invert: options.invert,
+      blurRadiusPx: options.blurRadiusPx,
+      maxWidthPx: options.maxWidthPx,
+      maxHeightPx: options.maxHeightPx
+    });
+
+    const spacingMm = options.stoneSizeMm + options.gapMm;
+    const points = sampleFieldFillPoints(
+      field,
+      { xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm },
+      spacingMm
+    );
+
+    const stones = points.map((point, index) => new Stone({
+      xMm: point.xMm,
+      yMm: point.yMm,
+      sizeMm: options.stoneSizeMm,
+      color: options.color,
+      layerId: options.layerId,
+      index
+    }));
+
+    return new StoneLayout({ layerId: options.layerId, sourceMode: 'fill', stones });
+  }
 }
 
 function normalizeTextParams(params) {
@@ -461,6 +524,54 @@ function normalizeSvgParams(params) {
     gapMm,
     mode,
     color: params.color ?? null
+  };
+}
+
+// RS-1008A: threshold/invert/blurRadiusPx/maxWidthPx/maxHeightPx are validated once, inside
+// prepareImageField() (src/image/ImageFieldPipeline.js) -- not duplicated here. This function only
+// validates the geometry-side params (placement, stone size/gap/color, layerId, the imageBuffer
+// shape), mirroring how normalizeSvgParams() above validates only its own geometry-side params and
+// leaves svgSource's own validation to parseSvgDocument().
+function normalizeImageParams(params) {
+  if (!params.imageBuffer || typeof params.imageBuffer.widthPx !== 'number' || typeof params.imageBuffer.heightPx !== 'number') {
+    throw new TypeError('GeometryEngine.generateImageLayout requires an imageBuffer with numeric widthPx/heightPx.');
+  }
+  if (typeof params.layerId !== 'string' || params.layerId.length === 0) {
+    throw new TypeError('GeometryEngine.generateImageLayout requires a non-empty layerId.');
+  }
+
+  const stoneSizeMm = assertPositiveNumber(params.stoneSizeMm, 'stoneSizeMm');
+
+  const gapMm = assertFiniteNumber(params.gapMm ?? 0, 'gapMm');
+  if (gapMm < 0) {
+    throw new RangeError('gapMm must be zero or positive.');
+  }
+
+  if (params.color !== undefined && params.color !== null &&
+    (typeof params.color !== 'string' || params.color.length === 0)) {
+    throw new TypeError('GeometryEngine.generateImageLayout color must be a non-empty string when provided.');
+  }
+
+  const xMm = assertFiniteNumber(params.xMm ?? 0, 'xMm');
+  const yMm = assertFiniteNumber(params.yMm ?? 0, 'yMm');
+  const widthMm = assertPositiveNumber(params.widthMm, 'widthMm');
+  const heightMm = assertPositiveNumber(params.heightMm, 'heightMm');
+
+  return {
+    imageBuffer: params.imageBuffer,
+    layerId: params.layerId,
+    xMm,
+    yMm,
+    widthMm,
+    heightMm,
+    stoneSizeMm,
+    gapMm,
+    color: params.color ?? null,
+    threshold: params.threshold,
+    invert: params.invert,
+    blurRadiusPx: params.blurRadiusPx,
+    maxWidthPx: params.maxWidthPx,
+    maxHeightPx: params.maxHeightPx
   };
 }
 

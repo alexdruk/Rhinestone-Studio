@@ -27,12 +27,8 @@ export {
 } from './Resize.js';
 
 export {
-  sampleImageFillPoints
-} from './ImageStoneSampler.js';
-
-export {
-  traceImageBufferToStoneLayout
-} from './ImageTracePipeline.js';
+  prepareImageField
+} from './ImageFieldPipeline.js';
 
 export {
   maskFieldToRgba
