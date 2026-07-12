@@ -79,7 +79,46 @@ export class GeometryEngine {
       throw new TypeError('GeometryEngine.generateTextLayout requires a fontProviderRegistry (none was supplied to the constructor).');
     }
     const options = normalizeTextParams(params);
+    const { polygons } = await this._textPolygons(options);
+    const spacingMm = options.stoneSizeMm + options.gapMm;
 
+    const points = options.mode === 'fill'
+      ? sampleFillPoints(polygons, BoundingBox.fromPoints(polygons.flat()), spacingMm)
+      : polygons.flatMap((polygon) => sampleOutlinePoints(polygon, spacingMm));
+
+    const stones = points.map((point, index) => new Stone({
+      xMm: point.xMm,
+      yMm: point.yMm,
+      sizeMm: options.stoneSizeMm,
+      color: options.color,
+      layerId: options.layerId,
+      index
+    }));
+
+    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
+  }
+
+  /**
+   * Resolve a text run's flattened (and, if curved, arc-projected) polygon contours in absolute
+   * millimeters, without sampling stones. RS-1012: the shared "get this text's vector outline"
+   * entry point Vector Boolean Operations use to build a boolean input source (see
+   * src/geometry/PathBoolean.js) -- calls the exact same `_textPolygons()` helper
+   * generateTextLayout() uses (including curved-text arc projection), so a text layer's boolean
+   * outline and its stone-sampled outline are always the same geometry. Requires a
+   * fontProviderRegistry, exactly like generateTextLayout().
+   *
+   * @param {object} params Same shape as generateTextLayout()'s params, minus stoneSizeMm/gapMm/mode/color.
+   * @returns {Promise<{polygons: import('../text/VectorPath.js').Point2D[][], boundingBox: BoundingBox|null}>}
+   */
+  async resolveTextPolygons(params = {}) {
+    if (!this._fontProviderRegistry) {
+      throw new TypeError('GeometryEngine.resolveTextPolygons requires a fontProviderRegistry (none was supplied to the constructor).');
+    }
+    const options = normalizeTextParams({ ...params, stoneSizeMm: 1, mode: DEFAULT_MODE });
+    return this._textPolygons(options);
+  }
+
+  async _textPolygons(options) {
     const { contours, totalAdvanceWidthMm } = await this._buildPositionedContours(options);
     let polygons = contours.map((contour) => flattenContourToPolygon(contour));
 
@@ -100,22 +139,7 @@ export class GeometryEngine {
       polygons = polygons.map((polygon) => projectPolygonToArc(polygon, arcOptions));
     }
 
-    const spacingMm = options.stoneSizeMm + options.gapMm;
-
-    const points = options.mode === 'fill'
-      ? sampleFillPoints(polygons, BoundingBox.fromPoints(polygons.flat()), spacingMm)
-      : polygons.flatMap((polygon) => sampleOutlinePoints(polygon, spacingMm));
-
-    const stones = points.map((point, index) => new Stone({
-      xMm: point.xMm,
-      yMm: point.yMm,
-      sizeMm: options.stoneSizeMm,
-      color: options.color,
-      layerId: options.layerId,
-      index
-    }));
-
-    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
+    return { polygons, boundingBox: BoundingBox.fromPoints(polygons.flat()) };
   }
 
   /**
@@ -178,12 +202,7 @@ export class GeometryEngine {
    */
   generateShapeLayout(params = {}) {
     const options = normalizeShapeParams(params);
-
-    const path = options.shape === 'circle'
-      ? createCircleVectorPath({ cxMm: options.cxMm, cyMm: options.cyMm, radiusMm: options.radiusMm, id: options.layerId })
-      : createRectangleVectorPath({ xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm, id: options.layerId });
-
-    const polygons = path.contours.map((contour) => flattenContourToPolygon(contour));
+    const { polygons } = this._shapePolygons(options);
     const spacingMm = options.stoneSizeMm + options.gapMm;
 
     const points = options.mode === 'fill'
@@ -200,6 +219,30 @@ export class GeometryEngine {
     }));
 
     return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
+  }
+
+  /**
+   * Resolve a circle/rectangle shape's flattened polygon contours in absolute millimeters, without
+   * sampling stones. RS-1012: the shared "get this shape's vector outline" entry point Vector
+   * Boolean Operations use to build a boolean input source (see src/geometry/PathBoolean.js) --
+   * calls the exact same `_shapePolygons()` helper generateShapeLayout() uses, so a shape's boolean
+   * outline and its stone-sampled outline are always the same geometry.
+   *
+   * @param {object} params Same shape as generateShapeLayout()'s params, minus stoneSizeMm/gapMm/mode/color.
+   * @returns {{polygons: import('../text/VectorPath.js').Point2D[][], boundingBox: BoundingBox|null}}
+   */
+  resolveShapePolygons(params = {}) {
+    const options = normalizeShapeParams({ ...params, stoneSizeMm: 1, mode: DEFAULT_MODE });
+    return this._shapePolygons(options);
+  }
+
+  _shapePolygons(options) {
+    const path = options.shape === 'circle'
+      ? createCircleVectorPath({ cxMm: options.cxMm, cyMm: options.cyMm, radiusMm: options.radiusMm, id: options.layerId })
+      : createRectangleVectorPath({ xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm, id: options.layerId });
+
+    const polygons = path.contours.map((contour) => flattenContourToPolygon(contour));
+    return { polygons, boundingBox: BoundingBox.fromPoints(polygons.flat()) };
   }
 
   /**
@@ -233,22 +276,7 @@ export class GeometryEngine {
    */
   generateSvgLayout(params = {}) {
     const options = normalizeSvgParams(params);
-    const parsed = parseSvgDocument(options.svgSource);
-
-    const targetWidthMm = options.widthMm ?? parsed.naturalWidthMm;
-    const targetHeightMm = options.heightMm ?? parsed.naturalHeightMm;
-    const scaleX = targetWidthMm / parsed.naturalWidthMm;
-    const scaleY = targetHeightMm / parsed.naturalHeightMm;
-
-    const closedPolygons = [];
-    const openPolygons = [];
-    for (const { contour, closed } of parsed.shapes) {
-      const placed = flattenContourToPolygon(contour).map((point) => new Point2D(
-        options.xMm + point.xMm * scaleX,
-        options.yMm + point.yMm * scaleY
-      ));
-      (closed ? closedPolygons : openPolygons).push(placed);
-    }
+    const { closedPolygons, openPolygons } = this._svgPolygons(options);
 
     const spacingMm = options.stoneSizeMm + options.gapMm;
     const points = [];
@@ -280,6 +308,44 @@ export class GeometryEngine {
     }));
 
     return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
+  }
+
+  /**
+   * Resolve an SVG document's closed-contour polygons (flattened and placed, in absolute
+   * millimeters), without sampling stones. RS-1012: the shared "get this SVG's fillable vector
+   * outline" entry point Vector Boolean Operations use to build a boolean input source (see
+   * src/geometry/PathBoolean.js) — calls the exact same `_svgPolygons()` helper generateSvgLayout()
+   * uses. Only closed contours are returned: an open contour (an SVG `<line>`/`<polyline>` or an
+   * unclosed `<path>` subpath) has no interior and cannot participate in a boolean operation.
+   *
+   * @param {object} params Same shape as generateSvgLayout()'s params, minus stoneSizeMm/gapMm/mode/color.
+   * @returns {{polygons: import('../text/VectorPath.js').Point2D[][], boundingBox: BoundingBox|null}}
+   */
+  resolveSvgPolygons(params = {}) {
+    const options = normalizeSvgParams({ ...params, stoneSizeMm: 1, mode: DEFAULT_MODE });
+    const { closedPolygons } = this._svgPolygons(options);
+    return { polygons: closedPolygons, boundingBox: BoundingBox.fromPoints(closedPolygons.flat()) };
+  }
+
+  _svgPolygons(options) {
+    const parsed = parseSvgDocument(options.svgSource);
+
+    const targetWidthMm = options.widthMm ?? parsed.naturalWidthMm;
+    const targetHeightMm = options.heightMm ?? parsed.naturalHeightMm;
+    const scaleX = targetWidthMm / parsed.naturalWidthMm;
+    const scaleY = targetHeightMm / parsed.naturalHeightMm;
+
+    const closedPolygons = [];
+    const openPolygons = [];
+    for (const { contour, closed } of parsed.shapes) {
+      const placed = flattenContourToPolygon(contour).map((point) => new Point2D(
+        options.xMm + point.xMm * scaleX,
+        options.yMm + point.yMm * scaleY
+      ));
+      (closed ? closedPolygons : openPolygons).push(placed);
+    }
+
+    return { closedPolygons, openPolygons };
   }
 
   /**
@@ -342,6 +408,90 @@ export class GeometryEngine {
     }));
 
     return new StoneLayout({ layerId: options.layerId, sourceMode: 'fill', stones });
+  }
+
+  /**
+   * Generate a StoneLayout for a 'path' layer — a generic compound vector shape defined directly by
+   * millimeter contours (RS-1012: the layer type a Union/Subtract/Intersect/Exclude Boolean
+   * Operation produces — see src/geometry/PathBoolean.js — but usable for any pre-flattened contour
+   * list). Reuses the exact "place a natural-size shape into an xMm/yMm/widthMm/heightMm box, then
+   * outline/fill-sample it" shape generateSvgLayout() already uses: `contours` must already be
+   * normalized so its own bounding box's top-left corner sits at (0,0) (RS-1012's boolean-op
+   * layer-creation code in app.js normalizes its result this way before storing it, exactly like
+   * src/svg's viewBox normalization already guarantees for generateSvgLayout()'s input); the
+   * caller's widthMm/heightMm (default: that natural bounding box's own size, i.e. no scaling) is
+   * then mapped onto it independently in X and Y, identically to every other placed shape in this
+   * engine.
+   *
+   * @param {object} params
+   * @param {{xMm:number,yMm:number}[][]} params.contours Pre-flattened, (0,0)-rooted contours (2+ points each).
+   * @param {string} params.layerId
+   * @param {number} [params.xMm] Placement top-left X, default 0.
+   * @param {number} [params.yMm] Placement top-left Y, default 0.
+   * @param {number} [params.widthMm] Target placed width; defaults to the contours' own natural width.
+   * @param {number} [params.heightMm] Target placed height; defaults to the contours' own natural height.
+   * @param {number} params.stoneSizeMm
+   * @param {number} [params.gapMm]
+   * @param {'outline'|'fill'} [params.mode]
+   * @param {string} [params.color]
+   * @returns {StoneLayout}
+   */
+  generatePathLayout(params = {}) {
+    const options = normalizePathParams(params);
+    const { polygons, boundingBox } = this._pathPolygons(options);
+
+    if (!boundingBox) {
+      return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones: [] });
+    }
+
+    const spacingMm = options.stoneSizeMm + options.gapMm;
+    const points = options.mode === 'fill'
+      ? sampleFillPoints(polygons, BoundingBox.fromPoints(polygons.flat()), spacingMm)
+      : polygons.flatMap((polygon) => sampleOutlinePoints(polygon, spacingMm));
+
+    const stones = points.map((point, index) => new Stone({
+      xMm: point.xMm,
+      yMm: point.yMm,
+      sizeMm: options.stoneSizeMm,
+      color: options.color,
+      layerId: options.layerId,
+      index
+    }));
+
+    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
+  }
+
+  /**
+   * Resolve a 'path' layer's flattened polygon contours in absolute millimeters, without sampling
+   * stones — RS-1012's boolean-input entry point for chaining a *previous* boolean result into
+   * another Boolean Operation, mirroring resolveShapePolygons()/resolveSvgPolygons()/resolveTextPolygons().
+   *
+   * @param {object} params Same shape as generatePathLayout()'s params, minus stoneSizeMm/gapMm/mode/color.
+   * @returns {{polygons: import('../text/VectorPath.js').Point2D[][], boundingBox: BoundingBox|null}}
+   */
+  resolvePathPolygons(params = {}) {
+    const options = normalizePathParams({ ...params, stoneSizeMm: 1, mode: DEFAULT_MODE });
+    return this._pathPolygons(options);
+  }
+
+  _pathPolygons(options) {
+    const naturalPoints = options.contours.flat();
+    const naturalBox = BoundingBox.fromPoints(naturalPoints.map((point) => new Point2D(point.xMm, point.yMm)));
+    if (!naturalBox) {
+      return { polygons: [], boundingBox: null };
+    }
+
+    const targetWidthMm = options.widthMm ?? naturalBox.widthMm;
+    const targetHeightMm = options.heightMm ?? naturalBox.heightMm;
+    const scaleX = naturalBox.widthMm > 0 ? targetWidthMm / naturalBox.widthMm : 1;
+    const scaleY = naturalBox.heightMm > 0 ? targetHeightMm / naturalBox.heightMm : 1;
+
+    const polygons = options.contours.map((contour) => contour.map((point) => new Point2D(
+      options.xMm + point.xMm * scaleX,
+      options.yMm + point.yMm * scaleY
+    )));
+
+    return { polygons, boundingBox: BoundingBox.fromPoints(polygons.flat()) };
   }
 }
 
@@ -572,6 +722,62 @@ function normalizeImageParams(params) {
     blurRadiusPx: params.blurRadiusPx,
     maxWidthPx: params.maxWidthPx,
     maxHeightPx: params.maxHeightPx
+  };
+}
+
+// RS-1012: contours/xMm/yMm/widthMm/heightMm are this method's own geometry-side params;
+// stoneSizeMm/gapMm/mode/color validation below mirrors normalizeSvgParams()'s exactly (same
+// "placed shape" param shape), following this file's existing per-type-normalizer convention.
+function normalizePathParams(params) {
+  if (!Array.isArray(params.contours) || params.contours.length === 0) {
+    throw new TypeError('GeometryEngine.generatePathLayout requires a non-empty contours array.');
+  }
+  for (const contour of params.contours) {
+    if (!Array.isArray(contour) || contour.length < 3) {
+      throw new TypeError('GeometryEngine.generatePathLayout requires every contour to have at least 3 points.');
+    }
+  }
+  if (typeof params.layerId !== 'string' || params.layerId.length === 0) {
+    throw new TypeError('GeometryEngine.generatePathLayout requires a non-empty layerId.');
+  }
+
+  const stoneSizeMm = assertPositiveNumber(params.stoneSizeMm, 'stoneSizeMm');
+
+  const gapMm = assertFiniteNumber(params.gapMm ?? 0, 'gapMm');
+  if (gapMm < 0) {
+    throw new RangeError('gapMm must be zero or positive.');
+  }
+
+  const mode = params.mode ?? DEFAULT_MODE;
+  if (!SAMPLE_MODES.has(mode)) {
+    throw new TypeError(`Unsupported geometry mode: ${mode}. Expected one of: ${[...SAMPLE_MODES].join(', ')}`);
+  }
+
+  if (params.color !== undefined && params.color !== null &&
+    (typeof params.color !== 'string' || params.color.length === 0)) {
+    throw new TypeError('GeometryEngine.generatePathLayout color must be a non-empty string when provided.');
+  }
+
+  const xMm = assertFiniteNumber(params.xMm ?? 0, 'xMm');
+  const yMm = assertFiniteNumber(params.yMm ?? 0, 'yMm');
+  const widthMm = params.widthMm === undefined || params.widthMm === null
+    ? null
+    : assertPositiveNumber(params.widthMm, 'widthMm');
+  const heightMm = params.heightMm === undefined || params.heightMm === null
+    ? null
+    : assertPositiveNumber(params.heightMm, 'heightMm');
+
+  return {
+    contours: params.contours,
+    layerId: params.layerId,
+    xMm,
+    yMm,
+    widthMm,
+    heightMm,
+    stoneSizeMm,
+    gapMm,
+    mode,
+    color: params.color ?? null
   };
 }
 

@@ -85,7 +85,7 @@
 // pipeline stages re-run on every threshold/invert/blur/resize edit, but the (comparatively
 // expensive) browser image decode only ever runs once per distinct imageSrc value.
 import './src/browser/BrowserDependencyProbe.js';
-import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout } from './src/geometry/index.js';
+import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
 import { createDefaultFontProviderRegistry } from './src/text/index.js';
 import { renderProductionLayout } from './src/renderer/CanvasRenderer2D.js';
@@ -110,6 +110,24 @@ import { SNAP_TOLERANCE_MM, NUDGE_STEP_MM, NUDGE_STEP_LARGE_MM, alignLayers, dis
 // wires a Lightbox to a top-menu button or a layer-aware "which fields to show" decision. See
 // docs/specifications/UI-001-CompleteRedesign.md.
 import { Lightbox } from './src/ui/index.js';
+// RS-1012 (Vector Boolean Operations): Union/Subtract/Intersect/Exclude over the current
+// multi-selection (the same selectedLayerIds set RS-1009's Align/Snap already uses). No new
+// geometry algorithm lives in app.js: resolveLayerShapeSource() below only asks the permanent
+// engine for each selected layer's already-placed vector outline (resolveShapePolygons()/
+// resolveSvgPolygons()/resolveTextPolygons()/resolvePathPolygons(), each new methods on
+// GeometryEngine that share their polygon-building code with the pre-existing generate*Layout()
+// stone methods -- see src/geometry/GeometryEngine.js) or, for an 'image' (Image Trace) layer, its
+// raster density field directly (src/image/**'s existing prepareImageField(), unchanged); the new
+// src/geometry/PathBoolean.js combines those sources and traces the result back into vector
+// contours. The combined result becomes a new 'path' layer -- a generic compound-vector-shape layer
+// type reusing the exact generic x/y/w/h placement-box editing (move/resize/duplicate/align/snap)
+// rectangle/svg/image layers already share, and generated into stones by the permanent engine's new
+// generatePathLayout(), the same "place a natural-size shape into an x/y/w/h box, then outline/fill
+// sample it" shape generateSvgLayout() already uses. The source layers are removed only after the
+// operation succeeds; a boolean op that cannot run (fewer than 2 layers selected, a selected layer
+// with no closed vector outline, or a result with no area) fails with a specific #status /
+// #booleanOpsValidation message and leaves `project` untouched. See
+// docs/specifications/RS-1012-VectorBooleanOperations.md.
 'use strict';
 const FONT5={
 ' ':['00000','00000','00000','00000','00000','00000','00000'],
@@ -170,6 +188,17 @@ function populateStoneColorOptions(){const groups=new Map();for(const c of Objec
 // actual previewColor. Called from updateStats() (itself called at the end of every updateAll()),
 // so the swatch always reflects the live selection after an edit, undo/redo, or import.
 function updateStoneColorSwatch(){const c=STONE_COLORS[el('stoneColor').value];el('stoneColorSwatch').style.background=c?c.previewColor:'transparent'}
+// RS-1009 originally, RS-1012 extracted to a standalone function: a text layer has no stored
+// absolute position of its own (unlike every other layer type) -- it is always auto-centered on the
+// production canvas first, then offset by layer.x/layer.y on top of that. generateTextStonesLive()
+// below applies this to already-generated stones; resolveLayerShapeSource()'s text branch applies
+// the exact same formula to already-generated *polygons* (RS-1012 boolean input), so both stay in
+// sync by construction instead of by duplicated arithmetic.
+function computeTextPlacementOffset(boundingBox,layer,project){
+  const offsetX=(boundingBox?(project.canvas.width-boundingBox.widthMm)/2-boundingBox.minXmm:0)+(layer.x||0);
+  const offsetY=(boundingBox?(project.canvas.height-boundingBox.heightMm)/2-boundingBox.minYmm:0)+(layer.y||0);
+  return{offsetX,offsetY};
+}
 class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=permanentEngine}
  // Geometry generation happens exactly once here, per docs/ARCHITECTURE.md: every layer's stones
  // come straight from the permanent engine's per-layer StoneLayout; dedupe() below only filters
@@ -177,13 +206,13 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // are wrapped into one real StoneLayout ('project' is a sentinel layerId — StoneLayout requires
  // one non-empty layerId per instance; each Stone still carries its own real layer id) so every
  // renderer/exporter downstream consumes the same canonical product.
- async generate(project){let raw=[];for(const l of project.layers){if(!l.visible)continue;if(l.type==='text')raw.push(...await this.generateTextStonesLive(l,project));if(l.type==='circle'||l.type==='rectangle')raw.push(...await this.generateShapeStonesLive(l));if(l.type==='svg')raw.push(...await this.generateSvgStonesLive(l));if(l.type==='image')raw.push(...await this.generateImageStonesLive(l));}const stones=this.dedupe(raw,Math.min(...raw.map(s=>s.d||2),2)*0.58).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId}));return new StoneLayout({layerId:'project',stones})}
+ async generate(project){let raw=[];for(const l of project.layers){if(!l.visible)continue;if(l.type==='text')raw.push(...await this.generateTextStonesLive(l,project));if(l.type==='circle'||l.type==='rectangle')raw.push(...await this.generateShapeStonesLive(l));if(l.type==='svg')raw.push(...await this.generateSvgStonesLive(l));if(l.type==='image')raw.push(...await this.generateImageStonesLive(l));if(l.type==='path')raw.push(...await this.generatePathStonesLive(l));}const stones=this.dedupe(raw,Math.min(...raw.map(s=>s.d||2),2)*0.58).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId}));return new StoneLayout({layerId:'project',stones})}
  async generateTextStonesLive(layer,project){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text)return[];const fontId=TEXT_ENGINE_FONT_IDS.has(layer.font)?layer.font:DEFAULT_TEXT_FONT_ID;const mode=layer.textMode==='fill'?'fill':'outline';const base={text:layer.text,fontId,layerId:layer.id,heightMm:layer.height,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const maxWidth=project.canvas.width-10;if(result.widthMm>maxWidth&&result.widthMm>0){const scale=maxWidth/result.widthMm;const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
   // RS-1009: text layers previously had no position field -- stones were always centered on the
   // canvas. layer.x/layer.y (mm, default 0) are a further offset applied on top of that same
   // auto-centered base position, so pre-RS-1009 Project JSON (no x/y on its text layers) renders
   // byte-identical to before, and dragging/nudging/aligning a text layer just moves this offset.
-  const offsetX=(bb?(project.canvas.width-bb.widthMm)/2-bb.minXmm:0)+(layer.x||0);const offsetY=(bb?(project.canvas.height-bb.heightMm)/2-bb.minYmm:0)+(layer.y||0);return result.stones.map(s=>({x:s.xMm+offsetX,y:s.yMm+offsetY,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
+  const{offsetX,offsetY}=computeTextPlacementOffset(bb,layer,project);return result.stones.map(s=>({x:s.xMm+offsetX,y:s.yMm+offsetY,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
  // RS-0003.5C1: circle/rectangle layers are generated by the same permanent engine's
  // generateShapeLayout(), mirroring generateTextStonesLive() above.
  async generateShapeStonesLive(layer){if(!this.permanentEngine)return[];const isCircle=layer.type==='circle';const params={shape:layer.type,layerId:layer.id,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:'outline',color:layer.color,...(isCircle?{cxMm:layer.cx,cyMm:layer.cy,radiusMm:layer.r}:{xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h})};const result=this.permanentEngine.generateShapeLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
@@ -197,6 +226,10 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // the (comparatively expensive) browser image decode only re-runs the first time a given imageSrc
  // is seen; every subsequent call here only re-runs the permanent engine's pure/fast pipeline.
  async generateImageStonesLive(layer){if(!this.permanentEngine||!layer.imageSrc)return[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx};const result=this.permanentEngine.generateImageLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
+ // RS-1012: 'path' layers (Boolean Operation results) go through the permanent engine's
+ // generatePathLayout(), mirroring generateSvgStonesLive()/generateShapeStonesLive() above --
+ // layer.contours is already plain (0,0)-rooted polygon data (no parsing step, unlike SVG).
+ async generatePathStonesLive(layer){if(!this.permanentEngine)return[];const params={contours:layer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:'outline',color:layer.color};const result=this.permanentEngine.generatePathLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
  // Legacy bitmap text path below (generateText/sampleGlyphFill/sampleGlyphStroke) and the legacy
  // generateCircle/generateRect shape path are kept but no longer called now that
  // generateTextStonesLive/generateShapeStonesLive use the permanent engine. Retained per
@@ -220,7 +253,7 @@ function defaultProject(){return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,
 // caller (the #importProjectFile change handler) surfaces that message via #status and leaves
 // the current `project` untouched on failure. Returns a normalized copy on success — it never
 // mutates its input.
-const SUPPORTED_LAYER_TYPES=new Set(['text','circle','rectangle','svg','image']);
+const SUPPORTED_LAYER_TYPES=new Set(['text','circle','rectangle','svg','image','path']);
 function validateProject(obj){
   if(!obj||typeof obj!=='object'||Array.isArray(obj))throw new Error('Project file must contain a JSON object.');
   const canvas=obj.canvas;
@@ -250,6 +283,11 @@ function validateProject(obj){
     if(l.type==='image'&&(typeof l.threshold!=='number'||!Number.isFinite(l.threshold)||l.threshold<0||l.threshold>255))throw new Error(`Image layer "${l.id}" is missing a valid 'threshold' (0-255).`);
     if(l.type==='image'&&(typeof l.blurRadiusPx!=='number'||!Number.isFinite(l.blurRadiusPx)||l.blurRadiusPx<0))throw new Error(`Image layer "${l.id}" is missing a valid non-negative 'blurRadiusPx'.`);
     if(l.type==='image'&&![l.maxWidthPx,l.maxHeightPx].every(n=>typeof n==='number'&&Number.isFinite(n)&&n>0))throw new Error(`Image layer "${l.id}" is missing valid positive 'maxWidthPx'/'maxHeightPx'.`);
+    // RS-1012: a 'path' layer (a Boolean Operation result) stores its shape directly as contours --
+    // an array of (0,0)-rooted polygons, each a numeric {x,y}[] with 3+ points -- plus the same
+    // x/y/w/h placement box svg/image layers already use.
+    if(l.type==='path'&&!(Array.isArray(l.contours)&&l.contours.length>0&&l.contours.every(c=>Array.isArray(c)&&c.length>=3&&c.every(p=>p&&typeof p.x==='number'&&Number.isFinite(p.x)&&typeof p.y==='number'&&Number.isFinite(p.y)))))throw new Error(`Path layer "${l.id}" is missing a valid non-empty 'contours' array.`);
+    if(l.type==='path'&&![l.x,l.y,l.w,l.h].every(n=>typeof n==='number'&&Number.isFinite(n)))throw new Error(`Path layer "${l.id}" is missing numeric x/y/w/h fields.`);
     if(typeof l.stoneSize!=='number'||!Number.isFinite(l.stoneSize)||l.stoneSize<=0)throw new Error(`Layer "${l.id}" is missing a positive numeric stoneSize.`);
     if(typeof l.gap!=='number'||!Number.isFinite(l.gap)||l.gap<0)throw new Error(`Layer "${l.id}" is missing a non-negative numeric gap.`);
   }
@@ -339,7 +377,7 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
 function writeSelectedControlsToLayer(){const l=selectedLayer();if(l.type==='text'){l.text=el('text').value;l.font=el('font').value;l.height=parseFloat(el('height').value)||25;l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;l.curveEnabled=el('curveEnabled').value==='on';l.curveRadiusMm=Math.max(0.1,parseFloat(el('curveRadiusMm').value)||40);l.curveDirection=el('curveDirection').value==='inside'?'inside':'outside';l.curveStartAngleDeg=parseFloat(el('curveStartAngleDeg').value)||0;l.curveSweepAngleDeg=parseFloat(el('curveSweepAngleDeg').value)||360;l.curveAlignment=el('curveAlignment').value;el('curveControls').style.display=l.curveEnabled?'block':'none';
   // UI-001: manual X/Y mm fields for the Text Lightbox, writing to the same layer.x/layer.y fields
   // RS-1009 already added (previously settable only by drag/nudge/align/distribute).
-  l.x=parseFloat(el('textX').value)||0;l.y=parseFloat(el('textY').value)||0}else if(l.type==='circle'){l.cx=parseFloat(el('shapeX').value)||105;l.cy=parseFloat(el('shapeY').value)||45;l.r=Math.max(1,parseFloat(el('shapeW').value)||18)}else if(l.type==='rectangle'){l.x=parseFloat(el('shapeX').value)||65;l.y=parseFloat(el('shapeY').value)||30;l.w=Math.max(1,parseFloat(el('shapeW').value)||80);l.h=Math.max(1,parseFloat(el('shapeH').value)||30)}else if(l.type==='svg'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.mode=el('svgMode').value==='fill'?'fill':'outline'}else if(l.type==='image'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX))}l.stoneSize=parseFloat(el('stoneSize').value)||2;l.gap=parseFloat(el('gap').value)||.3;l.color=el('stoneColor').value;project.cupColor=el('cupColor').value;project.wrap=el('wrap').value;project.name=el('projectName').value||DEFAULT_PROJECT_NAME;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
+  l.x=parseFloat(el('textX').value)||0;l.y=parseFloat(el('textY').value)||0}else if(l.type==='circle'){l.cx=parseFloat(el('shapeX').value)||105;l.cy=parseFloat(el('shapeY').value)||45;l.r=Math.max(1,parseFloat(el('shapeW').value)||18)}else if(l.type==='rectangle'){l.x=parseFloat(el('shapeX').value)||65;l.y=parseFloat(el('shapeY').value)||30;l.w=Math.max(1,parseFloat(el('shapeW').value)||80);l.h=Math.max(1,parseFloat(el('shapeH').value)||30)}else if(l.type==='svg'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.mode=el('svgMode').value==='fill'?'fill':'outline'}else if(l.type==='image'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX))}else if(l.type==='path'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(2,parseFloat(el('shapeW').value)||10);l.h=Math.max(2,parseFloat(el('shapeH').value)||10)}l.stoneSize=parseFloat(el('stoneSize').value)||2;l.gap=parseFloat(el('gap').value)||.3;l.color=el('stoneColor').value;project.cupColor=el('cupColor').value;project.wrap=el('wrap').value;project.name=el('projectName').value||DEFAULT_PROJECT_NAME;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
 async function updateAll(skipWrite=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated;try{generated=await engine.generate(project)}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Text generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;renderLayerUI();drawLayout();drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}// S-003: a project must always keep at least one layer (deleteLayer()'s guard below), so once
 // only one layer remains, every delete affordance -- the per-row trash icon and the sidebar
 // "Delete selected layer" button -- is disabled here (not just left clickable-but-a-no-op) and
@@ -350,7 +388,7 @@ function renderLayerUI(){const onlyOneLayer=project.layers.length<=1;el('selecte
   // UI-001: keep the right inspector's layer name and the left panel's project/template summary
   // in sync on every render (add/delete/duplicate/undo/redo/import/selection change).
   el('inspectorLayerName').textContent=layerLabel(selectedLayer());updateObjectTemplateDetail();
-}function layerLabel(l){return l.type==='text'?(l.text||'Text'):l.type==='circle'?'Circle':l.type==='svg'?(l.svgName||'SVG'):l.type==='image'?(l.imageName||'Image'):'Rectangle'}function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+}function layerLabel(l){return l.type==='text'?(l.text||'Text'):l.type==='circle'?'Circle':l.type==='svg'?(l.svgName||'SVG'):l.type==='image'?(l.imageName||'Image'):l.type==='path'?(l.pathName||'Path'):'Rectangle'}function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function resizeCanvas(c){const r=c.getBoundingClientRect(),dpr=Math.max(1,devicePixelRatio||1),w=Math.floor(r.width*dpr),h=Math.floor(r.height*dpr);if(c.width!==w||c.height!==h){c.width=w;c.height=h}return{w,h,dpr}}
 function layoutMmToPx(p){return{x:layoutTransform.ox+p.x*layoutTransform.s,y:layoutTransform.oy+p.y*layoutTransform.s}}function layoutPxToMm(x,y){return{x:(x-layoutTransform.ox)/layoutTransform.s,y:(y-layoutTransform.oy)/layoutTransform.s}}
 function drawLayout(){const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr});layoutTransform={s,ox,oy,dpr};if(showSafeArea)drawSafeAreaGuide(ctx,s,ox,oy,dpr,getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height));drawSelection(ctx,s,ox,oy,dpr);drawGuides(ctx,s,ox,oy,dpr);ctx.fillStyle='#516071';ctx.font=`${12*dpr}px Arial`;ctx.fillText(`${layout.count} stones · ${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm · ${selectedLayer().textMode||''}`,20*dpr,h-18*dpr);el('fitNotice').textContent='Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step).'}
@@ -363,7 +401,7 @@ function drawSafeAreaGuide(ctx,s,ox,oy,dpr,rectMm){const rx=ox+rectMm.xMm*s,ry=o
 // Text layers have no plain layer fields to compute a bbox from directly (unlike circle/
 // rectangle), so their selection bbox is derived from the already-generated StoneLayout, filtered
 // to this layer's stones and wrapped in a fresh StoneLayout to reuse its getBoundingBox() math.
-function getLayerBBox(l){if(l.type==='circle')return{x:l.cx-l.r,y:l.cy-l.r,width:l.r*2,height:l.r*2,x2:l.cx+l.r,y2:l.cy+l.r};if(l.type==='rectangle'||l.type==='svg'||l.type==='image')return{x:l.x,y:l.y,width:l.w,height:l.h,x2:l.x+l.w,y2:l.y+l.h};const stones=layout.stones.filter(s=>s.layerId===l.id);if(!stones.length)return{x:0,y:0,x2:0,y2:0,width:0,height:0};const b=new StoneLayout({layerId:l.id,stones}).getBoundingBox();return{x:b.minXmm,y:b.minYmm,x2:b.maxXmm,y2:b.maxYmm,width:b.widthMm,height:b.heightMm}}
+function getLayerBBox(l){if(l.type==='circle')return{x:l.cx-l.r,y:l.cy-l.r,width:l.r*2,height:l.r*2,x2:l.cx+l.r,y2:l.cy+l.r};if(l.type==='rectangle'||l.type==='svg'||l.type==='image'||l.type==='path')return{x:l.x,y:l.y,width:l.w,height:l.h,x2:l.x+l.w,y2:l.y+l.h};const stones=layout.stones.filter(s=>s.layerId===l.id);if(!stones.length)return{x:0,y:0,x2:0,y2:0,width:0,height:0};const b=new StoneLayout({layerId:l.id,stones}).getBoundingBox();return{x:b.minXmm,y:b.minYmm,x2:b.maxXmm,y2:b.maxYmm,width:b.widthMm,height:b.heightMm}}
 // RS-1009: the one pair of functions that know a layer's position field names (cx/cy for circle,
 // x/y for everything else, including the new text-layer offset fields) -- src/editing/** never
 // sees a layer `type`, it only ever returns a translation delta; these two functions turn that
@@ -381,11 +419,149 @@ function applyPositionDeltas(deltas){for(const[id,{dxMm,dyMm}]of deltas){const l
 const ALIGN_DIRECTION_LABELS={left:'left edges',centerH:'horizontal centers',right:'right edges',top:'top edges',centerV:'vertical centers',bottom:'bottom edges'};
 function runAlign(direction){const items=selectedItemsForEditing();if(items.length<2)return;commitHistory();applyPositionDeltas(alignLayers(items,direction));syncSelectedControlsFromLayer();updateAll(true);el('status').textContent=`Aligned ${items.length} layers to ${ALIGN_DIRECTION_LABELS[direction]||direction}`}
 function runDistribute(axis){const items=selectedItemsForEditing();if(items.length<3)return;commitHistory();applyPositionDeltas(distributeLayers(items,axis));syncSelectedControlsFromLayer();updateAll(true);el('status').textContent=`Distributed ${items.length} layers ${axis==='horizontal'?'horizontally':'vertically'}`}
+// RS-1012: Boolean Operations. BOOLEAN_OPERATION_LABELS is the exact user-facing vocabulary the
+// milestone brief requires ("Exclude", not "XOR"), reused for the result layer's default name and
+// every status/validation message so the wording stays consistent everywhere it appears.
+const BOOLEAN_OPERATION_LABELS={union:'Union',subtract:'Subtract',intersect:'Intersect',xor:'Exclude'};
+
+// Resolves one layer into the {kind:'polygons',polygons} | {kind:'field',...} shape
+// combineManyShapeSources() (src/geometry/PathBoolean.js) expects, or null if this layer has no
+// closed/fillable vector outline to combine (empty text, an SVG made only of open lines, an
+// unplaced Image Trace). Mirrors GeometryEngine.generate()'s per-type dispatch above, but asks the
+// permanent engine to *resolve* each shape's outline (resolveShapePolygons()/resolveSvgPolygons()/
+// resolveTextPolygons()/resolvePathPolygons()) instead of *sampling* it into stones -- the same
+// polygons the matching generate*Layout() stone method would flatten, so a layer's boolean input is
+// always identical to what it already renders as.
+async function resolveLayerShapeSource(layer){
+  if(layer.type==='circle'||layer.type==='rectangle'){
+    const isCircle=layer.type==='circle';
+    const{polygons,boundingBox}=permanentEngine.resolveShapePolygons({
+      shape:layer.type,layerId:layer.id,
+      ...(isCircle?{cxMm:layer.cx,cyMm:layer.cy,radiusMm:layer.r}:{xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h})
+    });
+    return boundingBox?{kind:'polygons',polygons}:null;
+  }
+  if(layer.type==='svg'){
+    const{polygons,boundingBox}=permanentEngine.resolveSvgPolygons({svgSource:layer.svgSource,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h});
+    return boundingBox?{kind:'polygons',polygons}:null;
+  }
+  if(layer.type==='path'){
+    const{polygons,boundingBox}=permanentEngine.resolvePathPolygons({contours:layer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h});
+    return boundingBox?{kind:'polygons',polygons}:null;
+  }
+  if(layer.type==='text'){
+    if(!permanentEngine.canGenerateText||!layer.text)return null;
+    const fontId=TEXT_ENGINE_FONT_IDS.has(layer.font)?layer.font:DEFAULT_TEXT_FONT_ID;
+    const base={text:layer.text,fontId,layerId:layer.id,heightMm:layer.height,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};
+    let resolved=await permanentEngine.resolveTextPolygons(base);
+    if(layer.autoFit&&resolved.boundingBox){
+      const maxWidth=project.canvas.width-10;
+      if(resolved.boundingBox.widthMm>maxWidth&&resolved.boundingBox.widthMm>0){
+        const scale=maxWidth/resolved.boundingBox.widthMm;
+        resolved=await permanentEngine.resolveTextPolygons({...base,heightMm:Math.max(1,layer.height*scale)});
+      }
+    }
+    if(!resolved.boundingBox)return null;
+    const{offsetX,offsetY}=computeTextPlacementOffset(resolved.boundingBox,layer,project);
+    return{kind:'polygons',polygons:resolved.polygons.map(poly=>poly.map(p=>({xMm:p.xMm+offsetX,yMm:p.yMm+offsetY})))};
+  }
+  if(layer.type==='image'){
+    if(!layer.imageSrc||!(layer.w>0)||!(layer.h>0))return null;
+    let buffer=imageBufferCache.get(layer.imageSrc);
+    if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}
+    const field=prepareImageField(buffer,{threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx});
+    return{kind:'field',field,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h};
+  }
+  return null;
+}
+
+function showBooleanOpsError(message){
+  el('status').textContent=message;
+  const validationEl=el('booleanOpsValidation');
+  if(validationEl){validationEl.textContent=message;validationEl.style.display='block'}
+}
+function clearBooleanOpsError(){
+  const validationEl=el('booleanOpsValidation');
+  if(validationEl){validationEl.textContent='';validationEl.style.display='none'}
+}
+
+// RS-1012: runs a Union/Subtract/Intersect/Exclude over the current multi-selection
+// (selectedLayerIds, the same RS-1009 set Align/Snap already uses). Layers are resolved in
+// project.layers' own z-order (back to front -- the same "last in the array is topmost" convention
+// hitTest()'s [...].reverse() already relies on), so Subtract has one predictable meaning
+// regardless of click order: the backmost selected layer minus everything selected in front of it,
+// matching Illustrator's "Minus Front"/Affinity's "Subtract". The source layers are removed, and the
+// new 'path' layer is inserted, only after every step below succeeds -- any failure leaves `project`
+// completely untouched and reports a specific message via #status/#booleanOpsValidation.
+async function runBooleanOp(operation){
+  clearBooleanOpsError();
+  const label=BOOLEAN_OPERATION_LABELS[operation]||operation;
+  const ids=[...selectedLayerIds];
+  const layers=project.layers.filter(l=>ids.includes(l.id));
+  if(layers.length<2){
+    showBooleanOpsError('Select two or more layers (Shift-click on the canvas or in the Layers list) to use Boolean Operations.');
+    return;
+  }
+
+  let sources;
+  try{
+    sources=await Promise.all(layers.map(l=>resolveLayerShapeSource(l)));
+  }catch(error){
+    console.error('Boolean operation failed while resolving layer geometry',error);
+    showBooleanOpsError(`${label} failed: ${error.message}`);
+    return;
+  }
+  const missingIndex=sources.findIndex(s=>!s);
+  if(missingIndex!==-1){
+    showBooleanOpsError(`"${layerLabel(layers[missingIndex])}" has no closed shape to combine — Boolean Operations need a solid outline (not an empty text layer, an SVG made only of open lines, or an unplaced Image Trace).`);
+    return;
+  }
+
+  let combined;
+  try{
+    combined=combineManyShapeSources(sources,operation);
+  }catch(error){
+    console.error('Boolean operation failed',error);
+    showBooleanOpsError(`${label} failed: ${error.message}`);
+    return;
+  }
+  if(!combined.contours.length){
+    const why=operation==='intersect'?'don’t overlap':operation==='subtract'?'fully cancel out':'don’t combine into a visible shape';
+    showBooleanOpsError(`${label} produced an empty shape — the selected layers ${why}. Nothing was changed.`);
+    return;
+  }
+
+  const box=combined.boundingBox;
+  const base=layers[0];
+  const localContours=combined.contours.map(poly=>poly.map(p=>({x:p.xMm-box.minXmm,y:p.yMm-box.minYmm})));
+  const newLayer={
+    id:'path'+Date.now(),type:'path',visible:true,pathName:`${label} Result`,
+    contours:localContours,x:box.minXmm,y:box.minYmm,w:Math.max(2,box.maxXmm-box.minXmm),h:Math.max(2,box.maxYmm-box.minYmm),
+    stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold'
+  };
+
+  commitHistory();
+  const insertAt=Math.min(...layers.map(l=>project.layers.indexOf(l)));
+  project.layers=project.layers.filter(l=>!ids.includes(l.id));
+  project.layers.splice(Math.min(insertAt,project.layers.length),0,newLayer);
+  selectedLayerId=newLayer.id;
+  selectedLayerIds=selectOnly(newLayer.id);
+  syncSelectedControlsFromLayer();
+  await updateAll(true);
+  el('status').textContent=`${label}: combined ${layers.length} layers into one editable shape (${combined.contours.length} contour${combined.contours.length===1?'':'s'}).`;
+}
+
 function nudgeSelection(dxMm,dyMm){if(selectedLayerIds.size===0)return;commitHistory();for(const id of selectedLayerIds){const l=project.layers.find(x=>x.id===id);if(!l)continue;const p=getLayerPosition(l);setLayerPosition(l,p.xMm+dxMm,p.yMm+dyMm)}syncSelectedControlsFromLayer();updateAll(true)}
 // RS-1009: keeps the Align/Snap sidebar section in sync with the current selection count -- align
 // needs 2+, distribute needs 3+, matching this milestone's required outcome exactly. Called from
 // updateAll() so it never goes stale after an edit/undo/redo/import.
-function updateEditingUI(){const n=selectedLayerIds.size;el('selectionSummary').textContent=n===0?'No layers selected':n===1?'1 layer selected':`${n} layers selected`;const alignDisabled=n<2;for(const id of['alignLeft','alignCenterH','alignRight','alignTop','alignCenterV','alignBottom'])el(id).disabled=alignDisabled;const distDisabled=n<3;el('distributeH').disabled=distDisabled;el('distributeV').disabled=distDisabled}
+function updateEditingUI(){const n=selectedLayerIds.size;el('selectionSummary').textContent=n===0?'No layers selected':n===1?'1 layer selected':`${n} layers selected`;const alignDisabled=n<2;for(const id of['alignLeft','alignCenterH','alignRight','alignTop','alignCenterV','alignBottom'])el(id).disabled=alignDisabled;const distDisabled=n<3;el('distributeH').disabled=distDisabled;el('distributeV').disabled=distDisabled;
+  // RS-1012: Boolean Operations need 2+ layers, exactly like Align above -- disabling the buttons
+  // (rather than only erroring on click) keeps the "why can't I click this" answer visible at a
+  // glance, matching this sidebar's existing Align/Distribute affordance.
+  const boolDisabled=n<2;for(const id of['boolUnion','boolSubtract','boolIntersect','boolExclude'])el(id).disabled=boolDisabled;
+  el('booleanOpsHint').style.display=boolDisabled?'block':'none';
+}
 // RS-0003.5D2: SELECTION_HANDLE_SIZE_PX enlarges the resize handles slightly (was a bare 10px
 // square) and a white halo is stroked behind the dashed outline so the selection reads clearly
 // against any background (light grid, light/dark stones), not just against the plain canvas.
@@ -420,7 +596,7 @@ function updateViewButtons(){document.querySelectorAll('.viewBtn').forEach(b=>b.
 function selectionBoundsText(){if(!selectedLayerIds.size)return'';const sel=[...selectedLayerIds].map(id=>project.layers.find(x=>x.id===id)).filter(Boolean);if(!sel.length)return'';const b=unionBBoxOfLayers(sel);return`<span>selection: ${b.width.toFixed(1)}×${b.height.toFixed(1)} mm</span>`}
 function updateStats(){const safe=getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height);el('layoutStats').innerHTML=`<b>${layout.count}</b> stones <span>${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm</span><span>canvas: ${project.canvas.width}×${project.canvas.height} mm</span><span>safe area: ${safe.widthMm.toFixed(1)}×${safe.heightMm.toFixed(1)} mm</span><span>units: mm</span>${selectionBoundsText()}<span>selected: ${escapeHtml(layerLabel(selectedLayer()))}</span>`;el('cupStats').innerHTML=`<span>${escapeHtml(currentObjectTemplate().displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span>`;updateStoneColorSwatch()}
 function download(name,mime,data){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:mime}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800);el('status').textContent=`Downloaded ${name}`}function exportCanvas(name,canvas){canvas.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800)},'image/png')}
-function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(copy.type==='rectangle'){copy.x+=8;copy.y+=8}if(copy.type==='svg'){copy.x+=8;copy.y+=8}if(copy.type==='image'){copy.x+=8;copy.y+=8}if(copy.type==='text'){copy.text+=' copy';copy.x=(copy.x||0)+8;copy.y=(copy.y||0)+8}project.layers.push(copy);selectedLayerId=copy.id;selectedLayerIds=selectOnly(copy.id);syncSelectedControlsFromLayer();updateAll()}function deleteLayer(id){if(project.layers.length<=1){el('status').textContent='Cannot delete the last layer';const hint=el('layerRuleHint');hint.style.display='block';hint.scrollIntoView({block:'nearest'});return}commitHistory();project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true)}
+function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(copy.type==='rectangle'){copy.x+=8;copy.y+=8}if(copy.type==='svg'){copy.x+=8;copy.y+=8}if(copy.type==='image'){copy.x+=8;copy.y+=8}if(copy.type==='path'){copy.x+=8;copy.y+=8}if(copy.type==='text'){copy.text+=' copy';copy.x=(copy.x||0)+8;copy.y=(copy.y||0)+8}project.layers.push(copy);selectedLayerId=copy.id;selectedLayerIds=selectOnly(copy.id);syncSelectedControlsFromLayer();updateAll()}function deleteLayer(id){if(project.layers.length<=1){el('status').textContent='Cannot delete the last layer';const hint=el('layerRuleHint');hint.style.display='block';hint.scrollIntoView({block:'nearest'});return}commitHistory();project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true)}
 function pointerToLayout(e){const r=layoutCanvas.getBoundingClientRect(),dpr=layoutTransform.dpr;return layoutPxToMm((e.clientX-r.left)*dpr,(e.clientY-r.top)*dpr)}function hitTest(mm){const layers=[...project.layers].reverse();for(const l of layers){const b=getLayerBBox(l);for(const h of handlesFor(b)){if(Math.abs(mm.x-h.x)<3&&Math.abs(mm.y-h.y)<3&&l.type!=='text')return{layer:l,kind:'resize',handle:h.name,b0:b}}if(mm.x>=b.x&&mm.x<=b.x2&&mm.y>=b.y&&mm.y<=b.y2)return{layer:l,kind:'move',b0:b}}return null}
 // RS-1009: pointerdown now resolves one of three outcomes: (1) empty canvas -> clear selection;
 // (2) a resize handle -> unchanged single-layer resize (never snaps, never multi-selects); (3) a
@@ -499,7 +675,7 @@ layoutCanvas.addEventListener('pointermove',e=>{
   }else if(drag.kind==='resize'){
     const l=project.layers.find(x=>x.id===drag.layerId);if(!l)return;
     if(l.type==='circle'){l.r=Math.max(2,Math.hypot(mm.x-drag.l0.cx,mm.y-drag.l0.cy))}
-    else if(l.type==='rectangle'||l.type==='svg'||l.type==='image'){let x0=drag.b0.x,y0=drag.b0.y,x1=drag.b0.x2,y1=drag.b0.y2;if(drag.handle.includes('w'))x0=mm.x;if(drag.handle.includes('e'))x1=mm.x;if(drag.handle.includes('n'))y0=mm.y;if(drag.handle.includes('s'))y1=mm.y;l.x=Math.min(x0,x1);l.y=Math.min(y0,y1);l.w=Math.max(2,Math.abs(x1-x0));l.h=Math.max(2,Math.abs(y1-y0))}
+    else if(l.type==='rectangle'||l.type==='svg'||l.type==='image'||l.type==='path'){let x0=drag.b0.x,y0=drag.b0.y,x1=drag.b0.x2,y1=drag.b0.y2;if(drag.handle.includes('w'))x0=mm.x;if(drag.handle.includes('e'))x1=mm.x;if(drag.handle.includes('n'))y0=mm.y;if(drag.handle.includes('s'))y1=mm.y;l.x=Math.min(x0,x1);l.y=Math.min(y0,y1);l.w=Math.max(2,Math.abs(x1-x0));l.h=Math.max(2,Math.abs(y1-y0))}
   }
   syncSelectedControlsFromLayer();updateAll(true);
 });
@@ -536,7 +712,9 @@ el('objectType').addEventListener('change',()=>{commitHistory();const template=g
   syncSelectedControlsFromLayer();updateEditingUI();updateAll(true)});el('deleteSelected').onclick=()=>deleteLayer(selectedLayerId);document.querySelectorAll('.viewBtn').forEach(b=>b.onclick=()=>{rotation=parseFloat(b.dataset.view);el('rotation').value=rotation;updateAll()});el('resetView').onclick=()=>{rotation=0;zoom=1;el('rotation').value=0;el('zoom').value=100;preview3D.resetView();updateAll()};el('undoBtn').onclick=()=>performUndo();el('redoBtn').onclick=()=>performRedo();
 // RS-1009: Align/Snap sidebar section. snapEnabled is view-only editor state (like rotation/zoom
 // above) -- not part of `project`, not undo/redo-tracked, not exported.
-el('alignLeft').onclick=()=>runAlign('left');el('alignCenterH').onclick=()=>runAlign('centerH');el('alignRight').onclick=()=>runAlign('right');el('alignTop').onclick=()=>runAlign('top');el('alignCenterV').onclick=()=>runAlign('centerV');el('alignBottom').onclick=()=>runAlign('bottom');el('distributeH').onclick=()=>runDistribute('horizontal');el('distributeV').onclick=()=>runDistribute('vertical');el('snapEnabled').addEventListener('change',()=>{snapEnabled=el('snapEnabled').value==='on'});el('addCircle').onclick=()=>{const l=selectedLayer();commitHistory();const layer={id:'circle'+Date.now(),type:'circle',visible:true,cx:105,cy:45,r:18,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};project.layers.push(layer);selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);syncSelectedControlsFromLayer();updateAll(true)};el('addRect').onclick=()=>{const l=selectedLayer();commitHistory();const layer={id:'rect'+Date.now(),type:'rectangle',visible:true,x:65,y:30,w:80,h:30,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};project.layers.push(layer);selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);syncSelectedControlsFromLayer();updateAll(true)};el('importProject').onclick=()=>el('importProjectFile').click();
+el('alignLeft').onclick=()=>runAlign('left');el('alignCenterH').onclick=()=>runAlign('centerH');el('alignRight').onclick=()=>runAlign('right');el('alignTop').onclick=()=>runAlign('top');el('alignCenterV').onclick=()=>runAlign('centerV');el('alignBottom').onclick=()=>runAlign('bottom');el('distributeH').onclick=()=>runDistribute('horizontal');el('distributeV').onclick=()=>runDistribute('vertical');el('snapEnabled').addEventListener('change',()=>{snapEnabled=el('snapEnabled').value==='on'});
+// RS-1012: Boolean Operations, in the Shapes Lightbox (see index.html's #booleanOpsSection).
+el('boolUnion').onclick=()=>runBooleanOp('union');el('boolSubtract').onclick=()=>runBooleanOp('subtract');el('boolIntersect').onclick=()=>runBooleanOp('intersect');el('boolExclude').onclick=()=>runBooleanOp('xor');el('addCircle').onclick=()=>{const l=selectedLayer();commitHistory();const layer={id:'circle'+Date.now(),type:'circle',visible:true,cx:105,cy:45,r:18,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};project.layers.push(layer);selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);syncSelectedControlsFromLayer();updateAll(true)};el('addRect').onclick=()=>{const l=selectedLayer();commitHistory();const layer={id:'rect'+Date.now(),type:'rectangle',visible:true,x:65,y:30,w:80,h:30,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};project.layers.push(layer);selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);syncSelectedControlsFromLayer();updateAll(true)};el('importProject').onclick=()=>el('importProjectFile').click();
 el('importProjectFile').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;
   // UI-001B fix: the Import Lightbox is a full-viewport overlay (position:fixed;inset:0), so it
   // covers #status (in the left panel) the whole time this dialog is open -- writing only to
@@ -724,7 +902,7 @@ el('menuHelp').onclick=()=>lightboxes.help.open();
 el('moreOptionsBtn').onclick=()=>{
   const t=selectedLayer().type;
   if(t==='text')lightboxes.text.open();
-  else if(t==='circle'||t==='rectangle')lightboxes.shapes.open();
+  else if(t==='circle'||t==='rectangle'||t==='path')lightboxes.shapes.open();
   else if(t==='svg')lightboxes.importBox.open();
   else if(t==='image')lightboxes.imagetrace.open();
 };

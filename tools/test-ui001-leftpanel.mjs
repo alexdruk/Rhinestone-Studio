@@ -104,7 +104,9 @@ await test('7. the right inspector is a compact quick-edit surface, not a second
 await test('8. More Options opens the Lightbox matching the selected layer\'s type', () => {
   assert.match(appJs, /el\('moreOptionsBtn'\)\.onclick=\(\)=>\{/);
   assert.match(appJs, /if\(t==='text'\)lightboxes\.text\.open\(\)/);
-  assert.match(appJs, /else if\(t==='circle'\|\|t==='rectangle'\)lightboxes\.shapes\.open\(\)/);
+  // RS-1012 extended this branch to also open Shapes for 'path' layers (Boolean Operation results,
+  // edited the same way circle/rectangle are) -- see tools/test-path-boolean-integration.mjs.
+  assert.match(appJs, /else if\(t==='circle'\|\|t==='rectangle'\|\|t==='path'\)lightboxes\.shapes\.open\(\)/);
   assert.match(appJs, /else if\(t==='svg'\)lightboxes\.importBox\.open\(\)/, 'expected More Options to open the Import Lightbox for svg layers');
   assert.match(appJs, /else if\(t==='image'\)lightboxes\.imagetrace\.open\(\)/);
 });

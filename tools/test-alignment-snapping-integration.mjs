@@ -160,7 +160,12 @@ await test('17. reopening a project (Project JSON import) resets the selection t
 });
 
 await test('18. text layers gained optional x/y fields, defaulted through ||0 so pre-RS-1009 Project JSON is unaffected', () => {
-  assert.match(appJs, /const offsetX=\(bb\?\(project\.canvas\.width-bb\.widthMm\)\/2-bb\.minXmm:0\)\+\(layer\.x\|\|0\);const offsetY=\(bb\?\(project\.canvas\.height-bb\.heightMm\)\/2-bb\.minYmm:0\)\+\(layer\.y\|\|0\);/);
+  // RS-1012 extracted this exact formula out of generateTextStonesLive() into a standalone
+  // computeTextPlacementOffset(boundingBox,layer,project) function, reused by RS-1012's own
+  // resolveLayerShapeSource() (see tools/test-path-boolean-integration.mjs) -- the arithmetic
+  // itself, and the ||0 default, are unchanged.
+  assert.match(appJs, /function computeTextPlacementOffset\(boundingBox,layer,project\)\{\s*const offsetX=\(boundingBox\?\(project\.canvas\.width-boundingBox\.widthMm\)\/2-boundingBox\.minXmm:0\)\+\(layer\.x\|\|0\);\s*const offsetY=\(boundingBox\?\(project\.canvas\.height-boundingBox\.heightMm\)\/2-boundingBox\.minYmm:0\)\+\(layer\.y\|\|0\);/);
+  assert.match(appJs, /const\{offsetX,offsetY\}=computeTextPlacementOffset\(bb,layer,project\);/, 'expected generateTextStonesLive to call the extracted computeTextPlacementOffset helper');
   assert.match(appJs, /curveAlignment:'center',x:0,y:0\}\]\}\}/, 'expected the default project\'s text layer to declare explicit x:0,y:0');
 });
 
@@ -317,6 +322,10 @@ await test('28. no forbidden file changed (this milestone\'s own forbidden list)
     .map((line) => line.slice(3).trim());
 
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
+  // RS-1012 (Vector Boolean Operations) legitimately adds src/geometry/PathBoolean.js and extends
+  // src/geometry/GeometryEngine.js/index.js/README.md -- see
+  // tools/test-path-boolean-integration.mjs for RS-1012's own forbidden-file guard.
+  const allowedDespitePrefix = new Set(['src/geometry/GeometryEngine.js', 'src/geometry/index.js', 'src/geometry/README.md', 'src/geometry/PathBoolean.js']);
   const forbiddenPrefixes = [
     'src/geometry/', 'src/renderer/', 'src/export/', 'src/text/', 'src/fonts/', 'src/core/',
     'src/browser/', 'src/svg/', 'src/image/', 'src/history/', 'src/products/', 'src/preview3d/',
@@ -326,6 +335,7 @@ await test('28. no forbidden file changed (this milestone\'s own forbidden list)
   for (const changedPath of changedPaths) {
     assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
     assert.ok(
+      allowedDespitePrefix.has(changedPath) ||
       !forbiddenPrefixes.some((prefix) => changedPath.startsWith(prefix)),
       `Forbidden file changed: ${changedPath}`
     );

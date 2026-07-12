@@ -492,6 +492,19 @@ saved before RS-1009 (no `x`/`y` on its text layers) renders byte-identical to b
 Layer.js` gains no corresponding field (same documented gap as every other RS-1009-touched
 concept — `src/core/**` remains unused by the live app).
 
+As of RS-1012 (Vector Boolean Operations), `app.js` supports a sixth editable layer type, `path`: a
+generic compound vector shape holding raw `(0,0)-rooted` polygon `contours` plus the same generic
+x/y/w/h placement-box editing (move/resize/duplicate/align/snap/undo/redo/save/load) `rectangle`/
+`svg`/`image` layers already share. Its stones are produced by the permanent `GeometryEngine`'s new
+`generatePathLayout()`, the fifth `generate*Layout()` sibling — see the "Geometry Engine" section
+above. A `path` layer is created only as the result of a Union/Subtract/Intersect/Exclude Boolean
+Operation (`app.js`'s `runBooleanOp()`), which combines the selected layers' vector outlines
+(resolved via `GeometryEngine.resolveShapePolygons()`/`resolveSvgPolygons()`/`resolveTextPolygons()`/
+`resolvePathPolygons()`, or an Image Trace layer's raster density field directly) with the new
+`src/geometry/PathBoolean.js` — see `docs/specifications/RS-1012-VectorBooleanOperations.md`.
+`src/core/Layer.js` gains no corresponding layer type (same documented gap as every other
+`app.js`-only concept — `src/core/**` remains unused by the live app).
+
 ---
 
 # Editing (Alignment & Snapping)

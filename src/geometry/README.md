@@ -195,6 +195,92 @@ provider to await), and does not require a `fontProviderRegistry`. Decoding raw 
 `src/image/index.js`'s `decodeImageFileToBuffer()`/`decodeDataUrlToBuffer()`) before this method is
 ever called — `GeometryEngine.js` itself has no DOM dependency.
 
+## Vector Boolean Operations (RS-1012)
+
+`combineShapeSources(subjectSource, clipSource, operation)` / `combineManyShapeSources(sources,
+operation)` (`PathBoolean.js`) implement Union/Subtract/Intersect/Exclude ("Exclude" is this app's
+user-facing name for XOR/symmetric difference). A "shape source" is either:
+
+```js
+{ kind: 'polygons', polygons: {xMm,yMm}[][] }                       // any vector shape's flattened contours
+{ kind: 'field', field, xMm, yMm, widthMm, heightMm }                // an Image Trace layer's raster density field
+```
+
+```js
+import { combineShapeSources, combineManyShapeSources } from './src/geometry/index.js';
+
+const result = combineShapeSources(
+  { kind: 'polygons', polygons: [circleAPolygon] },
+  { kind: 'polygons', polygons: [circleBPolygon] },
+  'union' // or 'subtract' | 'intersect' | 'xor'
+);
+result.contours;      // {xMm,yMm}[][] -- the combined shape's boundary loop(s)
+result.boundingBox;   // {minXmm,minYmm,maxXmm,maxYmm} | null
+
+// 3+ shapes: folds left to right (associative for union/intersect/xor; A-B-C = A-(B∪C) for subtract).
+combineManyShapeSources([sourceA, sourceB, sourceC], 'intersect');
+```
+
+True analytic polygon clipping does not generalize cleanly to multi-contour shapes with holes
+(glyph counters, nested SVG paths) or to a raster Image Trace field without a second, parallel
+vectorization system. `PathBoolean.js` instead rasterizes both sources onto one shared millimeter
+grid (reusing `StoneSampler.js`'s existing even-odd `isPointInsidePolygons()` for a vector source —
+the same interior test `sampleFillPoints()` already uses), combines them with the requested boolean
+truth table, and traces the combined mask's boundary back into vector polygons with marching
+squares. Grid resolution (`TARGET_GRID_CELLS`/`MIN_CELL_SIZE_MM`/`MAX_CELL_SIZE_MM` in
+`PathBoolean.js`) is far finer than any `stoneSizeMm+gapMm` spacing used elsewhere in this app
+(roughly 0.08-1mm per cell vs. stones of >=~1mm), so the result is visually and dimensionally
+indistinguishable from an analytic clip for rhinestone placement — see
+`docs/specifications/RS-1012-VectorBooleanOperations.md` for the full rationale, including known
+precision limits.
+
+Holes and multiple disjoint contours fall out of this for free: marching squares traces every
+boundary loop independently, and `generatePathLayout()`'s outline/fill sampling already treats a
+shape's contour list as an even-odd set (matching how `generateTextLayout()`/`generateSvgLayout()`
+already handle a glyph counter or a nested SVG path), so a hole contour "just works" without
+`PathBoolean.js` needing to know which contour is a hole.
+
+`GeometryEngine` gained four small `resolve*Polygons()` methods that return a shape's flattened,
+placed polygons instead of sampling them into stones — each backed by the exact same private helper
+its sibling `generate*Layout()` method already used internally (`_shapePolygons()`/`_svgPolygons()`/
+`_textPolygons()`/`_pathPolygons()`), so a layer's boolean input is always identical to what it
+already renders as, and none of `generateShapeLayout()`/`generateSvgLayout()`/`generateTextLayout()`
+changed behavior:
+
+```js
+engine.resolveShapePolygons({ shape, layerId, cxMm, cyMm, radiusMm });    // or xMm/yMm/widthMm/heightMm
+engine.resolveSvgPolygons({ svgSource, layerId, xMm, yMm, widthMm, heightMm });  // closed contours only
+await engine.resolveTextPolygons({ text, fontId, heightMm, curveEnabled, ... }); // same params as generateTextLayout()
+engine.resolvePathPolygons({ contours, layerId, xMm, yMm, widthMm, heightMm });  // for chaining a prior boolean result
+```
+
+`generatePathLayout()` is the fifth `generate*Layout()` sibling: it turns a 'path' layer -- app.js's
+generic name for a Boolean Operation's result, or any other pre-flattened contour list -- into a
+`StoneLayout`, reusing the exact "place a natural-size shape into an xMm/yMm/widthMm/heightMm box,
+then outline/fill-sample it" shape `generateSvgLayout()` already uses (its `contours` input must
+already be normalized so its own bounding box's top-left sits at (0,0), exactly like
+`generateSvgLayout()`'s SVG input already is via `src/svg`'s viewBox normalization):
+
+```js
+engine.generatePathLayout({
+  contours,       // {xMm:number,yMm:number}[][], (0,0)-rooted, 3+ points per contour
+  layerId,
+  xMm, yMm,       // placement top-left, default 0
+  widthMm, heightMm, // target placed size; defaults to the contours' own natural size (no scaling)
+  stoneSizeMm, gapMm,
+  mode,           // 'outline' | 'fill'
+  color
+});
+```
+
+`app.js` never computes a boolean operation's math itself: `resolveLayerShapeSource()` there asks
+the permanent engine (or, for an 'image' Image Trace layer, `src/image`'s existing
+`prepareImageField()` directly) for each selected layer's shape source, `combineManyShapeSources()`
+combines them, and the normalized result becomes a new 'path' layer generated by
+`generatePathLayout()` — the same "ask the permanent engine, never invent geometry locally" shape
+every other layer type already follows. See
+`docs/specifications/RS-1012-VectorBooleanOperations.md`.
+
 ## Stone Color (RS-0003.5A1)
 
 Every `Stone` carries a `color`. Pass `color` to `generateTextLayout()` to

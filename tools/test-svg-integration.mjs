@@ -98,18 +98,20 @@ await test('6. validateProject() accepts a valid svg layer and rejects one missi
 });
 
 await test('7. getLayerBBox()/drag-move/drag-resize/duplicateLayer() each have an svg case', () => {
-  // RS-1008 extended these same shared branches to also cover 'image' layers
-  // (l.type==='rectangle'||l.type==='svg'||l.type==='image') -- the svg case itself is
-  // unchanged, just no longer the last type in the condition. See tools/test-image-integration.mjs
-  // for the RS-1008-specific assertions against the same lines.
-  assert.match(appJs, /if\(l\.type==='rectangle'\|\|l\.type==='svg'\|\|l\.type==='image'\)return\{x:l\.x,y:l\.y,width:l\.w,height:l\.h,x2:l\.x\+l\.w,y2:l\.y\+l\.h\}/, 'expected getLayerBBox to treat svg like rectangle');
+  // RS-1008 extended these same shared branches to also cover 'image' layers, and RS-1012 extended
+  // them again to also cover 'path' layers (Boolean Operation results)
+  // (l.type==='rectangle'||l.type==='svg'||l.type==='image'||l.type==='path') -- the svg case
+  // itself is unchanged, just no longer the last type in the condition. See
+  // tools/test-image-integration.mjs for the RS-1008-specific assertions and
+  // tools/test-path-boolean-integration.mjs for the RS-1012-specific assertions against the same lines.
+  assert.match(appJs, /if\(l\.type==='rectangle'\|\|l\.type==='svg'\|\|l\.type==='image'\|\|l\.type==='path'\)return\{x:l\.x,y:l\.y,width:l\.w,height:l\.h,x2:l\.x\+l\.w,y2:l\.y\+l\.h\}/, 'expected getLayerBBox to treat svg like rectangle');
   // RS-1009 narrow carve-out: the per-type drag-move branch was replaced by a single
   // getLayerPosition()/setLayerPosition() pair used uniformly for every layer type (circle, text,
   // and rectangle/svg/image alike) -- see docs/specifications/RS-1009-AlignmentSnapping.md. svg
   // still moves exactly like rectangle/image: setLayerPosition() falls through to its x/y branch.
   assert.match(appJs, /function setLayerPosition\(l,xMm,yMm\)\{if\(l\.type==='circle'\)\{l\.cx=xMm;l\.cy=yMm\}else\{l\.x=xMm;l\.y=yMm\}\}/, 'expected setLayerPosition to move svg (and rectangle/image/text) via l.x/l.y');
   assert.match(appJs, /for\(const id of drag\.layerIds\)\{[\s\S]*?setLayerPosition\(l,p0\.xMm\+dx,p0\.yMm\+dy\)/, 'expected the move-drag path to apply positions via setLayerPosition');
-  assert.match(appJs, /l\.type==='rectangle'\|\|l\.type==='svg'\|\|l\.type==='image'\)\{let x0=drag\.b0\.x/, 'expected drag-resize to treat svg like rectangle');
+  assert.match(appJs, /l\.type==='rectangle'\|\|l\.type==='svg'\|\|l\.type==='image'\|\|l\.type==='path'\)\{let x0=drag\.b0\.x/, 'expected drag-resize to treat svg like rectangle');
   assert.match(appJs, /if\(copy\.type==='svg'\)\{copy\.x\+=8;copy\.y\+=8\}/, 'expected duplicateLayer to nudge svg layers');
 });
 
