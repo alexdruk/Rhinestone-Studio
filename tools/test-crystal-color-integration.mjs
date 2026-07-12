@@ -229,7 +229,9 @@ await test('14. no forbidden file changed (this milestone\'s own forbidden list)
     'src/renderer/CanvasRenderer2D.js',
     'src/renderer/CupRenderer.js',
     'src/export/SvgExporter.js',
-    'src/export/ProductionSheetExporter.js',
+    // RS-1013 (Variable Stone Sizes) legitimately changes src/export/ProductionSheetExporter.js
+    // (header now shows a stone size's commercial name alongside its mm value) -- see
+    // tools/test-variable-stone-sizes.mjs for that milestone's own forbidden-file guard.
     // RS-1008A (Image Trace Architecture Correction) legitimately changes
     // src/geometry/GeometryEngine.js/StoneSampler.js/index.js/README.md — see
     // tools/test-image-trace-regression.mjs for that milestone's own forbidden-file guard.

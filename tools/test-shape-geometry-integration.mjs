@@ -78,6 +78,8 @@ await test('7. app.js only imports modules allowed as of this milestone', () => 
     /from\s*['"]\.\/src\/renderer\/CanvasRenderer2D\.js['"]/,
     /from\s*['"]\.\/src\/renderer\/CupRenderer\.js['"]/,
     /from\s*['"]\.\/src\/renderer\/StoneColors\.js['"]/,
+    // RS-1013: the Stone Library catalog module, mirroring the StoneColors.js entry above.
+    /from\s*['"]\.\/src\/renderer\/StoneSizes\.js['"]/,
     /from\s*['"]\.\/src\/export\/SvgExporter\.js['"]/,
     /from\s*['"]\.\/src\/svg\/index\.js['"]/,
     /from\s*['"]\.\/src\/history\/index\.js['"]/,

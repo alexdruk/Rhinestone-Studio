@@ -505,6 +505,39 @@ Operation (`app.js`'s `runBooleanOp()`), which combines the selected layers' vec
 `src/core/Layer.js` gains no corresponding layer type (same documented gap as every other
 `app.js`-only concept — `src/core/**` remains unused by the live app).
 
+**RS-1013 (Variable Stone Sizes / Stone Library) — note on numbering:** the task brief for this
+milestone was labeled "RS-1010," but RS-1010 was already used (and merged into `develop`) for the
+Alignment & Snapping Upgrade above. This work is filed as RS-1013, the next free id after
+RS-1012A, to avoid colliding with existing history — see
+`docs/specifications/RS-1013-VariableStoneSizes.md` for the full audit and rationale.
+
+Audit finding: per-layer variable stone size was **already fully implemented** before this
+milestone — `GeometryEngine`'s six `generate*Layout()` methods (text, shape, svg, image, path, plus
+curved text as a text-layout option) each already take their own `stoneSizeMm`/`gapMm`, `Stone`
+already carries an individual `sizeMm`, and every renderer/exporter (`CanvasRenderer2D.js`,
+`CupRenderer.js`, `StoneLayoutTexture.js`, `SvgExporter.js`, `ProductionSheetExporter.js`) already
+draws each stone at its own `sizeMm` — mixing sizes across layers in one project required zero
+geometry/renderer/exporter changes. `app.js`'s undo/redo (`HISTORY_TRACKED_CONTROL_IDS`), duplicate
+(`duplicateLayer()`'s whole-layer deep clone), and save/load (`JSON.stringify(project)`) already
+carried a layer's `stoneSize` field generically, with no per-field special case.
+
+What this milestone actually added is the **Stone Library**: `src/renderer/StoneSizes.js`, a data-
+only commercial-size catalog (SS6/SS10/SS16/SS20/SS30 -> nominal mm diameter) in the same shape and
+location as `src/renderer/CrystalColors.js` — nothing in `src/geometry/**` reads it; a layer's
+`stoneSize` remains the same plain millimeter number it always was. The one shared `#stoneSize`
+`<select>` (relocated between the inspector and whichever Lightbox is open, exactly like
+`#stoneColor`/`#gap` already are — see "Shared field-group relocation" below) is now populated from
+this catalog at startup (`populateStoneSizeOptions()`, mirroring `populateStoneColorOptions()`),
+showing each option as "SS16 — 4.0 mm" instead of the previous plain-mm-only list. Backward
+compatibility for a project saved before this milestone (whose `stoneSize` may not match any
+catalog entry) is handled by `ensureStoneSizeOption()`, which injects a truthful synthetic "Custom —
+X mm" option for the exact stored value rather than silently snapping the displayed selection to
+the nearest *different* catalog size. `ProductionSheetExporter.js`'s header gained the one exporter
+change this milestone required (per its "Display both commercial name and actual diameter"
+acceptance criterion): its "Stone size: ..." line now reads e.g. "SS6 (2 mm), SS16 (4 mm)" via
+`formatStoneSizeLabel()`, while `distinctSizesMm`'s raw numeric array (read directly by
+`tools/test-production-sheet-exporter.mjs`) is unchanged.
+
 ---
 
 # Editing (Alignment & Snapping)
@@ -675,6 +708,7 @@ code.
 | Vector SVG import (RS-1001) | `src/svg/**` | `src/text/VectorPath.js` (Contour/Point2D primitives, `createCircleVectorPath`/`createRectangleVectorPath`) |
 | Geometry generation | `src/geometry/**` | `src/text/**` (VectorPath primitives, FontProviderRegistry), `src/svg/**` (`parseSvgDocument`) |
 | 2D + cup rendering | `src/renderer/**` | `src/geometry/**` (StoneLayout, Stone) |
+| Stone size library (RS-1013) | `src/renderer/StoneSizes.js` | nothing else in `src/**` (pure data + validation, exactly like `src/renderer/CrystalColors.js`; a layer's `stoneSize`/a `Stone`'s `sizeMm` stay plain millimeter numbers — `src/geometry/**` never reads this file) |
 | Export | `src/export/**` | `src/geometry/**`, `src/renderer/StoneColors.js` |
 | Browser compatibility | `src/browser/**` | `src/text/**`, `src/fonts/**`, `src/geometry/**` (proves resolution), `opentype.js` |
 | Undo/redo history (RS-1002) | `src/history/**` | nothing else in `src/**` (pure JSON-snapshot bookkeeping; no `Project`/`Layer`/`StoneLayout`/DOM dependency) |

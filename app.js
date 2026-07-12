@@ -91,6 +91,7 @@ import { createDefaultFontProviderRegistry } from './src/text/index.js';
 import { renderProductionLayout } from './src/renderer/CanvasRenderer2D.js';
 import { createPreview3D } from './src/preview3d/index.js';
 import { STONE_COLORS } from './src/renderer/StoneColors.js';
+import { listStoneSizes, findStoneSizeByDiameterMm } from './src/renderer/StoneSizes.js';
 import { stoneLayoutToSvg } from './src/export/SvgExporter.js';
 import { computeProductionSheetLayout, productionSheetToSvg, productionSheetToPdf } from './src/export/ProductionSheetExporter.js';
 import { parseSvgDocument } from './src/svg/index.js';
@@ -184,6 +185,34 @@ function setNumericSelectValue(select,num){let best=null,bestDiff=Infinity;for(c
 // string keys STONE_COLORS is built from). Called once at startup -- index.html no longer
 // hardcodes any <option> for this select.
 function populateStoneColorOptions(){const groups=new Map();for(const c of Object.values(STONE_COLORS)){if(!groups.has(c.group))groups.set(c.group,[]);groups.get(c.group).push(c)}el('stoneColor').innerHTML=[...groups.entries()].map(([group,colors])=>`<optgroup label="${escapeHtml(group)}">${colors.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`).join('')}
+// RS-1013: builds the #stoneSize <option> list from the Stone Library (src/renderer/StoneSizes.js)
+// -- each option's value is the size's plain millimeter diameter (the same raw number a layer's
+// stoneSize / a Stone's sizeMm has always been; see src/geometry/GeometryEngine.js's stoneSizeMm
+// params), so reading the control back (`parseFloat(el('stoneSize').value)`, unchanged below) needs
+// no new mapping step. Label shows both the commercial name and the mm value per this milestone's
+// "display both" requirement. Called once at startup, mirroring populateStoneColorOptions() --
+// index.html hardcodes no <option> for this select either, so adding a size later is one catalog
+// entry, never an index.html/app.js change.
+function populateStoneSizeOptions(){el('stoneSize').innerHTML=listStoneSizes().map(s=>`<option value="${s.diameterMm}">${escapeHtml(s.name)} — ${s.diameterMm.toFixed(1)} mm</option>`).join('')}
+// RS-1013: a layer's stoneSize can be a value the Stone Library doesn't name -- a pre-existing
+// project saved before this milestone (the old dropdown offered 0.8-3.0mm raw values with no
+// catalog behind them), a value produced by undo/redo history, or simply a size a user typed
+// before this milestone existed. Rather than silently snapping the dropdown's displayed selection
+// to the nearest *different* catalog size (which would misrepresent the layer's real, unchanged
+// stoneSizeMm -- a "preserve existing project compatibility" violation), this injects/updates one
+// trailing "Custom" option holding the exact value, so the control always has a truthful option to
+// select. Removes any previous synthetic "Custom" option first, so switching a layer back to a
+// catalog size (or between two custom layers) never accumulates stale entries.
+function ensureStoneSizeOption(select,diameterMm){
+  const existing=select.querySelector('option[data-custom="1"]');
+  if(existing)existing.remove();
+  const catalogMatch=findStoneSizeByDiameterMm(diameterMm);
+  if(catalogMatch)return;
+  const opt=document.createElement('option');
+  opt.value=String(diameterMm);opt.dataset.custom='1';
+  opt.textContent=`Custom — ${(Math.round(diameterMm*100)/100)} mm`;
+  select.appendChild(opt);
+}
 // RS-1007: keeps the small swatch next to #stoneColor showing the currently selected color's
 // actual previewColor. Called from updateStats() (itself called at the end of every updateAll()),
 // so the swatch always reflects the live selection after an edit, undo/redo, or import.
@@ -362,7 +391,7 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
   // slot (see relocateFieldGroups()) and is no longer always a child of #shapeControls, so it needs
   // its own visibility toggle mirroring the exact same isText condition #shapeControls already uses.
   el('sharedPositionFields').style.display=isText?'none':'block';
-  el('svgControls').style.display=l.type==='svg'?'block':'none';el('imageControls').style.display=l.type==='image'?'block':'none';if(isText){el('text').value=l.text;el('font').value=l.font;el('height').value=l.height;el('autoFit').value=l.autoFit?'on':'off';el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';el('curveRadiusMm').value=l.curveRadiusMm??40;el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??360;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';el('textX').value=l.x||0;el('textY').value=l.y||0}else{el('shapeX').value=l.type==='circle'?l.cx:l.x;el('shapeY').value=l.type==='circle'?l.cy:l.y;el('shapeW').value=l.type==='circle'?l.r:l.w;el('shapeH').value=l.type==='circle'?'':l.h;if(l.type==='svg')el('svgMode').value=l.mode||'outline';if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}setNumericSelectValue(el('stoneSize'),l.stoneSize);el('gap').value=l.gap;el('stoneColor').value=l.color;
+  el('svgControls').style.display=l.type==='svg'?'block':'none';el('imageControls').style.display=l.type==='image'?'block':'none';if(isText){el('text').value=l.text;el('font').value=l.font;el('height').value=l.height;el('autoFit').value=l.autoFit?'on':'off';el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';el('curveRadiusMm').value=l.curveRadiusMm??40;el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??360;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';el('textX').value=l.x||0;el('textY').value=l.y||0}else{el('shapeX').value=l.type==='circle'?l.cx:l.x;el('shapeY').value=l.type==='circle'?l.cy:l.y;el('shapeW').value=l.type==='circle'?l.r:l.w;el('shapeH').value=l.type==='circle'?'':l.h;if(l.type==='svg')el('svgMode').value=l.mode||'outline';if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);el('gap').value=l.gap;el('stoneColor').value=l.color;
   // RS-1002: project.cupColor/project.wrap are project-level (not per-layer) fields, so they must
   // be resynced here too -- otherwise an undo/redo restore (or a Project JSON import) leaves these
   // two dropdowns stale, and the *next* edit's writeSelectedControlsToLayer() would silently write
@@ -1030,4 +1059,4 @@ el('settingsApply').onclick=()=>{
   drawLayout();
 };
 
-populateStoneColorOptions();syncSelectedControlsFromLayer();updateAll(true);
+populateStoneColorOptions();populateStoneSizeOptions();syncSelectedControlsFromLayer();updateAll(true);

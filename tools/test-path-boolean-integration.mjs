@@ -292,6 +292,10 @@ await test('23. no forbidden file changed (this milestone\'s own forbidden list)
   // fonts/core/browser/svg/image/history/products/preview3d/editing) is untouched — no exporter
   // needed to change (see test 7/8 above), and no project-schema module beyond src/geometry/**
   // needed to change.
+  // RS-1013 (Variable Stone Sizes) legitimately adds src/renderer/StoneSizes.js and changes
+  // src/export/ProductionSheetExporter.js's header formatting -- see
+  // tools/test-variable-stone-sizes.mjs for that milestone's own forbidden-file guard.
+  const allowedDespitePrefix = new Set(['src/renderer/StoneSizes.js', 'src/export/ProductionSheetExporter.js']);
   const forbiddenPrefixes = [
     'src/renderer/', 'src/export/', 'src/text/', 'src/fonts/', 'src/core/',
     'src/browser/', 'src/svg/', 'src/image/', 'src/history/', 'src/products/', 'src/preview3d/',
@@ -301,6 +305,7 @@ await test('23. no forbidden file changed (this milestone\'s own forbidden list)
   for (const changedPath of changedPaths) {
     assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
     assert.ok(
+      allowedDespitePrefix.has(changedPath) ||
       !forbiddenPrefixes.some((prefix) => changedPath.startsWith(prefix)),
       `Forbidden file changed: ${changedPath}`
     );

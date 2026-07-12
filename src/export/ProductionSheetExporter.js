@@ -20,6 +20,7 @@
  */
 
 import { STONE_COLORS } from '../renderer/StoneColors.js';
+import { formatStoneSizeLabel } from '../renderer/StoneSizes.js';
 import { stoneCircleSvg } from './SvgExporter.js';
 import { PdfDocument, PT_PER_MM } from './PdfDocument.js';
 
@@ -69,6 +70,15 @@ function roundMm(value) {
 function formatMmList(values) {
   if (!values.length) return '—';
   return values.map((v) => `${roundMm(v)}`).join(', ') + ' mm';
+}
+
+// RS-1013: stone sizes get their own formatter (unlike formatMmList(), used unchanged for Gap,
+// which has no commercial name) so a size matching the Stone Library (src/renderer/StoneSizes.js)
+// reads e.g. "SS16 (4.0 mm)" on the printed sheet -- the production floor's usual vocabulary --
+// while a custom, non-catalog size still prints its plain millimeter value.
+function formatStoneSizeList(sizesMm) {
+  if (!sizesMm.length) return '—';
+  return sizesMm.map((v) => formatStoneSizeLabel(v)).join(', ');
 }
 
 function distinctStoneSizesMm(stones) {
@@ -191,7 +201,7 @@ export function computeProductionSheetLayout(stoneLayout, options = {}) {
     { text: `Object: ${objectType || '—'}`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
     { text: `Production size: ${roundMm(productionWidthMm)} × ${roundMm(productionHeightMm)} mm`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
     { text: `Stone count: ${stoneCount}`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
-    { text: `Stone size: ${formatMmList(distinctSizesMm)}`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
+    { text: `Stone size: ${formatStoneSizeList(distinctSizesMm)}`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
     { text: `Gap: ${formatMmList(distinctGapsMm)}`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
     { text: `Crystal color: ${distinctColors.length ? distinctColors.join(', ') : '—'}`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
     {
