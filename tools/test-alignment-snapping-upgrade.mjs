@@ -16,6 +16,12 @@ import { fileURLToPath } from 'node:url';
 // model. Structural checks against the live app.js/index.html source (same established convention
 // as tools/test-alignment-snapping-integration.mjs); pure behavioral checks against the real
 // src/editing/SnapEngine.js.
+//
+// RS-1010A (wording polish, test 13) — "Snap Distance (mm)" loses the raw parenthetical unit in
+// its label; the millimeter unit is instead explained in a short, always-visible hint sentence
+// (not a hover-only tooltip, so a first-time user isn't required to find it), and "Enable
+// Snapping"/"Show Alignment Guides" each gained a descriptive tooltip. Wording/markup only — no
+// app.js behavior changed by RS-1010A.
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
@@ -133,7 +139,15 @@ await test('12. text/curved-text, imported SVG, and Image Trace bounds all feed 
   assert.ok(!/l\.type==='text'/.test(body), 'expected no special-cased text branch: text/curved-text bounds must fall through to the one generic (StoneLayout-bounding-box) path used for every non-shape layer type, so no new snapping logic is needed per layer type');
 });
 
-await test('13. no forbidden file changed (src/geometry/**, src/renderer/**, src/export/**, StoneLayout/GeometryEngine untouched by this milestone; src/editing/** itself IS in scope -- RS-1010 adds selectMany() to Selection.js)', () => {
+await test('13. (RS-1010A wording polish) Snap Distance drops its raw "(mm)" suffix from the label but still explains millimeters in plain language, and both snapping checkboxes carry a descriptive tooltip', () => {
+  const body = indexHtml.slice(indexHtml.indexOf('id="lightboxSettings"'), indexHtml.indexOf('id="lightboxHelp"'));
+  assert.match(body, /<label for="settingsSnapDistance">Snap Distance<\/label>/, 'expected the label itself to read "Snap Distance", not "Snap Distance (mm)"');
+  assert.match(body, /<p class="hint">How close two elements need to be, in millimeters, before they snap together\.[^<]*<\/p>/, 'expected a visible, plain-language explanation of what the mm value means (not hover-only, so a first-time user does not have to find a tooltip)');
+  assert.match(body, /<label class="checkbox-row" title="[^"]+"><input type="checkbox" id="settingsSnapDefault" checked> Enable Snapping<\/label>/, 'expected "Enable Snapping" to carry a tooltip explaining what it snaps to');
+  assert.match(body, /<label class="checkbox-row" title="[^"]+"><input type="checkbox" id="settingsShowGuides" checked> Show Alignment Guides<\/label>/, 'expected "Show Alignment Guides" to carry a tooltip explaining what it shows');
+});
+
+await test('14. no forbidden file changed (src/geometry/**, src/renderer/**, src/export/**, StoneLayout/GeometryEngine untouched by this milestone; src/editing/** itself IS in scope -- RS-1010 adds selectMany() to Selection.js)', () => {
   const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
   const changedPaths = output
     .split('\n')
