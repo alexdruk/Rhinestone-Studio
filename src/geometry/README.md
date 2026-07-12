@@ -234,6 +234,25 @@ indistinguishable from an analytic clip for rhinestone placement — see
 `docs/specifications/RS-1012-VectorBooleanOperations.md` for the full rationale, including known
 precision limits.
 
+**RS-1012A (Production Precision Validation)** measured this engine against production-scale
+examples and made two changes as a direct result — see
+`docs/specifications/RS-1012A-ProductionPrecisionValidation.md` and
+`tools/measure-boolean-precision.mjs` for the full measured numbers:
+
+* Resolution is now **adaptive** (`computeAdaptiveCellSizeMm()`): in addition to the combined
+  bounding box, it also tightens for a small shape combined with a much larger one (so a tiny
+  cutout/detail isn't starved of resolution by an unrelated big shape) and, when the caller passes
+  `{ targetSpacingMm }` as a third argument to `combineShapeSources()`/`combineManyShapeSources()`
+  (the destination layer's `stoneSizeMm + gapMm` — `app.js`'s `runBooleanOp()` does this), tightens
+  further so boundary error stays a bounded fraction of the actual stone pitch. Measured: tiny
+  circular cutout preservation improved from ≥0.25mm to ≥0.07mm radius.
+* `combineShapeSources()`/`combineManyShapeSources()` now throw an exported `BooleanPrecisionError`
+  (a plain `Error` subclass) instead of silently coarsening the grid when the accuracy-driven
+  resolution would need more than a fixed grid-cell budget — only reachable when the two shapes
+  differ enormously in scale (a sub-millimeter detail combined with a multi-meter shape); ordinary
+  rhinestone-design-scale operations, including large production-sheet-scale documents, never hit
+  it (measured margin documented in the RS-1012A spec).
+
 Holes and multiple disjoint contours fall out of this for free: marching squares traces every
 boundary loop independently, and `generatePathLayout()`'s outline/fill sampling already treats a
 shape's contour list as an even-odd set (matching how `generateTextLayout()`/`generateSvgLayout()`

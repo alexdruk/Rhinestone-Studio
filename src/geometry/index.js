@@ -35,5 +35,6 @@ export {
 export {
   combineShapeSources,
   combineManyShapeSources,
-  BOOLEAN_OPERATIONS
+  BOOLEAN_OPERATIONS,
+  BooleanPrecisionError
 } from './PathBoolean.js';

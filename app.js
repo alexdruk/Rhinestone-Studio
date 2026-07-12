@@ -517,9 +517,14 @@ async function runBooleanOp(operation){
     return;
   }
 
+  // RS-1012A: the backmost selected layer's own stone pitch is passed as a resolution hint --
+  // combineManyShapeSources() tightens its raster grid so boundary error stays a bounded fraction
+  // of the *actual* stone spacing this result will be sampled at (see src/geometry/PathBoolean.js),
+  // rather than a fixed resolution unaware of how fine or coarse the destination stones are.
+  const targetSpacingMm=(layers[0].stoneSize||2)+(layers[0].gap??0.3);
   let combined;
   try{
-    combined=combineManyShapeSources(sources,operation);
+    combined=combineManyShapeSources(sources,operation,{targetSpacingMm});
   }catch(error){
     console.error('Boolean operation failed',error);
     showBooleanOpsError(`${label} failed: ${error.message}`);
