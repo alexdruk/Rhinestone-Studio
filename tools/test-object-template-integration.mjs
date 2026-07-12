@@ -91,13 +91,45 @@ await test('1. index.html exposes #objectType with mug/tumbler/bottle options', 
   }
 });
 
-await test('2. #objectType appears before #selectedLayer and #cupColor (top of the panel, zero-scroll discoverable, matching tools/test-ui-discoverability.mjs\'s convention)', () => {
-  const objectTypeIndex = indexHtml.indexOf('id="objectType"');
-  const selectedLayerIndex = indexHtml.indexOf('id="selectedLayer"');
-  const cupColorIndex = indexHtml.indexOf('id="cupColor"');
-  assert.ok(objectTypeIndex > 0 && selectedLayerIndex > 0 && cupColorIndex > 0);
-  assert.ok(objectTypeIndex < selectedLayerIndex, 'expected #objectType before #selectedLayer');
-  assert.ok(objectTypeIndex < cupColorIndex, 'expected #objectType before #cupColor');
+// UI-001 (Complete Application Redesign) replaced the single long sidebar this test originally
+// measured with a top menu + Lightbox architecture: #objectType now lives inside the Shapes
+// Lightbox's "Object Templates" tab (Mug/Tumbler/Bottle are physical object/preview templates, not
+// design-shape layers — see docs/specifications/UI-001-CompleteRedesign.md), reachable from the
+// always-visible top menu in one click, not by raw scroll position in one long sidebar. This
+// extracts #shapesPanelTemplates's own inner HTML (tag-depth-aware, so it is not fooled by nested
+// <div>s) and checks #objectType lives there, rather than an index-ordering heuristic tied to the
+// old layout.
+function extractElementHtml(html, id) {
+  const openTagMatch = html.match(new RegExp(`<([a-zA-Z]+)[^>]*\\bid="${id}"[^>]*>`));
+  assert.ok(openTagMatch, `expected to find an element with id="${id}"`);
+  const tag = openTagMatch[1];
+  const start = openTagMatch.index + openTagMatch[0].length;
+  const openRe = new RegExp(`<${tag}\\b`, 'g');
+  const closeRe = new RegExp(`</${tag}>`, 'g');
+  let depth = 1;
+  let cursor = start;
+  while (depth > 0) {
+    openRe.lastIndex = cursor;
+    closeRe.lastIndex = cursor;
+    const nextOpen = openRe.exec(html);
+    const nextClose = closeRe.exec(html);
+    assert.ok(nextClose, `unbalanced <${tag}> for id="${id}"`);
+    if (nextOpen && nextOpen.index < nextClose.index) {
+      depth++;
+      cursor = nextOpen.index + nextOpen[0].length;
+    } else {
+      depth--;
+      cursor = nextClose.index + nextClose[0].length;
+      if (depth === 0) return html.slice(start, nextClose.index);
+    }
+  }
+  throw new Error(`unreachable: failed to extract #${id}`);
+}
+
+await test('2. #objectType lives inside the Shapes Lightbox\'s "Object Templates" tab, reachable from the always-visible top menu (not buried in a long sidebar)', () => {
+  const templatesTabBody = extractElementHtml(indexHtml, 'shapesPanelTemplates');
+  assert.ok(templatesTabBody.includes('id="objectType"'), 'expected #objectType inside #shapesPanelTemplates');
+  assert.ok(indexHtml.indexOf('id="menuShapes"') > 0, 'expected an always-visible #menuShapes top-menu button that opens the Shapes Lightbox');
 });
 
 await test('3. #objectType is not duplicated (exactly one element)', () => {

@@ -105,14 +105,27 @@ await test('6. every default-text-layer edit control from the required test list
   for (const expected of ['text', 'font', 'textMode', 'curveEnabled', 'curveRadiusMm', 'curveDirection', 'curveStartAngleDeg', 'curveSweepAngleDeg', 'curveAlignment']) {
     assert.ok(ids.includes(expected), `expected HISTORY_TRACKED_CONTROL_IDS to include ${expected}`);
   }
-  assert.match(appJs, /el\('selectedLayer'\)\.addEventListener\('change',\(\)=>\{selectedLayerId=el\('selectedLayer'\)\.value;syncSelectedControlsFromLayer\(\);updateAll\(true\)\}\)/, 'expected layer selection via the dropdown to remain wired');
-  assert.match(appJs, /function hitTest\(mm\)\{[\s\S]*?l\.type==='text'\?'select':'move'/, 'expected clicking the text layer on the canvas to still select it (text has no drag/resize, by design)');
+  // RS-1009 narrow carve-out: the dropdown's change handler now also resets the multi-selection
+  // to just this layer (selectedLayerIds=selectOnly(...)) alongside the pre-existing
+  // selectedLayerId assignment -- selection via the dropdown is still wired, just through the one
+  // shared src/editing/Selection.js toggle instead of only selectedLayerId. See
+  // tools/test-alignment-snapping-integration.mjs for that milestone's own coverage.
+  assert.match(appJs, /el\('selectedLayer'\)\.addEventListener\('change',\(\)=>\{selectedLayerId=el\('selectedLayer'\)\.value;selectedLayerIds=selectOnly\(selectedLayerId\);syncSelectedControlsFromLayer\(\);updateAll\(true\)\}\)/, 'expected layer selection via the dropdown to remain wired');
+  // RS-1009 narrow carve-out: text layers gained x/y offset fields and are now draggable
+  // (hitTest() returns 'move' for every layer type, not 'select' for text) -- see
+  // docs/specifications/RS-1009-AlignmentSnapping.md, "Text Layer Position". Clicking a text
+  // layer on the canvas still selects it (via the same pointerdown handler as every other type);
+  // it just now also starts a move-drag, which was previously impossible for text.
+  assert.match(appJs, /function hitTest\(mm\)\{[\s\S]*?kind:'move',b0:b\}/, 'expected clicking any layer type, including text, on the canvas to resolve to a movable hit');
 });
 
 await test('7. duplicate/visibility toggle for the default layer are unchanged (still commit history, still wired via the layer-row action delegate)', () => {
   assert.match(appJs, /if\(action==='visible'\)\{const l=project\.layers\.find\(x=>x\.id===id\);commitHistory\(\);l\.visible=e\.target\.checked/);
   assert.match(appJs, /if\(action==='duplicate'\)\{duplicateLayer\(id\);return\}/);
-  assert.match(appJs, /if\(copy\.type==='text'\)\{copy\.text\+=' copy'\}/, 'expected duplicating a text layer to still nudge its text so the copy is visibly distinct');
+  // RS-1009 narrow carve-out: duplicating a text layer now also nudges its new x/y offset by
+  // +8mm (matching every other layer type's existing +8mm duplicate-offset convention) so the
+  // copy is visibly distinct even though it can now be repositioned independently of its source.
+  assert.match(appJs, /if\(copy\.type==='text'\)\{copy\.text\+=' copy';copy\.x=\(copy\.x\|\|0\)\+8;copy\.y=\(copy\.y\|\|0\)\+8\}/, 'expected duplicating a text layer to still nudge its text, and now also its position, so the copy is visibly distinct');
 });
 
 await test('8. StoneLayout.js is untouched by this fix (src/export/SvgExporter.js is now legitimately changed by RS-1005\'s Production Sheet export — see tools/test-production-sheet-exporter.mjs; GeometryEngine.js is now legitimately changed by RS-1008A — see tools/test-image-trace-regression.mjs)', () => {

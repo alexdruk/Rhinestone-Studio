@@ -46,7 +46,12 @@ await test('2. app.js imports src/image/**\'s field-preparation only (prepareIma
 
 await test('3. getLayerBBox()/drag-move/drag-resize/duplicateLayer()/layerLabel() each have an image case', () => {
   assert.match(appJs, /if\(l\.type==='rectangle'\|\|l\.type==='svg'\|\|l\.type==='image'\)return\{x:l\.x,y:l\.y,width:l\.w,height:l\.h,x2:l\.x\+l\.w,y2:l\.y\+l\.h\}/, 'expected getLayerBBox to treat image like rectangle/svg');
-  assert.match(appJs, /l\.type==='rectangle'\|\|l\.type==='svg'\|\|l\.type==='image'\)\{l\.x=drag\.l0\.x\+dx;l\.y=drag\.l0\.y\+dy\}/, 'expected drag-move to treat image like rectangle/svg');
+  // RS-1009 narrow carve-out: the per-type drag-move branch was replaced by a single
+  // getLayerPosition()/setLayerPosition() pair used uniformly for every layer type -- see
+  // docs/specifications/RS-1009-AlignmentSnapping.md. image still moves exactly like
+  // rectangle/svg: setLayerPosition() falls through to its x/y branch.
+  assert.match(appJs, /function setLayerPosition\(l,xMm,yMm\)\{if\(l\.type==='circle'\)\{l\.cx=xMm;l\.cy=yMm\}else\{l\.x=xMm;l\.y=yMm\}\}/, 'expected setLayerPosition to move image (and rectangle/svg/text) via l.x/l.y');
+  assert.match(appJs, /for\(const id of drag\.layerIds\)\{[\s\S]*?setLayerPosition\(l,p0\.xMm\+dx,p0\.yMm\+dy\)/, 'expected the move-drag path to apply positions via setLayerPosition');
   assert.match(appJs, /l\.type==='rectangle'\|\|l\.type==='svg'\|\|l\.type==='image'\)\{let x0=drag\.b0\.x/, 'expected drag-resize to treat image like rectangle/svg');
   assert.match(appJs, /if\(copy\.type==='image'\)\{copy\.x\+=8;copy\.y\+=8\}/, 'expected duplicateLayer to nudge image layers');
   assert.match(appJs, /l\.type==='image'\?\(l\.imageName\|\|'Image'\)/, 'expected layerLabel to have an image case');

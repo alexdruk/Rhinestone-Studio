@@ -3,88 +3,771 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Rhinestone Studio M2.2 Text/Shape Fix</title>
+<title>Rhinestone Studio</title>
 <style>
-:root{--bg:#f3f5f8;--panel:#fff;--ink:#111827;--muted:#6b7280;--line:#d9dee8;--accent:#1478ff}
-*{box-sizing:border-box}body{margin:0;font-family:Inter,Arial,sans-serif;background:var(--bg);color:var(--ink)}
-.top{height:44px;background:#11161d;color:white;display:flex;align-items:center;gap:14px;padding:0 18px;box-shadow:0 2px 12px #0003}.top b{font-size:15px}.top span{color:#b8c2d3;font-size:13px}.top .right{margin-left:auto;font-size:12px;color:#c7d2e4}
-.historyControls{display:flex;align-items:center;gap:8px}.historyControls button{background:#252c34;color:#fff;border:1px solid #46515e;border-radius:7px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer}.historyControls button:hover:not(:disabled){background:#34404b}.historyControls button:disabled{opacity:.4;cursor:default}.dirtyIndicator{font-size:12px;color:#c7d2e4;min-width:98px}
-.app{display:grid;grid-template-columns:300px 1fr 1fr;gap:14px;padding:14px;height:calc(100vh - 44px)}.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 1px 5px #1b24300d;overflow:hidden}.side{padding:14px;overflow:auto;background:linear-gradient(var(--panel),var(--panel)) 0 0/100% 100% local no-repeat,linear-gradient(rgba(255,255,255,0),var(--panel) 85%) 0 100%/100% 34px local no-repeat,radial-gradient(farthest-side at 50% 100%,rgba(17,24,39,.20),rgba(17,24,39,0)) 0 100%/100% 12px scroll no-repeat}.cardTitle{font-weight:800;font-size:14px;margin:0 0 10px}.small{font-size:12px;color:var(--muted)}hr{border:0;border-top:1px solid #e5eaf2;margin:14px 0}label{display:block;font-size:12px;font-weight:700;margin:11px 0 5px}input,select,button{font:inherit}input,select{width:100%;padding:9px 10px;border:1px solid #cfd6e2;border-radius:8px;background:white}button{border:1px solid #cfd6e2;border-radius:8px;background:white;padding:9px 10px;cursor:pointer;font-weight:700}.primary{background:#1f2937;color:white;border-color:#1f2937}.danger{background:#fff;color:#b42318;border-color:#fecaca}.row,.btnrow{display:grid;grid-template-columns:1fr 1fr;gap:8px}.export button{width:100%;margin-top:8px}
-.layer{display:grid;grid-template-columns:22px 1fr 54px 26px 26px 26px;align-items:center;gap:5px;background:#f7faff;border:1px solid #dce8ff;border-radius:8px;padding:7px;margin-bottom:6px;font-size:12px}.layer.selected{outline:2px solid #1478ff;background:#eef6ff}.layer input{width:auto}.layer button{padding:4px 5px;border-radius:6px;font-size:11px}.layer button:disabled{opacity:.35;cursor:not-allowed}.name{font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.type{font-size:10px;color:#64748b;text-align:right}
-button:disabled{opacity:.5;cursor:not-allowed}.ruleHint{font-size:12px;color:#b42318;margin-top:6px;line-height:1.35}
-.viewer{display:flex;flex-direction:column}.viewerHead{height:36px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:1px solid var(--line);font-weight:800}.viewerHead small{font-weight:500;color:var(--muted)}.canvasWrap{position:relative;flex:1;min-height:0;padding:12px}canvas{width:100%;height:100%;display:block;border-radius:10px;background:#fff;border:1px solid #d9dee8}.stats{height:54px;border-top:1px solid var(--line);display:flex;align-items:center;gap:14px;padding:0 14px;font-size:13px;color:#333;white-space:nowrap;overflow:hidden}.status{font-size:12px;color:#0b8b44;margin-top:8px}.warning{color:#b45309}.viewControls{padding:10px 14px;border-top:1px solid var(--line);display:grid;grid-template-columns:120px 1fr 96px;gap:12px;align-items:center}.viewControls input{padding:0}.fitNotice{position:absolute;left:22px;bottom:22px;color:#4b5563;font-size:12px;background:#ffffffdd;border:1px solid #d9dee8;border-radius:6px;padding:4px 8px}.selectionHint{font-size:12px;color:#64748b;margin-top:8px;line-height:1.35}.toolbar{display:flex;gap:8px;align-items:center;margin:8px 0}.kbd{font-family:monospace;background:#eef2f7;border:1px solid #d7dde8;border-radius:4px;padding:1px 4px}
-.colorPickRow{display:flex;align-items:center;gap:8px}.colorPickRow select{flex:1}.colorSwatch{width:32px;height:32px;flex:0 0 32px;border-radius:8px;border:1px solid #cfd6e2;box-shadow:inset 0 0 0 1px #ffffff80}
-@media(max-width:1100px){.app{grid-template-columns:280px 1fr;grid-template-rows:1fr 1fr}.cupPanel,.layoutPanel{grid-column:2}.side{grid-row:1 / span 2}}
-.modalOverlay{position:fixed;inset:0;background:rgba(17,24,39,.55);display:flex;align-items:center;justify-content:center;z-index:50}
-.modalPanel{background:var(--panel);border-radius:12px;box-shadow:0 12px 40px #0006;padding:18px;width:420px;max-width:calc(100vw - 40px);max-height:calc(100vh - 40px);overflow:auto}
-.modalPanel canvas{width:100%;max-height:220px;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:8px;image-rendering:pixelated}
-.modalStoneCount{font-size:12px;color:var(--muted);margin:6px 0 10px}
+/* ============================== Design tokens (UI-001) ============================== */
+:root{
+  --color-primary:#1a56db;
+  --color-primary-hover:#1747b8;
+  --color-primary-active:#123a94;
+  --color-primary-tint:#eaf1fd;
+  --color-text:#12172b;
+  --color-text-muted:#6b7280;
+  --color-text-faint:#9aa2b1;
+  --color-surface:#ffffff;
+  --color-bg:#f4f5f8;
+  --color-canvas-bg:#fbfcfe;
+  --color-border:#e3e6ec;
+  --color-border-strong:#cfd4de;
+  --color-focus:#1a56db;
+  --color-danger:#b42318;
+  --color-danger-tint:#fdecea;
+  --color-success:#0b8b44;
+  --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;
+  --radius-sm:6px;--radius-md:8px;--radius-lg:12px;
+  --shadow-sm:0 1px 2px rgba(17,24,39,.05);
+  --shadow-md:0 6px 20px rgba(17,24,39,.10);
+  --control-height:34px;
+  --control-height-sm:28px;
+  --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;
+  --font-size-xs:11px;--font-size-sm:12.5px;--font-size-md:13.5px;--font-size-lg:16px;
+  --topbar-height:52px;
+  --left-panel-width:268px;
+  --right-panel-width:252px;
+}
+
+/* ============================== Reset / base ============================== */
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font-family:var(--font-sans);background:var(--color-bg);color:var(--color-text);font-size:var(--font-size-md);-webkit-font-smoothing:antialiased}
+h1,h2,h3{margin:0}
+button{font:inherit}
+input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--color-focus);outline-offset:1px}
+button:focus-visible,a:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ============================== Shared controls ============================== */
+label{display:block;font-size:var(--font-size-xs);font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:.02em;margin:0 0 4px}
+input[type="text"],input[type="number"],input:not([type]),select{
+  width:100%;height:var(--control-height);padding:0 10px;border:1px solid var(--color-border-strong);
+  border-radius:var(--radius-sm);background:var(--color-surface);color:var(--color-text);font-size:var(--font-size-md);
+}
+input[type="range"]{width:100%}
+input:disabled,select:disabled,button:disabled{opacity:.45;cursor:not-allowed}
+.field{margin-bottom:var(--space-3)}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
+.field-row-3{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-2)}
+.hint{font-size:var(--font-size-xs);color:var(--color-text-muted);line-height:1.4;margin-top:var(--space-1)}
+.kbd{font-family:ui-monospace,Menlo,monospace;background:var(--color-bg);border:1px solid var(--color-border);border-radius:4px;padding:1px 5px;font-size:var(--font-size-xs)}
+
+button.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;height:var(--control-height);
+  padding:0 12px;border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);
+  background:var(--color-surface);color:var(--color-text);cursor:pointer;font-weight:600;font-size:var(--font-size-sm);
+  transition:background .12s,border-color .12s,color .12s;
+}
+button.btn:hover:not(:disabled){background:var(--color-bg);border-color:var(--color-border-strong)}
+button.btn.primary{background:var(--color-primary);border-color:var(--color-primary);color:#fff}
+button.btn.primary:hover:not(:disabled){background:var(--color-primary-hover)}
+button.btn.primary:active:not(:disabled){background:var(--color-primary-active)}
+button.btn.danger{background:var(--color-surface);color:var(--color-danger);border-color:#f3c6c1}
+button.btn.danger:hover:not(:disabled){background:var(--color-danger-tint)}
+button.btn.block{width:100%}
+button.btn.sm{height:var(--control-height-sm);padding:0 9px;font-size:var(--font-size-xs)}
+button.icon-btn{
+  display:inline-flex;align-items:center;justify-content:center;width:var(--control-height-sm);height:var(--control-height-sm);
+  border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);background:var(--color-surface);cursor:pointer;font-size:13px;
+}
+button.icon-btn:hover:not(:disabled){background:var(--color-bg)}
+button.icon-btn[aria-pressed="true"]{background:var(--color-primary-tint);border-color:var(--color-primary);color:var(--color-primary-active)}
+.btnrow{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
+.color-pick-row{display:flex;align-items:center;gap:var(--space-2)}
+.color-pick-row select{flex:1}
+.color-swatch{width:var(--control-height);height:var(--control-height);flex:0 0 var(--control-height);border-radius:var(--radius-sm);border:1px solid var(--color-border-strong);box-shadow:inset 0 0 0 1px #fff}
+.status-message{font-size:var(--font-size-sm);color:var(--color-success);margin-top:var(--space-2)}
+
+/* ============================== Top menu ============================== */
+.topbar{
+  height:var(--topbar-height);background:var(--color-surface);border-bottom:1px solid var(--color-border);
+  display:flex;align-items:center;gap:var(--space-4);padding:0 var(--space-4);position:relative;z-index:5;
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:800;font-size:var(--font-size-lg);color:var(--color-primary-active);white-space:nowrap}
+.brand .mark{font-size:18px}
+nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-x:auto}
+.topmenu-btn{
+  display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border:1px solid transparent;border-radius:var(--radius-sm);
+  background:transparent;color:var(--color-text);cursor:pointer;font-weight:600;font-size:var(--font-size-sm);white-space:nowrap;
+}
+.topmenu-btn .glyph{font-size:14px;line-height:1}
+.topmenu-btn:hover{background:var(--color-bg)}
+.topmenu-btn[aria-pressed="true"],.topmenu-btn.active{background:var(--color-primary-tint);color:var(--color-primary-active)}
+.topbar-actions{display:flex;align-items:center;gap:var(--space-2);flex:0 0 auto}
+.dirty-indicator{font-size:var(--font-size-xs);color:var(--color-text-muted);min-width:96px;text-align:right}
+
+/* ============================== App shell ============================== */
+.app-shell{display:grid;grid-template-columns:var(--left-panel-width) 1fr var(--right-panel-width);height:calc(100vh - var(--topbar-height));min-height:0}
+.left-panel,.right-inspector{background:var(--color-surface);overflow-y:auto;padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-5)}
+.left-panel{border-right:1px solid var(--color-border)}
+.right-inspector{border-left:1px solid var(--color-border)}
+.panel-section h2{font-size:var(--font-size-xs);font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--color-text-muted);margin-bottom:var(--space-3)}
+.meta-row{display:flex;align-items:center;justify-content:space-between;font-size:var(--font-size-sm);padding:6px 0;border-bottom:1px solid var(--color-border)}
+.meta-row:last-child{border-bottom:none}
+.meta-row .meta-label{color:var(--color-text-muted)}
+.meta-row .meta-value{font-weight:600}
+
+#layersList{display:flex;flex-direction:column;gap:6px;margin-bottom:var(--space-2)}
+.layer{
+  display:grid;grid-template-columns:20px 1fr 52px 24px 24px 24px;align-items:center;gap:5px;
+  background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:6px 7px;font-size:var(--font-size-xs);
+}
+.layer.selected{outline:2px solid var(--color-primary);outline-offset:-1px;background:var(--color-primary-tint)}
+.layer input{width:auto;height:auto}
+.layer button{padding:3px;border-radius:5px;font-size:11px;border:1px solid var(--color-border-strong);background:var(--color-surface);cursor:pointer}
+.layer button:disabled{opacity:.35;cursor:not-allowed}
+.layer .name{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.layer .type{font-size:9.5px;color:var(--color-text-faint);text-align:right}
+.ruleHint{font-size:var(--font-size-xs);color:var(--color-danger);margin-top:6px;line-height:1.4}
+#status{font-size:var(--font-size-sm);color:var(--color-text-muted)}
+
+/* ============================== Workspace ============================== */
+.workspace{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--color-bg)}
+.workspace-toolbar{display:flex;align-items:center;gap:var(--space-4);padding:var(--space-2) var(--space-4);border-bottom:1px solid var(--color-border);background:var(--color-surface);flex-wrap:wrap}
+.tabs{display:flex;gap:2px;background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:2px}
+.tabs .tab{height:28px;padding:0 12px;border:none;border-radius:5px;background:transparent;color:var(--color-text-muted);font-weight:700;font-size:var(--font-size-xs);cursor:pointer}
+.tabs .tab.active{background:var(--color-surface);color:var(--color-primary-active);box-shadow:var(--shadow-sm)}
+.toolbar-cluster{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}
+.toolbar-group{display:flex;align-items:center;gap:6px;padding-left:var(--space-3);border-left:1px solid var(--color-border)}
+.toolbar-group:first-child{border-left:none;padding-left:0}
+.toolbar-label{font-size:var(--font-size-xs);font-weight:700;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:.03em;margin-right:2px}
+#selectionSummary{font-size:var(--font-size-xs);color:var(--color-text-muted);white-space:nowrap}
+.align-icons{display:flex;gap:3px}
+.workspace-canvas-area{flex:1;min-height:0;position:relative}
+/* Both canvas panels stay mounted at real, non-zero pixel dimensions at all times (absolutely
+   stacked, filling the same inset), toggled by visibility/z-index rather than display:none -- a
+   canvas whose box collapses to 0x0 while "hidden" would size its 3D renderer to 0x0 too, silently
+   producing a blank Object Preview PNG export if a user never opened the 3D tab first. */
+.canvas-panel{position:absolute;inset:var(--space-4);background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);overflow:hidden}
+.canvas-panel.tab-hidden{visibility:hidden;pointer-events:none}
+.canvas-panel canvas{width:100%;height:100%;display:block;background:var(--color-canvas-bg)}
+/* Dual Workspace (UI-001B): the default desktop layout shows the 2D Canvas and Object Preview
+   side by side instead of one-at-a-time. Both panels switch from absolute stacking to a normal
+   flex row -- each still gets a real, non-zero pixel box at all times (same "never display:none"
+   rule the single-view tab modes rely on), so no canvas-sizing/export regression is reintroduced. */
+.workspace-canvas-area.dual{display:flex;gap:var(--space-3);padding:var(--space-4)}
+.workspace-canvas-area.dual .canvas-panel{position:relative;inset:auto;flex:1 1 0;min-width:0;height:100%}
+.fitNotice{position:absolute;left:var(--space-4);bottom:var(--space-4);color:var(--color-text-muted);font-size:var(--font-size-xs);background:#ffffffe6;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:4px 9px}
+.workspace-status{display:flex;align-items:center;gap:var(--space-4);padding:var(--space-2) var(--space-4);border-top:1px solid var(--color-border);background:var(--color-surface);font-size:var(--font-size-sm);white-space:nowrap;overflow-x:auto}
+.workspace-status b{font-weight:700}
+.workspace-status span{color:var(--color-text-muted)}
+.view3d-toolbar{display:flex;align-items:center;gap:var(--space-3)}
+.view-buttons{display:flex;gap:4px}
+.view-buttons button{height:var(--control-height-sm);padding:0 10px;border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);background:var(--color-surface);cursor:pointer;font-size:var(--font-size-xs);font-weight:700}
+.view-buttons button.primary{background:var(--color-primary);border-color:var(--color-primary);color:#fff}
+.slider-field{display:flex;align-items:center;gap:6px;font-size:var(--font-size-xs);color:var(--color-text-muted)}
+.slider-field input[type="range"]{width:100px}
+
+/* ============================== Right inspector ============================== */
+#inspectorEmpty{font-size:var(--font-size-sm);color:var(--color-text-muted)}
+.field-slot .field-row{margin-bottom:0}
+#moreOptionsBtn{margin-top:var(--space-2)}
+
+/* ============================== Responsive ============================== */
+@media (max-width:1400px){:root{--left-panel-width:240px;--right-panel-width:224px}}
+@media (max-width:1500px){
+  .brand span:not(.mark){display:none}
+  .topmenu-btn{padding:0 8px;gap:4px}
+  .dirty-indicator{min-width:0}
+}
+@media (max-width:1300px){
+  .app-shell{grid-template-columns:220px 1fr 0}
+  .right-inspector{display:none}
+}
+
+/* ============================== Lightbox system ============================== */
+.lightbox-overlay{position:fixed;inset:0;background:rgba(17,23,43,.5);display:none;align-items:center;justify-content:center;z-index:100;padding:var(--space-5)}
+.lightbox-overlay.open{display:flex}
+.lightbox{background:var(--color-surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);width:640px;max-width:100%;max-height:calc(100vh - 64px);display:flex;flex-direction:column;overflow:hidden}
+.lightbox.wide{width:760px}
+.lightbox-header{display:flex;align-items:center;justify-content:space-between;padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--color-border)}
+.lightbox-header h2{font-size:var(--font-size-lg);font-weight:700}
+.lightbox-close{width:30px;height:30px;border:none;background:transparent;border-radius:var(--radius-sm);cursor:pointer;font-size:16px;color:var(--color-text-muted)}
+.lightbox-close:hover{background:var(--color-bg)}
+.lightbox-body{padding:var(--space-5);overflow-y:auto;flex:1;min-height:0}
+.lightbox-footer{display:flex;align-items:center;justify-content:flex-end;gap:var(--space-2);padding:var(--space-3) var(--space-5);border-top:1px solid var(--color-border);background:var(--color-bg)}
+.lightbox-footer .footer-note{margin-right:auto;font-size:var(--font-size-xs);color:var(--color-text-muted)}
+.lightbox-tabs{display:flex;gap:2px;background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:2px;margin-bottom:var(--space-4);width:fit-content}
+.lightbox-tabs button{height:28px;padding:0 14px;border:none;border-radius:5px;background:transparent;color:var(--color-text-muted);font-weight:700;font-size:var(--font-size-xs);cursor:pointer}
+.lightbox-tabs button.active{background:var(--color-surface);color:var(--color-primary-active);box-shadow:var(--shadow-sm)}
+.lightbox-tab-panel[hidden]{display:none}
+.field-section{margin-bottom:var(--space-5)}
+.field-section:last-child{margin-bottom:0}
+.field-section h3{font-size:var(--font-size-sm);font-weight:700;margin-bottom:var(--space-3);color:var(--color-text)}
+.validation-message{font-size:var(--font-size-sm);color:var(--color-danger);background:var(--color-danger-tint);border:1px solid #f3c6c1;border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:var(--space-3);display:none}
+.validation-message.visible{display:block}
+.drop-zone{border:1.5px dashed var(--color-border-strong);border-radius:var(--radius-md);padding:var(--space-5);text-align:center;color:var(--color-text-muted);font-size:var(--font-size-sm);background:var(--color-bg)}
+.preview-box{background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:var(--space-3);text-align:center}
+.preview-box canvas{max-width:100%;max-height:220px;background:#fff;border:1px solid var(--color-border);border-radius:var(--radius-sm);image-rendering:pixelated}
+.stone-count{font-size:var(--font-size-xs);color:var(--color-text-muted);margin-top:6px}
+.checkbox-row{display:flex;align-items:center;gap:8px;font-size:var(--font-size-sm);font-weight:500;color:var(--color-text);text-transform:none;margin-top:var(--space-1)}
+.checkbox-row input{width:auto;height:auto}
+.template-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-3)}
+.template-card{border:1px solid var(--color-border-strong);border-radius:var(--radius-md);padding:var(--space-3);cursor:pointer;background:var(--color-surface)}
+.template-card.active{border-color:var(--color-primary);background:var(--color-primary-tint)}
+.template-card h4{font-size:var(--font-size-sm);margin:0 0 4px}
+.template-card p{font-size:var(--font-size-xs);color:var(--color-text-muted);margin:0}
+.help-section{margin-bottom:var(--space-4)}
+.help-section h3{font-size:var(--font-size-sm);font-weight:700;margin-bottom:6px}
+.help-section p,.help-section li{font-size:var(--font-size-sm);color:var(--color-text-muted);line-height:1.5}
+.shortcut-list{display:grid;grid-template-columns:120px 1fr;gap:4px 12px;font-size:var(--font-size-sm)}
+.export-group{border:1px solid var(--color-border);border-radius:var(--radius-md);padding:var(--space-3);margin-bottom:var(--space-3)}
+.export-group h3{font-size:var(--font-size-sm);font-weight:700;margin-bottom:2px}
+.export-group p{font-size:var(--font-size-xs);color:var(--color-text-muted);margin:0 0 var(--space-2)}
 </style>
 </head>
 <body>
-<div class="top"><b>💎 Rhinestone Studio</b><span>M2.2 Text/Shape Fix</span><div class="historyControls"><button id="undoBtn" title="Undo (Ctrl/Cmd+Z)" disabled>↶ Undo</button><button id="redoBtn" title="Redo (Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y)" disabled>↷ Redo</button><span id="dirtyIndicator" class="dirtyIndicator">Saved</span></div><div class="right">single GeometryEngine → 2D + cup + export · no images generated</div></div>
-<div class="app">
-  <aside class="panel side">
-    <div class="cardTitle">Project controls</div>
-    <label>Project name</label><input id="projectName" value="Untitled Project">
-    <label>Object type</label><select id="objectType"><option value="mug" selected>Mug</option><option value="tumbler">Straight Tumbler</option><option value="bottle">Bottle</option></select>
-    <hr>
-    <label>Selected layer</label><select id="selectedLayer"></select>
-    <label>Layers</label><div id="layersList"></div><div class="btnrow"><button id="addCircle">Add circle</button><button id="addRect">Add rectangle</button></div><div class="btnrow"><button id="importSvg">Import SVG</button><button id="importImage">Import Image...</button></div><input id="importSvgFile" type="file" accept="image/svg+xml,.svg" style="display:none"><input id="importImageFile" type="file" accept="image/png,image/jpeg,image/webp" style="display:none"><button id="deleteSelected" class="danger" style="width:100%;margin-top:8px">Delete selected layer</button><div id="layerRuleHint" class="ruleHint" style="display:none">At least one layer is required — add another layer before you can delete this one.</div>
-    <hr>
-    <div id="textControls">
-      <label>Text</label><input id="text" value="Vitalina Serbin">
-      <label>Font</label><select id="font"><option value="courier-prime-regular" selected>Courier Prime (monospace)</option><option value="great-vibes-regular">Great Vibes (script)</option></select>
-      <div class="row"><div><label>Text height (mm)</label><input id="height" type="number" min="4" max="80" step="1" value="25"></div><div><label>Auto fit</label><select id="autoFit"><option value="on">On</option><option value="off">Off</option></select></div></div>
-      <label>Text mode</label><select id="textMode"><option value="stroke" selected>Stroke - readable names</option><option value="fill">Fill - dense</option></select>
-      <label>Curved text</label><select id="curveEnabled"><option value="off" selected>Off - straight</option><option value="on">On - curved</option></select>
-      <div id="curveControls" style="display:none">
-        <div class="row"><div><label>Radius (mm)</label><input id="curveRadiusMm" type="number" min="1" step="1" value="40"></div><div><label>Direction</label><select id="curveDirection"><option value="outside" selected>Outside</option><option value="inside">Inside</option></select></div></div>
-        <div class="row"><div><label>Start angle (deg)</label><input id="curveStartAngleDeg" type="number" step="1" value="0"></div><div><label>Sweep angle (deg)</label><input id="curveSweepAngleDeg" type="number" step="1" value="360"></div></div>
-        <label>Alignment</label><select id="curveAlignment"><option value="start">Start</option><option value="center" selected>Center</option><option value="end">End</option></select>
+
+<header class="topbar">
+  <div class="brand"><span class="mark">💎</span><span>Rhinestone Studio</span></div>
+  <nav class="topmenu" aria-label="Main menu">
+    <button class="topmenu-btn" id="menuText" title="Text (edit the selected text layer's content, font, and curve)"><span class="glyph">🅣</span>Text</button>
+    <button class="topmenu-btn" id="menuShapes" title="Shapes and object templates"><span class="glyph">◇</span>Shapes</button>
+    <button class="topmenu-btn" id="menuImport" title="Import an SVG or a Project JSON file"><span class="glyph">⇪</span>Import</button>
+    <button class="topmenu-btn" id="menuImageTrace" title="Trace a PNG/JPG/WebP image into stones"><span class="glyph">🖼</span>Image Trace</button>
+    <button class="topmenu-btn" id="menuExport" title="Export project, layout, SVG, or PNG"><span class="glyph">⬇</span>Export</button>
+    <button class="topmenu-btn" id="menuProdSheet" title="Generate a manufacturing production sheet"><span class="glyph">🖨</span>Production Sheet</button>
+    <button class="topmenu-btn" id="menuShipping" title="Shipping and handling notes"><span class="glyph">📦</span>Shipping &amp; Handling</button>
+    <button class="topmenu-btn" id="menuSettings" title="Application settings"><span class="glyph">⚙</span>Settings</button>
+    <button class="topmenu-btn" id="menuHelp" title="Help and keyboard shortcuts"><span class="glyph">?</span>Help</button>
+  </nav>
+  <div class="topbar-actions">
+    <button id="undoBtn" class="icon-btn" title="Undo (Ctrl/Cmd+Z)" disabled>↶</button>
+    <button id="redoBtn" class="icon-btn" title="Redo (Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y)" disabled>↷</button>
+    <button class="btn" id="saveProject" title="Save project (downloads Project JSON)">Save</button>
+    <button class="btn primary" id="exportShortcut" title="Open the Export dialog">Export</button>
+    <span id="dirtyIndicator" class="dirty-indicator">Saved</span>
+  </div>
+</header>
+
+<div class="app-shell">
+
+  <!-- ===================== LEFT PANEL: Project / Layers / Actions only ===================== -->
+  <aside class="left-panel" aria-label="Project and layers">
+    <section class="panel-section">
+      <h2>Project</h2>
+      <div class="field"><label for="projectName">Project name</label><input id="projectName" value="Untitled Project"></div>
+      <div class="meta-row"><span class="meta-label">Units</span><span class="meta-value">mm</span></div>
+      <div class="meta-row"><span class="meta-label">Template</span><span class="meta-value" id="projectTemplateSummary">Mug · 210×90mm</span></div>
+    </section>
+
+    <section class="panel-section">
+      <h2>Layers</h2>
+      <select id="selectedLayer" class="visually-hidden" aria-label="Selected layer"></select>
+      <div id="layersList" role="list" aria-label="Layer list"></div>
+      <div class="btnrow">
+        <button class="btn sm" id="addCircle" title="Add a circle layer">+ Circle</button>
+        <button class="btn sm" id="addRect" title="Add a rectangle layer">+ Rectangle</button>
+      </div>
+      <button id="deleteSelected" class="btn danger block" style="margin-top:var(--space-2)">Delete selected layer</button><div id="layerRuleHint" class="ruleHint" style="display:none">At least one layer is required — add another layer before you can delete this one.</div>
+    </section>
+
+    <section class="panel-section">
+      <h2>Actions</h2>
+      <div class="btnrow" style="margin-bottom:var(--space-2)">
+        <button class="btn sm" id="actionUndo" title="Undo" disabled>↶ Undo</button>
+        <button class="btn sm" id="actionRedo" title="Redo" disabled>↷ Redo</button>
+      </div>
+      <div class="btnrow" style="margin-bottom:var(--space-2)">
+        <button class="btn sm" id="actionDuplicate" title="Duplicate selected layer">⧉ Duplicate</button>
+        <button class="btn sm" id="actionDelete" title="Delete selected layer">🗑 Delete</button>
+      </div>
+      <button class="btn primary block" id="actionSave" title="Save project (downloads Project JSON)">Save Project</button>
+    </section>
+
+    <div id="status" class="status-message" style="color:var(--color-text-muted)">Ready</div>
+  </aside>
+
+  <!-- ===================== CENTRAL WORKSPACE ===================== -->
+  <main class="workspace" aria-label="Design workspace">
+    <div class="workspace-toolbar">
+      <div class="tabs" role="tablist" aria-label="Workspace view">
+        <button class="tab active" id="viewTabDual" role="tab" aria-selected="true" title="Show the 2D Canvas and Object Preview side by side">Dual Workspace</button>
+        <button class="tab" id="viewTab2D" role="tab" aria-selected="false" title="Show only the 2D Canvas">2D Canvas</button>
+        <button class="tab" id="viewTab3D" role="tab" aria-selected="false" title="Show only the Object Preview">Object Preview</button>
+      </div>
+
+      <div class="toolbar-cluster" id="toolbar2D">
+        <div class="toolbar-group">
+          <button class="icon-btn" id="safeAreaToggle" title="Toggle safe-area guide" aria-pressed="true">▢</button>
+          <span class="hint" title="The reference grid helps align stones to the canvas; it is drawn by the permanent 2D renderer and cannot be turned off in this milestone" style="cursor:help">⊞&nbsp;Grid: always on</span>
+        </div>
+        <div class="toolbar-group">
+          <span class="toolbar-label">Align &amp; Snap</span>
+          <div id="selectionSummary" style="display:inline">No layers selected</div>
+          <div class="align-icons">
+            <button id="alignLeft" class="icon-btn" title="Align left (2+ layers selected)" disabled>⯇</button>
+            <button id="alignCenterH" class="icon-btn" title="Align horizontal center (2+ layers selected)" disabled>↔</button>
+            <button id="alignRight" class="icon-btn" title="Align right (2+ layers selected)" disabled>⯈</button>
+            <button id="alignTop" class="icon-btn" title="Align top (2+ layers selected)" disabled>⯅</button>
+            <button id="alignCenterV" class="icon-btn" title="Align vertical middle (2+ layers selected)" disabled>↕</button>
+            <button id="alignBottom" class="icon-btn" title="Align bottom (2+ layers selected)" disabled>⯆</button>
+            <button id="distributeH" class="icon-btn" title="Distribute horizontally, equal center spacing (3+ layers selected)" disabled>⇹</button>
+            <button id="distributeV" class="icon-btn" title="Distribute vertically, equal center spacing (3+ layers selected)" disabled>⇳</button>
+          </div>
+          <select id="snapEnabled" title="Snap to canvas center/edges, safe area, and other layers while dragging"><option value="on" selected>On</option><option value="off">Off</option></select>
+        </div>
+      </div>
+
+      <div class="toolbar-cluster view3d-toolbar" id="toolbar3D">
+        <div class="toolbar-group">
+          <div class="view-buttons">
+            <button data-view="0" class="viewBtn primary">Front</button><button data-view="-90" class="viewBtn">Left</button><button data-view="90" class="viewBtn">Right</button><button data-view="180" class="viewBtn">Back</button>
+          </div>
+        </div>
+        <div class="toolbar-group slider-field">
+          <span>Rotation</span><input id="rotation" type="range" min="-180" max="180" value="0">
+        </div>
+        <div class="toolbar-group slider-field">
+          <span>Zoom</span><input id="zoom" type="range" min="70" max="140" value="100">
+          <button class="btn sm" id="resetView">Reset view</button>
+        </div>
+        <div class="toolbar-group">
+          <label for="cupColor" style="margin:0 6px 0 0;display:inline">Preview background</label>
+          <select id="cupColor"><option value="#ffffff">White</option><option value="#0b0b0b">Black</option><option value="#1f3556" selected>Navy</option><option value="#bf1d1d">Red</option><option value="#f1d7a9">Cream</option><option value="#95d5b2">Mint</option><option value="#8f8f8f">Gray</option><option value="#e67aa0">Pink</option></select>
+        </div>
       </div>
     </div>
-    <div id="shapeControls" style="display:none">
-      <div class="row"><div><label>X / CX (mm)</label><input id="shapeX" type="number" step="1"></div><div><label>Y / CY (mm)</label><input id="shapeY" type="number" step="1"></div></div>
-      <div class="row"><div><label>Width / Radius</label><input id="shapeW" type="number" step="1"></div><div><label>Height</label><input id="shapeH" type="number" step="1"></div></div>
-      <div class="selectionHint">Shapes can be edited by mouse in the 2D layout: drag the shape to move it, drag blue handles to resize, press <span class="kbd">Delete</span> to remove.</div>
+
+    <div class="workspace-canvas-area dual" id="workspaceCanvasArea">
+      <section class="canvas-panel" id="panel2D" aria-label="2D production canvas">
+        <canvas id="layout"></canvas>
+        <div class="fitNotice" id="fitNotice"></div>
+      </section>
+      <section class="canvas-panel" id="panel3D" aria-label="3D object preview">
+        <canvas id="cup"></canvas>
+      </section>
     </div>
-    <div id="svgControls" style="display:none">
-      <label>Fill mode</label><select id="svgMode"><option value="outline" selected>Outline - readable</option><option value="fill">Fill - dense</option></select>
-    </div>
-    <div id="imageControls" style="display:none">
-      <label>Threshold (0-255)</label><input id="imgThreshold" type="range" min="0" max="255" step="1" value="128">
-      <div class="row"><div><label>Invert</label><select id="imgInvert"><option value="off" selected>Off</option><option value="on">On</option></select></div><div><label>Blur radius (px)</label><input id="imgBlurRadius" type="number" min="0" max="50" step="1" value="0"></div></div>
-      <div class="row"><div><label>Maximum width (px)</label><input id="imgMaxWidth" type="number" min="8" max="2000" step="1" value="400"></div><div><label>Maximum height (px)</label><input id="imgMaxHeight" type="number" min="8" max="2000" step="1" value="400"></div></div>
-      <div class="selectionHint">Images can be edited by mouse in the 2D layout: drag to move, drag blue handles to resize, press <span class="kbd">Delete</span> to remove.</div>
-    </div>
-    <div class="row"><div><label>Stone size</label><select id="stoneSize"><option value="0.8">0.8 mm</option><option value="1.0">1.0 mm</option><option value="1.2">1.2 mm</option><option value="1.5">1.5 mm</option><option value="1.8">1.8 mm</option><option value="2.0" selected>2.0 mm</option><option value="2.5">2.5 mm</option><option value="3.0">3.0 mm</option></select></div><div><label>Gap (mm)</label><input id="gap" type="number" min="0" max="5" step="0.1" value="0.3"></div></div>
-    <label>Stone color</label><div class="colorPickRow"><select id="stoneColor"></select><span id="stoneColorSwatch" class="colorSwatch" title="Selected color preview"></span></div>
-    <label>Preview background</label><select id="cupColor"><option value="#ffffff">White</option><option value="#0b0b0b">Black</option><option value="#1f3556" selected>Navy</option><option value="#bf1d1d">Red</option><option value="#f1d7a9">Cream</option><option value="#95d5b2">Mint</option><option value="#8f8f8f">Gray</option><option value="#e67aa0">Pink</option></select>
-    <hr><label>3D view</label><div class="btnrow"><button data-view="0" class="viewBtn primary">Front</button><button data-view="-90" class="viewBtn">Left</button><button data-view="90" class="viewBtn">Right</button><button data-view="180" class="viewBtn">Back</button></div>
-    <label>Rotation</label><input id="rotation" type="range" min="-180" max="180" value="0"><label>Wrap mode</label><select id="wrap"><option value="front" selected>Front only - readable</option><option value="wide">Wide front</option><option value="half">Half wrap</option><option value="full">Full wrap</option></select>
-    <hr><label>Project file</label><div class="btnrow"><button id="importProject">Import Project JSON</button></div><input id="importProjectFile" type="file" accept="application/json,.json" style="display:none">
-    <hr><label>Export</label><div class="export"><button id="exportProject" class="primary">Export Project JSON</button><button id="exportLayout" class="primary">Export Generated Layout JSON</button><button id="exportSVG" class="primary">Export 2D SVG</button><button id="exportPNG" class="primary">Export 2D PNG</button><button id="exportCup" class="primary">Export Cup PNG</button></div>
-    <hr><label>Production Sheet</label>
-    <div class="row"><div><label>Page size</label><select id="prodSheetPageSize"><option value="A4" selected>A4</option><option value="Letter">Letter</option></select></div><div><label>Margin (mm)</label><input id="prodSheetMargin" type="number" min="0" step="1" value="10"></div></div>
-    <div class="row"><div><label>Mirror</label><select id="prodSheetMirror"><option value="off" selected>Off</option><option value="on">On</option></select></div><div><label>Registration marks</label><select id="prodSheetRegMarks"><option value="on" selected>On</option><option value="off">Off</option></select></div></div>
-    <div class="export"><button id="exportProdSheetSVG" class="primary">Export Production Sheet (SVG)</button><button id="exportProdSheetPNG" class="primary">Export Production Sheet (PNG)</button><button id="exportProdSheetPDF" class="primary">Export Production Sheet (PDF)</button></div>
-    <div id="status" class="status">Ready</div>
+
+    <div class="workspace-status" id="layoutStats"></div>
+    <div class="workspace-status" id="cupStats"></div>
+  </main>
+
+  <!-- ===================== RIGHT INSPECTOR (compact quick-edit) ===================== -->
+  <aside class="right-inspector" id="rightInspector" aria-label="Layer inspector">
+    <section class="panel-section">
+      <h2>Inspector — <span id="inspectorLayerName">Selected layer</span></h2>
+      <div id="inspectorPositionSlot" class="field-slot"></div>
+      <div id="inspectorStoneSlot" class="field-slot"></div>
+      <button class="btn block" id="moreOptionsBtn">More Options…</button>
+    </section>
   </aside>
-  <section class="panel viewer layoutPanel"><div class="viewerHead">Production Layout <small>mouse-edit shapes · auto-fit view</small></div><div class="canvasWrap"><canvas id="layout"></canvas><div class="fitNotice" id="fitNotice"></div></div><div class="stats" id="layoutStats"></div></section>
-  <section class="panel viewer cupPanel"><div class="viewerHead">Object Preview <small>drag to rotate · scroll to zoom · right-drag to pan</small></div><div class="canvasWrap"><canvas id="cup"></canvas></div><div class="viewControls"><span class="small">Zoom</span><input id="zoom" type="range" min="70" max="140" value="100"><button id="resetView">Reset view</button></div><div class="stats" id="cupStats"></div></section>
+
 </div>
-<div id="imageImportPanel" class="modalOverlay" style="display:none">
-  <div class="modalPanel">
-    <div class="cardTitle">Import Image — preview before commit</div>
-    <canvas id="imageImportPreviewCanvas" width="1" height="1"></canvas>
-    <div id="imageImportStoneCount" class="modalStoneCount">— stones (approx.)</div>
-    <label>Threshold (0-255)</label><input id="imgPreviewThreshold" type="range" min="0" max="255" step="1" value="128">
-    <div class="row"><div><label>Invert</label><select id="imgPreviewInvert"><option value="off" selected>Off</option><option value="on">On</option></select></div><div><label>Blur radius (px)</label><input id="imgPreviewBlur" type="number" min="0" max="50" step="1" value="0"></div></div>
-    <div class="row"><div><label>Maximum width (px)</label><input id="imgPreviewMaxWidth" type="number" min="8" max="2000" step="1" value="400"></div><div><label>Maximum height (px)</label><input id="imgPreviewMaxHeight" type="number" min="8" max="2000" step="1" value="400"></div></div>
-    <div class="btnrow" style="margin-top:12px"><button id="imageImportCancel">Cancel</button><button id="imageImportCommit" class="primary">Import</button></div>
+
+<!-- ============================================================================
+     LIGHTBOXES
+     ============================================================================ -->
+
+<!-- ---------- TEXT ---------- -->
+<div class="lightbox-overlay" id="lightboxText">
+  <div class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxTextTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxTextTitle">Text</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <div id="textControls">
+        <div class="field-section">
+          <h3>Content</h3>
+          <div class="field"><label for="text">Text content</label><input id="text" value="Vitalina Serbin"></div>
+          <div class="field-row">
+            <div class="field"><label for="font">Font</label><select id="font"><option value="courier-prime-regular" selected>Courier Prime (monospace)</option><option value="great-vibes-regular">Great Vibes (script)</option></select></div>
+            <div class="field"><label for="textMode">Outline / Fill</label><select id="textMode"><option value="stroke" selected>Outline - readable</option><option value="fill">Fill - dense</option></select></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label for="height">Text height (mm)</label><input id="height" type="number" min="4" max="80" step="1" value="25"></div>
+            <div class="field"><label for="autoFit">Auto fit</label><select id="autoFit"><option value="on">On</option><option value="off">Off</option></select></div>
+          </div>
+        </div>
+        <div class="field-section">
+          <h3>Position</h3>
+          <div class="field-row">
+            <div class="field"><label for="textX">Position X (mm)</label><input id="textX" type="number" step="1" value="0"></div>
+            <div class="field"><label for="textY">Position Y (mm)</label><input id="textY" type="number" step="1" value="0"></div>
+          </div>
+          <p class="hint">Text can also be moved by dragging on the 2D canvas, arrow-key nudging, or Align &amp; Snap.</p>
+        </div>
+        <div class="field-section">
+          <h3>Curve</h3>
+          <div class="field"><label for="curveEnabled">Curved text</label><select id="curveEnabled"><option value="off" selected>Off - straight</option><option value="on">On - curved</option></select></div>
+          <div id="curveControls" style="display:none">
+            <div class="field-row">
+              <div class="field"><label for="curveRadiusMm">Curve radius (mm)</label><input id="curveRadiusMm" type="number" min="1" step="1" value="40"></div>
+              <div class="field"><label for="curveDirection">Curve direction</label><select id="curveDirection"><option value="outside" selected>Outside</option><option value="inside">Inside</option></select></div>
+            </div>
+            <div class="field-row">
+              <div class="field"><label for="curveStartAngleDeg">Start angle (deg)</label><input id="curveStartAngleDeg" type="number" step="1" value="0"></div>
+              <div class="field"><label for="curveSweepAngleDeg">Sweep angle (deg)</label><input id="curveSweepAngleDeg" type="number" step="1" value="360"></div>
+            </div>
+            <div class="field"><label for="curveAlignment">Curve alignment</label><select id="curveAlignment"><option value="start">Start</option><option value="center" selected>Center</option><option value="end">End</option></select></div>
+          </div>
+        </div>
+        <div class="field-section">
+          <h3>Stones</h3>
+          <div id="textStoneSlot" class="field-slot"></div>
+        </div>
+      </div>
+      <div class="validation-message" id="textValidation" role="alert"></div>
+    </div>
+    <footer class="lightbox-footer">
+      <span class="footer-note">Changes preview live and undo/redo normally.</span>
+      <button class="btn" data-lightbox-close>Cancel</button>
+      <button class="btn primary" id="textApply" data-lightbox-close>Apply</button>
+    </footer>
   </div>
 </div>
+
+<!-- ---------- SHAPES ---------- -->
+<div class="lightbox-overlay" id="lightboxShapes">
+  <div class="lightbox wide" role="dialog" aria-modal="true" aria-labelledby="lightboxShapesTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxShapesTitle">Shapes</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <div class="lightbox-tabs" role="tablist">
+        <button class="active" id="shapesTabDesign" role="tab" aria-selected="true">Design Shapes</button>
+        <button id="shapesTabTemplates" role="tab" aria-selected="false">Object Templates</button>
+      </div>
+
+      <div class="lightbox-tab-panel" id="shapesPanelDesign">
+        <div class="field-section">
+          <h3>Add a shape</h3>
+          <div class="btnrow">
+            <button class="btn" id="addCircleLightbox" title="Add a circle layer">◯ Circle</button>
+            <button class="btn" id="addRectLightbox" title="Add a rectangle layer">▭ Rectangle</button>
+          </div>
+          <p class="hint">Adds a new layer using the stone settings below. Existing shapes are edited by selecting them from the Layers list.</p>
+        </div>
+        <div id="shapeControls" style="display:none">
+          <div class="field-section">
+            <h3>Position &amp; size</h3>
+            <div id="shapesPositionSlot" class="field-slot"></div>
+            <p class="hint">Shapes can also be edited by mouse in the 2D canvas: drag to move, drag blue handles to resize, press <span class="kbd">Delete</span> to remove.</p>
+          </div>
+          <div class="field-section">
+            <h3>Stones</h3>
+            <div id="shapesStoneSlot" class="field-slot"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="lightbox-tab-panel" id="shapesPanelTemplates" hidden>
+        <div class="field-section">
+          <h3>Object type</h3>
+          <select id="objectType"><option value="mug" selected>Mug</option><option value="tumbler">Straight Tumbler</option><option value="bottle">Bottle</option></select>
+          <p class="hint" id="objectTemplateDetail">Production 210×90mm · Safe area inset 14/10mm · Default wrap: Front only</p>
+        </div>
+        <div class="field-section">
+          <h3>Wrap mode</h3>
+          <select id="wrap"><option value="front" selected>Front only - readable</option><option value="wide">Wide front</option><option value="half">Half wrap</option><option value="full">Full wrap</option></select>
+        </div>
+        <p class="hint">Mug, Straight Tumbler, and Bottle are physical object/preview templates, not design shape layers — switching resets the production canvas size and wrap default for that object.</p>
+      </div>
+    </div>
+    <footer class="lightbox-footer">
+      <button class="btn" data-lightbox-close>Close</button>
+      <button class="btn primary" data-lightbox-close>Apply</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ---------- IMPORT ---------- -->
+<div class="lightbox-overlay" id="lightboxImport">
+  <div class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxImportTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxImportTitle">Import</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <div class="lightbox-tabs" role="tablist">
+        <button class="active" id="importTabSvg" role="tab" aria-selected="true">SVG Import</button>
+        <button id="importTabProject" role="tab" aria-selected="false">Project Import</button>
+      </div>
+
+      <div class="lightbox-tab-panel" id="importPanelSvg">
+        <div class="field-section">
+          <h3>SVG file</h3>
+          <div class="drop-zone">Choose an SVG file to import as a new layer.<br><button id="importSvg" class="btn sm" style="margin-top:8px">Choose SVG file…</button></div>
+          <input id="importSvgFile" type="file" accept="image/svg+xml,.svg" style="display:none">
+        </div>
+        <div id="svgControls" style="display:none">
+          <div class="field-section">
+            <h3>Position &amp; size</h3>
+            <div id="importPositionSlot" class="field-slot"></div>
+          </div>
+          <div class="field-section">
+            <h3>Fill mode</h3>
+            <select id="svgMode"><option value="outline" selected>Outline - readable</option><option value="fill">Fill - dense</option></select>
+          </div>
+          <div class="field-section">
+            <h3>Stones</h3>
+            <div id="importStoneSlot" class="field-slot"></div>
+          </div>
+        </div>
+        <p class="hint">Unsupported SVG elements are skipped and reported after import; scaling preserves proportions to fit the current canvas.</p>
+      </div>
+
+      <div class="lightbox-tab-panel" id="importPanelProject" hidden>
+        <div class="field-section">
+          <h3>Project JSON file</h3>
+          <p class="hint">Project Import replaces the entire open project with a previously exported Project JSON file. It is not the same as SVG Import, which adds one new layer to the current project.</p>
+          <div class="drop-zone"><button id="importProject" class="btn sm">Choose Project JSON file…</button></div>
+          <input id="importProjectFile" type="file" accept="application/json,.json" style="display:none">
+        </div>
+        <div class="validation-message" id="importProjectValidation" role="alert"></div>
+        <p class="hint">On failure, the current project is left untouched and a specific error is shown above.</p>
+      </div>
+    </div>
+    <footer class="lightbox-footer">
+      <button class="btn" data-lightbox-close>Close</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ---------- IMAGE TRACE ---------- -->
+<div class="lightbox-overlay" id="lightboxImageTrace">
+  <div class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxImageTraceTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxImageTraceTitle">Image Trace</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <div id="imageTraceNewSection">
+        <div class="field-section">
+          <h3>Source image</h3>
+          <div class="drop-zone">PNG, JPG/JPEG, or WebP.<br><button id="importImage" class="btn sm" style="margin-top:8px">Choose image file…</button></div>
+          <input id="importImageFile" type="file" accept="image/png,image/jpeg,image/webp" style="display:none">
+        </div>
+        <div id="imageImportPanel" style="display:none">
+          <div class="field-section">
+            <h3>Preview</h3>
+            <div class="preview-box"><canvas id="imageImportPreviewCanvas" width="1" height="1"></canvas><div id="imageImportStoneCount" class="stone-count">— stones (approx.)</div></div>
+          </div>
+          <div class="field-section">
+            <h3>Trace parameters</h3>
+            <div class="field"><label for="imgPreviewThreshold">Threshold (0-255)</label><input id="imgPreviewThreshold" type="range" min="0" max="255" step="1" value="128"></div>
+            <div class="field-row">
+              <div class="field"><label for="imgPreviewInvert">Invert</label><select id="imgPreviewInvert"><option value="off" selected>Off</option><option value="on">On</option></select></div>
+              <div class="field"><label for="imgPreviewBlur">Blur radius (px)</label><input id="imgPreviewBlur" type="number" min="0" max="50" step="1" value="0"></div>
+            </div>
+            <div class="field-row">
+              <div class="field"><label for="imgPreviewMaxWidth">Maximum width (px)</label><input id="imgPreviewMaxWidth" type="number" min="8" max="2000" step="1" value="400"></div>
+              <div class="field"><label for="imgPreviewMaxHeight">Maximum height (px)</label><input id="imgPreviewMaxHeight" type="number" min="8" max="2000" step="1" value="400"></div>
+            </div>
+          </div>
+          <footer class="lightbox-footer" style="margin:0 calc(-1 * var(--space-5)) calc(-1 * var(--space-5));">
+            <button class="btn" id="imageImportCancel">Cancel</button>
+            <button class="btn primary" id="imageImportCommit">Import</button>
+          </footer>
+        </div>
+      </div>
+      <div id="imageTraceEditSection" style="display:none">
+        <div class="field-section">
+          <h3>Edit selected image layer</h3>
+          <div id="imageControls">
+            <div class="field"><label for="imgThreshold">Threshold (0-255)</label><input id="imgThreshold" type="range" min="0" max="255" step="1" value="128"></div>
+            <div class="field-row">
+              <div class="field"><label for="imgInvert">Invert</label><select id="imgInvert"><option value="off" selected>Off</option><option value="on">On</option></select></div>
+              <div class="field"><label for="imgBlurRadius">Blur radius (px)</label><input id="imgBlurRadius" type="number" min="0" max="50" step="1" value="0"></div>
+            </div>
+            <div class="field-row">
+              <div class="field"><label for="imgMaxWidth">Maximum width (px)</label><input id="imgMaxWidth" type="number" min="8" max="2000" step="1" value="400"></div>
+              <div class="field"><label for="imgMaxHeight">Maximum height (px)</label><input id="imgMaxHeight" type="number" min="8" max="2000" step="1" value="400"></div>
+            </div>
+          </div>
+          <div class="field-section">
+            <h3>Position &amp; size</h3>
+            <div id="imageTracePositionSlot" class="field-slot"></div>
+          </div>
+          <div class="field-section">
+            <h3>Stones</h3>
+            <div id="imageTraceStoneSlot" class="field-slot"></div>
+          </div>
+          <p class="hint">Images can also be edited by mouse in the 2D canvas: drag to move, drag blue handles to resize, press <span class="kbd">Delete</span> to remove.</p>
+        </div>
+      </div>
+    </div>
+    <footer class="lightbox-footer">
+      <button class="btn" data-lightbox-close>Close</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ---------- EXPORT ---------- -->
+<div class="lightbox-overlay" id="lightboxExport">
+  <div class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxExportTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxExportTitle">Export</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <div class="export-group">
+        <h3>Project data</h3>
+        <p>The full editable project — reopen later with Import → Project Import.</p>
+        <button class="btn primary block" id="exportProject">Export Project JSON</button>
+      </div>
+      <div class="export-group">
+        <h3>Production geometry</h3>
+        <p>The generated StoneLayout (stone positions, sizes, colors) as machine-readable JSON.</p>
+        <button class="btn primary block" id="exportLayout">Export Generated Layout JSON</button>
+      </div>
+      <div class="export-group">
+        <h3>Visual previews</h3>
+        <p>Rendered snapshots — SVG is vector, PNG is raster, both at the current canvas view.</p>
+        <div class="btnrow" style="margin-bottom:8px"><button class="btn primary" id="exportSVG">2D SVG</button><button class="btn primary" id="exportPNG">2D PNG</button></div>
+        <button class="btn primary block" id="exportCup">3D / Object Preview PNG</button>
+      </div>
+    </div>
+    <footer class="lightbox-footer"><button class="btn" data-lightbox-close>Close</button></footer>
+  </div>
+</div>
+
+<!-- ---------- PRODUCTION SHEET ---------- -->
+<div class="lightbox-overlay" id="lightboxProdSheet">
+  <div class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxProdSheetTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxProdSheetTitle">Production Sheet</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <div class="field-section">
+        <h3>Page setup</h3>
+        <div class="field-row">
+          <div class="field"><label for="prodSheetPageSize">Page size</label><select id="prodSheetPageSize"><option value="A4" selected>A4</option><option value="Letter">Letter</option></select></div>
+          <div class="field"><label for="prodSheetMargin">Margin (mm)</label><input id="prodSheetMargin" type="number" min="0" step="1" value="10"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label for="prodSheetMirror">Mirror</label><select id="prodSheetMirror"><option value="off" selected>Off</option><option value="on">On</option></select></div>
+          <div class="field"><label for="prodSheetRegMarks">Registration marks</label><select id="prodSheetRegMarks"><option value="on" selected>On</option><option value="off">Off</option></select></div>
+        </div>
+      </div>
+      <div class="field-section">
+        <h3>Included on the sheet</h3>
+        <p class="hint">Project name, object type, production dimensions, a labeled 50mm scale bar, stone count, and stone size/gap for every visible layer — generated from the same StoneLayout used everywhere else, at true 1:1 millimeter scale.</p>
+      </div>
+      <div class="validation-message" id="prodSheetValidation" role="alert"></div>
+    </div>
+    <footer class="lightbox-footer">
+      <button class="btn" data-lightbox-close>Close</button>
+      <button id="exportProdSheetSVG" class="btn primary">SVG</button>
+      <button id="exportProdSheetPNG" class="btn primary">PNG</button>
+      <button id="exportProdSheetPDF" class="btn primary">PDF</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ---------- SHIPPING & HANDLING ---------- -->
+<div class="lightbox-overlay" id="lightboxShipping">
+  <div class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxShippingTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxShippingTitle">Shipping &amp; Handling</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <p class="hint" style="margin-bottom:var(--space-4)">Local reference notes for packing this project's physical product. These values are kept for this browser session only — they are not yet saved with the project file, and there is no carrier, rate, label, or tracking integration.</p>
+      <div class="field-section">
+        <h3>Package</h3>
+        <div class="field"><label for="shipPackageType">Package type</label><select id="shipPackageType"><option value="box" selected>Box</option><option value="mailer">Padded mailer</option><option value="tube">Tube</option><option value="custom">Custom</option></select></div>
+        <div class="field-row-3">
+          <div class="field"><label for="shipLengthMm">Length (mm)</label><input id="shipLengthMm" type="number" min="0" step="1"></div>
+          <div class="field"><label for="shipWidthMm">Width (mm)</label><input id="shipWidthMm" type="number" min="0" step="1"></div>
+          <div class="field"><label for="shipHeightMm">Height (mm)</label><input id="shipHeightMm" type="number" min="0" step="1"></div>
+        </div>
+        <div class="field"><label for="shipWeightG">Weight (g)</label><input id="shipWeightG" type="number" min="0" step="1"></div>
+      </div>
+      <div class="field-section">
+        <h3>Handling</h3>
+        <div class="field"><label for="shipNotes">Handling notes</label><textarea id="shipNotes" rows="3" style="width:100%;padding:8px 10px;border:1px solid var(--color-border-strong);border-radius:var(--radius-sm)"></textarea></div>
+        <label class="checkbox-row"><input type="checkbox" id="shipFragile"> Fragile — mark package accordingly</label>
+      </div>
+    </div>
+    <footer class="lightbox-footer">
+      <span class="footer-note">Session-only — see note above.</span>
+      <button class="btn" data-lightbox-close>Close</button>
+      <button class="btn primary" id="shipApply" data-lightbox-close>Apply</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ---------- SETTINGS ---------- -->
+<div class="lightbox-overlay" id="lightboxSettings">
+  <div class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxSettingsTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxSettingsTitle">Settings</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <div class="field-section">
+        <h3>General</h3>
+        <div class="meta-row"><span class="meta-label">Units</span><span class="meta-value">mm (fixed)</span></div>
+        <div class="meta-row"><span class="meta-label">Theme</span><span class="meta-value">Light (fixed)</span></div>
+      </div>
+      <div class="field-section">
+        <h3>Canvas defaults</h3>
+        <label class="checkbox-row"><input type="checkbox" id="settingsGridDefault" checked disabled> Show grid by default (always on — not yet configurable)</label>
+        <label class="checkbox-row"><input type="checkbox" id="settingsSafeAreaDefault" checked> Show safe-area guide by default</label>
+        <label class="checkbox-row"><input type="checkbox" id="settingsSnapDefault" checked> Snap to guides by default</label>
+      </div>
+      <div class="field-section">
+        <h3>New-layer defaults</h3>
+        <div class="field-row">
+          <div class="field"><label for="settingsDefaultStoneSize">Default stone size</label><select id="settingsDefaultStoneSize"><option value="0.8">0.8 mm</option><option value="1.0">1.0 mm</option><option value="1.2">1.2 mm</option><option value="1.5">1.5 mm</option><option value="1.8">1.8 mm</option><option value="2.0" selected>2.0 mm</option><option value="2.5">2.5 mm</option><option value="3.0">3.0 mm</option></select></div>
+          <div class="field"><label for="settingsDefaultGap">Default gap (mm)</label><input id="settingsDefaultGap" type="number" min="0" max="5" step="0.1" value="0.3"></div>
+        </div>
+      </div>
+      <div class="field-section">
+        <h3>Application</h3>
+        <div class="meta-row"><span class="meta-label">Version</span><span class="meta-value">0.1.0</span></div>
+      </div>
+    </div>
+    <footer class="lightbox-footer">
+      <button class="btn" data-lightbox-close>Close</button>
+      <button class="btn primary" id="settingsApply" data-lightbox-close>Apply</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ---------- HELP ---------- -->
+<div class="lightbox-overlay" id="lightboxHelp">
+  <div class="lightbox wide" role="dialog" aria-modal="true" aria-labelledby="lightboxHelpTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxHelpTitle">Help</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <div class="help-section">
+        <h3>Getting started</h3>
+        <p>Add a layer from the left panel or the Shapes/Text/Import menus, adjust its parameters in the matching Lightbox or the right-hand inspector, then use the Export or Production Sheet menus to produce output.</p>
+      </div>
+      <div class="help-section">
+        <h3>Keyboard shortcuts</h3>
+        <div class="shortcut-list">
+          <span class="kbd">Ctrl/Cmd+Z</span><span>Undo</span>
+          <span class="kbd">Ctrl/Cmd+Shift+Z</span><span>Redo</span>
+          <span class="kbd">Ctrl/Cmd+Y</span><span>Redo</span>
+          <span class="kbd">Delete / Backspace</span><span>Delete selected layer</span>
+          <span class="kbd">Arrow keys</span><span>Nudge selection</span>
+          <span class="kbd">Shift+Arrow</span><span>Nudge selection (larger step)</span>
+          <span class="kbd">Shift+Click</span><span>Add/remove a layer from the selection</span>
+          <span class="kbd">Esc</span><span>Close the open dialog</span>
+        </div>
+      </div>
+      <div class="help-section"><h3>Import</h3><p>SVG Import adds one new layer from an SVG file. Project Import replaces the entire open project with a previously exported Project JSON file — it does not merge.</p></div>
+      <div class="help-section"><h3>Export</h3><p>Project JSON is the full editable project. Generated Layout JSON is the production StoneLayout. SVG/PNG are visual snapshots.</p></div>
+      <div class="help-section"><h3>Production Sheet</h3><p>A millimeter-accurate, print-ready manufacturing document generated directly from the same StoneLayout as the 2D canvas — never a re-generated or approximated layout.</p></div>
+      <div class="help-section"><h3>About Rhinestone Studio</h3><p>Version 0.1.0. Professional software for designing and producing rhinestone artwork on physical products.</p></div>
+    </div>
+    <footer class="lightbox-footer"><button class="btn" data-lightbox-close>Close</button></footer>
+  </div>
+</div>
+
+<!-- ============================================================================
+     Shared, relocated field groups (single canonical DOM node per field; UI-001
+     moves these between an inspector "home" slot and the relevant open Lightbox's
+     slot via appendChild, never duplicating an id). Initial home = right inspector.
+     ============================================================================ -->
+<div id="sharedPositionFields">
+  <div class="field-row">
+    <div class="field"><label for="shapeX">X / CX (mm)</label><input id="shapeX" type="number" step="1"></div>
+    <div class="field"><label for="shapeY">Y / CY (mm)</label><input id="shapeY" type="number" step="1"></div>
+  </div>
+  <div class="field-row">
+    <div class="field"><label for="shapeW">Width / Radius</label><input id="shapeW" type="number" step="1"></div>
+    <div class="field"><label for="shapeH">Height</label><input id="shapeH" type="number" step="1"></div>
+  </div>
+</div>
+<div id="sharedStoneFields">
+  <div class="field-row">
+    <div class="field"><label for="stoneSize">Stone size</label><select id="stoneSize"><option value="0.8">0.8 mm</option><option value="1.0">1.0 mm</option><option value="1.2">1.2 mm</option><option value="1.5">1.5 mm</option><option value="1.8">1.8 mm</option><option value="2.0" selected>2.0 mm</option><option value="2.5">2.5 mm</option><option value="3.0">3.0 mm</option></select></div>
+    <div class="field"><label for="gap">Gap (mm)</label><input id="gap" type="number" min="0" max="5" step="0.1" value="0.3"></div>
+  </div>
+  <div class="field"><label for="stoneColor">Stone color</label><div class="color-pick-row"><select id="stoneColor"></select><span id="stoneColorSwatch" class="color-swatch" title="Selected color preview"></span></div></div>
+</div>
+
 <script type="importmap">
 {
   "imports": {

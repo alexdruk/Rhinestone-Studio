@@ -483,6 +483,91 @@ above for the correction's history, and `docs/specifications/RS-1008A-ImageTrace
 for the full reasoning. `src/core/Layer.js` gains no new reserved layer-type slot for `image` (it
 remains unused by the live app, same documented gap as `svg`/`manual`).
 
+As of RS-1009, `text` layers gain optional `x`/`y` mm offset fields (default `0`, read via
+`layer.x||0`), making them movable/alignable/snappable for the first time — previously a `text`
+layer had no position field at all and was always auto-centered on the canvas, and `hitTest()`
+deliberately returned a non-draggable `'select'` kind for it. `generateTextStonesLive()`'s existing
+auto-center math is unchanged; `x`/`y` are added on top as a further offset, so a Project JSON file
+saved before RS-1009 (no `x`/`y` on its text layers) renders byte-identical to before. `src/core/
+Layer.js` gains no corresponding field (same documented gap as every other RS-1009-touched
+concept — `src/core/**` remains unused by the live app).
+
+---
+
+# Editing (Alignment & Snapping)
+
+Multi-select, alignment, distribution, and snapping are editor concerns, not geometry: they
+operate on layer bounding boxes in millimeters (the same mm values `StoneLayout`/`Stone` already
+use, but never generated stone positions directly) and never trigger a second geometry-generation
+implementation.
+
+**Implementation status:** implemented as of RS-1009 via `src/editing/**`
+(`EditingConstants.js`, `AlignmentEngine.js`, `SnapEngine.js`, `Selection.js`, consumed only
+through `index.js`), a new permanent module with the same "pure, DOM-free, consumed only through
+its barrel" shape every other permanent module already has — `src/geometry/**`, `src/renderer/**`,
+`src/export/**` are untouched, and `src/editing/**` has no dependency on any of them or on
+`Project`/`Layer`/`StoneLayout`. `app.js` is the only caller: it computes each layer's bounding box
+(reusing its existing `getLayerBBox()`), asks `src/editing/**` for the alignment/distribution
+delta or the drag-time snap offset (in mm), and applies the result itself through two small new
+per-type helpers, `getLayerPosition(layer)`/`setLayerPosition(layer,xMm,yMm)` — the one place that
+knows a given layer's position field names (`cx`/`cy` for `circle`, `x`/`y` for everything else).
+Multi-selection is one `Set<string>` (`selectedLayerIds` in `app.js`), mutated only through
+`src/editing/Selection.js`'s three pure functions (`selectOnly`/`toggleSelection`/
+`clearSelection`) — every entry point that changes selection (canvas click, layers-list click, the
+layer dropdown, new/duplicate/delete/import) goes through the same three functions, so there is
+exactly one selection model. Selection, the drag-time snap-guide overlay, and the snap-enabled
+toggle are view-only editor state, exactly like `rotation`/`zoom` already were: never part of
+`project`, never in the undo/redo snapshot, never in exported Project JSON. See
+`docs/specifications/RS-1009-AlignmentSnapping.md`.
+
+---
+
+# User Interface (UI-001 Redesign)
+
+The application shell is a top menu, a left project/layer panel, a large central 2D/3D workspace,
+an optional compact right inspector, and one reusable Lightbox/dialog system for full-parameter
+editing — replacing a single long scrolling sidebar that previously stacked every control for
+every layer type.
+
+**Implementation status:** implemented as of UI-001. A new permanent module, `src/ui/**`
+(`Lightbox.js`, consumed only through `index.js`), is a generic, DOM-only dialog controller (open/
+close, focus trap, Escape-to-close, backdrop click, ARIA) with zero knowledge of `Project`/`Layer`/
+`StoneLayout`/layer type — the same "pure, consumed only through its barrel" shape every other
+permanent module already has (`src/editing/**`, `src/history/**`, ...). `app.js` is the only
+caller: it constructs one `Lightbox` per dialog (Text, Shapes, Import, Image Trace, Export,
+Production Sheet, Shipping & Handling, Settings, Help) and wires each to its top-menu button.
+
+Every control that existed before UI-001 keeps its exact DOM `id` and its exact `app.js` wiring —
+`el(id)` lookups, event listeners, and `HISTORY_TRACKED_CONTROL_IDS` are all unchanged for
+pre-existing fields — only each field's *location* in the DOM changed (moved into a Lightbox, the
+left panel, or the workspace toolbar). Two fields the milestone brief required in both a Lightbox
+(the "complete parameter editor") and the compact right inspector (the "quick-edit surface") —
+shape position/size (`shapeX`/`shapeY`/`shapeW`/`shapeH`) and the shared stone fields
+(`stoneSize`/`gap`/`stoneColor`) — are each exactly one physical DOM node, relocated via
+`appendChild` (which preserves bound listeners) between an inspector "home" slot and whichever
+Lightbox is currently open, so there is never a duplicate id or a second independent copy of the
+same value. Two genuinely new fields were added: `textX`/`textY` (mm), exposing the `layer.x`/
+`layer.y` fields RS-1009 already added to text layers but never gave a manual input for.
+
+Two new pieces of app.js-local, view-only editor state were added, exactly like `rotation`/`zoom`/
+`snapEnabled` already were (never part of `project`, never undo/redo-tracked, never exported): which
+workspace tab (2D canvas / Object Preview) is active, and `showSafeArea` (gates the pre-existing
+`drawSafeAreaGuide()` overlay call). A real "grid toggle" was investigated and deliberately dropped:
+`drawGrid()` is called unconditionally inside the permanent `src/renderer/CanvasRenderer2D.js`, and
+building a working toggle would require changing that module plus amending roughly ten unrelated
+milestones' own `git status`-based forbidden-file guards — a blast radius far larger than the
+control itself, for something that was never toggleable before. `src/renderer/**` is therefore
+untouched by UI-001; the workspace shows a plain "grid always on" label instead of a non-functional
+control.
+
+Shipping & Handling is a new Lightbox with local, session-scoped-only metadata fields (package
+type/dimensions/weight/notes/fragile) — intentionally not added to `project` / Project JSON /
+`validateProject()` / undo-redo this milestone (see
+`docs/specifications/UI-001-CompleteRedesign.md`). It has no carrier/rate/label/tracking
+integration.
+
+See `docs/specifications/UI-001-CompleteRedesign.md` for the full feature-to-UI inventory table.
+
 ---
 
 # User Interface
@@ -560,7 +645,9 @@ code.
 | Undo/redo history (RS-1002) | `src/history/**` | nothing else in `src/**` (pure JSON-snapshot bookkeeping; no `Project`/`Layer`/`StoneLayout`/DOM dependency) |
 | Object templates (RS-1004) | `src/products/**` | nothing else in `src/**` (pure data + validation; never referenced by `src/geometry/**` or `src/renderer/**`, only consumed by `app.js` as plain display-option data) |
 | Bitmap image trace (RS-1008, corrected RS-1008A) | `src/image/**` | nothing else in `src/**` (pure field-preparation only: grayscale/threshold/invert/blur/resize -> a neutral density field; zero dependency on `src/geometry/**`, mirroring `src/svg/**`) |
-| Orchestration | `app.js` | every barrel module above except `src/core/**`, plus `src/svg/index.js` (pre-import validation only, not stone generation), `src/history/index.js` (undo/redo), `src/products/index.js` (RS-1004, object templates), and `src/image/index.js` (RS-1008, image field preparation only as of RS-1008A) |
+| Alignment, distribution, snapping, selection (RS-1009) | `src/editing/**` | nothing else in `src/**` (pure mm-geometry and `Set<string>` selection helpers only; zero dependency on `src/geometry/**`/`src/renderer/**`/`src/export/**`/`Project`/`Layer`/`StoneLayout`) |
+| Lightbox/dialog controller (UI-001) | `src/ui/**` | nothing else in `src/**` (pure DOM dialog behavior only: open/close, focus trap, Escape, backdrop click, ARIA; zero dependency on `Project`/`Layer`/`StoneLayout`/layer type) |
+| Orchestration | `app.js` | every barrel module above except `src/core/**`, plus `src/svg/index.js` (pre-import validation only, not stone generation), `src/history/index.js` (undo/redo), `src/products/index.js` (RS-1004, object templates), `src/image/index.js` (RS-1008, image field preparation only as of RS-1008A), `src/editing/index.js` (RS-1009, alignment/snapping/selection decisions only, never geometry), and `src/ui/index.js` (UI-001, dialog open/close/focus behavior only, never geometry) |
 
 Every permanent module (`src/core`, `src/fonts`, `src/text`, `src/geometry`, `src/renderer`,
 `src/export`) is consumed only through its `index.js` barrel — `app.js` never imports an internal

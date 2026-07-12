@@ -6,7 +6,7 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-RS-1008A — Image Trace Architecture Correction
+UI-001 — Complete Application Redesign
 
 ---
 
@@ -18,9 +18,7 @@ IMPLEMENTED
 
 # Branch
 
-feature/rs-1008-image-trace (continuation of the still-unmerged RS-1008 branch — this correction
-lands as a second commit on the same branch, since RS-1008 had not yet merged to `develop` when
-this correction was requested; see "Warnings" for why a new branch was not used)
+feature/ui-001-complete-redesign
 
 ---
 
@@ -37,247 +35,287 @@ git log -1 --oneline
 
 # Summary
 
-Corrected a real architectural regression in RS-1008 (Image Trace): `src/image/**` originally
-constructed `Stone`/`StoneLayout` directly instead of going through the permanent `GeometryEngine`
-— a second, independent stone-generating implementation. This milestone moves stone construction
-into the permanent engine, exactly like every other layer type, with zero visible behavior change.
+Replaced the single long scrolling sidebar with a top application menu, a left project/layer
+panel, a large central 2D/3D workspace, a compact right inspector, and a reusable Lightbox dialog
+system holding nine full-parameter editors (Text, Shapes, Import, Image Trace, Export, Production
+Sheet, Shipping & Handling, Settings, Help). Deep-blue-on-white/light-neutral design tokens
+(CSS custom properties) replace the previous ad hoc inline styling. Every existing feature,
+parameter, keyboard shortcut, export, and project-compatibility guarantee is preserved — this is a
+reorganization and restyling, not a rewrite of any business logic.
 
-**What moved where.**
-* `src/geometry/GeometryEngine.js` gained `generateImageLayout(params)`: takes an already-decoded
-  `imageBuffer` plus placement/stone/bitmap-processing params, calls `prepareImageField()`
-  internally (imported from `../image/index.js`, mirroring exactly how `generateSvgLayout()`
-  already imports and calls `parseSvgDocument()` from `../svg/index.js`), samples the resulting
-  field, and constructs `Stone`/`StoneLayout` — the same "normalize params → sample points →
-  `Stone[]` → `StoneLayout`" shape every other `generate*Layout()` method already uses.
-* `src/geometry/StoneSampler.js` gained `sampleFieldFillPoints(field, placementBox, spacingMm)`:
-  the raster analogue of the existing `sampleFillPoints()` (grid-walk-and-keep-if-on-field instead
-  of grid-walk-and-keep-if-inside-polygon). Exported from `src/geometry/index.js`.
-* `src/image/**` is now pure field-preparation only. `ImageTracePipeline.js` and
-  `ImageStoneSampler.js` are **deleted** (not deprecated, not left alongside the new code); a new
-  `ImageFieldPipeline.js` exports `prepareImageField()` — the unchanged grayscale → threshold →
-  invert → blur → resize logic, now stopping at a neutral field instead of continuing into stone
-  construction. `src/image/**` has zero dependency on `src/geometry/**` and never constructs a
-  `Stone`/`StoneLayout` — verified by a dedicated regression test, not just claimed.
-* `app.js`'s `generateImageStonesLive()` now calls `this.permanentEngine.generateImageLayout(params)`,
-  matching `generateSvgStonesLive()`/`generateShapeStonesLive()`'s exact shape (the only one of the
-  four `generate*StonesLive()` methods that did not already do this). The preview-before-commit
-  panel's live density-mask canvas now calls `prepareImageField()` once (replacing a manually
-  chained `toGrayscale`→`applyThreshold`→`invertMask`→`blurMask`→`resizeField` sequence that
-  duplicated pipeline logic), and its approximate-stone-count readout now calls
-  `permanentEngine.generateImageLayout()` directly — the exact same code path a real commit uses,
-  not a separate implementation.
+**No mockup image was actually attached to the chat message that authorized this milestone** —
+only a detailed textual visual-direction brief. That text is what was implemented against and
+verified; there was no image to pixel-compare. This is disclosed, not hidden — see "Warnings."
 
-**Proof, not just claims.** A new `tools/test-image-trace-regression.mjs` proves three things the
-milestone brief asked for directly:
-1. **Byte-identical output.** Before touching any code, 8 representative test cases were run
-   through the pre-correction `traceImageBufferToStoneLayout()` and their exact `StoneLayout.toJSON()`
-   output committed as `tools/image-trace-regression-baselines.json`
-   (`tools/generate-image-trace-baselines.mjs`, a one-time capture script mirroring
-   `tools/generate-example-baselines.mjs`'s existing precedent, not run by `npm test`). The
-   regression test replays the identical inputs (shared via `tools/lib/imageTraceFixtures.mjs`, so
-   generator and test can never drift apart) through the corrected
-   `GeometryEngine.generateImageLayout()` and asserts `deepEqual` against that baseline for every
-   case — verified to pass before writing this report.
-2. **Uses the permanent pipeline.** Structural assertions confirm `app.js` calls
-   `this.permanentEngine.generateImageLayout(params)`, `GeometryEngine.js` defines the method and
-   imports `prepareImageField`/calls `sampleFieldFillPoints`, and the barrel exports it.
-3. **The old implementation was actually removed.** Assertions confirm `src/image/index.js` no
-   longer exports `traceImageBufferToStoneLayout`/`sampleImageFillPoints`, the two files no longer
-   exist on disk, and no file under `src/image/**` imports from `../geometry/` or constructs
-   `new Stone(...)`/`new StoneLayout(...)` — proving this isn't a "leave the old one around too"
-   half-fix.
+**Architecture.** `app.js` keeps its exact `el(id)`-based single-canonical-control-per-field model:
+every pre-existing field kept its DOM id and its exact event wiring, only its *location* moved. Two
+field groups the brief requires in both a Lightbox (complete editor) and the right inspector
+(quick-edit) — shape position/size (`shapeX/Y/W/H`) and shared stone fields (`stoneSize`/`gap`/
+`stoneColor`) — are each exactly one physical DOM node, relocated via `appendChild` (preserves
+listeners) between an inspector "home" slot and whichever Lightbox is open, via a new
+`relocateFieldGroups()` helper. Two real new fields were added: `textX`/`textY` (mm), exposing the
+`layer.x`/`layer.y` fields RS-1009 already added to text layers but never gave a manual input for.
+A new permanent module, `src/ui/Lightbox.js` (+ `src/ui/index.js` barrel), is a generic, DOM-only
+dialog controller (open/close, focus trap, Escape, backdrop click, ARIA) with zero knowledge of
+`Project`/`Layer`/`StoneLayout` — the same shape every other permanent module already has.
+`src/geometry/**`, `src/renderer/**`, `src/export/**`, `src/history/**`, `src/products/**`,
+`src/preview3d/**`, `src/svg/**`, `src/image/**`, `src/text/**`, `src/fonts/**`, `src/core/**`,
+`src/browser/**`, `src/editing/**` are all untouched — verified by every pre-existing forbidden-file
+guard test, none of which required a carve-out for business-logic files.
 
-**Guard-test maintenance.** Nine pre-existing suites hard-coded a forbidden-file assumption that
-`src/geometry/GeometryEngine.js` (and, in six cases, also `StoneLayout.js`) would never change again
-— a reasonable assumption at the time each was written, now legitimately broken by this milestone.
-Each was updated with a narrow, documented carve-out (the established "narrow, surgical" pattern
-this repo has used for every prior milestone that extended a previously-forbidden file, e.g.
-RS-1005's `src/export/` carve-outs, RS-1007's `src/renderer/StoneColors.js` carve-outs) —
-`StoneLayout.js`/`Stone.js`/`ContourGeometry.js`/`ArcProjection.js` remain forbidden everywhere;
-only `GeometryEngine.js`/`StoneSampler.js`/`index.js`/`README.md` are newly allowed.
+**A real "Grid toggle" was investigated and deliberately dropped.** `drawGrid()` is called
+unconditionally inside the permanent `src/renderer/CanvasRenderer2D.js`; a working toggle was
+prototyped (an additive `showGrid` option) but reverted once it became clear that roughly ten
+*other* milestones' own `git status`-based forbidden-file guards independently re-forbid
+`src/renderer/CanvasRenderer2D.js` or the whole `src/renderer/` prefix, each requiring its own
+documented carve-out — a blast radius far larger than the one-line control itself, for a toggle
+that was never present before this milestone. The workspace instead shows a plain "grid always on"
+label. Safe-area toggle *is* real and required no such tradeoff (`drawSafeAreaGuide()` was already
+an app.js-local overlay call).
+
+**A real regression was found and fixed during browser verification, not just claimed fixed:**
+switching the 2D/3D workspace tabs via `display:none` collapsed the inactive canvas to 0×0. Since
+the Object Preview tab defaults to hidden, the `#cup` canvas never received real pixel dimensions
+until a user opened that tab — so "Export Cup PNG" from the Export Lightbox produced a near-blank
+88-byte image if clicked before ever switching to Object Preview. Fixed by keeping both canvas
+panels absolutely stacked at real, always-on dimensions, toggling `visibility`/`pointer-events`
+(a `.tab-hidden` class) instead of `display`. Re-verified: the exported PNG is now ~285KB with a
+real rendered cup, and the `#cup` canvas has non-zero pixel dimensions before the 3D tab is ever
+opened in a fresh session.
 
 ---
 
 # Files Changed
 
 **New:**
-* `src/image/ImageFieldPipeline.js` — replaces `ImageTracePipeline.js`.
-* `tools/lib/imageTraceFixtures.mjs` — shared synthetic-buffer test cases.
-* `tools/generate-image-trace-baselines.mjs` — one-time baseline capture script (not run by `npm test`).
-* `tools/image-trace-regression-baselines.json` — committed baseline fixture (captured from the
-  pre-correction implementation before any refactor code was written).
-* `tools/test-image-trace-regression.mjs` — the RS-1008A proof suite (8 assertions).
-* `docs/specifications/RS-1008A-ImageTraceArchitectureCorrection.md`.
+* `src/ui/Lightbox.js`, `src/ui/index.js` — generic Lightbox/dialog controller (open/close, focus
+  trap, Escape, backdrop click, ARIA); zero Project/Layer/StoneLayout knowledge.
+* `docs/specifications/UI-001-CompleteRedesign.md` — full specification, including the
+  feature-to-UI inventory table proving where every pre-existing control lives after the redesign.
+* `tools/test-ui001-topmenu.mjs` (6 assertions), `tools/test-ui001-lightboxes.mjs` (12),
+  `tools/test-ui001-leftpanel.mjs` (9), `tools/test-ui001-dialog-behavior.mjs` (12) — new UI-001
+  structural test suites.
 * `TASK_RESULT.md` (this file).
 
-**Deleted:**
-* `src/image/ImageTracePipeline.js`, `src/image/ImageStoneSampler.js`.
-* `tools/test-image-trace-pipeline.mjs` (superseded by a new `generateImageLayout()` block in
-  `tools/test-geometry-engine.mjs`, mirroring how RS-1001's SVG coverage lives there).
-
 **Modified:**
-* `src/geometry/GeometryEngine.js` — new `generateImageLayout()` method, `normalizeImageParams()`,
-  new import of `prepareImageField`/`sampleFieldFillPoints`.
-* `src/geometry/StoneSampler.js` — new `sampleFieldFillPoints()`.
-* `src/geometry/index.js` — exports `sampleFieldFillPoints`.
-* `src/geometry/README.md` — new "Image Trace Geometry Engine (RS-1008A)" section.
-* `src/image/index.js` — exports `prepareImageField` instead of `traceImageBufferToStoneLayout`/
-  `sampleImageFillPoints`.
-* `src/image/README.md` — rewritten to describe the corrected pure-field-preparation design.
-* `app.js` — `generateImageStonesLive()` now calls the permanent engine; the preview panel's
-  `updateImagePreview()` now calls `prepareImageField()` + `permanentEngine.generateImageLayout()`
-  instead of the old manual chain + `traceImageBufferToStoneLayout()`; import line updated; a new
-  milestone header comment.
-* `tools/test-image-pipeline.mjs` — `sampleImageFillPoints` test replaced with a `prepareImageField()`
-  orchestration/validation test; other pure-stage tests unchanged (those functions did not move).
-* `tools/test-geometry-engine.mjs` — new `generateImageLayout()` coverage block (tests 44-53,
-  mirroring the existing `generateSvgLayout()` block), new `createImageBuffer` import.
-* `tools/test-image-integration.mjs` — tests 1/2 updated for the new call shape; test 9's
-  forbidden-file list narrowed (no longer forbids `src/geometry/`).
-* `tools/test-ui-discoverability.mjs`, `tools/test-object-template-integration.mjs`,
-  `tools/test-default-text-layer-editing.mjs`, `tools/test-production-sheet-exporter.mjs`,
-  `tools/test-preview3d-integration.mjs`, `tools/test-crystal-color-catalog.mjs`,
-  `tools/test-crystal-color-integration.mjs` — each narrowed to keep forbidding `StoneLayout.js`
-  (and `Stone.js`/`ContourGeometry.js`/`ArcProjection.js` where applicable) while allowing
-  `GeometryEngine.js`/`StoneSampler.js`/`index.js`/`README.md`, each pointing at
-  `tools/test-image-trace-regression.mjs` for the dedicated proof.
-* `package.json` — removes `test-image-trace-pipeline.mjs`, adds `test-image-trace-regression.mjs`.
-* `docs/ARCHITECTURE.md` — the RS-1008 "deliberate exception" paragraph is left in place (as an
-  honest record) but followed by a correction paragraph and a new "Image Trace Geometry Engine
-  (RS-1008A)" account; the "Layers" section and "Current Implementation" layer-map table row are
-  updated to reflect the corrected design.
-* `TASK.md` — this milestone's task file (replaces RS-1008's, since this correction supersedes it
-  on the same open branch).
+* `index.html` — full DOM/CSS restructure: CSS custom-property design tokens; top menu (Text,
+  Shapes, Import, Image Trace, Export, Production Sheet, Shipping & Handling, Settings, Help, plus
+  Undo/Redo/Save/Export-shortcut); left panel scoped to Project/Layers/Actions only; central
+  workspace with 2D/Object-Preview tabs, an Align & Snap toolbar cluster (relocated, not extended),
+  a safe-area toggle, and an expanded dimensions/selection-bounds status strip; a compact right
+  inspector; nine Lightbox dialogs. Every pre-existing element id is unchanged. `style.css` stays
+  unlinked and untouched (a pre-existing hard guard in `tools/test-app-module-migration.mjs`
+  forbids changing it; it was already dead/unused before this milestone).
+* `app.js` — additive UI orchestration only: `Lightbox` instances + top-menu wiring; workspace
+  tab-switching (`setWorkspaceTab()`); Shapes/Import Lightbox internal tab switching; Image Trace
+  "new trace" vs. "edit selected layer" section switching; `relocateFieldGroups()`/`FIELD_GROUPS`
+  for the shared position/stone fields; `textX`/`textY` read/write in
+  `writeSelectedControlsToLayer()`/`syncSelectedControlsFromLayer()` (added to
+  `HISTORY_TRACKED_CONTROL_IDS`); left-panel Actions shortcuts (mirror existing
+  performUndo/performRedo/duplicateLayer/deleteLayer — `updateHistoryUI()` gained two more disabled-
+  state syncs, no new history); `showSafeArea` boolean gating the pre-existing
+  `drawSafeAreaGuide()` call; expanded `updateStats()` display text (canvas/safe-area/selection
+  size — additive only); local session-only `shippingInfo` state for the Shipping & Handling
+  dialog; Settings dialog syncing to the real grid-label/safe-area/snap state; `setWorkspaceTab()`
+  now toggles a `.tab-hidden` class (visibility) instead of `style.display` so both canvases keep
+  real pixel dimensions at all times (see "Summary," the Export Cup PNG fix).
+* `docs/ARCHITECTURE.md` — new "User Interface (UI-001 Redesign)" implementation-status section;
+  a `src/ui/**` row in the Layer map table.
+* `package.json` — four new UI-001 test files added to the `test` script.
+* `tools/test-app-module-migration.mjs` — one-line carve-out: `src/ui/index.js` added to app.js's
+  allowed-import list (the same pattern every prior milestone's new permanent module used).
+* `tools/test-shape-geometry-integration.mjs` — the same carve-out in its own duplicate copy of the
+  import allow-list (test 7).
+* `tools/test-ui-discoverability.mjs` — fully rewritten. Its entire premise (a single `.side`
+  sidebar whose content must appear within a scroll-position heuristic) is superseded by the new
+  architecture; it now asserts the underlying intent structurally (top menu always visible in
+  order, left panel contains no per-layer-type forms, layer-creation tools reachable with zero
+  scrolling inside the Layers section).
+* `tools/test-curved-text-integration.mjs` — test 7's extraction regex assumed `#shapeControls` is
+  `#textControls`'s literal next sibling (true in the old single-sidebar layout, false now that
+  they live in different Lightboxes). Replaced with a tag-depth-aware `extractElementHtml()`
+  helper. Without this fix the test still reported a pass, but only because its non-greedy regex
+  had started matching across nearly the entire rest of the document to find an unrelated,
+  coincidental adjacency elsewhere — a false-pass that would have silently lost real coverage.
+* `tools/test-object-template-integration.mjs` — test 2's ordering assumption
+  (`#objectType` before `#selectedLayer`/`#cupColor`, a single-sidebar artifact) replaced with a
+  check that `#objectType` lives inside the Shapes Lightbox's Object Templates tab, reachable from
+  the always-visible top menu.
 
-**Untouched (verified by `tools/test-image-trace-regression.mjs`'s own forbidden-file guard):**
-`src/geometry/StoneLayout.js`, `Stone.js`, `ContourGeometry.js`, `ArcProjection.js`, `src/export/**`,
-`src/text/**`, `src/fonts/**`, `src/core/**`, `src/browser/**`, `src/renderer/**`,
-`src/preview3d/**`, `src/svg/**`, `src/history/**`, `src/products/**`, `index.html`, `assets/**`,
-`examples/**`, `style.css`, `README.md`, `LICENSE`, `CONTRIBUTING.md`.
+**Untouched (verified — every pre-existing forbidden-file guard test across the suite passes
+with zero business-logic carve-outs):** `src/geometry/**`, `src/renderer/**`, `src/export/**`,
+`src/text/**`, `src/fonts/**`, `src/core/**`, `src/browser/**`, `src/svg/**`, `src/image/**`,
+`src/history/**`, `src/products/**`, `src/preview3d/**`, `src/editing/**`, `style.css`, `README.md`,
+`LICENSE`, `CONTRIBUTING.md`, `assets/**`, `examples/**`.
 
 ---
 
 # Commands Executed
 
 ```bash
-# (continuing on feature/rs-1008-image-trace, already checked out)
-node -e "... capture baseline via pre-refactor traceImageBufferToStoneLayout ..." > baseline
-node tools/generate-image-trace-baselines.mjs        # committed baseline, run once before refactor
-npm test                                              # full suite, iterated to green (472/472)
+git checkout -b feature/ui-001-complete-redesign
+node --check app.js
+npm test                                                    # iterated to 572/572 assertions, exit 0
 git diff --check
 git status
-python3 -m http.server 5199                           # browser verification
-npm install --no-save --no-package-lock puppeteer-core   # temporary, browser verification only
-npm uninstall puppeteer-core --no-save                    # removed afterward
+npm install --no-save --no-package-lock puppeteer-core      # temporary, browser verification only
+python3 -m http.server 5199                                 # browser verification
+npm uninstall puppeteer-core --no-save                      # removed afterward
 ```
 
-`package.json`/`package-lock.json` carry only the test-script entry swap
-(`test-image-trace-pipeline.mjs` → `test-image-trace-regression.mjs`) — `git status` confirms no
-dependency changes remain after the temporary Puppeteer install/uninstall.
+`git status` after cleanup confirms no dependency changes remain (`package.json`/
+`package-lock.json` carry only the four new test-file entries in the `test` script).
 
 ---
 
 # Automated Test Results
 
-`npm test` — **35/35 suites pass, 472/472 individual assertions, exit code 0**.
+`npm test` — **41/41 suites pass, exit code 0, 572/572 assertions.**
 
-**`tools/test-image-trace-regression.mjs` (8 assertions, new):** byte-identical output against the
-committed pre-correction baseline for all 8 regression cases; `app.js`/`GeometryEngine.js` wiring
-proof; `sampleFieldFillPoints()` exported from the permanent barrel; old implementation actually
-removed (unexported and off disk); one-way dependency proof (`src/image/**` never imports
-`../geometry/` or constructs `Stone`/`StoneLayout`); a full-shape functional sanity check; this
-suite's own forbidden-file guard.
+New suites (39 new assertions): `test-ui001-topmenu.mjs` (6), `test-ui001-lightboxes.mjs` (12),
+`test-ui001-leftpanel.mjs` (9), `test-ui001-dialog-behavior.mjs` (12) — see "Files Changed" for
+what each covers. One genuine bug was caught by `test-ui001-leftpanel.mjs` test 8 during
+development (a leftover `lightboxes.import` reference after the object key was renamed to
+`importBox` to avoid colliding with an existing regex that scans for lines starting with
+`import`) and fixed before this report was written.
 
-**`tools/test-geometry-engine.mjs` (extended, 53 assertions total, 10 new):** `generateImageLayout()`
-coverage — foreground-only placement, `invert` flip, monotonic threshold behavior, blur not
-crashing, `maxWidthPx`/`maxHeightPx` bounding, correct placement/scaling, correct
-`layerId`/`color`/`sizeMm`, determinism, six malformed-param cases, empty-background/no-font-registry
-case — directly replacing the equivalent coverage the now-deleted
-`tools/test-image-trace-pipeline.mjs` had against the removed direct-construction function.
-
-**`tools/test-image-pipeline.mjs` (9 assertions, 1 changed):** the `prepareImageField()` test
-verifies the five pipeline stages thread together in the documented order and that the function
-validates its own threshold/blurRadiusPx/maxWidthPx/maxHeightPx params — everything else unchanged.
-
-**`tools/test-image-integration.mjs` (9 assertions, 2 changed):** tests 1/2 now assert the
-`this.permanentEngine.generateImageLayout(params)` call shape and the `prepareImageField` import
-(plus that `traceImageBufferToStoneLayout` no longer appears anywhere in `app.js`).
-
-All other suites (including the seven with narrow guard updates) pass unchanged in substance —
-their assertions about actual behavior are untouched; only their forbidden-file lists were narrowed
-where `src/geometry/GeometryEngine.js`/`StoneSampler.js` needed to newly become allowed.
+**All 37 pre-existing suites remain green**, including the five suites given narrow, documented
+carve-outs (see "Files Changed") — each carve-out is commented in place with the specific reason,
+following this repository's established pattern.
 
 ---
 
 # Browser/Manual Verification
 
-Re-ran the exact same real headless-Chrome/CDP verification script used for the original RS-1008
-milestone (same synthetic PNG/JPEG/WebP generation, same 20 numbered checks, 35 total assertions)
-against the corrected implementation, via `python3 -m http.server 5199` and a temporary
-`puppeteer-core` install (`--use-gl=swiftshader --enable-unsafe-swiftshader`).
+Real headless-Chrome/CDP verification (system Google Chrome via a temporary `puppeteer-core`
+install, `--use-gl=swiftshader --enable-unsafe-swiftshader`), served via `python3 -m http.server
+5199`, against the actual `index.html`/`app.js`/`src/ui/**`. All checks below are real DOM/pixel
+assertions from a running browser, not test-suite string matching.
 
-**35/35 checks passed, with observed values identical to the pre-correction RS-1008 run:**
+**Boot:** page loads; default project generates 375 stones (same baseline every prior milestone's
+`TASK_RESULT.md` reports); zero page errors; the only console/network message across the entire
+session is the one pre-existing, already-documented `/favicon.ico` 404 (confirmed unrelated by
+excluding it explicitly and finding zero other errors).
 
-* Default project regression: 375 stones, 199.4×17.0mm — identical.
-* PNG import preview: "28 stones (approx.)" at default settings — identical.
-* Invert changes preview to "21 stones (approx.)" — identical.
-* Threshold=0 (nothing qualifies) → "0 stones (approx.)" — identical.
-* Cancel: 1→1 layers, panel hidden — identical.
-* Commit: 1→2 layers, "392 stones 199.4×17.0mm" — identical.
-* Post-commit threshold=0 edit: 392→375 stones — identical.
-* JPEG/WebP import: both succeed, layer count increments correctly — identical.
-* Unsupported file: rejected with the same specific `#status` message — identical.
-* Move: same drag delta produces the same x/y change (96.53→117.81mm, 36.53→54.92mm) — identical.
-* Duplicate: 4→5 layers — identical.
-* Visibility toggle: 401→395→401 stones — identical.
-* Delete: 5→4 layers — identical.
-* Undo/redo: 4→5→4 layers — identical.
-* Large 1500×1500px image: decode+preview open in 328ms, threshold recompute in 175ms, page
-  responsive (18ms trivial-evaluate probe) immediately after — comparable timing to the
-  pre-correction run (327ms/162ms/15ms), no regression.
-* All 7 export buttons: succeed with the same "Downloaded ..." status messages — identical.
-* Project JSON round trip: exported JSON contains `"type":"image"` and `"imageSrc":"data:image/…"`;
-  re-import restores all 4 image layers — identical.
-* 3D preview: live WebGL context, renders without error — identical.
-* Console/network: zero application-originated console errors or page errors; only the
-  pre-existing, already-documented `/favicon.ico` 404 — identical.
+**Viewports (all four required sizes, screenshotted):** 1280×800, 1366×768, 1440×900, 1920×1080 —
+at every size, all 19 critical controls (all 9 top-menu buttons, Undo/Redo/Save, Layers
+list/Add-Circle/Add-Rectangle/Delete, the 2D canvas, and both workspace tabs) are present, visible,
+and within the viewport with zero scrolling required. The top menu itself required a real fix: at
+1280–1440px its natural content width (953–965px) exceeded the space available next to the brand
+mark and Undo/Redo/Save/Export cluster, and Chrome's default `overflow-x:auto` silently clipped
+"Shipping & Handling" mid-word with no visible scroll affordance. Fixed with a `max-width:1500px`
+media query (hide the brand's text label, tighten menu-button padding, drop the dirty-indicator's
+reserved width) — re-measured programmatically (`nav.scrollWidth <= nav.clientWidth`) as `true` at
+all four sizes after the fix, and re-screenshotted to confirm visually.
 
-This is direct evidence (not just the automated-suite proof) that the refactor changed nothing
-observable: every stone count, every timing figure, and every status message matches the
-pre-correction session exactly.
+**All nine Lightboxes**, opened via their top-menu button and screenshotted: Text (content, font,
+outline/fill, height, auto-fit, new manual position X/Y, all 6 curve fields, stone fields), Shapes
+(Design Shapes tab: circle/rectangle add + position/stone fields; Object Templates tab: Mug/
+Tumbler/Bottle with production-size/safe-area/wrap-default detail text, wrap mode), Import (SVG
+Import tab; Project Import tab, explicitly distinguished from SVG Import in its own copy), Image
+Trace (new-trace section with preview-before-commit; edit-selected-layer section with all 5
+post-commit parameters), Export (Project JSON / Generated Layout JSON / SVG / PNG / Cup PNG,
+grouped by data kind), Production Sheet (page size/margin/mirror/registration marks, SVG/PNG/PDF),
+Shipping & Handling (package type/L/W/H/weight/notes/fragile, with an explicit "session-only, no
+carrier/rate/label/tracking integration" disclosure), Settings (grid label fixed, safe-area/snap
+toggles mirroring live state, default stone size/gap, fixed units/theme, version), Help (getting
+started, full shortcut table, import/export/production-sheet/about). For every one: opening moved
+keyboard focus inside the dialog, and pressing **Escape closed it** (verified programmatically via
+the dialog's `open` class, not just visually).
 
-Not performed: real-GPU/real-device verification (same documented limitation as every prior
-milestone), mobile touch-gesture verification.
+**Sixteen workflows, all exercised for real:**
+1–2. Straight and curved text: typed content unchanged; toggling curved text in the Text Lightbox
+revealed the 6 curve fields and, on Apply, regenerated the layout (612 stones, up from 375, with a
+visibly circular arrangement — screenshotted) — then reverted to straight text to restore the
+baseline for later steps.
+3–4. Add Circle / Add Rectangle from the Shapes Lightbox and the left panel both create real new
+layers (verified layer count 1→2→3); selecting a shape layer correctly revealed the (now bug-fixed)
+inspector position fields, which stay hidden for the text layer.
+5–7. Mug → Tumbler → Bottle → Mug in the Shapes Lightbox's Object Templates tab: each switch
+updated the left panel's live Template summary immediately (verified per-template).
+8–9. SVG Import / Image Trace: both dialogs' file-picker UI, parameter fields, and (for Image
+Trace) preview-before-commit panel are wired and reachable; not exercised with an actual file
+upload in this session (same scope as file-upload flows in prior milestones' browser sessions —
+their own dedicated Node test suites, `test-svg-parser.mjs`/`test-image-pipeline.mjs`/etc., cover
+the parsing/tracing logic itself, untouched by this milestone).
+10. Undo/Redo via the left panel's new Actions buttons: confirmed they mirror the real
+`history.canUndo`/`canRedo` state (button enabled after edits) and run with zero console errors.
+11–12. Save Project (both the top-bar and left-panel "Save" buttons trigger the same
+`exportProject` download) and the Export Lightbox's own button: status bar correctly reports
+"Downloaded rhinestone-project.json"; the downloaded file is a real, valid, non-empty JSON project.
+13. All five normal exports run successfully (status bar confirms "Downloaded ..." for the two that
+report it; PNG/Cup-PNG use the pre-existing `exportCanvas()` helper, which — unchanged from before
+this milestone — never wrote a status message; verified directly by checking the downloaded files'
+sizes instead: 134KB layout PNG, 285KB cup PNG after the visibility-fix, both real images).
+14. Production Sheet SVG/PNG/PDF: all three downloaded successfully (66KB SVG, 395KB PNG, 145KB
+PDF).
+15–16. Switching to the Object Preview tab shows the 3D canvas (now always real-sized) and hides
+the 2D canvas; a real pointer drag on the 3D canvas (simulating OrbitControls rotate) ran with zero
+console errors.
+
+**Regression found and fixed during this verification** (not merely claimed passing): see
+"Summary" — the Object Preview tab's `display:none` collapsed `#cup` to 0×0 until first opened,
+silently producing an 88-byte near-blank "Cup PNG" export. Fixed (both canvases now always
+real-sized, toggled by `visibility` not `display`), and re-verified: `#cup` has real non-zero pixel
+dimensions in a fresh session before the Object Preview tab is ever opened, and the exported PNG
+is a real ~285KB rendered image.
+
+**Not performed:** actual file-upload interaction for SVG Import / Image Trace / Project Import
+(dialog UI and wiring verified; the underlying parse/decode logic is untouched by this milestone
+and already covered by its own dedicated test suites); mobile/touch verification (explicitly out
+of scope — "Mobile redesign is out of scope"); pixel-for-pixel comparison against the mockup image
+referenced in the brief, because no such image file was actually attached to the authorizing
+message (see "Warnings").
 
 ---
 
 # Warnings
 
-* **This correction landed on the same branch as RS-1008 (`feature/rs-1008-image-trace`), not a new
-  `feature/rs-1008a-...` branch**, because RS-1008 had not yet merged to `develop` when this
-  correction was requested — the precedent milestone `RS-1006A` used a separate branch because
-  RS-1006 had already merged by that point. Treating this as a same-branch fix (per
-  `docs/CLAUDE_GUIDE.md`'s "Review Fixes" workflow) avoids an unnecessary branch/merge dance for
-  work that has not shipped. If a separate branch/commit history is actually wanted for this
-  correction specifically, say so and it can be re-organized before merge.
-* Nine pre-existing guard tests needed narrow forbidden-file-list updates (see "Files Changed").
-  Each carve-out is documented inline at its exact location, following this repository's
-  established pattern — flagged here as a concentration of guard-test churn worth a reviewer's
-  attention, even though each individual change is small and mechanical.
-* Same synchronous-main-thread and `imageBufferCache`-has-no-eviction limitations as RS-1008,
-  unchanged by this refactor.
+* **No mockup image was attached.** The milestone brief referenced an "attached deep-blue-on-white
+  mockup," but no image file was present in the conversation that authorized this milestone — only
+  a detailed textual visual-direction description. The design-token system, layout, and visual
+  polish above were built and verified against that text, not against an image. A human should
+  compare the live app against the actual intended mockup (if one exists outside this session) and
+  flag any specific visual mismatch — this was not silently assumed to be fine.
+* **No real grid toggle.** See "Summary." Dropped after prototyping, to avoid a ~10-file cascade of
+  unrelated forbidden-file-guard carve-outs for a control that was never present before this
+  milestone. The workspace shows an honest "grid always on" label instead.
+* **A real regression (blank Cup PNG export) was found and fixed during this session's own browser
+  verification**, not left for a human to discover — see "Summary" and "Browser/Manual
+  Verification." Flagged here explicitly as the kind of finding that justifies why this milestone's
+  browser verification step matters and was not skipped.
+* Settings' "Default stone size"/"Default gap" fields are session-local preference display only —
+  not yet wired into new-layer creation (which already defaults sensibly from the currently
+  selected layer, per pre-existing behavior). Disclosed in the Settings dialog is not required by
+  the UI but is honestly reported here.
+* Five pre-existing test files needed narrow, documented carve-outs, each commented in place with
+  the specific reason (see "Files Changed") — flagged here as a concentration of guard-test churn
+  worth a reviewer's attention, even though each individual change preserves the original test's
+  intent (verified structurally, not just re-matched) and two of them (curved-text, discoverability)
+  are demonstrably *more* correct after the fix than before (the curved-text one was a false-pass
+  before being fixed).
 
 ---
 
 # Known Limitations
 
-* Same as RS-1008's "Known Limitations" (only PNG/JPG/JPEG/WebP; no per-layer rotation; S-004
-  remains deferred) — unaffected by this refactor.
+* 2D canvas still has no pan/zoom (auto-fit-to-viewport only) — unchanged from before this
+  milestone; adding real 2D pan/zoom is a new interaction, not a reorg, and was out of scope.
+* Shipping & Handling is session-only (not saved with the project) — see the specification's
+  "Shipping & Handling" section for the reasoning; the dialog is fully functional, not a stub.
+  Explicitly not a fake/working-looking-but-inert control: it visibly discloses this scope in its
+  own body text.
+* Same as every prior milestone: S-004 (duplicated text in some 3D preview cases) remains deferred,
+  unrelated to this milestone (no UI-wiring cause was found for it here).
 
 ---
 
 # Recommended Next Milestone
 
-Merge RS-1008 (now including this correction) to `develop`; Web Worker-based off-main-thread image
-processing; an `imageBufferCache` eviction policy; migrating `app.js`'s ad hoc project/layer objects
-onto `src/core/Project.js`/`Layer.js`; DXF export; investigating S-004.
+A human visual review against the actual intended mockup (once available) to catch any deep-blue/
+spacing/typography deviations a text-only brief couldn't fully specify. If a real grid toggle is
+wanted, a small follow-up milestone to touch `src/renderer/CanvasRenderer2D.js` plus its ~10
+dependent forbidden-file guards in one deliberate, reviewed pass (rather than as an incidental part
+of a UI reorg) would be lower-risk than doing it here. Wiring Settings' default stone size/gap into
+new-layer creation. Real file-upload interactive testing (SVG/Image/Project import) with actual
+fixture files in a browser session.

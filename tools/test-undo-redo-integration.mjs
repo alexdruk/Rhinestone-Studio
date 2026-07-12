@@ -62,7 +62,14 @@ await test('3. every discrete mutation site commits history before its first pro
   assert.ok(svgHandler, 'expected the importSvgFile change handler body');
   assert.match(svgHandler[1], /commitHistory\(\);project\.layers\.push\(layer\)/, 'SVG import must commit history immediately before pushing the new layer');
 
-  assert.match(appJs, /if\(hit\.kind==='select'\)\{updateAll\(\);return\}commitHistory\(\);drag=\{/, 'the pointerdown drag-start handler must commit history before entering drag mode');
+  // RS-1009 narrow carve-out: pointerdown was rewritten for multi-select/group-drag/snapping (see
+  // docs/specifications/RS-1009-AlignmentSnapping.md), so the exact old 'select'-kind early-return
+  // no longer exists (every layer type, including text, now starts a move drag). Both drag-start
+  // paths this rewrite kept (resize, and move/group-move) still commit history exactly once,
+  // immediately before constructing the `drag` object -- see
+  // tools/test-alignment-snapping-integration.mjs for that milestone's own dedicated coverage.
+  assert.match(appJs, /commitHistory\(\);\s*drag=\{kind:'resize'/, 'the resize drag-start path must commit history before entering drag mode');
+  assert.match(appJs, /commitHistory\(\);\s*const dragIds=\[\.\.\.selectedLayerIds\];[\s\S]*?drag=\{kind:'move'/, 'the move drag-start path must commit history before entering drag mode');
 });
 
 await test('4. continuous project-affecting controls open/close a history session; rotation/zoom are excluded', () => {
