@@ -194,7 +194,11 @@ await test('11. no forbidden file changed (this milestone\'s own forbidden list)
     'src/core/', 'src/text/', 'src/fonts/',
     'src/browser/', 'src/history/', 'assets/', 'examples/'
   ];
-  const forbiddenExactWithinPrefix = new Set(['src/renderer/CanvasRenderer2D.js', 'src/renderer/StoneColors.js']);
+  // src/renderer/StoneColors.js is legitimately changed by RS-1007 (Crystal Color Library — it
+  // became a compatibility re-export shim over the new src/renderer/CrystalColors.js catalog) —
+  // see tools/test-crystal-color-catalog.mjs / tools/test-crystal-color-integration.mjs for that
+  // milestone's own forbidden-file guard.
+  const forbiddenExactWithinPrefix = new Set(['src/renderer/CanvasRenderer2D.js']);
 
   for (const changedPath of changedPaths) {
     assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);

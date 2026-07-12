@@ -6,7 +6,7 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-RS-1006A — Real 3D Preview Corrections
+RS-1007 — Crystal Color Library
 
 ---
 
@@ -18,7 +18,7 @@ IMPLEMENTED
 
 # Branch
 
-feature/rs-1006a-preview-corrections
+feature/rs-1007-crystal-color-library
 
 ---
 
@@ -35,225 +35,221 @@ git log -1 --oneline
 
 # Summary
 
-Follow-up correction pass on the RS-1006 Three.js 3D preview, driven entirely by human visual
-review of the shipped mesh against three reference screenshots (not by the automated suite, which
-passed in full throughout — these were visual defects an automated suite of this kind cannot
-catch). Fixed all four confirmed defects in place, inside the existing `src/preview3d/**`
-architecture; nothing was replaced.
+Replaced the 7-entry hard-coded stone-color palette (`src/renderer/StoneColors.js`) with a
+permanent, 17-color crystal-color catalog and gave the color picker a visible, organized UI.
 
-**1. Mug geometry (generic-cone silhouette).** `buildCylinderBodyGeometry()` built a bare, open-
-ended `CylinderGeometry` frustum — no rim, no visible base. Replaced with
-`buildTaperedBodyGeometry()`, a `THREE.LatheGeometry`-revolved profile (the same primitive the
-bottle already used): a closed flat base (a degenerate `r=0` point at `y=0`, exactly the technique
-the bottle's own base already used), the existing linear wall taper, then a modeled rim — the wall
-flares slightly proud of itself up to the object's true top (so the mesh's overall bounding-box
-height is byte-identical to before — no camera-framing or height-based test needed updating), then
-folds back inward, which is what reads as the mouth's visible wall thickness. The mouth stays open
-below that fold; a mug/tumbler is genuinely open on top.
+**Catalog.** New `src/renderer/CrystalColors.js` defines 17 colors — Crystal, Crystal AB, Jet,
+Siam, Light Siam, Rose, Fuchsia, Amethyst, Sapphire, Light Sapphire, Aquamarine, Emerald, Peridot,
+Topaz, Citrine, Gold, Silver — each with a stable `id`, display `name`, `group` (UI organization
+only), `previewColor`, optional `highlight`/`shadow`, and the render-channel fields every existing
+consumer already reads (`fill`/`stroke`/`shine`/`accent`, aliased 1:1 to
+`previewColor`/`shine`/`accent`). `validateCrystalColorCatalog()`, `getCrystalColor()`,
+`isValidCrystalColorId()`, and `listCrystalColorGroups()` are exported for reuse/testing. The
+module's header comment states these are decorative approximations, not calibrated to any
+manufacturer's product line, and no manufacturer name is referenced anywhere.
 
-**2. Handle attachment (floating/gapped).** `buildHandleMesh()`'s `CatmullRomCurve3` had its two
-wall-attachment endpoints sitting exactly *on* the wall's mathematical surface; `TubeGeometry`'s
-ends are open/uncapped, so that open cross-section sat right at the visible surface — a floating
-loop with a visible gap. Fixed by pulling both endpoints `HANDLE_EMBED_FACTOR` (1.6) tube-radii past
-the wall surface, toward the body's own axis. The tube's open end is now geometrically buried inside
-the solid body shell; from any outside camera position the wall's own front-facing surface sits
-between the camera and the buried segment, so ordinary z-buffer depth occlusion hides the seam
-entirely — the standard technique for visually "welding" separate meshes without true CSG boolean
-union.
+**Backward compatibility.** The 7 ids that existed before this milestone (`crystal`, `gold`,
+`silver`, `jet`, `rose`, `sapphire`, `emerald`) keep byte-identical `fill`/`stroke`/`shine`/`accent`
+hex values — verified directly against a hardcoded snapshot of the pre-milestone palette in
+`tools/test-crystal-color-catalog.mjs`. The only label change is `jet`'s display name, "Jet Black"
+→ "Jet" (same id, same color), to match the required catalog name list; one pre-existing hardcoded
+expectation of "Jet Black" in `tools/test-production-sheet-exporter.mjs` was updated accordingly
+(documented inline).
 
-**3. Tumbler/mug duplicated, unreadable artwork.** Root cause confirmed (not masked): the body
-material was `side: THREE.DoubleSide` on a single-wall, open-ended (no bottom cap) hollow geometry.
-Looking across the open mouth from above made the far interior wall's backface visible; since it is
-the same continuous surface (UV driven only by `(x,z)` position, independent of face winding), it
-carried the same design texture, visible simultaneously with the near exterior wall — reading as
-duplicated, mirrored, unreadable artwork. Fixed by changing the body material to
-`THREE.FrontSide` (Three.js's own default): a solid opaque vessel never needs its interior faces
-rendered from an outside camera, so this genuinely removes the second render pass through the open
-mouth rather than hiding it. Combined with fix 1's closed base, the object now reads as solid, not
-hollow-with-a-visible-phantom-interior. Verified by an actual before/after browser comparison (see
-Browser Verification) — the same "look down into the mouth" camera angle that reproduced the mirror-
-duplicate against the pre-fix code shows a single, correctly-readable design after the fix.
+**Zero renderer/exporter changes.** `src/renderer/StoneColors.js` is now a one-line compatibility
+shim (`export { STONE_COLORS } from './CrystalColors.js';`) — it keeps the exact same export name,
+shape (id-keyed object), and file path, so its five pre-existing consumers
+(`CanvasRenderer2D.js`/`drawStone`, `CupRenderer.js`, `StoneLayoutTexture.js`, `SvgExporter.js`,
+`ProductionSheetExporter.js`) and `app.js`'s own `STONE_COLORS` import needed **no code changes at
+all** — every one of them already resolved a stone's color generically via
+`STONE_COLORS[stone.color]`. This was verified, not assumed: `git status` confirms none of those
+five files changed, and a new runtime test (`tools/test-crystal-color-integration.mjs`) proves a
+brand-new catalog color (`topaz`) resolves identically through the 2D canvas gradient, the 3D
+texture gradient, the SVG exporter's `fill`/`stroke`/`data-color`, and the Production Sheet's
+"Crystal color: ..." header line. `src/geometry/**` (`GeometryEngine.js`, `StoneLayout.js`,
+`Stone.js`) is untouched; `Stone.color` remains a free string with no catalog-id validation added.
 
-**4. Bottle geometry / texture bleeding onto the shoulder.** Root cause confirmed: `LatheGeometry`'s
-default `V` texture coordinate is proportional to cumulative arc length along the *entire* revolved
-profile (body+shoulder+neck+cap), not to the body's own millimeter height. The design texture —
-generated at exactly `canvasWidthMm × canvasHeightMm`, sized for the body only — was therefore
-mapped across the whole profile, visibly bleeding onto the shoulder. Fixed with a new
-`applyBodyHeightUv()`, which writes `v = position.y / bodyHeightMm` per vertex for every body
-geometry (mug, tumbler, *and* bottle), overriding whichever default `V` Three.js generated. For the
-straight body wall this exactly matches what `CylinderGeometry`'s own old default `V` already did
-(no regression for mug/tumbler); for the bottle, points above `bodyHeightMm` now get `v>1`, which
-`ClampToEdgeWrapping` (already set on the texture) clamps to the texture's own top-edge texel — plain
-background color, not stretched design. The bottle's shoulder profile also gained one intermediate
-control point for a curved (not straight-diagonal) taper, and the cap gained a short near-cylindrical
-flared section before closing instead of tapering straight to a point — both read closer to a
-recognizable bottle silhouette once the texture bleed stopped obscuring the body/shoulder boundary.
-`totalHeightMm` (base to cap tip) is unchanged.
+**UI.** `index.html`'s `#stoneColor` `<select>` no longer hardcodes any `<option>` — `app.js`'s new
+`populateStoneColorOptions()` builds it from `STONE_COLORS`, grouped into six `<optgroup>`s (Clear
+& Neutral / Red & Pink / Purple & Blue / Green & Aqua / Yellow & Amber / Metallic) by each color's
+`group` field, called once at startup. A new `#stoneColorSwatch` element next to the select shows
+the selected color's actual `previewColor`, refreshed by a new `updateStoneColorSwatch()` called
+from the end of `updateStats()` — which already runs at the end of every `updateAll()` pass, so the
+swatch stays in sync across edits, layer switches, undo/redo, and Project JSON import with no new
+call sites needed. A small `.colorPickRow`/`.colorSwatch` CSS addition lives in `index.html`'s own
+inline `<style>` block (the standalone `style.css` file, already unused/unreferenced, was not
+touched — consistent with every prior milestone's guard tests treating it as permanently
+off-limits).
 
-All four fixes live entirely in `src/preview3d/ObjectGeometryBuilder.js`. No change to
-`ObjectDimensions.js`'s public contract, `StoneLayoutTexture.js`, `Preview3DRenderer.js`, `index.js`,
-`app.js`, `index.html`, `StoneLayout.js`, `GeometryEngine.js`, or any exporter — the existing 8
-`tools/test-object-geometry-builder.mjs` assertions (bounding-box height, circular cross-section,
-`applyWrapUv()`'s U-axis behavior) all pass **unmodified**, confirming these fixes did not change
-the object's overall size, camera framing, or wrap-mode behavior.
+**Guard-test maintenance.** Two pre-existing structural guard tests
+(`tools/test-object-template-integration.mjs`, `tools/test-cup-rotation-stabilization.mjs`)
+hard-coded `src/renderer/StoneColors.js` as forbidden from a past milestone (RS-1004/S-001); two
+more (`tools/test-production-sheet-exporter.mjs`, `tools/test-preview3d-integration.mjs`) forbid
+the entire `src/renderer/` prefix. All four were updated with a documented carve-out (the exact
+established pattern this repo already uses for `src/export/`'s RS-1005 carve-out), since this
+milestone is the legitimate, intended reason those files now change.
 
 ---
 
 # Files Changed
 
-**Modified:**
-* `src/preview3d/ObjectGeometryBuilder.js` — the four fixes described above:
-  `buildCylinderBodyGeometry()` replaced by `buildTaperedBodyGeometry()` (modeled rim + closed
-  base, via `LatheGeometry`); `buildBottleGeometry()`'s profile gained a shoulder curve point + cap
-  flare; new `applyBodyHeightUv()`; `buildHandleMesh()`'s curve endpoints embedded past the wall
-  surface; body material `side` changed from `THREE.DoubleSide` to `THREE.FrontSide`. New named
-  constants: `RIM_FLARE_START_FRACTION`, `RIM_TOP_FRACTION`, `RIM_INNER_FRACTION`,
-  `RIM_OUTER_RADIUS_FACTOR`, `RIM_INNER_RADIUS_FACTOR`, `HANDLE_EMBED_FACTOR`.
-* `tools/test-object-geometry-builder.mjs` — 4 additive regression tests (9–12), one per defect; all
-  8 pre-existing tests (1–8) untouched and still pass.
-* `TASK.md` (this milestone's task).
-
 **New:**
-* `docs/specifications/RS-1006A-PreviewCorrections.md`.
+* `src/renderer/CrystalColors.js` — the 17-color catalog.
+* `tools/test-crystal-color-catalog.mjs` — catalog data tests (12 assertions).
+* `tools/test-crystal-color-integration.mjs` — wiring/consistency tests (14 assertions).
+* `docs/specifications/RS-1007-CrystalColorLibrary.md`.
 * `TASK_RESULT.md` (this file).
 
-No forbidden file was changed: everything RS-1006 forbade, plus (per this milestone's own narrower
-list) `src/preview3d/ObjectDimensions.js`, `src/preview3d/index.js`,
-`src/preview3d/StoneLayoutTexture.js`, `src/preview3d/Preview3DRenderer.js`, `app.js`, `index.html`,
-`package.json` — all untouched, confirmed by `tools/test-preview3d-integration.mjs`'s existing "no
-forbidden file changed" guard (test 11, which checks live `git status`) continuing to pass.
+**Modified:**
+* `src/renderer/StoneColors.js` — now a one-line re-export shim over `CrystalColors.js`.
+* `app.js` — `populateStoneColorOptions()`, `updateStoneColorSwatch()`, called from startup and
+  from `updateStats()` respectively; a milestone comment block. No new import line (the existing
+  `STONE_COLORS` import from `StoneColors.js` is unchanged).
+* `index.html` — `#stoneColor` select emptied (populated by `app.js`), new `#stoneColorSwatch`
+  element, `.colorPickRow`/`.colorSwatch` CSS in the inline `<style>` block.
+* `package.json` — registers the two new test files in the `test` script.
+* `docs/ARCHITECTURE.md` — one new "As of RS-1007" implementation-status paragraph under
+  "Renderer".
+* `src/renderer/README.md` — "Stone Colors" section rewritten as "Crystal Color Catalog".
+* `TASK.md` — this milestone's task file (replaces RS-1006A's).
+* `tools/test-object-template-integration.mjs`, `tools/test-cup-rotation-stabilization.mjs`,
+  `tools/test-production-sheet-exporter.mjs`, `tools/test-preview3d-integration.mjs` — each
+  milestone's own forbidden-file guard updated with a documented RS-1007 carve-out for
+  `src/renderer/StoneColors.js`/`src/renderer/CrystalColors.js` (and `src/renderer/README.md` where
+  the guard forbids the whole `src/renderer/` prefix).
+* `tools/test-production-sheet-exporter.mjs` — test 5's hardcoded `'Jet Black'` expectations
+  updated to `'Jet'` (documented inline; same id/color, label-only change).
+
+**Untouched (verified by the new tests' own forbidden-file guard):**
+`src/renderer/CanvasRenderer2D.js`, `src/renderer/CupRenderer.js`,
+`src/preview3d/StoneLayoutTexture.js`, `src/export/SvgExporter.js`,
+`src/export/ProductionSheetExporter.js`, all of `src/geometry/**`, `src/text/**`, `src/fonts/**`,
+`src/core/**`, `src/browser/**`, `src/svg/**`, `src/history/**`, `src/products/**`,
+`src/preview3d/ObjectGeometryBuilder.js`/`Preview3DRenderer.js`/`ObjectDimensions.js`/`index.js`,
+`assets/**`, `examples/**`, `style.css`, `README.md`, `LICENSE`, `CONTRIBUTING.md`.
 
 ---
 
 # Commands Executed
 
 ```bash
-git checkout -b feature/rs-1006a-preview-corrections
-npm test                    # full suite, before and after implementation
-git diff --check            # clean, no whitespace errors
-git status                  # reviewed before committing
-python3 -m http.server 5183 # browser verification
-npm install --no-save --no-package-lock puppeteer-core   # temporary, for browser verification only
+git checkout -b feature/rs-1007-crystal-color-library
+npm test                                   # full suite, iterated to green (436/436)
+git diff --check
+git status
+python3 -m http.server 5199                # browser verification
+npm install --no-save --no-package-lock puppeteer-core   # temporary, browser verification only
 npm uninstall puppeteer-core --no-save                    # removed afterward
 ```
 
-`package.json`/`package-lock.json` are untouched by this milestone (`git status` confirms) — the
-temporary Puppeteer install/uninstall left no trace, matching the prior milestone's own pattern for
-browser verification tooling in this no-bundler repository.
+`package.json`/`package-lock.json` carry only the two new test-script entries — `git status`
+confirms no dependency changes remain after the temporary Puppeteer install/uninstall (same
+pattern as RS-1006/RS-1006A's own browser-verification tooling).
 
 ---
 
 # Automated Test Results
 
-`npm test` — **35/35 suites pass** (410 individual assertions, 0 failures), exit code 0: all 31
-pre-existing suites unmodified and passing, plus `tools/test-object-geometry-builder.mjs` now at
-12/12 (8 pre-existing + 4 new regression tests for this milestone's defects).
+`npm test` — **34/34 suites pass, 436/436 individual assertions, exit code 0**: all 32
+pre-existing suites (with the four documented forbidden-list/expectation updates above) plus the
+two new suites for this milestone.
 
-New assertions in `tools/test-object-geometry-builder.mjs`:
+**`tools/test-crystal-color-catalog.mjs` (12 assertions):** all 17 required display names present;
+every id non-empty/unique/lowercase-kebab; every entry has valid `name`/`previewColor` and
+valid-when-present `highlight`/`shadow`; render-channel fields (`fill`/`stroke`/`shine`/`accent`)
+present and correctly aliased; the 7 pre-existing ids are byte-identical to the pre-milestone
+palette; `STONE_COLORS` (catalog) and the `StoneColors.js` shim's re-export are the exact same
+object; `getCrystalColor()`/`isValidCrystalColorId()` correct for known/unknown ids;
+`DEFAULT_CRYSTAL_COLOR_ID` resolves; `listCrystalColorGroups()` covers every color exactly once;
+`validateCrystalColorCatalog()` accepts the shipped catalog and rejects duplicate/empty/malformed
+fixtures; no manufacturer name referenced; this suite's own forbidden-file guard.
 
-* **9.** Body material is `THREE.FrontSide` (not `DoubleSide`) for mug/tumbler/bottle — regression
-  guard for the duplicated-artwork defect.
-* **10.** Mug/tumbler body has a closed base (a vertex at `y≈0` with `r≈0`) and a modeled rim (the
-  wall's maximum radius occurs at the very top of the object, not partway down at a bare open edge)
-  — regression guard for the generic-cone defect.
-* **11.** The mug handle's wall-attachment endpoints sit strictly inside the wall radius at that
-  height (not on or outside it) — regression guard for the floating/gapped-handle defect.
-* **12.** Bottle body vertices above `bodyHeightMm` (shoulder/neck/cap) get `v>1`; vertices within
-  the printable body wall stay within `[0,1]` — regression guard for the shoulder texture-bleed
-  defect.
-
-All four check an observable geometry/material fact produced by the fix, not an implementation
-detail (e.g. test 10 does not assert the exact `RIM_*` constant values, only that a rim exists and
-the base is closed).
+**`tools/test-crystal-color-integration.mjs` (14 assertions):** `index.html`'s select has no
+hardcoded options and a swatch element exists; `app.js` builds `<optgroup>`s and refreshes the
+swatch from `updateStats()`; `stoneColor` remains history-tracked; `app.js`'s `STONE_COLORS` import
+line is unchanged; `defaultProject()`'s default color resolves; `validateProject()` never
+special-cases `layer.color` (round-trips any id untouched); a new-catalog color (`topaz`) survives
+end-to-end through the real permanent `GeometryEngine` for a text layer (straight and curved), a
+shape (circle) layer, and an SVG layer; the 2D canvas renderer and the 3D texture resolve the same
+new-catalog color to identical `fill`/`stroke`/`shine` values; SVG export emits the correct
+`fill`/`stroke`/`data-color`; Production Sheet export lists the correct color name; this suite's
+own forbidden-file guard.
 
 ---
 
 # Browser/Manual Verification
 
-Real headless-Chrome session via Puppeteer (CDP, software WebGL/SwiftShader — this environment has
-no GPU) against `python3 -m http.server`, using the same cached "Chrome for Testing" binary the
-RS-1006 milestone used. Console `error`/`warning`/`pageerror` events were captured for the full
-session.
+Real headless-Chrome session (`Google Chrome.app`, software WebGL via
+`--use-gl=swiftshader --enable-unsafe-swiftshader`) driven over CDP with a temporary
+`puppeteer-core` install, against `python3 -m http.server 5199`. Console `error`/`pageerror` events
+were captured for the full session; network responses were checked for any 4xx/5xx.
 
-**Methodology:** for each of the four required views, the object type was selected, a view preset
-button was clicked, then the canvas was mouse-dragged (`OrbitControls`) to the target angle, and the
-`#cup` canvas element was screenshotted directly (not a full-page screenshot). Screenshots were
-visually compared against the three reference images from the human review report.
+* **Selector organization:** `#stoneColor` contains exactly 6 `<optgroup>`s (Clear & Neutral: 3,
+  Red & Pink: 4, Purple & Blue: 3, Green & Aqua: 3, Yellow & Amber: 2, Metallic: 2) totaling 17
+  options — confirmed programmatically and visually.
+* **Swatch:** selecting Topaz updated `#stoneColorSwatch`'s background to `rgb(224, 142, 38)`
+  (`#e08e26`, Topaz's exact `previewColor`) — confirmed both via computed style and screenshot.
+* **Light/dark object backgrounds:** the default text layer set to Topaz was screenshotted against
+  both a white (`#ffffff`) and near-black (`#0b0b0b`) Object Preview background — the crystal color
+  is clearly legible against both.
+* **All layer types:** verified a new-catalog color renders correctly in both the 2D Production
+  Layout and the 3D Object Preview for a straight text layer (Topaz), curved text (Aquamarine — via
+  `#curveEnabled`), a circle/shape layer (Siam, added via "Add circle"), and an imported SVG layer
+  (Amethyst, a small star polygon imported via the real `#importSvgFile` control) — four
+  screenshots per case captured, all show correctly colored stones.
+* **Save/reopen:** clicked the real `#exportProject` button (intercepting the Blob via
+  `URL.createObjectURL`, not simulating the export logic), captured the exported JSON showing
+  `["aquamarine","siam","amethyst"]` across the three layers, reloaded the page to a fresh default
+  project, then imported that exact file back in via the real `#importProjectFile` control — the
+  reloaded project's first layer (`aquamarine`, the text layer) was selected and its color control
+  correctly showed `aquamarine`, confirming save→reload→reopen preserves every color losslessly.
+* **Undo/redo:** with `amethyst` selected, clicking `#undoBtn` moved the control back to `siam`
+  (the prior color-change step); clicking `#redoBtn` moved it forward to `amethyst` again —
+  confirmed programmatically by reading `#stoneColor.value` after each click.
+* **All exports:** clicked every export button once (`exportLayout`, `exportSVG`, `exportPNG`,
+  `exportCup`, `exportProdSheetSVG`, `exportProdSheetPDF`, plus `exportProject` above) against a
+  project using new-catalog colors; each completed without a thrown error, ending with the expected
+  `#status` message ("Downloaded rhinestone-production-sheet.pdf").
+* **Console/network:** zero application-originated console errors or page errors across the entire
+  session. The only 4xx response was the pre-existing, already-documented `/favicon.ico` 404 (no
+  favicon `<link>` defined in `index.html` — the same finding every prior milestone's browser
+  verification recorded); confirmed by cross-checking every `response` event's status, not just
+  filtering console text.
 
-* **Mug, 45°** (Front view + drag-orbit ~equivalent to the reference angle): the mug now shows a
-  visible rim (wall thickness) at the mouth instead of a bare open edge, a solid base, and — most
-  importantly — the handle connects into the wall on both ends with **no visible gap**, a clear,
-  direct improvement over the reference screenshot's floating handle with a large gap on both
-  attachment points.
-* **Mug, side view** (`Right` preset, the angle that shows the handle's full "D" loop profile in
-  silhouette — the single most revealing angle for the weld defect): the handle reads as physically
-  continuous with the wall at both the top and bottom attachment points; no open/floating tube end
-  is visible at any point along the loop.
-* **Tumbler, three-quarter-from-above** (the angle that reproduced the mirrored-duplicate defect in
-  the reference screenshot) at both its default `half` wrap and at `full` wrap: the design text
-  ("Vitalina...") now appears **exactly once**, wrapping smoothly around the visible curve. No
-  mirrored/duplicated ghost text is visible anywhere near the rim or through the opening, at either
-  wrap mode. **Confirmed by a genuine, direct before/after comparison, not just reasoning about the
-  fix**: the identical script was run against the pre-fix commit (`git stash` to the prior committed
-  state, same server, same camera angle, same default project/design) and it reproduced the exact
-  defect — a hollow ring, open at both top and bottom, showing the near wall's design ("Vitalina...",
-  readable) *and*, through the hole, the far interior wall's backface carrying a second, mirrored,
-  upside-down, unreadable copy of the same text. Re-running the identical script against the fixed
-  code at the identical camera angle shows a solid-looking, closed-bottom tumbler with the design
-  appearing exactly once — the second copy is gone, not hidden. This is the strongest evidence in
-  this report: a controlled A/B screenshot pair, same design, same angle, only the fix differs.
-* **Bottle, 45°**: a clearly recognizable bottle silhouette — cylindrical body, distinct curved
-  shoulder, straight neck, flared near-flat-topped cap — with the "Vitalina..." design text visibly
-  confined to the cylindrical body only. No design bleed onto the shoulder, neck, or cap at any
-  point in the profile.
-* **Console/errors:** the only console events across the entire verification session were (a) the
-  same pre-existing, unrelated `/favicon.ico` 404 the RS-1006 and RS-1005 browser verifications both
-  already documented (this repository defines no favicon `<link>`), and (b) SwiftShader/software-
-  WebGL driver warnings (`GL_CLOSE_PATH_NV` GPU-stall notices, `glCopySubTextureCHROMIUM` offset
-  warnings) produced by Puppeteer's `elementHandle.screenshot()` repeatedly reading back a live
-  WebGL canvas under software rendering — **confirmed pre-existing and unrelated to this milestone's
-  code changes** by running the identical verification script against the prior commit
-  (`git stash` to the pre-fix state, same server, same script): the identical warnings appear there
-  too. **Zero application-originated console errors, zero page errors, on either commit.**
-
-Not performed: real-GPU/real-device verification (this environment's headless Chrome has no GPU) and
-mobile touch-gesture verification — same limitations RS-1006 already documented, unchanged by this
-milestone.
+Not performed: real-GPU/real-device verification (headless Chrome here has no GPU, matching every
+prior milestone's documented limitation) and mobile touch-gesture verification.
 
 ---
 
 # Warnings
 
-* The rim/base modeling (fix 1) and shoulder/cap profile changes (fix 4) are schematic, visually-
-  tuned proportions (`RIM_FLARE_START_FRACTION`, `RIM_TOP_FRACTION`, `RIM_INNER_FRACTION`,
-  `RIM_OUTER_RADIUS_FACTOR`, `RIM_INNER_RADIUS_FACTOR`, the bottle's `shoulderMidY`/`capRadius`
-  factors) — judgment calls made by eye against the reference screenshots, the same category of
-  decision RS-1006's own camera-framing/lighting tuning already was, not derived from a real
-  physical mug/bottle reference.
-* The mug/tumbler interior is still not modeled (no wall thickness, no interior floor) — looking
-  directly down into the open mouth now shows the scene background through the opening (since
-  `FrontSide` correctly culls the far wall's backface) rather than an interior surface. This is more
-  correct than the pre-fix duplicated-texture artifact it replaces, but it is still a simplification,
-  not a fully solid vessel.
-* The tumbler duplicate-artwork fix's root cause (`DoubleSide` + open hollow geometry) was confirmed
-  structurally and by direct visual comparison at the reproducing camera angle after the fix (no
-  duplicate visible, at either `half` or `full` wrap); a pixel-identical "duplicate present" screenshot
-  of the pre-fix code was not separately captured with the exact reference design, since the
-  reference screenshots themselves already serve as that record.
+* The 10 newly added colors' hex values (Crystal/plain, Siam, Light Siam, Fuchsia, Amethyst, Light
+  Sapphire, Aquamarine, Peridot, Topaz, Citrine) are original, hand-picked approximations chosen to
+  read distinctly from each other and from the 7 pre-existing colors — they are not derived from or
+  verified against any manufacturer's physical color chart, per this milestone's explicit "no exact
+  commercial color matching" constraint.
+* `jet`'s display name changed from "Jet Black" to "Jet" (id and color values unchanged). This
+  required updating one pre-existing hardcoded test expectation
+  (`tools/test-production-sheet-exporter.mjs`); a human reviewing exported Production Sheets from
+  before this milestone will see the header text change from "Crystal color: Jet Black" to
+  "Crystal color: Jet" for that color.
+* The color selector remains a native `<select>` with `<optgroup>`s (plus a live swatch), not a
+  custom swatch-grid widget — per the specification's explicit scope decision, this satisfies
+  "visible, organized" without introducing a new UI framework/dependency.
 
 ---
 
 # Known Limitations
 
 * Same as "Warnings" above.
-* No PBR materials, HDR/environment lighting, shadows, animation, wall-thickness/interior modeling,
-  or DXF export — all still out of scope, unchanged from RS-1006.
+* S-004 (duplicated text visible in some 3D preview cases) remains deferred, as directed — this
+  milestone's changes are color-data/UI-only and do not touch `src/preview3d/ObjectGeometryBuilder.js`
+  or `Preview3DRenderer.js`, so they neither expose nor mask that defect.
+* No DXF export, manufacturing reports, or PBR/lighting changes — unchanged from prior milestones.
 
 ---
 
 # Recommended Next Milestone
 
-DXF export; syncing the Rotation slider's displayed value to live free-orbit camera state; consider
-whether the mug/tumbler interior floor is worth modeling (a thin closed disc a few mm below the rim)
-if human review of this correction pass still finds the open mouth's "see-through to background"
-look distracting at close zoom.
+Investigate S-004 (duplicated text in some 3D preview cases); DXF export; converging the two
+unreconciled project/layer models (`src/core/**` vs. `app.js`'s ad hoc project object).

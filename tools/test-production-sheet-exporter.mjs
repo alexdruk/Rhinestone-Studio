@@ -123,10 +123,12 @@ await test('5. stone count / stone size(s) / crystal color(s) are derived from s
   const d3 = computeProductionSheetLayout(three, BASE_OPTIONS);
   assert.equal(d1.stoneCount, 1);
   assert.deepEqual(d1.distinctSizesMm, [1.5]);
-  assert.deepEqual(d1.distinctColors, ['Jet Black']);
+  // RS-1007 renamed the 'jet' catalog entry's display name from "Jet Black" to "Jet" (same id,
+  // same fill/stroke/shine/accent values) to match the Crystal Color Library's required name list.
+  assert.deepEqual(d1.distinctColors, ['Jet']);
   assert.equal(d3.stoneCount, 3);
   assert.deepEqual(d3.distinctSizesMm, [1.5, 2.5]);
-  assert.deepEqual(d3.distinctColors, ['Jet Black', 'Rose']);
+  assert.deepEqual(d3.distinctColors, ['Jet', 'Rose']);
 });
 
 await test('6. an empty StoneLayout does not throw and reports zero/placeholder header values', () => {
@@ -403,6 +405,12 @@ await test('23. no forbidden file changed (this milestone\'s own forbidden list)
     .map((line) => line.slice(3).trim());
 
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
+  // RS-1007 (Crystal Color Library) legitimately changes src/renderer/StoneColors.js (now a
+  // compatibility re-export shim) and adds src/renderer/CrystalColors.js (the new catalog) — see
+  // tools/test-crystal-color-catalog.mjs / tools/test-crystal-color-integration.mjs for that
+  // milestone's own forbidden-file guard. CanvasRenderer2D.js/CupRenderer.js are unaffected and
+  // stay covered by the src/renderer/ prefix below.
+  const allowedDespitePrefix = new Set(['src/renderer/StoneColors.js', 'src/renderer/CrystalColors.js', 'src/renderer/README.md']);
   const forbiddenPrefixes = [
     'src/geometry/', 'src/renderer/', 'src/text/', 'src/fonts/', 'src/core/',
     'src/browser/', 'src/svg/', 'src/history/', 'src/products/', 'assets/', 'examples/'
@@ -411,6 +419,7 @@ await test('23. no forbidden file changed (this milestone\'s own forbidden list)
   for (const changedPath of changedPaths) {
     assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
     assert.ok(
+      allowedDespitePrefix.has(changedPath) ||
       !forbiddenPrefixes.some((prefix) => changedPath.startsWith(prefix)),
       `Forbidden file changed: ${changedPath}`
     );
