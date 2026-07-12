@@ -31,3 +31,10 @@ export {
   CURVE_DIRECTIONS,
   CURVE_ALIGNMENTS
 } from './ArcProjection.js';
+
+export {
+  combineShapeSources,
+  combineManyShapeSources,
+  BOOLEAN_OPERATIONS,
+  BooleanPrecisionError
+} from './PathBoolean.js';

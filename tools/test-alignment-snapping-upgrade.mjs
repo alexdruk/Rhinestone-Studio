@@ -155,6 +155,12 @@ await test('14. no forbidden file changed (src/geometry/**, src/renderer/**, src
     .map((line) => line.slice(3).trim());
 
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
+  // RS-1012 (Vector Boolean Operations) legitimately adds src/geometry/PathBoolean.js and extends
+  // src/geometry/GeometryEngine.js/index.js/README.md -- this guard checks live `git status`, not a
+  // diff scoped to this milestone's own commit, so it also has to reflect later milestones' scope,
+  // matching the precedent in tools/test-production-sheet-exporter.mjs (RS-1008A) -- see
+  // tools/test-path-boolean-integration.mjs for RS-1012's own forbidden-file guard.
+  const allowedDespitePrefix = new Set(['src/geometry/GeometryEngine.js', 'src/geometry/index.js', 'src/geometry/README.md', 'src/geometry/PathBoolean.js']);
   const forbiddenPrefixes = [
     'src/geometry/', 'src/renderer/', 'src/export/', 'src/text/', 'src/fonts/', 'src/core/',
     'src/browser/', 'src/svg/', 'src/image/', 'src/history/', 'src/products/', 'src/preview3d/',
@@ -164,6 +170,7 @@ await test('14. no forbidden file changed (src/geometry/**, src/renderer/**, src
   for (const changedPath of changedPaths) {
     assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
     assert.ok(
+      allowedDespitePrefix.has(changedPath) ||
       !forbiddenPrefixes.some((prefix) => changedPath.startsWith(prefix)),
       `Forbidden file changed: ${changedPath}`
     );

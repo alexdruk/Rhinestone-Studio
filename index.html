@@ -443,6 +443,20 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           </div>
           <p class="hint">Adds a new layer using the stone settings below. Existing shapes are edited by selecting them from the Layers list.</p>
         </div>
+        <div class="field-section" id="booleanOpsSection">
+          <h3>Boolean Operations</h3>
+          <p class="hint" id="booleanOpsHint">Select two or more layers (Shift-click on the canvas, or in the Layers list) to combine them. Works with any combination of shapes, text, curved text, imported SVG, and Image Trace layers.</p>
+          <div class="btnrow">
+            <button class="btn" id="boolUnion" disabled title="Merge the selected layers into one shape, keeping their combined outline.">⊕ Union</button>
+            <button class="btn" id="boolSubtract" disabled title="Cut the front layer(s) out of the back layer, like a cookie cutter.">⊖ Subtract</button>
+          </div>
+          <div class="btnrow">
+            <button class="btn" id="boolIntersect" disabled title="Keep only the area where every selected layer overlaps.">⊗ Intersect</button>
+            <button class="btn" id="boolExclude" disabled title="Keep the non-overlapping parts and remove the area where the layers overlap.">⊙ Exclude</button>
+          </div>
+          <p class="hint">The result becomes one new, fully editable shape layer — the original layers are removed. Undo restores them.</p>
+          <div class="validation-message" id="booleanOpsValidation" role="alert"></div>
+        </div>
         <div id="shapeControls" style="display:none">
           <div class="field-section">
             <h3>Position &amp; size</h3>

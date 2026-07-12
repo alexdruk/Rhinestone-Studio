@@ -415,7 +415,10 @@ await test('23. no forbidden file changed (this milestone\'s own forbidden list)
   // (adds sampleFieldFillPoints()) — see tools/test-image-trace-regression.mjs for that
   // milestone's own forbidden-file guard. src/geometry/StoneLayout.js/Stone.js stay covered by the
   // src/geometry/ prefix below (untouched by RS-1008A).
-  const allowedDespitePrefix = new Set(['src/renderer/StoneColors.js', 'src/renderer/CrystalColors.js', 'src/renderer/README.md', 'src/geometry/GeometryEngine.js', 'src/geometry/StoneSampler.js', 'src/geometry/index.js', 'src/geometry/README.md']);
+  // RS-1012 (Vector Boolean Operations) legitimately adds src/geometry/PathBoolean.js and extends
+  // src/geometry/GeometryEngine.js/index.js/README.md (already allowed below) -- see
+  // tools/test-path-boolean-integration.mjs for that milestone's own forbidden-file guard.
+  const allowedDespitePrefix = new Set(['src/renderer/StoneColors.js', 'src/renderer/CrystalColors.js', 'src/renderer/README.md', 'src/geometry/GeometryEngine.js', 'src/geometry/StoneSampler.js', 'src/geometry/index.js', 'src/geometry/README.md', 'src/geometry/PathBoolean.js']);
   const forbiddenPrefixes = [
     'src/geometry/', 'src/renderer/', 'src/text/', 'src/fonts/', 'src/core/',
     'src/browser/', 'src/svg/', 'src/history/', 'src/products/', 'assets/', 'examples/'

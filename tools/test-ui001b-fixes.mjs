@@ -117,7 +117,11 @@ await test('11. no forbidden file changed (GeometryEngine, StoneLayout, exporter
   // relocate its UI only) but this guard checks live `git status`, not a diff scoped to UI-001's
   // own commit, so it also has to reflect every later milestone's scope; RS-1010 (Alignment &
   // Snapping Upgrade) legitimately extends src/editing/Selection.js, so it is no longer forbidden
-  // here -- see tools/test-alignment-snapping-upgrade.mjs for RS-1010's own guard.
+  // here -- see tools/test-alignment-snapping-upgrade.mjs for RS-1010's own guard. RS-1012 (Vector
+  // Boolean Operations) likewise legitimately adds src/geometry/PathBoolean.js and extends
+  // src/geometry/GeometryEngine.js/index.js/README.md -- see
+  // tools/test-path-boolean-integration.mjs for RS-1012's own guard.
+  const allowedDespitePrefix = new Set(['src/geometry/GeometryEngine.js', 'src/geometry/index.js', 'src/geometry/README.md', 'src/geometry/PathBoolean.js']);
   const forbiddenPrefixes = [
     'src/geometry/', 'src/renderer/', 'src/export/', 'src/text/', 'src/fonts/', 'src/core/',
     'src/browser/', 'src/svg/', 'src/image/', 'src/history/', 'src/products/', 'src/preview3d/',
@@ -127,6 +131,7 @@ await test('11. no forbidden file changed (GeometryEngine, StoneLayout, exporter
   for (const changedPath of changedPaths) {
     assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
     assert.ok(
+      allowedDespitePrefix.has(changedPath) ||
       !forbiddenPrefixes.some((prefix) => changedPath.startsWith(prefix)),
       `Forbidden file changed: ${changedPath}`
     );
