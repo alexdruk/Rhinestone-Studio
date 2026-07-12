@@ -134,4 +134,79 @@ await test('8. applyWrapUv\'s angular window is narrower for "front" than for "f
   assert.ok(Math.abs(uFront - 0.5) > Math.abs(uFull - 0.5), 'expected the same azimuth to map further from center (0.5) under a narrower wrap window');
 });
 
+// RS-1006A regression tests -- these guard the four human-review defects fixed in
+// docs/specifications/RS-1006A-PreviewCorrections.md. Each checks an observable geometry/material
+// fact (not an implementation detail like a specific constant's value).
+
+await test('9. body material is FrontSide (not DoubleSide) for every template -- regression guard for the tumbler/mug duplicated-artwork defect', () => {
+  for (const id of ['mug', 'tumbler', 'bottle']) {
+    const [w, h] = CANVAS_SIZES[id];
+    const { bodyMesh } = buildObjectMesh(getObjectTemplate(id), w, h);
+    assert.equal(bodyMesh.material.side, THREE.FrontSide);
+  }
+});
+
+await test('10. mug/tumbler body has a closed base (a vertex at y=0 with r=0) and a modeled rim (max radius occurs above y=0, not at a bare open top) -- regression guard for the generic-cone defect', () => {
+  for (const id of ['mug', 'tumbler']) {
+    const [w, h] = CANVAS_SIZES[id];
+    const { bodyMesh, dimensions } = buildObjectMesh(getObjectTemplate(id), w, h);
+    const position = bodyMesh.geometry.attributes.position;
+    let baseIsClosed = false;
+    let maxRadius = 0, maxRadiusY = 0;
+    for (let i = 0; i < position.count; i++) {
+      const y = position.getY(i);
+      const r = Math.hypot(position.getX(i), position.getZ(i));
+      if (Math.abs(y) < 1e-6 && r < 1e-6) baseIsClosed = true;
+      if (r > maxRadius) { maxRadius = r; maxRadiusY = y; }
+    }
+    assert.ok(baseIsClosed, `expected ${id} to have a closed (r=0) base at y=0`);
+    // The rim's outer lip is the widest point of the wall, and it sits at the very top of the
+    // object (RIM_TOP_FRACTION=1) -- confirms a rim was modeled, not just a bare taper.
+    assert.ok(Math.abs(maxRadiusY - dimensions.bodyHeightMm) < 1e-3, `expected ${id}'s widest point (the rim) at the top (y=${dimensions.bodyHeightMm}), got y=${maxRadiusY}`);
+  }
+});
+
+await test('11. mug handle wall-attachment endpoints sit inside the wall radius at that height, not on/outside it -- regression guard for the floating/gapped handle defect', () => {
+  const { handleMesh, dimensions } = buildObjectMesh(getObjectTemplate('mug'), 210, 90);
+  const wallRadiusAt = (y) => {
+    const t = Math.max(0, Math.min(1, y / dimensions.bodyHeightMm));
+    return dimensions.bodyRadiusMm + (dimensions.topRadiusMm - dimensions.bodyRadiusMm) * t;
+  };
+  const position = handleMesh.geometry.attributes.position;
+  let minY = Infinity, maxY = -Infinity;
+  for (let i = 0; i < position.count; i++) {
+    minY = Math.min(minY, position.getY(i));
+    maxY = Math.max(maxY, position.getY(i));
+  }
+  // The handle's two attach ends are its extreme-Y vertices; check each is embedded (radius from
+  // the axis strictly less than the wall's own radius at that height).
+  for (let i = 0; i < position.count; i++) {
+    const y = position.getY(i);
+    if (Math.abs(y - minY) < 1e-3 || Math.abs(y - maxY) < 1e-3) {
+      const r = Math.hypot(position.getX(i), position.getZ(i));
+      assert.ok(r < wallRadiusAt(y) - 1e-6, `expected handle endpoint at y=${y} (r=${r}) embedded inside the wall (wallRadius=${wallRadiusAt(y)})`);
+    }
+  }
+});
+
+await test('12. bottle body vertices above bodyHeightMm (shoulder/neck/cap) get v>1 (clamped to background, off the printable body); body-wall vertices stay within [0,1] -- regression guard for the shoulder texture-bleed defect', () => {
+  const { bodyMesh, dimensions } = buildObjectMesh(getObjectTemplate('bottle'), 180, 90);
+  const position = bodyMesh.geometry.attributes.position;
+  const uv = bodyMesh.geometry.attributes.uv;
+  let sawBodyVertex = false, sawShoulderVertex = false;
+  for (let i = 0; i < position.count; i++) {
+    const y = position.getY(i);
+    const v = uv.getY(i);
+    if (y >= -1e-6 && y <= dimensions.bodyHeightMm + 1e-6) {
+      sawBodyVertex = true;
+      assert.ok(v >= -1e-6 && v <= 1 + 1e-6, `expected body-wall vertex (y=${y}) to have v in [0,1], got ${v}`);
+    }
+    if (y > dimensions.bodyHeightMm + 1) {
+      sawShoulderVertex = true;
+      assert.ok(v > 1, `expected shoulder/neck/cap vertex (y=${y}) to have v>1 (clamped off the printable body), got ${v}`);
+    }
+  }
+  assert.ok(sawBodyVertex && sawShoulderVertex, 'expected both a body-wall vertex and a shoulder/neck/cap vertex in the bottle profile');
+});
+
 console.log('Object geometry builder tests passed.');

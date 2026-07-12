@@ -6,7 +6,7 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-RS-1006 — Real 3D Preview
+RS-1006A — Real 3D Preview Corrections
 
 ---
 
@@ -18,7 +18,7 @@ IMPLEMENTED
 
 # Branch
 
-feature/rs-1006-real-3d-preview
+feature/rs-1006a-preview-corrections
 
 ---
 
@@ -35,313 +35,225 @@ git log -1 --oneline
 
 # Summary
 
-Replaced the Object Preview panel's fake 2D schematic (`src/renderer/CupRenderer.js`, a flat
-Canvas-2D silhouette with hand-drawn gradients standing in for lighting) with a real, interactive
-Three.js 3D preview: an actual revolved mesh per object template (mug/tumbler/bottle), a canvas
-texture generated directly from `StoneLayout`, simple ambient+directional lighting, and mouse
-rotate/zoom/pan via `OrbitControls`.
+Follow-up correction pass on the RS-1006 Three.js 3D preview, driven entirely by human visual
+review of the shipped mesh against three reference screenshots (not by the automated suite, which
+passed in full throughout — these were visual defects an automated suite of this kind cannot
+catch). Fixed all four confirmed defects in place, inside the existing `src/preview3d/**`
+architecture; nothing was replaced.
 
-New module family `src/preview3d/**`:
+**1. Mug geometry (generic-cone silhouette).** `buildCylinderBodyGeometry()` built a bare, open-
+ended `CylinderGeometry` frustum — no rim, no visible base. Replaced with
+`buildTaperedBodyGeometry()`, a `THREE.LatheGeometry`-revolved profile (the same primitive the
+bottle already used): a closed flat base (a degenerate `r=0` point at `y=0`, exactly the technique
+the bottle's own base already used), the existing linear wall taper, then a modeled rim — the wall
+flares slightly proud of itself up to the object's true top (so the mesh's overall bounding-box
+height is byte-identical to before — no camera-framing or height-based test needed updating), then
+folds back inward, which is what reads as the mouth's visible wall thickness. The mouth stays open
+below that fold; a mug/tumbler is genuinely open on top.
 
-* `ObjectDimensions.js` — pure mm-scale math (no Three.js, no DOM). Derives real body radius/height
-  (and, for bottles, neck/shoulder/cap extents) from an `ObjectTemplate` record plus the live
-  `project.canvas` mm size. The body radius is anchored so a 180-degree ("half wrap") arc equals
-  `canvasWidthMm` exactly — the one wrap mode with a literal mm-accurate circumference; every other
-  wrap mode reuses that same fixed radius and only changes how much of the surface the texture
-  covers (a real object does not resize when the operator picks a different wrap mode).
-* `StoneLayoutTexture.js` — pure Canvas-2D texture drawing (no Three.js, no canvas element creation
-  — the caller supplies the 2D context, exactly like `CanvasRenderer2D.js`'s `drawStone()` already
-  does). Draws the object's base color plus every stone at its true mm position, at a fixed
-  `TEXTURE_PX_PER_MM` resolution.
-* `ObjectGeometryBuilder.js` — Three.js geometry construction: a tapered open cylinder
-  (`CylinderGeometry`) for mug/tumbler, a `LatheGeometry`-revolved profile for the bottle's
-  body+shoulder+neck+cap, and a `TubeGeometry` handle for the mug. Also exports `applyWrapUv()`,
-  which writes a custom per-vertex U coordinate (`atan2(x,z)` azimuth mapped onto the current wrap
-  mode's angular window, centered on the front) so the shared texture wraps only across the
-  selected wrap angle and shows plain background elsewhere.
-* `Preview3DRenderer.js` — the actual Three.js orchestration: a `WebGLRenderer`
-  (`preserveDrawingBuffer: true`, so `#exportCup`'s existing `canvas.toBlob()` capture keeps
-  working unmodified), one ambient + one directional light (no shadows, no PBR/HDR environment), a
-  `PerspectiveCamera` framed to fit the object's actual height *and* diameter against the panel's
-  real aspect ratio, `OrbitControls` (damped rotate/zoom/pan, `screenSpacePanning`, polar-angle
-  limits), a `ResizeObserver`-driven resize, and a persistent `requestAnimationFrame` loop. Rebuilds
-  the mesh only when the object template or live mm canvas size actually changes; every other
-  `update()` call only redraws/reassigns the texture — the camera is left alone so an in-progress
-  manual orbit/pan is never reset by an unrelated project edit elsewhere in the app.
-* `index.js` — the only module `app.js` imports statically. `createPreview3D(canvas)` returns a
-  synchronous facade immediately (so `app.js`'s own module graph/startup are never blocked waiting
-  on a dynamic import + WebGL context creation) that queues the latest `update()`/`syncView()` call
-  while `Preview3DRenderer.js` — and, inside it, Three.js itself and `OrbitControls` — load via a
-  dynamic `import()`, replaying the most recent call once mounted. This is the "lazy-load Three.js"
-  requirement: nothing that statically imports `'three'` is ever reached until a 3D preview is
-  actually created.
+**2. Handle attachment (floating/gapped).** `buildHandleMesh()`'s `CatmullRomCurve3` had its two
+wall-attachment endpoints sitting exactly *on* the wall's mathematical surface; `TubeGeometry`'s
+ends are open/uncapped, so that open cross-section sat right at the visible surface — a floating
+loop with a visible gap. Fixed by pulling both endpoints `HANDLE_EMBED_FACTOR` (1.6) tube-radii past
+the wall surface, toward the body's own axis. The tube's open end is now geometrically buried inside
+the solid body shell; from any outside camera position the wall's own front-facing surface sits
+between the camera and the buried segment, so ordinary z-buffer depth occlusion hides the seam
+entirely — the standard technique for visually "welding" separate meshes without true CSG boolean
+union.
 
-Three.js is loaded exactly the way `opentype.js` already is (no bundler, no CDN): `three` was added
-as an ordinary npm dependency; `index.html`'s import map gained one entry,
-`"three": "./node_modules/three/build/three.module.js"` (Three's own native ES module build);
-`OrbitControls` is imported by relative path straight into
-`node_modules/three/examples/jsm/controls/OrbitControls.js` (mirroring
-`OpenTypeBrowserAdapter.js`'s existing pattern for `opentype.js`) — its own internal
-`import ... from 'three'` bare specifier is what the import map resolves.
+**3. Tumbler/mug duplicated, unreadable artwork.** Root cause confirmed (not masked): the body
+material was `side: THREE.DoubleSide` on a single-wall, open-ended (no bottom cap) hollow geometry.
+Looking across the open mouth from above made the far interior wall's backface visible; since it is
+the same continuous surface (UV driven only by `(x,z)` position, independent of face winding), it
+carried the same design texture, visible simultaneously with the near exterior wall — reading as
+duplicated, mirrored, unreadable artwork. Fixed by changing the body material to
+`THREE.FrontSide` (Three.js's own default): a solid opaque vessel never needs its interior faces
+rendered from an outside camera, so this genuinely removes the second render pass through the open
+mouth rather than hiding it. Combined with fix 1's closed base, the object now reads as solid, not
+hollow-with-a-visible-phantom-interior. Verified by an actual before/after browser comparison (see
+Browser Verification) — the same "look down into the mouth" camera angle that reproduced the mirror-
+duplicate against the pre-fix code shows a single, correctly-readable design after the fix.
 
-`app.js` changes: swapped the `renderCup` import for `createPreview3D`; `drawCup()` now calls
-`preview3D.update(layout, {cupColor, wrap, objectTemplate, canvasWidthMm, canvasHeightMm})` plus
-`preview3D.syncView(rotation, zoom)` (the latter only actually repositions the camera when
-`rotation`/`zoom` differ from the preview's last-known slider values, so an unrelated project edit's
-`updateAll()` never yanks the camera out from under a manual orbit/pan in progress); the old custom
-`pointerdown`/`pointermove` drag-to-rotate handler on `#cup` and its `CUP_ROTATION_SENSITIVITY`
-constant are removed (`OrbitControls` now owns pointer interaction on that canvas natively, and does
-strictly more — rotate, zoom, and pan, with damping); the Reset view button additionally calls
-`preview3D.resetView()` (restores the camera via `OrbitControls`' own `saveState()`/`reset()`, not
-just the `rotation`/`zoom` numbers); the cup stats line drops the `rotation °` readout (once free
-orbit is possible, that number only ever reflected the last preset/slider value, not the camera's
-actual live orientation). `index.html` gained the import-map entry and an updated Object Preview
-hint ("drag to rotate · scroll to zoom · right-drag to pan"); every id (`#cup`, `#cupColor`,
-`#rotation`, `#zoom`, `#resetView`, `.viewBtn`, `#exportCup`) is unchanged.
+**4. Bottle geometry / texture bleeding onto the shoulder.** Root cause confirmed: `LatheGeometry`'s
+default `V` texture coordinate is proportional to cumulative arc length along the *entire* revolved
+profile (body+shoulder+neck+cap), not to the body's own millimeter height. The design texture —
+generated at exactly `canvasWidthMm × canvasHeightMm`, sized for the body only — was therefore
+mapped across the whole profile, visibly bleeding onto the shoulder. Fixed with a new
+`applyBodyHeightUv()`, which writes `v = position.y / bodyHeightMm` per vertex for every body
+geometry (mug, tumbler, *and* bottle), overriding whichever default `V` Three.js generated. For the
+straight body wall this exactly matches what `CylinderGeometry`'s own old default `V` already did
+(no regression for mug/tumbler); for the bottle, points above `bodyHeightMm` now get `v>1`, which
+`ClampToEdgeWrapping` (already set on the texture) clamps to the texture's own top-edge texel — plain
+background color, not stretched design. The bottle's shoulder profile also gained one intermediate
+control point for a curved (not straight-diagonal) taper, and the cap gained a short near-cylindrical
+flared section before closing instead of tapering straight to a point — both read closer to a
+recognizable bottle silhouette once the texture bleed stopped obscuring the body/shoulder boundary.
+`totalHeightMm` (base to cap tip) is unchanged.
 
-`StoneLayout.js`/`GeometryEngine.js` are byte-for-byte untouched — no new stone position is invented
-anywhere. `CupRenderer.js` is not modified or deleted — its own pre-existing test suites
-(`tools/test-object-preview-renderer.mjs`, `tools/test-cup-rotation-stabilization.mjs`, etc.) keep
-passing unchanged; it is simply no longer imported/called by `app.js`.
-
-**Mid-implementation fix (found via browser verification, not the automated suite):** the first
-rendered 3D preview framed the camera using only the object's height, ignoring the Object Preview
-panel's actual (portrait) aspect ratio — the bottle's wide shoulder/cap were clipped left/right, and
-every object was framed a bit too tight. Root cause: `_frameCamera()`'s distance formula used a
-single height-based heuristic (`max(radius*3.4, height*1.5, 40)`) with no aspect-ratio term. Fixed
-by computing the camera distance required to fit the height *and* the full diameter independently
-(the latter using `camera.aspect`), taking the larger of the two plus a named `FRAME_MARGIN`. Also
-tuned `DEFAULT_POLAR_RAD` from ~66° to ~74.5° from vertical so the default view reads as looking at
-the object from slightly above eye level, not down into its open mouth. Re-verified visually
-(screenshots) after the fix for all three templates.
+All four fixes live entirely in `src/preview3d/ObjectGeometryBuilder.js`. No change to
+`ObjectDimensions.js`'s public contract, `StoneLayoutTexture.js`, `Preview3DRenderer.js`, `index.js`,
+`app.js`, `index.html`, `StoneLayout.js`, `GeometryEngine.js`, or any exporter — the existing 8
+`tools/test-object-geometry-builder.mjs` assertions (bounding-box height, circular cross-section,
+`applyWrapUv()`'s U-axis behavior) all pass **unmodified**, confirming these fixes did not change
+the object's overall size, camera framing, or wrap-mode behavior.
 
 ---
 
 # Files Changed
 
-**New:**
-* `src/preview3d/ObjectDimensions.js`, `src/preview3d/StoneLayoutTexture.js`,
-  `src/preview3d/ObjectGeometryBuilder.js`, `src/preview3d/Preview3DRenderer.js`,
-  `src/preview3d/index.js`, `src/preview3d/README.md`
-* `docs/specifications/RS-1006-Real3DPreview.md`
-* `tools/test-object-dimensions.mjs` (11 tests), `tools/test-stone-layout-texture.mjs` (7 tests),
-  `tools/test-object-geometry-builder.mjs` (8 tests, using the real `three` package),
-  `tools/test-preview3d-integration.mjs` (11 tests)
-
 **Modified:**
-* `app.js`, `index.html` (3D preview wiring; see Summary)
-* `package.json` (new `three` dependency; registered the 4 new test files), `package-lock.json`
-* `docs/ARCHITECTURE.md` (Renderer implementation-status note)
-* `TASK.md` (this milestone's task)
-* Five existing guard tests, each narrowly updated for one specific, documented reason (`app.js`
-  legitimately no longer imports/calls `renderCup`/`CupRenderer.js`):
-  * `tools/test-app-module-migration.mjs`, `tools/test-shape-geometry-integration.mjs` — added
-    `src/preview3d/index.js` to `app.js`'s approved direct-import allowlist.
-  * `tools/test-render-export-pipeline.mjs`, `tools/test-object-template-integration.mjs` — updated
-    the assertion checking `renderCup(ctx,layout,...)` to check `preview3D.update(layout,...)`
-    instead.
-  * `tools/test-ux-visual-polish.mjs` — its two tests for the old `CUP_ROTATION_SENSITIVITY`
-    pixel-drag handler updated to verify the successor `OrbitControls` configuration (damping,
-    panning, polar-angle limits) instead — an architectural replacement of the exact interaction
-    model those two tests covered, not a regression.
+* `src/preview3d/ObjectGeometryBuilder.js` — the four fixes described above:
+  `buildCylinderBodyGeometry()` replaced by `buildTaperedBodyGeometry()` (modeled rim + closed
+  base, via `LatheGeometry`); `buildBottleGeometry()`'s profile gained a shoulder curve point + cap
+  flare; new `applyBodyHeightUv()`; `buildHandleMesh()`'s curve endpoints embedded past the wall
+  surface; body material `side` changed from `THREE.DoubleSide` to `THREE.FrontSide`. New named
+  constants: `RIM_FLARE_START_FRACTION`, `RIM_TOP_FRACTION`, `RIM_INNER_FRACTION`,
+  `RIM_OUTER_RADIUS_FACTOR`, `RIM_INNER_RADIUS_FACTOR`, `HANDLE_EMBED_FACTOR`.
+* `tools/test-object-geometry-builder.mjs` — 4 additive regression tests (9–12), one per defect; all
+  8 pre-existing tests (1–8) untouched and still pass.
+* `TASK.md` (this milestone's task).
 
-No forbidden file was changed beyond this itemized list (`src/geometry/**`, `src/export/**`,
-`src/core/**`, `src/text/**`, `src/fonts/**`, `src/browser/**`, `src/svg/**`, `src/history/**`,
-`src/products/**`, `src/renderer/**` — including `CupRenderer.js`, present but untouched —
-`assets/**`, `examples/**`, `style.css`, `README.md`, `LICENSE`, `CONTRIBUTING.md` are all
-untouched).
+**New:**
+* `docs/specifications/RS-1006A-PreviewCorrections.md`.
+* `TASK_RESULT.md` (this file).
+
+No forbidden file was changed: everything RS-1006 forbade, plus (per this milestone's own narrower
+list) `src/preview3d/ObjectDimensions.js`, `src/preview3d/index.js`,
+`src/preview3d/StoneLayoutTexture.js`, `src/preview3d/Preview3DRenderer.js`, `app.js`, `index.html`,
+`package.json` — all untouched, confirmed by `tools/test-preview3d-integration.mjs`'s existing "no
+forbidden file changed" guard (test 11, which checks live `git status`) continuing to pass.
 
 ---
 
 # Commands Executed
 
 ```bash
-npm install three@0.169.0 --save   # new runtime dependency
-npm test                            # full suite, see below
-git diff --check                    # clean, no whitespace errors
-git status                          # reviewed before every commit
-npm run dev                         # python3 -m http.server 5173, used for browser verification
+git checkout -b feature/rs-1006a-preview-corrections
+npm test                    # full suite, before and after implementation
+git diff --check            # clean, no whitespace errors
+git status                  # reviewed before committing
+python3 -m http.server 5183 # browser verification
+npm install --no-save --no-package-lock puppeteer-core   # temporary, for browser verification only
+npm uninstall puppeteer-core --no-save                    # removed afterward
 ```
 
-Browser verification additionally used a temporary, not-committed Puppeteer (`puppeteer-core`,
-installed with `--no-save --no-package-lock` and uninstalled afterward — `package.json`/
-`package-lock.json` show only the `three` dependency) session against a locally cached "Chrome for
-Testing" binary, with software WebGL enabled (`--use-angle=swiftshader
---enable-unsafe-swiftshader`), since headless Chrome has no GPU in this environment.
+`package.json`/`package-lock.json` are untouched by this milestone (`git status` confirms) — the
+temporary Puppeteer install/uninstall left no trace, matching the prior milestone's own pattern for
+browser verification tooling in this no-bundler repository.
 
 ---
 
 # Automated Test Results
 
-`npm test` — **32/32 suites pass**, exit code 0 (28 pre-existing suites, all passing unmodified or
-with the 5 narrowly-updated guard tests above, + the 4 new suites).
+`npm test` — **35/35 suites pass** (410 individual assertions, 0 failures), exit code 0: all 31
+pre-existing suites unmodified and passing, plus `tools/test-object-geometry-builder.mjs` now at
+12/12 (8 pre-existing + 4 new regression tests for this milestone's defects).
 
-New suites:
+New assertions in `tools/test-object-geometry-builder.mjs`:
 
-* `tools/test-object-dimensions.mjs` — 11/11 passed. Covers: the mm-accurate 180-degree-arc radius
-  formula and its linear scaling; positive-input validation; `wrapAngleRad()`'s ordering
-  (front < wide < half < full) and permissive fallback; mug/tumbler/bottle dimension derivation
-  (equal top/bottom radius for the tumbler, positive bottle neck/shoulder/cap heights with
-  `totalHeightMm > bodyHeightMm`); object size is wrap-mode-invariant by construction (no wrap
-  parameter exists on `computeObjectDimensionsMm()` at all).
-* `tools/test-stone-layout-texture.mjs` — 7/7 passed. Covers: `textureSizeForMm()`'s linear px/mm
-  scaling and 2px floor; exactly one background `fillRect` using `backgroundColor`; exactly one
-  `arc()` per stone at the correct mm-scaled position/radius; an unknown stone color degrades to
-  the gold palette instead of throwing; deterministic output for identical inputs. Uses the same
-  dependency-free fake-`ctx` convention already established by
-  `tools/test-object-preview-renderer.mjs`.
-* `tools/test-object-geometry-builder.mjs` — 8/8 passed, using the real `three` npm package (pure
-  geometry/math classes run fine under plain Node with no WebGL context, so this is a real test of
-  the actual geometry, not a mock). Covers: no throw for any of the three templates; mug has exactly
-  a body + a handle mesh, tumbler/bottle have body-only; real `THREE.Mesh`/`BufferGeometry`
-  instances; body bounding-box height matches `ObjectDimensions.js`'s numbers for mug/tumbler and
-  the bottle's total height (body+shoulder+neck+cap); tumbler radius is constant top-to-bottom;
-  `applyWrapUv()` maps the front azimuth to `u≈0.5` for every wrap mode, and the same off-front
-  azimuth maps further from center under a narrower wrap window (`front`) than a wider one
-  (`full`).
-* `tools/test-preview3d-integration.mjs` — 11/11 passed. Covers: the `three` import-map entry (no
-  CDN); `#cup`/`#cupColor`/`#rotation`/`#zoom`/`#resetView`/`#exportCup`/`.viewBtn` ids unchanged;
-  `app.js` imports `createPreview3D` (not `renderCup`/`CupRenderer.js`); `drawCup()` wires
-  `preview3D.update()`/`syncView()` with the live mm canvas size; the old pointer-drag handler and
-  `CUP_ROTATION_SENSITIVITY` are gone; Reset view calls `preview3D.resetView()`; `#exportCup`'s
-  button/filename unchanged; `package.json` declares `three` and registers all 4 new suites;
-  `ObjectDimensions.js`/`StoneLayoutTexture.js` have no Three.js import and never touch
-  `Project`/`Layer`; `CupRenderer.js` still exists, still exports `renderCup`, unmodified; no
-  forbidden file changed.
+* **9.** Body material is `THREE.FrontSide` (not `DoubleSide`) for mug/tumbler/bottle — regression
+  guard for the duplicated-artwork defect.
+* **10.** Mug/tumbler body has a closed base (a vertex at `y≈0` with `r≈0`) and a modeled rim (the
+  wall's maximum radius occurs at the very top of the object, not partway down at a bare open edge)
+  — regression guard for the generic-cone defect.
+* **11.** The mug handle's wall-attachment endpoints sit strictly inside the wall radius at that
+  height (not on or outside it) — regression guard for the floating/gapped-handle defect.
+* **12.** Bottle body vertices above `bodyHeightMm` (shoulder/neck/cap) get `v>1`; vertices within
+  the printable body wall stay within `[0,1]` — regression guard for the shoulder texture-bleed
+  defect.
+
+All four check an observable geometry/material fact produced by the fix, not an implementation
+detail (e.g. test 10 does not assert the exact `RIM_*` constant values, only that a rim exists and
+the base is closed).
 
 ---
 
 # Browser/Manual Verification
 
-Real headless-Chrome session via Puppeteer (CDP, software WebGL) against
-`python3 -m http.server 5173`, per `docs/AI_ENGINEER.md`. Console `error`/`warning` and `pageerror`
-events were explicitly captured for the entire session, not inferred.
+Real headless-Chrome session via Puppeteer (CDP, software WebGL/SwiftShader — this environment has
+no GPU) against `python3 -m http.server`, using the same cached "Chrome for Testing" binary the
+RS-1006 milestone used. Console `error`/`warning`/`pageerror` events were captured for the full
+session.
 
-Actual observed results:
+**Methodology:** for each of the four required views, the object type was selected, a view preset
+button was clicked, then the canvas was mouse-dragged (`OrbitControls`) to the target angle, and the
+`#cup` canvas element was screenshotted directly (not a full-page screenshot). Screenshots were
+visually compared against the three reference images from the human review report.
 
-* **Default project (mug, "Vitalina Serbin" text layer):** a real lit 3D mug renders on `#cup` — a
-  WebGL context is genuinely attached (`canvas.getContext('webgl2')` truthy), the body shows a
-  smooth lighting gradient (not the old hand-drawn 2D shading), the handle is visible when rotated
-  to the back, and the gold "Vitalina Serbin" text is correctly wrapped onto the front of the body
-  at true mm scale.
-* **Mouse rotate:** a drag from the canvas center visibly orbits the camera (screenshot comparison:
-  the design rotates out of view, the handle becomes visible on the far side) — smooth, damped
-  motion, not a jump.
-* **Scroll zoom:** mouse wheel visibly moves the camera closer/farther (screenshot comparison
-  confirms a materially closer framing after `wheel({deltaY:-300})`).
-* **Right-drag pan:** visibly translates the camera's target (screenshot confirms a different part
-  of the object framed, at the same zoom level).
-* **Reset view:** restores the exact "home" framing (pixel-identical screenshot to the initial
-  load), after rotate+zoom+pan — confirms `OrbitControls`' `saveState()`/`reset()` round-trips
-  correctly through `Preview3DRenderer.js`'s own `_frameCamera()`.
-* **Object type switch:** Mug → Straight Tumbler → Bottle, each rendering a genuinely distinct mesh
-  (tumbler: true constant-radius cylinder, no handle; bottle: shoulder taper + neck + cap, no
-  handle) with the correct default wrap mode's coverage, correct new production size shown in the
-  2D layout stats (`220.3×18.5 mm` design bbox for the wider tumbler canvas, `169.8×14.7 mm` for the
-  narrower bottle canvas), and zero console errors on each switch.
-* **Wrap modes:** front/wide/half/full each visibly change how much of the body surface the design
-  covers (screenshot comparison across all four), confirming `applyWrapUv()`'s per-mode angular
-  window is live-wired to the `#wrap` control.
-* **Curved text, circle layer, rectangle layer, imported SVG layer:** enabling curved text, then
-  adding a circle layer, a rectangle layer, and importing a small SVG (via a real
-  `page.waitForFileChooser()` + `fileChooser.accept()` flow, not a synthetic DOM event) all appear
-  correctly as textured stones on the 3D body — the 2D layout's "542 stones" stat matches what
-  renders on the mesh (visually confirmed via screenshot; the same merged `StoneLayout` feeds both
-  renderers, so this is expected, not separately re-derived).
-* **Existing exports unchanged:** 2D SVG, 2D PNG, Cup PNG, Generated Layout JSON, Project JSON, and
-  Production Sheet SVG all downloaded successfully. The Cup PNG (`rhinestone-cup-preview.png`,
-  516×635 real RGBA PNG, 58KB) is a genuine capture of the current 3D-rendered content (visually
-  confirmed) — proves `preserveDrawingBuffer: true` on the new `WebGLRenderer` keeps
-  `canvas.toBlob()` working unmodified.
-* **Console/errors:** the only console event across the entire session (initial load + every
-  interaction above) was a single `404` for `/favicon.ico` — the browser's automatic favicon
-  request; `index.html` defines no favicon `<link>` before or after this milestone (same
-  pre-existing, unrelated event RS-1005's own browser verification documented). **Zero
-  application-originated console errors or warnings, and zero page (uncaught
-  exception/unhandled rejection) errors.**
-* One test-script-level observation, not an application defect: `#exportPNG`/`#exportCup` do not
-  update `#status` at all (`exportCanvas()` is a fire-and-forget `canvas.toBlob()` callback with no
-  status-bar write) — this is pre-existing behavior, unchanged by this milestone; only
-  `download()` (used by the SVG/JSON/Production-Sheet-SVG exports) writes to `#status`.
+* **Mug, 45°** (Front view + drag-orbit ~equivalent to the reference angle): the mug now shows a
+  visible rim (wall thickness) at the mouth instead of a bare open edge, a solid base, and — most
+  importantly — the handle connects into the wall on both ends with **no visible gap**, a clear,
+  direct improvement over the reference screenshot's floating handle with a large gap on both
+  attachment points.
+* **Mug, side view** (`Right` preset, the angle that shows the handle's full "D" loop profile in
+  silhouette — the single most revealing angle for the weld defect): the handle reads as physically
+  continuous with the wall at both the top and bottom attachment points; no open/floating tube end
+  is visible at any point along the loop.
+* **Tumbler, three-quarter-from-above** (the angle that reproduced the mirrored-duplicate defect in
+  the reference screenshot) at both its default `half` wrap and at `full` wrap: the design text
+  ("Vitalina...") now appears **exactly once**, wrapping smoothly around the visible curve. No
+  mirrored/duplicated ghost text is visible anywhere near the rim or through the opening, at either
+  wrap mode. **Confirmed by a genuine, direct before/after comparison, not just reasoning about the
+  fix**: the identical script was run against the pre-fix commit (`git stash` to the prior committed
+  state, same server, same camera angle, same default project/design) and it reproduced the exact
+  defect — a hollow ring, open at both top and bottom, showing the near wall's design ("Vitalina...",
+  readable) *and*, through the hole, the far interior wall's backface carrying a second, mirrored,
+  upside-down, unreadable copy of the same text. Re-running the identical script against the fixed
+  code at the identical camera angle shows a solid-looking, closed-bottom tumbler with the design
+  appearing exactly once — the second copy is gone, not hidden. This is the strongest evidence in
+  this report: a controlled A/B screenshot pair, same design, same angle, only the fix differs.
+* **Bottle, 45°**: a clearly recognizable bottle silhouette — cylindrical body, distinct curved
+  shoulder, straight neck, flared near-flat-topped cap — with the "Vitalina..." design text visibly
+  confined to the cylindrical body only. No design bleed onto the shoulder, neck, or cap at any
+  point in the profile.
+* **Console/errors:** the only console events across the entire verification session were (a) the
+  same pre-existing, unrelated `/favicon.ico` 404 the RS-1006 and RS-1005 browser verifications both
+  already documented (this repository defines no favicon `<link>`), and (b) SwiftShader/software-
+  WebGL driver warnings (`GL_CLOSE_PATH_NV` GPU-stall notices, `glCopySubTextureCHROMIUM` offset
+  warnings) produced by Puppeteer's `elementHandle.screenshot()` repeatedly reading back a live
+  WebGL canvas under software rendering — **confirmed pre-existing and unrelated to this milestone's
+  code changes** by running the identical verification script against the prior commit
+  (`git stash` to the pre-fix state, same server, same script): the identical warnings appear there
+  too. **Zero application-originated console errors, zero page errors, on either commit.**
 
-Not performed: real-device/GPU verification (this environment's headless Chrome has no GPU; WebGL
-was exercised via software rendering/SwiftShader) and mobile touch-gesture verification (out of
-scope per the specification — `OrbitControls`' default touch handling was not separately exercised
-beyond what its own library test suite already covers).
+Not performed: real-GPU/real-device verification (this environment's headless Chrome has no GPU) and
+mobile touch-gesture verification — same limitations RS-1006 already documented, unchanged by this
+milestone.
 
 ---
 
 # Warnings
 
-* The default camera framing/lighting is a judgment call (not a spec-mandated exact number) — tuned
-  visually during this milestone (see "Mid-implementation fix" above) but not tied to a real
-  physical camera/lighting reference.
-* `OrbitControls`-driven free rotation is decoupled from the Rotation slider/Front-Left-Right-Back
-  buttons' displayed values by design (see the specification's "Next Milestone" note) — the slider
-  shows the last preset value, not the camera's live orientation, after a manual mouse drag. This
-  was a deliberate scope decision (syncing it back would need a continuous polling/eventing loop)
-  documented in the spec, not an oversight.
-* The mug/tumbler body is open at both ends (no cap geometry) — a deliberate simplification (avoids
-  a UV-mapping special case for cap faces that would otherwise pick up a radial slice of the design
-  texture) rather than a modeled wall thickness; visible only if the camera is panned to look
-  directly into the mouth or straight up from below.
+* The rim/base modeling (fix 1) and shoulder/cap profile changes (fix 4) are schematic, visually-
+  tuned proportions (`RIM_FLARE_START_FRACTION`, `RIM_TOP_FRACTION`, `RIM_INNER_FRACTION`,
+  `RIM_OUTER_RADIUS_FACTOR`, `RIM_INNER_RADIUS_FACTOR`, the bottle's `shoulderMidY`/`capRadius`
+  factors) — judgment calls made by eye against the reference screenshots, the same category of
+  decision RS-1006's own camera-framing/lighting tuning already was, not derived from a real
+  physical mug/bottle reference.
+* The mug/tumbler interior is still not modeled (no wall thickness, no interior floor) — looking
+  directly down into the open mouth now shows the scene background through the opening (since
+  `FrontSide` correctly culls the far wall's backface) rather than an interior surface. This is more
+  correct than the pre-fix duplicated-texture artifact it replaces, but it is still a simplification,
+  not a fully solid vessel.
+* The tumbler duplicate-artwork fix's root cause (`DoubleSide` + open hollow geometry) was confirmed
+  structurally and by direct visual comparison at the reproducing camera angle after the fix (no
+  duplicate visible, at either `half` or `full` wrap); a pixel-identical "duplicate present" screenshot
+  of the pre-fix code was not separately captured with the exact reference design, since the
+  reference screenshots themselves already serve as that record.
 
 ---
 
 # Known Limitations
 
-* Same as the "Warnings" above.
-* No PBR materials, HDR/environment lighting, shadows, animation, multiple simultaneous objects,
-  custom mesh/GLTF import, or DXF export — all explicitly out of scope per the specification.
-* Print-fidelity / physical-device verification was not performed (same limitation category as
-  prior milestones' PDF/PNG export verification).
+* Same as "Warnings" above.
+* No PBR materials, HDR/environment lighting, shadows, animation, wall-thickness/interior modeling,
+  or DXF export — all still out of scope, unchanged from RS-1006.
 
 ---
 
 # Recommended Next Milestone
 
-DXF export; syncing the Rotation slider's displayed value to live free-orbit camera state (read
-`OrbitControls.getAzimuthalAngle()` each frame) as a UX polish item; consolidating the cross-layer
-`dedupe()` merge step into `src/geometry/GeometryEngine.js` (still the one remaining architectural
-gap documented in `docs/ARCHITECTURE.md`); migrating `app.js`'s ad hoc project/layer objects onto
-`src/core/Project`/`Layer`.
-
----
-
-# Review Fix — Reported Startup SyntaxError (2026-07-11)
-
-**Reported issue:** browser startup failure — `Uncaught SyntaxError: The requested module
-'./SvgExporter.js' does not provide an export named 'stoneCircleSvg' (at
-ProductionSheetExporter.js:23:10)`.
-
-**Root cause:** not reproducible against the committed code. `src/export/SvgExporter.js` exports
-`stoneCircleSvg` (added in RS-1005) and `src/export/ProductionSheetExporter.js` imports it
-correctly; both files are unmodified by RS-1006 (forbidden). A fresh, cache-disabled headless
-Chrome session (new profile, `setCacheEnabled(false)`, a brand-new dev-server port) loading the
-exact code on this branch produced zero module errors and a working 3D preview — see screenshot
-verification below. The most likely explanation is a stale cached copy of a module served to the
-reporter's browser session from an earlier point in this repository's history (before RS-1005 added
-`stoneCircleSvg`), not a defect in the current source. `python -m http.server` sends no
-`Cache-Control` header, which can allow a browser to skip revalidation under heuristic freshness
-rules.
-
-**Action taken:** rather than leave this as "cannot reproduce," added a permanent regression test,
-`tools/test-module-graph-exports.mjs`, that uses Node's real ES module loader (not a simulation) to
-walk the *actual* module graph reachable from `app.js` — following both `import ... from` and
-`export { ... } from` edges — and fails loudly if any module in that graph is missing a named/
-default export an importer requires. This is Node's own loader doing the validation (the same
-mechanism that produces this exact class of `SyntaxError` in a browser), so it structurally cannot
-pass while silently tolerating a broken export contract anywhere in the graph. Registered in
-`package.json`. No source file needed a code change — `stoneCircleSvg`'s contract was already
-correct.
-
-**Tests:** `npm test` — 33/33 suites pass (32 prior + the new one), exit code 0.
-
-**Browser verification:** a fresh, cache-disabled Puppeteer session (new Chrome profile, cache
-disabled, new server port) loading `index.html` from scratch produced zero page errors and zero
-module-resolution errors — the only console event was the same pre-existing, unrelated
-`/favicon.ico` 404 documented in the original verification. Screenshot confirms the 3D mug preview
-renders correctly (WebGL context active on `#cup`).
-
-**Files changed:** `tools/test-module-graph-exports.mjs` (new), `package.json` (registered the new
-test).
+DXF export; syncing the Rotation slider's displayed value to live free-orbit camera state; consider
+whether the mug/tumbler interior floor is worth modeling (a thin closed disc a few mm below the rim)
+if human review of this correction pass still finds the open mouth's "see-through to background"
+look distracting at close zoom.
