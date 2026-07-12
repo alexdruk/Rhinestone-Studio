@@ -6,7 +6,7 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-UI-001 — Complete Application Redesign
+RS-1010 — Alignment & Snapping Upgrade
 
 ---
 
@@ -18,7 +18,7 @@ IMPLEMENTED
 
 # Branch
 
-feature/ui-001-complete-redesign
+feature/rs-1010-alignment-snapping-upgrade
 
 ---
 
@@ -35,287 +35,243 @@ git log -1 --oneline
 
 # Summary
 
-Replaced the single long scrolling sidebar with a top application menu, a left project/layer
-panel, a large central 2D/3D workspace, a compact right inspector, and a reusable Lightbox dialog
-system holding nine full-parameter editors (Text, Shapes, Import, Image Trace, Export, Production
-Sheet, Shipping & Handling, Settings, Help). Deep-blue-on-white/light-neutral design tokens
-(CSS custom properties) replace the previous ad hoc inline styling. Every existing feature,
-parameter, keyboard shortcut, export, and project-compatibility guarantee is preserved — this is a
-reorganization and restyling, not a rewrite of any business logic.
+Upgraded RS-1009's alignment/snapping system (already shipped and merged into `develop`) with four
+additions: a configurable snap distance, an independently toggleable guide-visibility setting,
+Shift-drag axis constrain, and Alt/Option-drag duplicate — plus a reorganized Settings Lightbox
+with plain-language snapping controls. This was an audit-first upgrade, not a rewrite: before
+writing any code, the existing `src/editing/**` module and its `app.js` wiring were read in full,
+against both this milestone's feature list and its non-goals ("do not duplicate snapping logic").
 
-**No mockup image was actually attached to the chat message that authorized this milestone** —
-only a detailed textual visual-direction brief. That text is what was implemented against and
-verified; there was no image to pixel-compare. This is disclosed, not hidden — see "Warnings."
+**What was already correct and required zero new code, verified rather than reimplemented:**
+* Object-corner snapping ("configurable snap tolerance," "object corners" in the feature brief) —
+  `SnapEngine.js`'s `computeSnapOffset()` already matched x and y independently against every
+  candidate target, which already produces corner-to-corner snapping when both axes happen to be
+  within tolerance simultaneously. Proven with a new test (`tools/test-alignment-snapping-upgrade.mjs`
+  test 11) rather than adding a dedicated "corner" target type.
+* Text bounding boxes, imported SVG bounds, and Image Trace bounds as snap targets — `getLayerBBox()`
+  already had exactly two branches: `circle`/`rectangle`/`svg`/`image` read direct fields, and every
+  other type (`text`, including curved text) falls through to a `StoneLayout`-derived bbox. Both
+  paths already feed the one generic `layerBBoxes` array the snap engine uses — proven with test 12
+  (a structural check that `getLayerBBox()` has no `text`-specific branch to duplicate).
+* `computeSnapOffset()` already accepted tolerance as a parameter — the "configurable" part only
+  needed `app.js` to stop hardcoding `SNAP_TOLERANCE_MM` and start passing a variable, not any
+  change to `src/editing/**` itself.
 
-**Architecture.** `app.js` keeps its exact `el(id)`-based single-canonical-control-per-field model:
-every pre-existing field kept its DOM id and its exact event wiring, only its *location* moved. Two
-field groups the brief requires in both a Lightbox (complete editor) and the right inspector
-(quick-edit) — shape position/size (`shapeX/Y/W/H`) and shared stone fields (`stoneSize`/`gap`/
-`stoneColor`) — are each exactly one physical DOM node, relocated via `appendChild` (preserves
-listeners) between an inspector "home" slot and whichever Lightbox is open, via a new
-`relocateFieldGroups()` helper. Two real new fields were added: `textX`/`textY` (mm), exposing the
-`layer.x`/`layer.y` fields RS-1009 already added to text layers but never gave a manual input for.
-A new permanent module, `src/ui/Lightbox.js` (+ `src/ui/index.js` barrel), is a generic, DOM-only
-dialog controller (open/close, focus trap, Escape, backdrop click, ARIA) with zero knowledge of
-`Project`/`Layer`/`StoneLayout` — the same shape every other permanent module already has.
-`src/geometry/**`, `src/renderer/**`, `src/export/**`, `src/history/**`, `src/products/**`,
-`src/preview3d/**`, `src/svg/**`, `src/image/**`, `src/text/**`, `src/fonts/**`, `src/core/**`,
-`src/browser/**`, `src/editing/**` are all untouched — verified by every pre-existing forbidden-file
-guard test, none of which required a carve-out for business-logic files.
+**What was actually added, all in `app.js`/`index.html`, plus one small `src/editing/**` addition:**
+* `snapToleranceMm`/`showSnapGuides` — two new view-only editor-state variables (same category as
+  the pre-existing `snapEnabled`/`activeGuides`/`rotation`/`zoom`: never part of `project`, never in
+  the undo/redo snapshot, never exported). `snapToleranceMm` replaces the fixed `SNAP_TOLERANCE_MM`
+  constant as `computeSnapOffset()`'s tolerance argument; `showSnapGuides` gates only the drawn guide
+  lines, so disabling it hides the visual overlay without disabling the actual snap adjustment.
+* Shift-drag axis constrain: applied in `pointermove` *after* the snap offset is computed, forcing
+  whichever of `dx`/`dy` has the smaller magnitude to exactly `0` — so the locked axis always lands
+  exactly on the drag-start position, never nudged a fraction of a mm by a nearby snap target.
+* Alt/Option-drag duplicate: on `pointerdown`, once the selection is resolved and before the drag
+  starts, an Alt-held click deep-clones every layer in the selection, pushes the clones onto
+  `project.layers`, and starts the drag against the clones' ids — the pre-existing single
+  `commitHistory()` call (already made once per drag) covers duplicate+move as one undo step.
+  Selecting the freshly created ids needed a genuinely new primitive (no existing function could
+  express "select several specific ids at once"), so `src/editing/Selection.js` gained
+  `selectMany(ids)` — the *one* change to `src/editing/**` this milestone made, still routed through
+  the same "one selection-mutation implementation" `app.js` has used since RS-1009.
+* Settings Lightbox: snap-related settings moved into their own "Alignment & Snapping" section with
+  plain-language labels — "Enable Snapping" (renamed from "Snap to guides by default"), a new "Snap
+  Distance (mm)" field (0.5–5mm, clamped on Apply), and a new "Show Alignment Guides" checkbox.
+* Help Lightbox and the canvas status hint both document the two new drag modifiers.
 
-**A real "Grid toggle" was investigated and deliberately dropped.** `drawGrid()` is called
-unconditionally inside the permanent `src/renderer/CanvasRenderer2D.js`; a working toggle was
-prototyped (an additive `showGrid` option) but reverted once it became clear that roughly ten
-*other* milestones' own `git status`-based forbidden-file guards independently re-forbid
-`src/renderer/CanvasRenderer2D.js` or the whole `src/renderer/` prefix, each requiring its own
-documented carve-out — a blast radius far larger than the one-line control itself, for a toggle
-that was never present before this milestone. The workspace instead shows a plain "grid always on"
-label. Safe-area toggle *is* real and required no such tradeoff (`drawSafeAreaGuide()` was already
-an app.js-local overlay call).
-
-**A real regression was found and fixed during browser verification, not just claimed fixed:**
-switching the 2D/3D workspace tabs via `display:none` collapsed the inactive canvas to 0×0. Since
-the Object Preview tab defaults to hidden, the `#cup` canvas never received real pixel dimensions
-until a user opened that tab — so "Export Cup PNG" from the Export Lightbox produced a near-blank
-88-byte image if clicked before ever switching to Object Preview. Fixed by keeping both canvas
-panels absolutely stacked at real, always-on dimensions, toggling `visibility`/`pointer-events`
-(a `.tab-hidden` class) instead of `display`. Re-verified: the exported PNG is now ~285KB with a
-real rendered cup, and the `#cup` canvas has non-zero pixel dimensions before the 3D tab is ever
-opened in a fresh session.
+**Architecture preserved exactly as RS-1009 established it:** `GeometryEngine`, `StoneLayout`,
+`src/renderer/**`, `src/export/**` are untouched; `app.js` remains the only consumer of
+`src/editing/**`'s barrel; the Project JSON schema is unchanged (duplicated layers reuse the exact
+per-type field shape `duplicateLayer()`/import already produce and validate).
 
 ---
 
 # Files Changed
 
 **New:**
-* `src/ui/Lightbox.js`, `src/ui/index.js` — generic Lightbox/dialog controller (open/close, focus
-  trap, Escape, backdrop click, ARIA); zero Project/Layer/StoneLayout knowledge.
-* `docs/specifications/UI-001-CompleteRedesign.md` — full specification, including the
-  feature-to-UI inventory table proving where every pre-existing control lives after the redesign.
-* `tools/test-ui001-topmenu.mjs` (6 assertions), `tools/test-ui001-lightboxes.mjs` (12),
-  `tools/test-ui001-leftpanel.mjs` (9), `tools/test-ui001-dialog-behavior.mjs` (12) — new UI-001
-  structural test suites.
+* `docs/specifications/RS-1010-AlignmentSnappingUpgrade.md` — full specification.
+* `tools/test-alignment-snapping-upgrade.mjs` (13 assertions) — structural checks (new state
+  variables, Settings/Help Lightbox markup, Shift-constrain-after-snap ordering, Alt-duplicate +
+  `selectMany` wiring, resize never duplicates) and behavioral checks against the real, unmodified
+  `src/editing/SnapEngine.js` (configurable tolerance actually changes snap outcome; corner-to-corner
+  snapping already works via independent per-axis matching; `getLayerBBox()` has no per-type branch
+  for text, so text/curved-text/SVG/Image-Trace bounds all reach the snap engine through one path).
 * `TASK_RESULT.md` (this file).
 
 **Modified:**
-* `index.html` — full DOM/CSS restructure: CSS custom-property design tokens; top menu (Text,
-  Shapes, Import, Image Trace, Export, Production Sheet, Shipping & Handling, Settings, Help, plus
-  Undo/Redo/Save/Export-shortcut); left panel scoped to Project/Layers/Actions only; central
-  workspace with 2D/Object-Preview tabs, an Align & Snap toolbar cluster (relocated, not extended),
-  a safe-area toggle, and an expanded dimensions/selection-bounds status strip; a compact right
-  inspector; nine Lightbox dialogs. Every pre-existing element id is unchanged. `style.css` stays
-  unlinked and untouched (a pre-existing hard guard in `tools/test-app-module-migration.mjs`
-  forbids changing it; it was already dead/unused before this milestone).
-* `app.js` — additive UI orchestration only: `Lightbox` instances + top-menu wiring; workspace
-  tab-switching (`setWorkspaceTab()`); Shapes/Import Lightbox internal tab switching; Image Trace
-  "new trace" vs. "edit selected layer" section switching; `relocateFieldGroups()`/`FIELD_GROUPS`
-  for the shared position/stone fields; `textX`/`textY` read/write in
-  `writeSelectedControlsToLayer()`/`syncSelectedControlsFromLayer()` (added to
-  `HISTORY_TRACKED_CONTROL_IDS`); left-panel Actions shortcuts (mirror existing
-  performUndo/performRedo/duplicateLayer/deleteLayer — `updateHistoryUI()` gained two more disabled-
-  state syncs, no new history); `showSafeArea` boolean gating the pre-existing
-  `drawSafeAreaGuide()` call; expanded `updateStats()` display text (canvas/safe-area/selection
-  size — additive only); local session-only `shippingInfo` state for the Shipping & Handling
-  dialog; Settings dialog syncing to the real grid-label/safe-area/snap state; `setWorkspaceTab()`
-  now toggles a `.tab-hidden` class (visibility) instead of `style.display` so both canvases keep
-  real pixel dimensions at all times (see "Summary," the Export Cup PNG fix).
-* `docs/ARCHITECTURE.md` — new "User Interface (UI-001 Redesign)" implementation-status section;
-  a `src/ui/**` row in the Layer map table.
-* `package.json` — four new UI-001 test files added to the `test` script.
-* `tools/test-app-module-migration.mjs` — one-line carve-out: `src/ui/index.js` added to app.js's
-  allowed-import list (the same pattern every prior milestone's new permanent module used).
-* `tools/test-shape-geometry-integration.mjs` — the same carve-out in its own duplicate copy of the
-  import allow-list (test 7).
-* `tools/test-ui-discoverability.mjs` — fully rewritten. Its entire premise (a single `.side`
-  sidebar whose content must appear within a scroll-position heuristic) is superseded by the new
-  architecture; it now asserts the underlying intent structurally (top menu always visible in
-  order, left panel contains no per-layer-type forms, layer-creation tools reachable with zero
-  scrolling inside the Layers section).
-* `tools/test-curved-text-integration.mjs` — test 7's extraction regex assumed `#shapeControls` is
-  `#textControls`'s literal next sibling (true in the old single-sidebar layout, false now that
-  they live in different Lightboxes). Replaced with a tag-depth-aware `extractElementHtml()`
-  helper. Without this fix the test still reported a pass, but only because its non-greedy regex
-  had started matching across nearly the entire rest of the document to find an unrelated,
-  coincidental adjacency elsewhere — a false-pass that would have silently lost real coverage.
-* `tools/test-object-template-integration.mjs` — test 2's ordering assumption
-  (`#objectType` before `#selectedLayer`/`#cupColor`, a single-sidebar artifact) replaced with a
-  check that `#objectType` lives inside the Shapes Lightbox's Object Templates tab, reachable from
-  the always-visible top menu.
+* `app.js` — `snapToleranceMm`/`showSnapGuides` state; `computeSnapOffset()` now takes
+  `snapToleranceMm`; `activeGuides` gated by `showSnapGuides`; Shift-axis-constrain block in
+  `pointermove`; Alt-duplicate block in `pointerdown`; `syncSettingsFieldsFromState()`/
+  `settingsApply` wire the two new Settings fields; canvas status hint text updated; imports
+  `selectMany` from `src/editing/index.js`.
+* `index.html` — Settings Lightbox: new "Alignment & Snapping" field-section (`settingsSnapDefault`
+  relabeled "Enable Snapping", new `settingsSnapDistance` number input, new `settingsShowGuides`
+  checkbox); Help Lightbox: two new keyboard-shortcut rows.
+* `src/editing/Selection.js` — new `selectMany(ids)` pure function.
+* `src/editing/index.js` — exports `selectMany`.
+* `src/editing/README.md` — documents `selectMany` and links this spec.
+* `docs/ARCHITECTURE.md` — RS-1010 addendum under "Editing (Alignment & Snapping)"; Layer map row
+  updated.
+* `package.json` — registers `tools/test-alignment-snapping-upgrade.mjs` in the `test` script.
+* `tools/test-alignment-snapping-integration.mjs` — regex updates for the literals this milestone
+  changed (`snapToleranceMm` instead of the fixed constant, the extended state-declaration line, the
+  `selectMany` addition to the "every selection assignment goes through Selection.js" allow-list and
+  the barrel-import check). No coverage was removed — every original assertion still checks the same
+  invariant against the current source.
+* `tools/test-editing-selection.mjs` — two new cases for `selectMany()`.
+* `tools/test-undo-redo-integration.mjs` — one regex updated (`const dragIds` → `let dragIds`, since
+  the Alt-duplicate branch needs to reassign it); the invariant checked (history commits before the
+  first project mutation on a move-drag) is unchanged.
+* `tools/test-ui001b-fixes.mjs` — its forbidden-file guard checks live `git status`, not a diff
+  scoped to UI-001's own commit, so it also has to reflect every later milestone's scope; removed
+  `src/editing/` from its forbidden-prefix list now that RS-1010 legitimately extends it (with a
+  comment explaining why, pointing at this milestone's own guard).
+* `TASK.md` — overwritten for this milestone (per this repository's established convention:
+  `TASK.md` is the *current* milestone's task file, not a running history).
 
-**Untouched (verified — every pre-existing forbidden-file guard test across the suite passes
-with zero business-logic carve-outs):** `src/geometry/**`, `src/renderer/**`, `src/export/**`,
-`src/text/**`, `src/fonts/**`, `src/core/**`, `src/browser/**`, `src/svg/**`, `src/image/**`,
-`src/history/**`, `src/products/**`, `src/preview3d/**`, `src/editing/**`, `style.css`, `README.md`,
-`LICENSE`, `CONTRIBUTING.md`, `assets/**`, `examples/**`.
+**Untouched (verified — every forbidden-file guard test across the suite passes, including this
+milestone's own):** `src/geometry/**`, `src/renderer/**`, `src/export/**`, `src/text/**`,
+`src/fonts/**`, `src/core/**`, `src/browser/**`, `src/svg/**`, `src/image/**`, `src/history/**`,
+`src/products/**`, `src/preview3d/**`, `src/editing/SnapEngine.js`, `src/editing/AlignmentEngine.js`,
+`src/editing/EditingConstants.js`, `style.css`, `README.md`, `LICENSE`, `CONTRIBUTING.md`,
+`assets/**`, `examples/**`. `GeometryEngine`/`StoneLayout`/`Project` schema unchanged.
 
 ---
 
 # Commands Executed
 
 ```bash
-git checkout -b feature/ui-001-complete-redesign
-node --check app.js
-npm test                                                    # iterated to 572/572 assertions, exit 0
+git checkout develop && git pull --ff-only
+git checkout -b feature/rs-1010-alignment-snapping-upgrade
+npm test                                    # iterated to 47/47 suites, 598/598 assertions, exit 0
 git diff --check
 git status
-npm install --no-save --no-package-lock puppeteer-core      # temporary, browser verification only
-python3 -m http.server 5199                                 # browser verification
-npm uninstall puppeteer-core --no-save                      # removed afterward
+python3 -m http.server 5173                 # dev server, browser verification
+node <puppeteer verification script>        # headless Chrome, isolated temp profile
 ```
 
-`git status` after cleanup confirms no dependency changes remain (`package.json`/
-`package-lock.json` carry only the four new test-file entries in the `test` script).
+Puppeteer was already present locally (`/Users/alex/node_modules/puppeteer`, not a project
+dependency) — no `package.json`/`package-lock.json` change was needed or made for browser
+verification.
 
 ---
 
 # Automated Test Results
 
-`npm test` — **41/41 suites pass, exit code 0, 572/572 assertions.**
+`npm test` — **47/47 suites pass, exit code 0, 598/598 assertions.**
 
-New suites (39 new assertions): `test-ui001-topmenu.mjs` (6), `test-ui001-lightboxes.mjs` (12),
-`test-ui001-leftpanel.mjs` (9), `test-ui001-dialog-behavior.mjs` (12) — see "Files Changed" for
-what each covers. One genuine bug was caught by `test-ui001-leftpanel.mjs` test 8 during
-development (a leftover `lightboxes.import` reference after the object key was renamed to
-`importBox` to avoid colliding with an existing regex that scans for lines starting with
-`import`) and fixed before this report was written.
+New/extended coverage: `tools/test-alignment-snapping-upgrade.mjs` (13 new assertions),
+`tools/test-editing-selection.mjs` (+2, for `selectMany`). Five pre-existing suites needed narrow
+regex/scope updates for literals this milestone legitimately changed (see "Files Changed" for the
+exact reasoning per file) — each is a same-invariant update, not a coverage reduction, and each is
+commented in place with its reason, following this repository's established pattern (see UI-001's
+own `TASK_RESULT.md` for precedent).
 
-**All 37 pre-existing suites remain green**, including the five suites given narrow, documented
-carve-outs (see "Files Changed") — each carve-out is commented in place with the specific reason,
-following this repository's established pattern.
+All 45 other pre-existing suites remain green and unmodified.
 
 ---
 
 # Browser/Manual Verification
 
-Real headless-Chrome/CDP verification (system Google Chrome via a temporary `puppeteer-core`
-install, `--use-gl=swiftshader --enable-unsafe-swiftshader`), served via `python3 -m http.server
-5199`, against the actual `index.html`/`app.js`/`src/ui/**`. All checks below are real DOM/pixel
-assertions from a running browser, not test-suite string matching.
+Real headless-Chrome verification via Puppeteer (`/Users/alex/node_modules/puppeteer`, Chrome for
+Testing, launched with an isolated temporary `userDataDir` under `/tmp` — never the user's real
+Chrome profile/windows, and the only browser instance this session touched, closed via
+`browser.close()` at the end of the script), served via `python3 -m http.server 5173` against the
+actual `index.html`/`app.js`. The mm↔px canvas transform was calibrated exactly (not approximated)
+by intercepting `CanvasRenderingContext2D.prototype.strokeRect`'s call for the safe-area guide — a
+fixed, known mm rectangle (`{xMm:14,yMm:10,widthMm:182,heightMm:70}` for the default mug/210×90mm
+project, confirmed via `getSafeAreaRectMm()` directly in Node) — so every synthetic drag targeted
+real on-screen coordinates precisely, not estimates.
 
-**Boot:** page loads; default project generates 375 stones (same baseline every prior milestone's
-`TASK_RESULT.md` reports); zero page errors; the only console/network message across the entire
-session is the one pre-existing, already-documented `/favicon.ico` 404 (confirmed unrelated by
-excluding it explicitly and finding zero other errors).
+**Boot:** page loads; zero console errors other than the one known, pre-existing `/favicon.ico` 404.
 
-**Viewports (all four required sizes, screenshotted):** 1280×800, 1366×768, 1440×900, 1920×1080 —
-at every size, all 19 critical controls (all 9 top-menu buttons, Undo/Redo/Save, Layers
-list/Add-Circle/Add-Rectangle/Delete, the 2D canvas, and both workspace tabs) are present, visible,
-and within the viewport with zero scrolling required. The top menu itself required a real fix: at
-1280–1440px its natural content width (953–965px) exceeded the space available next to the brand
-mark and Undo/Redo/Save/Export cluster, and Chrome's default `overflow-x:auto` silently clipped
-"Shipping & Handling" mid-word with no visible scroll affordance. Fixed with a `max-width:1500px`
-media query (hide the brand's text label, tighten menu-button padding, drop the dirty-indicator's
-reserved width) — re-measured programmatically (`nav.scrollWidth <= nav.clientWidth`) as `true` at
-all four sizes after the fix, and re-screenshotted to confirm visually.
+**Settings Lightbox** (screenshot: `02-settings-lightbox-alignment-snapping.png`): confirmed a
+dedicated "Alignment & Snapping" section with exactly the required plain-language controls —
+"Enable Snapping" (checked by default), "Snap Distance (mm)" (value `1.5`, min `0.5`, max `5`),
+"Show Alignment Guides" (checked by default). No raw technical terms ("tolerance") in the visible
+labels.
 
-**All nine Lightboxes**, opened via their top-menu button and screenshotted: Text (content, font,
-outline/fill, height, auto-fit, new manual position X/Y, all 6 curve fields, stone fields), Shapes
-(Design Shapes tab: circle/rectangle add + position/stone fields; Object Templates tab: Mug/
-Tumbler/Bottle with production-size/safe-area/wrap-default detail text, wrap mode), Import (SVG
-Import tab; Project Import tab, explicitly distinguished from SVG Import in its own copy), Image
-Trace (new-trace section with preview-before-commit; edit-selected-layer section with all 5
-post-commit parameters), Export (Project JSON / Generated Layout JSON / SVG / PNG / Cup PNG,
-grouped by data kind), Production Sheet (page size/margin/mirror/registration marks, SVG/PNG/PDF),
-Shipping & Handling (package type/L/W/H/weight/notes/fragile, with an explicit "session-only, no
-carrier/rate/label/tracking integration" disclosure), Settings (grid label fixed, safe-area/snap
-toggles mirroring live state, default stone size/gap, fixed units/theme, version), Help (getting
-started, full shortcut table, import/export/production-sheet/about). For every one: opening moved
-keyboard focus inside the dialog, and pressing **Escape closed it** (verified programmatically via
-the dialog's `open` class, not just visually).
+**Help Lightbox** (screenshot: `03-help-lightbox-shortcuts.png`): confirmed both new shortcut rows
+("Shift+Drag → Constrain movement to horizontal or vertical", "Alt/Option+Drag → Duplicate the
+selection while dragging") render in the keyboard-shortcut list.
 
-**Sixteen workflows, all exercised for real:**
-1–2. Straight and curved text: typed content unchanged; toggling curved text in the Text Lightbox
-revealed the 6 curve fields and, on Apply, regenerated the layout (612 stones, up from 375, with a
-visibly circular arrangement — screenshotted) — then reverted to straight text to restore the
-baseline for later steps.
-3–4. Add Circle / Add Rectangle from the Shapes Lightbox and the left panel both create real new
-layers (verified layer count 1→2→3); selecting a shape layer correctly revealed the (now bug-fixed)
-inspector position fields, which stay hidden for the text layer.
-5–7. Mug → Tumbler → Bottle → Mug in the Shapes Lightbox's Object Templates tab: each switch
-updated the left panel's live Template summary immediately (verified per-template).
-8–9. SVG Import / Image Trace: both dialogs' file-picker UI, parameter fields, and (for Image
-Trace) preview-before-commit panel are wired and reachable; not exercised with an actual file
-upload in this session (same scope as file-upload flows in prior milestones' browser sessions —
-their own dedicated Node test suites, `test-svg-parser.mjs`/`test-image-pipeline.mjs`/etc., cover
-the parsing/tracing logic itself, untouched by this milestone).
-10. Undo/Redo via the left panel's new Actions buttons: confirmed they mirror the real
-`history.canUndo`/`canRedo` state (button enabled after edits) and run with zero console errors.
-11–12. Save Project (both the top-bar and left-panel "Save" buttons trigger the same
-`exportProject` download) and the Export Lightbox's own button: status bar correctly reports
-"Downloaded rhinestone-project.json"; the downloaded file is a real, valid, non-empty JSON project.
-13. All five normal exports run successfully (status bar confirms "Downloaded ..." for the two that
-report it; PNG/Cup-PNG use the pre-existing `exportCanvas()` helper, which — unchanged from before
-this milestone — never wrote a status message; verified directly by checking the downloaded files'
-sizes instead: 134KB layout PNG, 285KB cup PNG after the visibility-fix, both real images).
-14. Production Sheet SVG/PNG/PDF: all three downloaded successfully (66KB SVG, 395KB PNG, 145KB
-PDF).
-15–16. Switching to the Object Preview tab shows the 3D canvas (now always real-sized) and hides
-the 2D canvas; a real pointer drag on the 3D canvas (simulating OrbitControls rotate) ran with zero
-console errors.
+**Object-edge snapping with a visible guide** (screenshot:
+`04-drag-object-edge-snap-guide-visible.png`): two rectangles placed at known mm positions; dragging
+one to within ~0.9mm of the other's edge snapped it exactly onto that edge (`#shapeX` read `50`,
+matching the target layer's right edge exactly) and rendered a visible magenta dashed guide line at
+the snap point — confirmed in the screenshot.
 
-**Regression found and fixed during this verification** (not merely claimed passing): see
-"Summary" — the Object Preview tab's `display:none` collapsed `#cup` to 0×0 until first opened,
-silently producing an 88-byte near-blank "Cup PNG" export. Fixed (both canvases now always
-real-sized, toggled by `visibility` not `display`), and re-verified: `#cup` has real non-zero pixel
-dimensions in a fresh session before the Object Preview tab is ever opened, and the exported PNG
-is a real ~285KB rendered image.
+**Guide visibility decoupled from snapping** (screenshot: `05-drag-guides-hidden-still-snaps.png`):
+with "Show Alignment Guides" unchecked via Settings → Apply, the identical drag scenario still
+snapped exactly onto the same target (`#shapeX` again read `50`) with no guide line drawn — confirms
+`showSnapGuides` gates only the visual, never the snap behavior itself.
 
-**Not performed:** actual file-upload interaction for SVG Import / Image Trace / Project Import
-(dialog UI and wiring verified; the underlying parse/decode logic is untouched by this milestone
-and already covered by its own dedicated test suites); mobile/touch verification (explicitly out
-of scope — "Mobile redesign is out of scope"); pixel-for-pixel comparison against the mockup image
-referenced in the brief, because no such image file was actually attached to the authorizing
-message (see "Warnings").
+**Shift-drag axis constrain** (screenshot: `06-shift-drag-axis-constrain.png`): dragged a rectangle
+diagonally (30mm horizontal, 4mm vertical intent) with Shift pressed *after* the drag began (pressing
+Shift before `mousedown` is a shift-click selection-toggle, matching Illustrator/Figma — confirmed
+this is correct app behavior, not a bug, after an initial test-script mistake). Result: X moved to
+`80.00001...` (the intended ~30mm), Y stayed at exactly `50` — the pre-drag value, unchanged to the
+sub-micron level, confirming the locked axis is genuinely pinned, not merely reduced.
+
+**Alt/Option-drag duplicate** (screenshot: `07-alt-drag-duplicate.png`): layer count went from 3 to
+4 after an Alt-held drag (a new "Rectangle" row appears in the Layers list); re-selecting the
+original layer confirmed its position was byte-identical before and after (`x:20,y:20` both times) —
+the original was untouched, only the new copy moved.
+
+**Align/Distribute still function**: Shift-clicked two layer rows to multi-select, `#alignLeft`
+became enabled, clicking it produced status "Aligned 2 layers to left edges" (screenshot:
+`08-align-left-applied.png`).
+
+**Undo**: Cmd+Z after the above actions produced status "Undo" with no errors.
+
+**Text layer still selectable/movable**: confirmed the default text layer remains selectable
+(`#selectionSummary` read "1 layer selected") after all the above rectangle-focused interactions.
+
+**Console errors across the entire session:** only the one known, pre-existing favicon 404 — zero
+others, confirming no renderer/`GeometryEngine`/export regressions were introduced.
+
+**Not performed in this session:** resize-drag snapping (unchanged from RS-1009, out of scope for
+this upgrade, and already covered by `tools/test-alignment-snapping-integration.mjs` test 11);
+Image Trace/SVG-file-upload-specific snapping with an actual uploaded file (the underlying bbox
+mechanism is generic and covered structurally by test 12; file-upload interaction itself is
+out of scope for this milestone and was already flagged as not-performed in UI-001's own
+verification); dual-workspace/responsive-layout re-verification (unchanged by this milestone — no
+CSS/layout files were touched).
 
 ---
 
 # Warnings
 
-* **No mockup image was attached.** The milestone brief referenced an "attached deep-blue-on-white
-  mockup," but no image file was present in the conversation that authorized this milestone — only
-  a detailed textual visual-direction description. The design-token system, layout, and visual
-  polish above were built and verified against that text, not against an image. A human should
-  compare the live app against the actual intended mockup (if one exists outside this session) and
-  flag any specific visual mismatch — this was not silently assumed to be fine.
-* **No real grid toggle.** See "Summary." Dropped after prototyping, to avoid a ~10-file cascade of
-  unrelated forbidden-file-guard carve-outs for a control that was never present before this
-  milestone. The workspace shows an honest "grid always on" label instead.
-* **A real regression (blank Cup PNG export) was found and fixed during this session's own browser
-  verification**, not left for a human to discover — see "Summary" and "Browser/Manual
-  Verification." Flagged here explicitly as the kind of finding that justifies why this milestone's
-  browser verification step matters and was not skipped.
-* Settings' "Default stone size"/"Default gap" fields are session-local preference display only —
-  not yet wired into new-layer creation (which already defaults sensibly from the currently
-  selected layer, per pre-existing behavior). Disclosed in the Settings dialog is not required by
-  the UI but is honestly reported here.
-* Five pre-existing test files needed narrow, documented carve-outs, each commented in place with
-  the specific reason (see "Files Changed") — flagged here as a concentration of guard-test churn
-  worth a reviewer's attention, even though each individual change preserves the original test's
-  intent (verified structurally, not just re-matched) and two of them (curved-text, discoverability)
-  are demonstrably *more* correct after the fix than before (the curved-text one was a false-pass
-  before being fixed).
+* The Settings Lightbox's toolbar quick-toggle (`#snapEnabled`, in the Align & Snap toolbar cluster)
+  was left in place alongside the new Settings Lightbox controls, rather than removed. The milestone
+  brief said "move all snapping settings into the Settings Lightbox" — read as "make the Settings
+  Lightbox the complete, friendly-named home for these settings" (satisfied), not as "remove the
+  existing quick-access toggle" (which predates this milestone and is a common, deliberate pattern
+  in professional editors — e.g., Illustrator keeps "Snap to Grid" in both a menu and Preferences).
+  Flagged here in case the intended reading was stricter.
+* An initial version of the browser-verification script incorrectly held Shift *before* `mousedown`
+  for the axis-constrain test, which made the app correctly interpret it as a shift-click toggle
+  (returning before any drag started) rather than a constrained drag — a test-script bug, not an
+  app bug, caught and fixed by cross-checking the screenshot against the pointerdown handler's
+  actual control flow. Documented here as a specific, real finding from this session's verification,
+  not a silently-fixed detail.
 
 ---
 
 # Known Limitations
 
-* 2D canvas still has no pan/zoom (auto-fit-to-viewport only) — unchanged from before this
-  milestone; adding real 2D pan/zoom is a new interaction, not a reorg, and was out of scope.
-* Shipping & Handling is session-only (not saved with the project) — see the specification's
-  "Shipping & Handling" section for the reasoning; the dialog is fully functional, not a stub.
-  Explicitly not a fake/working-looking-but-inert control: it visibly discloses this scope in its
-  own body text.
 * Same as every prior milestone: S-004 (duplicated text in some 3D preview cases) remains deferred,
-  unrelated to this milestone (no UI-wiring cause was found for it here).
+  unrelated to this milestone.
+* No 45°-or-other-angle drag constraint, no arbitrary user-created guides, no rulers — all
+  explicitly out of scope per the milestone brief's non-goals.
+* `snapToleranceMm`/`showSnapGuides` are session-local (view-only editor state, matching
+  `snapEnabled`/`rotation`/`zoom`'s existing precedent) — not persisted across a page reload or
+  saved in Project JSON. This mirrors RS-1009's own explicit design choice for `snapEnabled`, not a
+  new gap introduced by this milestone.
 
 ---
 
 # Recommended Next Milestone
 
-A human visual review against the actual intended mockup (once available) to catch any deep-blue/
-spacing/typography deviations a text-only brief couldn't fully specify. If a real grid toggle is
-wanted, a small follow-up milestone to touch `src/renderer/CanvasRenderer2D.js` plus its ~10
-dependent forbidden-file guards in one deliberate, reviewed pass (rather than as an incidental part
-of a UI reorg) would be lower-risk than doing it here. Wiring Settings' default stone size/gap into
-new-layer creation. Real file-upload interactive testing (SVG/Image/Project import) with actual
-fixture files in a browser session.
+User-created guides, rulers, layer grouping/locking, and rotation support remain the natural next
+steps (mirrors RS-1009's own deferred list — none of this milestone's work changed that assessment).

@@ -113,10 +113,15 @@ await test('11. no forbidden file changed (GeometryEngine, StoneLayout, exporter
     .map((line) => line.slice(3).trim());
 
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
+  // src/editing/** was UI-001's own forbidden dir ("do not extend Alignment & Snapping" --
+  // relocate its UI only) but this guard checks live `git status`, not a diff scoped to UI-001's
+  // own commit, so it also has to reflect every later milestone's scope; RS-1010 (Alignment &
+  // Snapping Upgrade) legitimately extends src/editing/Selection.js, so it is no longer forbidden
+  // here -- see tools/test-alignment-snapping-upgrade.mjs for RS-1010's own guard.
   const forbiddenPrefixes = [
     'src/geometry/', 'src/renderer/', 'src/export/', 'src/text/', 'src/fonts/', 'src/core/',
     'src/browser/', 'src/svg/', 'src/image/', 'src/history/', 'src/products/', 'src/preview3d/',
-    'src/editing/', 'assets/', 'examples/'
+    'assets/', 'examples/'
   ];
 
   for (const changedPath of changedPaths) {

@@ -693,7 +693,14 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <h3>Canvas defaults</h3>
         <label class="checkbox-row"><input type="checkbox" id="settingsGridDefault" checked disabled> Show grid by default (always on — not yet configurable)</label>
         <label class="checkbox-row"><input type="checkbox" id="settingsSafeAreaDefault" checked> Show safe-area guide by default</label>
-        <label class="checkbox-row"><input type="checkbox" id="settingsSnapDefault" checked> Snap to guides by default</label>
+      </div>
+      <div class="field-section">
+        <h3>Alignment &amp; Snapping</h3>
+        <label class="checkbox-row"><input type="checkbox" id="settingsSnapDefault" checked> Enable Snapping</label>
+        <div class="field-row">
+          <div class="field"><label for="settingsSnapDistance">Snap Distance (mm)</label><input id="settingsSnapDistance" type="number" min="0.5" max="5" step="0.1" value="1.5"></div>
+        </div>
+        <label class="checkbox-row"><input type="checkbox" id="settingsShowGuides" checked> Show Alignment Guides</label>
       </div>
       <div class="field-section">
         <h3>New-layer defaults</h3>
@@ -733,6 +740,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <span class="kbd">Arrow keys</span><span>Nudge selection</span>
           <span class="kbd">Shift+Arrow</span><span>Nudge selection (larger step)</span>
           <span class="kbd">Shift+Click</span><span>Add/remove a layer from the selection</span>
+          <span class="kbd">Shift+Drag</span><span>Constrain movement to horizontal or vertical</span>
+          <span class="kbd">Alt/Option+Drag</span><span>Duplicate the selection while dragging</span>
           <span class="kbd">Esc</span><span>Close the open dialog</span>
         </div>
       </div>

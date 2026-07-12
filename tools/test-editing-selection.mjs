@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 // RS-1009 — unit tests for the pure Set<string> selection helpers in src/editing/Selection.js.
 // No DOM, no app.js.
 
-const { selectOnly, toggleSelection, clearSelection } = await import('../src/editing/index.js');
+const { selectOnly, toggleSelection, clearSelection, selectMany } = await import('../src/editing/index.js');
 
 async function test(name, fn) {
   try {
@@ -54,6 +54,16 @@ await test('6. clearSelection returns an empty Set', () => {
 await test('7. removing the last id via toggleSelection empties the selection', () => {
   const s = toggleSelection(new Set(['only']), 'only');
   assert.equal(s.size, 0);
+});
+
+await test('8. selectMany (RS-1010) returns a Set containing exactly the given ids', () => {
+  const s = selectMany(['a', 'b', 'c']);
+  assert.ok(s instanceof Set);
+  assert.deepEqual([...s].sort(), ['a', 'b', 'c']);
+});
+
+await test('9. selectMany([]) returns an empty Set (never throws on an empty duplicate batch)', () => {
+  assert.equal(selectMany([]).size, 0);
 });
 
 console.log('Editing selection tests passed.');

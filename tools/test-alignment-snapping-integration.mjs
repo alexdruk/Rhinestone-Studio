@@ -56,12 +56,12 @@ const setLayerPosition = extractFunction(appJs, 'setLayerPosition');
 await test('1. app.js imports the src/editing/** barrel with every symbol it uses', () => {
   assert.match(
     appJs,
-    /import\s*\{\s*SNAP_TOLERANCE_MM,\s*NUDGE_STEP_MM,\s*NUDGE_STEP_LARGE_MM,\s*alignLayers,\s*distributeLayers,\s*buildSnapTargets,\s*computeSnapOffset,\s*selectOnly,\s*toggleSelection,\s*clearSelection\s*\}\s*from\s*['"]\.\/src\/editing\/index\.js['"]/
+    /import\s*\{\s*SNAP_TOLERANCE_MM,\s*NUDGE_STEP_MM,\s*NUDGE_STEP_LARGE_MM,\s*alignLayers,\s*distributeLayers,\s*buildSnapTargets,\s*computeSnapOffset,\s*selectOnly,\s*toggleSelection,\s*clearSelection,\s*selectMany\s*\}\s*from\s*['"]\.\/src\/editing\/index\.js['"]/
   );
 });
 
 await test('2. selectedLayerIds is the one Set<string> multi-selection, initialized from selectedLayerId', () => {
-  assert.match(appJs, /let selectedLayerIds=new Set\(\[selectedLayerId\]\),snapEnabled=true,activeGuides=\[\];/);
+  assert.match(appJs, /let selectedLayerIds=new Set\(\[selectedLayerId\]\),snapEnabled=true,snapToleranceMm=SNAP_TOLERANCE_MM,showSnapGuides=true,activeGuides=\[\];/);
 });
 
 await test('3. every selection-changing site uses selectOnly/toggleSelection/clearSelection (src/editing/Selection.js), never a hand-rolled Set mutation', () => {
@@ -71,7 +71,7 @@ await test('3. every selection-changing site uses selectOnly/toggleSelection/cle
   const assignments = appJs.match(/selectedLayerIds=[^;]+;/g) || [];
   assert.ok(assignments.length >= 6, `expected several selectedLayerIds= assignments, found ${assignments.length}`);
   for (const assignment of assignments) {
-    assert.match(assignment, /selectedLayerIds=new Set\(\[selectedLayerId\]\)|selectedLayerIds=(selectOnly|toggleSelection|clearSelection)\(/, `unexpected selectedLayerIds assignment not going through src/editing/Selection.js: ${assignment}`);
+    assert.match(assignment, /selectedLayerIds=new Set\(\[selectedLayerId\]\)|selectedLayerIds=(selectOnly|toggleSelection|clearSelection|selectMany)\(/, `unexpected selectedLayerIds assignment not going through src/editing/Selection.js: ${assignment}`);
   }
 });
 
@@ -100,10 +100,10 @@ await test('8. a move-drag on a multi-selected group moves every selected layer 
   assert.match(pointermove[1], /setLayerPosition\(l,p0\.xMm\+dx,p0\.yMm\+dy\)/, 'expected every dragged layer to be positioned from the same dx/dy');
 });
 
-await test('9. drag snapping is gated by the snapEnabled toggle and computed via buildSnapTargets/computeSnapOffset against SNAP_TOLERANCE_MM', () => {
+await test('9. drag snapping is gated by the snapEnabled toggle and computed via buildSnapTargets/computeSnapOffset against the configurable snapToleranceMm (RS-1010; defaults from SNAP_TOLERANCE_MM)', () => {
   assert.match(appJs, /if\(snapEnabled\)\{/);
   assert.match(appJs, /buildSnapTargets\(\{canvasWidthMm:project\.canvas\.width,canvasHeightMm:project\.canvas\.height,safeAreaRectMm:getSafeAreaRectMm\(currentObjectTemplate\(\),project\.canvas\.width,project\.canvas\.height\),layerBBoxes:others\}\)/);
-  assert.match(appJs, /computeSnapOffset\(dragBBoxMm,targets,SNAP_TOLERANCE_MM\)/);
+  assert.match(appJs, /computeSnapOffset\(dragBBoxMm,targets,snapToleranceMm\)/);
 });
 
 await test('10. snap targets built for a drag exclude every currently-dragged layer (never snaps a selection to itself)', () => {
