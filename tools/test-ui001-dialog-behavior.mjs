@@ -68,15 +68,22 @@ await test('7. every element with [data-lightbox-close] closes the dialog withou
   assert.match(lightboxSource, /closeButtons\.forEach|for \(const btn of closeButtons\)/);
 });
 
-await test('8. the dialog has proper ARIA: role="dialog", aria-modal="true", and a labelled title, for every Lightbox instance in index.html', () => {
+await test('8. the dialog has proper ARIA: role="dialog", aria-modal="true" (or "false" for the deliberately non-modal lightboxShapes -- see test 13 and tools/test-s101-ux-workflow-polish.mjs), and a labelled title, for every Lightbox instance in index.html', () => {
   const overlayIds = [...appJs.matchAll(/new Lightbox\('(\w+)'/g)].map((m) => m[1]);
   assert.ok(overlayIds.length >= 9, 'expected at least nine Lightbox instances');
   for (const id of overlayIds) {
-    const re = new RegExp(`<div class="lightbox-overlay" id="${id}">[\\s\\S]*?<div class="lightbox[^"]*" role="dialog" aria-modal="true" aria-labelledby="(\\w+)"`);
+    const expectedAriaModal = id === 'lightboxShapes' ? 'false' : 'true';
+    const re = new RegExp(`<div class="lightbox-overlay[^"]*" id="${id}">[\\s\\S]*?<div class="lightbox[^"]*" role="dialog" aria-modal="${expectedAriaModal}" aria-labelledby="(\\w+)"`);
     const match = indexHtml.match(re);
-    assert.ok(match, `expected #${id}'s dialog to declare role/aria-modal/aria-labelledby`);
+    assert.ok(match, `expected #${id}'s dialog to declare role/aria-modal="${expectedAriaModal}"/aria-labelledby`);
     assert.ok(indexHtml.includes(`id="${match[1]}"`), `expected the aria-labelledby target #${match[1]} to exist`);
   }
+});
+
+await test('13. lightboxShapes is the one deliberate non-modal exception (S-101): it carries the .non-modal overlay class and its dialog is aria-modal="false", so Boolean Ops layer selection on the canvas/Layers list works while it stays open', () => {
+  assert.match(indexHtml, /<div class="lightbox-overlay non-modal" id="lightboxShapes">/, 'expected #lightboxShapes to carry the non-modal overlay class');
+  assert.match(indexHtml, /\.lightbox-overlay\.non-modal\{background:transparent;pointer-events:none\}/, 'expected the non-modal overlay to be transparent and click-through');
+  assert.match(indexHtml, /\.lightbox-overlay\.non-modal \.lightbox\{pointer-events:auto\}/, 'expected the dialog card itself to remain interactive despite the click-through backdrop');
 });
 
 await test('9. no full-page content shift: every Lightbox is a fixed, full-viewport overlay (position:fixed;inset:0), not an inline element that reflows the page', () => {

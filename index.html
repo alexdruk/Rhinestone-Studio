@@ -187,6 +187,14 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 /* ============================== Lightbox system ============================== */
 .lightbox-overlay{position:fixed;inset:0;background:rgba(17,23,43,.5);display:none;align-items:center;justify-content:center;z-index:100;padding:var(--space-5)}
 .lightbox-overlay.open{display:flex}
+/* S-101: the Shapes lightbox's own Boolean Ops hint tells the user to select layers on the canvas
+   or in the Layers list while the dialog is open. A regular lightbox-overlay's full-viewport backdrop
+   captures every pointer event (even over the always-visible sidebar), making that instruction
+   impossible to follow without closing the dialog first. .non-modal keeps the same visual dialog
+   shell but lets clicks fall through the backdrop to whatever is behind it -- only the dialog card
+   itself stays interactive -- so Boolean Ops selection works exactly as the hint text describes. */
+.lightbox-overlay.non-modal{background:transparent;pointer-events:none}
+.lightbox-overlay.non-modal .lightbox{pointer-events:auto}
 .lightbox{background:var(--color-surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);width:640px;max-width:100%;max-height:calc(100vh - 64px);display:flex;flex-direction:column;overflow:hidden}
 .lightbox.wide{width:760px}
 .lightbox-header{display:flex;align-items:center;justify-content:space-between;padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--color-border)}
@@ -431,9 +439,10 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
             </div>
             <div class="field-row">
               <div class="field"><label for="curveStartAngleDeg">Start angle (deg)</label><input id="curveStartAngleDeg" type="number" step="1" value="0"></div>
-              <div class="field"><label for="curveSweepAngleDeg">Sweep angle (deg)</label><input id="curveSweepAngleDeg" type="number" step="1" value="360"></div>
+              <div class="field"><label for="curveSweepAngleDeg">Sweep angle (deg)</label><input id="curveSweepAngleDeg" type="number" step="1" value="180"></div>
             </div>
             <div class="field"><label for="curveAlignment">Curve alignment</label><select id="curveAlignment"><option value="start">Start</option><option value="center" selected>Center</option><option value="end">End</option></select></div>
+            <p class="hint">180° arcs the text halfway around the curve, like a banner. Raise it toward 360° to wrap text into a closed circle.</p>
           </div>
         </div>
         <div class="field-section">
@@ -451,8 +460,10 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 </div>
 
 <!-- ---------- SHAPES ---------- -->
-<div class="lightbox-overlay" id="lightboxShapes">
-  <div class="lightbox wide" role="dialog" aria-modal="true" aria-labelledby="lightboxShapesTitle" tabindex="-1">
+<!-- S-101: non-modal so Shift-click layer selection on the canvas/Layers list works while this
+     dialog is open, per its own Boolean Ops hint text (see .lightbox-overlay.non-modal above). -->
+<div class="lightbox-overlay non-modal" id="lightboxShapes">
+  <div class="lightbox wide" role="dialog" aria-modal="false" aria-labelledby="lightboxShapesTitle" tabindex="-1">
     <header class="lightbox-header"><h2 id="lightboxShapesTitle">Shapes</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
     <div class="lightbox-body">
       <div class="lightbox-tabs" role="tablist">
@@ -864,12 +875,12 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
      ============================================================================ -->
 <div id="sharedPositionFields">
   <div class="field-row">
-    <div class="field"><label for="shapeX">X / CX (mm)</label><input id="shapeX" type="number" step="1"></div>
-    <div class="field"><label for="shapeY">Y / CY (mm)</label><input id="shapeY" type="number" step="1"></div>
+    <div class="field"><label for="shapeX">X (mm)</label><input id="shapeX" type="number" step="1"></div>
+    <div class="field"><label for="shapeY">Y (mm)</label><input id="shapeY" type="number" step="1"></div>
   </div>
   <div class="field-row">
-    <div class="field"><label for="shapeW">Width / Radius</label><input id="shapeW" type="number" step="1"></div>
-    <div class="field"><label for="shapeH">Height</label><input id="shapeH" type="number" step="1"></div>
+    <div class="field"><label for="shapeW" id="shapeWLabel">Width (mm)</label><input id="shapeW" type="number" step="1"></div>
+    <div class="field" id="shapeHField"><label for="shapeH">Height (mm)</label><input id="shapeH" type="number" step="1"></div>
   </div>
 </div>
 <div id="sharedStoneFields">
