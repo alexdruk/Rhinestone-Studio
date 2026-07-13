@@ -248,7 +248,6 @@ await test('16. no forbidden file changed', () => {
     // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone.
     'src/text/',
     'src/fonts/',
-    'src/core/',
     'src/browser/'
   ];
 

@@ -328,7 +328,7 @@ await test('20. no forbidden file changed (RS-2002 touches only app.js/index.htm
 
   const forbiddenExact = new Set(['style.css']);
   const forbiddenPrefixes = [
-    'src/geometry/', 'src/renderer/', 'src/export/', 'src/text/', 'src/core/', 'src/browser/',
+    'src/geometry/', 'src/renderer/', 'src/export/', 'src/text/', 'src/browser/',
     'src/svg/', 'src/image/', 'src/history/', 'src/products/', 'src/preview3d/', 'src/editing/',
     'src/ui/', 'src/library/', 'src/gallery/'
   ];

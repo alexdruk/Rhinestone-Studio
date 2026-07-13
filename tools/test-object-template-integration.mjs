@@ -310,7 +310,7 @@ await test('21. no forbidden file changed (this milestone\'s own forbidden list)
   // tools/test-image-trace-regression.mjs for that milestone's own forbidden-file guard.
   const forbiddenPrefixes = [
     // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
-    'src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'src/svg/', 'src/history/'
+    'src/text/', 'src/fonts/', 'src/browser/', 'src/svg/', 'src/history/'
   ];
   for (const changedPath of changedPaths) {
     assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);

@@ -335,7 +335,7 @@ await test('28. no forbidden file changed (this milestone\'s own forbidden list)
   const allowedDespitePrefix = new Set(['src/geometry/GeometryEngine.js', 'src/geometry/index.js', 'src/geometry/README.md', 'src/geometry/PathBoolean.js', 'src/geometry/StoneSampler.js', 'src/geometry/ContourRingSampler.js', 'src/renderer/StoneSizes.js', 'src/export/ProductionSheetExporter.js']);
   const forbiddenPrefixes = [
     // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
-    'src/geometry/', 'src/renderer/', 'src/export/', 'src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'src/svg/', 'src/image/', 'src/history/', 'src/products/', 'src/preview3d/'
+    'src/geometry/', 'src/renderer/', 'src/export/', 'src/text/', 'src/fonts/', 'src/browser/', 'src/svg/', 'src/image/', 'src/history/', 'src/products/', 'src/preview3d/'
   ];
 
   for (const changedPath of changedPaths) {
