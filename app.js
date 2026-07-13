@@ -138,10 +138,26 @@ import { validateRhsProject, toAppProjectShape, parseCatalog, search as searchGa
 // operation succeeds; a boolean op that cannot run (fewer than 2 layers selected, a selected layer
 // with no closed vector outline, or a result with no area) fails with a specific #status /
 // #booleanOpsValidation message and leaves `project` untouched. See
-// docs/specifications/RS-1012-VectorBooleanOperations.md.
+// docs/specifications/RS-1012-VectorBooleanOperations.md. RS-2002 (Typography & Font Library)
+// expanded the bundled font manifest from 3 registry entries (2 enabled) to 10 (9 enabled),
+// organized into categories (script/serif/sans-serif/display/monogram/decorative/block/
+// handwritten/monospace, stored in each font's existing `role` field), and replaced the
+// hardcoded TEXT_ENGINE_FONT_IDS Set below with one derived from fontManager.listFonts() once the
+// manifest loads -- previously every new bundled font needed a matching app.js edit here, the exact
+// "second font list" duplication docs/specifications/RS-2000A-PostMVPAudit.md flagged, and the
+// manifest's `enabled` flag gated nothing real. The #font <select> (inside the Text Lightbox) is
+// now populated at startup from the same fontManager.listFonts() call, grouped into <optgroup>s and
+// sorted alphabetically within each group (mirroring populateStoneColorOptions()'s existing
+// pattern), and a new "Browse Fonts" panel next to it adds search and favorites over the identical
+// list -- both write to the same #font control, so history/save/load/export are untouched. No new
+// font-management system: FontManager/the text-engine font provider/GeometryEngine are the only things that ever
+// turn a fontId into stone geometry; the panel only decides which fontId to write into #font.
 'use strict';
-const TEXT_ENGINE_FONT_IDS=new Set(['courier-prime-regular','great-vibes-regular']);
 const DEFAULT_TEXT_FONT_ID='courier-prime-regular';
+// RS-2002: seeded with just the default font id so text still renders if the manifest fails to
+// load (see permanentEngineError below); reassigned from the live manifest immediately after
+// fontManager loads successfully.
+let TEXT_ENGINE_FONT_IDS=new Set([DEFAULT_TEXT_FONT_ID]);
 // RS-0003.5D2: named UI-interaction constants (previously no explicit zoom clamp). ZOOM_MIN/
 // ZOOM_MAX mirror the #zoom range input's min="70"/max="140" (percent) and defensively clamp zoom
 // in case an out-of-range or non-finite value ever reaches it. RS-1006 removed the sibling
@@ -221,6 +237,49 @@ function ensureStoneSizeOption(select,diameterMm){
 // actual previewColor. Called from updateStats() (itself called at the end of every updateAll()),
 // so the swatch always reflects the live selection after an edit, undo/redo, or import.
 function updateStoneColorSwatch(){const c=STONE_COLORS[el('stoneColor').value];el('stoneColorSwatch').style.background=c?c.previewColor:'transparent'}
+// RS-2002 (Typography & Font Library) -- everything below builds the font picker on top of the
+// same fontManager.listFonts() call used to derive TEXT_ENGINE_FONT_IDS above. No font data lives
+// in app.js: category is font.role, family is font.family, both straight from the manifest.
+const FONT_CATEGORY_LABELS={script:'Script','sans-serif':'Sans Serif',serif:'Serif',display:'Display',monogram:'Monogram',decorative:'Decorative',block:'Block',handwritten:'Handwritten',monospace:'Monospace'};
+function fontCategoryLabel(role){return FONT_CATEGORY_LABELS[role]||(role?role.charAt(0).toUpperCase()+role.slice(1):'Other')}
+function groupFontsByCategory(fonts){const groups=new Map();for(const f of fonts){const key=f.role||'display';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(f)}for(const list of groups.values())list.sort((a,b)=>a.family.localeCompare(b.family));return[...groups.entries()].sort((a,b)=>fontCategoryLabel(a[0]).localeCompare(fontCategoryLabel(b[0])))}
+// A font family name safe to drop into a CSS font-family value / HTML style attribute. Every
+// bundled family name is plain ASCII with no quotes (see assets/fonts/manifest.json), but this
+// strips quote characters defensively rather than assuming that stays true forever.
+function cssFontFamily(family){return String(family).replace(/["'\\]/g,'')}
+// Registers one @font-face per enabled font so both the #font <select>'s options and the Browse
+// Fonts panel's rows can render live visual previews in the font's own typeface. Declaring
+// @font-face does not itself download anything -- browsers fetch a given font file lazily, only
+// once an actually-rendered (not display:none) element needs to paint text in that font-family, so
+// this costs nothing until an option list is opened or a preview row is on-screen.
+function injectFontFaceRules(fonts){const style=document.createElement('style');style.textContent=fonts.map(f=>`@font-face{font-family:"${cssFontFamily(f.family)}";src:url("${f.path}") format("truetype");font-display:swap;}`).join('\n');document.head.appendChild(style)}
+// Builds the #font <select>'s <optgroup>s from the live manifest, grouped by category and sorted
+// alphabetically within each group -- mirrors populateStoneColorOptions()'s existing pattern.
+// Disabled fonts (just the RobotoMono placeholder today) are never listed, matching
+// TEXT_ENGINE_FONT_IDS above.
+function populateFontOptions(){if(!fontManager)return;el('font').innerHTML=groupFontsByCategory(fontManager.listFonts()).map(([role,fonts])=>`<optgroup label="${escapeHtml(fontCategoryLabel(role))}">${fonts.map(f=>`<option value="${f.id}" style="font-family:'${cssFontFamily(f.family)}'">${escapeHtml(f.family)}</option>`).join('')}</optgroup>`).join('')}
+// Favorites are a client-side browsing preference, not project data -- stored in localStorage,
+// never read/written by save/load/export/Design Library/Gallery, so they carry no compatibility
+// risk and don't need to round-trip through a project file.
+const FONT_FAVORITES_STORAGE_KEY='rhinestoneStudio.favoriteFontIds';
+function loadFavoriteFontIds(){try{const raw=localStorage.getItem(FONT_FAVORITES_STORAGE_KEY);const arr=raw?JSON.parse(raw):[];return new Set(Array.isArray(arr)?arr.filter(id=>typeof id==='string'):[])}catch{return new Set()}}
+function saveFavoriteFontIds(ids){try{localStorage.setItem(FONT_FAVORITES_STORAGE_KEY,JSON.stringify([...ids]))}catch{}}
+let favoriteFontIds=loadFavoriteFontIds();
+let fontSearchQuery='';
+function fontLibraryRowHtml(f,currentFontId){const isFav=favoriteFontIds.has(f.id);return`<div class="font-library-row"><button type="button" class="font-fav${isFav?' active':''}" data-fav-font="${f.id}" title="${isFav?'Remove from favorites':'Add to favorites'}" aria-pressed="${isFav}">${isFav?'★':'☆'}</button><button type="button" class="font-library-item" data-pick-font="${f.id}" role="option" aria-selected="${f.id===currentFontId}" style="font-family:'${cssFontFamily(f.family)}'"><span class="font-preview">${escapeHtml(f.family)}</span></button></div>`}
+// Renders the Browse Fonts panel's list: an optional pinned "Favorites" group (only among fonts
+// matching the current search), then every category group in alphabetical order. Re-run on every
+// search keystroke and every favorite toggle; cheap at this catalog size (9 fonts today).
+function renderFontLibraryList(){if(!fontManager)return;const list=el('fontLibraryList');const query=fontSearchQuery.trim().toLowerCase();const fonts=fontManager.listFonts().filter(f=>!query||f.family.toLowerCase().includes(query)||fontCategoryLabel(f.role).toLowerCase().includes(query));if(fonts.length===0){list.innerHTML='<div class="font-library-empty">No fonts match your search.</div>';return}const currentFontId=el('font').value;const favorites=fonts.filter(f=>favoriteFontIds.has(f.id)).sort((a,b)=>a.family.localeCompare(b.family));let html='';if(favorites.length)html+=`<div class="font-library-group">Favorites</div>${favorites.map(f=>fontLibraryRowHtml(f,currentFontId)).join('')}`;for(const[role,group]of groupFontsByCategory(fonts))html+=`<div class="font-library-group">${escapeHtml(fontCategoryLabel(role))}</div>${group.map(f=>fontLibraryRowHtml(f,currentFontId)).join('')}`;list.innerHTML=html}
+function openFontLibraryPanel(){el('fontLibraryPanel').hidden=false;el('fontLibraryBtn').setAttribute('aria-expanded','true');fontSearchQuery='';el('fontSearch').value='';renderFontLibraryList();el('fontSearch').focus()}
+function closeFontLibraryPanel(){el('fontLibraryPanel').hidden=true;el('fontLibraryBtn').setAttribute('aria-expanded','false')}
+// Writes the picked font into the one real #font control and replays the exact 'input'+'change'
+// sequence a user picking from the native <select> would fire, so HISTORY_TRACKED_CONTROL_IDS'
+// existing listener (openHistorySession/updateAll on input, closeHistorySession on change) runs
+// unchanged -- this panel is a second way to set #font's value, never a second place that value
+// is read from.
+function pickFont(fontId){el('font').value=fontId;el('font').dispatchEvent(new Event('input'));el('font').dispatchEvent(new Event('change'));closeFontLibraryPanel()}
+function toggleFavoriteFont(fontId){if(favoriteFontIds.has(fontId))favoriteFontIds.delete(fontId);else favoriteFontIds.add(fontId);saveFavoriteFontIds(favoriteFontIds);renderFontLibraryList()}
 // RS-1009 originally, RS-1012 extracted to a standalone function: a text layer has no stored
 // absolute position of its own (unlike every other layer type) -- it is always auto-centered on the
 // production canvas first, then offset by layer.x/layer.y on top of that. generateTextStonesLive()
@@ -342,8 +401,8 @@ function validateProject(obj){
   // throwing, so old files keep importing cleanly.
   return{version:Number(obj.version)||2,units:'mm',name:typeof obj.name==='string'&&obj.name.length>0?obj.name:DEFAULT_PROJECT_NAME,product:getObjectTemplate(obj.product).id,canvas:{width:canvas.width,height:canvas.height},cupColor:typeof obj.cupColor==='string'?obj.cupColor:'#1f3556',wrap:typeof obj.wrap==='string'?obj.wrap:'front',layers:obj.layers.map(l=>({...l,visible:l.visible!==false}))}
 }
-let fontProviderRegistry=null,permanentEngineError=null;
-try{const fontManager=await FontManager.fromUrl('./assets/fonts/manifest.json');fontProviderRegistry=createDefaultFontProviderRegistry(fontManager)}catch(error){permanentEngineError=error;console.error('Font manifest failed to load; text layers will render empty until this is resolved. Shape layers are unaffected.',error)}
+let fontProviderRegistry=null,permanentEngineError=null,fontManager=null;
+try{fontManager=await FontManager.fromUrl('./assets/fonts/manifest.json');fontProviderRegistry=createDefaultFontProviderRegistry(fontManager);TEXT_ENGINE_FONT_IDS=new Set(fontManager.listFonts().map(f=>f.id))}catch(error){permanentEngineError=error;console.error('Font manifest failed to load; text layers will render empty until this is resolved. Shape layers are unaffected.',error)}
 const permanentEngine=new PermanentGeometryEngine({fontProviderRegistry});
 const engine=new GeometryEngine(permanentEngine);let project=defaultProject(),selectedLayerId='text',layout=null,rotation=0,zoom=1,layoutTransform=null,drag=null,generationToken=0;const el=id=>document.getElementById(id);const layoutCanvas=el('layout'),cupCanvas=el('cup');
 // RS-1009: the one multi-selection model (src/editing/Selection.js is the only place that
@@ -755,6 +814,12 @@ window.addEventListener('keydown',e=>{
 const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
+// RS-2002: Browse Fonts panel wiring. Toggling/closing never touches history (it only decides
+// which fontId #font's native 'input'/'change' events -- wired above via HISTORY_TRACKED_CONTROL_IDS
+// -- will fire for); only pickFont()'s dispatched events do.
+el('fontLibraryBtn').addEventListener('click',()=>{if(el('fontLibraryPanel').hidden)openFontLibraryPanel();else closeFontLibraryPanel()});
+el('fontSearch').addEventListener('input',()=>{fontSearchQuery=el('fontSearch').value;renderFontLibraryList()});
+el('fontLibraryList').addEventListener('click',e=>{const favBtn=e.target.closest('[data-fav-font]');if(favBtn){toggleFavoriteFont(favBtn.dataset.favFont);return}const pickBtn=e.target.closest('[data-pick-font]');if(pickBtn)pickFont(pickBtn.dataset.pickFont)});
 el('selectedLayer').addEventListener('change',()=>{selectedLayerId=el('selectedLayer').value;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true)});
 // RS-1004: switching the object template is one discrete, undoable action (matching addCircle/
 // addRect/deleteLayer's commitHistory()-then-mutate pattern below), not a continuous-session field
@@ -1417,4 +1482,10 @@ el('settingsApply').onclick=()=>{
   drawLayout();
 };
 
-populateStoneColorOptions();populateStoneSizeOptions();syncSelectedControlsFromLayer();updateAll(true);
+populateStoneColorOptions();populateStoneSizeOptions();
+// RS-2002: only populated when fontManager actually loaded -- if the manifest fetch failed,
+// index.html's static two-option #font markup (Courier Prime/Great Vibes) is left as the fallback,
+// and permanentEngineError's #status message (set inside updateAll(), see generate() above)
+// already tells the user text layers are empty.
+if(fontManager){populateFontOptions();injectFontFaceRules(fontManager.listFonts())}
+syncSelectedControlsFromLayer();updateAll(true);

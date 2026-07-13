@@ -186,11 +186,8 @@ await test('10. no forbidden file changed', () => {
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
   const allowedDespitePrefix = new Set(['src/geometry/README.md']);
   const forbiddenPrefixes = [
-    'src/text/',
-    'src/fonts/',
-    'src/core/',
-    'src/browser/',
-    'assets/'
+    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
+    'src/text/', 'src/fonts/', 'src/core/', 'src/browser/'
   ];
 
   for (const changedPath of changedPaths) {

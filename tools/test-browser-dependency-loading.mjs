@@ -139,8 +139,8 @@ await test('no forbidden file changed', () => {
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
   const forbiddenPrefixes = [
     // src/renderer/ and src/export/ are legitimately changed by RS-0003.5C2 (rendering pipeline).
+    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone.
     'src/core/',
-    'assets/fonts/',
     'node_modules/'
   ];
 

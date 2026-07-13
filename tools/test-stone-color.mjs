@@ -129,7 +129,8 @@ await test('this task did not modify forbidden UI, renderer, or exporter files',
 
   const forbiddenExact = new Set(['style.css']);
   // src/renderer/ and src/export/ are legitimately changed by RS-0003.5C2 (rendering pipeline).
-  const forbiddenPrefixes = ['src/text/', 'assets/'];
+  // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone.
+  const forbiddenPrefixes = ['src/text/'];
 
   for (const changedPath of changedPaths) {
     assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);

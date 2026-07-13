@@ -87,6 +87,23 @@ button.icon-btn[aria-pressed="true"]{background:var(--color-primary-tint);border
 .color-swatch{width:var(--control-height);height:var(--control-height);flex:0 0 var(--control-height);border-radius:var(--radius-sm);border:1px solid var(--color-border-strong);box-shadow:inset 0 0 0 1px #fff}
 .status-message{font-size:var(--font-size-sm);color:var(--color-success);margin-top:var(--space-2)}
 
+/* ============================== Font library (RS-2002) ============================== */
+.font-pick-row{display:flex;align-items:center;gap:var(--space-2)}
+.font-pick-row select{flex:1}
+.font-library-panel{margin-top:var(--space-2);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-surface);padding:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)}
+.font-library-list{max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+.font-library-group{font-size:var(--font-size-xs);font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--color-text-muted);margin:var(--space-2) 4px 2px}
+.font-library-group:first-child{margin-top:0}
+.font-library-row{display:flex;align-items:center;gap:4px}
+.font-library-item{flex:1;display:flex;align-items:center;min-width:0;padding:8px 10px;border-radius:var(--radius-sm);cursor:pointer;border:1px solid transparent;background:transparent;text-align:left;font-size:16px}
+.font-library-item:hover{background:var(--color-bg)}
+.font-library-item[aria-selected="true"]{background:var(--color-primary-tint);border-color:var(--color-primary)}
+.font-library-item .font-preview{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.font-fav{flex:0 0 auto;width:28px;height:28px;border:none;background:none;cursor:pointer;font-size:15px;color:var(--color-text-faint);border-radius:var(--radius-sm)}
+.font-fav:hover{background:var(--color-bg)}
+.font-fav.active{color:#e3a008}
+.font-library-empty{font-size:var(--font-size-sm);color:var(--color-text-muted);padding:var(--space-3);text-align:center}
+
 /* ============================== Top menu ============================== */
 .topbar{
   height:var(--topbar-height);background:var(--color-surface);border-bottom:1px solid var(--color-border);
@@ -420,7 +437,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <h3>Content</h3>
           <div class="field"><label for="text">Text content</label><input id="text" value="Vitalina Serbin"></div>
           <div class="field-row">
-            <div class="field"><label for="font">Font</label><select id="font"><option value="courier-prime-regular" selected>Courier Prime (monospace)</option><option value="great-vibes-regular">Great Vibes (script)</option></select></div>
+            <div class="field"><label for="font">Font</label><div class="font-pick-row"><select id="font"><option value="courier-prime-regular" selected>Courier Prime (monospace)</option><option value="great-vibes-regular">Great Vibes (script)</option></select><button type="button" class="icon-btn" id="fontLibraryBtn" title="Browse the font library" aria-haspopup="true" aria-expanded="false" aria-controls="fontLibraryPanel">🔎</button></div></div>
             <div class="field"><label for="textMode">Fill Style</label><select id="textMode" title="How rhinestones are arranged across this text.">
               <option value="stroke" selected>Outline - stones follow the letters</option>
               <option value="fill">Grid Fill - even rows and columns</option>
@@ -428,6 +445,10 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
               <option value="radial">Radial Fill - rings out from the center</option>
               <option value="contour">Contour Fill - rings that follow the letters inward</option>
             </select></div>
+          </div>
+          <div id="fontLibraryPanel" class="font-library-panel" hidden>
+            <input type="text" id="fontSearch" placeholder="Search fonts by name or category…" aria-label="Search fonts">
+            <div id="fontLibraryList" class="font-library-list" role="listbox" aria-label="Font library"></div>
           </div>
           <div class="field-row">
             <div class="field"><label for="height">Text height (mm)</label><input id="height" type="number" min="4" max="80" step="1" value="25"></div>

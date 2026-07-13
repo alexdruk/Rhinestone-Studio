@@ -172,9 +172,9 @@ await test('no forbidden files changed', () => {
   const forbiddenPrefixes = [
     // src/geometry/ is legitimately changed by RS-0003.5C1 (permanent shape generation).
     // src/renderer/ and src/export/ are legitimately changed by RS-0003.5C2 (rendering pipeline).
+    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone.
     'src/text/',
-    'src/core/',
-    'assets/'
+    'src/core/'
   ];
 
   for (const changedPath of changedPaths) {

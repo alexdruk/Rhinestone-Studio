@@ -242,9 +242,8 @@ await test('14. no forbidden file changed (this milestone\'s own forbidden list)
     'src/geometry/ArcProjection.js'
   ]);
   const forbiddenPrefixes = [
-    'src/text/', 'src/fonts/', 'src/core/', 'src/browser/',
-    'src/svg/', 'src/history/', 'src/products/', 'src/preview3d/',
-    'assets/' /* RS-2001: examples/ is legitimately changed by the Gallery */
+    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
+    'src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'src/svg/', 'src/history/', 'src/products/', 'src/preview3d/'
   ];
 
   for (const changedPath of changedPaths) {

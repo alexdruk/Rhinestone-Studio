@@ -70,6 +70,32 @@ async function main() {
   console.log('RS-2000 performance measurements\n' + '='.repeat(70));
   const engine = await buildEngine();
 
+  // RS-2002: switching-fonts / large-text-generation timings across every enabled font in the
+  // expanded library, using the same real production code path (FontManager -> OpenTypeProvider ->
+  // GeometryEngine.generateTextLayout()) the app itself calls. First call per font includes the
+  // one-time font file parse (OpenTypeProvider._loadParsedFont() caches per fontId); the second call
+  // measures a warm re-generation (font already parsed), which is what happens every time the user
+  // edits already-selected text.
+  console.log('\n-- RS-2002: per-font text generation (first parse vs warm, 18mm height, "Rhinestone Studio 123") --');
+  const manifest = JSON.parse(await readFile(path.join(repoRoot, 'assets/fonts/manifest.json'), 'utf8'));
+  const fontManager = new FontManager(manifest);
+  for (const font of fontManager.listFonts()) {
+    let result;
+    const coldMs = await timeMsAsync(async () => {
+      result = await engine.generateTextLayout({
+        text: 'Rhinestone Studio 123', fontId: font.id, layerId: 'perf-font-switch',
+        heightMm: 18, stoneSizeMm: 2, gapMm: 0.3, mode: 'outline', color: 'gold'
+      });
+    });
+    const warmMs = await timeMsAsync(async () => {
+      await engine.generateTextLayout({
+        text: 'Rhinestone Studio 123', fontId: font.id, layerId: 'perf-font-switch',
+        heightMm: 18, stoneSizeMm: 2, gapMm: 0.3, mode: 'outline', color: 'gold'
+      });
+    });
+    report(`font=${font.id}`, coldMs, `cold; warm=${warmMs.toFixed(2)}ms (${result.count} stones)`);
+  }
+
   console.log('\n-- Text geometry generation, per fill mode (18mm height, 2mm stone, 0.3mm gap) --');
   for (const mode of ['stroke', 'fill', 'staggered', 'radial', 'contour']) {
     let result;

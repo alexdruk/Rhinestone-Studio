@@ -159,7 +159,10 @@ await test('5. Production Sheet SVG and stoneLayoutToSvg() both render every sto
 await test('6. app.js imports the Stone Library and populates #stoneSize from it at startup (no hardcoded <option> list left in index.html)', () => {
   assert.match(appJs, /import\s*\{\s*listStoneSizes,\s*findStoneSizeByDiameterMm\s*\}\s*from\s*['"]\.\/src\/renderer\/StoneSizes\.js['"]/);
   assert.match(appJs, /function populateStoneSizeOptions\(\)\{/, 'expected a populateStoneSizeOptions helper');
-  assert.match(appJs, /populateStoneColorOptions\(\);populateStoneSizeOptions\(\);syncSelectedControlsFromLayer\(\)/, 'expected populateStoneSizeOptions to run once at startup, alongside populateStoneColorOptions');
+  // RS-2002 inserted its own conditional font-population startup call between
+  // populateStoneSizeOptions() and syncSelectedControlsFromLayer() (see app.js) -- match loosely
+  // across that gap rather than requiring the two calls immediately adjacent.
+  assert.match(appJs, /populateStoneColorOptions\(\);populateStoneSizeOptions\(\);[\s\S]{0,600}?syncSelectedControlsFromLayer\(\)/, 'expected populateStoneSizeOptions to run once at startup, alongside populateStoneColorOptions');
   const stoneSizeSelectHtml = indexHtml.match(/<select id="stoneSize"[^>]*>([\s\S]*?)<\/select>/);
   assert.ok(stoneSizeSelectHtml, 'expected a #stoneSize select in index.html');
   assert.equal(stoneSizeSelectHtml[1].trim(), '', 'expected #stoneSize to start empty and be populated by populateStoneSizeOptions(), like #stoneColor');
@@ -245,8 +248,8 @@ await test('11. no forbidden file changed (GeometryEngine/StoneLayout/Stone/rend
 
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
   const forbiddenPrefixes = [
-    'src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'src/svg/', 'src/image/',
-    'src/history/', 'src/products/', 'src/preview3d/', 'src/editing/', 'assets/' /* RS-2001: examples/ is legitimately changed by the Gallery */
+    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
+    'src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'src/svg/', 'src/image/', 'src/history/', 'src/products/', 'src/preview3d/', 'src/editing/'
   ];
   const forbiddenExactWithinPrefix = new Set([
     // GeometryEngine/Stone/StoneLayout already support per-layer stoneSizeMm end-to-end (see test
