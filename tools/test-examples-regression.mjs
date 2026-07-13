@@ -101,7 +101,7 @@ await test('1. every examples/manifest.json entry points to an existing .rhs fil
   for (const file of exampleFilesOnDisk) {
     assert.ok(manifestFiles.has(file), `${file} exists on disk but has no manifest.json entry`);
   }
-  assert.ok(exampleFilesOnDisk.length >= 17, `expected at least 17 example files (2 preserved + 15 new), found ${exampleFilesOnDisk.length}`);
+  assert.ok(exampleFilesOnDisk.length >= 24, `expected at least 24 example files (2 preserved + 15 RS-0003.5E1 + 7 RS-2000), found ${exampleFilesOnDisk.length}`);
 });
 
 await test('2. the two preserved legacy fixtures exist and are byte-for-byte unmodified', async () => {
@@ -127,6 +127,23 @@ for (const file of exampleFilesOnDisk) {
   loaded.set(file, rawJson);
 }
 
+// RS-2000: an 'image' layer's imageSrc needs a real browser decode (Node has no bundled PNG/
+// JPEG/WebP decoder; src/image/ImageDecoder.js is deliberately the one browser-only file in
+// src/image/**). Requiring a headless Chrome launch on every routine `npm test` run would be a new
+// dependency/latency cost for the whole suite, breaking from this repo's existing pattern of
+// keeping browser-dependent tooling (tools/measure-performance.mjs, tools/generate-example-
+// baselines.mjs) manual/optional rather than wired into `npm test`. So: every fixture (including
+// image ones) still gets full schema/translation/round-trip validation below (tests 1-6), but
+// actual GeometryEngine stone regeneration + baseline comparison (tests 7-14) is only run for
+// fixtures with no 'image' layer. Image-layer generation correctness is verified instead when
+// examples/baselines.json is (re)computed via `node tools/generate-example-baselines.mjs` (which
+// does launch a real browser for exactly this) and via RS-2000's own browser-driven end-to-end
+// verification pass — see docs/specifications/RS-2000-MVPStabilizationValidation.md.
+const filesWithGeneration = exampleFilesOnDisk.filter((file) => {
+  const raw = loaded.get(file);
+  return !(Array.isArray(raw.layers) && raw.layers.some((l) => l.type === 'image'));
+});
+
 await test('4. every example parses as valid JSON and passes validateRhsProject() structural validation', () => {
   for (const file of exampleFilesOnDisk) {
     assert.doesNotThrow(() => validateRhsProject(loaded.get(file), file), `${file} failed validateRhsProject()`);
@@ -151,14 +168,14 @@ await test('6. every example round-trips through JSON.parse(JSON.stringify(...))
 });
 
 await test('7. every visible layer of every example generates a non-throwing merged StoneLayout via the permanent GeometryEngine', async () => {
-  for (const file of exampleFilesOnDisk) {
+  for (const file of filesWithGeneration) {
     const project = validateRhsProject(loaded.get(file), file);
     await assert.doesNotReject(generateProjectStoneLayout(project, engine), `${file} failed to generate`);
   }
 });
 
 await test('8. every example produces a deterministic StoneLayout (two independent generations match exactly)', async () => {
-  for (const file of exampleFilesOnDisk) {
+  for (const file of filesWithGeneration) {
     const project = validateRhsProject(loaded.get(file), file);
     const a = await generateProjectStoneLayout(project, engine);
     const b = await generateProjectStoneLayout(project, engine);
@@ -168,7 +185,7 @@ await test('8. every example produces a deterministic StoneLayout (two independe
 
 await test('9. actual stone count and bounding box match the committed baseline (exact count, 0.001mm bounds tolerance)', async () => {
   const eps = 0.001;
-  for (const file of exampleFilesOnDisk) {
+  for (const file of filesWithGeneration) {
     const project = validateRhsProject(loaded.get(file), file);
     const layout = await generateProjectStoneLayout(project, engine);
     const baseline = baselinesByFile.get(file);
@@ -191,7 +208,7 @@ await test('9. actual stone count and bounding box match the committed baseline 
 });
 
 await test('10. every stone has finite xMm/yMm and a positive finite sizeMm; no NaN/Infinity anywhere in the layout', async () => {
-  for (const file of exampleFilesOnDisk) {
+  for (const file of filesWithGeneration) {
     const project = validateRhsProject(loaded.get(file), file);
     const layout = await generateProjectStoneLayout(project, engine);
     assert.ok(layout.count > 0, `${file}: expected a nonzero stone count`);
@@ -205,7 +222,7 @@ await test('10. every stone has finite xMm/yMm and a positive finite sizeMm; no 
 });
 
 await test('11. observed stone colors match the committed baseline color set for every example', async () => {
-  for (const file of exampleFilesOnDisk) {
+  for (const file of filesWithGeneration) {
     const project = validateRhsProject(loaded.get(file), file);
     const layout = await generateProjectStoneLayout(project, engine);
     const baseline = baselinesByFile.get(file);
@@ -223,7 +240,7 @@ await test('12. StoneLayout.toJSON()/fromJSON() round-trips every example within
   // here, and manufacturing-irrelevant. Every other field (stones, count, layerId, sourceMode,
   // boundingBox min/max) is still required to match exactly.
   const eps = 1e-5;
-  for (const file of exampleFilesOnDisk) {
+  for (const file of filesWithGeneration) {
     const project = validateRhsProject(loaded.get(file), file);
     const layout = await generateProjectStoneLayout(project, engine);
     const json = layout.toJSON();
@@ -243,7 +260,7 @@ await test('12. StoneLayout.toJSON()/fromJSON() round-trips every example within
 });
 
 await test('13. stoneLayoutToSvg() produces well-formed SVG whose circle count and coordinates match StoneLayout exactly', async () => {
-  for (const file of exampleFilesOnDisk) {
+  for (const file of filesWithGeneration) {
     const project = validateRhsProject(loaded.get(file), file);
     const layout = await generateProjectStoneLayout(project, engine);
     const svg = stoneLayoutToSvg(layout, { widthMm: project.canvas.width, heightMm: project.canvas.height });
@@ -262,7 +279,7 @@ await test('13. stoneLayoutToSvg() produces well-formed SVG whose circle count a
 
 await test('14. no stone lies wildly outside the project canvas (generous manufacturing tolerance, not a tight visual margin)', async () => {
   const TOLERANCE_MM = 50; // generous: catches genuinely broken output (e.g. runaway auto-fit), not tight framing
-  for (const file of exampleFilesOnDisk) {
+  for (const file of filesWithGeneration) {
     const project = validateRhsProject(loaded.get(file), file);
     const layout = await generateProjectStoneLayout(project, engine);
     for (const stone of layout.stones) {
@@ -302,7 +319,30 @@ await test('16. examples were only ever read during this suite — no example fi
   }
 });
 
-await test('17. no forbidden file changed (this milestone\'s own forbidden list)', () => {
+await test('17. RS-2000: every SUPPORTED_LAYER_TYPES value (text/circle/rectangle/svg/image/path) is exercised by at least one example fixture', async () => {
+  const { SUPPORTED_LAYER_TYPES } = await import('./lib/rhsProject.mjs');
+  const seenTypes = new Set();
+  for (const file of exampleFilesOnDisk) {
+    for (const layer of loaded.get(file).layers) seenTypes.add(layer.type);
+  }
+  for (const type of SUPPORTED_LAYER_TYPES) {
+    assert.ok(seenTypes.has(type), `no example fixture exercises layer type "${type}"`);
+  }
+});
+
+await test('18. RS-2000: every example with an \'image\' layer is excluded from generation tests 7-14 (documented, not silently skipped) and still passes schema/translation validation', () => {
+  const imageFiles = exampleFilesOnDisk.filter((file) => loaded.get(file).layers.some((l) => l.type === 'image'));
+  assert.ok(imageFiles.length > 0, 'expected at least one image-layer fixture to exist (image-trace-monogram.rhs)');
+  for (const file of imageFiles) {
+    assert.ok(!filesWithGeneration.includes(file), `${file}: expected to be excluded from filesWithGeneration`);
+    // Still fully schema/translation-validated (same as every other fixture, via tests 1-6).
+    const project = validateRhsProject(loaded.get(file), file);
+    const appShape = toAppProjectShape(project);
+    assert.doesNotThrow(() => validateProjectFromAppJs(appShape), `${file}'s app-shape translation was rejected by app.js's real validateProject()`);
+  }
+});
+
+await test('19. no forbidden file changed (this milestone\'s own forbidden list)', () => {
   const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
   const changedPaths = output
     .split('\n')

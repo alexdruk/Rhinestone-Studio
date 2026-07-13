@@ -5,9 +5,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // RS-0003.5B3 — verifies app.js is actually wired to the permanent GeometryEngine,
-// OpenTypeProvider (via FontProviderRegistry), and FontManager for live text generation,
-// and that the legacy bitmap text path is preserved (not deleted) but no longer the thing
-// that runs for text layers. These are structural checks against the live app.js source,
+// OpenTypeProvider (via FontProviderRegistry), and FontManager for live text generation.
+// RS-2000 deleted the legacy bitmap text path (FONT5 + glyph samplers) entirely, once
+// end-to-end + browser validation confirmed the permanent engine fully replaced it -- see
+// docs/specifications/RS-2000-MVPStabilizationValidation.md. These are structural checks
+// against the live app.js source,
 // matching the existing convention in tools/test-app-module-migration.mjs, because app.js
 // is a browser entry point (uses `fetch`, DOM APIs, import maps) and is not import()-able
 // directly under plain Node the way the permanent src/** modules are.
@@ -59,10 +61,10 @@ await test('7. text-layer generation is async and consumes the awaited result', 
   assert.match(appJs, /async\s+function\s+updateAll/, 'expected updateAll to be async so it can await live generation');
 });
 
-await test('8. the legacy bitmap text path (FONT5 + glyph samplers) is preserved, not deleted', () => {
-  assert.ok(appJs.includes('const FONT5={'), 'expected the legacy FONT5 bitmap table to still be present');
-  assert.ok(appJs.includes('sampleGlyphFill('), 'expected the legacy fill glyph sampler to still be present');
-  assert.ok(appJs.includes('sampleGlyphStroke('), 'expected the legacy stroke glyph sampler to still be present');
+await test('8. RS-2000: the legacy bitmap text path (FONT5 + glyph samplers) has been deleted, not merely unused', () => {
+  assert.ok(!appJs.includes('const FONT5={'), 'expected the legacy FONT5 bitmap table to be deleted');
+  assert.ok(!appJs.includes('sampleGlyphFill('), 'expected the legacy fill glyph sampler to be deleted');
+  assert.ok(!appJs.includes('sampleGlyphStroke('), 'expected the legacy stroke glyph sampler to be deleted');
 });
 
 await test('9. the legacy bitmap text path is no longer called for text layers', () => {
@@ -93,8 +95,8 @@ await test('10. shape generation now uses the permanent engine (RS-0003.5C1)', (
     !/type==='rectangle'\)raw\.push\(\.\.\.this\.generateRect\(l\)\)/.test(appJs),
     'the legacy generateRect() must no longer be invoked directly from generate()'
   );
-  assert.ok(appJs.includes('generateCircle(l){'), 'expected the legacy generateCircle() to still be present (preserved, not deleted)');
-  assert.ok(appJs.includes('generateRect(l){'), 'expected the legacy generateRect() to still be present (preserved, not deleted)');
+  assert.ok(!appJs.includes('generateCircle(l){'), 'RS-2000: expected the legacy generateCircle() to be deleted');
+  assert.ok(!appJs.includes('generateRect(l){'), 'RS-2000: expected the legacy generateRect() to be deleted');
 });
 
 await test('11. app.js does not import src/core/** (Project/Layer model migration is out of scope)', () => {

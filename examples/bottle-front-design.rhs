@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "product": "bottle",
+  "units": "mm",
+  "canvas": {
+    "width": 180,
+    "height": 90
+  },
+  "cupColor": "#7a1f2b",
+  "wrap": "front",
+  "layers": [
+    {
+      "id": "label-border",
+      "type": "rectangle",
+      "name": "Label Border",
+      "visible": true,
+      "xMm": 20,
+      "yMm": 15,
+      "widthMm": 140,
+      "heightMm": 60,
+      "fillMode": "outline",
+      "stoneSizeMm": 1.6,
+      "gapMm": 0.3,
+      "color": "gold"
+    },
+    {
+      "type": "text",
+      "visible": true,
+      "font": "Courier Prime",
+      "mode": "centerline",
+      "autoFit": true,
+      "id": "brand-serrano",
+      "name": "Serrano Vineyards",
+      "text": "Serrano Vineyards",
+      "heightMm": 14,
+      "stoneSizeMm": 1.4,
+      "gapMm": 0.25,
+      "color": "topaz"
+    },
+    {
+      "type": "text",
+      "visible": true,
+      "font": "Courier Prime",
+      "mode": "fill",
+      "autoFit": true,
+      "id": "tagline-est",
+      "name": "Est. 2010",
+      "text": "EST. 2010",
+      "heightMm": 8,
+      "stoneSizeMm": 1,
+      "gapMm": 0.15,
+      "color": "crystal-clear"
+    }
+  ]
+}

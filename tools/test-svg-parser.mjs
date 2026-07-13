@@ -197,4 +197,32 @@ await test('extra: zero-radius circle/ellipse and zero-size rect are valid-but-e
   assert.equal(result.warnings.length, 0);
 });
 
+await test('RS-2000: a non-mm unit with a matching viewBox produces shape coordinates in real millimeters, not the declared unit\'s raw numeric value', () => {
+  // width="100" (unitless -> px) + viewBox="0 0 100 100" is an extremely common real-world SVG
+  // pattern (icon libraries, exported logos). naturalWidthMm correctly resolves to ~26.46mm
+  // (100px at 96 CSS px/inch); shape coordinates must land in that same millimeter space, not be
+  // left at their raw 0-100 viewBox-unit values (the pre-fix bug: coordinates were off by a factor
+  // of 1/widthMmPerUnit, ~3.78x too large per axis for this case).
+  const result = parseSvgDocument(svg('<rect x="0" y="0" width="100" height="100"/>', { width: '100', height: '100', viewBox: '0 0 100 100' }));
+  const xs = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.xMm);
+  const expectedMaxMm = (100 * 25.4) / 96;
+  assert.ok(Math.abs(Math.max(...xs) - expectedMaxMm) < 1e-9, `expected shape's max x to equal naturalWidthMm (${expectedMaxMm}), got ${Math.max(...xs)}`);
+  assert.ok(Math.abs(Math.max(...xs) - result.naturalWidthMm) < 1e-9, 'shape coordinates must match naturalWidthMm\'s unit space exactly');
+});
+
+await test('RS-2000: a non-mm unit with NO viewBox also produces shape coordinates in real millimeters', () => {
+  // No viewBox means 1 user-unit == 1 declared-unit (standard SVG semantics) -- still needs the
+  // declared unit's mm-per-unit factor applied, the same gap the viewBox branch had.
+  const result = parseSvgDocument(svg('<rect x="0" y="0" width="200" height="100"/>', { width: '200px', height: '100px' }));
+  const xs = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.xMm);
+  const expectedMaxMm = (200 * 25.4) / 96;
+  assert.ok(Math.abs(Math.max(...xs) - expectedMaxMm) < 1e-9, `expected shape's max x to equal naturalWidthMm (${expectedMaxMm}), got ${Math.max(...xs)}`);
+});
+
+await test('RS-2000: the "mm" unit case is unchanged (byte-identical scale factor of 1, matching every pre-existing test in this file)', () => {
+  const result = parseSvgDocument(svg('<rect x="0" y="0" width="10" height="10"/>', { width: '50mm', height: '20mm', viewBox: '0 0 10 10' }));
+  const xs = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.xMm);
+  assert.equal(Math.max(...xs), 50, 'viewBox case: 10 user-units -> 50mm declared width, unaffected by this fix');
+});
+
 console.log('SVG parser tests passed.');

@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "product": "mug",
+  "units": "mm",
+  "canvas": {
+    "width": 210,
+    "height": 90
+  },
+  "cupColor": "#1f3556",
+  "wrap": "front",
+  "layers": [
+    {
+      "type": "text",
+      "visible": true,
+      "font": "Courier Prime",
+      "mode": "centerline",
+      "autoFit": true,
+      "id": "title-mixed",
+      "name": "Mixed (Outline)",
+      "text": "MIXED",
+      "heightMm": 20,
+      "stoneSizeMm": 2.5,
+      "gapMm": 0.4,
+      "color": "gold"
+    },
+    {
+      "type": "text",
+      "visible": true,
+      "font": "Great Vibes",
+      "mode": "fill",
+      "autoFit": true,
+      "id": "subtitle-styles",
+      "name": "styles (Fill)",
+      "text": "styles",
+      "heightMm": 14,
+      "stoneSizeMm": 1.2,
+      "gapMm": 0.2,
+      "color": "rose"
+    },
+    {
+      "id": "circle-staggered",
+      "type": "circle",
+      "name": "Staggered Circle",
+      "visible": true,
+      "cxMm": 50,
+      "cyMm": 65,
+      "radiusMm": 18,
+      "fillMode": "staggered",
+      "stoneSizeMm": 1.5,
+      "gapMm": 0.3,
+      "color": "sapphire"
+    },
+    {
+      "id": "rect-radial",
+      "type": "rectangle",
+      "name": "Radial Rectangle",
+      "visible": true,
+      "xMm": 85,
+      "yMm": 47,
+      "widthMm": 50,
+      "heightMm": 36,
+      "fillMode": "radial",
+      "stoneSizeMm": 1.8,
+      "gapMm": 0.35,
+      "color": "emerald"
+    },
+    {
+      "id": "circle-contour",
+      "type": "circle",
+      "name": "Contour Circle",
+      "visible": true,
+      "cxMm": 160,
+      "cyMm": 65,
+      "radiusMm": 18,
+      "fillMode": "contour",
+      "stoneSizeMm": 1,
+      "gapMm": 0.2,
+      "color": "amethyst"
+    }
+  ]
+}

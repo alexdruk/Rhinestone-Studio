@@ -963,29 +963,18 @@ resolution; neither contains product logic:
 
 # Remaining Legacy / Dead Code
 
-The following code is physically present but not reachable from any live code path in the running
-application. It is retained, not removed, per `docs/AI_ENGINEER.md`'s "do not refactor unrelated
-code" and prior milestones' explicit "do not remove until no live behavior depends on it":
+**RS-2000 (MVP Stabilization) deleted the legacy bitmap text engine and legacy shape generators**
+this section used to describe, once end-to-end + browser validation confirmed the permanent
+engine/renderer output is production-acceptable — the confirmation every `TASK_RESULT.md` had
+recommended since RS-0003.5C1. Specifically removed from `app.js`: the `FONT5` 5x7 glyph grid
+constant, `generateText()`, `sampleGlyphFill()`, `sampleGlyphStroke()`, `line()`, `generateCircle()`,
+`generateRect()`. `dedupe()` was kept — it is also the live cross-layer proximity merge `generate()`
+still uses, not only a dead-code dependency. `bbox()`/`layerBBox()` had already been removed as of
+RS-0003.5C2 (their call sites were replaced by real `StoneLayout`/`getLayerBBox()` usage that
+milestone). See `docs/specifications/RS-2000-MVPStabilizationValidation.md` for the validation this
+deletion was gated on.
 
-- **`app.js`'s legacy bitmap text engine** — the `FONT5` 5x7 glyph grid constant and the
-  `GeometryEngine` class methods `generateText()`, `sampleGlyphFill()`, `sampleGlyphStroke()`.
-  Superseded by `generateTextStonesLive()` (the permanent `GeometryEngine`/OpenType path) as of
-  RS-0003.5B3.
-- **`app.js`'s legacy shape generators** — `generateCircle()`, `generateRect()`. Superseded by
-  `generateShapeStonesLive()` as of RS-0003.5C1.
-- **`app.js`'s `engine.bbox()` and `layerBBox()`** — both fully unused as of RS-0003.5C2 (their
-  two remaining call sites were replaced by real `StoneLayout`/`getLayerBBox()` usage this
-  milestone).
-- **Shared helpers still live because dead code depends on them** — `line()` (used only by
-  `sampleGlyphStroke()`/`generateRect()`) and `dedupe()` (used by both the dead legacy generators
-  *and* the live cross-layer merge in `generate()` — do not rename or remove `dedupe()`'s `.x/.y/.d`
-  field convention without first deleting or migrating the legacy callers, or it silently becomes
-  a no-op filter for them).
-
-A future cleanup milestone should delete the bitmap text engine, the legacy shape generators, and
-`bbox()`/`layerBBox()` together, once a human confirms the permanent-engine/renderer output is
-production-acceptable (recommended in every `TASK_RESULT.md` since RS-0003.5C1 and still not
-scheduled).
+No other legacy/dead code is currently known in the application.
 
 ---
 
@@ -1004,10 +993,7 @@ scheduled).
    generates stone positions" — but it means the permanent engine has no native multi-layer
    aggregation API, and `StoneLayout`'s single-`layerId` constructor is worked around with a
    `'project'` sentinel rather than a real multi-layer representation.
-3. **Legacy dead code remains physically present** in `app.js` (see above), sharing helper
-   functions with live code, which is a latent-bug risk if those helpers are ever changed without
-   accounting for the dead callers.
-4. **The font manifest's `enabled` flag does not gate what can actually be loaded.**
+3. **The font manifest's `enabled` flag does not gate what can actually be loaded.**
    `assets/fonts/manifest.json` marks all three registered fonts (`courier-prime-regular`,
    `roboto-mono-regular`, `great-vibes-regular`) as `"enabled": false`, but
    `FontManager.getFont()` — which `OpenTypeProvider` calls — does not check `enabled` (only
@@ -1016,15 +1002,20 @@ scheduled).
    and render live text despite being marked disabled. `roboto-mono-regular`'s font file
    (`assets/fonts/RobotoMono-Regular.ttf`) is a 14-byte placeholder stub, not a real font — it is
    unreferenced by `app.js` today, but would throw from `opentype.parse()` if ever selected.
-5. **No Validation Engine, product-plugin system, DXF export, manufacturing reports, or 3D/WebGL
+4. **No Validation Engine, product-plugin system, DXF export, manufacturing reports, or 3D/WebGL
    renderer exist yet.** These remain future milestones per "Future Direction" below, not
    regressions.
-6. **PNG export is a render-capture, not a standalone exporter module.** Unlike SVG/JSON export,
+5. **PNG export is a render-capture, not a standalone exporter module.** Unlike SVG/JSON export,
    PNG/Cup-PNG export has no `src/export/**` counterpart; it depends on `canvas.toBlob()` running
    after the corresponding renderer call in the same update pass.
-7. **`getBrowserDependencyProbeStatus()` is unused.** The function exists but nothing calls it;
+6. **`getBrowserDependencyProbeStatus()` is unused.** The function exists but nothing calls it;
    only the module's side effect (import-time resolution) is exercised, by both `app.js` and its
    guard test.
+7. **`svg` layers use a differently-named Fill Style field than every other vector layer type.**
+   Circle/rectangle/path layers use `fillMode`; svg layers use `mode` for the exact same concept
+   (found during RS-2000's audit — see `generateSvgStonesLive()`/`writeSelectedControlsToLayer()`
+   in `app.js`). Cosmetic/internal only (the UI label is uniformly "Fill Style"), not worth a
+   schema-touching rename in a stabilization milestone.
 
 ---
 

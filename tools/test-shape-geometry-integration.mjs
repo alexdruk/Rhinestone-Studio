@@ -5,9 +5,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // RS-0003.5C1 — verifies app.js is actually wired to the permanent GeometryEngine's
-// generateShapeLayout() for circle/rectangle layers, and that the legacy shape generators
-// (generateCircle/generateRect) are preserved (not deleted) but no longer the thing that runs
-// for shape layers. Structural checks against the live app.js source, matching the existing
+// generateShapeLayout() for circle/rectangle layers. RS-2000 deleted the legacy shape
+// generators (generateCircle/generateRect) entirely once end-to-end + browser validation
+// confirmed the permanent engine fully replaced them -- see
+// docs/specifications/RS-2000-MVPStabilizationValidation.md. Structural checks against the
+// live app.js source, matching the existing
 // convention in tools/test-live-text-integration.mjs, because app.js is a browser entry point
 // and is not import()-able directly under plain Node the way the permanent src/** modules are.
 
@@ -52,9 +54,9 @@ await test('4. stoneSizeMm, gapMm, mode, and color are forwarded for shape gener
   assert.match(appJs, /stoneSizeMm:layer\.stoneSize,gapMm:layer\.gap,mode:resolveVectorFillMode\(layer\.fillMode\),color:layer\.color/);
 });
 
-await test('5. the legacy generateCircle/generateRect methods are preserved, not deleted', () => {
-  assert.ok(appJs.includes('generateCircle(l){'), 'expected the legacy generateCircle() to still be present');
-  assert.ok(appJs.includes('generateRect(l){'), 'expected the legacy generateRect() to still be present');
+await test('5. RS-2000: the legacy generateCircle/generateRect methods have been deleted, not merely unused', () => {
+  assert.ok(!appJs.includes('generateCircle(l){'), 'expected the legacy generateCircle() to be deleted');
+  assert.ok(!appJs.includes('generateRect(l){'), 'expected the legacy generateRect() to be deleted');
 });
 
 await test('6. the legacy generateCircle/generateRect methods are no longer called from generate()', () => {
