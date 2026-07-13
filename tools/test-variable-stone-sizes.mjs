@@ -250,9 +250,18 @@ await test('11. no forbidden file changed (GeometryEngine/StoneLayout/Stone/rend
   ];
   const forbiddenExactWithinPrefix = new Set([
     // GeometryEngine/Stone/StoneLayout already support per-layer stoneSizeMm end-to-end (see test
-    // 1/2 above) -- this milestone adds no geometry capability, so these stay untouched.
-    'src/geometry/GeometryEngine.js', 'src/geometry/Stone.js', 'src/geometry/StoneLayout.js',
-    'src/geometry/StoneSampler.js', 'src/geometry/ContourGeometry.js', 'src/geometry/ArcProjection.js',
+    // 1/2 above) -- this milestone (RS-1013) itself added no geometry capability, so these stayed
+    // untouched by RS-1013's own commit. This guard checks live `git status`, not a diff scoped to
+    // RS-1013's own commit, so -- matching the precedent already established for
+    // src/export/ProductionSheetExporter.js just below -- it must also accommodate later
+    // milestones' legitimate changes: RS-1011 (Fill Algorithms) legitimately extends
+    // src/geometry/GeometryEngine.js and src/geometry/StoneSampler.js (and adds a new file,
+    // src/geometry/ContourRingSampler.js, which was never in this list to begin with) -- see
+    // tools/test-fill-algorithms.mjs / tools/test-fill-algorithms-integration.mjs for that
+    // milestone's own forbidden-file guard. Stone.js/StoneLayout.js/ContourGeometry.js/
+    // ArcProjection.js remain untouched by RS-1011 too, so they stay listed here.
+    'src/geometry/Stone.js', 'src/geometry/StoneLayout.js',
+    'src/geometry/ContourGeometry.js', 'src/geometry/ArcProjection.js',
     'src/geometry/PathBoolean.js',
     // Renderers already draw every stone at its own individual sizeMm -- no renderer change needed.
     'src/renderer/CanvasRenderer2D.js', 'src/renderer/CupRenderer.js', 'src/renderer/CrystalColors.js', 'src/renderer/StoneColors.js',

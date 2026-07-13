@@ -153,7 +153,9 @@ await test('12. getLayerBBox()/drag-resize/duplicateLayer()/layerLabel()/moreOpt
 });
 
 await test('13. writeSelectedControlsToLayer() has a \'path\' branch writing the shared x/y/w/h fields back', () => {
-  assert.match(appJs, /else if\(l\.type==='path'\)\{l\.x=parseFloat\(el\('shapeX'\)\.value\)\|\|0;l\.y=parseFloat\(el\('shapeY'\)\.value\)\|\|0;l\.w=Math\.max\(2,parseFloat\(el\('shapeW'\)\.value\)\|\|10\);l\.h=Math\.max\(2,parseFloat\(el\('shapeH'\)\.value\)\|\|10\)\}/);
+  // RS-1011: the path branch also writes l.fillMode now (the Shapes Lightbox's new #shapeFillMode
+  // control, shared with circle/rectangle -- see docs/specifications/RS-1011-FillAlgorithms.md).
+  assert.match(appJs, /else if\(l\.type==='path'\)\{l\.x=parseFloat\(el\('shapeX'\)\.value\)\|\|0;l\.y=parseFloat\(el\('shapeY'\)\.value\)\|\|0;l\.w=Math\.max\(2,parseFloat\(el\('shapeW'\)\.value\)\|\|10\);l\.h=Math\.max\(2,parseFloat\(el\('shapeH'\)\.value\)\|\|10\);l\.fillMode=resolveVectorFillMode\(el\('shapeFillMode'\)\.value\)\}/);
 });
 
 await test('14. resolveLayerShapeSource() resolves every layer type into a boolean-input source, or null when a shape has no closed outline', () => {
