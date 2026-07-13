@@ -44,8 +44,12 @@ await test('3. circle layers pass shape/cxMm/cyMm/radiusMm; rectangle layers pas
   assert.match(appJs, /xMm:layer\.x,yMm:layer\.y,widthMm:layer\.w,heightMm:layer\.h/, 'expected rectangle params to map x/y/w/h to xMm/yMm/widthMm/heightMm');
 });
 
-await test('4. stoneSizeMm, gapMm, and color are forwarded for shape generation', () => {
-  assert.match(appJs, /stoneSizeMm:layer\.stoneSize,gapMm:layer\.gap,mode:'outline',color:layer\.color/);
+await test('4. stoneSizeMm, gapMm, mode, and color are forwarded for shape generation', () => {
+  // RS-1011: mode is now layer.fillMode (resolved through resolveVectorFillMode(), defaulting to
+  // 'outline' for any pre-RS-1011 layer with no fillMode field -- see
+  // docs/specifications/RS-1011-FillAlgorithms.md) instead of the hard-coded 'outline' this
+  // milestone's shape layers used to always pass.
+  assert.match(appJs, /stoneSizeMm:layer\.stoneSize,gapMm:layer\.gap,mode:resolveVectorFillMode\(layer\.fillMode\),color:layer\.color/);
 });
 
 await test('5. the legacy generateCircle/generateRect methods are preserved, not deleted', () => {

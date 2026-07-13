@@ -22,14 +22,20 @@
 
 import { BoundingBox, Point2D, createCircleVectorPath, createRectangleVectorPath } from '../text/VectorPath.js';
 import { flattenContourToPolygon, translateContour } from './ContourGeometry.js';
-import { sampleFillPoints, sampleOutlinePoints, sampleFieldFillPoints } from './StoneSampler.js';
+import { sampleOutlinePoints, sampleShapeFillPoints, sampleFieldByMode } from './StoneSampler.js';
 import { Stone } from './Stone.js';
 import { StoneLayout } from './StoneLayout.js';
 import { parseSvgDocument } from '../svg/index.js';
 import { prepareImageField } from '../image/index.js';
 import { CURVE_ALIGNMENTS, CURVE_DIRECTIONS, projectPolygonToArc } from './ArcProjection.js';
 
-const SAMPLE_MODES = new Set(['outline', 'fill']);
+// RS-1011: 'fill' is unchanged in meaning/output from before this milestone (a regular grid --
+// "Grid Fill" is only a clearer UI label for the same stored value); staggered/radial/contour are
+// new. See docs/specifications/RS-1011-FillAlgorithms.md.
+const SAMPLE_MODES = new Set(['outline', 'fill', 'staggered', 'radial', 'contour']);
+// RS-1011: Image Trace has no vector perimeter to walk, so 'outline' is never valid for it -- see
+// normalizeImageParams() below and generateImageLayout()'s doc comment.
+const IMAGE_SAMPLE_MODES = new Set(['fill', 'staggered', 'radial', 'contour']);
 const DEFAULT_MODE = 'outline';
 const SHAPE_TYPES = new Set(['circle', 'rectangle']);
 
@@ -82,9 +88,7 @@ export class GeometryEngine {
     const { polygons } = await this._textPolygons(options);
     const spacingMm = options.stoneSizeMm + options.gapMm;
 
-    const points = options.mode === 'fill'
-      ? sampleFillPoints(polygons, BoundingBox.fromPoints(polygons.flat()), spacingMm)
-      : polygons.flatMap((polygon) => sampleOutlinePoints(polygon, spacingMm));
+    const points = sampleShapeFillPoints(options.mode, polygons, BoundingBox.fromPoints(polygons.flat()), spacingMm);
 
     const stones = points.map((point, index) => new Stone({
       xMm: point.xMm,
@@ -205,9 +209,7 @@ export class GeometryEngine {
     const { polygons } = this._shapePolygons(options);
     const spacingMm = options.stoneSizeMm + options.gapMm;
 
-    const points = options.mode === 'fill'
-      ? sampleFillPoints(polygons, BoundingBox.fromPoints(polygons.flat()), spacingMm)
-      : polygons.flatMap((polygon) => sampleOutlinePoints(polygon, spacingMm));
+    const points = sampleShapeFillPoints(options.mode, polygons, BoundingBox.fromPoints(polygons.flat()), spacingMm);
 
     const stones = points.map((point, index) => new Stone({
       xMm: point.xMm,
@@ -285,13 +287,13 @@ export class GeometryEngine {
     // as call arguments overflows the JS call stack, which is reachable here (unlike
     // generateShapeLayout()/generateTextLayout()'s flatMap-based accumulation) because an SVG
     // layer's placement box can scale a document to an arbitrarily large physical size.
-    if (options.mode === 'fill') {
-      for (const point of sampleFillPoints(closedPolygons, BoundingBox.fromPoints(closedPolygons.flat()), spacingMm)) {
-        points.push(point);
-      }
-    } else {
+    if (options.mode === 'outline') {
       for (const polygon of closedPolygons) {
         for (const point of sampleOutlinePoints(polygon, spacingMm, { closed: true })) points.push(point);
+      }
+    } else {
+      for (const point of sampleShapeFillPoints(options.mode, closedPolygons, BoundingBox.fromPoints(closedPolygons.flat()), spacingMm)) {
+        points.push(point);
       }
     }
     for (const polygon of openPolygons) {
@@ -372,6 +374,8 @@ export class GeometryEngine {
    * @param {number} params.heightMm Placement height.
    * @param {number} params.stoneSizeMm
    * @param {number} [params.gapMm]
+   * @param {'fill'|'staggered'|'radial'|'contour'} [params.mode] Default 'fill' -- a raster density
+   *   field has no vector perimeter, so 'outline' is not supported (see RS-1011).
    * @param {string} [params.color]
    * @param {number} [params.threshold] 0-255, default 128.
    * @param {boolean} [params.invert]
@@ -392,7 +396,8 @@ export class GeometryEngine {
     });
 
     const spacingMm = options.stoneSizeMm + options.gapMm;
-    const points = sampleFieldFillPoints(
+    const points = sampleFieldByMode(
+      options.mode,
       field,
       { xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm },
       spacingMm
@@ -407,7 +412,7 @@ export class GeometryEngine {
       index
     }));
 
-    return new StoneLayout({ layerId: options.layerId, sourceMode: 'fill', stones });
+    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
   }
 
   /**
@@ -445,9 +450,7 @@ export class GeometryEngine {
     }
 
     const spacingMm = options.stoneSizeMm + options.gapMm;
-    const points = options.mode === 'fill'
-      ? sampleFillPoints(polygons, BoundingBox.fromPoints(polygons.flat()), spacingMm)
-      : polygons.flatMap((polygon) => sampleOutlinePoints(polygon, spacingMm));
+    const points = sampleShapeFillPoints(options.mode, polygons, BoundingBox.fromPoints(polygons.flat()), spacingMm);
 
     const stones = points.map((point, index) => new Stone({
       xMm: point.xMm,
@@ -702,6 +705,15 @@ function normalizeImageParams(params) {
     throw new TypeError('GeometryEngine.generateImageLayout color must be a non-empty string when provided.');
   }
 
+  // RS-1011: default 'fill' matches this method's previous, only, always-fill behavior exactly, so
+  // every pre-existing call site (and every image layer saved before this milestone, which has no
+  // stored mode) generates byte-identical geometry. 'outline' is intentionally not in
+  // IMAGE_SAMPLE_MODES -- a raster density field has no vector perimeter to walk.
+  const mode = params.mode ?? 'fill';
+  if (!IMAGE_SAMPLE_MODES.has(mode)) {
+    throw new TypeError(`Unsupported image fill mode: ${mode}. Expected one of: ${[...IMAGE_SAMPLE_MODES].join(', ')}`);
+  }
+
   const xMm = assertFiniteNumber(params.xMm ?? 0, 'xMm');
   const yMm = assertFiniteNumber(params.yMm ?? 0, 'yMm');
   const widthMm = assertPositiveNumber(params.widthMm, 'widthMm');
@@ -716,6 +728,7 @@ function normalizeImageParams(params) {
     heightMm,
     stoneSizeMm,
     gapMm,
+    mode,
     color: params.color ?? null,
     threshold: params.threshold,
     invert: params.invert,

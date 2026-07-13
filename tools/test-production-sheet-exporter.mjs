@@ -422,7 +422,12 @@ await test('23. no forbidden file changed (this milestone\'s own forbidden list)
   // catalog, in the same shape/location as CrystalColors.js above) -- this exporter's own header
   // formatting change (adding commercial names to "Stone size: ...") is covered by
   // tools/test-variable-stone-sizes.mjs, not this milestone's forbidden-file guard.
-  const allowedDespitePrefix = new Set(['src/renderer/StoneColors.js', 'src/renderer/CrystalColors.js', 'src/renderer/StoneSizes.js', 'src/renderer/README.md', 'src/geometry/GeometryEngine.js', 'src/geometry/StoneSampler.js', 'src/geometry/index.js', 'src/geometry/README.md', 'src/geometry/PathBoolean.js']);
+  // RS-1011 (Fill Algorithms) legitimately adds src/geometry/ContourRingSampler.js (Contour Fill's
+  // distance-transform + marching-squares inward-ring tracer) and extends
+  // src/geometry/GeometryEngine.js/StoneSampler.js/index.js (already allowed below) -- see
+  // tools/test-fill-algorithms.mjs / tools/test-fill-algorithms-integration.mjs for that
+  // milestone's own forbidden-file guard. No exporter file changed.
+  const allowedDespitePrefix = new Set(['src/renderer/StoneColors.js', 'src/renderer/CrystalColors.js', 'src/renderer/StoneSizes.js', 'src/renderer/README.md', 'src/geometry/GeometryEngine.js', 'src/geometry/StoneSampler.js', 'src/geometry/index.js', 'src/geometry/README.md', 'src/geometry/PathBoolean.js', 'src/geometry/ContourRingSampler.js']);
   const forbiddenPrefixes = [
     'src/geometry/', 'src/renderer/', 'src/text/', 'src/fonts/', 'src/core/',
     'src/browser/', 'src/svg/', 'src/history/', 'src/products/', 'assets/', 'examples/'

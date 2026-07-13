@@ -37,7 +37,10 @@ await test('1. generate() routes svg layers through a live generation method cal
 
 await test('2. svg layers forward svgSource/xMm/yMm/widthMm/heightMm/mode to the permanent engine', () => {
   assert.match(appJs, /svgSource:layer\.svgSource,layerId:layer\.id,xMm:layer\.x,yMm:layer\.y,widthMm:layer\.w,heightMm:layer\.h/);
-  assert.match(appJs, /mode:layer\.mode==='fill'\?'fill':'outline'/);
+  // RS-1011: mode now widens through resolveVectorFillMode() (staggered/radial/contour, not just
+  // outline/fill) instead of the old two-value inline ternary -- see
+  // docs/specifications/RS-1011-FillAlgorithms.md.
+  assert.match(appJs, /mode:resolveVectorFillMode\(layer\.mode\)/);
 });
 
 await test('3. app.js imports parseSvgDocument from src/svg/index.js for pre-import validation, not a reimplemented parser', () => {
@@ -49,7 +52,7 @@ await test('4. index.html exposes the #importSvg button, #importSvgFile file inp
   assert.match(indexHtml, /<button id="importSvg"/);
   assert.match(indexHtml, /<input id="importSvgFile" type="file"/);
   assert.match(indexHtml, /<div id="svgControls"/);
-  assert.match(indexHtml, /<select id="svgMode">/);
+  assert.match(indexHtml, /<select id="svgMode"/);
 });
 
 await test('5. the #importSvgFile change handler validates before adding a layer and reports failures via #status', () => {

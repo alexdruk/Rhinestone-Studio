@@ -22,8 +22,22 @@ export {
   sampleOutlinePoints,
   sampleFillPoints,
   sampleFieldFillPoints,
-  isPointInsidePolygons
+  isPointInsidePolygons,
+  sampleStaggeredFillPoints,
+  sampleStaggeredFieldFillPoints,
+  sampleRadialFillPoints,
+  sampleRadialFieldFillPoints,
+  sampleContourFillPoints,
+  sampleContourFieldFillPoints,
+  sampleShapeFillPoints,
+  sampleFieldByMode,
+  dedupeStonePoints
 } from './StoneSampler.js';
+
+export {
+  computeInwardRingPolygons,
+  ContourFillPrecisionError
+} from './ContourRingSampler.js';
 
 export {
   projectPointToArc,

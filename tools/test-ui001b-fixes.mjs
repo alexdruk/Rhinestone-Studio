@@ -124,7 +124,11 @@ await test('11. no forbidden file changed (GeometryEngine, StoneLayout, exporter
   // RS-1013 (Variable Stone Sizes) legitimately adds src/renderer/StoneSizes.js and changes
   // src/export/ProductionSheetExporter.js's header formatting -- see
   // tools/test-variable-stone-sizes.mjs for that milestone's own forbidden-file guard.
-  const allowedDespitePrefix = new Set(['src/geometry/GeometryEngine.js', 'src/geometry/index.js', 'src/geometry/README.md', 'src/geometry/PathBoolean.js', 'src/renderer/StoneSizes.js', 'src/export/ProductionSheetExporter.js']);
+  // RS-1011 (Fill Algorithms) legitimately adds src/geometry/ContourRingSampler.js and extends
+  // src/geometry/GeometryEngine.js (already allowed above)/StoneSampler.js -- see
+  // tools/test-fill-algorithms.mjs / tools/test-fill-algorithms-integration.mjs for that
+  // milestone's own forbidden-file guard.
+  const allowedDespitePrefix = new Set(['src/geometry/GeometryEngine.js', 'src/geometry/index.js', 'src/geometry/README.md', 'src/geometry/PathBoolean.js', 'src/geometry/StoneSampler.js', 'src/geometry/ContourRingSampler.js', 'src/renderer/StoneSizes.js', 'src/export/ProductionSheetExporter.js']);
   const forbiddenPrefixes = [
     'src/geometry/', 'src/renderer/', 'src/export/', 'src/text/', 'src/fonts/', 'src/core/',
     'src/browser/', 'src/svg/', 'src/image/', 'src/history/', 'src/products/', 'src/preview3d/',

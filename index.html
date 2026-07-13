@@ -379,7 +379,13 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <div class="field"><label for="text">Text content</label><input id="text" value="Vitalina Serbin"></div>
           <div class="field-row">
             <div class="field"><label for="font">Font</label><select id="font"><option value="courier-prime-regular" selected>Courier Prime (monospace)</option><option value="great-vibes-regular">Great Vibes (script)</option></select></div>
-            <div class="field"><label for="textMode">Outline / Fill</label><select id="textMode"><option value="stroke" selected>Outline - readable</option><option value="fill">Fill - dense</option></select></div>
+            <div class="field"><label for="textMode">Fill Style</label><select id="textMode" title="How rhinestones are arranged across this text.">
+              <option value="stroke" selected>Outline - stones follow the letters</option>
+              <option value="fill">Grid Fill - even rows and columns</option>
+              <option value="staggered">Staggered Fill - offset rows, tighter packing</option>
+              <option value="radial">Radial Fill - rings out from the center</option>
+              <option value="contour">Contour Fill - rings that follow the letters inward</option>
+            </select></div>
           </div>
           <div class="field-row">
             <div class="field"><label for="height">Text height (mm)</label><input id="height" type="number" min="4" max="80" step="1" value="25"></div>
@@ -463,6 +469,16 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
             <div id="shapesPositionSlot" class="field-slot"></div>
             <p class="hint">Shapes can also be edited by mouse in the 2D canvas: drag to move, drag blue handles to resize, press <span class="kbd">Delete</span> to remove.</p>
           </div>
+          <div class="field-section" id="shapeFillModeField">
+            <h3>Fill Style</h3>
+            <select id="shapeFillMode" title="How rhinestones are arranged across this shape.">
+              <option value="outline" selected>Outline - stones follow the edge</option>
+              <option value="fill">Grid Fill - even rows and columns</option>
+              <option value="staggered">Staggered Fill - offset rows, tighter packing</option>
+              <option value="radial">Radial Fill - rings out from the center</option>
+              <option value="contour">Contour Fill - rings that follow the edge inward</option>
+            </select>
+          </div>
           <div class="field-section">
             <h3>Stones</h3>
             <div id="shapesStoneSlot" class="field-slot"></div>
@@ -512,8 +528,14 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
             <div id="importPositionSlot" class="field-slot"></div>
           </div>
           <div class="field-section">
-            <h3>Fill mode</h3>
-            <select id="svgMode"><option value="outline" selected>Outline - readable</option><option value="fill">Fill - dense</option></select>
+            <h3>Fill Style</h3>
+            <select id="svgMode" title="How rhinestones are arranged across this SVG shape.">
+              <option value="outline" selected>Outline - stones follow the edge</option>
+              <option value="fill">Grid Fill - even rows and columns</option>
+              <option value="staggered">Staggered Fill - offset rows, tighter packing</option>
+              <option value="radial">Radial Fill - rings out from the center</option>
+              <option value="contour">Contour Fill - rings that follow the edge inward</option>
+            </select>
           </div>
           <div class="field-section">
             <h3>Stones</h3>
@@ -587,6 +609,15 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
               <div class="field"><label for="imgMaxWidth">Maximum width (px)</label><input id="imgMaxWidth" type="number" min="8" max="2000" step="1" value="400"></div>
               <div class="field"><label for="imgMaxHeight">Maximum height (px)</label><input id="imgMaxHeight" type="number" min="8" max="2000" step="1" value="400"></div>
             </div>
+          </div>
+          <div class="field-section">
+            <h3>Fill Style</h3>
+            <select id="imageFillMode" title="How rhinestones are arranged across the traced image. Image Trace has no outline option -- it is built from a pixel pattern, not an edge.">
+              <option value="fill" selected>Grid Fill - even rows and columns</option>
+              <option value="staggered">Staggered Fill - offset rows, tighter packing</option>
+              <option value="radial">Radial Fill - rings out from the center</option>
+              <option value="contour">Contour Fill - rings that follow the traced shape inward</option>
+            </select>
           </div>
           <div class="field-section">
             <h3>Position &amp; size</h3>

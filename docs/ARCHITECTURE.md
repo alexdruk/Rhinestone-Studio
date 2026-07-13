@@ -709,6 +709,7 @@ code.
 | Geometry generation | `src/geometry/**` | `src/text/**` (VectorPath primitives, FontProviderRegistry), `src/svg/**` (`parseSvgDocument`) |
 | 2D + cup rendering | `src/renderer/**` | `src/geometry/**` (StoneLayout, Stone) |
 | Stone size library (RS-1013) | `src/renderer/StoneSizes.js` | nothing else in `src/**` (pure data + validation, exactly like `src/renderer/CrystalColors.js`; a layer's `stoneSize`/a `Stone`'s `sizeMm` stay plain millimeter numbers — `src/geometry/**` never reads this file) |
+| Contour Fill inward-ring geometry (RS-1011) | `src/geometry/ContourRingSampler.js` | nothing else in `src/**` (a distance-transform + marching-squares tracer taking a plain interior-test callback; `src/geometry/StoneSampler.js` is its only caller — see `docs/specifications/RS-1011-FillAlgorithms.md`) |
 | Export | `src/export/**` | `src/geometry/**`, `src/renderer/StoneColors.js` |
 | Browser compatibility | `src/browser/**` | `src/text/**`, `src/fonts/**`, `src/geometry/**` (proves resolution), `opentype.js` |
 | Undo/redo history (RS-1002) | `src/history/**` | nothing else in `src/**` (pure JSON-snapshot bookkeeping; no `Project`/`Layer`/`StoneLayout`/DOM dependency) |
@@ -836,7 +837,7 @@ flowchart TD
     PermGen["GeometryEngine.generateShapeLayout()"]
     VPCreate["createCircleVectorPath() /\ncreateRectangleVectorPath()\n(src/text/VectorPath.js)"]
     Flatten["flattenContourToPolygon()"]
-    Sample["sampleOutlinePoints()\n(mode is always 'outline' from app.js today)"]
+    Sample["sampleShapeFillPoints(mode, ...)\n(RS-1011: outline/fill/staggered/radial/contour,\nvia layer.fillMode -- default 'outline')"]
     Stones["Stone[] -> StoneLayout\n(per layer)"]
     Merge["merged into project StoneLayout"]
 
@@ -844,11 +845,12 @@ flowchart TD
 ```
 
 Shape generation is synchronous (no font provider to await) and converges on the exact same
-`flattenContourToPolygon()` / `sampleOutlinePoints()` / `Stone`/`StoneLayout` pipeline that text
+`flattenContourToPolygon()` / `StoneSampler.js` sampling / `Stone`/`StoneLayout` pipeline that text
 generation uses — this is the "one Geometry Engine, one product" principle holding in practice,
-not just in the diagram at the top of this document. `generateShapeLayout()` supports a `'fill'`
-mode identical in shape to text's, but `app.js` never requests it for circle/rectangle layers
-today (always passes `mode: 'outline'`).
+not just in the diagram at the top of this document. RS-1011 (Fill Algorithms) added a new
+`layer.fillMode` field for circle/rectangle layers (default `'outline'`, preserving every project
+saved before that milestone) so `app.js` can now request any of `generateShapeLayout()`'s five
+modes — see `docs/specifications/RS-1011-FillAlgorithms.md`.
 
 ## 5. SVG-generation flow (RS-1001)
 
@@ -869,6 +871,12 @@ flowchart TD
     Layer --> Resolve --> PermGen
     PermGen --> Parse --> Place --> Flatten --> Sample --> Stones --> Merge
 ```
+
+RS-1011 (Fill Algorithms) widened `mode`'s accepted values from `outline`/`fill` to also include
+`staggered`/`radial`/`contour` (closed contours only — open contours, e.g. an SVG `<line>`, are
+always outline-walked regardless of `mode`, unchanged); the stored `'fill'` value's meaning and
+output are unchanged, so every SVG layer saved before that milestone still generates
+byte-identical geometry. See `docs/specifications/RS-1011-FillAlgorithms.md`.
 
 `app.js` never parses SVG geometry itself: `parseSvgDocument()` (imported directly from
 `src/svg/index.js`, the only `src/svg/**` symbol `app.js` touches) is called once at import time
