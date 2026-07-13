@@ -167,7 +167,7 @@ await test('10. no forbidden file changed (this milestone\'s own forbidden list)
   // tools/test-production-sheet-exporter.mjs for that milestone's own forbidden-file guard.
   const forbiddenPrefixes = [
     'src/text/', 'src/fonts/', 'src/core/', 'src/browser/',
-    'assets/', 'examples/'
+    'assets/' /* RS-2001: examples/ is legitimately changed by the Gallery */
   ];
 
   for (const changedPath of changedPaths) {

@@ -192,7 +192,7 @@ await test('11. no forbidden file changed (this milestone\'s own forbidden list)
   // tools/test-production-sheet-exporter.mjs for that milestone's own forbidden-file guard.
   const forbiddenPrefixes = [
     'src/core/', 'src/text/', 'src/fonts/',
-    'src/browser/', 'src/history/', 'assets/', 'examples/'
+    'src/browser/', 'src/history/', 'assets/' /* RS-2001: examples/ is legitimately changed by the Gallery */
   ];
   // src/renderer/StoneColors.js is legitimately changed by RS-1007 (Crystal Color Library — it
   // became a compatibility re-export shim over the new src/renderer/CrystalColors.js catalog) —

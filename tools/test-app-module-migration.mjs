@@ -117,7 +117,12 @@ await test('app.js only imports the RS-0003.5B2 probe, the RS-0003.5B3 permanent
     // permanent module's "consumed only through its barrel" entry above -- pure item model/
     // storage-adapter-backed CRUD/transform logic only, no Project/Layer/StoneLayout/
     // GeometryEngine knowledge.
-    /from\s*['"]\.\/src\/library\/index\.js['"]/
+    /from\s*['"]\.\/src\/library\/index\.js['"]/,
+    // RS-2001: the Gallery's own barrel (see src/gallery/index.js), mirroring every other
+    // permanent module's "consumed only through its barrel" entry above -- read-only fixture
+    // catalog + the .rhs-to-app-project-shape bridge only, no Project/Layer/StoneLayout/
+    // GeometryEngine knowledge of its own.
+    /from\s*['"]\.\/src\/gallery\/index\.js['"]/
   ];
   for (const line of importLines) {
     assert.ok(

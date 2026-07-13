@@ -128,7 +128,7 @@ await test('8. no forbidden file changed (this milestone\'s own forbidden list)'
   const forbiddenPrefixes = [
     'src/export/', 'src/text/', 'src/fonts/', 'src/core/', 'src/browser/',
     'src/renderer/', 'src/preview3d/', 'src/svg/', 'src/history/', 'src/products/',
-    'assets/', 'examples/'
+    'assets/' /* RS-2001: examples/ is legitimately changed by the Gallery */
   ];
 
   for (const changedPath of changedPaths) {

@@ -103,7 +103,9 @@ await test('7. app.js only imports modules allowed as of this milestone', () => 
     // UI-001: the new generic Lightbox/dialog-controller module's own barrel module.
     /from\s*['"]\.\/src\/ui\/index\.js['"]/,
     // RS-1015: the Design Library's own barrel module.
-    /from\s*['"]\.\/src\/library\/index\.js['"]/
+    /from\s*['"]\.\/src\/library\/index\.js['"]/,
+    // RS-2001: the Gallery's own barrel module.
+    /from\s*['"]\.\/src\/gallery\/index\.js['"]/
   ];
   for (const line of importLines) {
     assert.ok(allowed.some((pattern) => pattern.test(line)), `unexpected import: ${line}`);

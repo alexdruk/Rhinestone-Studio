@@ -120,6 +120,7 @@ import { Lightbox } from './src/ui/index.js';
 // renderProductionLayout() pipeline (reused, unmodified, for thumbnail generation). See
 // docs/specifications/RS-1015-DesignLibrary.md.
 import { DesignLibrary, createLocalStorageAdapter, createMemoryStorageAdapter, buildSelectionItemData, buildProjectItemData, buildProjectFromItem, prepareLayersForInsert, getInsertableLayers } from './src/library/index.js';
+import { validateRhsProject, toAppProjectShape, parseCatalog, search as searchGalleryCatalog, filterByCategory as filterGalleryCategory, categories as galleryCategories, featuredEntries as galleryFeaturedEntries, getEntry as getGalleryEntry } from './src/gallery/index.js';
 // RS-1012 (Vector Boolean Operations): Union/Subtract/Intersect/Exclude over the current
 // multi-selection (the same selectedLayerIds set RS-1009's Align/Snap already uses). No new
 // geometry algorithm lives in app.js: resolveLayerShapeSource() below only asks the permanent
@@ -941,12 +942,15 @@ const lightboxes={
   settings:new Lightbox('lightboxSettings',{onOpen(){syncSettingsFieldsFromState()}}),
   help:new Lightbox('lightboxHelp'),
   library:new Lightbox('lightboxLibrary',{onOpen(){onLibraryOpen()}}),
-  libraryConfirm:new Lightbox('lightboxLibraryConfirm')
+  libraryConfirm:new Lightbox('lightboxLibraryConfirm'),
+  gallery:new Lightbox('lightboxGallery',{onOpen(){onGalleryOpen()}}),
+  galleryPreview:new Lightbox('lightboxGalleryPreview')
 };
 
 el('menuText').onclick=()=>lightboxes.text.open();
 el('menuShapes').onclick=()=>lightboxes.shapes.open();
 el('menuLibrary').onclick=()=>lightboxes.library.open();
+el('menuGallery').onclick=()=>lightboxes.gallery.open();
 el('menuImport').onclick=()=>lightboxes.importBox.open();
 el('menuImageTrace').onclick=()=>lightboxes.imagetrace.open();
 el('menuExport').onclick=()=>lightboxes.exportBox.open();
@@ -1074,7 +1078,10 @@ let libraryQuery='',libraryCategory='All',librarySortDir='asc',pendingLibraryDel
 
 function currentSelectedLayers(){return project.layers.filter(l=>selectedLayerIds.has(l.id))}
 
-async function generateLibraryThumbnail(tempProject){
+// RS-2001: generalized from the Design-Library-only generateLibraryThumbnail() so the Gallery
+// reuses the exact same generate -> render -> capture sequence for its own cards/previews, rather
+// than a second thumbnail renderer.
+async function generateProjectThumbnail(tempProject){
   try{
     const stoneLayout=await engine.generate(tempProject);
     const canvas=document.createElement('canvas');
@@ -1082,7 +1089,7 @@ async function generateLibraryThumbnail(tempProject){
     renderProductionLayout(canvas.getContext('2d'),stoneLayout,{widthPx:canvas.width,heightPx:canvas.height,paddingPx:12});
     return canvas.toDataURL('image/png');
   }catch(error){
-    console.error('Design Library: thumbnail generation failed',error);
+    console.error('Thumbnail generation failed',error);
     return null;
   }
 }
@@ -1132,7 +1139,7 @@ function onLibraryOpen(){
 async function saveProjectToLibrary(){
   const name=el('librarySaveName').value.trim()||project.name||DEFAULT_PROJECT_NAME;
   const data=buildProjectItemData(project);
-  const thumbnail=await generateLibraryThumbnail(project);
+  const thumbnail=await generateProjectThumbnail(project);
   designLibrary.add({kind:'project',name,data,thumbnail});
   el('librarySaveName').value='';
   renderLibraryGrid();
@@ -1144,7 +1151,7 @@ async function saveSelectionToLibrary(){
   if(layers.length===0)return;
   const name=el('librarySaveName').value.trim()||'Untitled Selection';
   const data=buildSelectionItemData(layers,project.canvas);
-  const thumbnail=await generateLibraryThumbnail({...project,layers});
+  const thumbnail=await generateProjectThumbnail({...project,layers});
   designLibrary.add({kind:'selection',name,data,thumbnail});
   el('librarySaveName').value='';
   renderLibraryGrid();
@@ -1222,6 +1229,160 @@ el('libraryConfirmDelete').onclick=()=>{
   if(pendingLibraryDeleteId){designLibrary.remove(pendingLibraryDeleteId);pendingLibraryDeleteId=null;renderLibraryGrid();el('libraryStatus').textContent='Deleted.'}
   lightboxes.libraryConfirm.close();
 };
+
+// ---- Gallery (RS-2001): a built-in, permanent, READ-ONLY set of example projects sourced from
+// examples/*.rhs + examples/manifest.json + examples/baselines.json + examples/gallery.json (the
+// curatorial metadata this milestone adds). Gallery is not the Design Library: items are never
+// renamed/duplicated/deleted, and nothing here is ever written back to examples/**. "Open Copy"
+// fetches a fixture, translates it through the existing toAppProjectShape()/validateProject()
+// bridge (src/gallery/index.js), and replaces the live project exactly like #importProjectFile
+// already does; "Save to Library" reuses buildProjectItemData()/designLibrary.add() without
+// touching the live project at all. Thumbnails reuse generateProjectThumbnail() above -- no second
+// thumbnail renderer, no second render pipeline. ----
+let galleryEntries=null,galleryFixtures=null,galleryLoadError=null;
+let galleryQuery='',galleryCategory='All',galleryPreviewFile=null;
+const galleryThumbnailCache=new Map();
+
+async function loadGalleryCatalogIfNeeded(){
+  if(galleryEntries||galleryLoadError)return;
+  try{
+    const [manifest,baselines,galleryMeta]=await Promise.all([
+      fetch('./examples/manifest.json').then(r=>r.json()),
+      fetch('./examples/baselines.json').then(r=>r.json()),
+      fetch('./examples/gallery.json').then(r=>r.json())
+    ]);
+    const fixtures={};
+    await Promise.all(galleryMeta.items.map(async item=>{fixtures[item.file]=await fetch(`./examples/${item.file}`).then(r=>r.json())}));
+    galleryFixtures=fixtures;
+    galleryEntries=parseCatalog({manifest,baselines,galleryMeta,fixtures});
+  }catch(error){
+    console.error('Gallery: failed to load catalog',error);
+    galleryLoadError=error;
+  }
+}
+
+function galleryFilteredEntries(){
+  const searched=searchGalleryCatalog(galleryEntries,galleryQuery);
+  if(galleryCategory==='Featured')return galleryFeaturedEntries(searched);
+  return filterGalleryCategory(searched,galleryCategory);
+}
+
+// Translates a Gallery fixture to a fresh, editable app-shape project. Never mutates
+// galleryFixtures[file] -- validateRhsProject()/toAppProjectShape() both return new objects.
+function buildAppProjectFromGalleryFile(file,title){
+  const fixture=galleryFixtures[file];
+  const rhsProject=validateRhsProject(fixture,file);
+  const appProjectShape=toAppProjectShape(rhsProject);
+  return validateProject({...appProjectShape,name:title});
+}
+
+async function generateGalleryThumbnail(file,title){
+  if(galleryThumbnailCache.has(file))return galleryThumbnailCache.get(file);
+  const thumbnail=await generateProjectThumbnail(buildAppProjectFromGalleryFile(file,title));
+  galleryThumbnailCache.set(file,thumbnail);
+  return thumbnail;
+}
+
+function renderGalleryGrid(){
+  if(galleryLoadError){
+    el('galleryGrid').innerHTML='';
+    el('galleryNoResults').style.display='none';
+    el('galleryStatus').textContent=`Gallery failed to load: ${galleryLoadError.message}`;
+    return;
+  }
+  const categoryOptions=['All','Featured',...galleryCategories(galleryEntries)];
+  el('galleryCategoryFilter').innerHTML=categoryOptions.map(c=>`<option value="${escapeHtml(c)}" ${c===galleryCategory?'selected':''}>${c==='All'?'All categories':escapeHtml(c)}</option>`).join('');
+  const items=galleryFilteredEntries();
+  el('galleryNoResults').style.display=items.length===0?'block':'none';
+  el('galleryGrid').innerHTML=items.map(entry=>`<div class="library-card gallery-card" data-file="${escapeHtml(entry.file)}">
+      <span class="gallery-readonly-badge" title="Gallery designs are read-only">Read-only</span>
+      <div class="library-card-thumb" data-role="thumb"><span class="library-card-thumb-empty">Loading…</span></div>
+      <div class="library-card-body">
+        <h4 title="${escapeHtml(entry.title)}">${escapeHtml(entry.title)}</h4>
+        <div class="library-card-meta">
+          <span class="library-badge gallery-category-pill">${escapeHtml(entry.category)}</span>
+          <span class="library-badge">${escapeHtml(entry.difficulty)}</span>
+          <span class="library-badge">${entry.stoneCount} stones</span>
+        </div>
+      </div>
+      <div class="library-card-actions">
+        <button class="btn" data-action="preview" title="Preview this design">Preview</button>
+        <button class="btn primary" data-action="openCopy" title="Open an editable copy of this design">Open Copy</button>
+      </div>
+    </div>`).join('');
+  for(const entry of items){
+    generateGalleryThumbnail(entry.file,entry.title).then(thumbnail=>{
+      const thumbEl=el('galleryGrid').querySelector(`[data-file="${CSS.escape(entry.file)}"] [data-role="thumb"]`);
+      if(thumbEl&&thumbnail)thumbEl.innerHTML=`<img src="${thumbnail}" alt="Preview of ${escapeHtml(entry.title)}">`;
+    });
+  }
+}
+
+async function onGalleryOpen(){
+  galleryQuery='';galleryCategory='All';
+  el('gallerySearch').value='';
+  el('galleryStatus').textContent='';
+  el('galleryGrid').innerHTML='<p class="hint">Loading Gallery…</p>';
+  await loadGalleryCatalogIfNeeded();
+  renderGalleryGrid();
+}
+
+function openGalleryPreview(file){
+  const entry=getGalleryEntry(galleryEntries,file);if(!entry)return;
+  galleryPreviewFile=file;
+  el('galleryPreviewTitle').textContent=entry.title;
+  el('galleryPreviewMeta').innerHTML=`<span class="library-badge gallery-category-pill">${escapeHtml(entry.category)}</span><span class="library-badge">${escapeHtml(entry.difficulty)}</span><span class="library-badge">${escapeHtml(entry.objectType)}</span><span class="library-badge">${entry.stoneCount} stones</span>`;
+  el('galleryPreviewDescription').textContent=entry.description;
+  el('galleryPreviewTags').textContent=entry.tags.join(', ');
+  el('galleryPreviewThumb').innerHTML='<span class="library-card-thumb-empty">Loading…</span>';
+  el('galleryPreviewStatus').textContent='';
+  lightboxes.galleryPreview.open();
+  generateGalleryThumbnail(file,entry.title).then(thumbnail=>{
+    if(galleryPreviewFile===file&&thumbnail)el('galleryPreviewThumb').innerHTML=`<img src="${thumbnail}" alt="Preview of ${escapeHtml(entry.title)}">`;
+  });
+}
+
+async function openGalleryItemAsCopy(file){
+  const entry=getGalleryEntry(galleryEntries,file);if(!entry)return;
+  try{
+    project=buildAppProjectFromGalleryFile(file,entry.title);
+    selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);
+    // Mirrors #importProjectFile's/createProjectFromLibraryItem's exact "loading a project is a
+    // fresh start, not an undoable edit" history-clear + dirty-baseline-reset pattern.
+    history.clear();cleanProjectJson=JSON.stringify(project);
+    syncSelectedControlsFromLayer();await updateAll(true);
+    lightboxes.galleryPreview.close();lightboxes.gallery.close();
+    el('status').textContent=`Opened an editable copy of "${entry.title}" from the Gallery.`;
+  }catch(error){
+    console.error('Gallery: failed to open item as a copy',error);
+    el('galleryPreviewStatus').textContent=`Failed to open: ${error.message}`;
+  }
+}
+
+async function saveGalleryItemToLibrary(file){
+  const entry=getGalleryEntry(galleryEntries,file);if(!entry)return;
+  try{
+    const appProject=buildAppProjectFromGalleryFile(file,entry.title);
+    const data=buildProjectItemData(appProject);
+    const thumbnail=await generateGalleryThumbnail(file,entry.title);
+    designLibrary.add({kind:'project',name:entry.title,data,thumbnail});
+    el('galleryPreviewStatus').textContent=`Saved "${entry.title}" to the Design Library.`;
+  }catch(error){
+    console.error('Gallery: failed to save item to the Design Library',error);
+    el('galleryPreviewStatus').textContent=`Save failed: ${error.message}`;
+  }
+}
+
+el('gallerySearch').addEventListener('input',()=>{galleryQuery=el('gallerySearch').value;renderGalleryGrid()});
+el('galleryCategoryFilter').addEventListener('change',()=>{galleryCategory=el('galleryCategoryFilter').value;renderGalleryGrid()});
+el('galleryGrid').addEventListener('click',e=>{
+  const card=e.target.closest('.gallery-card');if(!card)return;
+  const file=card.dataset.file,action=e.target.dataset.action;
+  if(action==='preview')openGalleryPreview(file);
+  else if(action==='openCopy')openGalleryItemAsCopy(file);
+});
+el('galleryPreviewOpenCopy').onclick=()=>{if(galleryPreviewFile)openGalleryItemAsCopy(galleryPreviewFile)};
+el('galleryPreviewSaveToLibrary').onclick=()=>{if(galleryPreviewFile)saveGalleryItemToLibrary(galleryPreviewFile)};
 
 // ---- Shipping & Handling: local, session-scoped metadata only. Deliberately not part of
 // `project` / Project JSON / undo-redo this milestone -- see

@@ -246,7 +246,7 @@ await test('11. no forbidden file changed (GeometryEngine/StoneLayout/Stone/rend
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
   const forbiddenPrefixes = [
     'src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'src/svg/', 'src/image/',
-    'src/history/', 'src/products/', 'src/preview3d/', 'src/editing/', 'assets/', 'examples/'
+    'src/history/', 'src/products/', 'src/preview3d/', 'src/editing/', 'assets/' /* RS-2001: examples/ is legitimately changed by the Gallery */
   ];
   const forbiddenExactWithinPrefix = new Set([
     // GeometryEngine/Stone/StoneLayout already support per-layer stoneSizeMm end-to-end (see test

@@ -465,6 +465,66 @@
         "sapphire"
       ],
       "validationCategory": "mixed"
+    },
+    {
+      "file": "wedding-bride-tribe-tumbler.rhs",
+      "layerCount": 2,
+      "visibleLayerCount": 2,
+      "stoneCount": 468,
+      "bounds": {
+        "minXmm": 58.543501,
+        "minYmm": 11.221377,
+        "maxXmm": 171.456499,
+        "maxYmm": 88.760934
+      },
+      "fontIds": [
+        "great-vibes-regular"
+      ],
+      "colors": [
+        "gold",
+        "rose"
+      ],
+      "validationCategory": "mixed"
+    },
+    {
+      "file": "team-jersey-name-number.rhs",
+      "layerCount": 2,
+      "visibleLayerCount": 2,
+      "stoneCount": 411,
+      "bounds": {
+        "minXmm": 41.9,
+        "minYmm": 38.25,
+        "maxXmm": 168.1,
+        "maxYmm": 66.3
+      },
+      "fontIds": [
+        "courier-prime-regular"
+      ],
+      "colors": [
+        "crystal-clear",
+        "siam"
+      ],
+      "validationCategory": "mixed"
+    },
+    {
+      "file": "business-logo-monogram-bottle.rhs",
+      "layerCount": 2,
+      "visibleLayerCount": 2,
+      "stoneCount": 619,
+      "bounds": {
+        "minXmm": 14.2,
+        "minYmm": 11.2,
+        "maxXmm": 165.8,
+        "maxYmm": 78.8
+      },
+      "fontIds": [
+        "courier-prime-regular"
+      ],
+      "colors": [
+        "gold",
+        "silver"
+      ],
+      "validationCategory": "mixed"
     }
   ]
 }

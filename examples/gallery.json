@@ -1,0 +1,229 @@
+{
+  "version": 1,
+  "description": "RS-2001 Gallery curatorial metadata. Each entry names one examples/*.rhs fixture already covered by examples/manifest.json and examples/baselines.json. Deliberately NOT stored here: stoneCount, objectType (product), thumbnail -- these are derived at load time from baselines.json / the fixture's own `product` field / the live render pipeline by src/gallery/GalleryCatalog.js, so they can never drift out of sync with the fixture's real, committed geometry. Gallery items are read-only; this file only adds curatorial labels on top of existing, unmodified fixtures.",
+  "items": [
+    {
+      "file": "vitalina.rhs",
+      "title": "Classic Name",
+      "category": "Names",
+      "description": "The original preserved fixture: a short name in block font, centerline (outline) sampling. The simplest possible starting point.",
+      "difficulty": "beginner",
+      "tags": ["names", "block-font", "outline-mode", "legacy"],
+      "featured": true
+    },
+    {
+      "file": "vitalina-serbin.rhs",
+      "title": "Two-Word Name, Auto-Fit",
+      "category": "Names",
+      "description": "A longer two-word name that exercises the auto-fit rescale pass so it always fits the canvas.",
+      "difficulty": "intermediate",
+      "tags": ["names", "block-font", "outline-mode", "autofit"]
+    },
+    {
+      "file": "short-name-block.rhs",
+      "title": "Short Name, Light Cup",
+      "category": "Names",
+      "description": "A short first name in block font on a light cream cup, front wrap.",
+      "difficulty": "beginner",
+      "tags": ["names", "block-font", "light-cup", "front-wrap"]
+    },
+    {
+      "file": "long-name-autofit.rhs",
+      "title": "Long Name, Wide Wrap",
+      "category": "Names",
+      "description": "A long two-word name at a height that forces auto-fit rescaling, on a dark navy cup with a wide wrap.",
+      "difficulty": "intermediate",
+      "tags": ["names", "block-font", "autofit", "dark-cup", "wide-wrap"]
+    },
+    {
+      "file": "script-name-great-vibes.rhs",
+      "title": "Script Name",
+      "category": "Names",
+      "description": "A name set in the Great Vibes script font on a white cup -- a softer, more decorative look than the block font.",
+      "difficulty": "beginner",
+      "tags": ["names", "script-font", "light-cup", "front-wrap"]
+    },
+    {
+      "file": "monogram-outline.rhs",
+      "title": "Three-Letter Monogram (Outline)",
+      "category": "Monograms",
+      "description": "A three-letter monogram in block font, centerline sampling, on a small square canvas and a black cup.",
+      "difficulty": "beginner",
+      "tags": ["monogram", "block-font", "outline-mode", "dark-cup"]
+    },
+    {
+      "file": "monogram-fill.rhs",
+      "title": "Two-Letter Monogram (Fill)",
+      "category": "Monograms",
+      "description": "A two-letter monogram with dense interior fill sampling instead of an outline -- a bolder, denser look.",
+      "difficulty": "beginner",
+      "tags": ["monogram", "block-font", "fill-mode", "light-cup"]
+    },
+    {
+      "file": "front-wrap-light-cup.rhs",
+      "title": "Front Wrap, Light Cup",
+      "category": "Names",
+      "description": "Dedicated front-wrap and light (white) cup combination, short name in block font.",
+      "difficulty": "beginner",
+      "tags": ["names", "block-font", "light-cup", "front-wrap"]
+    },
+    {
+      "file": "wide-wrap-dark-cup.rhs",
+      "title": "Wide Wrap, Dark Cup",
+      "category": "Names",
+      "description": "Dedicated wider-wrap and dark (black) cup combination, short name in block font.",
+      "difficulty": "beginner",
+      "tags": ["names", "block-font", "dark-cup", "wide-wrap"]
+    },
+    {
+      "file": "circle-only.rhs",
+      "title": "Circle Only",
+      "category": "Shapes",
+      "description": "A single circle shape layer with no text -- full wrap, navy cup. Good starting point for badge/logo layouts.",
+      "difficulty": "beginner",
+      "tags": ["shapes", "circle", "outline-mode", "full-wrap"]
+    },
+    {
+      "file": "rectangle-only.rhs",
+      "title": "Rectangle Only",
+      "category": "Shapes",
+      "description": "A single rectangle shape layer with no text -- half wrap, gray cup.",
+      "difficulty": "beginner",
+      "tags": ["shapes", "rectangle", "outline-mode", "half-wrap"]
+    },
+    {
+      "file": "mixed-text-circle.rhs",
+      "title": "Text Framed by a Circle",
+      "category": "Shapes",
+      "description": "A text layer plus an overlapping circle frame layer, demonstrating cross-layer stone de-duplication where the two meet.",
+      "difficulty": "intermediate",
+      "tags": ["shapes", "mixed-layers", "text-and-circle", "light-cup"]
+    },
+    {
+      "file": "mixed-text-rectangle.rhs",
+      "title": "Text Framed by a Rectangle",
+      "category": "Shapes",
+      "description": "A text layer plus a rectangle frame layer, wide wrap, pink cup.",
+      "difficulty": "intermediate",
+      "tags": ["shapes", "mixed-layers", "text-and-rectangle", "wide-wrap"]
+    },
+    {
+      "file": "mixed-all-layers.rhs",
+      "title": "Text, Circle, and Rectangle",
+      "category": "Shapes",
+      "description": "Text, circle, and rectangle layers together, with one layer hidden -- shows how hidden layers are excluded from the rendered design.",
+      "difficulty": "advanced",
+      "tags": ["shapes", "mixed-layers", "hidden-layer", "half-wrap"]
+    },
+    {
+      "file": "small-stones-tight-gap.rhs",
+      "title": "Small Stones, Tight Gap",
+      "category": "Mixed Stone Sizes",
+      "description": "Small 0.8mm stones with a tight 0.1mm gap -- a fine, dense look.",
+      "difficulty": "beginner",
+      "tags": ["stone-sizes", "small-stones", "tight-gap"]
+    },
+    {
+      "file": "large-stones-wide-gap.rhs",
+      "title": "Large Stones, Wide Gap",
+      "category": "Mixed Stone Sizes",
+      "description": "Large 3.0mm stones with a wide 1.5mm gap -- a bold, sparse look, faster to apply by hand.",
+      "difficulty": "beginner",
+      "tags": ["stone-sizes", "large-stones", "wide-gap"]
+    },
+    {
+      "file": "long-script-name.rhs",
+      "title": "Long Script Name",
+      "category": "Names",
+      "description": "A long three-word name in Great Vibes script at a height that forces auto-fit, wide wrap, cream cup.",
+      "difficulty": "intermediate",
+      "tags": ["names", "script-font", "autofit", "light-cup", "wide-wrap"]
+    },
+    {
+      "file": "svg-logo-import.rhs",
+      "title": "Imported SVG Logo",
+      "category": "SVG",
+      "description": "A badge logo (circle/star/ribbon) imported from SVG, with a text tagline layer underneath, gold fill mode.",
+      "difficulty": "advanced",
+      "tags": ["svg", "logo", "fill-mode", "mixed-layers"],
+      "featured": true
+    },
+    {
+      "file": "image-trace-monogram.rhs",
+      "title": "Traced Photo Monogram",
+      "category": "Image Trace",
+      "description": "A monogram traced from a real photo/PNG using Image Trace, contour fill mode, on a white cup.",
+      "difficulty": "advanced",
+      "tags": ["image-trace", "monogram", "contour-mode", "light-cup"]
+    },
+    {
+      "file": "boolean-union-badge.rhs",
+      "title": "Boolean Union Badge",
+      "category": "Boolean Operations",
+      "description": "Two overlapping circles combined with a real Union boolean operation into a single badge shape.",
+      "difficulty": "advanced",
+      "tags": ["boolean-operations", "path-layer", "fill-mode"]
+    },
+    {
+      "file": "multi-color-mixed-layers.rhs",
+      "title": "Five-Layer Multi-Color Design",
+      "category": "Multi-color",
+      "description": "Five layers -- rectangles, circles, and text -- each in a distinct crystal color, on a black cup.",
+      "difficulty": "advanced",
+      "tags": ["multi-color", "mixed-layers", "dark-cup"],
+      "featured": true
+    },
+    {
+      "file": "tumbler-wrap-design.rhs",
+      "title": "Tumbler Wrap Design",
+      "category": "Tumblers",
+      "description": "A Straight Tumbler product, half wrap, script name framed by an accent ring.",
+      "difficulty": "intermediate",
+      "tags": ["tumbler-product", "half-wrap", "script-font", "mixed-layers"]
+    },
+    {
+      "file": "bottle-front-design.rhs",
+      "title": "Bottle Label Design",
+      "category": "Bottles",
+      "description": "A Bottle product, front wrap, label border framing a brand name and tagline.",
+      "difficulty": "intermediate",
+      "tags": ["bottle-product", "front-wrap", "mixed-layers", "block-font"]
+    },
+    {
+      "file": "mixed-fill-styles-and-sizes.rhs",
+      "title": "Every Fill Style, Every Stone Size",
+      "category": "Large Projects",
+      "description": "The Gallery's largest fixture: five layers spanning every fill/text mode (outline/fill/staggered/radial/contour) and stone sizes from 1.0mm to 2.5mm. Used as the primary performance benchmark project.",
+      "difficulty": "advanced",
+      "tags": ["fill-styles", "mixed-stone-sizes", "mixed-layers", "large-project", "benchmark"],
+      "featured": true
+    },
+    {
+      "file": "wedding-bride-tribe-tumbler.rhs",
+      "title": "Bride Tribe Tumbler",
+      "category": "Wedding",
+      "description": "A script 'Bride Tribe' design framed by a full accent ring on a blush half-wrap tumbler -- a bachelorette/bridal-party favorite.",
+      "difficulty": "intermediate",
+      "tags": ["wedding", "script-font", "tumbler-product", "mixed-layers"],
+      "featured": true
+    },
+    {
+      "file": "team-jersey-name-number.rhs",
+      "title": "Team Name Mug",
+      "category": "Sports",
+      "description": "A bold filled team name and number nameplate with an underline accent bar -- a team-spirit mug design.",
+      "difficulty": "intermediate",
+      "tags": ["sports", "block-font", "fill-mode", "mixed-layers"],
+      "featured": true
+    },
+    {
+      "file": "business-logo-monogram-bottle.rhs",
+      "title": "Corporate Branded Bottle",
+      "category": "Business",
+      "description": "A company name framed by a rectangular label border on a navy front-wrap bottle -- corporate gifting and branded merchandise.",
+      "difficulty": "intermediate",
+      "tags": ["business", "block-font", "bottle-product", "mixed-layers"],
+      "featured": true
+    }
+  ]
+}

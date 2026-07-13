@@ -251,6 +251,18 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .export-group{border:1px solid var(--color-border);border-radius:var(--radius-md);padding:var(--space-3);margin-bottom:var(--space-3)}
 .export-group h3{font-size:var(--font-size-sm);font-weight:700;margin-bottom:2px}
 .export-group p{font-size:var(--font-size-xs);color:var(--color-text-muted);margin:0 0 var(--space-2)}
+/* ---- Gallery (RS-2001): additive only -- reuses .library-grid/.library-card/.library-badge
+   structure and behavior verbatim; these rules only add the read-only visual identity (deep-blue
+   accent, read-only ribbon, category pill) on top of it, matching --color-primary already used
+   for every other primary action in the app. ---- */
+.gallery-lightbox .lightbox-header{background:var(--color-primary);color:#fff}
+.gallery-lightbox .lightbox-header .lightbox-close{color:#fff}
+.gallery-readonly-hint{color:var(--color-primary);font-weight:600}
+.gallery-card{position:relative}
+.gallery-readonly-badge{position:absolute;top:6px;right:6px;z-index:1;font-size:var(--font-size-xs);font-weight:700;letter-spacing:.02em;text-transform:uppercase;padding:2px 8px;border-radius:999px;background:var(--color-primary);color:#fff;box-shadow:0 1px 4px #0003}
+.gallery-category-pill{background:var(--color-primary-tint);color:var(--color-primary-active);border-color:var(--color-primary-tint)}
+.gallery-preview-thumb{aspect-ratio:3/2;background:#fbfdff;display:flex;align-items:center;justify-content:center;border:1px solid var(--color-border);border-radius:var(--radius-md);overflow:hidden;margin:var(--space-2) 0}
+.gallery-preview-thumb img{width:100%;height:100%;object-fit:contain}
 </style>
 </head>
 <body>
@@ -261,6 +273,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
     <button class="topmenu-btn" id="menuText" title="Text (edit the selected text layer's content, font, and curve)"><span class="glyph">🅣</span>Text</button>
     <button class="topmenu-btn" id="menuShapes" title="Shapes and object templates"><span class="glyph">◇</span>Shapes</button>
     <button class="topmenu-btn" id="menuLibrary" title="Save, browse, and reuse your saved designs"><span class="glyph">📚</span>Design Library</button>
+    <button class="topmenu-btn" id="menuGallery" title="Browse built-in example designs (read-only)"><span class="glyph">✨</span>Gallery</button>
     <button class="topmenu-btn" id="menuImport" title="Import an SVG or a Project JSON file"><span class="glyph">⇪</span>Import</button>
     <button class="topmenu-btn" id="menuImageTrace" title="Trace a PNG/JPG/WebP image into stones"><span class="glyph">🖼</span>Image Trace</button>
     <button class="topmenu-btn" id="menuExport" title="Export project, layout, SVG, or PNG"><span class="glyph">⬇</span>Export</button>
@@ -864,6 +877,43 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
     <footer class="lightbox-footer">
       <button class="btn" data-lightbox-close>Cancel</button>
       <button class="btn danger" id="libraryConfirmDelete">Delete</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ---------- GALLERY (RS-2001): built-in, read-only example designs ---------- -->
+<div class="lightbox-overlay" id="lightboxGallery">
+  <div class="lightbox wide gallery-lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxGalleryTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxGalleryTitle">Gallery</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <p class="hint gallery-readonly-hint">Gallery designs are built-in examples and cannot be changed. Choose "Open Copy" to start editing your own version.</p>
+      <div class="library-controls">
+        <div class="field grow"><label for="gallerySearch">Search</label><input id="gallerySearch" type="search" placeholder="Search Gallery designs"></div>
+        <div class="field"><label for="galleryCategoryFilter">Category</label><select id="galleryCategoryFilter"><option value="All">All categories</option></select></div>
+      </div>
+      <div class="library-no-results" id="galleryNoResults" style="display:none">No Gallery designs match your search or filter.</div>
+      <div class="library-grid gallery-grid" id="galleryGrid"></div>
+    </div>
+    <footer class="lightbox-footer"><span class="footer-note" id="galleryStatus"></span><button class="btn" data-lightbox-close>Close</button></footer>
+  </div>
+</div>
+
+<!-- ---------- GALLERY: PREVIEW (RS-2001) ---------- -->
+<div class="lightbox-overlay" id="lightboxGalleryPreview">
+  <div class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxGalleryPreviewTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxGalleryPreviewTitle">Preview</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <span class="gallery-readonly-badge" title="Gallery designs are read-only">Read-only</span>
+      <div class="library-card-thumb gallery-preview-thumb" id="galleryPreviewThumb"></div>
+      <h3 id="galleryPreviewTitle"></h3>
+      <div class="library-card-meta" id="galleryPreviewMeta"></div>
+      <p id="galleryPreviewDescription"></p>
+      <p class="hint" id="galleryPreviewTags"></p>
+    </div>
+    <footer class="lightbox-footer">
+      <span class="footer-note" id="galleryPreviewStatus"></span>
+      <button class="btn" id="galleryPreviewSaveToLibrary" title="Save a copy of this design to your Design Library">Save to Design Library</button>
+      <button class="btn primary" id="galleryPreviewOpenCopy" title="Open an editable copy of this design">Open Copy</button>
     </footer>
   </div>
 </div>
