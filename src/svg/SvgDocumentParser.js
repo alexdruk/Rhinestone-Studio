@@ -255,11 +255,27 @@ export function parseSvgDocument(svgSource) {
   const naturalWidthMm = declaredWidthValue * widthMmPerUnit;
   const naturalHeightMm = declaredHeightValue * heightMmPerUnit;
 
+  // RS-2000: shape coordinates below are produced by walking this matrix, and every downstream
+  // consumer (GeometryEngine._svgPolygons()'s xMm/yMm placement, Contour/VectorPath field names)
+  // treats them as already being in real millimeters -- so the matrix must convert all the way
+  // from user-space to mm, not just to the declared width/height's own numeric value. Previously
+  // this only scaled user-space to "declared-unit numeric space" (correct only when that unit was
+  // literally "mm", i.e. widthMmPerUnit/heightMmPerUnit == 1); any other unit (the overwhelming
+  // real-world default: unitless/px, or the viewBox-only fallback, both of which resolve to 'px'
+  // above) left shapes ~3.78x too large per axis (1 / (25.4/96)), while naturalWidthMm/
+  // naturalHeightMm were already being converted correctly -- a mismatch invisible to every
+  // existing coordinate-correctness test in tools/test-svg-parser.mjs because its `svg()` helper's
+  // default width/height is '50mm' (a no-op conversion factor of 1). Multiplying by
+  // widthMmPerUnit/heightMmPerUnit here is a no-op for the 'mm' case (byte-identical to before) and
+  // makes every other unit finally land in true millimeters, matching naturalWidthMm/
+  // naturalHeightMm and this function's own documented contract ("a natural millimeter size").
   let viewBoxMatrix = IDENTITY_MATRIX;
   if (viewBox) {
-    const scaleX = declaredWidthValue / viewBox.width;
-    const scaleY = declaredHeightValue / viewBox.height;
+    const scaleX = naturalWidthMm / viewBox.width;
+    const scaleY = naturalHeightMm / viewBox.height;
     viewBoxMatrix = { a: scaleX, b: 0, c: 0, d: scaleY, e: -viewBox.minX * scaleX, f: -viewBox.minY * scaleY };
+  } else {
+    viewBoxMatrix = { a: widthMmPerUnit, b: 0, c: 0, d: heightMmPerUnit, e: 0, f: 0 };
   }
   const rootMatrix = composeMatrix(viewBoxMatrix, parseTransformList(svgRoot.attrs.transform));
 
