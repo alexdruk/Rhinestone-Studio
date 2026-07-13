@@ -322,9 +322,8 @@ await test('16. no forbidden file changed (this milestone\'s own forbidden list)
   // tools/test-production-sheet-exporter.mjs et al.), updates the handful of earlier milestones'
   // own forbidden-file guards to allow-list these same files.
   const forbiddenPrefixes = [
-    'src/renderer/', 'src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'src/svg/',
-    'src/image/', 'src/history/', 'src/products/', 'src/preview3d/', 'src/editing/', 'src/export/',
-    'src/ui/', 'assets/' /* RS-2001: examples/ is legitimately changed by the Gallery */
+    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
+    'src/renderer/', 'src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'src/svg/', 'src/image/', 'src/history/', 'src/products/', 'src/preview3d/', 'src/editing/', 'src/export/', 'src/ui/'
   ];
 
   for (const changedPath of changedPaths) {

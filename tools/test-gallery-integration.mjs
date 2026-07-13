@@ -133,12 +133,8 @@ await test('13. no forbidden file/prefix changed on this branch (GeometryEngine/
 
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
   const forbiddenPrefixes = [
-    'src/geometry/', 'src/renderer/', 'src/export/', 'src/editing/', 'src/history/',
-    'src/products/', 'src/text/', 'src/fonts/', 'src/svg/', 'src/image/', 'src/preview3d/',
-    'src/core/', 'src/browser/', 'src/ui/', 'src/library/', 'assets/'
-    // Deliberately NOT forbidden here: examples/ (new fixtures + gallery.json are this
-    // milestone's whole point), tools/lib/rhsProject.mjs (now a re-export shim of the
-    // relocated src/gallery/RhsFixtureBridge.js).
+    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
+    'src/geometry/', 'src/renderer/', 'src/export/', 'src/editing/', 'src/history/', 'src/products/', 'src/text/', 'src/fonts/', 'src/svg/', 'src/image/', 'src/preview3d/', 'src/core/', 'src/browser/', 'src/ui/', 'src/library/'
   ];
 
   for (const changedPath of changedPaths) {

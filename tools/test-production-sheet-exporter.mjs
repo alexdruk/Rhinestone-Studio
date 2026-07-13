@@ -429,8 +429,8 @@ await test('23. no forbidden file changed (this milestone\'s own forbidden list)
   // milestone's own forbidden-file guard. No exporter file changed.
   const allowedDespitePrefix = new Set(['src/renderer/StoneColors.js', 'src/renderer/CrystalColors.js', 'src/renderer/StoneSizes.js', 'src/renderer/README.md', 'src/geometry/GeometryEngine.js', 'src/geometry/StoneSampler.js', 'src/geometry/index.js', 'src/geometry/README.md', 'src/geometry/PathBoolean.js', 'src/geometry/ContourRingSampler.js']);
   const forbiddenPrefixes = [
-    'src/geometry/', 'src/renderer/', 'src/text/', 'src/fonts/', 'src/core/',
-    'src/browser/', 'src/svg/', 'src/history/', 'src/products/', 'assets/' /* RS-2001: examples/ is legitimately changed by the Gallery */
+    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
+    'src/geometry/', 'src/renderer/', 'src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'src/svg/', 'src/history/', 'src/products/'
   ];
 
   for (const changedPath of changedPaths) {

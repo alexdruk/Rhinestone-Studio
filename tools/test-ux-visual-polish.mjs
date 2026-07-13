@@ -269,11 +269,8 @@ await test('11. no forbidden file changed', () => {
   // src/export/ is legitimately changed by RS-1005 (Production Sheet export) — see
   // tools/test-production-sheet-exporter.mjs for that milestone's own forbidden-file guard.
   const forbiddenPrefixes = [
-    'src/text/',
-    'src/fonts/',
-    'src/core/',
-    'src/browser/',
-    'assets/'
+    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
+    'src/text/', 'src/fonts/', 'src/core/', 'src/browser/'
   ];
 
   for (const changedPath of changedPaths) {

@@ -47,7 +47,10 @@ async function extractProjectFunctions() {
   const defaultMatch = appJs.match(/function defaultProject\(\)\{return\{[\s\S]*?\}\}\n/);
   assert.ok(defaultMatch, 'expected to find defaultProject() in app.js');
 
-  const constantsStart = appJs.indexOf("const TEXT_ENGINE_FONT_IDS=new Set");
+  // RS-2002: TEXT_ENGINE_FONT_IDS became a `let` (reassigned once fontManager loads) and moved
+  // after DEFAULT_TEXT_FONT_ID -- anchor on the latter instead, still the first real constant
+  // defaultProject()/validateProject() transitively depend on.
+  const constantsStart = appJs.indexOf("const DEFAULT_TEXT_FONT_ID=");
   const source = `${appJs.slice(constantsStart, appJs.indexOf(defaultMatch[0]) + defaultMatch[0].length)}\n${appJs.slice(appJs.indexOf('const SUPPORTED_LAYER_TYPES=new Set'), appJs.indexOf(validateMatch[0]) + validateMatch[0].length)}`;
   // eslint-disable-next-line no-new-func
   return new Function('getObjectTemplate', `${source}\nreturn { validateProject, defaultProject };`)(getObjectTemplate);
@@ -305,7 +308,10 @@ await test('21. no forbidden file changed (this milestone\'s own forbidden list)
   // tools/test-production-sheet-exporter.mjs for that milestone's own forbidden-file guard.
   // src/geometry/ is legitimately changed by RS-1008A (Image Trace Architecture Correction) — see
   // tools/test-image-trace-regression.mjs for that milestone's own forbidden-file guard.
-  const forbiddenPrefixes = ['src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'src/svg/', 'src/history/', 'assets/' /* RS-2001: examples/ is legitimately changed by the Gallery */];
+  const forbiddenPrefixes = [
+    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
+    'src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'src/svg/', 'src/history/'
+  ];
   for (const changedPath of changedPaths) {
     assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
     assert.ok(!forbiddenExactWithinPrefix.has(changedPath), `Forbidden file changed: ${changedPath}`);

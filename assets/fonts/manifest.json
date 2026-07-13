@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "fonts": [
     {
       "id": "courier-prime-regular",
@@ -8,8 +8,88 @@
       "weight": 400,
       "path": "assets/fonts/CourierPrime-Regular.ttf",
       "role": "monospace",
-      "enabled": false,
-      "notes": "Placeholder registry entry. Add the font file before enabling OpenType rendering."
+      "enabled": true,
+      "notes": "Typewriter-style monospace. Bundled since RS-0003.4; kept enabled as the project default font id (courier-prime-regular)."
+    },
+    {
+      "id": "great-vibes-regular",
+      "family": "Great Vibes",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/GreatVibes-Regular.ttf",
+      "role": "script",
+      "enabled": true,
+      "notes": "Flowing calligraphic script. Bundled since RS-0003.4."
+    },
+    {
+      "id": "pt-serif-regular",
+      "family": "PT Serif",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/PTSerif-Regular.ttf",
+      "role": "serif",
+      "enabled": true,
+      "notes": "RS-2002: classic, highly readable book-style serif. Static instance (no variable axes) -- 359 KB, deliberately chosen over the much larger variable-font Merriweather build for faster loading."
+    },
+    {
+      "id": "montserrat-regular",
+      "family": "Montserrat",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Montserrat-Regular.ttf",
+      "role": "sans-serif",
+      "enabled": true,
+      "notes": "RS-2002: clean geometric sans-serif with excellent readability at small stone sizes; one of the most recognized/requested Google Fonts sans-serifs."
+    },
+    {
+      "id": "playfair-display-regular",
+      "family": "Playfair Display",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/PlayfairDisplay-Regular.ttf",
+      "role": "display",
+      "enabled": true,
+      "notes": "RS-2002: high-contrast elegant display serif for headline-style text."
+    },
+    {
+      "id": "cinzel-regular",
+      "family": "Cinzel",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Cinzel-Regular.ttf",
+      "role": "monogram",
+      "enabled": true,
+      "notes": "RS-2002: classic Roman capitals styling, well suited to monogram/initial layouts and engraved-look designs."
+    },
+    {
+      "id": "lobster-regular",
+      "family": "Lobster",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Lobster-Regular.ttf",
+      "role": "decorative",
+      "enabled": true,
+      "notes": "RS-2002: bold decorative display face with a friendly, retro-signage character."
+    },
+    {
+      "id": "anton-regular",
+      "family": "Anton",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Anton-Regular.ttf",
+      "role": "block",
+      "enabled": true,
+      "notes": "RS-2002: ultra-bold condensed block sans for maximum impact/legibility at a distance."
+    },
+    {
+      "id": "caveat-regular",
+      "family": "Caveat",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Caveat-Regular.ttf",
+      "role": "handwritten",
+      "enabled": true,
+      "notes": "RS-2002: casual handwritten style with clean, simple outlines that hold up well as rhinestone outlines."
     },
     {
       "id": "roboto-mono-regular",
@@ -19,17 +99,7 @@
       "path": "assets/fonts/RobotoMono-Regular.ttf",
       "role": "monospace",
       "enabled": false,
-      "notes": "Placeholder registry entry. Add the font file before enabling OpenType rendering."
-    },
-    {
-      "id": "great-vibes-regular",
-      "family": "Great Vibes",
-      "style": "Regular",
-      "weight": 400,
-      "path": "assets/fonts/GreatVibes-Regular.ttf",
-      "role": "script",
-      "enabled": false,
-      "notes": "Placeholder registry entry. Add the font file before enabling OpenType rendering."
+      "notes": "Placeholder registry entry -- assets/fonts/RobotoMono-Regular.ttf is a 14-byte non-font stub, not a real font file. Left disabled and unused/untouched (see tools/test-opentype-provider.mjs's corrupt-font-file coverage, which depends on this file staying unparsable)."
     }
   ]
 }
