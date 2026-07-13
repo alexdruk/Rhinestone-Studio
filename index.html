@@ -216,6 +216,26 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .template-card.active{border-color:var(--color-primary);background:var(--color-primary-tint)}
 .template-card h4{font-size:var(--font-size-sm);margin:0 0 4px}
 .template-card p{font-size:var(--font-size-xs);color:var(--color-text-muted);margin:0}
+/* ---- Design Library (RS-1015) ---- */
+.library-toolbar{display:flex;flex-wrap:wrap;gap:var(--space-3);align-items:flex-end;margin-bottom:var(--space-4);padding-bottom:var(--space-4);border-bottom:1px solid var(--color-border)}
+.library-toolbar .field{margin-bottom:0;flex:1 1 220px}
+.library-toolbar .btnrow{display:flex;gap:var(--space-2);flex:0 0 auto}
+.library-controls{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:flex-end;margin-bottom:var(--space-4)}
+.library-controls .field{margin-bottom:0}
+.library-controls .field.grow{flex:1 1 200px}
+.library-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:var(--space-3)}
+.library-card{border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-surface);overflow:hidden;display:flex;flex-direction:column}
+.library-card-thumb{aspect-ratio:3/2;background:#fbfdff;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--color-border);overflow:hidden}
+.library-card-thumb img{width:100%;height:100%;object-fit:contain}
+.library-card-thumb-empty{color:var(--color-text-muted);font-size:var(--font-size-xs)}
+.library-card-body{padding:var(--space-2) var(--space-3);flex:1}
+.library-card-body h4{margin:0 0 6px;font-size:var(--font-size-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.library-card-body input.library-rename-input{width:100%;height:26px;padding:0 6px;font-size:var(--font-size-sm)}
+.library-card-meta{display:flex;gap:6px;flex-wrap:wrap}
+.library-badge{display:inline-block;font-size:var(--font-size-xs);padding:1px 8px;border-radius:999px;background:var(--color-bg);color:var(--color-text-muted);border:1px solid var(--color-border);white-space:nowrap}
+.library-card-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:var(--space-2) var(--space-3);border-top:1px solid var(--color-border)}
+.library-card-actions button.btn{padding:0 4px;font-size:var(--font-size-xs)}
+.library-empty-state,.library-no-results{text-align:center;color:var(--color-text-muted);padding:var(--space-6) var(--space-3);font-size:var(--font-size-sm)}
 .help-section{margin-bottom:var(--space-4)}
 .help-section h3{font-size:var(--font-size-sm);font-weight:700;margin-bottom:6px}
 .help-section p,.help-section li{font-size:var(--font-size-sm);color:var(--color-text-muted);line-height:1.5}
@@ -232,6 +252,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
   <nav class="topmenu" aria-label="Main menu">
     <button class="topmenu-btn" id="menuText" title="Text (edit the selected text layer's content, font, and curve)"><span class="glyph">🅣</span>Text</button>
     <button class="topmenu-btn" id="menuShapes" title="Shapes and object templates"><span class="glyph">◇</span>Shapes</button>
+    <button class="topmenu-btn" id="menuLibrary" title="Save, browse, and reuse your saved designs"><span class="glyph">📚</span>Design Library</button>
     <button class="topmenu-btn" id="menuImport" title="Import an SVG or a Project JSON file"><span class="glyph">⇪</span>Import</button>
     <button class="topmenu-btn" id="menuImageTrace" title="Trace a PNG/JPG/WebP image into stones"><span class="glyph">🖼</span>Image Trace</button>
     <button class="topmenu-btn" id="menuExport" title="Export project, layout, SVG, or PNG"><span class="glyph">⬇</span>Export</button>
@@ -797,6 +818,44 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
       <div class="help-section"><h3>About Rhinestone Studio</h3><p>Version 0.1.0. Professional software for designing and producing rhinestone artwork on physical products.</p></div>
     </div>
     <footer class="lightbox-footer"><button class="btn" data-lightbox-close>Close</button></footer>
+  </div>
+</div>
+
+<!-- ---------- DESIGN LIBRARY (RS-1015) ---------- -->
+<div class="lightbox-overlay" id="lightboxLibrary">
+  <div class="lightbox wide" role="dialog" aria-modal="true" aria-labelledby="lightboxLibraryTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxLibraryTitle">Design Library</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <div class="library-toolbar">
+        <div class="field"><label for="librarySaveName">Save to library as</label><input id="librarySaveName" type="text" placeholder="Design name" maxlength="80"></div>
+        <div class="btnrow">
+          <button class="btn primary" id="librarySaveProject" title="Save the entire current project as a new Design Library item">Save Whole Project</button>
+          <button class="btn" id="librarySaveSelection" title="Save only the selected layers as a new Design Library item" disabled>Save Selection</button>
+        </div>
+      </div>
+      <p class="hint" id="libraryDisabledHint" style="display:none">Select one or more layers on the canvas or in the Layers list to enable "Save Selection".</p>
+      <div class="library-controls">
+        <div class="field grow"><label for="librarySearch">Search</label><input id="librarySearch" type="search" placeholder="Search designs by name"></div>
+        <div class="field"><label for="libraryCategoryFilter">Category</label><select id="libraryCategoryFilter"><option value="All">All categories</option></select></div>
+        <div class="field"><label for="librarySort">Sort</label><select id="librarySort"><option value="asc">Name (A–Z)</option><option value="desc">Name (Z–A)</option></select></div>
+      </div>
+      <div class="library-empty-state" id="libraryEmptyState" style="display:none">Your Design Library is empty. Save your current project or a selection above to get started.</div>
+      <div class="library-no-results" id="libraryNoResults" style="display:none">No designs match your search or filter.</div>
+      <div class="library-grid" id="libraryGrid"></div>
+    </div>
+    <footer class="lightbox-footer"><span class="footer-note" id="libraryStatus"></span><button class="btn" data-lightbox-close>Close</button></footer>
+  </div>
+</div>
+
+<!-- ---------- DESIGN LIBRARY: DELETE CONFIRMATION (RS-1015) ---------- -->
+<div class="lightbox-overlay" id="lightboxLibraryConfirm">
+  <div class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxLibraryConfirmTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxLibraryConfirmTitle">Delete design?</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body"><p id="libraryConfirmMessage"></p></div>
+    <footer class="lightbox-footer">
+      <button class="btn" data-lightbox-close>Cancel</button>
+      <button class="btn danger" id="libraryConfirmDelete">Delete</button>
+    </footer>
   </div>
 </div>
 

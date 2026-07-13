@@ -99,7 +99,9 @@ await test('7. app.js only imports modules allowed as of this milestone', () => 
     // RS-1009: Alignment & Snapping's own barrel module.
     /from\s*['"]\.\/src\/editing\/index\.js['"]/,
     // UI-001: the new generic Lightbox/dialog-controller module's own barrel module.
-    /from\s*['"]\.\/src\/ui\/index\.js['"]/
+    /from\s*['"]\.\/src\/ui\/index\.js['"]/,
+    // RS-1015: the Design Library's own barrel module.
+    /from\s*['"]\.\/src\/library\/index\.js['"]/
   ];
   for (const line of importLines) {
     assert.ok(allowed.some((pattern) => pattern.test(line)), `unexpected import: ${line}`);

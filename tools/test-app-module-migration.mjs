@@ -112,7 +112,12 @@ await test('app.js only imports the RS-0003.5B2 probe, the RS-0003.5B3 permanent
     // UI-001: the new generic Lightbox/dialog-controller module's own barrel (see
     // src/ui/index.js), mirroring every other permanent module's "consumed only through its
     // barrel" entry above -- pure DOM dialog behavior only, no Project/Layer/StoneLayout knowledge.
-    /from\s*['"]\.\/src\/ui\/index\.js['"]/
+    /from\s*['"]\.\/src\/ui\/index\.js['"]/,
+    // RS-1015: the Design Library's own barrel (see src/library/index.js), mirroring every other
+    // permanent module's "consumed only through its barrel" entry above -- pure item model/
+    // storage-adapter-backed CRUD/transform logic only, no Project/Layer/StoneLayout/
+    // GeometryEngine knowledge.
+    /from\s*['"]\.\/src\/library\/index\.js['"]/
   ];
   for (const line of importLines) {
     assert.ok(

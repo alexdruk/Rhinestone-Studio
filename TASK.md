@@ -1,71 +1,64 @@
 # Task
 
-**Task ID:** RS-1011
-**Task Type:** Feature — Fill Algorithms
-**Specification:** `docs/specifications/RS-1011-FillAlgorithms.md`
-**Status:** IN PROGRESS
-**Branch:** feature/rs-1011-fill-algorithms
+**Task ID:** RS-1015
+**Task Type:** Feature — Design Library
+**Specification:** `docs/specifications/RS-1015-DesignLibrary.md`
+**Status:** IMPLEMENTED
+**Branch:** feature/rs-1015-design-library
 
 ## Goal
 
-Add professional fill algorithms — Grid Fill, Staggered Fill, Radial Fill, Contour Fill, alongside
-the existing Outline mode — so every supported layer type (Text/Curved Text, Circle, Rectangle,
-Imported SVG, Image Trace, Boolean/path layers) can choose a fill style through the existing
-`GeometryEngine -> StoneLayout -> render/export` pipeline. No parallel fill engine; `GeometryEngine`
-stays the single authority for stone placement.
+Let users save, organize, preview, and reuse commonly-used rhinestone designs — a selection of
+layers or an entire project — as a personal "Design Library", opened from the top menu, without
+introducing a second project format or a second geometry/rendering pipeline.
 
 ## Required Outcome
 
-See `docs/specifications/RS-1011-FillAlgorithms.md` in full. Summary:
+See `docs/specifications/RS-1015-DesignLibrary.md` in full. Summary:
 
-* Audit-first: `'outline'`/`'fill'` sample modes already existed and were already shared by every
-  vector layer type; `'fill'` mode already *was* Grid Fill (regular grid, `spacingMm =
-  stoneSizeMm + gapMm`) and needed a clearer label, not a reimplementation. Staggered/Radial/Contour
-  fill did not exist. Circle/Rectangle/Boolean-path layers had no fill-mode UI control at all
-  (hard-coded to Outline in `app.js`).
-* New: `sampleStaggeredFillPoints()`/`sampleRadialFillPoints()`/`sampleContourFillPoints()` (plus
-  raster `...FieldFillPoints()` counterparts for Image Trace) in `src/geometry/StoneSampler.js`, and
-  a new `src/geometry/ContourRingSampler.js` implementing a distance-transform + marching-squares
-  inward-ring tracer for Contour Fill (the one genuinely new geometry primitive).
-* `GeometryEngine`'s sample-mode enum extends to `{outline, fill, staggered, radial, contour}`
-  (`'fill'`'s stored meaning/output is byte-identical to before — only its UI label changes); every
-  `generate*Layout()` method now supports the full set via one shared dispatcher, replacing four
-  near-identical `mode==='fill'?...:...` ternaries. `generateImageLayout()` gains its first `mode`
-  parameter (default `'fill'`, matching its previous unconditional behavior; no `'outline'` — a
-  raster field has no vector perimeter).
-* New optional `fillMode` layer field on circle/rectangle/path layers (default `'outline'`,
-  preserving every existing project's geometry) and on image layers (default `'fill'`); `textMode`/
-  `svgMode`'s existing enums widen to the same 5 (4 for image) values, fully backward compatible.
-* One "Fill Style" control per layer-type Lightbox (Text, Import/SVG, Shapes, Image Trace), no new
-  secondary controls (Radial Fill's center is always the shape's own bounding-box center; Contour
-  Fill's ring spacing is always the same stone pitch every other mode uses).
+* Audit-first: no template/preset library infrastructure exists yet. `src/products/ObjectTemplate.js`
+  is an unrelated concept (physical product templates, not design content); `src/core/Project.js`/
+  `Layer.js` are unused by the live app. The live ad hoc `project`/layer JSON (already round-tripped
+  by `#exportProject`/`validateProject()`) is reused verbatim as a library item's payload — no new
+  schema for geometry/fill style/stone size/color/object type/text/SVG/Image Trace/boolean-path/
+  transforms/layer ordering.
+* New: `src/library/**` (`LibraryItem.js`, `LibraryTransform.js`, `DesignLibrary.js`,
+  `LibraryStorageAdapter.js`, `index.js`) — a pure, DOM-free module (storage-adapter-injected CRUD +
+  search/filter/sort + pure clone/insert/new-project transforms), fully unit-testable under Node,
+  mirroring `src/editing/**`/`src/history/**`'s existing shape.
+* `app.js`/`index.html`: one new Lightbox ("Design Library") from a new top-menu button; thumbnail
+  generation reuses the existing `engine.generate()` bridge + `renderProductionLayout()` against an
+  offscreen canvas (no second rendering pipeline); insertion and layer cloning reuse the existing
+  `commitHistory()`/`updateAll()`/`duplicateLayer()`-style deep-clone-then-reid pattern; "New Project
+  From This" mirrors the existing Project JSON import's full-replace + history-reset shape, reusing
+  `validateProject()` for whole-project items.
+* `GeometryEngine`, `StoneLayout`, every renderer, and every exporter are untouched.
 
 ## Rules
 
 * Follow `docs/AI_ENGINEER.md`, `docs/CLAUDE_GUIDE.md`, `docs/ARCHITECTURE.md`,
   `docs/MILESTONE_WORKFLOW.md`.
-* Repository is the source of truth; audit before implementing; do not duplicate
-  `GeometryEngine`/`StoneLayout` generation; no fill logic in any renderer or exporter.
-* Do not modify `PathBoolean.js`'s private marching-squares tracer (precision-tuned by RS-1012A) —
-  Contour Fill's tracer is a new, narrowly-scoped file reusing only `isPointInsidePolygons()`.
+* Repository is the source of truth; audit before implementing; do not duplicate project
+  serialization, `GeometryEngine`, `StoneLayout`, or renderer/exporter logic.
+* Do not touch any forbidden-file prefix still enforced by an existing `npm test` guard (`src/
+  geometry/`, `src/renderer/`, `src/export/`, `src/editing/`, `src/history/`, `src/products/`,
+  `src/text/`, `src/fonts/`, `src/svg/`, `src/image/`, `src/preview3d/`, `src/core/`, `src/browser/`,
+  `src/ui/`, `style.css`, `assets/`, `examples/`, `README.md`, `LICENSE`, `CONTRIBUTING.md`).
 * Preserve backward/project compatibility: a project saved before this milestone must load and
-  render unchanged; no existing layer field's meaning or default changes.
+  render unchanged; Project JSON's schema does not change.
 
 ## Deliverables
 
-* `src/geometry/ContourRingSampler.js` — new distance-transform + marching-squares inward-ring tracer.
-* `src/geometry/StoneSampler.js` — new staggered/radial/contour vector + field samplers, shared
-  `sampleShapeFillPoints()`/`sampleFieldByMode()` dispatchers, `dedupeStonePoints()`.
-* `src/geometry/GeometryEngine.js` — extended `SAMPLE_MODES`, `generateImageLayout()` gains `mode`.
-* `src/geometry/index.js` — new exports.
-* `app.js`, `index.html` — `fillMode` field wiring for circle/rectangle/path/image, widened
-  `textMode`/`svgMode` option lists, new Fill Style controls.
-* `docs/specifications/RS-1011-FillAlgorithms.md` — full specification and audit.
-* `tools/test-fill-algorithms.mjs`, `tools/test-fill-algorithms-integration.mjs` — new tests;
-  `package.json` test script updated.
+* `src/library/**` — new permanent module (item model, transforms, storage-adapter-backed CRUD,
+  barrel).
+* `app.js`, `index.html` — Design Library Lightbox, top-menu entry, thumbnail generation, save/
+  insert/create-project/rename/duplicate/delete wiring.
+* `tools/test-app-module-migration.mjs` — extend the `app.js` import allowlist by one entry.
+* `tools/test-design-library.mjs`, `tools/test-design-library-integration.mjs` — new tests.
+* `package.json` — updated `test` script.
+* `docs/specifications/RS-1015-DesignLibrary.md` — full specification and audit.
 * `npm test` passing in full.
-* Real-browser verification (headless Chrome via Playwright, isolated temp profile) of every fill
-  mode across every supported layer type, undo/redo, duplicate, save/load, exports, Production
-  Sheet, 2D canvas, 3D preview, Dual Workspace, with screenshots.
+* Real-browser verification (headless Chrome via CDP, isolated temp profile) of every Library
+  feature, thumbnails, Dual Workspace, Production Sheet, exports, undo/redo, with screenshots.
 * `TASK_RESULT.md` completed.
-* One commit on `feature/rs-1011-fill-algorithms`, branch pushed (not merged).
+* One commit on `feature/rs-1015-design-library`, branch pushed (not merged).
