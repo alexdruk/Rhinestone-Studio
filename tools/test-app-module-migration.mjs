@@ -138,8 +138,8 @@ await test('app.js only imports the RS-0003.5B2 probe, the RS-0003.5B3 permanent
   assert.ok(!cdnHostPattern.test(appJs), 'app.js must not reference a public CDN URL');
 });
 
-await test('app.js does not import the permanent src/core Project/Layer model (RS-0003.5B3 out of scope)', () => {
-  assert.ok(!appJs.includes('src/core/'), 'app.js must not import src/core/** in this task');
+await test('app.js does not import src/core/** (RS-2006: the module was removed, not migrated onto)', () => {
+  assert.ok(!appJs.includes('src/core/'), 'app.js must not import src/core/** — it no longer exists');
 });
 
 await test('the three updated legacy guard tests no longer reject app.js or index.html', async () => {
@@ -173,8 +173,10 @@ await test('no forbidden files changed', () => {
     // src/geometry/ is legitimately changed by RS-0003.5C1 (permanent shape generation).
     // src/renderer/ and src/export/ are legitimately changed by RS-0003.5C2 (rendering pipeline).
     // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone.
-    'src/text/',
-    'src/core/'
+    // RS-2006: src/core/** is legitimately removed by the Project Model Consolidation milestone
+    // (it was the unused half of the two-model split; app.js's ad hoc schema was already the one
+    // model every subsystem actually consumed — see docs/specifications/RS-2006-*.md).
+    'src/text/'
   ];
 
   for (const changedPath of changedPaths) {

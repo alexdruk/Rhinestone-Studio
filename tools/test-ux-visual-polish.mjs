@@ -270,7 +270,7 @@ await test('11. no forbidden file changed', () => {
   // tools/test-production-sheet-exporter.mjs for that milestone's own forbidden-file guard.
   const forbiddenPrefixes = [
     // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
-    'src/text/', 'src/fonts/', 'src/core/', 'src/browser/'
+    'src/text/', 'src/fonts/', 'src/browser/'
   ];
 
   for (const changedPath of changedPaths) {

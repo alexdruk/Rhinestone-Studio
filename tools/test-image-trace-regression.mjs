@@ -127,7 +127,7 @@ await test('8. no forbidden file changed (this milestone\'s own forbidden list)'
   const allowedDespitePrefix = new Set(['src/renderer/StoneSizes.js', 'src/export/ProductionSheetExporter.js']);
   const forbiddenPrefixes = [
     // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
-    'src/export/', 'src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'src/renderer/', 'src/preview3d/', 'src/svg/', 'src/history/', 'src/products/'
+    'src/export/', 'src/text/', 'src/fonts/', 'src/browser/', 'src/renderer/', 'src/preview3d/', 'src/svg/', 'src/history/', 'src/products/'
   ];
 
   for (const changedPath of changedPaths) {
