@@ -76,7 +76,9 @@ await test('4. every top-menu-opened Lightbox overlay exists exactly once and is
   for (const { lightbox } of MENU_ITEMS) {
     const matches = indexHtml.match(new RegExp(`id="${lightbox}"`, 'g')) || [];
     assert.equal(matches.length, 1, `expected exactly one #${lightbox}`);
-    assert.match(indexHtml, new RegExp(`<div class="lightbox-overlay" id="${lightbox}">`), `expected #${lightbox} to be a lightbox-overlay`);
+    // S-101: lightboxShapes carries an additional "non-modal" modifier class (see
+    // tools/test-s101-ux-workflow-polish.mjs) -- still a lightbox-overlay, just not the only class.
+    assert.match(indexHtml, new RegExp(`<div class="lightbox-overlay(?: [\\w-]+)?" id="${lightbox}">`), `expected #${lightbox} to be a lightbox-overlay`);
   }
 });
 

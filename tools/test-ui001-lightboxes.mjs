@@ -57,7 +57,12 @@ await test('1. every Lightbox has a title, a close button, Escape-closeable dial
   for (const id of ALL_LIGHTBOXES) {
     const body = extractElementHtml(indexHtml, id);
     assert.match(body, /<header class="lightbox-header">/, `expected ${id} to have a header`);
-    assert.match(body, /role="dialog" aria-modal="true"/, `expected ${id}'s dialog to be a proper modal`);
+    // S-101: lightboxShapes is deliberately non-modal (aria-modal="false") so its own Boolean Ops
+    // hint -- "select layers on the canvas or in the Layers list" -- is actually followable while
+    // the dialog stays open. Every other Lightbox is unchanged and stays a true modal. See test
+    // tools/test-s101-ux-workflow-polish.mjs for the dedicated non-modal assertions.
+    const expectedAriaModal = id === 'lightboxShapes' ? 'false' : 'true';
+    assert.match(body, new RegExp(`role="dialog" aria-modal="${expectedAriaModal}"`), `expected ${id}'s dialog to declare aria-modal="${expectedAriaModal}"`);
     assert.match(body, /<button class="lightbox-close" data-lightbox-close aria-label="Close">/, `expected ${id} to have a close button`);
     assert.match(body, /<footer class="lightbox-footer">/, `expected ${id} to have a footer`);
   }
