@@ -86,8 +86,10 @@ await test('7. "New Project From This" reuses the existing validateProject(), do
 });
 
 await test('8. thumbnail generation reuses the existing engine.generate()/renderProductionLayout() pipeline (no second rendering pipeline)', () => {
-  const fnMatch = appJs.match(/async function generateLibraryThumbnail\(tempProject\)\{[\s\S]*?\n\}/);
-  assert.ok(fnMatch, 'expected to find generateLibraryThumbnail() in app.js');
+  // RS-2001: generateLibraryThumbnail() was generalized to generateProjectThumbnail() so the
+  // Gallery could reuse the exact same function instead of a second thumbnail renderer.
+  const fnMatch = appJs.match(/async function generateProjectThumbnail\(tempProject\)\{[\s\S]*?\n\}/);
+  assert.ok(fnMatch, 'expected to find generateProjectThumbnail() in app.js');
   assert.match(fnMatch[0], /engine\.generate\(tempProject\)/);
   assert.match(fnMatch[0], /renderProductionLayout\(/);
   assert.ok(!/new\s+GeometryEngine\(/.test(fnMatch[0]), 'must reuse the existing engine bridge, not construct a second one');
@@ -173,7 +175,7 @@ await test('15. no forbidden file/prefix changed on this branch (GeometryEngine/
   const forbiddenPrefixes = [
     'src/geometry/', 'src/renderer/', 'src/export/', 'src/editing/', 'src/history/',
     'src/products/', 'src/text/', 'src/fonts/', 'src/svg/', 'src/image/', 'src/preview3d/',
-    'src/core/', 'src/browser/', 'src/ui/', 'assets/', 'examples/'
+    'src/core/', 'src/browser/', 'src/ui/', 'assets/' /* RS-2001: examples/ is legitimately changed by the Gallery */
   ];
 
   for (const changedPath of changedPaths) {

@@ -305,7 +305,7 @@ await test('21. no forbidden file changed (this milestone\'s own forbidden list)
   // tools/test-production-sheet-exporter.mjs for that milestone's own forbidden-file guard.
   // src/geometry/ is legitimately changed by RS-1008A (Image Trace Architecture Correction) — see
   // tools/test-image-trace-regression.mjs for that milestone's own forbidden-file guard.
-  const forbiddenPrefixes = ['src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'src/svg/', 'src/history/', 'assets/', 'examples/'];
+  const forbiddenPrefixes = ['src/text/', 'src/fonts/', 'src/core/', 'src/browser/', 'src/svg/', 'src/history/', 'assets/' /* RS-2001: examples/ is legitimately changed by the Gallery */];
   for (const changedPath of changedPaths) {
     assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
     assert.ok(!forbiddenExactWithinPrefix.has(changedPath), `Forbidden file changed: ${changedPath}`);

@@ -121,6 +121,21 @@
       "file": "mixed-fill-styles-and-sizes.rhs",
       "description": "RS-2000: five layers spanning every fill/text mode (outline/fill/staggered/radial/contour) and stone sizes from 1.0mm to 2.5mm.",
       "purpose": ["mixed-fill-styles", "variable-stone-sizes", "mixed-layers", "front-wrap"]
+    },
+    {
+      "file": "wedding-bride-tribe-tumbler.rhs",
+      "description": "RS-2001: customer-scenario Wedding design -- script 'Bride Tribe' text framed by a full accent ring, blush cup, half-wrap tumbler.",
+      "purpose": ["wedding", "script-font", "mixed-layers", "half-wrap", "tumbler-product"]
+    },
+    {
+      "file": "team-jersey-name-number.rhs",
+      "description": "RS-2001: customer-scenario Sports design -- filled block-font team name/number nameplate with an underline bar accent, dark cup, front-wrap mug.",
+      "purpose": ["sports", "block-font", "fill-mode", "mixed-layers", "front-wrap"]
+    },
+    {
+      "file": "business-logo-monogram-bottle.rhs",
+      "description": "RS-2001: customer-scenario Business design -- company name framed by a rectangular label border, navy cup, front-wrap bottle.",
+      "purpose": ["business", "block-font", "mixed-layers", "front-wrap", "bottle-product"]
     }
   ]
 }
