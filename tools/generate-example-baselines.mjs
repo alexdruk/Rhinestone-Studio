@@ -19,6 +19,7 @@ import { FontManager } from '../src/fonts/index.js';
 import { createDefaultFontProviderRegistry } from '../src/text/index.js';
 import { GeometryEngine } from '../src/geometry/index.js';
 import { validateRhsProject, generateProjectStoneLayout, resolveFontId, visibleLayerCount } from './lib/rhsProject.mjs';
+import { withBrowserImageDecoder } from './lib/browserImageBuffer.mjs';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const examplesDir = path.join(repoRoot, 'examples');
@@ -27,13 +28,19 @@ function round(value) {
   return Number(value.toFixed(6));
 }
 
+// RS-2000: generalized to cover svg/image/path (previously only text/circle/rectangle existed).
+// A project touching more than one of these groups is 'mixed', exactly as text+shape already was;
+// a project using only one group keeps that group's own '<group>-only' label.
 function validationCategory(project) {
   const types = new Set(project.layers.map((l) => l.type));
-  const hasText = types.has('text');
-  const hasShape = types.has('circle') || types.has('rectangle');
-  if (hasText && hasShape) return 'mixed';
-  if (hasText) return 'text-only';
-  return 'shape-only';
+  const groups = [];
+  if (types.has('text')) groups.push('text');
+  if (types.has('circle') || types.has('rectangle')) groups.push('shape');
+  if (types.has('svg')) groups.push('svg');
+  if (types.has('image')) groups.push('image');
+  if (types.has('path')) groups.push('path');
+  if (groups.length > 1) return 'mixed';
+  return `${groups[0]}-only`;
 }
 
 async function buildEngine() {
@@ -47,16 +54,13 @@ async function buildEngine() {
   return new GeometryEngine({ fontProviderRegistry });
 }
 
-async function main() {
-  const engine = await buildEngine();
-  const manifest = JSON.parse(await readFile(path.join(examplesDir, 'manifest.json'), 'utf8'));
-
+async function computeBaselines(engine, manifest, resolveImageBuffer) {
   const baselines = [];
   for (const entry of manifest.examples) {
     const filePath = path.join(examplesDir, entry.file);
     const raw = JSON.parse(await readFile(filePath, 'utf8'));
     const project = validateRhsProject(raw, entry.file);
-    const layout = await generateProjectStoneLayout(project, engine);
+    const layout = await generateProjectStoneLayout(project, engine, { resolveImageBuffer });
     const bb = layout.getBoundingBox();
 
     const fontIds = [...new Set(
@@ -77,6 +81,26 @@ async function main() {
       validationCategory: validationCategory(project)
     });
   }
+  return baselines;
+}
+
+async function main() {
+  const engine = await buildEngine();
+  const manifest = JSON.parse(await readFile(path.join(examplesDir, 'manifest.json'), 'utf8'));
+
+  // RS-2000: an 'image' layer fixture needs its imageSrc really decoded to pixels -- Node has no
+  // bundled PNG/JPEG/WebP decoder (src/image/ImageDecoder.js is deliberately browser-only), so
+  // only spin up the one short-lived headless Chrome instance this needs when the fixture set
+  // actually contains an image layer.
+  let needsBrowserDecoder = false;
+  for (const entry of manifest.examples) {
+    const raw = JSON.parse(await readFile(path.join(examplesDir, entry.file), 'utf8'));
+    if (Array.isArray(raw.layers) && raw.layers.some((l) => l.type === 'image')) { needsBrowserDecoder = true; break; }
+  }
+
+  const baselines = needsBrowserDecoder
+    ? await withBrowserImageDecoder((decode) => computeBaselines(engine, manifest, (layer) => decode(layer.imageSrc)))
+    : await computeBaselines(engine, manifest, undefined);
 
   const examplesOnDisk = (await readdir(examplesDir)).filter((f) => f.endsWith('.rhs')).sort();
   const manifestFiles = new Set(manifest.examples.map((e) => e.file));

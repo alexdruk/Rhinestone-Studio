@@ -23,9 +23,20 @@
 
 import { Stone, StoneLayout } from '../../src/geometry/index.js';
 
-export const SUPPORTED_LAYER_TYPES = new Set(['text', 'circle', 'rectangle']);
+// RS-2000: svg/image/path join text/circle/rectangle, extending this schema to match every layer
+// type app.js's own live-editor schema supports (RS-1001 SVG Import, RS-1008 Image Trace, RS-1012
+// Boolean Operations, RS-1011 Fill Algorithms). Field names stay in this file's existing flat
+// mm-suffixed convention (svgSource/imageSrc/contours are not measurements, so they stay
+// unprefixed, exactly like `color`/`font` already do) rather than adopting app.js's field names
+// verbatim -- see this module's header comment for why the two schemas are deliberately distinct.
+export const SUPPORTED_LAYER_TYPES = new Set(['text', 'circle', 'rectangle', 'svg', 'image', 'path']);
 export const SUPPORTED_WRAP_MODES = new Set(['front', 'wide', 'half', 'full']);
 export const SUPPORTED_TEXT_MODES = new Set(['centerline', 'fill']);
+// RS-1011: Fill Style modes. Vector shapes (circle/rectangle/svg/path) support all five; a raster
+// Image Trace layer has no perimeter to trace an "outline" from, so it supports only the four
+// interior-sampling modes -- mirroring app.js's VECTOR_FILL_MODES/IMAGE_FILL_MODES exactly.
+export const SUPPORTED_VECTOR_FILL_MODES = new Set(['outline', 'fill', 'staggered', 'radial', 'contour']);
+export const SUPPORTED_IMAGE_FILL_MODES = new Set(['fill', 'staggered', 'radial', 'contour']);
 
 const FONT_FAMILY_TO_ID = {
   'Courier Prime': 'courier-prime-regular',
@@ -131,7 +142,10 @@ export function validateRhsProject(obj, sourceLabel = 'project') {
       if (!isFiniteNumber(layer.radiusMm) || layer.radiusMm <= 0) {
         throw new Error(`${label} ("${layer.id}") radiusMm must be a positive finite number.`);
       }
-    } else {
+      if (layer.fillMode !== undefined && !SUPPORTED_VECTOR_FILL_MODES.has(layer.fillMode)) {
+        throw new Error(`${label} ("${layer.id}") fillMode must be one of ${[...SUPPORTED_VECTOR_FILL_MODES].join(', ')} when present.`);
+      }
+    } else if (layer.type === 'rectangle') {
       for (const field of ['xMm', 'yMm']) {
         if (!isFiniteNumber(layer[field])) {
           throw new Error(`${label} ("${layer.id}") ${field} must be a finite number.`);
@@ -141,6 +155,69 @@ export function validateRhsProject(obj, sourceLabel = 'project') {
         if (!isFiniteNumber(layer[field]) || layer[field] <= 0) {
           throw new Error(`${label} ("${layer.id}") ${field} must be a positive finite number.`);
         }
+      }
+      if (layer.fillMode !== undefined && !SUPPORTED_VECTOR_FILL_MODES.has(layer.fillMode)) {
+        throw new Error(`${label} ("${layer.id}") fillMode must be one of ${[...SUPPORTED_VECTOR_FILL_MODES].join(', ')} when present.`);
+      }
+    } else if (layer.type === 'svg') {
+      // RS-1001 / RS-2000: an SVG-imported layer. svgSource is real, self-contained SVG markup
+      // (not a measurement, so no "Mm" suffix, matching color/font's existing unprefixed style).
+      if (!isNonEmptyString(layer.svgSource)) {
+        throw new Error(`${label} ("${layer.id}") svgSource must be a non-empty string.`);
+      }
+      for (const field of ['xMm', 'yMm', 'widthMm', 'heightMm']) {
+        if (!isFiniteNumber(layer[field])) {
+          throw new Error(`${label} ("${layer.id}") ${field} must be a finite number.`);
+        }
+      }
+      if (layer.fillMode !== undefined && !SUPPORTED_VECTOR_FILL_MODES.has(layer.fillMode)) {
+        throw new Error(`${label} ("${layer.id}") fillMode must be one of ${[...SUPPORTED_VECTOR_FILL_MODES].join(', ')} when present.`);
+      }
+    } else if (layer.type === 'image') {
+      // RS-1008 / RS-2000: an Image Trace layer. imageSrc is a real, self-contained data: URI.
+      if (!isNonEmptyString(layer.imageSrc)) {
+        throw new Error(`${label} ("${layer.id}") imageSrc must be a non-empty string.`);
+      }
+      for (const field of ['xMm', 'yMm', 'widthMm', 'heightMm']) {
+        if (!isFiniteNumber(layer[field])) {
+          throw new Error(`${label} ("${layer.id}") ${field} must be a finite number.`);
+        }
+      }
+      if (!isFiniteNumber(layer.threshold) || layer.threshold < 0 || layer.threshold > 255) {
+        throw new Error(`${label} ("${layer.id}") threshold must be a finite number between 0 and 255.`);
+      }
+      if (!isFiniteNumber(layer.blurRadiusPx) || layer.blurRadiusPx < 0) {
+        throw new Error(`${label} ("${layer.id}") blurRadiusPx must be a non-negative finite number.`);
+      }
+      for (const field of ['maxWidthPx', 'maxHeightPx']) {
+        if (!isFiniteNumber(layer[field]) || layer[field] <= 0) {
+          throw new Error(`${label} ("${layer.id}") ${field} must be a positive finite number.`);
+        }
+      }
+      // A raster layer has no perimeter to trace an "outline" from -- only the four interior-
+      // sampling fill modes apply (mirrors app.js's IMAGE_FILL_MODES exactly).
+      if (layer.fillMode !== undefined && !SUPPORTED_IMAGE_FILL_MODES.has(layer.fillMode)) {
+        throw new Error(`${label} ("${layer.id}") fillMode must be one of ${[...SUPPORTED_IMAGE_FILL_MODES].join(', ')} when present.`);
+      }
+    } else if (layer.type === 'path') {
+      // RS-1012 / RS-2000: a Boolean Operation result. `contours` stores plain (0,0)-rooted
+      // polygons; point fields are `x`/`y` (NOT `xMm`/`yMm`) -- matching how GeometryEngine.
+      // generatePathLayout()/app.js's own validateProject() already store path contours (app.js
+      // ~line 344), so a contour round-trips byte-identical between the two schemas.
+      if (!(
+        Array.isArray(layer.contours) &&
+        layer.contours.length > 0 &&
+        layer.contours.every((c) => Array.isArray(c) && c.length >= 3 && c.every((p) => p && isFiniteNumber(p.x) && isFiniteNumber(p.y)))
+      )) {
+        throw new Error(`${label} ("${layer.id}") contours must be a non-empty array of polygons, each with 3+ numeric {x,y} points.`);
+      }
+      for (const field of ['xMm', 'yMm', 'widthMm', 'heightMm']) {
+        if (!isFiniteNumber(layer[field])) {
+          throw new Error(`${label} ("${layer.id}") ${field} must be a finite number.`);
+        }
+      }
+      if (layer.fillMode !== undefined && !SUPPORTED_VECTOR_FILL_MODES.has(layer.fillMode)) {
+        throw new Error(`${label} ("${layer.id}") fillMode must be one of ${[...SUPPORTED_VECTOR_FILL_MODES].join(', ')} when present.`);
       }
     }
 
@@ -188,6 +265,15 @@ export function toAppProjectShape(rhsProject) {
           autoFit: Boolean(layer.autoFit)
         };
       }
+      // RS-2000: fillMode (and svg's own `mode`) is an optional field in both schemas -- a fixture
+      // that doesn't set it must translate to an app-shape object with the key genuinely absent,
+      // not present-with-value-undefined (JSON.stringify() drops undefined-valued keys, so a
+      // literal `fillMode: layer.fillMode` here silently failed the round-trip test whenever the
+      // source layer had no fillMode: the pre-stringify object still had the key, the post-parse
+      // object didn't). Conditional spread keeps the key out entirely when absent, exactly
+      // matching how app.js's own live layers are shaped before a user ever touches the control.
+      const fillModeField = layer.fillMode !== undefined ? { fillMode: layer.fillMode } : {};
+
       if (layer.type === 'circle') {
         return {
           id: layer.id,
@@ -196,19 +282,79 @@ export function toAppProjectShape(rhsProject) {
           cx: layer.cxMm,
           cy: layer.cyMm,
           r: layer.radiusMm,
+          ...fillModeField,
           stoneSize: layer.stoneSizeMm,
           gap: layer.gapMm,
           color: layer.color
         };
       }
+      if (layer.type === 'rectangle') {
+        return {
+          id: layer.id,
+          type: 'rectangle',
+          visible,
+          x: layer.xMm,
+          y: layer.yMm,
+          w: layer.widthMm,
+          h: layer.heightMm,
+          ...fillModeField,
+          stoneSize: layer.stoneSizeMm,
+          gap: layer.gapMm,
+          color: layer.color
+        };
+      }
+      if (layer.type === 'svg') {
+        // app.js's own svg-layer field is genuinely named `mode`, not `fillMode` (see
+        // generateSvgStonesLive()/writeSelectedControlsToLayer() in app.js) -- every other vector
+        // layer type (circle/rectangle/path) uses `fillMode`; svg is the one exception in the live
+        // schema, so this translation preserves that exact quirk rather than "fixing" it.
+        return {
+          id: layer.id,
+          type: 'svg',
+          visible,
+          svgSource: layer.svgSource,
+          x: layer.xMm,
+          y: layer.yMm,
+          w: layer.widthMm,
+          h: layer.heightMm,
+          ...(layer.fillMode !== undefined ? { mode: layer.fillMode } : {}),
+          stoneSize: layer.stoneSizeMm,
+          gap: layer.gapMm,
+          color: layer.color
+        };
+      }
+      if (layer.type === 'image') {
+        return {
+          id: layer.id,
+          type: 'image',
+          visible,
+          imageSrc: layer.imageSrc,
+          x: layer.xMm,
+          y: layer.yMm,
+          w: layer.widthMm,
+          h: layer.heightMm,
+          threshold: layer.threshold,
+          invert: Boolean(layer.invert),
+          blurRadiusPx: layer.blurRadiusPx,
+          maxWidthPx: layer.maxWidthPx,
+          maxHeightPx: layer.maxHeightPx,
+          ...fillModeField,
+          stoneSize: layer.stoneSizeMm,
+          gap: layer.gapMm,
+          color: layer.color
+        };
+      }
+      // path
       return {
         id: layer.id,
-        type: 'rectangle',
+        type: 'path',
         visible,
+        contours: layer.contours,
         x: layer.xMm,
         y: layer.yMm,
         w: layer.widthMm,
         h: layer.heightMm,
+        ...fillModeField,
         stoneSize: layer.stoneSizeMm,
         gap: layer.gapMm,
         color: layer.color
@@ -254,10 +400,10 @@ async function generateTextStonesForLayer(layer, canvas, permanentEngine) {
   }));
 }
 
-// Circle/rectangle layers are never centered and always sampled in 'outline' mode — this mirrors
-// app.js's generateShapeStonesLive() exactly (it hardcodes mode:'outline' regardless of any
-// per-layer mode field), so a shape layer's on-canvas position/mode is exactly what the author
-// specified, with no hidden transform.
+// RS-2000: circle/rectangle layers are never centered, and are sampled per their own `fillMode`
+// (RS-1011) -- this now mirrors app.js's *current* generateShapeStonesLive(), which honors
+// layer.fillMode via resolveVectorFillMode() (falling back to 'outline' for a missing/invalid
+// value), not the pre-RS-1011 hardcoded 'outline' this function used to reproduce verbatim.
 function generateShapeStonesForLayer(layer, permanentEngine) {
   const isCircle = layer.type === 'circle';
   const params = {
@@ -265,7 +411,7 @@ function generateShapeStonesForLayer(layer, permanentEngine) {
     layerId: layer.id,
     stoneSizeMm: layer.stoneSizeMm,
     gapMm: layer.gapMm,
-    mode: 'outline',
+    mode: resolveVectorFillMode(layer.fillMode),
     color: layer.color,
     ...(isCircle
       ? { cxMm: layer.cxMm, cyMm: layer.cyMm, radiusMm: layer.radiusMm }
@@ -273,6 +419,82 @@ function generateShapeStonesForLayer(layer, permanentEngine) {
   };
   const result = permanentEngine.generateShapeLayout(params);
   return result.stones.map((s) => ({ x: s.xMm, y: s.yMm, d: s.sizeMm, color: s.color, layerId: s.layerId }));
+}
+
+// RS-1001 / RS-2000: an 'svg' layer, mirroring app.js's generateSvgStonesLive() -- src/svg/**
+// (not this file) does the actual SVG parsing, inside generateSvgLayout().
+function generateSvgStonesForLayer(layer, permanentEngine) {
+  const params = {
+    svgSource: layer.svgSource,
+    layerId: layer.id,
+    xMm: layer.xMm,
+    yMm: layer.yMm,
+    widthMm: layer.widthMm,
+    heightMm: layer.heightMm,
+    stoneSizeMm: layer.stoneSizeMm,
+    gapMm: layer.gapMm,
+    mode: resolveVectorFillMode(layer.fillMode),
+    color: layer.color
+  };
+  const result = permanentEngine.generateSvgLayout(params);
+  return result.stones.map((s) => ({ x: s.xMm, y: s.yMm, d: s.sizeMm, color: s.color, layerId: s.layerId }));
+}
+
+// RS-1008 / RS-2000: an 'image' (Image Trace) layer, mirroring app.js's generateImageStonesLive().
+// Node has no bundled PNG/JPEG/WebP decoder (src/image/ImageDecoder.js is deliberately the one
+// DOM-only file in src/image/**), so this cannot decode layer.imageSrc itself -- the caller must
+// supply `resolveImageBuffer(layer)` (e.g. backed by a real browser's decoded getImageData(), via
+// CDP, or any other already-decoded {widthPx,heightPx,data} source) returning an ImageBuffer
+// (src/image/index.js's createImageBuffer() shape).
+async function generateImageStonesForLayer(layer, permanentEngine, resolveImageBuffer) {
+  const imageBuffer = await resolveImageBuffer(layer);
+  const params = {
+    imageBuffer,
+    layerId: layer.id,
+    xMm: layer.xMm,
+    yMm: layer.yMm,
+    widthMm: layer.widthMm,
+    heightMm: layer.heightMm,
+    stoneSizeMm: layer.stoneSizeMm,
+    gapMm: layer.gapMm,
+    mode: resolveImageFillMode(layer.fillMode),
+    color: layer.color,
+    threshold: layer.threshold,
+    invert: Boolean(layer.invert),
+    blurRadiusPx: layer.blurRadiusPx,
+    maxWidthPx: layer.maxWidthPx,
+    maxHeightPx: layer.maxHeightPx
+  };
+  const result = permanentEngine.generateImageLayout(params);
+  return result.stones.map((s) => ({ x: s.xMm, y: s.yMm, d: s.sizeMm, color: s.color, layerId: s.layerId }));
+}
+
+// RS-1012 / RS-2000: a 'path' (Boolean Operation result) layer, mirroring app.js's
+// generatePathStonesLive(). layer.contours is already plain (0,0)-rooted polygon data (no parsing
+// step, unlike SVG) -- {x,y} point fields translate straight to generatePathLayout()'s {xMm,yMm}.
+function generatePathStonesForLayer(layer, permanentEngine) {
+  const params = {
+    contours: layer.contours.map((c) => c.map((p) => ({ xMm: p.x, yMm: p.y }))),
+    layerId: layer.id,
+    xMm: layer.xMm,
+    yMm: layer.yMm,
+    widthMm: layer.widthMm,
+    heightMm: layer.heightMm,
+    stoneSizeMm: layer.stoneSizeMm,
+    gapMm: layer.gapMm,
+    mode: resolveVectorFillMode(layer.fillMode),
+    color: layer.color
+  };
+  const result = permanentEngine.generatePathLayout(params);
+  return result.stones.map((s) => ({ x: s.xMm, y: s.yMm, d: s.sizeMm, color: s.color, layerId: s.layerId }));
+}
+
+function resolveVectorFillMode(value) {
+  return SUPPORTED_VECTOR_FILL_MODES.has(value) ? value : 'outline';
+}
+
+function resolveImageFillMode(value) {
+  return SUPPORTED_IMAGE_FILL_MODES.has(value) ? value : 'fill';
 }
 
 // Verbatim port of app.js's GeometryEngine.dedupe() (grid-based proximity filter). Only filters
@@ -311,16 +533,30 @@ function dedupe(stones, minDist) {
  *
  * @param {object} rhsProject A project returned by validateRhsProject().
  * @param {import('../../src/geometry/GeometryEngine.js').GeometryEngine} permanentEngine
+ * @param {object} [options]
+ * @param {(layer: object) => Promise<{widthPx:number,heightPx:number,data:Uint8ClampedArray}>} [options.resolveImageBuffer]
+ *   Required only if the project has an 'image' layer -- see generateImageStonesForLayer()'s doc
+ *   comment for why this file cannot decode layer.imageSrc itself.
  * @returns {Promise<StoneLayout>}
  */
-export async function generateProjectStoneLayout(rhsProject, permanentEngine) {
+export async function generateProjectStoneLayout(rhsProject, permanentEngine, options = {}) {
+  const { resolveImageBuffer } = options;
   let raw = [];
   for (const layer of rhsProject.layers) {
     if (layer.visible === false) continue;
     if (layer.type === 'text') {
       raw.push(...await generateTextStonesForLayer(layer, rhsProject.canvas, permanentEngine));
-    } else {
+    } else if (layer.type === 'circle' || layer.type === 'rectangle') {
       raw.push(...generateShapeStonesForLayer(layer, permanentEngine));
+    } else if (layer.type === 'svg') {
+      raw.push(...generateSvgStonesForLayer(layer, permanentEngine));
+    } else if (layer.type === 'image') {
+      if (typeof resolveImageBuffer !== 'function') {
+        throw new Error(`generateProjectStoneLayout: image layer "${layer.id}" requires options.resolveImageBuffer (no PNG/JPEG/WebP decoder is bundled in Node).`);
+      }
+      raw.push(...await generateImageStonesForLayer(layer, permanentEngine, resolveImageBuffer));
+    } else if (layer.type === 'path') {
+      raw.push(...generatePathStonesForLayer(layer, permanentEngine));
     }
   }
   const minDist = Math.min(...raw.map((s) => s.d || 2), 2) * 0.58;
