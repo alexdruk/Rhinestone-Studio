@@ -112,17 +112,20 @@ await test('3. ZOOM_MIN/ZOOM_MAX constants match the #zoom range input and are u
   );
 });
 
-await test('4. setNumericSelectValue() is defined, wired for #stoneSize, and resolves numeric layer values to the real dropdown options with no blank selection', () => {
+await test('4. setNumericSelectValue() is defined, wired for #stoneSize, and resolves numeric layer values to the real dropdown options with no blank selection', async () => {
   assert.match(appJs, /function setNumericSelectValue\(select,num\)\{/, 'expected a setNumericSelectValue helper');
   assert.match(appJs, /setNumericSelectValue\(el\('stoneSize'\),l\.stoneSize\)/, 'expected #stoneSize sync to use setNumericSelectValue');
   assert.ok(!/el\('stoneSize'\)\.value=String\(l\.stoneSize\)/.test(appJs), 'the previous brittle exact-string assignment must be gone');
 
-  // Extract the actual #stoneSize <option value="..."> list from index.html and the function
-  // body from app.js, then execute the real algorithm (not a re-implementation) against a mock
-  // <select>-shaped object to prove the fix actually resolves numeric values to option strings.
-  const optionsHtml = indexHtml.match(/<select id="stoneSize">([\s\S]*?)<\/select>/)[1];
-  const optionValues = [...optionsHtml.matchAll(/value="([^"]+)"/g)].map((m) => m[1]);
-  assert.ok(optionValues.includes('2.0'), 'expected index.html to still offer a 2.0 option');
+  // RS-1013: #stoneSize's <option> list is no longer static in index.html -- it is now populated
+  // at startup from the Stone Library catalog (src/renderer/StoneSizes.js), mirroring #stoneColor.
+  // Build the real option list the same way app.js does (populateStoneSizeOptions()), then execute
+  // the real, unmodified setNumericSelectValue() algorithm against it, proving the fix still
+  // resolves numeric values to option strings under the new catalog-driven dropdown.
+  assert.match(appJs, /function populateStoneSizeOptions\(\)\{/, 'expected #stoneSize to now be populated by populateStoneSizeOptions()');
+  const { listStoneSizes } = await import('../src/renderer/StoneSizes.js');
+  const optionValues = listStoneSizes().map((s) => String(s.diameterMm));
+  assert.ok(optionValues.includes('2'), 'expected the Stone Library to still offer a 2mm (SS6) option');
 
   const fnSource = appJs.match(/function setNumericSelectValue\(select,num\)\{[\s\S]*?\}\n/)[0];
   // eslint-disable-next-line no-new-func
@@ -130,13 +133,13 @@ await test('4. setNumericSelectValue() is defined, wired for #stoneSize, and res
 
   const mockSelect = { value: '', options: optionValues.map((v) => ({ value: v })) };
   setNumericSelectValue(mockSelect, 2);
-  assert.equal(mockSelect.value, '2.0', 'expected the numeric layer stoneSize 2 to resolve to option "2.0", not be blank');
+  assert.equal(mockSelect.value, '2', 'expected the numeric layer stoneSize 2 to resolve to the SS6 option "2", not be blank');
 
-  setNumericSelectValue(mockSelect, 1.5);
-  assert.equal(mockSelect.value, '1.5');
+  setNumericSelectValue(mockSelect, 2.8);
+  assert.equal(mockSelect.value, '2.8', 'expected stoneSize 2.8 to resolve to the SS10 option');
 
-  setNumericSelectValue(mockSelect, 0.8);
-  assert.equal(mockSelect.value, '0.8');
+  setNumericSelectValue(mockSelect, 4);
+  assert.equal(mockSelect.value, '4', 'expected stoneSize 4 to resolve to the SS16 option');
 });
 
 await test('5. drawSelection() includes a contrast halo pass and a named, enlarged handle-size constant', () => {

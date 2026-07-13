@@ -418,7 +418,11 @@ await test('23. no forbidden file changed (this milestone\'s own forbidden list)
   // RS-1012 (Vector Boolean Operations) legitimately adds src/geometry/PathBoolean.js and extends
   // src/geometry/GeometryEngine.js/index.js/README.md (already allowed below) -- see
   // tools/test-path-boolean-integration.mjs for that milestone's own forbidden-file guard.
-  const allowedDespitePrefix = new Set(['src/renderer/StoneColors.js', 'src/renderer/CrystalColors.js', 'src/renderer/README.md', 'src/geometry/GeometryEngine.js', 'src/geometry/StoneSampler.js', 'src/geometry/index.js', 'src/geometry/README.md', 'src/geometry/PathBoolean.js']);
+  // RS-1013 (Variable Stone Sizes) legitimately adds src/renderer/StoneSizes.js (the Stone Library
+  // catalog, in the same shape/location as CrystalColors.js above) -- this exporter's own header
+  // formatting change (adding commercial names to "Stone size: ...") is covered by
+  // tools/test-variable-stone-sizes.mjs, not this milestone's forbidden-file guard.
+  const allowedDespitePrefix = new Set(['src/renderer/StoneColors.js', 'src/renderer/CrystalColors.js', 'src/renderer/StoneSizes.js', 'src/renderer/README.md', 'src/geometry/GeometryEngine.js', 'src/geometry/StoneSampler.js', 'src/geometry/index.js', 'src/geometry/README.md', 'src/geometry/PathBoolean.js']);
   const forbiddenPrefixes = [
     'src/geometry/', 'src/renderer/', 'src/text/', 'src/fonts/', 'src/core/',
     'src/browser/', 'src/svg/', 'src/history/', 'src/products/', 'assets/', 'examples/'

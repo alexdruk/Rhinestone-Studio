@@ -1,74 +1,62 @@
 # Task
 
-**Task ID:** RS-1010
-**Task Type:** Feature — Alignment & Snapping Upgrade
-**Specification:** `docs/specifications/RS-1010-AlignmentSnappingUpgrade.md`
-**Status:** IN PROGRESS
-**Branch:** feature/rs-1010-alignment-snapping-upgrade
+**Task ID:** RS-1013 (task brief labeled "RS-1010" — already used/merged for Alignment & Snapping
+Upgrade; filed as RS-1013, the next free id — see the spec's "Numbering note")
+**Task Type:** Feature — Variable Stone Sizes (Stone Library)
+**Specification:** `docs/specifications/RS-1013-VariableStoneSizes.md`
+**Status:** IMPLEMENTED
+**Branch:** feature/rs-1013-variable-stone-sizes
 
 ## Goal
 
-Upgrade RS-1009's alignment/snapping system into a more complete, professional-editor-grade
-feature set: configurable snap distance, an independent guide-visibility toggle, Shift-drag axis
-constrain, and Alt/Option-drag duplicate — with every snapping setting exposed in the Settings
-Lightbox using plain, non-technical language. No rewrite of the editing architecture, selection
-system, or renderer; no duplicated snapping/alignment logic; no new visual effects.
+Allow each layer to use its own stone size, with a configurable, extensible library of standard
+commercial rhinestone sizes (SS6, SS10, SS16, SS20, SS30) shown by both commercial name and actual
+diameter. The selected size affects geometry generation only — rendering, exports, Production
+Sheet, and 3D preview consume the resulting `StoneLayout` exactly as they do today. No parallel
+geometry generation; `GeometryEngine` stays the single authority for stone placement.
 
 ## Required Outcome
 
-See `docs/specifications/RS-1010-AlignmentSnappingUpgrade.md` in full. Summary:
+See `docs/specifications/RS-1013-VariableStoneSizes.md` in full. Summary:
 
-* Snap distance becomes a configurable, view-only `snapToleranceMm` (Settings Lightbox: "Snap
-  Distance (mm)", 0.5–5mm), replacing the fixed `SNAP_TOLERANCE_MM` constant as the value passed to
-  `computeSnapOffset()`.
-* Guide-line visibility becomes independently toggleable via `showSnapGuides` (Settings Lightbox:
-  "Show Alignment Guides") — snapping still applies with guides hidden.
-* Shift held during a move-drag locks movement to one axis, applied after snapping so the locked
-  axis never drifts.
-* Alt/Option held on pointerdown duplicates the current selection and drags the copies, leaving
-  originals in place; one undo step covers duplicate+move.
-* Settings Lightbox gains a dedicated "Alignment & Snapping" section with friendly labels ("Enable
-  Snapping", "Snap Distance (mm)", "Show Alignment Guides").
-* Help Lightbox and the canvas status hint document the two new drag modifiers.
-* Verified (not re-implemented): object-corner snapping already works via RS-1009's existing
-  independent per-axis matching; text/curved-text/SVG/Image-Trace bounds already reach the snap
-  engine through the one generic `getLayerBBox()` path.
+* Audit-first: per-layer variable stone size (geometry, fill, spacing, rendering, exports,
+  Production Sheet, 3D preview, undo/redo, duplicate, save/load) was **already fully implemented**
+  before this milestone — verified with tests, not reimplemented.
+* New: `src/renderer/StoneSizes.js`, a data-only Stone Library catalog (SS6/SS10/SS16/SS20/SS30 ->
+  nominal mm), mirroring the existing `CrystalColors.js` catalog pattern exactly — no switch
+  statements, one more list entry to add a size later.
+* The one shared `#stoneSize` picker is now populated from this catalog ("SS16 — 4.0 mm"), with a
+  synthetic "Custom — X mm" fallback for any pre-existing project's non-catalog value (backward
+  compatible — never silently snaps a stored value to a different displayed size).
+* `ProductionSheetExporter.js`'s header now shows the commercial name alongside mm (the one
+  required exporter change, per the "display both" acceptance criterion).
 
 ## Rules
 
 * Follow `docs/AI_ENGINEER.md`, `docs/CLAUDE_GUIDE.md`, `docs/ARCHITECTURE.md`,
   `docs/MILESTONE_WORKFLOW.md`.
-* Repository is the source of truth; audit before implementing; do not duplicate functionality
-  that already exists (`src/editing/SnapEngine.js`'s configurable tolerance and independent-axis
-  matching already covered "configurable snap tolerance" and "object corners" — verified via new
-  tests, not reimplemented).
-* Do not modify `GeometryEngine`, `StoneLayout`, exporters, or the Project schema unless
-  absolutely necessary — none of this milestone's work required touching any of them.
-* `src/editing/**` stays almost entirely untouched: the one addition is
-  `Selection.js`'s `selectMany(ids)`, needed because Alt-drag-duplicate must select several new ids
-  at once (no existing selection primitive expressed that) — still routed through the one
-  selection-mutation module, preserving "no second selection model."
-* Forbidden files: `src/geometry/**`, `src/renderer/**`, `src/export/**`, `src/text/**`,
-  `src/fonts/**`, `src/core/**`, `src/browser/**`, `src/svg/**`, `src/image/**`, `src/history/**`,
-  `src/products/**`, `src/preview3d/**`, `src/editing/SnapEngine.js`,
-  `src/editing/AlignmentEngine.js`, `src/editing/EditingConstants.js`, `style.css`, `README.md`,
-  `LICENSE`, `CONTRIBUTING.md`, `assets/**`, `examples/**`.
-* Do not commit failing tests.
-* Do not merge — push the feature branch only.
+* Repository is the source of truth; audit before implementing; do not duplicate
+  `GeometryEngine`/`StoneLayout` generation.
+* Do not modify `GeometryEngine`, `Stone`, `StoneLayout`, or any renderer beyond the required
+  Production Sheet header line — none of this milestone's work required touching any of them.
+* Preserve backward/project compatibility: a project saved before this milestone must load and
+  render unchanged; its `stoneSize` value must not be silently altered by the new picker.
 
 ## Deliverables
 
-* `app.js`, `index.html` — new state, drag-handler changes, Settings/Help Lightbox updates.
-* `src/editing/Selection.js`, `src/editing/index.js`, `src/editing/README.md` — `selectMany()`.
-* `docs/ARCHITECTURE.md` — RS-1010 implementation-status addendum under "Editing (Alignment &
-  Snapping)" and the Layer map row.
-* Tests: `tools/test-alignment-snapping-upgrade.mjs` (new); `tools/test-editing-selection.mjs`,
-  `tools/test-alignment-snapping-integration.mjs`, `tools/test-undo-redo-integration.mjs`,
-  `tools/test-ui001b-fixes.mjs` (regex/scope updates for changed literals and `src/editing/**`'s
-  now-legitimate scope); `package.json` test script updated.
+* `src/renderer/StoneSizes.js` — new Stone Library catalog.
+* `app.js`, `index.html` — `#stoneSize` picker now catalog-driven, with legacy-value fallback.
+* `src/export/ProductionSheetExporter.js` — header stone-size formatting gains commercial names.
+* `docs/specifications/RS-1013-VariableStoneSizes.md` — full specification and audit.
+* `docs/ARCHITECTURE.md` — RS-1013 implementation-status addendum and Layer map row.
+* Tests: `tools/test-stone-size-library.mjs`, `tools/test-variable-stone-sizes.mjs` (new);
+  `tools/test-ux-visual-polish.mjs`, `tools/test-app-module-migration.mjs`,
+  `tools/test-shape-geometry-integration.mjs`, and several pre-existing milestones' own
+  forbidden-file guards updated for the new legitimately-changed files; `package.json` test script
+  updated.
 * `npm test` passing in full.
-* Real-browser verification (headless Chrome/CDP, isolated profile) of drag snapping, resize,
-  text/shape/SVG/Image-Trace snapping, alignment/distribution, Shift-constrain, Alt-duplicate,
-  Settings Lightbox controls, dual workspace, with screenshots.
+* Real-browser verification (headless Chrome/CDP, isolated profile) of stone-size selection across
+  every supported layer type, a mixed-size project, exports, Production Sheet, 2D canvas, 3D
+  preview, Dual Workspace, with screenshots.
 * `TASK_RESULT.md` completed.
-* One commit on `feature/rs-1010-alignment-snapping-upgrade`, branch pushed.
+* One commit on `feature/rs-1013-variable-stone-sizes`, branch pushed (not merged).

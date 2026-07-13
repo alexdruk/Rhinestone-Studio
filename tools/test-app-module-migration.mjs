@@ -87,6 +87,10 @@ await test('app.js only imports the RS-0003.5B2 probe, the RS-0003.5B3 permanent
     /from\s*['"]\.\/src\/renderer\/CanvasRenderer2D\.js['"]/,
     /from\s*['"]\.\/src\/renderer\/CupRenderer\.js['"]/,
     /from\s*['"]\.\/src\/renderer\/StoneColors\.js['"]/,
+    // RS-1013: the Stone Library catalog module (see src/renderer/StoneSizes.js), mirroring the
+    // StoneColors.js direct-file entry above -- src/renderer/** has no barrel index.js, so each
+    // individual renderer module app.js uses is listed here.
+    /from\s*['"]\.\/src\/renderer\/StoneSizes\.js['"]/,
     /from\s*['"]\.\/src\/export\/SvgExporter\.js['"]/,
     /from\s*['"]\.\/src\/svg\/index\.js['"]/,
     /from\s*['"]\.\/src\/history\/index\.js['"]/,

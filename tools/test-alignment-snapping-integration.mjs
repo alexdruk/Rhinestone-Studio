@@ -325,7 +325,10 @@ await test('28. no forbidden file changed (this milestone\'s own forbidden list)
   // RS-1012 (Vector Boolean Operations) legitimately adds src/geometry/PathBoolean.js and extends
   // src/geometry/GeometryEngine.js/index.js/README.md -- see
   // tools/test-path-boolean-integration.mjs for RS-1012's own forbidden-file guard.
-  const allowedDespitePrefix = new Set(['src/geometry/GeometryEngine.js', 'src/geometry/index.js', 'src/geometry/README.md', 'src/geometry/PathBoolean.js']);
+  // RS-1013 (Variable Stone Sizes) legitimately adds src/renderer/StoneSizes.js and changes
+  // src/export/ProductionSheetExporter.js's header formatting -- see
+  // tools/test-variable-stone-sizes.mjs for that milestone's own forbidden-file guard.
+  const allowedDespitePrefix = new Set(['src/geometry/GeometryEngine.js', 'src/geometry/index.js', 'src/geometry/README.md', 'src/geometry/PathBoolean.js', 'src/renderer/StoneSizes.js', 'src/export/ProductionSheetExporter.js']);
   const forbiddenPrefixes = [
     'src/geometry/', 'src/renderer/', 'src/export/', 'src/text/', 'src/fonts/', 'src/core/',
     'src/browser/', 'src/svg/', 'src/image/', 'src/history/', 'src/products/', 'src/preview3d/',
