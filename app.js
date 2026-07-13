@@ -111,6 +111,15 @@ import { SNAP_TOLERANCE_MM, NUDGE_STEP_MM, NUDGE_STEP_LARGE_MM, alignLayers, dis
 // wires a Lightbox to a top-menu button or a layer-aware "which fields to show" decision. See
 // docs/specifications/UI-001-CompleteRedesign.md.
 import { Lightbox } from './src/ui/index.js';
+// RS-1015 (Design Library): src/library/** is a new, pure, DOM-free module -- library item
+// creation/validation, category derivation, storage-adapter-injected CRUD/search/filter/sort, and
+// the pure clone/insert/new-project transforms over the existing ad hoc project/layer JSON. It has
+// no dependency on src/geometry/**/StoneLayout/Stone/Project/Layer and never generates stone
+// positions; app.js is the only caller, and is the only place that touches a browser-global
+// (localStorage, via createLocalStorageAdapter) or the existing engine.generate()/
+// renderProductionLayout() pipeline (reused, unmodified, for thumbnail generation). See
+// docs/specifications/RS-1015-DesignLibrary.md.
+import { DesignLibrary, createLocalStorageAdapter, createMemoryStorageAdapter, buildSelectionItemData, buildProjectItemData, buildProjectFromItem, prepareLayersForInsert, getInsertableLayers } from './src/library/index.js';
 // RS-1012 (Vector Boolean Operations): Union/Subtract/Intersect/Exclude over the current
 // multi-selection (the same selectedLayerIds set RS-1009's Align/Snap already uses). No new
 // geometry algorithm lives in app.js: resolveLayerShapeSource() below only asks the permanent
@@ -944,11 +953,14 @@ const lightboxes={
   prodSheet:new Lightbox('lightboxProdSheet'),
   shipping:new Lightbox('lightboxShipping',{onOpen(){syncShippingFieldsFromState()}}),
   settings:new Lightbox('lightboxSettings',{onOpen(){syncSettingsFieldsFromState()}}),
-  help:new Lightbox('lightboxHelp')
+  help:new Lightbox('lightboxHelp'),
+  library:new Lightbox('lightboxLibrary',{onOpen(){onLibraryOpen()}}),
+  libraryConfirm:new Lightbox('lightboxLibraryConfirm')
 };
 
 el('menuText').onclick=()=>lightboxes.text.open();
 el('menuShapes').onclick=()=>lightboxes.shapes.open();
+el('menuLibrary').onclick=()=>lightboxes.library.open();
 el('menuImport').onclick=()=>lightboxes.importBox.open();
 el('menuImageTrace').onclick=()=>lightboxes.imagetrace.open();
 el('menuExport').onclick=()=>lightboxes.exportBox.open();
@@ -1051,6 +1063,179 @@ el('actionDelete').onclick=()=>deleteLayer(selectedLayerId);
 function saveProjectDownload(){el('exportProject').click()}
 el('actionSave').onclick=saveProjectDownload;
 el('saveProject').onclick=saveProjectDownload;
+
+// ---- Design Library (RS-1015): save/browse/reuse rhinestone designs. See
+// docs/specifications/RS-1015-DesignLibrary.md. A library item's `data` is never a new schema --
+// it is a verbatim, deep-cloned copy of the exact ad hoc project/layer JSON `#exportProject`/
+// `duplicateLayer()` already read and write (see `src/library/LibraryTransform.js`). Thumbnails
+// reuse the existing `engine.generate()` bridge + the permanent `renderProductionLayout()` against
+// an offscreen canvas -- the same generate-then-render call sequence `drawLayout()` already
+// performs against the live canvas, never a second rendering pipeline. Insertion/new-project reuse
+// the existing commitHistory()/updateAll()/history.clear() patterns every other layer-adding or
+// project-replacing action already uses, so undo/redo, Production Sheet, and every exporter work
+// against library-sourced layers with zero further changes. ----
+const LIBRARY_STORAGE_KEY='rhinestone-studio:design-library';
+const LIBRARY_THUMB_WIDTH_PX=260,LIBRARY_THUMB_HEIGHT_PX=170;
+const LIBRARY_NEW_PROJECT_DEFAULTS={defaultProduct:'mug',defaultCupColor:'#1f3556',defaultWrap:'front',projectVersion:2};
+let designLibrary;
+try{
+  designLibrary=new DesignLibrary({storageAdapter:createLocalStorageAdapter(LIBRARY_STORAGE_KEY)});
+}catch(error){
+  console.warn('Design Library: localStorage is unavailable in this environment; using in-memory storage for this session only.',error);
+  designLibrary=new DesignLibrary({storageAdapter:createMemoryStorageAdapter()});
+}
+let libraryQuery='',libraryCategory='All',librarySortDir='asc',pendingLibraryDeleteId=null;
+
+function currentSelectedLayers(){return project.layers.filter(l=>selectedLayerIds.has(l.id))}
+
+async function generateLibraryThumbnail(tempProject){
+  try{
+    const stoneLayout=await engine.generate(tempProject);
+    const canvas=document.createElement('canvas');
+    canvas.width=LIBRARY_THUMB_WIDTH_PX;canvas.height=LIBRARY_THUMB_HEIGHT_PX;
+    renderProductionLayout(canvas.getContext('2d'),stoneLayout,{widthPx:canvas.width,heightPx:canvas.height,paddingPx:12});
+    return canvas.toDataURL('image/png');
+  }catch(error){
+    console.error('Design Library: thumbnail generation failed',error);
+    return null;
+  }
+}
+
+function updateLibrarySaveButtons(){
+  const hasSelection=selectedLayerIds.size>0;
+  el('librarySaveSelection').disabled=!hasSelection;
+  el('libraryDisabledHint').style.display=hasSelection?'none':'block';
+}
+
+function libraryFilteredSortedItems(){
+  const searched=designLibrary.search(libraryQuery);
+  const filtered=designLibrary.filterByCategory(searched,libraryCategory);
+  return designLibrary.sortByName(filtered,librarySortDir);
+}
+
+function renderLibraryGrid(){
+  const all=designLibrary.list();
+  const items=libraryFilteredSortedItems();
+  const categories=['All',...designLibrary.categories()];
+  el('libraryCategoryFilter').innerHTML=categories.map(c=>`<option value="${escapeHtml(c)}" ${c===libraryCategory?'selected':''}>${c==='All'?'All categories':escapeHtml(c)}</option>`).join('');
+  el('libraryEmptyState').style.display=all.length===0?'block':'none';
+  el('libraryNoResults').style.display=(all.length>0&&items.length===0)?'block':'none';
+  el('libraryGrid').innerHTML=items.map(item=>`<div class="library-card" data-item="${item.id}">
+      <div class="library-card-thumb">${item.thumbnail?`<img src="${item.thumbnail}" alt="Preview of ${escapeHtml(item.name)}">`:'<span class="library-card-thumb-empty">No preview</span>'}</div>
+      <div class="library-card-body">
+        <h4 data-role="name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</h4>
+        <div class="library-card-meta"><span class="library-badge">${item.kind==='project'?'Project':'Selection'}</span><span class="library-badge">${escapeHtml(item.category)}</span></div>
+      </div>
+      <div class="library-card-actions">
+        <button class="btn" data-action="insert" title="Insert into the current project">Insert</button>
+        <button class="btn" data-action="newProject" title="Start a new project from this design">New Project</button>
+        <button class="btn" data-action="rename" title="Rename this design">Rename</button>
+        <button class="btn" data-action="duplicate" title="Duplicate this design">Duplicate</button>
+        <button class="btn danger" data-action="delete" title="Delete this design">Delete</button>
+      </div>
+    </div>`).join('');
+}
+
+function onLibraryOpen(){
+  libraryQuery='';libraryCategory='All';librarySortDir='asc';
+  el('librarySearch').value='';el('librarySort').value='asc';el('libraryStatus').textContent='';
+  updateLibrarySaveButtons();
+  renderLibraryGrid();
+}
+
+async function saveProjectToLibrary(){
+  const name=el('librarySaveName').value.trim()||project.name||DEFAULT_PROJECT_NAME;
+  const data=buildProjectItemData(project);
+  const thumbnail=await generateLibraryThumbnail(project);
+  designLibrary.add({kind:'project',name,data,thumbnail});
+  el('librarySaveName').value='';
+  renderLibraryGrid();
+  el('libraryStatus').textContent=`Saved "${name}" to the Design Library.`;
+}
+
+async function saveSelectionToLibrary(){
+  const layers=currentSelectedLayers();
+  if(layers.length===0)return;
+  const name=el('librarySaveName').value.trim()||'Untitled Selection';
+  const data=buildSelectionItemData(layers,project.canvas);
+  const thumbnail=await generateLibraryThumbnail({...project,layers});
+  designLibrary.add({kind:'selection',name,data,thumbnail});
+  el('librarySaveName').value='';
+  renderLibraryGrid();
+  el('libraryStatus').textContent=`Saved "${name}" to the Design Library.`;
+}
+
+function insertLibraryItem(id){
+  const item=designLibrary.get(id);if(!item)return;
+  const newLayers=prepareLayersForInsert(getInsertableLayers(item));
+  commitHistory();
+  project.layers.push(...newLayers);
+  selectedLayerIds=selectMany(newLayers.map(l=>l.id));
+  selectedLayerId=newLayers[newLayers.length-1].id;
+  syncSelectedControlsFromLayer();
+  updateAll(true);
+  updateLibrarySaveButtons();
+  el('libraryStatus').textContent=`Inserted "${item.name}" (${newLayers.length} layer${newLayers.length===1?'':'s'}).`;
+}
+
+function createProjectFromLibraryItem(id){
+  const item=designLibrary.get(id);if(!item)return;
+  const built=buildProjectFromItem(item,LIBRARY_NEW_PROJECT_DEFAULTS);
+  project=validateProject(built);
+  selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);
+  // Mirrors #importProjectFile's exact "loading/replacing a project is a fresh start, not an
+  // undoable edit" history-clear + dirty-baseline-reset pattern.
+  history.clear();cleanProjectJson=JSON.stringify(project);
+  syncSelectedControlsFromLayer();updateAll(true);
+  lightboxes.library.close();
+  el('status').textContent=`Started a new project from "${item.name}".`;
+}
+
+function beginRenameLibraryItem(card,id){
+  const item=designLibrary.get(id);if(!item)return;
+  const nameEl=card.querySelector('[data-role="name"]');
+  const input=document.createElement('input');
+  input.type='text';input.maxLength=80;input.value=item.name;input.className='library-rename-input';
+  nameEl.replaceWith(input);input.focus();input.select();
+  let settled=false;
+  const commit=()=>{
+    if(settled)return;settled=true;
+    const value=input.value.trim();
+    if(value&&value!==item.name){designLibrary.rename(id,value);el('libraryStatus').textContent='Renamed.'}
+    renderLibraryGrid();
+  };
+  input.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){e.preventDefault();commit()}
+    else if(e.key==='Escape'){e.preventDefault();settled=true;renderLibraryGrid()}
+  });
+  input.addEventListener('blur',commit);
+}
+
+function requestDeleteLibraryItem(id){
+  const item=designLibrary.get(id);if(!item)return;
+  pendingLibraryDeleteId=id;
+  el('libraryConfirmMessage').textContent=`Delete "${item.name}" from the Design Library? This cannot be undone.`;
+  lightboxes.libraryConfirm.open();
+}
+
+el('librarySaveProject').onclick=()=>{saveProjectToLibrary()};
+el('librarySaveSelection').onclick=()=>{saveSelectionToLibrary()};
+el('librarySearch').addEventListener('input',()=>{libraryQuery=el('librarySearch').value;renderLibraryGrid()});
+el('libraryCategoryFilter').addEventListener('change',()=>{libraryCategory=el('libraryCategoryFilter').value;renderLibraryGrid()});
+el('librarySort').addEventListener('change',()=>{librarySortDir=el('librarySort').value;renderLibraryGrid()});
+el('libraryGrid').addEventListener('click',e=>{
+  const card=e.target.closest('.library-card');if(!card)return;
+  const id=card.dataset.item,action=e.target.dataset.action;
+  if(action==='insert')insertLibraryItem(id);
+  else if(action==='newProject')createProjectFromLibraryItem(id);
+  else if(action==='duplicate'){designLibrary.duplicate(id);renderLibraryGrid();el('libraryStatus').textContent='Duplicated.'}
+  else if(action==='delete')requestDeleteLibraryItem(id);
+  else if(action==='rename')beginRenameLibraryItem(card,id);
+});
+el('libraryConfirmDelete').onclick=()=>{
+  if(pendingLibraryDeleteId){designLibrary.remove(pendingLibraryDeleteId);pendingLibraryDeleteId=null;renderLibraryGrid();el('libraryStatus').textContent='Deleted.'}
+  lightboxes.libraryConfirm.close();
+};
 
 // ---- Shipping & Handling: local, session-scoped metadata only. Deliberately not part of
 // `project` / Project JSON / undo-redo this milestone -- see
