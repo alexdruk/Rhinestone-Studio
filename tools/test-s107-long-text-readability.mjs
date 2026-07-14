@@ -167,20 +167,34 @@ await test('13. rotating the Object Preview moves the Front View Frame (requirem
   assert.ok(!handler.includes('updateAll'), 'expected the live-orbit sync handler to never call the full updateAll() pipeline');
 });
 
-await test('14. Preview3DRenderer.js exposes the live camera azimuth via an OrbitControls \'change\' listener (onAzimuthChange), and no longer accepts/uses a `wrap` option in update()', async () => {
+await test('14. Preview3DRenderer.js exposes the live camera azimuth via an OrbitControls \'change\' listener (onAzimuthChange) AND still accepts/applies a `wrap` option in update() -- restored so wrap mode visibly changes the Object Preview again (this milestone\'s follow-up requirement 1/2)', async () => {
   const source = await readFile(path.join(repoRoot, 'src/preview3d/Preview3DRenderer.js'), 'utf8');
   assert.match(source, /this\.controls\.addEventListener\('change'/);
   assert.match(source, /onAzimuthChange/);
   const updateFn = source.match(/update\(stoneLayout, \{[^}]*\}\) \{[\s\S]*?\n {2}\}/);
   assert.ok(updateFn, 'expected to find Preview3DRenderer.update()');
-  assert.ok(!/\bwrap\b/.test(updateFn[0].split('\n')[0]), 'expected update()\'s destructured options to no longer include wrap');
+  assert.match(updateFn[0].split('\n')[0], /\bwrap\b/, 'expected update()\'s destructured options to include wrap');
+  assert.match(updateFn[0], /this\._applyWrapUv\(this\._bodyMesh, ?wrap\)/);
 });
 
-await test('15. ObjectGeometryBuilder.js\'s object mesh texture always wraps the complete production canvas fully and continuously (requirement 4: never clip/crop/hide the production layout) -- applyAzimuthUv() is wrap-mode independent, called once at mesh build time', async () => {
+await test('15. ObjectGeometryBuilder.js\'s object mesh texture compresses the complete production canvas into the selected wrap mode\'s angular window (restored, pre-S-107 behavior) -- applyWrapUv() is exported and wrap-mode dependent, callable whenever wrap mode changes', async () => {
   const source = await readFile(path.join(repoRoot, 'src/preview3d/ObjectGeometryBuilder.js'), 'utf8');
-  assert.ok(!source.includes('applyWrapUv'), 'expected the old per-wrap-mode applyWrapUv() to be removed');
-  assert.match(source, /applyAzimuthUv\(bodyGeometry, ?canvasWidthMm\)/);
-  assert.match(source, /canvasXMmForAzimuthRad\(azimuth, ?canvasWidthMm\)/);
+  assert.match(source, /export function applyWrapUv\(bodyMesh, ?wrapMode\)/);
+  assert.match(source, /applyAzimuthUv\(bodyMesh\.geometry, ?wrapAngleRad\(wrapMode\)\)/);
+});
+
+await test('15b. applyAzimuthUv() computes azimuth from each vertex\'s known Lathe column index, not from Math.atan2(position) -- regression guard for the dark-vertical-band defect (atan2\'s branch cut and the r=0 apex\'s signed-zero quirk both used to land on real, connected faces)', async () => {
+  const source = await readFile(path.join(repoRoot, 'src/preview3d/ObjectGeometryBuilder.js'), 'utf8');
+  const fnMatch = source.match(/function applyAzimuthUv\([^)]*\)\{[\s\S]*?\n\}/) || source.match(/function applyAzimuthUv\([^)]*\) \{[\s\S]*?\n\}/);
+  assert.ok(fnMatch, 'expected to find applyAzimuthUv() in ObjectGeometryBuilder.js');
+  assert.ok(!fnMatch[0].includes('Math.atan2'), 'expected applyAzimuthUv() to no longer derive azimuth from Math.atan2(position)');
+  assert.match(fnMatch[0], /Math\.floor\(i \/ rowCount\)/);
+});
+
+await test('15c. buildTaperedBodyGeometry()/buildBottleGeometry() build their LatheGeometry with phiStart=-PI -- moves LatheGeometry\'s own unconnected seam to the back (opposite front), where applyAzimuthUv()\'s column-based azimuth also wraps, so no real face ever spans the one unavoidable discontinuity', async () => {
+  const source = await readFile(path.join(repoRoot, 'src/preview3d/ObjectGeometryBuilder.js'), 'utf8');
+  const matches = source.match(/new THREE\.LatheGeometry\(points, LATHE_SEGMENTS, -Math\.PI, Math\.PI \* 2\)/g) || [];
+  assert.equal(matches.length, 2, 'expected both buildTaperedBodyGeometry() and buildBottleGeometry() to use phiStart=-PI, phiLength=2*PI');
 });
 
 await test('16. the too-long warning\'s Inspector panel copy has no misleading "Center Text"/wrap-mode-change affordance -- centering or changing wrap never fixes a genuine circumference overflow', () => {

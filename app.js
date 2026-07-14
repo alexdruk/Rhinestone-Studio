@@ -930,11 +930,12 @@ function handlesFor(b){return[{name:'nw',x:b.x,y:b.y},{name:'ne',x:b.x2,y:b.y},{
 // update() only rebuilds the mesh/texture when the StoneLayout or display options actually
 // changed; syncView() only repositions the camera when rotation/zoom actually changed -- neither
 // call disturbs a manual orbit/pan the operator has mid-way through with the mouse.
-// S-107: `wrap` is no longer passed to preview3D.update() -- the object mesh's texture always
-// wraps the complete production canvas fully and continuously around the object (mm-accurate, see
-// ObjectGeometryBuilder.js's applyAzimuthUv()); wrap mode only sizes the 2D canvas's Front View
-// Frame overlay (drawFrontViewFrame(), frontViewFrameGeometry()), which never touches the 3D mesh.
-function drawCup(){preview3D.update(layout,{cupColor:project.cupColor,objectTemplate:currentObjectTemplate(),canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height});preview3D.syncView(rotation,zoom)}
+// S-107 follow-up: `wrap` is passed back to preview3D.update() -- the object mesh's texture
+// compresses the complete production canvas into wrap's angular window (ObjectGeometryBuilder.js's
+// applyWrapUv()), restoring wrap mode's original visible effect on the Object Preview. The Front
+// View Frame overlay (drawFrontViewFrame(), frontViewFrameGeometry()) visualizes this exact same
+// window on the 2D canvas; it does not replace it.
+function drawCup(){preview3D.update(layout,{cupColor:project.cupColor,wrap:project.wrap,objectTemplate:currentObjectTemplate(),canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height});preview3D.syncView(rotation,zoom)}
 // S-001: keeps the Front/Left/Right/Back buttons' highlighted state synchronized with `rotation`
 // regardless of how it changed (view-button click, reset, slider, or manual cup-drag), since this
 // is called from updateAll() rather than duplicated at each rotation-changing call site.

@@ -281,3 +281,90 @@ found nothing to fix.
   changed from 0° to -94° in this run); the too-long warning element is present.
 * Direct reproduction of the reported error using a deliberately stale `ObjectDimensions.js` +
   current `app.js`, confirming the diagnosis rather than assuming it.
+
+---
+
+# Follow-up 2 — manual visual review: wrap-mode regression and dark texture bands
+
+Full detail in `docs/specifications/S-107-LongTextReadability.md`'s "Part 4" section. Summary:
+
+## Audit Findings
+
+* **Wrap mode controls "no longer available"**: `#wrap` was never removed from `index.html` (same
+  location since before this milestone). The regression was behavioral: Part 3 made the object mesh's
+  UV mapping wrap-mode *independent*, so the control produced no visible change on the Object Preview
+  — confirmed empirically (four wrap-mode screenshots were pixel-identical).
+* **Dark vertical bands**: root-caused with a pure-Node script that walks every triangle of the built
+  mesh and flags any triangle whose vertices' U coordinates span more than one small per-segment step.
+  Found two independent, real bugs in `ObjectGeometryBuilder.js`'s `applyAzimuthUv()`, both from
+  deriving azimuth via `Math.atan2(x, z)` on each vertex's own position: (1) `atan2`'s `(-PI, PI]`
+  branch cut coincided with a *real, connected* face (not the one face-less seam `LatheGeometry`
+  itself leaves), stretching that triangle's texture sample across nearly the whole canvas width; (2)
+  at the base/cap apex (`r=0`, `x=z=0` for every column), `Math.atan2(+-0, +-0)`'s signed-zero
+  sensitivity gave neighboring apex vertices at the *identical* physical point wildly different,
+  meaningless azimuths.
+
+## Decision
+
+* **Restored wrap-mode-dependent windowing** (`applyWrapUv()`, exported again, called from
+  `Preview3DRenderer.update()` on every `wrap` change) — the complete canvas compresses into the
+  selected wrap mode's angular window, exactly as before Part 3. The Front View Frame is additive, not
+  a replacement: it still sizes itself from `frontViewFrameWidthMm(wrap, canvasWidthMm)` and tracks the
+  same `rotation` the Object Preview's camera uses, so both change together.
+* **Fixed the dark-band root cause**: `applyAzimuthUv()` no longer calls `Math.atan2` at all — it
+  computes each vertex's azimuth directly from its known Lathe column index, matching the exact
+  parametric angle `LatheGeometry` itself used to place that column. This is defined and continuous
+  everywhere, including at `r=0`. `buildTaperedBodyGeometry()`/`buildBottleGeometry()` now build with
+  `phiStart=-PI` (was the THREE.js default `0`) so `LatheGeometry`'s own one face-less seam sits at the
+  back (opposite front), coinciding with the column-index formula's own unavoidable wrap — no real face
+  ever spans a discontinuity, for any wrap mode or rotation.
+
+## Files Changed
+
+```
+src/preview3d/ObjectGeometryBuilder.js    — applyAzimuthUv() rewritten (column-index based, no
+                                             atan2); applyWrapUv() restored/exported; phiStart=-PI
+                                             on both LatheGeometry calls
+src/preview3d/Preview3DRenderer.js        — wrap restored to update(), applyWrapUv() called on
+                                             wrap change (onAzimuthChange/live-orbit sync unchanged)
+app.js                                    — wrap passed back to preview3D.update()
+tools/test-object-geometry-builder.mjs    — checks 7/8 restored to wrap-dependent form; new checks
+                                             8b/8c (triangle UV-continuity + apex regression guards)
+tools/test-s107-long-text-readability.mjs — checks 14/15 updated; new checks 15b/15c
+docs/specifications/S-107-LongTextReadability.md — Part 4
+```
+
+No changes to `GeometryEngine`, `StoneLayout`, any exporter, the project/layer schema,
+`src/products/**`, or `ObjectDimensions.js` (the Front View Frame's own math is unchanged).
+
+## Test Results
+
+`npm test`: **908/908 checks, 0 failures** (up from 904; 4 new regression-guard checks added).
+
+## Browser Verification
+
+Headless Chromium (Playwright), real app, no mocks:
+
+* Wrap select restored, reachable, all 4 modes present.
+* Frame width changes with wrap mode: 40.8 / 67.1 / 105.0 / 175.0mm (front/wide/half/full, default
+  mug) — four distinct values.
+* Object Preview visibly changes with wrap mode (screenshots differ; "front" compresses the whole
+  text into a narrow frontal band, "full" spreads it most of the way around).
+* Frame-drag-rotates-preview and orbit-rotates-moves-frame re-verified at `front`/`half`/`full` wrap
+  modes independently.
+* No dark bands, no duplicated texture, no seam artifacts across a full rotation sweep (0/90/180/-90°)
+  at three wrap modes, including the previously-broken worst case (`full` wrap, rotation 180°, facing
+  the old seam location directly) — clean. One unrelated, pre-existing, very subtle lighting highlight
+  (brighter, not darker; present even over pure background) remains at the geometric seam from the
+  duplicated Lathe vertex column — a normal/lighting artifact, not a texture defect, not part of the
+  reported symptom, left unchanged.
+* Zero console errors across every scenario (wrap-mode cycling, orbit drags, frame drags, full
+  rotation sweeps).
+
+## Recommendation
+
+Approve. Wrap mode's original visible effect on the Object Preview is restored without discarding the
+Front View Frame — both now coexist, driven by the same `rotation`/`wrap` state. The dark-band defect
+is fixed at its actual root cause (two confirmed bugs in per-vertex azimuth derivation), not
+repositioned or hidden — verified both analytically (a new permanent triangle-by-triangle UV
+continuity regression test) and visually (the previously-worst-case view is now clean).
