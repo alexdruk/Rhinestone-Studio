@@ -1,40 +1,52 @@
 # Task
 
 **Task ID:** S-107
-**Task Type:** Readability fix — Long Text Readability
+**Task Type:** Front View Frame & Long Text Workflow (Part 3 — supersedes Part 2's warning-only
+workflow; Part 1 unchanged)
 **Specification:** `docs/specifications/S-107-LongTextReadability.md`
 **Status:** IMPLEMENTED
 **Branch:** feature/s-107-long-text-readability
 
 ## Goal
 
-Improve the readability of long text projected onto cylindrical objects (Object Preview), without
-regressing short/medium text, without a second layout pipeline, and without changing production
-geometry, exporters, or the project schema.
+Replace the current warning-based long-text workflow ("This text is too long to fit legibly on this
+object.") with a Front View Frame on the 2D Canvas: a movable overlay showing the portion of the
+design currently facing the viewer in the Object Preview, bidirectionally synchronized with the
+Object Preview's rotation. A cylindrical object is treated as an unwrapped surface — text that fits
+around the object's printable circumference stays valid and inspectable, regardless of the current
+viewing angle. A warning is shown only when text genuinely exceeds that circumference — a real
+manufacturing limitation, never a viewing-angle artifact.
 
 ## Required Outcome
 
-See `docs/specifications/S-107-LongTextReadability.md` in full. Summary:
+See `docs/specifications/S-107-LongTextReadability.md`, Part 3, in full. Summary:
 
-* Audit-first: walked the full text pipeline (measurement, scaling, spacing, wrap angle, projection)
-  and confirmed the root cause is in the **scaling/spacing** stages, not wrap angle or projection:
-  `app.js`'s auto-fit (`generateTextStonesLive()`/`resolveLayerShapeSource()`) shrinks a long text
-  layer's `heightMm` without limit to fit `project.canvas.width`, but never shrinks the stone pitch
-  (`stoneSizeMm`+`gapMm`) to match — so sufficiently long text renders as illegible stone soup in
-  **both** the 2D Canvas and the Object Preview (the same shared `StoneLayout`, per
-  `docs/ARCHITECTURE.md`'s single-source-of-truth principle), confirmed empirically in a real,
-  unmocked browser.
-* `app.js`: new `computeAutoFitScale()` helper (used by both existing auto-fit call sites, replacing
-  their previously duplicated inline arithmetic) clamps the auto-fit shrink to a legibility floor —
-  `heightMm` never drops below `MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO` (6) times the stone pitch. Text
-  short/plain enough that the old scale never crossed that floor is byte-identical to before; only
-  pathologically long text now overflows `maxWidth` (surfacing the pre-existing "outside the
-  printable area" / "Center Text" warning) instead of collapsing into illegible dots.
-* Stone size/gap are never rescaled — they are real catalog rhinestone sizes
-  (`src/renderer/StoneSizes.js`), and silently shrinking them would misrepresent what gets
-  manufactured.
-* No change to `GeometryEngine`, `StoneLayout`, the project schema, any exporter, any renderer, or
-  `src/preview3d/**`. No second layout pipeline. No multi-row text.
+* Audit-first: walked production-canvas-width-to-circumference, circumference-to-wrap-mode,
+  Object-Preview-rotation-to-production-coordinates, and existing-rotation-logic-coverage before
+  writing any code. Found that the 3D preview's body radius was anchored at a 180-degree reference
+  (canvas = half the circumference), which structurally prevents the canvas's own left/right edges
+  from being adjacent points on the object — re-anchored to a full 360-degree reference (canvas *is*
+  the complete unwrapped surface, exactly `canvasWidthMm` in circumference) so the Front View Frame
+  can wrap continuously across the canvas edges with no discontinuity, per requirement 3.
+* `src/preview3d/ObjectDimensions.js`: new pure mm<->azimuth/circumference/frame-width functions,
+  reused (not duplicated) by both `ObjectGeometryBuilder.js`'s object-mesh texture UV and `app.js`'s
+  Front View Frame — the 2D canvas and Object Preview compute "which part faces the viewer" with the
+  literal same code.
+* `ObjectGeometryBuilder.js`: the object mesh's texture now always wraps the complete production
+  canvas fully and continuously around the object (mm-accurate), never clipped/hidden by wrap mode —
+  wrap mode now only sizes the Front View Frame's highlighted width.
+* `Preview3DRenderer.js`: new live camera-azimuth read-back (`onAzimuthChange`, via an `OrbitControls`
+  `'change'` listener) so a free mouse/touch orbit of the Object Preview moves the Front View Frame,
+  not just the reverse.
+* `app.js`: draws the frame (visually distinct from the safe-area guide, width shown in mm), makes it
+  draggable (rotates the Object Preview), wires the live-orbit callback, and replaces the old
+  `maxWidth`-based `isTextTooLongForObject()` with one driven by the object's real printable
+  circumference (`getLayerBBox()` vs. `circumferenceMm()`) — reusing the existing `StoneLayout`-backed
+  bbox helper, no new bookkeeping map. The warning's copy states real mm numbers and never blames wrap
+  mode/viewing angle.
+* Never clips/crops/hides the production layout; never changes `GeometryEngine`, `StoneLayout`, any
+  exporter's output, physical stone size/gap, or the project schema; no second layout/rendering
+  pipeline; no multi-line text.
 
 ## Rules
 
@@ -42,18 +54,28 @@ See `docs/specifications/S-107-LongTextReadability.md` in full. Summary:
   `docs/MILESTONE_WORKFLOW.md`.
 * Repository is the source of truth; audit before implementing; do not add functionality beyond what
   the specification requires.
-* Do not touch `GeometryEngine`, `StoneLayout`, the project schema, production geometry, any
-  exporter's existing output, or introduce a second layout pipeline.
+* Do not touch `GeometryEngine`, `StoneLayout`, the project schema, production geometry (stone
+  positions), any exporter's existing output, `src/renderer/**`, or introduce a second layout
+  pipeline.
 
 ## Deliverables
 
-* `app.js` — new `MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO` constant and `computeAutoFitScale()` helper,
-  wired into both existing auto-fit call sites.
-* `tools/test-s107-long-text-readability.mjs` — new test suite (structural + behavioral).
-* `package.json` — new test wired into the `test` script.
-* `docs/specifications/S-107-LongTextReadability.md` — full specification and audit findings.
-* `npm test` passing in full.
-* Real-browser verification (headless Chromium via Playwright, isolated local run) of short/medium/
-  very-long text on mug/tumbler/bottle, before and after, with sample screenshots.
+* `src/preview3d/ObjectDimensions.js`/`ObjectGeometryBuilder.js`/`Preview3DRenderer.js`/`index.js` —
+  mm-accurate, wrap-independent circumference/azimuth math and live rotation sync.
+* `app.js`/`index.html` — the Front View Frame (draw/drag/hit-test), live-orbit sync, Inspector stats
+  (Front View width, printable circumference, viewing position), and the corrected long-text warning.
+* `tools/test-object-dimensions.mjs`, `tools/test-object-geometry-builder.mjs`,
+  `tools/test-s107-long-text-readability.mjs` — updated/rewritten test suites.
+* `tools/test-app-module-migration.mjs`, `tools/test-shape-geometry-integration.mjs` — allowlist the
+  new `ObjectDimensions.js` import.
+* 17 prior-milestone test files — stale `src/preview3d/` forbidden-path guard removed (mechanical
+  scoping fix; `src/renderer/` guard, correctly still forbidding this milestone, is untouched).
+* `docs/specifications/S-107-LongTextReadability.md` — Part 3 (this milestone's full specification
+  and audit findings).
+* `npm test` passing in full (904 checks, 0 failures).
+* Real-browser verification (headless Chromium via Playwright) of short/medium/long text on
+  mug/tumbler/bottle; frame-drag-rotates-preview and orbit-moves-frame in both directions; continuous
+  edge-wrap; mm-labeled frame width; circumference-only warning; zero console errors — with
+  screenshots.
 * `TASK_RESULT.md` completed.
-* One commit on `feature/s-107-long-text-readability`, branch pushed (not merged).
+* Feature branch pushed (not merged).

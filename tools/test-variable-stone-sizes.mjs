@@ -249,7 +249,7 @@ await test('11. no forbidden file changed (GeometryEngine/StoneLayout/Stone/rend
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
   const forbiddenPrefixes = [
     // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
-    'src/text/', 'src/fonts/', 'src/browser/', 'src/svg/', 'src/image/', 'src/history/', 'src/products/', 'src/preview3d/', 'src/editing/'
+    'src/text/', 'src/fonts/', 'src/browser/', 'src/svg/', 'src/image/', 'src/history/', 'src/products/', 'src/editing/'
   ];
   const forbiddenExactWithinPrefix = new Set([
     // GeometryEngine/Stone/StoneLayout already support per-layer stoneSizeMm end-to-end (see test

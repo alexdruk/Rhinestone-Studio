@@ -27,7 +27,6 @@ export class Preview3DRenderer {
     this.canvas = canvas;
     this._mounted = false;
     this._geometryKey = null;
-    this._wrap = null;
     this._azimuthDeg = 0;
     this._zoom = DEFAULT_ZOOM;
     this._sliderAzimuthDeg = 0;
@@ -40,6 +39,11 @@ export class Preview3DRenderer {
     this._textureCanvas = null;
     this._textureCtx = null;
     this._texture = null;
+    // S-107: fires with the live camera azimuth (degrees, same -180..180/front=0 convention as
+    // `rotation`) whenever the operator free-orbits the Object Preview with the mouse/touch, so
+    // app.js can keep the 2D canvas's Front View Frame in sync -- see _onControlsChange() below for
+    // why this never fires for our own slider/frame-drag-driven camera moves (no feedback loop).
+    this.onAzimuthChange = null;
   }
 
   async init() {
@@ -51,7 +55,6 @@ export class Preview3DRenderer {
     ]);
     this._THREE = THREE;
     this._buildObjectMesh = geometryModule.buildObjectMesh;
-    this._applyWrapUv = geometryModule.applyWrapUv;
 
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, preserveDrawingBuffer: true });
     this.renderer.setPixelRatio(Math.min(2, (typeof window !== 'undefined' && window.devicePixelRatio) || 1));
@@ -76,6 +79,7 @@ export class Preview3DRenderer {
     this.controls.maxDistance = 5000;
     this.controls.minPolarAngle = MIN_POLAR_RAD;
     this.controls.maxPolarAngle = MAX_POLAR_RAD;
+    this.controls.addEventListener('change', () => this._onControlsChange());
 
     this._resizeObserver = new ResizeObserver(() => this._handleResize());
     this._resizeObserver.observe(this.canvas.parentElement || this.canvas);
@@ -103,9 +107,13 @@ export class Preview3DRenderer {
 
   /**
    * @param {import('../geometry/StoneLayout.js').StoneLayout} stoneLayout
-   * @param {{cupColor:string, wrap:string, objectTemplate:object, canvasWidthMm:number, canvasHeightMm:number}} options
+   * @param {{cupColor:string, objectTemplate:object, canvasWidthMm:number, canvasHeightMm:number}} options
+   *   S-107: `wrap` is no longer accepted here -- the object mesh's texture always wraps the
+   *   complete production canvas fully and continuously around the object (mm-accurate, via
+   *   ObjectGeometryBuilder.js's applyAzimuthUv()); wrap mode only sizes the 2D canvas's Front View
+   *   Frame overlay (app.js), which never touches the 3D mesh or its texture.
    */
-  update(stoneLayout, { cupColor, wrap, objectTemplate, canvasWidthMm, canvasHeightMm }) {
+  update(stoneLayout, { cupColor, objectTemplate, canvasWidthMm, canvasHeightMm }) {
     if (!this._mounted) return;
 
     const geometryKey = `${objectTemplate.id}:${canvasWidthMm}:${canvasHeightMm}`;
@@ -113,12 +121,6 @@ export class Preview3DRenderer {
     if (geometryChanged) {
       this._rebuildMesh(objectTemplate, canvasWidthMm, canvasHeightMm);
       this._geometryKey = geometryKey;
-      this._wrap = null;
-    }
-
-    if (wrap !== this._wrap) {
-      this._applyWrapUv(this._bodyMesh, wrap);
-      this._wrap = wrap;
     }
 
     this._updateTexture(stoneLayout, canvasWidthMm, canvasHeightMm, cupColor);
@@ -267,5 +269,35 @@ export class Preview3DRenderer {
     const newOffset = new THREE.Vector3().setFromSpherical(spherical);
     this.camera.position.copy(target).add(newOffset);
     this.controls.update();
+  }
+
+  // S-107: reads the camera's *actual* current azimuth back out of its position (the same
+  // atan2(x,z)-based spherical convention _repositionCamera()/_frameCamera() write it with), so it
+  // reflects reality regardless of whether it got there via setAzimuthDeg() or a manual
+  // mouse/touch orbit OrbitControls applied directly to the camera.
+  _currentAzimuthDeg() {
+    const THREE = this._THREE;
+    const offset = new THREE.Vector3().copy(this.camera.position).sub(this.controls.target);
+    const spherical = new THREE.Spherical().setFromVector3(offset);
+    return (spherical.theta * 180) / Math.PI;
+  }
+
+  // S-107: OrbitControls fires 'change' both for a real user drag/touch orbit AND as a side effect
+  // of our own setAzimuthDeg()/_repositionCamera() writes (which call controls.update() to commit
+  // the new position). Comparing the freshly-read azimuth against this._azimuthDeg -- which
+  // setAzimuthDeg() always updates *before* touching the camera -- tells the two apart without any
+  // extra flag: our own writes always already match by the time 'change' fires, so onAzimuthChange
+  // only ever fires for a genuine, operator-driven orbit. This is what lets app.js keep the 2D
+  // canvas's Front View Frame following a free mouse-drag rotation of the Object Preview.
+  _onControlsChange() {
+    if (!this._mounted || !this._dimensions) return;
+    const current = this._currentAzimuthDeg();
+    let delta = (current - this._azimuthDeg) % 360;
+    if (delta > 180) delta -= 360;
+    if (delta < -180) delta += 360;
+    if (Math.abs(delta) < 0.01) return;
+    this._azimuthDeg = current;
+    this._sliderAzimuthDeg = current;
+    if (this.onAzimuthChange) this.onAzimuthChange(current);
   }
 }

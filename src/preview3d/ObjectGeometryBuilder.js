@@ -16,7 +16,7 @@
  * which is what lets tools/test-object-geometry-builder.mjs exercise this module directly.
  */
 import * as THREE from 'three';
-import { computeObjectDimensionsMm, wrapAngleRad } from './ObjectDimensions.js';
+import { computeObjectDimensionsMm, canvasXMmForAzimuthRad } from './ObjectDimensions.js';
 
 const LATHE_SEGMENTS = 48;
 const HANDLE_TUBE_SEGMENTS = 32;
@@ -66,6 +66,7 @@ export function buildObjectMesh(template, canvasWidthMm, canvasHeightMm) {
     ? buildBottleGeometry(dimensions)
     : buildTaperedBodyGeometry(dimensions);
   applyBodyHeightUv(bodyGeometry, dimensions.bodyHeightMm);
+  applyAzimuthUv(bodyGeometry, canvasWidthMm);
 
   // RS-1006A: FrontSide, not DoubleSide -- a solid opaque vessel never needs its interior faces
   // rendered from an outside camera. Rendering them (the RS-1006 default) is what caused the
@@ -207,31 +208,20 @@ function buildHandleMesh(dimensions) {
   return new THREE.Mesh(handleGeometry, handleMaterial);
 }
 
-// Writes a custom U coordinate per vertex: azimuth (atan2(x,z), 0 at +Z -- the default camera's
-// front-facing direction) mapped onto [0,1] across `angleRad`'s window, centered on the front. V is
-// left untouched here -- it is set once at build time by applyBodyHeightUv() above and does not
-// depend on wrap mode. Combined with ClampToEdgeWrapping (set by Preview3DRenderer.js on the
-// texture itself), vertices outside the wrap window clamp to the texture's own edge texels -- which
-// are always plain background color (StoneLayoutTexture.js's fill), so the rest of the body reads
-// as a seamless plain surface.
-function applyAzimuthUv(geometry, angleRad) {
+// S-107: writes a custom U coordinate per vertex from its azimuth (atan2(x,z), 0 at +Z -- the
+// default camera's front-facing direction), using the exact same mm-accurate
+// canvasXMmForAzimuthRad() mapping ObjectDimensions.js exposes for the 2D canvas's Front View
+// Frame -- the one shared formula that keeps the object mesh's texture and the 2D canvas in sync.
+// U is wrap-mode independent: the complete production canvas always wraps fully and continuously
+// around the object (per requirement 4, "never clip, crop or hide the production layout") --
+// wrap mode only controls the Front View Frame's highlighted width (app.js), never this mapping.
+// V is left untouched here -- it is set once at build time by applyBodyHeightUv() above.
+function applyAzimuthUv(geometry, canvasWidthMm) {
   const position = geometry.attributes.position;
   const uv = geometry.attributes.uv;
   for (let i = 0; i < position.count; i++) {
     const azimuth = Math.atan2(position.getX(i), position.getZ(i));
-    uv.setX(i, 0.5 + azimuth / angleRad);
+    uv.setX(i, canvasXMmForAzimuthRad(azimuth, canvasWidthMm) / canvasWidthMm);
   }
   uv.needsUpdate = true;
-}
-
-/**
- * Re-maps `bodyMesh`'s UV so the shared texture covers exactly `wrapMode`'s angular window,
- * centered on the front. Cheap (tens to low hundreds of vertices) -- safe to call every time the
- * operator changes wrap mode, not only when the mesh is rebuilt.
- *
- * @param {THREE.Mesh} bodyMesh
- * @param {'front'|'wide'|'half'|'full'} wrapMode
- */
-export function applyWrapUv(bodyMesh, wrapMode) {
-  applyAzimuthUv(bodyMesh.geometry, wrapAngleRad(wrapMode));
 }

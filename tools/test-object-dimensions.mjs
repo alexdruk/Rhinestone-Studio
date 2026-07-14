@@ -3,9 +3,19 @@ import assert from 'node:assert/strict';
 // RS-1006 — pure-number tests for src/preview3d/ObjectDimensions.js: the mm-accurate radius
 // formula, bottle extra-height derivation, positive-input validation, and sane output across all
 // three real ObjectTemplate records. No Three.js, no DOM/canvas — this module is plain math.
+//
+// S-107 (Front View Frame & Long Text Workflow) extended this module to be the one place the
+// production canvas's mm coordinate space and the cylinder's azimuth are related -- the flat canvas
+// is treated as the object's unwrapped surface, mapping exactly once around the full 360-degree
+// circumference (previously anchored at a 180-degree reference; see computeBodyRadiusMm() and this
+// file's own top-of-file comment for why the reference changed: it is what makes the Front View
+// Frame wrap continuously and seamlessly across the canvas's left/right edges, requirement 3).
 
-const { computeObjectDimensionsMm, computeBodyRadiusMm, wrapAngleRad, WRAP_ANGLE_DEG } =
-  await import('../src/preview3d/ObjectDimensions.js');
+const {
+  computeObjectDimensionsMm, computeBodyRadiusMm, wrapAngleRad, WRAP_ANGLE_DEG,
+  circumferenceMm, azimuthRadForCanvasXMm, canvasXMmForAzimuthRad,
+  canvasXMmForRotationDeg, rotationDegForCanvasXMm, frontViewFrameWidthMm
+} = await import('../src/preview3d/ObjectDimensions.js');
 const { getObjectTemplate } = await import('../src/products/index.js');
 
 async function test(name, fn) {
@@ -19,10 +29,10 @@ async function test(name, fn) {
   }
 }
 
-await test('1. computeBodyRadiusMm anchors a 180-degree arc to canvasWidthMm exactly', () => {
+await test('1. computeBodyRadiusMm anchors a full 360-degree revolution to canvasWidthMm exactly (S-107: the canvas is the object\'s complete unwrapped surface)', () => {
   const canvasWidthMm = 210;
   const radius = computeBodyRadiusMm(canvasWidthMm);
-  const arcLength = radius * Math.PI; // 180 degrees = PI radians
+  const arcLength = radius * 2 * Math.PI; // 360 degrees = 2*PI radians
   assert.ok(Math.abs(arcLength - canvasWidthMm) < 1e-9, `expected arc length ${canvasWidthMm}, got ${arcLength}`);
 });
 
@@ -97,6 +107,63 @@ await test('11. wrap mode never changes computeObjectDimensionsMm\'s output (obj
   const dimsA = computeObjectDimensionsMm(getObjectTemplate('mug'), 210, 90);
   const dimsB = computeObjectDimensionsMm(getObjectTemplate('mug'), 210, 90);
   assert.deepEqual(dimsA, dimsB);
+});
+
+// ---------------------------------------------------------------------------------------------
+// S-107: circumference / azimuth <-> canvas-x / Front View Frame width
+// ---------------------------------------------------------------------------------------------
+
+await test('12. circumferenceMm() equals canvasWidthMm exactly (by construction, per computeBodyRadiusMm\'s 360-degree reference)', () => {
+  for (const canvasWidthMm of [180, 210, 230]) {
+    assert.ok(Math.abs(circumferenceMm(canvasWidthMm) - canvasWidthMm) < 1e-9);
+  }
+});
+
+await test('13. canvasXMmForAzimuthRad(0, W) is the canvas center (the front); azimuth +-PI both map to the same seam at the canvas edges (0 and W)', () => {
+  const W = 210;
+  assert.ok(Math.abs(canvasXMmForAzimuthRad(0, W) - W / 2) < 1e-9);
+  assert.ok(Math.abs(canvasXMmForAzimuthRad(Math.PI, W) - W) < 1e-9);
+  assert.ok(Math.abs(canvasXMmForAzimuthRad(-Math.PI, W) - 0) < 1e-9);
+});
+
+await test('14. azimuthRadForCanvasXMm() is the exact inverse of canvasXMmForAzimuthRad() across the full range', () => {
+  const W = 210;
+  for (const azimuthRad of [-3, -2, -1, -0.3, 0, 0.3, 1, 2, 3]) {
+    const xMm = canvasXMmForAzimuthRad(azimuthRad, W);
+    const roundTripped = canvasXMmForAzimuthRad(azimuthRadForCanvasXMm(xMm, W), W);
+    assert.ok(Math.abs(roundTripped - xMm) < 1e-6, `expected xMm ${xMm} to round-trip, got ${roundTripped}`);
+  }
+});
+
+await test('15. canvas x=0 and x=canvasWidthMm are the same physical point (S-107 requirement 3: seamless wrap at the production canvas\'s own edges)', () => {
+  const W = 210;
+  assert.ok(Math.abs(azimuthRadForCanvasXMm(0, W) - Math.PI) < 1e-9 || Math.abs(azimuthRadForCanvasXMm(0, W) + Math.PI) < 1e-9);
+  const azAtRight = azimuthRadForCanvasXMm(W - 1e-9, W);
+  assert.ok(Math.abs(Math.abs(azAtRight) - Math.PI) < 1e-3, 'expected the right edge to sit at the same +-PI seam as the left edge');
+});
+
+await test('16. canvasXMmForRotationDeg(0, W) is dead center (front); rotationDegForCanvasXMm() is its inverse', () => {
+  const W = 210;
+  assert.ok(Math.abs(canvasXMmForRotationDeg(0, W) - W / 2) < 1e-9);
+  for (const rotationDeg of [-179, -90, -30, 0, 30, 90, 179]) {
+    const xMm = canvasXMmForRotationDeg(rotationDeg, W);
+    const roundTripped = rotationDegForCanvasXMm(xMm, W);
+    assert.ok(Math.abs(roundTripped - rotationDeg) < 1e-6, `expected rotation ${rotationDeg} to round-trip, got ${roundTripped}`);
+  }
+});
+
+await test('17. frontViewFrameWidthMm(): wrap-mode ordering matches WRAP_ANGLE_DEG (front < wide < half < full), and \'half\' covers exactly half the canvas width', () => {
+  const W = 210;
+  const widths = Object.fromEntries(['front', 'wide', 'half', 'full'].map((m) => [m, frontViewFrameWidthMm(m, W)]));
+  assert.ok(widths.front < widths.wide);
+  assert.ok(widths.wide < widths.half);
+  assert.ok(widths.half < widths.full);
+  assert.ok(Math.abs(widths.half - W / 2) < 1e-9, `expected 'half' to cover exactly half of canvasWidthMm (${W / 2}), got ${widths.half}`);
+  assert.ok(widths.full < W, 'expected \'full\' (300 degrees) to leave a real gap, never covering the entire circumference');
+});
+
+await test('18. frontViewFrameWidthMm() scales linearly with canvasWidthMm for a fixed wrap mode', () => {
+  assert.ok(Math.abs(frontViewFrameWidthMm('wide', 420) - frontViewFrameWidthMm('wide', 210) * 2) < 1e-9);
 });
 
 console.log('Object dimensions tests passed.');

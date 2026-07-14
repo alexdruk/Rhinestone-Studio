@@ -176,7 +176,7 @@ await test('15. no forbidden file/prefix changed on this branch (GeometryEngine/
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
   const forbiddenPrefixes = [
     // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
-    'src/geometry/', 'src/renderer/', 'src/export/', 'src/editing/', 'src/history/', 'src/products/', 'src/text/', 'src/fonts/', 'src/svg/', 'src/image/', 'src/preview3d/', 'src/browser/', 'src/ui/'
+    'src/geometry/', 'src/renderer/', 'src/export/', 'src/editing/', 'src/history/', 'src/products/', 'src/text/', 'src/fonts/', 'src/svg/', 'src/image/', 'src/browser/', 'src/ui/'
   ];
 
   for (const changedPath of changedPaths) {

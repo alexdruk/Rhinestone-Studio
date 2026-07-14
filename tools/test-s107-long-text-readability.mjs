@@ -4,40 +4,39 @@ import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// S-107 (Long Text Readability) — root cause: auto-fit (layer.autoFit) shrinks a text layer's
-// heightMm to force very long text to fit project.canvas.width, but stoneSizeMm/gapMm (the physical
-// stone pitch -- a real catalog rhinestone, see src/renderer/StoneSizes.js) never shrink to match.
-// As requested text gets longer, auto-fit's required shrink grows without bound, so the fixed-size
-// stones increasingly overwhelm the shrunk glyph strokes until the pattern reads as a blurred row of
-// dots instead of letters -- reproducible in both the 2D canvas and the Object Preview alike (see
-// docs/specifications/S-107-LongTextReadability.md's audit).
+// S-107 (Front View Frame & Long Text Workflow) — this milestone replaces the previous
+// warning-based long-text workflow (the original S-107 "Long Text Readability" Part 1/Part 2,
+// still summarized in docs/specifications/S-107-LongTextReadability.md) with a Front View Frame on
+// the 2D Canvas: a movable overlay showing the portion of the design currently facing the viewer in
+// the Object Preview, kept in sync with the Object Preview's rotation in both directions.
 //
-// Fix (part 1): computeAutoFitScale() (app.js) clamps how far auto-fit will shrink heightMm to a
-// legibility floor -- heightMm never drops below MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO times the
-// layer's own (unchanged) stoneSize+gap pitch. Text short/plain enough that the old fit-to-width
-// scale never crossed that floor gets the exact same scale as before (byte-identical short/medium
-// behavior).
+// Part 1 (auto-fit's legibility floor, computeAutoFitScale()/MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO) is
+// UNCHANGED by this milestone -- it still stops illegible over-shrinking and is not re-tested here
+// (see the original checks 8-12, still valid, still exercised structurally below).
 //
-// Fix (part 2, this milestone's follow-up): the floor above means text long enough now overflows
-// maxWidth instead of collapsing into illegible stone soup -- but silently letting it overflow still
-// produced a confusing, heavily-clipped result on the Object Preview with only the pre-existing
-// *positional* "outside the printable area" / "Center Text" warning, which is not a real fix for a
-// text that is too wide to fit no matter where it sits. isTextTooLongForObject() detects that
-// structural case (driven by computeAutoFitScale()'s `floorApplied`, not re-derived), and a new,
-// persistent (non-Lightbox) "This text is too long to fit legibly on this object." warning replaces
-// the misleading positional one whenever it applies.
+// Part 2 (the old maxWidth/floorApplied-driven "too long to fit legibly" warning) is REMOVED.
+// isTextTooLongForObject() is redefined: a text layer is only "too long" when its actual rendered
+// width (getLayerBBox(), the same StoneLayout-derived bbox isTextOutsidePrintableArea() already
+// uses) exceeds the object's printable circumference (printableCircumferenceMm(), which reuses
+// ObjectDimensions.js's circumferenceMm() -- by construction exactly project.canvas.width, since the
+// production canvas is treated as the object's complete unwrapped surface). This is a real,
+// wrap-mode-independent manufacturing limit (the design would overlap itself once wrapped fully
+// around the object), not a "current viewing angle" concern -- text that fits the circumference can
+// always be inspected by moving the Front View Frame or rotating the Object Preview, however far it
+// extends past a single wrap-mode-sized viewing window.
 //
 // Structural checks against the live app.js/index.html source (app.js is a browser entry point and
 // is not import()-able directly under plain Node, matching the established convention in
 // tools/test-alignment-snapping-integration.mjs); behavioral checks extract and execute the real,
 // pure logic functions from that source (mirroring that same file's extractFunction()/new Function()
-// precedent), injecting a fake autoFitFloorAppliedByLayerId Map where a function reads that module
-// state, so the actual decision logic runs for real rather than being merely pattern-matched.
+// precedent).
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
 const indexHtml = await readFile(path.join(repoRoot, 'index.html'), 'utf8');
 const packageJson = JSON.parse(await readFile(path.join(repoRoot, 'package.json'), 'utf8'));
+const { circumferenceMm, canvasXMmForAzimuthRad, azimuthRadForCanvasXMm, canvasXMmForRotationDeg, rotationDegForCanvasXMm, frontViewFrameWidthMm, wrapAngleRad } =
+  await import('../src/preview3d/ObjectDimensions.js');
 
 async function test(name, fn) {
   try {
@@ -58,50 +57,44 @@ function extractBlock(source, pattern, label) {
 
 const ratioDecl = extractBlock(appJs, /const MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO=\d+(\.\d+)?;/, 'the MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO declaration');
 const computeAutoFitScaleSrc = extractBlock(appJs, /function computeAutoFitScale\([^)]*\)\{[\s\S]*?\n\}/, 'function computeAutoFitScale()');
-const isTextTooLongSrc = extractBlock(appJs, /function isTextTooLongForObject\([^)]*\)\{[\s\S]*?\n\}/, 'function isTextTooLongForObject()');
-const recommendedWrapModeSrc = extractBlock(appJs, /function recommendedWrapModeForFit\([^)]*\)\{[\s\S]*?\n\}/, 'function recommendedWrapModeForFit()');
-const textTooLongMessageSrc = extractBlock(appJs, /function textTooLongActionMessage\([^)]*\)\{[\s\S]*?\n\}/, 'function textTooLongActionMessage()');
 
 // eslint-disable-next-line no-new-func
 const computeAutoFitScale = new Function(`${ratioDecl}\nreturn ${computeAutoFitScaleSrc};`)();
 
-// Builds { isTextTooLongForObject, recommendedWrapModeForFit, textTooLongActionMessage } wired
-// together against a real, caller-supplied autoFitFloorAppliedByLayerId Map -- exactly the module
-// state generateTextStonesLive() populates in the live app, injected here instead of the live app's
-// own singleton so each test gets a clean, independent map.
-function buildTooLongHelpers(floorAppliedByLayerId) {
-  // eslint-disable-next-line no-new-func
-  return new Function(
-    'autoFitFloorAppliedByLayerId',
-    `${isTextTooLongSrc}\n${recommendedWrapModeSrc}\n${textTooLongMessageSrc}\nreturn { isTextTooLongForObject, recommendedWrapModeForFit, textTooLongActionMessage };`
-  )(floorAppliedByLayerId);
-}
-
 // ---------------------------------------------------------------------------------------------
-// Structural wiring checks
+// Structural checks — old Part-2 workflow is gone, replaced by the circumference-based one
 // ---------------------------------------------------------------------------------------------
 
-await test('1. app.js declares a single MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO constant', () => {
-  const matches = appJs.match(/const MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO=/g) || [];
-  assert.equal(matches.length, 1, 'expected exactly one MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO declaration');
+await test('1. the old maxWidth/floorApplied-driven too-long workflow is fully removed: no autoFitFloorAppliedByLayerId, floorApplied, recommendedWrapModeForFit, or textTooLongActionMessage remain in app.js', () => {
+  for (const gone of ['autoFitFloorAppliedByLayerId', 'floorApplied', 'recommendedWrapModeForFit', 'textTooLongActionMessage']) {
+    assert.ok(!appJs.includes(gone), `expected "${gone}" to be fully removed from app.js`);
+  }
 });
 
-await test('2. generateTextStonesLive() computes its auto-fit scale via the shared computeAutoFitScale() helper, not inline maxWidth arithmetic, and records floorApplied', () => {
-  const methodMatch = appJs.match(/generateTextStonesLive\(layer,project\)\{[\s\S]*?const bb=result\.getBoundingBox\(\);/);
-  assert.ok(methodMatch, 'expected to find generateTextStonesLive() in app.js');
-  assert.ok(methodMatch[0].includes('const{scale,floorApplied}=computeAutoFitScale(layer,project,result.widthMm);'));
-  assert.ok(methodMatch[0].includes('autoFitFloorAppliedByLayerId.set(layer.id,floorApplied);'));
-  assert.ok(!/const maxWidth=project\.canvas\.width-10/.test(methodMatch[0]), 'expected the old inline maxWidth computation to be gone from generateTextStonesLive()');
+await test('2. isTextTooLongForObject() is driven by getLayerBBox() vs. printableCircumferenceMm(), not a wrap-window/maxWidth threshold', () => {
+  const fn = extractBlock(appJs, /function isTextTooLongForObject\([^)]*\)\{[\s\S]*?\n\}/, 'function isTextTooLongForObject()');
+  assert.match(fn, /getLayerBBox\(l\)\.width>printableCircumferenceMm\(\)/);
 });
 
-await test('3. resolveLayerShapeSource()\'s text branch computes its auto-fit scale via the same shared helper', () => {
-  const branchMatch = appJs.match(/if\(layer\.type==='text'\)\{[\s\S]*?\n {2}\}\n {2}if\(layer\.type==='image'\)/);
-  assert.ok(branchMatch, "expected to find resolveLayerShapeSource()'s text branch in app.js");
-  assert.ok(branchMatch[0].includes('const{scale}=computeAutoFitScale(layer,project,resolved.boundingBox.widthMm);'));
-  assert.ok(!/const maxWidth=project\.canvas\.width-10/.test(branchMatch[0]), 'expected the old inline maxWidth computation to be gone from resolveLayerShapeSource()');
+await test('3. printableCircumferenceMm() reuses ObjectDimensions.js\'s circumferenceMm() -- no duplicated geometry', () => {
+  assert.ok(appJs.includes("import { circumferenceMm, frontViewFrameWidthMm, canvasXMmForRotationDeg, rotationDegForCanvasXMm, azimuthRadForCanvasXMm, wrapAngleRad } from './src/preview3d/ObjectDimensions.js';"));
+  const fn = extractBlock(appJs, /function printableCircumferenceMm\(\)\{[\s\S]*?\n\}/, 'function printableCircumferenceMm()');
+  assert.match(fn, /circumferenceMm\(project\.canvas\.width\)/);
 });
 
-await test('4. no forbidden file changed (GeometryEngine/StoneLayout, any exporter, or the project schema)', () => {
+await test('4. the too-long warning\'s detail message describes a real manufacturing limitation (generated width vs. printable circumference) and never mentions wrap mode/viewing angle as the cause', () => {
+  const fn = extractBlock(appJs, /function textTooLongDetailMessage\([^)]*\)\{[\s\S]*?\n\}/, 'function textTooLongDetailMessage()');
+  assert.match(fn, /getLayerBBox\(l\)/);
+  assert.match(fn, /printableCircumferenceMm\(\)/);
+  assert.ok(!/wrap mode|project\.wrap/i.test(fn), 'expected the too-long message to never blame wrap mode/the current viewing angle as the cause (mentioning that the design gets "wrapped... around the object" physically is fine and expected)');
+});
+
+await test('5. index.html\'s too-long warning copy describes the printable circumference, not legibility/viewing angle, in both the Inspector and the Text Lightbox', () => {
+  assert.match(indexHtml, /id="workspaceTextTooLongWarning"[\s\S]{0,80}This text exceeds the object's printable circumference\./);
+  assert.match(indexHtml, /<p class="validation-message" id="textTooLongWarning" role="status">This text exceeds the object's printable circumference\.<\/p>/);
+});
+
+await test('6. no forbidden file changed (this milestone\'s own forbidden list: GeometryEngine/StoneLayout, any exporter, and the project schema)', () => {
   const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
   const changedPaths = output
     .split('\n')
@@ -117,139 +110,176 @@ await test('4. no forbidden file changed (GeometryEngine/StoneLayout, any export
   }
 });
 
-await test('5. package.json registers this milestone\'s test suite', () => {
+await test('7. package.json registers this milestone\'s test suite', () => {
   assert.ok(packageJson.scripts.test.includes('test-s107-long-text-readability.mjs'));
 });
 
-await test('6. GeometryEngine.generate() clears autoFitFloorAppliedByLayerId at the start of every generation, so a deleted/renamed layer can never leave a stale entry', () => {
-  assert.match(appJs, /async generate\(project\)\{autoFitFloorAppliedByLayerId\.clear\(\);/);
+// ---------------------------------------------------------------------------------------------
+// Structural checks — the Front View Frame itself (drawing, hit-test, drag, live sync)
+// ---------------------------------------------------------------------------------------------
+
+await test('8. drawFrontViewFrame() is wired into drawLayout() so the frame is always drawn alongside the production layout', () => {
+  const drawLayoutFn = extractBlock(appJs, /function drawLayout\(\)\{[\s\S]*?\n\}/, 'function drawLayout()');
+  assert.match(drawLayoutFn, /drawFrontViewFrame\(ctx,s,ox,oy,dpr\)/);
 });
 
-await test('7. autoFitFloorAppliedByLayerId is transient, in-memory state -- never read by save/load, validateProject(), or any exporter', () => {
-  assert.equal((appJs.match(/autoFitFloorAppliedByLayerId/g) || []).length >= 3, true, 'expected the map to be declared and used');
-  for (const forbiddenContext of ['validateProject', 'JSON.stringify', 'exportSVG', 'exportCanvas']) {
-    const fnMatch = appJs.match(new RegExp(`function ${forbiddenContext}\\([^)]*\\)\\{[\\s\\S]*?\\n\\}`));
-    if (fnMatch) assert.ok(!fnMatch[0].includes('autoFitFloorAppliedByLayerId'), `${forbiddenContext}() must not reference autoFitFloorAppliedByLayerId`);
-  }
+await test('9. the frame\'s geometry (frontViewFrameGeometry()) reuses canvasXMmForRotationDeg()/frontViewFrameWidthMm() from ObjectDimensions.js -- the same mm-accurate mapping the object mesh\'s own texture UV uses, so the 2D canvas and Object Preview cannot disagree', () => {
+  const fn = extractBlock(appJs, /function frontViewFrameGeometry\(\)\{[\s\S]*?\n\}/, 'function frontViewFrameGeometry()');
+  assert.match(fn, /frontViewFrameWidthMm\(project\.wrap,canvasWidthMm\)/);
+  assert.match(fn, /canvasXMmForRotationDeg\(rotation,canvasWidthMm\)/);
+});
+
+await test('10. the frame wraps continuously across the canvas\'s left/right edges (requirement 3): drawFrontViewFrame() splits into on-canvas segments modulo canvasWidthMm instead of clipping', () => {
+  const fn = extractBlock(appJs, /function drawFrontViewFrame\([^)]*\)\{[\s\S]*?\n\}/, 'function drawFrontViewFrame()');
+  assert.match(fn, /%canvasWidthMm/);
+  assert.match(fn, /segments\.push/);
+});
+
+await test('11. the frame is visually distinct from the safe-area guide: a different color/fill (drawFrontViewFrame does not reuse drawSafeAreaGuide\'s blue dashed style) and shows its width in millimeters', () => {
+  const safeAreaFn = extractBlock(appJs, /function drawSafeAreaGuide\([^)]*\)\{[\s\S]*?\}/, 'function drawSafeAreaGuide()');
+  const frameFn = extractBlock(appJs, /function drawFrontViewFrame\([^)]*\)\{[\s\S]*?\n\}/, 'function drawFrontViewFrame()');
+  assert.match(safeAreaFn, /rgba\(20,120,255/); // blue, dashed
+  assert.match(frameFn, /#ff8c00/); // amber/orange, distinct color
+  assert.ok(!frameFn.includes('setLineDash([5'), 'expected a solid (not dashed) frame border, visually distinct from the safe-area guide');
+  assert.match(frameFn, /frameWidthMm\.toFixed\(1\)\} mm/, 'expected the frame\'s width to be displayed in millimeters');
+});
+
+await test('12. dragging the Front View Frame rotates the Object Preview (requirement 2), cheaply -- no engine.generate()/updateAll() on every pointermove tick', () => {
+  const pointerdownFn = extractBlock(appJs, /layoutCanvas\.addEventListener\('pointerdown',e=>\{[\s\S]*?\n\}\);/, "the layoutCanvas 'pointerdown' handler");
+  assert.match(pointerdownFn, /isPointerOnFrontViewFrame\(mm\)/);
+  assert.match(pointerdownFn, /kind:'frontFrame'/);
+
+  const pointermoveFn = extractBlock(appJs, /layoutCanvas\.addEventListener\('pointermove',e=>\{[\s\S]*?\n\}\);/, "the layoutCanvas 'pointermove' handler");
+  const frameBranchMatch = pointermoveFn.match(/if\(drag\.kind==='frontFrame'\)\{[\s\S]*?\n {4}\}/);
+  assert.ok(frameBranchMatch, "expected a drag.kind==='frontFrame' branch in the pointermove handler");
+  const frameBranch = frameBranchMatch[0];
+  assert.match(frameBranch, /rotationDegForCanvasXMm\(targetXmm,project\.canvas\.width\)/);
+  assert.match(frameBranch, /preview3D\.syncView\(rotation,zoom\)/);
+  assert.ok(!frameBranch.includes('updateAll'), 'expected the frame-drag branch to never call the full updateAll()/engine.generate() pipeline');
+});
+
+await test('13. rotating the Object Preview moves the Front View Frame (requirement 2): preview3D.onAzimuthChange is wired to update `rotation` and redraw, cheaply -- no updateAll()', () => {
+  const match = appJs.match(/preview3D\.onAzimuthChange=deg=>\{[\s\S]*?\n\};/);
+  assert.ok(match, 'expected preview3D.onAzimuthChange to be assigned in app.js');
+  const handler = match[0];
+  assert.match(handler, /rotation=deg;/);
+  assert.match(handler, /drawLayout\(\);/);
+  assert.ok(!handler.includes('updateAll'), 'expected the live-orbit sync handler to never call the full updateAll() pipeline');
+});
+
+await test('14. Preview3DRenderer.js exposes the live camera azimuth via an OrbitControls \'change\' listener (onAzimuthChange), and no longer accepts/uses a `wrap` option in update()', async () => {
+  const source = await readFile(path.join(repoRoot, 'src/preview3d/Preview3DRenderer.js'), 'utf8');
+  assert.match(source, /this\.controls\.addEventListener\('change'/);
+  assert.match(source, /onAzimuthChange/);
+  const updateFn = source.match(/update\(stoneLayout, \{[^}]*\}\) \{[\s\S]*?\n {2}\}/);
+  assert.ok(updateFn, 'expected to find Preview3DRenderer.update()');
+  assert.ok(!/\bwrap\b/.test(updateFn[0].split('\n')[0]), 'expected update()\'s destructured options to no longer include wrap');
+});
+
+await test('15. ObjectGeometryBuilder.js\'s object mesh texture always wraps the complete production canvas fully and continuously (requirement 4: never clip/crop/hide the production layout) -- applyAzimuthUv() is wrap-mode independent, called once at mesh build time', async () => {
+  const source = await readFile(path.join(repoRoot, 'src/preview3d/ObjectGeometryBuilder.js'), 'utf8');
+  assert.ok(!source.includes('applyWrapUv'), 'expected the old per-wrap-mode applyWrapUv() to be removed');
+  assert.match(source, /applyAzimuthUv\(bodyGeometry, ?canvasWidthMm\)/);
+  assert.match(source, /canvasXMmForAzimuthRad\(azimuth, ?canvasWidthMm\)/);
+});
+
+await test('16. the too-long warning\'s Inspector panel copy has no misleading "Center Text"/wrap-mode-change affordance -- centering or changing wrap never fixes a genuine circumference overflow', () => {
+  const blockMatch = indexHtml.match(/<div class="validation-message" id="workspaceTextTooLongWarning"[\s\S]*?<\/div>\s*<\/div>/);
+  assert.ok(blockMatch, 'expected #workspaceTextTooLongWarning in index.html');
+  assert.ok(!blockMatch[0].includes('workspaceCenterTextBtn'), 'the too-long warning must not offer Center Text');
 });
 
 // ---------------------------------------------------------------------------------------------
-// Behavioral checks -- computeAutoFitScale()
+// Behavioral checks — computeAutoFitScale() (Part 1, unchanged)
 // ---------------------------------------------------------------------------------------------
 
 const project = { canvas: { width: 210, height: 90 } };
 
-await test('8. autoFit off never rescales, regardless of measured width, and floorApplied is false', () => {
+await test('17. autoFit off never rescales', () => {
   const layer = { autoFit: false, height: 25, stoneSize: 2, gap: 0.3 };
-  const { scale, floorApplied } = computeAutoFitScale(layer, project, 1000);
+  const { scale } = computeAutoFitScale(layer, project, 1000);
   assert.equal(scale, 1);
-  assert.equal(floorApplied, false);
 });
 
-await test('9. text that already fits (widthMm <= maxWidth) is never rescaled -- short/medium text is untouched', () => {
+await test('18. text that already fits (widthMm <= maxWidth) is never rescaled -- short/medium text is untouched', () => {
   const layer = { autoFit: true, height: 25, stoneSize: 2, gap: 0.3 };
-  assert.deepEqual(computeAutoFitScale(layer, project, 150), { scale: 1, floorApplied: false }); // maxWidth = 210-10 = 200
-  assert.deepEqual(computeAutoFitScale(layer, project, 200), { scale: 1, floorApplied: false }); // exactly at the boundary
+  assert.deepEqual(computeAutoFitScale(layer, project, 150), { scale: 1 });
+  assert.deepEqual(computeAutoFitScale(layer, project, 200), { scale: 1 }); // exactly at the boundary (maxWidth = 210-10)
 });
 
-await test('10. mild overflow (fit-to-width scale stays above the legibility floor) rescales exactly as before, floorApplied false', () => {
+await test('19. mild overflow rescales exactly as before (fit-to-width, unaffected by the legibility floor)', () => {
   const layer = { autoFit: true, height: 25, stoneSize: 2, gap: 0.3 };
-  // spacingMm = 2.3, floor = 2.3*6/25 = 0.552; a measured width of 250mm needs fitScale = 200/250 = 0.8,
-  // comfortably above the floor, so the pre-existing fit-to-width behavior must be unchanged.
-  const { scale, floorApplied } = computeAutoFitScale(layer, project, 250);
-  assert.ok(Math.abs(scale - 0.8) < 1e-9, `expected the unchanged fit-to-width scale 0.8, got ${scale}`);
-  assert.equal(floorApplied, false);
+  const { scale } = computeAutoFitScale(layer, project, 250);
+  assert.ok(Math.abs(scale - 0.8) < 1e-9, `expected the fit-to-width scale 0.8, got ${scale}`);
 });
 
-await test('11. severe overflow (fit-to-width would crush text past the legibility floor) clamps to the floor and reports floorApplied:true', () => {
+await test('20. severe overflow still clamps to the 6x legibility floor instead of collapsing into illegible stone soup', () => {
   const layer = { autoFit: true, height: 25, stoneSize: 2, gap: 0.3 };
-  // Reproduces the reported bug's magnitude: a 67-character phrase measured ~786mm wide at height 25.
   const measuredWidthMm = 786.3;
-  const fitScale = (project.canvas.width - 10) / measuredWidthMm; // ~0.254 -- the old, unreadable scale
-  const { scale, floorApplied } = computeAutoFitScale(layer, project, measuredWidthMm);
+  const fitScale = (project.canvas.width - 10) / measuredWidthMm;
+  const { scale } = computeAutoFitScale(layer, project, measuredWidthMm);
   assert.ok(scale > fitScale, 'expected the floor to win over the old, more-aggressive fit-to-width shrink');
-  assert.equal(floorApplied, true);
   const spacingMm = layer.stoneSize + layer.gap;
   const resultingHeightMm = layer.height * scale;
   assert.ok(resultingHeightMm / spacingMm >= 6 - 1e-9, 'expected the resulting height/spacing ratio to sit at the 6x legibility floor');
 });
 
-await test('12. the floor never scales height up past the original nominal height', () => {
+await test('21. the floor never scales height up past the original nominal height', () => {
   const layer = { autoFit: true, height: 5, stoneSize: 2, gap: 0.3 };
-  // A tiny nominal height (already below the floor's own target) plus enormous measured width must
-  // still never make computeAutoFitScale() return more than 1 -- auto-fit only ever shrinks.
   const { scale } = computeAutoFitScale(layer, project, 5000);
   assert.ok(scale <= 1, `expected scale to never exceed 1, got ${scale}`);
 });
 
 // ---------------------------------------------------------------------------------------------
-// Behavioral checks -- isTextTooLongForObject() / recommendedWrapModeForFit() / message copy
+// Behavioral checks — the actual circumference/frame/rotation math (via ObjectDimensions.js,
+// the single shared implementation both app.js and the object mesh's own UV mapping reuse)
 // ---------------------------------------------------------------------------------------------
 
-await test('13. isTextTooLongForObject() is true only when this exact layer id\'s last generation had floorApplied:true', () => {
-  const { isTextTooLongForObject } = buildTooLongHelpers(new Map([['a', true], ['b', false]]));
-  assert.equal(isTextTooLongForObject({ id: 'a', type: 'text' }), true);
-  assert.equal(isTextTooLongForObject({ id: 'b', type: 'text' }), false);
-  assert.equal(isTextTooLongForObject({ id: 'never-generated', type: 'text' }), false);
+await test('22. a mug (210mm canvas) genuinely cannot fit text wider than 210mm around its printable circumference -- a real manufacturing limit, not a viewing-window artifact', () => {
+  const circumference = circumferenceMm(210);
+  assert.ok(Math.abs(circumference - 210) < 1e-9);
+  assert.ok(529.6 > circumference, 'the reported 67-character phrase (529.6mm at the legibility floor) genuinely exceeds a 210mm-canvas mug\'s circumference');
 });
 
-await test('14. isTextTooLongForObject() ignores non-text layers and null/undefined', () => {
-  const { isTextTooLongForObject } = buildTooLongHelpers(new Map([['a', true]]));
-  assert.equal(isTextTooLongForObject({ id: 'a', type: 'circle' }), false);
-  assert.equal(isTextTooLongForObject(null), false);
-  assert.equal(isTextTooLongForObject(undefined), false);
+await test('23. the same phrase fits a wider object\'s circumference once the object (canvas width) is large enough -- "choose a wider object" is a real, working remedy', () => {
+  const measuredWidthMm = 529.6;
+  assert.ok(measuredWidthMm < circumferenceMm(600), 'expected a hypothetically much wider canvas to accommodate the phrase');
 });
 
-await test('15. recommendedWrapModeForFit() returns null whenever isTextTooLongForObject() is false', () => {
-  const { recommendedWrapModeForFit } = buildTooLongHelpers(new Map([['a', false]]));
-  assert.equal(recommendedWrapModeForFit({ id: 'a', type: 'text' }), null);
+await test('24. medium text ("Vitalina Serbin", 199.4mm raw) never triggers the too-long warning on any real object: on the mug/tumbler it fits under maxWidth outright (autoFit never engages, scale=1); on the narrower bottle autoFit\'s existing fit-to-maxWidth shrink (unchanged Part 1 behavior, no legibility floor needed at this length) already brings the resolved width under maxWidth, which is itself always < circumferenceMm', () => {
+  const layer = { autoFit: true, height: 25, stoneSize: 2, gap: 0.3 };
+  for (const canvasWidthMm of [210, 230, 180]) {
+    const proj = { canvas: { width: canvasWidthMm, height: 90 } };
+    const { scale } = computeAutoFitScale(layer, proj, 199.4);
+    const resolvedWidthMm = 199.4 * scale;
+    const maxWidth = canvasWidthMm - 10;
+    assert.ok(resolvedWidthMm <= maxWidth + 1e-9, `expected resolved width <= maxWidth at canvasWidthMm=${canvasWidthMm}, got ${resolvedWidthMm} > ${maxWidth}`);
+    assert.ok(maxWidth < circumferenceMm(canvasWidthMm), `expected maxWidth < circumference at canvasWidthMm=${canvasWidthMm}`);
+    assert.ok(resolvedWidthMm < circumferenceMm(canvasWidthMm), `expected the resolved width to fit within the printable circumference at canvasWidthMm=${canvasWidthMm}`);
+  }
 });
 
-await test('16. recommendedWrapModeForFit() never recommends a wrap-mode change today (fit is wrap-independent — audited in the spec) -- and never auto-applies one (project.wrap is never assigned by either function)', () => {
-  const { recommendedWrapModeForFit } = buildTooLongHelpers(new Map([['a', true]]));
-  assert.equal(recommendedWrapModeForFit({ id: 'a', type: 'text' }), null);
-  assert.ok(!recommendedWrapModeSrc.includes('project.wrap='), 'recommendedWrapModeForFit() must never assign project.wrap');
-  assert.ok(!isTextTooLongSrc.includes('project.wrap='), 'isTextTooLongForObject() must never assign project.wrap');
+await test('25. isPointerOnFrontViewFrame()-equivalent angular hit-test: a point at the exact center of the current rotation is always inside the frame band for every wrap mode', () => {
+  const canvasWidthMm = 210;
+  for (const rotationDeg of [-170, -45, 0, 45, 170]) {
+    const centerXmm = canvasXMmForRotationDeg(rotationDeg, canvasWidthMm);
+    const az = azimuthRadForCanvasXMm(centerXmm, canvasWidthMm);
+    const rotRad = (rotationDeg * Math.PI) / 180;
+    let delta = az - rotRad;
+    delta = ((delta % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
+    for (const wrap of ['front', 'wide', 'half', 'full']) {
+      assert.ok(Math.abs(delta) <= wrapAngleRad(wrap) / 2 + 1e-9, `expected the frame's own center to be inside its own band for wrap=${wrap}`);
+    }
+  }
 });
 
-await test('17. textTooLongActionMessage() always lists the three always-available remedies', () => {
-  const { textTooLongActionMessage } = buildTooLongHelpers(new Map([['a', true]]));
-  const message = textTooLongActionMessage({ id: 'a', type: 'text' });
-  assert.match(message, /shorten/i);
-  assert.match(message, /stone size/i);
-  assert.match(message, /wider object/i);
+await test('26. dragging the frame and rotating the Object Preview are exact inverses of each other (canvasXMmForRotationDeg <-> rotationDegForCanvasXMm) -- immediate, drift-free bidirectional sync', () => {
+  const canvasWidthMm = 230;
+  for (const rotationDeg of [-179, -90, 0, 45, 179]) {
+    const xMm = canvasXMmForRotationDeg(rotationDeg, canvasWidthMm);
+    const rotationBack = rotationDegForCanvasXMm(xMm, canvasWidthMm);
+    assert.ok(Math.abs(rotationBack - rotationDeg) < 1e-6);
+  }
 });
 
-// ---------------------------------------------------------------------------------------------
-// Structural checks -- warning priority + markup
-// ---------------------------------------------------------------------------------------------
-
-await test('18. updateTextOutsidePrintableWarning() shows the too-long warning and suppresses the positional one whenever isTextTooLongForObject() is true -- mutually exclusive, never both', () => {
-  const fnMatch = appJs.match(/function updateTextOutsidePrintableWarning\(\)\{[\s\S]*?\n\}/);
-  assert.ok(fnMatch, 'expected to find updateTextOutsidePrintableWarning() in app.js');
-  const fn = fnMatch[0];
-  assert.match(fn, /const tooLong=isTextTooLongForObject\(l\);/);
-  assert.match(fn, /const outside=!tooLong&&isTextOutsidePrintableArea\(l\);/);
-  assert.match(fn, /el\('textTooLongWarning'\)\.classList\.toggle\('visible',tooLong\);/);
-  assert.match(fn, /el\('workspaceTextTooLongWarning'\)\.classList\.toggle\('visible',tooLong\);/);
-});
-
-await test('19. the persistent (non-Lightbox) Inspector panel has its own "too long to fit" warning with the exact required wording, and no misleading Center Text button inside it', () => {
-  const blockMatch = indexHtml.match(/<div class="validation-message" id="workspaceTextTooLongWarning"[\s\S]*?<\/div>/);
-  assert.ok(blockMatch, 'expected #workspaceTextTooLongWarning in index.html');
-  assert.match(blockMatch[0], /This text is too long to fit legibly on this object\./);
-  assert.ok(!blockMatch[0].includes('workspaceCenterTextBtn'), 'the too-long warning must not offer Center Text -- centering never fixes a structural too-long failure');
-});
-
-await test('20. the Text Lightbox has the same "too long to fit" warning, with the exact required wording, reusing the existing .validation-message styling (no new CSS)', () => {
-  assert.match(indexHtml, /<p class="validation-message" id="textTooLongWarning" role="status">This text is too long to fit legibly on this object\.<\/p>/);
-  assert.match(indexHtml, /<p class="hint" id="textTooLongWarningDetail"><\/p>/);
-});
-
-await test('21. #workspaceTextTooLongWarning appears in the always-visible right Inspector panel (never covered by a modal), matching the S-104 workspace-warning placement pattern', () => {
-  const inspectorMatch = indexHtml.match(/<aside class="right-inspector" id="rightInspector"[\s\S]*?<\/aside>/);
-  assert.ok(inspectorMatch, 'expected to find #rightInspector in index.html');
-  assert.ok(inspectorMatch[0].includes('id="workspaceTextTooLongWarning"'));
-});
-
-console.log('S-107 long text readability tests passed.');
+console.log('S-107 Front View Frame & long text workflow tests passed.');

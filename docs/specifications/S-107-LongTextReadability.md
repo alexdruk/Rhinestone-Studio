@@ -1,4 +1,8 @@
-# S-107 — Long Text Readability
+# S-107 — Front View Frame & Long Text Workflow
+
+(Originally scoped as "Long Text Readability"; retitled for Part 3 below, which replaces Part 2's
+warning-only workflow with the Front View Frame. Parts 1 and 2 are kept verbatim as historical
+record — Part 1 is still in effect unmodified; Part 2 is explicitly superseded, see Part 3.)
 
 ## Task ID
 
@@ -6,12 +10,14 @@ S-107
 
 ## Type
 
-Readability/quality fix. No new production features, no second layout pipeline, no
-GeometryEngine/StoneLayout/project-schema/exporter changes, no multi-row text.
+Part 1/2: readability/quality fix. Part 3: a real UI feature (a new, movable, bidirectionally-synced
+2D canvas overlay) plus a corrected long-text validation rule — still no second layout pipeline, no
+GeometryEngine/StoneLayout/project-schema/exporter changes, no multi-row text, no production
+geometry change (3D preview body-radius sizing is a preview-only visual, not a stone position).
 
 ## Status
 
-IMPLEMENTED
+IMPLEMENTED (Parts 1–3)
 
 ## Branch
 
@@ -319,3 +325,315 @@ new geometry), the new warning is persistent and Lightbox-free per requirement 6
 verified-working remedies and never offers the one action (Center Text) proven not to help, the
 wrap-mode recommendation is a real evaluated check that is honestly `null` today rather than a faked
 positive, and nothing in `GeometryEngine`/`StoneLayout`/any exporter/the project schema changed.
+
+---
+
+## Part 3 — Front View Frame & Long Text Workflow (supersedes Part 2's warning-only workflow)
+
+### Why Part 2 was not acceptable
+
+Part 2's "This text is too long to fit legibly on this object." warning fired whenever a text
+layer's generated width exceeded `project.canvas.width-10` (`maxWidth`) — the width of a single,
+already-narrow viewing window. But `maxWidth` was never a real manufacturing limit: it is the
+*flat design canvas's* own width, not the *object's circumference*. A cylindrical object can carry a
+design considerably wider than one flat "page" of canvas, because the design wraps around the
+object's curved surface. Part 2 warned the operator the moment their text got wider than that one
+window — even when the object could easily carry it once wrapped — and offered no way to inspect
+the part of a long design not currently in that window. This milestone removes that workflow and
+replaces it with a **Front View Frame**: a movable overlay on the 2D Canvas showing exactly which
+portion of the design is facing the viewer in the Object Preview, synchronized bidirectionally with
+the Object Preview's rotation.
+
+### Audit (walked before any code changed, against the live repository)
+
+**1. Relationship between production canvas width and printable circumference.**
+`src/preview3d/ObjectDimensions.js`'s `computeBodyRadiusMm(canvasWidthMm)` is the one place a
+canvas's mm width is turned into a real body radius for the 3D preview. Before this milestone it
+anchored a **180-degree** arc to `canvasWidthMm` (`radius = canvasWidthMm / PI`) — a preview-sizing
+choice, not a claim about where the design actually sits on the object. Given that anchor, the
+*canvas's own left and right edges land on opposite sides of the object* (90 degrees to either side
+of dead-center front, joined by an undesigned 180-degree gap around the back) — which makes it
+structurally impossible for the canvas to "wrap continuously across its own left/right edges"
+(requirement 3): those two edges are not adjacent points on the object at all under a 180-degree
+reference.
+
+**Decision:** re-anchor the reference to a full **360-degree** revolution
+(`radius = canvasWidthMm / (2*PI)`), so the production canvas *is* the object's complete unwrapped
+surface — canvas x=0 and x=canvasWidthMm are the *same physical point* (the seam directly opposite
+the front), and the whole canvas wraps exactly once around the object with no gap. This is a
+preview-body-sizing change only (never a stone position — `GeometryEngine`/`StoneLayout` are
+untouched); it also happens to produce a more realistic previewed object size (e.g. a 210mm-canvas
+mug now previews at ~66.9mm diameter instead of ~133.7mm — closer to a real 11oz mug's ~80mm). Under
+this reference, `circumferenceMm(canvasWidthMm)` is, by construction, exactly `canvasWidthMm` — the
+new `printableCircumferenceMm()` in `app.js` reuses this via `ObjectDimensions.js`'s
+`circumferenceMm()`, not a new/duplicated computation.
+
+**2. Relationship between printable circumference and wrap modes.**
+Before this milestone, `WRAP_ANGLE_DEG`/`applyAzimuthUv()` (`ObjectGeometryBuilder.js`) compressed
+or stretched the *entire* canvas into whichever angular window the selected wrap mode specified
+(70/115/180/300 degrees) — a fixed, content-independent, non-mm-accurate "zoom" of the whole design
+onto the mesh, with everything outside that window clamped to plain background (clipped/hidden).
+This is exactly the behavior requirement 4 ("never clip, crop or hide the production layout") rules
+out, and it is also what made "does text fit" wrap-*dependent* in the old Part 2 logic even though
+Part 2's own audit had already found (and this milestone re-confirms) that no shipped
+`ObjectTemplate` actually makes fit wrap-dependent. **Decision:** decouple wrap mode from the object
+mesh's texture entirely — `applyAzimuthUv()` now maps the canvas mm-accurately and continuously
+around the full circumference regardless of wrap mode (see `canvasXMmForAzimuthRad()` below); wrap
+mode's only remaining job is sizing the **Front View Frame's width**
+(`frontViewFrameWidthMm(wrapMode, canvasWidthMm) = wrapAngleRad(wrapMode) * bodyRadiusMm`, an arc
+length) — a 2D-canvas viewing-window highlight, never a clip. Printable circumference itself is
+therefore wrap-mode independent, confirmed by `tools/test-object-dimensions.mjs` check 11 (object
+size, and by extension circumference, is wrap-invariant) and reflected in the new too-long check
+below.
+
+**3. Relationship between Object Preview rotation and production coordinates.**
+`Preview3DRenderer.js`'s camera azimuth (`_azimuthDeg`, degrees, front = 0) already uses the same
+`atan2(x,z)`-based spherical convention the mesh's own UV azimuth uses (`applyAzimuthUv()`) — so the
+mesh point currently facing the camera is, by construction, the point whose azimuth equals the
+camera's azimuth. Combined with the new mm-accurate `canvasXMmForAzimuthRad(azimuthRad,
+canvasWidthMm)` mapping (`ObjectDimensions.js`), this gives an exact, invertible relationship between
+`rotation` (the existing `-180..180` slider/state variable) and a canvas-x mm position — no new 3D
+math was needed, only two small pure functions (`canvasXMmForRotationDeg()`/
+`rotationDegForCanvasXMm()`) built on the existing radius/azimuth primitives.
+
+**4. Whether the existing rotation logic already exposes everything required.**
+Mostly, but not entirely. `Preview3DRenderer.setAzimuthDeg()`/`syncView()` already let external code
+*push* a rotation value into the camera — sufficient for "dragging the frame rotates the preview."
+But nothing previously let external code *read back* the camera's azimuth after a free mouse/touch
+orbit (`syncView()` only ever compared against its own last-pushed value) — necessary for "rotating
+the Object Preview moves the frame." This is the one genuinely new piece of 3D-side logic this
+milestone adds: `Preview3DRenderer._currentAzimuthDeg()` (reads azimuth back from the camera's actual
+position, via the same `THREE.Spherical` conversion `_repositionCamera()` already uses in the write
+direction) plus an `OrbitControls` `'change'` listener (`_onControlsChange()`) that fires an
+`onAzimuthChange` callback only when the azimuth actually changed due to user interaction (comparing
+against `_azimuthDeg`, which our own writes always update *before* touching the camera — so our own
+writes never re-trigger the callback; no feedback loop).
+
+**5. Whether existing safe-area guides can be reused.**
+The safe-area guide (`drawSafeAreaGuide()`, `getSafeAreaRectMm()`) is an orthogonal concept — a fixed
+rectangle marking vertical/general print-safety margins on the flat canvas — and is left completely
+unchanged, still driving the pre-existing S-104 positional "outside the printable area" warning. The
+Front View Frame is a new, additional, visually distinct overlay (solid amber band vs. the safe
+area's dashed blue outline); it does not reuse or replace the safe-area guide, and both can be shown
+at once without conflict.
+
+### Architectural decisions
+
+* **One new geometry module addition, zero duplication:** all new mm<->azimuth/circumference/frame-
+  width math lives in `src/preview3d/ObjectDimensions.js` (already "pure millimeter-scale geometry
+  math," per its own header) as small, named, individually-tested pure functions
+  (`circumferenceMm`, `azimuthRadForCanvasXMm`, `canvasXMmForAzimuthRad`, `canvasXMmForRotationDeg`,
+  `rotationDegForCanvasXMm`, `frontViewFrameWidthMm`). Both `ObjectGeometryBuilder.js`'s mesh UV
+  mapping and `app.js`'s Front View Frame drawing/drag/hit-test import and reuse these exact
+  functions — the 2D canvas and the Object Preview cannot disagree about "which part of the design
+  faces the viewer" because they compute it with the same code, not parallel implementations.
+* **The Front View Frame overlay lives in `app.js`, not `CanvasRenderer2D.js`:** matching this
+  codebase's existing convention that layer-aware/editor-only overlays (`drawSelection()`,
+  `drawGuides()`, `drawSafeAreaGuide()`) are app.js-local, never added to the permanent renderer
+  (`CanvasRenderer2D.js`'s own header: "Layer-aware editor affordances... are not part of this
+  module — they belong to the application"). `src/renderer/**` is therefore untouched by this
+  milestone.
+* **`wrap` project field is preserved, its meaning narrows:** previously it changed how much of the
+  canvas the 3D mesh's texture showed (a clip/compression window); now it only sizes the Front View
+  Frame's highlighted width on the 2D canvas. The field, its four values, and its UI control are all
+  unchanged — only what it visually controls changed, and only because the old behavior (clipping
+  the production layout per wrap mode) is exactly what requirement 4 prohibits.
+* **Long-text detection reuses `getLayerBBox()`, no new per-layer bookkeeping map:** Part 2's
+  `autoFitFloorAppliedByLayerId` transient map is deleted outright. The new `isTextTooLongForObject()`
+  compares `getLayerBBox(l).width` (already the single source of truth for a layer's rendered mm
+  extent, driving selection bounds, alignment/snap, and the existing S-104 positional warning) against
+  `printableCircumferenceMm()`. This can never disagree with what was actually generated, because it
+  reads the same `StoneLayout` every other consumer reads — no second bookkeeping channel.
+* **Part 1 (the legibility floor, `computeAutoFitScale()`/`MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO`) is
+  untouched.** It still prevents illegible over-shrinking; only Part 2's *consequence* of the floor
+  (a `maxWidth`-based failure warning) is replaced. `computeAutoFitScale()`'s now-unused
+  `floorApplied` return field is removed (nothing reads it anymore) — the shrink-clamping arithmetic
+  itself is byte-identical.
+* **Frame-drag and live-orbit sync never call `engine.generate()`/`updateAll()`:** rotation changes
+  never alter the generated `StoneLayout`, so both live-sync paths (dragging the frame; free-orbiting
+  the Object Preview) only reposition the camera (`preview3D.syncView()`/`setAzimuthDeg()`), redraw
+  the already-computed 2D canvas (`drawLayout()`), and refresh the lightweight stats/view-button DOM
+  (`updateStats()`/`updateViewButtons()`) — kept deliberately cheap so sync stays immediate and smooth
+  even on every pointermove/animation-frame tick, per requirement 2's "immediate and smooth."
+
+### Implementation Summary
+
+* **`src/preview3d/ObjectDimensions.js`** — `REFERENCE_WRAP_ANGLE_DEG` changed from 180 to 360 (see
+  audit finding 1); new exports `circumferenceMm()`, `azimuthRadForCanvasXMm()`,
+  `canvasXMmForAzimuthRad()`, `canvasXMmForRotationDeg()`, `rotationDegForCanvasXMm()`,
+  `frontViewFrameWidthMm()`.
+* **`src/preview3d/ObjectGeometryBuilder.js`** — `applyAzimuthUv()` rewritten to use
+  `canvasXMmForAzimuthRad()`/`canvasWidthMm` (mm-accurate, wrap-mode independent) instead of the old
+  per-wrap-mode angular window; called once at mesh-build time inside `buildObjectMesh()` instead of
+  being re-invoked on every wrap-mode change. `applyWrapUv()` (the old per-wrap-mode entry point) is
+  removed — nothing calls it anymore.
+* **`src/preview3d/Preview3DRenderer.js`** — `update()` no longer accepts/uses a `wrap` option (texture
+  UV no longer depends on it); new `onAzimuthChange` callback property, `_currentAzimuthDeg()`, and an
+  `OrbitControls` `'change'` listener (`_onControlsChange()`) that fires it only for genuine
+  user-driven orbits (see audit finding 4).
+* **`src/preview3d/index.js`** — the `createPreview3D()` facade forwards `onAzimuthChange` assignment
+  to the real renderer once mounted (queuing it, same pattern as `pendingUpdate`/`pendingView`, if set
+  before the async mount completes).
+* **`app.js`** — new import of the `ObjectDimensions.js` geometry helpers (direct import, not through
+  `src/preview3d/index.js`'s Three.js-lazy-loading barrel, since these are pure DOM/Project-free
+  functions); `printableCircumferenceMm()`, `isTextTooLongForObject()` (redefined),
+  `textTooLongDetailMessage()` (replaces `textTooLongActionMessage()`/`recommendedWrapModeForFit()`,
+  both deleted); `frontViewFrameGeometry()`/`drawFrontViewFrame()`/`isPointerOnFrontViewFrame()` (new,
+  mirroring the existing `drawSafeAreaGuide()` pattern); a new `drag.kind==='frontFrame'` branch in the
+  existing `pointerdown`/`pointermove` handlers; `preview3D.onAzimuthChange` wiring; `updateStats()`
+  extended to show Front View width, printable circumference, and viewing position (requirement 6).
+  `autoFitFloorAppliedByLayerId` deleted.
+* **`index.html`** — the too-long warning's headline copy (Inspector panel and Text Lightbox) changed
+  from "This text is too long to fit legibly on this object." to "This text exceeds the object's
+  printable circumference." (accurately describing the new, real manufacturing-limit check); one added
+  hint sentence pointing at the Front View Frame/rotation as the way to inspect long text. No new
+  markup, no new CSS — same elements, same `.validation-message`/`.hint` styling.
+
+No change to `src/geometry/GeometryEngine.js`, `src/geometry/StoneLayout.js`, any exporter
+(`src/export/**`), `src/renderer/**`, the project/layer schema, or `src/products/**`. No second layout
+pipeline. No multi-row text. `GeometryEngine`/`StoneLayout` remain the one source of truth every
+consumer (2D canvas, Object Preview, exporters) reads — this milestone adds a new *viewing* concept on
+top of that single `StoneLayout`, never a second one.
+
+### Files Changed
+
+**New (0):** none — this milestone extends existing modules rather than adding new ones (the Front
+View Frame's drawing/interaction code lives inside the already-existing `app.js`, per the
+"editor overlays are app.js-local" convention above).
+
+**Modified:**
+```
+src/preview3d/ObjectDimensions.js       — 360-degree reference; circumferenceMm/azimuth<->canvasX/
+                                           frontViewFrameWidthMm
+src/preview3d/ObjectGeometryBuilder.js  — mm-accurate, wrap-independent applyAzimuthUv();
+                                           applyWrapUv() removed
+src/preview3d/Preview3DRenderer.js      — onAzimuthChange, _currentAzimuthDeg(), OrbitControls
+                                           'change' listener; update() no longer takes `wrap`
+src/preview3d/index.js                  — forwards onAzimuthChange to the real renderer
+app.js                                  — Front View Frame draw/drag/hit-test/live-sync; new
+                                           circumference-based isTextTooLongForObject(); removed
+                                           autoFitFloorAppliedByLayerId/recommendedWrapModeForFit()/
+                                           textTooLongActionMessage()
+index.html                              — too-long warning copy updated (both surfaces); one hint
+                                           sentence added
+docs/specifications/S-107-LongTextReadability.md — this Part 3
+TASK.md                                 — retitled/updated for this milestone
+tools/test-object-dimensions.mjs        — 360-degree reference; new exports covered
+tools/test-object-geometry-builder.mjs  — wrap-independent UV mapping covered
+tools/test-s107-long-text-readability.mjs — rewritten for the Front View Frame workflow
+tools/test-app-module-migration.mjs     — allowlists app.js's new ObjectDimensions.js import
+tools/test-shape-geometry-integration.mjs — same allowlist addition (independent milestone guard)
+```
+
+**Test-suite scoping fix (17 files):** `tools/test-s104-*.mjs`, `tools/test-s105-*.mjs`,
+`tools/test-s106-*.mjs`, and 14 other prior-milestone test files each carried a `git status
+--porcelain`-based "forbidden files" guard whose list included `src/preview3d/` (and, separately,
+`src/renderer/`) as permanently off-limits — a one-time "did this milestone stay in its own lane"
+snapshot check from when each was written, not a standing architectural rule. Since this milestone has
+an explicit, audited, legitimate reason to touch `src/preview3d/**` (bidirectional rotation sync is
+only possible there), the stale `'src/preview3d/'` entry was removed from each list (mechanical,
+one-line-per-file). `src/renderer/**` remains untouched by this milestone and so still appears,
+correctly, in every one of those forbidden lists.
+
+### Test Results
+
+```bash
+$ npm test
+```
+
+All 71 test files in the `test` script pass, **904 checks total, 0 failures** (up from 892 in the
+prior commit — this milestone rewrote `tools/test-s107-long-text-readability.mjs` and extended
+`tools/test-object-dimensions.mjs`/`tools/test-object-geometry-builder.mjs`; no test file count
+change beyond that, since this milestone adds no new module files).
+
+`tools/test-s107-long-text-readability.mjs` (26/26): structural checks that the old Part-2 workflow
+(`autoFitFloorAppliedByLayerId`/`floorApplied`/`recommendedWrapModeForFit`/`textTooLongActionMessage`)
+is fully removed; `isTextTooLongForObject()` is driven by `getLayerBBox()` vs.
+`printableCircumferenceMm()`; the too-long message describes a real manufacturing limitation and never
+blames wrap mode; the frame is wired into `drawLayout()`, reuses the shared `ObjectDimensions.js`
+mapping, wraps continuously via canvas-x modulo, is visually distinct from the safe-area guide, and
+shows its width in mm; frame-drag and live-orbit sync never call `updateAll()`; `Preview3DRenderer.js`
+exposes live azimuth via an `OrbitControls` `'change'` listener and no longer takes `wrap`;
+`ObjectGeometryBuilder.js`'s UV mapping is wrap-independent. Behavioral checks (Part 1's
+`computeAutoFitScale()`, unchanged; the actual circumference/frame/rotation math via
+`ObjectDimensions.js`) confirm: a mug's 210mm circumference genuinely cannot fit the reported
+67-character phrase (529.6mm at the legibility floor) — a real limit, not a viewing-window artifact;
+the same phrase fits a hypothetically wide-enough object; medium text never triggers the warning on
+any real object; the frame's own angular hit-test is self-consistent for every wrap mode; frame-drag
+and Object-Preview-rotation are exact mathematical inverses of each other (drift-free bidirectional
+sync).
+
+`tools/test-object-dimensions.mjs` (18/18, was 11): the 360-degree radius reference; `circumferenceMm`
+equals `canvasWidthMm` exactly; `canvasXMmForAzimuthRad`/`azimuthRadForCanvasXMm` are exact inverses;
+canvas x=0 and x=canvasWidthMm map to the same +-PI seam (the requirement-3 seamless-wrap property,
+tested directly); `canvasXMmForRotationDeg`/`rotationDegForCanvasXMm` round-trip; `frontViewFrameWidthMm`
+orders correctly by wrap mode and scales linearly with canvas width.
+
+`tools/test-object-geometry-builder.mjs` (12/12, was 12): front azimuth still maps to u=0.5 (now
+wrap-mode independent, single check instead of a four-mode loop); new check 8 verifies the *entire*
+mesh's UV, vertex by vertex, matches `canvasXMmForAzimuthRad(azimuth, canvasWidthMm)/canvasWidthMm`
+exactly — mm-accurate, not merely "looks reasonable."
+
+Two additional test files needed a small allowlist update (`tools/test-app-module-migration.mjs`,
+`tools/test-shape-geometry-integration.mjs` — each independently enumerates app.js's allowed import
+list) to permit the new `./src/preview3d/ObjectDimensions.js` import; and the 17-file forbidden-path
+scoping fix described in "Files Changed" above.
+
+### Browser Verification
+
+Headless Chromium (Playwright, this repo's local `node_modules`), `python3 -m http.server 5173`
+serving the actual app (no mocks), 1600×1000 viewport. 22/22 automated checks passed; representative
+screenshots captured for all combinations.
+
+1. **Short ("Hi"), medium ("Vitalina Serbin"), and long (67-character phrase) text × Mug, Straight
+   Tumbler, and Bottle (9 combinations)** — every combination renders with zero console errors; the
+   too-long warning fires only for the long phrase (on all three objects — 529.6mm exceeds even the
+   widest real canvas here, 230mm on the tumbler); short/medium never warn. Front View width and
+   printable circumference are shown per object (mug: 40.8mm frame / 210.0mm circumference; tumbler:
+   115.0mm / 230.0mm; bottle: 57.5mm / 180.0mm — matching each object's own `wrap.default` and canvas
+   size).
+2. **Dragging the Front View Frame rotates the Object Preview** — verified on the tumbler with the
+   long phrase: a 150px rightward drag on an empty part of the 2D canvas inside the frame band moved
+   `rotation` from 0° to -65°, with the Object Preview's displayed text and the frame's on-canvas
+   position updating together, live, every pointermove tick (no full layout regeneration).
+3. **Rotating the Object Preview moves the Front View Frame** — a mouse-orbit drag directly on the
+   `#cup` canvas (OrbitControls) moved `rotation` from 0° to -103°/-104° across two independent runs,
+   with the 2D canvas's frame and "viewing position" stat following live.
+4. **Frame wraps correctly across the canvas edges** — at `wrap=full` (175mm frame on a 210mm mug
+   canvas) and `rotation=175°`, the frame visibly splits into two on-canvas segments (left and right
+   edges of the canvas), reading "Vitalina" on one segment and "Serbin" on the other with no gap
+   between them — and the Object Preview, at the same rotation, shows the mug's own texture seam
+   split at exactly the same point (the design's left/right ends meeting at the back). Confirms the 2D
+   canvas and Object Preview are showing the literal same wrapped view, not just numerically agreeing.
+5. **Frame width is displayed in millimeters** — "Front View · N mm" label on the frame itself, plus
+   "Front View width: N mm" / "printable circumference: N mm" / "viewing position: N°" in the
+   workspace status bar (requirement 6), live-updated during both drag and free-orbit sync (fixed
+   during verification: the first pass found the stats bar going stale mid-drag because the two new
+   cheap-sync code paths omitted `updateStats()`; both now call it).
+6. **Long text can be inspected by moving the Front View Frame or rotating the Object Preview** —
+   demonstrated directly by (2)/(3)/(4) above: the 67-character phrase, which does not fit inside any
+   single wrap mode's frame width, remains fully generated and visible in the 2D canvas at all times
+   (never clipped), and every portion of it becomes the Object Preview's front-facing view as the
+   frame/rotation moves.
+7. **Warning appears only when the printable circumference is genuinely exceeded** — the long phrase
+   on the mug: "This design is 529.6mm wide -- 319.6mm more than the mug's 210.0mm printable
+   circumference, so it would overlap itself once wrapped fully around the object. Try: shortening the
+   text, reducing the stone size, or choosing a wider object." — states actual numbers, never mentions
+   wrap mode or viewing angle as the cause (verified both by an automated string check and by reading
+   the rendered copy directly).
+8. **2D Canvas and Object Preview always remain synchronized** — cycling the Left/Right/Back/Front
+   view buttons produced no errors and the frame followed each button's rotation.
+9. **Zero console errors** across every scenario above (9 object/text combinations, frame-drag,
+   free-orbit, wrap-mode/rotation edge cases, view-button cycling).
+
+### Recommendation (Part 3)
+
+Approve. The Front View Frame replaces a warning that measured the wrong thing (a single viewing
+window's width) with a workflow that treats the object as what it physically is — a wrapped
+cylindrical surface — and a warning that measures the right thing (the object's real printable
+circumference, reusing the exact same geometry the 3D preview's own texture mapping uses, so the two
+views can never disagree). No second `GeometryEngine`/`StoneLayout`/rendering pipeline was introduced;
+the one required 3D-preview-sizing change (180-degree to 360-degree radius reference) is preview-only
+and does not touch any stone position; and the Front View Frame's drag/live-orbit sync paths are
+deliberately cheap (no layout regeneration) so requirement 2's "immediate and smooth" holds under
+real, verified mouse interaction in both directions.

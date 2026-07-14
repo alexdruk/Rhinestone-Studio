@@ -6,7 +6,8 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-S-107 — Long Text Readability (Part 1: legibility floor; Part 2 follow-up: failure-state detection)
+S-107 — Front View Frame & Long Text Workflow (Part 3, supersedes Part 2's warning-only workflow;
+Part 1 — the auto-fit legibility floor — is unchanged and still in effect)
 
 ---
 
@@ -35,121 +36,113 @@ git log -1 --oneline
 
 # Audit Findings
 
-Full detail in `docs/specifications/S-107-LongTextReadability.md`.
+Full detail, including the complete walk of every question the milestone brief asked, is in
+`docs/specifications/S-107-LongTextReadability.md`'s "Part 3" section (Parts 1/2 there are the
+unmodified historical record of the earlier, now-superseded warning-based work). Summary:
 
-## Part 1 — why long text was illegible
-
-Walked the complete text pipeline (measurement, scaling, spacing, wrap angle, projection):
-
-* **Scaling** — `app.js`'s live auto-fit (`generateTextStonesLive()` /
-  `resolveLayerShapeSource()`'s text branch) shrinks a too-wide text layer's `heightMm` with **no
-  floor**, so the shrink factor grows without bound as text gets longer.
-* **Spacing** — `spacingMm = stoneSizeMm + gapMm` is the fixed physical stone pitch. Auto-fit's
-  scaling stage shrinks `heightMm` but **never touches `stoneSizeMm`/`gapMm`**. Root cause: as the
-  shrink factor grows, glyph-to-stone-pitch ratio falls until stones can no longer trace the
-  letterforms — the pattern reads as a blurred row of dots.
-* **Wrap angle / projection** — fixed, content-independent; ruled out (would also change short/
-  medium text, and curved-text projection is off by default).
-* Verified in a real, unmocked browser: the same illegible pattern appears in **both** the 2D Canvas
-  (at full zoom) and the Object Preview — the bug is in the one shared `StoneLayout`, not a 3D-only
-  rendering defect.
-* `stoneSizeMm` is a real catalog rhinestone diameter (`src/renderer/StoneSizes.js`, no smaller than
-  2.0mm) — rescaling it would misrepresent what gets manufactured, so the fix never touches it.
-
-## Part 2 (this follow-up) — why the Part 1 fix alone was not enough
-
-Part 1's floor stops illegible over-shrinking, but very long text can still overflow `maxWidth`
-once the floor wins. Browser-verified with the exact reported phrase on the default mug: the
-generated text is 529.6mm wide against a 200mm `maxWidth`. The only warning that fired was the
-pre-existing *positional* `isTextOutsidePrintableArea()` — its "Center Text" button visibly did
-nothing, because no position (not even dead center) can fix a text that is structurally too wide.
-
-Audited every candidate lever before choosing a fix:
-
-* **Canvas width is the one hard bound** — `StoneLayoutTexture.js` rasterizes into a buffer sized
-  exactly to `canvasWidthMm`; content outside those mm bounds is never drawn, in 2D or 3D.
-* **Wrap mode does not affect this bound**, confirmed against `src/products/ObjectTemplate.js`
-  (`getSafeAreaRectMm()` takes no wrap argument) and the existing `app.js` architecture comment
-  ("anything within the flat canvas's mm bounds is always... visible... regardless of wrap mode"),
-  and verified empirically across all four wrap modes on the reported phrase — the "too long"
-  outcome never changed.
-* **Object type** (mug/tumbler/bottle) does change canvas width (210/230/180mm) — a real "choose a
-  wider object" remedy.
-* **Stone size** changes the floor's own required `heightMm` — verified empirically ("Happy Birthday
-  Sarah" is fine at SS6/2.0mm, too-long at SS10/2.8mm and SS16/4.0mm).
+1. **Production canvas width vs. printable circumference.** The 3D preview's body radius
+   (`ObjectDimensions.js`'s `computeBodyRadiusMm()`) was anchored at a **180-degree** reference —
+   the canvas only ever represented *half* the object's circumference, which makes it structurally
+   impossible for the canvas's own left/right edges to be adjacent points on the object (a hard
+   requirement for continuous edge-wrap, requirement 3). Re-anchored to **360 degrees**: the
+   production canvas now *is* the object's complete unwrapped surface, and its printable
+   circumference is, by construction, exactly `project.canvas.width`.
+2. **Circumference vs. wrap mode.** The old `applyAzimuthUv()` compressed/stretched the *entire*
+   canvas into whichever angular window the wrap mode specified, clamping everything outside it to
+   background — exactly the clip/hide behavior requirement 4 prohibits, and also what made the old
+   "too long" check (wrongly) wrap-dependent-feeling even though no shipped object actually needs a
+   wrap-mode fix. Decoupled: the object mesh's texture now always wraps the complete canvas
+   mm-accurately and continuously, regardless of wrap mode; wrap mode's only remaining job is sizing
+   the Front View Frame's own highlighted width.
+3. **Object Preview rotation vs. production coordinates.** The camera's existing azimuth convention
+   (`atan2(x,z)`, front = 0) already matches the mesh's own UV azimuth convention — an exact,
+   invertible mm<->rotation mapping was derivable from the existing radius/azimuth primitives with no
+   new 3D math.
+4. **Did the existing rotation logic already expose everything required?** Almost — it could
+   already be *pushed* a rotation (`setAzimuthDeg()`/`syncView()`), but nothing could *read back* the
+   camera's azimuth after a free mouse/touch orbit. Added the one genuinely new piece:
+   `Preview3DRenderer._currentAzimuthDeg()` + an `OrbitControls` `'change'` listener, gated so it
+   never fires for the renderer's own writes (no feedback loop).
+5. **Could the existing safe-area guide be reused?** No — it is an orthogonal, unchanged concept
+   (vertical/positional print-safety margins). The Front View Frame is a new, visually distinct,
+   additional overlay.
 
 ---
 
 # Implementation Summary
 
-## Part 1
+* **`src/preview3d/ObjectDimensions.js`** — 360-degree radius reference; new pure functions
+  `circumferenceMm()`, `azimuthRadForCanvasXMm()`, `canvasXMmForAzimuthRad()`,
+  `canvasXMmForRotationDeg()`, `rotationDegForCanvasXMm()`, `frontViewFrameWidthMm()`. Reused by both
+  the object mesh's texture UV and the 2D canvas's Front View Frame — one shared implementation, not
+  two that could disagree.
+* **`src/preview3d/ObjectGeometryBuilder.js`** — `applyAzimuthUv()` rewritten to be mm-accurate and
+  wrap-mode independent (called once at mesh-build time); the old per-wrap-mode `applyWrapUv()` is
+  removed.
+* **`src/preview3d/Preview3DRenderer.js`** — `update()` no longer takes a `wrap` option; new
+  `onAzimuthChange` callback, `_currentAzimuthDeg()`, and an `OrbitControls` `'change'` listener so a
+  free orbit of the Object Preview reports its azimuth back out live.
+* **`src/preview3d/index.js`** — forwards `onAzimuthChange` assignment to the real renderer (queued
+  the same way `pendingUpdate`/`pendingView` already are).
+* **`app.js`** —
+  * `printableCircumferenceMm()`, redefined `isTextTooLongForObject()` (now
+    `getLayerBBox(l).width > printableCircumferenceMm()` — reuses the existing `StoneLayout`-backed
+    bbox helper, no new bookkeeping map), `textTooLongDetailMessage()` (replaces
+    `textTooLongActionMessage()`/`recommendedWrapModeForFit()`, both deleted, along with the now-dead
+    `autoFitFloorAppliedByLayerId` map — Part 1's `computeAutoFitScale()` itself is unchanged).
+  * `frontViewFrameGeometry()` / `drawFrontViewFrame()` / `isPointerOnFrontViewFrame()` (new,
+    mirroring the existing `drawSafeAreaGuide()` app.js-local-overlay pattern — never added to
+    `src/renderer/CanvasRenderer2D.js`).
+  * A new `drag.kind==='frontFrame'` branch in the existing `pointerdown`/`pointermove` handlers
+    (drag-to-rotate); `preview3D.onAzimuthChange` wiring (orbit-moves-frame). Both paths are
+    deliberately cheap — camera reposition + 2D redraw + stats refresh, never
+    `engine.generate()`/`updateAll()` — so sync stays immediate and smooth.
+  * `updateStats()` extended to show Front View width, printable circumference, and viewing position
+    (requirement 6) in the existing `#cupStats` bar.
+* **`index.html`** — too-long warning headline changed from "This text is too long to fit legibly on
+  this object." to "This text exceeds the object's printable circumference." (both surfaces); one
+  hint sentence added pointing at the frame/rotation as the way to inspect long text. No new markup,
+  no new CSS.
 
-* **`app.js`** — `MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO` (`=6`) and `computeAutoFitScale()`: clamps
-  auto-fit's shrink to a floor (`heightMm` never below `6× spacingMm`). Text that never needed the
-  floor is byte-identical to before.
-
-## Part 2 (this follow-up)
-
-* **`app.js`** — `computeAutoFitScale()` now also returns `floorApplied` (true exactly when the
-  floor, not the pure fit-to-width shrink, decided the result) alongside the unchanged `scale` value
-  — same math, richer return shape. `generateTextStonesLive()` records `floorApplied` per layer id
-  into a new, transient, in-memory-only `autoFitFloorAppliedByLayerId` map (cleared at the top of
-  every `generate()` call; never read by `validateProject()`, save/load, or any exporter — not part
-  of the project/layer schema).
-* **`isTextTooLongForObject(l)`** (new) reads that map — true exactly when this text layer's last
-  generation needed the floor, meaning it structurally cannot fit `maxWidth` at any position.
-* **`recommendedWrapModeForFit(l)`** (new) — a real, evaluated check for requirement 7 ("if a wider
-  valid wrap mode can fit the text, recommend it"). Given the audited wrap-independence, it always
-  returns `null` today (no tip shown, `project.wrap` never written); written as a real function (not
-  skipped) so a future wrap-dependent ObjectTemplate would be picked up with no other code change.
-* **`textTooLongActionMessage(l)`** (new) — "Try: shortening the text, reducing the stone size, or
-  choosing a wider object." plus an optional wrap-mode tip (never fires today).
-* **`updateTextOutsidePrintableWarning()`** (updated) — computes both `isTextTooLongForObject()` and
-  the existing `isTextOutsidePrintableArea()`; the two are mutually exclusive, with the structural
-  "too long" warning taking priority (so "Center Text" is never offered when it would not help).
-* **`index.html`** — new `#workspaceTextTooLongWarning` (always-visible right Inspector panel, no
-  Lightbox needed — requirement 6) and `#textTooLongWarning` (Text Lightbox, for consistency with
-  the existing dual-surface pattern), both reusing the existing `.validation-message`/`.hint`
-  styling verbatim — no new CSS.
-* Not implemented: hiding/suppressing the rendered (clipped) stones — the fix for "silent" per
-  requirement 3 is the new, unmissable warning, not removing the operator's visible work.
-
-No change to `src/geometry/GeometryEngine.js`, `src/geometry/StoneLayout.js`, any exporter, any
-renderer, `src/preview3d/**`, or the project/layer schema, in either part. No second layout pipeline.
-No multi-row text.
+No change to `src/geometry/GeometryEngine.js`, `src/geometry/StoneLayout.js`, any exporter
+(`src/export/**`), `src/renderer/**`, the project/layer schema, or `src/products/**`. No second
+layout pipeline. No multi-row text. The one 3D-preview-sizing change (180→360-degree radius
+reference) is a preview-only visual and never touches a stone position.
 
 ---
 
 # Files Changed
 
-**New (2):**
+**Modified:**
 ```
-docs/specifications/S-107-LongTextReadability.md
-tools/test-s107-long-text-readability.mjs
-```
-
-**Modified (4):**
-```
-app.js                                             — MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO,
-                                                     computeAutoFitScale() (+floorApplied),
-                                                     autoFitFloorAppliedByLayerId,
-                                                     isTextTooLongForObject(),
-                                                     recommendedWrapModeForFit(),
-                                                     textTooLongActionMessage(),
-                                                     updateTextOutsidePrintableWarning() (updated)
-index.html                                         — #workspaceTextTooLongWarning,
-                                                     #textTooLongWarning + detail elements
-package.json                                       — new test wired into the `test` script
-tools/test-s104-text-position-recovery-drag-tuning.mjs — check 12 updated to match
-                                                     updateTextOutsidePrintableWarning()'s new,
-                                                     floor-gated logic (still driven by the exact
-                                                     same isTextOutsidePrintableArea() result)
-TASK.md                                            — this milestone's task definition
+src/preview3d/ObjectDimensions.js         — 360-degree reference; circumference/azimuth/frame-width math
+src/preview3d/ObjectGeometryBuilder.js    — mm-accurate, wrap-independent applyAzimuthUv(); applyWrapUv() removed
+src/preview3d/Preview3DRenderer.js        — onAzimuthChange, _currentAzimuthDeg(), OrbitControls 'change' listener
+src/preview3d/index.js                    — forwards onAzimuthChange to the real renderer
+app.js                                    — Front View Frame draw/drag/hit-test/live-sync; circumference-based
+                                             isTextTooLongForObject(); removed autoFitFloorAppliedByLayerId/
+                                             recommendedWrapModeForFit()/textTooLongActionMessage()
+index.html                                — too-long warning copy updated; one hint sentence added
+docs/specifications/S-107-LongTextReadability.md — Part 3 (this milestone's spec + audit)
+TASK.md                                   — retitled/updated for this milestone
+tools/test-object-dimensions.mjs          — 360-degree reference; 7 new checks for the new exports
+tools/test-object-geometry-builder.mjs    — checks 7/8 rewritten for wrap-independent UV mapping
+tools/test-s107-long-text-readability.mjs — rewritten (26 checks) for the Front View Frame workflow
+tools/test-app-module-migration.mjs       — allowlists app.js's new ObjectDimensions.js import
+tools/test-shape-geometry-integration.mjs — same allowlist addition (independent milestone guard)
 ```
 
-No changes to `GeometryEngine`, `StoneLayout`, any renderer (`src/renderer/**`,
-`src/preview3d/**`), any exporter (`src/export/**`), the project/layer schema, `src/library/**`,
-`src/gallery/**`, `src/editing/**`, or `src/ui/**`.
+**Test-suite scoping fix (17 files, mechanical, one line each):** `tools/test-s104-*.mjs`,
+`tools/test-s105-*.mjs`, `tools/test-s106-*.mjs`, and 14 other prior-milestone test files each carry a
+`git status --porcelain`-based "forbidden files" guard whose list included `src/preview3d/` as
+permanently off-limits — a one-time "did this milestone stay in its own lane" snapshot from when each
+was written, not a standing rule. Removed the stale `'src/preview3d/'` entry from each list, since this
+milestone has an explicit, audited reason to touch that directory. `src/renderer/**` — which this
+milestone does *not* touch (the Front View Frame lives in `app.js`, per the existing "editor overlays
+are app.js-local" convention) — correctly remains forbidden in every one of those lists, untouched.
+
+No changes to `GeometryEngine`, `StoneLayout`, any exporter (`src/export/**`), `src/renderer/**`, the
+project/layer schema, `src/library/**`, `src/gallery/**`, `src/editing/**`, or `src/ui/**`.
 
 ---
 
@@ -159,76 +152,74 @@ No changes to `GeometryEngine`, `StoneLayout`, any renderer (`src/renderer/**`,
 $ npm test
 ```
 
-All 69 test files in the `test` script pass, **892 checks total, 0 failures**.
+All 71 test files in the `test` script pass, **904 checks total, 0 failures** (up from 892 before
+this milestone).
 
-`tools/test-s107-long-text-readability.mjs` (21/21 passing) covers both parts: structural checks
-(single `MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO` declaration; both auto-fit call sites use the shared
-helper; `generateTextStonesLive()` records `floorApplied`; `generate()` clears the map; the map is
-never referenced by `validateProject()`/`JSON.stringify`/either exporter; the new warning markup
-exists in both the Inspector and Lightbox with the exact required wording and no forbidden-file
-change) and behavioral checks (extracting and executing the real `computeAutoFitScale()`,
-`isTextTooLongForObject()`, `recommendedWrapModeForFit()`, and `textTooLongActionMessage()` from the
-live source, injecting a fake `autoFitFloorAppliedByLayerId` map for the latter three): auto-fit-off/
-already-fits/mild-overflow all unchanged from before this milestone; severe overflow reports
-`floorApplied:true` and sits exactly at the 6× floor; `isTextTooLongForObject()` is true only for the
-exact layer id whose last generation needed the floor; `recommendedWrapModeForFit()` is always `null`
-(matching the audited wrap-independence) and never assigns `project.wrap`; the action message lists
-all three real remedies; `updateTextOutsidePrintableWarning()`'s mutual-exclusivity/priority logic is
-wired correctly.
-
-One pre-existing test needed updating (same pattern as prior milestones hitting an already-tested
-function whose logic legitimately evolved): `tools/test-s104-text-position-recovery-drag-tuning.mjs`
-check 12 asserted `updateTextOutsidePrintableWarning()`'s exact body text; updated to match its new
-(still `isTextOutsidePrintableArea()`-driven, now floor-gated) form.
+* `tools/test-s107-long-text-readability.mjs` — 26/26. Structural: the old Part-2 workflow is fully
+  removed; the new `isTextTooLongForObject()`/warning copy are circumference-driven and never blame
+  wrap mode; the frame is wired into `drawLayout()`, reuses the shared `ObjectDimensions.js` mapping,
+  wraps continuously via canvas-x modulo, is visually distinct from the safe-area guide, shows its
+  width in mm; frame-drag/live-orbit sync never call `updateAll()`; `Preview3DRenderer.js`/
+  `ObjectGeometryBuilder.js` are wrap-independent as designed. Behavioral: Part 1's
+  `computeAutoFitScale()` (unchanged); the real circumference/frame/rotation math confirms the
+  reported phrase genuinely exceeds a mug's circumference (a real limit, not a viewing-window
+  artifact), medium text never warns on any real object, and frame-drag/Object-Preview-rotation are
+  exact mathematical inverses (drift-free bidirectional sync).
+* `tools/test-object-dimensions.mjs` — 18/18 (was 11). New: `circumferenceMm() === canvasWidthMm`;
+  `canvasXMmForAzimuthRad`/`azimuthRadForCanvasXMm` are exact inverses; canvas x=0 and
+  x=canvasWidthMm map to the same seam (requirement 3, tested directly); rotation<->canvas-x
+  round-trips; `frontViewFrameWidthMm` orders correctly by wrap mode.
+* `tools/test-object-geometry-builder.mjs` — 12/12. New check verifies the *entire* mesh's UV, vertex
+  by vertex, matches the mm-accurate mapping exactly.
+* `tools/test-app-module-migration.mjs` / `tools/test-shape-geometry-integration.mjs` — updated to
+  allowlist app.js's new direct import of `ObjectDimensions.js`.
 
 ---
 
 # Browser Verification
 
 Headless Chromium (Playwright, this repo's local `node_modules`), `python3 -m http.server 5173`
-serving the actual app (no mocks), 1800×950 viewport.
+serving the actual app (no mocks), 1600×1000 viewport. **22/22 automated checks passed.**
 
-## Part 1
+1. Short ("Hi"), medium ("Vitalina Serbin"), and long (67-character phrase) text × Mug, Straight
+   Tumbler, Bottle (9 combinations) — zero console errors throughout; the too-long warning fires only
+   for the long phrase, on every object (its 529.6mm exceeds even the widest real canvas here,
+   230mm on the tumbler).
+2. **Dragging the Front View Frame rotates the Object Preview** — verified on the tumbler: a drag on
+   empty canvas inside the frame band moved `rotation` from 0° to −65° live, every pointermove tick.
+3. **Rotating the Object Preview moves the Front View Frame** — a mouse-orbit drag on the Object
+   Preview canvas moved `rotation` to −103°/−104° across independent runs, with the frame and
+   "viewing position" stat following live.
+4. **Continuous edge-wrap** — at `wrap=full`/rotation 175° on the mug, the frame visibly splits into
+   two on-canvas segments with no gap, and the Object Preview shows the mug's own texture seam split
+   at the identical point — the 2D canvas and Object Preview are showing the literal same wrapped
+   view.
+5. **Frame width in millimeters** — "Front View · N mm" on the frame itself, plus width/circumference/
+   viewing-position in the status bar, confirmed live-updating during both drag and free-orbit sync
+   (a first pass found the stats bar going stale mid-interaction — both new cheap-sync paths now call
+   `updateStats()`).
+6. **Long text can be inspected by moving the frame or rotating the preview** — the 67-character
+   phrase remains fully generated and visible in the 2D canvas at all times (never clipped); every
+   portion of it becomes the Object Preview's front-facing view as the frame/rotation moves.
+7. **Warning fires only on a genuine circumference overflow, with real numbers, never blaming wrap
+   mode** — "This design is 529.6mm wide -- 319.6mm more than the mug's 210.0mm printable
+   circumference, so it would overlap itself once wrapped fully around the object. Try: shortening
+   the text, reducing the stone size, or choosing a wider object."
+8. View-button (Left/Right/Back/Front) cycling produced no errors; the frame followed each.
+9. Zero console errors across every scenario.
 
-1. Short text ("Hi") — 69 stones, 29.2×18.6mm, legible and unchanged on mug/tumbler/bottle.
-2. Medium text ("Vitalina Serbin") — 375 stones, 199.4×17.0mm, unchanged, clearly readable.
-3. Very long text (67-character phrase) — before: `heightMm≈6.4` (ratio ≈2.8), illegible dot row in
-   both 2D and 3D on all three object types; after: floor-clamped to `heightMm≈13.9` (ratio 6.0),
-   individual words legible.
-4. No distortion (uniform scale only); no new console/page errors (one pre-existing, unrelated WebGL
-   driver warning confirmed present on unmodified `develop` too).
-
-## Part 2 (this follow-up)
-
-1. **The exact reported phrase, mug, `front` wrap** — now shows "This text is too long to fit
-   legibly on this object." with "Try: shortening the text, reducing the stone size, or choosing a
-   wider object." in both the persistent Inspector panel and the Text Lightbox; the old "outside the
-   printable area" / "Center Text" warning is suppressed, not shown alongside it.
-2. **Short/medium text, mug** — no warning at all, `layoutStats` identical to Part 1's own
-   verification (69 stones/29.2×18.6mm; 375 stones/199.4×17.0mm).
-3. **Mug, tumbler, bottle** — the reported phrase triggers the identical warning on all three
-   (738 stones, 529.6×13.9mm on every object).
-4. **All four wrap modes** (`front`/`wide`/`half`/`full`) on the mug, same phrase — warning state
-   identical across every mode, confirming the audited wrap-independence directly rather than by
-   inspection alone.
-5. **Several stone sizes** — "Happy Birthday Sarah": no warning at SS6 (2.0mm, 200.5mm wide);
-   too-long at SS10 (2.8mm, 223.6mm) and SS16 (4.0mm, 301.3mm) — "reduce the stone size" is a
-   verified-working remedy, not just suggested text. A shortened version of the reported phrase
-   ("Special thanks, love you") also clears the warning (201.1mm, fits).
-6. **No misleading "successful" preview without feedback** — every case that cannot fit shows the
-   warning; every case that fits shows none.
-7. **2D and 3D stay consistent** — both panels and the Inspector always agree, since all three are
-   driven by the one shared `layout`/bbox.
-
-**Sample before/after screenshots (Part 1):** published as an artifact —
-https://claude.ai/code/artifact/ba39444f-8593-4c85-88da-675646ff9273
+**Screenshots (gallery, published as an Artifact):**
+https://claude.ai/code/artifact/26208bf5-6766-47c7-a786-f585a9bbed27
 
 ---
 
 # Recommendation
 
-Approve both parts. Part 1 fixes the actual root cause (scaling/spacing decoupling in auto-fit)
-inside the one shared pipeline; Part 2 replaces a silent, misleadingly-recoverable overflow with a
-clear, persistent, non-Lightbox warning whose suggested remedies are all verified to actually work,
-built entirely from Part 1's own unmodified floor decision (no second threshold, no new geometry, no
-GeometryEngine/StoneLayout/exporter/schema change, no second layout pipeline, no multi-row text).
+Approve. The Front View Frame replaces a warning that measured the wrong thing (one viewing window's
+width) with a workflow that treats the object as what it physically is — a wrapped cylindrical
+surface — and a warning that measures the right thing (the object's real printable circumference,
+computed with the exact same geometry the 3D preview's own texture mapping uses, so the two views
+can never disagree). No second `GeometryEngine`/`StoneLayout`/rendering pipeline was introduced; the
+one required 3D-preview-sizing change is preview-only and never touches a stone position; and the
+frame's drag/live-orbit sync paths are deliberately cheap so requirement 2's "immediate and smooth"
+holds under real, verified mouse interaction in both directions.

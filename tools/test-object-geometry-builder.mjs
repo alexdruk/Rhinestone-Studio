@@ -6,8 +6,8 @@ import assert from 'node:assert/strict';
 // (not faked) test of the actual geometry this milestone builds, without needing a browser.
 
 const THREE = await import('three');
-const { buildObjectMesh, applyWrapUv } = await import('../src/preview3d/ObjectGeometryBuilder.js');
-const { computeObjectDimensionsMm } = await import('../src/preview3d/ObjectDimensions.js');
+const { buildObjectMesh } = await import('../src/preview3d/ObjectGeometryBuilder.js');
+const { computeObjectDimensionsMm, canvasXMmForAzimuthRad } = await import('../src/preview3d/ObjectDimensions.js');
 const { getObjectTemplate } = await import('../src/products/index.js');
 
 async function test(name, fn) {
@@ -92,7 +92,7 @@ await test('6. tumbler body radius is constant top-to-bottom (straight wall); mu
   assert.ok(Math.abs(dims.topRadiusMm - dims.bodyRadiusMm) < 1e-9);
 });
 
-await test('7. applyWrapUv maps the front azimuth (atan2(x,z)=0) to u=0.5 for every wrap mode', () => {
+await test('7. buildObjectMesh maps the front azimuth (atan2(x,z)=0) to u=0.5 (S-107: mm-accurate, wrap-mode independent -- the object mesh always wraps the complete canvas continuously, see ObjectGeometryBuilder.js\'s applyAzimuthUv())', () => {
   const { bodyMesh } = buildObjectMesh(getObjectTemplate('mug'), 210, 90);
   const position = bodyMesh.geometry.attributes.position;
   const uv = bodyMesh.geometry.attributes.uv;
@@ -105,33 +105,23 @@ await test('7. applyWrapUv maps the front azimuth (atan2(x,z)=0) to u=0.5 for ev
     if (score > bestScore) { bestScore = score; frontIndex = i; }
   }
 
-  for (const wrap of ['front', 'wide', 'half', 'full']) {
-    applyWrapUv(bodyMesh, wrap);
-    assert.ok(Math.abs(uv.getX(frontIndex) - 0.5) < 0.05, `expected u≈0.5 at the front azimuth for wrap=${wrap}`);
-  }
+  assert.ok(Math.abs(uv.getX(frontIndex) - 0.5) < 0.05, 'expected u≈0.5 at the front azimuth');
 });
 
-await test('8. applyWrapUv\'s angular window is narrower for "front" than for "full" (u spreads out more for a wider wrap angle)', () => {
-  const { bodyMesh } = buildObjectMesh(getObjectTemplate('tumbler'), 230, 100);
+await test('8. buildObjectMesh\'s UV mapping is mm-accurate and wrap-mode independent: U matches canvasXMmForAzimuthRad(azimuth, canvasWidthMm)/canvasWidthMm for every vertex, unaffected by which wrap mode the project has selected (S-107 requirement 4: never clip/hide the production layout on the object mesh -- wrap mode only sizes the 2D canvas\'s Front View Frame, app.js)', () => {
+  const canvasWidthMm = 230;
+  const { bodyMesh } = buildObjectMesh(getObjectTemplate('tumbler'), canvasWidthMm, 100);
   const position = bodyMesh.geometry.attributes.position;
   const uv = bodyMesh.geometry.attributes.uv;
 
-  // A vertex at a fixed, moderate azimuth away from front (not exactly back, to avoid the atan2
-  // branch-cut discontinuity at +-PI).
-  let sideIndex = -1, bestDiff = Infinity;
-  const targetAzimuth = Math.PI / 2;
+  let checked = 0;
   for (let i = 0; i < position.count; i++) {
     const azimuth = Math.atan2(position.getX(i), position.getZ(i));
-    const diff = Math.abs(azimuth - targetAzimuth);
-    if (diff < bestDiff) { bestDiff = diff; sideIndex = i; }
+    const expectedU = canvasXMmForAzimuthRad(azimuth, canvasWidthMm) / canvasWidthMm;
+    assert.ok(Math.abs(uv.getX(i) - expectedU) < 1e-6, `vertex ${i}: expected u=${expectedU}, got ${uv.getX(i)}`);
+    checked++;
   }
-
-  applyWrapUv(bodyMesh, 'front');
-  const uFront = uv.getX(sideIndex);
-  applyWrapUv(bodyMesh, 'full');
-  const uFull = uv.getX(sideIndex);
-
-  assert.ok(Math.abs(uFront - 0.5) > Math.abs(uFull - 0.5), 'expected the same azimuth to map further from center (0.5) under a narrower wrap window');
+  assert.ok(checked > 0, 'expected at least one vertex to be checked');
 });
 
 // RS-1006A regression tests -- these guard the four human-review defects fixed in

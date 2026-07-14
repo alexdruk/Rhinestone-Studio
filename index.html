@@ -433,7 +433,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
     <section class="panel-section">
       <h2>Inspector — <span id="inspectorLayerName">Selected layer</span></h2>
       <div class="validation-message" id="workspaceTextTooLongWarning" role="status">
-        <div>This text is too long to fit legibly on this object.</div>
+        <div>This text exceeds the object's printable circumference.</div>
         <div class="hint" id="workspaceTextTooLongWarningDetail"></div>
       </div>
       <div class="validation-message" id="workspaceTextOutsideWarning" role="status">
@@ -486,11 +486,11 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
             <div class="field"><label for="textX">Position X (mm)</label><input id="textX" type="number" step="1" value="0"></div>
             <div class="field"><label for="textY">Position Y (mm)</label><input id="textY" type="number" step="1" value="0"></div>
           </div>
-          <p class="validation-message" id="textTooLongWarning" role="status">This text is too long to fit legibly on this object.</p>
+          <p class="validation-message" id="textTooLongWarning" role="status">This text exceeds the object's printable circumference.</p>
           <p class="hint" id="textTooLongWarningDetail"></p>
           <p class="validation-message" id="textOutsidePrintableWarning" role="status">This text is outside the printable area.</p>
           <button type="button" class="btn sm primary" id="centerTextOnObject" title="Reset only this text layer's position to the center of the printable area — font, size, rotation, spacing, fill, and stone size are left unchanged">↺ Center on Object</button>
-          <p class="hint">Text can also be moved by dragging on the 2D canvas, arrow-key nudging, or Align &amp; Snap. Dragged this text out of view? Click Center on Object above to bring it back.</p>
+          <p class="hint">Text can also be moved by dragging on the 2D canvas, arrow-key nudging, or Align &amp; Snap. Dragged this text out of view? Click Center on Object above to bring it back. Long text that fits the object's printable circumference can be inspected by dragging the amber Front View Frame on the 2D canvas, or by rotating the Object Preview.</p>
         </div>
         <div class="field-section">
           <h3>Curve</h3>

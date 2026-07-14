@@ -9,16 +9,22 @@
 
 /**
  * @param {HTMLCanvasElement} canvas
- * @returns {{update: Function, syncView: Function, resetView: Function}}
+ * @returns {{update: Function, syncView: Function, resetView: Function, onAzimuthChange: Function|null}}
  */
 export function createPreview3D(canvas) {
   let real = null;
   let pendingUpdate = null;
   let pendingView = null;
+  // S-107: onAzimuthChange is assigned as a plain property (app.js does
+  // `preview3D.onAzimuthChange = fn`), same as the real Preview3DRenderer's own field -- queued the
+  // same way pendingUpdate/pendingView already are, so a caller can set it before the real renderer
+  // finishes its async mount without losing the assignment.
+  let pendingOnAzimuthChange = null;
 
   (async () => {
     const { Preview3DRenderer } = await import('./Preview3DRenderer.js');
     real = new Preview3DRenderer(canvas);
+    if (pendingOnAzimuthChange) real.onAzimuthChange = pendingOnAzimuthChange;
     await real.init();
     if (pendingUpdate) real.update(pendingUpdate.stoneLayout, pendingUpdate.options);
     if (pendingView) real.syncView(pendingView.azimuthDeg, pendingView.zoom);
@@ -37,6 +43,10 @@ export function createPreview3D(canvas) {
     },
     resetView() {
       if (real) real.resetView();
+    },
+    set onAzimuthChange(fn) {
+      pendingOnAzimuthChange = fn;
+      if (real) real.onAzimuthChange = fn;
     }
   };
 }

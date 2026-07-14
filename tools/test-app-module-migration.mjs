@@ -99,10 +99,17 @@ await test('app.js only imports the RS-0003.5B2 probe, the RS-0003.5B3 permanent
     // RS-1005: Production Sheet export. src/export/** has no barrel index.js (SvgExporter.js above
     // is likewise imported directly), so each individual export module app.js uses is listed here.
     /from\s*['"]\.\/src\/export\/ProductionSheetExporter\.js['"]/,
-    // RS-1006: the real 3D preview's own barrel module (see src/preview3d/index.js) -- the only
-    // module app.js imports from src/preview3d/**, matching the same "barrel module" shape every
-    // other permanent module entry point above already has.
+    // RS-1006: the real 3D preview's own barrel module (see src/preview3d/index.js), matching the
+    // same "barrel module" shape every other permanent module entry point above already has.
     /from\s*['"]\.\/src\/preview3d\/index\.js['"]/,
+    // S-107 (Front View Frame & Long Text Workflow): ObjectDimensions.js is preview3d's pure,
+    // DOM/Project/Layer-free millimeter geometry math (no Three.js import either -- see that
+    // file's own top-of-file comment) -- app.js imports it directly (not through
+    // src/preview3d/index.js, which is Three.js-lazy-loading-only) to reuse the exact same
+    // canvas-x<->azimuth mapping ObjectGeometryBuilder.js's applyAzimuthUv() uses for the object
+    // mesh's own texture, so the 2D canvas's Front View Frame and the Object Preview can never
+    // disagree about which portion of the design faces the viewer.
+    /from\s*['"]\.\/src\/preview3d\/ObjectDimensions\.js['"]/,
     // RS-1008: Image Trace's own barrel module (see src/image/index.js), mirroring the
     // src/svg/index.js entry RS-1001 already added above.
     /from\s*['"]\.\/src\/image\/index\.js['"]/,
