@@ -483,6 +483,32 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
   el('objectType').value=project.product;
   // RS-1005: project.name is likewise project-level -- resync for the same reason.
   el('projectName').value=project.name;
+  // S-105 follow-up: a type-specific Lightbox (Text/Import/Image Trace) that stays open (non-modal
+  // + persistent, S-105) while the selection changes to a different, incompatible layer type must
+  // never sit there empty (isText/etc. above already hide its per-layer content for the wrong
+  // type, and none of these three has any always-visible fallback content once that happens).
+  // activeFieldLightbox is only non-null while one of the four type-specific Lightboxes is open, so
+  // this never fires when no type-specific Lightbox is open (e.g. Settings/Export/Help untouched).
+  // lightboxForLayerType(l.type).open() both switches to the correct Lightbox for the new selection
+  // and -- via the existing single-primary-Lightbox exclusivity in src/ui/Lightbox.js -- closes the
+  // now-incompatible one automatically; a no-op if the correct one is already open.
+  //
+  // Shapes is deliberately excluded from this auto-switch-away: (1) it can never actually go empty
+  // -- its "Add a shape"/"Boolean Operations" sections (index.html #shapesPanelDesign) are always
+  // visible regardless of the selected layer's type, unlike Text/Import/Image Trace, whose entire
+  // body is gated behind a single type check; (2) Boolean Ops (S-101) deliberately Shift-selects a
+  // mixed-type selection (any combination of shapes/text/SVG/image, per its own hint text) while
+  // Shapes stays open -- and a Shift-click multi-select always starts with one plain click (a
+  // genuine single-selection, indistinguishable in the moment from an ordinary single-select), so
+  // auto-switching away on that first click would close Shapes before the operator can Shift-click
+  // the second layer. Switching *into* Shapes from Text/Import/Image Trace is unaffected -- only
+  // switching *away* from an already-open Shapes is skipped.
+  // Also guarded to a single-layer selection, so a multi-selection built any other way never
+  // triggers a switch either.
+  if(activeFieldLightbox&&activeFieldLightbox!=='shapes'&&selectedLayerIds.size<=1){
+    const target=lightboxForLayerType(l.type);
+    if(target&&!target.isOpen)target.open();
+  }
 }
 function writeSelectedControlsToLayer(){const l=selectedLayer();if(l.type==='text'){l.text=el('text').value;l.font=el('font').value;l.height=parseFloat(el('height').value)||25;l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;l.curveEnabled=el('curveEnabled').value==='on';l.curveRadiusMm=Math.max(0.1,parseFloat(el('curveRadiusMm').value)||40);l.curveDirection=el('curveDirection').value==='inside'?'inside':'outside';l.curveStartAngleDeg=parseFloat(el('curveStartAngleDeg').value)||0;l.curveSweepAngleDeg=parseFloat(el('curveSweepAngleDeg').value)||180;l.curveAlignment=el('curveAlignment').value;el('curveControls').style.display=l.curveEnabled?'block':'none';
   // UI-001: manual X/Y mm fields for the Text Lightbox, writing to the same layer.x/layer.y fields
@@ -1076,19 +1102,24 @@ function relocateFieldGroups(){
 relocateFieldGroups();
 
 // ---- Lightboxes ----
+// S-105: the 11 named Lightboxes are `primary:true` (mutually exclusive -- opening one closes any
+// other open primary Lightbox first, see src/ui/Lightbox.js and docs/specifications/
+// S-105-PersistentMovableLightboxes.md). libraryConfirm/galleryPreview are transient sub-dialogs
+// launched from within an already-open primary Lightbox and are deliberately left non-primary so
+// they keep stacking on top of it exactly as before.
 const lightboxes={
-  text:new Lightbox('lightboxText',{onOpen(){activeFieldLightbox='text';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
-  shapes:new Lightbox('lightboxShapes',{onOpen(){activeFieldLightbox='shapes';relocateFieldGroups();updateObjectTemplateDetail()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
-  importBox:new Lightbox('lightboxImport',{onOpen(){activeFieldLightbox='import';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
-  imagetrace:new Lightbox('lightboxImageTrace',{onOpen(){activeFieldLightbox='imagetrace';relocateFieldGroups();updateImageTraceSections()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
-  exportBox:new Lightbox('lightboxExport'),
-  prodSheet:new Lightbox('lightboxProdSheet'),
-  shipping:new Lightbox('lightboxShipping',{onOpen(){syncShippingFieldsFromState()}}),
-  settings:new Lightbox('lightboxSettings',{onOpen(){syncSettingsFieldsFromState()}}),
-  help:new Lightbox('lightboxHelp'),
-  library:new Lightbox('lightboxLibrary',{onOpen(){onLibraryOpen()}}),
+  text:new Lightbox('lightboxText',{primary:true,onOpen(){activeFieldLightbox='text';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  shapes:new Lightbox('lightboxShapes',{primary:true,onOpen(){activeFieldLightbox='shapes';relocateFieldGroups();updateObjectTemplateDetail()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  importBox:new Lightbox('lightboxImport',{primary:true,onOpen(){activeFieldLightbox='import';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  imagetrace:new Lightbox('lightboxImageTrace',{primary:true,onOpen(){activeFieldLightbox='imagetrace';relocateFieldGroups();updateImageTraceSections()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  exportBox:new Lightbox('lightboxExport',{primary:true}),
+  prodSheet:new Lightbox('lightboxProdSheet',{primary:true}),
+  shipping:new Lightbox('lightboxShipping',{primary:true,onOpen(){syncShippingFieldsFromState()}}),
+  settings:new Lightbox('lightboxSettings',{primary:true,onOpen(){syncSettingsFieldsFromState()}}),
+  help:new Lightbox('lightboxHelp',{primary:true}),
+  library:new Lightbox('lightboxLibrary',{primary:true,onOpen(){onLibraryOpen()}}),
   libraryConfirm:new Lightbox('lightboxLibraryConfirm'),
-  gallery:new Lightbox('lightboxGallery',{onOpen(){onGalleryOpen()}}),
+  gallery:new Lightbox('lightboxGallery',{primary:true,onOpen(){onGalleryOpen()}}),
   galleryPreview:new Lightbox('lightboxGalleryPreview')
 };
 
@@ -1109,13 +1140,22 @@ el('menuShipping').onclick=()=>lightboxes.shipping.open();
 el('menuSettings').onclick=()=>lightboxes.settings.open();
 el('menuHelp').onclick=()=>lightboxes.help.open();
 
+// S-105 follow-up: the layer-type -> Lightbox mapping used by both "More Options" (below) and
+// syncSelectedControlsFromLayer()'s auto-switch (so a type-specific Lightbox left open across a
+// different-type selection never goes empty, see docs/specifications/
+// S-105-PersistentMovableLightboxes.md, "Follow-up: No Empty Lightbox on Selection Mismatch").
+function lightboxForLayerType(t){
+  if(t==='text')return lightboxes.text;
+  if(t==='circle'||t==='rectangle'||t==='path')return lightboxes.shapes;
+  if(t==='svg')return lightboxes.importBox;
+  if(t==='image')return lightboxes.imagetrace;
+  return null;
+}
+
 // The right inspector's "More Options" opens the Lightbox that matches the selected layer's type.
 el('moreOptionsBtn').onclick=()=>{
-  const t=selectedLayer().type;
-  if(t==='text')lightboxes.text.open();
-  else if(t==='circle'||t==='rectangle'||t==='path')lightboxes.shapes.open();
-  else if(t==='svg')lightboxes.importBox.open();
-  else if(t==='image')lightboxes.imagetrace.open();
+  const target=lightboxForLayerType(selectedLayer().type);
+  if(target)target.open();
 };
 
 // ---- Shapes Lightbox: Design Shapes / Object Templates tabs ----

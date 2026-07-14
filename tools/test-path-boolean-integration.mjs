@@ -149,7 +149,11 @@ await test('12. getLayerBBox()/drag-resize/duplicateLayer()/layerLabel()/moreOpt
   assert.match(appJs, /l\.type==='rectangle'\|\|l\.type==='svg'\|\|l\.type==='image'\|\|l\.type==='path'\)\{let x0=drag\.b0\.x/);
   assert.match(appJs, /if\(copy\.type==='path'\)\{copy\.x\+=8;copy\.y\+=8\}/);
   assert.match(appJs, /l\.type==='path'\?\(l\.pathName\|\|'Path'\)/);
-  assert.match(appJs, /else if\(t==='circle'\|\|t==='rectangle'\|\|t==='path'\)lightboxes\.shapes\.open\(\)/);
+  // S-105 follow-up moved the type->Lightbox mapping (moreOptionsBtn's former inline branch) into
+  // the shared lightboxForLayerType() helper -- see tools/test-s105-persistent-movable-lightboxes.mjs.
+  const fnMatch = appJs.match(/function lightboxForLayerType\(t\)\{[\s\S]*?\n\}/);
+  assert.ok(fnMatch, 'expected a lightboxForLayerType(t) function in app.js');
+  assert.match(fnMatch[0], /if\(t==='circle'\|\|t==='rectangle'\|\|t==='path'\)return lightboxes\.shapes/);
 });
 
 await test('13. writeSelectedControlsToLayer() has a \'path\' branch writing the shared x/y/w/h fields back', () => {

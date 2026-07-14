@@ -102,13 +102,20 @@ await test('7. the right inspector is a compact quick-edit surface, not a second
 });
 
 await test('8. More Options opens the Lightbox matching the selected layer\'s type', () => {
+  // S-105 follow-up: the type->Lightbox mapping moved into the shared lightboxForLayerType()
+  // helper (also used by syncSelectedControlsFromLayer()'s auto-switch, so a type-specific Lightbox
+  // left open never goes empty across a selection change) instead of being repeated inline here.
+  // See tools/test-s105-persistent-movable-lightboxes.mjs.
   assert.match(appJs, /el\('moreOptionsBtn'\)\.onclick=\(\)=>\{/);
-  assert.match(appJs, /if\(t==='text'\)lightboxes\.text\.open\(\)/);
+  assert.match(appJs, /const target=lightboxForLayerType\(selectedLayer\(\)\.type\);/);
+  const fnMatch = appJs.match(/function lightboxForLayerType\(t\)\{[\s\S]*?\n\}/);
+  assert.ok(fnMatch, 'expected a lightboxForLayerType(t) function in app.js');
+  assert.match(fnMatch[0], /if\(t==='text'\)return lightboxes\.text/);
   // RS-1012 extended this branch to also open Shapes for 'path' layers (Boolean Operation results,
   // edited the same way circle/rectangle are) -- see tools/test-path-boolean-integration.mjs.
-  assert.match(appJs, /else if\(t==='circle'\|\|t==='rectangle'\|\|t==='path'\)lightboxes\.shapes\.open\(\)/);
-  assert.match(appJs, /else if\(t==='svg'\)lightboxes\.importBox\.open\(\)/, 'expected More Options to open the Import Lightbox for svg layers');
-  assert.match(appJs, /else if\(t==='image'\)lightboxes\.imagetrace\.open\(\)/);
+  assert.match(fnMatch[0], /if\(t==='circle'\|\|t==='rectangle'\|\|t==='path'\)return lightboxes\.shapes/);
+  assert.match(fnMatch[0], /if\(t==='svg'\)return lightboxes\.importBox/, 'expected More Options to open the Import Lightbox for svg layers');
+  assert.match(fnMatch[0], /if\(t==='image'\)return lightboxes\.imagetrace/);
 });
 
 await test('9. shared position/stone fields are one physical DOM node each (no duplicate ids across inspector and Lightboxes)', () => {

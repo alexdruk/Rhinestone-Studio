@@ -38,11 +38,9 @@ await test('1. lightboxShapes overlay carries the non-modal modifier class and a
   assert.match(indexHtml, /\.lightbox-overlay\.non-modal \.lightbox\{pointer-events:auto\}/);
 });
 
-await test('2. every other lightbox overlay keeps the plain (fully modal) class -- the non-modal treatment is scoped to Shapes only', () => {
-  const otherIds = ['lightboxText', 'lightboxImport', 'lightboxImageTrace', 'lightboxExport', 'lightboxProdSheet', 'lightboxShipping', 'lightboxSettings', 'lightboxHelp', 'lightboxLibrary'];
-  for (const id of otherIds) {
-    assert.match(indexHtml, new RegExp(`<div class="lightbox-overlay" id="${id}">`), `expected #${id} to remain a plain, fully-modal lightbox-overlay`);
-  }
+await test('2. lightboxShapes\' own non-modal markup (the S-101 fix) is still present verbatim -- S-105 later generalized the same .non-modal treatment to the other 10 named Lightboxes (see tools/test-ui001-dialog-behavior.mjs test 13 and tools/test-s105-persistent-movable-lightboxes.mjs), so this test only re-confirms Shapes\' own markup was not regressed, not that it is still the sole exception', () => {
+  assert.match(indexHtml, /<div class="lightbox-overlay non-modal" id="lightboxShapes">/, 'expected #lightboxShapes to still carry the non-modal overlay class');
+  assert.match(indexHtml, /<div class="lightbox wide" role="dialog" aria-modal="false" aria-labelledby="lightboxShapesTitle"/, 'expected #lightboxShapes\' dialog to still declare aria-modal="false"');
 });
 
 await test('3. the Boolean Ops hint text still matches the now-functional workflow (select via canvas or Layers list)', () => {

@@ -68,11 +68,12 @@ await test('7. every element with [data-lightbox-close] closes the dialog withou
   assert.match(lightboxSource, /closeButtons\.forEach|for \(const btn of closeButtons\)/);
 });
 
-await test('8. the dialog has proper ARIA: role="dialog", aria-modal="true" (or "false" for the deliberately non-modal lightboxShapes -- see test 13 and tools/test-s101-ux-workflow-polish.mjs), and a labelled title, for every Lightbox instance in index.html', () => {
+await test('8. the dialog has proper ARIA: role="dialog", aria-modal="false" for the 11 non-modal S-105 Lightboxes (or "true" for the two modal sub-dialogs lightboxLibraryConfirm/lightboxGalleryPreview -- see test 13 and tools/test-s101-ux-workflow-polish.mjs), and a labelled title, for every Lightbox instance in index.html', () => {
   const overlayIds = [...appJs.matchAll(/new Lightbox\('(\w+)'/g)].map((m) => m[1]);
   assert.ok(overlayIds.length >= 9, 'expected at least nine Lightbox instances');
+  const MODAL_SUB_DIALOGS = new Set(['lightboxLibraryConfirm', 'lightboxGalleryPreview']);
   for (const id of overlayIds) {
-    const expectedAriaModal = id === 'lightboxShapes' ? 'false' : 'true';
+    const expectedAriaModal = MODAL_SUB_DIALOGS.has(id) ? 'true' : 'false';
     const re = new RegExp(`<div class="lightbox-overlay[^"]*" id="${id}">[\\s\\S]*?<div class="lightbox[^"]*" role="dialog" aria-modal="${expectedAriaModal}" aria-labelledby="(\\w+)"`);
     const match = indexHtml.match(re);
     assert.ok(match, `expected #${id}'s dialog to declare role/aria-modal="${expectedAriaModal}"/aria-labelledby`);
@@ -80,10 +81,26 @@ await test('8. the dialog has proper ARIA: role="dialog", aria-modal="true" (or 
   }
 });
 
-await test('13. lightboxShapes is the one deliberate non-modal exception (S-101): it carries the .non-modal overlay class and its dialog is aria-modal="false", so Boolean Ops layer selection on the canvas/Layers list works while it stays open', () => {
-  assert.match(indexHtml, /<div class="lightbox-overlay non-modal" id="lightboxShapes">/, 'expected #lightboxShapes to carry the non-modal overlay class');
+await test('13. all 11 named Lightboxes are non-modal (S-105, generalizing the S-101 Shapes precedent): each carries the .non-modal overlay class and aria-modal="false", so canvas/Layers-list/Inspector interaction works while any of them stays open; lightboxLibraryConfirm/lightboxGalleryPreview intentionally keep the plain, fully-modal backdrop', () => {
+  const NON_MODAL_IDS = ['lightboxText', 'lightboxShapes', 'lightboxImport', 'lightboxImageTrace', 'lightboxExport', 'lightboxProdSheet', 'lightboxShipping', 'lightboxSettings', 'lightboxHelp', 'lightboxLibrary', 'lightboxGallery'];
+  for (const id of NON_MODAL_IDS) {
+    const re = new RegExp(`<div class="lightbox-overlay non-modal[^"]*" id="${id}">`);
+    assert.match(indexHtml, re, `expected #${id} to carry the non-modal overlay class`);
+  }
   assert.match(indexHtml, /\.lightbox-overlay\.non-modal\{background:transparent;pointer-events:none\}/, 'expected the non-modal overlay to be transparent and click-through');
   assert.match(indexHtml, /\.lightbox-overlay\.non-modal \.lightbox\{pointer-events:auto\}/, 'expected the dialog card itself to remain interactive despite the click-through backdrop');
+  for (const id of ['lightboxLibraryConfirm', 'lightboxGalleryPreview']) {
+    assert.match(indexHtml, new RegExp(`<div class="lightbox-overlay" id="${id}">`), `expected #${id} to keep the plain, fully-modal overlay class`);
+  }
+});
+
+await test('14. header drag-to-move (S-105) is wired for every Lightbox: pointerdown/pointermove/pointerup on .lightbox-header, viewport clamping, and single-primary-Lightbox exclusivity', () => {
+  assert.match(lightboxSource, /this\.header\.addEventListener\('pointerdown'/, 'expected a pointerdown listener on the header to start a drag');
+  assert.match(lightboxSource, /this\.header\.addEventListener\('pointermove'/, 'expected a pointermove listener on the header to move the dialog');
+  assert.match(lightboxSource, /_clampToViewport/, 'expected a viewport-clamping method');
+  assert.match(lightboxSource, /window\.addEventListener\('resize'/, 'expected dragged dialogs to re-clamp on window resize');
+  assert.match(lightboxSource, /options\.primary/, 'expected an options.primary flag for single-active-Lightbox exclusivity');
+  assert.match(lightboxSource, /primaryLightboxes/, 'expected a primary-Lightbox registry used to close others on open()');
 });
 
 await test('9. no full-page content shift: every Lightbox is a fixed, full-viewport overlay (position:fixed;inset:0), not an inline element that reflows the page', () => {
@@ -99,7 +116,7 @@ await test('11. field-relocation moves the shared position/stone field groups on
   assert.match(appJs, /function relocateFieldGroups\(\)\{/);
   const closers = ['text', 'shapes', 'importBox', 'imagetrace'];
   for (const key of closers) {
-    const re = new RegExp(`${key}:new Lightbox\\('\\w+',\\{onOpen\\(\\)\\{[^}]*relocateFieldGroups\\(\\)[\\s\\S]*?onClose\\(\\)\\{[^}]*relocateFieldGroups\\(\\)`);
+    const re = new RegExp(`${key}:new Lightbox\\('\\w+',\\{primary:true,onOpen\\(\\)\\{[^}]*relocateFieldGroups\\(\\)[\\s\\S]*?onClose\\(\\)\\{[^}]*relocateFieldGroups\\(\\)`);
     assert.match(appJs, re, `expected the ${key} Lightbox to relocate field groups on both open and close`);
   }
 });

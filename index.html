@@ -211,17 +211,27 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 /* ============================== Lightbox system ============================== */
 .lightbox-overlay{position:fixed;inset:0;background:rgba(17,23,43,.5);display:none;align-items:center;justify-content:center;z-index:100;padding:var(--space-5)}
 .lightbox-overlay.open{display:flex}
-/* S-101: the Shapes lightbox's own Boolean Ops hint tells the user to select layers on the canvas
-   or in the Layers list while the dialog is open. A regular lightbox-overlay's full-viewport backdrop
-   captures every pointer event (even over the always-visible sidebar), making that instruction
-   impossible to follow without closing the dialog first. .non-modal keeps the same visual dialog
+/* S-101 (Shapes only), generalized to all 11 named Lightboxes by S-105: a regular lightbox-overlay's
+   full-viewport backdrop captures every pointer event (even over the always-visible sidebar/canvas),
+   which blocks continuing to work while the dialog is open. .non-modal keeps the same visual dialog
    shell but lets clicks fall through the backdrop to whatever is behind it -- only the dialog card
-   itself stays interactive -- so Boolean Ops selection works exactly as the hint text describes. */
+   itself stays interactive. lightboxLibraryConfirm/lightboxGalleryPreview intentionally keep the
+   plain, fully-modal backdrop -- see docs/specifications/S-105-PersistentMovableLightboxes.md,
+   "Out of Scope". */
 .lightbox-overlay.non-modal{background:transparent;pointer-events:none}
 .lightbox-overlay.non-modal .lightbox{pointer-events:auto}
 .lightbox{background:var(--color-surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);width:640px;max-width:100%;max-height:calc(100vh - 64px);display:flex;flex-direction:column;overflow:hidden}
 .lightbox.wide{width:760px}
-.lightbox-header{display:flex;align-items:center;justify-content:space-between;padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--color-border)}
+/* S-105: every Lightbox is movable by dragging its header (src/ui/Lightbox.js). cursor:grab signals
+   the affordance. touch-action:none stops the browser's own gesture handling (trackpad/touch pan
+   or scroll) from intercepting the pointer sequence before the header's own pointerdown/pointermove
+   listeners see it -- required for reliable custom pointer-drag on real hardware input, not just
+   synthetic mouse events. user-select:none is unconditional (not only while .dragging) so a fast
+   real mousedown-then-move can never start a native text-selection drag on the <h2> title in the
+   single frame before JS's classList.add('dragging') would otherwise apply it. */
+.lightbox-header{display:flex;align-items:center;justify-content:space-between;padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--color-border);cursor:grab;touch-action:none;user-select:none}
+.lightbox.dragging{cursor:grabbing}
+.lightbox.dragging .lightbox-header{cursor:grabbing}
 .lightbox-header h2{font-size:var(--font-size-lg);font-weight:700}
 .lightbox-close{width:30px;height:30px;border:none;background:transparent;border-radius:var(--radius-sm);cursor:pointer;font-size:16px;color:var(--color-text-muted)}
 .lightbox-close:hover{background:var(--color-bg)}
@@ -439,8 +449,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
      ============================================================================ -->
 
 <!-- ---------- TEXT ---------- -->
-<div class="lightbox-overlay" id="lightboxText">
-  <div class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxTextTitle" tabindex="-1">
+<div class="lightbox-overlay non-modal" id="lightboxText">
+  <div class="lightbox" role="dialog" aria-modal="false" aria-labelledby="lightboxTextTitle" tabindex="-1">
     <header class="lightbox-header"><h2 id="lightboxTextTitle">Text</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
     <div class="lightbox-body">
       <div id="textControls">
@@ -584,8 +594,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 </div>
 
 <!-- ---------- IMPORT ---------- -->
-<div class="lightbox-overlay" id="lightboxImport">
-  <div class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxImportTitle" tabindex="-1">
+<div class="lightbox-overlay non-modal" id="lightboxImport">
+  <div class="lightbox" role="dialog" aria-modal="false" aria-labelledby="lightboxImportTitle" tabindex="-1">
     <header class="lightbox-header"><h2 id="lightboxImportTitle">Import</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
     <div class="lightbox-body">
       <div class="lightbox-tabs" role="tablist">
@@ -640,8 +650,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 </div>
 
 <!-- ---------- IMAGE TRACE ---------- -->
-<div class="lightbox-overlay" id="lightboxImageTrace">
-  <div class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxImageTraceTitle" tabindex="-1">
+<div class="lightbox-overlay non-modal" id="lightboxImageTrace">
+  <div class="lightbox" role="dialog" aria-modal="false" aria-labelledby="lightboxImageTraceTitle" tabindex="-1">
     <header class="lightbox-header"><h2 id="lightboxImageTraceTitle">Image Trace</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
     <div class="lightbox-body">
       <div id="imageTraceNewSection">
@@ -715,8 +725,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 </div>
 
 <!-- ---------- EXPORT ---------- -->
-<div class="lightbox-overlay" id="lightboxExport">
-  <div class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxExportTitle" tabindex="-1">
+<div class="lightbox-overlay non-modal" id="lightboxExport">
+  <div class="lightbox" role="dialog" aria-modal="false" aria-labelledby="lightboxExportTitle" tabindex="-1">
     <header class="lightbox-header"><h2 id="lightboxExportTitle">Export</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
     <div class="lightbox-body">
       <div class="export-group">
@@ -741,8 +751,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 </div>
 
 <!-- ---------- PRODUCTION SHEET ---------- -->
-<div class="lightbox-overlay" id="lightboxProdSheet">
-  <div class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxProdSheetTitle" tabindex="-1">
+<div class="lightbox-overlay non-modal" id="lightboxProdSheet">
+  <div class="lightbox" role="dialog" aria-modal="false" aria-labelledby="lightboxProdSheetTitle" tabindex="-1">
     <header class="lightbox-header"><h2 id="lightboxProdSheetTitle">Production Sheet</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
     <div class="lightbox-body">
       <div class="field-section">
@@ -772,8 +782,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 </div>
 
 <!-- ---------- SHIPPING & HANDLING ---------- -->
-<div class="lightbox-overlay" id="lightboxShipping">
-  <div class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxShippingTitle" tabindex="-1">
+<div class="lightbox-overlay non-modal" id="lightboxShipping">
+  <div class="lightbox" role="dialog" aria-modal="false" aria-labelledby="lightboxShippingTitle" tabindex="-1">
     <header class="lightbox-header"><h2 id="lightboxShippingTitle">Shipping &amp; Handling</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
     <div class="lightbox-body">
       <p class="hint" style="margin-bottom:var(--space-4)">Local reference notes for packing this project's physical product. These values are kept for this browser session only — they are not yet saved with the project file, and there is no carrier, rate, label, or tracking integration.</p>
@@ -802,8 +812,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 </div>
 
 <!-- ---------- SETTINGS ---------- -->
-<div class="lightbox-overlay" id="lightboxSettings">
-  <div class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxSettingsTitle" tabindex="-1">
+<div class="lightbox-overlay non-modal" id="lightboxSettings">
+  <div class="lightbox" role="dialog" aria-modal="false" aria-labelledby="lightboxSettingsTitle" tabindex="-1">
     <header class="lightbox-header"><h2 id="lightboxSettingsTitle">Settings</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
     <div class="lightbox-body">
       <div class="field-section">
@@ -845,8 +855,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 </div>
 
 <!-- ---------- HELP ---------- -->
-<div class="lightbox-overlay" id="lightboxHelp">
-  <div class="lightbox wide" role="dialog" aria-modal="true" aria-labelledby="lightboxHelpTitle" tabindex="-1">
+<div class="lightbox-overlay non-modal" id="lightboxHelp">
+  <div class="lightbox wide" role="dialog" aria-modal="false" aria-labelledby="lightboxHelpTitle" tabindex="-1">
     <header class="lightbox-header"><h2 id="lightboxHelpTitle">Help</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
     <div class="lightbox-body">
       <div class="help-section">
@@ -878,8 +888,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 </div>
 
 <!-- ---------- DESIGN LIBRARY (RS-1015) ---------- -->
-<div class="lightbox-overlay" id="lightboxLibrary">
-  <div class="lightbox wide" role="dialog" aria-modal="true" aria-labelledby="lightboxLibraryTitle" tabindex="-1">
+<div class="lightbox-overlay non-modal" id="lightboxLibrary">
+  <div class="lightbox wide" role="dialog" aria-modal="false" aria-labelledby="lightboxLibraryTitle" tabindex="-1">
     <header class="lightbox-header"><h2 id="lightboxLibraryTitle">Design Library</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
     <div class="lightbox-body">
       <div class="library-toolbar">
@@ -916,8 +926,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 </div>
 
 <!-- ---------- GALLERY (RS-2001): built-in, read-only example designs ---------- -->
-<div class="lightbox-overlay" id="lightboxGallery">
-  <div class="lightbox wide gallery-lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxGalleryTitle" tabindex="-1">
+<div class="lightbox-overlay non-modal" id="lightboxGallery">
+  <div class="lightbox wide gallery-lightbox" role="dialog" aria-modal="false" aria-labelledby="lightboxGalleryTitle" tabindex="-1">
     <header class="lightbox-header"><h2 id="lightboxGalleryTitle">Gallery</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
     <div class="lightbox-body">
       <p class="hint gallery-readonly-hint">Gallery designs are built-in examples and cannot be changed. Choose "Open Copy" to start editing your own version.</p>

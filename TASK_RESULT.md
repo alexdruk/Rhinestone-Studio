@@ -6,7 +6,7 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-S-104 — Text Position Recovery & Drag Tuning
+S-105 — Persistent Movable Lightboxes
 
 ---
 
@@ -18,7 +18,7 @@ IMPLEMENTED
 
 # Branch
 
-feature/s-104-text-position-recovery-drag-tuning
+feature/s-105-persistent-movable-lightboxes
 
 ---
 
@@ -35,50 +35,75 @@ git log -1 --oneline
 
 # Audit Findings
 
-Full detail in `docs/specifications/S-104-TextPositionRecoveryDragTuning.md`. Summary:
+Full detail in `docs/specifications/S-105-PersistentMovableLightboxes.md`. Summary:
 
-* **Move-drag was a 1:1 pointer-to-mm mapping.** `app.js`'s `layoutCanvas` `pointermove` handler
-  applied `rawDx`/`rawDy` (from `pointerToLayout(e)`) to the dragged selection's position verbatim.
-  One CSS pixel of pointer movement always produced the same mm movement, making fine text placement
-  imprecise — text has no resize handles to fall back on (`hitTest()` explicitly excludes text from
-  resize-handle hits). This is the same class of "unexplained inline drag multiplier"
-  `docs/ARCHITECTURE.md` had already called out and fixed once before, for cup rotation
-  (`CUP_ROTATION_SENSITIVITY`, since removed when `OrbitControls` took over rotation).
-* **A text layer has no persisted absolute position of its own.** `computeTextPlacementOffset()`
-  (RS-1009/RS-1012, unchanged) always auto-centers the generated bounding box on the full production
-  canvas, then adds `layer.x`/`layer.y` on top — so a text layer's rendered world-center is always
-  exactly `(canvas.width/2 + layer.x, canvas.height/2 + layer.y)`, independent of its content, font,
-  or size. There was no UI action using this fact to recover a lost layer, and no reset affordance on
-  the Text Lightbox's existing `#textX`/`#textY` inputs.
-* **The printable area is `getSafeAreaRectMm()`** (`src/products/ObjectTemplate.js`, unchanged),
-  already used for the safe-area guide and drag-snap targets. Every current object template
-  (Mug/Tumbler/Bottle) has symmetric insets, so its center currently coincides with the raw canvas
-  center — the implementation reads the safe-area rect rather than relying on that coincidence, so it
-  stays correct if an asymmetric template is ever added.
-* **Recovery path already half-existed.** The Layers-list row selection (RS-1009) already lets an
-  operator select a layer regardless of whether it is currently visible on-canvas — the missing piece
-  was purely a position-only reset action once selected.
+* **One shared dialog controller, 13 instances, one existing non-modal precedent.** Every Lightbox
+  (`src/ui/Lightbox.js`, pure DOM dialog behavior) wraps one static `.lightbox-overlay` block already
+  in `index.html`. 13 instances are built from one object literal in `app.js` — the 11 named in this
+  milestone (Text, Shapes, Import, Image Trace, Design Library, Export, Production Sheet, Shipping &
+  Handling, Settings, Help, Gallery) plus two transient sub-dialogs launched from inside an already-
+  open Lightbox (`lightboxLibraryConfirm`, `lightboxGalleryPreview`) that are not named in the
+  spec's 11-item list. Every overlay was a full-viewport, pointer-blocking, dimmed backdrop
+  (`position:fixed;inset:0;background:rgba(...)`) except `lightboxShapes`, made non-modal in S-101
+  specifically so its own Boolean Ops hint text ("select on the canvas or Layers list") was actually
+  followable — the only existing precedent for non-blocking behavior in the repository.
+* **No drag/move code existed anywhere** — every dialog was simply flex-centered in its overlay, no
+  `Draggable` component, no drag library in `node_modules`.
+* **Reopening never created a duplicate** — already true structurally (`Lightbox.isOpen` short-
+  circuits `open()`; one static overlay id, one JS instance for the page's lifetime). Verified, not
+  re-implemented.
+* **A real, load-bearing architectural constraint governs "how many Lightboxes can be open at
+  once."** `FIELD_GROUPS`/`activeFieldLightbox` (`app.js`) physically re-parents one shared
+  `sharedPositionFields` DOM node and one shared `sharedStoneFields` DOM node into whichever *one* of
+  Text/Shapes/Import/Image Trace is "active," or back to the Inspector when none is. Two of those
+  four open simultaneously would mean the shared field DOM node can only physically live in one of
+  them — the other would silently show an empty position/stone section. This is the concrete reason
+  this milestone keeps exactly one **primary** Lightbox open at a time (documented as an explicit
+  Architecture Decision in the specification, per requirement 6's audit instruction) rather than
+  allowing arbitrary concurrency.
+* **The "More Options" round-trip was a pure side effect of every Lightbox being modal**, not a
+  separate mechanism that needed new sync code. `syncSelectedControlsFromLayer()` already runs on
+  every layer-selection path (Layers list click, canvas click, `#selectedLayer` change, add/
+  duplicate/delete, Undo/Redo) regardless of which Lightbox, if any, is open, and writes into the same
+  DOM nodes wherever they currently live. An operator simply could not reach the Layers list to
+  reselect while a modal Lightbox blocked it. Once Lightboxes stop blocking the Layers list/canvas,
+  this pre-existing sync logic already keeps an open, same-type Lightbox's fields live across
+  reselection — confirmed live in browser verification below, with zero new sync code required.
 
 ---
 
 # Implementation Summary
 
-* `app.js` — new named constant `LAYER_MOVE_DRAG_SENSITIVITY = 0.5`, applied to the move-drag delta
-  (`dx=rawDx*LAYER_MOVE_DRAG_SENSITIVITY,dy=rawDy*LAYER_MOVE_DRAG_SENSITIVITY`) before snapping/
-  Shift-axis-lock/position-apply. Resize-drag and keyboard nudge are structurally untouched.
-* `app.js` — new `centerSelectedTextOnObject()`: guards to text-only selections, computes the target
-  `(x,y)` from `getSafeAreaRectMm(currentObjectTemplate(), project.canvas.width,
-  project.canvas.height)`, writes only `l.x`/`l.y`, and follows the exact same
-  `commitHistory()` → mutate → `syncSelectedControlsFromLayer()`+`updateAll(true)` → `#status` pattern
-  every other mutating action (`runAlign`/`runDistribute`/`nudgeSelection`) already uses.
-* `index.html` — new `Center on Object` button (`#centerTextOnObject`, reusing the existing `.btn .sm`
-  class — no new CSS) in the Text Lightbox's existing Position section, under `#textX`/`#textY`, plus
-  one sentence added to the section's existing hint paragraph pointing at it for the "dragged my text
-  away" scenario.
-* No changes to `GeometryEngine`, `StoneLayout`, any renderer (`src/renderer/**`, `src/preview3d/**`),
-  any exporter (`src/export/**`), the project/layer schema (no field added/removed/renamed —
-  `layer.x`/`layer.y` already existed since RS-1009), Design Library (`src/library/**`), or Gallery
-  (`src/gallery/**`).
+* **`src/ui/Lightbox.js`** — extended, still zero Project/Layer/StoneLayout knowledge:
+  * `options.primary` (boolean): when true, `open()` closes any other currently-open `primary`
+    Lightbox first (new module-level `primaryLightboxes` registry). The `isOpen` no-op guard runs
+    *before* this, so re-clicking an already-open Lightbox's own menu button never flash-closes
+    anything.
+  * Header drag-to-move: `pointerdown`/`pointermove`/`pointerup` (+ `pointercancel`) on
+    `.lightbox-header`, using `setPointerCapture`/`releasePointerCapture` (mirrors this codebase's
+    existing canvas-drag convention). Ignores clicks on the close button or any other interactive
+    header descendant. First drag switches the dialog from flex-centered to `position:fixed` with
+    `left`/`top` computed from its current `getBoundingClientRect()` — zero visual jump.
+  * `_clampToViewport(left, top)`: keeps the dialog fully inside the current `window.innerWidth`/
+    `innerHeight` whenever it fits; on a viewport smaller than the dialog, keeps it flush against the
+    near edge instead of drifting off-screen, so the header (and its Close button) stay reachable.
+    Applied on every `pointermove`, once on every `open()` (covers a resize while closed), and via a
+    single shared `window` `resize` listener for whichever dialogs have ever been dragged.
+  * Position is **not** reset on `close()` — reopening reuses the last dragged spot (re-clamped),
+    matching "reuse the existing window" for identity and placement both. A never-dragged Lightbox
+    keeps the original centered default untouched.
+* **`index.html`** — the existing S-101 `.lightbox-overlay.non-modal` modifier is applied to all 11
+  named Lightboxes (`aria-modal` flipped `"true"`→`"false"` on each); new CSS
+  (`.lightbox-header{cursor:grab}`, `.lightbox.dragging{cursor:grabbing;user-select:none}`) is drag
+  affordance only, no layout change. `lightboxLibraryConfirm`/`lightboxGalleryPreview` are byte-
+  identical to `develop` — still the plain, dimmed, fully-modal overlay, still `aria-modal="true"`.
+* **`app.js`** — the 11 primary `lightboxes` entries each gain `primary:true` in their existing
+  options object; their `onOpen`/`onClose` callbacks are untouched. No other logic change — the
+  "remove More Options dependency" requirement is satisfied purely by exposing already-existing
+  selection-sync behavior (see Audit Findings), not new code.
+* `GeometryEngine`, `StoneLayout`, every renderer, every exporter, the project schema, the Design
+  Library/Gallery data layers (`src/library/**`, `src/gallery/**`), and Gallery's disabled top-menu
+  button/attributes are untouched.
 
 ---
 
@@ -86,44 +111,36 @@ Full detail in `docs/specifications/S-104-TextPositionRecoveryDragTuning.md`. Su
 
 **New (2):**
 ```
-docs/specifications/S-104-TextPositionRecoveryDragTuning.md
-tools/test-s104-text-position-recovery-drag-tuning.mjs
+docs/specifications/S-105-PersistentMovableLightboxes.md
+tools/test-s105-persistent-movable-lightboxes.mjs
 ```
 
-**Modified (6, plus four rounds of follow-up touches to `index.html`/`app.js`/the new test/this file):**
+**Modified (10):**
 ```
-app.js                                          — LAYER_MOVE_DRAG_SENSITIVITY, centerSelectedTextOnObject();
-                                                   follow-up 2: isTextOutsidePrintableArea(),
-                                                   updateTextOutsidePrintableWarning();
-                                                   follow-up 3: ratio-based threshold correction;
-                                                   follow-up 4: dual-surface toggle, workspace button wiring
-index.html                                      — Center on Object button + hint sentence;
-                                                   follow-up: .primary styling + icon for discoverability;
-                                                   follow-up 2: #textOutsidePrintableWarning;
-                                                   follow-up 4: #workspaceTextOutsideWarning in #rightInspector
+src/ui/Lightbox.js                              — primary exclusivity, header drag-to-move, viewport
+                                                   clamping (drag/open/resize), position persisted
+                                                   across close/reopen
+index.html                                      — .non-modal class + aria-modal="false" on the 11
+                                                   named Lightboxes; new drag-cursor CSS only
+app.js                                          — primary:true on the 11 named Lightbox instances
 package.json                                    — new test wired into the `test` script
-tools/test-alignment-snapping-integration.mjs   — one assertion updated for the intentional sensitivity change
+tools/test-ui001-dialog-behavior.mjs            — test 8/11/13 updated for the generalized non-modal
+                                                   state; new test 14 (drag/clamp/exclusivity wiring)
+tools/test-ui001-lightboxes.mjs                 — test 1's per-overlay aria-modal expectation updated
+tools/test-ui001-topmenu.mjs                    — test 3's lightboxHelp regex updated for its new
+                                                   options object
+tools/test-s101-ux-workflow-polish.mjs          — test 2 narrowed to "Shapes' own markup wasn't
+                                                   regressed" (no longer "the sole exception")
+tools/test-design-library-integration.mjs       — test 2's lightboxLibrary overlay-class expectation
+                                                   updated
+tools/test-gallery-integration.mjs              — test 2/4's lightboxGallery overlay-class
+                                                   expectations updated
 TASK.md                                         — this milestone's task definition
-TASK_RESULT.md                                  — this file
 ```
 
-Follow-up (discoverability fix) additionally touched:
-```
-docs/specifications/S-104-TextPositionRecoveryDragTuning.md   — audit + fix addendum
-tools/test-s104-text-position-recovery-drag-tuning.mjs        — new check 4b locks in the .primary class
-```
-
-Follow-up 3 (coordinate-space audit + partial-overlap fix) additionally touched:
-```
-docs/specifications/S-104-TextPositionRecoveryDragTuning.md   — coordinate-space audit + fix addendum
-tools/test-s104-text-position-recovery-drag-tuning.mjs        — new check 12b locks in the ratio formula
-```
-
-Follow-up 4 (workspace warning) additionally touched:
-```
-docs/specifications/S-104-TextPositionRecoveryDragTuning.md   — placement audit + fix addendum
-tools/test-s104-text-position-recovery-drag-tuning.mjs        — new checks 15-17
-```
+No changes to `GeometryEngine`, `StoneLayout`, any renderer (`src/renderer/**`, `src/preview3d/**`),
+any exporter (`src/export/**`), the project/layer schema, `src/library/**`, `src/gallery/**`, or
+`#menuGallery`'s `disabled`/`aria-disabled` attributes.
 
 ---
 
@@ -133,215 +150,252 @@ tools/test-s104-text-position-recovery-drag-tuning.mjs        — new checks 15-
 $ npm test
 ```
 
-**840 checks run, 0 failures, exit code 0** as of the final commit (see the Follow-up sections below
-for how this grew across four review rounds: 831 → 832 → 836 → 837 → 840). Includes the new
-`tools/test-s104-text-position-recovery-drag-tuning.mjs` suite (18/18 passing) and the updated
-`tools/test-alignment-snapping-integration.mjs` (28/28 passing, including the one assertion this
-milestone deliberately changed). Every other pre-existing suite (font/geometry/history/editing/
-alignment/snapping/export/preview3D/image/Gallery/Design Library/Typography/Project-Model-
-Consolidation/etc.) passes unchanged.
+All 67 test files in the `test` script pass, **0 failures**, run individually and via the full
+chained script after committing (a clean working tree — see note below). The new
+`tools/test-s105-persistent-movable-lightboxes.mjs` suite (16/16 passing) covers: all 11 named
+overlays carry `.non-modal`/`aria-modal="false"`; the two sub-dialogs are untouched
+(`aria-modal="true"`, not primary); header drag wiring, viewport clamping (fits-inside vs.
+flush-against-near-edge), and resize re-clamping; drag never initiates from the close button; position
+is not reset on `close()`; Escape/close-button still close; `options.primary` exclusivity with the
+`isOpen` no-op guard ordered before the exclusivity loop; `app.js` marks exactly the 11 named
+Lightboxes `primary:true`; every overlay id still appears exactly once (no duplication path exists);
+More Options/top-menu reopen affordances unchanged; `#menuGallery` still disabled; `Lightbox.js` still
+has zero Project/Layer/StoneLayout knowledge; no forbidden file changed.
+
+**Note on the "no forbidden file changed" checks in five unrelated, pre-existing test files**
+(`test-fill-algorithms.mjs`, `test-fill-algorithms-integration.mjs`,
+`test-design-library-integration.mjs`, `test-gallery-integration.mjs`,
+`test-typography-font-library.mjs`): these run `git status --porcelain` against their own
+milestone-scoped forbidden-prefix list, several of which include `src/ui/` (a file this milestone
+must legitimately touch). While this branch's changes were uncommitted, all five failed with exactly
+one assertion each ("Forbidden file changed: src/ui/Lightbox.js") — every other assertion in those
+five files passed. This is a known characteristic of this repository's "check live `git status`"
+test convention (confirmed against `docs/S-104` precedent, whose own `TASK_RESULT.md` reports its
+final count "as of the final commit"): the check is against the *live* working tree, not a
+milestone-scoped diff, so it necessarily reports every currently-uncommitted change against every
+prior milestone's own list until committed. After committing S-105, `git status --porcelain` is
+clean, `changedPaths` is empty, and all five pass trivially — re-verified below.
+
+**Post-commit verification:**
 
 ```bash
-$ git diff --stat HEAD~1..HEAD
+$ git log -1 --oneline
+$ npm test
 ```
-(run after commit — see `git log -1 --oneline` for the commit this refers to)
+(run after the commit below; see the commit message and re-run output)
 
 ---
 
 # Browser Verification
 
-Real headless Chromium (Playwright, project's local `node_modules`), `npm run dev`
-(`python3 -m http.server 5173`), 1440×900 viewport, 2D-Canvas-only view. All steps against the actual
-running app (no mocks):
+Headless Chromium (Playwright, this repo's local `node_modules`, `--use-gl=angle
+--use-angle=swiftshader` for a realistic 3D-preview signal), `npm run dev`
+(`python3 -m http.server 5173`), against the actual running app (no mocks). 54/54 scripted checks
+passed across three viewports; screenshots captured at each step.
 
-1. **Moderate drag, reduced sensitivity confirmed live.** A 200×100 CSS-px drag from the default
-   `(0,0)` text position landed at `(50.56, 26.51)` mm — proportional, controllable movement. Undo
-   returned it to exactly `(0, 0)`.
-2. **Text can still be positioned anywhere, including fully outside the printable area.** A
-   1400×900 CSS-px drag moved the text to `(366.79, 235.80)` mm — far outside the 210×90mm mug canvas
-   (safe area 182×70mm). Screenshot confirms the stones render clearly outside the printable-area
-   guide rectangle.
-3. **Center on Object immediately restores visibility.** Selected the text layer via the Layers list,
-   opened More Options → Text Lightbox, clicked **Center on Object**: Position X/Y immediately read
-   `(0, 0)`, `#status` read "Centered text on the printable area", and the screenshot shows the text
-   stones back inside the printable-area grid. Font (`courier-prime-regular`), height (`25`), auto-fit,
-   fill style (`stroke`), stone size (`2`), color (`gold`), and curve setting (`off`) were verified
-   byte-identical before and after via a full property snapshot comparison (not just visual).
-4. **Undo/Redo still works.** After closing the lightbox, Undo returned Position X/Y to the
-   off-canvas `(366.79, 235.80)`; Redo returned to `(0, 0)` — one history step each, as intended.
-5. **Console.** Zero console errors or page errors captured across the entire session (no favicon
-   warning was even triggered in this run).
+**1440×900 (primary pass, 46 checks):**
 
-Screenshots captured at every step (initial state, after moderate drag, after off-canvas drag, Text
-Lightbox open on an off-canvas layer, after Center on Object, after undo/redo).
+1. **Every one of the 11 named Lightboxes opened via its top-menu button** (Gallery's menu entry is
+   intentionally disabled — see below) — each confirmed `.open`.
+2. **Non-blocking, for all 11**: for each, the 2D canvas was clickable at whatever point wasn't
+   visually covered by the dialog's own card (the true meaning of "non-modal" — the backdrop doesn't
+   block; the dialog card itself, like any window, still occupies the screen space it visually
+   occupies until dragged aside), and the always-visible Layers list was clickable in every case.
+3. **Gallery**: `#menuGallery` confirmed still `disabled`; `#lightboxGallery` confirmed to carry the
+   `.non-modal` class (its Lightbox is non-modal/movable/persistent like the others, only the menu
+   entry point stays unreachable, exactly as specified).
+4. **Drag by header**: dragged the Text Lightbox ~220px right; it moved from `left:400→620`. Vertical
+   movement was correctly clamped (`top:32→64`, capped because the dialog is 836px tall in a 900px
+   viewport, leaving only 64px of vertical slack) — clamping working as designed, not a bug.
+5. **Persistent while editing elsewhere**: with the Text Lightbox open and dragged, added a new layer
+   from the always-visible left panel (stayed open), selected a different layer via the Layers list
+   (stayed open), confirmed the left panel's Undo button stayed reachable, switched to the Object
+   Preview tab (stayed open — screenshot confirms both the 3D preview and the open Text dialog
+   visible simultaneously).
+6. **Live field update on same-type reselection (the "More Options" fix)**: reselected the original
+   text layer via the Layers list while the Text Lightbox stayed open; `#text`'s value read back
+   `"Vitalina Serbin"` with zero additional clicks — no More Options round-trip needed.
+7. **No duplicate on reopen**: closed and reopened the Text Lightbox; exactly one `#lightboxText` node
+   existed both before and after, and its position from before close was restored (within 5px).
+8. **Single-primary exclusivity**: opened Shapes while Text was still open; Text closed automatically,
+   Shapes opened — confirmed via both dialogs' `.open` class state.
+9. **Extreme drag clamping**: dragged Shapes far past the top-left viewport corner (mouse target
+   `(-5000,-5000)`) — the dialog's rendered rect stayed within `[0,1440]×[0,900]` throughout (live
+   clamping, not just after the fact). Dragged it far past the bottom-right corner
+   (`(9000,9000)`) — the Close button stayed within the viewport and clickable.
+10. **Resize re-clamp**: with Shapes already dragged, shrank the viewport to 1100×700 — the dialog's
+    rect was live-reclamped to stay fully inside the new, smaller viewport (never permanently
+    unreachable after a window resize).
+11. **Sub-dialog stacking preserved**: saved a design to the Design Library, clicked its delete
+    action — `lightboxLibraryConfirm` opened as a real, pointer-blocking modal stacked on top of the
+    still-open, non-modal Library dialog (`getComputedStyle(...).pointerEvents !== 'none'` confirmed),
+    exactly as before this milestone.
+12. **Zero console/page errors** throughout the entire 1440×900 pass.
 
----
+**1366×768:** Export Lightbox opened and its default (never-dragged) position was fully contained
+within the 1366×768 viewport. Zero console errors.
 
-# Follow-up: Visibility/Discoverability Audit
+**Narrow 480×800:** Settings Lightbox opened and was fully contained within the narrow viewport by
+default. Dragged it far off-screen (`(-500,-500)`) — the Close button remained reachable within the
+480×800 viewport afterward (clamping works correctly at narrow/mobile-scale widths, not just desktop
+widths). Zero console errors.
 
-A visual reviewer reported the Center on Object button was not visible during manual testing. Full
-detail in `docs/specifications/S-104-TextPositionRecoveryDragTuning.md` §"Follow-up: Visibility/
-Discoverability Audit". Summary:
-
-* **Audited, did not implement anything new, until root cause was determined.** Confirmed the button
-  was actually added (`id="centerTextOnObject"`, exactly once, inside the Text Lightbox's Position
-  section — unchanged location), correctly wired (`app.js`, no console errors), and is shown only while
-  `#lightboxText` is open (same visibility condition as every other text property).
-* **Reproduction across both entry points (top-menu Text, Inspector More Options) and five viewport
-  sizes (1440×900 down to 1024×768) found no rendering or functional bug** — the button was always
-  present, correctly positioned (no scrolling needed), `visibility:visible`/`opacity:1`, and clickable.
-* **Root cause: a discoverability gap, not a bug.** The button used the same plain `.btn.sm` style as
-  a neutral secondary field, blending into the surrounding form instead of reading as an action — a
-  real usability problem for a feature whose purpose is fast recovery from a mistake, even though
-  nothing was non-functional.
-* **Fix (index.html only):** button now carries `.primary` (`class="btn sm primary"`), the same blue
-  treatment already used for `Export`/`Save`/`Save Project`, plus a `↺` icon glyph. No change to the
-  button's location, id, wiring, guard logic, or `app.js`'s `centerSelectedTextOnObject()` — it is
-  byte-identical to before this follow-up. A new locked-in test assertion (check 4b in
-  `tools/test-s104-text-position-recovery-drag-tuning.mjs`) guards against this regressing back to a
-  plain, easy-to-overlook button.
-* **Re-verified** via headless Chromium (1440×900): opened the Text Lightbox through the plain
-  top-menu **Text** button (no drag, no More Options detour — the most direct discovery path),
-  confirmed the button renders immediately with no scrolling, edited the text content and position by
-  hand, clicked **Center on Object**, and confirmed the position reset to `(0, 0)` while the just-typed
-  text content was left untouched. Zero console errors.
-
-`npm test` after this follow-up: **832 checks, 0 failures** (one new assertion, 4b, added to lock in
-the `.primary` styling).
+Screenshots captured: baseline (all-menu, 1440×900), Text Lightbox dragged, Object Preview visible
+with Text Lightbox still open, Text Lightbox reopened at its restored position, Shapes open after
+Text auto-closed (exclusivity), 1366×768, narrow 480×800.
 
 ---
 
-# Follow-up 2: Outside-the-Printable-Area Warning
+# Known Limitations
 
-A second visual-review request: warn in the Text Lightbox when selected text has moved materially
-outside the printable safe area, live, clearing automatically once back inside, without ever blocking
-the move. Full detail in `docs/specifications/S-104-TextPositionRecoveryDragTuning.md` §"Follow-up 2".
-Summary:
-
-* **Threshold correction caught by browser verification, not shipped blind.** The first attempt used
-  "not fully contained by the safe area." Verifying it live immediately showed a false positive: the
-  *default, never-moved* text already overhangs the safe area (`199.4×17.0mm` bbox vs. `182×70mm` safe
-  area — auto-fit caps to canvas width, not safe-area width, pre-existing/unrelated behavior). Fixed to
-  fire only when the bbox has **no overlap at all** with the safe area (fully disjoint, small
-  tolerance) — this also intentionally mirrors Center on Object's own "completely outside" scope, so
-  the warning is a correct signal for exactly when that button is the fix.
-* `app.js` — new `isTextOutsidePrintableArea(l)` (pure: `getLayerBBox()` vs `getSafeAreaRectMm()`,
-  tolerance = existing `SNAP_TOLERANCE_MM`) and `updateTextOutsidePrintableWarning()` (DOM-only
-  `.visible` class toggle). Neither writes any layer field — moving text outside the area is never
-  prevented. Wired into `updateAll()` right after `layout` regenerates, so it is live on every
-  position-changing action (drag, nudge, align, Undo/Redo, and every keystroke in `#textX`/`#textY`).
-* `index.html` — `#textOutsidePrintableWarning`, reusing the existing `.validation-message`/`.visible`
-  alert styling already used elsewhere in this same lightbox (no new CSS), placed between the X/Y
-  fields and Center on Object (unchanged, still `.primary`).
-* No changes to `GeometryEngine`, `StoneLayout`, any renderer, any exporter, or the project schema.
-
-**Tests:** 4 new checks (10–13) in `tools/test-s104-text-position-recovery-drag-tuning.mjs`. `npm
-test`: **836 checks, 0 failures**.
-
-**Browser verification** (headless Chromium, 1440×900): baseline `(0,0)` → warning hidden (confirms
-the corrected threshold); dragged text far outside the canvas (lightbox closed, since it's a real modal
-and blocks canvas drags while open) → reopened lightbox → warning visible; typed Position X/Y back to
-`(0,0)` **without closing the lightbox** → warning disappeared live; typed X back to `400` → warning
-reappeared live; clicked **Center on Object** → position reset to `(0,0)` and warning disappeared in
-the same render pass; Undo → warning back; Redo → warning gone again. Zero console errors throughout.
-
----
-
-# Follow-up 3: Coordinate-Space Audit & Real-Mouse-Drag Fix
-
-A third visual-review report: manual mouse-drag testing on the mug still showed no warning, and
-distrusted the prior round's verification method, asking specifically for real CDP
-`Input.dispatchMouseEvent` reproduction (not Playwright's `page.mouse` helper, not DOM field edits).
-Full detail in `docs/specifications/S-104-TextPositionRecoveryDragTuning.md` §"Follow-up 3". Summary:
-
-* **Reproduced with raw CDP** (`page.context().newCDPSession(page)` + `Input.dispatchMouseEvent`
-  `mousePressed`/`mouseMoved`/`mouseReleased`) against the exact default mug project.
-* **Coordinate-space audit** (required by this milestone before any code change): `layer.x/y` and
-  `getLayerBBox()` are in the flat production-canvas mm frame; `getSafeAreaRectMm()` is the same
-  frame's inset rect; the 3D preview (`StoneLayoutTexture.js`/`ObjectGeometryBuilder.js`) rasterizes
-  the *entire* flat canvas into one texture and maps that whole texture across the wrap angle centered
-  on the front (`WRAP_ANGLE_DEG`: front 70°, wide 115°, half 180°, full 300° —
-  `src/preview3d/ObjectDimensions.js`) — so anything within the flat canvas's mm bounds is always
-  front-facing/visible at any wrap mode or camera rotation, and anything outside is clipped from the
-  texture before reaching the mesh. **Conclusion: the flat canvas-mm comparison was already the
-  correct coordinate space** — no 3D projection math was missing; `GeometryEngine`, `StoneLayout`, and
-  3D rendering remain untouched, per this milestone's constraint #6.
-* **The real bug, found empirically:** a 200-screen-px, purely sideways real CDP drag moved the default
-  text to `textX≈120mm`. At that position only **35.4%** of the text's own bounding-box area still
-  overlaps the safe area — cup screenshot shows only "Vitali…" and stray streaks, genuinely unreadable
-  — yet the previous "fully disjoint from the safe area" check computed **no warning**, because the
-  default project's auto-fit text (`199.4mm` wide) is wider than the safe area (`182mm`): a large
-  fraction can leave before literally 100% does, which is exactly what "fully disjoint" requires.
-* **Fix:** `isTextOutsidePrintableArea()` now computes the real intersection area between the text bbox
-  and the safe area and warns once less than a named `TEXT_PRINTABLE_VISIBILITY_RATIO` (50%) of the
-  bbox's own area remains inside — "majority of the text has left," matching "no longer meaningfully
-  visible" directly. Still a pure function (no layer mutation), still driven from `updateAll()` — drag
-  sensitivity, Center on Object, and Undo/Redo are unaffected.
-* **Tests:** one new check (12b) verifying the ratio-based formula. `npm test`: **837 checks, 0
-  failures**.
-* **Browser verification** (real CDP, no Playwright `page.mouse`, no DOM field edits for the drag):
-  before-drag screenshot (baseline, warning hidden); the 200px gap-demonstration drag with both old
-  and new formulas recomputed by hand from the resulting position (old → `false`, the bug; new → `true`,
-  the fix) plus a cup screenshot showing the text genuinely unreadable at that exact spot; a larger
-  drag to fully off-canvas (`≈(544.5, 363.0)`) with the warning confirmed both via DOM state and by
-  screenshotting the opened Text Lightbox; Center on Object restoring the text (cup screenshot shows it
-  fully legible again) and clearing the warning; Undo/Redo restoring/clearing it correctly; zero
-  console errors throughout.
-
----
-
-# Follow-up 4: Warning Moved to the Persistent Workspace
-
-A fourth visual-review report, despite Follow-up 3 being verifiably correct: manual testing still
-showed no visible warning. The report correctly identified the actual defect — the warning lived only
-inside `#lightboxText`, a modal that is normally **closed** for the entire duration of a canvas drag
-(dragging on the 2D canvas is impossible while any modal is open — it captures every pointer event
-across the full viewport). A warning inside a closed dialog is indistinguishable from no warning during
-the one interaction it exists to catch. This was a placement defect, not a computation bug — Follow-up
-3's 50% threshold is unchanged, per this round's explicit instruction. Full detail in
-`docs/specifications/S-104-TextPositionRecoveryDragTuning.md` §"Follow-up 4".
-
-* **Fix:** a second copy of the same warning now lives in `#rightInspector` — normal page chrome,
-  never covered by a modal, and already this app's persistent per-selection status surface (Stone
-  Size/Gap/Stone Color/More Options). `#workspaceTextOutsideWarning` (reusing the same
-  `.validation-message` styling) sits directly under the Inspector's layer-name heading with a
-  `↺ Center Text` button (`#workspaceCenterTextBtn`).
-* `updateTextOutsidePrintableWarning()` now computes `isTextOutsidePrintableArea()` **once** and
-  toggles both the Lightbox's and the workspace's warning from that single shared boolean — they can
-  never disagree, and both stay live via the same `updateAll()` call every position-changing action
-  (including every drag `pointermove` frame) already goes through.
-* `#workspaceCenterTextBtn` calls the *exact same* `centerSelectedTextOnObject()` function
-  `#centerTextOnObject` already uses — no duplicated recovery logic, so it is guaranteed to only ever
-  touch `l.x`/`l.y`.
-* `#centerTextOnObject`/`#textOutsidePrintableWarning` (inside the Text Lightbox) are both **kept**, per
-  this round's explicit instruction — they remain the visible copy for when the Lightbox is open (which
-  covers the Inspector).
-* No `GeometryEngine`/`StoneLayout`/renderer/exporter/schema change.
-* **Tests:** 3 new checks (15–17) plus check 12 updated for the two-surface toggle. `npm test`: **840
-  checks, 0 failures**.
-* **Browser verification** (real CDP `Input.dispatchMouseEvent`, Text Lightbox never opened): a single
-  continuous drag, checked live mid-gesture (before the mouse was released) — workspace warning hidden
-  at `textX≈36/77mm`, **visible starting at `textX≈117mm`**, `lightboxOpen` confirmed `false`
-  throughout. Screenshot at the unreadable state shows the cup with only stray streaks, Lightbox still
-  closed, red warning + blue Center Text button in the Inspector. Clicked `#workspaceCenterTextBtn`
-  directly (Lightbox never opened): position reset to `(0,0)`, warning cleared, cup shows the text fully
-  legible again, every other text property (font/height/stone size/color/fill style/curve/text content)
-  verified unchanged. Undo/Redo correctly restored/cleared the workspace warning. Zero console errors.
+* ~~If an operator selects a layer of a different type than the currently-open field-owning
+  Lightbox, its type-specific content hides itself, leaving the dialog empty.~~ **Fixed — see
+  "Follow-up: No Empty Lightbox on Selection Mismatch" below.**
+* Lightbox position is in-memory only, like every other piece of UI-only state in this app
+  (`rotation`/`zoom`) — dragged positions do not survive a full page reload.
 
 ---
 
 # Recommendation
 
-Approve and merge. Both original requirements — reduced, more predictable drag sensitivity and a
-one-click, position-only recovery action — plus all four follow-up fixes (Center on Object
-discoverability, the outside-the-printable-area warning, its real-mouse-drag-verified
-partial-overlap correction, and its move to the persistent workspace), are implemented as the smallest
-coherent change on top of
-existing, already-tested infrastructure (`getSafeAreaRectMm`, `commitHistory`/`HistoryManager`, the
-Layers-list selection path, the shared `centerSelectedTextOnObject()`, and the app's existing
-`.btn.primary`/
-`.validation-message` visual language). No new geometry, no new storage, no schema change, and none of
-the explicitly forbidden modules (`GeometryEngine`, `StoneLayout`, project schema, exporters, rendering,
-Design Library, Gallery) were touched — enforced by an automated forbidden-file-prefix check in the
-test suite. The `0.5` sensitivity constant and the disjoint-bbox warning threshold are both reasonable,
-easily-retunable defaults if real usage calls for different values.
+Approve. All 8 numbered requirements are implemented as the smallest coherent change on top of
+existing, already-tested infrastructure: the S-101 non-modal CSS precedent generalized to all 11
+named Lightboxes, the existing `Lightbox` class extended (not replaced) with drag/clamp/exclusivity,
+and the "More Options" dependency removed by exposing already-correct selection-sync behavior rather
+than writing new sync logic. The single-primary-Lightbox policy is an explicit, documented
+architectural decision driven by a real constraint (`FIELD_GROUPS`'s single-owner shared field DOM),
+not an oversight. `GeometryEngine`, `StoneLayout`, the project schema, every exporter, the Design
+Library/Gallery data layers, and Gallery's disabled menu state are byte-identical to `develop`.
+
+---
+
+# Follow-up: No Empty Lightbox on Selection Mismatch
+
+A manual review of the implemented milestone found one remaining UX issue: a type-specific Lightbox
+(Text/Shapes/Import/Image Trace) left open while the operator selects a different-type layer could
+show an empty content area — reachable only because this milestone made non-modal, persistent
+Lightboxes possible in the first place (previously modal, this combination was unreachable). Full
+detail in `docs/specifications/S-105-PersistentMovableLightboxes.md` §"Follow-up: No Empty Lightbox on
+Selection Mismatch". Summary:
+
+* **Audited before implementing.** Confirmed Text's entire body is gated behind one `isText`
+  conditional with no fallback content (can go fully empty). Confirmed Import and Image Trace each
+  keep an always-visible "add new" section, so neither can go *fully* empty, but Image Trace's outer
+  section split is only re-toggled on open/commit/cancel, not on every selection change, so it could
+  show stale, partially-empty content if left open across an unrelated selection change. Confirmed
+  Shapes' "Add a shape"/"Boolean Operations" sections are unconditionally visible regardless of
+  selected type — Shapes can never go empty.
+* **First fix attempt (auto-switch on any type-specific Lightbox, including Shapes) broke Boolean Ops
+  in real browser verification**, not shipped blind: a Shift-click multi-selection always begins with
+  one plain, genuinely-single-selection click before the Shift-click — indistinguishable in the moment
+  from an ordinary single-select — so the naive fix closed Shapes before the operator could Shift-click
+  a second, different-type layer for a Boolean Op. Combined with Shapes never needing this protection
+  (per the audit above), the fix excludes Shapes from the auto-switch-away trigger.
+* `app.js` — new shared `lightboxForLayerType(t)` helper (the type→Lightbox mapping, extracted from
+  `#moreOptionsBtn`'s previous inline branching so there is exactly one source of truth).
+  `syncSelectedControlsFromLayer()` gains one guarded call:
+  `if(activeFieldLightbox&&activeFieldLightbox!=='shapes'&&selectedLayerIds.size<=1){const
+  target=lightboxForLayerType(l.type);if(target&&!target.isOpen)target.open();}` — switches to the
+  correct Lightbox (closing the incompatible one via S-105's existing single-primary exclusivity, a
+  no-op if already correct), gated to a single-layer selection and excluding Shapes.
+* No changes to `src/ui/Lightbox.js`, `index.html`, `GeometryEngine`, `StoneLayout`, any renderer, any
+  exporter, the project schema, `src/library/**`, or `src/gallery/**`.
+
+**Tests:** 3 new checks (16-18) in `tools/test-s105-persistent-movable-lightboxes.mjs` (test 19 is now
+the forbidden-file check); `tools/test-ui001-leftpanel.mjs` check 8 and
+`tools/test-path-boolean-integration.mjs` check 12 updated for the `lightboxForLayerType()` refactor.
+`npm test`: **860 checks, 0 failures**.
+
+**Browser verification** (headless Chromium, 1440×900, real running app, no mocks) — the exact
+reproduction requested:
+
+1. Opened Text Lightbox — real content (`#text` = "Vitalina Serbin").
+2. Selected a Shape (circle) layer — auto-switched to Shapes, real content.
+3. Selected an SVG layer: while *Import* was the open Lightbox, switched to Import (real content);
+   while *Shapes* was the open Lightbox, correctly **stayed on Shapes** (still non-empty — Add a
+   Shape/Boolean Operations always visible) rather than switching, per the audited exception; reopening
+   Import directly afterward still showed the svg layer correctly.
+4. Selected an Image Trace (image) layer while Import was open — switched to Image Trace, real content
+   both in the new-import and post-commit states.
+5. Selected the Text layer again while Image Trace was open — switched back to Text, `#text` field
+   read back `"Vitalina Serbin"` (verified as real field content, not just a non-empty DOM check).
+6. **Regression check**: opened Shapes, plain-clicked a Text layer then Shift-clicked a Circle layer
+   (the exact S-101 Boolean Ops mixed-type multi-select gesture) — Shapes stayed open throughout,
+   confirming the exclusion fix resolved the regression found during this follow-up's own
+   implementation before it ever reached this final version.
+
+15/15 scripted checks passed. Zero console/page errors throughout. Screenshots captured at each step.
+
+**Recommendation:** Approve. Requirement 1 (no empty Lightbox) is now met for the exact reproduction
+requested. Requirement 2's "automatically switch" is applied everywhere it can be reached safely;
+Shapes is deliberately left alone because it satisfies requirement 1 unconditionally on its own (never
+empty) and because switching away from it would reintroduce a real regression in existing S-101
+functionality that requirement 3/7 (preserve existing behavior) explicitly protects. Requirements 3-5
+(non-modal/movable/persistent, one-primary architecture, no geometry/schema/export changes) are
+untouched — this follow-up is `app.js` + `tools/` + `docs/` only.
+
+---
+
+# Follow-up: Real-Hardware-Input Drag Reliability
+
+Manual visual testing reported the Lightbox "cannot be moved" — the strongest signal yet that
+something in real-browser conditions diverged from every automated check so far (including the
+original milestone's own Playwright `page.mouse`-based drag verification, which had reported success).
+Full detail in `docs/specifications/S-105-PersistentMovableLightboxes.md` §"Follow-up:
+Real-Hardware-Input Drag Reliability". Summary:
+
+**Audit (per this follow-up's explicit instructions), before any code change:**
+
+1. **Drag handle location verified.** `.lightbox-header` sits exactly where expected
+   (`cursor:grab`, `pointer-events:auto`), and `document.elementsFromPoint()` at its center confirmed
+   no other element overlaps it — the full paint-order stack is
+   `header → .lightbox → .workspace-toolbar → main.workspace → .app-shell → body → html`.
+2. **Pointer events reaching the header verified with real CDP `Input.dispatchMouseEvent`** (not
+   Playwright's `page.mouse` helper, per this follow-up's explicit instruction) — an instrumented
+   listener on the header captured all 23 dispatched events, every one targeted at `HEADER`.
+3. **Dragging did change the Lightbox's position in this exact reproduction** (a 220×30px real-CDP
+   drag moved `#lightboxText` from `left:400,top:32` to `left:620,top:64`) — the movement math itself
+   was correct.
+4. **Root cause found: two well-documented custom-pointer-drag prerequisites were missing**, neither
+   exposed by headless CDP's idealized synthetic mouse injection but both relevant to real hardware
+   input (the far more likely path for "manual visual testing"):
+   - `_handleDragStart()` never called `e.preventDefault()`, so a real mousedown/pointerdown starting
+     over the header's `<h2>` text never had the browser's own default action (native
+     text-selection drag) cancelled — real trackpad/mouse input can start a native drag that competes
+     with the custom one; CDP's direct event injection bypasses the OS/browser gesture layer this
+     goes through entirely.
+   - `.lightbox-header` had `touch-action:auto` (the default), letting the browser's own
+     gesture-recognition layer (trackpad pan/scroll) intercept the pointer sequence before every
+     `pointermove` reliably reaches JS — a documented MDN/W3C Pointer Events requirement for custom
+     drag, and specifically relevant to trackpad-driven "mouse" events (laptops are the most common
+     manual-testing device).
+   - `user-select:none` was only applied once `.dragging` was added by JS (after `pointerdown`),
+     leaving a real-hardware-timing window for a fast drag to start text selection first.
+
+**Fix:**
+
+* `src/ui/Lightbox.js` — `_handleDragStart(e)` now calls `e.preventDefault()` immediately after the
+  existing guards, before any drag-state setup.
+* `index.html` — `.lightbox-header` gains `touch-action:none` and an **unconditional**
+  `user-select:none` (previously gated behind `.dragging`).
+* No change to the movement math itself (`_handleDragMove`/`_clampToViewport`/`_reclampToViewport`) or
+  to `app.js` (single-primary exclusivity, non-modal wiring, and the Shapes Boolean-Ops exclusion are
+  all untouched).
+
+**Tests:** `npm test`: **862 checks, 0 failures** (2 new checks in
+`tools/test-s105-persistent-movable-lightboxes.mjs`; one existing check updated for the CSS
+restructure; forbidden-file check renumbered and its file-scope comment corrected).
+
+**Browser verification** (real CDP `Input.dispatchMouseEvent`, headless Chromium, 1440×900, exactly as
+required): opened Text, dragged its header 220px — bounding box moved `dx=220.0,dy=30.0`; repeated
+identically for Shapes, Import, Export, and Settings (`dx=220.0,dy=30.0` every time); confirmed the 2D
+canvas and left panel stayed interactive after every drag; dragged Settings far past the viewport edge
+and confirmed its Close button remained reachable afterward (never permanently unreachable). **17/17
+checks passed. Zero console/page errors.**
+
+**Recommendation:** Approve. The reported "cannot be moved" symptom is resolved at its actual root
+cause (missing `preventDefault()`/`touch-action:none`, both required for reliable custom pointer-drag
+on real hardware input), not papered over with a workaround. Every other S-105 requirement — non-modal
+behavior, one-primary-Lightbox architecture, persistence until close, Shapes/Boolean Ops behavior, and
+all existing Lightbox content — is untouched, since this fix is scoped entirely to event acquisition
+in the shared base class and one CSS rule.
