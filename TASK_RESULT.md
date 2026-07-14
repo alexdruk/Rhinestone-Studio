@@ -248,17 +248,9 @@ Text auto-closed (exclusivity), 1366×768, narrow 480×800.
 
 # Known Limitations
 
-* If an operator selects a layer of a **different type** than the currently-open field-owning
-  Lightbox (e.g. selects a Shape while the Text Lightbox is open and dragged aside), the Text
-  Lightbox correctly stays open (per requirement 4 — clicking elsewhere must never auto-close it) but
-  its type-specific content (`#textControls`) hides itself, since that pre-existing
-  `isText`-conditional visibility toggle in `syncSelectedControlsFromLayer()` was never reachable
-  before this milestone (every Lightbox was modal, so a different-type layer could never be selected
-  while it was open). This is not a regression — the toggle itself is unchanged, pre-existing logic —
-  and forcibly auto-switching the open Lightbox's content to match a new selection would be new
-  behavior beyond this milestone's scope (and would conflict with requirement 4's "must not close it"
-  guarantee if implemented as an auto-close instead). The menu buttons and More Options remain the
-  correct way to switch to a different type's Lightbox.
+* ~~If an operator selects a layer of a different type than the currently-open field-owning
+  Lightbox, its type-specific content hides itself, leaving the dialog empty.~~ **Fixed — see
+  "Follow-up: No Empty Lightbox on Selection Mismatch" below.**
 * Lightbox position is in-memory only, like every other piece of UI-only state in this app
   (`rotation`/`zoom`) — dragged positions do not survive a full page reload.
 
@@ -274,3 +266,70 @@ than writing new sync logic. The single-primary-Lightbox policy is an explicit, 
 architectural decision driven by a real constraint (`FIELD_GROUPS`'s single-owner shared field DOM),
 not an oversight. `GeometryEngine`, `StoneLayout`, the project schema, every exporter, the Design
 Library/Gallery data layers, and Gallery's disabled menu state are byte-identical to `develop`.
+
+---
+
+# Follow-up: No Empty Lightbox on Selection Mismatch
+
+A manual review of the implemented milestone found one remaining UX issue: a type-specific Lightbox
+(Text/Shapes/Import/Image Trace) left open while the operator selects a different-type layer could
+show an empty content area — reachable only because this milestone made non-modal, persistent
+Lightboxes possible in the first place (previously modal, this combination was unreachable). Full
+detail in `docs/specifications/S-105-PersistentMovableLightboxes.md` §"Follow-up: No Empty Lightbox on
+Selection Mismatch". Summary:
+
+* **Audited before implementing.** Confirmed Text's entire body is gated behind one `isText`
+  conditional with no fallback content (can go fully empty). Confirmed Import and Image Trace each
+  keep an always-visible "add new" section, so neither can go *fully* empty, but Image Trace's outer
+  section split is only re-toggled on open/commit/cancel, not on every selection change, so it could
+  show stale, partially-empty content if left open across an unrelated selection change. Confirmed
+  Shapes' "Add a shape"/"Boolean Operations" sections are unconditionally visible regardless of
+  selected type — Shapes can never go empty.
+* **First fix attempt (auto-switch on any type-specific Lightbox, including Shapes) broke Boolean Ops
+  in real browser verification**, not shipped blind: a Shift-click multi-selection always begins with
+  one plain, genuinely-single-selection click before the Shift-click — indistinguishable in the moment
+  from an ordinary single-select — so the naive fix closed Shapes before the operator could Shift-click
+  a second, different-type layer for a Boolean Op. Combined with Shapes never needing this protection
+  (per the audit above), the fix excludes Shapes from the auto-switch-away trigger.
+* `app.js` — new shared `lightboxForLayerType(t)` helper (the type→Lightbox mapping, extracted from
+  `#moreOptionsBtn`'s previous inline branching so there is exactly one source of truth).
+  `syncSelectedControlsFromLayer()` gains one guarded call:
+  `if(activeFieldLightbox&&activeFieldLightbox!=='shapes'&&selectedLayerIds.size<=1){const
+  target=lightboxForLayerType(l.type);if(target&&!target.isOpen)target.open();}` — switches to the
+  correct Lightbox (closing the incompatible one via S-105's existing single-primary exclusivity, a
+  no-op if already correct), gated to a single-layer selection and excluding Shapes.
+* No changes to `src/ui/Lightbox.js`, `index.html`, `GeometryEngine`, `StoneLayout`, any renderer, any
+  exporter, the project schema, `src/library/**`, or `src/gallery/**`.
+
+**Tests:** 3 new checks (16-18) in `tools/test-s105-persistent-movable-lightboxes.mjs` (test 19 is now
+the forbidden-file check); `tools/test-ui001-leftpanel.mjs` check 8 and
+`tools/test-path-boolean-integration.mjs` check 12 updated for the `lightboxForLayerType()` refactor.
+`npm test`: **860 checks, 0 failures**.
+
+**Browser verification** (headless Chromium, 1440×900, real running app, no mocks) — the exact
+reproduction requested:
+
+1. Opened Text Lightbox — real content (`#text` = "Vitalina Serbin").
+2. Selected a Shape (circle) layer — auto-switched to Shapes, real content.
+3. Selected an SVG layer: while *Import* was the open Lightbox, switched to Import (real content);
+   while *Shapes* was the open Lightbox, correctly **stayed on Shapes** (still non-empty — Add a
+   Shape/Boolean Operations always visible) rather than switching, per the audited exception; reopening
+   Import directly afterward still showed the svg layer correctly.
+4. Selected an Image Trace (image) layer while Import was open — switched to Image Trace, real content
+   both in the new-import and post-commit states.
+5. Selected the Text layer again while Image Trace was open — switched back to Text, `#text` field
+   read back `"Vitalina Serbin"` (verified as real field content, not just a non-empty DOM check).
+6. **Regression check**: opened Shapes, plain-clicked a Text layer then Shift-clicked a Circle layer
+   (the exact S-101 Boolean Ops mixed-type multi-select gesture) — Shapes stayed open throughout,
+   confirming the exclusion fix resolved the regression found during this follow-up's own
+   implementation before it ever reached this final version.
+
+15/15 scripted checks passed. Zero console/page errors throughout. Screenshots captured at each step.
+
+**Recommendation:** Approve. Requirement 1 (no empty Lightbox) is now met for the exact reproduction
+requested. Requirement 2's "automatically switch" is applied everywhere it can be reached safely;
+Shapes is deliberately left alone because it satisfies requirement 1 unconditionally on its own (never
+empty) and because switching away from it would reintroduce a real regression in existing S-101
+functionality that requirement 3/7 (preserve existing behavior) explicitly protects. Requirements 3-5
+(non-modal/movable/persistent, one-primary architecture, no geometry/schema/export changes) are
+untouched — this follow-up is `app.js` + `tools/` + `docs/` only.

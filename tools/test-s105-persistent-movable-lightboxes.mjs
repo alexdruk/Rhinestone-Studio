@@ -158,7 +158,43 @@ await test('15. Lightbox.js still has zero knowledge of Project/Layer/StoneLayou
   }
 });
 
-await test('16. no forbidden file changed (GeometryEngine, StoneLayout, exporters, every renderer, Design Library data layer, Gallery data layer) -- S-105 is src/ui/Lightbox.js, index.html, app.js, tools, docs only', () => {
+// ---------- 8. Follow-up: no empty Lightbox on a selection-type mismatch ----------
+
+await test('16. lightboxForLayerType() is the single shared layer-type -> Lightbox mapping, reused by both More Options and the auto-switch (not duplicated)', () => {
+  const fnMatch = appJs.match(/function lightboxForLayerType\(t\)\{[\s\S]*?\n\}/);
+  assert.ok(fnMatch, 'expected a lightboxForLayerType(t) function in app.js');
+  assert.match(fnMatch[0], /t===['"]text['"][\s\S]*?lightboxes\.text/);
+  assert.match(fnMatch[0], /circle[\s\S]*?rectangle[\s\S]*?path[\s\S]*?lightboxes\.shapes/);
+  assert.match(fnMatch[0], /t===['"]svg['"][\s\S]*?lightboxes\.importBox/);
+  assert.match(fnMatch[0], /t===['"]image['"][\s\S]*?lightboxes\.imagetrace/);
+  // More Options must call the shared helper, not a second copy of the type->Lightbox branching
+  const moreOptionsMatch = appJs.match(/el\('moreOptionsBtn'\)\.onclick=\(\)=>\{[\s\S]*?\n\};/);
+  assert.ok(moreOptionsMatch, 'expected the moreOptionsBtn handler');
+  assert.match(moreOptionsMatch[0], /lightboxForLayerType\(selectedLayer\(\)\.type\)/);
+});
+
+await test('17. syncSelectedControlsFromLayer() auto-switches the open type-specific Lightbox to match a newly selected, incompatible-type layer, so it never sits empty', () => {
+  const fnMatch = appJs.match(/function syncSelectedControlsFromLayer\(\)\{[\s\S]*?\n\}(?=\n(?:function|const|let|el\(|\/\/))/);
+  assert.ok(fnMatch, 'expected to find syncSelectedControlsFromLayer()');
+  assert.match(fnMatch[0], /if\s*\(activeFieldLightbox\s*&&\s*activeFieldLightbox\s*!==\s*['"]shapes['"]\s*&&\s*selectedLayerIds\.size\s*<=\s*1\)\s*\{/, 'expected the auto-switch to be gated on activeFieldLightbox (a type-specific Lightbox is open), excluding Shapes, and a single-layer selection');
+  assert.match(fnMatch[0], /const target=lightboxForLayerType\(l\.type\);/);
+  assert.match(fnMatch[0], /if\s*\(target\s*&&\s*!target\.isOpen\)\s*target\.open\(\);/, 'expected a no-op guard so an already-correct open Lightbox is never redundantly reopened');
+});
+
+await test('18. Shapes is excluded from the auto-switch-away trigger, so Boolean Ops\' mixed-type Shift-click multi-select (S-101) is never disrupted', () => {
+  const fnMatch = appJs.match(/function syncSelectedControlsFromLayer\(\)\{[\s\S]*?\n\}(?=\n(?:function|const|let|el\(|\/\/))/);
+  assert.match(fnMatch[0], /activeFieldLightbox\s*!==\s*['"]shapes['"]/, 'expected Shapes to be excluded, since a Shift-click multi-select always begins with one plain (single-selection) click that would otherwise trigger a premature switch away');
+  assert.match(fnMatch[0], /selectedLayerIds\.size\s*<=\s*1/);
+  // Shapes never needs this protection in the first place: its "Add a shape"/"Boolean Operations"
+  // sections are unconditionally visible regardless of the selected layer's type (unlike
+  // Text/Import/Image Trace, whose entire body content is gated behind a single type check).
+  const shapesBody = indexHtml.match(/<div class="lightbox-tab-panel" id="shapesPanelDesign">[\s\S]*?<div id="shapeControls"/);
+  assert.ok(shapesBody, 'expected to find the Shapes Design panel up to its type-conditional #shapeControls');
+  assert.match(shapesBody[0], /<h3>Add a shape<\/h3>/);
+  assert.match(shapesBody[0], /<h3>Boolean Operations<\/h3>/);
+});
+
+await test('19. no forbidden file changed (GeometryEngine, StoneLayout, exporters, every renderer, Design Library data layer, Gallery data layer) -- this follow-up is app.js/tools/docs only', () => {
   const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
   const changedPaths = output
     .split('\n')

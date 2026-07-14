@@ -288,3 +288,119 @@ feat(ui): S-105 - persistent, movable, non-modal Lightboxes
 ## Next Milestone
 
 Not defined by this task; recommend the human owner/ChatGPT decide based on this milestone's review.
+
+---
+
+## Follow-up: No Empty Lightbox on Selection Mismatch
+
+A manual review of the implemented milestone found one remaining UX issue: when a type-specific
+Lightbox (Text/Shapes/Import/Image Trace) stays open (non-modal + persistent, as designed) and the
+operator selects a layer of a *different* type, the Lightbox could show an empty content area —
+reachable for the first time only because this milestone made it possible to select a different-type
+layer while the dialog stays open at all (previously modal, this combination was unreachable). Noted
+as a known limitation in the original `TASK_RESULT.md`; this follow-up fixes it.
+
+### Audit
+
+- **Confirmed root cause.** `syncSelectedControlsFromLayer()` already toggles each Lightbox's
+  per-layer-type content (`#textControls`, `#shapeControls`, `#svgControls`/`#imageControls`) based
+  on the selected layer's type, on every selection change, regardless of which Lightbox is open. For
+  **Text**, `#textControls` wraps its *entire* body content (Content/Position/Curve/Stones) with no
+  always-visible fallback — hiding it leaves the dialog empty. **Import** and **Image Trace** were
+  audited too: both always keep an always-visible "add new" section (`index.html`'s Import-SVG-tab
+  "SVG file" drop-zone; Image Trace's `imageTraceNewSection`, shown whenever the selection isn't an
+  image layer) — so neither can go *fully* empty, but Image Trace's outer
+  `imageTraceEditSection`/`imageTraceNewSection` split is only re-toggled by `updateImageTraceSections()`
+  (called on open/commit/cancel, not on every selection change), so leaving it open across an
+  unrelated selection change could show a stale, partially-empty "Edit selected image layer" section.
+  **Shapes** was audited and found structurally different: its "Add a shape" and "Boolean Operations"
+  sections (`#shapesPanelDesign`) are unconditionally visible regardless of the selected layer's
+  type — only `#shapeControls` (the per-layer Position/Fill Style detail) is conditional. Shapes can
+  never actually go empty.
+- **Boolean Ops interaction audited before choosing a fix.** Prototyping a first version of the fix
+  (auto-switch away from *any* type-specific Lightbox, including Shapes, on a mismatched selection)
+  broke the S-101 Boolean Ops workflow in real browser verification: a Shift-click multi-selection
+  always begins with one plain click (`el('layersList').addEventListener('click', ...)`: a plain
+  click calls `selectOnly()`, Shift-click calls `toggleSelection()` — two separate events, not one).
+  That first plain click is a genuine, momentary single-selection, indistinguishable in the instant it
+  fires from an ordinary single-select — so a same-type-only auto-switch fired and closed Shapes
+  before the Shift-click could add the second layer. Combined with Shapes never needing this
+  protection (per the audit above), the fix excludes Shapes from the auto-switch-away trigger
+  entirely.
+
+### Fix (`app.js` only)
+
+- New shared helper `lightboxForLayerType(t)` — the single layer-type → Lightbox mapping, extracted
+  from `#moreOptionsBtn`'s previous inline branching (now calls the helper instead of repeating it) so
+  the mapping has exactly one source of truth.
+- `syncSelectedControlsFromLayer()` gains one guarded call at its end:
+  `if(activeFieldLightbox&&activeFieldLightbox!=='shapes'&&selectedLayerIds.size<=1){const
+  target=lightboxForLayerType(l.type);if(target&&!target.isOpen)target.open();}`
+  - `activeFieldLightbox` (already tracked by each type-specific Lightbox's `onOpen`/`onClose`) gates
+    this to only fire while Text, Import, or Image Trace is the one open — Settings/Export/Help/etc.
+    are unaffected, and Shapes is explicitly excluded per the audit above.
+  - `target.open()` both switches to the correct Lightbox for the new selection and — via S-105's
+    existing single-primary-Lightbox exclusivity in `src/ui/Lightbox.js` — closes the now-incompatible
+    one automatically. This satisfies requirement 2's preferred first option ("automatically switch")
+    for every case where it applies, with no separate "close" call needed.
+  - `selectedLayerIds.size<=1` additionally guards against acting mid-multi-selection generally
+    (defense in depth beyond the Shapes exclusion, in case a future multi-select feature is added to
+    another type-specific Lightbox).
+  - The `!target.isOpen` check makes it a true no-op when the correct Lightbox is already open (no
+    redundant close/reopen flicker).
+
+### Requirements Met
+
+1. No Lightbox may display an empty content area — Text/Import/Image Trace now always show real,
+   matching content while open; Shapes never could go empty in the first place (confirmed by audit,
+   not just assumed).
+2. Automatic switch to the appropriate Lightbox is used wherever it safely applies (Text/Import/Image
+   Trace); Shapes is deliberately left open rather than switched or closed, which is still "not an
+   empty window" — satisfying the requirement's actual goal without its more disruptive literal
+   application.
+3. Non-modal/movable/persistent behavior: untouched (zero changes to `src/ui/Lightbox.js` or
+   `index.html` in this follow-up).
+4. One-primary-Lightbox architecture: reused as-is, not modified — the fix calls the same
+   `Lightbox.open()`/exclusivity mechanism every other open path already uses.
+5. `GeometryEngine`, `StoneLayout`, the project schema, exporters, and rendering: untouched (this
+   follow-up is `app.js` + `tools/` + `docs/` only).
+
+### Files Changed
+
+```
+app.js                                           — lightboxForLayerType() helper; moreOptionsBtn
+                                                    refactored to use it; syncSelectedControlsFromLayer()
+                                                    auto-switch (Shapes excluded)
+tools/test-s105-persistent-movable-lightboxes.mjs — checks 16-18 (was 16 forbidden-file, now 19)
+tools/test-ui001-leftpanel.mjs                    — check 8 updated for the lightboxForLayerType()
+                                                     refactor
+tools/test-path-boolean-integration.mjs           — check 12 updated the same way
+docs/specifications/S-105-PersistentMovableLightboxes.md — this section
+TASK_RESULT.md                                    — Follow-up section
+```
+
+No changes to `src/ui/Lightbox.js`, `index.html`, `GeometryEngine`, `StoneLayout`, any renderer, any
+exporter, the project schema, `src/library/**`, or `src/gallery/**`.
+
+### Tests
+
+`npm test`: **860 checks, 0 failures** (3 new checks in `tools/test-s105-persistent-movable-lightboxes.mjs`,
+2 pre-existing checks updated for the `lightboxForLayerType()` refactor).
+
+### Browser Verification
+
+Headless Chromium (Playwright), `npm run dev`, 1440×900, against the real running app:
+
+- **Exact reproduction requested**: opened Text Lightbox (real content) → selected a Shape (circle)
+  layer (auto-switched to Shapes, real content) → selected an SVG layer while a *different*
+  type-specific Lightbox (Import, then separately Shapes) was open (switched to Import when Import was
+  open; correctly *stayed open* on Shapes, still non-empty, when Shapes was open, per the audited
+  exception) → selected an Image Trace (image) layer while Import was open (switched to Image Trace,
+  real content, both new-import and post-commit states) → selected the Text layer again while Image
+  Trace was open (switched back to Text, `#text` field read back `"Vitalina Serbin"`, confirming real
+  content, not just a non-empty DOM check).
+- **Regression check**: opened Shapes, plain-clicked a Text layer then Shift-clicked a Circle layer
+  (the exact S-101 Boolean Ops mixed-type multi-select gesture) — Shapes stayed open throughout,
+  confirming the exclusion fix resolved the regression found during this follow-up's own
+  implementation.
+- 15/15 scripted checks passed. Zero console/page errors throughout.
