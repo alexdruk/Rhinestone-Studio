@@ -404,3 +404,93 @@ Headless Chromium (Playwright), `npm run dev`, 1440×900, against the real runni
   confirming the exclusion fix resolved the regression found during this follow-up's own
   implementation.
 - 15/15 scripted checks passed. Zero console/page errors throughout.
+
+---
+
+## Follow-up: Real-Hardware-Input Drag Reliability
+
+Manual visual testing reported the Lightbox "cannot be moved" — a stronger, more definitive report
+than any prior automated verification had produced. Full detail matches the audit/fix/verification
+narrative below; see `TASK_RESULT.md` for the equivalent completion-report entry.
+
+### Audit (per this follow-up's explicit instructions)
+
+1. **Drag handle location, verified.** `#lightboxText .lightbox-header` renders at the expected
+   position (flex-centered dialog's top strip), with `cursor:grab`, `pointer-events:auto` (inherited
+   through `.lightbox-overlay.non-modal .lightbox{pointer-events:auto}`), and
+   `document.elementFromPoint()` at its center resolves to the header itself — no other element
+   overlaps it (`document.elementsFromPoint()` confirmed the full paint-order stack under the header
+   is exactly `header → .lightbox → .workspace-toolbar → main.workspace → .app-shell → body → html`,
+   nothing intervening).
+2. **Pointer events reaching the header, verified two ways.** (a) Real CDP `Input.dispatchMouseEvent`
+   (`mousePressed`/`mouseMoved` ×20/`mouseReleased`, not Playwright's `page.mouse` helper, per this
+   follow-up's explicit instruction) dispatched at the header's screen coordinates was captured by an
+   instrumented `pointerdown`/`pointermove`/`pointerup` listener added directly on the header: **23
+   events received, every one targeted at `HEADER`**, confirming events do physically reach it.
+   (b) `_handleDragStart`/`_handleDragMove` execute and their console-visible side effects (inline
+   `style.left`/`style.top`, the `dragging` class) do apply, matching the events above.
+3. **Dragging the header does change the Lightbox's position — in this exact headless/CDP
+   reproduction.** A 220×30px real-CDP drag on `#lightboxText` moved it from `left:400,top:32` to
+   `left:620,top:64` (`dialog.style.position` was `fixed`, `left`/`top` set correctly) — mechanically
+   correct.
+4. **Root cause of the reported failure: two well-documented prerequisites for reliable custom
+   pointer-drag were missing, neither of which headless CDP's purely synthetic mouse events exposes,
+   but real hardware input does:**
+   - **No `e.preventDefault()`** in `_handleDragStart()`. Without it, a real mousedown/pointerdown
+     that starts moving over the header's `<h2>` title text never has the browser's own default
+     action (starting a native text-selection drag) cancelled — on real hardware input (trackpad or
+     mouse, not headless CDP's idealized event injection) this can start a native text-selection drag
+     that competes with or overrides the custom drag handling.
+   - **`touch-action:auto` (the default) on `.lightbox-header`.** Without `touch-action:none`, the
+     browser's own gesture-recognition layer (trackpad pan/scroll, touch scroll) can intercept and
+     consume the pointer sequence before the header's own `pointermove` listener reliably receives
+     every event — a documented MDN/W3C Pointer Events requirement for custom drag implementations,
+     specifically relevant to trackpad-driven "mouse" pointer events on laptops (the most common
+     manual-testing device), which headless CDP mouse injection bypasses entirely (it dispatches
+     directly at the input-event level, never through the OS/browser gesture-recognition layer a real
+     trackpad or touchscreen goes through).
+   - `user-select:none` was previously gated behind `.lightbox.dragging .lightbox-header` (applied by
+     JS *after* `pointerdown` fires), leaving a real-hardware-timing window where a fast real
+     mousedown-then-move could start selecting the header text before the class was applied.
+
+### Fix
+
+- **`src/ui/Lightbox.js`**: `_handleDragStart(e)` now calls `e.preventDefault()` immediately after
+  the existing button/interactive-descendant guards, before any drag-state setup.
+- **`index.html`**: `.lightbox-header` gains `touch-action:none` (stops the browser's own gesture
+  handling from intercepting the pointer sequence) and an **unconditional** `user-select:none` (no
+  longer only while `.dragging`), removing the real-hardware-timing race entirely.
+- No change to the drag/clamp/exclusivity logic itself (`_handleDragMove`, `_clampToViewport`,
+  `_reclampToViewport`, `options.primary` exclusivity) — this follow-up only hardens event
+  acquisition, not the movement math, which was already correct.
+
+### Requirements Met
+
+1-3 (audit) — done, see above. 4: fixed for all 11 primary Lightboxes (the fix is in the shared base
+class/CSS rule, not per-instance). 5: `_clampToViewport`/`_reclampToViewport` unchanged, still keeps
+every dialog inside the viewport. 6: non-modal CSS, `options.primary` exclusivity, `onClose`/`onOpen`
+persistence wiring, and the Shapes Boolean-Ops exclusion in `app.js` are all byte-identical to before
+this follow-up (only `src/ui/Lightbox.js` and `index.html`'s Lightbox-system CSS changed). 7: no
+`GeometryEngine`/`StoneLayout`/project-schema/exporter/renderer file touched.
+
+### Tests
+
+`npm test`: **862 checks, 0 failures** post-commit (2 new checks — 19, 20 — in
+`tools/test-s105-persistent-movable-lightboxes.mjs`; check 7 updated for the CSS restructure;
+forbidden-file check renumbered to 21 and its comment updated to reflect this follow-up's actual
+file scope, `src/ui/Lightbox.js`/`index.html`/`tools`/`docs`).
+
+### Browser Verification
+
+Real CDP `Input.dispatchMouseEvent` (headless Chromium, 1440×900, `npm run dev`, no mocks, not
+Playwright's `page.mouse` helper), exactly as required:
+
+- Opened **Text**, dragged its header 220px horizontally (+30px vertically) — bounding box moved
+  `dx=220.0, dy=30.0`.
+- Repeated for **Shapes**, **Import**, **Export**, and **Settings** — identical `dx=220.0, dy=30.0`
+  for every one.
+- After each drag, confirmed the 2D canvas and the left panel (Undo button) both remained reachable
+  and interactive.
+- Dragged Settings far past the top-left corner (target `(-5000,-5000)`) — its Close button remained
+  within the viewport afterward (never permanently unreachable).
+- **17/17 scripted checks passed. Zero console/page errors** throughout the entire real-CDP session.

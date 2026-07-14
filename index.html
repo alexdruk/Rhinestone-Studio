@@ -223,11 +223,15 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .lightbox{background:var(--color-surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);width:640px;max-width:100%;max-height:calc(100vh - 64px);display:flex;flex-direction:column;overflow:hidden}
 .lightbox.wide{width:760px}
 /* S-105: every Lightbox is movable by dragging its header (src/ui/Lightbox.js). cursor:grab signals
-   the affordance; .dragging (toggled only for the duration of a drag) shows grabbing feedback and
-   suppresses text selection while the pointer moves across the header/title. */
-.lightbox-header{display:flex;align-items:center;justify-content:space-between;padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--color-border);cursor:grab}
+   the affordance. touch-action:none stops the browser's own gesture handling (trackpad/touch pan
+   or scroll) from intercepting the pointer sequence before the header's own pointerdown/pointermove
+   listeners see it -- required for reliable custom pointer-drag on real hardware input, not just
+   synthetic mouse events. user-select:none is unconditional (not only while .dragging) so a fast
+   real mousedown-then-move can never start a native text-selection drag on the <h2> title in the
+   single frame before JS's classList.add('dragging') would otherwise apply it. */
+.lightbox-header{display:flex;align-items:center;justify-content:space-between;padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--color-border);cursor:grab;touch-action:none;user-select:none}
 .lightbox.dragging{cursor:grabbing}
-.lightbox.dragging .lightbox-header{cursor:grabbing;user-select:none}
+.lightbox.dragging .lightbox-header{cursor:grabbing}
 .lightbox-header h2{font-size:var(--font-size-lg);font-weight:700}
 .lightbox-close{width:30px;height:30px;border:none;background:transparent;border-radius:var(--radius-sm);cursor:pointer;font-size:16px;color:var(--color-text-muted)}
 .lightbox-close:hover{background:var(--color-bg)}

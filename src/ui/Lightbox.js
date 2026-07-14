@@ -123,6 +123,11 @@ export class Lightbox {
   _handleDragStart(e) {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     if (e.target.closest('button, a, input, select, textarea, [data-lightbox-close]')) return;
+    // Without this, the browser's own default action for a mousedown/pointerdown that moves over
+    // text (the header's <h2> title) can start a native text-selection drag instead of -- or
+    // racing with -- this custom drag, on real hardware input (trackpad/mouse) even though
+    // synthetic/CDP-dispatched mouse events in headless testing don't reliably reproduce it.
+    e.preventDefault();
     const rect = this.dialog.getBoundingClientRect();
     this.dialog.style.position = 'fixed';
     this.dialog.style.margin = '0';

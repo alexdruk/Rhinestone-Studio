@@ -92,7 +92,9 @@ await test('6. a dragged Lightbox re-clamps to the viewport on open() and on win
 await test('7. index.html gives the header a grab cursor and the dialog a dragging state (grabbing cursor, no text selection) purely as CSS -- no layout change to the existing centered default', () => {
   assert.match(indexHtml, /\.lightbox-header\{[^}]*cursor:grab[^}]*\}/);
   assert.match(indexHtml, /\.lightbox\.dragging\{[^}]*cursor:grabbing[^}]*\}/);
-  assert.match(indexHtml, /\.lightbox\.dragging \.lightbox-header\{[^}]*user-select:none[^}]*\}/);
+  // user-select:none is unconditional on the header (not gated behind .dragging) -- see check 20
+  // (real-hardware-input hardening) for why.
+  assert.match(indexHtml, /\.lightbox-header\{[^}]*user-select:none[^}]*\}/);
 });
 
 // ---------- 3. Persistent: no backdrop-close for non-modal overlays, position kept across reopen ----------
@@ -194,7 +196,22 @@ await test('18. Shapes is excluded from the auto-switch-away trigger, so Boolean
   assert.match(shapesBody[0], /<h3>Boolean Operations<\/h3>/);
 });
 
-await test('19. no forbidden file changed (GeometryEngine, StoneLayout, exporters, every renderer, Design Library data layer, Gallery data layer) -- this follow-up is app.js/tools/docs only', () => {
+// ---------- 9. Follow-up: real-hardware-input drag reliability ----------
+
+await test('19. _handleDragStart() calls preventDefault() so a real mousedown/pointerdown over the header title can never start a native text-selection drag that races with the custom drag', () => {
+  const fnMatch = lightboxSource.match(/_handleDragStart\(e\) \{[\s\S]*?\n {2}\}/);
+  assert.ok(fnMatch, 'expected a _handleDragStart(e) method');
+  assert.match(fnMatch[0], /e\.preventDefault\(\);/);
+  // preventDefault must run before pointer capture / drag-state setup, not after
+  assert.ok(fnMatch[0].indexOf('e.preventDefault();') < fnMatch[0].indexOf('setPointerCapture'), 'expected preventDefault() before pointer capture is established');
+});
+
+await test('20. the header has touch-action:none and an unconditional user-select:none, so the browser\'s own gesture/scroll handling and text selection can never intercept the pointer sequence before JS sees it (headless synthetic mouse events do not reliably expose this gap, real trackpad/mouse input does)', () => {
+  assert.match(indexHtml, /\.lightbox-header\{[^}]*touch-action:none[^}]*\}/);
+  assert.match(indexHtml, /\.lightbox-header\{[^}]*user-select:none[^}]*\}/);
+});
+
+await test('21. no forbidden file changed (GeometryEngine, StoneLayout, exporters, every renderer, Design Library data layer, Gallery data layer) -- this drag-reliability follow-up is src/ui/Lightbox.js, index.html, tools, docs only', () => {
   const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
   const changedPaths = output
     .split('\n')
