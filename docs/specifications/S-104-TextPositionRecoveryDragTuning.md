@@ -378,14 +378,88 @@ edits for the drag itself):**
    position and cleared it again.
 6. **Console** — zero errors/page errors across the entire session.
 
+## Follow-up 4: Warning Moved to the Persistent Workspace
+
+A fourth visual-review report, despite Follow-up 3's fix being verifiably correct: manual testing still
+showed no visible warning. The report identified the actual remaining problem precisely — the warning
+lived exclusively inside `#lightboxText`, a modal (`.lightbox-overlay{position:fixed;inset:0;
+display:none}` / `.open{display:flex}`) that is normally **closed** for the entire duration of a
+canvas drag (there is no way to drag on the 2D canvas while any modal lightbox is open — the overlay
+covers and captures every pointer event across the full viewport). A warning that only exists inside a
+closed dialog is, correctly, indistinguishable from "no warning" during the one interaction (dragging)
+it exists to catch. This was a real, conceptual placement defect, not a computation bug — Follow-up 3's
+threshold fix was correct and is unchanged (per this round's explicit instruction not to touch it
+again).
+
+**Fix — a second, persistent copy of the same warning in the always-visible right Inspector panel.**
+`#rightInspector` (`aside.right-inspector`) is normal page chrome, not a modal — it sits beside the 2D
+canvas and remains on screen throughout a drag, unlike the Text Lightbox. It is also this app's
+existing persistent per-selection status surface (Stone Size/Gap/Stone Color/More Options already live
+there, conditioned on the current selection), matching this round's "reuse the existing persistent
+status/notification UI if suitable" instruction — no new modal, no new panel type.
+
+* `index.html` — `#workspaceTextOutsideWarning` (`div.validation-message`, the same shared alert
+  styling as the Lightbox's copy — no new CSS beyond one `margin-top` spacing rule for its button)
+  placed immediately under the Inspector's `<h2>` layer-name heading, containing the same required
+  wording ("This text is outside the printable area.") plus a `↺ Center Text` button
+  (`#workspaceCenterTextBtn`, `.btn.sm.primary` — the same prominent styling Follow-up 1 gave Center on
+  Object).
+* `app.js` — `updateTextOutsidePrintableWarning()` now computes `isTextOutsidePrintableArea()`
+  **once** and toggles *both* `#textOutsidePrintableWarning` (Lightbox) and
+  `#workspaceTextOutsideWarning` (workspace) from that single shared boolean, so the two surfaces can
+  never disagree. Both are therefore still driven from the same `updateAll()` call every
+  position-changing action already funnels through — live during an actual drag (`pointermove` calls
+  `updateAll(true)` on every mouse-move frame), not just after it ends.
+* `#workspaceCenterTextBtn`'s click handler is `()=>centerSelectedTextOnObject()` — the *exact same*
+  function `#centerTextOnObject` already calls. No new recovery logic exists; the workspace button is
+  guaranteed by construction to touch only `l.x`/`l.y`, identically to the existing control.
+* `#centerTextOnObject` (inside the Text Lightbox) and `#textOutsidePrintableWarning` are both **kept**,
+  per this round's explicit instruction — when the Lightbox *is* open, it visually covers the Inspector,
+  so its own copy is what stays visible in that state; the two together cover both "Lightbox closed"
+  (the normal drag scenario) and "Lightbox open" (reviewing/fine-tuning position numerically).
+* No `GeometryEngine`/`StoneLayout`/renderer/exporter/project-schema change — this is markup + one
+  shared read-only function's DOM output, unchanged from Follow-up 3's geometry.
+
+**Known, pre-existing, out-of-scope limitation:** `@media (max-width:1300px){.right-inspector{
+display:none}}` (unrelated, pre-UI-001 responsive rule) hides the entire right Inspector — and with it
+both the workspace warning and the rest of the per-selection quick-edit panel — on narrow viewports.
+This is unchanged pre-existing behavior, not something this milestone's scope covers; the Text
+Lightbox's own warning + Center on Object remain available as a fallback recovery path at any viewport
+width.
+
+**Tests:** `tools/test-s104-text-position-recovery-drag-tuning.mjs` gained checks 15–17 (the workspace
+warning + button exist in the right Inspector ahead of the rest of its content; the button reuses
+`centerSelectedTextOnObject()` verbatim; both warning surfaces share one `isTextOutsidePrintableArea()`
+result) and check 12 was updated for the two-surface toggle. `npm test`: **840 checks, 0 failures**.
+
+**Browser verification (real CDP `Input.dispatchMouseEvent`, Text Lightbox never opened, matching the
+exact normal-user workflow):**
+1. Default mug project loaded; Text Lightbox confirmed closed; workspace warning confirmed hidden.
+2. A single continuous CDP drag (mouse held down throughout) toward the right — checked the workspace
+   warning's live DOM state at four points *during* the drag, before the mouse was ever released: hidden
+   at `textX≈36mm`/`77mm`, **visible starting at `textX≈117mm`** (mid-gesture, `lightboxOpen` confirmed
+   `false` at every checkpoint) and remained visible through `textX≈157mm` at drag end.
+3. Screenshot at the unreadable state: cup preview shows only stray stone streaks (the text itself off
+   the visible surface), Text Lightbox still closed, right Inspector showing the red warning box and
+   blue **Center Text** button directly under "Vitalina Serbin" 's layer name.
+4. Clicked `#workspaceCenterTextBtn` directly (Lightbox never opened at any point in this run):
+   position reset to `(0,0)`, warning disappeared, `#status` confirmed "Centered text on the printable
+   area," cup screenshot shows "Vitalina Serbin" fully legible again. Every other text property (font,
+   height, stone size, color, fill style, curve setting, text content itself) verified unchanged via a
+   full property snapshot.
+5. Undo restored the off-canvas position and the workspace warning; Redo restored the centered position
+   and cleared it again.
+6. Zero console/page errors across the entire session.
+
 ## Recommendation
 
-Approve and merge. Both original requirements, plus all three follow-up fixes (Center on Object
-discoverability, the outside-the-printable-area warning, and its real-mouse-drag-verified
-partial-overlap correction), are implemented as the smallest coherent
-change on top of existing, already-tested infrastructure
-(`getSafeAreaRectMm`, `commitHistory`/`HistoryManager`, the Layers-list selection path, and now the
-app's existing `.btn.primary` visual language) — no new geometry, no new storage, no schema change, no
-forbidden file touched, and the follow-up fix touched only a `class`/label on one existing element. The
+Approve and merge. Both original requirements, plus all four follow-up fixes (Center on Object
+discoverability, the outside-the-printable-area warning, its real-mouse-drag-verified
+partial-overlap correction, and its move to the persistent, always-visible workspace), are implemented
+as the smallest coherent change on top of existing, already-tested infrastructure
+(`getSafeAreaRectMm`, `commitHistory`/`HistoryManager`, the Layers-list selection path, the shared
+`centerSelectedTextOnObject()`, and the app's existing `.btn.primary`/`.validation-message` visual
+language) — no new geometry, no new storage, no schema change, no new modal, and no forbidden file
+touched. The
 `0.5` sensitivity constant is a reasonable default; if real usage shows it too aggressive or too mild
 in either direction, it is a one-line, well-isolated tuning change.

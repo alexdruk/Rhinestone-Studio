@@ -580,11 +580,22 @@ function isTextOutsidePrintableArea(l){
   const visibleRatio=(overlapWidth*overlapHeight)/bboxArea;
   return visibleRatio<TEXT_PRINTABLE_VISIBILITY_RATIO;
 }
-// Called from updateAll() (after `layout` is regenerated) so it is always in sync with the layer's
-// true current position/extent -- live during a drag (pointermove already calls updateAll() on every
-// move), immediately after Undo/Redo, and on every keystroke while editing #textX/#textY directly.
+// S-104 (audited): the Text Lightbox is a modal (`position:fixed;inset:0`) that is normally CLOSED
+// while the operator drags text on the canvas -- a warning that only lives inside it is therefore
+// never seen during the one interaction it exists to catch. #workspaceTextOutsideWarning lives in the
+// always-visible right Inspector panel (`#rightInspector`, never covered by a modal, already the
+// persistent per-selection status surface this app reuses for Stone Size/Gap/Stone Color/More
+// Options) so it is on screen throughout a drag with the Lightbox closed. #textOutsidePrintableWarning
+// (inside the Lightbox) is kept too -- when the Lightbox *is* open it covers the Inspector, so that
+// copy is what stays visible in that state. Both read the exact same isTextOutsidePrintableArea()
+// result; toggled together so they can never disagree. Called from updateAll() (after `layout` is
+// regenerated) so both are always in sync with the layer's true current position/extent -- live
+// during a drag (pointermove already calls updateAll() on every move), immediately after Undo/Redo,
+// and on every keystroke while editing #textX/#textY directly.
 function updateTextOutsidePrintableWarning(){
-  el('textOutsidePrintableWarning').classList.toggle('visible',isTextOutsidePrintableArea(selectedLayer()));
+  const outside=isTextOutsidePrintableArea(selectedLayer());
+  el('textOutsidePrintableWarning').classList.toggle('visible',outside);
+  el('workspaceTextOutsideWarning').classList.toggle('visible',outside);
 }
 // RS-1012: Boolean Operations. BOOLEAN_OPERATION_LABELS is the exact user-facing vocabulary the
 // milestone brief requires ("Exclude", not "XOR"), reused for the result layer's default name and
@@ -899,6 +910,9 @@ el('objectType').addEventListener('change',()=>{commitHistory();const template=g
 // RS-1009: Align/Snap sidebar section. snapEnabled is view-only editor state (like rotation/zoom
 // above) -- not part of `project`, not undo/redo-tracked, not exported.
 el('centerTextOnObject').onclick=()=>centerSelectedTextOnObject();
+// S-104: the workspace warning's own "Center Text" button -- same shared function, so it can only
+// ever move x/y (never any other property), exactly like the Text Lightbox's Center on Object.
+el('workspaceCenterTextBtn').onclick=()=>centerSelectedTextOnObject();
 el('alignLeft').onclick=()=>runAlign('left');el('alignCenterH').onclick=()=>runAlign('centerH');el('alignRight').onclick=()=>runAlign('right');el('alignTop').onclick=()=>runAlign('top');el('alignCenterV').onclick=()=>runAlign('centerV');el('alignBottom').onclick=()=>runAlign('bottom');el('distributeH').onclick=()=>runDistribute('horizontal');el('distributeV').onclick=()=>runDistribute('vertical');el('snapEnabled').addEventListener('change',()=>{snapEnabled=el('snapEnabled').value==='on'});
 // RS-1012: Boolean Operations, in the Shapes Lightbox (see index.html's #booleanOpsSection).
 el('boolUnion').onclick=()=>runBooleanOp('union');el('boolSubtract').onclick=()=>runBooleanOp('subtract');el('boolIntersect').onclick=()=>runBooleanOp('intersect');el('boolExclude').onclick=()=>runBooleanOp('xor');el('addCircle').onclick=()=>{const l=selectedLayer();commitHistory();const layer={id:'circle'+Date.now(),type:'circle',visible:true,cx:105,cy:45,r:18,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};project.layers.push(layer);selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);syncSelectedControlsFromLayer();updateAll(true)};el('addRect').onclick=()=>{const l=selectedLayer();commitHistory();const layer={id:'rect'+Date.now(),type:'rectangle',visible:true,x:65,y:30,w:80,h:30,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};project.layers.push(layer);selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);syncSelectedControlsFromLayer();updateAll(true)};el('importProject').onclick=()=>el('importProjectFile').click();

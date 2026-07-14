@@ -90,15 +90,17 @@ docs/specifications/S-104-TextPositionRecoveryDragTuning.md
 tools/test-s104-text-position-recovery-drag-tuning.mjs
 ```
 
-**Modified (6, plus three rounds of follow-up touches to `index.html`/`app.js`/the new test/this file):**
+**Modified (6, plus four rounds of follow-up touches to `index.html`/`app.js`/the new test/this file):**
 ```
 app.js                                          — LAYER_MOVE_DRAG_SENSITIVITY, centerSelectedTextOnObject();
                                                    follow-up 2: isTextOutsidePrintableArea(),
                                                    updateTextOutsidePrintableWarning();
-                                                   follow-up 3: ratio-based threshold correction
+                                                   follow-up 3: ratio-based threshold correction;
+                                                   follow-up 4: dual-surface toggle, workspace button wiring
 index.html                                      — Center on Object button + hint sentence;
                                                    follow-up: .primary styling + icon for discoverability;
-                                                   follow-up 2: #textOutsidePrintableWarning
+                                                   follow-up 2: #textOutsidePrintableWarning;
+                                                   follow-up 4: #workspaceTextOutsideWarning in #rightInspector
 package.json                                    — new test wired into the `test` script
 tools/test-alignment-snapping-integration.mjs   — one assertion updated for the intentional sensitivity change
 TASK.md                                         — this milestone's task definition
@@ -117,6 +119,12 @@ docs/specifications/S-104-TextPositionRecoveryDragTuning.md   — coordinate-spa
 tools/test-s104-text-position-recovery-drag-tuning.mjs        — new check 12b locks in the ratio formula
 ```
 
+Follow-up 4 (workspace warning) additionally touched:
+```
+docs/specifications/S-104-TextPositionRecoveryDragTuning.md   — placement audit + fix addendum
+tools/test-s104-text-position-recovery-drag-tuning.mjs        — new checks 15-17
+```
+
 ---
 
 # Test Results
@@ -125,9 +133,9 @@ tools/test-s104-text-position-recovery-drag-tuning.mjs        — new check 12b 
 $ npm test
 ```
 
-**837 checks run, 0 failures, exit code 0** as of the final commit (see the Follow-up sections below
-for how this grew across three review rounds: 831 → 832 → 836 → 837). Includes the new
-`tools/test-s104-text-position-recovery-drag-tuning.mjs` suite (15/15 passing) and the updated
+**840 checks run, 0 failures, exit code 0** as of the final commit (see the Follow-up sections below
+for how this grew across four review rounds: 831 → 832 → 836 → 837 → 840). Includes the new
+`tools/test-s104-text-position-recovery-drag-tuning.mjs` suite (18/18 passing) and the updated
 `tools/test-alignment-snapping-integration.mjs` (28/28 passing, including the one assertion this
 milestone deliberately changed). Every other pre-existing suite (font/geometry/history/editing/
 alignment/snapping/export/preview3D/image/Gallery/Design Library/Typography/Project-Model-
@@ -282,14 +290,56 @@ Full detail in `docs/specifications/S-104-TextPositionRecoveryDragTuning.md` §"
 
 ---
 
+# Follow-up 4: Warning Moved to the Persistent Workspace
+
+A fourth visual-review report, despite Follow-up 3 being verifiably correct: manual testing still
+showed no visible warning. The report correctly identified the actual defect — the warning lived only
+inside `#lightboxText`, a modal that is normally **closed** for the entire duration of a canvas drag
+(dragging on the 2D canvas is impossible while any modal is open — it captures every pointer event
+across the full viewport). A warning inside a closed dialog is indistinguishable from no warning during
+the one interaction it exists to catch. This was a placement defect, not a computation bug — Follow-up
+3's 50% threshold is unchanged, per this round's explicit instruction. Full detail in
+`docs/specifications/S-104-TextPositionRecoveryDragTuning.md` §"Follow-up 4".
+
+* **Fix:** a second copy of the same warning now lives in `#rightInspector` — normal page chrome,
+  never covered by a modal, and already this app's persistent per-selection status surface (Stone
+  Size/Gap/Stone Color/More Options). `#workspaceTextOutsideWarning` (reusing the same
+  `.validation-message` styling) sits directly under the Inspector's layer-name heading with a
+  `↺ Center Text` button (`#workspaceCenterTextBtn`).
+* `updateTextOutsidePrintableWarning()` now computes `isTextOutsidePrintableArea()` **once** and
+  toggles both the Lightbox's and the workspace's warning from that single shared boolean — they can
+  never disagree, and both stay live via the same `updateAll()` call every position-changing action
+  (including every drag `pointermove` frame) already goes through.
+* `#workspaceCenterTextBtn` calls the *exact same* `centerSelectedTextOnObject()` function
+  `#centerTextOnObject` already uses — no duplicated recovery logic, so it is guaranteed to only ever
+  touch `l.x`/`l.y`.
+* `#centerTextOnObject`/`#textOutsidePrintableWarning` (inside the Text Lightbox) are both **kept**, per
+  this round's explicit instruction — they remain the visible copy for when the Lightbox is open (which
+  covers the Inspector).
+* No `GeometryEngine`/`StoneLayout`/renderer/exporter/schema change.
+* **Tests:** 3 new checks (15–17) plus check 12 updated for the two-surface toggle. `npm test`: **840
+  checks, 0 failures**.
+* **Browser verification** (real CDP `Input.dispatchMouseEvent`, Text Lightbox never opened): a single
+  continuous drag, checked live mid-gesture (before the mouse was released) — workspace warning hidden
+  at `textX≈36/77mm`, **visible starting at `textX≈117mm`**, `lightboxOpen` confirmed `false`
+  throughout. Screenshot at the unreadable state shows the cup with only stray streaks, Lightbox still
+  closed, red warning + blue Center Text button in the Inspector. Clicked `#workspaceCenterTextBtn`
+  directly (Lightbox never opened): position reset to `(0,0)`, warning cleared, cup shows the text fully
+  legible again, every other text property (font/height/stone size/color/fill style/curve/text content)
+  verified unchanged. Undo/Redo correctly restored/cleared the workspace warning. Zero console errors.
+
+---
+
 # Recommendation
 
 Approve and merge. Both original requirements — reduced, more predictable drag sensitivity and a
-one-click, position-only recovery action — plus all three follow-up fixes (Center on Object
-discoverability, the outside-the-printable-area warning, and its real-mouse-drag-verified
-partial-overlap correction), are implemented as the smallest coherent change on top of
+one-click, position-only recovery action — plus all four follow-up fixes (Center on Object
+discoverability, the outside-the-printable-area warning, its real-mouse-drag-verified
+partial-overlap correction, and its move to the persistent workspace), are implemented as the smallest
+coherent change on top of
 existing, already-tested infrastructure (`getSafeAreaRectMm`, `commitHistory`/`HistoryManager`, the
-Layers-list selection path, and the app's existing `.btn.primary`/
+Layers-list selection path, the shared `centerSelectedTextOnObject()`, and the app's existing
+`.btn.primary`/
 `.validation-message` visual language). No new geometry, no new storage, no schema change, and none of
 the explicitly forbidden modules (`GeometryEngine`, `StoneLayout`, project schema, exporters, rendering,
 Design Library, Gallery) were touched — enforced by an automated forbidden-file-prefix check in the

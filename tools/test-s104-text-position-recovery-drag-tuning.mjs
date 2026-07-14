@@ -127,7 +127,9 @@ await test('12. isTextOutsidePrintableArea()/updateTextOutsidePrintableWarning()
   assert.match(fn, /getSafeAreaRectMm\(currentObjectTemplate\(\),project\.canvas\.width,project\.canvas\.height\)/);
   assert.doesNotMatch(fn, /[a-zA-Z0-9_.]+\.[a-zA-Z]+\s*=[^=]/, 'expected a pure read-only computation, no assignment of any kind');
   const updateFn = appJs.match(/function updateTextOutsidePrintableWarning\(\)\{([\s\S]*?)\n\}/)[1];
-  assert.match(updateFn, /el\('textOutsidePrintableWarning'\)\.classList\.toggle\('visible',isTextOutsidePrintableArea\(selectedLayer\(\)\)\)/);
+  assert.match(updateFn, /const outside=isTextOutsidePrintableArea\(selectedLayer\(\)\);/, 'expected one shared computation reused by both warning surfaces');
+  assert.match(updateFn, /el\('textOutsidePrintableWarning'\)\.classList\.toggle\('visible',outside\);/);
+  assert.match(updateFn, /el\('workspaceTextOutsideWarning'\)\.classList\.toggle\('visible',outside\);/);
 });
 
 await test('12b. the warning uses a partial-overlap-area ratio against the printable safe area (not a full-disjoint/boundary-touch test) — a real mouse-drag audit found a full-disjoint test never fires for text wider than the safe area (the default project\'s own auto-fit text is 199.4mm vs. a 182mm-wide safe area) until literally 100% of it has left, well after a real user can no longer read it', () => {
@@ -145,7 +147,29 @@ await test('13. the warning is recomputed on every updateAll() call — live dur
   assert.match(updateAllFn, /layout=generated;renderLayerUI\(\);drawLayout\(\);drawCup\(\);updateStats\(\);updateHistoryUI\(\);updateEditingUI\(\);updateViewButtons\(\);updateTextOutsidePrintableWarning\(\);/);
 });
 
-await test('14. no forbidden file changed (GeometryEngine, StoneLayout, exporters, every renderer, Design Library, Gallery, and every other prior milestone\'s forbidden list) — S-104 is app.js/index.html/tools/docs only', () => {
+await test('15. the persistent right Inspector panel (never covered by a modal, always visible while dragging on the canvas) has its own "outside the printable area" warning with a "Center Text" action — not inside the Text Lightbox', () => {
+  const inspector = indexHtml.match(/<aside class="right-inspector" id="rightInspector"[\s\S]*?<\/aside>/)[0];
+  assert.match(inspector, /id="workspaceTextOutsideWarning"/);
+  assert.match(inspector, /This text is outside the printable area\./);
+  assert.match(inspector, /id="workspaceCenterTextBtn"/);
+  assert.match(inspector, /Center Text</);
+  assert.ok(
+    inspector.indexOf('id="workspaceTextOutsideWarning"') < inspector.indexOf('id="workspaceCenterTextBtn"') &&
+    inspector.indexOf('id="workspaceCenterTextBtn"') < inspector.indexOf('id="inspectorPositionSlot"'),
+    'expected the warning+button ahead of the rest of the inspector, immediately under the layer name'
+  );
+});
+
+await test('16. the workspace "Center Text" button reuses the exact same centerSelectedTextOnObject() the Text Lightbox\'s Center on Object uses — no duplicated recovery logic, so it is guaranteed to only ever touch x/y', () => {
+  assert.match(appJs, /el\('workspaceCenterTextBtn'\)\.onclick=\(\)=>centerSelectedTextOnObject\(\);/);
+});
+
+await test('17. the workspace warning reuses the existing .validation-message alert styling and is toggled from the exact same isTextOutsidePrintableArea() result as the Text Lightbox\'s copy (see check 12) — both surfaces can never disagree', () => {
+  const warningTag = indexHtml.match(/<div class="validation-message" id="workspaceTextOutsideWarning"[^>]*>/);
+  assert.ok(warningTag, 'expected #workspaceTextOutsideWarning to carry class="validation-message"');
+});
+
+await test('18. no forbidden file changed (GeometryEngine, StoneLayout, exporters, every renderer, Design Library, Gallery, and every other prior milestone\'s forbidden list) — S-104 is app.js/index.html/tools/docs only', () => {
   const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
   const changedPaths = output
     .split('\n')

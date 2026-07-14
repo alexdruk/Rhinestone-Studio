@@ -194,6 +194,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 #inspectorEmpty{font-size:var(--font-size-sm);color:var(--color-text-muted)}
 .field-slot .field-row{margin-bottom:0}
 #moreOptionsBtn{margin-top:var(--space-2)}
+#workspaceCenterTextBtn{margin-top:var(--space-2)}
 
 /* ============================== Responsive ============================== */
 @media (max-width:1400px){:root{--left-panel-width:240px;--right-panel-width:224px}}
@@ -421,6 +422,10 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
   <aside class="right-inspector" id="rightInspector" aria-label="Layer inspector">
     <section class="panel-section">
       <h2>Inspector — <span id="inspectorLayerName">Selected layer</span></h2>
+      <div class="validation-message" id="workspaceTextOutsideWarning" role="status">
+        <div>This text is outside the printable area.</div>
+        <button type="button" class="btn sm primary" id="workspaceCenterTextBtn" title="Reset only this text layer's position to the center of the printable area — font, size, rotation, spacing, fill, and stone size are left unchanged">↺ Center Text</button>
+      </div>
       <div id="inspectorPositionSlot" class="field-slot"></div>
       <div id="inspectorStoneSlot" class="field-slot"></div>
       <button class="btn block" id="moreOptionsBtn">More Options…</button>
