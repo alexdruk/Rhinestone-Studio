@@ -805,6 +805,26 @@ function updateViewButtons(){document.querySelectorAll('.viewBtn').forEach(b=>b.
 function selectionBoundsText(){if(!selectedLayerIds.size)return'';const sel=[...selectedLayerIds].map(id=>project.layers.find(x=>x.id===id)).filter(Boolean);if(!sel.length)return'';const b=unionBBoxOfLayers(sel);return`<span>selection: ${b.width.toFixed(1)}×${b.height.toFixed(1)} mm</span>`}
 function updateStats(){const safe=getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height);el('layoutStats').innerHTML=`<b>${layout.count}</b> stones <span>${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm</span><span>canvas: ${project.canvas.width}×${project.canvas.height} mm</span><span>safe area: ${safe.widthMm.toFixed(1)}×${safe.heightMm.toFixed(1)} mm</span><span>units: mm</span>${selectionBoundsText()}<span>selected: ${escapeHtml(layerLabel(selectedLayer()))}</span>`;el('cupStats').innerHTML=`<span>${escapeHtml(currentObjectTemplate().displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span>`;updateStoneColorSwatch()}
 function download(name,mime,data){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:mime}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800);el('status').textContent=`Downloaded ${name}`}function exportCanvas(name,canvas){canvas.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800)},'image/png')}
+// S-106: Combined Visual Preview PNG. Composites the two already-rendered, always-mounted canvas
+// elements (layoutCanvas/cupCanvas -- both keep a real, non-zero pixel backing store at all times
+// regardless of the active workspace tab, per the .tab-hidden/dual-mode invariant documented at
+// index.html's .canvas-panel rule) side by side onto one offscreen canvas, drawn at each source
+// canvas's own native pixel size (no rescale/stretch) so the capture is byte-for-byte what the
+// operator currently sees, including whatever 3D rotation/zoom OrbitControls is mid-orbit on. No
+// new render pass, no GeometryEngine/StoneLayout/renderer call -- pure canvas-to-canvas copy, the
+// same "capture, not a standalone exporter" shape #exportPNG/#exportCup already use.
+function composeCombinedPreviewCanvas(){
+  const dpr=Math.max(1,devicePixelRatio||1),margin=48*dpr,gap=48*dpr;
+  const w1=layoutCanvas.width,h1=layoutCanvas.height,w2=cupCanvas.width,h2=cupCanvas.height;
+  const maxH=Math.max(h1,h2);
+  const c=document.createElement('canvas');
+  c.width=margin*2+gap+w1+w2;c.height=margin*2+maxH;
+  const ctx=c.getContext('2d');
+  ctx.fillStyle='#ffffff';ctx.fillRect(0,0,c.width,c.height);
+  ctx.drawImage(layoutCanvas,margin,margin+(maxH-h1)/2);
+  ctx.drawImage(cupCanvas,margin+w1+gap,margin+(maxH-h2)/2);
+  return c;
+}
 function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(copy.type==='rectangle'){copy.x+=8;copy.y+=8}if(copy.type==='svg'){copy.x+=8;copy.y+=8}if(copy.type==='image'){copy.x+=8;copy.y+=8}if(copy.type==='path'){copy.x+=8;copy.y+=8}if(copy.type==='text'){copy.text+=' copy';copy.x=(copy.x||0)+8;copy.y=(copy.y||0)+8}project.layers.push(copy);selectedLayerId=copy.id;selectedLayerIds=selectOnly(copy.id);syncSelectedControlsFromLayer();updateAll()}function deleteLayer(id){if(project.layers.length<=1){el('status').textContent='Cannot delete the last layer';const hint=el('layerRuleHint');hint.style.display='block';hint.scrollIntoView({block:'nearest'});return}commitHistory();project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true)}
 function pointerToLayout(e){const r=layoutCanvas.getBoundingClientRect(),dpr=layoutTransform.dpr;return layoutPxToMm((e.clientX-r.left)*dpr,(e.clientY-r.top)*dpr)}function hitTest(mm){const layers=[...project.layers].reverse();for(const l of layers){const b=getLayerBBox(l);for(const h of handlesFor(b)){if(Math.abs(mm.x-h.x)<3&&Math.abs(mm.y-h.y)<3&&l.type!=='text')return{layer:l,kind:'resize',handle:h.name,b0:b}}if(mm.x>=b.x&&mm.x<=b.x2&&mm.y>=b.y&&mm.y<=b.y2)return{layer:l,kind:'move',b0:b}}return null}
 // S-104: a move-drag previously mapped pointer movement to mm 1:1 (rawDx/rawDy applied verbatim),
@@ -1041,6 +1061,7 @@ el('exportLayout').onclick=()=>{if(!layout){el('status').textContent='Export fai
 el('exportSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-layout.svg','image/svg+xml',stoneLayoutToSvg(layout,{widthMm:project.canvas.width,heightMm:project.canvas.height}))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportPNG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-layout.png',layoutCanvas)}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportCup').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-cup-preview.png',cupCanvas)}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+el('exportCombined').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-combined-preview.png',composeCombinedPreviewCanvas())}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 // RS-1005: Production Sheet export. Page size/margin/mirror/registration-marks are view/export-
 // only options (like rotation/zoom) -- read live from their controls at click time, not part of
 // `project`, not undo/redo-tracked. gapMm is collected from every currently visible layer (the one

@@ -1,42 +1,39 @@
 # Task
 
-**Task ID:** S-105
-**Task Type:** UI/UX behavior change — Persistent Movable Lightboxes
-**Specification:** `docs/specifications/S-105-PersistentMovableLightboxes.md`
+**Task ID:** S-106
+**Task Type:** Additive export feature — Combined Visual Preview PNG Export
+**Specification:** `docs/specifications/S-106-CombinedVisualPreviewPNGExport.md`
 **Status:** IMPLEMENTED
-**Branch:** feature/s-105-persistent-movable-lightboxes
+**Branch:** feature/s-106-combined-visual-preview-png-export
 
 ## Goal
 
-Make every Lightbox (Text, Shapes, Import, Image Trace, Design Library, Export, Production Sheet,
-Shipping & Handling, Settings, Help, Gallery) movable by its header, non-blocking of the 2D canvas /
-Object Preview / Layers list / Inspector, and persistent until the operator explicitly closes it —
-removing the current close-and-reopen-via-"More Options" round trip for reselecting a same-type layer.
+Add one new Export option, "Export Combined Preview PNG", that produces a single PNG with the
+current 2D Canvas on the left and the current Object Preview (3D) on the right, side by side, on a
+white background — reflecting exactly what the operator currently sees, including whatever 3D
+rotation/zoom is live, without requiring a switch to the Object Preview tab first.
 
 ## Required Outcome
 
-See `docs/specifications/S-105-PersistentMovableLightboxes.md` in full. Summary:
+See `docs/specifications/S-106-CombinedVisualPreviewPNGExport.md` in full. Summary:
 
-* Audit-first: confirmed the one shared `src/ui/Lightbox.js` dialog controller wraps a full-viewport
-  blocking `.lightbox-overlay` backdrop for every Lightbox except `lightboxShapes` (made non-modal in
-  S-101, the only existing precedent); confirmed no drag/move code exists anywhere in the repository;
-  confirmed reopening never creates a duplicate (already a no-op via `Lightbox.isOpen`); confirmed the
-  `FIELD_GROUPS`/`activeFieldLightbox` shared-DOM relocation mechanism (`app.js:1063-1076`) already
-  assumes exactly one of Text/Shapes/Import/Image Trace is "active" at a time, which is the concrete
-  architectural reason this milestone keeps one primary Lightbox open at a time rather than allowing
-  arbitrary concurrency; confirmed `syncSelectedControlsFromLayer()` already runs on every selection
-  change regardless of Lightbox state, so removing the modal block is sufficient to make an open
-  Lightbox live-update on same-type reselection with no new sync logic.
-* `src/ui/Lightbox.js`: new `options.primary` exclusivity (closes any other open primary Lightbox
-  before opening), header-drag-to-move with viewport clamping (on drag, on open, and on window
-  resize), position persisted across close/reopen (not reset), `.lightbox.dragging` state class.
-* `index.html`: the existing S-101 `.lightbox-overlay.non-modal` modifier applied to all 11 named
-  Lightboxes (`aria-modal` flipped to `"false"` on each); new drag-cursor CSS only. The two sub-dialogs
-  (`lightboxLibraryConfirm`, `lightboxGalleryPreview`) are untouched — still modal, not primary, per
-  the specification's explicit scope boundary.
-* `app.js`: the 11 primary `lightboxes` entries gain `primary:true`; no other logic changes.
-* `GeometryEngine`, `StoneLayout`, every renderer, every exporter, the project schema, the Design
-  Library/Gallery data layers, and Gallery's disabled top-menu button are untouched.
+* Audit-first: confirmed both `layoutCanvas`/`#layout` and `cupCanvas`/`#cup` are permanently
+  mounted, always-rendered `<canvas>` elements regardless of the active workspace tab (the existing
+  `.tab-hidden{visibility:hidden}` invariant, never `display:none`, documented in `index.html` for
+  exactly this reason); confirmed the default `workspaceMode` is `'dual'` (both panels already shown
+  side by side on load); confirmed `Preview3DRenderer` is constructed with
+  `preserveDrawingBuffer:true` so its canvas's pixels are readable after the fact, the same
+  precondition the existing `#exportCup` handler already relies on; confirmed `#exportPNG`/`#exportCup`
+  already establish a "capture an existing rendered canvas via `toBlob`, not a standalone exporter"
+  precedent this milestone reuses verbatim.
+* `index.html`: one new button, `#exportCombined`, added to the existing "Visual previews"
+  `.export-group` inside `#lightboxExport`, alongside `2D SVG` / `2D PNG` / `3D / Object Preview PNG`.
+* `app.js`: new `composeCombinedPreviewCanvas()` — draws `layoutCanvas` (left) then `cupCanvas`
+  (right) at their own native pixel size onto a new offscreen canvas with a white background and a
+  fixed margin/gap, vertically centered on whichever is taller. `#exportCombined`'s handler mirrors
+  the existing export handlers' guard/try-catch shape exactly and reuses `exportCanvas()` unchanged.
+* No change to `GeometryEngine`, `StoneLayout`, the project schema, production geometry, any existing
+  exporter, or any existing export's output.
 
 ## Rules
 
@@ -44,23 +41,20 @@ See `docs/specifications/S-105-PersistentMovableLightboxes.md` in full. Summary:
   `docs/MILESTONE_WORKFLOW.md`.
 * Repository is the source of truth; audit before implementing; do not add functionality beyond what
   the specification requires.
-* Do not touch `GeometryEngine`, `StoneLayout`, the project schema, exporters, rendering
-  (`src/renderer/**`, `src/preview3d/**`), Design Library data layer (`src/library/**`), Gallery data
-  layer (`src/gallery/**`), or Gallery's disabled menu state (`#menuGallery` in `index.html`).
+* Do not touch `GeometryEngine`, `StoneLayout`, the project schema, production geometry, any
+  exporter's existing output, or any renderer (`src/renderer/**`, `src/preview3d/**`).
 
 ## Deliverables
 
-* `src/ui/Lightbox.js`, `index.html`, `app.js` — primary-exclusivity, drag-to-move, non-modal for all
-  11 named Lightboxes.
-* `tools/test-s105-persistent-movable-lightboxes.mjs` — new test suite.
-* `tools/test-ui001-dialog-behavior.mjs`, `tools/test-ui001-lightboxes.mjs`,
-  `tools/test-s101-ux-workflow-polish.mjs` — updated for the generalized non-modal/`aria-modal` state.
+* `index.html`, `app.js` — new `#exportCombined` export option and `composeCombinedPreviewCanvas()`.
+* `tools/test-s106-combined-visual-preview-png-export.mjs` — new test suite.
+* `tools/test-production-export-validation.mjs` — updated export-handler-count assertion.
 * `package.json` — new test wired into the `test` script.
-* `docs/specifications/S-105-PersistentMovableLightboxes.md` — full specification and audit findings.
+* `docs/specifications/S-106-CombinedVisualPreviewPNGExport.md` — full specification and audit
+  findings.
 * `npm test` passing in full.
-* Real-browser verification (headless Chromium via Playwright, isolated local run) of non-modal
-  interaction, drag/viewport-clamp behavior, persistence across selection/canvas edits, no-duplicate
-  reopening, and primary-Lightbox exclusivity, at 1366×768, 1440×900, and a narrow width, with
-  screenshots.
+* Real-browser verification (headless Chromium via Playwright, isolated local run) of the export
+  working immediately after startup with no tab switch, correctly capturing a rotated Object
+  Preview on re-export, and existing PNG exports unaffected — with sample PNGs.
 * `TASK_RESULT.md` completed.
-* One commit on `feature/s-105-persistent-movable-lightboxes`, branch pushed (not merged).
+* One commit on `feature/s-106-combined-visual-preview-png-export`, branch pushed (not merged).
