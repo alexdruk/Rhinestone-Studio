@@ -303,10 +303,86 @@ and the update call is wired into `updateAll()`. `npm test`: **836 checks, 0 fai
    again.
 6. Zero console/page errors across the entire session.
 
+## Follow-up 3: Coordinate-Space Audit & Real-Mouse-Drag Fix
+
+A third visual-review report: manual testing (dragging the mouse until the text is no longer readable
+on the mug) still showed no warning, and the report specifically distrusted the prior round's
+verification method, asking for reproduction via real CDP `Input.dispatchMouseEvent` rather than
+Playwright's `page.mouse` helper or DOM-level field edits.
+
+**Reproduction method.** A fresh script drove the browser via `page.context().newCDPSession(page)` and
+raw `cdp.send('Input.dispatchMouseEvent', {...})` calls — `mousePressed`/`mouseMoved`
+(`buttons:1`)/`mouseReleased` — bypassing Playwright's `page.mouse` abstraction entirely, against the
+exact default mug project (`product:'mug'`, `wrap:'front'`, default "Vitalina Serbin" text) a real user
+opens first.
+
+**Coordinate-space audit (required before touching any code):**
+* `layer.x`/`layer.y` and `getLayerBBox()`'s bbox (`app.js`) are both in the flat *production-canvas
+  mm* frame — the same frame every stone is generated in.
+* `getSafeAreaRectMm()` (`src/products/ObjectTemplate.js`, unchanged) is an inset rectangle in that
+  exact same frame.
+* The 3D object projection (`src/preview3d/StoneLayoutTexture.js`'s `drawStoneLayoutTexture()`, fed
+  `canvasWidthMm`/`canvasHeightMm` straight from `project.canvas` by `Preview3DRenderer.js`'s
+  `update()`) rasterizes the *entire* flat canvas into one texture; `ObjectGeometryBuilder.js`'s
+  `applyWrapUv()`/`applyAzimuthUv()` then map that whole texture (`U 0..1` = canvas `x 0..canvasWidthMm`)
+  across the wrap-mode angle centered on the front (`WRAP_ANGLE_DEG` in `src/preview3d/
+  ObjectDimensions.js` — `front:70°`, `wide:115°`, `half:180°`, `full:300°`). Content within the flat
+  canvas's mm bounds is therefore always on the front-facing, always-visible part of the object at any
+  wrap mode/camera rotation; content outside those mm bounds is clipped out of the texture before it
+  ever reaches the mesh (`ctx.fillRect`/`ctx.arc` simply don't draw outside the texture's own pixel
+  bounds).
+* **Conclusion: the flat canvas-mm safe-area comparison is already the correct coordinate space** for
+  "visible on the object" — no 3D projection math was missing, and per this milestone's own constraint
+  #6, none was added. `GeometryEngine`, `StoneLayout`, and 3D rendering remain untouched.
+
+**The real bug — found empirically via raw CDP drag, not by inspection.** A `Input.dispatchMouseEvent`
+drag of only 200 screen-px, purely sideways (no vertical component), moved the default text layer to
+`textX≈120mm`. At that position the text's own bounding box (`125.4–324.8mm` × `36.5–53.5mm`) overlaps
+the `182×70mm` safe area by only **35.4% of its own area** — cup screenshot confirms only "Vitali…" and
+a few stray stone streaks remain on the visible surface, genuinely unreadable. The *previous*
+implementation (`isTextOutsidePrintableArea()`, "fully disjoint from the safe area") computed **no
+warning** at this exact position (`bx2=324.8 > safe.xMm-tol`, `bx=125.4 < safe.xMm+safe.widthMm+tol` —
+neither disjointness condition was met, since roughly a third of the wide default text still grazed the
+safe area). This is precisely the discrepancy reported: a real, moderate mouse drag left text mostly
+unreadable while the warning stayed silent, because "fully disjoint" only ever fires once **100%** of
+the text has left, and the default project's own auto-fit text (`199.4mm` wide) is wider than the
+safe area (`182mm`) — a large fraction can leave before literally all of it does.
+
+**Fix — partial-overlap-area ratio, same coordinate space, no 3D changes.** `isTextOutsidePrintableArea()`
+now computes the actual intersection rectangle between the text's bbox and the safe area, and warns once
+less than `TEXT_PRINTABLE_VISIBILITY_RATIO` (50%) of the bbox's own area remains inside — i.e., once a
+majority of the text has left the printable area, matching "no longer meaningfully visible" directly
+instead of only the 100% case. The function is still pure (bbox/area arithmetic only, no layer
+mutation) and still driven from `updateAll()`, so live-update behavior, Center on Object, drag
+sensitivity, and Undo/Redo are all unaffected by this change.
+
+**Tests:** `tools/test-s104-text-position-recovery-drag-tuning.mjs` gained check 12b, asserting the
+ratio-based formula (`overlapWidth*overlapHeight)/bboxArea` compared against a named
+`TEXT_PRINTABLE_VISIBILITY_RATIO` constant in `(0,1)`) replaced the disjointness test. `npm test`:
+**837 checks, 0 failures**.
+
+**Browser verification (real CDP `Input.dispatchMouseEvent`, no Playwright `page.mouse`, no DOM field
+edits for the drag itself):**
+1. **Before drag** — default mug project, `textX/textY=(0,0)`, warning hidden. Screenshot captured.
+2. **Gap demonstration** — the exact 200px sideways CDP drag above: recomputed both the old and new
+   formulas by hand from the resulting position using this project's own reported constants (canvas
+   `210×90`, safe area `182×70` at inset `14/10`, default bbox `199.4×17.0`): old formula → `false` (no
+   warning — the bug); new formula → `true` (warns — the fix). Cup screenshot shows the text genuinely
+   unreadable at this exact position.
+3. **After text becomes unreadable** (larger diagonal CDP drag, `textX/textY≈(544.5, 363.0)`, fully off
+   the canvas) — warning visible, confirmed both via the raw DOM class and by opening the Text Lightbox
+   and screenshotting it.
+4. **Center on Object** — position reset to `(0,0)`, warning disappeared in the same render pass, cup
+   screenshot shows "Vitalina Serbin" fully legible again.
+5. **Undo/Redo** — Undo restored the off-canvas position and the warning; Redo restored the centered
+   position and cleared it again.
+6. **Console** — zero errors/page errors across the entire session.
+
 ## Recommendation
 
-Approve and merge. Both original requirements, plus both follow-up fixes (Center on Object
-discoverability, and the outside-the-printable-area warning), are implemented as the smallest coherent
+Approve and merge. Both original requirements, plus all three follow-up fixes (Center on Object
+discoverability, the outside-the-printable-area warning, and its real-mouse-drag-verified
+partial-overlap correction), are implemented as the smallest coherent
 change on top of existing, already-tested infrastructure
 (`getSafeAreaRectMm`, `commitHistory`/`HistoryManager`, the Layers-list selection path, and now the
 app's existing `.btn.primary` visual language) — no new geometry, no new storage, no schema change, no

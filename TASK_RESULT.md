@@ -90,11 +90,12 @@ docs/specifications/S-104-TextPositionRecoveryDragTuning.md
 tools/test-s104-text-position-recovery-drag-tuning.mjs
 ```
 
-**Modified (6, plus two rounds of follow-up touches to `index.html`/`app.js`/the new test/this file):**
+**Modified (6, plus three rounds of follow-up touches to `index.html`/`app.js`/the new test/this file):**
 ```
 app.js                                          — LAYER_MOVE_DRAG_SENSITIVITY, centerSelectedTextOnObject();
                                                    follow-up 2: isTextOutsidePrintableArea(),
-                                                   updateTextOutsidePrintableWarning()
+                                                   updateTextOutsidePrintableWarning();
+                                                   follow-up 3: ratio-based threshold correction
 index.html                                      — Center on Object button + hint sentence;
                                                    follow-up: .primary styling + icon for discoverability;
                                                    follow-up 2: #textOutsidePrintableWarning
@@ -110,6 +111,12 @@ docs/specifications/S-104-TextPositionRecoveryDragTuning.md   — audit + fix ad
 tools/test-s104-text-position-recovery-drag-tuning.mjs        — new check 4b locks in the .primary class
 ```
 
+Follow-up 3 (coordinate-space audit + partial-overlap fix) additionally touched:
+```
+docs/specifications/S-104-TextPositionRecoveryDragTuning.md   — coordinate-space audit + fix addendum
+tools/test-s104-text-position-recovery-drag-tuning.mjs        — new check 12b locks in the ratio formula
+```
+
 ---
 
 # Test Results
@@ -118,9 +125,9 @@ tools/test-s104-text-position-recovery-drag-tuning.mjs        — new check 4b l
 $ npm test
 ```
 
-832 checks run, **0 failures**, exit code 0 (post follow-up fix; 831 before it — see the Follow-up
-section below for the one new assertion). Includes the new
-`tools/test-s104-text-position-recovery-drag-tuning.mjs` suite (10/10 passing) and the updated
+**837 checks run, 0 failures, exit code 0** as of the final commit (see the Follow-up sections below
+for how this grew across three review rounds: 831 → 832 → 836 → 837). Includes the new
+`tools/test-s104-text-position-recovery-drag-tuning.mjs` suite (15/15 passing) and the updated
 `tools/test-alignment-snapping-integration.mjs` (28/28 passing, including the one assertion this
 milestone deliberately changed). Every other pre-existing suite (font/geometry/history/editing/
 alignment/snapping/export/preview3D/image/Gallery/Design Library/Typography/Project-Model-
@@ -232,13 +239,57 @@ the same render pass; Undo → warning back; Redo → warning gone again. Zero c
 
 ---
 
+# Follow-up 3: Coordinate-Space Audit & Real-Mouse-Drag Fix
+
+A third visual-review report: manual mouse-drag testing on the mug still showed no warning, and
+distrusted the prior round's verification method, asking specifically for real CDP
+`Input.dispatchMouseEvent` reproduction (not Playwright's `page.mouse` helper, not DOM field edits).
+Full detail in `docs/specifications/S-104-TextPositionRecoveryDragTuning.md` §"Follow-up 3". Summary:
+
+* **Reproduced with raw CDP** (`page.context().newCDPSession(page)` + `Input.dispatchMouseEvent`
+  `mousePressed`/`mouseMoved`/`mouseReleased`) against the exact default mug project.
+* **Coordinate-space audit** (required by this milestone before any code change): `layer.x/y` and
+  `getLayerBBox()` are in the flat production-canvas mm frame; `getSafeAreaRectMm()` is the same
+  frame's inset rect; the 3D preview (`StoneLayoutTexture.js`/`ObjectGeometryBuilder.js`) rasterizes
+  the *entire* flat canvas into one texture and maps that whole texture across the wrap angle centered
+  on the front (`WRAP_ANGLE_DEG`: front 70°, wide 115°, half 180°, full 300° —
+  `src/preview3d/ObjectDimensions.js`) — so anything within the flat canvas's mm bounds is always
+  front-facing/visible at any wrap mode or camera rotation, and anything outside is clipped from the
+  texture before reaching the mesh. **Conclusion: the flat canvas-mm comparison was already the
+  correct coordinate space** — no 3D projection math was missing; `GeometryEngine`, `StoneLayout`, and
+  3D rendering remain untouched, per this milestone's constraint #6.
+* **The real bug, found empirically:** a 200-screen-px, purely sideways real CDP drag moved the default
+  text to `textX≈120mm`. At that position only **35.4%** of the text's own bounding-box area still
+  overlaps the safe area — cup screenshot shows only "Vitali…" and stray streaks, genuinely unreadable
+  — yet the previous "fully disjoint from the safe area" check computed **no warning**, because the
+  default project's auto-fit text (`199.4mm` wide) is wider than the safe area (`182mm`): a large
+  fraction can leave before literally 100% does, which is exactly what "fully disjoint" requires.
+* **Fix:** `isTextOutsidePrintableArea()` now computes the real intersection area between the text bbox
+  and the safe area and warns once less than a named `TEXT_PRINTABLE_VISIBILITY_RATIO` (50%) of the
+  bbox's own area remains inside — "majority of the text has left," matching "no longer meaningfully
+  visible" directly. Still a pure function (no layer mutation), still driven from `updateAll()` — drag
+  sensitivity, Center on Object, and Undo/Redo are unaffected.
+* **Tests:** one new check (12b) verifying the ratio-based formula. `npm test`: **837 checks, 0
+  failures**.
+* **Browser verification** (real CDP, no Playwright `page.mouse`, no DOM field edits for the drag):
+  before-drag screenshot (baseline, warning hidden); the 200px gap-demonstration drag with both old
+  and new formulas recomputed by hand from the resulting position (old → `false`, the bug; new → `true`,
+  the fix) plus a cup screenshot showing the text genuinely unreadable at that exact spot; a larger
+  drag to fully off-canvas (`≈(544.5, 363.0)`) with the warning confirmed both via DOM state and by
+  screenshotting the opened Text Lightbox; Center on Object restoring the text (cup screenshot shows it
+  fully legible again) and clearing the warning; Undo/Redo restoring/clearing it correctly; zero
+  console errors throughout.
+
+---
+
 # Recommendation
 
 Approve and merge. Both original requirements — reduced, more predictable drag sensitivity and a
-one-click, position-only recovery action — plus both follow-up fixes (Center on Object discoverability,
-and the outside-the-printable-area warning), are implemented as the smallest coherent change on top of
+one-click, position-only recovery action — plus all three follow-up fixes (Center on Object
+discoverability, the outside-the-printable-area warning, and its real-mouse-drag-verified
+partial-overlap correction), are implemented as the smallest coherent change on top of
 existing, already-tested infrastructure (`getSafeAreaRectMm`, `commitHistory`/`HistoryManager`, the
-Layers-list selection path, `SNAP_TOLERANCE_MM`, and the app's existing `.btn.primary`/
+Layers-list selection path, and the app's existing `.btn.primary`/
 `.validation-message` visual language). No new geometry, no new storage, no schema change, and none of
 the explicitly forbidden modules (`GeometryEngine`, `StoneLayout`, project schema, exporters, rendering,
 Design Library, Gallery) were touched — enforced by an automated forbidden-file-prefix check in the

@@ -544,24 +544,41 @@ function centerSelectedTextOnObject(){
   syncSelectedControlsFromLayer();updateAll(true);
   el('status').textContent='Centered text on the printable area';
 }
-// S-104: "materially outside" the printable (safe) area means the text's bounding box has no overlap
-// with it at all (fully disjoint), not merely overhanging an edge -- auto-fit text is deliberately
-// allowed to be wider than the safe area (it only caps to canvas width minus a margin, per
-// generateTextStonesLive() above), so a strict full-containment check would false-positive on
-// perfectly normal, never-moved text. A small tolerance (the existing SNAP_TOLERANCE_MM, this
-// codebase's "close enough" threshold for drag-snap) keeps a bbox resting exactly on the boundary
-// from flickering. This intentionally matches centerSelectedTextOnObject()'s own "recovers text
-// dragged completely outside the visible printable area" scope, so the warning is a direct, correct
-// signal for exactly when Center on Object is the fix. Layer bbox comes from getLayerBBox() (RS-1009,
-// already the single source of truth for every layer's rendered extent) -- no new geometry. An
-// empty/unrendered text layer (zero stones) has nothing to warn about.
+// S-104 (audited/corrected after real-mouse-drag verification): "no longer meaningfully visible on
+// the printable object" is a PARTIAL-overlap test against the printable safe area, not a full-
+// disjoint one. Coordinate-space audit behind this: layer.x/y and getLayerBBox()'s bbox are both in
+// the flat production-canvas mm frame (the same frame stones are generated in); getSafeAreaRectMm()
+// is that same frame's inset rectangle. The 3D preview (src/preview3d/StoneLayoutTexture.js's
+// drawStoneLayoutTexture(), fed canvasWidthMm/canvasHeightMm from this exact project.canvas by
+// Preview3DRenderer.js's update()) rasterizes the *entire* flat canvas into one texture and
+// ObjectGeometryBuilder.js's applyWrapUv()/applyAzimuthUv() map that whole texture (U 0..1 = canvas
+// x 0..canvasWidthMm) across the wrap angle centered on the front -- so anything within the flat
+// canvas's mm bounds is always on the front-facing, always-visible part of the object regardless of
+// wrap mode or camera rotation, and anything outside those mm bounds is clipped out of the texture
+// before it ever reaches the mesh. The flat canvas-mm safe-area comparison is therefore already the
+// correct coordinate space for "visible on the object" -- no 3D projection math is needed or was
+// touched. What was wrong was the *threshold*: the first version only warned once the bbox had zero
+// overlap with the safe area at all. Real-mouse verification (raw CDP drag, see the S-104 spec's
+// audit) showed that is too lenient for text wider than the safe area (the default project's own
+// auto-fit text is 199.4mm wide vs. a 182mm-wide safe area) -- a drag that pushes most, but not
+// 100%, of the text out still leaves a sliver of overlap, so the old check stayed silent exactly
+// when a real user already could not read their text. TEXT_PRINTABLE_VISIBILITY_RATIO (50%) instead
+// warns once *most* of the text's own bounding-box area has left the safe area: a real overlap-area
+// ratio, not a boundary touch, so it degrades gracefully with drag distance and direction alike (down,
+// sideways, or diagonal) and cannot be fooled by a wide layer that still grazes the edge. Layer bbox
+// comes from getLayerBBox() (RS-1009, already the single source of truth for every layer's rendered
+// extent) -- no new geometry. An empty/unrendered text layer (zero stones) has nothing to warn about.
+const TEXT_PRINTABLE_VISIBILITY_RATIO=0.5;
 function isTextOutsidePrintableArea(l){
   if(!l||l.type!=='text')return false;
   const b=getLayerBBox(l);
-  if(b.width===0&&b.height===0)return false;
+  const bboxArea=b.width*b.height;
+  if(bboxArea<=0)return false;
   const safe=getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height);
-  const tol=SNAP_TOLERANCE_MM;
-  return b.x2<=safe.xMm-tol||b.x>=safe.xMm+safe.widthMm+tol||b.y2<=safe.yMm-tol||b.y>=safe.yMm+safe.heightMm+tol;
+  const overlapWidth=Math.max(0,Math.min(b.x2,safe.xMm+safe.widthMm)-Math.max(b.x,safe.xMm));
+  const overlapHeight=Math.max(0,Math.min(b.y2,safe.yMm+safe.heightMm)-Math.max(b.y,safe.yMm));
+  const visibleRatio=(overlapWidth*overlapHeight)/bboxArea;
+  return visibleRatio<TEXT_PRINTABLE_VISIBILITY_RATIO;
 }
 // Called from updateAll() (after `layout` is regenerated) so it is always in sync with the layer's
 // true current position/extent -- live during a drag (pointermove already calls updateAll() on every

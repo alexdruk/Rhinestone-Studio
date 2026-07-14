@@ -121,14 +121,23 @@ await test('11. the warning reuses the existing .validation-message alert stylin
   assert.match(indexHtml, /\.validation-message\.visible\{display:block\}/, 'expected the shared reveal rule to still exist');
 });
 
-await test('12. isTextOutsidePrintableArea()/updateTextOutsidePrintableWarning() are pure read+DOM-toggle (no layer/property mutation) and reuse existing geometry (getLayerBBox/getSafeAreaRectMm/SNAP_TOLERANCE_MM) — no new geometry, and moving text outside the area is never prevented', () => {
+await test('12. isTextOutsidePrintableArea()/updateTextOutsidePrintableWarning() are pure read+DOM-toggle (no layer/property mutation) and reuse existing geometry (getLayerBBox/getSafeAreaRectMm) — no new geometry, and moving text outside the area is never prevented', () => {
   const fn = appJs.match(/function isTextOutsidePrintableArea\(l\)\{([\s\S]*?)\n\}/)[1];
   assert.match(fn, /getLayerBBox\(l\)/);
   assert.match(fn, /getSafeAreaRectMm\(currentObjectTemplate\(\),project\.canvas\.width,project\.canvas\.height\)/);
-  assert.match(fn, /SNAP_TOLERANCE_MM/);
   assert.doesNotMatch(fn, /[a-zA-Z0-9_.]+\.[a-zA-Z]+\s*=[^=]/, 'expected a pure read-only computation, no assignment of any kind');
   const updateFn = appJs.match(/function updateTextOutsidePrintableWarning\(\)\{([\s\S]*?)\n\}/)[1];
   assert.match(updateFn, /el\('textOutsidePrintableWarning'\)\.classList\.toggle\('visible',isTextOutsidePrintableArea\(selectedLayer\(\)\)\)/);
+});
+
+await test('12b. the warning uses a partial-overlap-area ratio against the printable safe area (not a full-disjoint/boundary-touch test) — a real mouse-drag audit found a full-disjoint test never fires for text wider than the safe area (the default project\'s own auto-fit text is 199.4mm vs. a 182mm-wide safe area) until literally 100% of it has left, well after a real user can no longer read it', () => {
+  const match = appJs.match(/const TEXT_PRINTABLE_VISIBILITY_RATIO=([0-9.]+);/);
+  assert.ok(match, 'expected a named TEXT_PRINTABLE_VISIBILITY_RATIO constant');
+  const ratio = Number(match[1]);
+  assert.ok(ratio > 0 && ratio < 1, `expected the visibility ratio to be a real fraction, got ${ratio}`);
+  const fn = appJs.match(/function isTextOutsidePrintableArea\(l\)\{([\s\S]*?)\n\}/)[1];
+  assert.match(fn, /overlapWidth\s*\*\s*overlapHeight\s*\)\s*\/\s*bboxArea/, 'expected an overlap-area / bbox-area ratio, not a boundary-only test');
+  assert.match(fn, /visibleRatio\s*<\s*TEXT_PRINTABLE_VISIBILITY_RATIO/);
 });
 
 await test('13. the warning is recomputed on every updateAll() call — live during drag (pointermove already calls updateAll() every move), after Undo/Redo, and on every keystroke in #textX/#textY, exactly like every other post-mutation UI refresh (renderLayerUI/drawLayout/updateStats)', () => {
