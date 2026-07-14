@@ -1,60 +1,66 @@
 # Task
 
-**Task ID:** S-104
-**Task Type:** Small UX polish — Text Position Recovery & Drag Tuning
-**Specification:** `docs/specifications/S-104-TextPositionRecoveryDragTuning.md`
+**Task ID:** S-105
+**Task Type:** UI/UX behavior change — Persistent Movable Lightboxes
+**Specification:** `docs/specifications/S-105-PersistentMovableLightboxes.md`
 **Status:** IMPLEMENTED
-**Branch:** feature/s-104-text-position-recovery-drag-tuning
+**Branch:** feature/s-105-persistent-movable-lightboxes
 
 ## Goal
 
-Improve the usability of text positioning: reduce move-drag sensitivity so text (and every other
-draggable layer) moves more precisely and predictably, and add a simple **Center on Object** action
-that restores a selected text layer to the center of the printable area — position only, no other
-property touched — recovering text that has been dragged fully outside the visible canvas.
+Make every Lightbox (Text, Shapes, Import, Image Trace, Design Library, Export, Production Sheet,
+Shipping & Handling, Settings, Help, Gallery) movable by its header, non-blocking of the 2D canvas /
+Object Preview / Layers list / Inspector, and persistent until the operator explicitly closes it —
+removing the current close-and-reopen-via-"More Options" round trip for reselecting a same-type layer.
 
 ## Required Outcome
 
-See `docs/specifications/S-104-TextPositionRecoveryDragTuning.md` in full. Summary:
+See `docs/specifications/S-105-PersistentMovableLightboxes.md` in full. Summary:
 
-* Audit-first: confirmed the move-drag `pointermove` handler mapped pointer movement to mm 1:1
-  (`rawDx`/`rawDy` applied verbatim), and that a text layer's world position is always
-  `(canvas.width/2 + layer.x, canvas.height/2 + layer.y)` by construction of
-  `computeTextPlacementOffset()` (RS-1009/RS-1012, unchanged) — so "center on the printable area" is a
-  pure function of `getSafeAreaRectMm()` (`src/products/ObjectTemplate.js`, unchanged) and the canvas
-  size, needing no new geometry.
-* `app.js`: new named constant `LAYER_MOVE_DRAG_SENSITIVITY = 0.5`, applied to the move-drag delta
-  before snapping/shift-lock/position-apply — matching this file's existing precedent (the removed
-  `CUP_ROTATION_SENSITIVITY`) of naming pointer-tuning constants instead of inline magic numbers.
-  Resize-drag and keyboard nudge are untouched (structurally different code paths).
-* `app.js`/`index.html`: new `centerSelectedTextOnObject()` function and a `Center on Object` button in
-  the Text Lightbox's existing Position section, reusing the existing `commitHistory()`/
-  `syncSelectedControlsFromLayer()`/`updateAll(true)`/`#status` pattern every other mutating action
-  already uses — one undo step, immediate UI refresh, no new storage or schema field.
-* `GeometryEngine`, `StoneLayout`, every renderer, every exporter, the project schema, Design Library,
-  and Gallery are untouched.
+* Audit-first: confirmed the one shared `src/ui/Lightbox.js` dialog controller wraps a full-viewport
+  blocking `.lightbox-overlay` backdrop for every Lightbox except `lightboxShapes` (made non-modal in
+  S-101, the only existing precedent); confirmed no drag/move code exists anywhere in the repository;
+  confirmed reopening never creates a duplicate (already a no-op via `Lightbox.isOpen`); confirmed the
+  `FIELD_GROUPS`/`activeFieldLightbox` shared-DOM relocation mechanism (`app.js:1063-1076`) already
+  assumes exactly one of Text/Shapes/Import/Image Trace is "active" at a time, which is the concrete
+  architectural reason this milestone keeps one primary Lightbox open at a time rather than allowing
+  arbitrary concurrency; confirmed `syncSelectedControlsFromLayer()` already runs on every selection
+  change regardless of Lightbox state, so removing the modal block is sufficient to make an open
+  Lightbox live-update on same-type reselection with no new sync logic.
+* `src/ui/Lightbox.js`: new `options.primary` exclusivity (closes any other open primary Lightbox
+  before opening), header-drag-to-move with viewport clamping (on drag, on open, and on window
+  resize), position persisted across close/reopen (not reset), `.lightbox.dragging` state class.
+* `index.html`: the existing S-101 `.lightbox-overlay.non-modal` modifier applied to all 11 named
+  Lightboxes (`aria-modal` flipped to `"false"` on each); new drag-cursor CSS only. The two sub-dialogs
+  (`lightboxLibraryConfirm`, `lightboxGalleryPreview`) are untouched — still modal, not primary, per
+  the specification's explicit scope boundary.
+* `app.js`: the 11 primary `lightboxes` entries gain `primary:true`; no other logic changes.
+* `GeometryEngine`, `StoneLayout`, every renderer, every exporter, the project schema, the Design
+  Library/Gallery data layers, and Gallery's disabled top-menu button are untouched.
 
 ## Rules
 
 * Follow `docs/AI_ENGINEER.md`, `docs/CLAUDE_GUIDE.md`, `docs/ARCHITECTURE.md`,
   `docs/MILESTONE_WORKFLOW.md`.
-* Repository is the source of truth; audit before implementing; do not add new features beyond the
-  two requested (drag tuning, Center on Object).
+* Repository is the source of truth; audit before implementing; do not add functionality beyond what
+  the specification requires.
 * Do not touch `GeometryEngine`, `StoneLayout`, the project schema, exporters, rendering
-  (`src/renderer/**`, `src/preview3d/**`), Design Library (`src/library/**`), or Gallery
-  (`src/gallery/**`).
+  (`src/renderer/**`, `src/preview3d/**`), Design Library data layer (`src/library/**`), Gallery data
+  layer (`src/gallery/**`), or Gallery's disabled menu state (`#menuGallery` in `index.html`).
 
 ## Deliverables
 
-* `app.js`, `index.html` — reduced drag sensitivity, Center on Object action + button.
-* `tools/test-s104-text-position-recovery-drag-tuning.mjs` — new test (9 checks).
-* `tools/test-alignment-snapping-integration.mjs` — one pre-existing assertion updated to reflect the
-  intentionally-changed drag-delta source line (behavior it protects is otherwise unchanged).
+* `src/ui/Lightbox.js`, `index.html`, `app.js` — primary-exclusivity, drag-to-move, non-modal for all
+  11 named Lightboxes.
+* `tools/test-s105-persistent-movable-lightboxes.mjs` — new test suite.
+* `tools/test-ui001-dialog-behavior.mjs`, `tools/test-ui001-lightboxes.mjs`,
+  `tools/test-s101-ux-workflow-polish.mjs` — updated for the generalized non-modal/`aria-modal` state.
 * `package.json` — new test wired into the `test` script.
-* `docs/specifications/S-104-TextPositionRecoveryDragTuning.md` — full specification, audit findings,
-  and browser verification detail.
-* `npm test` passing in full (831 checks, 0 failures).
-* Real-browser verification (headless Chromium via Playwright, isolated local run) of drag sensitivity,
-  off-canvas recovery, non-position-property preservation, and undo/redo, with screenshots.
+* `docs/specifications/S-105-PersistentMovableLightboxes.md` — full specification and audit findings.
+* `npm test` passing in full.
+* Real-browser verification (headless Chromium via Playwright, isolated local run) of non-modal
+  interaction, drag/viewport-clamp behavior, persistence across selection/canvas edits, no-duplicate
+  reopening, and primary-Lightbox exclusivity, at 1366×768, 1440×900, and a narrow width, with
+  screenshots.
 * `TASK_RESULT.md` completed.
-* One commit on `feature/s-104-text-position-recovery-drag-tuning`, branch pushed (not merged).
+* One commit on `feature/s-105-persistent-movable-lightboxes`, branch pushed (not merged).

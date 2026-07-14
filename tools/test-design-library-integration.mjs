@@ -41,7 +41,9 @@ await test('1. index.html exposes a "Design Library" top-menu button', () => {
 });
 
 await test('2. index.html defines the Design Library lightbox and its delete-confirmation lightbox', () => {
-  assert.match(indexHtml, /<div class="lightbox-overlay" id="lightboxLibrary">/);
+  // S-105: lightboxLibrary is non-modal (see tools/test-ui001-dialog-behavior.mjs test 13);
+  // lightboxLibraryConfirm is a transient sub-dialog and intentionally stays fully modal.
+  assert.match(indexHtml, /<div class="lightbox-overlay non-modal" id="lightboxLibrary">/);
   assert.match(indexHtml, /<div class="lightbox-overlay" id="lightboxLibraryConfirm">/);
 });
 

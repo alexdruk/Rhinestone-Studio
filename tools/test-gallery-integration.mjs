@@ -35,7 +35,9 @@ await test('1. index.html exposes a "Gallery" top-menu button', () => {
 });
 
 await test('2. index.html defines the Gallery lightbox and its preview lightbox', () => {
-  assert.match(indexHtml, /<div class="lightbox-overlay" id="lightboxGallery">/);
+  // S-105: lightboxGallery is non-modal (see tools/test-ui001-dialog-behavior.mjs test 13);
+  // lightboxGalleryPreview is a transient sub-dialog and intentionally stays fully modal.
+  assert.match(indexHtml, /<div class="lightbox-overlay non-modal" id="lightboxGallery">/);
   assert.match(indexHtml, /<div class="lightbox-overlay" id="lightboxGalleryPreview">/);
 });
 
@@ -47,7 +49,7 @@ await test('3. the Gallery lightbox has search, category filter, and a grid cont
 });
 
 await test('4. the Gallery lightbox has no Save/Rename/Duplicate/Delete actions (read-only) and offers Open Copy + Save to Design Library', () => {
-  const galleryLightboxMatch = indexHtml.match(/<div class="lightbox-overlay" id="lightboxGallery">[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/);
+  const galleryLightboxMatch = indexHtml.match(/<div class="lightbox-overlay non-modal" id="lightboxGallery">[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/);
   assert.ok(galleryLightboxMatch, 'expected to find the Gallery lightbox markup');
   const markup = galleryLightboxMatch[0];
   assert.ok(!/data-action="delete"/.test(markup), 'the Gallery grid must not offer a delete action');

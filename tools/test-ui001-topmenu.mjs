@@ -69,7 +69,7 @@ await test('3. every top-menu button opens exactly its documented Lightbox', () 
   assert.match(appJs, /new Lightbox\('lightboxProdSheet'/, 'expected a Lightbox instance for #lightboxProdSheet');
   assert.match(appJs, /new Lightbox\('lightboxShipping'/, 'expected a Lightbox instance for #lightboxShipping');
   assert.match(appJs, /new Lightbox\('lightboxSettings'/, 'expected a Lightbox instance for #lightboxSettings');
-  assert.match(appJs, /new Lightbox\('lightboxHelp'\)/, 'expected a Lightbox instance for #lightboxHelp');
+  assert.match(appJs, /new Lightbox\('lightboxHelp'/, 'expected a Lightbox instance for #lightboxHelp');
 });
 
 await test('4. every top-menu-opened Lightbox overlay exists exactly once and is a lightbox-overlay', () => {

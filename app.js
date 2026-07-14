@@ -1076,19 +1076,24 @@ function relocateFieldGroups(){
 relocateFieldGroups();
 
 // ---- Lightboxes ----
+// S-105: the 11 named Lightboxes are `primary:true` (mutually exclusive -- opening one closes any
+// other open primary Lightbox first, see src/ui/Lightbox.js and docs/specifications/
+// S-105-PersistentMovableLightboxes.md). libraryConfirm/galleryPreview are transient sub-dialogs
+// launched from within an already-open primary Lightbox and are deliberately left non-primary so
+// they keep stacking on top of it exactly as before.
 const lightboxes={
-  text:new Lightbox('lightboxText',{onOpen(){activeFieldLightbox='text';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
-  shapes:new Lightbox('lightboxShapes',{onOpen(){activeFieldLightbox='shapes';relocateFieldGroups();updateObjectTemplateDetail()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
-  importBox:new Lightbox('lightboxImport',{onOpen(){activeFieldLightbox='import';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
-  imagetrace:new Lightbox('lightboxImageTrace',{onOpen(){activeFieldLightbox='imagetrace';relocateFieldGroups();updateImageTraceSections()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
-  exportBox:new Lightbox('lightboxExport'),
-  prodSheet:new Lightbox('lightboxProdSheet'),
-  shipping:new Lightbox('lightboxShipping',{onOpen(){syncShippingFieldsFromState()}}),
-  settings:new Lightbox('lightboxSettings',{onOpen(){syncSettingsFieldsFromState()}}),
-  help:new Lightbox('lightboxHelp'),
-  library:new Lightbox('lightboxLibrary',{onOpen(){onLibraryOpen()}}),
+  text:new Lightbox('lightboxText',{primary:true,onOpen(){activeFieldLightbox='text';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  shapes:new Lightbox('lightboxShapes',{primary:true,onOpen(){activeFieldLightbox='shapes';relocateFieldGroups();updateObjectTemplateDetail()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  importBox:new Lightbox('lightboxImport',{primary:true,onOpen(){activeFieldLightbox='import';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  imagetrace:new Lightbox('lightboxImageTrace',{primary:true,onOpen(){activeFieldLightbox='imagetrace';relocateFieldGroups();updateImageTraceSections()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  exportBox:new Lightbox('lightboxExport',{primary:true}),
+  prodSheet:new Lightbox('lightboxProdSheet',{primary:true}),
+  shipping:new Lightbox('lightboxShipping',{primary:true,onOpen(){syncShippingFieldsFromState()}}),
+  settings:new Lightbox('lightboxSettings',{primary:true,onOpen(){syncSettingsFieldsFromState()}}),
+  help:new Lightbox('lightboxHelp',{primary:true}),
+  library:new Lightbox('lightboxLibrary',{primary:true,onOpen(){onLibraryOpen()}}),
   libraryConfirm:new Lightbox('lightboxLibraryConfirm'),
-  gallery:new Lightbox('lightboxGallery',{onOpen(){onGalleryOpen()}}),
+  gallery:new Lightbox('lightboxGallery',{primary:true,onOpen(){onGalleryOpen()}}),
   galleryPreview:new Lightbox('lightboxGalleryPreview')
 };
 
