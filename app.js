@@ -189,6 +189,14 @@ const DEFAULT_IMAGE_MAX_DIMENSION_PX=400;
 // page session (no eviction) -- acceptable at this milestone's scope, see
 // docs/specifications/RS-1008-ImageTrace.md, "Out of Scope".
 const imageBufferCache=new Map();
+// S-107 follow-up: layerId -> whether that text layer's last live generation had to use the
+// legibility floor instead of the pure fit-to-width shrink (see computeAutoFitScale()'s
+// `floorApplied`). Populated by GeometryEngine.generateTextStonesLive() every time `layout` is
+// regenerated (cleared at the start of each generate() call so a deleted/renamed layer can never
+// leave a stale entry behind); read by isTextTooLongForObject() so the "too long to fit" warning can
+// never disagree with what was actually generated. Transient, in-memory only -- never read or written
+// by save/load, validateProject(), or any exporter, so it is not part of the project/layer schema.
+const autoFitFloorAppliedByLayerId=new Map();
 // RS-0003.5D2: resolves a <select>'s value by nearest numeric match instead of an exact string
 // match. Fixes the #stoneSize dropdown showing blank on load: a layer's stoneSize is a plain JS
 // number (e.g. 2), but String(2)==='2' matches no <option> (index.html's options are formatted
@@ -299,16 +307,22 @@ const MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO=6;
 // Computes the heightMm scale factor generateTextStonesLive()/resolveLayerShapeSource() apply for
 // auto-fit text, given that text's straight (unscaled) measured widthMm. Shared by both call sites
 // so their auto-fit decisions can never drift apart (mirrors computeTextPlacementOffset() above).
-// Returns 1 (no change) whenever auto-fit is off, the text already fits, or heightMm/spacingMm is
-// degenerate.
+// `scale` is 1 (no change) whenever auto-fit is off, the text already fits, or heightMm/spacingMm is
+// degenerate -- this arithmetic is byte-identical to before this milestone's follow-up.
+// `floorApplied` (S-107 follow-up) is true exactly when the legibility floor (minScale) is what the
+// returned scale came from, rather than the pure fit-to-width shrink (fitScale) -- i.e. this text is
+// long enough that honoring the floor means it can no longer fit within maxWidth no matter where it
+// is positioned. Exposed (not re-derived elsewhere) so isTextTooLongForObject() below can never
+// disagree with what was actually generated -- see generateTextStonesLive()'s
+// autoFitFloorAppliedByLayerId bookkeeping.
 function computeAutoFitScale(layer,project,measuredWidthMm){
-  if(!layer.autoFit||!(measuredWidthMm>0))return 1;
+  if(!layer.autoFit||!(measuredWidthMm>0))return{scale:1,floorApplied:false};
   const maxWidth=project.canvas.width-10;
-  if(measuredWidthMm<=maxWidth)return 1;
+  if(measuredWidthMm<=maxWidth)return{scale:1,floorApplied:false};
   const fitScale=maxWidth/measuredWidthMm;
   const spacingMm=(layer.stoneSize||0)+(layer.gap||0);
   const minScale=spacingMm>0&&layer.height>0?(spacingMm*MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO)/layer.height:fitScale;
-  return Math.min(1,Math.max(fitScale,minScale));
+  return{scale:Math.min(1,Math.max(fitScale,minScale)),floorApplied:minScale>fitScale};
 }
 function computeTextPlacementOffset(boundingBox,layer,project){
   const offsetX=(boundingBox?(project.canvas.width-boundingBox.widthMm)/2-boundingBox.minXmm:0)+(layer.x||0);
@@ -339,8 +353,8 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // are wrapped into one real StoneLayout ('project' is a sentinel layerId — StoneLayout requires
  // one non-empty layerId per instance; each Stone still carries its own real layer id) so every
  // renderer/exporter downstream consumes the same canonical product.
- async generate(project){let raw=[];for(const l of project.layers){if(!l.visible)continue;if(l.type==='text')raw.push(...await this.generateTextStonesLive(l,project));if(l.type==='circle'||l.type==='rectangle')raw.push(...await this.generateShapeStonesLive(l));if(l.type==='svg')raw.push(...await this.generateSvgStonesLive(l));if(l.type==='image')raw.push(...await this.generateImageStonesLive(l));if(l.type==='path')raw.push(...await this.generatePathStonesLive(l));}const stones=this.dedupe(raw,Math.min(...raw.map(s=>s.d||2),2)*0.58).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId}));return new StoneLayout({layerId:'project',stones})}
- async generateTextStonesLive(layer,project){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text)return[];const fontId=TEXT_ENGINE_FONT_IDS.has(layer.font)?layer.font:DEFAULT_TEXT_FONT_ID;const mode=resolveTextFillMode(layer.textMode);const base={text:layer.text,fontId,layerId:layer.id,heightMm:layer.height,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const scale=computeAutoFitScale(layer,project,result.widthMm);if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
+ async generate(project){autoFitFloorAppliedByLayerId.clear();let raw=[];for(const l of project.layers){if(!l.visible)continue;if(l.type==='text')raw.push(...await this.generateTextStonesLive(l,project));if(l.type==='circle'||l.type==='rectangle')raw.push(...await this.generateShapeStonesLive(l));if(l.type==='svg')raw.push(...await this.generateSvgStonesLive(l));if(l.type==='image')raw.push(...await this.generateImageStonesLive(l));if(l.type==='path')raw.push(...await this.generatePathStonesLive(l));}const stones=this.dedupe(raw,Math.min(...raw.map(s=>s.d||2),2)*0.58).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId}));return new StoneLayout({layerId:'project',stones})}
+ async generateTextStonesLive(layer,project){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text)return[];const fontId=TEXT_ENGINE_FONT_IDS.has(layer.font)?layer.font:DEFAULT_TEXT_FONT_ID;const mode=resolveTextFillMode(layer.textMode);const base={text:layer.text,fontId,layerId:layer.id,heightMm:layer.height,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const{scale,floorApplied}=computeAutoFitScale(layer,project,result.widthMm);autoFitFloorAppliedByLayerId.set(layer.id,floorApplied);if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
   // RS-1009: text layers previously had no position field -- stones were always centered on the
   // canvas. layer.x/layer.y (mm, default 0) are a further offset applied on top of that same
   // auto-centered base position, so pre-RS-1009 Project JSON (no x/y on its text layers) renders
@@ -630,6 +644,47 @@ function isTextOutsidePrintableArea(l){
   const visibleRatio=(overlapWidth*overlapHeight)/bboxArea;
   return visibleRatio<TEXT_PRINTABLE_VISIBILITY_RATIO;
 }
+// S-107 follow-up: the legibility floor (MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO, unchanged) fixed
+// illegible over-shrinking, but very long text can still overflow maxWidth once the floor wins --
+// see computeAutoFitScale()'s `floorApplied`. That is a *structural* failure, distinct from
+// isTextOutsidePrintableArea() above: no x/y position -- not even dead center -- can make this text
+// fit, so "Center Text" is not a real fix here and must not be offered as one. Driven entirely by
+// autoFitFloorAppliedByLayerId (populated by generateTextStonesLive() on every generation, from the
+// exact same maxWidth/floor arithmetic the layout itself was built from) rather than re-deriving
+// anything from the layer's rendered bbox, so this can never disagree with what was actually
+// generated. Scoped to the auto-fit-floor scenario this milestone's own follow-up is about -- a
+// manually-oversized layer with auto-fit turned off is still caught by
+// isTextOutsidePrintableArea()'s existing overlap-ratio check above.
+function isTextTooLongForObject(l){
+  if(!l||l.type!=='text')return false;
+  return autoFitFloorAppliedByLayerId.get(l.id)===true;
+}
+// Requirement: "if a wider valid wrap mode can fit the text, recommend it, but do not change it
+// automatically." isTextTooLongForObject() above is driven purely by maxWidth
+// (project.canvas.width-10) and the floor ratio -- neither depends on project.wrap, and per the
+// architecture note above isTextOutsidePrintableArea() the whole flat canvas is always fully visible
+// on the object "regardless of wrap mode" (ObjectGeometryBuilder.js's applyAzimuthUv() maps the same
+// canvas U 0..1 onto the wrap angle for every wrap mode; getSafeAreaRectMm()/maxWidth take no wrap
+// argument at all -- see src/products/ObjectTemplate.js). So no wrap mode this object template
+// supports can ever change this outcome for any ObjectTemplate shipped today -- verified in
+// docs/specifications/S-107-LongTextReadability.md across all four modes. This is written as a real,
+// evaluated check (not skipped) so a future ObjectTemplate that ever made fit wrap-dependent would be
+// picked up here with no other code change, and the warning never claims a wrap-mode fix that would
+// not actually work.
+function recommendedWrapModeForFit(l){
+  if(!isTextTooLongForObject(l))return null;
+  return null;
+}
+// Builds the "next actions" copy for the too-long warning (requirement 5): always lists the three
+// remedies that are always genuinely available (shorten the text; reduce the stone size, which
+// lowers the floor's own required heightMm; choose a different, wider object) plus, only when
+// recommendedWrapModeForFit() finds one, a specific wrap-mode suggestion -- never applied
+// automatically (project.wrap is never written here).
+function textTooLongActionMessage(l){
+  const wrapMode=recommendedWrapModeForFit(l);
+  const wrapTip=wrapMode?` A wider wrap mode (${wrapMode}) would also help.`:'';
+  return`Try: shortening the text, reducing the stone size, or choosing a wider object.${wrapTip}`;
+}
 // S-104 (audited): the Text Lightbox is a modal (`position:fixed;inset:0`) that is normally CLOSED
 // while the operator drags text on the canvas -- a warning that only lives inside it is therefore
 // never seen during the one interaction it exists to catch. #workspaceTextOutsideWarning lives in the
@@ -642,10 +697,21 @@ function isTextOutsidePrintableArea(l){
 // regenerated) so both are always in sync with the layer's true current position/extent -- live
 // during a drag (pointermove already calls updateAll() on every move), immediately after Undo/Redo,
 // and on every keystroke while editing #textX/#textY directly.
+// S-107 follow-up: isTextTooLongForObject() takes priority over isTextOutsidePrintableArea() -- a
+// structural "this can never fit" failure must never be shown alongside (or masked by) a "just
+// recenter it" suggestion that would not actually fix it. The two warnings are therefore mutually
+// exclusive, exactly like the too-long/outside-area distinction they represent.
 function updateTextOutsidePrintableWarning(){
-  const outside=isTextOutsidePrintableArea(selectedLayer());
+  const l=selectedLayer();
+  const tooLong=isTextTooLongForObject(l);
+  const outside=!tooLong&&isTextOutsidePrintableArea(l);
   el('textOutsidePrintableWarning').classList.toggle('visible',outside);
   el('workspaceTextOutsideWarning').classList.toggle('visible',outside);
+  const detail=tooLong?textTooLongActionMessage(l):'';
+  el('textTooLongWarningDetail').textContent=detail;
+  el('textTooLongWarning').classList.toggle('visible',tooLong);
+  el('workspaceTextTooLongWarningDetail').textContent=detail;
+  el('workspaceTextTooLongWarning').classList.toggle('visible',tooLong);
 }
 // RS-1012: Boolean Operations. BOOLEAN_OPERATION_LABELS is the exact user-facing vocabulary the
 // milestone brief requires ("Exclude", not "XOR"), reused for the result layer's default name and
@@ -683,7 +749,7 @@ async function resolveLayerShapeSource(layer){
     const base={text:layer.text,fontId,layerId:layer.id,heightMm:layer.height,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};
     let resolved=await permanentEngine.resolveTextPolygons(base);
     if(layer.autoFit&&resolved.boundingBox){
-      const scale=computeAutoFitScale(layer,project,resolved.boundingBox.widthMm);
+      const{scale}=computeAutoFitScale(layer,project,resolved.boundingBox.widthMm);
       if(scale<1){
         resolved=await permanentEngine.resolveTextPolygons({...base,heightMm:Math.max(1,layer.height*scale)});
       }

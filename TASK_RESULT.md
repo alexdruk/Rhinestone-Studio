@@ -6,7 +6,7 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-S-107 — Long Text Readability
+S-107 — Long Text Readability (Part 1: legibility floor; Part 2 follow-up: failure-state detection)
 
 ---
 
@@ -35,64 +35,88 @@ git log -1 --oneline
 
 # Audit Findings
 
-Full detail in `docs/specifications/S-107-LongTextReadability.md`. Walked the complete text
-pipeline the specification asks for:
+Full detail in `docs/specifications/S-107-LongTextReadability.md`.
 
-* **Measurement** (`GeometryEngine._buildPositionedContours()`) — correct, shared by every
-  consumer, no issue.
+## Part 1 — why long text was illegible
+
+Walked the complete text pipeline (measurement, scaling, spacing, wrap angle, projection):
+
 * **Scaling** — `app.js`'s live auto-fit (`generateTextStonesLive()` /
   `resolveLayerShapeSource()`'s text branch) shrinks a too-wide text layer's `heightMm` with **no
   floor**, so the shrink factor grows without bound as text gets longer.
 * **Spacing** — `spacingMm = stoneSizeMm + gapMm` is the fixed physical stone pitch. Auto-fit's
-  scaling stage shrinks `heightMm` but **never touches `stoneSizeMm`/`gapMm`**. This is the root
-  cause: as the shrink factor grows, the ratio of glyph size to stone pitch falls until stones can
-  no longer trace the letterforms — the pattern reads as a blurred row of dots rather than text.
-* **Wrap angle** (`ObjectDimensions.WRAP_ANGLE_DEG`) — a fixed angular window, independent of text
-  length/content. Ruled out as the length-dependent cause (a fix here would also change short/
-  medium text, which must stay unchanged).
-* **Projection** (`ArcProjection`) — only active for curved text (off by default); not implicated.
+  scaling stage shrinks `heightMm` but **never touches `stoneSizeMm`/`gapMm`**. Root cause: as the
+  shrink factor grows, glyph-to-stone-pitch ratio falls until stones can no longer trace the
+  letterforms — the pattern reads as a blurred row of dots.
+* **Wrap angle / projection** — fixed, content-independent; ruled out (would also change short/
+  medium text, and curved-text projection is off by default).
+* Verified in a real, unmocked browser: the same illegible pattern appears in **both** the 2D Canvas
+  (at full zoom) and the Object Preview — the bug is in the one shared `StoneLayout`, not a 3D-only
+  rendering defect.
+* `stoneSizeMm` is a real catalog rhinestone diameter (`src/renderer/StoneSizes.js`, no smaller than
+  2.0mm) — rescaling it would misrepresent what gets manufactured, so the fix never touches it.
 
-**Root cause:** scaling/spacing decoupling in auto-fit (`app.js`), not a 3D-only rendering defect.
-Verified directly in a real, unmocked browser: a 67-character phrase reproduced the reported
-symptom in **both** the 2D Canvas (at full single-panel zoom, not just the small dual-workspace
-panel) and the Object Preview — because both draw the exact same `StoneLayout`
-(`docs/ARCHITECTURE.md`'s single-source-of-truth principle). The Object Preview's curved-surface
-projection and per-stone lighting do further reduce contrast on an already-marginal pattern
-(consistent with the reported symptom being most noticeable there), but the pattern itself is
-generated once, upstream, in the one shared pipeline — which is where the fix belongs, per
-requirement 4/5 ("no second layout pipeline", "keep one GeometryEngine and one StoneLayout
-pipeline").
+## Part 2 (this follow-up) — why the Part 1 fix alone was not enough
 
-**Why stone size itself cannot shrink:** `stoneSizeMm` is a real catalog rhinestone diameter
-(`src/renderer/StoneSizes.js`: SS6/SS10/SS16/SS20/SS30, no smaller than 2.0mm). Silently rescaling
-it during auto-fit would produce a non-orderable size — the opposite of "preserving production
-accuracy." The fix never touches it.
+Part 1's floor stops illegible over-shrinking, but very long text can still overflow `maxWidth`
+once the floor wins. Browser-verified with the exact reported phrase on the default mug: the
+generated text is 529.6mm wide against a 200mm `maxWidth`. The only warning that fired was the
+pre-existing *positional* `isTextOutsidePrintableArea()` — its "Center Text" button visibly did
+nothing, because no position (not even dead center) can fix a text that is structurally too wide.
+
+Audited every candidate lever before choosing a fix:
+
+* **Canvas width is the one hard bound** — `StoneLayoutTexture.js` rasterizes into a buffer sized
+  exactly to `canvasWidthMm`; content outside those mm bounds is never drawn, in 2D or 3D.
+* **Wrap mode does not affect this bound**, confirmed against `src/products/ObjectTemplate.js`
+  (`getSafeAreaRectMm()` takes no wrap argument) and the existing `app.js` architecture comment
+  ("anything within the flat canvas's mm bounds is always... visible... regardless of wrap mode"),
+  and verified empirically across all four wrap modes on the reported phrase — the "too long"
+  outcome never changed.
+* **Object type** (mug/tumbler/bottle) does change canvas width (210/230/180mm) — a real "choose a
+  wider object" remedy.
+* **Stone size** changes the floor's own required `heightMm` — verified empirically ("Happy Birthday
+  Sarah" is fine at SS6/2.0mm, too-long at SS10/2.8mm and SS16/4.0mm).
 
 ---
 
 # Implementation Summary
 
-* **`app.js`** — new `MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO` constant (`= 6`, chosen empirically —
-  see below) and `computeAutoFitScale(layer, project, measuredWidthMm)` helper, placed beside the
-  existing `computeTextPlacementOffset()` (which already keeps two call sites in sync "by
-  construction instead of by duplicated arithmetic" — the same pattern this fix now applies to the
-  auto-fit scale decision). Both `generateTextStonesLive()` and `resolveLayerShapeSource()`'s text
-  branch now call this one helper instead of separately duplicating the same inline
-  `maxWidth`/`scale` arithmetic.
-* The scale returned is `min(1, max(fitScale, minScale))`, where `fitScale` is the pre-existing
-  fit-to-width scale and `minScale` keeps `heightMm` at least `6×` the stone pitch. Whenever
-  `fitScale >= minScale` (every case that doesn't need the floor), the result is **exactly** the old
-  scale — byte-identical behavior. Only text long enough to need more shrinking than the floor
-  allows now gets a larger (less aggressive) scale, overflowing `maxWidth` and surfacing the
-  pre-existing "outside the printable area" / "Center Text" warning (S-104) instead of collapsing
-  into illegible stone soup.
-* `MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO = 6` was chosen empirically: with auto-fit disabled and
-  `heightMm` swept manually for representative phrases, `heightMm/spacingMm ≈ 3` (the original,
-  unmodified bug) read as a blurred dot row, `≈4` was marginal, `≈6` read clearly and consistently
-  across mug/tumbler/bottle.
-* No change to `src/geometry/GeometryEngine.js`, `src/geometry/StoneLayout.js`, any exporter
-  (`src/export/**`), any renderer, `src/preview3d/**`, or the project/layer schema. Existing project
-  files remain fully compatible. No multi-row text.
+## Part 1
+
+* **`app.js`** — `MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO` (`=6`) and `computeAutoFitScale()`: clamps
+  auto-fit's shrink to a floor (`heightMm` never below `6× spacingMm`). Text that never needed the
+  floor is byte-identical to before.
+
+## Part 2 (this follow-up)
+
+* **`app.js`** — `computeAutoFitScale()` now also returns `floorApplied` (true exactly when the
+  floor, not the pure fit-to-width shrink, decided the result) alongside the unchanged `scale` value
+  — same math, richer return shape. `generateTextStonesLive()` records `floorApplied` per layer id
+  into a new, transient, in-memory-only `autoFitFloorAppliedByLayerId` map (cleared at the top of
+  every `generate()` call; never read by `validateProject()`, save/load, or any exporter — not part
+  of the project/layer schema).
+* **`isTextTooLongForObject(l)`** (new) reads that map — true exactly when this text layer's last
+  generation needed the floor, meaning it structurally cannot fit `maxWidth` at any position.
+* **`recommendedWrapModeForFit(l)`** (new) — a real, evaluated check for requirement 7 ("if a wider
+  valid wrap mode can fit the text, recommend it"). Given the audited wrap-independence, it always
+  returns `null` today (no tip shown, `project.wrap` never written); written as a real function (not
+  skipped) so a future wrap-dependent ObjectTemplate would be picked up with no other code change.
+* **`textTooLongActionMessage(l)`** (new) — "Try: shortening the text, reducing the stone size, or
+  choosing a wider object." plus an optional wrap-mode tip (never fires today).
+* **`updateTextOutsidePrintableWarning()`** (updated) — computes both `isTextTooLongForObject()` and
+  the existing `isTextOutsidePrintableArea()`; the two are mutually exclusive, with the structural
+  "too long" warning taking priority (so "Center Text" is never offered when it would not help).
+* **`index.html`** — new `#workspaceTextTooLongWarning` (always-visible right Inspector panel, no
+  Lightbox needed — requirement 6) and `#textTooLongWarning` (Text Lightbox, for consistency with
+  the existing dual-surface pattern), both reusing the existing `.validation-message`/`.hint`
+  styling verbatim — no new CSS.
+* Not implemented: hiding/suppressing the rendered (clipped) stones — the fix for "silent" per
+  requirement 3 is the new, unmissable warning, not removing the operator's visible work.
+
+No change to `src/geometry/GeometryEngine.js`, `src/geometry/StoneLayout.js`, any exporter, any
+renderer, `src/preview3d/**`, or the project/layer schema, in either part. No second layout pipeline.
+No multi-row text.
 
 ---
 
@@ -104,12 +128,23 @@ docs/specifications/S-107-LongTextReadability.md
 tools/test-s107-long-text-readability.mjs
 ```
 
-**Modified (3):**
+**Modified (4):**
 ```
-app.js       — new MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO + computeAutoFitScale(), wired into both
-               existing auto-fit call sites (generateTextStonesLive(), resolveLayerShapeSource())
-package.json — new test wired into the `test` script
-TASK.md      — this milestone's task definition
+app.js                                             — MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO,
+                                                     computeAutoFitScale() (+floorApplied),
+                                                     autoFitFloorAppliedByLayerId,
+                                                     isTextTooLongForObject(),
+                                                     recommendedWrapModeForFit(),
+                                                     textTooLongActionMessage(),
+                                                     updateTextOutsidePrintableWarning() (updated)
+index.html                                         — #workspaceTextTooLongWarning,
+                                                     #textTooLongWarning + detail elements
+package.json                                       — new test wired into the `test` script
+tools/test-s104-text-position-recovery-drag-tuning.mjs — check 12 updated to match
+                                                     updateTextOutsidePrintableWarning()'s new,
+                                                     floor-gated logic (still driven by the exact
+                                                     same isTextOutsidePrintableArea() result)
+TASK.md                                            — this milestone's task definition
 ```
 
 No changes to `GeometryEngine`, `StoneLayout`, any renderer (`src/renderer/**`,
@@ -124,21 +159,27 @@ No changes to `GeometryEngine`, `StoneLayout`, any renderer (`src/renderer/**`,
 $ npm test
 ```
 
-All 69 test files in the `test` script pass, **881 checks total, 0 failures**.
+All 69 test files in the `test` script pass, **892 checks total, 0 failures**.
 
-New `tools/test-s107-long-text-readability.mjs` (10/10 passing) covers:
+`tools/test-s107-long-text-readability.mjs` (21/21 passing) covers both parts: structural checks
+(single `MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO` declaration; both auto-fit call sites use the shared
+helper; `generateTextStonesLive()` records `floorApplied`; `generate()` clears the map; the map is
+never referenced by `validateProject()`/`JSON.stringify`/either exporter; the new warning markup
+exists in both the Inspector and Lightbox with the exact required wording and no forbidden-file
+change) and behavioral checks (extracting and executing the real `computeAutoFitScale()`,
+`isTextTooLongForObject()`, `recommendedWrapModeForFit()`, and `textTooLongActionMessage()` from the
+live source, injecting a fake `autoFitFloorAppliedByLayerId` map for the latter three): auto-fit-off/
+already-fits/mild-overflow all unchanged from before this milestone; severe overflow reports
+`floorApplied:true` and sits exactly at the 6× floor; `isTextTooLongForObject()` is true only for the
+exact layer id whose last generation needed the floor; `recommendedWrapModeForFit()` is always `null`
+(matching the audited wrap-independence) and never assigns `project.wrap`; the action message lists
+all three real remedies; `updateTextOutsidePrintableWarning()`'s mutual-exclusivity/priority logic is
+wired correctly.
 
-* Structural: exactly one `MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO` declaration; both
-  `generateTextStonesLive()` and `resolveLayerShapeSource()`'s text branch call the shared
-  `computeAutoFitScale()` helper and no longer contain the old duplicated inline `maxWidth`
-  computation; no forbidden file changed (`src/geometry/**`, `src/export/**`); the new suite is
-  registered in `package.json`.
-* Behavioral (extracts and executes the real `computeAutoFitScale()` from the live `app.js`
-  source, mirroring `tools/test-alignment-snapping-integration.mjs`'s `extractFunction()`/
-  `new Function()` precedent): auto-fit off never rescales; text that already fits is never
-  rescaled; mild overflow gets the exact pre-existing fit-to-width scale (unchanged behavior);
-  severe overflow clamps to the 6× floor instead of the old, more-aggressive shrink; the floor
-  never scales height up past the original nominal height.
+One pre-existing test needed updating (same pattern as prior milestones hitting an already-tested
+function whose logic legitimately evolved): `tools/test-s104-text-position-recovery-drag-tuning.mjs`
+check 12 asserted `updateTextOutsidePrintableWarning()`'s exact body text; updated to match its new
+(still `isTextOutsidePrintableArea()`-driven, now floor-gated) form.
 
 ---
 
@@ -147,47 +188,47 @@ New `tools/test-s107-long-text-readability.mjs` (10/10 passing) covers:
 Headless Chromium (Playwright, this repo's local `node_modules`), `python3 -m http.server 5173`
 serving the actual app (no mocks), 1800×950 viewport.
 
-1. **Short text ("Hi"), mug/tumbler/bottle.** 69 stones, 29.2×18.6mm. Clearly legible before and
-   after on every object type — auto-fit never engages (text far under `maxWidth`). Pixel-identical
-   stone data before/after (confirmed via the same `computeAutoFitScale` returning `1` in both
-   cases).
-2. **Medium text ("Vitalina Serbin", the project default), mug.** 375 stones, 199.4×17.0mm,
-   identical before/after (`fitScale` at this length, ~0.85 on a narrower bottle canvas, never
-   drops below the ~0.55 floor) — clearly readable in 2D and 3D, before and after.
-3. **Very long text (67-character phrase), mug/tumbler/bottle.** Before: auto-fit shrinks to
-   `heightMm≈6.4` (ratio ≈2.8) — renders as an illegible row of dots in **both** the 2D Canvas
-   (confirmed at full single-panel zoom, not just the small dual-workspace panel) and the Object
-   Preview, on all three object types. After: shrinks only to the floor (`heightMm≈13.9`, ratio
-   6.0) — individual words are legible ("...love for all the help sh...") in the 2D Canvas and on
-   the mug, tumbler, and bottle's Object Preview alike. The text now exceeds `maxWidth`, correctly
-   surfacing the pre-existing "This text is outside the printable area" / "Center Text" warning
-   rather than silently shipping unreadable output.
-4. **No distortion.** The fix only changes a uniform `heightMm` scale factor (the same operation
-   auto-fit already performed) — glyph proportions are never non-uniformly stretched or squashed.
-5. **No new console/page errors.** One pre-existing, unrelated WebGL
-   `glTexSubImage2DRobustANGLE: Offset overflows texture dimensions` driver warning appears when
-   switching to the Straight Tumbler object type in this headless test harness — confirmed present
-   on unmodified `develop` too (via `git stash`), unrelated to this change.
-6. **Root-cause confirmation ruled out a 3D-only fix.** Before concluding the fix belonged in the
-   shared pipeline, the Object Preview's texture filtering (`generateMipmaps`/`minFilter`/
-   anisotropy in `src/preview3d/Preview3DRenderer.js`) was inspected as a candidate 3D-only cause;
-   it was not touched, because the same illegible pattern was independently confirmed in the plain
-   2D Canvas at full zoom — a 3D-only texture fix would not have addressed the actual defect and
-   was correctly not applied, per requirement 4/5 (no second layout pipeline).
+## Part 1
 
-**Sample before/after screenshots:** published as an artifact —
-https://claude.ai/code/artifact/ba39444f-8593-4c85-88da-675646ff9273 (short/medium/very-long text
-across mug/tumbler/bottle, side by side with stone-count/dimension metadata).
+1. Short text ("Hi") — 69 stones, 29.2×18.6mm, legible and unchanged on mug/tumbler/bottle.
+2. Medium text ("Vitalina Serbin") — 375 stones, 199.4×17.0mm, unchanged, clearly readable.
+3. Very long text (67-character phrase) — before: `heightMm≈6.4` (ratio ≈2.8), illegible dot row in
+   both 2D and 3D on all three object types; after: floor-clamped to `heightMm≈13.9` (ratio 6.0),
+   individual words legible.
+4. No distortion (uniform scale only); no new console/page errors (one pre-existing, unrelated WebGL
+   driver warning confirmed present on unmodified `develop` too).
+
+## Part 2 (this follow-up)
+
+1. **The exact reported phrase, mug, `front` wrap** — now shows "This text is too long to fit
+   legibly on this object." with "Try: shortening the text, reducing the stone size, or choosing a
+   wider object." in both the persistent Inspector panel and the Text Lightbox; the old "outside the
+   printable area" / "Center Text" warning is suppressed, not shown alongside it.
+2. **Short/medium text, mug** — no warning at all, `layoutStats` identical to Part 1's own
+   verification (69 stones/29.2×18.6mm; 375 stones/199.4×17.0mm).
+3. **Mug, tumbler, bottle** — the reported phrase triggers the identical warning on all three
+   (738 stones, 529.6×13.9mm on every object).
+4. **All four wrap modes** (`front`/`wide`/`half`/`full`) on the mug, same phrase — warning state
+   identical across every mode, confirming the audited wrap-independence directly rather than by
+   inspection alone.
+5. **Several stone sizes** — "Happy Birthday Sarah": no warning at SS6 (2.0mm, 200.5mm wide);
+   too-long at SS10 (2.8mm, 223.6mm) and SS16 (4.0mm, 301.3mm) — "reduce the stone size" is a
+   verified-working remedy, not just suggested text. A shortened version of the reported phrase
+   ("Special thanks, love you") also clears the warning (201.1mm, fits).
+6. **No misleading "successful" preview without feedback** — every case that cannot fit shows the
+   warning; every case that fits shows none.
+7. **2D and 3D stay consistent** — both panels and the Inspector always agree, since all three are
+   driven by the one shared `layout`/bbox.
+
+**Sample before/after screenshots (Part 1):** published as an artifact —
+https://claude.ai/code/artifact/ba39444f-8593-4c85-88da-675646ff9273
 
 ---
 
 # Recommendation
 
-Approve. The fix addresses the actual, verified root cause (scaling and spacing decoupling in
-auto-fit) inside the one existing shared pipeline — `generateTextStonesLive()` and
-`resolveLayerShapeSource()` both now go through a single `computeAutoFitScale()` helper, so 2D, 3D,
-and every exporter continue to show and produce the exact same stone pattern. Short and medium text
-are byte-identical to `develop` (the floor only changes the result when the old scale would have
-dropped below it). No changes to `GeometryEngine`, `StoneLayout`, any exporter, any renderer, or the
-project schema. No second layout pipeline, no multi-row text, and no rescaling of a real catalog
-stone size — production accuracy is preserved for every text length.
+Approve both parts. Part 1 fixes the actual root cause (scaling/spacing decoupling in auto-fit)
+inside the one shared pipeline; Part 2 replaces a silent, misleadingly-recoverable overflow with a
+clear, persistent, non-Lightbox warning whose suggested remedies are all verified to actually work,
+built entirely from Part 1's own unmodified floor decision (no second threshold, no new geometry, no
+GeometryEngine/StoneLayout/exporter/schema change, no second layout pipeline, no multi-row text).
