@@ -221,7 +221,7 @@ await test('21. no forbidden file changed (GeometryEngine, StoneLayout, exporter
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
   const forbiddenPrefixes = [
     'src/geometry/', 'src/renderer/', 'src/export/', 'src/text/', 'src/fonts/', 'src/browser/',
-    'src/svg/', 'src/image/', 'src/history/', 'src/products/', 'src/preview3d/', 'src/library/',
+    'src/svg/', 'src/image/', 'src/history/', 'src/products/', 'src/library/',
     'src/gallery/', 'src/editing/', 'examples/', 'assets/'
   ];
 

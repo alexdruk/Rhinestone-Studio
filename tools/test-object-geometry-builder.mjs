@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 
 const THREE = await import('three');
 const { buildObjectMesh, applyWrapUv } = await import('../src/preview3d/ObjectGeometryBuilder.js');
-const { computeObjectDimensionsMm } = await import('../src/preview3d/ObjectDimensions.js');
+const { computeObjectDimensionsMm, wrapAngleRad } = await import('../src/preview3d/ObjectDimensions.js');
 const { getObjectTemplate } = await import('../src/products/index.js');
 
 async function test(name, fn) {
@@ -92,7 +92,7 @@ await test('6. tumbler body radius is constant top-to-bottom (straight wall); mu
   assert.ok(Math.abs(dims.topRadiusMm - dims.bodyRadiusMm) < 1e-9);
 });
 
-await test('7. applyWrapUv maps the front azimuth (atan2(x,z)=0) to u=0.5 for every wrap mode', () => {
+await test('7. applyWrapUv maps the front azimuth (atan2(x,z)=0) to u=0.5 for every wrap mode (S-107 follow-up: restores wrap-mode-dependent windowing -- "changing wrap mode changes the Object Preview")', () => {
   const { bodyMesh } = buildObjectMesh(getObjectTemplate('mug'), 210, 90);
   const position = bodyMesh.geometry.attributes.position;
   const uv = bodyMesh.geometry.attributes.uv;
@@ -111,13 +111,13 @@ await test('7. applyWrapUv maps the front azimuth (atan2(x,z)=0) to u=0.5 for ev
   }
 });
 
-await test('8. applyWrapUv\'s angular window is narrower for "front" than for "full" (u spreads out more for a wider wrap angle)', () => {
+await test('8. applyWrapUv\'s angular window is narrower for "front" than for "full" (u spreads out more for a wider wrap angle) -- wrap mode visibly changes the Object Preview again', () => {
   const { bodyMesh } = buildObjectMesh(getObjectTemplate('tumbler'), 230, 100);
   const position = bodyMesh.geometry.attributes.position;
   const uv = bodyMesh.geometry.attributes.uv;
 
-  // A vertex at a fixed, moderate azimuth away from front (not exactly back, to avoid the atan2
-  // branch-cut discontinuity at +-PI).
+  // A vertex at a fixed, moderate azimuth away from front (not exactly back, to avoid the one
+  // intentional seam -- see check 8b below).
   let sideIndex = -1, bestDiff = Infinity;
   const targetAzimuth = Math.PI / 2;
   for (let i = 0; i < position.count; i++) {
@@ -132,6 +132,47 @@ await test('8. applyWrapUv\'s angular window is narrower for "front" than for "f
   const uFull = uv.getX(sideIndex);
 
   assert.ok(Math.abs(uFront - 0.5) > Math.abs(uFull - 0.5), 'expected the same azimuth to map further from center (0.5) under a narrower wrap window');
+});
+
+await test('8b. no triangle spans a large U range for any object/wrap-mode combination -- regression guard for the dark-vertical-band defect (a real, human-observed bug: atan2\'s branch cut and the r=0 base/cap apex both used to coincide with real, connected faces, stretching a texture sample across nearly the whole canvas width in one thin triangle)', () => {
+  const sizes = { mug: [210, 90], tumbler: [230, 100], bottle: [180, 90] };
+  for (const id of ['mug', 'tumbler', 'bottle']) {
+    const [w, h] = sizes[id];
+    const { bodyMesh } = buildObjectMesh(getObjectTemplate(id), w, h);
+    const position = bodyMesh.geometry.attributes.position;
+    const index = bodyMesh.geometry.index;
+    for (const wrap of ['front', 'wide', 'half', 'full']) {
+      applyWrapUv(bodyMesh, wrap);
+      const uv = bodyMesh.geometry.attributes.uv;
+      // A healthy triangle's U span is at most a few LATHE_SEGMENTS-steps wide (~0.05-0.1 for the
+      // narrowest wrap mode); 0.3 is a generous margin that would only be crossed by a genuine
+      // seam/branch-cut/degenerate-apex defect, never by ordinary per-segment variation.
+      for (let t = 0; t < index.count; t += 3) {
+        const a = index.getX(t), b = index.getX(t + 1), c = index.getX(t + 2);
+        const ua = uv.getX(a), ub = uv.getX(b), uc = uv.getX(c);
+        const jump = Math.max(Math.abs(ua - ub), Math.abs(ub - uc), Math.abs(ua - uc));
+        assert.ok(jump < 0.3, `${id} wrap=${wrap} triangle@${t}: U jump ${jump} (vertices ${a}=${ua}, ${b}=${ub}, ${c}=${uc}) -- suspected seam/apex UV defect`);
+      }
+    }
+  }
+});
+
+await test('8c. the base apex (r=0, x=z=0 for every column) never triggers Math.atan2\'s signed-zero quirk -- regression guard for the second dark-band defect (neighboring apex vertices at the identical physical point used to get wildly different, meaningless azimuths depending on the sign of each column\'s near-zero x/z)', () => {
+  const { bodyMesh } = buildObjectMesh(getObjectTemplate('mug'), 210, 90);
+  applyWrapUv(bodyMesh, 'full');
+  const position = bodyMesh.geometry.attributes.position;
+  const uv = bodyMesh.geometry.attributes.uv;
+  const apexUs = [];
+  for (let i = 0; i < position.count; i++) {
+    if (position.getX(i) === 0 && position.getY(i) === 0 && position.getZ(i) === 0) apexUs.push(uv.getX(i));
+  }
+  assert.ok(apexUs.length > 10, 'expected many duplicate apex vertices (one per Lathe column)');
+  // Adjacent apex columns must differ by a small, regular step (matching every other column pair),
+  // never by a large, sign-of-zero-driven jump.
+  const sorted = [...apexUs].sort((x, y) => x - y);
+  for (let i = 1; i < sorted.length; i++) {
+    assert.ok(sorted[i] - sorted[i - 1] < 0.3, `apex U values ${sorted[i - 1]} and ${sorted[i]} are implausibly far apart`);
+  }
 });
 
 // RS-1006A regression tests -- these guard the four human-review defects fixed in

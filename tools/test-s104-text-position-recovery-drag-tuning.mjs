@@ -127,7 +127,11 @@ await test('12. isTextOutsidePrintableArea()/updateTextOutsidePrintableWarning()
   assert.match(fn, /getSafeAreaRectMm\(currentObjectTemplate\(\),project\.canvas\.width,project\.canvas\.height\)/);
   assert.doesNotMatch(fn, /[a-zA-Z0-9_.]+\.[a-zA-Z]+\s*=[^=]/, 'expected a pure read-only computation, no assignment of any kind');
   const updateFn = appJs.match(/function updateTextOutsidePrintableWarning\(\)\{([\s\S]*?)\n\}/)[1];
-  assert.match(updateFn, /const outside=isTextOutsidePrintableArea\(selectedLayer\(\)\);/, 'expected one shared computation reused by both warning surfaces');
+  // S-107 follow-up: the positional warning is still driven by this exact isTextOutsidePrintableArea()
+  // result (one shared computation, reused by both warning surfaces) -- now additionally gated by
+  // `!tooLong` so the structural "too long to fit no matter where it sits" warning (S-107) always
+  // takes priority instead of the two ever showing (or disagreeing) at once.
+  assert.match(updateFn, /const outside=!tooLong&&isTextOutsidePrintableArea\(l\);/, 'expected one shared computation reused by both warning surfaces');
   assert.match(updateFn, /el\('textOutsidePrintableWarning'\)\.classList\.toggle\('visible',outside\);/);
   assert.match(updateFn, /el\('workspaceTextOutsideWarning'\)\.classList\.toggle\('visible',outside\);/);
 });
@@ -179,7 +183,7 @@ await test('18. no forbidden file changed (GeometryEngine, StoneLayout, exporter
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
   const forbiddenPrefixes = [
     'src/geometry/', 'src/renderer/', 'src/export/', 'src/text/', 'src/fonts/', 'src/browser/',
-    'src/svg/', 'src/image/', 'src/history/', 'src/products/', 'src/preview3d/', 'src/library/',
+    'src/svg/', 'src/image/', 'src/history/', 'src/products/', 'src/library/',
     'src/gallery/', 'examples/', 'assets/'
   ];
 

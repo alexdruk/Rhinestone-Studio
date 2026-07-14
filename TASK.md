@@ -1,39 +1,52 @@
 # Task
 
-**Task ID:** S-106
-**Task Type:** Additive export feature — Combined Visual Preview PNG Export
-**Specification:** `docs/specifications/S-106-CombinedVisualPreviewPNGExport.md`
+**Task ID:** S-107
+**Task Type:** Front View Frame & Long Text Workflow (Part 3 — supersedes Part 2's warning-only
+workflow; Part 1 unchanged)
+**Specification:** `docs/specifications/S-107-LongTextReadability.md`
 **Status:** IMPLEMENTED
-**Branch:** feature/s-106-combined-visual-preview-png-export
+**Branch:** feature/s-107-long-text-readability
 
 ## Goal
 
-Add one new Export option, "Export Combined Preview PNG", that produces a single PNG with the
-current 2D Canvas on the left and the current Object Preview (3D) on the right, side by side, on a
-white background — reflecting exactly what the operator currently sees, including whatever 3D
-rotation/zoom is live, without requiring a switch to the Object Preview tab first.
+Replace the current warning-based long-text workflow ("This text is too long to fit legibly on this
+object.") with a Front View Frame on the 2D Canvas: a movable overlay showing the portion of the
+design currently facing the viewer in the Object Preview, bidirectionally synchronized with the
+Object Preview's rotation. A cylindrical object is treated as an unwrapped surface — text that fits
+around the object's printable circumference stays valid and inspectable, regardless of the current
+viewing angle. A warning is shown only when text genuinely exceeds that circumference — a real
+manufacturing limitation, never a viewing-angle artifact.
 
 ## Required Outcome
 
-See `docs/specifications/S-106-CombinedVisualPreviewPNGExport.md` in full. Summary:
+See `docs/specifications/S-107-LongTextReadability.md`, Part 3, in full. Summary:
 
-* Audit-first: confirmed both `layoutCanvas`/`#layout` and `cupCanvas`/`#cup` are permanently
-  mounted, always-rendered `<canvas>` elements regardless of the active workspace tab (the existing
-  `.tab-hidden{visibility:hidden}` invariant, never `display:none`, documented in `index.html` for
-  exactly this reason); confirmed the default `workspaceMode` is `'dual'` (both panels already shown
-  side by side on load); confirmed `Preview3DRenderer` is constructed with
-  `preserveDrawingBuffer:true` so its canvas's pixels are readable after the fact, the same
-  precondition the existing `#exportCup` handler already relies on; confirmed `#exportPNG`/`#exportCup`
-  already establish a "capture an existing rendered canvas via `toBlob`, not a standalone exporter"
-  precedent this milestone reuses verbatim.
-* `index.html`: one new button, `#exportCombined`, added to the existing "Visual previews"
-  `.export-group` inside `#lightboxExport`, alongside `2D SVG` / `2D PNG` / `3D / Object Preview PNG`.
-* `app.js`: new `composeCombinedPreviewCanvas()` — draws `layoutCanvas` (left) then `cupCanvas`
-  (right) at their own native pixel size onto a new offscreen canvas with a white background and a
-  fixed margin/gap, vertically centered on whichever is taller. `#exportCombined`'s handler mirrors
-  the existing export handlers' guard/try-catch shape exactly and reuses `exportCanvas()` unchanged.
-* No change to `GeometryEngine`, `StoneLayout`, the project schema, production geometry, any existing
-  exporter, or any existing export's output.
+* Audit-first: walked production-canvas-width-to-circumference, circumference-to-wrap-mode,
+  Object-Preview-rotation-to-production-coordinates, and existing-rotation-logic-coverage before
+  writing any code. Found that the 3D preview's body radius was anchored at a 180-degree reference
+  (canvas = half the circumference), which structurally prevents the canvas's own left/right edges
+  from being adjacent points on the object — re-anchored to a full 360-degree reference (canvas *is*
+  the complete unwrapped surface, exactly `canvasWidthMm` in circumference) so the Front View Frame
+  can wrap continuously across the canvas edges with no discontinuity, per requirement 3.
+* `src/preview3d/ObjectDimensions.js`: new pure mm<->azimuth/circumference/frame-width functions,
+  reused (not duplicated) by both `ObjectGeometryBuilder.js`'s object-mesh texture UV and `app.js`'s
+  Front View Frame — the 2D canvas and Object Preview compute "which part faces the viewer" with the
+  literal same code.
+* `ObjectGeometryBuilder.js`: the object mesh's texture now always wraps the complete production
+  canvas fully and continuously around the object (mm-accurate), never clipped/hidden by wrap mode —
+  wrap mode now only sizes the Front View Frame's highlighted width.
+* `Preview3DRenderer.js`: new live camera-azimuth read-back (`onAzimuthChange`, via an `OrbitControls`
+  `'change'` listener) so a free mouse/touch orbit of the Object Preview moves the Front View Frame,
+  not just the reverse.
+* `app.js`: draws the frame (visually distinct from the safe-area guide, width shown in mm), makes it
+  draggable (rotates the Object Preview), wires the live-orbit callback, and replaces the old
+  `maxWidth`-based `isTextTooLongForObject()` with one driven by the object's real printable
+  circumference (`getLayerBBox()` vs. `circumferenceMm()`) — reusing the existing `StoneLayout`-backed
+  bbox helper, no new bookkeeping map. The warning's copy states real mm numbers and never blames wrap
+  mode/viewing angle.
+* Never clips/crops/hides the production layout; never changes `GeometryEngine`, `StoneLayout`, any
+  exporter's output, physical stone size/gap, or the project schema; no second layout/rendering
+  pipeline; no multi-line text.
 
 ## Rules
 
@@ -41,20 +54,28 @@ See `docs/specifications/S-106-CombinedVisualPreviewPNGExport.md` in full. Summa
   `docs/MILESTONE_WORKFLOW.md`.
 * Repository is the source of truth; audit before implementing; do not add functionality beyond what
   the specification requires.
-* Do not touch `GeometryEngine`, `StoneLayout`, the project schema, production geometry, any
-  exporter's existing output, or any renderer (`src/renderer/**`, `src/preview3d/**`).
+* Do not touch `GeometryEngine`, `StoneLayout`, the project schema, production geometry (stone
+  positions), any exporter's existing output, `src/renderer/**`, or introduce a second layout
+  pipeline.
 
 ## Deliverables
 
-* `index.html`, `app.js` — new `#exportCombined` export option and `composeCombinedPreviewCanvas()`.
-* `tools/test-s106-combined-visual-preview-png-export.mjs` — new test suite.
-* `tools/test-production-export-validation.mjs` — updated export-handler-count assertion.
-* `package.json` — new test wired into the `test` script.
-* `docs/specifications/S-106-CombinedVisualPreviewPNGExport.md` — full specification and audit
-  findings.
-* `npm test` passing in full.
-* Real-browser verification (headless Chromium via Playwright, isolated local run) of the export
-  working immediately after startup with no tab switch, correctly capturing a rotated Object
-  Preview on re-export, and existing PNG exports unaffected — with sample PNGs.
+* `src/preview3d/ObjectDimensions.js`/`ObjectGeometryBuilder.js`/`Preview3DRenderer.js`/`index.js` —
+  mm-accurate, wrap-independent circumference/azimuth math and live rotation sync.
+* `app.js`/`index.html` — the Front View Frame (draw/drag/hit-test), live-orbit sync, Inspector stats
+  (Front View width, printable circumference, viewing position), and the corrected long-text warning.
+* `tools/test-object-dimensions.mjs`, `tools/test-object-geometry-builder.mjs`,
+  `tools/test-s107-long-text-readability.mjs` — updated/rewritten test suites.
+* `tools/test-app-module-migration.mjs`, `tools/test-shape-geometry-integration.mjs` — allowlist the
+  new `ObjectDimensions.js` import.
+* 17 prior-milestone test files — stale `src/preview3d/` forbidden-path guard removed (mechanical
+  scoping fix; `src/renderer/` guard, correctly still forbidding this milestone, is untouched).
+* `docs/specifications/S-107-LongTextReadability.md` — Part 3 (this milestone's full specification
+  and audit findings).
+* `npm test` passing in full (904 checks, 0 failures).
+* Real-browser verification (headless Chromium via Playwright) of short/medium/long text on
+  mug/tumbler/bottle; frame-drag-rotates-preview and orbit-moves-frame in both directions; continuous
+  edge-wrap; mm-labeled frame width; circumference-only warning; zero console errors — with
+  screenshots.
 * `TASK_RESULT.md` completed.
-* One commit on `feature/s-106-combined-visual-preview-png-export`, branch pushed (not merged).
+* Feature branch pushed (not merged).

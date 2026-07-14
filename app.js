@@ -90,6 +90,7 @@ import { FontManager } from './src/fonts/index.js';
 import { createDefaultFontProviderRegistry } from './src/text/index.js';
 import { renderProductionLayout } from './src/renderer/CanvasRenderer2D.js';
 import { createPreview3D } from './src/preview3d/index.js';
+import { circumferenceMm, frontViewFrameWidthMm, canvasXMmForRotationDeg, rotationDegForCanvasXMm, azimuthRadForCanvasXMm, wrapAngleRad } from './src/preview3d/ObjectDimensions.js';
 import { STONE_COLORS } from './src/renderer/StoneColors.js';
 import { listStoneSizes, findStoneSizeByDiameterMm } from './src/renderer/StoneSizes.js';
 import { stoneLayoutToSvg } from './src/export/SvgExporter.js';
@@ -286,6 +287,30 @@ function toggleFavoriteFont(fontId){if(favoriteFontIds.has(fontId))favoriteFontI
 // below applies this to already-generated stones; resolveLayerShapeSource()'s text branch applies
 // the exact same formula to already-generated *polygons* (RS-1012 boolean input), so both stay in
 // sync by construction instead of by duplicated arithmetic.
+// S-107: the minimum heightMm/spacingMm ratio auto-fit will shrink text to. spacingMm (stoneSize+gap)
+// is the fixed physical stone pitch -- unlike heightMm, it never scales down here, because a stone's
+// size is a real catalog rhinestone (see src/renderer/StoneSizes.js), not a continuously-adjustable
+// display value; shrinking it during auto-fit would silently produce a non-orderable size. Below
+// this ratio there are too few stones across a glyph's shrunk stroke width for the letterform to
+// read as anything but a blurred row of dots (confirmed empirically -- see
+// docs/specifications/S-107-LongTextReadability.md's audit). Auto-fit still shrinks heightMm as much
+// as it can within this floor; only text so long it would need to shrink past the floor now overflows
+// maxWidth instead of collapsing into illegible stone soup.
+const MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO=6;
+// Computes the heightMm scale factor generateTextStonesLive()/resolveLayerShapeSource() apply for
+// auto-fit text, given that text's straight (unscaled) measured widthMm. Shared by both call sites
+// so their auto-fit decisions can never drift apart (mirrors computeTextPlacementOffset() above).
+// `scale` is 1 (no change) whenever auto-fit is off, the text already fits, or heightMm/spacingMm is
+// degenerate -- this arithmetic is byte-identical to before this milestone's follow-up.
+function computeAutoFitScale(layer,project,measuredWidthMm){
+  if(!layer.autoFit||!(measuredWidthMm>0))return{scale:1};
+  const maxWidth=project.canvas.width-10;
+  if(measuredWidthMm<=maxWidth)return{scale:1};
+  const fitScale=maxWidth/measuredWidthMm;
+  const spacingMm=(layer.stoneSize||0)+(layer.gap||0);
+  const minScale=spacingMm>0&&layer.height>0?(spacingMm*MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO)/layer.height:fitScale;
+  return{scale:Math.min(1,Math.max(fitScale,minScale))};
+}
 function computeTextPlacementOffset(boundingBox,layer,project){
   const offsetX=(boundingBox?(project.canvas.width-boundingBox.widthMm)/2-boundingBox.minXmm:0)+(layer.x||0);
   const offsetY=(boundingBox?(project.canvas.height-boundingBox.heightMm)/2-boundingBox.minYmm:0)+(layer.y||0);
@@ -316,7 +341,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // one non-empty layerId per instance; each Stone still carries its own real layer id) so every
  // renderer/exporter downstream consumes the same canonical product.
  async generate(project){let raw=[];for(const l of project.layers){if(!l.visible)continue;if(l.type==='text')raw.push(...await this.generateTextStonesLive(l,project));if(l.type==='circle'||l.type==='rectangle')raw.push(...await this.generateShapeStonesLive(l));if(l.type==='svg')raw.push(...await this.generateSvgStonesLive(l));if(l.type==='image')raw.push(...await this.generateImageStonesLive(l));if(l.type==='path')raw.push(...await this.generatePathStonesLive(l));}const stones=this.dedupe(raw,Math.min(...raw.map(s=>s.d||2),2)*0.58).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId}));return new StoneLayout({layerId:'project',stones})}
- async generateTextStonesLive(layer,project){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text)return[];const fontId=TEXT_ENGINE_FONT_IDS.has(layer.font)?layer.font:DEFAULT_TEXT_FONT_ID;const mode=resolveTextFillMode(layer.textMode);const base={text:layer.text,fontId,layerId:layer.id,heightMm:layer.height,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const maxWidth=project.canvas.width-10;if(result.widthMm>maxWidth&&result.widthMm>0){const scale=maxWidth/result.widthMm;const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
+ async generateTextStonesLive(layer,project){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text)return[];const fontId=TEXT_ENGINE_FONT_IDS.has(layer.font)?layer.font:DEFAULT_TEXT_FONT_ID;const mode=resolveTextFillMode(layer.textMode);const base={text:layer.text,fontId,layerId:layer.id,heightMm:layer.height,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const{scale}=computeAutoFitScale(layer,project,result.widthMm);if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
   // RS-1009: text layers previously had no position field -- stones were always centered on the
   // canvas. layer.x/layer.y (mm, default 0) are a further offset applied on top of that same
   // auto-centered base position, so pre-RS-1009 Project JSON (no x/y on its text layers) renders
@@ -429,6 +454,18 @@ let showSafeArea=true;
 // RS-1006: createPreview3D() returns a synchronous facade immediately -- Three.js itself loads
 // lazily inside it, so this line never blocks app.js's own startup.
 const preview3D=createPreview3D(cupCanvas);
+// S-107 (requirement 2, "rotating the Object Preview must move the Front View Frame"): fires
+// whenever the operator free-orbits the Object Preview with the mouse/touch (Preview3DRenderer.js's
+// OrbitControls 'change' listener; never fires for our own slider/frame-drag-driven camera moves --
+// see that file's _onControlsChange() for why). Mirrors the frame-drag branch in the pointermove
+// handler below: updates `rotation` and does a cheap 2D-canvas-only redraw, no layout regeneration.
+preview3D.onAzimuthChange=deg=>{
+  rotation=deg;
+  el('rotation').value=rotation;
+  drawLayout();
+  updateViewButtons();
+  updateStats();
+};
 function selectedLayer(){return project.layers.find(l=>l.id===selectedLayerId)||project.layers[0]}
 // RS-1004: resolves project.product (the pre-existing, previously-unread ad hoc field) to its real
 // ObjectTemplate record. getObjectTemplate() itself falls back to 'mug' for any unknown/missing id,
@@ -527,13 +564,80 @@ function renderLayerUI(){const onlyOneLayer=project.layers.length<=1;el('selecte
 }function layerLabel(l){return l.type==='text'?(l.text||'Text'):l.type==='circle'?'Circle':l.type==='svg'?(l.svgName||'SVG'):l.type==='image'?(l.imageName||'Image'):l.type==='path'?(l.pathName||'Path'):'Rectangle'}function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function resizeCanvas(c){const r=c.getBoundingClientRect(),dpr=Math.max(1,devicePixelRatio||1),w=Math.floor(r.width*dpr),h=Math.floor(r.height*dpr);if(c.width!==w||c.height!==h){c.width=w;c.height=h}return{w,h,dpr}}
 function layoutMmToPx(p){return{x:layoutTransform.ox+p.x*layoutTransform.s,y:layoutTransform.oy+p.y*layoutTransform.s}}function layoutPxToMm(x,y){return{x:(x-layoutTransform.ox)/layoutTransform.s,y:(y-layoutTransform.oy)/layoutTransform.s}}
-function drawLayout(){const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr});layoutTransform={s,ox,oy,dpr};if(showSafeArea)drawSafeAreaGuide(ctx,s,ox,oy,dpr,getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height));drawSelection(ctx,s,ox,oy,dpr);drawGuides(ctx,s,ox,oy,dpr);ctx.fillStyle='#516071';ctx.font=`${12*dpr}px Arial`;ctx.fillText(`${layout.count} stones · ${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm · ${selectedLayer().textMode||''}`,20*dpr,h-18*dpr);el('fitNotice').textContent='Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step).'}
+function drawLayout(){const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr});layoutTransform={s,ox,oy,dpr};drawFrontViewFrame(ctx,s,ox,oy,dpr);if(showSafeArea)drawSafeAreaGuide(ctx,s,ox,oy,dpr,getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height));drawSelection(ctx,s,ox,oy,dpr);drawGuides(ctx,s,ox,oy,dpr);ctx.fillStyle='#516071';ctx.font=`${12*dpr}px Arial`;ctx.fillText(`${layout.count} stones · ${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm · ${selectedLayer().textMode||''}`,20*dpr,h-18*dpr);el('fitNotice').textContent='Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step) · Drag the amber Front View Frame to rotate the Object Preview.'}
 // RS-1004: a dashed guide rectangle for the active object template's safe design area, derived from
 // the current project.canvas size. This is a layer-agnostic editor overlay (like drawSelection()
 // below), not a CanvasRenderer2D.js change -- it reuses the exact mm->px transform
 // renderProductionLayout() already returned, drawn before the selection outline so selection always
 // reads on top.
 function drawSafeAreaGuide(ctx,s,ox,oy,dpr,rectMm){const rx=ox+rectMm.xMm*s,ry=oy+rectMm.yMm*s,rw=rectMm.widthMm*s,rh=rectMm.heightMm*s;ctx.save();ctx.strokeStyle='rgba(20,120,255,.45)';ctx.lineWidth=1.25*dpr;ctx.setLineDash([5*dpr,4*dpr]);ctx.strokeRect(rx,ry,rw,rh);ctx.setLineDash([]);ctx.restore()}
+// S-107 (Front View Frame & Long Text Workflow): normalizes a radian angle delta to (-PI, PI], the
+// signed "how far around the object" distance used by isPointerOnFrontViewFrame() and the frame
+// drag math below. A tiny local helper (not exported from ObjectDimensions.js) since it operates on
+// a difference of two already-computed azimuths, not a canvas-x<->azimuth conversion itself.
+function normalizeAngleDeltaRad(deltaRad){let d=deltaRad%(2*Math.PI);if(d>Math.PI)d-=2*Math.PI;if(d<-Math.PI)d+=2*Math.PI;return d}
+// The Front View Frame (requirement 1): a movable, always-drawn overlay on the 2D canvas showing
+// the portion of the object currently facing the viewer in the Object Preview. Unlike
+// drawSafeAreaGuide() (a fixed dashed outline marking print-safety margins), this is a filled,
+// solid-bordered amber band spanning the full canvas height, deliberately different in both color
+// and style (requirement 1: "must be visually different from the printable-area guides") and
+// clearly a *viewing window*, not a boundary. Reuses canvasXMmForRotationDeg()/
+// frontViewFrameWidthMm() (ObjectDimensions.js) -- the exact same mm-accurate, wrap-independent
+// mapping ObjectGeometryBuilder.js's applyAzimuthUv() uses for the object mesh's own texture, so the
+// 2D canvas and the Object Preview can never disagree about which portion is "facing the viewer"
+// (requirement: "2D Canvas and Object Preview become synchronized views of the same wrapped
+// design"). Never clips/hides any stone -- this is drawn on top of the already-complete production
+// layout (requirement 4), purely a highlight.
+function frontViewFrameGeometry(){
+  const canvasWidthMm=project.canvas.width;
+  const frameWidthMm=Math.min(canvasWidthMm,frontViewFrameWidthMm(project.wrap,canvasWidthMm));
+  const centerXmm=canvasXMmForRotationDeg(rotation,canvasWidthMm);
+  return{canvasWidthMm,frameWidthMm,centerXmm};
+}
+function drawFrontViewFrame(ctx,s,ox,oy,dpr){
+  const{canvasWidthMm,frameWidthMm,centerXmm}=frontViewFrameGeometry();
+  const halfW=frameWidthMm/2;
+  // Requirement 3: wrap continuously across the canvas's left/right edges -- x=0 and x=canvasWidthMm
+  // are the same physical point on the object (ObjectDimensions.js), so a frame that spans past
+  // either edge is split into on-canvas segments, each re-entering (mod canvasWidthMm) at the
+  // opposite edge, with no gap or jump between them.
+  const segments=[];
+  let startXmm=centerXmm-halfW,remainingMm=frameWidthMm;
+  while(remainingMm>1e-6){
+    const wrappedX=((startXmm%canvasWidthMm)+canvasWidthMm)%canvasWidthMm;
+    const segLen=Math.min(remainingMm,canvasWidthMm-wrappedX);
+    segments.push({x0:wrappedX,x1:wrappedX+segLen});
+    startXmm+=segLen;remainingMm-=segLen;
+  }
+  ctx.save();
+  ctx.fillStyle='rgba(255,140,0,.16)';
+  ctx.strokeStyle='#ff8c00';
+  ctx.lineWidth=2.5*dpr;
+  ctx.setLineDash([]);
+  for(const seg of segments){
+    const rx=ox+seg.x0*s,ry=oy,rw=(seg.x1-seg.x0)*s,rh=project.canvas.height*s;
+    ctx.fillRect(rx,ry,rw,rh);
+    ctx.strokeRect(rx,ry,rw,rh);
+  }
+  const label=`Front View · ${frameWidthMm.toFixed(1)} mm`;
+  const labelSeg=segments[0];
+  const labelY=oy>16*dpr?oy-8*dpr:oy+16*dpr;
+  ctx.font=`bold ${12*dpr}px Arial`;
+  ctx.fillStyle='#ff8c00';
+  ctx.fillText(label,ox+labelSeg.x0*s+6*dpr,labelY);
+  ctx.restore();
+}
+// Hit-test for starting a frame drag (requirement 2): true when `mm` sits inside the current Front
+// View Frame band -- the same wrap-aware angular window drawFrontViewFrame() renders, expressed as
+// an angular distance so it needs no per-segment mm math and handles the edge-wrap case for free.
+function isPointerOnFrontViewFrame(mm){
+  if(mm.y<0||mm.y>project.canvas.height)return false;
+  const canvasWidthMm=project.canvas.width;
+  const pointerAzimuthRad=azimuthRadForCanvasXMm(mm.x,canvasWidthMm);
+  const rotationRad=(rotation*Math.PI)/180;
+  const deltaRad=normalizeAngleDeltaRad(pointerAzimuthRad-rotationRad);
+  return Math.abs(deltaRad)<=wrapAngleRad(project.wrap)/2;
+}
 // Text layers have no plain layer fields to compute a bbox from directly (unlike circle/
 // rectangle), so their selection bbox is derived from the already-generated StoneLayout, filtered
 // to this layer's stones and wrapped in a fresh StoneLayout to reuse its getBoundingBox() math.
@@ -606,6 +710,32 @@ function isTextOutsidePrintableArea(l){
   const visibleRatio=(overlapWidth*overlapHeight)/bboxArea;
   return visibleRatio<TEXT_PRINTABLE_VISIBILITY_RATIO;
 }
+// S-107 (Front View Frame & Long Text Workflow): a cylindrical object is treated as an unwrapped
+// surface -- ObjectDimensions.js's circumferenceMm() is, by construction, exactly
+// project.canvas.width (the flat production canvas maps exactly once around the object's full
+// 360-degree circumference; see that module's own top-of-file comment). "Too long" is therefore a
+// genuine manufacturing limitation -- the generated design would overlap itself once wrapped fully
+// around the object -- not a viewing-window/wrap-mode concern: wrap mode only sizes the Front View
+// Frame highlight (frontViewFrameWidthMm()), it never changes the object's circumference. Reuses
+// getLayerBBox() (RS-1009's single source of truth for a layer's rendered mm extent, already the
+// same StoneLayout-derived bbox isTextOutsidePrintableArea() above uses) instead of tracking a
+// parallel per-layer map, so this can never disagree with what was actually generated.
+function printableCircumferenceMm(){return circumferenceMm(project.canvas.width)}
+function isTextTooLongForObject(l){
+  if(!l||l.type!=='text'||!l.text)return false;
+  return getLayerBBox(l).width>printableCircumferenceMm();
+}
+// Builds the too-long warning's detail copy (requirement 5: "must describe a real manufacturing
+// limitation... must not describe the current viewing angle"): states the actual generated width
+// against the object's actual printable circumference, then lists the three remedies that actually
+// change that comparison -- shortening the text, reducing the stone size (lowers the auto-fit
+// legibility floor's required heightMm, see computeAutoFitScale()), or choosing a wider object
+// (a larger project.canvas.width, and so a larger circumference). Wrap mode is deliberately never
+// offered as a remedy: it cannot change either side of this comparison.
+function textTooLongDetailMessage(l){
+  const b=getLayerBBox(l),circumference=printableCircumferenceMm();
+  return`This design is ${b.width.toFixed(1)}mm wide -- ${(b.width-circumference).toFixed(1)}mm more than the ${currentObjectTemplate().displayName.toLowerCase()}'s ${circumference.toFixed(1)}mm printable circumference, so it would overlap itself once wrapped fully around the object. Try: shortening the text, reducing the stone size, or choosing a wider object.`;
+}
 // S-104 (audited): the Text Lightbox is a modal (`position:fixed;inset:0`) that is normally CLOSED
 // while the operator drags text on the canvas -- a warning that only lives inside it is therefore
 // never seen during the one interaction it exists to catch. #workspaceTextOutsideWarning lives in the
@@ -618,10 +748,21 @@ function isTextOutsidePrintableArea(l){
 // regenerated) so both are always in sync with the layer's true current position/extent -- live
 // during a drag (pointermove already calls updateAll() on every move), immediately after Undo/Redo,
 // and on every keystroke while editing #textX/#textY directly.
+// S-107 follow-up: isTextTooLongForObject() takes priority over isTextOutsidePrintableArea() -- a
+// structural "this can never fit" failure must never be shown alongside (or masked by) a "just
+// recenter it" suggestion that would not actually fix it. The two warnings are therefore mutually
+// exclusive, exactly like the too-long/outside-area distinction they represent.
 function updateTextOutsidePrintableWarning(){
-  const outside=isTextOutsidePrintableArea(selectedLayer());
+  const l=selectedLayer();
+  const tooLong=isTextTooLongForObject(l);
+  const outside=!tooLong&&isTextOutsidePrintableArea(l);
   el('textOutsidePrintableWarning').classList.toggle('visible',outside);
   el('workspaceTextOutsideWarning').classList.toggle('visible',outside);
+  const detail=tooLong?textTooLongDetailMessage(l):'';
+  el('textTooLongWarningDetail').textContent=detail;
+  el('textTooLongWarning').classList.toggle('visible',tooLong);
+  el('workspaceTextTooLongWarningDetail').textContent=detail;
+  el('workspaceTextTooLongWarning').classList.toggle('visible',tooLong);
 }
 // RS-1012: Boolean Operations. BOOLEAN_OPERATION_LABELS is the exact user-facing vocabulary the
 // milestone brief requires ("Exclude", not "XOR"), reused for the result layer's default name and
@@ -659,9 +800,8 @@ async function resolveLayerShapeSource(layer){
     const base={text:layer.text,fontId,layerId:layer.id,heightMm:layer.height,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};
     let resolved=await permanentEngine.resolveTextPolygons(base);
     if(layer.autoFit&&resolved.boundingBox){
-      const maxWidth=project.canvas.width-10;
-      if(resolved.boundingBox.widthMm>maxWidth&&resolved.boundingBox.widthMm>0){
-        const scale=maxWidth/resolved.boundingBox.widthMm;
+      const{scale}=computeAutoFitScale(layer,project,resolved.boundingBox.widthMm);
+      if(scale<1){
         resolved=await permanentEngine.resolveTextPolygons({...base,heightMm:Math.max(1,layer.height*scale)});
       }
     }
@@ -790,6 +930,11 @@ function handlesFor(b){return[{name:'nw',x:b.x,y:b.y},{name:'ne',x:b.x2,y:b.y},{
 // update() only rebuilds the mesh/texture when the StoneLayout or display options actually
 // changed; syncView() only repositions the camera when rotation/zoom actually changed -- neither
 // call disturbs a manual orbit/pan the operator has mid-way through with the mouse.
+// S-107 follow-up: `wrap` is passed back to preview3D.update() -- the object mesh's texture
+// compresses the complete production canvas into wrap's angular window (ObjectGeometryBuilder.js's
+// applyWrapUv()), restoring wrap mode's original visible effect on the Object Preview. The Front
+// View Frame overlay (drawFrontViewFrame(), frontViewFrameGeometry()) visualizes this exact same
+// window on the 2D canvas; it does not replace it.
 function drawCup(){preview3D.update(layout,{cupColor:project.cupColor,wrap:project.wrap,objectTemplate:currentObjectTemplate(),canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height});preview3D.syncView(rotation,zoom)}
 // S-001: keeps the Front/Left/Right/Back buttons' highlighted state synchronized with `rotation`
 // regardless of how it changed (view-button click, reset, slider, or manual cup-drag), since this
@@ -803,7 +948,13 @@ function updateViewButtons(){document.querySelectorAll('.viewBtn').forEach(b=>b.
 // any layers are selected) the current selection's bounding box -- purely additional display text,
 // computed from data updateAll() already has (project.canvas, getSafeAreaRectMm(), unionBBoxOfLayers()).
 function selectionBoundsText(){if(!selectedLayerIds.size)return'';const sel=[...selectedLayerIds].map(id=>project.layers.find(x=>x.id===id)).filter(Boolean);if(!sel.length)return'';const b=unionBBoxOfLayers(sel);return`<span>selection: ${b.width.toFixed(1)}×${b.height.toFixed(1)} mm</span>`}
-function updateStats(){const safe=getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height);el('layoutStats').innerHTML=`<b>${layout.count}</b> stones <span>${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm</span><span>canvas: ${project.canvas.width}×${project.canvas.height} mm</span><span>safe area: ${safe.widthMm.toFixed(1)}×${safe.heightMm.toFixed(1)} mm</span><span>units: mm</span>${selectionBoundsText()}<span>selected: ${escapeHtml(layerLabel(selectedLayer()))}</span>`;el('cupStats').innerHTML=`<span>${escapeHtml(currentObjectTemplate().displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span>`;updateStoneColorSwatch()}
+// S-107 (requirement 6, "Show useful information associated with the Front View Frame"): reuses
+// the existing #cupStats workspace-status bar (already showing per-object/preview info) rather
+// than adding new markup -- Front View width and printable circumference come straight from
+// frontViewFrameGeometry()/printableCircumferenceMm(), the exact same functions that draw the
+// frame and gate the too-long warning, so this can never disagree with either. Viewing position is
+// the live rotation angle, signed the same way the Rotation slider/view buttons already are.
+function updateStats(){const safe=getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height);el('layoutStats').innerHTML=`<b>${layout.count}</b> stones <span>${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm</span><span>canvas: ${project.canvas.width}×${project.canvas.height} mm</span><span>safe area: ${safe.widthMm.toFixed(1)}×${safe.heightMm.toFixed(1)} mm</span><span>units: mm</span>${selectionBoundsText()}<span>selected: ${escapeHtml(layerLabel(selectedLayer()))}</span>`;const{frameWidthMm}=frontViewFrameGeometry();el('cupStats').innerHTML=`<span>${escapeHtml(currentObjectTemplate().displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span><span>Front View width: ${frameWidthMm.toFixed(1)} mm</span><span>printable circumference: ${printableCircumferenceMm().toFixed(1)} mm</span><span>viewing position: ${Math.round(rotation)}°</span>`;updateStoneColorSwatch()}
 function download(name,mime,data){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:mime}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800);el('status').textContent=`Downloaded ${name}`}function exportCanvas(name,canvas){canvas.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800)},'image/png')}
 // S-106: Combined Visual Preview PNG. Composites the two already-rendered, always-mounted canvas
 // elements (layoutCanvas/cupCanvas -- both keep a real, non-zero pixel backing store at all times
@@ -844,6 +995,14 @@ const LAYER_MOVE_DRAG_SENSITIVITY=0.5;
 // starting its drag. Exactly one commitHistory() call happens per drag, at drag start.
 layoutCanvas.addEventListener('pointerdown',e=>{
   const mm=pointerToLayout(e);const hit=hitTest(mm);
+  // S-107: an empty-canvas click that lands inside the Front View Frame starts a frame drag
+  // instead of clearing the selection -- a click on an actual layer/stone still takes priority
+  // (hit is checked first, above) and moves that layer exactly as before.
+  if(!hit&&isPointerOnFrontViewFrame(mm)){
+    drag={kind:'frontFrame',startPointerXmm:mm.x,startRotation:rotation};
+    layoutCanvas.setPointerCapture(e.pointerId);
+    return;
+  }
   if(!hit){if(selectedLayerIds.size){selectedLayerIds=clearSelection();renderLayerUI();updateEditingUI();drawLayout()}return}
   if(hit.kind==='resize'){
     selectedLayerIds=selectOnly(hit.layer.id);selectedLayerId=hit.layer.id;
@@ -881,6 +1040,24 @@ layoutCanvas.addEventListener('pointerdown',e=>{
 });
 layoutCanvas.addEventListener('pointermove',e=>{
   if(!drag)return;
+  // S-107: dragging the Front View Frame rotates the Object Preview live. Deliberately cheap --
+  // no engine.generate()/updateAll() (the layout itself never changes here, only the viewing
+  // angle) -- so this stays immediate and smooth even while the pointer moves every frame.
+  // canvasXMmForRotationDeg()/rotationDegForCanvasXMm() are exact inverses of each other, so
+  // re-deriving the absolute rotation from the total pointer displacement each move is drift-free
+  // (never an accumulated per-frame delta).
+  if(drag.kind==='frontFrame'){
+    const mm=pointerToLayout(e);
+    const dxMm=mm.x-drag.startPointerXmm;
+    const targetXmm=canvasXMmForRotationDeg(drag.startRotation,project.canvas.width)+dxMm;
+    rotation=rotationDegForCanvasXMm(targetXmm,project.canvas.width);
+    el('rotation').value=rotation;
+    preview3D.syncView(rotation,zoom);
+    drawLayout();
+    updateViewButtons();
+    updateStats();
+    return;
+  }
   const mm=pointerToLayout(e),rawDx=mm.x-drag.start.x,rawDy=mm.y-drag.start.y;
   if(drag.kind==='move'){
     let dx=rawDx*LAYER_MOVE_DRAG_SENSITIVITY,dy=rawDy*LAYER_MOVE_DRAG_SENSITIVITY;

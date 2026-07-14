@@ -400,6 +400,10 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
             <button data-view="0" class="viewBtn primary">Front</button><button data-view="-90" class="viewBtn">Left</button><button data-view="90" class="viewBtn">Right</button><button data-view="180" class="viewBtn">Back</button>
           </div>
         </div>
+        <div class="toolbar-group">
+          <label for="wrap" style="margin:0 6px 0 0;display:inline" title="How wide a slice of the design's circumference is shown on the Object Preview, centered on the front -- also sizes the amber Front View Frame on the 2D Canvas">Wrap mode</label>
+          <select id="wrap"><option value="front" selected>Front only - readable</option><option value="wide">Wide front</option><option value="half">Half wrap</option><option value="full">Full wrap</option></select>
+        </div>
         <div class="toolbar-group slider-field">
           <span>Rotation</span><input id="rotation" type="range" min="-180" max="180" value="0">
         </div>
@@ -432,6 +436,10 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
   <aside class="right-inspector" id="rightInspector" aria-label="Layer inspector">
     <section class="panel-section">
       <h2>Inspector — <span id="inspectorLayerName">Selected layer</span></h2>
+      <div class="validation-message" id="workspaceTextTooLongWarning" role="status">
+        <div>This text exceeds the object's printable circumference.</div>
+        <div class="hint" id="workspaceTextTooLongWarningDetail"></div>
+      </div>
       <div class="validation-message" id="workspaceTextOutsideWarning" role="status">
         <div>This text is outside the printable area.</div>
         <button type="button" class="btn sm primary" id="workspaceCenterTextBtn" title="Reset only this text layer's position to the center of the printable area — font, size, rotation, spacing, fill, and stone size are left unchanged">↺ Center Text</button>
@@ -482,9 +490,11 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
             <div class="field"><label for="textX">Position X (mm)</label><input id="textX" type="number" step="1" value="0"></div>
             <div class="field"><label for="textY">Position Y (mm)</label><input id="textY" type="number" step="1" value="0"></div>
           </div>
+          <p class="validation-message" id="textTooLongWarning" role="status">This text exceeds the object's printable circumference.</p>
+          <p class="hint" id="textTooLongWarningDetail"></p>
           <p class="validation-message" id="textOutsidePrintableWarning" role="status">This text is outside the printable area.</p>
           <button type="button" class="btn sm primary" id="centerTextOnObject" title="Reset only this text layer's position to the center of the printable area — font, size, rotation, spacing, fill, and stone size are left unchanged">↺ Center on Object</button>
-          <p class="hint">Text can also be moved by dragging on the 2D canvas, arrow-key nudging, or Align &amp; Snap. Dragged this text out of view? Click Center on Object above to bring it back.</p>
+          <p class="hint">Text can also be moved by dragging on the 2D canvas, arrow-key nudging, or Align &amp; Snap. Dragged this text out of view? Click Center on Object above to bring it back. Long text that fits the object's printable circumference can be inspected by dragging the amber Front View Frame on the 2D canvas, or by rotating the Object Preview.</p>
         </div>
         <div class="field-section">
           <h3>Curve</h3>
@@ -580,11 +590,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <select id="objectType"><option value="mug" selected>Mug</option><option value="tumbler">Straight Tumbler</option><option value="bottle">Bottle</option></select>
           <p class="hint" id="objectTemplateDetail">Production 210×90mm · Safe area inset 14/10mm · Default wrap: Front only</p>
         </div>
-        <div class="field-section">
-          <h3>Wrap mode</h3>
-          <select id="wrap"><option value="front" selected>Front only - readable</option><option value="wide">Wide front</option><option value="half">Half wrap</option><option value="full">Full wrap</option></select>
-        </div>
-        <p class="hint">Mug, Straight Tumbler, and Bottle are physical object/preview templates, not design shape layers — switching resets the production canvas size and wrap default for that object.</p>
+        <p class="hint">Mug, Straight Tumbler, and Bottle are physical object/preview templates, not design shape layers — switching resets the production canvas size and wrap default for that object. Wrap mode moved to the Object Preview toolbar (Dual Workspace / Object Preview tab) — it only affects that view.</p>
       </div>
     </div>
     <footer class="lightbox-footer">

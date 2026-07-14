@@ -96,6 +96,9 @@ await test('7. app.js only imports modules allowed as of this milestone', () => 
     /from\s*['"]\.\/src\/export\/ProductionSheetExporter\.js['"]/,
     // RS-1006: the real 3D preview's own barrel module.
     /from\s*['"]\.\/src\/preview3d\/index\.js['"]/,
+    // S-107: ObjectDimensions.js is preview3d's pure, DOM/Project/Layer-free mm geometry math --
+    // see tools/test-app-module-migration.mjs's matching entry for the full rationale.
+    /from\s*['"]\.\/src\/preview3d\/ObjectDimensions\.js['"]/,
     // RS-1008: Image Trace's own barrel module, mirroring the src/svg/index.js entry above.
     /from\s*['"]\.\/src\/image\/index\.js['"]/,
     // RS-1009: Alignment & Snapping's own barrel module.

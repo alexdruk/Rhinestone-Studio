@@ -109,7 +109,11 @@ function buildTaperedBodyGeometry(dimensions) {
     new THREE.Vector2(rimTopRadius * RIM_OUTER_RADIUS_FACTOR, rimTopY),
     new THREE.Vector2(rimTopRadius * RIM_INNER_RADIUS_FACTOR, rimInnerY)
   ];
-  return new THREE.LatheGeometry(points, LATHE_SEGMENTS, 0, Math.PI * 2);
+  // S-107 follow-up: phiStart=-PI (not the THREE.js default 0) puts LatheGeometry's own seam --
+  // the one column pair (first/last) it never actually joins with a face -- directly opposite the
+  // +Z "front" azimuth applyAzimuthUv() below centers the texture on, instead of directly at front.
+  // See applyAzimuthUv()'s own comment for why this placement matters.
+  return new THREE.LatheGeometry(points, LATHE_SEGMENTS, -Math.PI, Math.PI * 2);
 }
 
 // Bottle body+shoulder+neck+cap: one revolved profile (a THREE.LatheGeometry), closed at both ends
@@ -139,7 +143,9 @@ function buildBottleGeometry(dimensions) {
     new THREE.Vector2(capRadius, capTopY - capHeightMm * 0.25),
     new THREE.Vector2(0, capTopY)
   ];
-  return new THREE.LatheGeometry(points, LATHE_SEGMENTS);
+  // S-107 follow-up: see the matching comment in buildTaperedBodyGeometry() above -- phiStart=-PI
+  // moves LatheGeometry's own unconnected seam to the back, opposite front.
+  return new THREE.LatheGeometry(points, LATHE_SEGMENTS, -Math.PI, Math.PI * 2);
 }
 
 // RS-1006A: writes a custom V coordinate per vertex -- the vertex's real millimeter Y position
@@ -207,19 +213,45 @@ function buildHandleMesh(dimensions) {
   return new THREE.Mesh(handleGeometry, handleMaterial);
 }
 
-// Writes a custom U coordinate per vertex: azimuth (atan2(x,z), 0 at +Z -- the default camera's
-// front-facing direction) mapped onto [0,1] across `angleRad`'s window, centered on the front. V is
-// left untouched here -- it is set once at build time by applyBodyHeightUv() above and does not
-// depend on wrap mode. Combined with ClampToEdgeWrapping (set by Preview3DRenderer.js on the
-// texture itself), vertices outside the wrap window clamp to the texture's own edge texels -- which
-// are always plain background color (StoneLayoutTexture.js's fill), so the rest of the body reads
+// S-107 follow-up: writes a custom U coordinate per vertex, compressing the *entire* production
+// canvas into `wrapAngleRadValue`'s angular window centered on the front -- restores the original
+// (pre-S-107) wrap-mode-dependent windowing (requirement: "changing wrap mode changes the Object
+// Preview"; "the Front View Frame must visualize the selected wrap mode, not replace it"). Vertices
+// outside the window get a U outside [0,1], which Preview3DRenderer.js's ClampToEdgeWrapping clamps
+// to the texture's own edge texel -- always plain background color, so the rest of the body reads
 // as a seamless plain surface.
-function applyAzimuthUv(geometry, angleRad) {
+//
+// Deliberately does NOT derive each vertex's azimuth from its own position via Math.atan2(x,z) --
+// two independent, real bugs came from that (both root-caused with
+// tools/test-object-geometry-builder.mjs's UV-continuity check and confirmed visually as dark
+// vertical bands on the object):
+//  1. atan2 only ever returns a value in (-PI, PI]. LatheGeometry connects every column to its
+//     neighbor with a real face all the way around (48 faces from 49 columns) -- one of those
+//     columns necessarily sits right at that +-PI branch cut, so its face's three vertices would
+//     get azimuths like +PI and -PI+epsilon: a ~2*PI swing in a single, real, adjacent-column
+//     triangle, stretching that triangle's texture sample across nearly the whole canvas width.
+//  2. At r=0 (the base/cap apex, x=z=0 for every column), Math.atan2(x,z)'s result depends on the
+//     *sign* of each zero (IEEE 754 distinguishes +0/-0, and atan2(+-0,+-0) is defined per-quadrant
+//     by that sign) -- which flips essentially arbitrarily column to column, giving neighboring
+//     apex vertices wildly different, meaningless azimuths despite sitting at the identical point.
+// Both are avoided by computing azimuth from the column's own known construction angle (column
+// index / LATHE_SEGMENTS, matching buildTaperedBodyGeometry()/buildBottleGeometry()'s
+// phiStart=-PI, phiLength=2*PI) instead of reverse-engineering it from position: this is exactly
+// the angle LatheGeometry itself used to place that column, so it is defined (and continuous with
+// every real neighboring face) even at r=0, and its one unavoidable wrap (column 0 to column
+// LATHE_SEGMENTS, both at the back, azimuth +-PI) falls exactly on the one column pair
+// LatheGeometry never actually joins with a face -- the only place a UV discontinuity is safe.
+//
+// V is left untouched here -- it is set once at build time by applyBodyHeightUv() above.
+function applyAzimuthUv(geometry, wrapAngleRadValue) {
   const position = geometry.attributes.position;
   const uv = geometry.attributes.uv;
+  const columnCount = LATHE_SEGMENTS + 1;
+  const rowCount = position.count / columnCount;
   for (let i = 0; i < position.count; i++) {
-    const azimuth = Math.atan2(position.getX(i), position.getZ(i));
-    uv.setX(i, 0.5 + azimuth / angleRad);
+    const column = Math.floor(i / rowCount);
+    const azimuth = -Math.PI + (column / LATHE_SEGMENTS) * 2 * Math.PI;
+    uv.setX(i, 0.5 + azimuth / wrapAngleRadValue);
   }
   uv.needsUpdate = true;
 }
