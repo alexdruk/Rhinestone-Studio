@@ -793,3 +793,24 @@ band defect is fixed at its actual root cause -- two independent, confirmed bugs
 azimuth was derived, not a workaround that merely repositions or shrinks the symptom -- verified both
 analytically (a triangle-by-triangle UV continuity check, now a permanent regression test) and
 visually (the previously-worst-case view, `full` wrap at the back, is now clean).
+
+---
+
+## Part 5 — wrap mode control was undiscoverable
+
+A user reported being unable to find the Wrap Mode control anywhere in the UI. Audit: `#wrap` was
+never removed -- it lived (unchanged since before this milestone) inside the Shapes lightbox's
+"Object Templates" tab, two clicks behind a menu item ("Shapes") with no apparent connection to wrap
+mode, the Object Preview, or the Front View Frame. A genuine discoverability defect, not a
+regression this milestone introduced, but squarely this milestone's responsibility given how tightly
+the Front View Frame now couples to wrap mode.
+
+**Decision:** moved `#wrap` (same element/id/options/wiring, no behavior change) into the Object
+Preview toolbar (`#toolbar3D`), directly beside the view buttons and Rotation slider -- visible
+immediately in Dual Workspace or Object Preview view, no lightbox required. `tools/test-ui001-
+lightboxes.mjs` check 4 updated (no longer expects `#wrap` inside Object Templates); new
+`tools/test-s107-long-text-readability.mjs` check 1b locks in the control's presence inside
+`#toolbar3D` and that it exists exactly once in the document, as a permanent regression guard.
+`npm test`: 909/909. Browser-verified: `#wrap` visible on load with no interaction, selecting a mode
+changes the Front View width and Object Preview live, no longer present anywhere in the Shapes
+lightbox, zero console errors.

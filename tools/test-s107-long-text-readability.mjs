@@ -71,6 +71,19 @@ await test('1. the old maxWidth/floorApplied-driven too-long workflow is fully r
   }
 });
 
+await test('1b. the wrap mode control (#wrap, Front/Wide/Half/Full) lives in the Object Preview toolbar (#toolbar3D) -- discoverable alongside Rotation/Zoom/the view buttons, not buried inside the Shapes lightbox, and never removed from the UI (a real user reported being unable to find it there)', () => {
+  const toolbarMatch = indexHtml.match(/<div class="toolbar-cluster view3d-toolbar" id="toolbar3D">[\s\S]*?\n {6}<\/div>\n {4}<\/div>/);
+  assert.ok(toolbarMatch, 'expected to find #toolbar3D in index.html');
+  const toolbar = toolbarMatch[0];
+  assert.match(toolbar, /<select id="wrap">/, 'expected #wrap inside #toolbar3D');
+  for (const value of ['front', 'wide', 'half', 'full']) {
+    assert.ok(toolbar.includes(`value="${value}"`), `expected #toolbar3D's wrap select to offer ${value}`);
+  }
+  // Exactly one #wrap in the whole document (never duplicated -- app.js's el('wrap') must resolve
+  // to a single, unambiguous control).
+  assert.equal((indexHtml.match(/id="wrap"/g) || []).length, 1, 'expected exactly one #wrap element in index.html');
+});
+
 await test('2. isTextTooLongForObject() is driven by getLayerBBox() vs. printableCircumferenceMm(), not a wrap-window/maxWidth threshold', () => {
   const fn = extractBlock(appJs, /function isTextTooLongForObject\([^)]*\)\{[\s\S]*?\n\}/, 'function isTextTooLongForObject()');
   assert.match(fn, /getLayerBBox\(l\)\.width>printableCircumferenceMm\(\)/);

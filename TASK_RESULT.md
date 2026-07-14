@@ -368,3 +368,60 @@ Front View Frame — both now coexist, driven by the same `rotation`/`wrap` stat
 is fixed at its actual root cause (two confirmed bugs in per-vertex azimuth derivation), not
 repositioned or hidden — verified both analytically (a new permanent triangle-by-triangle UV
 continuity regression test) and visually (the previously-worst-case view is now clean).
+
+---
+
+# Follow-up 3 — wrap mode control was undiscoverable
+
+A user reported being unable to find the Wrap Mode (Front/Wide/Half/Full) control anywhere in the UI.
+
+## Audit
+
+`#wrap` was never removed from `index.html` by any prior commit on this branch — confirmed present,
+unchanged in location, since before this milestone. It lived inside the Shapes lightbox's "Object
+Templates" tab (`Shapes` top-menu button → `Object Templates` tab → `Wrap mode` `<select>`), two
+clicks deep behind a menu item whose name ("Shapes") has no apparent connection to wrap mode, the
+Object Preview, or the Front View Frame. This was a genuine discoverability defect, not a perception
+issue or a regression introduced by this milestone's own work — but it is squarely this milestone's
+job to fix, since the Front View Frame now depends entirely on wrap mode being an easy, obvious
+control to reach.
+
+## Decision
+
+Moved `#wrap` (same element, same id, same options, same app.js wiring — nothing about how it
+behaves changed) out of the Shapes lightbox into the Object Preview toolbar (`#toolbar3D`), directly
+beside the Front/Left/Right/Back view buttons and the Rotation slider it now directly controls the
+meaning of. It requires no lightbox to be open and no navigation — it is visible immediately in Dual
+Workspace or Object Preview view, exactly where a user looking for "how much of my design wraps
+around the object" would look. The Shapes lightbox's Object Templates tab keeps `#objectType`
+(Mug/Tumbler/Bottle) and gained a hint pointing at the control's new location.
+
+## Files Changed
+
+```
+index.html                                — #wrap moved from #shapesPanelTemplates to #toolbar3D
+tools/test-ui001-lightboxes.mjs           — check 4 updated: #wrap no longer expected inside
+                                             Object Templates
+tools/test-s107-long-text-readability.mjs — new check 1b: #wrap lives in #toolbar3D, exactly once
+                                             in the whole document
+```
+
+## Test Results
+
+`npm test`: **909/909 checks, 0 failures** (up from 908; one new permanent regression guard locking
+in the control's discoverable location).
+
+## Browser Verification
+
+* `#wrap` is directly visible on page load (Dual Workspace) — no lightbox/menu interaction needed.
+* Selecting a wrap mode directly from the toolbar changes the Front View width shown in the status
+  bar (40.8mm → 175.0mm, front → full) and the Object Preview, live.
+* Confirmed `#wrap` no longer appears anywhere inside the Shapes lightbox.
+* Zero console errors.
+
+## Recommendation
+
+Approve. The control was never deleted, but it was effectively unusable if a user couldn't guess it
+was hidden behind an unrelated menu item — moving it beside the controls it actually interacts with
+(Rotation, the view buttons, and by extension the Front View Frame) fixes that directly, with no
+behavior change to the control itself.

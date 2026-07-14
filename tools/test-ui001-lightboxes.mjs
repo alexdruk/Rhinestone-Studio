@@ -95,7 +95,11 @@ await test('4. Shapes Lightbox has two clearly separated sections: Design Shapes
   for (const value of ['mug', 'tumbler', 'bottle']) {
     assert.ok(templatesBody.includes(`value="${value}"`), `expected Object Templates to offer ${value}`);
   }
-  assert.ok(templatesBody.includes('id="wrap"'), 'expected wrap mode in Object Templates');
+  // S-107 follow-up: wrap mode moved out of this tab into the Object Preview toolbar (#toolbar3D)
+  // for discoverability -- it only affects the Object Preview/Front View Frame, not a design shape
+  // or object template choice, and a user reported being unable to find it here. See check in
+  // tools/test-s107-long-text-readability.mjs for its new location.
+  assert.ok(!templatesBody.includes('id="wrap"'), 'expected wrap mode to no longer live in Object Templates (moved to the Object Preview toolbar)');
 });
 
 await test('5. Import Lightbox has two clearly separated tabs: SVG Import and Project Import, and Project Import explains it is not SVG import', () => {
