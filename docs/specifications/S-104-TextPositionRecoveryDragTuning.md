@@ -237,10 +237,77 @@ confirmed the button is immediately visible with no scrolling
 manually, clicked **Center on Object**, and confirmed it reset the position (`textX`/`textY` → `0,0`)
 while leaving the just-edited text content (`"Hello World"`) untouched. Zero console errors.
 
+## Follow-up 2: Outside-the-Printable-Area Warning
+
+A second visual-review request: show a clear warning in the Text Lightbox when the selected text has
+moved materially outside the printable safe area, updating live and clearing automatically once the
+text is back inside — without ever preventing the move itself.
+
+**Threshold chosen — full disjointness, not strict containment.** The first implementation attempt
+used "not fully contained by the safe area" (any overhang triggers the warning), and browser
+verification immediately caught it as wrong: the *default, never-moved* text layer already overhangs
+the safe area at `(0,0)` (its auto-fit bounding box, `199.4×17.0mm`, is wider than the `182×70mm` safe
+area — `generateTextStonesLive()`'s auto-fit deliberately caps width to `canvas.width-10`, not to the
+safe area, and this is pre-existing, unrelated behavior). A strict-containment check would have shown
+the warning on essentially every normal project, defeating its purpose. The corrected rule —
+`isTextOutsidePrintableArea()` in `app.js` — fires only when the text's bounding box has **no overlap
+at all** with the safe area (fully disjoint, with a small tolerance so a bbox resting exactly on the
+boundary never flickers). This intentionally mirrors `centerSelectedTextOnObject()`'s own scope
+("recovers text dragged *completely* outside the visible printable area"), so the warning is a direct,
+correct signal for exactly when Center on Object is the right fix — never a false alarm for ordinary
+auto-fit overhang.
+
+**Implementation:**
+* `app.js` — `isTextOutsidePrintableArea(l)` (pure function: `getLayerBBox(l)` vs
+  `getSafeAreaRectMm(currentObjectTemplate(), project.canvas.width, project.canvas.height)`, tolerance
+  = the existing `SNAP_TOLERANCE_MM`) and `updateTextOutsidePrintableWarning()` (toggles the `.visible`
+  class on the warning element). Both are read-only — neither writes to any layer field, so the move
+  itself is never affected or prevented, satisfying "do not prevent moving text outside the area" by
+  construction.
+* `updateTextOutsidePrintableWarning()` is called from inside `updateAll()`, immediately after `layout`
+  is regenerated — the same function every position-changing action already funnels through (drag
+  `pointermove`, keyboard nudge, Align/Distribute, Undo/Redo, Center on Object, and every keystroke in
+  the Text Lightbox's own `#textX`/`#textY` fields). This is what makes the warning "live": it is
+  recomputed on literally every call that could have changed the layer's extent, with no separate
+  polling or event wiring needed.
+* `index.html` — a `<p class="validation-message" id="textOutsidePrintableWarning">This text is
+  outside the printable area.</p>` in the Text Lightbox's Position section, between the X/Y fields and
+  the Center on Object button. Reuses the exact `.validation-message`/`.visible` styling already used
+  by `#textValidation` elsewhere in this same lightbox — a red alert box, no new CSS.
+* Center on Object (`#centerTextOnObject`) is completely unchanged — same id, position, wiring, guard
+  logic, and styling as the prior follow-up left it.
+* No changes to `GeometryEngine`, `StoneLayout`, any renderer, any exporter, or the project schema —
+  the warning is computed entirely from already-generated `layout` data and the already-existing
+  `getSafeAreaRectMm()`.
+
+**Tests:** `tools/test-s104-text-position-recovery-drag-tuning.mjs` gained checks 10–13: the warning
+element exists with the exact required wording between the X/Y fields and the button; it reuses the
+existing `.validation-message` styling; `isTextOutsidePrintableArea()`/`updateTextOutsidePrintableWarning()`
+are purely read+DOM-toggle (regex-verified: no property assignment of any kind in the pure function);
+and the update call is wired into `updateAll()`. `npm test`: **836 checks, 0 failures** (4 new).
+
+**Browser verification** (headless Chromium, 1440×900, 2D-Canvas-only):
+1. Baseline: opened the Text Lightbox at the default `(0,0)` position — warning correctly **hidden**
+   (confirming the corrected, non-strict threshold).
+2. Dragged the text far outside the canvas (lightbox closed during the drag, as it must be — the Text
+   Lightbox is a real modal and blocks canvas pointer events while open); reopened the lightbox —
+   warning **visible**, sitting directly above Center on Object.
+3. **Live update inside the open lightbox**, the closest in-app analog to "live while dragging" since
+   the modal cannot be open during an actual canvas drag: typed the Position X/Y fields back to
+   `(0,0)` without closing/reopening anything — warning disappeared immediately; typed X back to `400`
+   — warning reappeared immediately. No reopen needed either time.
+4. Clicked **Center on Object** — position reset to `(0,0)` and the warning disappeared in the same
+   render pass.
+5. Closed the lightbox, clicked **Undo** — position returned to the off-canvas value; reopening the
+   lightbox showed the warning again. Clicked **Redo** — position returned to `(0,0)`; warning gone
+   again.
+6. Zero console/page errors across the entire session.
+
 ## Recommendation
 
-Approve and merge. Both original requirements, plus this follow-up discoverability fix, are
-implemented as the smallest coherent change on top of existing, already-tested infrastructure
+Approve and merge. Both original requirements, plus both follow-up fixes (Center on Object
+discoverability, and the outside-the-printable-area warning), are implemented as the smallest coherent
+change on top of existing, already-tested infrastructure
 (`getSafeAreaRectMm`, `commitHistory`/`HistoryManager`, the Layers-list selection path, and now the
 app's existing `.btn.primary` visual language) — no new geometry, no new storage, no schema change, no
 forbidden file touched, and the follow-up fix touched only a `class`/label on one existing element. The

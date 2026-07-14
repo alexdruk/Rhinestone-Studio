@@ -90,11 +90,14 @@ docs/specifications/S-104-TextPositionRecoveryDragTuning.md
 tools/test-s104-text-position-recovery-drag-tuning.mjs
 ```
 
-**Modified (6, plus follow-up touches to `index.html`/the new test/this file):**
+**Modified (6, plus two rounds of follow-up touches to `index.html`/`app.js`/the new test/this file):**
 ```
-app.js                                          — LAYER_MOVE_DRAG_SENSITIVITY, centerSelectedTextOnObject()
+app.js                                          — LAYER_MOVE_DRAG_SENSITIVITY, centerSelectedTextOnObject();
+                                                   follow-up 2: isTextOutsidePrintableArea(),
+                                                   updateTextOutsidePrintableWarning()
 index.html                                      — Center on Object button + hint sentence;
-                                                   follow-up: .primary styling + icon for discoverability
+                                                   follow-up: .primary styling + icon for discoverability;
+                                                   follow-up 2: #textOutsidePrintableWarning
 package.json                                    — new test wired into the `test` script
 tools/test-alignment-snapping-integration.mjs   — one assertion updated for the intentional sensitivity change
 TASK.md                                         — this milestone's task definition
@@ -193,14 +196,51 @@ the `.primary` styling).
 
 ---
 
+# Follow-up 2: Outside-the-Printable-Area Warning
+
+A second visual-review request: warn in the Text Lightbox when selected text has moved materially
+outside the printable safe area, live, clearing automatically once back inside, without ever blocking
+the move. Full detail in `docs/specifications/S-104-TextPositionRecoveryDragTuning.md` §"Follow-up 2".
+Summary:
+
+* **Threshold correction caught by browser verification, not shipped blind.** The first attempt used
+  "not fully contained by the safe area." Verifying it live immediately showed a false positive: the
+  *default, never-moved* text already overhangs the safe area (`199.4×17.0mm` bbox vs. `182×70mm` safe
+  area — auto-fit caps to canvas width, not safe-area width, pre-existing/unrelated behavior). Fixed to
+  fire only when the bbox has **no overlap at all** with the safe area (fully disjoint, small
+  tolerance) — this also intentionally mirrors Center on Object's own "completely outside" scope, so
+  the warning is a correct signal for exactly when that button is the fix.
+* `app.js` — new `isTextOutsidePrintableArea(l)` (pure: `getLayerBBox()` vs `getSafeAreaRectMm()`,
+  tolerance = existing `SNAP_TOLERANCE_MM`) and `updateTextOutsidePrintableWarning()` (DOM-only
+  `.visible` class toggle). Neither writes any layer field — moving text outside the area is never
+  prevented. Wired into `updateAll()` right after `layout` regenerates, so it is live on every
+  position-changing action (drag, nudge, align, Undo/Redo, and every keystroke in `#textX`/`#textY`).
+* `index.html` — `#textOutsidePrintableWarning`, reusing the existing `.validation-message`/`.visible`
+  alert styling already used elsewhere in this same lightbox (no new CSS), placed between the X/Y
+  fields and Center on Object (unchanged, still `.primary`).
+* No changes to `GeometryEngine`, `StoneLayout`, any renderer, any exporter, or the project schema.
+
+**Tests:** 4 new checks (10–13) in `tools/test-s104-text-position-recovery-drag-tuning.mjs`. `npm
+test`: **836 checks, 0 failures**.
+
+**Browser verification** (headless Chromium, 1440×900): baseline `(0,0)` → warning hidden (confirms
+the corrected threshold); dragged text far outside the canvas (lightbox closed, since it's a real modal
+and blocks canvas drags while open) → reopened lightbox → warning visible; typed Position X/Y back to
+`(0,0)` **without closing the lightbox** → warning disappeared live; typed X back to `400` → warning
+reappeared live; clicked **Center on Object** → position reset to `(0,0)` and warning disappeared in
+the same render pass; Undo → warning back; Redo → warning gone again. Zero console errors throughout.
+
+---
+
 # Recommendation
 
 Approve and merge. Both original requirements — reduced, more predictable drag sensitivity and a
-one-click, position-only recovery action — plus the follow-up discoverability fix, are implemented as
-the smallest coherent change on top of existing, already-tested infrastructure (`getSafeAreaRectMm`,
-`commitHistory`/`HistoryManager`, the Layers-list selection path, and the app's existing `.btn.primary`
-visual language). No new geometry, no new storage, no schema change, and none of the explicitly
-forbidden modules (`GeometryEngine`, `StoneLayout`, project schema, exporters, rendering, Design
-Library, Gallery) were touched — enforced by an automated forbidden-file-prefix check in the test
-suite. The `0.5` sensitivity constant is a reasonable, easily-retunable default if real usage calls
-for a different value.
+one-click, position-only recovery action — plus both follow-up fixes (Center on Object discoverability,
+and the outside-the-printable-area warning), are implemented as the smallest coherent change on top of
+existing, already-tested infrastructure (`getSafeAreaRectMm`, `commitHistory`/`HistoryManager`, the
+Layers-list selection path, `SNAP_TOLERANCE_MM`, and the app's existing `.btn.primary`/
+`.validation-message` visual language). No new geometry, no new storage, no schema change, and none of
+the explicitly forbidden modules (`GeometryEngine`, `StoneLayout`, project schema, exporters, rendering,
+Design Library, Gallery) were touched — enforced by an automated forbidden-file-prefix check in the
+test suite. The `0.5` sensitivity constant and the disjoint-bbox warning threshold are both reasonable,
+easily-retunable defaults if real usage calls for different values.

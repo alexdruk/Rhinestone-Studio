@@ -103,7 +103,40 @@ await test('8. centering targets the printable (safe) area\'s center, not just t
   assert.match(fn, /safe\.yMm\+safe\.heightMm\/2-project\.canvas\.height\/2/);
 });
 
-await test('9. no forbidden file changed (GeometryEngine, StoneLayout, exporters, every renderer, Design Library, Gallery, and every other prior milestone\'s forbidden list) — S-104 is app.js/index.html/tools/docs only', () => {
+await test('10. the Text lightbox\'s Position section has an "outside the printable area" warning with the exact required wording, sitting between the X/Y fields and the Center on Object button', () => {
+  const positionSection = indexHtml.match(/<h3>Position<\/h3>[\s\S]*?<\/div>\s*<p class="hint">/)[0];
+  assert.match(positionSection, /id="textOutsidePrintableWarning"/);
+  assert.match(positionSection, /This text is outside the printable area\./, 'expected the exact required warning text');
+  assert.ok(
+    positionSection.indexOf('id="textY"') < positionSection.indexOf('id="textOutsidePrintableWarning"') &&
+    positionSection.indexOf('id="textOutsidePrintableWarning"') < positionSection.indexOf('id="centerTextOnObject"'),
+    'expected the warning between the X/Y fields and the Center on Object button'
+  );
+});
+
+await test('11. the warning reuses the existing .validation-message alert styling (hidden by default, shown via .visible) already used elsewhere in this same lightbox — no new CSS', () => {
+  const warningTag = indexHtml.match(/<p[^>]*id="textOutsidePrintableWarning"[^>]*>/)[0];
+  assert.match(warningTag, /class="validation-message"/);
+  assert.match(indexHtml, /\.validation-message\{[^}]*display:none/, 'expected the shared hidden-by-default rule to still exist');
+  assert.match(indexHtml, /\.validation-message\.visible\{display:block\}/, 'expected the shared reveal rule to still exist');
+});
+
+await test('12. isTextOutsidePrintableArea()/updateTextOutsidePrintableWarning() are pure read+DOM-toggle (no layer/property mutation) and reuse existing geometry (getLayerBBox/getSafeAreaRectMm/SNAP_TOLERANCE_MM) — no new geometry, and moving text outside the area is never prevented', () => {
+  const fn = appJs.match(/function isTextOutsidePrintableArea\(l\)\{([\s\S]*?)\n\}/)[1];
+  assert.match(fn, /getLayerBBox\(l\)/);
+  assert.match(fn, /getSafeAreaRectMm\(currentObjectTemplate\(\),project\.canvas\.width,project\.canvas\.height\)/);
+  assert.match(fn, /SNAP_TOLERANCE_MM/);
+  assert.doesNotMatch(fn, /[a-zA-Z0-9_.]+\.[a-zA-Z]+\s*=[^=]/, 'expected a pure read-only computation, no assignment of any kind');
+  const updateFn = appJs.match(/function updateTextOutsidePrintableWarning\(\)\{([\s\S]*?)\n\}/)[1];
+  assert.match(updateFn, /el\('textOutsidePrintableWarning'\)\.classList\.toggle\('visible',isTextOutsidePrintableArea\(selectedLayer\(\)\)\)/);
+});
+
+await test('13. the warning is recomputed on every updateAll() call — live during drag (pointermove already calls updateAll() every move), after Undo/Redo, and on every keystroke in #textX/#textY, exactly like every other post-mutation UI refresh (renderLayerUI/drawLayout/updateStats)', () => {
+  const updateAllFn = appJs.match(/async function updateAll\([\s\S]*?\n\}/)[0];
+  assert.match(updateAllFn, /layout=generated;renderLayerUI\(\);drawLayout\(\);drawCup\(\);updateStats\(\);updateHistoryUI\(\);updateEditingUI\(\);updateViewButtons\(\);updateTextOutsidePrintableWarning\(\);/);
+});
+
+await test('14. no forbidden file changed (GeometryEngine, StoneLayout, exporters, every renderer, Design Library, Gallery, and every other prior milestone\'s forbidden list) — S-104 is app.js/index.html/tools/docs only', () => {
   const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
   const changedPaths = output
     .split('\n')

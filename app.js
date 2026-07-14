@@ -488,7 +488,7 @@ function writeSelectedControlsToLayer(){const l=selectedLayer();if(l.type==='tex
   // UI-001: manual X/Y mm fields for the Text Lightbox, writing to the same layer.x/layer.y fields
   // RS-1009 already added (previously settable only by drag/nudge/align/distribute).
   l.x=parseFloat(el('textX').value)||0;l.y=parseFloat(el('textY').value)||0}else if(l.type==='circle'){l.cx=parseFloat(el('shapeX').value)||105;l.cy=parseFloat(el('shapeY').value)||45;l.r=Math.max(1,parseFloat(el('shapeW').value)||18);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(l.type==='rectangle'){l.x=parseFloat(el('shapeX').value)||65;l.y=parseFloat(el('shapeY').value)||30;l.w=Math.max(1,parseFloat(el('shapeW').value)||80);l.h=Math.max(1,parseFloat(el('shapeH').value)||30);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(l.type==='svg'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.mode=resolveVectorFillMode(el('svgMode').value)}else if(l.type==='image'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.fillMode=resolveImageFillMode(el('imageFillMode').value)}else if(l.type==='path'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(2,parseFloat(el('shapeW').value)||10);l.h=Math.max(2,parseFloat(el('shapeH').value)||10);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}l.stoneSize=parseFloat(el('stoneSize').value)||2;l.gap=parseFloat(el('gap').value)||.3;l.color=el('stoneColor').value;project.cupColor=el('cupColor').value;project.wrap=el('wrap').value;project.name=el('projectName').value||DEFAULT_PROJECT_NAME;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
-async function updateAll(skipWrite=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated;try{generated=await engine.generate(project)}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Text generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;renderLayerUI();drawLayout();drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}// S-003: a project must always keep at least one layer (deleteLayer()'s guard below), so once
+async function updateAll(skipWrite=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated;try{generated=await engine.generate(project)}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Text generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;renderLayerUI();drawLayout();drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}// S-003: a project must always keep at least one layer (deleteLayer()'s guard below), so once
 // only one layer remains, every delete affordance -- the per-row trash icon and the sidebar
 // "Delete selected layer" button -- is disabled here (not just left clickable-but-a-no-op) and
 // #layerRuleHint (sitting directly under the button, always in view) explains why. This runs on
@@ -543,6 +543,31 @@ function centerSelectedTextOnObject(){
   l.x=targetX;l.y=targetY;
   syncSelectedControlsFromLayer();updateAll(true);
   el('status').textContent='Centered text on the printable area';
+}
+// S-104: "materially outside" the printable (safe) area means the text's bounding box has no overlap
+// with it at all (fully disjoint), not merely overhanging an edge -- auto-fit text is deliberately
+// allowed to be wider than the safe area (it only caps to canvas width minus a margin, per
+// generateTextStonesLive() above), so a strict full-containment check would false-positive on
+// perfectly normal, never-moved text. A small tolerance (the existing SNAP_TOLERANCE_MM, this
+// codebase's "close enough" threshold for drag-snap) keeps a bbox resting exactly on the boundary
+// from flickering. This intentionally matches centerSelectedTextOnObject()'s own "recovers text
+// dragged completely outside the visible printable area" scope, so the warning is a direct, correct
+// signal for exactly when Center on Object is the fix. Layer bbox comes from getLayerBBox() (RS-1009,
+// already the single source of truth for every layer's rendered extent) -- no new geometry. An
+// empty/unrendered text layer (zero stones) has nothing to warn about.
+function isTextOutsidePrintableArea(l){
+  if(!l||l.type!=='text')return false;
+  const b=getLayerBBox(l);
+  if(b.width===0&&b.height===0)return false;
+  const safe=getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height);
+  const tol=SNAP_TOLERANCE_MM;
+  return b.x2<=safe.xMm-tol||b.x>=safe.xMm+safe.widthMm+tol||b.y2<=safe.yMm-tol||b.y>=safe.yMm+safe.heightMm+tol;
+}
+// Called from updateAll() (after `layout` is regenerated) so it is always in sync with the layer's
+// true current position/extent -- live during a drag (pointermove already calls updateAll() on every
+// move), immediately after Undo/Redo, and on every keystroke while editing #textX/#textY directly.
+function updateTextOutsidePrintableWarning(){
+  el('textOutsidePrintableWarning').classList.toggle('visible',isTextOutsidePrintableArea(selectedLayer()));
 }
 // RS-1012: Boolean Operations. BOOLEAN_OPERATION_LABELS is the exact user-facing vocabulary the
 // milestone brief requires ("Exclude", not "XOR"), reused for the result layer's default name and
