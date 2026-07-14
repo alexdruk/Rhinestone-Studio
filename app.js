@@ -529,6 +529,21 @@ function applyPositionDeltas(deltas){for(const[id,{dxMm,dyMm}]of deltas){const l
 const ALIGN_DIRECTION_LABELS={left:'left edges',centerH:'horizontal centers',right:'right edges',top:'top edges',centerV:'vertical centers',bottom:'bottom edges'};
 function runAlign(direction){const items=selectedItemsForEditing();if(items.length<2)return;commitHistory();applyPositionDeltas(alignLayers(items,direction));syncSelectedControlsFromLayer();updateAll(true);el('status').textContent=`Aligned ${items.length} layers to ${ALIGN_DIRECTION_LABELS[direction]||direction}`}
 function runDistribute(axis){const items=selectedItemsForEditing();if(items.length<3)return;commitHistory();applyPositionDeltas(distributeLayers(items,axis));syncSelectedControlsFromLayer();updateAll(true);el('status').textContent=`Distributed ${items.length} layers ${axis==='horizontal'?'horizontally':'vertically'}`}
+// S-104: recovers a text layer dragged fully outside the visible printable (safe) area. Text has no
+// stored absolute position -- computeTextPlacementOffset() above already auto-centers its bbox on
+// the production canvas before adding layer.x/layer.y on top (world bbox center = canvas center +
+// layer.x/y), so centering on the printable area is a pure function of the safe-area rect and the
+// canvas size, independent of the text's own content/font/size. Only l.x/l.y are ever written here --
+// every other text property (font, size, rotation/curve, spacing, fill, stone size) is untouched.
+function centerSelectedTextOnObject(){
+  const l=selectedLayer();if(!l||l.type!=='text')return;
+  const safe=getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height);
+  const targetX=safe.xMm+safe.widthMm/2-project.canvas.width/2,targetY=safe.yMm+safe.heightMm/2-project.canvas.height/2;
+  commitHistory();
+  l.x=targetX;l.y=targetY;
+  syncSelectedControlsFromLayer();updateAll(true);
+  el('status').textContent='Centered text on the printable area';
+}
 // RS-1012: Boolean Operations. BOOLEAN_OPERATION_LABELS is the exact user-facing vocabulary the
 // milestone brief requires ("Exclude", not "XOR"), reused for the result layer's default name and
 // every status/validation message so the wording stays consistent everywhere it appears.
@@ -713,6 +728,14 @@ function updateStats(){const safe=getSafeAreaRectMm(currentObjectTemplate(),proj
 function download(name,mime,data){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:mime}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800);el('status').textContent=`Downloaded ${name}`}function exportCanvas(name,canvas){canvas.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800)},'image/png')}
 function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(copy.type==='rectangle'){copy.x+=8;copy.y+=8}if(copy.type==='svg'){copy.x+=8;copy.y+=8}if(copy.type==='image'){copy.x+=8;copy.y+=8}if(copy.type==='path'){copy.x+=8;copy.y+=8}if(copy.type==='text'){copy.text+=' copy';copy.x=(copy.x||0)+8;copy.y=(copy.y||0)+8}project.layers.push(copy);selectedLayerId=copy.id;selectedLayerIds=selectOnly(copy.id);syncSelectedControlsFromLayer();updateAll()}function deleteLayer(id){if(project.layers.length<=1){el('status').textContent='Cannot delete the last layer';const hint=el('layerRuleHint');hint.style.display='block';hint.scrollIntoView({block:'nearest'});return}commitHistory();project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true)}
 function pointerToLayout(e){const r=layoutCanvas.getBoundingClientRect(),dpr=layoutTransform.dpr;return layoutPxToMm((e.clientX-r.left)*dpr,(e.clientY-r.top)*dpr)}function hitTest(mm){const layers=[...project.layers].reverse();for(const l of layers){const b=getLayerBBox(l);for(const h of handlesFor(b)){if(Math.abs(mm.x-h.x)<3&&Math.abs(mm.y-h.y)<3&&l.type!=='text')return{layer:l,kind:'resize',handle:h.name,b0:b}}if(mm.x>=b.x&&mm.x<=b.x2&&mm.y>=b.y&&mm.y<=b.y2)return{layer:l,kind:'move',b0:b}}return null}
+// S-104: a move-drag previously mapped pointer movement to mm 1:1 (rawDx/rawDy applied verbatim),
+// which made small, precise placements -- text in particular, since it has no resize handles to
+// fall back on -- hard to land exactly. LAYER_MOVE_DRAG_SENSITIVITY scales the pointer's
+// displacement from drag.start down before it becomes a position delta, the same named-constant
+// pattern this file already uses for pointer-driven tuning (see the removed CUP_ROTATION_SENSITIVITY
+// precedent in docs/ARCHITECTURE.md). Applied once, before snapping/shift-lock, so both keep working
+// against the already-scaled delta; resize-drag (mm-under-cursor, not delta-based) is unaffected.
+const LAYER_MOVE_DRAG_SENSITIVITY=0.5;
 // RS-1009: pointerdown now resolves one of three outcomes: (1) empty canvas -> clear selection;
 // (2) a resize handle -> unchanged single-layer resize (never snaps, never multi-selects); (3) a
 // layer body -> Shift toggles it in the multi-selection (no drag starts on that click, matching
@@ -761,7 +784,7 @@ layoutCanvas.addEventListener('pointermove',e=>{
   if(!drag)return;
   const mm=pointerToLayout(e),rawDx=mm.x-drag.start.x,rawDy=mm.y-drag.start.y;
   if(drag.kind==='move'){
-    let dx=rawDx,dy=rawDy;
+    let dx=rawDx*LAYER_MOVE_DRAG_SENSITIVITY,dy=rawDy*LAYER_MOVE_DRAG_SENSITIVITY;
     activeGuides=[];
     // RS-1009: snapping is drag-only (never keyboard nudge/align/distribute), independently
     // computed on x/y, and only ever checked against OTHER visible layers -- the dragged
@@ -833,6 +856,7 @@ el('objectType').addEventListener('change',()=>{commitHistory();const template=g
   syncSelectedControlsFromLayer();updateEditingUI();updateAll(true)});el('deleteSelected').onclick=()=>deleteLayer(selectedLayerId);document.querySelectorAll('.viewBtn').forEach(b=>b.onclick=()=>{rotation=parseFloat(b.dataset.view);el('rotation').value=rotation;updateAll()});el('resetView').onclick=()=>{rotation=0;zoom=1;el('rotation').value=0;el('zoom').value=100;preview3D.resetView();updateAll()};el('undoBtn').onclick=()=>performUndo();el('redoBtn').onclick=()=>performRedo();
 // RS-1009: Align/Snap sidebar section. snapEnabled is view-only editor state (like rotation/zoom
 // above) -- not part of `project`, not undo/redo-tracked, not exported.
+el('centerTextOnObject').onclick=()=>centerSelectedTextOnObject();
 el('alignLeft').onclick=()=>runAlign('left');el('alignCenterH').onclick=()=>runAlign('centerH');el('alignRight').onclick=()=>runAlign('right');el('alignTop').onclick=()=>runAlign('top');el('alignCenterV').onclick=()=>runAlign('centerV');el('alignBottom').onclick=()=>runAlign('bottom');el('distributeH').onclick=()=>runDistribute('horizontal');el('distributeV').onclick=()=>runDistribute('vertical');el('snapEnabled').addEventListener('change',()=>{snapEnabled=el('snapEnabled').value==='on'});
 // RS-1012: Boolean Operations, in the Shapes Lightbox (see index.html's #booleanOpsSection).
 el('boolUnion').onclick=()=>runBooleanOp('union');el('boolSubtract').onclick=()=>runBooleanOp('subtract');el('boolIntersect').onclick=()=>runBooleanOp('intersect');el('boolExclude').onclick=()=>runBooleanOp('xor');el('addCircle').onclick=()=>{const l=selectedLayer();commitHistory();const layer={id:'circle'+Date.now(),type:'circle',visible:true,cx:105,cy:45,r:18,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};project.layers.push(layer);selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);syncSelectedControlsFromLayer();updateAll(true)};el('addRect').onclick=()=>{const l=selectedLayer();commitHistory();const layer={id:'rect'+Date.now(),type:'rectangle',visible:true,x:65,y:30,w:80,h:30,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};project.layers.push(layer);selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);syncSelectedControlsFromLayer();updateAll(true)};el('importProject').onclick=()=>el('importProjectFile').click();
