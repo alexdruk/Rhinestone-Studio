@@ -188,10 +188,61 @@ Screenshots captured at every step (initial state, after moderate drag, after of
 Lightbox open on an off-canvas layer, after Center on Object, after undo/redo) confirm the above
 visually as well as via the read DOM values.
 
+## Follow-up: Visibility/Discoverability Audit
+
+A visual reviewer reported that after this milestone's initial implementation, "no such control is
+visible" for Center on Object during manual testing. Re-audited before writing any new code, per the
+review request:
+
+* **Was the button actually added?** Yes — `id="centerTextOnObject"` is present exactly once in
+  `index.html`, inside the Text Lightbox's Position `field-section`, and `app.js` wires it
+  (`el('centerTextOnObject').onclick=...`) without error.
+* **Where is it located?** Text Lightbox → Position section, directly under the Position X/Y (mm)
+  inputs, above the position hint paragraph — unchanged from the original implementation.
+* **Under what conditions is it shown?** Only while `#lightboxText` is open (`class="lightbox-overlay
+  open"`), reachable via the top-menu **Text** button or the right Inspector's **More Options** button
+  when a text layer is selected — the same visibility condition every other Text property (font,
+  height, curve, stone size, etc.) already has. It does not appear anywhere outside that modal.
+* **Reproduction attempts (all failed to find a rendering/functional bug):** opened via both entry
+  points (`#menuText` top-menu button and Inspector `#moreOptionsBtn`); tested at five viewport sizes
+  (1440×900, 1440×800, 1366×768, 1280×720, 1024×768); measured the button's live
+  `getBoundingClientRect()`/computed style (`display:inline-flex`, `visibility:visible`, `opacity:1`)
+  and confirmed it sits within the Text Lightbox's visible scroll position at every size tested (no
+  scrolling required to reach the Position section — it is second of four sections, well above any
+  overflow). Zero console/page errors in any run. The control is real, correctly wired, and renders
+  and functions correctly in every reproducible scenario.
+* **Conclusion — not a rendering bug; a discoverability gap.** The control's *only* problem was that,
+  before this fix, it used the same plain `.btn.sm` styling as a neutral secondary field, visually
+  indistinguishable from ordinary form controls around it. For a feature whose entire purpose is
+  "I lost my text, get it back fast," blending into a wall of plain inputs inside a modal a confused
+  user may not think to open in the first place is a real usability failure, even though no line of
+  code was non-functional. This matches this review's second branch ("if intentionally hidden, make it
+  visible and discoverable in the Text Lightbox") rather than the first ("if a bug, fix it") — there
+  was nothing to fix functionally.
+
+**Fix applied (index.html only, no functional/wiring change):** the button now carries `.primary` in
+addition to `.sm` (`class="btn sm primary"`) — the same prominent blue treatment already used for
+`Export`/`Save`/`Save Project`, matching this app's existing visual vocabulary for "this is the action
+you want here," and gained a `↺` (undo/restore) icon glyph reinforcing the "brings something back"
+meaning at a glance. Nothing else about the button — its position, id, wiring, guard logic, or
+the fields it touches — changed. `centerSelectedTextOnObject()` in `app.js` is byte-identical to
+before this follow-up. A new test assertion
+(`tools/test-s104-text-position-recovery-drag-tuning.mjs`, check 4b) locks in the `.primary` class so
+this cannot silently regress back to an easy-to-overlook plain button.
+
+Re-verified via headless Chromium at 1440×900: opened the Text Lightbox through the plain top-menu
+**Text** button (the most direct, most-likely-discovered path — no drag, no More Options detour),
+confirmed the button is immediately visible with no scrolling
+(`getBoundingClientRect()` inside the modal's visible body), edited the text content and position
+manually, clicked **Center on Object**, and confirmed it reset the position (`textX`/`textY` → `0,0`)
+while leaving the just-edited text content (`"Hello World"`) untouched. Zero console errors.
+
 ## Recommendation
 
-Approve and merge. Both requirements are implemented as the smallest coherent change on top of
-existing, already-tested infrastructure (`getSafeAreaRectMm`, `commitHistory`/`HistoryManager`, the
-Layers-list selection path) — no new geometry, no new storage, no schema change, no forbidden file
-touched. The `0.5` sensitivity constant is a reasonable default; if real usage shows it too aggressive
-or too mild in either direction, it is a one-line, well-isolated tuning change.
+Approve and merge. Both original requirements, plus this follow-up discoverability fix, are
+implemented as the smallest coherent change on top of existing, already-tested infrastructure
+(`getSafeAreaRectMm`, `commitHistory`/`HistoryManager`, the Layers-list selection path, and now the
+app's existing `.btn.primary` visual language) — no new geometry, no new storage, no schema change, no
+forbidden file touched, and the follow-up fix touched only a `class`/label on one existing element. The
+`0.5` sensitivity constant is a reasonable default; if real usage shows it too aggressive or too mild
+in either direction, it is a one-line, well-isolated tuning change.

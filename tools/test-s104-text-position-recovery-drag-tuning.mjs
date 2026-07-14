@@ -60,7 +60,13 @@ await test('4. the Text lightbox\'s Position section has a "Center on Object" bu
   assert.match(body, /id="textY"/);
   assert.match(body, /id="centerTextOnObject"/);
   assert.ok(body.indexOf('id="textY"') < body.indexOf('id="centerTextOnObject"'), 'expected the button after the X/Y fields');
-  assert.match(body, />Center on Object</);
+  assert.match(body, /Center on Object</);
+});
+
+await test('4b. the button is styled as a primary (visually prominent) action, not a plain/easily-overlooked secondary control -- a real discoverability audit found the control, while present and functional, was easy to miss since it looked identical to neighboring neutral fields', () => {
+  const button = indexHtml.match(/<button[^>]*id="centerTextOnObject"[^>]*>/);
+  assert.ok(button, 'expected to find the #centerTextOnObject button tag');
+  assert.match(button[0], /class="[^"]*\bprimary\b[^"]*"/, 'expected the button to carry the .primary style so it reads as an action, not a plain field');
 });
 
 await test('5. app.js defines centerSelectedTextOnObject() and wires it to #centerTextOnObject', () => {

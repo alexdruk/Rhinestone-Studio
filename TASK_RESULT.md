@@ -90,14 +90,21 @@ docs/specifications/S-104-TextPositionRecoveryDragTuning.md
 tools/test-s104-text-position-recovery-drag-tuning.mjs
 ```
 
-**Modified (6):**
+**Modified (6, plus follow-up touches to `index.html`/the new test/this file):**
 ```
 app.js                                          — LAYER_MOVE_DRAG_SENSITIVITY, centerSelectedTextOnObject()
-index.html                                      — Center on Object button + hint sentence
+index.html                                      — Center on Object button + hint sentence;
+                                                   follow-up: .primary styling + icon for discoverability
 package.json                                    — new test wired into the `test` script
 tools/test-alignment-snapping-integration.mjs   — one assertion updated for the intentional sensitivity change
 TASK.md                                         — this milestone's task definition
 TASK_RESULT.md                                  — this file
+```
+
+Follow-up (discoverability fix) additionally touched:
+```
+docs/specifications/S-104-TextPositionRecoveryDragTuning.md   — audit + fix addendum
+tools/test-s104-text-position-recovery-drag-tuning.mjs        — new check 4b locks in the .primary class
 ```
 
 ---
@@ -108,8 +115,9 @@ TASK_RESULT.md                                  — this file
 $ npm test
 ```
 
-831 checks run, **0 failures**, exit code 0. Includes the new
-`tools/test-s104-text-position-recovery-drag-tuning.mjs` suite (9/9 passing) and the updated
+832 checks run, **0 failures**, exit code 0 (post follow-up fix; 831 before it — see the Follow-up
+section below for the one new assertion). Includes the new
+`tools/test-s104-text-position-recovery-drag-tuning.mjs` suite (10/10 passing) and the updated
 `tools/test-alignment-snapping-integration.mjs` (28/28 passing, including the one assertion this
 milestone deliberately changed). Every other pre-existing suite (font/geometry/history/editing/
 alignment/snapping/export/preview3D/image/Gallery/Design Library/Typography/Project-Model-
@@ -151,13 +159,48 @@ Lightbox open on an off-canvas layer, after Center on Object, after undo/redo).
 
 ---
 
+# Follow-up: Visibility/Discoverability Audit
+
+A visual reviewer reported the Center on Object button was not visible during manual testing. Full
+detail in `docs/specifications/S-104-TextPositionRecoveryDragTuning.md` §"Follow-up: Visibility/
+Discoverability Audit". Summary:
+
+* **Audited, did not implement anything new, until root cause was determined.** Confirmed the button
+  was actually added (`id="centerTextOnObject"`, exactly once, inside the Text Lightbox's Position
+  section — unchanged location), correctly wired (`app.js`, no console errors), and is shown only while
+  `#lightboxText` is open (same visibility condition as every other text property).
+* **Reproduction across both entry points (top-menu Text, Inspector More Options) and five viewport
+  sizes (1440×900 down to 1024×768) found no rendering or functional bug** — the button was always
+  present, correctly positioned (no scrolling needed), `visibility:visible`/`opacity:1`, and clickable.
+* **Root cause: a discoverability gap, not a bug.** The button used the same plain `.btn.sm` style as
+  a neutral secondary field, blending into the surrounding form instead of reading as an action — a
+  real usability problem for a feature whose purpose is fast recovery from a mistake, even though
+  nothing was non-functional.
+* **Fix (index.html only):** button now carries `.primary` (`class="btn sm primary"`), the same blue
+  treatment already used for `Export`/`Save`/`Save Project`, plus a `↺` icon glyph. No change to the
+  button's location, id, wiring, guard logic, or `app.js`'s `centerSelectedTextOnObject()` — it is
+  byte-identical to before this follow-up. A new locked-in test assertion (check 4b in
+  `tools/test-s104-text-position-recovery-drag-tuning.mjs`) guards against this regressing back to a
+  plain, easy-to-overlook button.
+* **Re-verified** via headless Chromium (1440×900): opened the Text Lightbox through the plain
+  top-menu **Text** button (no drag, no More Options detour — the most direct discovery path),
+  confirmed the button renders immediately with no scrolling, edited the text content and position by
+  hand, clicked **Center on Object**, and confirmed the position reset to `(0, 0)` while the just-typed
+  text content was left untouched. Zero console errors.
+
+`npm test` after this follow-up: **832 checks, 0 failures** (one new assertion, 4b, added to lock in
+the `.primary` styling).
+
+---
+
 # Recommendation
 
-Approve and merge. Both requirements — reduced, more predictable drag sensitivity and a one-click,
-position-only recovery action — are implemented as the smallest coherent change on top of existing,
-already-tested infrastructure (`getSafeAreaRectMm`, `commitHistory`/`HistoryManager`, the Layers-list
-selection path). No new geometry, no new storage, no schema change, and none of the explicitly
+Approve and merge. Both original requirements — reduced, more predictable drag sensitivity and a
+one-click, position-only recovery action — plus the follow-up discoverability fix, are implemented as
+the smallest coherent change on top of existing, already-tested infrastructure (`getSafeAreaRectMm`,
+`commitHistory`/`HistoryManager`, the Layers-list selection path, and the app's existing `.btn.primary`
+visual language). No new geometry, no new storage, no schema change, and none of the explicitly
 forbidden modules (`GeometryEngine`, `StoneLayout`, project schema, exporters, rendering, Design
-Library, Gallery) were touched — enforced by an automated forbidden-file-prefix check in the new test
+Library, Gallery) were touched — enforced by an automated forbidden-file-prefix check in the test
 suite. The `0.5` sensitivity constant is a reasonable, easily-retunable default if real usage calls
 for a different value.
