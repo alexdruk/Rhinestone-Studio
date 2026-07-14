@@ -1015,6 +1015,10 @@ const lightboxes={
 el('menuText').onclick=()=>lightboxes.text.open();
 el('menuShapes').onclick=()=>lightboxes.shapes.open();
 el('menuLibrary').onclick=()=>lightboxes.library.open();
+// S-103 (Product Scope Freeze): #menuGallery carries the native `disabled` attribute (see
+// index.html), which makes the browser withhold click/Enter/Space activation and tab focus
+// entirely -- this handler is wired the same as every other menu item and is deliberately left
+// in place (Gallery code/tests/fixtures stay intact), it is just unreachable via the UI for now.
 el('menuGallery').onclick=()=>lightboxes.gallery.open();
 el('menuImport').onclick=()=>lightboxes.importBox.open();
 el('menuImageTrace').onclick=()=>lightboxes.imagetrace.open();
