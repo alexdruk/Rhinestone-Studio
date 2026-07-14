@@ -286,6 +286,30 @@ function toggleFavoriteFont(fontId){if(favoriteFontIds.has(fontId))favoriteFontI
 // below applies this to already-generated stones; resolveLayerShapeSource()'s text branch applies
 // the exact same formula to already-generated *polygons* (RS-1012 boolean input), so both stay in
 // sync by construction instead of by duplicated arithmetic.
+// S-107: the minimum heightMm/spacingMm ratio auto-fit will shrink text to. spacingMm (stoneSize+gap)
+// is the fixed physical stone pitch -- unlike heightMm, it never scales down here, because a stone's
+// size is a real catalog rhinestone (see src/renderer/StoneSizes.js), not a continuously-adjustable
+// display value; shrinking it during auto-fit would silently produce a non-orderable size. Below
+// this ratio there are too few stones across a glyph's shrunk stroke width for the letterform to
+// read as anything but a blurred row of dots (confirmed empirically -- see
+// docs/specifications/S-107-LongTextReadability.md's audit). Auto-fit still shrinks heightMm as much
+// as it can within this floor; only text so long it would need to shrink past the floor now overflows
+// maxWidth instead of collapsing into illegible stone soup.
+const MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO=6;
+// Computes the heightMm scale factor generateTextStonesLive()/resolveLayerShapeSource() apply for
+// auto-fit text, given that text's straight (unscaled) measured widthMm. Shared by both call sites
+// so their auto-fit decisions can never drift apart (mirrors computeTextPlacementOffset() above).
+// Returns 1 (no change) whenever auto-fit is off, the text already fits, or heightMm/spacingMm is
+// degenerate.
+function computeAutoFitScale(layer,project,measuredWidthMm){
+  if(!layer.autoFit||!(measuredWidthMm>0))return 1;
+  const maxWidth=project.canvas.width-10;
+  if(measuredWidthMm<=maxWidth)return 1;
+  const fitScale=maxWidth/measuredWidthMm;
+  const spacingMm=(layer.stoneSize||0)+(layer.gap||0);
+  const minScale=spacingMm>0&&layer.height>0?(spacingMm*MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO)/layer.height:fitScale;
+  return Math.min(1,Math.max(fitScale,minScale));
+}
 function computeTextPlacementOffset(boundingBox,layer,project){
   const offsetX=(boundingBox?(project.canvas.width-boundingBox.widthMm)/2-boundingBox.minXmm:0)+(layer.x||0);
   const offsetY=(boundingBox?(project.canvas.height-boundingBox.heightMm)/2-boundingBox.minYmm:0)+(layer.y||0);
@@ -316,7 +340,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // one non-empty layerId per instance; each Stone still carries its own real layer id) so every
  // renderer/exporter downstream consumes the same canonical product.
  async generate(project){let raw=[];for(const l of project.layers){if(!l.visible)continue;if(l.type==='text')raw.push(...await this.generateTextStonesLive(l,project));if(l.type==='circle'||l.type==='rectangle')raw.push(...await this.generateShapeStonesLive(l));if(l.type==='svg')raw.push(...await this.generateSvgStonesLive(l));if(l.type==='image')raw.push(...await this.generateImageStonesLive(l));if(l.type==='path')raw.push(...await this.generatePathStonesLive(l));}const stones=this.dedupe(raw,Math.min(...raw.map(s=>s.d||2),2)*0.58).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId}));return new StoneLayout({layerId:'project',stones})}
- async generateTextStonesLive(layer,project){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text)return[];const fontId=TEXT_ENGINE_FONT_IDS.has(layer.font)?layer.font:DEFAULT_TEXT_FONT_ID;const mode=resolveTextFillMode(layer.textMode);const base={text:layer.text,fontId,layerId:layer.id,heightMm:layer.height,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const maxWidth=project.canvas.width-10;if(result.widthMm>maxWidth&&result.widthMm>0){const scale=maxWidth/result.widthMm;const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
+ async generateTextStonesLive(layer,project){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text)return[];const fontId=TEXT_ENGINE_FONT_IDS.has(layer.font)?layer.font:DEFAULT_TEXT_FONT_ID;const mode=resolveTextFillMode(layer.textMode);const base={text:layer.text,fontId,layerId:layer.id,heightMm:layer.height,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const scale=computeAutoFitScale(layer,project,result.widthMm);if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
   // RS-1009: text layers previously had no position field -- stones were always centered on the
   // canvas. layer.x/layer.y (mm, default 0) are a further offset applied on top of that same
   // auto-centered base position, so pre-RS-1009 Project JSON (no x/y on its text layers) renders
@@ -659,9 +683,8 @@ async function resolveLayerShapeSource(layer){
     const base={text:layer.text,fontId,layerId:layer.id,heightMm:layer.height,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};
     let resolved=await permanentEngine.resolveTextPolygons(base);
     if(layer.autoFit&&resolved.boundingBox){
-      const maxWidth=project.canvas.width-10;
-      if(resolved.boundingBox.widthMm>maxWidth&&resolved.boundingBox.widthMm>0){
-        const scale=maxWidth/resolved.boundingBox.widthMm;
+      const scale=computeAutoFitScale(layer,project,resolved.boundingBox.widthMm);
+      if(scale<1){
         resolved=await permanentEngine.resolveTextPolygons({...base,heightMm:Math.max(1,layer.height*scale)});
       }
     }
