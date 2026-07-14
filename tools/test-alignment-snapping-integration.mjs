@@ -307,11 +307,14 @@ await test('26. computeSnapOffset()/buildSnapTargets() integrate correctly with 
   assert.ok(centered.guides.some((g) => g.axis === 'horizontal' && g.type === 'canvas-center'));
 });
 
-await test('27. snapping-disabled drag falls back to raw pointer delta (no snap engine call in that branch)', () => {
+await test('27. snapping-disabled drag falls back to the (sensitivity-scaled) pointer delta (no snap engine call in that branch)', () => {
   const moveBranch = appJs.match(/if\(drag\.kind==='move'\)\{([\s\S]*?)\}else if\(drag\.kind==='resize'\)/);
   assert.ok(moveBranch);
-  assert.match(moveBranch[1], /let dx=rawDx,dy=rawDy;/, 'expected the unsnapped delta to start as the raw pointer delta');
-  assert.match(moveBranch[1], /if\(snapEnabled\)\{/, 'expected the snap computation to be fully gated behind snapEnabled, so dx/dy stay raw when disabled');
+  // S-104: dx/dy start as rawDx/rawDy scaled by the named LAYER_MOVE_DRAG_SENSITIVITY constant
+  // (reduced-sensitivity dragging), not the raw 1:1 pointer delta -- see
+  // tools/test-s104-text-position-recovery-drag-tuning.mjs for the dedicated sensitivity checks.
+  assert.match(moveBranch[1], /let dx=rawDx\*LAYER_MOVE_DRAG_SENSITIVITY,dy=rawDy\*LAYER_MOVE_DRAG_SENSITIVITY;/, 'expected the unsnapped delta to start as the sensitivity-scaled pointer delta');
+  assert.match(moveBranch[1], /if\(snapEnabled\)\{/, 'expected the snap computation to be fully gated behind snapEnabled, so dx/dy stay unsnapped when disabled');
 });
 
 await test('28. no forbidden file changed (this milestone\'s own forbidden list)', () => {

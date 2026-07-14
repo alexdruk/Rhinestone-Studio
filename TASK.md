@@ -1,79 +1,60 @@
 # Task
 
-**Task ID:** RS-2001
-**Task Type:** Feature — Gallery & Acceptance Suite
-**Specification:** `docs/specifications/RS-2001-GalleryAcceptanceSuite.md`
+**Task ID:** S-104
+**Task Type:** Small UX polish — Text Position Recovery & Drag Tuning
+**Specification:** `docs/specifications/S-104-TextPositionRecoveryDragTuning.md`
 **Status:** IMPLEMENTED
-**Branch:** feature/rs-2001-gallery-acceptance-suite
+**Branch:** feature/s-104-text-position-recovery-drag-tuning
 
 ## Goal
 
-Add a built-in, read-only Gallery of example rhinestone designs — browsable, searchable,
-filterable, previewable, and openable as an editable copy (optionally saved to the Design Library)
-— that also converts the existing 24 `examples/*.rhs` fixtures (plus 3 new customer-scenario
-fixtures) into a formal, permanent acceptance-test and performance-benchmark surface, per
-`docs/specifications/RS-2000A-PostMVPAudit.md` Part 7.
+Improve the usability of text positioning: reduce move-drag sensitivity so text (and every other
+draggable layer) moves more precisely and predictably, and add a simple **Center on Object** action
+that restores a selected text layer to the center of the printable area — position only, no other
+property touched — recovering text that has been dragged fully outside the visible canvas.
 
 ## Required Outcome
 
-See `docs/specifications/RS-2001-GalleryAcceptanceSuite.md` in full. Summary:
+See `docs/specifications/S-104-TextPositionRecoveryDragTuning.md` in full. Summary:
 
-* Audit-first: three parallel project schemas already exist in this repo (live `app.js` schema,
-  unused `src/core/Project`, and the `.rhs` fixture schema bridged only by
-  `tools/lib/rhsProject.mjs`). Gallery reuses the existing bridge (`toAppProjectShape()`), the
-  existing Design-Library-pioneered thumbnail pipeline, and the existing `validateProject()` — no
-  fourth schema, no second render pipeline, no duplicate storage/UI.
-* New: `src/gallery/**` (`RhsFixtureBridge.js` — relocated from `tools/lib/rhsProject.mjs` so there
-  is exactly one implementation shared by Node tooling and the browser; `GalleryCatalog.js`;
-  `index.js`) — a pure, DOM-free module mirroring `src/library/**`'s shape.
-  `tools/lib/rhsProject.mjs` is now a thin re-export shim.
-* New: `examples/gallery.json` (additive curatorial metadata) and 3 new customer-scenario fixtures
-  (Wedding/Sports/Business) with baselines regenerated via the existing
-  `node tools/generate-example-baselines.mjs` tool.
-* `app.js`/`index.html`: one new Lightbox pair ("Gallery" grid + "Preview" detail) from a new
-  top-menu button; thumbnail generation reuses the generalized `generateProjectThumbnail()` (renamed
-  from Design Library's `generateLibraryThumbnail()`); Open Copy and Save-to-Library reuse
-  `validateProject()`/`buildProjectItemData()`/`designLibrary.add()` verbatim; grid markup reuses
-  `.library-grid`/`.library-card`/`.library-badge` classes, with a small set of additive-only CSS
-  classes for the read-only visual identity.
-* A real, previously-latent bug (legacy fixtures storing a stone-color *display name* instead of a
-  catalog *id*, silently corrupting the layer on the live editor's first subsequent edit) was found
-  via browser verification and fixed at the schema-bridge boundary — see the specification's Audit
-  Findings.
-* `GeometryEngine`, `StoneLayout`, every renderer, and every exporter are untouched.
+* Audit-first: confirmed the move-drag `pointermove` handler mapped pointer movement to mm 1:1
+  (`rawDx`/`rawDy` applied verbatim), and that a text layer's world position is always
+  `(canvas.width/2 + layer.x, canvas.height/2 + layer.y)` by construction of
+  `computeTextPlacementOffset()` (RS-1009/RS-1012, unchanged) — so "center on the printable area" is a
+  pure function of `getSafeAreaRectMm()` (`src/products/ObjectTemplate.js`, unchanged) and the canvas
+  size, needing no new geometry.
+* `app.js`: new named constant `LAYER_MOVE_DRAG_SENSITIVITY = 0.5`, applied to the move-drag delta
+  before snapping/shift-lock/position-apply — matching this file's existing precedent (the removed
+  `CUP_ROTATION_SENSITIVITY`) of naming pointer-tuning constants instead of inline magic numbers.
+  Resize-drag and keyboard nudge are untouched (structurally different code paths).
+* `app.js`/`index.html`: new `centerSelectedTextOnObject()` function and a `Center on Object` button in
+  the Text Lightbox's existing Position section, reusing the existing `commitHistory()`/
+  `syncSelectedControlsFromLayer()`/`updateAll(true)`/`#status` pattern every other mutating action
+  already uses — one undo step, immediate UI refresh, no new storage or schema field.
+* `GeometryEngine`, `StoneLayout`, every renderer, every exporter, the project schema, Design Library,
+  and Gallery are untouched.
 
 ## Rules
 
 * Follow `docs/AI_ENGINEER.md`, `docs/CLAUDE_GUIDE.md`, `docs/ARCHITECTURE.md`,
   `docs/MILESTONE_WORKFLOW.md`.
-* Repository is the source of truth; audit before implementing; do not duplicate project
-  serialization, `GeometryEngine`, `StoneLayout`, renderer/exporter logic, or the Design Library's
-  own storage/UI.
-* Do not touch any forbidden-file prefix still enforced by an existing `npm test` guard, per the
-  specification's Forbidden Files list. `examples/**` is legitimately touched by this milestone
-  (its whole point) and is intentionally excluded from this milestone's own forbidden-file guard,
-  as documented.
-* Preserve backward/project compatibility: a project saved before this milestone must load and
-  render unchanged; Project JSON's schema does not change.
+* Repository is the source of truth; audit before implementing; do not add new features beyond the
+  two requested (drag tuning, Center on Object).
+* Do not touch `GeometryEngine`, `StoneLayout`, the project schema, exporters, rendering
+  (`src/renderer/**`, `src/preview3d/**`), Design Library (`src/library/**`), or Gallery
+  (`src/gallery/**`).
 
 ## Deliverables
 
-* `src/gallery/**` — new permanent module (fixture bridge, catalog, barrel).
-* `examples/gallery.json`, 3 new `.rhs` fixtures, updated `manifest.json`/`baselines.json`.
-* `app.js`, `index.html` — Gallery + Preview Lightboxes, top-menu entry, thumbnail generalization,
-  Open Copy / Save-to-Library wiring, additive-only CSS.
-* `tools/test-app-module-migration.mjs`, `tools/test-shape-geometry-integration.mjs` — extended
-  import allowlists.
-* `tools/test-design-library-integration.mjs` and 18 other pre-existing integration tests — updated
-  for the thumbnail rename / the `examples/`-is-no-longer-forbidden change.
-* `tools/test-gallery.mjs`, `tools/test-gallery-integration.mjs`, `tools/test-gallery-benchmark.mjs`
-  — new tests.
-* `package.json` — updated `test` script.
-* `docs/specifications/RS-2001-GalleryAcceptanceSuite.md` — full specification and audit.
-* `npm test` passing in full (801 checks).
-* Real-browser verification (headless Chrome via CDP, isolated temp profile) of every Gallery
-  feature, thumbnails, Open Copy, Save to Library, Dual Workspace, Production Sheet, exports, with
-  screenshots — including a real bug found and fixed mid-verification.
-* `TASK_RESULT.md` completed, including Product Owner and Business reviews and a final
-  recommendation.
-* One commit on `feature/rs-2001-gallery-acceptance-suite`, branch pushed (not merged).
+* `app.js`, `index.html` — reduced drag sensitivity, Center on Object action + button.
+* `tools/test-s104-text-position-recovery-drag-tuning.mjs` — new test (9 checks).
+* `tools/test-alignment-snapping-integration.mjs` — one pre-existing assertion updated to reflect the
+  intentionally-changed drag-delta source line (behavior it protects is otherwise unchanged).
+* `package.json` — new test wired into the `test` script.
+* `docs/specifications/S-104-TextPositionRecoveryDragTuning.md` — full specification, audit findings,
+  and browser verification detail.
+* `npm test` passing in full (831 checks, 0 failures).
+* Real-browser verification (headless Chromium via Playwright, isolated local run) of drag sensitivity,
+  off-canvas recovery, non-position-property preservation, and undo/redo, with screenshots.
+* `TASK_RESULT.md` completed.
+* One commit on `feature/s-104-text-position-recovery-drag-tuning`, branch pushed (not merged).

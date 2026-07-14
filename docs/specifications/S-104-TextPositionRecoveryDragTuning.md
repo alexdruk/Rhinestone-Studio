@@ -1,0 +1,465 @@
+# S-104 — Text Position Recovery & Drag Tuning
+
+## Task ID
+
+S-104
+
+## Type
+
+Small, high-value UX polish. No new production features, no architecture refactoring, no
+GeometryEngine/StoneLayout/renderer/exporter/project-schema/Design Library/Gallery changes.
+
+## Status
+
+IMPLEMENTED
+
+## Branch
+
+feature/s-104-text-position-recovery-drag-tuning
+
+## Objective
+
+Improve the usability of text positioning: make move-drags smoother and more precise, and give the
+operator an easy, position-only way to recover a text layer that has been dragged fully outside the
+visible printable area.
+
+## Audit Findings (verified against the live repository before implementation)
+
+1. **Move-drag was a 1:1 pointer-to-mm mapping.** `app.js`'s `layoutCanvas` `pointermove` handler
+   computed `rawDx/rawDy` (`mm.x-drag.start.x`, `mm.y-drag.start.y`) from `pointerToLayout(e)` and
+   applied that delta to the dragged selection's position verbatim (after optional snapping and the
+   Shift axis-lock, both already pre-existing RS-1009/RS-1010 behavior). One CSS pixel of pointer
+   movement therefore always produced the same mm movement regardless of how small an adjustment the
+   operator wanted, which made fine text placement (text has no resize handles to fall back on —
+   `hitTest()` explicitly excludes `l.type==='text'` from resize-handle hits) imprecise. This is the
+   same class of "unexplained inline drag multiplier" `docs/ARCHITECTURE.md` already called out and
+   fixed once before, for cup rotation (`CUP_ROTATION_SENSITIVITY`, since removed when `OrbitControls`
+   took over rotation).
+2. **A text layer has no persisted absolute position of its own.** `computeTextPlacementOffset()`
+   (RS-1009/RS-1012) always auto-centers the generated text bounding box on the full production
+   canvas first, then adds `layer.x`/`layer.y` (mm, default 0) on top. Algebraically this means the
+   rendered bbox's world-space center is always exactly `(canvas.width/2 + layer.x, canvas.height/2 +
+   layer.y)` — independent of the text's own content, font, or size. There was, however, no UI action
+   that used this fact to recover a lost layer: the Text Lightbox's Position section only exposed raw
+   `#textX`/`#textY` number inputs (RS-1009/UI-001), with no "reset" affordance, and dragging a text
+   layer fully outside the canvas left no on-canvas way to reselect or move it back (the Layers-list
+   selection path already existed and still works for *finding* the layer, just not for un-losing its
+   position).
+3. **The printable area is `getSafeAreaRectMm(template, canvasWidthMm, canvasHeightMm)`**
+   (`src/products/ObjectTemplate.js`, untouched), already used for the safe-area guide overlay and as
+   a drag-snap target (RS-1009). Every current object template (Mug/Tumbler/Bottle) happens to use
+   symmetric left/right and top/bottom insets, so its center currently coincides with the raw canvas
+   center — but a correct "center on the printable area" implementation should read the safe-area rect
+   rather than hardcode that coincidence, so it stays correct if an asymmetric template is ever added.
+
+## Changes Made
+
+### 1. Reduced move-drag sensitivity
+
+`app.js`: a new named constant `LAYER_MOVE_DRAG_SENSITIVITY = 0.5` (placed with its own explanatory
+comment immediately above the `pointerdown` handler, matching this file's existing precedent of
+naming pointer-tuning constants rather than leaving inline magic numbers) scales `rawDx`/`rawDy` down
+*before* they become `dx`/`dy` in the `pointermove` handler's `'move'` branch:
+
+```js
+let dx=rawDx*LAYER_MOVE_DRAG_SENSITIVITY,dy=rawDy*LAYER_MOVE_DRAG_SENSITIVITY;
+```
+
+This is the one and only change to the move-drag path — snapping (`buildSnapTargets`/
+`computeSnapOffset`), the Shift axis-lock, Alt-duplicate, multi-selection grouped movement, and
+arrow-key nudging (a separate, already-precise code path, untouched) all continue to operate exactly
+as before, just against an already-scaled delta. Resize-drag (`drag.kind==='resize'`) maps the pointer
+directly to an mm position under the cursor rather than a delta, so it is structurally unaffected and
+was deliberately left alone — text layers have no resize handles in the first place.
+
+`0.5` was chosen as a straightforward halving: precise enough to make small adjustments controllable,
+without requiring an unreasonable amount of extra pointer travel to still reach any position on a
+realistic canvas (confirmed in browser verification below — arbitrarily large drags still reach
+arbitrarily far positions, including well outside the canvas).
+
+### 2. "Center on Object" recovery action
+
+`app.js`: a new `centerSelectedTextOnObject()` function, guarded to only ever act on the selected
+layer when it is a text layer:
+
+```js
+function centerSelectedTextOnObject(){
+  const l=selectedLayer();if(!l||l.type!=='text')return;
+  const safe=getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height);
+  const targetX=safe.xMm+safe.widthMm/2-project.canvas.width/2,targetY=safe.yMm+safe.heightMm/2-project.canvas.height/2;
+  commitHistory();
+  l.x=targetX;l.y=targetY;
+  syncSelectedControlsFromLayer();updateAll(true);
+  el('status').textContent='Centered text on the printable area';
+}
+```
+
+It writes exactly two fields (`l.x`, `l.y`) and nothing else — font, text height/auto-fit, fill
+style, curve settings, stone size/gap/color are never touched, satisfying the "position only, no
+other properties" requirement by construction (there is no code path in this function that can reach
+them). It follows the exact same pattern every other mutating editor action already uses
+(`runAlign`/`runDistribute`/`nudgeSelection`): one `commitHistory()` before the mutation (undo/redo
+support, for free, via the existing `HistoryManager`), `syncSelectedControlsFromLayer()` +
+`updateAll(true)` to refresh the UI without re-reading stale input values, and a `#status` confirmation
+message.
+
+`index.html`: a new `Center on Object` button (`id="centerTextOnObject"`, reusing the existing `.btn
+.sm` class already used by e.g. `#resetView` — no new CSS) added to the Text Lightbox's existing
+Position field-section, directly under the `#textX`/`#textY` inputs, with a title attribute spelling
+out exactly what it does and does not touch. The section's existing hint paragraph gained one sentence
+pointing at the button for the "I dragged my text away and can't find it" scenario. Because the
+Layers-list row selection path (RS-1009, pre-existing) already lets an operator select a layer
+regardless of whether it is currently visible on-canvas, the full recovery flow needs no other new UI:
+select the (possibly off-canvas) text layer in the Layers list → More Options → Center on Object.
+
+Wired via `el('centerTextOnObject').onclick=()=>centerSelectedTextOnObject();`, placed next to the
+other single-click action-button wiring (`alignLeft` etc.).
+
+## Do-not-change list — verified untouched
+
+`GeometryEngine`, `StoneLayout`, every renderer (`src/renderer/**`, `src/preview3d/**`), every
+exporter (`src/export/**`), the project/layer schema (no field added/removed/renamed — `layer.x`/
+`layer.y` already existed since RS-1009), Design Library (`src/library/**`), and Gallery
+(`src/gallery/**`) are all untouched. Enforced by an automated forbidden-file-prefix check in the new
+test suite (see below), mirroring the guard pattern every prior milestone's own test file already
+uses.
+
+## Tests
+
+New: `tools/test-s104-text-position-recovery-drag-tuning.mjs` (9 checks) — structural checks against
+the live `app.js`/`index.html` source (the established convention for this browser-entry-point file,
+see `tools/test-ui001b-fixes.mjs`/`tools/test-alignment-snapping-integration.mjs`):
+
+1. `LAYER_MOVE_DRAG_SENSITIVITY` exists and is strictly between 0 and 1.
+2. The pointermove handler scales the pointer delta by that constant *before* snapping/shift-lock/
+   position-apply.
+3. The resize-drag branch is untouched by the sensitivity constant.
+4. The Text Lightbox's Position section has a `Center on Object` button placed after the X/Y fields.
+5. `centerSelectedTextOnObject()` is defined and wired to `#centerTextOnObject`.
+6. It only ever writes `l.x`/`l.y` — no font/size/rotation/curve/spacing/fill/stone-size assignment
+   appears in its body.
+7. It guards non-text/missing selections, opens exactly one undo step, and re-syncs the UI/history the
+   same way every other mutating action does.
+8. It targets the printable (safe) area's center via the existing `getSafeAreaRectMm()`, not a
+   hardcoded canvas-center assumption.
+9. No forbidden file changed.
+
+Updated: one pre-existing assertion in `tools/test-alignment-snapping-integration.mjs` (`27. snapping-
+disabled drag falls back to raw pointer delta`) encoded the old 1:1 mapping (`let dx=rawDx,dy=rawDy;`)
+as its literal expected source text. Updated to expect the new, deliberately-changed
+`let dx=rawDx*LAYER_MOVE_DRAG_SENSITIVITY,dy=rawDy*LAYER_MOVE_DRAG_SENSITIVITY;` — the *behavior* the
+test protects (dx/dy start unsnapped, gated fully behind `snapEnabled`) is unchanged; only the
+sensitivity this milestone intentionally introduced needed reflecting.
+
+`package.json`'s `test` script gained the new test file at the end of the existing chain.
+
+**Result:** `npm test` — 831 checks, 0 failures, exit code 0 (see Result Package below).
+
+## Browser Verification
+
+Real headless Chromium (Playwright, local `node_modules`), `npm run dev` (`python3 -m http.server
+5173`), 1440×900 viewport, 2D-Canvas-only view for an unambiguous drag target. All steps performed
+against the actual running app, not a mock:
+
+1. **Moderate drag, default state.** A 200×100 CSS-px drag from the default `(0,0)` text position
+   landed at `(50.56, 26.51)` mm — proportional, controllable movement; reduced sensitivity confirmed
+   live (a pre-S-104 1:1 mapping would have produced a much larger mm delta for the same pointer
+   travel, consistent with the source-level check that the constant is `<1` and actually wired into
+   the live delta). Undo returned it to exactly `(0, 0)`.
+2. **Large drag, fully outside the printable area.** A 1400×900 CSS-px drag moved the text to
+   `(366.79, 235.80)` mm — far outside the 210×90mm mug canvas (safe area 182×70mm). Screenshot
+   confirms the stones render clearly outside the printable-area guide rectangle, with the 2D canvas
+   auto-panning/zooming (pre-existing renderer behavior, unrelated to this milestone) to keep the
+   now-distant selection visible.
+3. **Recovery.** Selected the (already-selected, but exercised via the Layers-list row per the
+   intended recovery flow) text layer, opened More Options → Text Lightbox, clicked **Center on
+   Object**. Position X/Y immediately read `(0, 0)`, `#status` read "Centered text on the printable
+   area", and the screenshot shows the text stones back inside the printable-area grid. Font
+   (`courier-prime-regular`), height (`25`), auto-fit, fill style (`stroke`), stone size (`2`), color
+   (`gold`), and curve setting (`off`) were byte-identical before and after — verified by comparing the
+   full property snapshot, not just eyeballing the UI.
+4. **Undo/Redo.** After closing the lightbox, Undo returned Position X/Y to the off-canvas
+   `(366.79, 235.80)`; Redo returned to `(0, 0)`. Both single history steps, exactly as `commitHistory()`
+   +`updateAll(true)` intends.
+5. **Console.** Zero console errors or page errors captured across the entire session (favicon 404, if
+   any, was not even triggered in this run — `page.on('console'/'pageerror')` list was empty).
+
+Screenshots captured at every step (initial state, after moderate drag, after off-canvas drag, Text
+Lightbox open on an off-canvas layer, after Center on Object, after undo/redo) confirm the above
+visually as well as via the read DOM values.
+
+## Follow-up: Visibility/Discoverability Audit
+
+A visual reviewer reported that after this milestone's initial implementation, "no such control is
+visible" for Center on Object during manual testing. Re-audited before writing any new code, per the
+review request:
+
+* **Was the button actually added?** Yes — `id="centerTextOnObject"` is present exactly once in
+  `index.html`, inside the Text Lightbox's Position `field-section`, and `app.js` wires it
+  (`el('centerTextOnObject').onclick=...`) without error.
+* **Where is it located?** Text Lightbox → Position section, directly under the Position X/Y (mm)
+  inputs, above the position hint paragraph — unchanged from the original implementation.
+* **Under what conditions is it shown?** Only while `#lightboxText` is open (`class="lightbox-overlay
+  open"`), reachable via the top-menu **Text** button or the right Inspector's **More Options** button
+  when a text layer is selected — the same visibility condition every other Text property (font,
+  height, curve, stone size, etc.) already has. It does not appear anywhere outside that modal.
+* **Reproduction attempts (all failed to find a rendering/functional bug):** opened via both entry
+  points (`#menuText` top-menu button and Inspector `#moreOptionsBtn`); tested at five viewport sizes
+  (1440×900, 1440×800, 1366×768, 1280×720, 1024×768); measured the button's live
+  `getBoundingClientRect()`/computed style (`display:inline-flex`, `visibility:visible`, `opacity:1`)
+  and confirmed it sits within the Text Lightbox's visible scroll position at every size tested (no
+  scrolling required to reach the Position section — it is second of four sections, well above any
+  overflow). Zero console/page errors in any run. The control is real, correctly wired, and renders
+  and functions correctly in every reproducible scenario.
+* **Conclusion — not a rendering bug; a discoverability gap.** The control's *only* problem was that,
+  before this fix, it used the same plain `.btn.sm` styling as a neutral secondary field, visually
+  indistinguishable from ordinary form controls around it. For a feature whose entire purpose is
+  "I lost my text, get it back fast," blending into a wall of plain inputs inside a modal a confused
+  user may not think to open in the first place is a real usability failure, even though no line of
+  code was non-functional. This matches this review's second branch ("if intentionally hidden, make it
+  visible and discoverable in the Text Lightbox") rather than the first ("if a bug, fix it") — there
+  was nothing to fix functionally.
+
+**Fix applied (index.html only, no functional/wiring change):** the button now carries `.primary` in
+addition to `.sm` (`class="btn sm primary"`) — the same prominent blue treatment already used for
+`Export`/`Save`/`Save Project`, matching this app's existing visual vocabulary for "this is the action
+you want here," and gained a `↺` (undo/restore) icon glyph reinforcing the "brings something back"
+meaning at a glance. Nothing else about the button — its position, id, wiring, guard logic, or
+the fields it touches — changed. `centerSelectedTextOnObject()` in `app.js` is byte-identical to
+before this follow-up. A new test assertion
+(`tools/test-s104-text-position-recovery-drag-tuning.mjs`, check 4b) locks in the `.primary` class so
+this cannot silently regress back to an easy-to-overlook plain button.
+
+Re-verified via headless Chromium at 1440×900: opened the Text Lightbox through the plain top-menu
+**Text** button (the most direct, most-likely-discovered path — no drag, no More Options detour),
+confirmed the button is immediately visible with no scrolling
+(`getBoundingClientRect()` inside the modal's visible body), edited the text content and position
+manually, clicked **Center on Object**, and confirmed it reset the position (`textX`/`textY` → `0,0`)
+while leaving the just-edited text content (`"Hello World"`) untouched. Zero console errors.
+
+## Follow-up 2: Outside-the-Printable-Area Warning
+
+A second visual-review request: show a clear warning in the Text Lightbox when the selected text has
+moved materially outside the printable safe area, updating live and clearing automatically once the
+text is back inside — without ever preventing the move itself.
+
+**Threshold chosen — full disjointness, not strict containment.** The first implementation attempt
+used "not fully contained by the safe area" (any overhang triggers the warning), and browser
+verification immediately caught it as wrong: the *default, never-moved* text layer already overhangs
+the safe area at `(0,0)` (its auto-fit bounding box, `199.4×17.0mm`, is wider than the `182×70mm` safe
+area — `generateTextStonesLive()`'s auto-fit deliberately caps width to `canvas.width-10`, not to the
+safe area, and this is pre-existing, unrelated behavior). A strict-containment check would have shown
+the warning on essentially every normal project, defeating its purpose. The corrected rule —
+`isTextOutsidePrintableArea()` in `app.js` — fires only when the text's bounding box has **no overlap
+at all** with the safe area (fully disjoint, with a small tolerance so a bbox resting exactly on the
+boundary never flickers). This intentionally mirrors `centerSelectedTextOnObject()`'s own scope
+("recovers text dragged *completely* outside the visible printable area"), so the warning is a direct,
+correct signal for exactly when Center on Object is the right fix — never a false alarm for ordinary
+auto-fit overhang.
+
+**Implementation:**
+* `app.js` — `isTextOutsidePrintableArea(l)` (pure function: `getLayerBBox(l)` vs
+  `getSafeAreaRectMm(currentObjectTemplate(), project.canvas.width, project.canvas.height)`, tolerance
+  = the existing `SNAP_TOLERANCE_MM`) and `updateTextOutsidePrintableWarning()` (toggles the `.visible`
+  class on the warning element). Both are read-only — neither writes to any layer field, so the move
+  itself is never affected or prevented, satisfying "do not prevent moving text outside the area" by
+  construction.
+* `updateTextOutsidePrintableWarning()` is called from inside `updateAll()`, immediately after `layout`
+  is regenerated — the same function every position-changing action already funnels through (drag
+  `pointermove`, keyboard nudge, Align/Distribute, Undo/Redo, Center on Object, and every keystroke in
+  the Text Lightbox's own `#textX`/`#textY` fields). This is what makes the warning "live": it is
+  recomputed on literally every call that could have changed the layer's extent, with no separate
+  polling or event wiring needed.
+* `index.html` — a `<p class="validation-message" id="textOutsidePrintableWarning">This text is
+  outside the printable area.</p>` in the Text Lightbox's Position section, between the X/Y fields and
+  the Center on Object button. Reuses the exact `.validation-message`/`.visible` styling already used
+  by `#textValidation` elsewhere in this same lightbox — a red alert box, no new CSS.
+* Center on Object (`#centerTextOnObject`) is completely unchanged — same id, position, wiring, guard
+  logic, and styling as the prior follow-up left it.
+* No changes to `GeometryEngine`, `StoneLayout`, any renderer, any exporter, or the project schema —
+  the warning is computed entirely from already-generated `layout` data and the already-existing
+  `getSafeAreaRectMm()`.
+
+**Tests:** `tools/test-s104-text-position-recovery-drag-tuning.mjs` gained checks 10–13: the warning
+element exists with the exact required wording between the X/Y fields and the button; it reuses the
+existing `.validation-message` styling; `isTextOutsidePrintableArea()`/`updateTextOutsidePrintableWarning()`
+are purely read+DOM-toggle (regex-verified: no property assignment of any kind in the pure function);
+and the update call is wired into `updateAll()`. `npm test`: **836 checks, 0 failures** (4 new).
+
+**Browser verification** (headless Chromium, 1440×900, 2D-Canvas-only):
+1. Baseline: opened the Text Lightbox at the default `(0,0)` position — warning correctly **hidden**
+   (confirming the corrected, non-strict threshold).
+2. Dragged the text far outside the canvas (lightbox closed during the drag, as it must be — the Text
+   Lightbox is a real modal and blocks canvas pointer events while open); reopened the lightbox —
+   warning **visible**, sitting directly above Center on Object.
+3. **Live update inside the open lightbox**, the closest in-app analog to "live while dragging" since
+   the modal cannot be open during an actual canvas drag: typed the Position X/Y fields back to
+   `(0,0)` without closing/reopening anything — warning disappeared immediately; typed X back to `400`
+   — warning reappeared immediately. No reopen needed either time.
+4. Clicked **Center on Object** — position reset to `(0,0)` and the warning disappeared in the same
+   render pass.
+5. Closed the lightbox, clicked **Undo** — position returned to the off-canvas value; reopening the
+   lightbox showed the warning again. Clicked **Redo** — position returned to `(0,0)`; warning gone
+   again.
+6. Zero console/page errors across the entire session.
+
+## Follow-up 3: Coordinate-Space Audit & Real-Mouse-Drag Fix
+
+A third visual-review report: manual testing (dragging the mouse until the text is no longer readable
+on the mug) still showed no warning, and the report specifically distrusted the prior round's
+verification method, asking for reproduction via real CDP `Input.dispatchMouseEvent` rather than
+Playwright's `page.mouse` helper or DOM-level field edits.
+
+**Reproduction method.** A fresh script drove the browser via `page.context().newCDPSession(page)` and
+raw `cdp.send('Input.dispatchMouseEvent', {...})` calls — `mousePressed`/`mouseMoved`
+(`buttons:1`)/`mouseReleased` — bypassing Playwright's `page.mouse` abstraction entirely, against the
+exact default mug project (`product:'mug'`, `wrap:'front'`, default "Vitalina Serbin" text) a real user
+opens first.
+
+**Coordinate-space audit (required before touching any code):**
+* `layer.x`/`layer.y` and `getLayerBBox()`'s bbox (`app.js`) are both in the flat *production-canvas
+  mm* frame — the same frame every stone is generated in.
+* `getSafeAreaRectMm()` (`src/products/ObjectTemplate.js`, unchanged) is an inset rectangle in that
+  exact same frame.
+* The 3D object projection (`src/preview3d/StoneLayoutTexture.js`'s `drawStoneLayoutTexture()`, fed
+  `canvasWidthMm`/`canvasHeightMm` straight from `project.canvas` by `Preview3DRenderer.js`'s
+  `update()`) rasterizes the *entire* flat canvas into one texture; `ObjectGeometryBuilder.js`'s
+  `applyWrapUv()`/`applyAzimuthUv()` then map that whole texture (`U 0..1` = canvas `x 0..canvasWidthMm`)
+  across the wrap-mode angle centered on the front (`WRAP_ANGLE_DEG` in `src/preview3d/
+  ObjectDimensions.js` — `front:70°`, `wide:115°`, `half:180°`, `full:300°`). Content within the flat
+  canvas's mm bounds is therefore always on the front-facing, always-visible part of the object at any
+  wrap mode/camera rotation; content outside those mm bounds is clipped out of the texture before it
+  ever reaches the mesh (`ctx.fillRect`/`ctx.arc` simply don't draw outside the texture's own pixel
+  bounds).
+* **Conclusion: the flat canvas-mm safe-area comparison is already the correct coordinate space** for
+  "visible on the object" — no 3D projection math was missing, and per this milestone's own constraint
+  #6, none was added. `GeometryEngine`, `StoneLayout`, and 3D rendering remain untouched.
+
+**The real bug — found empirically via raw CDP drag, not by inspection.** A `Input.dispatchMouseEvent`
+drag of only 200 screen-px, purely sideways (no vertical component), moved the default text layer to
+`textX≈120mm`. At that position the text's own bounding box (`125.4–324.8mm` × `36.5–53.5mm`) overlaps
+the `182×70mm` safe area by only **35.4% of its own area** — cup screenshot confirms only "Vitali…" and
+a few stray stone streaks remain on the visible surface, genuinely unreadable. The *previous*
+implementation (`isTextOutsidePrintableArea()`, "fully disjoint from the safe area") computed **no
+warning** at this exact position (`bx2=324.8 > safe.xMm-tol`, `bx=125.4 < safe.xMm+safe.widthMm+tol` —
+neither disjointness condition was met, since roughly a third of the wide default text still grazed the
+safe area). This is precisely the discrepancy reported: a real, moderate mouse drag left text mostly
+unreadable while the warning stayed silent, because "fully disjoint" only ever fires once **100%** of
+the text has left, and the default project's own auto-fit text (`199.4mm` wide) is wider than the
+safe area (`182mm`) — a large fraction can leave before literally all of it does.
+
+**Fix — partial-overlap-area ratio, same coordinate space, no 3D changes.** `isTextOutsidePrintableArea()`
+now computes the actual intersection rectangle between the text's bbox and the safe area, and warns once
+less than `TEXT_PRINTABLE_VISIBILITY_RATIO` (50%) of the bbox's own area remains inside — i.e., once a
+majority of the text has left the printable area, matching "no longer meaningfully visible" directly
+instead of only the 100% case. The function is still pure (bbox/area arithmetic only, no layer
+mutation) and still driven from `updateAll()`, so live-update behavior, Center on Object, drag
+sensitivity, and Undo/Redo are all unaffected by this change.
+
+**Tests:** `tools/test-s104-text-position-recovery-drag-tuning.mjs` gained check 12b, asserting the
+ratio-based formula (`overlapWidth*overlapHeight)/bboxArea` compared against a named
+`TEXT_PRINTABLE_VISIBILITY_RATIO` constant in `(0,1)`) replaced the disjointness test. `npm test`:
+**837 checks, 0 failures**.
+
+**Browser verification (real CDP `Input.dispatchMouseEvent`, no Playwright `page.mouse`, no DOM field
+edits for the drag itself):**
+1. **Before drag** — default mug project, `textX/textY=(0,0)`, warning hidden. Screenshot captured.
+2. **Gap demonstration** — the exact 200px sideways CDP drag above: recomputed both the old and new
+   formulas by hand from the resulting position using this project's own reported constants (canvas
+   `210×90`, safe area `182×70` at inset `14/10`, default bbox `199.4×17.0`): old formula → `false` (no
+   warning — the bug); new formula → `true` (warns — the fix). Cup screenshot shows the text genuinely
+   unreadable at this exact position.
+3. **After text becomes unreadable** (larger diagonal CDP drag, `textX/textY≈(544.5, 363.0)`, fully off
+   the canvas) — warning visible, confirmed both via the raw DOM class and by opening the Text Lightbox
+   and screenshotting it.
+4. **Center on Object** — position reset to `(0,0)`, warning disappeared in the same render pass, cup
+   screenshot shows "Vitalina Serbin" fully legible again.
+5. **Undo/Redo** — Undo restored the off-canvas position and the warning; Redo restored the centered
+   position and cleared it again.
+6. **Console** — zero errors/page errors across the entire session.
+
+## Follow-up 4: Warning Moved to the Persistent Workspace
+
+A fourth visual-review report, despite Follow-up 3's fix being verifiably correct: manual testing still
+showed no visible warning. The report identified the actual remaining problem precisely — the warning
+lived exclusively inside `#lightboxText`, a modal (`.lightbox-overlay{position:fixed;inset:0;
+display:none}` / `.open{display:flex}`) that is normally **closed** for the entire duration of a
+canvas drag (there is no way to drag on the 2D canvas while any modal lightbox is open — the overlay
+covers and captures every pointer event across the full viewport). A warning that only exists inside a
+closed dialog is, correctly, indistinguishable from "no warning" during the one interaction (dragging)
+it exists to catch. This was a real, conceptual placement defect, not a computation bug — Follow-up 3's
+threshold fix was correct and is unchanged (per this round's explicit instruction not to touch it
+again).
+
+**Fix — a second, persistent copy of the same warning in the always-visible right Inspector panel.**
+`#rightInspector` (`aside.right-inspector`) is normal page chrome, not a modal — it sits beside the 2D
+canvas and remains on screen throughout a drag, unlike the Text Lightbox. It is also this app's
+existing persistent per-selection status surface (Stone Size/Gap/Stone Color/More Options already live
+there, conditioned on the current selection), matching this round's "reuse the existing persistent
+status/notification UI if suitable" instruction — no new modal, no new panel type.
+
+* `index.html` — `#workspaceTextOutsideWarning` (`div.validation-message`, the same shared alert
+  styling as the Lightbox's copy — no new CSS beyond one `margin-top` spacing rule for its button)
+  placed immediately under the Inspector's `<h2>` layer-name heading, containing the same required
+  wording ("This text is outside the printable area.") plus a `↺ Center Text` button
+  (`#workspaceCenterTextBtn`, `.btn.sm.primary` — the same prominent styling Follow-up 1 gave Center on
+  Object).
+* `app.js` — `updateTextOutsidePrintableWarning()` now computes `isTextOutsidePrintableArea()`
+  **once** and toggles *both* `#textOutsidePrintableWarning` (Lightbox) and
+  `#workspaceTextOutsideWarning` (workspace) from that single shared boolean, so the two surfaces can
+  never disagree. Both are therefore still driven from the same `updateAll()` call every
+  position-changing action already funnels through — live during an actual drag (`pointermove` calls
+  `updateAll(true)` on every mouse-move frame), not just after it ends.
+* `#workspaceCenterTextBtn`'s click handler is `()=>centerSelectedTextOnObject()` — the *exact same*
+  function `#centerTextOnObject` already calls. No new recovery logic exists; the workspace button is
+  guaranteed by construction to touch only `l.x`/`l.y`, identically to the existing control.
+* `#centerTextOnObject` (inside the Text Lightbox) and `#textOutsidePrintableWarning` are both **kept**,
+  per this round's explicit instruction — when the Lightbox *is* open, it visually covers the Inspector,
+  so its own copy is what stays visible in that state; the two together cover both "Lightbox closed"
+  (the normal drag scenario) and "Lightbox open" (reviewing/fine-tuning position numerically).
+* No `GeometryEngine`/`StoneLayout`/renderer/exporter/project-schema change — this is markup + one
+  shared read-only function's DOM output, unchanged from Follow-up 3's geometry.
+
+**Known, pre-existing, out-of-scope limitation:** `@media (max-width:1300px){.right-inspector{
+display:none}}` (unrelated, pre-UI-001 responsive rule) hides the entire right Inspector — and with it
+both the workspace warning and the rest of the per-selection quick-edit panel — on narrow viewports.
+This is unchanged pre-existing behavior, not something this milestone's scope covers; the Text
+Lightbox's own warning + Center on Object remain available as a fallback recovery path at any viewport
+width.
+
+**Tests:** `tools/test-s104-text-position-recovery-drag-tuning.mjs` gained checks 15–17 (the workspace
+warning + button exist in the right Inspector ahead of the rest of its content; the button reuses
+`centerSelectedTextOnObject()` verbatim; both warning surfaces share one `isTextOutsidePrintableArea()`
+result) and check 12 was updated for the two-surface toggle. `npm test`: **840 checks, 0 failures**.
+
+**Browser verification (real CDP `Input.dispatchMouseEvent`, Text Lightbox never opened, matching the
+exact normal-user workflow):**
+1. Default mug project loaded; Text Lightbox confirmed closed; workspace warning confirmed hidden.
+2. A single continuous CDP drag (mouse held down throughout) toward the right — checked the workspace
+   warning's live DOM state at four points *during* the drag, before the mouse was ever released: hidden
+   at `textX≈36mm`/`77mm`, **visible starting at `textX≈117mm`** (mid-gesture, `lightboxOpen` confirmed
+   `false` at every checkpoint) and remained visible through `textX≈157mm` at drag end.
+3. Screenshot at the unreadable state: cup preview shows only stray stone streaks (the text itself off
+   the visible surface), Text Lightbox still closed, right Inspector showing the red warning box and
+   blue **Center Text** button directly under "Vitalina Serbin" 's layer name.
+4. Clicked `#workspaceCenterTextBtn` directly (Lightbox never opened at any point in this run):
+   position reset to `(0,0)`, warning disappeared, `#status` confirmed "Centered text on the printable
+   area," cup screenshot shows "Vitalina Serbin" fully legible again. Every other text property (font,
+   height, stone size, color, fill style, curve setting, text content itself) verified unchanged via a
+   full property snapshot.
+5. Undo restored the off-canvas position and the workspace warning; Redo restored the centered position
+   and cleared it again.
+6. Zero console/page errors across the entire session.
+
+## Recommendation
+
+Approve and merge. Both original requirements, plus all four follow-up fixes (Center on Object
+discoverability, the outside-the-printable-area warning, its real-mouse-drag-verified
+partial-overlap correction, and its move to the persistent, always-visible workspace), are implemented
+as the smallest coherent change on top of existing, already-tested infrastructure
+(`getSafeAreaRectMm`, `commitHistory`/`HistoryManager`, the Layers-list selection path, the shared
+`centerSelectedTextOnObject()`, and the app's existing `.btn.primary`/`.validation-message` visual
+language) — no new geometry, no new storage, no schema change, no new modal, and no forbidden file
+touched. The
+`0.5` sensitivity constant is a reasonable default; if real usage shows it too aggressive or too mild
+in either direction, it is a one-line, well-isolated tuning change.
