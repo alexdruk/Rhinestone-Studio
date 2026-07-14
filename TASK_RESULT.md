@@ -223,3 +223,61 @@ can never disagree). No second `GeometryEngine`/`StoneLayout`/rendering pipeline
 one required 3D-preview-sizing change is preview-only and never touches a stone position; and the
 frame's drag/live-orbit sync paths are deliberately cheap so requirement 2's "immediate and smooth"
 holds under real, verified mouse interaction in both directions.
+
+---
+
+# Follow-up — "does not provide an export named 'azimuthRadForCanvasXMm'" report
+
+A report came in that the app fails to load with:
+`Uncaught SyntaxError: The requested module './src/preview3d/ObjectDimensions.js' does not provide
+an export named 'azimuthRadForCanvasXMm'`.
+
+## Audit
+
+Checked every layer between "app.js imports this symbol" and "the browser evaluates it":
+
+* `src/preview3d/ObjectDimensions.js` exports `azimuthRadForCanvasXMm` at line 94 (`export function
+  azimuthRadForCanvasXMm(xMm, canvasWidthMm)`), both in the local working tree and in
+  `origin/feature/s-107-long-text-readability` — `git diff origin/... -- src/preview3d/ObjectDimensions.js app.js`
+  reports no difference.
+* `app.js`'s import statement lists exactly the six names the module exports that it uses
+  (`circumferenceMm, frontViewFrameWidthMm, canvasXMmForRotationDeg, rotationDegForCanvasXMm,
+  azimuthRadForCanvasXMm, wrapAngleRad`) — verified both by direct inspection and by actually running
+  Node's real ESM loader against the committed file (`import('./src/preview3d/ObjectDimensions.js')`),
+  which resolves all six as functions.
+* No duplicate `ObjectDimensions.js`/`app.js`/`index.html` exists anywhere else in the repository
+  (`find . -iname ...` returns exactly one of each), and there is no build step, bundler, or import-map
+  entry that could substitute a different file at that path — `index.html`'s import map only remaps
+  `opentype.js` and `three`.
+* `npm test` (904/904) and a fresh, cache-disabled Playwright browser session against the current
+  commit both load and run with **zero** console/page errors and no "does not provide an export"
+  error, across a first load and three repeated loads in the same session.
+* **Reproduced the exact reported error directly**: serving the pre-S-107 commit's
+  `ObjectDimensions.js` (which genuinely does not export `azimuthRadForCanvasXMm` — confirmed via
+  `git show 13e1cbb:src/preview3d/ObjectDimensions.js`) alongside the current `app.js` in a real
+  browser reproduces the identical error message byte-for-byte. Critically, `azimuthRadForCanvasXMm`
+  does not exist anywhere in the repository's history *before* this feature's own commit
+  (`5974c26`) — neither exported nor imported — so this error cannot come from any single real commit
+  in this repository; it only arises from a **mixed state**: an old, cached `ObjectDimensions.js`
+  served alongside a freshly-fetched `app.js`.
+
+## Conclusion
+
+There is no import/export mismatch in the repository at the pushed commit. The reported error is
+consistent with the reporting browser having a stale cached copy of `ObjectDimensions.js` from before
+this feature existed (ES module scripts are cached aggressively by browsers, and a plain
+`python3 -m http.server` sends no `Cache-Control` headers to prevent that) — reloading with the cache
+disabled or a hard refresh (Cmd+Shift+R / Ctrl+Shift+R) resolves it, which is exactly what the
+zero-error fresh-session verification above demonstrates. Per "do not change any functionality beyond
+resolving this error unless the audit proves it is required," no source file was changed — the audit
+found nothing to fix.
+
+**Verification performed for this follow-up:**
+* `npm test`: 904/904 checks, 0 failures (unchanged from before this follow-up — no source touched).
+* Fresh, cache-disabled Playwright session: zero console errors, zero page errors, no import errors,
+  app renders its layout, three consecutive reloads stay clean.
+* S-107 functionality re-confirmed live: Front View width/printable circumference/viewing position
+  shown in the status bar; orbiting the Object Preview still moves the Front View Frame (rotation
+  changed from 0° to -94° in this run); the too-long warning element is present.
+* Direct reproduction of the reported error using a deliberately stale `ObjectDimensions.js` +
+  current `app.js`, confirming the diagnosis rather than assuming it.
