@@ -119,6 +119,12 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .topmenu-btn .glyph{font-size:14px;line-height:1}
 .topmenu-btn:hover{background:var(--color-bg)}
 .topmenu-btn[aria-pressed="true"],.topmenu-btn.active{background:var(--color-primary-tint);color:var(--color-primary-active)}
+/* ---- S-103 (Product Scope Freeze): disabled top-menu entries stay visible but inert -- no click,
+   no hover affordance, no keyboard focus (native [disabled] on a <button> already removes it from
+   the tab order and blocks click/Enter/Space activation, so no JS gating is needed here). ---- */
+.topmenu-btn:disabled{cursor:not-allowed;opacity:.5;color:var(--color-text-faint)}
+.topmenu-btn:disabled:hover{background:transparent}
+.topmenu-badge{margin-left:2px;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:1px 6px;border-radius:999px;background:var(--color-bg);color:var(--color-text-muted);border:1px solid var(--color-border-strong)}
 .topbar-actions{display:flex;align-items:center;gap:var(--space-2);flex:0 0 auto}
 .dirty-indicator{font-size:var(--font-size-xs);color:var(--color-text-muted);min-width:96px;text-align:right}
 
@@ -290,7 +296,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
     <button class="topmenu-btn" id="menuText" title="Text (edit the selected text layer's content, font, and curve)"><span class="glyph">🅣</span>Text</button>
     <button class="topmenu-btn" id="menuShapes" title="Shapes and object templates"><span class="glyph">◇</span>Shapes</button>
     <button class="topmenu-btn" id="menuLibrary" title="Save, browse, and reuse your saved designs"><span class="glyph">📚</span>Design Library</button>
-    <button class="topmenu-btn" id="menuGallery" title="Browse built-in example designs (read-only)"><span class="glyph">✨</span>Gallery</button>
+    <button class="topmenu-btn" id="menuGallery" title="Gallery is temporarily unavailable while product scope is reduced (S-103). All Gallery designs and code remain intact." disabled aria-disabled="true"><span class="glyph">✨</span>Gallery<span class="topmenu-badge">Coming Soon</span></button>
     <button class="topmenu-btn" id="menuImport" title="Import an SVG or a Project JSON file"><span class="glyph">⇪</span>Import</button>
     <button class="topmenu-btn" id="menuImageTrace" title="Trace a PNG/JPG/WebP image into stones"><span class="glyph">🖼</span>Image Trace</button>
     <button class="topmenu-btn" id="menuExport" title="Export project, layout, SVG, or PNG"><span class="glyph">⬇</span>Export</button>
