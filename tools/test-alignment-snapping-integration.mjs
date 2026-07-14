@@ -174,7 +174,9 @@ await test('19. the Align & Snap sidebar section exists with labeled/tooltipped 
     const re = new RegExp(`<button id="${id}"[^>]*title="[^"]+"[^>]*disabled>`);
     assert.match(indexHtml, re, `expected #${id} to have a title tooltip and start disabled`);
   }
-  assert.match(indexHtml, /<select id="snapEnabled"[^>]*title="[^"]+"[^>]*><option value="on" selected>On<\/option><option value="off">Off<\/option><\/select>/);
+  // S-108: option labels read "Snap: On"/"Snap: Off" (not bare On/Off) for toolbar clarity; the
+  // underlying values/selected state driving snapEnabled are unchanged.
+  assert.match(indexHtml, /<select id="snapEnabled"[^>]*title="[^"]+"[^>]*><option value="on" selected>Snap: On<\/option><option value="off">Snap: Off<\/option><\/select>/);
   assert.match(indexHtml, /<div[^>]*id="selectionSummary"/);
 });
 

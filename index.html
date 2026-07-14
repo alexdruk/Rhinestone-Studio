@@ -81,6 +81,7 @@ button.icon-btn{
 }
 button.icon-btn:hover:not(:disabled){background:var(--color-bg)}
 button.icon-btn[aria-pressed="true"]{background:var(--color-primary-tint);border-color:var(--color-primary);color:var(--color-primary-active)}
+.align-icon{width:15px;height:15px;display:block;overflow:visible}
 .btnrow{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
 .color-pick-row{display:flex;align-items:center;gap:var(--space-2)}
 .color-pick-row select{flex:1}
@@ -381,16 +382,16 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <span class="toolbar-label">Align &amp; Snap</span>
           <div id="selectionSummary" style="display:inline">No layers selected</div>
           <div class="align-icons">
-            <button id="alignLeft" class="icon-btn" title="Align left (2+ layers selected)" disabled>⯇</button>
-            <button id="alignCenterH" class="icon-btn" title="Align horizontal center (2+ layers selected)" disabled>↔</button>
-            <button id="alignRight" class="icon-btn" title="Align right (2+ layers selected)" disabled>⯈</button>
-            <button id="alignTop" class="icon-btn" title="Align top (2+ layers selected)" disabled>⯅</button>
-            <button id="alignCenterV" class="icon-btn" title="Align vertical middle (2+ layers selected)" disabled>↕</button>
-            <button id="alignBottom" class="icon-btn" title="Align bottom (2+ layers selected)" disabled>⯆</button>
-            <button id="distributeH" class="icon-btn" title="Distribute horizontally, equal center spacing (3+ layers selected)" disabled>⇹</button>
-            <button id="distributeV" class="icon-btn" title="Distribute vertically, equal center spacing (3+ layers selected)" disabled>⇳</button>
+            <button id="alignLeft" class="icon-btn" title="Align Left — aligns selected layers to each other's left edges (2+ layers selected)" disabled><svg class="align-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="3" y="2" width="6" height="4" rx="1" fill="currentColor"/><rect x="3" y="10" width="10" height="4" rx="1" fill="currentColor"/></svg></button>
+            <button id="alignCenterH" class="icon-btn" title="Align Horizontal Centers — aligns selected layers to each other's horizontal centers (2+ layers selected)" disabled><svg class="align-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="7.4" y="1" width="1.2" height="14" rx="0.6" fill="currentColor" opacity="0.5"/><rect x="5" y="2" width="6" height="4" rx="1" fill="currentColor"/><rect x="3" y="10" width="10" height="4" rx="1" fill="currentColor"/></svg></button>
+            <button id="alignRight" class="icon-btn" title="Align Right — aligns selected layers to each other's right edges (2+ layers selected)" disabled><svg class="align-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="7" y="2" width="6" height="4" rx="1" fill="currentColor"/><rect x="3" y="10" width="10" height="4" rx="1" fill="currentColor"/></svg></button>
+            <button id="alignTop" class="icon-btn" title="Align Top — aligns selected layers to each other's top edges (2+ layers selected)" disabled><svg class="align-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="2" y="2" width="4" height="5" rx="1" fill="currentColor"/><rect x="9" y="2" width="5" height="9" rx="1" fill="currentColor"/></svg></button>
+            <button id="alignCenterV" class="icon-btn" title="Align Vertical Centers — aligns selected layers to each other's vertical centers (2+ layers selected)" disabled><svg class="align-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="1" y="7.4" width="14" height="1.2" rx="0.6" fill="currentColor" opacity="0.5"/><rect x="2" y="5" width="4" height="6" rx="1" fill="currentColor"/><rect x="9" y="3" width="5" height="10" rx="1" fill="currentColor"/></svg></button>
+            <button id="alignBottom" class="icon-btn" title="Align Bottom — aligns selected layers to each other's bottom edges (2+ layers selected)" disabled><svg class="align-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="2" y="9" width="4" height="5" rx="1" fill="currentColor"/><rect x="9" y="5" width="5" height="9" rx="1" fill="currentColor"/></svg></button>
+            <button id="distributeH" class="icon-btn" title="Distribute Horizontally — spaces selected layers evenly left-to-right, equal center spacing (3+ layers selected)" disabled><svg class="align-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="1" y="4" width="3" height="8" rx="1" fill="currentColor"/><rect x="6.5" y="4" width="3" height="8" rx="1" fill="currentColor"/><rect x="12" y="4" width="3" height="8" rx="1" fill="currentColor"/></svg></button>
+            <button id="distributeV" class="icon-btn" title="Distribute Vertically — spaces selected layers evenly top-to-bottom, equal center spacing (3+ layers selected)" disabled><svg class="align-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="4" y="1" width="8" height="3" rx="1" fill="currentColor"/><rect x="4" y="6.5" width="8" height="3" rx="1" fill="currentColor"/><rect x="4" y="12" width="8" height="3" rx="1" fill="currentColor"/></svg></button>
           </div>
-          <select id="snapEnabled" title="Snap to canvas center/edges, safe area, and other layers while dragging"><option value="on" selected>On</option><option value="off">Off</option></select>
+          <select id="snapEnabled" title="Snap while dragging: canvas center/edges, the printable safe area, and other layers (does not affect Align/Distribute, keyboard nudge, or the configurable snap distance below)"><option value="on" selected>Snap: On</option><option value="off">Snap: Off</option></select>
         </div>
       </div>
 
