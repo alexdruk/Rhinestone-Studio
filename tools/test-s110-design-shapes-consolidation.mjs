@@ -53,10 +53,18 @@ await test('2. the old proxy #addCircleLightbox/#addRectLightbox buttons no long
 
 await test('3. Circle and Rectangle are created only via the unified Design Shapes grid (one creation function, one set of buttons)', () => {
   assert.match(appJs, /async function createShapeLayer\(kind\)\{/, 'expected one unified createShapeLayer(kind) function');
-  // Exactly one call site constructs a 'circle' layer (inside createShapeLayer) -- not a second,
-  // independent circle-creation code path anywhere else in app.js.
-  const circleLayerLiterals = appJs.match(/type:'circle'/g) || [];
-  assert.equal(circleLayerLiterals.length, 1, 'expected exactly one place in app.js that constructs a circle layer object');
+  // S-110A: every 'circle' layer-object literal must live inside createShapeLayer() itself (its two
+  // size branches -- sized-around-text vs. default) or referenceShapeLayer() (a measurement-only
+  // object, never pushed to project.layers, used to size a shape around existing text) -- never a
+  // second, independent circle-creation code path anywhere else in app.js.
+  const createShapeLayerFn = appJs.match(/async function createShapeLayer\(kind\)\{[\s\S]*?\n\}/);
+  const referenceShapeLayerFn = appJs.match(/function referenceShapeLayer\(kind\)\{[\s\S]*?\n\}/);
+  assert.ok(createShapeLayerFn, 'expected to find createShapeLayer()');
+  assert.ok(referenceShapeLayerFn, 'expected to find referenceShapeLayer()');
+  const totalCircleLiterals = (appJs.match(/type:'circle'/g) || []).length;
+  const inCreateShapeLayer = (createShapeLayerFn[0].match(/type:'circle'/g) || []).length;
+  const inReferenceShapeLayer = (referenceShapeLayerFn[0].match(/type:'circle'/g) || []).length;
+  assert.equal(totalCircleLiterals, inCreateShapeLayer + inReferenceShapeLayer, 'expected every circle layer-object literal to live inside createShapeLayer() or referenceShapeLayer(), not a third, independent code path');
 });
 
 // ---------------------------------------------------------------------------------------------

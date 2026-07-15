@@ -61,5 +61,6 @@ export {
 export {
   FITTABLE_SHAPE_TYPES,
   computeInscribedRect,
-  computeShapeFitScale
+  computeShapeFitScale,
+  computeContainingShapeScale
 } from './ShapeFit.js';

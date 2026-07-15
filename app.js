@@ -85,7 +85,7 @@
 // pipeline stages re-run on every threshold/invert/blur/resize edit, but the (comparatively
 // expensive) browser image decode only ever runs once per distinct imageSrc value.
 import './src/browser/BrowserDependencyProbe.js';
-import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale } from './src/geometry/index.js';
+import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
 import { createDefaultFontProviderRegistry, BoundingBox } from './src/text/index.js';
 import { renderProductionLayout } from './src/renderer/CanvasRenderer2D.js';
@@ -1233,33 +1233,111 @@ el('boolUnion').onclick=()=>runBooleanOp('union');el('boolSubtract').onclick=()=
 // be created is added -- exactly one other selected layer of the right type is what "initial
 // automatic fitting" keys off of in both createShapeLayer()/addText() below.
 function singleOtherSelectedLayer(){const ids=[...selectedLayerIds];if(ids.length!==1)return null;return project.layers.find(x=>x.id===ids[0])||null}
+// S-110: circle's own hardcoded default radius (createShapeLayer() below) -- named here too so
+// S-110A's referenceShapeLayer() never has to duplicate the literal.
+const DEFAULT_CIRCLE_RADIUS_MM=18;
+// S-110A (Smart Shape-to-Text Creation): a shape `kind` at its own canonical default proportions
+// (SHAPE_DEFAULT_SIZES_MM, the exact same defaults createShapeLayer() itself uses when there is no
+// text to size around), centered at the origin. This is a *reference* layer purely for measuring
+// how that kind's largest-inscribed-rectangle-at-a-given-aspect-ratio scales with overall shape
+// size -- resolveShapeLayerPolygonsForFitting() (and its Ring-inner-circle special case) is reused
+// unchanged, so the "shape contains text" direction can never disagree with the existing "text fits
+// shape" direction about what a shape's usable region is.
+function referenceShapeLayer(kind){
+  if(kind==='circle')return{id:'reference',type:'circle',cx:0,cy:0,r:DEFAULT_CIRCLE_RADIUS_MM};
+  const{w,h}=SHAPE_DEFAULT_SIZES_MM[kind]||{w:60,h:60};
+  return{id:'reference',type:kind,x:-w/2,y:-h/2,w,h,...defaultShapeExtraFields(kind)};
+}
+// S-110A: computes the smallest shape of `kind` (at its own canonical proportions) that fully
+// contains textLayer's current *rendered* bounding box (getLayerBBox() -- the same single source of
+// truth for a layer's mm extent every other editing feature already uses, so this reflects the
+// text's true on-canvas size, including any S-107 auto-fit shrink already applied) plus one full
+// stone-pitch of production margin on every side. The margin is stoneSize+gap -- the same physical
+// pitch quantity that already governs stone spacing everywhere else -- not an arbitrary pixel value:
+// it is the minimum gap needed so the shape's own outline stones don't crowd the text's outermost
+// stones. Reuses computeContainingShapeScale() (src/geometry/ShapeFit.js) -- the exact inverse of
+// the math fitTextToShape() already uses -- rather than a second fitting algorithm. Returns null
+// when the text has no rendered extent yet (nothing to size a shape around).
+function computeShapeAroundText(kind,textLayer){
+  const textBBox=getLayerBBox(textLayer);
+  if(!(textBBox.width>0)||!(textBBox.height>0))return null;
+  const marginMm=(textLayer.stoneSize||0)+(textLayer.gap||0);
+  const requiredWidthMm=textBBox.width+marginMm*2;
+  const requiredHeightMm=textBBox.height+marginMm*2;
+  const{polygons,boundingBox}=resolveShapeLayerPolygonsForFitting(referenceShapeLayer(kind));
+  if(!boundingBox)return null;
+  const fit=computeContainingShapeScale(polygons,boundingBox,requiredWidthMm,requiredHeightMm);
+  if(!fit)return null;
+  const centerXmm=textBBox.x+textBBox.width/2,centerYmm=textBBox.y+textBBox.height/2;
+  if(kind==='circle'){
+    const radiusMm=DEFAULT_CIRCLE_RADIUS_MM*fit.scale;
+    return{widthMm:radiusMm*2,heightMm:radiusMm*2,centerXmm,centerYmm,cxMm:centerXmm,cyMm:centerYmm,radiusMm};
+  }
+  const{w,h}=SHAPE_DEFAULT_SIZES_MM[kind]||{w:60,h:60};
+  const widthMm=w*fit.scale,heightMm=h*fit.scale;
+  return{widthMm,heightMm,centerXmm,centerYmm,xMm:centerXmm-widthMm/2,yMm:centerYmm-heightMm/2};
+}
+// S-110A: whether a shape of the given centered size (as returned by computeShapeAroundText() above)
+// sits completely within the current object template's printable area -- reusing
+// getSafeAreaRectMm() (src/products/index.js), the same printable-area rectangle
+// isTextOutsidePrintableArea()/drawSafeAreaGuide() already use, rather than a second notion of
+// "printable". A full containment check (every edge inside the safe rect), not merely "smaller
+// than" -- the shape is centered on the text's own current position, which may itself already sit
+// off-center, so only the actual placed bounds can answer "fits completely inside".
+function shapeAroundTextFitsPrintableArea(sized){
+  const safe=getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height);
+  const halfW=sized.widthMm/2,halfH=sized.heightMm/2;
+  const EPS=1e-6;
+  return sized.centerXmm-halfW>=safe.xMm-EPS&&sized.centerXmm+halfW<=safe.xMm+safe.widthMm+EPS&&
+    sized.centerYmm-halfH>=safe.yMm-EPS&&sized.centerYmm+halfH<=safe.yMm+safe.heightMm+EPS;
+}
 // S-110: Design Shapes' single, unified shape-creation function -- replaces the old separate
 // addCircle/addRect click handlers (RS-2000's own commitHistory()-then-push-then-select pattern,
 // preserved exactly) with one function for all 11 shapes. Circle keeps its historical cx/cy/r
 // defaults byte-for-byte; every other kind gets a default x/y/w/h box (SHAPE_DEFAULT_SIZES_MM,
 // centered on the same (105,45) point Circle/Rectangle's own pre-S-110 defaults already used) plus
-// its own configurable extra fields (defaultShapeExtraFields()). If exactly one other layer is
-// currently selected and it is an uncurved text layer, the new shape is auto-fit into it once (see
-// fitTextToShape()) -- "initial automatic fitting", never repeated on later manual edits.
+// its own configurable extra fields (defaultShapeExtraFields()).
+//
+// S-110A: when exactly one other selected layer is an uncurved, fittable-compatible text layer,
+// the new shape no longer always has the text fitted into it -- computeShapeAroundText() first
+// asks "can a shape sized to contain this text, centered on it, still fit the printable area?". If
+// yes, the shape is created at that size/position and the text is left completely untouched (font,
+// stone size, gap, fill style, color, curve, position -- literally none of it is written), which is
+// the "preserve the text whenever possible" requirement satisfied structurally, not by a special
+// case. Only when the required shape would spill outside the printable area does this fall back to
+// S-110's original behavior: a normal/default-size shape with the text fitted into it via
+// fitTextToShape(), so the legibility floor and every other S-110 guarantee still apply unchanged.
 async function createShapeLayer(kind){
   const l=selectedLayer();
   const other=singleOtherSelectedLayer();
   const fitPartnerText=(other&&other.type==='text'&&!other.curveEnabled&&FITTABLE_SHAPE_TYPES.has(kind))?other:null;
+  let shapeAroundText=null,shapeAroundTextRejected=false;
+  if(fitPartnerText){
+    const sized=computeShapeAroundText(kind,fitPartnerText);
+    if(sized&&shapeAroundTextFitsPrintableArea(sized))shapeAroundText=sized;
+    else if(sized)shapeAroundTextRejected=true;
+  }
   commitHistory();
   let layer;
   if(kind==='circle'){
-    layer={id:'circle'+Date.now(),type:'circle',visible:true,cx:105,cy:45,r:18,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};
+    layer=shapeAroundText
+      ?{id:'circle'+Date.now(),type:'circle',visible:true,cx:shapeAroundText.cxMm,cy:shapeAroundText.cyMm,r:shapeAroundText.radiusMm,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'}
+      :{id:'circle'+Date.now(),type:'circle',visible:true,cx:105,cy:45,r:DEFAULT_CIRCLE_RADIUS_MM,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};
   }else{
-    const{w,h}=SHAPE_DEFAULT_SIZES_MM[kind]||{w:60,h:60};
-    layer={id:kind+Date.now(),type:kind,visible:true,x:105-w/2,y:45-h/2,w,h,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold',...defaultShapeExtraFields(kind)};
+    const{w,h}=shapeAroundText?{w:shapeAroundText.widthMm,h:shapeAroundText.heightMm}:(SHAPE_DEFAULT_SIZES_MM[kind]||{w:60,h:60});
+    const x=shapeAroundText?shapeAroundText.xMm:105-w/2,y=shapeAroundText?shapeAroundText.yMm:45-h/2;
+    layer={id:kind+Date.now(),type:kind,visible:true,x,y,w,h,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold',...defaultShapeExtraFields(kind)};
   }
   project.layers.push(layer);
   selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);
   let statusText=`Added ${SHAPE_DISPLAY_LABELS[kind]||kind}`;
-  if(fitPartnerText){
+  if(shapeAroundText){
+    statusText+=` sized around "${layerLabel(fitPartnerText)}" (text unchanged)`;
+  }else if(fitPartnerText){
+    const fallbackNote=shapeAroundTextRejected?` (a shape sized around "${layerLabel(fitPartnerText)}" would not fit the printable area, so it was created at the default size instead)`:'';
     const plan=await fitTextToShape(fitPartnerText,layer);
-    if(plan.ok){applyTextFitPlan(fitPartnerText,plan);statusText+=` and fit "${layerLabel(fitPartnerText)}" inside it`}
-    else statusText+=` (could not auto-fit "${layerLabel(fitPartnerText)}": ${plan.message})`;
+    if(plan.ok){applyTextFitPlan(fitPartnerText,plan);statusText+=`${fallbackNote} and fit "${layerLabel(fitPartnerText)}" inside it`}
+    else statusText+=`${fallbackNote} (could not auto-fit "${layerLabel(fitPartnerText)}": ${plan.message})`;
   }
   syncSelectedControlsFromLayer();
   await updateAll(true);
