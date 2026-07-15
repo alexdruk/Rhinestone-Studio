@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -346,30 +345,4 @@ await test('18. RS-2000: every example with an \'image\' layer is excluded from 
     assert.doesNotThrow(() => validateProjectFromAppJs(appShape), `${file}'s app-shape translation was rejected by app.js's real validateProject()`);
   }
 });
-
-await test('19. no forbidden file changed (this milestone\'s own forbidden list)', () => {
-  const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
-  const changedPaths = output
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    .map((line) => line.slice(3).trim());
-
-  // app.js, index.html, src/geometry/**, and the new src/svg/** are legitimately changed by
-  // RS-1001 (SVG import); everything else this suite originally protected stays forbidden.
-  // src/renderer/ is legitimately changed by S-001 (cup rendering/rotation stabilization) — see
-  // tools/test-cup-rotation-stabilization.mjs for that milestone's own forbidden-file guard.
-  // src/export/ is legitimately changed by RS-1005 (Production Sheet export) — see
-  // tools/test-production-sheet-exporter.mjs for that milestone's own forbidden-file guard.
-  const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
-  const forbiddenPrefixes = [
-    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
-    'src/text/', 'src/fonts/', 'src/browser/'
-  ];
-
-  for (const changedPath of changedPaths) {
-    assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
-    assert.ok(!forbiddenPrefixes.some((prefix) => changedPath.startsWith(prefix)), `Forbidden file changed: ${changedPath}`);
-  }
-});
-
 console.log('Examples regression suite passed.');

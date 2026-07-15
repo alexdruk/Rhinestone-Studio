@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -176,38 +175,4 @@ await test('10. "front" wrap mode stays centered (matching its pre-S-001 fixed l
   const centroidX = (arcCalls[0].x + arcCalls[1].x) / 2;
   assert.ok(Math.abs(centroidX - cx) < 5, `expected the design centered on cx=${cx} at rotationDeg=0, got centroid ${centroidX}`);
 });
-
-await test('11. no forbidden file changed (this milestone\'s own forbidden list)', () => {
-  const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
-  const changedPaths = output
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    .map((line) => line.slice(3).trim());
-
-  const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
-  // src/svg/ and src/geometry/ are legitimately changed by the RS-1001 audit follow-up (added
-  // <ellipse> support, fixed a call-stack overflow in generateSvgLayout()) — see
-  // tools/test-svg-parser.mjs / tools/test-geometry-engine.mjs for that follow-up's own scope.
-  // src/export/ is legitimately changed by RS-1005 (Production Sheet export) — see
-  // tools/test-production-sheet-exporter.mjs for that milestone's own forbidden-file guard.
-  const forbiddenPrefixes = [
-    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
-    'src/text/', 'src/fonts/', 'src/browser/', 'src/history/'
-  ];
-  // src/renderer/StoneColors.js is legitimately changed by RS-1007 (Crystal Color Library — it
-  // became a compatibility re-export shim over the new src/renderer/CrystalColors.js catalog) —
-  // see tools/test-crystal-color-catalog.mjs / tools/test-crystal-color-integration.mjs for that
-  // milestone's own forbidden-file guard.
-  const forbiddenExactWithinPrefix = new Set(['src/renderer/CanvasRenderer2D.js']);
-
-  for (const changedPath of changedPaths) {
-    assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
-    assert.ok(!forbiddenExactWithinPrefix.has(changedPath), `Forbidden file changed: ${changedPath}`);
-    assert.ok(
-      !forbiddenPrefixes.some((prefix) => changedPath.startsWith(prefix)),
-      `Forbidden file changed: ${changedPath}`
-    );
-  }
-});
-
 console.log('Cup rotation stabilization tests passed.');

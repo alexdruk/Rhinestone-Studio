@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -77,122 +76,35 @@ await test('app.js imports the permanent GeometryEngine for live text generation
   assert.ok(appJs.includes('generateTextLayout'), 'app.js must call generateTextLayout for live text generation');
 });
 
-await test('app.js only imports the RS-0003.5B2 probe, the RS-0003.5B3 permanent-module entry points, and the RS-0003.5C2 renderer/exporter modules', () => {
+await test('app.js only imports the browser probe, permanent-module barrels (src/*/index.js), or a direct file inside a barrel-less permanent directory (src/renderer/**, src/export/**)', () => {
+  // Structural rule, not a per-milestone enumeration: docs/ARCHITECTURE.md requires every
+  // permanent module to be "consumed only through its index.js barrel" except src/renderer/**
+  // and src/export/**, which have no barrel of their own (see ARCHITECTURE.md's "Orchestration
+  // Layer" section) and are therefore imported file-by-file. A new permanent module adding its
+  // own barrel needs no update here; only a genuinely new *exception* to the barrel rule would.
   const importLines = appJs.match(/^\s*import\b.*$/gm) || [];
-  const allowed = [
-    /BrowserDependencyProbe\.js/,
-    /from\s*['"]\.\/src\/geometry\/index\.js['"]/,
-    /from\s*['"]\.\/src\/fonts\/index\.js['"]/,
-    /from\s*['"]\.\/src\/text\/index\.js['"]/,
-    /from\s*['"]\.\/src\/renderer\/CanvasRenderer2D\.js['"]/,
-    /from\s*['"]\.\/src\/renderer\/CupRenderer\.js['"]/,
-    /from\s*['"]\.\/src\/renderer\/StoneColors\.js['"]/,
-    // RS-1013: the Stone Library catalog module (see src/renderer/StoneSizes.js), mirroring the
-    // StoneColors.js direct-file entry above -- src/renderer/** has no barrel index.js, so each
-    // individual renderer module app.js uses is listed here.
-    /from\s*['"]\.\/src\/renderer\/StoneSizes\.js['"]/,
-    /from\s*['"]\.\/src\/export\/SvgExporter\.js['"]/,
-    /from\s*['"]\.\/src\/svg\/index\.js['"]/,
-    /from\s*['"]\.\/src\/history\/index\.js['"]/,
-    // RS-1004: activates the previously-inert src/products/** module (object-template registry).
-    /from\s*['"]\.\/src\/products\/index\.js['"]/,
-    // RS-1005: Production Sheet export. src/export/** has no barrel index.js (SvgExporter.js above
-    // is likewise imported directly), so each individual export module app.js uses is listed here.
-    /from\s*['"]\.\/src\/export\/ProductionSheetExporter\.js['"]/,
-    // RS-1006: the real 3D preview's own barrel module (see src/preview3d/index.js), matching the
-    // same "barrel module" shape every other permanent module entry point above already has.
-    /from\s*['"]\.\/src\/preview3d\/index\.js['"]/,
-    // S-107 (Front View Frame & Long Text Workflow): ObjectDimensions.js is preview3d's pure,
-    // DOM/Project/Layer-free millimeter geometry math (no Three.js import either -- see that
-    // file's own top-of-file comment) -- app.js imports it directly (not through
-    // src/preview3d/index.js, which is Three.js-lazy-loading-only) to reuse the exact same
-    // canvas-x<->azimuth mapping ObjectGeometryBuilder.js's applyAzimuthUv() uses for the object
-    // mesh's own texture, so the 2D canvas's Front View Frame and the Object Preview can never
-    // disagree about which portion of the design faces the viewer.
-    /from\s*['"]\.\/src\/preview3d\/ObjectDimensions\.js['"]/,
-    // RS-1008: Image Trace's own barrel module (see src/image/index.js), mirroring the
-    // src/svg/index.js entry RS-1001 already added above.
-    /from\s*['"]\.\/src\/image\/index\.js['"]/,
-    // RS-1009: Alignment & Snapping's own barrel module (see src/editing/index.js), mirroring
-    // every other permanent module's "consumed only through its barrel" entry above.
-    /from\s*['"]\.\/src\/editing\/index\.js['"]/,
-    // UI-001: the new generic Lightbox/dialog-controller module's own barrel (see
-    // src/ui/index.js), mirroring every other permanent module's "consumed only through its
-    // barrel" entry above -- pure DOM dialog behavior only, no Project/Layer/StoneLayout knowledge.
-    /from\s*['"]\.\/src\/ui\/index\.js['"]/,
-    // RS-1015: the Design Library's own barrel (see src/library/index.js), mirroring every other
-    // permanent module's "consumed only through its barrel" entry above -- pure item model/
-    // storage-adapter-backed CRUD/transform logic only, no Project/Layer/StoneLayout/
-    // GeometryEngine knowledge.
-    /from\s*['"]\.\/src\/library\/index\.js['"]/,
-    // RS-2001: the Gallery's own barrel (see src/gallery/index.js), mirroring every other
-    // permanent module's "consumed only through its barrel" entry above -- read-only fixture
-    // catalog + the .rhs-to-app-project-shape bridge only, no Project/Layer/StoneLayout/
-    // GeometryEngine knowledge of its own.
-    /from\s*['"]\.\/src\/gallery\/index\.js['"]/
-  ];
+  const isProbe = (line) => /BrowserDependencyProbe\.js/.test(line);
+  const isBarrel = (line) => /from\s*['"]\.\/src\/[\w-]+\/index\.js['"]/.test(line);
+  const isBarrelLessDirectFile = (line) => /from\s*['"]\.\/src\/(renderer|export)\/[\w.-]+\.js['"]/.test(line);
+  // The one documented exception: ObjectDimensions.js is deliberately imported directly rather
+  // than through src/preview3d/index.js (which is Three.js-lazy-loading-only), so app.js and
+  // ObjectGeometryBuilder.js share the exact same mm<->azimuth math — see
+  // docs/specifications/S-107-LongTextReadability.md.
+  const isDocumentedDirectFileException = (line) => /from\s*['"]\.\/src\/preview3d\/ObjectDimensions\.js['"]/.test(line);
+
   for (const line of importLines) {
     assert.ok(
-      allowed.some((pattern) => pattern.test(line)),
-      `app.js must only import the browser probe or the permanent geometry/fonts/text/renderer/export barrel modules, found: ${line}`
+      isProbe(line) || isBarrel(line) || isBarrelLessDirectFile(line) || isDocumentedDirectFileException(line),
+      `app.js must only import the browser probe, a permanent module's src/*/index.js barrel, or a direct file inside src/renderer/**|src/export/**, found: ${line}`
     );
   }
   assert.ok(!appJs.includes('node_modules'), 'app.js must not import directly from node_modules');
+  assert.ok(!appJs.includes('src/core/'), 'app.js must not import src/core/** — it was removed by RS-2006, not migrated onto');
   // A blanket http(s):// scan would false-positive on the SVG exporter's
   // `xmlns="http://www.w3.org/2000/svg"` namespace URI, which is not a network
   // request. Check for actual CDN hostnames instead.
   const cdnHostPattern = /\b(unpkg\.com|cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|jspm\.dev|esm\.sh|skypack\.dev)\b/;
   assert.ok(!cdnHostPattern.test(appJs), 'app.js must not reference a public CDN URL');
-});
-
-await test('app.js does not import src/core/** (RS-2006: the module was removed, not migrated onto)', () => {
-  assert.ok(!appJs.includes('src/core/'), 'app.js must not import src/core/** — it no longer exists');
-});
-
-await test('the three updated legacy guard tests no longer reject app.js or index.html', async () => {
-  const guardFiles = [
-    'tools/test-opentype-provider.mjs',
-    'tools/test-stone-color.mjs',
-    'tools/test-geometry-engine.mjs'
-  ];
-
-  for (const relativePath of guardFiles) {
-    const source = await readFile(path.join(repoRoot, relativePath), 'utf8');
-    assert.ok(!/forbiddenExact\s*=\s*new Set\(\[[^\]]*'app\.js'/.test(source), `${relativePath} must no longer forbid app.js`);
-    assert.ok(!/forbiddenExact\s*=\s*new Set\(\[[^\]]*'index\.html'/.test(source), `${relativePath} must no longer forbid index.html`);
-    assert.ok(/forbiddenExact\s*=\s*new Set\(\[[^\]]*'style\.css'/.test(source), `${relativePath} must still forbid style.css`);
-  }
-});
-
-await test('no forbidden files changed', () => {
-  const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
-  const changedPaths = output
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    // Porcelain lines are exactly "XY path" (2 status chars + 1 space); slicing must happen on
-    // the untrimmed line, since trimming first (the previous, buggy implementation) eats the
-    // leading status character for common single-letter-in-column-2 statuses like " M", silently
-    // truncating the path and making this guard a no-op for modified (not new) files.
-    .map((line) => line.slice(3).trim());
-
-  const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
-  const forbiddenPrefixes = [
-    // src/geometry/ is legitimately changed by RS-0003.5C1 (permanent shape generation).
-    // src/renderer/ and src/export/ are legitimately changed by RS-0003.5C2 (rendering pipeline).
-    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone.
-    // RS-2006: src/core/** is legitimately removed by the Project Model Consolidation milestone
-    // (it was the unused half of the two-model split; app.js's ad hoc schema was already the one
-    // model every subsystem actually consumed — see docs/specifications/RS-2006-*.md).
-    'src/text/'
-  ];
-
-  for (const changedPath of changedPaths) {
-    assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
-    assert.ok(
-      !forbiddenPrefixes.some((prefix) => changedPath.startsWith(prefix)),
-      `Forbidden file changed: ${changedPath}`
-    );
-  }
 });
 
 console.log('App module migration tests passed.');

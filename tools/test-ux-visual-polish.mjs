@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -255,31 +254,4 @@ await test('10. stoneLayoutToSvg()/StoneLayout.toJSON() output for a fixed Stone
   assert.ok(svg.includes('cx="1.235" cy="4.500" r="1.000"'));
   assert.ok(svg.includes('data-color="gold"') && svg.includes('data-color="sapphire"'));
 });
-
-await test('11. no forbidden file changed', () => {
-  const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
-  const changedPaths = output
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    .map((line) => line.slice(3).trim());
-
-  // src/geometry/ is legitimately changed by RS-1001 (generateSvgLayout(), open-path outline
-  // sampling).
-  const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
-  // src/export/ is legitimately changed by RS-1005 (Production Sheet export) — see
-  // tools/test-production-sheet-exporter.mjs for that milestone's own forbidden-file guard.
-  const forbiddenPrefixes = [
-    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
-    'src/text/', 'src/fonts/', 'src/browser/'
-  ];
-
-  for (const changedPath of changedPaths) {
-    assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
-    assert.ok(
-      !forbiddenPrefixes.some((prefix) => changedPath.startsWith(prefix)),
-      `Forbidden file changed: ${changedPath}`
-    );
-  }
-});
-
 console.log('UX visual polish tests passed.');

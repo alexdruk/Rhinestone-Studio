@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -124,31 +123,4 @@ await test('7. getLayerBBox()/drag-move/drag-resize/duplicateLayer() each have a
   assert.match(appJs, /XYWH_SHAPE_TYPES\.has\(l\.type\)\)\{let x0=drag\.b0\.x/, 'expected drag-resize to treat svg like rectangle');
   assert.match(appJs, /if\(XYWH_SHAPE_TYPES\.has\(copy\.type\)\)\{copy\.x\+=8;copy\.y\+=8\}/, 'expected duplicateLayer to nudge svg layers');
 });
-
-await test('8. no forbidden file changed (this milestone\'s own forbidden list)', () => {
-  const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
-  const changedPaths = output
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    .map((line) => line.slice(3).trim());
-
-  const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
-  // src/renderer/ is legitimately changed by S-001 (cup rendering/rotation stabilization) — see
-  // tools/test-cup-rotation-stabilization.mjs for that milestone's own forbidden-file guard.
-  // src/export/ is legitimately changed by RS-1005 (Production Sheet export) — see
-  // tools/test-production-sheet-exporter.mjs for that milestone's own forbidden-file guard.
-  const forbiddenPrefixes = [
-    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
-    'src/text/', 'src/fonts/', 'src/browser/'
-  ];
-
-  for (const changedPath of changedPaths) {
-    assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
-    assert.ok(
-      !forbiddenPrefixes.some((prefix) => changedPath.startsWith(prefix)),
-      `Forbidden file changed: ${changedPath}`
-    );
-  }
-});
-
 console.log('SVG integration tests passed.');

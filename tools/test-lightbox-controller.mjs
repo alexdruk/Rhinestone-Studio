@@ -12,6 +12,9 @@ import { fileURLToPath } from 'node:url';
 // interactive Escape/focus/Cancel/Apply behavior is verified with a real browser and recorded in
 // TASK_RESULT.md, per this repository's existing "interactive browser verification is manual, not
 // an automated browser test suite" testing philosophy (docs/ARCHITECTURE.md, "Testing Philosophy").
+// Renamed by S-111 from test-ui001-dialog-behavior.mjs: this file tests the permanent
+// src/ui/Lightbox.js module's own contract, not milestone-specific page furniture, so it is named
+// for what it protects rather than the milestone that introduced it.
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const lightboxSource = await readFile(path.join(repoRoot, 'src/ui/Lightbox.js'), 'utf8');
@@ -127,4 +130,4 @@ await test('12. validation messages have a dedicated, visible element per Lightb
   }
 });
 
-console.log('UI-001 dialog behavior tests passed.');
+console.log('Lightbox controller tests passed.');

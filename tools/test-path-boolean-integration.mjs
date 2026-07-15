@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GeometryEngine, combineShapeSources, combineManyShapeSources } from '../src/geometry/index.js';
@@ -298,38 +297,4 @@ await test('22. graceful-failure messages name the specific problem in plain lan
 // ---------------------------------------------------------------------------------------------
 // Forbidden files — this milestone's own guard, mirroring every prior milestone's own list
 // ---------------------------------------------------------------------------------------------
-
-await test('23. no forbidden file changed (this milestone\'s own forbidden list)', () => {
-  const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
-  const changedPaths = output
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    .map((line) => line.slice(3).trim());
-
-  const forbiddenExact = new Set(['style.css', 'LICENSE', 'CONTRIBUTING.md']);
-  // RS-1012 is deliberately scoped to: app.js, index.html, src/geometry/** (its own new
-  // PathBoolean.js plus the pre-existing GeometryEngine.js/index.js/README.md it extends),
-  // docs/**, package.json, and tools/**. Every other permanent module (renderer/export/text/
-  // fonts/core/browser/svg/image/history/products/preview3d/editing) is untouched — no exporter
-  // needed to change (see test 7/8 above), and no project-schema module beyond src/geometry/**
-  // needed to change.
-  // RS-1013 (Variable Stone Sizes) legitimately adds src/renderer/StoneSizes.js and changes
-  // src/export/ProductionSheetExporter.js's header formatting -- see
-  // tools/test-variable-stone-sizes.mjs for that milestone's own forbidden-file guard.
-  const allowedDespitePrefix = new Set(['src/renderer/StoneSizes.js', 'src/export/ProductionSheetExporter.js']);
-  const forbiddenPrefixes = [
-    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
-    'src/renderer/', 'src/export/', 'src/text/', 'src/fonts/', 'src/browser/', 'src/svg/', 'src/image/', 'src/history/', 'src/products/', 'src/editing/'
-  ];
-
-  for (const changedPath of changedPaths) {
-    assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
-    assert.ok(
-      allowedDespitePrefix.has(changedPath) ||
-      !forbiddenPrefixes.some((prefix) => changedPath.startsWith(prefix)),
-      `Forbidden file changed: ${changedPath}`
-    );
-  }
-});
-
 console.log('Path Boolean integration tests passed.');

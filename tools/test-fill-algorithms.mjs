@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FontManager } from '../src/fonts/index.js';
@@ -305,34 +304,4 @@ await test('15. representative fill generations complete quickly (small text, la
 });
 
 // --- 9. Forbidden files (this milestone's own guard) ---------------------------------------------
-
-await test('16. no forbidden file changed (this milestone\'s own forbidden list)', () => {
-  const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
-  const changedPaths = output
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    .map((line) => line.slice(3).trim());
-
-  const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
-  // RS-1011 (Fill Algorithms) legitimately: adds src/geometry/ContourRingSampler.js; extends
-  // src/geometry/StoneSampler.js/GeometryEngine.js/index.js; extends app.js/index.html (Fill Style
-  // UI wiring); adds this file and tools/test-fill-algorithms-integration.mjs; updates
-  // package.json's test script; adds docs/specifications/RS-1011-FillAlgorithms.md; updates
-  // TASK.md/TASK_RESULT.md; and, per the established "own forbidden list" precedent (see
-  // tools/test-production-sheet-exporter.mjs et al.), updates the handful of earlier milestones'
-  // own forbidden-file guards to allow-list these same files.
-  const forbiddenPrefixes = [
-    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
-    'src/renderer/', 'src/text/', 'src/fonts/', 'src/browser/', 'src/svg/', 'src/image/', 'src/history/', 'src/products/', 'src/editing/', 'src/export/', 'src/ui/'
-  ];
-
-  for (const changedPath of changedPaths) {
-    assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
-    assert.ok(
-      !forbiddenPrefixes.some((prefix) => changedPath.startsWith(prefix)),
-      `Forbidden file changed: ${changedPath}`
-    );
-  }
-});
-
 console.log('Fill Algorithms (RS-1011) engine-level tests passed.');

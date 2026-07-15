@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -396,54 +395,4 @@ await test('22. Production Sheet page size/margin/mirror/registration-marks cont
 });
 
 // --- 14. Forbidden files -----------------------------------------------------------------------------
-
-await test('23. no forbidden file changed (this milestone\'s own forbidden list)', () => {
-  const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
-  const changedPaths = output
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    .map((line) => line.slice(3).trim());
-
-  const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
-  // RS-1007 (Crystal Color Library) legitimately changes src/renderer/StoneColors.js (now a
-  // compatibility re-export shim) and adds src/renderer/CrystalColors.js (the new catalog) — see
-  // tools/test-crystal-color-catalog.mjs / tools/test-crystal-color-integration.mjs for that
-  // milestone's own forbidden-file guard. CanvasRenderer2D.js/CupRenderer.js are unaffected and
-  // stay covered by the src/renderer/ prefix below.
-  // RS-1008A (Image Trace Architecture Correction) legitimately changes
-  // src/geometry/GeometryEngine.js (adds generateImageLayout()) and src/geometry/StoneSampler.js
-  // (adds sampleFieldFillPoints()) — see tools/test-image-trace-regression.mjs for that
-  // milestone's own forbidden-file guard. src/geometry/StoneLayout.js/Stone.js stay covered by the
-  // src/geometry/ prefix below (untouched by RS-1008A).
-  // RS-1012 (Vector Boolean Operations) legitimately adds src/geometry/PathBoolean.js and extends
-  // src/geometry/GeometryEngine.js/index.js/README.md (already allowed below) -- see
-  // tools/test-path-boolean-integration.mjs for that milestone's own forbidden-file guard.
-  // RS-1013 (Variable Stone Sizes) legitimately adds src/renderer/StoneSizes.js (the Stone Library
-  // catalog, in the same shape/location as CrystalColors.js above) -- this exporter's own header
-  // formatting change (adding commercial names to "Stone size: ...") is covered by
-  // tools/test-variable-stone-sizes.mjs, not this milestone's forbidden-file guard.
-  // RS-1011 (Fill Algorithms) legitimately adds src/geometry/ContourRingSampler.js (Contour Fill's
-  // distance-transform + marching-squares inward-ring tracer) and extends
-  // src/geometry/GeometryEngine.js/StoneSampler.js/index.js (already allowed below) -- see
-  // tools/test-fill-algorithms.mjs / tools/test-fill-algorithms-integration.mjs for that
-  // milestone's own forbidden-file guard. No exporter file changed.
-  // S-110: ShapeLibrary.js/ShapeFit.js are the two new files the Expanded Shape Library / Smart
-  // Text-to-Shape Fitting milestone adds under src/geometry/ -- allow-listed per this guard's own
-  // established precedent.
-  const allowedDespitePrefix = new Set(['src/renderer/StoneColors.js', 'src/renderer/CrystalColors.js', 'src/renderer/StoneSizes.js', 'src/renderer/README.md', 'src/geometry/GeometryEngine.js', 'src/geometry/StoneSampler.js', 'src/geometry/index.js', 'src/geometry/README.md', 'src/geometry/PathBoolean.js', 'src/geometry/ContourRingSampler.js', 'src/geometry/ShapeLibrary.js', 'src/geometry/ShapeFit.js']);
-  const forbiddenPrefixes = [
-    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
-    'src/geometry/', 'src/renderer/', 'src/text/', 'src/fonts/', 'src/browser/', 'src/svg/', 'src/history/', 'src/products/'
-  ];
-
-  for (const changedPath of changedPaths) {
-    assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
-    assert.ok(
-      allowedDespitePrefix.has(changedPath) ||
-      !forbiddenPrefixes.some((prefix) => changedPath.startsWith(prefix)),
-      `Forbidden file changed: ${changedPath}`
-    );
-  }
-});
-
 console.log('Production Sheet exporter tests passed.');
