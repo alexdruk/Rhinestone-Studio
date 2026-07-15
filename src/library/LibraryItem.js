@@ -12,10 +12,23 @@
 
 const KINDS = new Set(['project', 'selection']);
 
+// S-110: the nine new Design Shapes kinds (Ellipse/Capsule/Regular Polygon/Star/Heart/Arrow/Cross/
+// Crescent/Ring) all categorize as 'Shapes', exactly like Circle/Rectangle already do -- they are
+// hardcoded here (not imported from src/geometry/ShapeLibrary.js) to preserve this module's own
+// "no dependency on src/geometry" architecture (see the top-of-file doc comment).
 const CATEGORY_BY_LAYER_TYPE = {
   text: 'Text',
   circle: 'Shapes',
   rectangle: 'Shapes',
+  ellipse: 'Shapes',
+  capsule: 'Shapes',
+  polygon: 'Shapes',
+  star: 'Shapes',
+  heart: 'Shapes',
+  arrow: 'Shapes',
+  cross: 'Shapes',
+  crescent: 'Shapes',
+  ring: 'Shapes',
   svg: 'SVG',
   image: 'Image Trace',
   path: 'Boolean / Path'

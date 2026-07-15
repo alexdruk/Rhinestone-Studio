@@ -38,7 +38,10 @@ await test('2. app.js imports FontManager from src/fonts/index.js', () => {
 });
 
 await test('3. app.js imports createDefaultFontProviderRegistry from src/text/index.js', () => {
-  assert.match(appJs, /import\s*\{\s*createDefaultFontProviderRegistry\s*\}\s*from\s*['"]\.\/src\/text\/index\.js['"]/);
+  // S-110 legitimately adds a second named import (BoundingBox, used by fitTextToShape()'s Ring
+  // special-case) to this same import line -- matched loosely (any named-import list containing
+  // createDefaultFontProviderRegistry) rather than requiring it to be the only one.
+  assert.match(appJs, /import\s*\{[^}]*\bcreateDefaultFontProviderRegistry\b[^}]*\}\s*from\s*['"]\.\/src\/text\/index\.js['"]/);
 });
 
 await test('4. app.js builds a FontManager from the bundled font manifest', () => {
@@ -77,9 +80,13 @@ await test('9. the legacy bitmap text path is no longer called for text layers',
 });
 
 await test('10. shape generation now uses the permanent engine (RS-0003.5C1)', () => {
+  // S-110 generalized the inline `l.type==='circle'||l.type==='rectangle'` check into a shared
+  // SHAPE_LAYER_TYPES set (so the same dispatch line also covers the nine new S-110 shape kinds) --
+  // the underlying behavior this test protects (circle/rectangle route through
+  // generateShapeStonesLive) is unchanged, just expressed via that set instead of an inline `||`.
   assert.match(
     appJs,
-    /l\.type==='circle'\|\|l\.type==='rectangle'\)raw\.push\(\.\.\.await this\.generateShapeStonesLive\(l\)\)/,
+    /SHAPE_LAYER_TYPES\.has\(l\.type\)\)raw\.push\(\.\.\.await this\.generateShapeStonesLive\(l\)\)/,
     'expected generate() to route circle/rectangle layers through a live shape-generation method'
   );
   assert.match(

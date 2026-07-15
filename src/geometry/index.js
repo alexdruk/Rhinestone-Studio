@@ -52,3 +52,15 @@ export {
   BOOLEAN_OPERATIONS,
   BooleanPrecisionError
 } from './PathBoolean.js';
+
+export {
+  SHAPE_LIBRARY_KINDS,
+  createShapeNaturalContours
+} from './ShapeLibrary.js';
+
+export {
+  FITTABLE_SHAPE_TYPES,
+  computeInscribedRect,
+  computeShapeFitScale,
+  computeContainingShapeScale
+} from './ShapeFit.js';

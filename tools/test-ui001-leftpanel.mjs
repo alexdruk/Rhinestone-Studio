@@ -47,10 +47,16 @@ await test('1. Project section: name, rename input, units, template summary', ()
   assert.ok(body.includes('id="projectTemplateSummary"'), 'expected a current object-template summary');
 });
 
-await test('2. Layers section: list, add shortcuts, delete, no per-layer-type detail forms', () => {
+await test('2. Layers section: list, delete, no per-layer-type detail forms, no duplicate shape-creation controls', () => {
   const body = section(leftPanel, 'Layers');
-  for (const id of ['layersList', 'addCircle', 'addRect', 'deleteSelected', 'layerRuleHint']) {
+  for (const id of ['layersList', 'deleteSelected', 'layerRuleHint']) {
     assert.ok(body.includes(`id="${id}"`), `expected #${id} in the Layers section`);
+  }
+  // S-110: #addCircle/#addRect (a duplicate shape-creation control, alongside the Shapes -> Design
+  // Shapes Lightbox's own real one) were removed from the Layers section entirely -- Design Shapes
+  // is now the one place to create a shape. See tools/test-s110-design-shapes-consolidation.mjs.
+  for (const id of ['addCircle', 'addRect']) {
+    assert.ok(!body.includes(`id="${id}"`), `expected #${id} (a removed duplicate creation control) NOT in the Layers section`);
   }
   for (const id of ['textControls', 'shapeControls', 'svgControls', 'imageControls']) {
     assert.ok(!body.includes(`id="${id}"`), `expected #${id} (a per-layer-type form) NOT in the Layers section`);
@@ -112,8 +118,10 @@ await test('8. More Options opens the Lightbox matching the selected layer\'s ty
   assert.ok(fnMatch, 'expected a lightboxForLayerType(t) function in app.js');
   assert.match(fnMatch[0], /if\(t==='text'\)return lightboxes\.text/);
   // RS-1012 extended this branch to also open Shapes for 'path' layers (Boolean Operation results,
-  // edited the same way circle/rectangle are) -- see tools/test-path-boolean-integration.mjs.
-  assert.match(fnMatch[0], /if\(t==='circle'\|\|t==='rectangle'\|\|t==='path'\)return lightboxes\.shapes/);
+  // edited the same way circle/rectangle are) -- see tools/test-path-boolean-integration.mjs. S-110
+  // further generalized circle/rectangle into the shared SHAPE_LAYER_TYPES set (also covering nine
+  // new shape kinds) -- see tools/test-s110-design-shapes-consolidation.mjs.
+  assert.match(fnMatch[0], /if\(t==='path'\|\|SHAPE_LAYER_TYPES\.has\(t\)\)return lightboxes\.shapes/);
   assert.match(fnMatch[0], /if\(t==='svg'\)return lightboxes\.importBox/, 'expected More Options to open the Import Lightbox for svg layers');
   assert.match(fnMatch[0], /if\(t==='image'\)return lightboxes\.imagetrace/);
 });

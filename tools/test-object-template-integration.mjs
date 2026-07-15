@@ -52,8 +52,13 @@ async function extractProjectFunctions() {
   // defaultProject()/validateProject() transitively depend on.
   const constantsStart = appJs.indexOf("const DEFAULT_TEXT_FONT_ID=");
   const source = `${appJs.slice(constantsStart, appJs.indexOf(defaultMatch[0]) + defaultMatch[0].length)}\n${appJs.slice(appJs.indexOf('const SUPPORTED_LAYER_TYPES=new Set'), appJs.indexOf(validateMatch[0]) + validateMatch[0].length)}`;
+  // S-110: this slice now includes app.js's own XYWH_SHAPE_TYPES/SHAPE_LAYER_TYPES/etc.
+  // declarations (they sit between DEFAULT_TEXT_FONT_ID and defaultProject()), which spread the
+  // imported SHAPE_LIBRARY_KINDS -- injected as a function parameter for the same reason
+  // getObjectTemplate is.
+  const { SHAPE_LIBRARY_KINDS } = await import('../src/geometry/index.js');
   // eslint-disable-next-line no-new-func
-  return new Function('getObjectTemplate', `${source}\nreturn { validateProject, defaultProject };`)(getObjectTemplate);
+  return new Function('getObjectTemplate', 'SHAPE_LIBRARY_KINDS', `${source}\nreturn { validateProject, defaultProject };`)(getObjectTemplate, SHAPE_LIBRARY_KINDS);
 }
 
 const { validateProject, defaultProject } = await extractProjectFunctions();

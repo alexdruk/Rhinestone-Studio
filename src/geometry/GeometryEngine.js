@@ -28,6 +28,15 @@ import { StoneLayout } from './StoneLayout.js';
 import { parseSvgDocument } from '../svg/index.js';
 import { prepareImageField } from '../image/index.js';
 import { CURVE_ALIGNMENTS, CURVE_DIRECTIONS, projectPolygonToArc } from './ArcProjection.js';
+// S-110: Expanded Shape Library. createShapeNaturalContours() (src/geometry/ShapeLibrary.js) is the
+// only place that knows the *math* for Ellipse/Capsule/Regular Polygon/Star/Heart/Arrow/Cross/
+// Crescent/Ring -- it returns plain natural, (0,0)-rooted contours, never stones. This module is
+// the only caller that turns those contours into stones, via the exact same "place natural
+// contours into an xMm/yMm/widthMm/heightMm box" mechanism generatePathLayout()/_pathPolygons()
+// already uses for Boolean Operation results (see _placeNaturalContours() below) -- so the new
+// shapes are not a second shape system, just nine more natural-contour sources feeding the one
+// existing placement + sampling pipeline circle/rectangle/path already share.
+import { SHAPE_LIBRARY_KINDS, createShapeNaturalContours } from './ShapeLibrary.js';
 
 // RS-1011: 'fill' is unchanged in meaning/output from before this milestone (a regular grid --
 // "Grid Fill" is only a clearer UI label for the same stored value); staggered/radial/contour are
@@ -37,7 +46,10 @@ const SAMPLE_MODES = new Set(['outline', 'fill', 'staggered', 'radial', 'contour
 // normalizeImageParams() below and generateImageLayout()'s doc comment.
 const IMAGE_SAMPLE_MODES = new Set(['fill', 'staggered', 'radial', 'contour']);
 const DEFAULT_MODE = 'outline';
-const SHAPE_TYPES = new Set(['circle', 'rectangle']);
+// S-110: SHAPE_LIBRARY_KINDS (Ellipse/Capsule/Regular Polygon/Star/Heart/Arrow/Cross/Crescent/Ring)
+// join Circle/Rectangle here -- every one of them is a generateShapeLayout()/resolveShapePolygons()
+// shape, not a new engine method.
+const SHAPE_TYPES = new Set(['circle', 'rectangle', ...SHAPE_LIBRARY_KINDS]);
 
 export class GeometryEngine {
   /**
@@ -239,11 +251,55 @@ export class GeometryEngine {
   }
 
   _shapePolygons(options) {
-    const path = options.shape === 'circle'
-      ? createCircleVectorPath({ cxMm: options.cxMm, cyMm: options.cyMm, radiusMm: options.radiusMm, id: options.layerId })
-      : createRectangleVectorPath({ xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm, id: options.layerId });
+    if (options.shape === 'circle' || options.shape === 'rectangle') {
+      const path = options.shape === 'circle'
+        ? createCircleVectorPath({ cxMm: options.cxMm, cyMm: options.cyMm, radiusMm: options.radiusMm, id: options.layerId })
+        : createRectangleVectorPath({ xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm, id: options.layerId });
 
-    const polygons = path.contours.map((contour) => flattenContourToPolygon(contour));
+      const polygons = path.contours.map((contour) => flattenContourToPolygon(contour));
+      return { polygons, boundingBox: BoundingBox.fromPoints(polygons.flat()) };
+    }
+
+    // S-110: every other shape kind (Ellipse/Capsule/Regular Polygon/Star/Heart/Arrow/Cross/
+    // Crescent/Ring) is a natural, (0,0)-rooted contour set from ShapeLibrary.js, placed into this
+    // layer's x/y/w/h box via the exact same mechanism _pathPolygons() uses for Boolean Operation
+    // results -- see _placeNaturalContours() below.
+    const naturalContours = createShapeNaturalContours(options.shape, options);
+    return this._placeNaturalContours(naturalContours, options.xMm, options.yMm, options.widthMm, options.heightMm);
+  }
+
+  /**
+   * Scales a set of natural, (0,0)-rooted contours independently in X and Y so their own bounding
+   * box lands exactly on the given widthMm/heightMm (defaulting to the natural box's own size when
+   * omitted), then translates the result so that box's top-left corner sits at (xMm, yMm). This is
+   * the one placement primitive every "place a natural-size shape into a box" layer kind shares --
+   * originally generatePathLayout()'s (Boolean Operation results), now reused by _shapePolygons()
+   * for every S-110 shape kind too, so this math is written exactly once.
+   *
+   * @param {{xMm:number,yMm:number}[][]} contours
+   * @param {number} xMm
+   * @param {number} yMm
+   * @param {number|null} widthMm
+   * @param {number|null} heightMm
+   * @returns {{polygons: import('../text/VectorPath.js').Point2D[][], boundingBox: BoundingBox|null}}
+   */
+  _placeNaturalContours(contours, xMm, yMm, widthMm, heightMm) {
+    const naturalPoints = contours.flat();
+    const naturalBox = BoundingBox.fromPoints(naturalPoints.map((p) => new Point2D(p.xMm, p.yMm)));
+    if (!naturalBox) {
+      return { polygons: [], boundingBox: null };
+    }
+
+    const targetWidthMm = widthMm ?? naturalBox.widthMm;
+    const targetHeightMm = heightMm ?? naturalBox.heightMm;
+    const scaleX = naturalBox.widthMm > 0 ? targetWidthMm / naturalBox.widthMm : 1;
+    const scaleY = naturalBox.heightMm > 0 ? targetHeightMm / naturalBox.heightMm : 1;
+
+    const polygons = contours.map((contour) => contour.map((p) => new Point2D(
+      xMm + p.xMm * scaleX,
+      yMm + p.yMm * scaleY
+    )));
+
     return { polygons, boundingBox: BoundingBox.fromPoints(polygons.flat()) };
   }
 
@@ -478,23 +534,10 @@ export class GeometryEngine {
   }
 
   _pathPolygons(options) {
-    const naturalPoints = options.contours.flat();
-    const naturalBox = BoundingBox.fromPoints(naturalPoints.map((point) => new Point2D(point.xMm, point.yMm)));
-    if (!naturalBox) {
-      return { polygons: [], boundingBox: null };
-    }
-
-    const targetWidthMm = options.widthMm ?? naturalBox.widthMm;
-    const targetHeightMm = options.heightMm ?? naturalBox.heightMm;
-    const scaleX = naturalBox.widthMm > 0 ? targetWidthMm / naturalBox.widthMm : 1;
-    const scaleY = naturalBox.heightMm > 0 ? targetHeightMm / naturalBox.heightMm : 1;
-
-    const polygons = options.contours.map((contour) => contour.map((point) => new Point2D(
-      options.xMm + point.xMm * scaleX,
-      options.yMm + point.yMm * scaleY
-    )));
-
-    return { polygons, boundingBox: BoundingBox.fromPoints(polygons.flat()) };
+    // S-110: delegates to the shared _placeNaturalContours() helper -- see its doc comment. Behavior
+    // is unchanged; this is a pure extraction so Boolean Operation results and every S-110 shape
+    // kind share one placement implementation instead of two copies of the same math.
+    return this._placeNaturalContours(options.contours, options.xMm, options.yMm, options.widthMm, options.heightMm);
   }
 }
 
@@ -622,13 +665,48 @@ function normalizeShapeParams(params) {
     };
   }
 
-  return {
+  // S-110: Rectangle and every ShapeLibrary kind (Ellipse/Capsule/Regular Polygon/Star/Heart/Arrow/
+  // Cross/Crescent/Ring) all place a natural shape into one x/y/w/h box -- the exact same fields
+  // Rectangle already required, extended here with each configurable shape's own extra parameters.
+  const placed = {
     ...base,
     xMm: assertFiniteNumber(params.xMm, 'xMm'),
     yMm: assertFiniteNumber(params.yMm, 'yMm'),
     widthMm: assertPositiveNumber(params.widthMm, 'widthMm'),
     heightMm: assertPositiveNumber(params.heightMm, 'heightMm')
   };
+
+  if (params.shape === 'polygon') {
+    return { ...placed, sides: assertIntegerInRange(params.sides, 'sides', 3, 12) };
+  }
+  if (params.shape === 'star') {
+    return {
+      ...placed,
+      points: assertIntegerInRange(params.points, 'points', 3, 12),
+      innerRadiusRatio: assertNumberInRange(params.innerRadiusRatio, 'innerRadiusRatio', 0.1, 0.9)
+    };
+  }
+  if (params.shape === 'ring') {
+    return { ...placed, innerRatio: assertNumberInRange(params.innerRatio, 'innerRatio', 0.1, 0.9) };
+  }
+
+  return placed;
+}
+
+function assertIntegerInRange(value, name, min, max) {
+  assertFiniteNumber(value, name);
+  if (!Number.isInteger(value) || value < min || value > max) {
+    throw new RangeError(`${name} must be an integer from ${min} to ${max}.`);
+  }
+  return value;
+}
+
+function assertNumberInRange(value, name, min, max) {
+  assertFiniteNumber(value, name);
+  if (value < min || value > max) {
+    throw new RangeError(`${name} must be a number from ${min} to ${max}.`);
+  }
+  return value;
 }
 
 function normalizeSvgParams(params) {

@@ -85,9 +85,9 @@
 // pipeline stages re-run on every threshold/invert/blur/resize edit, but the (comparatively
 // expensive) browser image decode only ever runs once per distinct imageSrc value.
 import './src/browser/BrowserDependencyProbe.js';
-import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources } from './src/geometry/index.js';
+import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
-import { createDefaultFontProviderRegistry } from './src/text/index.js';
+import { createDefaultFontProviderRegistry, BoundingBox } from './src/text/index.js';
 import { renderProductionLayout } from './src/renderer/CanvasRenderer2D.js';
 import { createPreview3D } from './src/preview3d/index.js';
 import { circumferenceMm, frontViewFrameWidthMm, canvasXMmForRotationDeg, rotationDegForCanvasXMm, azimuthRadForCanvasXMm, wrapAngleRad } from './src/preview3d/ObjectDimensions.js';
@@ -333,6 +333,69 @@ const TEXT_MODE_TO_ENGINE_MODE={stroke:'outline',fill:'fill',staggered:'staggere
 function resolveTextFillMode(textMode){return TEXT_MODE_TO_ENGINE_MODE[textMode]||'outline'}
 function resolveVectorFillMode(value){return VECTOR_FILL_MODES.has(value)?value:'outline'}
 function resolveImageFillMode(value){return IMAGE_FILL_MODES.has(value)?value:'fill'}
+// S-110 (Expanded Shape Library): every shape kind that resolves through GeometryEngine's
+// generateShapeLayout()/resolveShapePolygons() -- Circle/Rectangle plus the nine new
+// ShapeLibrary.js kinds (Ellipse/Capsule/Regular Polygon/Star/Heart/Arrow/Cross/Crescent/Ring).
+// Replaces the old `l.type==='circle'||l.type==='rectangle'` checks in generate()/
+// resolveLayerShapeSource() below with one shared set, so a new shape kind never needs a second
+// call site touched beyond this list.
+const SHAPE_LAYER_TYPES=new Set(['circle','rectangle',...SHAPE_LIBRARY_KINDS]);
+// Every layer type that places a *natural-size* shape into an x/y/w/h box (as opposed to Circle's
+// cx/cy/r or Text's auto-centered-then-offset position) -- Rectangle/SVG/Image/Path plus every new
+// S-110 shape kind. Replaces the repeated `l.type==='rectangle'||l.type==='svg'||...` unions in
+// getLayerBBox()/the drag-resize handler/duplicateLayer() below with one shared set.
+const XYWH_SHAPE_TYPES=new Set(['rectangle','svg','image','path',...SHAPE_LIBRARY_KINDS]);
+// Every layer type with a Fill Style control backed by VECTOR_FILL_MODES above (SVG/Image have
+// their own separate, dedicated Fill Style controls -- #svgMode/#imageFillMode -- so they are
+// deliberately not in this set). Replaces the old `l.type==='circle'||l.type==='rectangle'||
+// l.type==='path'` check (isShapeFillType, below) with one shared set that also covers the nine new
+// shape kinds.
+const VECTOR_FILL_MODE_TYPES=new Set(['circle','rectangle','path',...SHAPE_LIBRARY_KINDS]);
+const SHAPE_DISPLAY_LABELS={
+  circle:'Circle',rectangle:'Rectangle',ellipse:'Ellipse',capsule:'Capsule',polygon:'Regular Polygon',
+  star:'Star',heart:'Heart',arrow:'Arrow',cross:'Cross',crescent:'Crescent',ring:'Ring'
+};
+// Default creation size (mm) for each non-circle shape kind, centered on the same (105,45) point
+// the original circle/rectangle defaults already used (a 210x90mm default canvas's own center).
+// Rectangle's own w/h here (80x30) is unchanged from its pre-S-110 default. Most kinds default to a
+// square box so a Regular Polygon/Star/Ring/Cross reads as its canonical, undistorted shape at
+// creation (distortion via resize is opt-in, not the default look) -- Capsule and Arrow are
+// deliberately non-square since a stretched-to-square pill/arrow would no longer read as one.
+const SHAPE_DEFAULT_SIZES_MM={
+  rectangle:{w:80,h:30},ellipse:{w:70,h:45},capsule:{w:80,h:40},polygon:{w:60,h:60},star:{w:60,h:60},
+  heart:{w:55,h:50},arrow:{w:70,h:42},cross:{w:55,h:55},crescent:{w:50,h:62},ring:{w:60,h:60}
+};
+// Each configurable shape kind's own extra creation-time fields (Regular Polygon's side count,
+// Star's point count + inner radius, Ring's inner opening) -- everything else needs none.
+function defaultShapeExtraFields(kind){
+  if(kind==='polygon')return{sides:6};
+  if(kind==='star')return{points:5,innerRadiusRatio:0.5};
+  if(kind==='ring')return{innerRatio:0.5};
+  return{};
+}
+// Reads a shape layer's own configurable extra fields back out (the inverse of
+// defaultShapeExtraFields() above) into the shape of GeometryEngine.generateShapeLayout()'s extra
+// params -- shared by generateShapeStonesLive() (live stone generation) and
+// shapeLayerResolveParams() (Boolean Operations / Fit Text to Shape's polygon resolution) below, so
+// a shape's configurable parameters are read out in exactly one place.
+function shapeExtraParams(layer){
+  if(layer.type==='polygon')return{sides:layer.sides};
+  if(layer.type==='star')return{points:layer.points,innerRadiusRatio:layer.innerRadiusRatio};
+  if(layer.type==='ring')return{innerRatio:layer.innerRatio};
+  return{};
+}
+// Builds the params object permanentEngine.generateShapeLayout()/resolveShapePolygons() expect for
+// any shape-kind layer (Circle's cx/cy/r, or every other kind's x/y/w/h placement box, plus that
+// kind's own extra params) -- the one shared "layer -> engine params" mapping used by
+// generateShapeStonesLive(), resolveLayerShapeSource(), and fitTextToShape()'s shape resolution.
+function shapeLayerResolveParams(layer){
+  const isCircle=layer.type==='circle';
+  return{
+    shape:layer.type,layerId:layer.id,
+    ...(isCircle?{cxMm:layer.cx,cyMm:layer.cy,radiusMm:layer.r}:{xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h}),
+    ...shapeExtraParams(layer)
+  };
+}
 class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=permanentEngine}
  // Geometry generation happens exactly once here, per docs/ARCHITECTURE.md: every layer's stones
  // come straight from the permanent engine's per-layer StoneLayout; dedupe() below only filters
@@ -340,7 +403,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // are wrapped into one real StoneLayout ('project' is a sentinel layerId — StoneLayout requires
  // one non-empty layerId per instance; each Stone still carries its own real layer id) so every
  // renderer/exporter downstream consumes the same canonical product.
- async generate(project){let raw=[];for(const l of project.layers){if(!l.visible)continue;if(l.type==='text')raw.push(...await this.generateTextStonesLive(l,project));if(l.type==='circle'||l.type==='rectangle')raw.push(...await this.generateShapeStonesLive(l));if(l.type==='svg')raw.push(...await this.generateSvgStonesLive(l));if(l.type==='image')raw.push(...await this.generateImageStonesLive(l));if(l.type==='path')raw.push(...await this.generatePathStonesLive(l));}const stones=this.dedupe(raw,Math.min(...raw.map(s=>s.d||2),2)*0.58).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId}));return new StoneLayout({layerId:'project',stones})}
+ async generate(project){let raw=[];for(const l of project.layers){if(!l.visible)continue;if(l.type==='text')raw.push(...await this.generateTextStonesLive(l,project));if(SHAPE_LAYER_TYPES.has(l.type))raw.push(...await this.generateShapeStonesLive(l));if(l.type==='svg')raw.push(...await this.generateSvgStonesLive(l));if(l.type==='image')raw.push(...await this.generateImageStonesLive(l));if(l.type==='path')raw.push(...await this.generatePathStonesLive(l));}const stones=this.dedupe(raw,Math.min(...raw.map(s=>s.d||2),2)*0.58).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId}));return new StoneLayout({layerId:'project',stones})}
  async generateTextStonesLive(layer,project){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text)return[];const fontId=TEXT_ENGINE_FONT_IDS.has(layer.font)?layer.font:DEFAULT_TEXT_FONT_ID;const mode=resolveTextFillMode(layer.textMode);const base={text:layer.text,fontId,layerId:layer.id,heightMm:layer.height,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const{scale}=computeAutoFitScale(layer,project,result.widthMm);if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
   // RS-1009: text layers previously had no position field -- stones were always centered on the
   // canvas. layer.x/layer.y (mm, default 0) are a further offset applied on top of that same
@@ -348,8 +411,10 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
   // byte-identical to before, and dragging/nudging/aligning a text layer just moves this offset.
   const{offsetX,offsetY}=computeTextPlacementOffset(bb,layer,project);return result.stones.map(s=>({x:s.xMm+offsetX,y:s.yMm+offsetY,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
  // RS-0003.5C1: circle/rectangle layers are generated by the same permanent engine's
- // generateShapeLayout(), mirroring generateTextStonesLive() above.
- async generateShapeStonesLive(layer){if(!this.permanentEngine)return[];const isCircle=layer.type==='circle';const params={shape:layer.type,layerId:layer.id,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.fillMode),color:layer.color,...(isCircle?{cxMm:layer.cx,cyMm:layer.cy,radiusMm:layer.r}:{xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h})};const result=this.permanentEngine.generateShapeLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
+ // generateShapeLayout(), mirroring generateTextStonesLive() above. S-110: every new shape kind
+ // (Ellipse/Capsule/Regular Polygon/Star/Heart/Arrow/Cross/Crescent/Ring) goes through this exact
+ // same call, via shapeLayerResolveParams()'s shared layer->params mapping (module scope, above).
+ async generateShapeStonesLive(layer){if(!this.permanentEngine)return[];const params={...shapeLayerResolveParams(layer),stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.fillMode),color:layer.color};const result=this.permanentEngine.generateShapeLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
  // RS-1001: svg layers reuse the same x/y/w/h placement box rectangle layers use; src/svg/**
  // (not app.js) does the actual SVG parsing, inside generateSvgLayout().
  async generateSvgStonesLive(layer){if(!this.permanentEngine)return[];const params={svgSource:layer.svgSource,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.mode),color:layer.color};const result=this.permanentEngine.generateSvgLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
@@ -379,7 +444,7 @@ function defaultProject(){return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,
 // caller (the #importProjectFile change handler) surfaces that message via #status and leaves
 // the current `project` untouched on failure. Returns a normalized copy on success — it never
 // mutates its input.
-const SUPPORTED_LAYER_TYPES=new Set(['text','circle','rectangle','svg','image','path']);
+const SUPPORTED_LAYER_TYPES=new Set(['text','circle','rectangle','svg','image','path',...SHAPE_LIBRARY_KINDS]);
 function validateProject(obj){
   if(!obj||typeof obj!=='object'||Array.isArray(obj))throw new Error('Project file must contain a JSON object.');
   const canvas=obj.canvas;
@@ -396,24 +461,30 @@ function validateProject(obj){
     if(!SUPPORTED_LAYER_TYPES.has(l.type))throw new Error(`Layer "${l.id}" has unsupported type: ${l.type}`);
     if(l.type==='text'&&typeof l.text!=='string')throw new Error(`Text layer "${l.id}" is missing a string 'text' field.`);
     if(l.type==='circle'&&![l.cx,l.cy,l.r].every(n=>typeof n==='number'&&Number.isFinite(n)))throw new Error(`Circle layer "${l.id}" is missing numeric cx/cy/r fields.`);
-    if(l.type==='rectangle'&&![l.x,l.y,l.w,l.h].every(n=>typeof n==='number'&&Number.isFinite(n)))throw new Error(`Rectangle layer "${l.id}" is missing numeric x/y/w/h fields.`);
+    // S-110: Rectangle/SVG/Image/Path and every new shape kind (Ellipse/Capsule/Regular Polygon/
+    // Star/Heart/Arrow/Cross/Crescent/Ring) all place a natural shape into one x/y/w/h box -- one
+    // shared check via XYWH_SHAPE_TYPES, replacing what were four separate identical checks.
+    if(XYWH_SHAPE_TYPES.has(l.type)&&![l.x,l.y,l.w,l.h].every(n=>typeof n==='number'&&Number.isFinite(n)))throw new Error(`"${l.type}" layer "${l.id}" is missing numeric x/y/w/h fields.`);
     if(l.type==='svg'&&(typeof l.svgSource!=='string'||l.svgSource.length===0))throw new Error(`SVG layer "${l.id}" is missing a non-empty 'svgSource' string.`);
-    if(l.type==='svg'&&![l.x,l.y,l.w,l.h].every(n=>typeof n==='number'&&Number.isFinite(n)))throw new Error(`SVG layer "${l.id}" is missing numeric x/y/w/h fields.`);
-    // RS-1008: image layers mirror the svg case above (a non-empty self-contained source string
-    // plus a numeric x/y/w/h placement box), plus their own threshold/blurRadiusPx/maxWidthPx/
-    // maxHeightPx pipeline fields. 'invert' is a plain boolean UI toggle, not strictly validated
-    // here, matching this function's existing permissive style for other boolean-ish fields
-    // (e.g. layer.visible/autoFit).
+    // RS-1008: image layers mirror the svg case above (a non-empty self-contained source string),
+    // plus their own threshold/blurRadiusPx/maxWidthPx/maxHeightPx pipeline fields. 'invert' is a
+    // plain boolean UI toggle, not strictly validated here, matching this function's existing
+    // permissive style for other boolean-ish fields (e.g. layer.visible/autoFit).
     if(l.type==='image'&&(typeof l.imageSrc!=='string'||l.imageSrc.length===0))throw new Error(`Image layer "${l.id}" is missing a non-empty 'imageSrc' string.`);
-    if(l.type==='image'&&![l.x,l.y,l.w,l.h].every(n=>typeof n==='number'&&Number.isFinite(n)))throw new Error(`Image layer "${l.id}" is missing numeric x/y/w/h fields.`);
     if(l.type==='image'&&(typeof l.threshold!=='number'||!Number.isFinite(l.threshold)||l.threshold<0||l.threshold>255))throw new Error(`Image layer "${l.id}" is missing a valid 'threshold' (0-255).`);
     if(l.type==='image'&&(typeof l.blurRadiusPx!=='number'||!Number.isFinite(l.blurRadiusPx)||l.blurRadiusPx<0))throw new Error(`Image layer "${l.id}" is missing a valid non-negative 'blurRadiusPx'.`);
     if(l.type==='image'&&![l.maxWidthPx,l.maxHeightPx].every(n=>typeof n==='number'&&Number.isFinite(n)&&n>0))throw new Error(`Image layer "${l.id}" is missing valid positive 'maxWidthPx'/'maxHeightPx'.`);
     // RS-1012: a 'path' layer (a Boolean Operation result) stores its shape directly as contours --
-    // an array of (0,0)-rooted polygons, each a numeric {x,y}[] with 3+ points -- plus the same
-    // x/y/w/h placement box svg/image layers already use.
+    // an array of (0,0)-rooted polygons, each a numeric {x,y}[] with 3+ points.
     if(l.type==='path'&&!(Array.isArray(l.contours)&&l.contours.length>0&&l.contours.every(c=>Array.isArray(c)&&c.length>=3&&c.every(p=>p&&typeof p.x==='number'&&Number.isFinite(p.x)&&typeof p.y==='number'&&Number.isFinite(p.y)))))throw new Error(`Path layer "${l.id}" is missing a valid non-empty 'contours' array.`);
-    if(l.type==='path'&&![l.x,l.y,l.w,l.h].every(n=>typeof n==='number'&&Number.isFinite(n)))throw new Error(`Path layer "${l.id}" is missing numeric x/y/w/h fields.`);
+    // S-110: Regular Polygon/Star/Ring's own configurable extra parameters, matching
+    // GeometryEngine's own assertIntegerInRange()/assertNumberInRange() validation ranges (see
+    // src/geometry/GeometryEngine.js's normalizeShapeParams()) so a malformed saved value is caught
+    // here, at load time, rather than surfacing later as a thrown error during generation.
+    if(l.type==='polygon'&&!(Number.isInteger(l.sides)&&l.sides>=3&&l.sides<=12))throw new Error(`Regular Polygon layer "${l.id}" is missing a valid integer 'sides' field (3-12).`);
+    if(l.type==='star'&&!(Number.isInteger(l.points)&&l.points>=3&&l.points<=12))throw new Error(`Star layer "${l.id}" is missing a valid integer 'points' field (3-12).`);
+    if(l.type==='star'&&!(typeof l.innerRadiusRatio==='number'&&Number.isFinite(l.innerRadiusRatio)&&l.innerRadiusRatio>=0.1&&l.innerRadiusRatio<=0.9))throw new Error(`Star layer "${l.id}" is missing a valid 'innerRadiusRatio' field (0.1-0.9).`);
+    if(l.type==='ring'&&!(typeof l.innerRatio==='number'&&Number.isFinite(l.innerRatio)&&l.innerRatio>=0.1&&l.innerRatio<=0.9))throw new Error(`Ring layer "${l.id}" is missing a valid 'innerRatio' field (0.1-0.9).`);
     if(typeof l.stoneSize!=='number'||!Number.isFinite(l.stoneSize)||l.stoneSize<=0)throw new Error(`Layer "${l.id}" is missing a positive numeric stoneSize.`);
     if(typeof l.gap!=='number'||!Number.isFinite(l.gap)||l.gap<0)throw new Error(`Layer "${l.id}" is missing a non-negative numeric gap.`);
   }
@@ -505,9 +576,19 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
   // #shapeControls) and #imageFillMode (image, inside the Image Trace Lightbox's #imageControls)
   // are the two genuinely new controls -- these three layer types never had any fill-mode UI
   // before this milestone. #textMode/#svgMode already existed and only gain new <option>s.
-  const isShapeFillType=l.type==='circle'||l.type==='rectangle'||l.type==='path';
+  const isShapeFillType=VECTOR_FILL_MODE_TYPES.has(l.type);
   el('shapeFillModeField').style.display=isShapeFillType?'block':'none';
   if(isShapeFillType)el('shapeFillMode').value=resolveVectorFillMode(l.fillMode);
+  // S-110: per-shape "Shape options" -- only the fields relevant to the selected shape kind are
+  // shown (Regular Polygon's side count; Star's point count + inner radius; Ring's inner opening),
+  // matching this function's existing shapeHField (Circle vs. everything else) visibility pattern.
+  const showSidesField=l.type==='polygon',showStarFields=l.type==='star',showRingField=l.type==='ring';
+  el('shapeSidesField').style.display=showSidesField?'block':'none';
+  el('shapeStarFields').style.display=showStarFields?'block':'none';
+  el('shapeRingField').style.display=showRingField?'block':'none';
+  if(showSidesField)el('shapeSides').value=l.sides??6;
+  if(showStarFields){el('shapePoints').value=l.points??5;el('shapeInnerRadius').value=l.innerRadiusRatio??0.5}
+  if(showRingField)el('shapeRingInner').value=l.innerRatio??0.5;
   if(l.type==='image')el('imageFillMode').value=resolveImageFillMode(l.fillMode);
   if(isText){el('text').value=l.text;el('font').value=l.font;el('height').value=l.height;el('autoFit').value=l.autoFit?'on':'off';el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';el('curveRadiusMm').value=l.curveRadiusMm??40;el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??180;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';el('textX').value=l.x||0;el('textY').value=l.y||0}else{el('shapeX').value=l.type==='circle'?l.cx:l.x;el('shapeY').value=l.type==='circle'?l.cy:l.y;el('shapeW').value=l.type==='circle'?l.r:l.w;el('shapeH').value=l.type==='circle'?'':l.h;el('shapeWLabel').textContent=l.type==='circle'?'Radius (mm)':'Width (mm)';el('shapeHField').style.display=l.type==='circle'?'none':'';if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);el('gap').value=l.gap;el('stoneColor').value=l.color;
   // RS-1002: project.cupColor/project.wrap are project-level (not per-layer) fields, so they must
@@ -550,7 +631,14 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
 function writeSelectedControlsToLayer(){const l=selectedLayer();if(l.type==='text'){l.text=el('text').value;l.font=el('font').value;l.height=parseFloat(el('height').value)||25;l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;l.curveEnabled=el('curveEnabled').value==='on';l.curveRadiusMm=Math.max(0.1,parseFloat(el('curveRadiusMm').value)||40);l.curveDirection=el('curveDirection').value==='inside'?'inside':'outside';l.curveStartAngleDeg=parseFloat(el('curveStartAngleDeg').value)||0;l.curveSweepAngleDeg=parseFloat(el('curveSweepAngleDeg').value)||180;l.curveAlignment=el('curveAlignment').value;el('curveControls').style.display=l.curveEnabled?'block':'none';
   // UI-001: manual X/Y mm fields for the Text Lightbox, writing to the same layer.x/layer.y fields
   // RS-1009 already added (previously settable only by drag/nudge/align/distribute).
-  l.x=parseFloat(el('textX').value)||0;l.y=parseFloat(el('textY').value)||0}else if(l.type==='circle'){l.cx=parseFloat(el('shapeX').value)||105;l.cy=parseFloat(el('shapeY').value)||45;l.r=Math.max(1,parseFloat(el('shapeW').value)||18);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(l.type==='rectangle'){l.x=parseFloat(el('shapeX').value)||65;l.y=parseFloat(el('shapeY').value)||30;l.w=Math.max(1,parseFloat(el('shapeW').value)||80);l.h=Math.max(1,parseFloat(el('shapeH').value)||30);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(l.type==='svg'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.mode=resolveVectorFillMode(el('svgMode').value)}else if(l.type==='image'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.fillMode=resolveImageFillMode(el('imageFillMode').value)}else if(l.type==='path'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(2,parseFloat(el('shapeW').value)||10);l.h=Math.max(2,parseFloat(el('shapeH').value)||10);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}l.stoneSize=parseFloat(el('stoneSize').value)||2;l.gap=parseFloat(el('gap').value)||.3;l.color=el('stoneColor').value;project.cupColor=el('cupColor').value;project.wrap=el('wrap').value;project.name=el('projectName').value||DEFAULT_PROJECT_NAME;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
+  l.x=parseFloat(el('textX').value)||0;l.y=parseFloat(el('textY').value)||0}else if(l.type==='circle'){l.cx=parseFloat(el('shapeX').value)||105;l.cy=parseFloat(el('shapeY').value)||45;l.r=Math.max(1,parseFloat(el('shapeW').value)||18);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(l.type==='rectangle'){l.x=parseFloat(el('shapeX').value)||65;l.y=parseFloat(el('shapeY').value)||30;l.w=Math.max(1,parseFloat(el('shapeW').value)||80);l.h=Math.max(1,parseFloat(el('shapeH').value)||30);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(SHAPE_LIBRARY_KINDS.has(l.type)){
+  // S-110: every new shape kind shares Rectangle's x/y/w/h + Fill Style write-back, plus its own
+  // configurable extra fields (Regular Polygon/Star/Ring only).
+  l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||60);l.h=Math.max(1,parseFloat(el('shapeH').value)||60);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value);
+  if(l.type==='polygon')l.sides=Math.max(3,Math.min(12,parseIntOr(el('shapeSides').value,6)));
+  if(l.type==='star'){l.points=Math.max(3,Math.min(12,parseIntOr(el('shapePoints').value,5)));l.innerRadiusRatio=Math.max(0.1,Math.min(0.9,parseFloat(el('shapeInnerRadius').value)||0.5))}
+  if(l.type==='ring')l.innerRatio=Math.max(0.1,Math.min(0.9,parseFloat(el('shapeRingInner').value)||0.5));
+}else if(l.type==='svg'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.mode=resolveVectorFillMode(el('svgMode').value)}else if(l.type==='image'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.fillMode=resolveImageFillMode(el('imageFillMode').value)}else if(l.type==='path'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(2,parseFloat(el('shapeW').value)||10);l.h=Math.max(2,parseFloat(el('shapeH').value)||10);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}l.stoneSize=parseFloat(el('stoneSize').value)||2;l.gap=parseFloat(el('gap').value)||.3;l.color=el('stoneColor').value;project.cupColor=el('cupColor').value;project.wrap=el('wrap').value;project.name=el('projectName').value||DEFAULT_PROJECT_NAME;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
 async function updateAll(skipWrite=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated;try{generated=await engine.generate(project)}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Text generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;renderLayerUI();drawLayout();drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}// S-003: a project must always keep at least one layer (deleteLayer()'s guard below), so once
 // only one layer remains, every delete affordance -- the per-row trash icon and the sidebar
 // "Delete selected layer" button -- is disabled here (not just left clickable-but-a-no-op) and
@@ -561,7 +649,7 @@ function renderLayerUI(){const onlyOneLayer=project.layers.length<=1;el('selecte
   // UI-001: keep the right inspector's layer name and the left panel's project/template summary
   // in sync on every render (add/delete/duplicate/undo/redo/import/selection change).
   el('inspectorLayerName').textContent=layerLabel(selectedLayer());updateObjectTemplateDetail();
-}function layerLabel(l){return l.type==='text'?(l.text||'Text'):l.type==='circle'?'Circle':l.type==='svg'?(l.svgName||'SVG'):l.type==='image'?(l.imageName||'Image'):l.type==='path'?(l.pathName||'Path'):'Rectangle'}function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+}function layerLabel(l){if(l.type==='text')return l.text||'Text';if(l.type==='svg')return l.svgName||'SVG';if(l.type==='image')return l.imageName||'Image';if(l.type==='path')return l.pathName||'Path';return SHAPE_DISPLAY_LABELS[l.type]||'Shape'}function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function resizeCanvas(c){const r=c.getBoundingClientRect(),dpr=Math.max(1,devicePixelRatio||1),w=Math.floor(r.width*dpr),h=Math.floor(r.height*dpr);if(c.width!==w||c.height!==h){c.width=w;c.height=h}return{w,h,dpr}}
 function layoutMmToPx(p){return{x:layoutTransform.ox+p.x*layoutTransform.s,y:layoutTransform.oy+p.y*layoutTransform.s}}function layoutPxToMm(x,y){return{x:(x-layoutTransform.ox)/layoutTransform.s,y:(y-layoutTransform.oy)/layoutTransform.s}}
 function drawLayout(){const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr});layoutTransform={s,ox,oy,dpr};drawFrontViewFrame(ctx,s,ox,oy,dpr);if(showSafeArea)drawSafeAreaGuide(ctx,s,ox,oy,dpr,getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height));drawSelection(ctx,s,ox,oy,dpr);drawGuides(ctx,s,ox,oy,dpr);ctx.fillStyle='#516071';ctx.font=`${12*dpr}px Arial`;ctx.fillText(`${layout.count} stones · ${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm · ${selectedLayer().textMode||''}`,20*dpr,h-18*dpr);el('fitNotice').textContent='Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step) · Drag the amber Front View Frame to rotate the Object Preview.'}
@@ -641,7 +729,7 @@ function isPointerOnFrontViewFrame(mm){
 // Text layers have no plain layer fields to compute a bbox from directly (unlike circle/
 // rectangle), so their selection bbox is derived from the already-generated StoneLayout, filtered
 // to this layer's stones and wrapped in a fresh StoneLayout to reuse its getBoundingBox() math.
-function getLayerBBox(l){if(l.type==='circle')return{x:l.cx-l.r,y:l.cy-l.r,width:l.r*2,height:l.r*2,x2:l.cx+l.r,y2:l.cy+l.r};if(l.type==='rectangle'||l.type==='svg'||l.type==='image'||l.type==='path')return{x:l.x,y:l.y,width:l.w,height:l.h,x2:l.x+l.w,y2:l.y+l.h};const stones=layout.stones.filter(s=>s.layerId===l.id);if(!stones.length)return{x:0,y:0,x2:0,y2:0,width:0,height:0};const b=new StoneLayout({layerId:l.id,stones}).getBoundingBox();return{x:b.minXmm,y:b.minYmm,x2:b.maxXmm,y2:b.maxYmm,width:b.widthMm,height:b.heightMm}}
+function getLayerBBox(l){if(l.type==='circle')return{x:l.cx-l.r,y:l.cy-l.r,width:l.r*2,height:l.r*2,x2:l.cx+l.r,y2:l.cy+l.r};if(XYWH_SHAPE_TYPES.has(l.type))return{x:l.x,y:l.y,width:l.w,height:l.h,x2:l.x+l.w,y2:l.y+l.h};const stones=layout.stones.filter(s=>s.layerId===l.id);if(!stones.length)return{x:0,y:0,x2:0,y2:0,width:0,height:0};const b=new StoneLayout({layerId:l.id,stones}).getBoundingBox();return{x:b.minXmm,y:b.minYmm,x2:b.maxXmm,y2:b.maxYmm,width:b.widthMm,height:b.heightMm}}
 // RS-1009: the one pair of functions that know a layer's position field names (cx/cy for circle,
 // x/y for everything else, including the new text-layer offset fields) -- src/editing/** never
 // sees a layer `type`, it only ever returns a translation delta; these two functions turn that
@@ -778,12 +866,8 @@ const BOOLEAN_OPERATION_LABELS={union:'Union',subtract:'Subtract',intersect:'Int
 // polygons the matching generate*Layout() stone method would flatten, so a layer's boolean input is
 // always identical to what it already renders as.
 async function resolveLayerShapeSource(layer){
-  if(layer.type==='circle'||layer.type==='rectangle'){
-    const isCircle=layer.type==='circle';
-    const{polygons,boundingBox}=permanentEngine.resolveShapePolygons({
-      shape:layer.type,layerId:layer.id,
-      ...(isCircle?{cxMm:layer.cx,cyMm:layer.cy,radiusMm:layer.r}:{xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h})
-    });
+  if(SHAPE_LAYER_TYPES.has(layer.type)){
+    const{polygons,boundingBox}=permanentEngine.resolveShapePolygons(shapeLayerResolveParams(layer));
     return boundingBox?{kind:'polygons',polygons}:null;
   }
   if(layer.type==='svg'){
@@ -910,6 +994,12 @@ function updateEditingUI(){const n=selectedLayerIds.size;el('selectionSummary').
   // glance, matching this sidebar's existing Align/Distribute affordance.
   const boolDisabled=n<2;for(const id of['boolUnion','boolSubtract','boolIntersect','boolExclude'])el(id).disabled=boolDisabled;
   el('booleanOpsHint').style.display=boolDisabled?'block':'none';
+  // S-110: Fit Text to Shape needs exactly one text layer + one other layer selected, mirroring
+  // Boolean Operations' own disabled-button + hint pattern above.
+  const fitDisabled=!fitTextToShapeSelection();
+  el('fitTextToShapeBtn').disabled=fitDisabled;
+  el('fitTextToShapeHint').style.display=fitDisabled?'block':'none';
+  if(!fitDisabled)clearFitTextToShapeError();
 }
 // RS-0003.5D2: SELECTION_HANDLE_SIZE_PX enlarges the resize handles slightly (was a bare 10px
 // square) and a white halo is stroked behind the dashed outline so the selection reads clearly
@@ -976,7 +1066,7 @@ function composeCombinedPreviewCanvas(){
   ctx.drawImage(cupCanvas,margin+w1+gap,margin+(maxH-h2)/2);
   return c;
 }
-function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(copy.type==='rectangle'){copy.x+=8;copy.y+=8}if(copy.type==='svg'){copy.x+=8;copy.y+=8}if(copy.type==='image'){copy.x+=8;copy.y+=8}if(copy.type==='path'){copy.x+=8;copy.y+=8}if(copy.type==='text'){copy.text+=' copy';copy.x=(copy.x||0)+8;copy.y=(copy.y||0)+8}project.layers.push(copy);selectedLayerId=copy.id;selectedLayerIds=selectOnly(copy.id);syncSelectedControlsFromLayer();updateAll()}function deleteLayer(id){if(project.layers.length<=1){el('status').textContent='Cannot delete the last layer';const hint=el('layerRuleHint');hint.style.display='block';hint.scrollIntoView({block:'nearest'});return}commitHistory();project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true)}
+function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(XYWH_SHAPE_TYPES.has(copy.type)){copy.x+=8;copy.y+=8}if(copy.type==='text'){copy.text+=' copy';copy.x=(copy.x||0)+8;copy.y=(copy.y||0)+8}project.layers.push(copy);selectedLayerId=copy.id;selectedLayerIds=selectOnly(copy.id);syncSelectedControlsFromLayer();updateAll()}function deleteLayer(id){if(project.layers.length<=1){el('status').textContent='Cannot delete the last layer';const hint=el('layerRuleHint');hint.style.display='block';hint.scrollIntoView({block:'nearest'});return}commitHistory();project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true)}
 function pointerToLayout(e){const r=layoutCanvas.getBoundingClientRect(),dpr=layoutTransform.dpr;return layoutPxToMm((e.clientX-r.left)*dpr,(e.clientY-r.top)*dpr)}function hitTest(mm){const layers=[...project.layers].reverse();for(const l of layers){const b=getLayerBBox(l);for(const h of handlesFor(b)){if(Math.abs(mm.x-h.x)<3&&Math.abs(mm.y-h.y)<3&&l.type!=='text')return{layer:l,kind:'resize',handle:h.name,b0:b}}if(mm.x>=b.x&&mm.x<=b.x2&&mm.y>=b.y&&mm.y<=b.y2)return{layer:l,kind:'move',b0:b}}return null}
 // S-104: a move-drag previously mapped pointer movement to mm 1:1 (rawDx/rawDy applied verbatim),
 // which made small, precise placements -- text in particular, since it has no resize handles to
@@ -1089,7 +1179,7 @@ layoutCanvas.addEventListener('pointermove',e=>{
   }else if(drag.kind==='resize'){
     const l=project.layers.find(x=>x.id===drag.layerId);if(!l)return;
     if(l.type==='circle'){l.r=Math.max(2,Math.hypot(mm.x-drag.l0.cx,mm.y-drag.l0.cy))}
-    else if(l.type==='rectangle'||l.type==='svg'||l.type==='image'||l.type==='path'){let x0=drag.b0.x,y0=drag.b0.y,x1=drag.b0.x2,y1=drag.b0.y2;if(drag.handle.includes('w'))x0=mm.x;if(drag.handle.includes('e'))x1=mm.x;if(drag.handle.includes('n'))y0=mm.y;if(drag.handle.includes('s'))y1=mm.y;l.x=Math.min(x0,x1);l.y=Math.min(y0,y1);l.w=Math.max(2,Math.abs(x1-x0));l.h=Math.max(2,Math.abs(y1-y0))}
+    else if(XYWH_SHAPE_TYPES.has(l.type)){let x0=drag.b0.x,y0=drag.b0.y,x1=drag.b0.x2,y1=drag.b0.y2;if(drag.handle.includes('w'))x0=mm.x;if(drag.handle.includes('e'))x1=mm.x;if(drag.handle.includes('n'))y0=mm.y;if(drag.handle.includes('s'))y1=mm.y;l.x=Math.min(x0,x1);l.y=Math.min(y0,y1);l.w=Math.max(2,Math.abs(x1-x0));l.h=Math.max(2,Math.abs(y1-y0))}
   }
   syncSelectedControlsFromLayer();updateAll(true);
 });
@@ -1110,7 +1200,7 @@ window.addEventListener('keydown',e=>{
 // (opened on the first 'input' event, closed on 'change'). `rotation`/`zoom` are view-only (not
 // part of `project`) and keep their original plain 'input' listener, untouched.
 // UI-001: 'textX'/'textY' are the new manual Text Lightbox position fields (see writeSelectedControlsToLayer()).
-const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY'];
+const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
 // RS-2002: Browse Fonts panel wiring. Toggling/closing never touches history (it only decides
@@ -1138,7 +1228,250 @@ el('centerTextOnObject').onclick=()=>centerSelectedTextOnObject();
 el('workspaceCenterTextBtn').onclick=()=>centerSelectedTextOnObject();
 el('alignLeft').onclick=()=>runAlign('left');el('alignCenterH').onclick=()=>runAlign('centerH');el('alignRight').onclick=()=>runAlign('right');el('alignTop').onclick=()=>runAlign('top');el('alignCenterV').onclick=()=>runAlign('centerV');el('alignBottom').onclick=()=>runAlign('bottom');el('distributeH').onclick=()=>runDistribute('horizontal');el('distributeV').onclick=()=>runDistribute('vertical');el('snapEnabled').addEventListener('change',()=>{snapEnabled=el('snapEnabled').value==='on';el('status').textContent=snapEnabled?'Snap Enabled':'Snap Disabled'});
 // RS-1012: Boolean Operations, in the Shapes Lightbox (see index.html's #booleanOpsSection).
-el('boolUnion').onclick=()=>runBooleanOp('union');el('boolSubtract').onclick=()=>runBooleanOp('subtract');el('boolIntersect').onclick=()=>runBooleanOp('intersect');el('boolExclude').onclick=()=>runBooleanOp('xor');el('addCircle').onclick=()=>{const l=selectedLayer();commitHistory();const layer={id:'circle'+Date.now(),type:'circle',visible:true,cx:105,cy:45,r:18,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};project.layers.push(layer);selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);syncSelectedControlsFromLayer();updateAll(true)};el('addRect').onclick=()=>{const l=selectedLayer();commitHistory();const layer={id:'rect'+Date.now(),type:'rectangle',visible:true,x:65,y:30,w:80,h:30,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};project.layers.push(layer);selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);syncSelectedControlsFromLayer();updateAll(true)};el('importProject').onclick=()=>el('importProjectFile').click();
+el('boolUnion').onclick=()=>runBooleanOp('union');el('boolSubtract').onclick=()=>runBooleanOp('subtract');el('boolIntersect').onclick=()=>runBooleanOp('intersect');el('boolExclude').onclick=()=>runBooleanOp('xor');
+// S-110: singleOtherSelectedLayer() looks at the selection as it stood *before* the layer about to
+// be created is added -- exactly one other selected layer of the right type is what "initial
+// automatic fitting" keys off of in both createShapeLayer()/addText() below.
+function singleOtherSelectedLayer(){const ids=[...selectedLayerIds];if(ids.length!==1)return null;return project.layers.find(x=>x.id===ids[0])||null}
+// S-110: circle's own hardcoded default radius (createShapeLayer() below) -- named here too so
+// S-110A's referenceShapeLayer() never has to duplicate the literal.
+const DEFAULT_CIRCLE_RADIUS_MM=18;
+// S-110A (Smart Shape-to-Text Creation): a shape `kind` at its own canonical default proportions
+// (SHAPE_DEFAULT_SIZES_MM, the exact same defaults createShapeLayer() itself uses when there is no
+// text to size around), centered at the origin. This is a *reference* layer purely for measuring
+// how that kind's largest-inscribed-rectangle-at-a-given-aspect-ratio scales with overall shape
+// size -- resolveShapeLayerPolygonsForFitting() (and its Ring-inner-circle special case) is reused
+// unchanged, so the "shape contains text" direction can never disagree with the existing "text fits
+// shape" direction about what a shape's usable region is.
+function referenceShapeLayer(kind){
+  if(kind==='circle')return{id:'reference',type:'circle',cx:0,cy:0,r:DEFAULT_CIRCLE_RADIUS_MM};
+  const{w,h}=SHAPE_DEFAULT_SIZES_MM[kind]||{w:60,h:60};
+  return{id:'reference',type:kind,x:-w/2,y:-h/2,w,h,...defaultShapeExtraFields(kind)};
+}
+// S-110A: computes the smallest shape of `kind` (at its own canonical proportions) that fully
+// contains textLayer's current *rendered* bounding box (getLayerBBox() -- the same single source of
+// truth for a layer's mm extent every other editing feature already uses, so this reflects the
+// text's true on-canvas size, including any S-107 auto-fit shrink already applied) plus one full
+// stone-pitch of production margin on every side. The margin is stoneSize+gap -- the same physical
+// pitch quantity that already governs stone spacing everywhere else -- not an arbitrary pixel value:
+// it is the minimum gap needed so the shape's own outline stones don't crowd the text's outermost
+// stones. Reuses computeContainingShapeScale() (src/geometry/ShapeFit.js) -- the exact inverse of
+// the math fitTextToShape() already uses -- rather than a second fitting algorithm. Returns null
+// when the text has no rendered extent yet (nothing to size a shape around).
+function computeShapeAroundText(kind,textLayer){
+  const textBBox=getLayerBBox(textLayer);
+  if(!(textBBox.width>0)||!(textBBox.height>0))return null;
+  const marginMm=(textLayer.stoneSize||0)+(textLayer.gap||0);
+  const requiredWidthMm=textBBox.width+marginMm*2;
+  const requiredHeightMm=textBBox.height+marginMm*2;
+  const{polygons,boundingBox}=resolveShapeLayerPolygonsForFitting(referenceShapeLayer(kind));
+  if(!boundingBox)return null;
+  const fit=computeContainingShapeScale(polygons,boundingBox,requiredWidthMm,requiredHeightMm);
+  if(!fit)return null;
+  const centerXmm=textBBox.x+textBBox.width/2,centerYmm=textBBox.y+textBBox.height/2;
+  if(kind==='circle'){
+    const radiusMm=DEFAULT_CIRCLE_RADIUS_MM*fit.scale;
+    return{widthMm:radiusMm*2,heightMm:radiusMm*2,centerXmm,centerYmm,cxMm:centerXmm,cyMm:centerYmm,radiusMm};
+  }
+  const{w,h}=SHAPE_DEFAULT_SIZES_MM[kind]||{w:60,h:60};
+  const widthMm=w*fit.scale,heightMm=h*fit.scale;
+  return{widthMm,heightMm,centerXmm,centerYmm,xMm:centerXmm-widthMm/2,yMm:centerYmm-heightMm/2};
+}
+// S-110A: whether a shape of the given centered size (as returned by computeShapeAroundText() above)
+// sits completely within the current object template's printable area -- reusing
+// getSafeAreaRectMm() (src/products/index.js), the same printable-area rectangle
+// isTextOutsidePrintableArea()/drawSafeAreaGuide() already use, rather than a second notion of
+// "printable". A full containment check (every edge inside the safe rect), not merely "smaller
+// than" -- the shape is centered on the text's own current position, which may itself already sit
+// off-center, so only the actual placed bounds can answer "fits completely inside".
+function shapeAroundTextFitsPrintableArea(sized){
+  const safe=getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height);
+  const halfW=sized.widthMm/2,halfH=sized.heightMm/2;
+  const EPS=1e-6;
+  return sized.centerXmm-halfW>=safe.xMm-EPS&&sized.centerXmm+halfW<=safe.xMm+safe.widthMm+EPS&&
+    sized.centerYmm-halfH>=safe.yMm-EPS&&sized.centerYmm+halfH<=safe.yMm+safe.heightMm+EPS;
+}
+// S-110: Design Shapes' single, unified shape-creation function -- replaces the old separate
+// addCircle/addRect click handlers (RS-2000's own commitHistory()-then-push-then-select pattern,
+// preserved exactly) with one function for all 11 shapes. Circle keeps its historical cx/cy/r
+// defaults byte-for-byte; every other kind gets a default x/y/w/h box (SHAPE_DEFAULT_SIZES_MM,
+// centered on the same (105,45) point Circle/Rectangle's own pre-S-110 defaults already used) plus
+// its own configurable extra fields (defaultShapeExtraFields()).
+//
+// S-110A: when exactly one other selected layer is an uncurved, fittable-compatible text layer,
+// the new shape no longer always has the text fitted into it -- computeShapeAroundText() first
+// asks "can a shape sized to contain this text, centered on it, still fit the printable area?". If
+// yes, the shape is created at that size/position and the text is left completely untouched (font,
+// stone size, gap, fill style, color, curve, position -- literally none of it is written), which is
+// the "preserve the text whenever possible" requirement satisfied structurally, not by a special
+// case. Only when the required shape would spill outside the printable area does this fall back to
+// S-110's original behavior: a normal/default-size shape with the text fitted into it via
+// fitTextToShape(), so the legibility floor and every other S-110 guarantee still apply unchanged.
+async function createShapeLayer(kind){
+  const l=selectedLayer();
+  const other=singleOtherSelectedLayer();
+  const fitPartnerText=(other&&other.type==='text'&&!other.curveEnabled&&FITTABLE_SHAPE_TYPES.has(kind))?other:null;
+  let shapeAroundText=null,shapeAroundTextRejected=false;
+  if(fitPartnerText){
+    const sized=computeShapeAroundText(kind,fitPartnerText);
+    if(sized&&shapeAroundTextFitsPrintableArea(sized))shapeAroundText=sized;
+    else if(sized)shapeAroundTextRejected=true;
+  }
+  commitHistory();
+  let layer;
+  if(kind==='circle'){
+    layer=shapeAroundText
+      ?{id:'circle'+Date.now(),type:'circle',visible:true,cx:shapeAroundText.cxMm,cy:shapeAroundText.cyMm,r:shapeAroundText.radiusMm,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'}
+      :{id:'circle'+Date.now(),type:'circle',visible:true,cx:105,cy:45,r:DEFAULT_CIRCLE_RADIUS_MM,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};
+  }else{
+    const{w,h}=shapeAroundText?{w:shapeAroundText.widthMm,h:shapeAroundText.heightMm}:(SHAPE_DEFAULT_SIZES_MM[kind]||{w:60,h:60});
+    const x=shapeAroundText?shapeAroundText.xMm:105-w/2,y=shapeAroundText?shapeAroundText.yMm:45-h/2;
+    layer={id:kind+Date.now(),type:kind,visible:true,x,y,w,h,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold',...defaultShapeExtraFields(kind)};
+  }
+  project.layers.push(layer);
+  selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);
+  let statusText=`Added ${SHAPE_DISPLAY_LABELS[kind]||kind}`;
+  if(shapeAroundText){
+    statusText+=` sized around "${layerLabel(fitPartnerText)}" (text unchanged)`;
+  }else if(fitPartnerText){
+    const fallbackNote=shapeAroundTextRejected?` (a shape sized around "${layerLabel(fitPartnerText)}" would not fit the printable area, so it was created at the default size instead)`:'';
+    const plan=await fitTextToShape(fitPartnerText,layer);
+    if(plan.ok){applyTextFitPlan(fitPartnerText,plan);statusText+=`${fallbackNote} and fit "${layerLabel(fitPartnerText)}" inside it`}
+    else statusText+=`${fallbackNote} (could not auto-fit "${layerLabel(fitPartnerText)}": ${plan.message})`;
+  }
+  syncSelectedControlsFromLayer();
+  await updateAll(true);
+  el('status').textContent=statusText;
+}
+// S-110: the Text Lightbox's "+ Add Text" button -- previously there was no way to create a second
+// text layer at all (only Duplicate on the existing one), which left "create a shape, then create
+// text" with no entry point. Mirrors createShapeLayer()'s exact pattern/defaults (matching
+// defaultProject()'s own initial text layer's field set), including the same single-other-selected-
+// layer auto-fit hook, symmetric to createShapeLayer()'s.
+async function addText(){
+  const l=selectedLayer();
+  const other=singleOtherSelectedLayer();
+  const fitPartnerShape=(other&&FITTABLE_SHAPE_TYPES.has(other.type))?other:null;
+  commitHistory();
+  const layer={id:'text'+Date.now(),type:'text',visible:true,text:'New Text',font:TEXT_ENGINE_FONT_IDS.has(l.font)?l.font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold',autoFit:true,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',x:0,y:0};
+  project.layers.push(layer);
+  selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);
+  let statusText='Added text layer';
+  if(fitPartnerShape){
+    const plan=await fitTextToShape(layer,fitPartnerShape);
+    if(plan.ok){applyTextFitPlan(layer,plan);statusText+=` and fit it inside "${layerLabel(fitPartnerShape)}"`}
+    else statusText+=` (could not auto-fit inside "${layerLabel(fitPartnerShape)}": ${plan.message})`;
+  }
+  syncSelectedControlsFromLayer();
+  await updateAll(true);
+  el('status').textContent=statusText;
+}
+// S-110: Smart Text-to-Shape Fitting. A pure "compute a fit plan" function -- it never mutates
+// textLayer itself (matching runBooleanOp()'s own "validate everything, only mutate on success"
+// convention below); callers apply a successful plan via applyTextFitPlan(). Resolves shapeLayer's
+// polygons via the same shapeLayerResolveParams()/resolveShapePolygons() call
+// resolveLayerShapeSource() already uses for Boolean Operations, measures textLayer's current
+// (unscaled) size via the same resolveTextPolygons() call generateTextStonesLive()/
+// resolveLayerShapeSource()'s text branch already use, finds the largest inscribed rectangle of the
+// text's own aspect ratio via ShapeFit.computeInscribedRect(), then the required scale via
+// ShapeFit.computeShapeFitScale() -- reusing S-107's own MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO
+// legibility floor so the two features can never disagree on "how small is too small". Never
+// touches font/stoneSize/gap/fillMode/color/curve fields, and never converts curved text to
+// straight text (aborts instead, with a specific message).
+async function fitTextToShape(textLayer,shapeLayer){
+  if(textLayer.curveEnabled){
+    return{ok:false,reason:'curved',message:'Curved text can’t be automatically fit to a shape — turn off Curved text first, or position it manually.'};
+  }
+  if(!FITTABLE_SHAPE_TYPES.has(shapeLayer.type)){
+    return{ok:false,reason:'incompatible',message:`${SHAPE_DISPLAY_LABELS[shapeLayer.type]||layerLabel(shapeLayer)} doesn’t provide a predictable region for automatic text fitting — position text manually.`};
+  }
+  const{polygons,boundingBox}=resolveShapeLayerPolygonsForFitting(shapeLayer);
+  if(!boundingBox){
+    return{ok:false,reason:'empty-shape',message:`"${layerLabel(shapeLayer)}" has no usable area to fit text into.`};
+  }
+  if(!permanentEngine.canGenerateText||!textLayer.text){
+    return{ok:false,reason:'empty-text',message:'This text layer has no content to fit.'};
+  }
+  const fontId=TEXT_ENGINE_FONT_IDS.has(textLayer.font)?textLayer.font:DEFAULT_TEXT_FONT_ID;
+  const measured=await permanentEngine.resolveTextPolygons({text:textLayer.text,fontId,layerId:textLayer.id,heightMm:textLayer.height,curveEnabled:false});
+  if(!measured.boundingBox){
+    return{ok:false,reason:'empty-text',message:'This text layer has no content to fit.'};
+  }
+  const aspectRatio=measured.boundingBox.widthMm/measured.boundingBox.heightMm;
+  const inscribed=computeInscribedRect(polygons,boundingBox,aspectRatio);
+  if(!inscribed||!(inscribed.widthMm>0)){
+    return{ok:false,reason:'no-region',message:`"${layerLabel(shapeLayer)}" has no usable region to fit text into.`};
+  }
+  const spacingMm=(textLayer.stoneSize||0)+(textLayer.gap||0);
+  const scaleResult=computeShapeFitScale({
+    currentHeightMm:textLayer.height,measuredWidthMm:measured.boundingBox.widthMm,measuredHeightMm:measured.boundingBox.heightMm,
+    spacingMm,targetWidthMm:inscribed.widthMm,targetHeightMm:inscribed.heightMm,minHeightToSpacingRatio:MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO
+  });
+  if(!scaleResult.ok){
+    return{ok:false,reason:'legibility',message:`This text can’t fit inside "${layerLabel(shapeLayer)}" at the current stone size and gap without becoming unreadable. Its previous size and position were kept. Try a smaller stone size/gap, shorter text, or a larger shape.`};
+  }
+  // computeTextPlacementOffset() always auto-centers a text layer's bbox on the canvas before
+  // adding layer.x/layer.y on top (see its own doc comment above) -- so the final rendered bbox
+  // center is always exactly (canvas.width/2 + layer.x, canvas.height/2 + layer.y), independent of
+  // the text's own measured extents. Solving that for layer.x/layer.y is what lands the bbox center
+  // on the inscribed rect's center; no second measurement of the rescaled text is needed.
+  return{
+    ok:true,
+    heightMm:Math.max(1,textLayer.height*scaleResult.scale),
+    xMm:inscribed.xMm+inscribed.widthMm/2-project.canvas.width/2,
+    yMm:inscribed.yMm+inscribed.heightMm/2-project.canvas.height/2
+  };
+}
+function applyTextFitPlan(textLayer,plan){textLayer.height=plan.heightMm;textLayer.x=plan.xMm;textLayer.y=plan.yMm}
+// S-110: resolves a shape layer's polygons for FITTING purposes specifically -- identical to
+// resolveLayerShapeSource()'s shape branch (shared shapeLayerResolveParams()), except for Ring: a
+// donut's sensible "fit text into it" region is its inner opening (a monogram inside a ring is a
+// common real-world design), not the annulus band the true two-contour geometry describes -- fit a
+// rectangle centered on the *annulus's* bbox center and every candidate would sit inside the hole
+// itself (the even-odd rule correctly treats the inner circle as excluded), so a Ring's fittable
+// region is deliberately just its inner circle, treated as an ordinary filled disk. Boolean
+// Operations (resolveLayerShapeSource()) are unaffected -- they still combine the real annulus.
+function resolveShapeLayerPolygonsForFitting(shapeLayer){
+  const{polygons,boundingBox}=permanentEngine.resolveShapePolygons(shapeLayerResolveParams(shapeLayer));
+  if(shapeLayer.type==='ring'&&polygons.length===2){
+    const innerPolygon=polygons[1];
+    return{polygons:[innerPolygon],boundingBox:BoundingBox.fromPoints(innerPolygon)};
+  }
+  return{polygons,boundingBox};
+}
+// S-110: mirrors clearBooleanOpsError()/showBooleanOpsError()'s exact pattern below for the new
+// Fit Text to Shape section's own validation message.
+function showFitTextToShapeError(msg){el('fitTextToShapeValidation').textContent=msg}
+function clearFitTextToShapeError(){el('fitTextToShapeValidation').textContent=''}
+// The two currently-selected layers eligible for an explicit "Fit Text to Shape" click: exactly one
+// text layer + one other (shape) layer, in either selection order.
+function fitTextToShapeSelection(){
+  const sel=[...selectedLayerIds].map(id=>project.layers.find(x=>x.id===id)).filter(Boolean);
+  if(sel.length!==2)return null;
+  const text=sel.find(x=>x.type==='text');
+  const shape=sel.find(x=>x!==text);
+  if(!text||!shape)return null;
+  return{text,shape};
+}
+el('fitTextToShapeBtn').onclick=async()=>{
+  const pair=fitTextToShapeSelection();
+  if(!pair)return;
+  clearFitTextToShapeError();
+  const plan=await fitTextToShape(pair.text,pair.shape);
+  if(!plan.ok){
+    showFitTextToShapeError(plan.message);
+    el('status').textContent=`Fit Text to Shape failed: ${plan.message}`;
+    return;
+  }
+  commitHistory();
+  applyTextFitPlan(pair.text,plan);
+  syncSelectedControlsFromLayer();
+  await updateAll(true);
+  el('status').textContent=`Fit "${layerLabel(pair.text)}" to "${layerLabel(pair.shape)}"`;
+};
+el('shapeGrid').addEventListener('click',e=>{const btn=e.target.closest('[data-shape-kind]');if(!btn)return;createShapeLayer(btn.dataset.shapeKind)});
+el('addTextBtn').onclick=()=>addText();
+el('importProject').onclick=()=>el('importProjectFile').click();
 el('importProjectFile').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;
   // UI-001B fix: the Import Lightbox is a full-viewport overlay (position:fixed;inset:0), so it
   // covers #status (in the left panel) the whole time this dialog is open -- writing only to
@@ -1344,7 +1677,7 @@ el('menuHelp').onclick=()=>lightboxes.help.open();
 // S-105-PersistentMovableLightboxes.md, "Follow-up: No Empty Lightbox on Selection Mismatch").
 function lightboxForLayerType(t){
   if(t==='text')return lightboxes.text;
-  if(t==='circle'||t==='rectangle'||t==='path')return lightboxes.shapes;
+  if(t==='path'||SHAPE_LAYER_TYPES.has(t))return lightboxes.shapes;
   if(t==='svg')return lightboxes.importBox;
   if(t==='image')return lightboxes.imagetrace;
   return null;
@@ -1365,8 +1698,6 @@ function setShapesTab(tab){
 }
 el('shapesTabDesign').onclick=()=>setShapesTab('design');
 el('shapesTabTemplates').onclick=()=>setShapesTab('templates');
-el('addCircleLightbox').onclick=()=>el('addCircle').click();
-el('addRectLightbox').onclick=()=>el('addRect').click();
 function updateObjectTemplateDetail(){
   const t=currentObjectTemplate(),s=t.safeAreaInsetMm;
   const detailEl=el('objectTemplateDetail');
@@ -1789,8 +2120,8 @@ el('shipApply').onclick=()=>{
 
 // ---- Settings: mirrors the live grid/safe-area/snap toggle state (one boolean each, never a
 // second independent copy). Default stone size/gap are session-local preference fields not yet
-// wired into new-layer creation (addCircle/addRect already default sensibly from the currently
-// selected layer) -- documented, not faked; see the specification. ----
+// wired into new-layer creation (createShapeLayer()/addText() already default sensibly from the
+// currently selected layer) -- documented, not faked; see the specification. ----
 function syncSettingsFieldsFromState(){
   el('settingsGridDefault').checked=true;el('settingsGridDefault').disabled=true;
   el('settingsSafeAreaDefault').checked=showSafeArea;el('settingsSnapDefault').checked=snapEnabled;

@@ -46,17 +46,19 @@ await test('2. app.js imports src/image/**\'s field-preparation only (prepareIma
 
 await test('3. getLayerBBox()/drag-move/drag-resize/duplicateLayer()/layerLabel() each have an image case', () => {
   // RS-1012 extended this same shared branch again to also cover 'path' layers (Boolean Operation
-  // results) -- see tools/test-path-boolean-integration.mjs for the RS-1012-specific assertions.
-  assert.match(appJs, /if\(l\.type==='rectangle'\|\|l\.type==='svg'\|\|l\.type==='image'\|\|l\.type==='path'\)return\{x:l\.x,y:l\.y,width:l\.w,height:l\.h,x2:l\.x\+l\.w,y2:l\.y\+l\.h\}/, 'expected getLayerBBox to treat image like rectangle/svg');
+  // results), and S-110 generalized the whole union (plus nine new shape kinds) into one shared
+  // XYWH_SHAPE_TYPES set -- see tools/test-path-boolean-integration.mjs for the RS-1012-specific
+  // assertions.
+  assert.match(appJs, /if\(XYWH_SHAPE_TYPES\.has\(l\.type\)\)return\{x:l\.x,y:l\.y,width:l\.w,height:l\.h,x2:l\.x\+l\.w,y2:l\.y\+l\.h\}/, 'expected getLayerBBox to treat image like rectangle/svg');
   // RS-1009 narrow carve-out: the per-type drag-move branch was replaced by a single
   // getLayerPosition()/setLayerPosition() pair used uniformly for every layer type -- see
   // docs/specifications/RS-1009-AlignmentSnapping.md. image still moves exactly like
   // rectangle/svg: setLayerPosition() falls through to its x/y branch.
   assert.match(appJs, /function setLayerPosition\(l,xMm,yMm\)\{if\(l\.type==='circle'\)\{l\.cx=xMm;l\.cy=yMm\}else\{l\.x=xMm;l\.y=yMm\}\}/, 'expected setLayerPosition to move image (and rectangle/svg/text) via l.x/l.y');
   assert.match(appJs, /for\(const id of drag\.layerIds\)\{[\s\S]*?setLayerPosition\(l,p0\.xMm\+dx,p0\.yMm\+dy\)/, 'expected the move-drag path to apply positions via setLayerPosition');
-  assert.match(appJs, /l\.type==='rectangle'\|\|l\.type==='svg'\|\|l\.type==='image'\|\|l\.type==='path'\)\{let x0=drag\.b0\.x/, 'expected drag-resize to treat image like rectangle/svg');
-  assert.match(appJs, /if\(copy\.type==='image'\)\{copy\.x\+=8;copy\.y\+=8\}/, 'expected duplicateLayer to nudge image layers');
-  assert.match(appJs, /l\.type==='image'\?\(l\.imageName\|\|'Image'\)/, 'expected layerLabel to have an image case');
+  assert.match(appJs, /XYWH_SHAPE_TYPES\.has\(l\.type\)\)\{let x0=drag\.b0\.x/, 'expected drag-resize to treat image like rectangle/svg');
+  assert.match(appJs, /if\(XYWH_SHAPE_TYPES\.has\(copy\.type\)\)\{copy\.x\+=8;copy\.y\+=8\}/, 'expected duplicateLayer to nudge image layers');
+  assert.match(appJs, /if\(l\.type==='image'\)return l\.imageName\|\|'Image'/, 'expected layerLabel to have an image case');
 });
 
 await test('4. SUPPORTED_LAYER_TYPES includes image', () => {
@@ -68,8 +70,13 @@ await test('5. validateProject() accepts a valid image layer and rejects one mis
   assert.ok(match, 'expected to find validateProject() in app.js');
   const source = appJs.slice(appJs.indexOf('const DEFAULT_PROJECT_NAME='), appJs.indexOf(match[0]) + match[0].length);
   const { getObjectTemplate } = await import('../src/products/index.js');
+  // S-110: validateProject() (and its own extracted slice's SUPPORTED_LAYER_TYPES declaration) now
+  // references XYWH_SHAPE_TYPES/SHAPE_LIBRARY_KINDS (declared well before this slice begins) --
+  // injected as function parameters for the same reason getObjectTemplate is above.
+  const { SHAPE_LIBRARY_KINDS } = await import('../src/geometry/index.js');
+  const XYWH_SHAPE_TYPES = new Set(['rectangle', 'svg', 'image', 'path', ...SHAPE_LIBRARY_KINDS]);
   // eslint-disable-next-line no-new-func
-  const validateProject = new Function('getObjectTemplate', `${source}\nreturn validateProject;`)(getObjectTemplate);
+  const validateProject = new Function('getObjectTemplate', 'XYWH_SHAPE_TYPES', 'SHAPE_LIBRARY_KINDS', `${source}\nreturn validateProject;`)(getObjectTemplate, XYWH_SHAPE_TYPES, SHAPE_LIBRARY_KINDS);
 
   const baseProject = () => ({
     version: 2,
