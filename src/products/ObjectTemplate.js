@@ -11,10 +11,16 @@
  * layers (mm stone positions). An `ObjectTemplate` never contains a stone position — it only
  * describes the physical item the (unchanged) `StoneLayout` is being previewed/produced against.
  */
+import { PLATE_ROUND_DINNER_DEFINITION, getPlateDefaults } from './PlateProductDefinition.js';
 
 export const WRAP_MODES = Object.freeze(['front', 'wide', 'half', 'full']);
 
-const PREVIEW_KINDS = new Set(['mug', 'tumbler', 'bottle']);
+// S-112: 'plate' joins the three revolved-vessel kinds. Unlike mug/tumbler/bottle, a plate's
+// printable surface is not an unwrapped cylinder wall (see preview.kind==='plate' below) -- it
+// still shares the same ObjectTemplate record shape (id/displayName/production size/safe area/
+// wrap/preview) so every generic consumer (Production Sheet, save/load, the #objectType select)
+// needs no plate-specific branch of its own.
+const PREVIEW_KINDS = new Set(['mug', 'tumbler', 'bottle', 'plate']);
 
 function assertFiniteNumber(value, label) {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -93,11 +99,19 @@ export function createObjectTemplate(def) {
   if (!PREVIEW_KINDS.has(preview.kind)) {
     throw new TypeError(`ObjectTemplate: preview.kind must be one of ${[...PREVIEW_KINDS].join(', ')}.`);
   }
-  assertPositiveNumber(preview.topWidthFactor, 'preview.topWidthFactor');
-  assertPositiveNumber(preview.bottomWidthFactor, 'preview.bottomWidthFactor');
-  assertPositiveNumber(preview.bodyHeightFactor, 'preview.bodyHeightFactor');
   if (typeof preview.hasHandle !== 'boolean') {
     throw new TypeError('ObjectTemplate: preview.hasHandle must be a boolean.');
+  }
+  // S-112: a plate's real dimensions are not derived from canvasWidthMm/topWidthFactor the way
+  // every revolved-vessel kind's are (a plate's outer diameter is a direct physical spec, not an
+  // unwrapped-canvas-circumference artifact -- see ObjectDimensions.js's computeObjectDimensionsMm()
+  // plate branch) -- so topWidthFactor/bottomWidthFactor/bodyHeightFactor do not apply and are
+  // deliberately not required here. Its live mm params instead come from project.plate at runtime
+  // (see src/products/PlateProductDefinition.js's normalizePlateParams()).
+  if (preview.kind !== 'plate') {
+    assertPositiveNumber(preview.topWidthFactor, 'preview.topWidthFactor');
+    assertPositiveNumber(preview.bottomWidthFactor, 'preview.bottomWidthFactor');
+    assertPositiveNumber(preview.bodyHeightFactor, 'preview.bodyHeightFactor');
   }
   if (preview.kind === 'bottle') {
     for (const field of ['neckWidthFactor', 'neckHeightFactor', 'shoulderHeightFactor', 'capHeightFactor']) {
@@ -187,6 +201,27 @@ const TEMPLATE_DEFINITIONS = [
       neckHeightFactor: 0.12,
       shoulderHeightFactor: 0.09,
       capHeightFactor: 0.06
+    }
+  },
+  {
+    // S-112: Round Dinner Plate. productionWidthMm/productionHeightMm are the plate's own
+    // outerDiameterMm default (see PlateProductDefinition.js) — for every other template, the
+    // production canvas is an *unwrapped cylinder wall*; for a plate, it is instead a flat,
+    // top-down square exactly bounding the circular top surface (project.canvas.width ===
+    // project.canvas.height === the live outerDiameterMm, kept in sync by app.js whenever the
+    // operator edits Outer Diameter — see ObjectDimensions.js's plate branch). safeAreaInsetMm is
+    // zero on every side (a design may legitimately run to the true outer edge, e.g. Full Top
+    // Surface) — the real printable-boundary guide for a plate is circular/annular, drawn from
+    // src/products/PlateGuides.js's plate-specific helper, not this rectangular inset.
+    id: 'plate',
+    displayName: PLATE_ROUND_DINNER_DEFINITION.name,
+    productionWidthMm: getPlateDefaults().outerDiameterMm,
+    productionHeightMm: getPlateDefaults().outerDiameterMm,
+    safeAreaInsetMm: { top: 0, right: 0, bottom: 0, left: 0 },
+    wrap: { supported: WRAP_MODES, default: 'full' },
+    preview: {
+      kind: 'plate',
+      hasHandle: false
     }
   }
 ];

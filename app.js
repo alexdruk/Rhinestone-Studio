@@ -97,7 +97,7 @@ import { stoneLayoutToSvg } from './src/export/SvgExporter.js';
 import { computeProductionSheetLayout, productionSheetToSvg, productionSheetToPdf } from './src/export/ProductionSheetExporter.js';
 import { parseSvgDocument } from './src/svg/index.js';
 import { HistoryManager } from './src/history/index.js';
-import { getObjectTemplate, getSafeAreaRectMm } from './src/products/index.js';
+import { getObjectTemplate, getSafeAreaRectMm, getPlateDefaults, getPlateColorOptions, getPlateColor, normalizePlateParams, computeRimWidthMm, getPlateDesignTargetGuide, getPlateDesignTargetMeta, PLATE_ROUND_DINNER_DEFINITION } from './src/products/index.js';
 import { prepareImageField, maskFieldToRgba, decodeImageFileToBuffer, decodeDataUrlToBuffer, readFileAsDataUrl, isSupportedImageFile } from './src/image/index.js';
 // RS-1009 (Alignment & Snapping): src/editing/** is a new, pure, DOM-free module -- multi-select,
 // align/distribute, and drag/keyboard snapping math over layer bounding boxes in mm. It has no
@@ -437,7 +437,12 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // below is the one survivor: it is also the live cross-layer proximity merge generate() still uses.
  dedupe(stones,minDist){const cell=Math.max(minDist,0.5),grid=new Map(),out=[],m2=minDist*minDist;for(const s of stones){const gx=Math.floor(s.x/cell),gy=Math.floor(s.y/cell);let ok=true;for(let yy=gy-1;yy<=gy+1;yy++)for(let xx=gx-1;xx<=gx+1;xx++){const arr=grid.get(xx+','+yy)||[];for(const o of arr){const dx=s.x-o.x,dy=s.y-o.y;if(dx*dx+dy*dy<m2){ok=false;break}}if(!ok)break}if(ok){out.push(s);const k=gx+','+gy;if(!grid.has(k))grid.set(k,[]);grid.get(k).push(s)}}return out} }
 const DEFAULT_PROJECT_NAME='Untitled Project';
-function defaultProject(){return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,product:'mug',canvas:{width:210,height:90},cupColor:'#1f3556',wrap:'front',layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:2,gap:.3,color:'gold',autoFit:true,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',x:0,y:0}]}}
+// S-112: project.plate always carries a normalized plate-params bag (the JSON's own defaults for a
+// fresh/non-plate project), even though it is only meaningful once product==='plate' -- this
+// avoids a null-check at every call site that reads it (drawCup(), Production Sheet options, the
+// plate guide overlay), exactly like project.wrap already exists (and is read) even while a
+// cylindrical template that barely uses it is selected.
+function defaultProject(){return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,product:'mug',canvas:{width:210,height:90},cupColor:'#1f3556',wrap:'front',plate:getPlateDefaults(),layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:2,gap:.3,color:'gold',autoFit:true,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',x:0,y:0}]}}
 // RS-0003.5D1: validates an imported Project JSON file against the exact ad hoc project/layer
 // shape #exportProject already produces (JSON.stringify(project)). Throws a specific Error
 // describing the first problem found instead of silently accepting a malformed project; the
@@ -495,7 +500,12 @@ function validateProject(obj){
   // RS-1005: project.name follows the exact same permissive-default style — a missing/non-string
   // name (e.g. every pre-RS-1005 Project JSON file) resolves to DEFAULT_PROJECT_NAME rather than
   // throwing, so old files keep importing cleanly.
-  return{version:Number(obj.version)||2,units:'mm',name:typeof obj.name==='string'&&obj.name.length>0?obj.name:DEFAULT_PROJECT_NAME,product:getObjectTemplate(obj.product).id,canvas:{width:canvas.width,height:canvas.height},cupColor:typeof obj.cupColor==='string'?obj.cupColor:'#1f3556',wrap:typeof obj.wrap==='string'?obj.wrap:'front',layers:obj.layers.map(l=>({...l,visible:l.visible!==false}))}
+  // S-112: project.plate is a new, optional top-level field, present/meaningful only when
+  // product==='plate'. Every pre-S-112 Project JSON (Mug/Tumbler/Bottle) has no such field at all;
+  // normalizePlateParams(undefined) returns the JSON's own defaults, so this never throws and never
+  // needs obj.plate to exist. Backward compatible by construction — see
+  // docs/specifications/S-112-RoundDinnerPlate.md, "Project Schema Impact".
+  return{version:Number(obj.version)||2,units:'mm',name:typeof obj.name==='string'&&obj.name.length>0?obj.name:DEFAULT_PROJECT_NAME,product:getObjectTemplate(obj.product).id,canvas:{width:canvas.width,height:canvas.height},cupColor:typeof obj.cupColor==='string'?obj.cupColor:'#1f3556',wrap:typeof obj.wrap==='string'?obj.wrap:'front',plate:normalizePlateParams(obj.plate),layers:obj.layers.map(l=>({...l,visible:l.visible!==false}))}
 }
 let fontProviderRegistry=null,permanentEngineError=null,fontManager=null;
 try{fontManager=await FontManager.fromUrl('./assets/fonts/manifest.json');fontProviderRegistry=createDefaultFontProviderRegistry(fontManager);TEXT_ENGINE_FONT_IDS=new Set(fontManager.listFonts().map(f=>f.id))}catch(error){permanentEngineError=error;console.error('Font manifest failed to load; text layers will render empty until this is resolved. Shape layers are unaffected.',error)}
@@ -599,6 +609,10 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
   // RS-1004: project.product is likewise project-level, not per-layer -- resync on every selection
   // change/undo/redo/import for the same reason cupColor/wrap are resynced above.
   el('objectType').value=project.product;
+  // S-112: project.plate is likewise project-level -- resync every plate field for the same reason
+  // (undo/redo restore, Project JSON import, or a template switch away-and-back must never leave
+  // these inputs showing a stale value that a later edit would silently write back).
+  el('plateOuterDiameter').value=project.plate.outerDiameterMm;el('plateInnerWellDiameter').value=project.plate.innerWellDiameterMm;el('plateOverallHeight').value=project.plate.overallHeightMm;el('plateCenterDepth').value=project.plate.centerDepthMm;el('plateColor').value=project.plate.colorId;el('plateDesignTarget').value=project.plate.designTarget;
   // RS-1005: project.name is likewise project-level -- resync for the same reason.
   el('projectName').value=project.name;
   // S-105 follow-up: a type-specific Lightbox (Text/Import/Image Trace) that stays open (non-modal
@@ -638,7 +652,21 @@ function writeSelectedControlsToLayer(){const l=selectedLayer();if(l.type==='tex
   if(l.type==='polygon')l.sides=Math.max(3,Math.min(12,parseIntOr(el('shapeSides').value,6)));
   if(l.type==='star'){l.points=Math.max(3,Math.min(12,parseIntOr(el('shapePoints').value,5)));l.innerRadiusRatio=Math.max(0.1,Math.min(0.9,parseFloat(el('shapeInnerRadius').value)||0.5))}
   if(l.type==='ring')l.innerRatio=Math.max(0.1,Math.min(0.9,parseFloat(el('shapeRingInner').value)||0.5));
-}else if(l.type==='svg'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.mode=resolveVectorFillMode(el('svgMode').value)}else if(l.type==='image'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.fillMode=resolveImageFillMode(el('imageFillMode').value)}else if(l.type==='path'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(2,parseFloat(el('shapeW').value)||10);l.h=Math.max(2,parseFloat(el('shapeH').value)||10);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}l.stoneSize=parseFloat(el('stoneSize').value)||2;l.gap=parseFloat(el('gap').value)||.3;l.color=el('stoneColor').value;project.cupColor=el('cupColor').value;project.wrap=el('wrap').value;project.name=el('projectName').value||DEFAULT_PROJECT_NAME;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
+}else if(l.type==='svg'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.mode=resolveVectorFillMode(el('svgMode').value)}else if(l.type==='image'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.fillMode=resolveImageFillMode(el('imageFillMode').value)}else if(l.type==='path'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(2,parseFloat(el('shapeW').value)||10);l.h=Math.max(2,parseFloat(el('shapeH').value)||10);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}l.stoneSize=parseFloat(el('stoneSize').value)||2;l.gap=parseFloat(el('gap').value)||.3;l.color=el('stoneColor').value;project.cupColor=el('cupColor').value;project.wrap=el('wrap').value;
+  // S-112: plate fields only read/written while the Round Dinner Plate template is active
+  // (mirroring how e.g. bottle-only fields are template-gated) -- normalizePlateParams() clamps
+  // every value into the JSON's approved range and re-derives a consistent inner/outer diameter
+  // pair, so a malformed typed value can never desync rimWidthMm or leave project.plate
+  // inconsistent. project.canvas is kept a square exactly matching the live outer diameter (the
+  // plate's production canvas IS its top-down footprint, unlike the cylindrical templates' unwrapped
+  // wall), and project.cupColor is kept resolved from the selected plate color id so drawCup()/the
+  // Object Preview need no plate-specific color plumbing.
+  if(currentObjectTemplate().preview.kind==='plate'){
+    project.plate=normalizePlateParams({outerDiameterMm:parseFloat(el('plateOuterDiameter').value),innerWellDiameterMm:parseFloat(el('plateInnerWellDiameter').value),overallHeightMm:parseFloat(el('plateOverallHeight').value),centerDepthMm:parseFloat(el('plateCenterDepth').value),footRingOuterDiameterMm:project.plate.footRingOuterDiameterMm,footRingHeightMm:project.plate.footRingHeightMm,colorId:el('plateColor').value,designTarget:el('plateDesignTarget').value});
+    project.canvas={width:project.plate.outerDiameterMm,height:project.plate.outerDiameterMm};
+    project.cupColor=getPlateColor(project.plate.colorId).hex;
+  }
+  project.name=el('projectName').value||DEFAULT_PROJECT_NAME;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
 async function updateAll(skipWrite=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated;try{generated=await engine.generate(project)}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Text generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;renderLayerUI();drawLayout();drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}// S-003: a project must always keep at least one layer (deleteLayer()'s guard below), so once
 // only one layer remains, every delete affordance -- the per-row trash icon and the sidebar
 // "Delete selected layer" button -- is disabled here (not just left clickable-but-a-no-op) and
@@ -652,13 +680,47 @@ function renderLayerUI(){const onlyOneLayer=project.layers.length<=1;el('selecte
 }function layerLabel(l){if(l.type==='text')return l.text||'Text';if(l.type==='svg')return l.svgName||'SVG';if(l.type==='image')return l.imageName||'Image';if(l.type==='path')return l.pathName||'Path';return SHAPE_DISPLAY_LABELS[l.type]||'Shape'}function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function resizeCanvas(c){const r=c.getBoundingClientRect(),dpr=Math.max(1,devicePixelRatio||1),w=Math.floor(r.width*dpr),h=Math.floor(r.height*dpr);if(c.width!==w||c.height!==h){c.width=w;c.height=h}return{w,h,dpr}}
 function layoutMmToPx(p){return{x:layoutTransform.ox+p.x*layoutTransform.s,y:layoutTransform.oy+p.y*layoutTransform.s}}function layoutPxToMm(x,y){return{x:(x-layoutTransform.ox)/layoutTransform.s,y:(y-layoutTransform.oy)/layoutTransform.s}}
-function drawLayout(){const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr});layoutTransform={s,ox,oy,dpr};drawFrontViewFrame(ctx,s,ox,oy,dpr);if(showSafeArea)drawSafeAreaGuide(ctx,s,ox,oy,dpr,getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height));drawSelection(ctx,s,ox,oy,dpr);drawGuides(ctx,s,ox,oy,dpr);ctx.fillStyle='#516071';ctx.font=`${12*dpr}px Arial`;ctx.fillText(`${layout.count} stones · ${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm · ${selectedLayer().textMode||''}`,20*dpr,h-18*dpr);el('fitNotice').textContent='Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step) · Drag the amber Front View Frame to rotate the Object Preview.'}
+function drawLayout(){const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr});layoutTransform={s,ox,oy,dpr};
+  // S-112: the plate template draws its own circular/annular design-target guide instead of the
+  // cylindrical Front View Frame + rectangular safe-area guide -- neither applies to a flat
+  // top-down disc (see drawPlateDesignTargetGuide()'s own header comment).
+  const isPlate=currentObjectTemplate().preview.kind==='plate';
+  if(isPlate){drawPlateDesignTargetGuide(ctx,s,ox,oy,dpr)}else{drawFrontViewFrame(ctx,s,ox,oy,dpr);if(showSafeArea)drawSafeAreaGuide(ctx,s,ox,oy,dpr,getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height))}
+  drawSelection(ctx,s,ox,oy,dpr);drawGuides(ctx,s,ox,oy,dpr);ctx.fillStyle='#516071';ctx.font=`${12*dpr}px Arial`;ctx.fillText(`${layout.count} stones · ${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm · ${selectedLayer().textMode||''}`,20*dpr,h-18*dpr);el('fitNotice').textContent=isPlate?'Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step) · Blue guide shows the selected Design Target’s printable boundary.':'Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step) · Drag the amber Front View Frame to rotate the Object Preview.'}
 // RS-1004: a dashed guide rectangle for the active object template's safe design area, derived from
 // the current project.canvas size. This is a layer-agnostic editor overlay (like drawSelection()
 // below), not a CanvasRenderer2D.js change -- it reuses the exact mm->px transform
 // renderProductionLayout() already returned, drawn before the selection outline so selection always
 // reads on top.
 function drawSafeAreaGuide(ctx,s,ox,oy,dpr,rectMm){const rx=ox+rectMm.xMm*s,ry=oy+rectMm.yMm*s,rw=rectMm.widthMm*s,rh=rectMm.heightMm*s;ctx.save();ctx.strokeStyle='rgba(20,120,255,.45)';ctx.lineWidth=1.25*dpr;ctx.setLineDash([5*dpr,4*dpr]);ctx.strokeRect(rx,ry,rw,rh);ctx.setLineDash([]);ctx.restore()}
+// S-112: the Round Dinner Plate's own printable-boundary guide -- a circle (Center Well/Full Top
+// Surface) or true annulus (Rim Band), replacing the cylindrical Front View Frame (drawFrontViewFrame()
+// below is skipped entirely for the plate template, see drawLayout()) since a flat top-down disc has
+// no "currently facing the viewer" wrap-position concept. Reuses getPlateDesignTargetGuide()
+// (src/products/PlateGuides.js, kept plate-specific and outside GeometryEngine per the milestone
+// brief) for the pure geometry; this function only turns that into drawn circles with the existing
+// mm->px transform every other overlay here already uses. Purely advisory (like drawSafeAreaGuide()) --
+// never clips/hides a stone, and the design-target selection never regenerates the StoneLayout.
+function drawPlateDesignTargetGuide(ctx,s,ox,oy,dpr){
+  const guide=getPlateDesignTargetGuide(project.plate.designTarget,project.plate,project.canvas.width,project.canvas.height);
+  const cx=ox+guide.cxMm*s,cy=oy+guide.cyMm*s;
+  const strokeCircle=(radiusMm,dashed)=>{ctx.beginPath();ctx.arc(cx,cy,radiusMm*s,0,Math.PI*2);ctx.setLineDash(dashed?[5*dpr,4*dpr]:[]);ctx.stroke()};
+  ctx.save();
+  ctx.lineWidth=1.75*dpr;
+  ctx.strokeStyle='rgba(20,120,255,.6)';
+  if(guide.kind==='annulus'){
+    strokeCircle(guide.outerRadiusMm,false);
+    strokeCircle(guide.innerRadiusMm,false);
+  }else{
+    strokeCircle(guide.radiusMm,false);
+    if(guide.transitionRadiusMm!=null){ctx.strokeStyle='rgba(20,120,255,.35)';strokeCircle(guide.transitionRadiusMm,true)}
+  }
+  ctx.setLineDash([]);
+  ctx.font=`bold ${12*dpr}px Arial`;
+  ctx.fillStyle='#1478ff';
+  ctx.fillText(`${guide.label} · printable boundary`,ox+6*dpr,oy+16*dpr);
+  ctx.restore();
+}
 // S-107 (Front View Frame & Long Text Workflow): normalizes a radian angle delta to (-PI, PI], the
 // signed "how far around the object" distance used by isPointerOnFrontViewFrame() and the frame
 // drag math below. A tiny local helper (not exported from ObjectDimensions.js) since it operates on
@@ -719,6 +781,9 @@ function drawFrontViewFrame(ctx,s,ox,oy,dpr){
 // View Frame band -- the same wrap-aware angular window drawFrontViewFrame() renders, expressed as
 // an angular distance so it needs no per-segment mm math and handles the edge-wrap case for free.
 function isPointerOnFrontViewFrame(mm){
+  // S-112: the plate has no Front View Frame (drawLayout() never draws one for it -- see
+  // drawPlateDesignTargetGuide()'s header comment), so it can never be the target of a frame drag.
+  if(currentObjectTemplate().preview.kind==='plate')return false;
   if(mm.y<0||mm.y>project.canvas.height)return false;
   const canvasWidthMm=project.canvas.width;
   const pointerAzimuthRad=azimuthRadForCanvasXMm(mm.x,canvasWidthMm);
@@ -811,6 +876,10 @@ function isTextOutsidePrintableArea(l){
 function printableCircumferenceMm(){return circumferenceMm(project.canvas.width)}
 function isTextTooLongForObject(l){
   if(!l||l.type!=='text'||!l.text)return false;
+  // S-112: a plate is a flat surface, never wrapped around a circumference -- "too long to wrap
+  // around the object" is not a real manufacturing limitation for it (see printableCircumferenceMm()'s
+  // own header comment: this check exists only for cylindrical/revolved-vessel templates).
+  if(currentObjectTemplate().preview.kind==='plate')return false;
   return getLayerBBox(l).width>printableCircumferenceMm();
 }
 // Builds the too-long warning's detail copy (requirement 5: "must describe a real manufacturing
@@ -1026,7 +1095,7 @@ function handlesFor(b){return[{name:'nw',x:b.x,y:b.y},{name:'ne',x:b.x2,y:b.y},{
 // position/scale/orientation/proportions, subject only to normal cylindrical perspective. Wrap mode
 // still controls the Front View Frame overlay (drawFrontViewFrame(), frontViewFrameGeometry()) on
 // the 2D canvas, unchanged.
-function drawCup(){preview3D.update(layout,{cupColor:project.cupColor,objectTemplate:currentObjectTemplate(),canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height});preview3D.syncView(rotation,zoom)}
+function drawCup(){preview3D.update(layout,{cupColor:project.cupColor,objectTemplate:currentObjectTemplate(),canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height,plateParams:project.plate});preview3D.syncView(rotation,zoom)}
 // S-001: keeps the Front/Left/Right/Back buttons' highlighted state synchronized with `rotation`
 // regardless of how it changed (view-button click, reset, slider, or manual cup-drag), since this
 // is called from updateAll() rather than duplicated at each rotation-changing call site.
@@ -1045,7 +1114,13 @@ function selectionBoundsText(){if(!selectedLayerIds.size)return'';const sel=[...
 // frontViewFrameGeometry()/printableCircumferenceMm(), the exact same functions that draw the
 // frame and gate the too-long warning, so this can never disagree with either. Viewing position is
 // the live rotation angle, signed the same way the Rotation slider/view buttons already are.
-function updateStats(){const safe=getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height);el('layoutStats').innerHTML=`<b>${layout.count}</b> stones <span>${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm</span><span>canvas: ${project.canvas.width}×${project.canvas.height} mm</span><span>safe area: ${safe.widthMm.toFixed(1)}×${safe.heightMm.toFixed(1)} mm</span><span>units: mm</span>${selectionBoundsText()}<span>selected: ${escapeHtml(layerLabel(selectedLayer()))}</span>`;const{frameWidthMm}=frontViewFrameGeometry();el('cupStats').innerHTML=`<span>${escapeHtml(currentObjectTemplate().displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span><span>Front View width: ${frameWidthMm.toFixed(1)} mm</span><span>printable circumference: ${printableCircumferenceMm().toFixed(1)} mm</span><span>viewing position: ${Math.round(rotation)}°</span>`;updateStoneColorSwatch()}
+// S-112: the plate has no Front View Frame/printable-circumference concept (see
+// isPointerOnFrontViewFrame()/isTextTooLongForObject()'s own S-112 guards) -- its cupStats line
+// instead reports the plate's own physical metadata: design target, outer/inner diameter, rim
+// width, and approximate weight.
+function plateCupStatsHtml(t){const rimWidthMm=computeRimWidthMm(project.plate.outerDiameterMm,project.plate.innerWellDiameterMm);return`<span>${escapeHtml(t.displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span><span>design target: ${escapeHtml(getPlateDesignTargetMeta(project.plate.designTarget).name)}</span><span>outer diameter: ${project.plate.outerDiameterMm.toFixed(1)} mm</span><span>inner well diameter: ${project.plate.innerWellDiameterMm.toFixed(1)} mm</span><span>rim width: ${rimWidthMm.toFixed(1)} mm</span><span>approx. weight: ${PLATE_ROUND_DINNER_DEFINITION.weightGrams.average} g</span>`}
+function cylindricalCupStatsHtml(t){const{frameWidthMm}=frontViewFrameGeometry();return`<span>${escapeHtml(t.displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span><span>Front View width: ${frameWidthMm.toFixed(1)} mm</span><span>printable circumference: ${printableCircumferenceMm().toFixed(1)} mm</span><span>viewing position: ${Math.round(rotation)}°</span>`}
+function updateStats(){const t=currentObjectTemplate(),isPlate=t.preview.kind==='plate';const safe=getSafeAreaRectMm(t,project.canvas.width,project.canvas.height);el('layoutStats').innerHTML=`<b>${layout.count}</b> stones <span>${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm</span><span>canvas: ${project.canvas.width}×${project.canvas.height} mm</span><span>safe area: ${safe.widthMm.toFixed(1)}×${safe.heightMm.toFixed(1)} mm</span><span>units: mm</span>${selectionBoundsText()}<span>selected: ${escapeHtml(layerLabel(selectedLayer()))}</span>`;el('cupStats').innerHTML=isPlate?plateCupStatsHtml(t):cylindricalCupStatsHtml(t);updateStoneColorSwatch()}
 function download(name,mime,data){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:mime}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800);el('status').textContent=`Downloaded ${name}`}function exportCanvas(name,canvas){canvas.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800)},'image/png')}
 // S-106: Combined Visual Preview PNG. Composites the two already-rendered, always-mounted canvas
 // elements (layoutCanvas/cupCanvas -- both keep a real, non-zero pixel backing store at all times
@@ -1201,7 +1276,7 @@ window.addEventListener('keydown',e=>{
 // (opened on the first 'input' event, closed on 'change'). `rotation`/`zoom` are view-only (not
 // part of `project`) and keep their original plain 'input' listener, untouched.
 // UI-001: 'textX'/'textY' are the new manual Text Lightbox position fields (see writeSelectedControlsToLayer()).
-const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner'];
+const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
 // RS-2002: Browse Fonts panel wiring. Toggling/closing never touches history (it only decides
@@ -1215,7 +1290,13 @@ el('selectedLayer').addEventListener('change',()=>{selectedLayerId=el('selectedL
 // addRect/deleteLayer's commitHistory()-then-mutate pattern below), not a continuous-session field
 // -- it also resets project.canvas/project.wrap to the new template's own defaults, so those two
 // resets are always committed together with the switch, never independently.
-el('objectType').addEventListener('change',()=>{commitHistory();const template=getObjectTemplate(el('objectType').value);project.product=template.id;project.canvas={width:template.productionWidthMm,height:template.productionHeightMm};project.wrap=template.wrap.default;syncSelectedControlsFromLayer();updateAll(true)});el('layersList').addEventListener('click',e=>{const row=e.target.closest('.layer');if(!row)return;const id=row.dataset.layer,action=e.target.dataset.action;if(action==='visible'){const l=project.layers.find(x=>x.id===id);commitHistory();l.visible=e.target.checked;updateAll(true);return}if(action==='duplicate'){duplicateLayer(id);return}if(action==='delete'){deleteLayer(id);return}
+el('objectType').addEventListener('change',()=>{commitHistory();const template=getObjectTemplate(el('objectType').value);project.product=template.id;project.canvas={width:template.productionWidthMm,height:template.productionHeightMm};project.wrap=template.wrap.default;
+  // S-112: switching to the Round Dinner Plate also resets project.plate to the JSON's own
+  // defaults (mirroring how project.canvas/project.wrap already reset above) and seeds
+  // project.cupColor from the plate's default color id so the Object Preview immediately shows
+  // the approved White, not whatever cupColor the previous template left behind.
+  if(template.id==='plate'){project.plate=getPlateDefaults();project.cupColor=getPlateColor(project.plate.colorId).hex}
+  syncSelectedControlsFromLayer();updateAll(true)});el('layersList').addEventListener('click',e=>{const row=e.target.closest('.layer');if(!row)return;const id=row.dataset.layer,action=e.target.dataset.action;if(action==='visible'){const l=project.layers.find(x=>x.id===id);commitHistory();l.visible=e.target.checked;updateAll(true);return}if(action==='duplicate'){duplicateLayer(id);return}if(action==='delete'){deleteLayer(id);return}
   // RS-1009: Shift-click toggles a layer row in the multi-selection, the same shared toggle a
   // canvas Shift-click uses (src/editing/Selection.js) -- a plain click still selects only that
   // one layer, preserving pre-existing single-selection behavior.
@@ -1578,7 +1659,12 @@ el('exportCombined').onclick=()=>{if(!layout){el('status').textContent='Export f
 // `project`, not undo/redo-tracked. gapMm is collected from every currently visible layer (the one
 // piece of header metadata Stone itself never carries -- see
 // docs/specifications/RS-1005-ProductionSheetGenerator.md, "Current Repository State").
-function currentProductionSheetOptions(){return{projectName:project.name,objectType:currentObjectTemplate().displayName,productionWidthMm:project.canvas.width,productionHeightMm:project.canvas.height,gapMm:[...new Set(project.layers.filter(l=>l.visible).map(l=>l.gap))],pageSize:el('prodSheetPageSize').value,marginMm:parseFloat(el('prodSheetMargin').value)||0,mirror:el('prodSheetMirror').value==='on',registrationMarks:el('prodSheetRegMarks').value==='on'}}
+// S-112: adds five plate-only header fields (undefined/absent for every other template, matching
+// ProductionSheetExporter.js's existing "plain caller-supplied options, label + '—' fallback"
+// pattern for Gap/Crystal color) -- see docs/specifications/RS-1005-ProductionSheetGenerator.md for
+// this function's pre-existing fields and docs/specifications/S-112-RoundDinnerPlate.md for the
+// plate-specific additions.
+function currentProductionSheetOptions(){const t=currentObjectTemplate(),isPlate=t.preview.kind==='plate';const plateFields=isPlate?{plateDesignTarget:getPlateDesignTargetMeta(project.plate.designTarget).name,plateOuterDiameterMm:project.plate.outerDiameterMm,plateInnerWellDiameterMm:project.plate.innerWellDiameterMm,plateRimWidthMm:computeRimWidthMm(project.plate.outerDiameterMm,project.plate.innerWellDiameterMm),plateOverallHeightMm:project.plate.overallHeightMm,plateWeightGrams:PLATE_ROUND_DINNER_DEFINITION.weightGrams.average,plateColorName:getPlateColor(project.plate.colorId).name}:{};return{projectName:project.name,objectType:t.displayName,productionWidthMm:project.canvas.width,productionHeightMm:project.canvas.height,gapMm:[...new Set(project.layers.filter(l=>l.visible).map(l=>l.gap))],pageSize:el('prodSheetPageSize').value,marginMm:parseFloat(el('prodSheetMargin').value)||0,mirror:el('prodSheetMirror').value==='on',registrationMarks:el('prodSheetRegMarks').value==='on',...plateFields}}
 el('exportProdSheetSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-production-sheet.svg','image/svg+xml',productionSheetToSvg(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportProdSheetPDF').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-production-sheet.pdf','application/pdf',productionSheetToPdf(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 // PNG has no dedicated src/export/** module (matching #exportPNG/#exportCup's existing "capture,
@@ -1701,10 +1787,23 @@ el('shapesTabDesign').onclick=()=>setShapesTab('design');
 el('shapesTabTemplates').onclick=()=>setShapesTab('templates');
 function updateObjectTemplateDetail(){
   const t=currentObjectTemplate(),s=t.safeAreaInsetMm;
+  const isPlate=t.preview.kind==='plate';
   const detailEl=el('objectTemplateDetail');
   if(detailEl)detailEl.textContent=`Production ${t.productionWidthMm}×${t.productionHeightMm}mm · Safe area inset ${s.top}/${s.right}/${s.bottom}/${s.left}mm · Default wrap: ${t.wrap.default}`;
   const summaryEl=el('projectTemplateSummary');
   if(summaryEl)summaryEl.textContent=`${t.displayName} · ${project.canvas.width}×${project.canvas.height}mm`;
+  // S-112: the plate-only dimension/design-target field group and the plate-only color swatch
+  // (in place of the generic #cupColor preview-background swatch) are shown only while the Round
+  // Dinner Plate template is active -- every other template's fields are unaffected.
+  el('plateFields').style.display=isPlate?'block':'none';
+  el('plateColorField').style.display=isPlate?'flex':'none';
+  el('cupColorField').style.display=isPlate?'none':'flex';
+  if(isPlate){
+    const rimWidthMm=computeRimWidthMm(project.plate.outerDiameterMm,project.plate.innerWellDiameterMm);
+    const targetName=getPlateDesignTargetMeta(project.plate.designTarget).name;
+    const plateDetailEl=el('plateDetail');
+    if(plateDetailEl)plateDetailEl.textContent=`Rim width ${rimWidthMm.toFixed(1)}mm (derived) · Design target: ${targetName} · Approx. weight ${PLATE_ROUND_DINNER_DEFINITION.weightGrams.average} g (product information, read-only)`;
+  }
 }
 
 // ---- Import Lightbox: SVG Import / Project Import tabs ----

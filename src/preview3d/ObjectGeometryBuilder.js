@@ -47,20 +47,39 @@ const HANDLE_TUBE_RADIUS_FRACTION = 0.11; // relative to bodyRadiusMm
 // "Handle attachment" in docs/specifications/RS-1006A-PreviewCorrections.md.
 const HANDLE_EMBED_FACTOR = 1.6;
 
+// S-112: plate profile constants -- fractions/offsets describing the radial cross-section revolved
+// into the plate's LatheGeometry silhouette, all relative to the live plate's own mm dimensions
+// (never a fixed mm constant), so the silhouette stays proportional across the JSON's whole
+// outerDiameterMm/overallHeightMm range, not just the 270mm/25mm default.
+const PLATE_WALL_THICKNESS_FRACTION = 0.16; // rim wall thickness, relative to overallHeightMm
+const PLATE_RIM_SLOPE_FRACTION = 0.12; // top-surface dip from the outer edge down to the rim/well transition ("rim plane"), relative to overallHeightMm -- what makes the rim read as sloped, not flat
+const PLATE_EDGE_ROUND_FRACTION = 0.4; // outer-edge rounding radius, relative to wall thickness
+const PLATE_FOOT_RING_WIDTH_FRACTION = 0.24; // foot ring radial width, relative to footRingOuterRadiusMm
+const PLATE_WELL_CONCAVE_BOW = 0.22; // how far the well's mid-radius curve control point bows toward center depth (0 = straight line, 1 = as deep as the center) -- keeps "slightly concave", never bowl-like
+
 /**
  * Builds a Group for one ObjectTemplate at the given live production-canvas mm size.
  *
  * @param {object} template A record from src/products/ObjectTemplate.js.
  * @param {number} canvasWidthMm
  * @param {number} canvasHeightMm
+ * @param {object|null} [plateParams] Required when template.preview.kind==='plate' -- see
+ *   ObjectDimensions.js's computeObjectDimensionsMm().
  * @returns {{group: THREE.Group, bodyMesh: THREE.Mesh, handleMesh: THREE.Mesh|null, dimensions: object}}
- *   `bodyMesh` is the one surface the caller applies the StoneLayout canvas texture to.
+ *   `bodyMesh` is the one surface the caller applies the StoneLayout canvas texture to (for a
+ *   plate, this is the printable top surface only -- the non-printable underside/rim-edge/foot-ring
+ *   is a second, plain-colored child mesh added directly to `group`, not returned separately, since
+ *   nothing outside this module needs to address it on its own).
  *   `dimensions` is computeObjectDimensionsMm()'s own result, so the caller can frame its camera
  *   without recomputing radius/height itself.
  */
-export function buildObjectMesh(template, canvasWidthMm, canvasHeightMm) {
-  const dimensions = computeObjectDimensionsMm(template, canvasWidthMm, canvasHeightMm);
+export function buildObjectMesh(template, canvasWidthMm, canvasHeightMm, plateParams = null) {
+  const dimensions = computeObjectDimensionsMm(template, canvasWidthMm, canvasHeightMm, plateParams);
   const group = new THREE.Group();
+
+  if (dimensions.kind === 'plate') {
+    return buildPlateObjectMesh(group, dimensions, canvasWidthMm, canvasHeightMm);
+  }
 
   const bodyGeometry = dimensions.kind === 'bottle'
     ? buildBottleGeometry(dimensions)
@@ -84,6 +103,58 @@ export function buildObjectMesh(template, canvasWidthMm, canvasHeightMm) {
   }
 
   return { group, bodyMesh, handleMesh, dimensions };
+}
+
+// S-112: builds the plate's two-mesh silhouette (see buildPlateProfilePoints() for the shared
+// radial cross-section both meshes are cut from) and returns the same {group, bodyMesh,
+// handleMesh, dimensions} shape every other kind returns, so Preview3DRenderer.js needs no
+// plate-specific branch of its own -- handleMesh is always null (plates have no handle).
+function buildPlateObjectMesh(group, dimensions, canvasWidthMm, canvasHeightMm) {
+  const points = buildPlateProfilePoints(dimensions);
+  // Index PLATE_TOP_POINT_COUNT-1 (the rounded outer-edge apex) is shared by both meshes so their
+  // silhouettes meet with no visible seam/gap.
+  //
+  // buildPlateProfilePoints() lists the top surface outward (well center -> rim edge), the natural
+  // order to describe it in, but THREE.LatheGeometry derives each vertex's normal from the
+  // profile's own traversal direction (rotating the local (dr,dy) tangent), not from "which way is
+  // up" -- traversed outward (r increasing together with y increasing, the same direction the
+  // mug/tumbler wall profile is traversed) it produces a normal that faces down and outward, correct
+  // for a convex wall seen from the side, but facing away from a camera looking down at a concave
+  // top surface from above. Reversing the top surface's point order (rim edge -> well center) flips
+  // that normal to face up, matching the bottle cap's own r-decreasing-while-y-increasing profile
+  // direction (also concave-seen-from-outside, also traversed rim-inward) -- confirmed correct via
+  // real-browser verification (TASK_RESULT.md). The underside/foot-ring, whose visible faces are
+  // seen from below/the side, keeps its natural outward (rim -> center-underside) order unchanged.
+  const topPoints = points.slice(0, PLATE_TOP_POINT_COUNT).reverse();
+  const underPoints = points.slice(PLATE_TOP_POINT_COUNT - 1);
+
+  const topGeometry = new THREE.LatheGeometry(topPoints, LATHE_SEGMENTS, -Math.PI, Math.PI * 2);
+  // LatheGeometry's own analytic per-vertex normals (derived from the profile's local tangent) are
+  // unreliable on a non-monotonic profile curve like the well's concave dip (radius briefly
+  // reverses direction relative to a simple taper) -- computeVertexNormals() discards those and
+  // derives fresh normals directly from each triangle's actual winding, guaranteed self-consistent
+  // with what the GPU rasterizes, fixing an observed dark/inconsistently-lit patch across the well
+  // (confirmed via real-browser verification, see TASK_RESULT.md).
+  topGeometry.computeVertexNormals();
+  applyPlateTopSurfaceUv(topGeometry, canvasWidthMm, canvasHeightMm);
+  const topMaterial = new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.04, side: THREE.FrontSide });
+  const bodyMesh = new THREE.Mesh(topGeometry, topMaterial);
+  group.add(bodyMesh);
+
+  // The underside/rim-edge/foot-ring never carries the design texture (a real manufactured plate
+  // has no rhinestones under the rim) -- a plain material colored to match the plate's own
+  // cupColor is set once here; Preview3DRenderer.js's _updateTexture() also refreshes this color
+  // on every update() call so it always tracks the live plate color, matching how the mug's handle
+  // material already tracks cupColor.
+  const underGeometry = new THREE.LatheGeometry(underPoints, LATHE_SEGMENTS, -Math.PI, Math.PI * 2);
+  // Same reasoning as topGeometry above -- the foot ring's own radius reversal (outer wall down,
+  // across the bottom, inner wall back up) is non-monotonic too.
+  underGeometry.computeVertexNormals();
+  const underMaterial = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0.05, side: THREE.FrontSide });
+  const underMesh = new THREE.Mesh(underGeometry, underMaterial);
+  group.add(underMesh);
+
+  return { group, bodyMesh, handleMesh: null, underMesh, dimensions };
 }
 
 // Mug/tumbler body (RS-1006A): a revolved profile (THREE.LatheGeometry, the same primitive the
@@ -147,6 +218,94 @@ function buildBottleGeometry(dimensions) {
   // S-107 follow-up: see the matching comment in buildTaperedBodyGeometry() above -- phiStart=-PI
   // moves LatheGeometry's own unconnected seam to the back, opposite front.
   return new THREE.LatheGeometry(points, LATHE_SEGMENTS, -Math.PI, Math.PI * 2);
+}
+
+// S-112: the plate's shared radial cross-section (r, y) mm points, revolved by buildPlateObjectMesh()
+// into two LatheGeometry pieces that split at index PLATE_TOP_POINT_COUNT-1 (the rounded outer-edge
+// apex -- the one point both pieces share, so their silhouettes meet with no gap/seam). Traveling
+// outward then back inward, in construction order:
+//   0 well center (top surface, lowest point) -- 1 well mid (concave curve) -- 2 rim/well
+//   transition ("rim plane") -- 3 rim mid-slope -- 4 rim top near outer edge -- 5 rounded outer-edge
+//   apex (shared) -- 6 edge rounds under into the underside -- 7 underside rim slope -- 8 underside
+//   approaching the foot ring -- 9 foot-ring outer wall top -- 10 foot-ring outer wall bottom
+//   (touches the table, y=0) -- 11 foot-ring inner wall bottom (y=0) -- 12 foot-ring inner wall top
+//   -- 13 underside center, closes the solid.
+// All offsets are fractions of the plate's own live dimensions (never a fixed mm constant), so the
+// silhouette stays proportional across the JSON's whole outerDiameterMm/overallHeightMm range.
+const PLATE_TOP_POINT_COUNT = 6;
+
+function buildPlateProfilePoints(dimensions) {
+  const { outerRadiusMm: R, innerWellRadiusMm: Rw, rimWidthMm, overallHeightMm: H, centerDepthMm: D, footRingOuterRadiusMm: Rf, footRingHeightMm: Hf } = dimensions;
+
+  const wallThicknessMm = Math.max(1.2, H * PLATE_WALL_THICKNESS_FRACTION);
+  const edgeRoundMm = wallThicknessMm * PLATE_EDGE_ROUND_FRACTION;
+  const footRingWidthMm = Math.min(Rf * 0.9, Rf * PLATE_FOOT_RING_WIDTH_FRACTION);
+
+  const rimTopOuterY = H; // the plate's overall max height, per definition, sits at the outer rim
+  const rimPlaneY = H - H * PLATE_RIM_SLOPE_FRACTION; // where the sloped rim meets the well
+  const wellCenterY = rimPlaneY - D; // centerDepthMm below the rim plane, per the JSON's own definition
+  const wellMidR = Rw * 0.5;
+  const wellMidY = wellCenterY + (rimPlaneY - wellCenterY) * PLATE_WELL_CONCAVE_BOW;
+  const rimMidR = Rw + rimWidthMm * 0.55;
+  const rimMidY = rimPlaneY + (rimTopOuterY - rimPlaneY) * 0.6;
+
+  const V = (r, y) => new THREE.Vector2(r, y);
+  return [
+    V(0, wellCenterY),
+    V(wellMidR, wellMidY),
+    V(Rw, rimPlaneY),
+    V(rimMidR, rimMidY),
+    V(R - edgeRoundMm, rimTopOuterY),
+    V(R, rimTopOuterY - edgeRoundMm * 0.5), // outer-most point -- PLATE_TOP_POINT_COUNT-1, shared with the underside mesh
+    V(R - edgeRoundMm * 0.6, rimTopOuterY - wallThicknessMm),
+    V(rimMidR, rimPlaneY - wallThicknessMm * 0.85),
+    V(Rf + footRingWidthMm * 0.6, Hf * 1.15),
+    V(Rf, Hf),
+    V(Rf, 0),
+    V(Rf - footRingWidthMm, 0),
+    V(Rf - footRingWidthMm, Hf),
+    V(0, Hf * 0.92)
+  ];
+}
+
+// S-112: the plate's printable top-surface UV mapping -- a direct top-down planar (orthographic)
+// projection of each vertex's own world X/Z position onto the flat production canvas, NOT the
+// azimuth/height-along-a-vertical-axis mapping applyAzimuthUv()/applyBodyHeightUv() use for every
+// revolved-vessel kind (see this file's own header comment on why that mapping does not apply to a
+// plate's face). Reads position.x/position.z directly -- no atan2, no column-index trick, no branch
+// cut, no r=0 sign instability: at r=0 (the well's exact center), every column's vertex already has
+// x=z=0 by construction, which trivially maps to the same canvas-center UV regardless of column, so
+// this projection is continuous everywhere on the surface with no special-cased seam, including
+// across the well/rim transition (Full Top Surface's "projection must remain continuous" requirement)
+// and across the rim's slope (Rim Band's "design must follow the sloped rim surface" requirement --
+// this samples the vertex's *actual* 3D position, not a flat overlay plane, so a design painted onto
+// the sloped rim genuinely follows that slope).
+//
+// canvasWidthMm/canvasHeightMm are expected to equal the plate's own outerDiameterMm on both axes
+// (app.js keeps project.canvas in sync with project.plate.outerDiameterMm) -- the plate is centered
+// at the canvas's own center, exactly like every stone in the merged StoneLayout already is.
+//
+// V uses -worldZ (not +worldZ, unlike U's direct +worldX): THREE.CanvasTexture defaults
+// `flipY=true` (reconciling the source <canvas>'s top-left-origin row order with GL's
+// bottom-left-origin V axis), which every revolved-vessel kind's applyBodyHeightUv() also relies on
+// implicitly -- but that mapping is safe from extra sign confusion because it ties V directly to
+// the object's own vertical axis, which the camera's "up" always agrees with regardless of viewing
+// angle. The plate's V axis instead comes from a *horizontal* world axis (Z, since the printable
+// face lies in the X-Z plane); combined with flipY and this preview's near-top-down camera (positioned
+// at +Z, looking toward -Z per Preview3DRenderer.js's default theta=0), the object's own +Z --
+// nearer the camera, reading as the *bottom* of the screen given the downward tilt -- must map to
+// the *bottom* of the 2D design (large canvas-Y mm), not its top. -worldZ is what makes that hold;
+// confirmed by real-browser verification (TASK_RESULT.md) that text reads upright and left-to-right
+// from the default camera position, matching the 2D Canvas exactly.
+function applyPlateTopSurfaceUv(geometry, canvasWidthMm, canvasHeightMm) {
+  const position = geometry.attributes.position;
+  const uv = geometry.attributes.uv;
+  for (let i = 0; i < position.count; i++) {
+    const canvasXMm = canvasWidthMm / 2 + position.getX(i);
+    const canvasYMm = canvasHeightMm / 2 - position.getZ(i);
+    uv.setXY(i, canvasXMm / canvasWidthMm, canvasYMm / canvasHeightMm);
+  }
+  uv.needsUpdate = true;
 }
 
 // RS-1006A: writes a custom V coordinate per vertex -- the vertex's real millimeter Y position

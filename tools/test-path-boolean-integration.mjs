@@ -262,7 +262,9 @@ await test('21. save/load: a project containing a path layer round-trips through
   // parameters for the same reason getObjectTemplate is.
   const { SHAPE_LIBRARY_KINDS } = await import('../src/geometry/index.js');
   const XYWH_SHAPE_TYPES = new Set(['rectangle', 'svg', 'image', 'path', ...SHAPE_LIBRARY_KINDS]);
-  const fn = new Function('getObjectTemplate', 'XYWH_SHAPE_TYPES', 'SHAPE_LIBRARY_KINDS', `${constantsSlice}\nreturn validateProject;`)(getObjectTemplateModule.getObjectTemplate, XYWH_SHAPE_TYPES, SHAPE_LIBRARY_KINDS);
+  // S-112: validateProject() also calls normalizePlateParams() -- injected as a function parameter
+  // for the same reason getObjectTemplate is.
+  const fn = new Function('getObjectTemplate', 'normalizePlateParams', 'XYWH_SHAPE_TYPES', 'SHAPE_LIBRARY_KINDS', `${constantsSlice}\nreturn validateProject;`)(getObjectTemplateModule.getObjectTemplate, getObjectTemplateModule.normalizePlateParams, XYWH_SHAPE_TYPES, SHAPE_LIBRARY_KINDS);
 
   const validProject = {
     version: 2, name: 'Test', product: 'mug', canvas: { width: 210, height: 90 },

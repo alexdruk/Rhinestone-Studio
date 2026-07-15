@@ -414,9 +414,18 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <span>Zoom</span><input id="zoom" type="range" min="70" max="140" value="100">
           <button class="btn sm" id="resetView">Reset view</button>
         </div>
-        <div class="toolbar-group">
+        <div class="toolbar-group" id="cupColorField">
           <label for="cupColor" style="margin:0 6px 0 0;display:inline">Preview background</label>
           <select id="cupColor"><option value="#ffffff">White</option><option value="#0b0b0b">Black</option><option value="#1f3556" selected>Navy</option><option value="#bf1d1d">Red</option><option value="#f1d7a9">Cream</option><option value="#95d5b2">Mint</option><option value="#8f8f8f">Gray</option><option value="#e67aa0">Pink</option></select>
+        </div>
+        <!-- S-112: shown only for the Round Dinner Plate template (toggled by updateObjectTemplateDetail()
+             in app.js) in place of the generic #cupColor swatch above -- a real product's approved
+             colors, not a cosmetic preview backdrop. Writes project.cupColor via the plate's own
+             White/Creme hex values (src/products/PlateProductDefinition.js), so drawCup()/Object
+             Preview need no plate-specific color plumbing. -->
+        <div class="toolbar-group" id="plateColorField" style="display:none">
+          <label for="plateColor" style="margin:0 6px 0 0;display:inline">Plate color</label>
+          <select id="plateColor"><option value="white" selected>White</option><option value="creme">Creme</option></select>
         </div>
       </div>
     </div>
@@ -626,10 +635,36 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
       <div class="lightbox-tab-panel" id="shapesPanelTemplates" hidden>
         <div class="field-section">
           <h3>Object type</h3>
-          <select id="objectType"><option value="mug" selected>Mug</option><option value="tumbler">Straight Tumbler</option><option value="bottle">Bottle</option></select>
+          <select id="objectType"><option value="mug" selected>Mug</option><option value="tumbler">Straight Tumbler</option><option value="bottle">Bottle</option><option value="plate">Round Dinner Plate</option></select>
           <p class="hint" id="objectTemplateDetail">Production 210×90mm · Safe area inset 14/10mm · Default wrap: Front only</p>
         </div>
-        <p class="hint">Mug, Straight Tumbler, and Bottle are physical object/preview templates, not design shape layers — switching resets the production canvas size and wrap default for that object. Wrap mode moved to the Object Preview toolbar (Dual Workspace / Object Preview tab) — it only affects that view.</p>
+        <p class="hint">Mug, Straight Tumbler, Bottle, and Round Dinner Plate are physical object/preview templates, not design shape layers — switching resets the production canvas size and wrap default for that object. Wrap mode moved to the Object Preview toolbar (Dual Workspace / Object Preview tab) — it only affects that view.</p>
+        <!-- S-112: shown only when Object type is Round Dinner Plate (toggled by
+             updateObjectTemplateDetail() in app.js). Outer/inner diameter, overall height, and
+             center depth are the plate's own user-adjustable mm parameters (project.plate); rim
+             width and weight are read-only/derived. Ranges (min/max/step) mirror
+             src/products/definitions/plate-round-dinner.json's dimensions -- the JSON stays the
+             single source of truth; these attributes are read from it, not invented here. -->
+        <div class="field-section" id="plateFields" style="display:none">
+          <h3>Plate dimensions</h3>
+          <div class="field-row">
+            <div class="field"><label for="plateOuterDiameter">Outer Diameter (mm)</label><input id="plateOuterDiameter" type="number" min="250" max="300" step="0.5" value="270"></div>
+            <div class="field"><label for="plateInnerWellDiameter">Inner Well Diameter (mm)</label><input id="plateInnerWellDiameter" type="number" min="175" max="215" step="0.5" value="195"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label for="plateOverallHeight">Overall Height (mm)</label><input id="plateOverallHeight" type="number" min="18" max="32" step="0.5" value="25"></div>
+            <div class="field"><label for="plateCenterDepth">Center Depth (mm)</label><input id="plateCenterDepth" type="number" min="7" max="18" step="0.5" value="12"></div>
+          </div>
+          <div class="field">
+            <label for="plateDesignTarget">Design Target</label>
+            <select id="plateDesignTarget">
+              <option value="centerWell" selected>Center Well</option>
+              <option value="rimBand">Rim Band</option>
+              <option value="fullTopSurface">Full Top Surface</option>
+            </select>
+          </div>
+          <p class="hint" id="plateDetail">Rim width 37.5mm (derived) · Approx. weight 800 g (product information, read-only)</p>
+        </div>
       </div>
     </div>
     <footer class="lightbox-footer">
@@ -804,7 +839,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
       <div class="field-section">
         <h3>Page setup</h3>
         <div class="field-row">
-          <div class="field"><label for="prodSheetPageSize">Page size</label><select id="prodSheetPageSize"><option value="A4" selected>A4</option><option value="Letter">Letter</option></select></div>
+          <div class="field"><label for="prodSheetPageSize">Page size</label><select id="prodSheetPageSize"><option value="A4" selected>A4</option><option value="Letter">Letter</option><option value="A3">A3 (large format, e.g. Round Dinner Plate)</option></select></div>
           <div class="field"><label for="prodSheetMargin">Margin (mm)</label><input id="prodSheetMargin" type="number" min="0" step="1" value="10"></div>
         </div>
         <div class="field-row">

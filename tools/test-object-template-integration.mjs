@@ -20,7 +20,7 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
 const indexHtml = await readFile(path.join(repoRoot, 'index.html'), 'utf8');
 
-const { getObjectTemplate, OBJECT_TEMPLATE_IDS } = await import('../src/products/index.js');
+const { getObjectTemplate, OBJECT_TEMPLATE_IDS, getPlateDefaults, normalizePlateParams } = await import('../src/products/index.js');
 const { GeometryEngine } = await import('../src/geometry/index.js');
 const { FontManager } = await import('../src/fonts/index.js');
 const { createDefaultFontProviderRegistry } = await import('../src/text/index.js');
@@ -56,8 +56,11 @@ async function extractProjectFunctions() {
   // imported SHAPE_LIBRARY_KINDS -- injected as a function parameter for the same reason
   // getObjectTemplate is.
   const { SHAPE_LIBRARY_KINDS } = await import('../src/geometry/index.js');
+  // S-112: defaultProject() calls getPlateDefaults() and validateProject() calls
+  // normalizePlateParams() -- both injected as function parameters for the same reason
+  // getObjectTemplate is.
   // eslint-disable-next-line no-new-func
-  return new Function('getObjectTemplate', 'SHAPE_LIBRARY_KINDS', `${source}\nreturn { validateProject, defaultProject };`)(getObjectTemplate, SHAPE_LIBRARY_KINDS);
+  return new Function('getObjectTemplate', 'SHAPE_LIBRARY_KINDS', 'getPlateDefaults', 'normalizePlateParams', `${source}\nreturn { validateProject, defaultProject };`)(getObjectTemplate, SHAPE_LIBRARY_KINDS, getPlateDefaults, normalizePlateParams);
 }
 
 const { validateProject, defaultProject } = await extractProjectFunctions();
@@ -146,8 +149,12 @@ await test('3. #objectType is not duplicated (exactly one element)', () => {
 
 // --- 2. Wiring ---------------------------------------------------------------------------------
 
-await test('4. app.js imports getObjectTemplate/getSafeAreaRectMm from the products barrel', () => {
-  assert.match(appJs, /import\s*\{\s*getObjectTemplate\s*,\s*getSafeAreaRectMm\s*\}\s*from\s*['"]\.\/src\/products\/index\.js['"]/);
+await test('4. app.js imports getObjectTemplate/getSafeAreaRectMm (plus S-112\'s plate helpers) from the products barrel', () => {
+  const importMatch = appJs.match(/import\s*\{([\s\S]*?)\}\s*from\s*['"]\.\/src\/products\/index\.js['"]/);
+  assert.ok(importMatch, 'expected an import from ./src/products/index.js');
+  for (const name of ['getObjectTemplate', 'getSafeAreaRectMm', 'getPlateDefaults', 'normalizePlateParams', 'getPlateDesignTargetGuide']) {
+    assert.ok(importMatch[1].includes(name), `expected the products barrel import to include ${name}`);
+  }
 });
 
 await test('5. switching #objectType commits history before mutating project.product/canvas/wrap', () => {

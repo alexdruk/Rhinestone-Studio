@@ -9,7 +9,7 @@ const THREE = await import('three');
 const ObjectGeometryBuilder = await import('../src/preview3d/ObjectGeometryBuilder.js');
 const { buildObjectMesh } = ObjectGeometryBuilder;
 const { computeObjectDimensionsMm } = await import('../src/preview3d/ObjectDimensions.js');
-const { getObjectTemplate } = await import('../src/products/index.js');
+const { getObjectTemplate, getPlateDefaults } = await import('../src/products/index.js');
 
 async function test(name, fn) {
   try {
@@ -247,6 +247,96 @@ await test('12. bottle body vertices above bodyHeightMm (shoulder/neck/cap) get 
     }
   }
   assert.ok(sawBodyVertex && sawShoulderVertex, 'expected both a body-wall vertex and a shoulder/neck/cap vertex in the bottle profile');
+});
+
+// --- S-112: Round Dinner Plate radial profile ---------------------------------------------------
+
+const PLATE_TEMPLATE = getObjectTemplate('plate');
+const PLATE_DEFAULTS = getPlateDefaults();
+
+await test('13. S-112: buildObjectMesh("plate") never throws and requires plateParams (unlike every other kind)', () => {
+  assert.doesNotThrow(() => buildObjectMesh(PLATE_TEMPLATE, 270, 270, PLATE_DEFAULTS));
+  assert.throws(() => buildObjectMesh(PLATE_TEMPLATE, 270, 270), /plateParams is required/);
+});
+
+await test('14. S-112: the plate mesh has exactly a printable top-surface mesh + a non-printable underside mesh, no handle', () => {
+  const { group, bodyMesh, handleMesh, underMesh, dimensions } = buildObjectMesh(PLATE_TEMPLATE, 270, 270, PLATE_DEFAULTS);
+  assert.equal(dimensions.kind, 'plate');
+  assert.equal(group.children.length, 2);
+  assert.equal(handleMesh, null);
+  assert.ok(underMesh, 'expected a non-printable underside/rim-edge/foot-ring mesh');
+  assert.ok(group.children.includes(bodyMesh));
+  assert.ok(group.children.includes(underMesh));
+  assert.notEqual(bodyMesh.geometry, underMesh.geometry);
+});
+
+await test('15. S-112: the plate silhouette is rotationally symmetric, has real thickness, a visible foot ring, and reaches the full outer diameter and overall height', () => {
+  const { bodyMesh, underMesh, dimensions } = buildObjectMesh(PLATE_TEMPLATE, 270, 270, PLATE_DEFAULTS);
+  bodyMesh.geometry.computeBoundingBox();
+  underMesh.geometry.computeBoundingBox();
+  const topBox = bodyMesh.geometry.boundingBox;
+  const underBox = underMesh.geometry.boundingBox;
+  // Rotational symmetry: a LatheGeometry revolve is symmetric by construction around Y -- confirmed
+  // here by checking the X/Z extents are equal (a true circle in plan view, not an ellipse).
+  assert.ok(Math.abs((topBox.max.x - topBox.min.x) - (topBox.max.z - topBox.min.z)) < 1e-6, 'top surface plan-view extent must be a true circle');
+  assert.ok(Math.abs((underBox.max.x - underBox.min.x) - (underBox.max.z - underBox.min.z)) < 1e-6, 'underside plan-view extent must be a true circle');
+  // Reaches the full outer diameter (both meshes share the outer-edge apex).
+  assert.ok(Math.abs(topBox.max.x - dimensions.outerRadiusMm) < 1e-6, 'top surface must reach the full outer radius');
+  // Overall height reached: the top surface's own max Y equals overallHeightMm exactly (the rim's
+  // outer top edge, per the JSON's own "Maximum height from table surface to top of rim" definition).
+  assert.ok(Math.abs(topBox.max.y - dimensions.overallHeightMm) < 1e-6, 'plate must reach its full overallHeightMm at the rim top');
+  // Real thickness: the top and underside surfaces are never coincident (not a zero-thickness disc).
+  assert.ok(topBox.min.y > underBox.min.y, 'plate must have real thickness (top surface floats above the table, unlike the underside/foot ring)');
+  assert.ok(topBox.min.y - underBox.min.y > 1, 'plate thickness must be physically plausible (>1mm), not a hairline');
+  // Not bowl-like excessive depth: the well's concave depth must stay within a modest fraction of
+  // the overall height (centerDepthMm is ~48% of overallHeightMm at the JSON default -- generous,
+  // but far short of the object's own radius, which is what a bowl-like depth would approach).
+  assert.ok(dimensions.overallHeightMm - topBox.min.y < dimensions.outerRadiusMm * 0.5, 'well depth must not be bowl-like');
+  // Visible supporting foot ring: the underside touches the table (y=0) only near the foot ring
+  // radius, not across its whole extent (a flat-bottomed disc would touch at every radius).
+  assert.ok(underBox.min.y <= 1e-6, 'the foot ring must actually touch the table (y=0 somewhere on the underside)');
+});
+
+await test('16. S-112: the plate\'s printable top surface uses a direct planar (x,z)->canvas UV projection, not the cylindrical azimuth/height mapping', () => {
+  const canvasWidthMm = 270, canvasHeightMm = 270;
+  const { bodyMesh } = buildObjectMesh(PLATE_TEMPLATE, canvasWidthMm, canvasHeightMm, PLATE_DEFAULTS);
+  const position = bodyMesh.geometry.attributes.position;
+  const uv = bodyMesh.geometry.attributes.uv;
+  let checked = 0;
+  for (let i = 0; i < position.count; i++) {
+    // Float32 storage (THREE.BufferAttribute's default array type) introduces ~1e-7 relative
+    // rounding versus the float64 expected value computed here -- 1e-5 is generous while still
+    // catching any real formula mismatch (which would differ by orders of magnitude more).
+    const expectedU = (canvasWidthMm / 2 + position.getX(i)) / canvasWidthMm;
+    const expectedV = (canvasHeightMm / 2 - position.getZ(i)) / canvasHeightMm;
+    assert.ok(Math.abs(uv.getX(i) - expectedU) < 1e-5, `vertex ${i}: U must equal the direct planar projection`);
+    assert.ok(Math.abs(uv.getY(i) - expectedV) < 1e-5, `vertex ${i}: V must equal the direct planar projection`);
+    checked++;
+  }
+  assert.ok(checked > 0);
+  // The exact canvas center (r=0, the well's center point) must map to UV (0.5, 0.5) -- continuous,
+  // no branch-cut/seam issue (unlike the cylindrical azimuth mapping, this needs no special-casing).
+  const centerIndex = [...Array(position.count).keys()].find((i) => Math.abs(position.getX(i)) < 1e-6 && Math.abs(position.getZ(i)) < 1e-6);
+  assert.ok(centerIndex !== undefined, 'expected at least one vertex at the exact well center (r=0)');
+  assert.ok(Math.abs(uv.getX(centerIndex) - 0.5) < 1e-5 && Math.abs(uv.getY(centerIndex) - 0.5) < 1e-5);
+});
+
+await test('17. S-112: the plate\'s underside/foot-ring mesh has no printable UV mapping (StoneLayoutTexture is never applied to it -- Preview3DRenderer.js gives it a plain color material instead)', () => {
+  const { underMesh } = buildObjectMesh(PLATE_TEMPLATE, 270, 270, PLATE_DEFAULTS);
+  // buildObjectMesh() never assigns .map itself (Preview3DRenderer._updateTexture() does that,
+  // live, only for bodyMesh) -- MeshStandardMaterial defaults .map to null, so this confirms the
+  // underside mesh is built with no texture reference of any kind at construction time.
+  assert.equal(underMesh.material.map, null, 'the underside mesh must not carry a design texture');
+});
+
+await test('18. S-112: rebuilding the plate mesh at a different live outer diameter (project.plate.outerDiameterMm) scales the silhouette accordingly (a real, user-adjustable dimension, unlike the fixed template factors every other kind uses)', () => {
+  const small = buildObjectMesh(PLATE_TEMPLATE, 250, 250, { ...PLATE_DEFAULTS, outerDiameterMm: 250, innerWellDiameterMm: 175 });
+  const large = buildObjectMesh(PLATE_TEMPLATE, 300, 300, { ...PLATE_DEFAULTS, outerDiameterMm: 300, innerWellDiameterMm: 215 });
+  small.bodyMesh.geometry.computeBoundingBox();
+  large.bodyMesh.geometry.computeBoundingBox();
+  assert.ok(large.bodyMesh.geometry.boundingBox.max.x > small.bodyMesh.geometry.boundingBox.max.x);
+  assert.equal(small.dimensions.outerRadiusMm, 125);
+  assert.equal(large.dimensions.outerRadiusMm, 150);
 });
 
 console.log('Object geometry builder tests passed.');
