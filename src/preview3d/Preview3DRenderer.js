@@ -27,7 +27,6 @@ export class Preview3DRenderer {
     this.canvas = canvas;
     this._mounted = false;
     this._geometryKey = null;
-    this._wrap = null;
     this._azimuthDeg = 0;
     this._zoom = DEFAULT_ZOOM;
     this._sliderAzimuthDeg = 0;
@@ -56,7 +55,6 @@ export class Preview3DRenderer {
     ]);
     this._THREE = THREE;
     this._buildObjectMesh = geometryModule.buildObjectMesh;
-    this._applyWrapUv = geometryModule.applyWrapUv;
 
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, preserveDrawingBuffer: true });
     this.renderer.setPixelRatio(Math.min(2, (typeof window !== 'undefined' && window.devicePixelRatio) || 1));
@@ -109,13 +107,14 @@ export class Preview3DRenderer {
 
   /**
    * @param {import('../geometry/StoneLayout.js').StoneLayout} stoneLayout
-   * @param {{cupColor:string, wrap:string, objectTemplate:object, canvasWidthMm:number, canvasHeightMm:number}} options
-   *   S-107 follow-up: `wrap` restored -- the object mesh's texture compresses the complete
-   *   production canvas into `wrap`'s angular window (ObjectGeometryBuilder.js's applyWrapUv()),
-   *   exactly as before the brief wrap-independent full-wrap experiment. The Front View Frame
-   *   (app.js) visualizes this same window on the 2D canvas; it does not replace it.
+   * @param {{cupColor:string, objectTemplate:object, canvasWidthMm:number, canvasHeightMm:number}} options
+   *   S-109: no `wrap` option -- the object mesh's texture UV is wrap-mode independent (built once
+   *   inside ObjectGeometryBuilder.js's buildObjectMesh(), at the object's true circumference
+   *   scale), so this method no longer needs to react to wrap-mode changes at all. The Front View
+   *   Frame (app.js) still visualizes the selected wrap mode's width on the 2D canvas, using
+   *   ObjectDimensions.js's frontViewFrameWidthMm(), unchanged.
    */
-  update(stoneLayout, { cupColor, wrap, objectTemplate, canvasWidthMm, canvasHeightMm }) {
+  update(stoneLayout, { cupColor, objectTemplate, canvasWidthMm, canvasHeightMm }) {
     if (!this._mounted) return;
 
     const geometryKey = `${objectTemplate.id}:${canvasWidthMm}:${canvasHeightMm}`;
@@ -123,12 +122,6 @@ export class Preview3DRenderer {
     if (geometryChanged) {
       this._rebuildMesh(objectTemplate, canvasWidthMm, canvasHeightMm);
       this._geometryKey = geometryKey;
-      this._wrap = null;
-    }
-
-    if (wrap !== this._wrap) {
-      this._applyWrapUv(this._bodyMesh, wrap);
-      this._wrap = wrap;
     }
 
     this._updateTexture(stoneLayout, canvasWidthMm, canvasHeightMm, cupColor);

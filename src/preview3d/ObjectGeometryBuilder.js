@@ -16,7 +16,7 @@
  * which is what lets tools/test-object-geometry-builder.mjs exercise this module directly.
  */
 import * as THREE from 'three';
-import { computeObjectDimensionsMm, wrapAngleRad } from './ObjectDimensions.js';
+import { computeObjectDimensionsMm } from './ObjectDimensions.js';
 
 const LATHE_SEGMENTS = 48;
 const HANDLE_TUBE_SEGMENTS = 32;
@@ -66,6 +66,7 @@ export function buildObjectMesh(template, canvasWidthMm, canvasHeightMm) {
     ? buildBottleGeometry(dimensions)
     : buildTaperedBodyGeometry(dimensions);
   applyBodyHeightUv(bodyGeometry, dimensions.bodyHeightMm);
+  applyAzimuthUv(bodyGeometry);
 
   // RS-1006A: FrontSide, not DoubleSide -- a solid opaque vessel never needs its interior faces
   // rendered from an outside camera. Rendering them (the RS-1006 default) is what caused the
@@ -213,13 +214,20 @@ function buildHandleMesh(dimensions) {
   return new THREE.Mesh(handleGeometry, handleMaterial);
 }
 
-// S-107 follow-up: writes a custom U coordinate per vertex, compressing the *entire* production
-// canvas into `wrapAngleRadValue`'s angular window centered on the front -- restores the original
-// (pre-S-107) wrap-mode-dependent windowing (requirement: "changing wrap mode changes the Object
-// Preview"; "the Front View Frame must visualize the selected wrap mode, not replace it"). Vertices
-// outside the window get a U outside [0,1], which Preview3DRenderer.js's ClampToEdgeWrapping clamps
-// to the texture's own edge texel -- always plain background color, so the rest of the body reads
-// as a seamless plain surface.
+// S-109: writes a custom U coordinate per vertex at the object's true, wrap-mode-independent
+// circumference scale -- U = 0.5 + azimuth/(2*PI), the exact same mm-accurate mapping
+// ObjectDimensions.js's canvasXMmForAzimuthRad()/canvasWidthMm relation already defines for the
+// Front View Frame (U is that function's canvasXMm/canvasWidthMm, dimensionless, so it needs no
+// canvasWidthMm parameter here). This keeps the Object Preview's texture at the same position/
+// scale/proportions as the 2D Canvas for every wrap mode, matching the requirement that the two
+// views agree subject only to normal cylindrical perspective. Wrap mode keeps its own meaning --
+// it still sizes the Front View Frame's highlighted width (frontViewFrameWidthMm(),
+// unchanged) and still drives any printable-circumference validation -- it just no longer rescales
+// the object mesh's own texture, which was never true 1:1 mm scale (see the milestone's own
+// audit in docs/specifications/S-109-SvgObjectPreviewProjectionConsistency.md for the prior,
+// wrap-compressed behavior and why it was replaced). Because this mapping no longer depends on
+// wrap mode, it is computed once at mesh-build time (buildObjectMesh(), alongside
+// applyBodyHeightUv()) instead of being re-invoked on every wrap-mode change.
 //
 // Deliberately does NOT derive each vertex's azimuth from its own position via Math.atan2(x,z) --
 // two independent, real bugs came from that (both root-caused with
@@ -243,7 +251,7 @@ function buildHandleMesh(dimensions) {
 // LatheGeometry never actually joins with a face -- the only place a UV discontinuity is safe.
 //
 // V is left untouched here -- it is set once at build time by applyBodyHeightUv() above.
-function applyAzimuthUv(geometry, wrapAngleRadValue) {
+function applyAzimuthUv(geometry) {
   const position = geometry.attributes.position;
   const uv = geometry.attributes.uv;
   const columnCount = LATHE_SEGMENTS + 1;
@@ -251,19 +259,7 @@ function applyAzimuthUv(geometry, wrapAngleRadValue) {
   for (let i = 0; i < position.count; i++) {
     const column = Math.floor(i / rowCount);
     const azimuth = -Math.PI + (column / LATHE_SEGMENTS) * 2 * Math.PI;
-    uv.setX(i, 0.5 + azimuth / wrapAngleRadValue);
+    uv.setX(i, 0.5 + azimuth / (2 * Math.PI));
   }
   uv.needsUpdate = true;
-}
-
-/**
- * Re-maps `bodyMesh`'s UV so the shared texture covers exactly `wrapMode`'s angular window,
- * centered on the front. Cheap (tens to low hundreds of vertices) -- safe to call every time the
- * operator changes wrap mode, not only when the mesh is rebuilt.
- *
- * @param {THREE.Mesh} bodyMesh
- * @param {'front'|'wide'|'half'|'full'} wrapMode
- */
-export function applyWrapUv(bodyMesh, wrapMode) {
-  applyAzimuthUv(bodyMesh.geometry, wrapAngleRad(wrapMode));
 }

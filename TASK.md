@@ -1,81 +1,76 @@
 # Task
 
-**Task ID:** S-107
-**Task Type:** Front View Frame & Long Text Workflow (Part 3 — supersedes Part 2's warning-only
-workflow; Part 1 unchanged)
-**Specification:** `docs/specifications/S-107-LongTextReadability.md`
+**Task ID:** S-109
+**Task Type:** SVG Object Preview Projection Consistency
+**Specification:** `docs/specifications/S-109-SvgObjectPreviewProjectionConsistency.md`
 **Status:** IMPLEMENTED
-**Branch:** feature/s-107-long-text-readability
+**Branch:** feature/s-109-svg-object-preview-projection-consistency
 
 ## Goal
 
-Replace the current warning-based long-text workflow ("This text is too long to fit legibly on this
-object.") with a Front View Frame on the 2D Canvas: a movable overlay showing the portion of the
-design currently facing the viewer in the Object Preview, bidirectionally synchronized with the
-Object Preview's rotation. A cylindrical object is treated as an unwrapped surface — text that fits
-around the object's printable circumference stays valid and inspectable, regardless of the current
-viewing angle. A warning is shown only when text genuinely exceeds that circumference — a real
-manufacturing limitation, never a viewing-angle artifact.
+Imported SVG designs were correctly shown on the 2D Canvas but projected incorrectly on the Object
+Preview. Whatever the user sees on the 2D Canvas should appear consistently on the Object Preview,
+subject only to the normal cylindrical perspective — same position, scale, orientation, and
+proportions.
 
 ## Required Outcome
 
-See `docs/specifications/S-107-LongTextReadability.md`, Part 3, in full. Summary:
+See `docs/specifications/S-109-SvgObjectPreviewProjectionConsistency.md` in full. Summary:
 
-* Audit-first: walked production-canvas-width-to-circumference, circumference-to-wrap-mode,
-  Object-Preview-rotation-to-production-coordinates, and existing-rotation-logic-coverage before
-  writing any code. Found that the 3D preview's body radius was anchored at a 180-degree reference
-  (canvas = half the circumference), which structurally prevents the canvas's own left/right edges
-  from being adjacent points on the object — re-anchored to a full 360-degree reference (canvas *is*
-  the complete unwrapped surface, exactly `canvasWidthMm` in circumference) so the Front View Frame
-  can wrap continuously across the canvas edges with no discontinuity, per requirement 3.
-* `src/preview3d/ObjectDimensions.js`: new pure mm<->azimuth/circumference/frame-width functions,
-  reused (not duplicated) by both `ObjectGeometryBuilder.js`'s object-mesh texture UV and `app.js`'s
-  Front View Frame — the 2D canvas and Object Preview compute "which part faces the viewer" with the
-  literal same code.
-* `ObjectGeometryBuilder.js`: the object mesh's texture now always wraps the complete production
-  canvas fully and continuously around the object (mm-accurate), never clipped/hidden by wrap mode —
-  wrap mode now only sizes the Front View Frame's highlighted width.
-* `Preview3DRenderer.js`: new live camera-azimuth read-back (`onAzimuthChange`, via an `OrbitControls`
-  `'change'` listener) so a free mouse/touch orbit of the Object Preview moves the Front View Frame,
-  not just the reverse.
-* `app.js`: draws the frame (visually distinct from the safe-area guide, width shown in mm), makes it
-  draggable (rotates the Object Preview), wires the live-orbit callback, and replaces the old
-  `maxWidth`-based `isTextTooLongForObject()` with one driven by the object's real printable
-  circumference (`getLayerBBox()` vs. `circumferenceMm()`) — reusing the existing `StoneLayout`-backed
-  bbox helper, no new bookkeeping map. The warning's copy states real mm numbers and never blames wrap
-  mode/viewing angle.
-* Never clips/crops/hides the production layout; never changes `GeometryEngine`, `StoneLayout`, any
-  exporter's output, physical stone size/gap, or the project schema; no second layout/rendering
-  pipeline; no multi-line text.
+* Audit-first: walked SVG parsing (`src/svg/**`), SVG-to-StoneLayout generation
+  (`GeometryEngine.generateSvgLayout()`), layer-bounds calculation (`app.js`'s `getLayerBBox()`),
+  transform handling (`src/svg/SvgTransform.js`), and Object Preview texture generation
+  (`src/preview3d/StoneLayoutTexture.js`/`ObjectGeometryBuilder.js`) before writing any code.
+  Confirmed via direct Node testing and real-browser (Playwright) testing that SVG's geometry math
+  is correct and that `src/renderer/**`/`src/preview3d/**` are genuinely layer-type-agnostic —
+  empirically reproduced the identical distortion with a plain Rectangle shape layer in the same
+  placement box, proving the defect was never SVG-specific.
+* **Root cause** (confirmed with the human project owner before implementing, since it reverses a
+  previously-approved decision): `src/preview3d/ObjectGeometryBuilder.js`'s `applyAzimuthUv()`
+  compressed the *entire* production canvas into the current wrap mode's angular window (e.g. 70°
+  for Mug's default `front` mode, vs. a true 360°) instead of mapping mm position to azimuth at the
+  object's true, wrap-mode-independent circumference scale — an X-only aspect distortion (~5.1x too
+  narrow at `front`) affecting every layer type identically, most visually obvious on SVG/shape
+  content. This was deliberate, already-shipped, already-reviewed behavior (see
+  `docs/specifications/S-107-LongTextReadability.md`, Part 4, commit `a6b88b4`), which this
+  milestone's explicit "2D and Preview must agree, subject only to cylindrical perspective"
+  requirement supersedes.
+* `src/preview3d/ObjectGeometryBuilder.js`: `applyAzimuthUv()` now maps `U = 0.5 +
+  azimuth/(2*PI)` (true circumference scale, matching `ObjectDimensions.js`'s own
+  `canvasXMmForAzimuthRad()` model), computed once inside `buildObjectMesh()` instead of being
+  re-invoked per wrap-mode change. `applyWrapUv()` is removed (nothing left for it to do).
+* `src/preview3d/Preview3DRenderer.js`: `update()` no longer accepts/uses a `wrap` option.
+* `app.js`: `drawCup()` no longer passes `wrap` to `preview3D.update()` (one line). The Front View
+  Frame, printable-circumference validation, and the `#wrap` control are all unchanged — wrap mode
+  keeps every other documented effect, it just no longer rescales the Object Preview's texture.
+* No SVG-specific rendering code was added anywhere; the fix is entirely inside the shared
+  `src/preview3d/**` pipeline every layer type already flows through.
 
 ## Rules
 
 * Follow `docs/AI_ENGINEER.md`, `docs/CLAUDE_GUIDE.md`, `docs/ARCHITECTURE.md`,
   `docs/MILESTONE_WORKFLOW.md`.
-* Repository is the source of truth; audit before implementing; do not add functionality beyond what
-  the specification requires.
-* Do not touch `GeometryEngine`, `StoneLayout`, the project schema, production geometry (stone
-  positions), any exporter's existing output, `src/renderer/**`, or introduce a second layout
-  pipeline.
+* Repository is the source of truth; audit before implementing; do not guess; do not add
+  SVG-specific rendering hacks.
+* Do not change `GeometryEngine`, `StoneLayout`, the project schema, exporters, or
+  wrap-mode configuration (`WRAP_ANGLE_DEG`, the Front View Frame's own drag/sizing logic). Only
+  correct the inconsistent projection — and only for its shared root cause, not an SVG-only patch.
+* If the audit reveals another layer type suffers the same defect, fix the shared root cause rather
+  than only SVG — confirmed true here (Rectangle/text shared the exact same defect).
 
 ## Deliverables
 
-* `src/preview3d/ObjectDimensions.js`/`ObjectGeometryBuilder.js`/`Preview3DRenderer.js`/`index.js` —
-  mm-accurate, wrap-independent circumference/azimuth math and live rotation sync.
-* `app.js`/`index.html` — the Front View Frame (draw/drag/hit-test), live-orbit sync, Inspector stats
-  (Front View width, printable circumference, viewing position), and the corrected long-text warning.
-* `tools/test-object-dimensions.mjs`, `tools/test-object-geometry-builder.mjs`,
-  `tools/test-s107-long-text-readability.mjs` — updated/rewritten test suites.
-* `tools/test-app-module-migration.mjs`, `tools/test-shape-geometry-integration.mjs` — allowlist the
-  new `ObjectDimensions.js` import.
-* 17 prior-milestone test files — stale `src/preview3d/` forbidden-path guard removed (mechanical
-  scoping fix; `src/renderer/` guard, correctly still forbidding this milestone, is untouched).
-* `docs/specifications/S-107-LongTextReadability.md` — Part 3 (this milestone's full specification
-  and audit findings).
-* `npm test` passing in full (904 checks, 0 failures).
-* Real-browser verification (headless Chromium via Playwright) of short/medium/long text on
-  mug/tumbler/bottle; frame-drag-rotates-preview and orbit-moves-frame in both directions; continuous
-  edge-wrap; mm-labeled frame width; circumference-only warning; zero console errors — with
-  screenshots.
+* `src/preview3d/ObjectGeometryBuilder.js`/`Preview3DRenderer.js` — true-scale, wrap-mode-independent
+  object mesh texture UV mapping.
+* `app.js` — one-line `drawCup()` update (no `wrap` passed to `preview3D.update()`); no other change.
+* `tools/test-object-geometry-builder.mjs`, `tools/test-s107-long-text-readability.mjs` —
+  updated/rewritten checks for the new wrap-independent UV behavior; dark-band/apex regression guards
+  (S-107 Part 4) kept unchanged.
+* `docs/specifications/S-109-SvgObjectPreviewProjectionConsistency.md` — full audit findings, root
+  cause, decision, and implementation record.
+* `npm test` passing in full (792/792 checks, 0 failures).
+* Real-browser verification (headless Chromium via Playwright): SVG (simple + multi-path) and the
+  default text layer on Mug/Tumbler/Bottle at all four wrap modes; save/load round trip; zero
+  console errors — before/after comparisons recorded in `TASK_RESULT.md`.
 * `TASK_RESULT.md` completed.
 * Feature branch pushed (not merged).

@@ -6,7 +6,7 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-S-111 — Test Suite Rationalization
+S-109 — SVG Object Preview Projection Consistency
 
 ---
 
@@ -18,15 +18,8 @@ IMPLEMENTED
 
 # Branch
 
-feature/s-111-test-suite-rationalization
-
-Note: this session's repository context initially showed `feature/s-110-expanded-shape-library` as
-checked out; partway through the session, `git log`/`git branch` showed that branch had already been
-merged into `develop` and pushed (`53f7b39`, matching `origin/develop`) — evidently done by the human
-owner outside this session, before this milestone's own commit. This milestone's work was carried
-forward from that `develop` checkout onto a new `feature/s-111-test-suite-rationalization` branch cut
-from `develop`, per this repository's one-feature-branch-per-milestone convention and this
-milestone's own "do not merge" instruction.
+feature/s-109-svg-object-preview-projection-consistency (cut from `develop`, per this milestone's
+"do not merge" instruction).
 
 ---
 
@@ -43,156 +36,114 @@ git log -1 --oneline
 
 # Audit Findings
 
-Full detail — the complete per-file classification table, the exact guard-removal count, the
-consolidation rationale, and the requirement-by-requirement walkthrough — is in
-`docs/specifications/S-111-TestSuiteRationalization.md`. Summary:
+Full detail is in `docs/specifications/S-109-SvgObjectPreviewProjectionConsistency.md`. Summary:
 
-1. **Audited all 74 test files in full** (not grepped) via four parallel research passes against
-   `docs/ARCHITECTURE.md`'s permanent rules, each classifying every file (and, within mixed files,
-   every check) as Keep / Consolidate / Rewrite / Optional / Remove.
-2. **The dominant cruft pattern, confirmed independently by all four passes:** a
-   `git status --porcelain` "forbidden file changed" guard, unique to the milestone that introduced
-   it and requiring a hand-edit on every later milestone that legitimately touched a listed path —
-   present in 37 of 74 files (39 individual checks; two files carried two each). It protected
-   nothing beyond "what did this one past `git diff` look like" and was removed from all 37 files.
-3. **One self-referential meta-check** (`test-app-module-migration.mjs`'s "the three updated legacy
-   guard tests no longer reject app.js") tested three *other test files'* regex content, not the
-   app — became unsatisfiable the moment those files' own guards were removed, confirming it had no
-   independent value. Removed.
-4. **The one legitimate rule the forbidden-file guards approximated** — "`app.js` only imports
-   permanent-module barrels" — already had proper, non-git-status enforcement in
-   `test-app-module-migration.mjs`. That enforcement was itself a 32-line, 20-dated-comment
-   enumeration (one regex line added per historical milestone). Rewritten into 4 general structural
-   rules that require no future edit when a new permanent barrel module is added.
-5. **11 files provided zero protection beyond what a real, executing test elsewhere already
-   proves** (e.g. `test-live-text-integration.mjs`/`test-curved-text-integration.mjs`'s source-text
-   regex vs. `test-geometry-engine.mjs`'s real text/curved-text generation calls;
-   `test-undo-redo-integration.mjs`'s literal source-string pinning vs. `test-history-manager.mjs`'s
-   real undo/redo behavior). Deleted, with one real assertion each salvaged from three of them
-   before deletion (folded into a sibling file — see the specification's "Salvaged assertions").
-6. **6 files across two feature areas (UI-001 shell, alignment & snapping wiring) were split along
-   historical-milestone boundaries rather than subject-matter boundaries**, with the same
-   `extractElementHtml()` helper reimplemented twice and two literal duplicate assertions. Merged
-   into 2 new files with zero assertions dropped.
-7. **Gallery is disabled in the public UI** (already independently guarded by
-   `test-s105-persistent-movable-lightboxes.mjs`). Its cheap regression suites
-   (`test-gallery.mjs`/`test-gallery-integration.mjs`) stay in default `npm test`; its self-described
-   "permanent performance benchmark" (`test-gallery-benchmark.mjs`, a 5s-per-fixture sanity ceiling)
-   moved to an optional `npm run test:gallery` command.
-8. **Performance measured file-by-file** (`/usr/bin/time -p node tools/test-*.mjs`, sequential):
-   total `npm test` wall time 17.8s → ~14.3–14.9s (18 fewer files run by default). The single
-   slowest file, `test-fill-algorithms.mjs` (5.78s, 33% of the original total), was kept in full —
-   it is real, non-duplicated production-density Fill Styles protection, not cruft, and requirement
-   1 explicitly requires preserving Fill Styles coverage.
-9. **No suite in this repository — before or after this milestone — drives a real browser**; per
-   `docs/ARCHITECTURE.md`'s own "Testing Philosophy" section, interactive browser verification is
-   manual, per-milestone, over headless Chrome. A `test:browser` npm script was therefore
-   deliberately not added (it would run nothing or silently duplicate `test:full`), documented
-   explicitly in the specification rather than silently omitted.
+1. **Walked the full SVG pipeline** — `src/svg/SvgDocumentParser.js`/`SvgTransform.js` (parsing,
+   viewBox/unit normalization, `<g>` transform composition) → `GeometryEngine.generateSvgLayout()`
+   (placement, flattening, sampling) → merged `StoneLayout` → `CanvasRenderer2D.js` (2D) /
+   `StoneLayoutTexture.js`+`ObjectGeometryBuilder.js` (Object Preview). Confirmed by direct code
+   reading and a direct Node.js call to `GeometryEngine.generateSvgLayout()` that SVG's placement
+   math produces a numerically correct stone bounding box for a known input.
+2. **Confirmed `src/renderer/**`/`src/preview3d/**` are genuinely layer-type-agnostic** — neither
+   references `Project`, `Layer`, or a layer `type` string (matches `docs/ARCHITECTURE.md`'s own
+   claim); both consume only the one merged `StoneLayout` `app.js`'s `updateAll()` builds once per
+   generation.
+3. **Empirically disproved "SVG-specific"**: reproduced the identical distortion (extreme,
+   wrap-mode-dependent horizontal compression) on the Object Preview using a plain **Rectangle**
+   shape layer placed in the exact same `x/y/w/h` box as an imported SVG triangle — screenshots were
+   qualitatively identical. Also reproduced it on the default project's **text** layer. This ruled
+   out every SVG-only code path.
+4. **Root-caused to `ObjectGeometryBuilder.js`'s `applyAzimuthUv()`**, which compressed the *entire*
+   production canvas into the selected wrap mode's angular window (`wrapAngleRad(wrapMode)`, e.g. 70°
+   for Mug's default `front` mode) instead of the object's true 360° circumference — an X-only aspect
+   distortion (~5.1x too narrow at `front`, ~1.2x even at `full`) that Y (`applyBodyHeightUv()`) never
+   shared. This behavior was deliberate and had already been explicitly reviewed and approved: see
+   `docs/specifications/S-107-LongTextReadability.md` Part 4 ("Decision: Restore wrap-mode-dependent
+   windowing"), commit `a6b88b4`.
+5. **This finding was surfaced to the human project owner before any code change**, since fixing it
+   means reversing a previously-approved decision and directly touches wrap-mode behavior this
+   milestone's own instructions said not to change. Two options were presented: (a) fix the shared
+   root cause, updating the two test suites that assert the old wrap-dependent behavior, or (b) leave
+   it untouched and keep searching for a narrower SVG-only defect. The owner first chose (b); after a
+   second, exhaustive round of audit (multi-path SVG, Mug/Tumbler/Bottle, very wide/tall SVGs, nested
+   `<g>` transforms — no further divergence found beyond the same shared defect), the owner reversed
+   to (a): fix the shared root cause. Implementation below reflects that final direction.
+6. **Secondary, out-of-scope finding**: `isTextTooLongForObject()` (the printable-circumference
+   overflow warning) is text-only; SVG/shape/image layers wider than the object's printable
+   circumference get no equivalent warning. Documented as a known limitation, not fixed here — no
+   requirement of this milestone asked for it, and the milestone's own scope discipline rule ("do not
+   add functionality beyond what the specification requires") applies.
+
+---
+
+# Root Cause
+
+See "Root Cause" in `docs/specifications/S-109-SvgObjectPreviewProjectionConsistency.md`. In one
+line: the Object Preview's texture UV mapping rescaled the design's X axis by
+`360° / wrapAngleRad(wrapMode)` while never touching Y, for every layer type — not a rendering
+artifact of cylindrical perspective, an artificial preview-only stylization that this milestone's
+"2D and Preview must agree" requirement does not permit.
+
+---
+
+# Architectural Explanation
+
+The single-source-of-truth pipeline (`Project → GeometryEngine → StoneLayout → {2D Canvas, Object
+Preview, Exporters}`) was already correctly implemented and untouched by this fix — every layer type,
+including SVG, produces one shared `StoneLayout` in millimeters, and both renderers already consumed
+it identically. The defect lived entirely inside the Object Preview's own texture-to-mesh UV mapping
+(`src/preview3d/ObjectGeometryBuilder.js`), a rendering concern, not a geometry concern — so the fix
+required zero changes to `GeometryEngine`, `StoneLayout`, or the project schema. The correct
+architectural level for the fix was confirmed by the audit itself: since the defect was reproducible
+with any layer type in the same box, it could not be inside anything layer-aware (`app.js`'s
+per-type logic, `src/svg/**`), only inside the layer-agnostic rendering pipeline every type shares —
+exactly where the fix landed.
 
 ---
 
 # Implementation Summary
 
-* **`tools/*.mjs`** — 74 → 59 physical test files (default `npm test` runs 56 of them; the
-  remaining 3 are optional):
-  * **Deleted (11 files):** `test-default-font-provider-registry.mjs`,
-    `test-live-text-integration.mjs`, `test-shape-geometry-integration.mjs`,
-    `test-undo-redo-integration.mjs`, `test-curved-text-integration.mjs`,
-    `test-ui-discoverability.mjs`, `test-default-text-layer-editing.mjs`,
-    `test-preview3d-integration.mjs`, `test-image-integration.mjs`, `test-rs2000-ui-fixes.mjs`,
-    `test-s101-ux-workflow-polish.mjs`.
-  * **Consolidated (6 → 2 new files):** the UI-001 shell cluster
-    (`test-ui001-topmenu.mjs`+`test-ui001-lightboxes.mjs`+`test-ui001-leftpanel.mjs`+
-    `test-ui001b-fixes.mjs` → new `test-ui-shell-structure.mjs`, 20 checks, zero assertions
-    dropped) and the alignment & snapping wiring cluster
-    (`test-alignment-snapping-integration.mjs`+`test-alignment-snapping-upgrade.mjs` → new
-    `test-alignment-snapping-wiring.mjs`, 21 checks, only 2 literal-duplicate checks dropped).
-  * **Renamed (1, content preserved):** `test-ui001-dialog-behavior.mjs` →
-    `test-lightbox-controller.mjs` (it tests the permanent `src/ui/Lightbox.js` module's own
-    contract, not milestone-specific page furniture).
-  * **Rewritten (5 files):** `test-app-module-migration.mjs` (import-boundary check genericized
-    from a per-milestone enumeration to 4 structural rules; self-referential meta-check and the
-    `git status` guard removed); `test-opentype-provider.mjs`, `test-image-trace-regression.mjs`,
-    `test-browser-dependency-loading.mjs`, `test-module-graph-exports.mjs` (each gained one real
-    assertion salvaged from a deleted file).
-  * **Mechanically de-crufted (37 files):** the `git status --porcelain` forbidden-file guard (and
-    its now-dangling `execSync`/`node:child_process` import) removed; every other line untouched.
-  * **Moved to optional buckets, content unchanged (3 files):** `test-gallery-benchmark.mjs` (→
-    `npm run test:gallery`), `test-cup-rotation-stabilization.mjs`,
-    `test-object-preview-renderer.mjs` (→ `npm run test:full` only — real, still-passing tests for
-    `src/renderer/CupRenderer.js`, which `docs/ARCHITECTURE.md` documents as not wired into the
-    live Object Preview panel; kept runnable, not deleted, since production code was out of scope
-    for this milestone).
-* **`package.json`** — `scripts.test` now runs 56 files (`test:core` + `test:integration` +
-  `test:architecture`). New scripts: `test:core` (28 files, permanent-module unit/behavioral tests
-  with no `app.js`/`index.html` dependency), `test:integration` (24 files, `app.js`/`index.html`
-  wiring + cross-module behavioral tests), `test:architecture` (4 files: import boundaries, module
-  graph integrity, one project model, browser dependency loading — the permanent architectural
-  rules), `test:gallery` (3 files, optional Gallery regression + benchmark), `test:full` (all 59
-  files). `test:browser` intentionally not added — see Audit Finding 9.
-* No production file (`app.js`, `index.html`, `src/**`, `style.css`) was modified.
+* **`src/preview3d/ObjectGeometryBuilder.js`**:
+  * `applyAzimuthUv(geometry)` (signature changed — no longer takes a `wrapAngleRadValue` parameter)
+    now computes `U = 0.5 + azimuth / (2*PI)`, the object's true, wrap-mode-independent circumference
+    scale — the same dimensionless `canvasXMm/canvasWidthMm` relation
+    `ObjectDimensions.js`'s `canvasXMmForAzimuthRad()` already defines for the Front View Frame, so
+    the 2D Canvas and Object Preview now share one mm-to-azimuth model exactly.
+  * Called once inside `buildObjectMesh()`, alongside `applyBodyHeightUv()`, since it no longer needs
+    to react to wrap-mode changes.
+  * `applyWrapUv(bodyMesh, wrapMode)` — removed. Nothing calls it, and there is nothing left for a
+    per-wrap-mode UV re-application to do.
+  * The azimuth-from-Lathe-column-index math (not `Math.atan2(position)`) and both `LatheGeometry`
+    calls' `phiStart=-PI` seam placement — two real, independent dark-vertical-band fixes from S-107
+    Part 4 — are byte-identical, unchanged.
+* **`src/preview3d/Preview3DRenderer.js`**: `update(stoneLayout, options)` no longer destructures or
+  uses `wrap`; the `_wrap` field and `_applyWrapUv` bookkeeping (both only meaningful for the removed
+  per-wrap-mode re-application) are removed. `onAzimuthChange`/live-orbit sync is untouched.
+* **`app.js`**: `drawCup()`'s call to `preview3D.update()` no longer includes `wrap:project.wrap`
+  (one key removed from one object literal). Nothing else in `app.js` changed — the Front View Frame
+  drawing/drag/hit-test code, `printableCircumferenceMm()`, `isTextTooLongForObject()`, and the
+  `#wrap` `<select>` are all byte-identical to before this milestone.
+* No production file outside `src/preview3d/**` and this one line of `app.js` was touched. No
+  SVG-specific code was added anywhere.
 
 ---
 
 # Files Changed
 
 ```
-docs/specifications/S-111-TestSuiteRationalization.md   (new)
-TASK_RESULT.md                                            (this file)
-package.json                                              (scripts restructured)
+docs/specifications/S-109-SvgObjectPreviewProjectionConsistency.md   (new)
+TASK.md                                                                (this milestone)
+TASK_RESULT.md                                                        (this file)
 
-tools/test-ui-shell-structure.mjs                         (new — consolidates 4 files below)
-tools/test-alignment-snapping-wiring.mjs                  (new — consolidates 2 files below)
-tools/test-lightbox-controller.mjs                        (renamed from test-ui001-dialog-behavior.mjs)
+src/preview3d/ObjectGeometryBuilder.js   (applyAzimuthUv() true-scale, wrap-independent;
+                                           applyWrapUv() removed)
+src/preview3d/Preview3DRenderer.js       (update() no longer takes/uses `wrap`)
+app.js                                   (drawCup(): `wrap` no longer passed to preview3D.update();
+                                           2 comment updates, no other logic change)
 
-tools/test-default-font-provider-registry.mjs             (deleted; 1 assertion folded into test-opentype-provider.mjs)
-tools/test-live-text-integration.mjs                      (deleted)
-tools/test-shape-geometry-integration.mjs                 (deleted)
-tools/test-undo-redo-integration.mjs                      (deleted)
-tools/test-curved-text-integration.mjs                    (deleted)
-tools/test-ui-discoverability.mjs                         (deleted)
-tools/test-default-text-layer-editing.mjs                 (deleted)
-tools/test-preview3d-integration.mjs                      (deleted; 2 assertions folded into test-browser-dependency-loading.mjs / test-module-graph-exports.mjs)
-tools/test-image-integration.mjs                          (deleted; 1 assertion folded into test-image-trace-regression.mjs)
-tools/test-rs2000-ui-fixes.mjs                             (deleted)
-tools/test-s101-ux-workflow-polish.mjs                     (deleted)
-tools/test-ui001-topmenu.mjs                               (deleted; merged into test-ui-shell-structure.mjs)
-tools/test-ui001-lightboxes.mjs                            (deleted; merged into test-ui-shell-structure.mjs)
-tools/test-ui001-leftpanel.mjs                             (deleted; merged into test-ui-shell-structure.mjs)
-tools/test-ui001b-fixes.mjs                                (deleted; merged into test-ui-shell-structure.mjs)
-tools/test-alignment-snapping-integration.mjs               (deleted; merged into test-alignment-snapping-wiring.mjs)
-tools/test-alignment-snapping-upgrade.mjs                   (deleted; merged into test-alignment-snapping-wiring.mjs)
-
-tools/test-app-module-migration.mjs                        (rewritten: generic import-boundary rule)
-tools/test-opentype-provider.mjs                            (gained 1 salvaged assertion)
-tools/test-image-trace-regression.mjs                       (gained 1 salvaged assertion)
-tools/test-browser-dependency-loading.mjs                   (gained 1 salvaged assertion)
-tools/test-module-graph-exports.mjs                         (gained 1 salvaged assertion)
-
-tools/test-crystal-color-catalog.mjs                        (guard removed)
-tools/test-crystal-color-integration.mjs                    (guard removed)
-tools/test-cup-rotation-stabilization.mjs                   (guard removed; moved to test:full only)
-tools/test-design-library-integration.mjs                   (guard removed)
-tools/test-examples-regression.mjs                          (guard removed)
-tools/test-fill-algorithms-integration.mjs                  (guard removed)
-tools/test-fill-algorithms.mjs                              (guard removed)
-tools/test-gallery-integration.mjs                          (guard removed)
-tools/test-geometry-engine.mjs                              (guard removed)
-tools/test-object-template-integration.mjs                  (2 guards removed)
-tools/test-path-boolean-integration.mjs                     (guard removed)
-tools/test-production-export-validation.mjs                 (guard removed)
-tools/test-production-sheet-exporter.mjs                    (guard removed)
-tools/test-render-export-pipeline.mjs                       (guard removed)
-tools/test-s104-text-position-recovery-drag-tuning.mjs      (guard removed)
-tools/test-s105-persistent-movable-lightboxes.mjs           (guard removed)
-tools/test-s106-combined-visual-preview-png-export.mjs      (guard removed)
-tools/test-s107-long-text-readability.mjs                   (guard removed)
-tools/test-stone-color.mjs                                  (guard removed)
-tools/test-svg-integration.mjs                              (guard removed)
-tools/test-typography-font-library.mjs                      (guard removed)
-tools/test-ux-visual-polish.mjs                              (guard removed)
-tools/test-variable-stone-sizes.mjs                          (guard removed)
+tools/test-object-geometry-builder.mjs           (checks 7/8 rewritten for wrap-independent UV;
+                                                   8b/8c simplified, same regression coverage)
+tools/test-s107-long-text-readability.mjs        (checks 14/15 rewritten; 15b/15c unchanged)
 ```
 
 ---
@@ -201,15 +152,7 @@ tools/test-variable-stone-sizes.mjs                          (guard removed)
 
 | Command | Files | Assertions | Result |
 |---|---:|---:|---|
-| `npm test` (default) | 56 | 792 | **PASS**, 0 failures, ~14.3–14.9s wall |
-| `npm run test:core` | 28 | — | **PASS**, 0 failures |
-| `npm run test:integration` | 24 | — | **PASS**, 0 failures |
-| `npm run test:architecture` | 4 | — | **PASS**, 0 failures |
-| `npm run test:gallery` | 3 | — | **PASS**, 0 failures |
-| `npm run test:full` | 59 | 812 | **PASS**, 0 failures |
-
-Baseline before this milestone: 74 files, 974 assertions, ~17.8s wall, 0 failures (confirmed by
-running `npm test` before any change, to establish the true starting point).
+| `npm test` | 56 | 792 | **PASS**, 0 failures |
 
 `git diff --check` — clean, no whitespace errors.
 
@@ -217,50 +160,67 @@ running `npm test` before any change, to establish the true starting point).
 
 # Browser Verification
 
-Performed after the test-suite refactor, since no automated suite in this repository drives a real
-browser (per `docs/ARCHITECTURE.md`'s "Testing Philosophy" section) and this milestone's own
-instructions require it. Dev server (`npm run dev`) started; headless Chromium driven via
-Playwright (already present in `node_modules`, used the same ad hoc way prior milestones' manual
-verification passes have — not added as a new `package.json` dependency).
+Headless Chromium (Playwright), `python3 -m http.server 5173`, real app, no mocks. Before/after
+comparison performed at Mug's default `front` wrap mode — the previously worst-case, ~5.1x
+distortion:
 
-Exercised, in order:
+1. **Right-triangle SVG import** (asymmetric on both axes, to catch orientation/flip bugs
+   independently of scale): **before** — rendered as a nearly-illegible thin sliver, hypotenuse and
+   left edge nearly overlapping. **after** — matches the 2D Canvas's shape, orientation
+   (right-angle corner position preserved, not flipped/rotated), and proportions exactly, with only
+   mild, expected cylindrical bowing.
+2. **Multi-path SVG** (a `<g transform="translate(10,10) rotate(15)"><rect></g>`, a `<circle>`, a
+   closed `<path>` triangle, and an open `<polyline>`): after the fix, all four shapes' relative
+   position/rotation/shape match the 2D Canvas, verified on both Mug and Bottle at `front` wrap.
+3. **Default project text layer** ("Vitalina Serbin", the milestone's own worst-case default state):
+   before — compressed into overlapping, near-illegible glyphs. After — readable, correctly
+   proportioned, at the exact same `front` wrap mode.
+4. **Wrap-mode sweep** (`front`/`wide`/`half`/`full`) on the imported triangle: Object Preview
+   screenshots are now visually identical across all four modes (texture is wrap-mode independent, as
+   intended). The 2D Canvas's Front View Frame width still changes correctly per mode — 40.8mm
+   (front) / 67.1mm (wide) / 105.0mm (half) / 175.0mm (full) on the default Mug, unchanged from S-107
+   — confirming wrap mode's remaining, intended effects were not disturbed.
+5. **Object types**: Mug, Tumbler, Bottle all tested with the multi-path SVG; no clipping, no
+   errors, correct rim/shoulder/neck/cap geometry (unchanged, RS-1006A behavior not touched).
+6. **Save/load round trip**: exported Project JSON from a project with the multi-path SVG on a
+   Bottle, reloaded the page (fresh app state), imported the file back — Object Preview and 2D Canvas
+   both rendered identically to before reload.
+7. **Very wide (600mm) and very tall (400mm) SVG imports**: both imported without error, auto-scaled
+   to fit the canvas on import (aspect-ratio preserved), no crash, no NaN.
+8. **Zero console errors, zero page errors** across every step above (verified via Playwright's
+   `console`/`pageerror` event listeners on every run, not just visual inspection).
 
-1. Initial load — 2D canvas and 3D mug preview both render the default project's text layer
-   (375 stones, "Vitalina Serbin").
-2. Opened the Text Lightbox, edited the text content live (`#text` field) — both canvases update.
-3. Opened the Shapes Lightbox, added a Circle via the Design Shapes grid — exercises the live
-   `GeometryEngine` + both renderers; layer list correctly shows 2 layers.
-4. Undo, then Redo.
-5. Opened the Export Lightbox.
-6. Switched to the Object Preview (3D-only) tab, then back to Dual Workspace.
+Screenshots were captured to a local scratch directory during this session (not committed to the
+repository, consistent with this repository's existing convention of not embedding binary screenshots
+in `docs/specifications/**`); this section is the complete verification record.
 
-**Result: zero console errors, zero page errors**, across the entire sequence. Screenshots
-confirmed correct rendering at every step — 2D production layout with the Front View Frame overlay,
-3D mug preview with rhinestone-rendered text, the Shapes Lightbox with Boolean Operations/Text
-Fitting panels intact, the Object Preview tab. Production behavior is unchanged, as expected — no
-production file was modified by this milestone.
+---
+
+# Known Limitations
+
+* `isTextTooLongForObject()` remains text-only — see Audit Finding 6. Not fixed in this milestone;
+  no requirement asked for it, and fixing it would be functionality beyond this milestone's stated
+  scope.
+* Wrap mode no longer visibly changes the Object Preview's texture at all — only the 2D Canvas's
+  Front View Frame. This is the correct, required outcome per this milestone's explicit mandate, but
+  it is a real, deliberate behavior change from what S-107 Part 4 shipped and had approved. Flagged
+  here for visibility, not because it is considered a defect.
 
 ---
 
 # Recommendation
 
-**APPROVE.** Every area listed in this milestone's Requirement 1 (GeometryEngine, StoneLayout,
-deterministic geometry, save/load, backward compatibility, SVG import, Image Trace, Fill Styles,
-Boolean Operations, Design Library, Object Preview, Production Sheet, exporters, Undo/Redo,
-alignment & snapping, text fitting, shape fitting, preview synchronization, project fixtures) keeps
-real, executing behavioral coverage — none was weakened, several are now more clearly organized.
-Every one of the 11 deletions and both consolidations was independently confirmed, across four
-separate full-file audit passes, to either duplicate a surviving real test or protect only a past
-`git status` snapshot with no forward value. The suite is smaller (74 → 56 files by default,
-974 → 792 assertions), faster (~17–20%), and the one architectural rule this task specifically
-called out for strengthening — "`app.js` only imports permanent-module barrels" — is now enforced
-by a general rule that gets *more* accurate as the codebase grows, instead of a per-milestone
-enumeration that only ever grew stale.
+**APPROVE.** The fix is minimal and lands at the correct architectural level: a rewritten UV formula
+inside `ObjectGeometryBuilder.js` (plus removing the now-dead `applyWrapUv()` entry point and its two
+call sites), with zero changes to `GeometryEngine`, `StoneLayout`, the project schema, any exporter,
+or the Front View Frame's own drawing/drag logic. No SVG-specific code exists anywhere in the diff —
+consistent with the audit's own finding that the defect was never SVG-specific. Both affected test
+suites were rewritten to assert the new, correct behavior; all pre-existing dark-band/seam regression
+guards from S-107 Part 4 are preserved unchanged. Real-browser verification confirms the 2D Canvas
+and Object Preview now agree on position/scale/orientation/proportions for SVG, shapes, and text
+alike, at every wrap mode and object type, subject only to normal cylindrical perspective.
 
-Recommended next milestone: none forced by this work. Optional low-priority follow-ups noted in
-`docs/specifications/S-111-TestSuiteRationalization.md` (not attempted here, to keep this milestone
-scoped to test-suite rationalization only): deduplicate the "StoneLayout-only"/"never throws" checks
-still repeated across a handful of files; consolidate the four independent reads of
-`examples/manifest.json`/`baselines.json`/`gallery.json`; consider a jsdom-driven rewrite of the
-UI-001 shell and wiring "integration" files if `app.js`/`index.html` ever gain a real DOM-testing
-harness.
+Recommended next milestone (optional, not attempted here — out of this milestone's scope): extend
+`isTextTooLongForObject()`'s printable-circumference overflow warning to non-text layer types
+(SVG/shape/image), so an oversized imported design gets the same real-manufacturing-limit warning
+long text already does.

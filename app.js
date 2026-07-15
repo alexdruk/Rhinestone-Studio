@@ -769,11 +769,11 @@ function centerSelectedTextOnObject(){
 // is that same frame's inset rectangle. The 3D preview (src/preview3d/StoneLayoutTexture.js's
 // drawStoneLayoutTexture(), fed canvasWidthMm/canvasHeightMm from this exact project.canvas by
 // Preview3DRenderer.js's update()) rasterizes the *entire* flat canvas into one texture and
-// ObjectGeometryBuilder.js's applyWrapUv()/applyAzimuthUv() map that whole texture (U 0..1 = canvas
-// x 0..canvasWidthMm) across the wrap angle centered on the front -- so anything within the flat
-// canvas's mm bounds is always on the front-facing, always-visible part of the object regardless of
-// wrap mode or camera rotation, and anything outside those mm bounds is clipped out of the texture
-// before it ever reaches the mesh. The flat canvas-mm safe-area comparison is therefore already the
+// ObjectGeometryBuilder.js's applyAzimuthUv() maps that whole texture (U 0..1 = canvas
+// x 0..canvasWidthMm) around the object's true, wrap-mode-independent circumference (S-109) -- so
+// anything within the flat canvas's mm bounds is always on the object at the same mm position
+// regardless of wrap mode or camera rotation, and anything outside those mm bounds is clipped out of
+// the texture before it ever reaches the mesh. The flat canvas-mm safe-area comparison is therefore already the
 // correct coordinate space for "visible on the object" -- no 3D projection math is needed or was
 // touched. What was wrong was the *threshold*: the first version only warned once the bbox had zero
 // overlap with the safe area at all. Real-mouse verification (raw CDP drag, see the S-104 spec's
@@ -1020,12 +1020,13 @@ function handlesFor(b){return[{name:'nw',x:b.x,y:b.y},{name:'ne',x:b.x2,y:b.y},{
 // update() only rebuilds the mesh/texture when the StoneLayout or display options actually
 // changed; syncView() only repositions the camera when rotation/zoom actually changed -- neither
 // call disturbs a manual orbit/pan the operator has mid-way through with the mouse.
-// S-107 follow-up: `wrap` is passed back to preview3D.update() -- the object mesh's texture
-// compresses the complete production canvas into wrap's angular window (ObjectGeometryBuilder.js's
-// applyWrapUv()), restoring wrap mode's original visible effect on the Object Preview. The Front
-// View Frame overlay (drawFrontViewFrame(), frontViewFrameGeometry()) visualizes this exact same
-// window on the 2D canvas; it does not replace it.
-function drawCup(){preview3D.update(layout,{cupColor:project.cupColor,wrap:project.wrap,objectTemplate:currentObjectTemplate(),canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height});preview3D.syncView(rotation,zoom)}
+// S-109: `wrap` is no longer passed to preview3D.update() -- the object mesh's texture UV is
+// wrap-mode independent (true circumference scale, matching the 2D Canvas), so the Object Preview
+// consuming the same StoneLayout as the 2D canvas is now sufficient for the two to agree on
+// position/scale/orientation/proportions, subject only to normal cylindrical perspective. Wrap mode
+// still controls the Front View Frame overlay (drawFrontViewFrame(), frontViewFrameGeometry()) on
+// the 2D canvas, unchanged.
+function drawCup(){preview3D.update(layout,{cupColor:project.cupColor,objectTemplate:currentObjectTemplate(),canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height});preview3D.syncView(rotation,zoom)}
 // S-001: keeps the Front/Left/Right/Back buttons' highlighted state synchronized with `rotation`
 // regardless of how it changed (view-button click, reset, slider, or manual cup-drag), since this
 // is called from updateAll() rather than duplicated at each rotation-changing call site.
