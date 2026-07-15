@@ -162,20 +162,21 @@ await test('13. rotating the Object Preview moves the Front View Frame (requirem
   assert.ok(!handler.includes('updateAll'), 'expected the live-orbit sync handler to never call the full updateAll() pipeline');
 });
 
-await test('14. Preview3DRenderer.js exposes the live camera azimuth via an OrbitControls \'change\' listener (onAzimuthChange) AND still accepts/applies a `wrap` option in update() -- restored so wrap mode visibly changes the Object Preview again (this milestone\'s follow-up requirement 1/2)', async () => {
+await test('14. Preview3DRenderer.js exposes the live camera azimuth via an OrbitControls \'change\' listener (onAzimuthChange) AND update() no longer accepts/uses a `wrap` option -- S-109: the object mesh\'s UV is wrap-mode independent, so update() has nothing wrap-related left to apply', async () => {
   const source = await readFile(path.join(repoRoot, 'src/preview3d/Preview3DRenderer.js'), 'utf8');
   assert.match(source, /this\.controls\.addEventListener\('change'/);
   assert.match(source, /onAzimuthChange/);
   const updateFn = source.match(/update\(stoneLayout, \{[^}]*\}\) \{[\s\S]*?\n {2}\}/);
   assert.ok(updateFn, 'expected to find Preview3DRenderer.update()');
-  assert.match(updateFn[0].split('\n')[0], /\bwrap\b/, 'expected update()\'s destructured options to include wrap');
-  assert.match(updateFn[0], /this\._applyWrapUv\(this\._bodyMesh, ?wrap\)/);
+  assert.ok(!/\bwrap\b/.test(updateFn[0].split('\n')[0]), 'expected update()\'s destructured options to no longer include wrap');
+  assert.ok(!source.includes('_applyWrapUv'), 'expected no remaining _applyWrapUv call site');
 });
 
-await test('15. ObjectGeometryBuilder.js\'s object mesh texture compresses the complete production canvas into the selected wrap mode\'s angular window (restored, pre-S-107 behavior) -- applyWrapUv() is exported and wrap-mode dependent, callable whenever wrap mode changes', async () => {
+await test('15. ObjectGeometryBuilder.js\'s object mesh texture maps the complete production canvas around the object\'s true, wrap-mode-independent circumference (S-109) -- applyWrapUv() no longer exists; applyAzimuthUv() is called once at mesh-build time', async () => {
   const source = await readFile(path.join(repoRoot, 'src/preview3d/ObjectGeometryBuilder.js'), 'utf8');
-  assert.match(source, /export function applyWrapUv\(bodyMesh, ?wrapMode\)/);
-  assert.match(source, /applyAzimuthUv\(bodyMesh\.geometry, ?wrapAngleRad\(wrapMode\)\)/);
+  assert.ok(!source.includes('applyWrapUv'), 'expected applyWrapUv() to no longer exist');
+  assert.match(source, /applyAzimuthUv\(bodyGeometry\)/, 'expected applyAzimuthUv() to be called once inside buildObjectMesh()');
+  assert.match(source, /0\.5 \+ azimuth \/ \(2 \* Math\.PI\)/, 'expected the true circumference scale formula');
 });
 
 await test('15b. applyAzimuthUv() computes azimuth from each vertex\'s known Lathe column index, not from Math.atan2(position) -- regression guard for the dark-vertical-band defect (atan2\'s branch cut and the r=0 apex\'s signed-zero quirk both used to land on real, connected faces)', async () => {

@@ -6,8 +6,9 @@ import assert from 'node:assert/strict';
 // (not faked) test of the actual geometry this milestone builds, without needing a browser.
 
 const THREE = await import('three');
-const { buildObjectMesh, applyWrapUv } = await import('../src/preview3d/ObjectGeometryBuilder.js');
-const { computeObjectDimensionsMm, wrapAngleRad } = await import('../src/preview3d/ObjectDimensions.js');
+const ObjectGeometryBuilder = await import('../src/preview3d/ObjectGeometryBuilder.js');
+const { buildObjectMesh } = ObjectGeometryBuilder;
+const { computeObjectDimensionsMm } = await import('../src/preview3d/ObjectDimensions.js');
 const { getObjectTemplate } = await import('../src/products/index.js');
 
 async function test(name, fn) {
@@ -92,7 +93,7 @@ await test('6. tumbler body radius is constant top-to-bottom (straight wall); mu
   assert.ok(Math.abs(dims.topRadiusMm - dims.bodyRadiusMm) < 1e-9);
 });
 
-await test('7. applyWrapUv maps the front azimuth (atan2(x,z)=0) to u=0.5 for every wrap mode (S-107 follow-up: restores wrap-mode-dependent windowing -- "changing wrap mode changes the Object Preview")', () => {
+await test('7. object mesh UV maps the front azimuth (atan2(x,z)=0) to u=0.5, and is wrap-mode independent -- S-109: rebuilding the same mesh never changes its UV (no per-wrap-mode entry point exists any more)', () => {
   const { bodyMesh } = buildObjectMesh(getObjectTemplate('mug'), 210, 90);
   const position = bodyMesh.geometry.attributes.position;
   const uv = bodyMesh.geometry.attributes.uv;
@@ -105,13 +106,11 @@ await test('7. applyWrapUv maps the front azimuth (atan2(x,z)=0) to u=0.5 for ev
     if (score > bestScore) { bestScore = score; frontIndex = i; }
   }
 
-  for (const wrap of ['front', 'wide', 'half', 'full']) {
-    applyWrapUv(bodyMesh, wrap);
-    assert.ok(Math.abs(uv.getX(frontIndex) - 0.5) < 0.05, `expected u≈0.5 at the front azimuth for wrap=${wrap}`);
-  }
+  assert.ok(Math.abs(uv.getX(frontIndex) - 0.5) < 0.05, 'expected u≈0.5 at the front azimuth');
+  assert.equal(typeof ObjectGeometryBuilder.applyWrapUv, 'undefined', 'expected no per-wrap-mode UV entry point to exist (S-109: UV is wrap-mode independent, built once in buildObjectMesh())');
 });
 
-await test('8. applyWrapUv\'s angular window is narrower for "front" than for "full" (u spreads out more for a wider wrap angle) -- wrap mode visibly changes the Object Preview again', () => {
+await test('8. object mesh UV matches the object\'s true circumference scale (S-109): a vertex at azimuth theta gets u = 0.5 + theta/(2*PI), the same dimensionless canvasXMm/canvasWidthMm relation ObjectDimensions.js\'s canvasXMmForAzimuthRad() uses for the Front View Frame -- so the Object Preview and the 2D Canvas agree on scale for any canvas width, with no wrap-mode-dependent rescaling', () => {
   const { bodyMesh } = buildObjectMesh(getObjectTemplate('tumbler'), 230, 100);
   const position = bodyMesh.geometry.attributes.position;
   const uv = bodyMesh.geometry.attributes.uv;
@@ -126,40 +125,40 @@ await test('8. applyWrapUv\'s angular window is narrower for "front" than for "f
     if (diff < bestDiff) { bestDiff = diff; sideIndex = i; }
   }
 
-  applyWrapUv(bodyMesh, 'front');
-  const uFront = uv.getX(sideIndex);
-  applyWrapUv(bodyMesh, 'full');
-  const uFull = uv.getX(sideIndex);
+  // The vertex's *own* construction azimuth (column index formula, not atan2 -- see applyAzimuthUv()'s
+  // doc comment) is what its U is actually derived from; recover it the same way to compute the
+  // expected true-scale U independently of the implementation under test.
+  const LATHE_SEGMENTS = 48;
+  const columnCount = LATHE_SEGMENTS + 1;
+  const rowCount = position.count / columnCount;
+  const column = Math.floor(sideIndex / rowCount);
+  const azimuth = -Math.PI + (column / LATHE_SEGMENTS) * 2 * Math.PI;
+  const expectedU = 0.5 + azimuth / (2 * Math.PI);
 
-  assert.ok(Math.abs(uFront - 0.5) > Math.abs(uFull - 0.5), 'expected the same azimuth to map further from center (0.5) under a narrower wrap window');
+  assert.ok(Math.abs(uv.getX(sideIndex) - expectedU) < 1e-9, `expected u=${expectedU} (true circumference scale) at azimuth=${azimuth}, got ${uv.getX(sideIndex)}`);
 });
 
-await test('8b. no triangle spans a large U range for any object/wrap-mode combination -- regression guard for the dark-vertical-band defect (a real, human-observed bug: atan2\'s branch cut and the r=0 base/cap apex both used to coincide with real, connected faces, stretching a texture sample across nearly the whole canvas width in one thin triangle)', () => {
+await test('8b. no triangle spans a large U range for any object template -- regression guard for the dark-vertical-band defect (a real, human-observed bug: atan2\'s branch cut and the r=0 base/cap apex both used to coincide with real, connected faces, stretching a texture sample across nearly the whole canvas width in one thin triangle)', () => {
   const sizes = { mug: [210, 90], tumbler: [230, 100], bottle: [180, 90] };
   for (const id of ['mug', 'tumbler', 'bottle']) {
     const [w, h] = sizes[id];
     const { bodyMesh } = buildObjectMesh(getObjectTemplate(id), w, h);
-    const position = bodyMesh.geometry.attributes.position;
     const index = bodyMesh.geometry.index;
-    for (const wrap of ['front', 'wide', 'half', 'full']) {
-      applyWrapUv(bodyMesh, wrap);
-      const uv = bodyMesh.geometry.attributes.uv;
-      // A healthy triangle's U span is at most a few LATHE_SEGMENTS-steps wide (~0.05-0.1 for the
-      // narrowest wrap mode); 0.3 is a generous margin that would only be crossed by a genuine
-      // seam/branch-cut/degenerate-apex defect, never by ordinary per-segment variation.
-      for (let t = 0; t < index.count; t += 3) {
-        const a = index.getX(t), b = index.getX(t + 1), c = index.getX(t + 2);
-        const ua = uv.getX(a), ub = uv.getX(b), uc = uv.getX(c);
-        const jump = Math.max(Math.abs(ua - ub), Math.abs(ub - uc), Math.abs(ua - uc));
-        assert.ok(jump < 0.3, `${id} wrap=${wrap} triangle@${t}: U jump ${jump} (vertices ${a}=${ua}, ${b}=${ub}, ${c}=${uc}) -- suspected seam/apex UV defect`);
-      }
+    const uv = bodyMesh.geometry.attributes.uv;
+    // A healthy triangle's U span is at most a few LATHE_SEGMENTS-steps wide (~0.02); 0.3 is a
+    // generous margin that would only be crossed by a genuine seam/branch-cut/degenerate-apex
+    // defect, never by ordinary per-segment variation.
+    for (let t = 0; t < index.count; t += 3) {
+      const a = index.getX(t), b = index.getX(t + 1), c = index.getX(t + 2);
+      const ua = uv.getX(a), ub = uv.getX(b), uc = uv.getX(c);
+      const jump = Math.max(Math.abs(ua - ub), Math.abs(ub - uc), Math.abs(ua - uc));
+      assert.ok(jump < 0.3, `${id} triangle@${t}: U jump ${jump} (vertices ${a}=${ua}, ${b}=${ub}, ${c}=${uc}) -- suspected seam/apex UV defect`);
     }
   }
 });
 
 await test('8c. the base apex (r=0, x=z=0 for every column) never triggers Math.atan2\'s signed-zero quirk -- regression guard for the second dark-band defect (neighboring apex vertices at the identical physical point used to get wildly different, meaningless azimuths depending on the sign of each column\'s near-zero x/z)', () => {
   const { bodyMesh } = buildObjectMesh(getObjectTemplate('mug'), 210, 90);
-  applyWrapUv(bodyMesh, 'full');
   const position = bodyMesh.geometry.attributes.position;
   const uv = bodyMesh.geometry.attributes.uv;
   const apexUs = [];
