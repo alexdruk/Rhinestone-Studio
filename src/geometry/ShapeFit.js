@@ -2,12 +2,14 @@
  * S-110: Smart Text-to-Shape Fitting — pure geometry helpers.
  *
  * This module has no knowledge of Project/Layer/StoneLayout/the DOM (matching src/editing/**'s
- * "pure, DOM-free" convention) -- it only answers two geometry questions: "what's the largest
- * rectangle of a given aspect ratio that fits inside this polygon?" (computeInscribedRect) and
- * "what scale does a measured text box need to fit a target box, honoring a minimum legible
- * height?" (computeShapeFitScale). app.js is the only caller, and is the only place that resolves a
- * shape layer to polygons, resolves a text layer's measured size, and writes the result back onto
- * the text layer's own x/y/height fields -- this module never touches a layer directly.
+ * "pure, DOM-free" convention) -- it only answers three geometry questions: "what's the largest
+ * rectangle of a given aspect ratio that fits inside this polygon?" (computeInscribedRect), "what
+ * scale does a measured text box need to fit a target box, honoring a minimum legible height?"
+ * (computeShapeFitScale), and — S-110A, the inverse of the first question — "what scale does a
+ * reference shape need so its own largest-inscribed-rectangle grows to match a required box?"
+ * (computeContainingShapeScale). app.js is the only caller, and is the only place that resolves a
+ * shape layer to polygons, resolves a text layer's measured size, and writes the result back onto a
+ * layer's own fields -- this module never touches a layer directly.
  */
 
 import { Point2D } from '../text/VectorPath.js';
@@ -155,4 +157,34 @@ export function computeShapeFitScale({
   }
 
   return { ok: true, scale };
+}
+
+/**
+ * S-110A (Smart Shape-to-Text Creation): the inverse of computeInscribedRect() -- given a
+ * *reference* shape's already-resolved polygons/boundingBox (at any convenient reference size) and
+ * a required box size (typically the existing text's rendered bbox plus a production margin), finds
+ * the uniform scale factor that, if applied to the reference shape's own overall size, makes its
+ * largest inscribed rectangle at the required box's aspect ratio come out exactly that size.
+ *
+ * This is exact, not an approximation: computeInscribedRect()'s search is expressed as a fraction
+ * `s` of the shape's own bounding-box width (see its own doc comment), so both the shape and its
+ * inscribed rectangle scale by the same factor under a uniform resize -- resolving the reference
+ * shape's inscribed rect once and solving `requiredWidthMm = scale * inscribed.widthMm` for `scale`
+ * is therefore exact at any target size, not a second fitting algorithm.
+ *
+ * @param {import('../text/VectorPath.js').Point2D[][]} polygons Reference shape's resolved polygons.
+ * @param {import('../text/VectorPath.js').BoundingBox|null} boundingBox Reference shape's own bbox.
+ * @param {number} requiredWidthMm
+ * @param {number} requiredHeightMm
+ * @returns {{scale:number}|null} null when the reference shape has no usable region, or the
+ *   required box is degenerate.
+ */
+export function computeContainingShapeScale(polygons, boundingBox, requiredWidthMm, requiredHeightMm) {
+  if (!(requiredWidthMm > 0) || !(requiredHeightMm > 0)) return null;
+  const aspectRatio = requiredWidthMm / requiredHeightMm;
+  const inscribed = computeInscribedRect(polygons, boundingBox, aspectRatio);
+  if (!inscribed || !(inscribed.widthMm > 0)) return null;
+  const scale = requiredWidthMm / inscribed.widthMm;
+  if (!Number.isFinite(scale) || scale <= 0) return null;
+  return { scale };
 }

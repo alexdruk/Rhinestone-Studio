@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { GeometryEngine, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, isPointInsidePolygons } from '../src/geometry/index.js';
+import { GeometryEngine, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, isPointInsidePolygons } from '../src/geometry/index.js';
 import { BoundingBox, Point2D } from '../src/text/VectorPath.js';
 import { createStarNaturalContours, createRegularPolygonNaturalContours, createRingNaturalContours } from '../src/geometry/ShapeLibrary.js';
 
@@ -195,6 +195,54 @@ await test('13. end-to-end fit computation succeeds for every FITTABLE_SHAPE_TYP
     });
     assert.ok(typeof scaleResult.ok === 'boolean', `${kind}: expected a definite ok/fail result`);
   }
+});
+
+// --- 5. computeContainingShapeScale() (S-110A: the inverse direction, shape-around-text) --------
+
+await test('14. computeContainingShapeScale() is the exact inverse of computeInscribedRect() for a circle', () => {
+  const radiusMm = 18;
+  const polygon = circleContour(radiusMm);
+  const boundingBox = BoundingBox.fromPoints(polygon);
+  const required = { widthMm: 50, heightMm: 20 };
+  const fit = computeContainingShapeScale([polygon], boundingBox, required.widthMm, required.heightMm);
+  assert.ok(fit && fit.scale > 0);
+  // Applying the returned scale to the reference circle's own radius must produce a circle whose
+  // largest inscribed rectangle at the required aspect ratio is exactly the required size.
+  const scaledRadiusMm = radiusMm * fit.scale;
+  const scaledPolygon = circleContour(scaledRadiusMm);
+  const scaledBox = BoundingBox.fromPoints(scaledPolygon);
+  const check = computeInscribedRect([scaledPolygon], scaledBox, required.widthMm / required.heightMm);
+  assert.ok(Math.abs(check.widthMm - required.widthMm) < 0.05, `expected inscribed width ~${required.widthMm}, got ${check.widthMm}`);
+  assert.ok(Math.abs(check.heightMm - required.heightMm) < 0.05, `expected inscribed height ~${required.heightMm}, got ${check.heightMm}`);
+});
+
+await test('15. computeContainingShapeScale() scales linearly: doubling the required box doubles the scale', () => {
+  const radiusMm = 10;
+  const polygon = circleContour(radiusMm);
+  const boundingBox = BoundingBox.fromPoints(polygon);
+  const small = computeContainingShapeScale([polygon], boundingBox, 30, 15);
+  const large = computeContainingShapeScale([polygon], boundingBox, 60, 30);
+  assert.ok(Math.abs(large.scale / small.scale - 2) < 1e-6, 'doubling the required box must double the scale');
+});
+
+await test('16. computeContainingShapeScale() works for a concave reference shape (Star) and a Ring\'s inner opening', () => {
+  const [starContour] = toPoints(createStarNaturalContours(5, 0.4));
+  const starBox = BoundingBox.fromPoints(starContour);
+  const starFit = computeContainingShapeScale([starContour], starBox, 20, 20);
+  assert.ok(starFit && starFit.scale > 0);
+
+  const [, ringInner] = toPoints(createRingNaturalContours(0.5));
+  const ringBox = BoundingBox.fromPoints(ringInner);
+  const ringFit = computeContainingShapeScale([ringInner], ringBox, 20, 8);
+  assert.ok(ringFit && ringFit.scale > 0);
+});
+
+await test('17. computeContainingShapeScale() returns null for a degenerate required box', () => {
+  const polygon = circleContour(10);
+  const box = BoundingBox.fromPoints(polygon);
+  assert.equal(computeContainingShapeScale([polygon], box, 0, 10), null);
+  assert.equal(computeContainingShapeScale([polygon], box, 10, 0), null);
+  assert.equal(computeContainingShapeScale([polygon], box, NaN, 10), null);
 });
 
 console.log('Smart Text-to-Shape Fitting (S-110) tests passed.');
