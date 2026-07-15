@@ -19,9 +19,20 @@ const ZOOM_MIN = 0.4;
 const ZOOM_MAX = 3;
 const DEFAULT_POLAR_RAD = 1.3; // ~74.5 degrees from +Y (~15.5 degrees above the horizon) -- shows the object mostly from the side, not looking down into its open top
 // S-112: a plate has no "open top" to avoid looking into -- its printable face IS the top, so the
-// default framing is much closer to top-down than every revolved-vessel kind's DEFAULT_POLAR_RAD,
-// while still keeping enough angle to read as a real 3D object (not a flat orthographic circle).
-const PLATE_DEFAULT_POLAR_RAD = 0.68; // ~39 degrees from +Y
+// default framing was originally much closer to top-down than every revolved-vessel kind's
+// DEFAULT_POLAR_RAD.
+// S-112A: that original 0.68 rad (~51 degrees of elevation) read as near-top-down, which undersold
+// the object as a real dinner plate: the sloped rim read almost flat, and the foot ring never showed
+// at all -- the foot ring's outer wall sits well inside the rim's outer edge (165mm vs 270mm) and low
+// against the table, so any above-the-rim-plane camera has the rim's own overhang occlude it, no
+// matter how steep. Verified empirically (real-browser screenshots swept across the whole polar
+// range): the foot ring only becomes visible once the camera nears the rim's own underside slope --
+// i.e. an eye-level-ish elevation, not a top-down one. Landed on ~13 degrees of elevation (close to
+// the revolved-vessel default above), the shallowest angle at which the foot ring and the sloped
+// rim/outer lip read clearly at the front edge without rotating, while the top surface (Center
+// Well/Rim Band/Full Top Surface design) still fills most of the frame. Geometry itself is untouched
+// -- only the camera moved.
+const PLATE_DEFAULT_POLAR_RAD = 1.35; // ~77 degrees from +Y (~13 degrees of elevation above horizon)
 const MIN_POLAR_RAD = 0.05;
 const MAX_POLAR_RAD = Math.PI - 0.05;
 const FRAME_MARGIN = 1.25; // breathing room around the object when framing the "home" camera position

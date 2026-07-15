@@ -642,7 +642,21 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
     if(target&&!target.isOpen)target.open();
   }
 }
-function writeSelectedControlsToLayer(){const l=selectedLayer();if(l.type==='text'){l.text=el('text').value;l.font=el('font').value;l.height=parseFloat(el('height').value)||25;l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;l.curveEnabled=el('curveEnabled').value==='on';l.curveRadiusMm=Math.max(0.1,parseFloat(el('curveRadiusMm').value)||40);l.curveDirection=el('curveDirection').value==='inside'?'inside':'outside';l.curveStartAngleDeg=parseFloat(el('curveStartAngleDeg').value)||0;l.curveSweepAngleDeg=parseFloat(el('curveSweepAngleDeg').value)||180;l.curveAlignment=el('curveAlignment').value;el('curveControls').style.display=l.curveEnabled?'block':'none';
+function writeSelectedControlsToLayer(){const l=selectedLayer();
+  // S-112A: detected here, before project.plate is overwritten further down in this same function
+  // (project.plate.designTarget still holds the *previous* target, el('plateDesignTarget').value the
+  // one the user just picked) -- true exactly once, on the edit that switches Design Target to Rim
+  // Band while a plate is active.
+  const enteringRimBand=currentObjectTemplate().preview.kind==='plate'&&el('plateDesignTarget').value==='rimBand'&&project.plate.designTarget!=='rimBand';
+  if(l.type==='text'){
+    // S-112A: Rim Band Intelligent Default -- the most common rim-band use case is curved text
+    // following the rim, so selecting Rim Band pre-fills the curve controls (and shows them) with a
+    // geometrically-correct path *before* the normal el('curveEnabled')/el('curveRadiusMm')/
+    // el('curveDirection') reads below pick them up, exactly as if the operator had set them by hand.
+    // Center Well/Full Top Surface never run this block, so their text behavior is untouched, and the
+    // operator can still freely edit every curve field afterward -- this only seeds a default.
+    if(enteringRimBand){el('curveEnabled').value='on';el('curveRadiusMm').value=rimBandCurveRadiusMm().toFixed(2);el('curveDirection').value='outside';el('curveControls').style.display='block'}
+    l.text=el('text').value;l.font=el('font').value;l.height=parseFloat(el('height').value)||25;l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;l.curveEnabled=el('curveEnabled').value==='on';l.curveRadiusMm=Math.max(0.1,parseFloat(el('curveRadiusMm').value)||40);l.curveDirection=el('curveDirection').value==='inside'?'inside':'outside';l.curveStartAngleDeg=parseFloat(el('curveStartAngleDeg').value)||0;l.curveSweepAngleDeg=parseFloat(el('curveSweepAngleDeg').value)||180;l.curveAlignment=el('curveAlignment').value;el('curveControls').style.display=l.curveEnabled?'block':'none';
   // UI-001: manual X/Y mm fields for the Text Lightbox, writing to the same layer.x/layer.y fields
   // RS-1009 already added (previously settable only by drag/nudge/align/distribute).
   l.x=parseFloat(el('textX').value)||0;l.y=parseFloat(el('textY').value)||0}else if(l.type==='circle'){l.cx=parseFloat(el('shapeX').value)||105;l.cy=parseFloat(el('shapeY').value)||45;l.r=Math.max(1,parseFloat(el('shapeW').value)||18);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(l.type==='rectangle'){l.x=parseFloat(el('shapeX').value)||65;l.y=parseFloat(el('shapeY').value)||30;l.w=Math.max(1,parseFloat(el('shapeW').value)||80);l.h=Math.max(1,parseFloat(el('shapeH').value)||30);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(SHAPE_LIBRARY_KINDS.has(l.type)){
@@ -721,6 +735,11 @@ function drawPlateDesignTargetGuide(ctx,s,ox,oy,dpr){
   ctx.fillText(`${guide.label} · printable boundary`,ox+6*dpr,oy+16*dpr);
   ctx.restore();
 }
+// S-112A: Rim Band's printable annulus midline, in mm -- reuses the exact outer/inner radii
+// getPlateDesignTargetGuide() already derives (no second radius calculation), giving curved text "the
+// correct circular text path" for the rim: centered between the well/rim transition and the outer
+// edge, so default-length rim text neither overlaps the well nor runs past the plate's edge.
+function rimBandCurveRadiusMm(){const guide=getPlateDesignTargetGuide('rimBand',project.plate,project.canvas.width,project.canvas.height);return(guide.outerRadiusMm+guide.innerRadiusMm)/2}
 // S-107 (Front View Frame & Long Text Workflow): normalizes a radian angle delta to (-PI, PI], the
 // signed "how far around the object" distance used by isPointerOnFrontViewFrame() and the frame
 // drag math below. A tiny local helper (not exported from ObjectDimensions.js) since it operates on
@@ -1798,6 +1817,10 @@ function updateObjectTemplateDetail(){
   el('plateFields').style.display=isPlate?'block':'none';
   el('plateColorField').style.display=isPlate?'flex':'none';
   el('cupColorField').style.display=isPlate?'none':'flex';
+  // S-112A: Wrap mode is a cylindrical-only concept (it sizes the Front View Frame band, which the
+  // plate never draws -- see drawLayout()) -- hidden whenever the Round Dinner Plate is the active
+  // template, unchanged for every other template.
+  el('wrapField').style.display=isPlate?'none':'flex';
   if(isPlate){
     const rimWidthMm=computeRimWidthMm(project.plate.outerDiameterMm,project.plate.innerWellDiameterMm);
     const targetName=getPlateDesignTargetMeta(project.plate.designTarget).name;

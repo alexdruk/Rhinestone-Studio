@@ -403,7 +403,11 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
             <button data-view="0" class="viewBtn primary">Front</button><button data-view="-90" class="viewBtn">Left</button><button data-view="90" class="viewBtn">Right</button><button data-view="180" class="viewBtn">Back</button>
           </div>
         </div>
-        <div class="toolbar-group">
+        <!-- S-112A: hidden for the Round Dinner Plate (toggled by updateObjectTemplateDetail() in
+             app.js) -- wrap mode sizes the cylindrical Front View Frame band, a concept the plate has
+             none of (it draws its own circular/annular Design Target guide instead, see
+             drawPlateDesignTargetGuide()). Unchanged for every other template. -->
+        <div class="toolbar-group" id="wrapField">
           <label for="wrap" style="margin:0 6px 0 0;display:inline" title="How wide a slice of the design's circumference is shown on the Object Preview, centered on the front -- also sizes the amber Front View Frame on the 2D Canvas">Wrap mode</label>
           <select id="wrap"><option value="front" selected>Front only - readable</option><option value="wide">Wide front</option><option value="half">Half wrap</option><option value="full">Full wrap</option></select>
         </div>
