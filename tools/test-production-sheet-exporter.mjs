@@ -270,9 +270,19 @@ await test('15. PDF: valid structure, /MediaBox at page size, one circle (4 "c" 
 
 // --- 10. All object templates --------------------------------------------------------------------------
 
-await test('16. every object template fits both A4 and Letter at the default margin, with the correct displayName header', () => {
+// S-112: every cylindrical template (mug/tumbler/bottle) still fits A4 and Letter at the default
+// margin -- unchanged. The Round Dinner Plate's square production canvas (up to 300mm per side,
+// per plate-round-dinner.json's outerDiameterMm range) plus its own extra header lines does not fit
+// A4 or Letter in either orientation at any margin (this exporter's own "no scaling — hard
+// requirement" policy, unchanged, correctly throws a clear RangeError for that case rather than
+// silently rescaling) -- it fits A3 instead, the large-format page size S-112 added specifically
+// for this. This is a real physical constraint of a ~270mm-diameter object on ~210-297mm stock, not
+// a defect, and is documented as a known limitation in TASK_RESULT.md.
+const PLATE_FITTING_PAGE_SIZE = 'A3';
+await test('16. every cylindrical object template (mug/tumbler/bottle) fits A4/Letter/A3 at the default margin; the plate fits A3 and correctly throws a clear RangeError on A4/Letter -- all with the correct displayName header', () => {
   for (const id of OBJECT_TEMPLATE_IDS) {
     const template = getObjectTemplate(id);
+    const isPlate = template.preview.kind === 'plate';
     for (const pageSize of Object.keys(PAGE_SIZES)) {
       const options = {
         projectName: 'Template Sweep',
@@ -281,6 +291,10 @@ await test('16. every object template fits both A4 and Letter at the default mar
         productionHeightMm: template.productionHeightMm,
         pageSize
       };
+      if (isPlate && pageSize !== PLATE_FITTING_PAGE_SIZE) {
+        assert.throws(() => computeProductionSheetLayout(TWO_STONE_LAYOUT(), options), RangeError, `${id}/${pageSize}: expected a clear RangeError, not a silent rescale`);
+        continue;
+      }
       const d = computeProductionSheetLayout(TWO_STONE_LAYOUT(), options);
       assert.ok(d.headerLines.some((l) => l.text === `Object: ${template.displayName}`), `${id}/${pageSize}: expected header to show the template's displayName`);
       assert.doesNotThrow(() => productionSheetToSvg(TWO_STONE_LAYOUT(), options), `${id}/${pageSize} SVG should not throw`);

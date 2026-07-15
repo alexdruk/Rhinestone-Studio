@@ -76,7 +76,10 @@ await test('6. validateProject() accepts a valid svg layer and rejects one missi
   // app.js) to normalize project.product; the extracted source snippet above does not include that
   // import, so it is injected as a function parameter instead, matching the precedent in
   // tools/test-examples-regression.mjs's extractValidateProject().
-  const { getObjectTemplate } = await import('../src/products/index.js');
+  // S-112: validateProject() also calls normalizePlateParams() (project.plate's own
+  // permissive-default normalizer) -- injected as a function parameter for the same reason
+  // getObjectTemplate is above.
+  const { getObjectTemplate, normalizePlateParams } = await import('../src/products/index.js');
   // S-110: validateProject() also references the module-level XYWH_SHAPE_TYPES constant, and the
   // extracted slice's own SUPPORTED_LAYER_TYPES declaration spreads SHAPE_LIBRARY_KINDS (both
   // declared well before this extracted slice begins) -- both injected as function parameters for
@@ -84,7 +87,7 @@ await test('6. validateProject() accepts a valid svg layer and rejects one missi
   const { SHAPE_LIBRARY_KINDS } = await import('../src/geometry/index.js');
   const XYWH_SHAPE_TYPES = new Set(['rectangle', 'svg', 'image', 'path', ...SHAPE_LIBRARY_KINDS]);
   // eslint-disable-next-line no-new-func
-  const validateProject = new Function('getObjectTemplate', 'XYWH_SHAPE_TYPES', 'SHAPE_LIBRARY_KINDS', `${source}\nreturn validateProject;`)(getObjectTemplate, XYWH_SHAPE_TYPES, SHAPE_LIBRARY_KINDS);
+  const validateProject = new Function('getObjectTemplate', 'normalizePlateParams', 'XYWH_SHAPE_TYPES', 'SHAPE_LIBRARY_KINDS', `${source}\nreturn validateProject;`)(getObjectTemplate, normalizePlateParams, XYWH_SHAPE_TYPES, SHAPE_LIBRARY_KINDS);
 
   const baseProject = () => ({
     version: 2,

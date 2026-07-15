@@ -1,76 +1,93 @@
 # Task
 
-**Task ID:** S-109
-**Task Type:** SVG Object Preview Projection Consistency
-**Specification:** `docs/specifications/S-109-SvgObjectPreviewProjectionConsistency.md`
+**Task ID:** S-112
+**Task Type:** Real Product Template — Round Dinner Plate
+**Specification:** `docs/specifications/S-112-RoundDinnerPlate.md`
 **Status:** IMPLEMENTED
-**Branch:** feature/s-109-svg-object-preview-projection-consistency
+**Branch:** feature/s-112-round-dinner-plate
 
 ## Goal
 
-Imported SVG designs were correctly shown on the 2D Canvas but projected incorrectly on the Object
-Preview. Whatever the user sees on the 2D Canvas should appear consistently on the Object Preview,
-subject only to the normal cylindrical perspective — same position, scale, orientation, and
-proportions.
+Add a realistic, parameterized Round Dinner Plate product template — the first non-cylindrical
+product — with three design targets (Center Well, Rim Band, Full Top Surface), driven end to end by
+the approved product-definition input `plate-round-dinner.json`.
 
 ## Required Outcome
 
-See `docs/specifications/S-109-SvgObjectPreviewProjectionConsistency.md` in full. Summary:
+See `docs/specifications/S-112-RoundDinnerPlate.md` in full. Summary:
 
-* Audit-first: walked SVG parsing (`src/svg/**`), SVG-to-StoneLayout generation
-  (`GeometryEngine.generateSvgLayout()`), layer-bounds calculation (`app.js`'s `getLayerBBox()`),
-  transform handling (`src/svg/SvgTransform.js`), and Object Preview texture generation
-  (`src/preview3d/StoneLayoutTexture.js`/`ObjectGeometryBuilder.js`) before writing any code.
-  Confirmed via direct Node testing and real-browser (Playwright) testing that SVG's geometry math
-  is correct and that `src/renderer/**`/`src/preview3d/**` are genuinely layer-type-agnostic —
-  empirically reproduced the identical distortion with a plain Rectangle shape layer in the same
-  placement box, proving the defect was never SVG-specific.
-* **Root cause** (confirmed with the human project owner before implementing, since it reverses a
-  previously-approved decision): `src/preview3d/ObjectGeometryBuilder.js`'s `applyAzimuthUv()`
-  compressed the *entire* production canvas into the current wrap mode's angular window (e.g. 70°
-  for Mug's default `front` mode, vs. a true 360°) instead of mapping mm position to azimuth at the
-  object's true, wrap-mode-independent circumference scale — an X-only aspect distortion (~5.1x too
-  narrow at `front`) affecting every layer type identically, most visually obvious on SVG/shape
-  content. This was deliberate, already-shipped, already-reviewed behavior (see
-  `docs/specifications/S-107-LongTextReadability.md`, Part 4, commit `a6b88b4`), which this
-  milestone's explicit "2D and Preview must agree, subject only to cylindrical perspective"
-  requirement supersedes.
-* `src/preview3d/ObjectGeometryBuilder.js`: `applyAzimuthUv()` now maps `U = 0.5 +
-  azimuth/(2*PI)` (true circumference scale, matching `ObjectDimensions.js`'s own
-  `canvasXMmForAzimuthRad()` model), computed once inside `buildObjectMesh()` instead of being
-  re-invoked per wrap-mode change. `applyWrapUv()` is removed (nothing left for it to do).
-* `src/preview3d/Preview3DRenderer.js`: `update()` no longer accepts/uses a `wrap` option.
-* `app.js`: `drawCup()` no longer passes `wrap` to `preview3D.update()` (one line). The Front View
-  Frame, printable-circumference validation, and the `#wrap` control are all unchanged — wrap mode
-  keeps every other documented effect, it just no longer rescales the Object Preview's texture.
-* No SVG-specific rendering code was added anywhere; the fix is entirely inside the shared
-  `src/preview3d/**` pipeline every layer type already flows through.
+* Audit-first: walked `src/products/ObjectTemplate.js`, `src/preview3d/**`, `app.js`'s object-type
+  wiring, `src/export/ProductionSheetExporter.js`, and the project schema (`defaultProject()`/
+  `validateProject()`) before writing any code. Confirmed the cylindrical templates' entire mm model
+  (`computeBodyRadiusMm()`'s canvas-width-as-circumference anchor, `applyAzimuthUv()`/
+  `applyBodyHeightUv()`'s azimuth/height UV mapping, the Front View Frame's wrap-around highlight)
+  does not apply to a flat plate, and that no existing circular/annular guide exists anywhere in the
+  codebase.
+* `plate-round-dinner.json` is checked in verbatim
+  (`src/products/definitions/plate-round-dinner.json`) as the single source of truth for ranges,
+  defaults, color options, and design-target metadata, loaded via the new
+  `src/products/PlateProductDefinition.js` (`getPlateDefaults()`, `getPlateColorOptions()`,
+  `computeRimWidthMm()`, `normalizePlateParams()`, ...).
+* `src/products/ObjectTemplate.js`: `preview.kind` gains `'plate'`; `createObjectTemplate()`
+  relaxes its cylindrical `topWidthFactor`/`bottomWidthFactor`/`bodyHeightFactor` requirement for
+  that kind (they do not apply to a flat radial disc — the plate's real dimensions come from
+  `project.plate` at runtime, not fixed template ratios). A new `plate` template entry:
+  `productionWidthMm`/`productionHeightMm` = the live outer diameter (a square canvas bounding the
+  disc — the plate's own "unwrapped surface" equivalent), zero rectangular safe-area inset (the real
+  boundary is circular, drawn separately).
+* `src/preview3d/ObjectDimensions.js`: `computeObjectDimensionsMm()` gains a `plate` branch that
+  takes a normalized `plateParams` argument (outer/inner radius, rim width, overall height, center
+  depth, foot-ring dims, design target) instead of deriving anything from `canvasWidthMm`
+  circumference.
+* `src/preview3d/ObjectGeometryBuilder.js`: `buildPlateProfilePoints()`/`buildPlateObjectMesh()`
+  build a single revolved `LatheGeometry` cross-section (concave well → sloped rim → rounded outer
+  edge → underside → foot ring → center), split at the outer-edge apex into a printable top-surface
+  mesh and a non-printable underside mesh. `applyPlateTopSurfaceUv()` is a new, direct planar
+  `(worldX, worldZ) → canvas mm → (u,v)` projection — not the cylindrical azimuth/height mapping —
+  inherently continuous across the well/rim transition, with no seam/branch-cut concern.
+* `src/preview3d/Preview3DRenderer.js`: `update()` gains an optional `plateParams` option (passed
+  straight through to `buildObjectMesh()`); the underside mesh's color tracks `cupColor` like the
+  mug handle's already does; camera framing uses a closer-to-top-down default polar angle for the
+  plate kind.
+* `src/products/PlateGuides.js` (new, plate-specific, outside `GeometryEngine`):
+  `getPlateDesignTargetGuide()` — pure circle/annulus geometry for the selected design target.
+* `app.js`: new `project.plate` field (optional, normalized permissively, present on every project
+  via `defaultProject()`/`validateProject()`); new UI controls (Outer/Inner Diameter, Overall
+  Height, Center Depth, Design Target, Plate color); `drawPlateDesignTargetGuide()` replaces the
+  Front View Frame for the plate; `isPointerOnFrontViewFrame()`/`isTextTooLongForObject()` opt the
+  plate out of cylindrical wrap-around concepts; Production Sheet options gain plate-only fields.
+* `src/export/ProductionSheetExporter.js`: header height becomes dynamic (was a fixed 7-body-line
+  constant) to accommodate the plate's six extra header lines without overflow; a new `A3` page size
+  (the plate's ~270-300mm square does not fit A4/Letter at any margin — a real physical constraint,
+  not a defect — this exporter's pre-existing "no scaling" policy correctly throws a clear
+  `RangeError` for that case).
 
 ## Rules
 
 * Follow `docs/AI_ENGINEER.md`, `docs/CLAUDE_GUIDE.md`, `docs/ARCHITECTURE.md`,
   `docs/MILESTONE_WORKFLOW.md`.
-* Repository is the source of truth; audit before implementing; do not guess; do not add
-  SVG-specific rendering hacks.
-* Do not change `GeometryEngine`, `StoneLayout`, the project schema, exporters, or
-  wrap-mode configuration (`WRAP_ANGLE_DEG`, the Front View Frame's own drag/sizing logic). Only
-  correct the inconsistent projection — and only for its shared root cause, not an SVG-only patch.
-* If the audit reveals another layer type suffers the same defect, fix the shared root cause rather
-  than only SVG — confirmed true here (Rectangle/text shared the exact same defect).
+* Repository is the source of truth; audit before implementing; do not guess.
+* Do not create a second GeometryEngine/StoneLayout pipeline. Do not hardcode plate dimensions
+  outside `plate-round-dinner.json`/`PlateProductDefinition.js`.
+* Do not modify `GeometryEngine.js`, `StoneLayout.js`, `src/renderer/**`, `src/svg/**`,
+  `src/image/**`, `src/editing/**`, `src/history/**`, `src/text/**`, `src/fonts/**`.
+* Mug/Tumbler/Bottle behavior and every pre-existing project file must remain unchanged.
 
 ## Deliverables
 
-* `src/preview3d/ObjectGeometryBuilder.js`/`Preview3DRenderer.js` — true-scale, wrap-mode-independent
-  object mesh texture UV mapping.
-* `app.js` — one-line `drawCup()` update (no `wrap` passed to `preview3D.update()`); no other change.
-* `tools/test-object-geometry-builder.mjs`, `tools/test-s107-long-text-readability.mjs` —
-  updated/rewritten checks for the new wrap-independent UV behavior; dark-band/apex regression guards
-  (S-107 Part 4) kept unchanged.
-* `docs/specifications/S-109-SvgObjectPreviewProjectionConsistency.md` — full audit findings, root
-  cause, decision, and implementation record.
-* `npm test` passing in full (792/792 checks, 0 failures).
-* Real-browser verification (headless Chromium via Playwright): SVG (simple + multi-path) and the
-  default text layer on Mug/Tumbler/Bottle at all four wrap modes; save/load round trip; zero
-  console errors — before/after comparisons recorded in `TASK_RESULT.md`.
-* `TASK_RESULT.md` completed.
+* `src/products/definitions/plate-round-dinner.json`, `src/products/PlateProductDefinition.js`,
+  `src/products/PlateGuides.js`, `src/products/ObjectTemplate.js`, `src/products/index.js`.
+* `src/preview3d/ObjectDimensions.js`, `src/preview3d/ObjectGeometryBuilder.js`,
+  `src/preview3d/Preview3DRenderer.js`.
+* `src/export/ProductionSheetExporter.js`.
+* `app.js`, `index.html`.
+* `tools/test-s112-round-dinner-plate.mjs` (new, 23 checks) plus updates to
+  `tools/test-object-template.mjs`, `tools/test-object-geometry-builder.mjs`,
+  `tools/test-object-template-integration.mjs`, `tools/test-production-sheet-exporter.mjs`, and five
+  other pre-existing suites that extract `validateProject()`/`defaultProject()` from `app.js` into a
+  sandboxed `Function` (needed `normalizePlateParams`/`getPlateDefaults` injected).
+* `docs/specifications/S-112-RoundDinnerPlate.md` — full audit findings, architecture, and
+  implementation record.
+* `npm test` passing in full (823/823 checks, 0 failures).
+* Real-browser verification and `TASK_RESULT.md` completed.
 * Feature branch pushed (not merged).

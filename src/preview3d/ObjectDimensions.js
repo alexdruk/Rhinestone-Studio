@@ -156,14 +156,53 @@ export function frontViewFrameWidthMm(wrapMode, canvasWidthMm) {
  * src/renderer/CupRenderer.js already reads, reused here as real mm ratios instead of viewport-px
  * ratios). Never touches ObjectTemplate.js itself.
  *
+ * S-112: for `template.preview.kind === 'plate'`, dimensions come from `plateParams` (a normalized
+ * project.plate record -- see src/products/PlateProductDefinition.js's normalizePlateParams())
+ * instead of from canvasWidthMm/preview.*Factor. A plate's outer diameter is a direct physical
+ * spec, not an artifact of "how wide is the unwrapped canvas" the way every revolved-vessel kind's
+ * radius is (see computeBodyRadiusMm()'s own header comment) -- so this branch deliberately never
+ * calls computeBodyRadiusMm()/derives anything from canvasWidthMm. canvasWidthMm/canvasHeightMm are
+ * still required and are expected to equal outerDiameterMm on both axes (app.js keeps
+ * project.canvas in sync with project.plate.outerDiameterMm whenever either changes) -- this
+ * function does not itself enforce that; ObjectGeometryBuilder.js's plate UV mapping is what
+ * actually depends on it (see that file's applyPlateTopSurfaceUv()).
+ *
  * @param {object} template A record from src/products/ObjectTemplate.js (getObjectTemplate()).
  * @param {number} canvasWidthMm
  * @param {number} canvasHeightMm
+ * @param {object|null} [plateParams] Required (and only meaningful) when
+ *   template.preview.kind==='plate' -- a normalized record with outerDiameterMm/
+ *   innerWellDiameterMm/overallHeightMm/centerDepthMm/footRingOuterDiameterMm/footRingHeightMm/
+ *   designTarget (see normalizePlateParams()).
  * @returns {object} Plain mm dimensions consumed by ObjectGeometryBuilder.js.
  */
-export function computeObjectDimensionsMm(template, canvasWidthMm, canvasHeightMm) {
+export function computeObjectDimensionsMm(template, canvasWidthMm, canvasHeightMm, plateParams = null) {
   assertPositiveFiniteNumber(canvasHeightMm, 'canvasHeightMm');
   const preview = template.preview;
+
+  if (preview.kind === 'plate') {
+    if (!plateParams || typeof plateParams !== 'object') {
+      throw new TypeError('computeObjectDimensionsMm: plateParams is required for preview.kind==="plate".');
+    }
+    for (const field of ['outerDiameterMm', 'innerWellDiameterMm', 'overallHeightMm', 'centerDepthMm', 'footRingOuterDiameterMm', 'footRingHeightMm']) {
+      assertPositiveFiniteNumber(plateParams[field], `plateParams.${field}`);
+    }
+    const rimWidthMm = (plateParams.outerDiameterMm - plateParams.innerWellDiameterMm) / 2;
+    return {
+      kind: 'plate',
+      hasHandle: false,
+      outerRadiusMm: plateParams.outerDiameterMm / 2,
+      innerWellRadiusMm: plateParams.innerWellDiameterMm / 2,
+      rimWidthMm,
+      overallHeightMm: plateParams.overallHeightMm,
+      centerDepthMm: plateParams.centerDepthMm,
+      footRingOuterRadiusMm: plateParams.footRingOuterDiameterMm / 2,
+      footRingHeightMm: plateParams.footRingHeightMm,
+      designTarget: plateParams.designTarget || 'centerWell',
+      totalHeightMm: plateParams.overallHeightMm
+    };
+  }
+
   const bodyRadiusMm = computeBodyRadiusMm(canvasWidthMm);
   const topRadiusMm = bodyRadiusMm * (preview.topWidthFactor / preview.bottomWidthFactor);
   const bodyHeightMm = canvasHeightMm;

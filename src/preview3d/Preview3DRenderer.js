@@ -18,6 +18,21 @@ const DEFAULT_ZOOM = 1;
 const ZOOM_MIN = 0.4;
 const ZOOM_MAX = 3;
 const DEFAULT_POLAR_RAD = 1.3; // ~74.5 degrees from +Y (~15.5 degrees above the horizon) -- shows the object mostly from the side, not looking down into its open top
+// S-112: a plate has no "open top" to avoid looking into -- its printable face IS the top, so the
+// default framing was originally much closer to top-down than every revolved-vessel kind's
+// DEFAULT_POLAR_RAD.
+// S-112A: that original 0.68 rad (~51 degrees of elevation) read as near-top-down, which undersold
+// the object as a real dinner plate: the sloped rim read almost flat, and the foot ring never showed
+// at all -- the foot ring's outer wall sits well inside the rim's outer edge (165mm vs 270mm) and low
+// against the table, so any above-the-rim-plane camera has the rim's own overhang occlude it, no
+// matter how steep. Verified empirically (real-browser screenshots swept across the whole polar
+// range): the foot ring only becomes visible once the camera nears the rim's own underside slope --
+// i.e. an eye-level-ish elevation, not a top-down one. Landed on ~13 degrees of elevation (close to
+// the revolved-vessel default above), the shallowest angle at which the foot ring and the sloped
+// rim/outer lip read clearly at the front edge without rotating, while the top surface (Center
+// Well/Rim Band/Full Top Surface design) still fills most of the frame. Geometry itself is untouched
+// -- only the camera moved.
+const PLATE_DEFAULT_POLAR_RAD = 1.35; // ~77 degrees from +Y (~13 degrees of elevation above horizon)
 const MIN_POLAR_RAD = 0.05;
 const MAX_POLAR_RAD = Math.PI - 0.05;
 const FRAME_MARGIN = 1.25; // breathing room around the object when framing the "home" camera position
@@ -36,6 +51,7 @@ export class Preview3DRenderer {
     this._group = null;
     this._bodyMesh = null;
     this._handleMesh = null;
+    this._underMesh = null; // S-112: the plate's non-printable underside/rim-edge/foot-ring mesh, null for every other kind
     this._textureCanvas = null;
     this._textureCtx = null;
     this._texture = null;
@@ -107,20 +123,24 @@ export class Preview3DRenderer {
 
   /**
    * @param {import('../geometry/StoneLayout.js').StoneLayout} stoneLayout
-   * @param {{cupColor:string, objectTemplate:object, canvasWidthMm:number, canvasHeightMm:number}} options
+   * @param {{cupColor:string, objectTemplate:object, canvasWidthMm:number, canvasHeightMm:number,
+   *   plateParams:object|null}} options
    *   S-109: no `wrap` option -- the object mesh's texture UV is wrap-mode independent (built once
    *   inside ObjectGeometryBuilder.js's buildObjectMesh(), at the object's true circumference
    *   scale), so this method no longer needs to react to wrap-mode changes at all. The Front View
    *   Frame (app.js) still visualizes the selected wrap mode's width on the 2D canvas, using
    *   ObjectDimensions.js's frontViewFrameWidthMm(), unchanged.
+   *   S-112: `plateParams` (project.plate, normalized) is only meaningful when
+   *   objectTemplate.preview.kind==='plate' -- omitted/null for every other template, exactly like
+   *   `wrap` used to be an option every non-relevant caller could simply not pass.
    */
-  update(stoneLayout, { cupColor, objectTemplate, canvasWidthMm, canvasHeightMm }) {
+  update(stoneLayout, { cupColor, objectTemplate, canvasWidthMm, canvasHeightMm, plateParams = null }) {
     if (!this._mounted) return;
 
-    const geometryKey = `${objectTemplate.id}:${canvasWidthMm}:${canvasHeightMm}`;
+    const geometryKey = `${objectTemplate.id}:${canvasWidthMm}:${canvasHeightMm}:${plateParams ? JSON.stringify(plateParams) : ''}`;
     const geometryChanged = geometryKey !== this._geometryKey;
     if (geometryChanged) {
-      this._rebuildMesh(objectTemplate, canvasWidthMm, canvasHeightMm);
+      this._rebuildMesh(objectTemplate, canvasWidthMm, canvasHeightMm, plateParams);
       this._geometryKey = geometryKey;
     }
 
@@ -187,12 +207,13 @@ export class Preview3DRenderer {
     });
   }
 
-  _rebuildMesh(objectTemplate, canvasWidthMm, canvasHeightMm) {
+  _rebuildMesh(objectTemplate, canvasWidthMm, canvasHeightMm, plateParams) {
     this._disposeGroup();
-    const { group, bodyMesh, handleMesh, dimensions } = this._buildObjectMesh(objectTemplate, canvasWidthMm, canvasHeightMm);
+    const { group, bodyMesh, handleMesh, underMesh, dimensions } = this._buildObjectMesh(objectTemplate, canvasWidthMm, canvasHeightMm, plateParams);
     this._group = group;
     this._bodyMesh = bodyMesh;
     this._handleMesh = handleMesh;
+    this._underMesh = underMesh || null;
     this._dimensions = dimensions;
     this.scene.add(group);
   }
@@ -214,6 +235,23 @@ export class Preview3DRenderer {
     if (this._textureCanvas.width !== widthPx || this._textureCanvas.height !== heightPx) {
       this._textureCanvas.width = widthPx;
       this._textureCanvas.height = heightPx;
+      // S-112: resizing an HTMLCanvasElement already bound as a WebGL texture source is not a
+      // reliable way to trigger a full GPU texture reallocation on every implementation --
+      // observed (real-browser verification, see TASK_RESULT.md) to leave the OLD, wrong-size GPU
+      // texture bound after a large size jump (e.g. mug's 1680x720 -> the plate's 2160x2160),
+      // showing a stale render (the previous object template's texture, cupColor included) despite
+      // `needsUpdate=true` and a correctly-redrawn CPU-side canvas. Disposing and recreating the
+      // THREE.CanvasTexture itself whenever the pixel size actually changes (not on every redraw)
+      // forces a real reallocation every time; texture parameters are the same fixed set applied at
+      // first construction, so re-applying them here just keeps this block self-contained.
+      this._texture.dispose();
+      this._texture = new THREE.CanvasTexture(this._textureCanvas);
+      this._texture.wrapS = THREE.ClampToEdgeWrapping;
+      this._texture.wrapT = THREE.ClampToEdgeWrapping;
+      this._texture.generateMipmaps = false;
+      this._texture.minFilter = THREE.LinearFilter;
+      this._texture.colorSpace = THREE.SRGBColorSpace;
+      if (this._bodyMesh) this._bodyMesh.material.map = null; // force the map-changed branch below to re-assign
     }
     drawStoneLayoutTexture(this._textureCtx, stoneLayout, { widthMm: canvasWidthMm, heightMm: canvasHeightMm, backgroundColor: cupColor });
     this._texture.needsUpdate = true;
@@ -226,6 +264,12 @@ export class Preview3DRenderer {
     if (this._handleMesh) {
       this._handleMesh.material.color.set(cupColor);
     }
+    // S-112: the plate's underside/rim-edge/foot-ring mesh has no texture map -- it always shows
+    // the plate's own solid color, kept in sync with the live cupColor exactly like the mug
+    // handle's material color already is above.
+    if (this._underMesh) {
+      this._underMesh.material.color.set(cupColor);
+    }
   }
 
   // Fits both the object's height and its full diameter inside the current viewport, accounting
@@ -233,8 +277,14 @@ export class Preview3DRenderer {
   // framing on height alone left wide/short objects like the bottle's shoulder clipped left/right).
   _frameCamera() {
     const THREE = this._THREE;
-    const { bodyRadiusMm, topRadiusMm, totalHeightMm } = this._dimensions;
-    const maxRadius = Math.max(bodyRadiusMm, topRadiusMm || bodyRadiusMm);
+    const { bodyRadiusMm, topRadiusMm, outerRadiusMm, totalHeightMm } = this._dimensions;
+    // S-112: the plate's dims use outerRadiusMm (a flat disc has no body/top wall radius) --
+    // bodyRadiusMm/topRadiusMm are simply absent from that dimensions object (see
+    // ObjectDimensions.js's computeObjectDimensionsMm() plate branch), unlike every revolved-vessel
+    // kind. Falling through to outerRadiusMm here keeps this the one shared framing function for
+    // every object kind, matching every other kind's existing "framing needs only a radius and a
+    // height" contract.
+    const maxRadius = Math.max(bodyRadiusMm ?? outerRadiusMm, topRadiusMm || bodyRadiusMm || outerRadiusMm);
 
     const verticalFovRad = (this.camera.fov * Math.PI) / 180;
     const aspect = this.camera.aspect || 1;
@@ -246,7 +296,8 @@ export class Preview3DRenderer {
     const target = new THREE.Vector3(0, totalHeightMm / 2, 0);
     this.controls.target.copy(target);
 
-    const spherical = new THREE.Spherical(distance / this._zoom, DEFAULT_POLAR_RAD, (this._azimuthDeg * Math.PI) / 180);
+    const polarRad = this._dimensions.kind === 'plate' ? PLATE_DEFAULT_POLAR_RAD : DEFAULT_POLAR_RAD;
+    const spherical = new THREE.Spherical(distance / this._zoom, polarRad, (this._azimuthDeg * Math.PI) / 180);
     const offset = new THREE.Vector3().setFromSpherical(spherical);
     this.camera.position.copy(target).add(offset);
 

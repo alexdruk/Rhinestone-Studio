@@ -40,9 +40,9 @@ function validDef(overrides = {}) {
   };
 }
 
-await test('1. the registry contains exactly mug, tumbler, bottle', () => {
-  assert.deepEqual([...OBJECT_TEMPLATE_IDS].sort(), ['bottle', 'mug', 'tumbler']);
-  assert.equal(listObjectTemplates().length, 3);
+await test('1. the registry contains exactly mug, tumbler, bottle, plate', () => {
+  assert.deepEqual([...OBJECT_TEMPLATE_IDS].sort(), ['bottle', 'mug', 'plate', 'tumbler']);
+  assert.equal(listObjectTemplates().length, 4);
 });
 
 await test('2. DEFAULT_OBJECT_TEMPLATE_ID is mug, and getObjectTemplate() defaults to it', () => {
@@ -63,7 +63,7 @@ await test('4. every registered template has a positive production size, a non-e
     assert.ok(t.displayName.length > 0, `${id}: displayName must be non-empty`);
     assert.ok(t.productionWidthMm > 0 && Number.isFinite(t.productionWidthMm), `${id}: productionWidthMm`);
     assert.ok(t.productionHeightMm > 0 && Number.isFinite(t.productionHeightMm), `${id}: productionHeightMm`);
-    assert.ok(['mug', 'tumbler', 'bottle'].includes(t.preview.kind), `${id}: preview.kind`);
+    assert.ok(['mug', 'tumbler', 'bottle', 'plate'].includes(t.preview.kind), `${id}: preview.kind`);
   }
 });
 
@@ -172,6 +172,22 @@ await test('17. getSafeAreaRectMm() scales with the canvas size actually passed,
   assert.equal(small.xMm, mug.safeAreaInsetMm.left);
   assert.equal(small.yMm, mug.safeAreaInsetMm.top);
   assert.equal(large.xMm, mug.safeAreaInsetMm.left);
+});
+
+await test('18. S-112: plate is registered with preview.kind==="plate", no handle, production size seeded from PlateProductDefinition\'s default outer diameter, and zero rectangular safe-area inset', () => {
+  const plate = getObjectTemplate('plate');
+  assert.equal(plate.preview.kind, 'plate');
+  assert.equal(plate.preview.hasHandle, false);
+  assert.equal(plate.productionWidthMm, 270);
+  assert.equal(plate.productionHeightMm, 270);
+  assert.equal(plate.productionWidthMm, plate.productionHeightMm, 'plate production canvas is square (outer diameter on both axes)');
+  assert.deepEqual(plate.safeAreaInsetMm, { top: 0, right: 0, bottom: 0, left: 0 });
+  assert.ok(plate.wrap.supported.includes(plate.wrap.default));
+});
+
+await test('19. S-112: createObjectTemplate() does not require topWidthFactor/bottomWidthFactor/bodyHeightFactor for preview.kind==="plate" (they do not apply to a flat radial disc), but still requires them for every other kind', () => {
+  assert.doesNotThrow(() => createObjectTemplate(validDef({ productionWidthMm: 270, productionHeightMm: 270, safeAreaInsetMm: { top: 0, right: 0, bottom: 0, left: 0 }, preview: { kind: 'plate', hasHandle: false } })));
+  assert.throws(() => createObjectTemplate(validDef({ preview: { kind: 'mug', hasHandle: true } })), /topWidthFactor/);
 });
 
 console.log('Object template tests passed.');

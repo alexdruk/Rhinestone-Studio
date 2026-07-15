@@ -24,9 +24,17 @@ import { formatStoneSizeLabel } from '../renderer/StoneSizes.js';
 import { stoneCircleSvg } from './SvgExporter.js';
 import { PdfDocument, PT_PER_MM } from './PdfDocument.js';
 
+// S-112: A3 joins A4/Letter -- the Round Dinner Plate's production rect (up to 300mm square, per
+// the JSON's outerDiameterMm range) plus header/footer does not fit A4 or Letter at any margin in
+// either orientation (this module's own "no scaling — hard requirement" policy, unchanged, throws a
+// clear RangeError for that case, exactly as intended); A3 is real, commonly available print stock
+// large-format production sheets already use, so it is added as a genuine additional page-size
+// option, not a rescaling workaround. A4/Letter's own behavior and every pre-existing size/fit
+// check is untouched.
 export const PAGE_SIZES = Object.freeze({
   A4: Object.freeze({ widthMm: 210, heightMm: 297 }),
-  Letter: Object.freeze({ widthMm: 215.9, heightMm: 279.4 })
+  Letter: Object.freeze({ widthMm: 215.9, heightMm: 279.4 }),
+  A3: Object.freeze({ widthMm: 297, heightMm: 420 })
 });
 
 // Fixed layout constants (mm). Kept as named constants, not magic numbers, per this codebase's
@@ -39,11 +47,17 @@ const HEADER_TOP_PADDING_MM = 2;
 // Generous enough that the last header line never crowds the production rect's top border or the
 // top corner registration marks, which extend REG_MARK_GAP_MM+REG_MARK_ARM_MM above that border.
 const HEADER_BOTTOM_PADDING_MM = 10;
-// One title line (HEADER_TITLE_SLOT_HEIGHT_MM) + seven body lines (HEADER_LINE_SLOT_HEIGHT_MM),
-// plus top/bottom padding -- computed once here so productionSheetToSvg()/productionSheetToPdf()
-// never have to duplicate (or risk disagreeing on) this arithmetic.
-const HEADER_HEIGHT_MM =
-  HEADER_TOP_PADDING_MM + HEADER_TITLE_SLOT_HEIGHT_MM + 7 * HEADER_LINE_SLOT_HEIGHT_MM + HEADER_BOTTOM_PADDING_MM;
+// One title line (HEADER_TITLE_SLOT_HEIGHT_MM) + a variable number of body lines
+// (HEADER_LINE_SLOT_HEIGHT_MM each), plus top/bottom padding. Seven body lines are always present
+// (Object/Production size/Stone count/Stone size/Gap/Crystal color/Page-Margin-Mirror-Registration);
+// S-112 adds six more, only when the active object template is the Round Dinner Plate (see
+// computePlateHeaderLineTexts() below) -- computeHeaderHeightMm() is the one place this arithmetic
+// lives, so productionSheetToSvg()/productionSheetToPdf() never have to duplicate (or risk
+// disagreeing on) it, exactly like before this milestone when it was a fixed constant.
+const HEADER_BODY_LINE_COUNT = 7;
+function computeHeaderHeightMm(extraBodyLineCount) {
+  return HEADER_TOP_PADDING_MM + HEADER_TITLE_SLOT_HEIGHT_MM + (HEADER_BODY_LINE_COUNT + extraBodyLineCount) * HEADER_LINE_SLOT_HEIGHT_MM + HEADER_BOTTOM_PADDING_MM;
+}
 const FOOTER_HEIGHT_MM = 16;
 const REG_MARK_ARM_MM = 4;
 const REG_MARK_GAP_MM = 1.5;
@@ -99,6 +113,27 @@ function normalizeGapMm(gapMm) {
     .sort((a, b) => a - b);
 }
 
+// S-112: builds the Round Dinner Plate's extra header line texts from plain, optional
+// caller-supplied fields (app.js's currentProductionSheetOptions() only populates them while the
+// plate template is active) -- returns [] for every other object template, so the header falls back
+// to exactly its pre-S-112 seven body lines and computeHeaderHeightMm(0) reproduces the old fixed
+// HEADER_HEIGHT_MM constant byte-for-byte. Mirrors this module's existing "label + '—' fallback"
+// convention (see the Gap/Crystal color lines above) for any individual field that happens to be
+// missing while plateOuterDiameterMm (the field that gates whether these lines appear at all) is
+// present.
+function computePlateHeaderLineTexts(options) {
+  const { plateDesignTarget, plateOuterDiameterMm, plateInnerWellDiameterMm, plateRimWidthMm, plateOverallHeightMm, plateWeightGrams, plateColorName } = options;
+  if (plateOuterDiameterMm == null) return [];
+  return [
+    `Design target: ${plateDesignTarget || '—'}`,
+    `Outer diameter (incl. rim): ${roundMm(plateOuterDiameterMm)} mm`,
+    `Inner well diameter: ${plateInnerWellDiameterMm != null ? `${roundMm(plateInnerWellDiameterMm)} mm` : '—'}`,
+    `Rim width: ${plateRimWidthMm != null ? `${roundMm(plateRimWidthMm)} mm` : '—'}`,
+    `Overall height: ${plateOverallHeightMm != null ? `${roundMm(plateOverallHeightMm)} mm` : '—'}`,
+    `Plate color: ${plateColorName || '—'} · Approx. weight: ${plateWeightGrams != null ? `${roundMm(plateWeightGrams)} g` : '—'}`
+  ];
+}
+
 /**
  * Chooses the smallest-fitting orientation (portrait, then landscape) of `pageSize` that leaves a
  * printable area large enough for the required content block at the requested margin. Throws a
@@ -143,6 +178,15 @@ function resolvePageOrientation({ pageSize, marginMm, neededWidthMm, neededHeigh
  * @param {number} [options.marginMm]
  * @param {boolean} [options.mirror]
  * @param {boolean} [options.registrationMarks]
+ * @param {string} [options.plateDesignTarget] S-112: Round Dinner Plate only -- see
+ *   computePlateHeaderLineTexts(). Omitted (or options.plateOuterDiameterMm omitted) for every
+ *   other object template, which adds zero extra header lines.
+ * @param {number} [options.plateOuterDiameterMm]
+ * @param {number} [options.plateInnerWellDiameterMm]
+ * @param {number} [options.plateRimWidthMm]
+ * @param {number} [options.plateOverallHeightMm]
+ * @param {number} [options.plateWeightGrams]
+ * @param {string} [options.plateColorName]
  * @returns {object}
  */
 export function computeProductionSheetLayout(stoneLayout, options = {}) {
@@ -175,15 +219,18 @@ export function computeProductionSheetLayout(stoneLayout, options = {}) {
     throw new TypeError('computeProductionSheetLayout: registrationMarks must be a boolean.');
   }
 
+  const plateHeaderLineTexts = computePlateHeaderLineTexts(options);
+  const headerHeightMm = computeHeaderHeightMm(plateHeaderLineTexts.length);
+
   const neededWidthMm = Math.max(productionWidthMm, SCALE_BAR_LENGTH_MM);
-  const neededHeightMm = HEADER_HEIGHT_MM + productionHeightMm + FOOTER_HEIGHT_MM;
+  const neededHeightMm = headerHeightMm + productionHeightMm + FOOTER_HEIGHT_MM;
   const { orientation, widthMm: pageWidthMm, heightMm: pageHeightMm, printableWidthMm, printableHeightMm } =
     resolvePageOrientation({ pageSize, marginMm, neededWidthMm, neededHeightMm });
 
   const contentBlockHeightMm = neededHeightMm;
   const contentTopMm = marginMm + (printableHeightMm - contentBlockHeightMm) / 2;
   const headerTopMm = contentTopMm;
-  const productionRectTopMm = headerTopMm + HEADER_HEIGHT_MM;
+  const productionRectTopMm = headerTopMm + headerHeightMm;
   const productionRectLeftMm = marginMm + (printableWidthMm - productionWidthMm) / 2;
   const footerTopMm = productionRectTopMm + productionHeightMm;
 
@@ -208,7 +255,11 @@ export function computeProductionSheetLayout(stoneLayout, options = {}) {
       text: `Page: ${pageSize} (${orientation}) · Margin: ${roundMm(marginMm)} mm · Mirror: ${mirror ? 'On' : 'Off'} · Registration marks: ${registrationMarks ? 'On' : 'Off'}`,
       sizeMm: HEADER_LINE_SIZE_MM,
       slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM
-    }
+    },
+    // S-112: [] for every non-plate template (computePlateHeaderLineTexts() above) -- headerHeightMm
+    // was already sized to include exactly this many extra lines, so this can never overflow into
+    // the production rect below.
+    ...plateHeaderLineTexts.map((text) => ({ text, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM }))
   ].map((line) => {
     // Baseline sits near the bottom of the line's own vertical slot (roughly text cap-height
     // above the baseline, matching how both SVG's y="baseline" and PDF's Td-positioned text work).

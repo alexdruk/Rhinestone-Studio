@@ -115,11 +115,11 @@ await test('8. validateProject() accepts a valid image layer and rejects one mis
   const match = appJs.match(/function validateProject\(obj\)\{[\s\S]*?\n\}\n/);
   assert.ok(match, 'expected to find validateProject() in app.js');
   const source = appJs.slice(appJs.indexOf('const DEFAULT_PROJECT_NAME='), appJs.indexOf(match[0]) + match[0].length);
-  const { getObjectTemplate } = await import('../src/products/index.js');
+  const { getObjectTemplate, normalizePlateParams } = await import('../src/products/index.js');
   const { SHAPE_LIBRARY_KINDS } = await import('../src/geometry/index.js');
   const XYWH_SHAPE_TYPES = new Set(['rectangle', 'svg', 'image', 'path', ...SHAPE_LIBRARY_KINDS]);
   // eslint-disable-next-line no-new-func
-  const validateProject = new Function('getObjectTemplate', 'XYWH_SHAPE_TYPES', 'SHAPE_LIBRARY_KINDS', `${source}\nreturn validateProject;`)(getObjectTemplate, XYWH_SHAPE_TYPES, SHAPE_LIBRARY_KINDS);
+  const validateProject = new Function('getObjectTemplate', 'normalizePlateParams', 'XYWH_SHAPE_TYPES', 'SHAPE_LIBRARY_KINDS', `${source}\nreturn validateProject;`)(getObjectTemplate, normalizePlateParams, XYWH_SHAPE_TYPES, SHAPE_LIBRARY_KINDS);
 
   const baseProject = () => ({
     version: 2,
