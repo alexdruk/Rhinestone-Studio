@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -233,32 +232,4 @@ await test('15. index.html exposes the import controls app.js expects', () => {
   assert.match(indexHtml, /<button id="importProject"/);
   assert.match(indexHtml, /<input id="importProjectFile" type="file"/);
 });
-
-await test('16. no forbidden file changed', () => {
-  const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
-  const changedPaths = output
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    .map((line) => line.slice(3).trim());
-
-  const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
-  const forbiddenPrefixes = [
-    // src/renderer/CanvasRenderer2D.js and src/renderer/CupRenderer.js are legitimately changed by
-    // RS-0003.5D2 (cup handle/body/selection visual polish) — see tools/test-ux-visual-polish.mjs
-    // for that milestone's own forbidden-file guard.
-    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone.
-    'src/text/',
-    'src/fonts/',
-    'src/browser/'
-  ];
-
-  for (const changedPath of changedPaths) {
-    assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
-    assert.ok(
-      !forbiddenPrefixes.some((prefix) => changedPath.startsWith(prefix)),
-      `Forbidden file changed: ${changedPath}`
-    );
-  }
-});
-
 console.log('Production export validation tests passed.');

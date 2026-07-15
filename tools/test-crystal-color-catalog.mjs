@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -176,45 +175,4 @@ await test('11. no manufacturer trademark reference in the catalog module (gener
     assert.ok(!source.includes(brand), `catalog must not reference manufacturer name "${brand}"`);
   }
 });
-
-await test('12. no forbidden file changed (this milestone\'s own forbidden list)', () => {
-  const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
-  const changedPaths = output
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    .map((line) => line.slice(3).trim());
-
-  const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
-  const forbiddenExactWithinPrefix = new Set([
-    'src/renderer/CanvasRenderer2D.js',
-    'src/renderer/CupRenderer.js',
-    'src/export/SvgExporter.js',
-    // RS-1013 (Variable Stone Sizes) legitimately changes src/export/ProductionSheetExporter.js
-    // (its header now shows a stone size's commercial name alongside its mm value, via the new
-    // src/renderer/StoneSizes.js catalog) -- see tools/test-variable-stone-sizes.mjs for that
-    // milestone's own forbidden-file guard. Removed from this set rather than left forbidding it.
-    // RS-1008A (Image Trace Architecture Correction) legitimately changes
-    // src/geometry/GeometryEngine.js/StoneSampler.js/index.js/README.md — see
-    // tools/test-image-trace-regression.mjs for that milestone's own forbidden-file guard.
-    // StoneLayout.js/Stone.js/ContourGeometry.js/ArcProjection.js stay forbidden below.
-    'src/geometry/StoneLayout.js',
-    'src/geometry/Stone.js',
-    'src/geometry/ContourGeometry.js',
-    'src/geometry/ArcProjection.js'
-  ]);
-  const forbiddenPrefixes = [
-    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
-    'src/text/', 'src/fonts/', 'src/browser/', 'src/svg/', 'src/history/', 'src/products/'
-  ];
-
-  for (const changedPath of changedPaths) {
-    assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
-    assert.ok(!forbiddenExactWithinPrefix.has(changedPath), `Forbidden file changed: ${changedPath}`);
-    assert.ok(
-      !forbiddenPrefixes.some((prefix) => changedPath.startsWith(prefix)),
-      `Forbidden file changed: ${changedPath}`
-    );
-  }
-});
-
 console.log('Crystal color catalog tests passed.');

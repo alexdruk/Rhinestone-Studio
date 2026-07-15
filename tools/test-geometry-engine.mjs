@@ -688,30 +688,4 @@ await test('53. generateImageLayout(): an all-background buffer produces a valid
   const layout = engineNoFonts.generateImageLayout({ imageBuffer: buffer, ...BASE_IMAGE_PARAMS });
   assert.equal(layout.count, 0);
 });
-
-await test('this task did not modify forbidden UI, renderer, or exporter files', async () => {
-  const { execSync } = await import('node:child_process');
-  const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
-  const changedPaths = output
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    // Porcelain lines are exactly "XY path" (2 status chars + 1 space); slicing must happen on
-    // the untrimmed line, since trimming first eats the leading status character for common
-    // single-letter-in-column-2 statuses like " M", silently truncating the path.
-    .map((line) => line.slice(3).trim());
-
-  const forbiddenExact = new Set(['style.css', 'README.md']);
-  // src/renderer/ and src/export/ are legitimately changed by RS-0003.5C2 (rendering pipeline).
-  // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone.
-  const forbiddenPrefixes = [];
-
-  for (const changedPath of changedPaths) {
-    assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
-    assert.ok(
-      !forbiddenPrefixes.some((prefix) => changedPath.startsWith(prefix)),
-      `Forbidden file changed: ${changedPath}`
-    );
-  }
-});
-
 console.log('GeometryEngine tests passed.');

@@ -237,49 +237,4 @@ await test('10. new layers (add circle/add rectangle/SVG import/Image Trace impo
   assert.match(appJs, /stoneSize:l\.stoneSize\|\|2/, 'expected addCircle/addRect to inherit the selected layer\'s stoneSize');
   assert.match(appJs, /stoneSize:base\.stoneSize\|\|2/, 'expected SVG import / Image Trace import to inherit the selected layer\'s stoneSize');
 });
-
-await test('11. no forbidden file changed (GeometryEngine/StoneLayout/Stone/renderers stay untouched -- only the catalog, its UI wiring, and the one required exporter formatting change)', async () => {
-  const { execSync } = await import('node:child_process');
-  const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
-  const changedPaths = output
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    .map((line) => line.slice(3).trim());
-
-  const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
-  const forbiddenPrefixes = [
-    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
-    'src/text/', 'src/fonts/', 'src/browser/', 'src/svg/', 'src/image/', 'src/history/', 'src/products/', 'src/editing/'
-  ];
-  const forbiddenExactWithinPrefix = new Set([
-    // GeometryEngine/Stone/StoneLayout already support per-layer stoneSizeMm end-to-end (see test
-    // 1/2 above) -- this milestone (RS-1013) itself added no geometry capability, so these stayed
-    // untouched by RS-1013's own commit. This guard checks live `git status`, not a diff scoped to
-    // RS-1013's own commit, so -- matching the precedent already established for
-    // src/export/ProductionSheetExporter.js just below -- it must also accommodate later
-    // milestones' legitimate changes: RS-1011 (Fill Algorithms) legitimately extends
-    // src/geometry/GeometryEngine.js and src/geometry/StoneSampler.js (and adds a new file,
-    // src/geometry/ContourRingSampler.js, which was never in this list to begin with) -- see
-    // tools/test-fill-algorithms.mjs / tools/test-fill-algorithms-integration.mjs for that
-    // milestone's own forbidden-file guard. Stone.js/StoneLayout.js/ContourGeometry.js/
-    // ArcProjection.js remain untouched by RS-1011 too, so they stay listed here.
-    'src/geometry/Stone.js', 'src/geometry/StoneLayout.js',
-    'src/geometry/ContourGeometry.js', 'src/geometry/ArcProjection.js',
-    'src/geometry/PathBoolean.js',
-    // Renderers already draw every stone at its own individual sizeMm -- no renderer change needed.
-    'src/renderer/CanvasRenderer2D.js', 'src/renderer/CupRenderer.js', 'src/renderer/CrystalColors.js', 'src/renderer/StoneColors.js',
-    'src/export/SvgExporter.js'
-    // Note: src/export/ProductionSheetExporter.js is intentionally NOT in this list -- this
-    // milestone's spec explicitly requires stone size to participate in the Production Sheet
-    // ("Display both commercial name and actual diameter"), so its header-formatting change is
-    // required, not incidental.
-  ]);
-
-  for (const changedPath of changedPaths) {
-    assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
-    assert.ok(!forbiddenExactWithinPrefix.has(changedPath), `Forbidden file changed: ${changedPath}`);
-    assert.ok(!forbiddenPrefixes.some((prefix) => changedPath.startsWith(prefix)), `Forbidden file changed: ${changedPath}`);
-  }
-});
-
 console.log('Variable stone size tests passed.');

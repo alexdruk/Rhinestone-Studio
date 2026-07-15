@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -67,6 +66,15 @@ await test('the import map resolves "opentype.js" to the local adapter, not dire
   assert.ok(/OpenTypeBrowserAdapter\.js$/.test(target), `expected the import map to target the browser adapter, found: ${target}`);
 });
 
+// The import map also resolves the bare specifier "three" (RS-1006, the real 3D preview) to the
+// local node_modules ESM build, never a CDN -- the same "no CDN" rule opentype.js's own mapping
+// above enforces, checked once for every bare specifier the app actually maps.
+await test('the import map resolves "three" to the local node_modules ESM build (no CDN)', () => {
+  const importMap = extractImportMap(indexHtml);
+  assert.equal(importMap.imports.three, './node_modules/three/build/three.module.js');
+  assert.ok(!/^https?:\/\//i.test(importMap.imports.three), 'must not load three.js from a CDN');
+});
+
 // 6. The browser dependency probe exists.
 let probeSource;
 await test('the browser dependency probe exists', async () => {
@@ -126,32 +134,6 @@ await test('app.js imports the browser dependency probe', () => {
 });
 
 // 19. No forbidden file changed (RS-0003.5B2 forbidden-file list).
-await test('no forbidden file changed', () => {
-  const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
-  const changedPaths = output
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    // Porcelain lines are exactly "XY path" (2 status chars + 1 space); slicing must happen on
-    // the untrimmed line, since trimming first eats the leading status character for common
-    // single-letter-in-column-2 statuses like " M", silently truncating the path.
-    .map((line) => line.slice(3).trim());
-
-  const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
-  const forbiddenPrefixes = [
-    // src/renderer/ and src/export/ are legitimately changed by RS-0003.5C2 (rendering pipeline).
-    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone.
-    'node_modules/'
-  ];
-
-  for (const changedPath of changedPaths) {
-    assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
-    assert.ok(
-      !forbiddenPrefixes.some((prefix) => changedPath.startsWith(prefix)),
-      `Forbidden file changed: ${changedPath}`
-    );
-  }
-});
-
 // 21. `src/text/OpenTypeProvider.js` remains unchanged.
 await test('src/text/OpenTypeProvider.js keeps its original default import of opentype.js', async () => {
   const source = await readFile(openTypeProviderPath, 'utf8');

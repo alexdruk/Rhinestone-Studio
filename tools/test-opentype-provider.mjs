@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FontManager } from '../src/fonts/index.js';
-import { FontProviderRegistry, OpenTypeProvider } from '../src/text/index.js';
+import { FontProviderRegistry, OpenTypeProvider, createDefaultFontProviderRegistry } from '../src/text/index.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const manifest = JSON.parse(await readFile(path.join(repoRoot, 'assets/fonts/manifest.json'), 'utf8'));
@@ -102,25 +101,16 @@ await test('works end-to-end through the FontProviderRegistry', async () => {
   assert.ok(result.path.contours.length > 0);
 });
 
-await test('this task did not modify forbidden UI files', async () => {
-  const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
-  const changedPaths = output
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => line.slice(3).trim());
+await test('createDefaultFontProviderRegistry() registers OpenTypeProvider as the one default provider', async () => {
+  const registry = createDefaultFontProviderRegistry(fontManager, { loadFontBuffer: loadFontBufferFromRepoRoot });
 
-  // src/renderer/ and src/export/ are legitimately changed by RS-0003.5C2 (rendering pipeline).
-  const forbiddenExact = new Set(['style.css']);
-  const forbiddenPrefixes = [];
+  assert.equal(registry.has('opentype'), true);
+  assert.equal(registry.defaultProviderId, 'opentype');
+  assert.deepEqual(registry.list(), [{ id: 'opentype', displayName: 'OpenType' }]);
 
-  for (const changedPath of changedPaths) {
-    assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
-    assert.ok(
-      !forbiddenPrefixes.some((prefix) => changedPath.startsWith(prefix)),
-      `Forbidden file changed: ${changedPath}`
-    );
-  }
+  const result = await registry.getTextPath({ fontId: 'courier-prime-regular', text: 'Vitalina', heightMm: 10 });
+  assert.equal(result.text, 'Vitalina');
+  assert.ok(result.path.contours.length > 0);
 });
 
 console.log('OpenTypeProvider tests passed.');

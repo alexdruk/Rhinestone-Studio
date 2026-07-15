@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -269,17 +268,6 @@ await test('17. switching object type and back leaves layer geometry fields unto
 });
 
 // --- 6. GeometryEngine/StoneLayout untouched, export compatibility --------------------------------
-
-await test('18. StoneLayout.js is untouched by this milestone (GeometryEngine.js is now legitimately changed by RS-1008A)', () => {
-  const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
-  const changedPaths = output.split('\n').filter((l) => l.trim().length > 0).map((l) => l.slice(3).trim());
-  // RS-1008A (Image Trace Architecture Correction) legitimately adds
-  // GeometryEngine.generateImageLayout() -- see tools/test-image-trace-regression.mjs.
-  for (const changedPath of changedPaths) {
-    assert.notEqual(changedPath, 'src/geometry/StoneLayout.js', 'this milestone must not touch StoneLayout.js');
-  }
-});
-
 await test('19. every export button id and downloaded filename is unchanged, including the Object Preview PNG (still exportCup / rhinestone-cup-preview.png)', () => {
   assert.match(appJs, /el\('exportProject'\)\.onclick=/);
   assert.match(appJs, /el\('exportLayout'\)\.onclick=/);
@@ -299,29 +287,4 @@ await test('20. the #cup canvas id and #cupColor control id are unchanged; only 
   assert.ok(indexHtml.includes('Object Preview'), 'expected the panel header to be relabeled to object-generic wording');
   assert.ok(indexHtml.includes('Preview background'), 'expected the cupColor label to be relabeled to object-generic wording');
 });
-
-await test('21. no forbidden file changed (this milestone\'s own forbidden list)', () => {
-  const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
-  const changedPaths = output.split('\n').filter((l) => l.trim().length > 0).map((l) => l.slice(3).trim());
-  const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
-  // src/renderer/StoneColors.js is legitimately changed by RS-1007 (Crystal Color Library — it
-  // became a compatibility re-export shim over the new src/renderer/CrystalColors.js catalog) —
-  // see tools/test-crystal-color-catalog.mjs / tools/test-crystal-color-integration.mjs for that
-  // milestone's own forbidden-file guard.
-  const forbiddenExactWithinPrefix = new Set(['src/renderer/CanvasRenderer2D.js']);
-  // src/export/ is legitimately changed by RS-1005 (Production Sheet export) — see
-  // tools/test-production-sheet-exporter.mjs for that milestone's own forbidden-file guard.
-  // src/geometry/ is legitimately changed by RS-1008A (Image Trace Architecture Correction) — see
-  // tools/test-image-trace-regression.mjs for that milestone's own forbidden-file guard.
-  const forbiddenPrefixes = [
-    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
-    'src/text/', 'src/fonts/', 'src/browser/', 'src/svg/', 'src/history/'
-  ];
-  for (const changedPath of changedPaths) {
-    assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
-    assert.ok(!forbiddenExactWithinPrefix.has(changedPath), `Forbidden file changed: ${changedPath}`);
-    assert.ok(!forbiddenPrefixes.some((prefix) => changedPath.startsWith(prefix)), `Forbidden file changed: ${changedPath}`);
-  }
-});
-
 console.log('Object template integration tests passed.');

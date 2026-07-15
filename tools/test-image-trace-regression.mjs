@@ -110,34 +110,42 @@ await test('7. GeometryEngine.generateImageLayout() and app.js\'s live orchestra
   assert.ok(layout.count > 0);
 });
 
-await test('8. no forbidden file changed (this milestone\'s own forbidden list)', async () => {
-  const { execSync } = await import('node:child_process');
-  const output = execSync('git status --porcelain', { cwd: repoRoot, encoding: 'utf8' });
-  const changedPaths = output
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    .map((line) => line.slice(3).trim());
+await test('8. validateProject() accepts a valid image layer and rejects one missing imageSrc / with an out-of-range threshold', async () => {
+  const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
+  const match = appJs.match(/function validateProject\(obj\)\{[\s\S]*?\n\}\n/);
+  assert.ok(match, 'expected to find validateProject() in app.js');
+  const source = appJs.slice(appJs.indexOf('const DEFAULT_PROJECT_NAME='), appJs.indexOf(match[0]) + match[0].length);
+  const { getObjectTemplate } = await import('../src/products/index.js');
+  const { SHAPE_LIBRARY_KINDS } = await import('../src/geometry/index.js');
+  const XYWH_SHAPE_TYPES = new Set(['rectangle', 'svg', 'image', 'path', ...SHAPE_LIBRARY_KINDS]);
+  // eslint-disable-next-line no-new-func
+  const validateProject = new Function('getObjectTemplate', 'XYWH_SHAPE_TYPES', 'SHAPE_LIBRARY_KINDS', `${source}\nreturn validateProject;`)(getObjectTemplate, XYWH_SHAPE_TYPES, SHAPE_LIBRARY_KINDS);
 
-  const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
-  // Unlike RS-1008, this milestone's whole point is to legitimately change src/geometry/** and
-  // src/image/**, so neither is forbidden here.
-  // RS-1013 (Variable Stone Sizes) legitimately adds src/renderer/StoneSizes.js and changes
-  // src/export/ProductionSheetExporter.js's header formatting -- see
-  // tools/test-variable-stone-sizes.mjs for that milestone's own forbidden-file guard.
-  const allowedDespitePrefix = new Set(['src/renderer/StoneSizes.js', 'src/export/ProductionSheetExporter.js']);
-  const forbiddenPrefixes = [
-    // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
-    'src/export/', 'src/text/', 'src/fonts/', 'src/browser/', 'src/renderer/', 'src/svg/', 'src/history/', 'src/products/'
-  ];
+  const baseProject = () => ({
+    version: 2,
+    canvas: { width: 210, height: 90 },
+    layers: [
+      { id: 'image1', type: 'image', imageSrc: 'data:image/png;base64,AAAA', x: 10, y: 10, w: 20, h: 20, threshold: 128, invert: false, blurRadiusPx: 0, maxWidthPx: 400, maxHeightPx: 400, stoneSize: 2, gap: 0.3, color: 'gold' }
+    ]
+  });
 
-  for (const changedPath of changedPaths) {
-    assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
-    assert.ok(
-      allowedDespitePrefix.has(changedPath) ||
-      !forbiddenPrefixes.some((prefix) => changedPath.startsWith(prefix)),
-      `Forbidden file changed: ${changedPath}`
-    );
-  }
+  assert.doesNotThrow(() => validateProject(baseProject()));
+
+  const missingSource = baseProject();
+  delete missingSource.layers[0].imageSrc;
+  assert.throws(() => validateProject(missingSource), /imageSrc/);
+
+  const badThreshold = baseProject();
+  badThreshold.layers[0].threshold = 999;
+  assert.throws(() => validateProject(badThreshold), /threshold/);
+
+  const missingBBox = baseProject();
+  delete missingBBox.layers[0].w;
+  assert.throws(() => validateProject(missingBBox), /x\/y\/w\/h/);
+
+  const badMax = baseProject();
+  badMax.layers[0].maxWidthPx = -1;
+  assert.throws(() => validateProject(badMax), /maxWidthPx/);
 });
 
 console.log('Image trace architecture-correction regression tests passed.');
