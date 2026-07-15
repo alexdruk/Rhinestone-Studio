@@ -97,17 +97,25 @@ await test('4. the left panel scopes to exactly Project / Layers / Actions secti
   assert.deepEqual(headings, ['Project', 'Layers', 'Actions']);
 });
 
-await test('5. layer-creation tools (Add circle/Add rectangle) are reachable inside the Layers section of the left panel with zero scrolling required beyond the panel itself, immediately after the layer list', () => {
+// S-110 (Expanded Shape Library) superseded this test's own premise: Add circle/Add rectangle used
+// to live as a *second*, duplicate creation control in the left panel's Layers section (the exact
+// "fragmented interface" S-110 was asked to fix), proxied by dead buttons inside the Shapes ->
+// Design Shapes Lightbox. S-110 removed the left-panel duplicates entirely -- Design Shapes is now
+// the one place every shape (including Circle/Rectangle) is created. This test now asserts that
+// single-source-of-truth property instead of the left panel location it used to check.
+await test('5. layer-creation tools (all 11 Design Shapes, including Circle/Rectangle) are reachable inside Shapes -> Design Shapes, with no duplicate left-panel controls', () => {
   const leftPanelMatch = indexHtml.match(/<aside class="left-panel"[^>]*>([\s\S]*?)<\/aside>/);
   assert.ok(leftPanelMatch);
-  const body = leftPanelMatch[1];
-  const layersListIndex = body.indexOf('id="layersList"');
-  const addCircleIndex = body.indexOf('id="addCircle"');
-  const addRectIndex = body.indexOf('id="addRect"');
-  const actionsHeadingIndex = body.indexOf('Actions');
-  assert.ok(layersListIndex > 0 && addCircleIndex > 0 && addRectIndex > 0 && actionsHeadingIndex > 0);
-  assert.ok(addCircleIndex > layersListIndex && addCircleIndex < actionsHeadingIndex, 'expected #addCircle inside the Layers section');
-  assert.ok(addRectIndex > layersListIndex && addRectIndex < actionsHeadingIndex, 'expected #addRect inside the Layers section');
+  assert.ok(!leftPanelMatch[1].includes('id="addCircle"'), 'the left panel must not contain a duplicate #addCircle');
+  assert.ok(!leftPanelMatch[1].includes('id="addRect"'), 'the left panel must not contain a duplicate #addRect');
+
+  const designPanelMatch = indexHtml.match(/<div class="lightbox-tab-panel" id="shapesPanelDesign">([\s\S]*?)<div id="shapeControls"/);
+  assert.ok(designPanelMatch, 'expected #shapesPanelDesign in index.html');
+  const shapeGridMatch = designPanelMatch[1].match(/<div class="shape-grid" id="shapeGrid">([\s\S]*?)<\/div>/);
+  assert.ok(shapeGridMatch, 'expected #shapeGrid inside Design Shapes');
+  for (const kind of ['circle', 'rectangle', 'ellipse', 'capsule', 'polygon', 'star', 'heart', 'arrow', 'cross', 'crescent', 'ring']) {
+    assert.ok(shapeGridMatch[1].includes(`data-shape-kind="${kind}"`), `expected a ${kind} button in #shapeGrid`);
+  }
 });
 
 await test('6. every per-layer-type detail control that used to live in the long sidebar still exists exactly once, now inside its Lightbox', () => {
@@ -120,7 +128,9 @@ await test('6. every per-layer-type detail control that used to live in the long
 });
 
 await test('7. app.js still wires every id this fix relies on', () => {
-  for (const id of ['addCircle', 'addRect', 'importSvg', 'deleteSelected', 'layersList', 'curveEnabled', 'menuText', 'menuShapes', 'menuImport']) {
+  // S-110: #addCircle/#addRect no longer exist (see test 5 above) -- #shapeGrid (the unified
+  // Design Shapes creation control) and #addTextBtn (the new Add Text control) replace them.
+  for (const id of ['shapeGrid', 'addTextBtn', 'importSvg', 'deleteSelected', 'layersList', 'curveEnabled', 'menuText', 'menuShapes', 'menuImport']) {
     assert.ok(appJs.includes(`el('${id}')`), `expected app.js to still wire #${id}`);
   }
 });

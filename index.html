@@ -267,6 +267,12 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .library-controls .field{margin-bottom:0}
 .library-controls .field.grow{flex:1 1 200px}
 .library-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:var(--space-3)}
+/* S-110 (Expanded Shape Library): a compact auto-fill grid for the 11 Design Shapes buttons,
+   mirroring .library-grid's own auto-fill pattern above at a smaller minmax so it stays a clear,
+   organized grid (not a long unstructured list) down to the Shapes Lightbox's own min width. */
+.shape-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:var(--space-2)}
+.shape-grid-btn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:var(--space-2) 4px;font-size:20px;line-height:1}
+.shape-grid-btn span{font-size:var(--font-size-xs);line-height:1.2}
 .library-card{border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-surface);overflow:hidden;display:flex;flex-direction:column}
 .library-card-thumb{aspect-ratio:3/2;background:#fbfdff;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--color-border);overflow:hidden}
 .library-card-thumb img{width:100%;height:100%;object-fit:contain}
@@ -341,10 +347,6 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
       <h2>Layers</h2>
       <select id="selectedLayer" class="visually-hidden" aria-label="Selected layer"></select>
       <div id="layersList" role="list" aria-label="Layer list"></div>
-      <div class="btnrow">
-        <button class="btn sm" id="addCircle" title="Add a circle layer">+ Circle</button>
-        <button class="btn sm" id="addRect" title="Add a rectangle layer">+ Rectangle</button>
-      </div>
       <button id="deleteSelected" class="btn danger block" style="margin-top:var(--space-2)">Delete selected layer</button><div id="layerRuleHint" class="ruleHint" style="display:none">At least one layer is required — add another layer before you can delete this one.</div>
     </section>
 
@@ -462,6 +464,11 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
   <div class="lightbox" role="dialog" aria-modal="false" aria-labelledby="lightboxTextTitle" tabindex="-1">
     <header class="lightbox-header"><h2 id="lightboxTextTitle">Text</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
     <div class="lightbox-body">
+      <div class="field-section">
+        <h3>Add text</h3>
+        <button class="btn" id="addTextBtn" title="Add a new text layer">+ Add Text</button>
+        <p class="hint">Adds a new text layer using the stone settings below. If exactly one compatible shape is also selected, the new text is automatically fit inside it. Existing text is edited by selecting it from the Layers list.</p>
+      </div>
       <div id="textControls">
         <div class="field-section">
           <h3>Content</h3>
@@ -542,11 +549,20 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
       <div class="lightbox-tab-panel" id="shapesPanelDesign">
         <div class="field-section">
           <h3>Add a shape</h3>
-          <div class="btnrow">
-            <button class="btn" id="addCircleLightbox" title="Add a circle layer">◯ Circle</button>
-            <button class="btn" id="addRectLightbox" title="Add a rectangle layer">▭ Rectangle</button>
+          <div class="shape-grid" id="shapeGrid">
+            <button class="btn shape-grid-btn" data-shape-kind="circle" title="Add a circle layer">◯<span>Circle</span></button>
+            <button class="btn shape-grid-btn" data-shape-kind="rectangle" title="Add a rectangle layer">▭<span>Rectangle</span></button>
+            <button class="btn shape-grid-btn" data-shape-kind="ellipse" title="Add an ellipse layer">⬭<span>Ellipse</span></button>
+            <button class="btn shape-grid-btn" data-shape-kind="capsule" title="Add a capsule/oblong layer">▢<span>Capsule</span></button>
+            <button class="btn shape-grid-btn" data-shape-kind="polygon" title="Add a regular polygon layer (configurable number of sides)">⬡<span>Polygon</span></button>
+            <button class="btn shape-grid-btn" data-shape-kind="star" title="Add a star layer (configurable points and inner radius)">★<span>Star</span></button>
+            <button class="btn shape-grid-btn" data-shape-kind="heart" title="Add a heart layer">♥<span>Heart</span></button>
+            <button class="btn shape-grid-btn" data-shape-kind="arrow" title="Add an arrow layer">➤<span>Arrow</span></button>
+            <button class="btn shape-grid-btn" data-shape-kind="cross" title="Add a cross layer">✚<span>Cross</span></button>
+            <button class="btn shape-grid-btn" data-shape-kind="crescent" title="Add a crescent layer">☾<span>Crescent</span></button>
+            <button class="btn shape-grid-btn" data-shape-kind="ring" title="Add a ring/donut layer (configurable inner opening)">◎<span>Ring</span></button>
           </div>
-          <p class="hint">Adds a new layer using the stone settings below. Existing shapes are edited by selecting them from the Layers list.</p>
+          <p class="hint">Adds a new layer using the stone settings below. If exactly one compatible text layer is also selected, it is automatically fit inside the new shape. Existing shapes are edited by selecting them from the Layers list.</p>
         </div>
         <div class="field-section" id="booleanOpsSection">
           <h3>Boolean Operations</h3>
@@ -561,6 +577,13 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           </div>
           <p class="hint">The result becomes one new, fully editable shape layer — the original layers are removed. Undo restores them.</p>
           <div class="validation-message" id="booleanOpsValidation" role="alert"></div>
+        </div>
+        <div class="field-section" id="fitTextToShapeSection">
+          <h3>Text Fitting</h3>
+          <p class="hint" id="fitTextToShapeHint">Select exactly one text layer and one compatible shape layer (Shift-click on the canvas, or in the Layers list) to fit the text inside the shape.</p>
+          <button class="btn" id="fitTextToShapeBtn" disabled title="Resize and reposition the selected text to fit inside the selected shape, without changing stone size, gap, font, fill style, or color.">Fit Text to Shape</button>
+          <p class="hint">Adjusts only the text's position and height/scale. Text and shape stay separate, editable layers — this never merges them. Run again any time; it only overrides the position/height it itself last set, never a manual edit made afterward.</p>
+          <div class="validation-message" id="fitTextToShapeValidation" role="alert"></div>
         </div>
         <div id="shapeControls" style="display:none">
           <div class="field-section">
@@ -577,6 +600,21 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
               <option value="radial">Radial Fill - rings out from the center</option>
               <option value="contour">Contour Fill - rings that follow the edge inward</option>
             </select>
+          </div>
+          <div class="field-section" id="shapeSidesField" style="display:none">
+            <h3>Shape options</h3>
+            <div class="field"><label for="shapeSides">Number of Sides</label><input id="shapeSides" type="number" min="3" max="12" step="1" value="6"></div>
+          </div>
+          <div class="field-section" id="shapeStarFields" style="display:none">
+            <h3>Shape options</h3>
+            <div class="field-row">
+              <div class="field"><label for="shapePoints">Number of Points</label><input id="shapePoints" type="number" min="3" max="12" step="1" value="5"></div>
+              <div class="field"><label for="shapeInnerRadius">Inner Radius</label><input id="shapeInnerRadius" type="number" min="0.1" max="0.9" step="0.05" value="0.5"></div>
+            </div>
+          </div>
+          <div class="field-section" id="shapeRingField" style="display:none">
+            <h3>Shape options</h3>
+            <div class="field"><label for="shapeRingInner">Inner Opening</label><input id="shapeRingInner" type="number" min="0.1" max="0.9" step="0.05" value="0.5"></div>
           </div>
           <div class="field-section">
             <h3>Stones</h3>

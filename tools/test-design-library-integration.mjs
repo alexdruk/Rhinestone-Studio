@@ -21,6 +21,12 @@ const packageJson = JSON.parse(await readFile(path.join(repoRoot, 'package.json'
 
 const { getObjectTemplate } = await import('../src/products/index.js');
 const { buildProjectFromItem, buildSelectionItemData, createLibraryItem } = await import('../src/library/index.js');
+// S-110: validateProject() (and its own extracted slice's SUPPORTED_LAYER_TYPES declaration) now
+// references XYWH_SHAPE_TYPES/SHAPE_LIBRARY_KINDS (module-level constants declared well before the
+// extracted slice begins) -- both injected as function parameters below, for the same reason
+// getObjectTemplate already is.
+const { SHAPE_LIBRARY_KINDS } = await import('../src/geometry/index.js');
+const XYWH_SHAPE_TYPES = new Set(['rectangle', 'svg', 'image', 'path', ...SHAPE_LIBRARY_KINDS]);
 
 async function test(name, fn) {
   try {
@@ -125,7 +131,7 @@ await test("12. buildProjectFromItem()'s output for a 'project' item passes the 
   const constantsStart = appJs.indexOf('const SUPPORTED_LAYER_TYPES=new Set');
   const source = appJs.slice(constantsStart, appJs.indexOf(validateMatch[0]) + validateMatch[0].length);
   // eslint-disable-next-line no-new-func
-  const { validateProject } = new Function('getObjectTemplate', `${source}\nreturn { validateProject };`)(getObjectTemplate);
+  const { validateProject } = new Function('getObjectTemplate', 'XYWH_SHAPE_TYPES', 'SHAPE_LIBRARY_KINDS', `${source}\nreturn { validateProject };`)(getObjectTemplate, XYWH_SHAPE_TYPES, SHAPE_LIBRARY_KINDS);
 
   const storedProject = {
     version: 2, units: 'mm', name: 'Saved Project', product: 'mug',
@@ -146,7 +152,7 @@ await test("13. buildProjectFromItem()'s output for a 'selection' item also pass
   const constantsStart = appJs.indexOf('const SUPPORTED_LAYER_TYPES=new Set');
   const source = appJs.slice(constantsStart, appJs.indexOf(validateMatch[0]) + validateMatch[0].length);
   // eslint-disable-next-line no-new-func
-  const { validateProject } = new Function('getObjectTemplate', `${source}\nreturn { validateProject };`)(getObjectTemplate);
+  const { validateProject } = new Function('getObjectTemplate', 'XYWH_SHAPE_TYPES', 'SHAPE_LIBRARY_KINDS', `${source}\nreturn { validateProject };`)(getObjectTemplate, XYWH_SHAPE_TYPES, SHAPE_LIBRARY_KINDS);
 
   const layers = [{ id: 'circle-1', type: 'circle', visible: true, cx: 105, cy: 45, r: 18, stoneSize: 2, gap: 0.3, color: 'gold' }];
   const data = buildSelectionItemData(layers, { width: 210, height: 90 });
@@ -174,6 +180,11 @@ await test('15. no forbidden file/prefix changed on this branch (GeometryEngine/
     .map((line) => line.slice(3).trim());
 
   const forbiddenExact = new Set(['style.css', 'README.md', 'LICENSE', 'CONTRIBUTING.md']);
+  // S-110 (Expanded Shape Library / Smart Text-to-Shape Fitting) legitimately extends
+  // src/geometry/GeometryEngine.js/index.js and adds src/geometry/ShapeLibrary.js/ShapeFit.js --
+  // allow-listed per this guard's own established precedent (see e.g.
+  // tools/test-alignment-snapping-integration.mjs).
+  const allowedDespitePrefix = new Set(['src/geometry/GeometryEngine.js', 'src/geometry/index.js', 'src/geometry/ShapeLibrary.js', 'src/geometry/ShapeFit.js']);
   const forbiddenPrefixes = [
     // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
     'src/geometry/', 'src/renderer/', 'src/export/', 'src/editing/', 'src/history/', 'src/products/', 'src/text/', 'src/fonts/', 'src/svg/', 'src/image/', 'src/browser/', 'src/ui/'
@@ -182,6 +193,7 @@ await test('15. no forbidden file/prefix changed on this branch (GeometryEngine/
   for (const changedPath of changedPaths) {
     assert.ok(!forbiddenExact.has(changedPath), `Forbidden file changed: ${changedPath}`);
     assert.ok(
+      allowedDespitePrefix.has(changedPath) ||
       !forbiddenPrefixes.some((prefix) => changedPath.startsWith(prefix)),
       `Forbidden file changed: ${changedPath}`
     );

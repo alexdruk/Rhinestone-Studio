@@ -28,9 +28,12 @@ async function test(name, fn) {
 }
 
 await test('1. generate() routes circle and rectangle layers through a live shape-generation method', () => {
+  // S-110 generalized the inline `l.type==='circle'||l.type==='rectangle'` check into a shared
+  // SHAPE_LAYER_TYPES set (also covering nine new shape kinds) -- circle/rectangle still route
+  // through generateShapeStonesLive exactly as before, just via that set membership test.
   assert.match(
     appJs,
-    /l\.type==='circle'\|\|l\.type==='rectangle'\)raw\.push\(\.\.\.await this\.generateShapeStonesLive\(l\)\)/,
+    /SHAPE_LAYER_TYPES\.has\(l\.type\)\)raw\.push\(\.\.\.await this\.generateShapeStonesLive\(l\)\)/,
     'expected generate() to call generateShapeStonesLive for circle/rectangle layers'
   );
 });

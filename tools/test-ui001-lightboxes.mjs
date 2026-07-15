@@ -86,8 +86,12 @@ await test('4. Shapes Lightbox has two clearly separated sections: Design Shapes
   assert.match(body, /<button class="active" id="shapesTabDesign"/, 'expected a Design Shapes tab');
   assert.match(body, /<button id="shapesTabTemplates"/, 'expected an Object Templates tab');
   const designBody = extractElementHtml(indexHtml, 'shapesPanelDesign');
-  assert.ok(designBody.includes('id="addCircleLightbox"'), 'expected a circle add control in Design Shapes');
-  assert.ok(designBody.includes('id="addRectLightbox"'), 'expected a rectangle add control in Design Shapes');
+  // S-110: #addCircleLightbox/#addRectLightbox (dead proxy buttons that only forwarded clicks to
+  // the left panel's now-removed #addCircle/#addRect) were replaced by #shapeGrid, the one real
+  // creation control for all 11 Design Shapes, including Circle/Rectangle.
+  assert.ok(designBody.includes('id="shapeGrid"'), 'expected the unified Design Shapes creation grid');
+  assert.ok(designBody.includes('data-shape-kind="circle"'), 'expected a circle add control in Design Shapes');
+  assert.ok(designBody.includes('data-shape-kind="rectangle"'), 'expected a rectangle add control in Design Shapes');
   assert.ok(designBody.includes('id="shapesPositionSlot"'), 'expected a position-fields slot in Design Shapes');
   assert.ok(designBody.includes('id="shapesStoneSlot"'), 'expected a stone-fields slot in Design Shapes');
   const templatesBody = extractElementHtml(indexHtml, 'shapesPanelTemplates');

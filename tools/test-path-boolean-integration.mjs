@@ -130,7 +130,11 @@ await test('8. a boolean result\'s StoneLayout exports through the unmodified Pr
 // ---------------------------------------------------------------------------------------------
 
 await test('9. app.js imports combineManyShapeSources from the geometry barrel', () => {
-  assert.match(appJs, /import\s*\{\s*GeometryEngine as PermanentGeometryEngine,\s*Stone,\s*StoneLayout,\s*combineManyShapeSources\s*\}\s*from\s*['"]\.\/src\/geometry\/index\.js['"]/);
+  // S-110 legitimately adds more named imports (SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES,
+  // computeInscribedRect, computeShapeFitScale) to this same import line -- matched loosely (any
+  // named-import list containing these four, in their original relative order) rather than
+  // requiring it to be the complete list.
+  assert.match(appJs, /import\s*\{\s*GeometryEngine as PermanentGeometryEngine,\s*Stone,\s*StoneLayout,\s*combineManyShapeSources[^}]*\}\s*from\s*['"]\.\/src\/geometry\/index\.js['"]/);
 });
 
 await test('10. SUPPORTED_LAYER_TYPES includes \'path\', and validateProject() has path-specific field checks', () => {
@@ -145,15 +149,17 @@ await test('11. GeometryEngine.generate() routes \'path\' layers through generat
 });
 
 await test('12. getLayerBBox()/drag-resize/duplicateLayer()/layerLabel()/moreOptionsBtn each have a \'path\' case (shared with rectangle/svg/image)', () => {
-  assert.match(appJs, /if\(l\.type==='circle'\)return\{[^}]*\};if\(l\.type==='rectangle'\|\|l\.type==='svg'\|\|l\.type==='image'\|\|l\.type==='path'\)return\{x:l\.x,y:l\.y,width:l\.w,height:l\.h,x2:l\.x\+l\.w,y2:l\.y\+l\.h\}/);
-  assert.match(appJs, /l\.type==='rectangle'\|\|l\.type==='svg'\|\|l\.type==='image'\|\|l\.type==='path'\)\{let x0=drag\.b0\.x/);
-  assert.match(appJs, /if\(copy\.type==='path'\)\{copy\.x\+=8;copy\.y\+=8\}/);
-  assert.match(appJs, /l\.type==='path'\?\(l\.pathName\|\|'Path'\)/);
+  // S-110 generalized every one of these per-type unions (plus nine new shape kinds) into shared
+  // XYWH_SHAPE_TYPES/SHAPE_LAYER_TYPES sets -- 'path' still behaves exactly like rectangle/svg/image.
+  assert.match(appJs, /if\(l\.type==='circle'\)return\{[^}]*\};if\(XYWH_SHAPE_TYPES\.has\(l\.type\)\)return\{x:l\.x,y:l\.y,width:l\.w,height:l\.h,x2:l\.x\+l\.w,y2:l\.y\+l\.h\}/);
+  assert.match(appJs, /XYWH_SHAPE_TYPES\.has\(l\.type\)\)\{let x0=drag\.b0\.x/);
+  assert.match(appJs, /if\(XYWH_SHAPE_TYPES\.has\(copy\.type\)\)\{copy\.x\+=8;copy\.y\+=8\}/);
+  assert.match(appJs, /if\(l\.type==='path'\)return l\.pathName\|\|'Path'/);
   // S-105 follow-up moved the type->Lightbox mapping (moreOptionsBtn's former inline branch) into
   // the shared lightboxForLayerType() helper -- see tools/test-s105-persistent-movable-lightboxes.mjs.
   const fnMatch = appJs.match(/function lightboxForLayerType\(t\)\{[\s\S]*?\n\}/);
   assert.ok(fnMatch, 'expected a lightboxForLayerType(t) function in app.js');
-  assert.match(fnMatch[0], /if\(t==='circle'\|\|t==='rectangle'\|\|t==='path'\)return lightboxes\.shapes/);
+  assert.match(fnMatch[0], /if\(t==='path'\|\|SHAPE_LAYER_TYPES\.has\(t\)\)return lightboxes\.shapes/);
 });
 
 await test('13. writeSelectedControlsToLayer() has a \'path\' branch writing the shared x/y/w/h fields back', () => {
@@ -165,7 +171,10 @@ await test('13. writeSelectedControlsToLayer() has a \'path\' branch writing the
 await test('14. resolveLayerShapeSource() resolves every layer type into a boolean-input source, or null when a shape has no closed outline', () => {
   assert.match(appJs, /async function resolveLayerShapeSource\(layer\)\{/);
   for (const branch of [
-    /layer\.type==='circle'\|\|layer\.type==='rectangle'/,
+    // S-110 generalized this branch's condition into a shared SHAPE_LAYER_TYPES set (also covering
+    // nine new shape kinds) -- circle/rectangle still resolve through the same
+    // permanentEngine.resolveShapePolygons() call just below, unchanged.
+    /SHAPE_LAYER_TYPES\.has\(layer\.type\)/,
     /layer\.type==='svg'/,
     /layer\.type==='path'/,
     /layer\.type==='text'/,
@@ -248,7 +257,13 @@ await test('21. save/load: a project containing a path layer round-trips through
   assert.ok(validateMatch, 'expected to find validateProject()');
   const constantsSlice = appJs.slice(appJs.indexOf('const SUPPORTED_LAYER_TYPES=new Set'), appJs.indexOf(validateMatch[0]) + validateMatch[0].length);
   const getObjectTemplateModule = await import('../src/products/index.js');
-  const fn = new Function('getObjectTemplate', `${constantsSlice}\nreturn validateProject;`)(getObjectTemplateModule.getObjectTemplate);
+  // S-110: validateProject()'s own extracted slice includes SUPPORTED_LAYER_TYPES's declaration,
+  // which now spreads SHAPE_LIBRARY_KINDS, and validateProject() itself references
+  // XYWH_SHAPE_TYPES -- both declared well before this slice begins, injected as function
+  // parameters for the same reason getObjectTemplate is.
+  const { SHAPE_LIBRARY_KINDS } = await import('../src/geometry/index.js');
+  const XYWH_SHAPE_TYPES = new Set(['rectangle', 'svg', 'image', 'path', ...SHAPE_LIBRARY_KINDS]);
+  const fn = new Function('getObjectTemplate', 'XYWH_SHAPE_TYPES', 'SHAPE_LIBRARY_KINDS', `${constantsSlice}\nreturn validateProject;`)(getObjectTemplateModule.getObjectTemplate, XYWH_SHAPE_TYPES, SHAPE_LIBRARY_KINDS);
 
   const validProject = {
     version: 2, name: 'Test', product: 'mug', canvas: { width: 210, height: 90 },

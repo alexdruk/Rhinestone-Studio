@@ -55,8 +55,16 @@ await test('3. every discrete mutation site commits history before its first pro
 
   assert.match(appJs, /if\(action==='visible'\)\{const l=project\.layers\.find\(x=>x\.id===id\);commitHistory\(\);l\.visible=e\.target\.checked/, 'visibility toggle must commit history before mutating l.visible');
 
-  assert.match(appJs, /el\('addCircle'\)\.onclick=\(\)=>\{const l=selectedLayer\(\);commitHistory\(\);const layer=/, 'addCircle must commit history before constructing the new layer');
-  assert.match(appJs, /el\('addRect'\)\.onclick=\(\)=>\{const l=selectedLayer\(\);commitHistory\(\);const layer=/, 'addRect must commit history before constructing the new layer');
+  // S-110: the old dedicated #addCircle/#addRect handlers were replaced by one unified
+  // createShapeLayer(kind) function (used by all 11 Design Shapes buttons) and a new addText()
+  // function -- both still commit history before constructing the new layer, exactly like the
+  // handlers they replaced.
+  const createShapeLayerFn = appJs.match(/async function createShapeLayer\(kind\)\{([\s\S]*?)\n\}/);
+  assert.ok(createShapeLayerFn, 'expected to find createShapeLayer()');
+  assert.match(createShapeLayerFn[1], /commitHistory\(\);\s*let layer;/, 'createShapeLayer must commit history before constructing the new layer');
+  const addTextFn = appJs.match(/async function addText\(\)\{([\s\S]*?)\n\}/);
+  assert.ok(addTextFn, 'expected to find addText()');
+  assert.match(addTextFn[1], /commitHistory\(\);\s*const layer=/, 'addText must commit history before constructing the new layer');
 
   const svgHandler = appJs.match(/el\('importSvgFile'\)\.addEventListener\('change',async e=>\{([\s\S]*?)\}\);/);
   assert.ok(svgHandler, 'expected the importSvgFile change handler body');

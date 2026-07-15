@@ -427,7 +427,10 @@ await test('23. no forbidden file changed (this milestone\'s own forbidden list)
   // src/geometry/GeometryEngine.js/StoneSampler.js/index.js (already allowed below) -- see
   // tools/test-fill-algorithms.mjs / tools/test-fill-algorithms-integration.mjs for that
   // milestone's own forbidden-file guard. No exporter file changed.
-  const allowedDespitePrefix = new Set(['src/renderer/StoneColors.js', 'src/renderer/CrystalColors.js', 'src/renderer/StoneSizes.js', 'src/renderer/README.md', 'src/geometry/GeometryEngine.js', 'src/geometry/StoneSampler.js', 'src/geometry/index.js', 'src/geometry/README.md', 'src/geometry/PathBoolean.js', 'src/geometry/ContourRingSampler.js']);
+  // S-110: ShapeLibrary.js/ShapeFit.js are the two new files the Expanded Shape Library / Smart
+  // Text-to-Shape Fitting milestone adds under src/geometry/ -- allow-listed per this guard's own
+  // established precedent.
+  const allowedDespitePrefix = new Set(['src/renderer/StoneColors.js', 'src/renderer/CrystalColors.js', 'src/renderer/StoneSizes.js', 'src/renderer/README.md', 'src/geometry/GeometryEngine.js', 'src/geometry/StoneSampler.js', 'src/geometry/index.js', 'src/geometry/README.md', 'src/geometry/PathBoolean.js', 'src/geometry/ContourRingSampler.js', 'src/geometry/ShapeLibrary.js', 'src/geometry/ShapeFit.js']);
   const forbiddenPrefixes = [
     // RS-2002: assets/fonts/** is legitimately expanded by the Typography & Font Library milestone (new bundled font files + manifest entries).
     'src/geometry/', 'src/renderer/', 'src/text/', 'src/fonts/', 'src/browser/', 'src/svg/', 'src/history/', 'src/products/'

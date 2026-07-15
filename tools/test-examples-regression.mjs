@@ -57,8 +57,13 @@ async function extractValidateProject() {
   // SUPPORTED_LAYER_TYPES -- the extra intervening source (defaultProject(), etc.) is harmless.
   const source = appJs.slice(appJs.indexOf('const DEFAULT_PROJECT_NAME='), appJs.indexOf(match[0]) + match[0].length);
   const { getObjectTemplate } = await import('../src/products/index.js');
+  // S-110: validateProject() (and its own extracted slice's SUPPORTED_LAYER_TYPES declaration) now
+  // references XYWH_SHAPE_TYPES/SHAPE_LIBRARY_KINDS (declared well before this slice begins) --
+  // injected as function parameters for the same reason getObjectTemplate is above.
+  const { SHAPE_LIBRARY_KINDS } = await import('../src/geometry/index.js');
+  const XYWH_SHAPE_TYPES = new Set(['rectangle', 'svg', 'image', 'path', ...SHAPE_LIBRARY_KINDS]);
   // eslint-disable-next-line no-new-func
-  return new Function('getObjectTemplate', `${source}\nreturn validateProject;`)(getObjectTemplate);
+  return new Function('getObjectTemplate', 'XYWH_SHAPE_TYPES', 'SHAPE_LIBRARY_KINDS', `${source}\nreturn validateProject;`)(getObjectTemplate, XYWH_SHAPE_TYPES, SHAPE_LIBRARY_KINDS);
 }
 
 async function buildPermanentEngine() {
