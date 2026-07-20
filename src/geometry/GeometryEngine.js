@@ -22,7 +22,7 @@
 
 import { BoundingBox, Point2D, createCircleVectorPath, createRectangleVectorPath } from '../text/VectorPath.js';
 import { flattenContourToPolygon, translateContour } from './ContourGeometry.js';
-import { sampleOutlinePoints, sampleShapeFillPoints, sampleFieldByMode } from './StoneSampler.js';
+import { sampleOutlinePoints, sampleMultiContourOutlinePoints, sampleShapeFillPoints, sampleFieldByMode } from './StoneSampler.js';
 import { Stone } from './Stone.js';
 import { StoneLayout } from './StoneLayout.js';
 import { parseSvgDocument } from '../svg/index.js';
@@ -100,7 +100,7 @@ export class GeometryEngine {
     const { polygons } = await this._textPolygons(options);
     const spacingMm = options.stoneSizeMm + options.gapMm;
 
-    const points = sampleShapeFillPoints(options.mode, polygons, BoundingBox.fromPoints(polygons.flat()), spacingMm);
+    const points = sampleShapeFillPoints(options.mode, polygons, BoundingBox.fromPoints(polygons.flat()), spacingMm, options.stoneSizeMm);
 
     const stones = points.map((point, index) => new Stone({
       xMm: point.xMm,
@@ -221,7 +221,7 @@ export class GeometryEngine {
     const { polygons } = this._shapePolygons(options);
     const spacingMm = options.stoneSizeMm + options.gapMm;
 
-    const points = sampleShapeFillPoints(options.mode, polygons, BoundingBox.fromPoints(polygons.flat()), spacingMm);
+    const points = sampleShapeFillPoints(options.mode, polygons, BoundingBox.fromPoints(polygons.flat()), spacingMm, options.stoneSizeMm);
 
     const stones = points.map((point, index) => new Stone({
       xMm: point.xMm,
@@ -344,9 +344,12 @@ export class GeometryEngine {
     // generateShapeLayout()/generateTextLayout()'s flatMap-based accumulation) because an SVG
     // layer's placement box can scale a document to an arbitrarily large physical size.
     if (options.mode === 'outline') {
-      for (const polygon of closedPolygons) {
-        for (const point of sampleOutlinePoints(polygon, spacingMm, { closed: true })) points.push(point);
-      }
+      // RC-002: sampleMultiContourOutlinePoints() (not a plain per-polygon loop) so an SVG document
+      // with nested closed paths (e.g. a donut shape) never produces overlapping stones where two
+      // different contours pass closer together than one stone pitch -- see that function's doc
+      // comment. Still appended one-by-one, not spread, for the same large-point-set stack-safety
+      // reason as before.
+      for (const point of sampleMultiContourOutlinePoints(closedPolygons, spacingMm, { closed: true, minSeparationMm: options.stoneSizeMm })) points.push(point);
     } else {
       for (const point of sampleShapeFillPoints(options.mode, closedPolygons, BoundingBox.fromPoints(closedPolygons.flat()), spacingMm)) {
         points.push(point);
@@ -506,7 +509,7 @@ export class GeometryEngine {
     }
 
     const spacingMm = options.stoneSizeMm + options.gapMm;
-    const points = sampleShapeFillPoints(options.mode, polygons, BoundingBox.fromPoints(polygons.flat()), spacingMm);
+    const points = sampleShapeFillPoints(options.mode, polygons, BoundingBox.fromPoints(polygons.flat()), spacingMm, options.stoneSizeMm);
 
     const stones = points.map((point, index) => new Stone({
       xMm: point.xMm,

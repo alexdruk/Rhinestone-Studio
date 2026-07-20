@@ -198,6 +198,82 @@ export function dedupeStonePoints(points, minDistanceMm) {
   return kept;
 }
 
+/**
+ * RC-002: sample every contour's outline points independently (via sampleOutlinePoints(), so each
+ * contour's own spacingMm arc-length walk is completely unchanged), then drop any point that lands
+ * within `minSeparationMm` of an already-kept point from a *different* contour.
+ *
+ * Outline mode samples stone centers directly on each contour's boundary curve. For a single-contour
+ * shape this is always spacingMm apart and safe. For a multi-contour shape (Ring's outer+inner
+ * circle; a glyph's outer contour and an interior counter/hole like "o" or "e"; a Boolean Operation
+ * difference result; an SVG document with nested closed paths) two *different* contours can pass
+ * closer to each other than one stone pitch -- e.g. a Ring whose annulus (outer radius - inner
+ * radius) is narrower than stoneSizeMm -- and independently sampling each contour then produces
+ * physically overlapping stones, since nothing previously related one contour's points to another's.
+ *
+ * `minSeparationMm` defaults to `spacingMm` (matching dedupeStonePoints()'s existing "full pitch"
+ * floor for Contour/Radial Fill's own convergence problem), but callers should pass stoneSizeMm
+ * explicitly: the reported defect is literal physical overlap (center-to-center distance less than
+ * the sum of two stones' radii, i.e. less than stoneSizeMm for same-size stones), not merely
+ * "closer than the full gap-inclusive pitch". Flooring at the full spacingMm pitch instead measurably
+ * thins outline stone counts even for widely-used shapes/text that never actually overlap (dense
+ * script fonts' nearby strokes, in particular) -- a much larger, more visible behavior change than
+ * this fix's scope calls for. Flooring at stoneSizeMm is the minimal change that still strictly
+ * guarantees no two stones from different contours ever overlap.
+ *
+ * A point is never dropped for being close to another point on its *own* contour: that spacing is
+ * already correct by construction (a fixed arc-length walk), and pruning it here would change
+ * existing single-contour outline behaviour (e.g. Star's sharp inner notches, where consecutive
+ * arc-length samples can have a shorter straight-line chord) outside this fix's scope. Earlier
+ * contours (by input order) are therefore always fully preserved; a later contour's points are the
+ * only ones ever pruned, mirroring dedupeStonePoints()'s existing "first of any close pair wins"
+ * convention.
+ *
+ * @param {Point2D[][]} polygons
+ * @param {number} spacingMm
+ * @param {{closed?: boolean, minSeparationMm?: number}} [options]
+ * @returns {Point2D[]}
+ */
+export function sampleMultiContourOutlinePoints(polygons, spacingMm, { closed = true, minSeparationMm = spacingMm } = {}) {
+  const minDistanceSqMm = minSeparationMm * minSeparationMm;
+  const cellSizeMm = minSeparationMm;
+  const buckets = new Map();
+  const kept = [];
+
+  polygons.forEach((polygon, contourIndex) => {
+    for (const point of sampleOutlinePoints(polygon, spacingMm, { closed })) {
+      const gx = Math.floor(point.xMm / cellSizeMm);
+      const gy = Math.floor(point.yMm / cellSizeMm);
+      let tooCloseToOtherContour = false;
+
+      for (let dy = -1; dy <= 1 && !tooCloseToOtherContour; dy++) {
+        for (let dx = -1; dx <= 1 && !tooCloseToOtherContour; dx++) {
+          const bucket = buckets.get(`${gx + dx},${gy + dy}`);
+          if (!bucket) continue;
+          for (const other of bucket) {
+            if (other.contourIndex === contourIndex) continue;
+            const ddx = point.xMm - other.xMm;
+            const ddy = point.yMm - other.yMm;
+            if (ddx * ddx + ddy * ddy < minDistanceSqMm) {
+              tooCloseToOtherContour = true;
+              break;
+            }
+          }
+        }
+      }
+
+      if (!tooCloseToOtherContour) {
+        kept.push(point);
+        const key = `${gx},${gy}`;
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key).push({ xMm: point.xMm, yMm: point.yMm, contourIndex });
+      }
+    }
+  });
+
+  return kept;
+}
+
 // RS-1011: dedupeStonePoints()'s minimum-distance floor for Contour/Radial Fill, as a fraction of
 // the stone pitch. This is 1.0 -- the *full* pitch, not a discount -- deliberately: StoneSampler.js
 // only ever receives the combined spacingMm (stoneSizeMm + gapMm), never the two values separately,
@@ -372,9 +448,13 @@ export function sampleContourFillPoints(polygons, boundingBox, spacingMm) {
  * @param {Point2D[][]} polygons
  * @param {import('../text/VectorPath.js').BoundingBox|null} boundingBox
  * @param {number} spacingMm
+ * @param {number} [stoneSizeMm] RC-002: outline mode's cross-contour overlap floor (see
+ *   sampleMultiContourOutlinePoints()). Only 'outline' reads this; every other mode ignores it.
+ *   Defaults to spacingMm (the pre-RC-002 floor) when omitted, so callers that only care about
+ *   fill/staggered/radial/contour modes need not pass it.
  * @returns {Point2D[]}
  */
-export function sampleShapeFillPoints(mode, polygons, boundingBox, spacingMm) {
+export function sampleShapeFillPoints(mode, polygons, boundingBox, spacingMm, stoneSizeMm = spacingMm) {
   switch (mode) {
     case 'fill': return sampleFillPoints(polygons, boundingBox, spacingMm);
     case 'staggered': return sampleStaggeredFillPoints(polygons, boundingBox, spacingMm);
@@ -382,7 +462,7 @@ export function sampleShapeFillPoints(mode, polygons, boundingBox, spacingMm) {
     case 'contour': return sampleContourFillPoints(polygons, boundingBox, spacingMm);
     case 'outline':
     default:
-      return polygons.flatMap((polygon) => sampleOutlinePoints(polygon, spacingMm));
+      return sampleMultiContourOutlinePoints(polygons, spacingMm, { minSeparationMm: stoneSizeMm });
   }
 }
 
