@@ -111,7 +111,7 @@ import { SNAP_TOLERANCE_MM, NUDGE_STEP_MM, NUDGE_STEP_LARGE_MM, alignLayers, dis
 // of Project/Layer/StoneLayout/layer type; app.js is the only caller, and is the only place that
 // wires a Lightbox to a top-menu button or a layer-aware "which fields to show" decision. See
 // docs/specifications/UI-001-CompleteRedesign.md.
-import { Lightbox } from './src/ui/index.js';
+import { Lightbox, el, parseIntOr, download, exportCanvas, syncShippingFieldsFromState, wireShippingApply } from './src/ui/index.js';
 // RS-1015 (Design Library): src/library/** is a new, pure, DOM-free module -- library item
 // creation/validation, category derivation, storage-adapter-injected CRUD/search/filter/sort, and
 // the pure clone/insert/new-project transforms over the existing ad hoc project/layer JSON. It has
@@ -195,11 +195,6 @@ const imageBufferCache=new Map();
 // number (e.g. 2), but String(2)==='2' matches no <option> (index.html's options are formatted
 // like "2.0"), so the browser rendered no selection even though the underlying mm value was
 // valid. Never mutates the numeric value itself, only the displayed selection.
-// RS-1008: `parseFloat(...)||fallback` (the pattern the rest of this file already uses for numeric
-// field reads) silently discards an explicit, meaningful 0 -- harmless for fields whose fallback is
-// also a sensible default at 0 (e.g. curveStartAngleDeg), but wrong for imgThreshold, whose valid
-// range starts at 0. parseIntOr() only falls back on genuinely invalid (NaN) input.
-function parseIntOr(value,fallback){const n=Math.round(parseFloat(value));return Number.isFinite(n)?n:fallback}
 function setNumericSelectValue(select,num){let best=null,bestDiff=Infinity;for(const opt of select.options){const v=parseFloat(opt.value);if(Number.isFinite(v)){const diff=Math.abs(v-num);if(diff<bestDiff){bestDiff=diff;best=opt.value}}}select.value=best!==null?best:String(num)}
 // RS-1007: builds the Stone color <optgroup>s from STONE_COLORS (17 entries) grouped by each
 // color's `group` field, in catalog order (Object.values() preserves insertion order for the
@@ -518,7 +513,7 @@ function validateProject(obj){
 let fontProviderRegistry=null,permanentEngineError=null,fontManager=null;
 try{fontManager=await FontManager.fromUrl('./assets/fonts/manifest.json');fontProviderRegistry=createDefaultFontProviderRegistry(fontManager);TEXT_ENGINE_FONT_IDS=new Set(fontManager.listFonts().map(f=>f.id))}catch(error){permanentEngineError=error;console.error('Font manifest failed to load; text layers will render empty until this is resolved. Shape layers are unaffected.',error)}
 const permanentEngine=new PermanentGeometryEngine({fontProviderRegistry});
-const engine=new GeometryEngine(permanentEngine);let project=defaultProject(),selectedLayerId='text',layout=null,rotation=0,zoom=1,layoutTransform=null,drag=null,generationToken=0;const el=id=>document.getElementById(id);const layoutCanvas=el('layout'),cupCanvas=el('cup');
+const engine=new GeometryEngine(permanentEngine);let project=defaultProject(),selectedLayerId='text',layout=null,rotation=0,zoom=1,layoutTransform=null,drag=null,generationToken=0;const layoutCanvas=el('layout'),cupCanvas=el('cup');
 // RS-1009: the one multi-selection model (src/editing/Selection.js is the only place that
 // computes a new Set from an old one). selectedLayerId (above, pre-existing) keeps driving the
 // single-layer property panel exactly as before -- it always points at the most recently
@@ -1148,7 +1143,6 @@ function selectionBoundsText(){if(!selectedLayerIds.size)return'';const sel=[...
 function plateCupStatsHtml(t){const rimWidthMm=computeRimWidthMm(project.plate.outerDiameterMm,project.plate.innerWellDiameterMm);return`<span>${escapeHtml(t.displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span><span>design target: ${escapeHtml(getPlateDesignTargetMeta(project.plate.designTarget).name)}</span><span>outer diameter: ${project.plate.outerDiameterMm.toFixed(1)} mm</span><span>inner well diameter: ${project.plate.innerWellDiameterMm.toFixed(1)} mm</span><span>rim width: ${rimWidthMm.toFixed(1)} mm</span><span>approx. weight: ${PLATE_ROUND_DINNER_DEFINITION.weightGrams.average} g</span>`}
 function cylindricalCupStatsHtml(t){const{frameWidthMm}=frontViewFrameGeometry();return`<span>${escapeHtml(t.displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span><span>Front View width: ${frameWidthMm.toFixed(1)} mm</span><span>printable circumference: ${printableCircumferenceMm().toFixed(1)} mm</span><span>viewing position: ${Math.round(rotation)}°</span>`}
 function updateStats(){const t=currentObjectTemplate(),isPlate=t.preview.kind==='plate';const safe=getSafeAreaRectMm(t,project.canvas.width,project.canvas.height);el('layoutStats').innerHTML=`<b>${layout.count}</b> stones <span>${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm</span><span>canvas: ${project.canvas.width}×${project.canvas.height} mm</span><span>safe area: ${safe.widthMm.toFixed(1)}×${safe.heightMm.toFixed(1)} mm</span><span>units: mm</span>${selectionBoundsText()}<span>selected: ${escapeHtml(layerLabel(selectedLayer()))}</span>`;el('cupStats').innerHTML=isPlate?plateCupStatsHtml(t):cylindricalCupStatsHtml(t);updateStoneColorSwatch()}
-function download(name,mime,data){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:mime}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800);el('status').textContent=`Downloaded ${name}`}function exportCanvas(name,canvas){canvas.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),800)},'image/png')}
 // S-106: Combined Visual Preview PNG. Composites the two already-rendered, always-mounted canvas
 // elements (layoutCanvas/cupCanvas -- both keep a real, non-zero pixel backing store at all times
 // regardless of the active workspace tab, per the .tab-hidden/dual-mode invariant documented at
@@ -2236,18 +2230,9 @@ el('galleryPreviewSaveToLibrary').onclick=()=>{if(galleryPreviewFile)saveGallery
 // ---- Shipping & Handling: local, session-scoped metadata only. Deliberately not part of
 // `project` / Project JSON / undo-redo this milestone -- see
 // docs/specifications/UI-001-CompleteRedesign.md, "Shipping & Handling". ----
-const shippingInfo={packageType:'box',lengthMm:'',widthMm:'',heightMm:'',weightG:'',notes:'',fragile:false};
-function syncShippingFieldsFromState(){
-  el('shipPackageType').value=shippingInfo.packageType;el('shipLengthMm').value=shippingInfo.lengthMm;
-  el('shipWidthMm').value=shippingInfo.widthMm;el('shipHeightMm').value=shippingInfo.heightMm;
-  el('shipWeightG').value=shippingInfo.weightG;el('shipNotes').value=shippingInfo.notes;el('shipFragile').checked=shippingInfo.fragile;
-}
-el('shipApply').onclick=()=>{
-  shippingInfo.packageType=el('shipPackageType').value;shippingInfo.lengthMm=el('shipLengthMm').value;
-  shippingInfo.widthMm=el('shipWidthMm').value;shippingInfo.heightMm=el('shipHeightMm').value;
-  shippingInfo.weightG=el('shipWeightG').value;shippingInfo.notes=el('shipNotes').value;shippingInfo.fragile=el('shipFragile').checked;
-  el('status').textContent='Shipping & Handling notes updated (this session only).';
-};
+// ARC-001: shippingInfo state, syncShippingFieldsFromState(), and the #shipApply wiring moved to
+// src/ui/ShippingPanel.js (imported above); wireShippingApply() is called once at startup, below.
+wireShippingApply();
 
 // ---- Settings: mirrors the live grid/safe-area/snap toggle state (one boolean each, never a
 // second independent copy). Default stone size/gap are session-local preference fields not yet
