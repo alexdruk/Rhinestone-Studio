@@ -244,30 +244,47 @@ S-111; this milestone does not change that classification).
 - `test:full`'s distinct meaning (58 default files + the 3 excluded-by-default files) is preserved,
   not collapsed into `test`.
 
-## Known effect: four pre-existing "package.json lists my filename" checks now fail
+## Resolved: four "package.json lists my filename" checks updated to the new registration contract
 
-Four existing test files each contain one single-check assertion that greps the literal string
+Four existing test files each contained one single-check assertion that greped the literal string
 `packageJson.scripts.test` (parsed from `package.json`) for that file's own filename:
 `test-s107-long-text-readability.mjs` (check 7), `test-s110-design-shapes-consolidation.mjs` (check
 16), `test-s110a-smart-shape-to-text-creation.mjs` (check 10), and
-`test-s112a-plate-ux-corrections.mjs` (check 16). This is the same "exact-file-count / trivial
+`test-s112a-plate-ux-corrections.mjs` (check 16). This was the same "exact-file-count / trivial
 package.json-registration assertion" category `docs/specifications/S-111-TestSuiteRationalization.md`
 already identified and deliberately chose not to remove from `test-s110`/`test-s110a` ("single-line,
 negligible cost, not worth a risky edit to files otherwise fully Keep") — S-111's audit did not catch
 all four instances (`test-s107` predates it, `test-s112a` postdates it), but the category and the
-disposition are the same.
+disposition were the same.
 
-This milestone's `package.json` rewrite (Phase 4) is the direct, intended cause: the whole point of
+This milestone's `package.json` rewrite (Phase 4) was the direct, intended cause: the whole point of
 CI-001 is that `package.json`'s test scripts no longer enumerate filenames, so a check asserting that
-they do is now permanently false by design, not by a bug. Confirmed not a runner defect: each of the
-four files fails identically when run standalone (`node tools/test-s107-long-text-readability.mjs`,
-etc.) — same failing check, same message — with or without `tools/run-tests.mjs` involved.
+they do became permanently false by design, not by a bug — confirmed not a runner defect, since each
+of the four files failed identically run standalone, with or without `tools/run-tests.mjs` involved.
 
-Per this milestone's explicit constraints ("do not change any existing test's assertions or logic
-merely to make the new runner pass," and no `src/**`/test-logic edits to paper over a known issue),
-these four checks are left exactly as they are. They will keep failing under `npm test`/
-`test:integration` until a future, separately-scoped milestone removes or rewrites these four
-single-line checks — tracked here, not fixed here.
+**Follow-up CI-001A** replaced all four checks with an equivalent assertion against the *new*
+registration contract, rather than removing or weakening them. The real registration contract, since
+CI-001, is `tools/test-groups.mjs` (which named group a file belongs to, and the default-suite
+exclusion list) plus `tools/run-tests.mjs`'s own selection logic (`resolveSelection()`, exported and
+side-effect-free on import) — not `package.json`'s script text. A shared helper,
+`tools/lib/test-registration-assertions.mjs`, exports `assertTestRegistered({ filename, group,
+includedInDefault })`, which asserts, against the live manifest and runner (no hardcoded list of its
+own):
+
+1. `filename` is listed in `tools/test-groups.mjs`'s `GROUPS[group]`;
+2. `filename`'s presence/absence in `EXCLUDED_FROM_DEFAULT` matches `includedInDefault`;
+3. `tools/run-tests.mjs`'s actual default selection (`resolveSelection(parseArgs([]))` — what `npm
+   test` runs) includes/excludes `filename` accordingly;
+4. `tools/run-tests.mjs`'s `--all` selection (what `npm run test:full` runs) includes `filename`.
+
+Each of the four files now calls this helper with its own filename and correct group
+(`test-s107-long-text-readability.mjs`, `test-s110a-smart-shape-to-text-creation.mjs`, and
+`test-s112a-plate-ux-corrections.mjs` → `integration`; `test-s110-design-shapes-consolidation.mjs`'s
+check additionally verifies its three sibling S-110 files — `test-shape-library.mjs`,
+`test-shape-fit.mjs`, `test-shape-library-integration.mjs` — against `core`, their actual group,
+preserving that check's original "every new S-110 test file is registered" scope). No other
+assertion in any of the four files was changed. `npm test` now passes completely: 58 selected, 58
+passed, 0 failed.
 
 ## Out of scope
 
