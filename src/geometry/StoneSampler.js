@@ -267,17 +267,38 @@ export function dedupeStonesByRadius(stones) {
 }
 
 /**
- * RC-002: sample every contour's outline points independently (via sampleOutlinePoints(), so each
- * contour's own spacingMm arc-length walk is completely unchanged), then drop any point that lands
- * within `minSeparationMm` of an already-kept point from a *different* contour.
+ * RC-002 / RC-004A: sample every contour's outline points independently (via sampleOutlinePoints(),
+ * so each contour's own spacingMm arc-length walk is completely unchanged), then drop any point
+ * that lands within `minSeparationMm` of an already-kept point -- from that *same* contour or a
+ * *different* one alike.
  *
- * Outline mode samples stone centers directly on each contour's boundary curve. For a single-contour
- * shape this is always spacingMm apart and safe. For a multi-contour shape (Ring's outer+inner
- * circle; a glyph's outer contour and an interior counter/hole like "o" or "e"; a Boolean Operation
- * difference result; an SVG document with nested closed paths) two *different* contours can pass
- * closer to each other than one stone pitch -- e.g. a Ring whose annulus (outer radius - inner
- * radius) is narrower than stoneSizeMm -- and independently sampling each contour then produces
- * physically overlapping stones, since nothing previously related one contour's points to another's.
+ * RC-002 (cross-contour): outline mode samples stone centers directly on each contour's boundary
+ * curve. For a multi-contour shape (Ring's outer+inner circle; a glyph's outer contour and an
+ * interior counter/hole like "o" or "e"; a Boolean Operation difference result; an SVG document
+ * with nested closed paths) two *different* contours can pass closer to each other than one stone
+ * pitch -- e.g. a Ring whose annulus (outer radius - inner radius) is narrower than stoneSizeMm --
+ * and independently sampling each contour then produces physically overlapping stones, since
+ * nothing previously related one contour's points to another's.
+ *
+ * RC-004A (same-contour): a single contour's arc-length walk only guarantees consecutive samples
+ * are spacingMm apart *along the perimeter* -- the straight-line (chord) distance between them is
+ * always <= that, and sharp curvature (a cursive font's tight loop or cusp, a sharp corner) or a
+ * short closing-seam remainder (the walk's last sample back to its first) can pull that chord below
+ * the physically-correct touching distance, even between *immediately adjacent* samples. This is
+ * confirmed directly against `long-script-name.rhs`'s own contours: 132 adjacent-sample pairs and
+ * all 48 closing seams landed under the physical threshold before this fix (see
+ * tools/test-rc-004a-same-contour-overlap.mjs). An "arc-length-adjacent samples are always fine"
+ * exemption was considered and rejected: it left exactly these worst overlaps (near-zero clearance)
+ * in place, because that is precisely where the defect lives.
+ *
+ * Both cases use the exact same rule, so there is only one to state: nothing is ever pruned merely
+ * for being *close*. A tight-but-non-overlapping notch or cusp (e.g. Star's inner notches) never
+ * breaches the physical sum-of-radii threshold and survives untouched; only a literal physical
+ * overlap -- same-contour or cross-contour alike -- is ever removed. Earlier samples (by input
+ * order, contour-by-contour then sample-by-sample) are therefore always fully preserved; a later
+ * sample is the only one ever pruned, matching dedupeStonePoints()'s existing "first of any close
+ * pair wins" convention -- this function's body is in fact now exactly dedupeStonePoints() applied
+ * to every contour's points concatenated in that fixed order.
  *
  * `minSeparationMm` defaults to `spacingMm` (matching dedupeStonePoints()'s existing "full pitch"
  * floor for Contour/Radial Fill's own convergence problem), but callers should pass stoneSizeMm
@@ -287,15 +308,7 @@ export function dedupeStonesByRadius(stones) {
  * thins outline stone counts even for widely-used shapes/text that never actually overlap (dense
  * script fonts' nearby strokes, in particular) -- a much larger, more visible behavior change than
  * this fix's scope calls for. Flooring at stoneSizeMm is the minimal change that still strictly
- * guarantees no two stones from different contours ever overlap.
- *
- * A point is never dropped for being close to another point on its *own* contour: that spacing is
- * already correct by construction (a fixed arc-length walk), and pruning it here would change
- * existing single-contour outline behaviour (e.g. Star's sharp inner notches, where consecutive
- * arc-length samples can have a shorter straight-line chord) outside this fix's scope. Earlier
- * contours (by input order) are therefore always fully preserved; a later contour's points are the
- * only ones ever pruned, mirroring dedupeStonePoints()'s existing "first of any close pair wins"
- * convention.
+ * guarantees no two stones -- from the same contour or different ones -- ever overlap.
  *
  * @param {Point2D[][]} polygons
  * @param {number} spacingMm
@@ -303,43 +316,8 @@ export function dedupeStonesByRadius(stones) {
  * @returns {Point2D[]}
  */
 export function sampleMultiContourOutlinePoints(polygons, spacingMm, { closed = true, minSeparationMm = spacingMm } = {}) {
-  const minDistanceSqMm = minSeparationMm * minSeparationMm;
-  const cellSizeMm = minSeparationMm;
-  const buckets = new Map();
-  const kept = [];
-
-  polygons.forEach((polygon, contourIndex) => {
-    for (const point of sampleOutlinePoints(polygon, spacingMm, { closed })) {
-      const gx = Math.floor(point.xMm / cellSizeMm);
-      const gy = Math.floor(point.yMm / cellSizeMm);
-      let tooCloseToOtherContour = false;
-
-      for (let dy = -1; dy <= 1 && !tooCloseToOtherContour; dy++) {
-        for (let dx = -1; dx <= 1 && !tooCloseToOtherContour; dx++) {
-          const bucket = buckets.get(`${gx + dx},${gy + dy}`);
-          if (!bucket) continue;
-          for (const other of bucket) {
-            if (other.contourIndex === contourIndex) continue;
-            const ddx = point.xMm - other.xMm;
-            const ddy = point.yMm - other.yMm;
-            if (ddx * ddx + ddy * ddy < minDistanceSqMm) {
-              tooCloseToOtherContour = true;
-              break;
-            }
-          }
-        }
-      }
-
-      if (!tooCloseToOtherContour) {
-        kept.push(point);
-        const key = `${gx},${gy}`;
-        if (!buckets.has(key)) buckets.set(key, []);
-        buckets.get(key).push({ xMm: point.xMm, yMm: point.yMm, contourIndex });
-      }
-    }
-  });
-
-  return kept;
+  const points = polygons.flatMap((polygon) => sampleOutlinePoints(polygon, spacingMm, { closed }));
+  return dedupeStonePoints(points, minSeparationMm);
 }
 
 // RS-1011: dedupeStonePoints()'s minimum-distance floor for Contour/Radial Fill, as a fraction of

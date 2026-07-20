@@ -355,8 +355,14 @@ export class GeometryEngine {
         points.push(point);
       }
     }
+    // RC-004A: each open polygon (an SVG <line>/<polyline> or an unclosed <path> subpath) is run
+    // through sampleMultiContourOutlinePoints() -- as its own single-contour array -- so a tight
+    // loop or doubled-back stroke within that one open contour gets the same same-contour
+    // self-overlap guard closed contours get above. A lone contour never triggers that function's
+    // cross-contour branch, so this is a pure self-check; open polygons are still never compared
+    // against each other, matching this function's pre-existing (out of RC-004A's scope) behavior.
     for (const polygon of openPolygons) {
-      for (const point of sampleOutlinePoints(polygon, spacingMm, { closed: false })) points.push(point);
+      for (const point of sampleMultiContourOutlinePoints([polygon], spacingMm, { closed: false, minSeparationMm: options.stoneSizeMm })) points.push(point);
     }
 
     const stones = points.map((point, index) => new Stone({

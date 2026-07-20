@@ -169,7 +169,7 @@ await test('5. an elliptical Ring placement (width != height) with a narrow annu
 
 // --- 6. Regression: a comfortable annulus is completely unaffected by the fix -------------------
 
-await test('6. a normal Ring (wide annulus relative to stone pitch) is byte-identical to the pre-fix outline sampling', () => {
+await test('6. a normal Ring (wide annulus relative to stone pitch) has an unaffected cross-contour count, modulo RC-004A\'s own-circle closing-seam fix', () => {
   const engine = createEngine();
   const widthMm = 60, heightMm = 60, innerRatio = 0.5;
   const layout = ringOutlineLayout(engine, { widthMm, heightMm, innerRatio, stoneSizeMm: 1.5, gapMm: 0.2 });
@@ -185,9 +185,15 @@ await test('6. a normal Ring (wide annulus relative to stone pitch) is byte-iden
   );
 
   // A wide annulus (30mm gap) is nowhere near the spacingMm=1.7 cross-contour proximity check, so
-  // the new cross-contour filter must prune nothing here: the exact same 167 points this Ring
-  // produced on `develop` before this fix (verified directly against the pre-fix code).
-  assert.equal(layout.stones.length, 167, 'a wide annulus must sample exactly as many points as before this fix');
+  // RC-002's cross-contour filter still prunes nothing here. RC-004A (this Ring's outer and inner
+  // circle are each their own single contour) now additionally closes each circle's own
+  // closing-seam gap: 167 was the pre-RC-004A count (verified directly against the pre-fix code);
+  // this Ring's closing-seam remainder on both the outer and inner circle happened to land under
+  // stoneSizeMm=1.5mm (confirmed: post-fix, every stone's own-circle angular neighbor is >=
+  // 1.698mm apart, comfortably clear -- see tools/test-rc-004a-same-contour-overlap.mjs for the
+  // dedicated closing-seam regression coverage), so one redundant stone is correctly dropped from
+  // each circle: 165, not 167.
+  assert.equal(layout.stones.length, 165, 'a wide annulus must sample exactly as many points as before this fix, minus the two same-circle closing-seam duplicates RC-004A now removes');
 });
 
 // --- 7. General multi-contour fix, not Ring-specific: an SVG donut (two nested closed circles) --
