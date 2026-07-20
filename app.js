@@ -2371,4 +2371,20 @@ syncSelectedControlsFromLayer();updateAll(true);
 // above) last, once startup has otherwise finished -- but never over permanentEngineError's own
 // #status message (set inside updateAll(), just above): a broken font manifest is the more urgent
 // thing for the operator to see, and recovery already succeeded silently either way.
-if(bootStatusMessage&&!permanentEngineError)el('status').textContent=bootStatusMessage;
+//
+// RC-005 follow-up: a plain, never-dismissing #status line was reported as too easy to miss right
+// after a recovery (the exact moment it matters most). #status is this app's one existing
+// notification channel -- every other action already reports success/failure through it (Import,
+// Export failures, runAlign/runDistribute, etc.) -- so this reuses it rather than adding a new
+// toast/dialog/workflow. RECOVERY_NOTIFICATION_DISMISS_MS auto-clears it back to the exact "Ready"
+// text index.html ships by default, but only if nothing else has changed #status in the meantime --
+// a real subsequent action's own message must never be clobbered by this timer. bootStatusMessage
+// is set in exactly one place (the boot-time recovery block above, only when autosave.load()
+// actually returned a usable record), so this notification is never shown after a normal startup
+// with nothing to recover, a manual Save, Import/Open, New Project, Gallery, or Design Library
+// action -- none of those ever touch bootStatusMessage.
+const RECOVERY_NOTIFICATION_DISMISS_MS=5000;
+if(bootStatusMessage&&!permanentEngineError){
+  el('status').textContent=bootStatusMessage;
+  setTimeout(()=>{if(el('status').textContent===bootStatusMessage)el('status').textContent='Ready'},RECOVERY_NOTIFICATION_DISMISS_MS);
+}
