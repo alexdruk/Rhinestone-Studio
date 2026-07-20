@@ -21,14 +21,16 @@
  *
  * generateProjectStoneLayout() calls only the permanent src/geometry/GeometryEngine.js per layer
  * (via its index.js barrel) to generate stone positions, then reproduces app.js's existing
- * cross-layer proximity-dedupe/auto-fit/centering algorithm verbatim (a faithful port for test
- * infrastructure, not a new invention — that merge step living outside the permanent engine is a
- * documented, pre-existing architectural gap, see docs/ARCHITECTURE.md "Current Architectural
- * Limitations" #2). Nothing here invents a stone position; dedupe only filters already-generated
- * positions by proximity, exactly like app.js's own dedupe().
+ * cross-layer merge/auto-fit/centering algorithm (a faithful port for test infrastructure, not a
+ * new invention — that merge step living outside the permanent engine is a documented, pre-existing
+ * architectural gap, see docs/ARCHITECTURE.md "Current Architectural Limitations" #2). RC-004: the
+ * proximity-dedupe half of that merge is no longer a separately-ported copy — both this file and
+ * app.js now call the same shared, physically-correct src/geometry/StoneSampler.js
+ * `dedupeStonesByRadius()` directly, so the two can no longer drift the way two verbatim ports
+ * could. It only filters already-generated positions by proximity; it invents no stone position.
  */
 
-import { Stone, StoneLayout } from '../geometry/index.js';
+import { Stone, StoneLayout, dedupeStonesByRadius } from '../geometry/index.js';
 import { STONE_COLORS } from '../renderer/StoneColors.js';
 
 // RS-2000: svg/image/path join text/circle/rectangle, extending this schema to match every layer
@@ -525,36 +527,6 @@ function resolveImageFillMode(value) {
   return SUPPORTED_IMAGE_FILL_MODES.has(value) ? value : 'fill';
 }
 
-// Verbatim port of app.js's GeometryEngine.dedupe() (grid-based proximity filter). Only filters
-// already-generated stones; invents no positions.
-function dedupe(stones, minDist) {
-  const cell = Math.max(minDist, 0.5);
-  const grid = new Map();
-  const out = [];
-  const m2 = minDist * minDist;
-  for (const s of stones) {
-    const gx = Math.floor(s.x / cell);
-    const gy = Math.floor(s.y / cell);
-    let ok = true;
-    for (let yy = gy - 1; yy <= gy + 1 && ok; yy++) {
-      for (let xx = gx - 1; xx <= gx + 1 && ok; xx++) {
-        const arr = grid.get(`${xx},${yy}`) || [];
-        for (const o of arr) {
-          const dx = s.x - o.x, dy = s.y - o.y;
-          if (dx * dx + dy * dy < m2) { ok = false; break; }
-        }
-      }
-    }
-    if (ok) {
-      out.push(s);
-      const k = `${gx},${gy}`;
-      if (!grid.has(k)) grid.set(k, []);
-      grid.get(k).push(s);
-    }
-  }
-  return out;
-}
-
 /**
  * Generates the merged, deduped, project-level StoneLayout for a validated `.rhs` project, using
  * the permanent GeometryEngine per visible layer. Deterministic for a given project + engine.
@@ -587,8 +559,7 @@ export async function generateProjectStoneLayout(rhsProject, permanentEngine, op
       raw.push(...generatePathStonesForLayer(layer, permanentEngine));
     }
   }
-  const minDist = Math.min(...raw.map((s) => s.d || 2), 2) * 0.58;
-  const deduped = dedupe(raw, minDist);
+  const deduped = dedupeStonesByRadius(raw);
   const stones = deduped.map((s) => new Stone({ xMm: s.x, yMm: s.y, sizeMm: s.d, color: s.color, layerId: s.layerId }));
   return new StoneLayout({ layerId: 'project', stones });
 }

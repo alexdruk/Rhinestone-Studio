@@ -31,7 +31,8 @@ export {
   sampleContourFieldFillPoints,
   sampleShapeFillPoints,
   sampleFieldByMode,
-  dedupeStonePoints
+  dedupeStonePoints,
+  dedupeStonesByRadius
 } from './StoneSampler.js';
 
 export {

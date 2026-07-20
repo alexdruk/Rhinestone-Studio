@@ -199,6 +199,74 @@ export function dedupeStonePoints(points, minDistanceMm) {
 }
 
 /**
+ * RC-004: drop any stone whose center lands within the physically-correct "touching" distance of
+ * an already-kept stone *from a different layer* -- the sum of the two stones' own radii, i.e.
+ * `(a.d + b.d) / 2` -- scanning in input order (first of any overlapping pair wins, matching
+ * dedupeStonePoints()'s convention).
+ *
+ * This is the cross-layer counterpart to sampleMultiContourOutlinePoints()'s RC-002 fix, applied
+ * at layer granularity the same way that one applies at contour granularity: a point is never
+ * dropped for being close to another point from its *own* layerId, only for landing on top of a
+ * different layer's stone. `app.js`'s per-layer GeometryEngine calls (and RC-002's own
+ * cross-contour guard inside each of those calls) are already the sole authority for a layer's own
+ * internal spacing -- including deliberately-preserved tight spots like a glyph's concave corners
+ * or a Star's inner notches (see sampleMultiContourOutlinePoints()'s doc comment) -- so re-checking
+ * same-layer pairs here would both duplicate that logic and undo those intentional exceptions.
+ *
+ * Threshold is computed per pair from each stone's own `d` (not one global value) because RS-1013
+ * (Variable Stone Sizes) allows a different stoneSizeMm per layer, so two overlapping stones from
+ * different layers are not necessarily the same size.
+ *
+ * Takes/returns the flat `{x, y, d, layerId}` stone-record shape `app.js`/`RhsFixtureBridge.js`
+ * build *before* wrapping survivors in real `Stone` instances (matching the pre-existing
+ * `dedupe()` calling convention at both call sites), not `Stone`/`Point2D`.
+ *
+ * @param {{x: number, y: number, d: number, layerId: string}[]} stones
+ * @returns {object[]}
+ */
+export function dedupeStonesByRadius(stones) {
+  if (stones.length === 0) {
+    return stones;
+  }
+
+  const cellSizeMm = Math.max(...stones.map((s) => s.d));
+  const buckets = new Map();
+  const kept = [];
+
+  for (const stone of stones) {
+    const gx = Math.floor(stone.x / cellSizeMm);
+    const gy = Math.floor(stone.y / cellSizeMm);
+    let overlaps = false;
+
+    for (let dy = -1; dy <= 1 && !overlaps; dy++) {
+      for (let dx = -1; dx <= 1 && !overlaps; dx++) {
+        const bucket = buckets.get(`${gx + dx},${gy + dy}`);
+        if (!bucket) continue;
+        for (const other of bucket) {
+          if (other.layerId === stone.layerId) continue;
+          const ddx = stone.x - other.x;
+          const ddy = stone.y - other.y;
+          const minSeparationMm = (stone.d + other.d) / 2;
+          if (ddx * ddx + ddy * ddy < minSeparationMm * minSeparationMm) {
+            overlaps = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!overlaps) {
+      kept.push(stone);
+      const key = `${gx},${gy}`;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(stone);
+    }
+  }
+
+  return kept;
+}
+
+/**
  * RC-002: sample every contour's outline points independently (via sampleOutlinePoints(), so each
  * contour's own spacingMm arc-length walk is completely unchanged), then drop any point that lands
  * within `minSeparationMm` of an already-kept point from a *different* contour.
