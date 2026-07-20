@@ -229,9 +229,18 @@ await test('9. geometry counts/bounds from the permanent GeometryEngine are unch
   // closer than one stone diameter to its own counter/hole contour (e.g. this text's "a"/"e"/"b"
   // characters) -- the exact same class of defect RC-002 fixed for Ring's outer/inner circle,
   // confirmed present in this text layer's *un-fixed* geometry too (see RC-002's audit notes).
-  assert.equal(result.count, 357, 'expected RC-002\'s cross-contour overlap guard to prune overlapping glyph-counter stones');
-  assert.ok(Math.abs(result.widthMm - 199.385118) < 0.001, `expected widthMm ~= 199.385118, got ${result.widthMm}`);
-  assert.ok(Math.abs(result.heightMm - 16.978695) < 0.001, `expected heightMm ~= 16.978695, got ${result.heightMm}`);
+  //
+  // RC-004A (fix same-contour stone self-overlap) intentionally changes this count again, from 357
+  // to 202: the same sampleMultiContourOutlinePoints() now also prunes literal physical overlap
+  // *within* one contour (a glyph's tight curves, cusps, and closing seam -- e.g. "V", "S", "a",
+  // "e", "b", "i" all have curvature or a stroke width comparable to this layer's stoneSizeMm=2mm
+  // at this text height), not only across two different contours as RC-002 alone did. This test's
+  // own title ("this milestone touches no geometry code") refers to whatever milestone is *current*
+  // when a reader is auditing a future, unrelated change; RC-004A is exactly a geometry-code
+  // milestone, so this count and the bounding box below are expected to move once more here.
+  assert.equal(result.count, 202, 'expected RC-004A\'s same-contour overlap guard to additionally prune physically overlapping stones within a single glyph contour');
+  assert.ok(Math.abs(result.widthMm - 200.598759) < 0.001, `expected widthMm ~= 200.598759, got ${result.widthMm}`);
+  assert.ok(Math.abs(result.heightMm - 17.097546) < 0.001, `expected heightMm ~= 17.097546, got ${result.heightMm}`);
 });
 
 await test('10. stoneLayoutToSvg()/StoneLayout.toJSON() output for a fixed StoneLayout is unchanged (src/export, src/geometry untouched this milestone)', () => {
