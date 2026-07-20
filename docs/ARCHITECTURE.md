@@ -1002,9 +1002,10 @@ No other legacy/dead code is currently known in the application.
    and render live text despite being marked disabled. `roboto-mono-regular`'s font file
    (`assets/fonts/RobotoMono-Regular.ttf`) is a 14-byte placeholder stub, not a real font — it is
    unreferenced by `app.js` today, but would throw from `opentype.parse()` if ever selected.
-3. **No Validation Engine, product-plugin system, DXF export, manufacturing reports, or 3D/WebGL
-   renderer exist yet.** These remain future milestones per "Future Direction" below, not
-   regressions.
+3. **No Validation Engine, DXF export, or manufacturing reports exist yet.** These remain future
+   milestones per "Future Direction" below, not regressions. (The product-plugin system and the
+   3D/WebGL renderer, previously also listed here as not-yet-built, were implemented by RS-1004 and
+   RS-1006 respectively — see the "Product Plugins" and "Renderer" sections above.)
 4. **PNG export is a render-capture, not a standalone exporter module.** Unlike SVG/JSON export,
    PNG/Cup-PNG export has no `src/export/**` counterpart; it depends on `canvas.toBlob()` running
    after the corresponding renderer call in the same update pass.
@@ -1077,8 +1078,10 @@ palette, the generic undo/redo stack (`tools/test-history-manager.mjs`, RS-1002)
 template registry and generalized preview renderer (`tools/test-object-template.mjs`,
 `tools/test-object-preview-renderer.mjs`, `tools/test-object-template-integration.mjs`, RS-1004),
 the render/export pipeline, structural guards on `app.js` (approved-import allowlists,
-forbidden-file lists per milestone, including `tools/test-svg-integration.mjs` (RS-1001) and
-`tools/test-undo-redo-integration.mjs` (RS-1002)), and — as
+forbidden-file lists per milestone, including `tools/test-svg-integration.mjs` (RS-1001); a
+similar RS-1002 guard for undo/redo, `tools/test-undo-redo-integration.mjs`, was later deleted by
+S-111 (`docs/specifications/S-111-TestSuiteRationalization.md`) since it only pinned source text
+brittly and the real behavior was already covered by `tools/test-history-manager.mjs`), and — as
 of RS-0003.5E1 — a permanent real-production regression suite (`tools/test-examples-regression.mjs`)
 that loads every
 `examples/*.rhs` fixture (17 as of this milestone: 2 preserved, 15 representative additions),
@@ -1106,14 +1109,17 @@ is not otherwise updated here, per that milestone's own documentation-scope limi
 Planned milestones include
 
 - OpenType sampling — **done** (`src/text/OpenTypeProvider.js`, live since RS-0003.5B3)
-- Product plugin system — not started
-- Manufacturing reports — not started
+- Product plugin system — **done** (`src/products/**`, live since RS-1004; see "Product Plugins"
+  above)
+- Manufacturing reports — not started (a Production Sheet export exists as of RS-1005 — see
+  "Exporters" above — but a dedicated Stone Report/manufacturing-report document does not)
 - DXF export — not started
 - Mouse editing — **done** for circle/rectangle shapes (drag to move, handle-drag to resize);
-  text layers are select-only, not draggable
+  text layers gained a manual `x`/`y` offset as of RS-1009, still not drag-repositionable directly
 - Undo/Redo — **done** (`src/history/HistoryManager.js`, live since RS-1002; unlimited,
   configurably bounded undo/redo over every editing operation, keyboard shortcuts, toolbar buttons,
   dirty-state tracking)
+- 3D/WebGL object preview — **done** (`src/preview3d/**`, live since RS-1006; see "Renderer" above)
 - AI-assisted design — not started
 
 These features extend the architecture.
