@@ -4,7 +4,15 @@ Rhinestone Studio is a manufacturing-first design tool for rhinestone decoration
 
 ## Current status
 
-Repository foundation. The first production milestone is **M2.2 — Vector Text Engine**.
+Version 1.0 is feature-complete and under feature freeze: no new features are being added, only
+fixes and documentation/stabilization work (see `docs/PRODUCT_ROADMAP.md`). Gallery and Design
+Library exist and remain in the codebase but are temporarily disabled in the UI for this release
+(`S-103`, `RC-006`).
+
+For the authoritative, continuously-updated description of what is implemented, see
+`docs/ARCHITECTURE.md` (implementation status is recorded per section) and
+`docs/specifications/` (one file per milestone). Do not rely on a milestone name or number in prose
+elsewhere in this file — it will drift; those two locations are the source of truth.
 
 ## Core principle
 
@@ -43,6 +51,22 @@ Initial local setup:
 ```bash
 git clone https://github.com/alexdruk/Rhinestone-Studio.git
 cd Rhinestone-Studio
+npm install
 ```
 
-No npm dependency is required for this repository-foundation commit.
+Run the app locally (a static file server; the app itself is a browser-only ES module app with no
+build step):
+
+```bash
+npm run dev
+# open http://localhost:5173
+```
+
+Run the automated test suite (plain Node scripts under `tools/test-*.mjs`, no browser required):
+
+```bash
+npm test
+```
+
+See `docs/AI_ENGINEER.md` and `docs/MILESTONE_WORKFLOW.md` for the full development/testing/review
+workflow, and `CONTRIBUTING.md` for commit conventions.
