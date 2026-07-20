@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  repository-smoke-test:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,3 +17,9 @@ jobs:
           test -f docs/architecture/architecture.md
           test -d src/geometry
           test -d examples
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
