@@ -223,7 +223,13 @@ await test('9. geometry counts/bounds from the permanent GeometryEngine are unch
   const scale = maxWidth / result.widthMm;
   result = await engine.generateTextLayout({ ...base, heightMm: Math.max(1, 25 * scale) });
 
-  assert.equal(result.count, 391, 'expected the same stone count as before this milestone\'s renderer-only changes');
+  // RC-002 (fix ring outline overlap) intentionally changed this count from 391 to 357: outline
+  // mode's cross-contour overlap guard (StoneSampler.js's sampleMultiContourOutlinePoints()) now
+  // prunes stones that would have physically overlapped where a glyph's outer contour passes
+  // closer than one stone diameter to its own counter/hole contour (e.g. this text's "a"/"e"/"b"
+  // characters) -- the exact same class of defect RC-002 fixed for Ring's outer/inner circle,
+  // confirmed present in this text layer's *un-fixed* geometry too (see RC-002's audit notes).
+  assert.equal(result.count, 357, 'expected RC-002\'s cross-contour overlap guard to prune overlapping glyph-counter stones');
   assert.ok(Math.abs(result.widthMm - 199.385118) < 0.001, `expected widthMm ~= 199.385118, got ${result.widthMm}`);
   assert.ok(Math.abs(result.heightMm - 16.978695) < 0.001, `expected heightMm ~= 16.978695, got ${result.heightMm}`);
 });
