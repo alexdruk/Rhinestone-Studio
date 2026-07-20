@@ -450,6 +450,13 @@ function defaultProject(){return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,
 // the current `project` untouched on failure. Returns a normalized copy on success — it never
 // mutates its input.
 const SUPPORTED_LAYER_TYPES=new Set(['text','circle','rectangle','svg','image','path',...SHAPE_LIBRARY_KINDS]);
+// SEC-001: layer.id is written into HTML attributes (renderLayerUI()'s <option value>/data-layer)
+// via innerHTML. Every internally generated id (defaultProject(), duplicateLayer(), the drag-
+// duplicate path, and every "add layer" handler) is already a bare type name plus Date.now()
+// digits, a strict subset of this pattern -- so this only ever rejects an id that could not have
+// been produced by this app, never a legitimate one. See docs/specifications/
+// SEC-001-SecureImportedProjects.md.
+const LAYER_ID_PATTERN=/^[A-Za-z0-9_-]{1,64}$/;
 function validateProject(obj){
   if(!obj||typeof obj!=='object'||Array.isArray(obj))throw new Error('Project file must contain a JSON object.');
   const canvas=obj.canvas;
@@ -461,6 +468,7 @@ function validateProject(obj){
     const l=obj.layers[i];
     if(!l||typeof l!=='object'||Array.isArray(l))throw new Error(`layers[${i}] must be an object.`);
     if(typeof l.id!=='string'||l.id.length===0)throw new Error(`layers[${i}] is missing a non-empty string id.`);
+    if(!LAYER_ID_PATTERN.test(l.id))throw new Error(`layers[${i}] has an invalid id "${l.id}": id must match ${LAYER_ID_PATTERN}.`);
     if(ids.has(l.id))throw new Error(`Duplicate layer id: ${l.id}`);
     ids.add(l.id);
     if(!SUPPORTED_LAYER_TYPES.has(l.type))throw new Error(`Layer "${l.id}" has unsupported type: ${l.type}`);
@@ -687,11 +695,11 @@ async function updateAll(skipWrite=false){if(!skipWrite)writeSelectedControlsToL
 // #layerRuleHint (sitting directly under the button, always in view) explains why. This runs on
 // every renderLayerUI() call (i.e. after every add/delete/duplicate/undo/redo/import), so the
 // disabled state and hint never go stale relative to the current layer count.
-function renderLayerUI(){const onlyOneLayer=project.layers.length<=1;el('selectedLayer').innerHTML=project.layers.map(l=>`<option value="${l.id}">${escapeHtml(layerLabel(l))}</option>`).join('');el('selectedLayer').value=selectedLayerId;el('layersList').innerHTML=project.layers.map(l=>`<div class="layer ${selectedLayerIds.has(l.id)?'selected':''}" data-layer="${l.id}"><input type="checkbox" ${l.visible?'checked':''} data-action="visible"><div class="name" data-action="select" title="${escapeHtml(layerLabel(l))}">${escapeHtml(layerLabel(l))}</div><div class="type">${l.type.toUpperCase()}</div><button data-action="select">✎</button><button data-action="duplicate">⧉</button><button data-action="delete" ${onlyOneLayer?'disabled title="At least one layer is required"':''}>🗑</button></div>`).join('');el('deleteSelected').disabled=onlyOneLayer;el('deleteSelected').title=onlyOneLayer?'At least one layer is required':'';el('layerRuleHint').style.display=onlyOneLayer?'block':'none';
+function renderLayerUI(){const onlyOneLayer=project.layers.length<=1;el('selectedLayer').innerHTML=project.layers.map(l=>`<option value="${escapeHtml(l.id)}">${escapeHtml(layerLabel(l))}</option>`).join('');el('selectedLayer').value=selectedLayerId;el('layersList').innerHTML=project.layers.map(l=>`<div class="layer ${selectedLayerIds.has(l.id)?'selected':''}" data-layer="${escapeHtml(l.id)}"><input type="checkbox" ${l.visible?'checked':''} data-action="visible"><div class="name" data-action="select" title="${escapeHtml(layerLabel(l))}">${escapeHtml(layerLabel(l))}</div><div class="type">${l.type.toUpperCase()}</div><button data-action="select">✎</button><button data-action="duplicate">⧉</button><button data-action="delete" ${onlyOneLayer?'disabled title="At least one layer is required"':''}>🗑</button></div>`).join('');el('deleteSelected').disabled=onlyOneLayer;el('deleteSelected').title=onlyOneLayer?'At least one layer is required':'';el('layerRuleHint').style.display=onlyOneLayer?'block':'none';
   // UI-001: keep the right inspector's layer name and the left panel's project/template summary
   // in sync on every render (add/delete/duplicate/undo/redo/import/selection change).
   el('inspectorLayerName').textContent=layerLabel(selectedLayer());updateObjectTemplateDetail();
-}function layerLabel(l){if(l.type==='text')return l.text||'Text';if(l.type==='svg')return l.svgName||'SVG';if(l.type==='image')return l.imageName||'Image';if(l.type==='path')return l.pathName||'Path';return SHAPE_DISPLAY_LABELS[l.type]||'Shape'}function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+}function layerLabel(l){if(l.type==='text')return l.text||'Text';if(l.type==='svg')return l.svgName||'SVG';if(l.type==='image')return l.imageName||'Image';if(l.type==='path')return l.pathName||'Path';return SHAPE_DISPLAY_LABELS[l.type]||'Shape'}function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function resizeCanvas(c){const r=c.getBoundingClientRect(),dpr=Math.max(1,devicePixelRatio||1),w=Math.floor(r.width*dpr),h=Math.floor(r.height*dpr);if(c.width!==w||c.height!==h){c.width=w;c.height=h}return{w,h,dpr}}
 function layoutMmToPx(p){return{x:layoutTransform.ox+p.x*layoutTransform.s,y:layoutTransform.oy+p.y*layoutTransform.s}}function layoutPxToMm(x,y){return{x:(x-layoutTransform.ox)/layoutTransform.s,y:(y-layoutTransform.oy)/layoutTransform.s}}
 function drawLayout(){const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr});layoutTransform={s,ox,oy,dpr};
