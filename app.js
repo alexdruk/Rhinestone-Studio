@@ -1586,7 +1586,12 @@ el('importProjectFile').addEventListener('change',async e=>{const file=e.target.
   // RS-1002: loading a project is a fresh start, not an undoable edit -- clear history entirely
   // (matches "history cleared on project load") and reset the dirty baseline to this load.
   history.clear();cleanProjectJson=JSON.stringify(project);
-  syncSelectedControlsFromLayer();await updateAll(true);el('status').textContent=`Imported ${file.name}: ${project.layers.length} layer(s)`;lightboxes.importBox.close()}catch(error){console.error('Project import failed',error);el('status').textContent=`Import failed: ${error.message}`;validationEl.textContent=`Import failed: ${error.message} The current project was left untouched.`;validationEl.style.display='block'}});
+  // RC-003: close the Import Lightbox *before* syncing selection controls -- syncSelectedControlsFromLayer()'s
+  // S-105-follow-up auto-switch (see its own comment) treats a still-open activeFieldLightbox as "the operator
+  // is mid-edit with a type-specific Lightbox open", and a fresh whole-project replacement is not that. Closing
+  // first clears activeFieldLightbox so the auto-switch is a no-op here, regardless of the imported first layer's type.
+  lightboxes.importBox.close();
+  syncSelectedControlsFromLayer();await updateAll(true);el('status').textContent=`Imported ${file.name}: ${project.layers.length} layer(s)`}catch(error){console.error('Project import failed',error);el('status').textContent=`Import failed: ${error.message}`;validationEl.textContent=`Import failed: ${error.message} The current project was left untouched.`;validationEl.style.display='block'}});
 el('importSvg').onclick=()=>el('importSvgFile').click();
 // RS-1001: parseSvgDocument() here only validates/measures the file (naturalWidthMm/heightMm,
 // shape count, warnings) — it invents no stone positions, so this direct src/svg call does not
