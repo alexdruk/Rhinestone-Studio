@@ -121,6 +121,13 @@ import { Lightbox, el, parseIntOr, download, exportCanvas, syncShippingFieldsFro
 // renderProductionLayout() pipeline (reused, unmodified, for thumbnail generation). See
 // docs/specifications/RS-1015-DesignLibrary.md.
 import { DesignLibrary, createLocalStorageAdapter, createMemoryStorageAdapter, buildSelectionItemData, buildProjectItemData, buildProjectFromItem, prepareLayersForInsert, getInsertableLayers } from './src/library/index.js';
+// RC-005 (Autosave & Crash Recovery): src/persistence/** is a new, pure, DOM-free module -- mirrors
+// src/library/**'s exact "storage-adapter injected, browser-global only at app.js's edge" shape.
+// It knows nothing about Project/Layer/StoneLayout; app.js is the only caller, and is the only
+// place that decides *when* a meaningful edit happened (debounced below) or touches localStorage
+// (via createAutosaveLocalStorageAdapter). Aliased on import since createLocalStorageAdapter/
+// createMemoryStorageAdapter are already bound above to the Design Library's own adapters.
+import { AutosaveManager, createLocalStorageAdapter as createAutosaveLocalStorageAdapter, createMemoryStorageAdapter as createAutosaveMemoryStorageAdapter } from './src/persistence/index.js';
 import { validateRhsProject, toAppProjectShape, parseCatalog, search as searchGalleryCatalog, filterByCategory as filterGalleryCategory, categories as galleryCategories, featuredEntries as galleryFeaturedEntries, getEntry as getGalleryEntry } from './src/gallery/index.js';
 // RS-1012 (Vector Boolean Operations): Union/Subtract/Intersect/Exclude over the current
 // multi-selection (the same selectedLayerIds set RS-1009's Align/Snap already uses). No new
@@ -572,7 +579,67 @@ function currentObjectTemplate(){return getObjectTemplate(project.product)}
 // deliberately excluded. Importing a Project JSON file clears history entirely (a fresh project,
 // not an undoable edit); exporting never touches history at all.
 const history=new HistoryManager({maxSize:HISTORY_MAX_SIZE});
+// RC-005: Autosave & Crash Recovery. AUTOSAVE_STORAGE_KEY is a new, separate localStorage slot
+// (never shared with LIBRARY_STORAGE_KEY/FONT_FAVORITES_STORAGE_KEY below) holding exactly one
+// recovery record -- the same {project,selectedLayerId} shape currentSnapshot() already produces
+// for undo/redo -- overwritten on every autosave. Falls back to an in-memory adapter (this session
+// only) if localStorage is unavailable, mirroring the Design Library's own fallback further down.
+const AUTOSAVE_STORAGE_KEY='rhinestone-studio:autosave';
+const AUTOSAVE_DEBOUNCE_MS=1200;
+let autosave;
+try{
+  autosave=new AutosaveManager({storageAdapter:createAutosaveLocalStorageAdapter(AUTOSAVE_STORAGE_KEY)});
+}catch(error){
+  console.warn('Autosave: localStorage is unavailable in this environment; using in-memory storage for this session only.',error);
+  autosave=new AutosaveManager({storageAdapter:createAutosaveMemoryStorageAdapter()});
+}
+// Crash/refresh recovery: runs once, here, before any UI wiring below reads `project` -- restoring
+// (or not) is the only thing that ever replaces `project` outside of an explicit user action
+// (Import/Open, Design Library "New Project", Gallery "Open as copy"). autosave.load() already
+// discards anything unusable (corrupt/wrong-schema/older than 24h -- see AutosaveManager) and
+// returns null in that case, so a missing/stale/corrupt recovery record silently falls back to the
+// freshly constructed defaultProject() above, exactly like a first-ever visit. validateProject()
+// re-runs the exact same normalization #importProjectFile already uses, so a recovered project
+// saved under an older Project JSON shape restores exactly as compatibly as re-importing that same
+// file would.
+let bootStatusMessage=null;
+try{
+  const recovered=autosave.load();
+  if(recovered){
+    project=validateProject(recovered.project);
+    selectedLayerId=project.layers.some(l=>l.id===recovered.selectedLayerId)?recovered.selectedLayerId:project.layers[0].id;
+    selectedLayerIds=selectOnly(selectedLayerId);
+    bootStatusMessage='Restored unsaved changes from autosave (crash/refresh recovery).';
+  }
+}catch(error){
+  console.error('Autosave recovery failed; starting from a fresh project instead.',error);
+  try{autosave.clear()}catch{}
+}
 let cleanProjectJson=JSON.stringify(project);
+// lastAutosavedProjectJson tracks what's actually in the autosave slot right now -- starts equal to
+// the just-decided boot project (restored or default) so nothing is redundantly re-written on the
+// very first updateAll(). scheduleAutosave() (called from updateAll(), so it runs after every
+// regeneration -- every keystroke, every drag frame, every discrete action) only (re)starts
+// autosaveTimer when the live project actually differs from this. That diff, plus the debounce
+// itself, is what keeps autosave firing only after a meaningful edit settles, never on every
+// keystroke or mouse move.
+let lastAutosavedProjectJson=cleanProjectJson,autosaveTimer=null;
+function flushAutosaveNow(){
+  if(autosaveTimer){clearTimeout(autosaveTimer);autosaveTimer=null}
+  const json=JSON.stringify(project);
+  if(json===lastAutosavedProjectJson)return;
+  try{autosave.save({project,selectedLayerId});lastAutosavedProjectJson=json}catch(error){console.error('Autosave failed',error)}
+}
+function scheduleAutosave(){
+  if(JSON.stringify(project)===lastAutosavedProjectJson)return;
+  if(autosaveTimer)clearTimeout(autosaveTimer);
+  autosaveTimer=setTimeout(flushAutosaveNow,AUTOSAVE_DEBOUNCE_MS);
+}
+// A refresh/crash mid-debounce (before AUTOSAVE_DEBOUNCE_MS elapses) must not lose the pending
+// write -- 'pagehide' (fires on tab close/navigation/reload, including bfcache cases 'beforeunload'
+// can miss) flushes it synchronously; localStorage.setItem() is synchronous, so this reliably
+// completes before the page actually unloads.
+window.addEventListener('pagehide',flushAutosaveNow);
 function currentSnapshot(){return{project:JSON.parse(JSON.stringify(project)),selectedLayerId}}
 function commitHistory(){history.commit(currentSnapshot());updateHistoryUI()}
 function openHistorySession(){if(history.sessionOpen)return;history.beginSession(currentSnapshot());updateHistoryUI()}
@@ -689,7 +756,7 @@ function writeSelectedControlsToLayer(){const l=selectedLayer();
     project.cupColor=getPlateColor(project.plate.colorId).hex;
   }
   project.name=el('projectName').value||DEFAULT_PROJECT_NAME;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
-async function updateAll(skipWrite=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated;try{generated=await engine.generate(project)}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Text generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;renderLayerUI();drawLayout();drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}// S-003: a project must always keep at least one layer (deleteLayer()'s guard below), so once
+async function updateAll(skipWrite=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated;try{generated=await engine.generate(project)}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Text generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;renderLayerUI();drawLayout();drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}// S-003: a project must always keep at least one layer (deleteLayer()'s guard below), so once
 // only one layer remains, every delete affordance -- the per-row trash icon and the sidebar
 // "Delete selected layer" button -- is disabled here (not just left clickable-but-a-no-op) and
 // #layerRuleHint (sitting directly under the button, always in view) explains why. This runs on
@@ -1591,6 +1658,14 @@ el('importProjectFile').addEventListener('change',async e=>{const file=e.target.
   // RS-1002: loading a project is a fresh start, not an undoable edit -- clear history entirely
   // (matches "history cleared on project load") and reset the dirty baseline to this load.
   history.clear();cleanProjectJson=JSON.stringify(project);
+  // RC-005: loading a project (Import/Open, Design Library "New Project", Gallery "Open as copy")
+  // is a fresh start -- immediately re-baseline the autosave slot to this project so a crash right
+  // after loading still recovers *this* project, not stale content from before it loaded. Also
+  // guards "never overwrite a manually saved/opened project": invalidating
+  // lastAutosavedProjectJson first forces flushAutosaveNow() to actually write (it no-ops when the
+  // live project already matches what's stored), so the old record is always replaced here, never
+  // left to linger and get offered as a stale "recovery" on some later boot.
+  lastAutosavedProjectJson=null;flushAutosaveNow();
   // RC-003: close the Import Lightbox *before* syncing selection controls -- syncSelectedControlsFromLayer()'s
   // S-105-follow-up auto-switch (see its own comment) treats a still-open activeFieldLightbox as "the operator
   // is mid-edit with a type-specific Lightbox open", and a fresh whole-project replacement is not that. Closing
@@ -1679,7 +1754,15 @@ el('imageImportCommit').onclick=async()=>{
   await updateAll(true);
   el('status').textContent=`Imported ${importedName}`;
 };
-el('exportProject').onclick=()=>{try{download('rhinestone-project.json','application/json',JSON.stringify(project,null,2));cleanProjectJson=JSON.stringify(project);updateHistoryUI()}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+el('exportProject').onclick=()=>{try{download('rhinestone-project.json','application/json',JSON.stringify(project,null,2));cleanProjectJson=JSON.stringify(project);updateHistoryUI();
+  // RC-005: a manual Save/Export is now the authoritative saved copy -- clear the autosave
+  // recovery slot so a later refresh never reports "restored unsaved changes" for work that was
+  // already safely exported. lastAutosavedProjectJson still tracks the live project (not stale)
+  // so a further edit after this Save autosaves normally, same as always.
+  try{autosave.clear()}catch{}
+  lastAutosavedProjectJson=cleanProjectJson;
+  if(autosaveTimer){clearTimeout(autosaveTimer);autosaveTimer=null}
+  }catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportLayout').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-generated-layout.json','application/json',JSON.stringify(layout,null,2))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-layout.svg','image/svg+xml',stoneLayoutToSvg(layout,{widthMm:project.canvas.width,heightMm:project.canvas.height}))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportPNG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-layout.png',layoutCanvas)}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
@@ -2032,6 +2115,14 @@ function createProjectFromLibraryItem(id){
   // Mirrors #importProjectFile's exact "loading/replacing a project is a fresh start, not an
   // undoable edit" history-clear + dirty-baseline-reset pattern.
   history.clear();cleanProjectJson=JSON.stringify(project);
+  // RC-005: loading a project (Import/Open, Design Library "New Project", Gallery "Open as copy")
+  // is a fresh start -- immediately re-baseline the autosave slot to this project so a crash right
+  // after loading still recovers *this* project, not stale content from before it loaded. Also
+  // guards "never overwrite a manually saved/opened project": invalidating
+  // lastAutosavedProjectJson first forces flushAutosaveNow() to actually write (it no-ops when the
+  // live project already matches what's stored), so the old record is always replaced here, never
+  // left to linger and get offered as a stale "recovery" on some later boot.
+  lastAutosavedProjectJson=null;flushAutosaveNow();
   syncSelectedControlsFromLayer();updateAll(true);
   lightboxes.library.close();
   el('status').textContent=`Started a new project from "${item.name}".`;
@@ -2203,6 +2294,14 @@ async function openGalleryItemAsCopy(file){
     // Mirrors #importProjectFile's/createProjectFromLibraryItem's exact "loading a project is a
     // fresh start, not an undoable edit" history-clear + dirty-baseline-reset pattern.
     history.clear();cleanProjectJson=JSON.stringify(project);
+    // RC-005: loading a project (Import/Open, Design Library "New Project", Gallery "Open as copy")
+    // is a fresh start -- immediately re-baseline the autosave slot to this project so a crash
+    // right after loading still recovers *this* project, not stale content from before it loaded.
+    // Also guards "never overwrite a manually saved/opened project": invalidating
+    // lastAutosavedProjectJson first forces flushAutosaveNow() to actually write (it no-ops when
+    // the live project already matches what's stored), so the old record is always replaced here,
+    // never left to linger and get offered as a stale "recovery" on some later boot.
+    lastAutosavedProjectJson=null;flushAutosaveNow();
     syncSelectedControlsFromLayer();await updateAll(true);
     lightboxes.galleryPreview.close();lightboxes.gallery.close();
     el('status').textContent=`Opened an editable copy of "${entry.title}" from the Gallery.`;
@@ -2268,3 +2367,8 @@ populateStoneColorOptions();populateStoneSizeOptions();
 // already tells the user text layers are empty.
 if(fontManager){populateFontOptions();injectFontFaceRules(fontManager.listFonts())}
 syncSelectedControlsFromLayer();updateAll(true);
+// RC-005: reports the boot-time crash/refresh recovery decision (see the AutosaveManager setup
+// above) last, once startup has otherwise finished -- but never over permanentEngineError's own
+// #status message (set inside updateAll(), just above): a broken font manifest is the more urgent
+// thing for the operator to see, and recovery already succeeded silently either way.
+if(bootStatusMessage&&!permanentEngineError)el('status').textContent=bootStatusMessage;
