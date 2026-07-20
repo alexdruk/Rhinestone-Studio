@@ -1090,6 +1090,15 @@ Interactive browser verification (drag/resize gestures, layer visibility, export
 manually per milestone via headless Chrome driven over raw CDP and recorded in `TASK_RESULT.md`,
 not by an automated browser test suite.
 
+As of CI-001, `npm test` and its named groups (`test:core`/`test:integration`/`test:architecture`/
+`test:gallery`/`test:full`) run through `tools/run-tests.mjs`, a runner that discovers
+`tools/test-*.mjs` files rather than a hand-maintained `&&` chain, and `.github/workflows/ci.yml`
+runs the full default suite (`npm ci && npm test`) on every push and pull request — previously CI
+only checked that a few required files existed. See
+`docs/specifications/CI-001-RealTestExecution.md` for the runner's design and the current default
+suite's exact file count/exclusions (this section's suite-count prose predates that milestone and
+is not otherwise updated here, per that milestone's own documentation-scope limits).
+
 ---
 
 # Future Direction

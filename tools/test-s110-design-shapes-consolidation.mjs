@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertTestRegistered } from './lib/test-registration-assertions.mjs';
 
 // S-110 (Expanded Shape Library & Smart Text-to-Shape Fitting) — structural proof for app.js/
 // index.html, mirroring this repo's existing convention for testing app.js (no DOM/jsdom
@@ -13,7 +14,6 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
 const indexHtml = await readFile(path.join(repoRoot, 'index.html'), 'utf8');
-const packageJson = JSON.parse(await readFile(path.join(repoRoot, 'package.json'), 'utf8'));
 
 async function test(name, fn) {
   try {
@@ -245,12 +245,18 @@ await test('15. updateEditingUI() enables Fit Text to Shape only for a valid (ex
 });
 
 // ---------------------------------------------------------------------------------------------
-// 6. package.json registers every new S-110 test file
+// 6. every new S-110 test file is registered in the correct suite/group (via
+//    tools/test-groups.mjs + tools/run-tests.mjs, not a literal package.json chain)
 // ---------------------------------------------------------------------------------------------
 
-await test('16. package.json registers every new S-110 test file', () => {
-  for (const file of ['test-shape-library.mjs', 'test-shape-fit.mjs', 'test-shape-library-integration.mjs', 'test-s110-design-shapes-consolidation.mjs']) {
-    assert.ok(packageJson.scripts.test.includes(file), `expected package.json's test script to include ${file}`);
+await test('16. every new S-110 test file is registered in its group and the default suite', () => {
+  for (const { filename, group } of [
+    { filename: 'test-shape-library.mjs', group: 'core' },
+    { filename: 'test-shape-fit.mjs', group: 'core' },
+    { filename: 'test-shape-library-integration.mjs', group: 'core' },
+    { filename: 'test-s110-design-shapes-consolidation.mjs', group: 'integration' },
+  ]) {
+    assertTestRegistered({ filename, group, includedInDefault: true });
   }
 });
 

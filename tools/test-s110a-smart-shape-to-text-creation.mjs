@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { GeometryEngine, computeContainingShapeScale } from '../src/geometry/index.js';
 import { BoundingBox } from '../src/text/VectorPath.js';
 import { getObjectTemplate, getSafeAreaRectMm } from '../src/products/index.js';
+import { assertTestRegistered } from './lib/test-registration-assertions.mjs';
 
 // S-110A (Smart Shape-to-Text Creation) — extracts and REALLY EXECUTES app.js's own
 // referenceShapeLayer()/computeShapeAroundText()/shapeAroundTextFitsPrintableArea() (via
@@ -178,9 +179,12 @@ await test('9. no new "Fit Shape to Text" command was introduced, and no hidden 
   }
 });
 
-await test('10. package.json registers this milestone\'s test file', async () => {
-  const packageJson = JSON.parse(await readFile(path.join(repoRoot, 'package.json'), 'utf8'));
-  assert.ok(packageJson.scripts.test.includes('test-s110a-smart-shape-to-text-creation.mjs'));
+await test('10. this milestone\'s test file is registered in test:integration and the default suite (via tools/test-groups.mjs + tools/run-tests.mjs, not a literal package.json chain)', () => {
+  assertTestRegistered({
+    filename: 'test-s110a-smart-shape-to-text-creation.mjs',
+    group: 'integration',
+    includedInDefault: true,
+  });
 });
 
 console.log('Smart Shape-to-Text Creation (S-110A) tests passed.');

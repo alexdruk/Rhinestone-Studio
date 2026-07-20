@@ -71,10 +71,24 @@ A separate specification-review-only phase is not required unless `docs/MILESTON
 
 Automated tests must verify behavior and architecture, not only exact source text.
 
-Always run:
+`npm test` (and each named group: `test:core`, `test:integration`, `test:architecture`,
+`test:gallery`) runs via `tools/run-tests.mjs`, a maintainable runner that discovers
+`tools/test-*.mjs` files automatically, continues past individual failures, and prints a pass/fail
+summary — see `docs/specifications/CI-001-RealTestExecution.md` for its design. CI
+(`.github/workflows/ci.yml`) runs `npm test` (the full default suite) on every push and pull
+request.
+
+During implementation, run focused tests as you go — a single file, a filename filter
+(`node tools/run-tests.mjs <substring>`), or the one named group relevant to the area you're
+touching — rather than the full local suite after every edit. Run the complete local suite
+(`npm test`, plus each named group actually affected) once, when the milestone's implementation is
+finished and ready for review; a normal small milestone does not need repeated full-suite runs
+after every commit. A milestone that changes the test runner or CI workflow itself is the case where
+a full-suite run is most load-bearing — do not skip it even if every touched file passed standalone.
+
+Before committing, always run:
 
 ```bash
-npm test
 git diff --check
 git status
 ```

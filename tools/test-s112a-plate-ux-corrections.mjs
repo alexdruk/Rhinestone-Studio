@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getPlateDesignTargetGuide, getPlateDefaults } from '../src/products/index.js';
+import { assertTestRegistered } from './lib/test-registration-assertions.mjs';
 
 // S-112A (Round Dinner Plate UX Corrections) — three focused corrections on top of S-112:
 //   1. Plate-Specific Workflow: the cylindrical Wrap Mode control is hidden while a plate is active.
@@ -186,11 +187,12 @@ await test('15. re-entering Rim Band from a different target re-applies the defa
   }
 });
 
-await test('16. package.json registers this milestone\'s test file', async () => {
-  const packageJson = JSON.parse(await readFile(path.join(repoRoot, 'package.json'), 'utf8'));
-  for (const scriptName of ['test', 'test:integration', 'test:full']) {
-    assert.ok(packageJson.scripts[scriptName].includes('test-s112a-plate-ux-corrections.mjs'), `expected ${scriptName} to include this milestone's test file`);
-  }
+await test('16. this milestone\'s test file is registered in the default suite, test:integration, and test:full (via tools/test-groups.mjs + tools/run-tests.mjs, not a literal package.json chain)', () => {
+  assertTestRegistered({
+    filename: 'test-s112a-plate-ux-corrections.mjs',
+    group: 'integration',
+    includedInDefault: true,
+  });
 });
 
 console.log('Round Dinner Plate UX Corrections (S-112A) tests passed.');

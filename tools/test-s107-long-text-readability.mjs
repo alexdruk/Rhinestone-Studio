@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertTestRegistered } from './lib/test-registration-assertions.mjs';
 
 // S-107 (Front View Frame & Long Text Workflow) — this milestone replaces the previous
 // warning-based long-text workflow (the original S-107 "Long Text Readability" Part 1/Part 2,
@@ -33,7 +34,6 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
 const indexHtml = await readFile(path.join(repoRoot, 'index.html'), 'utf8');
-const packageJson = JSON.parse(await readFile(path.join(repoRoot, 'package.json'), 'utf8'));
 const { circumferenceMm, canvasXMmForAzimuthRad, azimuthRadForCanvasXMm, canvasXMmForRotationDeg, rotationDegForCanvasXMm, frontViewFrameWidthMm, wrapAngleRad } =
   await import('../src/preview3d/ObjectDimensions.js');
 
@@ -105,8 +105,12 @@ await test('5. index.html\'s too-long warning copy describes the printable circu
   assert.match(indexHtml, /id="workspaceTextTooLongWarning"[\s\S]{0,80}This text exceeds the object's printable circumference\./);
   assert.match(indexHtml, /<p class="validation-message" id="textTooLongWarning" role="status">This text exceeds the object's printable circumference\.<\/p>/);
 });
-await test('7. package.json registers this milestone\'s test suite', () => {
-  assert.ok(packageJson.scripts.test.includes('test-s107-long-text-readability.mjs'));
+await test('7. this milestone\'s test file is registered in test:integration and the default suite (via tools/test-groups.mjs + tools/run-tests.mjs, not a literal package.json chain)', () => {
+  assertTestRegistered({
+    filename: 'test-s107-long-text-readability.mjs',
+    group: 'integration',
+    includedInDefault: true,
+  });
 });
 
 // ---------------------------------------------------------------------------------------------
