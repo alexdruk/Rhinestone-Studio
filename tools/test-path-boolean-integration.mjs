@@ -155,7 +155,7 @@ await test('12. getLayerBBox()/drag-resize/duplicateLayer()/layerLabel()/moreOpt
   assert.match(appJs, /if\(XYWH_SHAPE_TYPES\.has\(copy\.type\)\)\{copy\.x\+=8;copy\.y\+=8\}/);
   assert.match(appJs, /if\(l\.type==='path'\)return l\.pathName\|\|'Path'/);
   // S-105 follow-up moved the type->Lightbox mapping (moreOptionsBtn's former inline branch) into
-  // the shared lightboxForLayerType() helper -- see tools/test-s105-persistent-movable-lightboxes.mjs.
+  // the shared lightboxForLayerType() helper -- see tools/test-lightbox-movable-persistent.mjs.
   const fnMatch = appJs.match(/function lightboxForLayerType\(t\)\{[\s\S]*?\n\}/);
   assert.ok(fnMatch, 'expected a lightboxForLayerType(t) function in app.js');
   assert.match(fnMatch[0], /if\(t==='path'\|\|SHAPE_LAYER_TYPES\.has\(t\)\)return lightboxes\.shapes/);
@@ -296,7 +296,4 @@ await test('22. graceful-failure messages name the specific problem in plain lan
   assert.match(appJs, /produced an empty shape/);
 });
 
-// ---------------------------------------------------------------------------------------------
-// Forbidden files — this milestone's own guard, mirroring every prior milestone's own list
-// ---------------------------------------------------------------------------------------------
 console.log('Path Boolean integration tests passed.');

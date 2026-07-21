@@ -190,7 +190,7 @@ await test('6. a normal Ring (wide annulus relative to stone pitch) has an unaff
   // closing-seam gap: 167 was the pre-RC-004A count (verified directly against the pre-fix code);
   // this Ring's closing-seam remainder on both the outer and inner circle happened to land under
   // stoneSizeMm=1.5mm (confirmed: post-fix, every stone's own-circle angular neighbor is >=
-  // 1.698mm apart, comfortably clear -- see tools/test-rc-004a-same-contour-overlap.mjs for the
+  // 1.698mm apart, comfortably clear -- see tools/test-geometry-stone-overlap-same-contour.mjs for the
   // dedicated closing-seam regression coverage), so one redundant stone is correctly dropped from
   // each circle: 165, not 167.
   assert.equal(layout.stones.length, 165, 'a wide annulus must sample exactly as many points as before this fix, minus the two same-circle closing-seam duplicates RC-004A now removes');

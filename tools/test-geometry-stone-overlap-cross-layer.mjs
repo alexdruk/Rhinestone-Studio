@@ -122,7 +122,7 @@ await test('4. dedupeStonesByRadius() never compares two stones from the same la
   const deduped = dedupeStonesByRadius(tightlyPackedSingleLayer);
   assert.deepEqual(deduped, tightlyPackedSingleLayer, 'same-layerId stones must never be dropped by the cross-layer dedupe, no matter how close together');
 
-  // The actual RC-002 regression matrix (tools/test-rc-002-ring-overlap.mjs) exercises
+  // The actual RC-002 regression matrix (tools/test-geometry-stone-overlap-cross-contour.mjs) exercises
   // GeometryEngine.generateShapeLayout() directly -- entirely upstream of, and untouched by, this
   // cross-layer merge step -- so it is unaffected by this milestone; it is not re-run here to avoid
   // duplicating that file's own coverage.

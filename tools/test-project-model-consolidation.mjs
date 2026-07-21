@@ -56,7 +56,7 @@ await test('src/core/ no longer exists (the unused parallel project model was re
 });
 
 await test('no source or tooling file references src/core/ (no residual duplicate-model wiring)', async () => {
-  // test-app-module-migration.mjs/test-live-text-integration.mjs and this file's own two tests
+  // test-architecture-module-boundaries.mjs/test-live-text-integration.mjs and this file's own two tests
   // above legitimately mention the string 'src/core/' as part of a permanent "app.js must never
   // import it" guard assertion — that guard is exactly what proves the model stays gone, not
   // residual wiring to clean up. src/geometry/Stone.js and src/library/LibraryTransform.js carry a
@@ -69,7 +69,7 @@ await test('no source or tooling file references src/core/ (no residual duplicat
   // that is documentation validation confirming the stale reference is *absent* from the codebase,
   // not wiring that depends on src/core/, so it is exempt from this residual-wiring scan too.
   const guardFilesExemptFromScan = new Set([
-    'tools/test-app-module-migration.mjs',
+    'tools/test-architecture-module-boundaries.mjs',
     'tools/test-live-text-integration.mjs',
     'tools/test-project-model-consolidation.mjs',
     'tools/test-documentation-consistency.mjs',

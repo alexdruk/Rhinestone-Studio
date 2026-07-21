@@ -303,5 +303,4 @@ await test('15. representative fill generations complete quickly (small text, la
   assert.ok(text.count > 0);
 });
 
-// --- 9. Forbidden files (this milestone's own guard) ---------------------------------------------
 console.log('Fill Algorithms (RS-1011) engine-level tests passed.');

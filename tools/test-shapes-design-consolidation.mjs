@@ -9,7 +9,7 @@ import { assertTestRegistered } from './lib/test-registration-assertions.mjs';
 // available; extract a specific function's source text via regex, then either execute it in
 // isolation via `new Function` for small pure helpers, or assert on its structure/call-sites for
 // helpers that are too entangled with live app state to run standalone -- see e.g.
-// tools/test-s107-long-text-readability.mjs's own extractBlock()+`new Function` pattern).
+// tools/test-text-position-workflow.mjs's own extractBlock()+`new Function` pattern).
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
@@ -254,7 +254,7 @@ await test('16. every new S-110 test file is registered in its group and the def
     { filename: 'test-shape-library.mjs', group: 'core' },
     { filename: 'test-shape-fit.mjs', group: 'core' },
     { filename: 'test-shape-library-integration.mjs', group: 'core' },
-    { filename: 'test-s110-design-shapes-consolidation.mjs', group: 'integration' },
+    { filename: 'test-shapes-design-consolidation.mjs', group: 'integration' },
   ]) {
     assertTestRegistered({ filename, group, includedInDefault: true });
   }

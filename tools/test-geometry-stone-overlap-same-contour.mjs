@@ -13,7 +13,7 @@ import { validateRhsProject, generateProjectStoneLayout } from './lib/rhsProject
 // (StoneSampler.js's sampleOutlinePoints()). RC-002 already guarantees consecutive samples never
 // physically overlap *across* two different contours, but deliberately left every same-contour pair
 // unchecked (see sampleMultiContourOutlinePoints()'s pre-RC-004A doc comment, and this suite's own
-// tools/test-rc-002-ring-overlap.mjs test 6, which explicitly called that a "separate, pre-existing,
+// tools/test-geometry-stone-overlap-cross-contour.mjs test 6, which explicitly called that a "separate, pre-existing,
 // single-contour artifact"). A single contour's arc-length walk only guarantees consecutive samples
 // are spacingMm apart *along the perimeter* -- their straight-line (chord) distance is always <=
 // that, and sharp curvature (a cursive stroke's tight loop or cusp, a letter's serif detail, a
@@ -217,7 +217,7 @@ await test('6. per-call stoneSizeMm correctly scales the same-contour physical t
 
 // --- 7. RC-002 regression: run unchanged -----------------------------------------------------------
 //
-// tools/test-rc-002-ring-overlap.mjs exercises GeometryEngine.generateShapeLayout()/generateSvgLayout()
+// tools/test-geometry-stone-overlap-cross-contour.mjs exercises GeometryEngine.generateShapeLayout()/generateSvgLayout()
 // directly for cross-contour overlap. This RC-004A fix reuses the exact same
 // sampleMultiContourOutlinePoints() entry point (see that file's own test 6, updated alongside this
 // milestone to account for RC-004A's own-circle closing-seam fix); it is not re-run here to avoid
@@ -225,7 +225,7 @@ await test('6. per-call stoneSizeMm correctly scales the same-contour physical t
 
 // --- 8. RC-004 regression: run unchanged -----------------------------------------------------------
 //
-// tools/test-rc-004-cross-layer-overlap.mjs exercises dedupeStonesByRadius() (the cross-*layer*
+// tools/test-geometry-stone-overlap-cross-layer.mjs exercises dedupeStonesByRadius() (the cross-*layer*
 // merge), which this milestone does not touch at all -- same-contour overlap is resolved entirely
 // upstream, inside each layer's own GeometryEngine call, before cross-layer merging ever runs. Not
 // re-run here to avoid duplicating that file's coverage.

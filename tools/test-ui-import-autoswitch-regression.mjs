@@ -39,7 +39,7 @@ import { SHAPE_LIBRARY_KINDS } from '../src/geometry/index.js';
 // `lightboxForLayerType()`, and the exact auto-switch fragment inside
 // syncSelectedControlsFromLayer() (via `new Function`, using the real src/ui/Lightbox.js class
 // against a minimal fake DOM), matching this repo's established app.js-testing convention (see
-// e.g. tools/test-s110a-smart-shape-to-text-creation.mjs). The two statements under test --
+// e.g. tools/test-shapes-around-text-creation.mjs). The two statements under test --
 // `lightboxes.importBox.close()` and `syncSelectedControlsFromLayer()` -- are replayed in whichever
 // order app.js's real #importProjectFile handler source actually contains them, so this test
 // exercises the live call sequence rather than an assumed one: it fails on unmodified `develop`
