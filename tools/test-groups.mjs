@@ -119,4 +119,135 @@ export const GROUPS = {
     'test-autosave-manager.mjs',
     'test-autosave-recovery-wiring.mjs',
   ],
+
+  // --- MAINT-002 — Test Execution Tiers -------------------------------------------------------
+  //
+  // The 12 groups below, together with architecture/gallery/security/documentation/autosave above,
+  // partition all `tools/test-*.mjs` files by subsystem with no gaps and no overlaps (every file
+  // belongs to exactly one of these 16 groups) — Tier 2 of the tiered execution model. `core`/
+  // `integration` above are unaffected: they remain their own, overlapping-with-everything,
+  // test-layer-based groups for backward compatibility.
+
+  geometry: [
+    'test-geometry-engine.mjs',
+    'test-path-boolean.mjs',
+    'test-path-boolean-integration.mjs',
+    'test-boolean-precision-validation.mjs',
+    'test-geometry-stone-overlap-cross-contour.mjs',
+    'test-geometry-stone-overlap-cross-layer.mjs',
+    'test-geometry-stone-overlap-same-contour.mjs',
+    'test-arc-projection.mjs',
+    'test-image-pipeline.mjs',
+    'test-image-trace-regression.mjs',
+    'test-fill-algorithms.mjs',
+    'test-fill-algorithms-integration.mjs',
+  ],
+  'stone-layout': [
+    'test-stone-color.mjs',
+    'test-stone-size-library.mjs',
+    'test-crystal-color-catalog.mjs',
+    'test-crystal-color-integration.mjs',
+    'test-variable-stone-sizes.mjs',
+  ],
+  text: [
+    'test-font-manager.mjs',
+    'test-font-provider-registry.mjs',
+    'test-opentype-provider.mjs',
+    'test-vector-path.mjs',
+    'test-typography-font-library.mjs',
+  ],
+  shapes: [
+    'test-shape-fit.mjs',
+    'test-shape-library.mjs',
+    'test-shape-library-integration.mjs',
+    'test-shapes-design-consolidation.mjs',
+    'test-shapes-around-text-creation.mjs',
+  ],
+  products: [
+    'test-object-template.mjs',
+    'test-object-template-integration.mjs',
+    'test-object-dimensions.mjs',
+    'test-product-plate-round-dinner.mjs',
+  ],
+  // Import/Export. test-svg-parser.mjs lives here (not in `text`) because it parses *imported* SVG
+  // into VectorPath contours -- the import half of Import/Export, paired with its own integration
+  // test test-svg-integration.mjs -- not text/glyph rendering.
+  exporters: [
+    'test-svg-parser.mjs',
+    'test-svg-integration.mjs',
+    'test-production-export-validation.mjs',
+    'test-production-sheet-exporter.mjs',
+    'test-pdf-document.mjs',
+    'test-export-combined-preview-png.mjs',
+  ],
+  renderers: [
+    'test-render-export-pipeline.mjs',
+    'test-stone-layout-texture.mjs',
+    'test-object-preview-renderer.mjs',
+    'test-cup-rotation-stabilization.mjs',
+    'test-object-geometry-builder.mjs',
+  ],
+  // Pure alignment/snap/selection math reused by the UI, kept separate from `ui` (markup/wiring)
+  // so --group editing targets exactly that math.
+  editing: [
+    'test-alignment-engine.mjs',
+    'test-snap-engine.mjs',
+    'test-editing-selection.mjs',
+    'test-alignment-snapping-wiring.mjs',
+  ],
+  ui: [
+    'test-ui-shell-structure.mjs',
+    'test-lightbox-controller.mjs',
+    'test-lightbox-movable-persistent.mjs',
+    'test-ui-import-autoswitch-regression.mjs',
+    'test-text-position-workflow.mjs',
+    'test-ux-visual-polish.mjs',
+  ],
+  'design-library': [
+    'test-design-library.mjs',
+    'test-design-library-integration.mjs',
+    'test-design-library-freeze-gate.mjs',
+  ],
+  history: [
+    'test-history-manager.mjs',
+  ],
+  // Full fixture-driven regression sweep (examples/*.rhs against committed baselines) -- expensive
+  // relative to a fast dev loop, but exactly what merge/release/CI validation wants.
+  'release-smoke': [
+    'test-examples-regression.mjs',
+  ],
+
+  // Tier 1 — Fast Development. One cheap, high-value representative per subsystem above, plus all
+  // four architecture guards (the cheapest, highest-leverage checks in the suite -- they directly
+  // protect the "one GeometryEngine / one StoneLayout" invariant). `npm test` runs this group.
+  // Deliberately excludes: gallery (disabled in the public UI), release-smoke (a full fixture sweep,
+  // better suited to full validation), and test-fill-algorithms.mjs (4.5s alone -- its subsystem,
+  // shapes, already has a cheap representative here). See
+  // docs/specifications/MAINT-002-TestExecutionTiers.md for the full rationale.
+  fast: [
+    'test-architecture-module-boundaries.mjs',
+    'test-browser-dependency-loading.mjs',
+    'test-module-graph-exports.mjs',
+    'test-project-model-consolidation.mjs',
+    'test-geometry-engine.mjs',
+    'test-path-boolean.mjs',
+    'test-stone-color.mjs',
+    'test-crystal-color-catalog.mjs',
+    'test-font-manager.mjs',
+    'test-opentype-provider.mjs',
+    'test-shape-fit.mjs',
+    'test-shape-library.mjs',
+    'test-object-template.mjs',
+    'test-svg-parser.mjs',
+    'test-pdf-document.mjs',
+    'test-render-export-pipeline.mjs',
+    'test-editing-selection.mjs',
+    'test-alignment-engine.mjs',
+    'test-ui-shell-structure.mjs',
+    'test-history-manager.mjs',
+    'test-autosave-manager.mjs',
+    'test-design-library.mjs',
+    'test-project-validation-security.mjs',
+    'test-documentation-consistency.mjs',
+  ],
 };

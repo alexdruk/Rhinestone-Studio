@@ -71,20 +71,30 @@ A separate specification-review-only phase is not required unless `docs/MILESTON
 
 Automated tests must verify behavior and architecture, not only exact source text.
 
-`npm test` (and each named group: `test:core`, `test:integration`, `test:architecture`,
-`test:gallery`) runs via `tools/run-tests.mjs`, a maintainable runner that discovers
-`tools/test-*.mjs` files automatically, continues past individual failures, and prints a pass/fail
-summary — see `docs/specifications/CI-001-RealTestExecution.md` for its design. CI
-(`.github/workflows/ci.yml`) runs `npm test` (the full default suite) on every push and pull
-request.
+Tests run via `tools/run-tests.mjs`, a maintainable runner that discovers `tools/test-*.mjs` files
+automatically, continues past individual failures, and prints a pass/fail summary — see
+`docs/specifications/CI-001-RealTestExecution.md` for its original design and
+`docs/specifications/MAINT-002-TestExecutionTiers.md` for the three-tier execution model layered on
+top of it:
 
-During implementation, run focused tests as you go — a single file, a filename filter
-(`node tools/run-tests.mjs <substring>`), or the one named group relevant to the area you're
-touching — rather than the full local suite after every edit. Run the complete local suite
-(`npm test`, plus each named group actually affected) once, when the milestone's implementation is
-finished and ready for review; a normal small milestone does not need repeated full-suite runs
-after every commit. A milestone that changes the test runner or CI workflow itself is the case where
-a full-suite run is most load-bearing — do not skip it even if every touched file passed standalone.
+- **Tier 1 — `npm test` (fast development).** A curated ~24-file subset (`tools/test-groups.mjs`'s
+  `fast` group), one high-value representative per subsystem plus every architecture guard. This is
+  the loop to run while iterating on a change.
+- **Tier 2 — one subsystem at a time**, via `npm run test:geometry`, `test:exporters`, `test:ui`,
+  `test:products`, `test:security`, `test:documentation`, `test:autosave`, or any other subsystem
+  script (equivalent to `node tools/run-tests.mjs --group <name>`) — every subsystem
+  `tools/test-groups.mjs` defines is independently runnable this way; see that file for the full
+  list. Use the group(s) covering the area you're touching.
+- **Tier 3 — `npm run test:full`** (`--all`, every `tools/test-*.mjs` file, including the two
+  `EXCLUDED_FROM_DEFAULT` legacy `CupRenderer.js` suites). CI (`.github/workflows/ci.yml`) runs this
+  on every push and pull request. Also required before merge approval, any shared-architecture
+  change, and release validation.
+
+During implementation, run Tier 1/Tier 2 as you go rather than the full suite after every edit. Run
+`npm run test:full` once, when the milestone's implementation is finished and ready for review; a
+normal small milestone does not need repeated full-suite runs after every commit. A milestone that
+changes the test runner, `tools/test-groups.mjs`, or CI workflow itself is the case where a
+`test:full` run is most load-bearing — do not skip it even if every touched file passed standalone.
 
 Before committing, always run:
 
