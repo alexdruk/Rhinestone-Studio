@@ -68,5 +68,9 @@ Run the automated test suite (plain Node scripts under `tools/test-*.mjs`, no br
 npm test
 ```
 
+`npm test` runs a fast, curated subset for day-to-day development. A subsystem script such as
+`npm run test:geometry` or `npm run test:ui` runs just that area, and `npm run test:full` runs
+everything — see `docs/AI_ENGINEER.md` for the full tiered-testing model.
+
 See `docs/AI_ENGINEER.md` and `docs/MILESTONE_WORKFLOW.md` for the full development/testing/review
 workflow, and `CONTRIBUTING.md` for commit conventions.
