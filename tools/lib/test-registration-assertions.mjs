@@ -1,6 +1,6 @@
 // Shared helper for the "this test is registered in the suite" checks in
-// tools/test-s107-long-text-readability.mjs, tools/test-s110-design-shapes-consolidation.mjs,
-// tools/test-s110a-smart-shape-to-text-creation.mjs, and tools/test-s112a-plate-ux-corrections.mjs.
+// tools/test-shapes-design-consolidation.mjs,
+// tools/test-shapes-around-text-creation.mjs, and tools/test-product-plate-round-dinner.mjs.
 //
 // CI-001 replaced package.json's hand-maintained "&&" chains with tools/run-tests.mjs +
 // tools/test-groups.mjs (see docs/specifications/CI-001-RealTestExecution.md); package.json no

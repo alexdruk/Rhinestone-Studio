@@ -17,6 +17,7 @@ const { FontManager } = await import('../src/fonts/index.js');
 const { createDefaultFontProviderRegistry } = await import('../src/text/index.js');
 const { GeometryEngine, StoneLayout } = await import('../src/geometry/index.js');
 const { stoneLayoutToSvg } = await import('../src/export/SvgExporter.js');
+const { computeProductionSheetLayout, productionSheetToSvg, productionSheetToPdf } = await import('../src/export/ProductionSheetExporter.js');
 const {
   validateRhsProject,
   generateProjectStoneLayout,
@@ -347,4 +348,44 @@ await test('18. RS-2000: every example with an \'image\' layer is excluded from 
     assert.doesNotThrow(() => validateProjectFromAppJs(appShape), `${file}'s app-shape translation was rejected by app.js's real validateProject()`);
   }
 });
+const PERFORMANCE_SANITY_CEILING_MS = 5000;
+
+await test('19. release smoke: geometry generation, SVG export, and Production Sheet (SVG+PDF) generation for every fixture complete within a generous sanity ceiling (catches a catastrophic performance regression, not a tight benchmark -- wall-clock time is machine-dependent, so this is intentionally not a pinned assertion)', async () => {
+  let flagshipFile = null;
+  let flagshipStoneCount = -1;
+  for (const file of filesWithGeneration) {
+    const project = validateRhsProject(loaded.get(file), file);
+
+    const t0 = performance.now();
+    const layout = await generateProjectStoneLayout(project, engine);
+    const geometryMs = performance.now() - t0;
+    assert.ok(geometryMs < PERFORMANCE_SANITY_CEILING_MS, `${file}: geometry generation took ${geometryMs.toFixed(1)}ms, exceeding the ${PERFORMANCE_SANITY_CEILING_MS}ms sanity ceiling`);
+
+    const t1 = performance.now();
+    const svg = stoneLayoutToSvg(layout, { widthMm: project.canvas.width, heightMm: project.canvas.height });
+    const svgExportMs = performance.now() - t1;
+    assert.ok(typeof svg === 'string' && svg.length > 0);
+    assert.ok(svgExportMs < PERFORMANCE_SANITY_CEILING_MS, `${file}: SVG export took ${svgExportMs.toFixed(1)}ms, exceeding the ${PERFORMANCE_SANITY_CEILING_MS}ms sanity ceiling`);
+
+    const prodSheetOptions = { projectName: file, objectType: 'Mug', productionWidthMm: project.canvas.width, productionHeightMm: project.canvas.height, gapMm: 0.3 };
+    const t2 = performance.now();
+    computeProductionSheetLayout(layout, prodSheetOptions);
+    const prodSheetSvg = productionSheetToSvg(layout, prodSheetOptions);
+    const prodSheetSvgMs = performance.now() - t2;
+    assert.ok(typeof prodSheetSvg === 'string' && prodSheetSvg.length > 0);
+    assert.ok(prodSheetSvgMs < PERFORMANCE_SANITY_CEILING_MS, `${file}: Production Sheet SVG generation took ${prodSheetSvgMs.toFixed(1)}ms, exceeding the ${PERFORMANCE_SANITY_CEILING_MS}ms sanity ceiling`);
+
+    const t3 = performance.now();
+    const prodSheetPdf = productionSheetToPdf(layout, prodSheetOptions);
+    const prodSheetPdfMs = performance.now() - t3;
+    assert.ok(prodSheetPdf && prodSheetPdf.byteLength > 0);
+    assert.ok(prodSheetPdfMs < PERFORMANCE_SANITY_CEILING_MS, `${file}: Production Sheet PDF generation took ${prodSheetPdfMs.toFixed(1)}ms, exceeding the ${PERFORMANCE_SANITY_CEILING_MS}ms sanity ceiling`);
+
+    if (layout.count > flagshipStoneCount) { flagshipStoneCount = layout.count; flagshipFile = file; }
+  }
+  // The largest fixture (by stone count) was actually measured above, not skipped -- guards against
+  // an accidental early-exit/filter bug silently shrinking coverage to only the cheap fixtures.
+  assert.ok(flagshipFile, 'expected at least one fixture to be measured');
+});
+
 console.log('Examples regression suite passed.');

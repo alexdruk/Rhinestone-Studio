@@ -3,16 +3,18 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// RC-005 — Autosave & Crash Recovery.
+// Autosave & Recovery — app.js wiring.
 //
-// src/persistence/test-autosave-manager.mjs already covers the pure recovery-record logic
+// tools/test-autosave-manager.mjs already covers the pure recovery-record logic
 // (schema/staleness/corruption handling) in isolation. This suite covers the app.js *wiring*
 // around it, using this repository's established "extract the real source fragment, execute it via
-// new Function() against minimal fakes" convention (see tools/test-rc-003-project-import-lightbox.mjs,
-// tools/test-s110a-smart-shape-to-text-creation.mjs) so these tests fail on a real regression in
-// app.js's own source, not just an assumption about what it does.
+// new Function() against minimal fakes" convention (see tools/test-ui-import-autoswitch-regression.mjs,
+// tools/test-shapes-around-text-creation.mjs) so these tests fail on a real regression in app.js's
+// own source, not just an assumption about what it does.
 //
-// Covered:
+// Two originally-separate suites (RC-005, RC-005A), merged here because they cover adjacent app.js
+// code for the same feature:
+//
 //  1. Boot-time recovery decision (the exact fragment between `let bootStatusMessage=null;` and
 //     `let cleanProjectJson=...`): restores + normalizes via validateProject() when a usable
 //     record exists, falls back to the freshly-constructed default project otherwise, and never
@@ -23,6 +25,11 @@ import { fileURLToPath } from 'node:url';
 //  4. Every "loading a project is a fresh start" site (Import/Open, Design Library "New Project",
 //     Gallery "Open as copy") re-baselines the autosave slot to the newly loaded project.
 //  5. A pagehide flush listener exists (mid-debounce refresh/crash must not lose the pending write).
+//  6. The recovery *notification* (#status line): shown immediately, auto-dismisses back to "Ready"
+//     after a few seconds unless a newer #status message has since been written, suppressed by a
+//     higher-priority font-manifest boot error, and reuses #status rather than introducing a new
+//     dialog/toast. The recovery *decision* itself (bootStatusMessage's true/false logic) is section
+//     1 above; this section only covers how that decision is displayed.
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
@@ -183,8 +190,91 @@ await test("a 'pagehide' listener flushes any pending debounced autosave before 
 
 // ---------- Normal Save/Open/Export behavior is unchanged ----------
 
-await test('Export/Import/New-Project handlers still perform their original, pre-RC-005 actions (download / validateProject+replace / buildProjectFromItem)', () => {
+await test('Export/Import/New-Project handlers still perform their original, pre-recovery-feature actions (download / validateProject+replace / buildProjectFromItem)', () => {
   assert.match(appJs, /el\('exportProject'\)\.onclick=\(\)=>\{try\{download\('rhinestone-project\.json','application\/json',JSON\.stringify\(project,null,2\)\);cleanProjectJson=JSON\.stringify\(project\);updateHistoryUI\(\);/);
   assert.match(appJs, /validateProject\(JSON\.parse\(await file\.text\(\)\)\)/, 'Import must still validate the uploaded file exactly as before');
   assert.match(appJs, /buildProjectFromItem\(item,LIBRARY_NEW_PROJECT_DEFAULTS\)/, 'Design Library "New Project" must still build from the library item exactly as before');
+});
+
+// ---------- 6. Recovery notification (#status), extracted and executed for real ----------
+
+const notificationStartMarker = 'const RECOVERY_NOTIFICATION_DISMISS_MS=5000;';
+const notificationStartIdx = appJs.indexOf(notificationStartMarker);
+assert.ok(notificationStartIdx !== -1, 'expected to find the RECOVERY_NOTIFICATION_DISMISS_MS notification block in app.js');
+assert.ok(appJs.trim().endsWith('}'), 'expected the notification block to still be the final statement in app.js (this test extracts to end-of-file)');
+const notificationSrc = appJs.slice(notificationStartIdx);
+
+// Sanity: this really is the tail of the file, so the extraction below is the exact real block,
+// not a stale copy that happens to also appear earlier.
+assert.equal(appJs.indexOf(notificationStartMarker, notificationStartIdx + 1), -1, 'RECOVERY_NOTIFICATION_DISMISS_MS must appear exactly once in app.js');
+
+function runNotification({ bootStatusMessage, permanentEngineError = null, statusTextBeforeTimerFires = undefined }) {
+  let statusText = 'Ready';
+  const el = (id) => {
+    assert.equal(id, 'status', `the notification block must only ever touch #status, not #${id}`);
+    return {
+      get textContent() { return statusText; },
+      set textContent(v) { statusText = v; }
+    };
+  };
+  let scheduledCallback = null;
+  let scheduledDelay = null;
+  const fakeSetTimeout = (cb, delay) => { scheduledCallback = cb; scheduledDelay = delay; return 1; };
+
+  // The extracted block itself returns nothing; el()/setTimeout are the real closures above, so
+  // their side effects (mutating statusText, capturing the scheduled callback) are what this reads.
+  const fn = new Function('el', 'setTimeout', 'bootStatusMessage', 'permanentEngineError', notificationSrc);
+  fn(el, fakeSetTimeout, bootStatusMessage, permanentEngineError);
+
+  const statusRightAfterBoot = statusText;
+  if (statusTextBeforeTimerFires !== undefined) statusText = statusTextBeforeTimerFires;
+  if (scheduledCallback) scheduledCallback();
+  return { statusRightAfterBoot, statusAfterTimerFires: statusText, timerWasScheduled: scheduledCallback !== null, scheduledDelay };
+}
+
+await test('an actual recovery shows the notification immediately in #status', () => {
+  const result = runNotification({ bootStatusMessage: 'Restored unsaved changes from autosave (crash/refresh recovery).' });
+  assert.equal(result.statusRightAfterBoot, 'Restored unsaved changes from autosave (crash/refresh recovery).');
+});
+
+await test('the notification auto-dismisses back to "Ready" after a few seconds', () => {
+  const result = runNotification({ bootStatusMessage: 'Restored unsaved changes from autosave (crash/refresh recovery).' });
+  assert.ok(result.timerWasScheduled, 'expected a dismiss timer to be scheduled');
+  assert.ok(result.scheduledDelay >= 2000 && result.scheduledDelay <= 10000, `expected a "few seconds" dismiss delay, got ${result.scheduledDelay}ms`);
+  assert.equal(result.statusAfterTimerFires, 'Ready');
+});
+
+await test('normal startup (nothing recovered) never shows or schedules the notification', () => {
+  const result = runNotification({ bootStatusMessage: null });
+  assert.equal(result.statusRightAfterBoot, 'Ready', '#status must be left completely untouched on an ordinary boot');
+  assert.equal(result.timerWasScheduled, false, 'no dismiss timer should exist when there was nothing to recover');
+});
+
+await test('a font-manifest failure at boot takes priority: the recovery notification is suppressed entirely', () => {
+  const result = runNotification({ bootStatusMessage: 'Restored unsaved changes from autosave (crash/refresh recovery).', permanentEngineError: new Error('manifest fetch failed') });
+  assert.equal(result.statusRightAfterBoot, 'Ready', 'the recovery message must not overwrite/precede the more urgent font-manifest error message');
+  assert.equal(result.timerWasScheduled, false);
+});
+
+await test('the auto-dismiss never clobbers a real action the operator took in the meantime', () => {
+  const result = runNotification({
+    bootStatusMessage: 'Restored unsaved changes from autosave (crash/refresh recovery).',
+    statusTextBeforeTimerFires: 'Imported my-other-project.json: 2 layer(s)'
+  });
+  assert.equal(result.statusAfterTimerFires, 'Imported my-other-project.json: 2 layer(s)', 'a real, newer #status message must survive the recovery notification\'s own dismiss timer');
+});
+
+await test('the notification reuses #status -- no new dialog/toast/overlay element is introduced', () => {
+  assert.match(notificationSrc, /el\('status'\)\.textContent=/);
+  assert.doesNotMatch(notificationSrc, /createElement|innerHTML|appendChild|new Lightbox|\.open\(\)/, 'must not introduce any new DOM element, Lightbox, or dialog/workflow');
+});
+
+await test('bootStatusMessage is only ever assigned inside the boot-time recovery block -- Save/Import/New Project/Gallery/Library never trigger this notification', () => {
+  // Excludes its own `let bootStatusMessage=null;` declaration (a plain re-init, not a "message
+  // was actually set" assignment) -- only a real string assignment counts.
+  const assignments = [...appJs.matchAll(/bootStatusMessage='/g)];
+  assert.equal(assignments.length, 1, `expected exactly one real string assignment to bootStatusMessage (the boot recovery decision); found ${assignments.length}`);
+  const idx = assignments[0].index;
+  const precedingContext = appJs.slice(Math.max(0, idx - 400), idx);
+  assert.match(precedingContext, /const recovered=autosave\.load\(\);/, 'the sole bootStatusMessage assignment must live inside the autosave recovery decision, not any Save/Import/New-Project/Gallery/Library handler');
 });

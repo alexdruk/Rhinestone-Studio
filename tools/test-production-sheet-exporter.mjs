@@ -408,5 +408,4 @@ await test('22. Production Sheet page size/margin/mirror/registration-marks cont
   }
 });
 
-// --- 14. Forbidden files -----------------------------------------------------------------------------
 console.log('Production Sheet exporter tests passed.');

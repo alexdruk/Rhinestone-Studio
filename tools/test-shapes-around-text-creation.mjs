@@ -12,7 +12,7 @@ import { assertTestRegistered } from './lib/test-registration-assertions.mjs';
 // `new Function`, injecting a real GeometryEngine/BoundingBox/computeContainingShapeScale/
 // getSafeAreaRectMm/getObjectTemplate and a minimal mocked getLayerBBox() -- the one dependency that
 // needs live `layout` state this standalone script doesn't construct), matching this repo's
-// established app.js-testing convention (see e.g. tools/test-s107-long-text-readability.mjs's
+// established app.js-testing convention (see e.g. tools/test-text-position-workflow.mjs's
 // computeAutoFitScale extraction). Structural checks against createShapeLayer()/addText()/
 // fitTextToShape() cover the parts that are too entangled with live app state to execute standalone.
 
@@ -181,7 +181,7 @@ await test('9. no new "Fit Shape to Text" command was introduced, and no hidden 
 
 await test('10. this milestone\'s test file is registered in test:integration and the default suite (via tools/test-groups.mjs + tools/run-tests.mjs, not a literal package.json chain)', () => {
   assertTestRegistered({
-    filename: 'test-s110a-smart-shape-to-text-creation.mjs',
+    filename: 'test-shapes-around-text-creation.mjs',
     group: 'integration',
     includedInDefault: true,
   });

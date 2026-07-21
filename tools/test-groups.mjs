@@ -15,15 +15,15 @@ export const EXCLUDED_FROM_DEFAULT = [
   // precedent — test:full only.
   'test-cup-rotation-stabilization.mjs',
   'test-object-preview-renderer.mjs',
-  // Asserts a 5-second-per-fixture timing ceiling, not correctness. Timing assertions do not
-  // belong in a suite that must stay fast and deterministic on every machine (S-111). Its
-  // correctness assertions duplicate test-examples-regression.mjs. test:gallery / test:full only.
-  'test-gallery-benchmark.mjs',
 ];
 
-// Named groups preserved from the pre-CI-001 package.json scripts of the same name. File order is
-// kept as it was in each original "&&" chain.
+// Named groups, organized around stable subsystems (MAINT-001 — Test Suite Consolidation) rather
+// than the historical milestones that originally introduced each file. A file may appear in more
+// than one group (e.g. Gallery's own catalog/wiring files also run as part of core/integration) —
+// GROUPS only drives `--group <name>` selection; it has no bearing on the default suite, which is
+// computed by discovery minus EXCLUDED_FROM_DEFAULT above.
 export const GROUPS = {
+  // Permanent-module unit/behavioral tests: no app.js/index.html dependency.
   core: [
     'test-font-manager.mjs',
     'test-vector-path.mjs',
@@ -53,15 +53,19 @@ export const GROUPS = {
     'test-shape-library.mjs',
     'test-shape-fit.mjs',
     'test-shape-library-integration.mjs',
+    'test-geometry-stone-overlap-cross-contour.mjs',
+    'test-geometry-stone-overlap-cross-layer.mjs',
+    'test-geometry-stone-overlap-same-contour.mjs',
+    'test-autosave-manager.mjs',
   ],
+  // app.js/index.html wiring + cross-module behavioral tests.
   integration: [
     'test-svg-integration.mjs',
     'test-render-export-pipeline.mjs',
     'test-production-export-validation.mjs',
     'test-ux-visual-polish.mjs',
     'test-object-template-integration.mjs',
-    'test-s112-round-dinner-plate.mjs',
-    'test-s112a-plate-ux-corrections.mjs',
+    'test-product-plate-round-dinner.mjs',
     'test-examples-regression.mjs',
     'test-production-sheet-exporter.mjs',
     'test-crystal-color-integration.mjs',
@@ -72,25 +76,47 @@ export const GROUPS = {
     'test-design-library-integration.mjs',
     'test-gallery-integration.mjs',
     'test-typography-font-library.mjs',
-    'test-s104-text-position-recovery-drag-tuning.mjs',
-    'test-s105-persistent-movable-lightboxes.mjs',
-    'test-s106-combined-visual-preview-png-export.mjs',
-    'test-s107-long-text-readability.mjs',
-    'test-s110-design-shapes-consolidation.mjs',
-    'test-s110a-smart-shape-to-text-creation.mjs',
+    'test-text-position-workflow.mjs',
+    'test-lightbox-movable-persistent.mjs',
+    'test-export-combined-preview-png.mjs',
+    'test-shapes-design-consolidation.mjs',
+    'test-shapes-around-text-creation.mjs',
     'test-alignment-snapping-wiring.mjs',
     'test-lightbox-controller.mjs',
     'test-ui-shell-structure.mjs',
+    'test-ui-import-autoswitch-regression.mjs',
+    'test-design-library-freeze-gate.mjs',
+    'test-autosave-recovery-wiring.mjs',
   ],
+  // Permanent architectural rules (one GeometryEngine, one StoneLayout/project model, app.js
+  // barrel-only imports, browser dependency loading).
   architecture: [
-    'test-app-module-migration.mjs',
+    'test-architecture-module-boundaries.mjs',
     'test-browser-dependency-loading.mjs',
     'test-module-graph-exports.mjs',
     'test-project-model-consolidation.mjs',
   ],
+  // Gallery is disabled in the public UI, but its catalog/wiring logic is still protected — both
+  // files here already run as part of core/integration, so this group is a complete,
+  // self-contained Gallery check on its own.
   gallery: [
     'test-gallery.mjs',
     'test-gallery-integration.mjs',
-    'test-gallery-benchmark.mjs',
+  ],
+  // Docs/manifest consistency checks (README/ARCHITECTURE/BACKLOG/etc. against the real filesystem
+  // and package.json scripts).
+  documentation: [
+    'test-documentation-consistency.mjs',
+  ],
+  // Input-validation/XSS hardening checks (layer.id, escapeHtml, renderLayerUI against hostile
+  // input).
+  security: [
+    'test-project-validation-security.mjs',
+  ],
+  // AutosaveManager's own pure record logic plus app.js's wiring around it (scheduling, boot-time
+  // recovery decision, recovery notification). Both files already run as part of core/integration.
+  autosave: [
+    'test-autosave-manager.mjs',
+    'test-autosave-recovery-wiring.mjs',
   ],
 };

@@ -7,7 +7,7 @@ import { createStarNaturalContours, createRegularPolygonNaturalContours, createR
 // fitTextToShape() (app.js) is built on: computeInscribedRect() (the largest same-aspect-ratio
 // rectangle fully inside a shape) and computeShapeFitScale() (the scale + legibility-floor decision
 // that turns an inscribed rect into a required text height). app.js itself is not executed here (no
-// DOM) -- its own structural wiring is covered by tools/test-s110-design-shapes-consolidation.mjs,
+// DOM) -- its own structural wiring is covered by tools/test-shapes-design-consolidation.mjs,
 // matching this repo's existing app.js test convention (structural checks against the source, not a
 // jsdom run).
 

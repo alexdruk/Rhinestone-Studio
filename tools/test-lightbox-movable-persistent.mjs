@@ -150,7 +150,7 @@ await test('14. #menuGallery keeps its native disabled/aria-disabled attributes 
   assert.match(indexHtml, /<button class="topmenu-btn" id="menuGallery"[^>]*\bdisabled\b[^>]*aria-disabled="true"[^>]*>/);
 });
 
-// ---------- 7. Lightbox.js stays a pure DOM module; forbidden files untouched ----------
+// ---------- 7. Lightbox.js stays a pure DOM module ----------
 
 await test('15. Lightbox.js still has zero knowledge of Project/Layer/StoneLayout/layer type', () => {
   const codeOnly = lightboxSource.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');

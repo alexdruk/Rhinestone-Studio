@@ -108,5 +108,4 @@ await test('8. composeCombinedPreviewCanvas() calls no renderer/generation funct
   }
 });
 
-// ---------- 5. Forbidden files untouched ----------
 console.log('S-106 Combined Visual Preview PNG Export tests passed.');

@@ -150,14 +150,11 @@ await test('5. drawSelection() includes a contrast halo pass and a named, enlarg
   );
 });
 
-await test('6. CupRenderer/CanvasRenderer2D remain StoneLayout-only (no Project/Layer/layer-type/GeometryEngine reference)', () => {
+await test('6. CupRenderer/CanvasRenderer2D never reference GeometryEngine or call geometry generation (the project.layers/layer-type purity check itself lives in tools/test-render-export-pipeline.mjs check 8, which covers the same two files plus SvgExporter.js)', () => {
   for (const [name, source] of [
     ['CupRenderer.js', cupRendererSource],
     ['CanvasRenderer2D.js', canvasRenderer2DSource]
   ]) {
-    assert.ok(!/project\.layers/.test(source), `${name} must not reference project.layers`);
-    assert.ok(!/layer\.type|l\.type/.test(source), `${name} must not reference a layer's type`);
-    assert.ok(!/['"](text|circle|rectangle)['"]/.test(source), `${name} must not reference a layer type literal`);
     assert.ok(!/GeometryEngine/.test(source), `${name} must not reference GeometryEngine`);
     assert.ok(!/generateTextLayout|generateShapeLayout/.test(source), `${name} must not call geometry generation`);
   }
