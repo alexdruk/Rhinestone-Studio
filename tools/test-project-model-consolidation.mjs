@@ -63,11 +63,16 @@ await test('no source or tooling file references src/core/ (no residual duplicat
   // pre-existing historical doc comment naming src/core/Layer.js/Project.js for context (predating
   // RS-2006); left as-is rather than edited, since touching either file trips unrelated,
   // already-merged per-milestone "forbidden files" regression guards elsewhere in this suite that
-  // are out of RS-2006's scope to reopen.
+  // are out of RS-2006's scope to reopen. tools/test-documentation-consistency.mjs (RC-007) also
+  // mentions 'src/core/' in a comment, explaining why docs/ARCHITECTURE.md is excluded from its
+  // blind path-existence check (ARCHITECTURE.md legitimately cites the deleted path as history) —
+  // that is documentation validation confirming the stale reference is *absent* from the codebase,
+  // not wiring that depends on src/core/, so it is exempt from this residual-wiring scan too.
   const guardFilesExemptFromScan = new Set([
     'tools/test-app-module-migration.mjs',
     'tools/test-live-text-integration.mjs',
     'tools/test-project-model-consolidation.mjs',
+    'tools/test-documentation-consistency.mjs',
     'src/geometry/Stone.js',
     'src/library/LibraryTransform.js'
   ]);
