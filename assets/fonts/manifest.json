@@ -100,6 +100,17 @@
       "role": "monospace",
       "enabled": false,
       "notes": "Placeholder registry entry -- assets/fonts/RobotoMono-Regular.ttf is a 14-byte non-font stub, not a real font file. Left disabled and unused/untouched (see tools/test-opentype-provider.mjs's corrupt-font-file coverage, which depends on this file staying unparsable)."
+    },
+    {
+      "id": "rs-block",
+      "family": "RS Block (Experimental)",
+      "style": "Regular",
+      "weight": 400,
+      "path": "rhinestone:rs-block",
+      "role": "rhinestone",
+      "enabled": true,
+      "providerId": "rhinestone",
+      "notes": "TXT-101B pre-merge visual acceptance pass: RS Block, the first production-quality original rhinestone font (src/text/rhinestoneFont/families/rsBlock.js), temporarily exposed in the font picker under an explicit (Experimental) label pending manual visual approval of the completed alphabet. `path` is a documentation-only identifier, not a real font file -- RhinestoneFontProvider generates glyph geometry from authored stone centers at runtime and never fetches/parses it (see injectFontFaceRules() in app.js, which only declares @font-face rules for providerId:'opentype' entries). The diagnostic-only RS Block Prototype (SS10) remains intentionally unregistered here."
     }
   ]
 }

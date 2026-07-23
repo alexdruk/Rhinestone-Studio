@@ -206,6 +206,21 @@ export class GeometryEngine {
     let penXMm = 0;
 
     for (let i = 0; i < characters.length; i++) {
+      // Optional per-provider kerning hook (TXT-101B) -- applied here, between two separate
+      // single-character getTextPath() calls, because this loop is the only place in the whole
+      // engine that ever walks a text run's pen position character by character (see
+      // FontProviderRegistry.getKerningAdjustmentMm()'s module doc). A registry without this method
+      // (most test fakes across the codebase construct a minimal {getTextPath} object) is treated
+      // exactly like a provider with no kerning: 0 adjustment, byte-identical to before this existed.
+      if (i > 0 && typeof this._fontProviderRegistry.getKerningAdjustmentMm === 'function') {
+        penXMm += this._fontProviderRegistry.getKerningAdjustmentMm({
+          providerId: options.providerId ?? undefined,
+          fontId: options.fontId,
+          prevChar: characters[i - 1],
+          nextChar: characters[i]
+        });
+      }
+
       const result = await this._fontProviderRegistry.getTextPath({
         providerId: options.providerId ?? undefined,
         fontId: options.fontId,

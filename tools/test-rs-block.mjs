@@ -23,6 +23,7 @@ import { Stone } from '../src/geometry/Stone.js';
 import { FontManager } from '../src/fonts/index.js';
 import { stoneLayoutToSvg } from '../src/export/SvgExporter.js';
 import { drawStoneLayoutTexture } from '../src/preview3d/StoneLayoutTexture.js';
+import { ALL_CONTENT_STRINGS } from './rsBlockQaCorpus.mjs';
 
 async function test(name, fn) {
   try {
@@ -35,6 +36,8 @@ async function test(name, fn) {
   }
 }
 
+const manifest = JSON.parse(await readFile(new URL('../assets/fonts/manifest.json', import.meta.url), 'utf8'));
+
 const FONT_ID = 'rs-block';
 const SUPPORTED_CHARACTERS = [
   ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
@@ -46,7 +49,15 @@ const SUPPORTED_CHARACTERS = [
 function makeEngine() {
   const registry = createDefaultRhinestoneFontRegistry();
   const provider = new RhinestoneFontProvider({ registry });
-  const engine = new GeometryEngine({ fontProviderRegistry: { getTextPath: (o) => provider.getTextPath(o) } });
+  // Mirrors the real FontProviderRegistry's two delegated methods (see FontProviderRegistry.js) --
+  // including getKerningAdjustmentMm is required for kerning to actually apply through this fake,
+  // exactly like the real registry delegates it to whichever provider is resolved.
+  const engine = new GeometryEngine({
+    fontProviderRegistry: {
+      getTextPath: (o) => provider.getTextPath(o),
+      getKerningAdjustmentMm: (o) => provider.getKerningAdjustmentMm(o.fontId, o.prevChar, o.nextChar)
+    }
+  });
   return { registry, provider, engine };
 }
 
@@ -217,20 +228,35 @@ await test('13. resolveTextPolygons fails explicitly for RS Block -- it has no v
 // 6. Kerning
 // ---------------------------------------------------------------------------------------------
 
-await test('14. reviewed kerning pairs tighten the pen advance relative to the unkerned sum of the two glyphs\' widths', async () => {
-  const { provider } = makeEngine();
+await test('14. reviewed kerning pairs tighten the real GeometryEngine-produced layout relative to the unkerned sum of the two glyphs\' widths', async () => {
+  // Kerning is applied by GeometryEngine._buildPositionedContours() between separate
+  // single-character getTextPath() calls (see FontProviderRegistry.getKerningAdjustmentMm()'s
+  // module doc) -- NOT inside a single multi-character provider.getTextPath() call, since the real
+  // pipeline never makes one of those. This test therefore goes through the engine, not the
+  // provider directly, so it actually exercises the mechanism the app uses.
+  const { engine } = makeEngine();
   const reviewedPairs = ['AV', 'VA', 'WA', 'AW', 'To', 'Yo', 'LA', 'LT', 'TT', 'TA', 'FA', 'PA', 'LY', 'RY'];
   for (const pair of reviewedPairs) {
     const adjustment = getKerningAdjustmentMm(pair[0], pair[1]);
     assert.ok(adjustment < 0, `expected "${pair}" to tighten (negative adjustment), got ${adjustment}`);
 
-    const pairResult = await provider.getTextPath({ fontId: FONT_ID, text: pair, heightMm: 20 });
-    const unkerntedSum = getGlyphStoneMap(pair[0]).advanceWidthMm + getGlyphStoneMap(pair[1]).advanceWidthMm;
+    const layout = await engine.generateTextLayout({
+      text: pair, fontId: FONT_ID, providerId: 'rhinestone', layerId: 'x',
+      heightMm: 30, stoneSizeMm: descriptor.recommendedStoneSizeMm, gapMm: descriptor.recommendedGapMm, mode: 'outline', color: 'gold'
+    });
+    const first = getGlyphStoneMap(pair[0]);
+    const second = getGlyphStoneMap(pair[1]);
+    // The second glyph's leftmost stone (x=0 in its own authored space) must land at exactly
+    // first.advanceWidthMm + adjustment, not at the unkerned first.advanceWidthMm.
+    const kernedSecondGlyphMinX = first.advanceWidthMm + adjustment;
     assert.ok(
-      pairResult.metrics.advanceWidthMm < unkerntedSum,
-      `expected "${pair}"'s kerned advance (${pairResult.metrics.advanceWidthMm}) to be less than the unkerned sum (${unkerntedSum})`
+      layout.stones.some((s) => Math.abs(s.xMm - kernedSecondGlyphMinX) < 1e-6),
+      `expected "${pair}" to place the second glyph's leftmost stone at ${kernedSecondGlyphMinX.toFixed(3)}mm through the real engine`
     );
-    assert.ok(Math.abs(pairResult.metrics.advanceWidthMm - (unkerntedSum + adjustment)) < 1e-9);
+    assert.ok(
+      !layout.stones.some((s) => Math.abs(s.xMm - first.advanceWidthMm) < 1e-6 && second.stones.some((s2) => s2.xMm === 0)),
+      `expected "${pair}" NOT to place any stone at the unkerned position ${first.advanceWidthMm.toFixed(3)}mm`
+    );
   }
 });
 
@@ -238,10 +264,27 @@ await test('15. an unreviewed pair (e.g. "BC") gets zero kerning adjustment', ()
   assert.equal(getKerningAdjustmentMm('B', 'C'), 0);
 });
 
-await test('16. a family without getKerningAdjustmentMm (the SS10 prototype) behaves exactly as before -- no crash, no adjustment', async () => {
-  const { provider } = makeEngine();
-  const result = await provider.getTextPath({ fontId: 'rs-block-prototype-ss10', text: 'AB', heightMm: 20 });
-  assert.ok(Array.isArray(result.stoneCenters));
+await test('16. a family without getKerningAdjustmentMm (the SS10 prototype) renders through the real engine exactly as before -- no crash, no adjustment', async () => {
+  const { engine } = makeEngine();
+  const layout = await engine.generateTextLayout({
+    text: 'AB', fontId: 'rs-block-prototype-ss10', providerId: 'rhinestone', layerId: 'x',
+    heightMm: 30, stoneSizeMm: 2.8, gapMm: 0.3, mode: 'outline', color: 'gold'
+  });
+  assert.ok(layout.stones.length > 0);
+});
+
+await test('16b. FontProviderRegistry.getKerningAdjustmentMm() delegates to the resolved provider and returns 0 for a provider without the hook (OpenType, via the real createDefaultFontProviderRegistry wiring)', async () => {
+  const manager = new FontManager(manifest);
+  const providerRegistry = createDefaultFontProviderRegistry(manager);
+  assert.equal(
+    providerRegistry.getKerningAdjustmentMm({ providerId: 'opentype', fontId: 'courier-prime-regular', prevChar: 'A', nextChar: 'V' }),
+    0,
+    'expected OpenTypeProvider (no getKerningAdjustmentMm) to contribute zero kerning adjustment'
+  );
+  assert.ok(
+    providerRegistry.getKerningAdjustmentMm({ providerId: 'rhinestone', fontId: FONT_ID, prevChar: 'A', nextChar: 'V' }) < 0,
+    'expected the rhinestone provider to delegate to RS Block\'s reviewed "AV" kerning adjustment'
+  );
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -309,12 +352,16 @@ await test('21. a generated StoneLayout round-trips through StoneLayout.toJSON/f
 // 9. Backward compatibility
 // ---------------------------------------------------------------------------------------------
 
-const manifest = JSON.parse(await readFile(new URL('../assets/fonts/manifest.json', import.meta.url), 'utf8'));
-
-await test('22. the desktop font manifest is unaffected -- RS Block is not manifest-registered, so it never appears in the normal font picker yet', () => {
+await test('22. RS Block is manifest-registered under an explicit "(Experimental)" label (TXT-101B pre-merge visual acceptance pass), every pre-existing font untouched', () => {
   const manager = new FontManager(manifest);
-  assert.equal(manager.hasFont(FONT_ID), false);
-  assert.equal(manager.listFonts({ includeDisabled: true }).length, 10);
+  assert.equal(manager.hasFont(FONT_ID), true);
+  assert.equal(manager.getFont(FONT_ID).family, 'RS Block (Experimental)');
+  assert.equal(manager.getFont(FONT_ID).providerId, 'rhinestone');
+  assert.equal(manager.getFont(FONT_ID).enabled, true);
+  assert.equal(manager.listFonts({ includeDisabled: true }).length, 11);
+  for (const id of ['courier-prime-regular', 'great-vibes-regular', 'anton-regular']) {
+    assert.ok(manager.hasFont(id), `expected pre-existing font id "${id}" to still resolve`);
+  }
 });
 
 await test('23. an old project JSON with a plain desktop-font id still resolves through the unmodified OpenType path', () => {
@@ -334,6 +381,122 @@ await test('25. the SS10 prototype family is untouched -- still 12 diagnostic gl
   const meta = registry.getMetadata('rs-block-prototype-ss10');
   assert.equal(meta.supportedCharacters.length, 12);
   assert.equal(meta.fillModeIndependent, true);
+});
+
+await test('26. RS Block resolves end-to-end through the real app.js wiring path (FontManager -> resolveFontProviderId-equivalent -> createDefaultFontProviderRegistry -> GeometryEngine), not just the standalone RhinestoneFontProvider used elsewhere in this suite', async () => {
+  const manager = new FontManager(manifest);
+  const providerRegistry = createDefaultFontProviderRegistry(manager);
+  const engine = new GeometryEngine({ fontProviderRegistry: providerRegistry });
+  const resolvedProviderId = manager.getFont(FONT_ID).providerId;
+  assert.equal(resolvedProviderId, 'rhinestone');
+
+  const layout = await engine.generateTextLayout({
+    text: 'Alex', fontId: FONT_ID, providerId: resolvedProviderId, layerId: 'x',
+    heightMm: 30, stoneSizeMm: descriptor.recommendedStoneSizeMm, gapMm: descriptor.recommendedGapMm, mode: 'outline', color: 'gold'
+  });
+  assert.ok(layout instanceof StoneLayout);
+  assert.ok(layout.stones.length > 0);
+  assert.equal(layout.sourceMode, 'authored');
+});
+
+// ---------------------------------------------------------------------------------------------
+// 10. Corpus-wide automated QA (TXT-101B pre-merge visual acceptance pass, section 4: "Automatic
+// QA"). Runs every string across all 12 QA sheets (tools/rsBlockQaCorpus.mjs -- the exact same
+// content the PNGs in tmp/qa/ are rendered from) through structural checks a human eye can't
+// exhaustively perform: collisions, exact reproduction (catches missing/cropped glyphs and broken
+// counters), unexpected unsupported-character markers, and kerning-gap outliers. This cannot
+// replace the visual review itself (uneven spacing/ambiguous shapes still need a human), but it
+// catches any regression across the ~200-string corpus that visual spot-checking could miss.
+// ---------------------------------------------------------------------------------------------
+
+/** Independently re-derives expected stone positions for `text` by walking the same pen-advance
+ * algorithm RhinestoneFontProvider.getTextPath() uses (including kerning), directly against the
+ * authored family data -- not by calling the provider -- so this is a real cross-check, not a
+ * tautology. */
+function expectedStonesForText(text) {
+  const stones = [];
+  let penXMm = 0;
+  let previousCharacter = null;
+  for (const character of Array.from(text)) {
+    if (previousCharacter !== null) {
+      penXMm += getKerningAdjustmentMm(previousCharacter, character);
+    }
+    const glyph = getGlyphStoneMap(character);
+    if (glyph) {
+      for (const stone of glyph.stones) stones.push({ xMm: stone.xMm + penXMm, yMm: stone.yMm });
+      penXMm += glyph.advanceWidthMm;
+    }
+    previousCharacter = character;
+  }
+  return stones;
+}
+
+const stoneKey = (s) => `${s.xMm.toFixed(3)},${s.yMm.toFixed(3)}`;
+
+await test('27. every character in the QA corpus (all 12 sheets, ~200 strings) is a supported character -- zero unexpected unsupported-character markers', () => {
+  for (const text of ALL_CONTENT_STRINGS) {
+    for (const character of Array.from(text)) {
+      assert.ok(getGlyphStoneMap(character) !== null, `expected "${character}" (from corpus string "${text}") to be supported`);
+    }
+  }
+});
+
+await test('28. every corpus string reproduces exactly through the real GeometryEngine pipeline -- no missing/cropped glyphs, no broken counters, no baseline drift', async () => {
+  const { engine } = makeEngine();
+  for (const text of ALL_CONTENT_STRINGS) {
+    const layout = await engine.generateTextLayout({
+      text, fontId: FONT_ID, providerId: 'rhinestone', layerId: 'x',
+      heightMm: 30, stoneSizeMm: descriptor.recommendedStoneSizeMm, gapMm: descriptor.recommendedGapMm, mode: 'outline', color: 'gold'
+    });
+    const expected = expectedStonesForText(text);
+    assert.equal(layout.stones.length, expected.length, `expected "${text}" to produce exactly ${expected.length} stones, got ${layout.stones.length}`);
+    const actualKeys = new Set(layout.stones.map(stoneKey));
+    for (const stone of expected) {
+      assert.ok(actualKeys.has(stoneKey(stone)), `expected stone ${stoneKey(stone)} for "${text}" to survive unchanged`);
+    }
+  }
+});
+
+await test('29. no two stones collide anywhere in the QA corpus (every pairwise stone distance within a rendered string is at least the recommended stone size)', async () => {
+  const { engine } = makeEngine();
+  for (const text of ALL_CONTENT_STRINGS) {
+    const layout = await engine.generateTextLayout({
+      text, fontId: FONT_ID, providerId: 'rhinestone', layerId: 'x',
+      heightMm: 30, stoneSizeMm: descriptor.recommendedStoneSizeMm, gapMm: descriptor.recommendedGapMm, mode: 'outline', color: 'gold'
+    });
+    for (let i = 0; i < layout.stones.length; i++) {
+      for (let j = i + 1; j < layout.stones.length; j++) {
+        const distance = Math.hypot(layout.stones[i].xMm - layout.stones[j].xMm, layout.stones[i].yMm - layout.stones[j].yMm);
+        assert.ok(
+          distance >= descriptor.recommendedStoneSizeMm - 1e-9,
+          `collision in "${text}": two stones ${distance.toFixed(2)}mm apart, below the ${descriptor.recommendedStoneSizeMm}mm recommended stone size`
+        );
+      }
+    }
+  }
+});
+
+await test('30. no pathological (outlier) letter-spacing gap anywhere in the QA corpus -- every adjacent non-space character pair\'s pen-advance gap stays within a sane multiple of the pitch', () => {
+  // A generous outlier threshold (10x pitch) -- not a tight typographic tolerance, just a
+  // regression guard against a future glyph/kerning edit that blows a gap open far past every
+  // pair actually reviewed in this corpus (the widest legitimate advance width in the family is 8
+  // columns -- m/w's 7-column ink width + 1 gap column, i.e. 8x pitch -- 10x pitch comfortably
+  // above that with real margin).
+  const OUTLIER_THRESHOLD_MM = 10 * PITCH_MM;
+  for (const text of ALL_CONTENT_STRINGS) {
+    const characters = Array.from(text);
+    for (let i = 0; i + 1 < characters.length; i++) {
+      const [prev, next] = [characters[i], characters[i + 1]];
+      if (prev === ' ' || next === ' ') continue; // word-to-word gaps are intentionally large
+      const prevGlyph = getGlyphStoneMap(prev);
+      const kerning = getKerningAdjustmentMm(prev, next);
+      const gapMm = prevGlyph.advanceWidthMm + kerning;
+      assert.ok(
+        gapMm <= OUTLIER_THRESHOLD_MM,
+        `outlier pen-advance gap in "${text}" between "${prev}" and "${next}": ${gapMm.toFixed(2)}mm (threshold ${OUTLIER_THRESHOLD_MM.toFixed(2)}mm)`
+      );
+    }
+  }
 });
 
 console.log('RS Block (TXT-101B) tests passed.');

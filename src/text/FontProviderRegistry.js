@@ -100,6 +100,30 @@ export class FontProviderRegistry {
     await provider.load();
     return provider.getTextPath(options);
   }
+
+  /**
+   * Optional per-provider kerning hook (TXT-101B). GeometryEngine._buildPositionedContours() is
+   * the one place that walks a text run's pen position character by character -- every provider
+   * (OpenType included) is only ever asked for one character's glyph at a time, so kerning between
+   * two consecutive characters can never live inside a single getTextPath() call. This method lets
+   * GeometryEngine ask "what mm adjustment applies between these two characters" without knowing
+   * anything about which provider or font family is resolved; a provider without this method (e.g.
+   * OpenTypeProvider) contributes 0 for every pair, so fonts through that provider are completely
+   * unaffected.
+   *
+   * @param {object} options
+   * @param {string} [options.providerId] Defaults to the registry default, exactly like getTextPath().
+   * @param {string} options.fontId
+   * @param {string} options.prevChar
+   * @param {string} options.nextChar
+   * @returns {number} mm pen-advance adjustment (negative tightens, positive loosens).
+   */
+  getKerningAdjustmentMm(options) {
+    const providerId = options?.providerId ?? this._defaultProviderId;
+    const provider = this.get(providerId);
+    if (typeof provider.getKerningAdjustmentMm !== 'function') return 0;
+    return provider.getKerningAdjustmentMm(options.fontId, options.prevChar, options.nextChar);
+  }
 }
 
 export function createFontProviderRegistry(providers = [], options = {}) {

@@ -24,11 +24,15 @@
  * read more reliably than round ones at sparse stone resolution (see docs/memory
  * rhinestone-studio-font-perf-lesson).
  *
- * Kerning: GLYPH_KERNING_PAIRS below adjusts pen advance for specific reviewed pairs (AV VA WA AW
- * To Yo LA LT TT TA FA PA LY RY) where the default per-glyph advance leaves a visually oversized or
- * undersized gap. Consumed by RhinestoneFontProvider.getTextPath() via getKerningAdjustmentMm(),
- * an additive, optional family hook -- it does not change the stoneCenters/FontProviderResult
- * contract, and a family without this method (e.g. the SS10 prototype) behaves exactly as before.
+ * Kerning: KERNING_PAIRS_MM below adjusts pen advance for specific reviewed pairs (AV VA WA AW To
+ * Yo LA LT TT TA FA PA LY RY) where the default per-glyph advance leaves a visually oversized or
+ * undersized gap. Exposed via this module's own getKerningAdjustmentMm(prevChar, nextChar) -- an
+ * additive, optional family hook that RhinestoneFontProvider.getKerningAdjustmentMm() delegates to,
+ * which FontProviderRegistry.getKerningAdjustmentMm() in turn exposes to GeometryEngine (the only
+ * place that walks a text run's pen position character by character -- see
+ * GeometryEngine._buildPositionedContours()). None of this changes the stoneCenters/
+ * FontProviderResult contract, and a family without this method (e.g. the SS10 prototype) behaves
+ * exactly as before.
  */
 
 export const PITCH_MM = 3.1;

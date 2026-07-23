@@ -29,6 +29,15 @@
  * fixed-stone diagnostic. `heightMm` is still validated (required by the IFontProvider contract) but
  * otherwise unused. See the family module for exactly which stone size/gap this is valid at, and its
  * descriptor.fillModeIndependent flag for why the requested fill mode is never applied.
+ *
+ * Kerning (TXT-101B): getTextPath() never applies kerning even when called with multi-character
+ * text, because the real pipeline (GeometryEngine._buildPositionedContours()) only ever calls it
+ * with one character at a time -- an earlier version of this method tried to kern internally and
+ * was dead code in production for exactly that reason (caught by tools/test-rs-block.mjs's
+ * corpus-wide reproduction check). Kerning is instead exposed via this class's own
+ * getKerningAdjustmentMm(fontId, prevChar, nextChar), which FontProviderRegistry.
+ * getKerningAdjustmentMm() calls between GeometryEngine's separate per-character getTextPath()
+ * calls -- see families/rsBlock.js for the family-level kerning table this delegates to.
  */
 
 import { IFontProvider } from '../IFontProvider.js';
@@ -99,15 +108,13 @@ export class RhinestoneFontProvider extends IFontProvider {
     const path = new VectorPath({ id: `${fontId}:${text}`, source: 'font:rhinestone' });
     const stoneCenters = [];
     let advanceWidthMm = 0;
-    let previousCharacter = null;
 
+    // No kerning applied here: GeometryEngine._buildPositionedContours() is the one place that
+    // walks a text run's pen position character by character (every provider, OpenType included,
+    // is only ever asked for one character's glyph at a time in the real pipeline -- see
+    // getKerningAdjustmentMm() below), so kerning between two characters is entirely GeometryEngine's
+    // responsibility, applied between separate single-character getTextPath() calls.
     for (const character of Array.from(text)) {
-      // Optional, additive per-family hook (see families/rsBlock.js's module doc) -- a family
-      // without getKerningAdjustmentMm() behaves exactly as before this field existed.
-      if (previousCharacter !== null && typeof family.getKerningAdjustmentMm === 'function') {
-        advanceWidthMm += family.getKerningAdjustmentMm(previousCharacter, character);
-      }
-
       const glyph = family.getGlyphStoneMap(character);
 
       if (glyph) {
@@ -118,7 +125,6 @@ export class RhinestoneFontProvider extends IFontProvider {
       } else {
         advanceWidthMm += FALLBACK_ADVANCE_MM;
       }
-      previousCharacter = character;
     }
 
     const boundingBox = BoundingBox.fromPoints(stoneCenters.map((c) => new Point2D(c.xMm, c.yMm)));
@@ -130,6 +136,25 @@ export class RhinestoneFontProvider extends IFontProvider {
     });
 
     return new FontProviderResult({ path, metrics, fontId, text, heightMm, stoneCenters });
+  }
+
+  /**
+   * Optional per-provider kerning hook that FontProviderRegistry.getKerningAdjustmentMm() calls on
+   * whichever provider is resolved for a given providerId (see FontProviderRegistry.js). Delegates
+   * to the rhinestone family's own optional getKerningAdjustmentMm(prevChar, nextChar) (see
+   * families/rsBlock.js) -- a family without one (e.g. the SS10 prototype) returns 0 for every
+   * pair, so it renders exactly as it did before this hook existed.
+   *
+   * @param {string} fontId
+   * @param {string} prevChar
+   * @param {string} nextChar
+   * @returns {number} mm pen-advance adjustment (negative tightens, positive loosens).
+   */
+  getKerningAdjustmentMm(fontId, prevChar, nextChar) {
+    if (typeof fontId !== 'string' || fontId.length === 0) return 0;
+    const family = this._registry.get(fontId);
+    if (typeof family.getKerningAdjustmentMm !== 'function') return 0;
+    return family.getKerningAdjustmentMm(prevChar, nextChar);
   }
 }
 

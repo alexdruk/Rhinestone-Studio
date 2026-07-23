@@ -163,9 +163,10 @@ await test('8. every currently-enabled manifest font id would be accepted as val
   const idsInSource = new Set(manager.listFonts().map((f) => f.id));
   // Simulates the real reassignment line's right-hand side against the real manifest.
   for (const id of idsInSource) assert.ok(typeof id === 'string' && id.length > 0);
-  // TXT-101A's rhinestone-native prototype is not manifest-registered (see
-  // src/text/rhinestoneFont/index.js), so this is still just the 9 RS-2002 desktop fonts.
-  assert.equal(idsInSource.size, 9);
+  // TXT-101B's pre-merge visual acceptance pass manifest-registered RS Block (rs-block,
+  // providerId:'rhinestone') alongside the 9 RS-2002 desktop fonts -- 10 total. The SS10 prototype
+  // remains manifest-unregistered (see src/text/rhinestoneFont/index.js).
+  assert.equal(idsInSource.size, 10);
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -183,11 +184,11 @@ await test('9. populateFontOptions() groups by category (alphabetical group orde
   const groupLabels = [...html.matchAll(/<optgroup label="([^"]+)">/g)].map((m) => m[1]);
   const sortedLabels = [...groupLabels].sort((a, b) => a.localeCompare(b));
   assert.deepEqual(groupLabels, sortedLabels, 'expected optgroup labels in alphabetical order');
-  assert.deepEqual(new Set(groupLabels), new Set(['Script', 'Serif', 'Sans Serif', 'Display', 'Monogram', 'Decorative', 'Block', 'Handwritten', 'Monospace']));
+  assert.deepEqual(new Set(groupLabels), new Set(['Script', 'Serif', 'Sans Serif', 'Display', 'Monogram', 'Decorative', 'Block', 'Handwritten', 'Monospace', 'Rhinestone (Original)']));
 
   // Within the "Monospace" group (Courier Prime + Roboto Mono is disabled, so only Courier Prime) --
   // use a group with 2+ members instead to actually exercise sorting: there is none among the
-  // current 9 fonts, so assert the general invariant against every group directly from the source.
+  // current 10 fonts, so assert the general invariant against every group directly from the source.
   const groupBlocks = [...html.matchAll(/<optgroup label="([^"]+)">([\s\S]*?)<\/optgroup>/g)];
   for (const [, label, inner] of groupBlocks) {
     const families = [...inner.matchAll(/>([^<]+)<\/option>/g)].map((m) => m[1]);
@@ -207,8 +208,12 @@ await test('10. every rendered <option> carries a font-family style for a live v
   const run = new Function('el', 'fontManager', `${source}\npopulateFontOptions();`);
   run(el, manager);
   const html = el('font')._html;
+  // TXT-101B's "RS Block (Experimental)" family name contains regex metacharacters ('(', ')') --
+  // escape before building a RegExp, or that font's own check would silently pass for the wrong
+  // reason (matching "RS Block Experimental" without the parens actually present in the HTML).
+  const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   for (const font of manager.listFonts()) {
-    const re = new RegExp(`<option value="${font.id}" style="font-family:'${font.family}'">`);
+    const re = new RegExp(`<option value="${escapeRegExp(font.id)}" style="font-family:'${escapeRegExp(font.family)}'">`);
     assert.match(html, re, `expected a font-face-previewed option for ${font.id}`);
   }
 });
