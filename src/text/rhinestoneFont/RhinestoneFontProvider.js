@@ -99,8 +99,15 @@ export class RhinestoneFontProvider extends IFontProvider {
     const path = new VectorPath({ id: `${fontId}:${text}`, source: 'font:rhinestone' });
     const stoneCenters = [];
     let advanceWidthMm = 0;
+    let previousCharacter = null;
 
     for (const character of Array.from(text)) {
+      // Optional, additive per-family hook (see families/rsBlock.js's module doc) -- a family
+      // without getKerningAdjustmentMm() behaves exactly as before this field existed.
+      if (previousCharacter !== null && typeof family.getKerningAdjustmentMm === 'function') {
+        advanceWidthMm += family.getKerningAdjustmentMm(previousCharacter, character);
+      }
+
       const glyph = family.getGlyphStoneMap(character);
 
       if (glyph) {
@@ -111,6 +118,7 @@ export class RhinestoneFontProvider extends IFontProvider {
       } else {
         advanceWidthMm += FALLBACK_ADVANCE_MM;
       }
+      previousCharacter = character;
     }
 
     const boundingBox = BoundingBox.fromPoints(stoneCenters.map((c) => new Point2D(c.xMm, c.yMm)));

@@ -54,9 +54,9 @@ function makeEngine() {
 // 1. Registration
 // ---------------------------------------------------------------------------------------------
 
-await test('1. the default registry registers exactly the one prototype family, with a stable id', () => {
+await test('1. the default registry registers the prototype family, with a stable id (alongside TXT-101B\'s production RS Block family -- see tools/test-rs-block.mjs)', () => {
   const registry = createDefaultRhinestoneFontRegistry();
-  assert.deepEqual(registry.list().map((f) => f.id), ['rs-block-prototype-ss10']);
+  assert.ok(registry.list().map((f) => f.id).includes('rs-block-prototype-ss10'));
 });
 
 await test('2. the registry rejects a family missing getGlyphStoneMap()', () => {
