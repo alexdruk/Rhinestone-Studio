@@ -310,18 +310,46 @@ export class GlyphMetrics {
 }
 
 export class FontProviderResult {
-  constructor({ path, metrics, fontId, text, heightMm }) {
+  /**
+   * @param {object} options
+   * @param {VectorPath} options.path Ordinary glyph outline contours. Required by every provider,
+   *   even one that instead supplies `stoneCenters` below -- an empty VectorPath (no contours) in
+   *   that case, not a placeholder shape.
+   * @param {GlyphMetrics} options.metrics
+   * @param {string} options.fontId
+   * @param {string} options.text
+   * @param {number} options.heightMm
+   * @param {{xMm:number,yMm:number}[]|null} [options.stoneCenters] A font may return this instead of
+   *   (never in addition to any meaningful use of) glyph contours: explicit, already-in-millimeters
+   *   stone-center positions for this character, authored directly by the font rather than derived
+   *   from any vector shape. GeometryEngine converts these straight into ordinary Stone objects --
+   *   see GeometryEngine._buildPositionedContours()/generateTextLayout(). null (the default) means
+   *   "this provider only ever returns ordinary contours", matching every provider before this field
+   *   existed.
+   */
+  constructor({ path, metrics, fontId, text, heightMm, stoneCenters = null }) {
     if (!(path instanceof VectorPath)) {
       throw new TypeError('FontProviderResult path must be a VectorPath.');
     }
     if (!(metrics instanceof GlyphMetrics)) {
       throw new TypeError('FontProviderResult metrics must be GlyphMetrics.');
     }
+    if (stoneCenters !== null) {
+      if (!Array.isArray(stoneCenters)) {
+        throw new TypeError('FontProviderResult stoneCenters must be an array when provided.');
+      }
+      for (const center of stoneCenters) {
+        if (!center || !Number.isFinite(center.xMm) || !Number.isFinite(center.yMm)) {
+          throw new TypeError('FontProviderResult stoneCenters entries must be {xMm, yMm} finite numbers.');
+        }
+      }
+    }
     this.path = path;
     this.metrics = metrics;
     this.fontId = fontId;
     this.text = text;
     this.heightMm = heightMm;
+    this.stoneCenters = stoneCenters;
   }
 
   toJSON() {
@@ -330,7 +358,10 @@ export class FontProviderResult {
       text: this.text,
       heightMm: roundForJson(this.heightMm),
       metrics: this.metrics.toJSON(),
-      path: this.path.toJSON()
+      path: this.path.toJSON(),
+      stoneCenters: this.stoneCenters
+        ? this.stoneCenters.map((c) => ({ xMm: roundForJson(c.xMm), yMm: roundForJson(c.yMm) }))
+        : null
     };
   }
 }

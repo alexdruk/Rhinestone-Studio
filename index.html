@@ -104,6 +104,13 @@ button.icon-btn[aria-pressed="true"]{background:var(--color-primary-tint);border
 .font-fav:hover{background:var(--color-bg)}
 .font-fav.active{color:#e3a008}
 .font-library-empty{font-size:var(--font-size-sm);color:var(--color-text-muted);padding:var(--space-3);text-align:center}
+.font-library-toolbar{display:flex;gap:var(--space-2);align-items:center}
+.font-library-toolbar input{flex:1;min-width:0}
+.font-library-toolbar select{flex:0 0 auto}
+.font-preview-canvas{display:block;width:160px;height:36px;flex:0 0 auto;background:#fbfdff;border-radius:var(--radius-sm);border:1px solid var(--color-border)}
+.font-library-item-meta{display:flex;flex-direction:column;min-width:0;margin-left:10px}
+.font-library-item-name{font-size:13px;font-weight:600;color:var(--color-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.font-library-item-category{font-size:11px;color:var(--color-text-muted)}
 
 /* ============================== Top menu ============================== */
 .topbar{
@@ -497,7 +504,10 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
             </select></div>
           </div>
           <div id="fontLibraryPanel" class="font-library-panel" hidden>
-            <input type="text" id="fontSearch" placeholder="Search fonts by name or category…" aria-label="Search fonts">
+            <div class="font-library-toolbar">
+              <input type="text" id="fontSearch" placeholder="Search fonts by name or category…" aria-label="Search fonts">
+              <select id="fontCategoryFilter" aria-label="Filter fonts by category"><option value="">All categories</option></select>
+            </div>
             <div id="fontLibraryList" class="font-library-list" role="listbox" aria-label="Font library"></div>
           </div>
           <div class="field-row">

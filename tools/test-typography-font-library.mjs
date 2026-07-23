@@ -76,7 +76,11 @@ function makeDom() {
       getAttribute(k) { return this._attrs[k]; },
       focus() {}, style: {},
       addEventListener(type, fn) { (listeners[type] = listeners[type] || []).push(fn); },
-      dispatchEvent(evt) { for (const fn of (listeners[evt.type] || [])) fn(evt); return true; }
+      dispatchEvent(evt) { for (const fn of (listeners[evt.type] || [])) fn(evt); return true; },
+      // TXT-101A's populateFontPreviewCanvases() queries for preview canvases inside the rendered
+      // list; this shim has no real child nodes, so an empty result is the correct (not merely
+      // convenient) stub -- there is nothing to find until a real DOM parses `_html`.
+      querySelectorAll() { return []; }
     };
     return e;
   }
@@ -107,7 +111,11 @@ await test('2. the manifest still has exactly one disabled entry (the RobotoMono
 
 await test('3. every enabled font\'s referenced file actually exists on disk', async () => {
   const manager = new FontManager(manifest);
-  for (const font of manager.listFonts()) {
+  // TXT-101A's rhinestone-native fonts (providerId:'rhinestone') have no font file at all -- their
+  // manifest `path` is a documentation-only identifier (RhinestoneFontProvider generates glyph
+  // geometry at runtime, never fetches/parses it -- see assets/fonts/manifest.json's notes for
+  // those entries), so only OpenType-backed fonts are expected to resolve to a real file on disk.
+  for (const font of manager.listFonts().filter((f) => f.providerId === 'opentype')) {
     await readFile(path.join(repoRoot, font.path));
   }
 });
@@ -155,7 +163,10 @@ await test('8. every currently-enabled manifest font id would be accepted as val
   const idsInSource = new Set(manager.listFonts().map((f) => f.id));
   // Simulates the real reassignment line's right-hand side against the real manifest.
   for (const id of idsInSource) assert.ok(typeof id === 'string' && id.length > 0);
-  assert.equal(idsInSource.size, 9);
+  // TXT-101B's pre-merge visual acceptance pass manifest-registered RS Block (rs-block,
+  // providerId:'rhinestone') alongside the 9 RS-2002 desktop fonts -- 10 total. The SS10 prototype
+  // remains manifest-unregistered (see src/text/rhinestoneFont/index.js).
+  assert.equal(idsInSource.size, 10);
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -173,11 +184,11 @@ await test('9. populateFontOptions() groups by category (alphabetical group orde
   const groupLabels = [...html.matchAll(/<optgroup label="([^"]+)">/g)].map((m) => m[1]);
   const sortedLabels = [...groupLabels].sort((a, b) => a.localeCompare(b));
   assert.deepEqual(groupLabels, sortedLabels, 'expected optgroup labels in alphabetical order');
-  assert.deepEqual(new Set(groupLabels), new Set(['Script', 'Serif', 'Sans Serif', 'Display', 'Monogram', 'Decorative', 'Block', 'Handwritten', 'Monospace']));
+  assert.deepEqual(new Set(groupLabels), new Set(['Script', 'Serif', 'Sans Serif', 'Display', 'Monogram', 'Decorative', 'Block', 'Handwritten', 'Monospace', 'Rhinestone (Original)']));
 
   // Within the "Monospace" group (Courier Prime + Roboto Mono is disabled, so only Courier Prime) --
   // use a group with 2+ members instead to actually exercise sorting: there is none among the
-  // current 9 fonts, so assert the general invariant against every group directly from the source.
+  // current 10 fonts, so assert the general invariant against every group directly from the source.
   const groupBlocks = [...html.matchAll(/<optgroup label="([^"]+)">([\s\S]*?)<\/optgroup>/g)];
   for (const [, label, inner] of groupBlocks) {
     const families = [...inner.matchAll(/>([^<]+)<\/option>/g)].map((m) => m[1]);
@@ -197,8 +208,12 @@ await test('10. every rendered <option> carries a font-family style for a live v
   const run = new Function('el', 'fontManager', `${source}\npopulateFontOptions();`);
   run(el, manager);
   const html = el('font')._html;
+  // TXT-101B's "RS Block (Experimental)" family name contains regex metacharacters ('(', ')') --
+  // escape before building a RegExp, or that font's own check would silently pass for the wrong
+  // reason (matching "RS Block Experimental" without the parens actually present in the HTML).
+  const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   for (const font of manager.listFonts()) {
-    const re = new RegExp(`<option value="${font.id}" style="font-family:'${font.family}'">`);
+    const re = new RegExp(`<option value="${escapeRegExp(font.id)}" style="font-family:'${escapeRegExp(font.family)}'">`);
     assert.match(html, re, `expected a font-face-previewed option for ${font.id}`);
   }
 });
@@ -286,9 +301,14 @@ await test('17. pickFont() writes the value into #font and replays input+change 
   el('font').addEventListener('change', () => { changeFired = true; });
   el('fontLibraryPanel').hidden = false;
   const source = extractFontLibrarySource();
+  // TXT-101A: pickFont() now also records "Recently Used" (recordRecentFont()), which re-renders
+  // the panel's list via renderFontLibraryList() while it's still open (before pickFont() closes
+  // it) -- that function's very first line is `if(!fontManager)return`, so passing null here (no
+  // real FontManager needed for this test's assertions) exercises that guard instead of hitting an
+  // undefined free variable.
   // eslint-disable-next-line no-new-func
-  const run = new Function('el', `${source}\npickFont('montserrat-regular');`);
-  run(el);
+  const run = new Function('el', 'fontManager', `${source}\npickFont('montserrat-regular');`);
+  run(el, null);
   assert.equal(el('font').value, 'montserrat-regular');
   assert.ok(inputFired, 'expected pickFont() to dispatch an input event (history session + live regen)');
   assert.ok(changeFired, 'expected pickFont() to dispatch a change event (closes the history session)');
