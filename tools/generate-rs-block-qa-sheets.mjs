@@ -178,17 +178,21 @@ async function renderSheetHtml(sheet) {
 
 async function main() {
   const outputDir = process.argv[2] || 'tmp/qa';
+  // Optional third arg: comma-separated sheet file basenames (e.g. "03-lowercase,08-wedding") to
+  // regenerate only a subset -- used for a targeted glyph refinement's before/after comparison
+  // without churning every other (unaffected) sheet. Defaults to all 12.
+  const onlyFiles = process.argv[3] ? new Set(process.argv[3].split(',').map((s) => s.trim())) : null;
+  const sheetsToRender = onlyFiles ? SHEETS.filter((s) => onlyFiles.has(s.file)) : SHEETS;
   await mkdir(outputDir, { recursive: true });
 
-  const indexLinks = [];
+  const indexLinks = SHEETS.map((sheet) => `<li><a href="./${sheet.file}.html">${sheet.title}</a></li>`);
   const htmlFiles = [];
 
-  for (const sheet of SHEETS) {
+  for (const sheet of sheetsToRender) {
     const html = await renderSheetHtml(sheet);
     const htmlPath = path.join(outputDir, `${sheet.file}.html`);
     await writeFile(htmlPath, html, 'utf8');
     htmlFiles.push({ file: sheet.file, path: htmlPath });
-    indexLinks.push(`<li><a href="./${sheet.file}.html">${sheet.title}</a></li>`);
     console.log(`Wrote ${htmlPath}`);
   }
 

@@ -15,7 +15,7 @@
  *   - t's ascender is one row shorter than a full ascender (row 5, not 6) -- the one deliberate
  *     height break from "every ascender reaches cap height", matching how t reads in real type.
  * Each glyph specifies its own row width (ink columns) rather than a fixed column count, so advance
- * width is chosen per letter for optical spacing (e.g. i/l/1/./,/'  are narrow, m/w are wide) rather
+ * width is chosen per letter for optical spacing (e.g. i/l/1/./,/'  are narrow, m is wide) rather
  * than forced uniform width.
  *
  * Lowercase bowls (b d p q) use a flat-sided rectilinear shape rather than a round one where they
@@ -142,9 +142,14 @@ const LOWERCASE = {
   r: glyph(['XXXX.', 'X...X', 'X....', 'X....', 'X....'], { topRow: X_HEIGHT_TOP_ROW }),
   s: glyph(['.XXXX', 'X....', '.XXX.', '....X', 'XXXX.'], { topRow: X_HEIGHT_TOP_ROW }),
   t: glyph(['.X...', 'XXXX.', '.X...', '.X...', '.X...', '..XX.'], { topRow: X_HEIGHT_TOP_ROW + 1 }),
-  u: glyph(['X...X', 'X...X', 'X...X', 'X...X', 'XXXXX'], { topRow: X_HEIGHT_TOP_ROW }),
+  // u borrows U's tapered-corner bottom transition ('.XXX.') instead of a flat full-width bar, so
+  // the two share the same family geometry at the baseline -- just one row shorter (x-height).
+  u: glyph(['X...X', 'X...X', 'X...X', 'X...X', '.XXX.'], { topRow: X_HEIGHT_TOP_ROW }),
   v: glyph(['X...X', 'X...X', 'X...X', '.X.X.', '..X..'], { topRow: X_HEIGHT_TOP_ROW }),
-  w: glyph(['X..X..X', 'X..X..X', 'X..X..X', 'X..X..X', 'XXXXXXX'], { topRow: X_HEIGHT_TOP_ROW }),
+  // w borrows W's own diagonal double-V construction (the bottom 5 rows of the 7-row uppercase W
+  // pattern, reused verbatim at x-height) instead of a flat-bottomed 3-leg bar, so the two share
+  // the same family geometry -- narrower (5 cols, matching v/x) than the previous 7-col bar version.
+  w: glyph(['X...X', 'X...X', 'X.X.X', 'XX.XX', 'X...X'], { topRow: X_HEIGHT_TOP_ROW }),
   x: glyph(['X...X', '.X.X.', '..X..', '.X.X.', 'X...X'], { topRow: X_HEIGHT_TOP_ROW }),
   y: glyph(['X...X', 'X...X', '.X.X.', '..X..', '..X..', '..X..', '.X...'], { topRow: X_HEIGHT_TOP_ROW }),
   z: glyph(['XXXXX', '...X.', '..X..', '.X...', 'XXXXX'], { topRow: X_HEIGHT_TOP_ROW })

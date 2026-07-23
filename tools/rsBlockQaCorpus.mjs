@@ -50,7 +50,10 @@ const RANDOM_PHRASES = [
   'Inspire', 'Jubilee', 'Kindness', 'Lantern', 'Memories', 'Nostalgia', 'Optimist', 'Passion',
   'Quicksilver', 'Serenity', 'Timeless', 'Unstoppable', 'Vibrant', 'Whimsical', 'Xtra Special',
   'Yonder', 'Zest for Life', 'Blessed', 'Chosen Family', 'Dream Big', 'Endless Summer',
-  'Free Spirit', 'Grace & Grit'
+  'Free Spirit', 'Grace & Grit',
+  // Explicitly named in the u/w lowercase refinement's review list (alongside Summer, Luxury,
+  // Custom, Wildcats, Wedding, Squad, and Wonderful above, all already present elsewhere here).
+  'Beautiful', 'Unique'
 ];
 
 export const SHEETS = [
