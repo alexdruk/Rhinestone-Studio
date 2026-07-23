@@ -688,4 +688,180 @@ await test('53. generateImageLayout(): an all-background buffer produces a valid
   const layout = engineNoFonts.generateImageLayout({ imageBuffer: buffer, ...BASE_IMAGE_PARAMS });
   assert.equal(layout.count, 0);
 });
+
+// ---------------------------------------------------------------------------------------------
+// TXT-102 (Professional Text Layout): multi-line, alignment, line spacing, rotation.
+// ---------------------------------------------------------------------------------------------
+
+await test('54. text without a newline reproduces the exact single-line layout (regression) regardless of align/lineSpacing', async () => {
+  const engine = createEngine();
+  const baseline = await engine.generateTextLayout(BASE_PARAMS);
+  const withNewFieldsAtDefault = await engine.generateTextLayout({ ...BASE_PARAMS, align: 'left', lineSpacing: 1, rotationDeg: 0 });
+  const withNonDefaultAlignSpacing = await engine.generateTextLayout({ ...BASE_PARAMS, align: 'center', lineSpacing: 2.5 });
+  assert.deepEqual(baseline.toJSON(), withNewFieldsAtDefault.toJSON());
+  // align/lineSpacing only affect the relationship between multiple lines -- a single line has
+  // nothing to align or space against, so both must still reproduce the exact same layout.
+  assert.deepEqual(baseline.toJSON(), withNonDefaultAlignSpacing.toJSON());
+});
+
+await test('55. a two-line text block produces the same stones as its two lines generated independently and stacked by the default line-height pitch', async () => {
+  const engine = createEngine();
+  const twoLine = await engine.generateTextLayout({ ...BASE_PARAMS, text: 'Hi\nYou' });
+  const lineOne = await engine.generateTextLayout({ ...BASE_PARAMS, text: 'Hi' });
+  const lineTwo = await engine.generateTextLayout({ ...BASE_PARAMS, text: 'You' });
+  const lineHeightMm = BASE_PARAMS.heightMm * 1.4; // TEXT_LINE_HEIGHT_RATIO, lineSpacing default 1
+  const key = (s) => `${s.xMm.toFixed(3)},${s.yMm.toFixed(3)}`;
+  const twoLineKeys = new Set(twoLine.stones.map(key));
+  for (const stone of lineOne.stones) assert.ok(twoLineKeys.has(key(stone)), `expected line 1 stone ${key(stone)} unshifted`);
+  for (const stone of lineTwo.stones) {
+    const shifted = { xMm: stone.xMm, yMm: stone.yMm + lineHeightMm };
+    assert.ok(twoLineKeys.has(key(shifted)), `expected line 2 stone ${key(stone)} shifted down by ${lineHeightMm}mm`);
+  }
+  assert.equal(twoLine.count, lineOne.count + lineTwo.count);
+});
+
+await test('56. empty lines are preserved -- a blank line still occupies a full line-height slot', async () => {
+  const engine = createEngine();
+  const withBlankLine = await engine.generateTextLayout({ ...BASE_PARAMS, text: 'Hi\n\nYou' });
+  const withoutBlankLine = await engine.generateTextLayout({ ...BASE_PARAMS, text: 'Hi\nYou' });
+  const lineHeightMm = BASE_PARAMS.heightMm * 1.4;
+  assert.equal(withBlankLine.count, withoutBlankLine.count, 'a blank line contributes zero stones of its own');
+  const minYWith = Math.min(...withBlankLine.stones.map((s) => s.yMm));
+  const minYWithout = Math.min(...withoutBlankLine.stones.map((s) => s.yMm));
+  const maxYWith = Math.max(...withBlankLine.stones.map((s) => s.yMm));
+  const maxYWithout = Math.max(...withoutBlankLine.stones.map((s) => s.yMm));
+  // The extra blank line pushes every subsequent line down by one more line-height, so the block's
+  // total vertical extent (max - min) grows by exactly lineHeightMm; the first line's own position
+  // (min) is unaffected since the blank line comes after it.
+  assert.ok(Math.abs(minYWith - minYWithout) < 1e-6, 'first line position unaffected by a later blank line');
+  assert.ok(Math.abs((maxYWith - minYWith) - (maxYWithout - minYWithout) - lineHeightMm) < 1e-6, 'blank line adds exactly one line-height of vertical extent');
+});
+
+await test('57. left alignment (default) never offsets any line horizontally, even when lines have very different widths', async () => {
+  const engine = createEngine();
+  const layout = await engine.generateTextLayout({ ...BASE_PARAMS, text: 'I\nVitalina' });
+  const lineI = await engine.generateTextLayout({ ...BASE_PARAMS, text: 'I' });
+  const lineHeightMm = BASE_PARAMS.heightMm * 1.4;
+  const firstLineStones = layout.stones.filter((s) => s.yMm < lineHeightMm / 2);
+  const key = (s) => `${s.xMm.toFixed(6)},${s.yMm.toFixed(6)}`;
+  const firstLineKeys = new Set(firstLineStones.map(key));
+  // Left alignment applies zero offset to every line (see textAlignOffsetMm()), so the first line's
+  // own stones (isolated by y < half a line-height, since line 2's baseline sits a full line-height
+  // below) must reproduce "I" generated alone, stone for stone.
+  assert.equal(firstLineStones.length, lineI.count);
+  for (const stone of lineI.stones) assert.ok(firstLineKeys.has(key(stone)), `expected "I" alone's stone (${key(stone)}) to reappear unshifted as the first line`);
+});
+
+await test('58. center alignment centers each line relative to the widest line', async () => {
+  const engine = createEngine();
+  const layout = await engine.generateTextLayout({ ...BASE_PARAMS, text: 'I\nVitalina', align: 'center' });
+  const bb = layout.getBoundingBox();
+  const lineHeightMm = BASE_PARAMS.heightMm * 1.4;
+  const isSecondLine = (yMm) => yMm > lineHeightMm / 2;
+  const firstLineStones = layout.stones.filter((s) => !isSecondLine(s.yMm));
+  const secondLineStones = layout.stones.filter((s) => isSecondLine(s.yMm));
+  assert.ok(firstLineStones.length > 0 && secondLineStones.length > 0);
+  const firstLineCenter = (Math.min(...firstLineStones.map((s) => s.xMm)) + Math.max(...firstLineStones.map((s) => s.xMm))) / 2;
+  const secondLineCenter = (Math.min(...secondLineStones.map((s) => s.xMm)) + Math.max(...secondLineStones.map((s) => s.xMm))) / 2;
+  const blockCenter = (bb.minXmm + bb.maxXmm) / 2;
+  // "I" is a single narrow glyph, so its own center is close to its line's pen-advance center;
+  // both lines' visual centers should land close to the whole block's horizontal center.
+  assert.ok(Math.abs(secondLineCenter - blockCenter) < 1, `expected the wide line's center (${secondLineCenter}) to anchor the block center (${blockCenter})`);
+  assert.ok(Math.abs(firstLineCenter - blockCenter) < 2, `expected the narrow line's center (${firstLineCenter}) close to the block center (${blockCenter})`);
+});
+
+await test('59. right alignment flushes every line to the widest line\'s right edge', async () => {
+  const engine = createEngine();
+  const layout = await engine.generateTextLayout({ ...BASE_PARAMS, text: 'I\nVitalina', align: 'right' });
+  const bb = layout.getBoundingBox();
+  const lineHeightMm = BASE_PARAMS.heightMm * 1.4;
+  const isSecondLine = (yMm) => yMm > lineHeightMm / 2;
+  const firstLineStones = layout.stones.filter((s) => !isSecondLine(s.yMm));
+  const maxXFirstLine = Math.max(...firstLineStones.map((s) => s.xMm));
+  // Tolerance covers one outline-sample spacing (stoneSizeMm + gapMm here): 'outline' mode places
+  // stones at fixed arc-length intervals along the glyph perimeter, which does not guarantee a
+  // sample lands exactly on the true geometric edge -- the alignment math itself (textAlignOffsetMm())
+  // is exact in pen-advance-width terms; this only allows for that sampling granularity.
+  const sampleSpacingMm = BASE_PARAMS.stoneSizeMm + BASE_PARAMS.gapMm;
+  assert.ok(Math.abs(maxXFirstLine - bb.maxXmm) < sampleSpacingMm * 1.5, `expected the short line's right edge (${maxXFirstLine}) to land on the block's right edge (${bb.maxXmm})`);
+});
+
+await test('60. lineSpacing multiplies the default line-height pitch proportionally', async () => {
+  const engine = createEngine();
+  const single = await engine.generateTextLayout({ ...BASE_PARAMS, text: 'Hi\nYou', lineSpacing: 1 });
+  const doubled = await engine.generateTextLayout({ ...BASE_PARAMS, text: 'Hi\nYou', lineSpacing: 2 });
+  const pitchAt = (layout) => Math.max(...layout.stones.map((s) => s.yMm)) - Math.min(...layout.stones.map((s) => s.yMm));
+  // Not an exact 2x (each line's own glyph extent contributes a fixed amount regardless of spacing),
+  // but doubling the spacing multiplier must clearly widen the block's total vertical extent.
+  assert.ok(pitchAt(doubled) > pitchAt(single) * 1.5, `expected lineSpacing:2 (${pitchAt(doubled)}mm) to be substantially taller than lineSpacing:1 (${pitchAt(single)}mm)`);
+});
+
+await test('61. rotationDeg omitted/0 reproduces the exact unrotated layout (regression)', async () => {
+  const engine = createEngine();
+  const withoutField = await engine.generateTextLayout(BASE_PARAMS);
+  const explicitZero = await engine.generateTextLayout({ ...BASE_PARAMS, rotationDeg: 0 });
+  assert.deepEqual(withoutField.toJSON(), explicitZero.toJSON());
+});
+
+await test('62. rotationDeg:180 flips the layout through its own bounding-box center (every stone maps to its point-reflection)', async () => {
+  const engine = createEngine();
+  const straight = await engine.generateTextLayout(BASE_PARAMS);
+  const rotated = await engine.generateTextLayout({ ...BASE_PARAMS, rotationDeg: 180 });
+  const bb = straight.getBoundingBox();
+  const cx = (bb.minXmm + bb.maxXmm) / 2, cy = (bb.minYmm + bb.maxYmm) / 2;
+  // Distance-based matching (not string-key equality): a 180 degree rotation's cos(pi) is not
+  // exactly -1 in floating point, so an expected reflection can land a machine-epsilon's distance
+  // from its actual match (occasionally straddling a -0/0 string-formatting boundary) -- a real
+  // bug would miss by orders of magnitude more than this tolerance.
+  for (const stone of straight.stones) {
+    const expectedXmm = 2 * cx - stone.xMm, expectedYmm = 2 * cy - stone.yMm;
+    const closestDistance = Math.min(...rotated.stones.map((s) => Math.hypot(s.xMm - expectedXmm, s.yMm - expectedYmm)));
+    assert.ok(closestDistance < 1e-6, `expected a point-reflected match near (${expectedXmm.toFixed(3)},${expectedYmm.toFixed(3)}) for original (${stone.xMm.toFixed(3)},${stone.yMm.toFixed(3)}), closest was ${closestDistance}mm away`);
+  }
+});
+
+await test('63. rotationDeg is normalized into [0,360) -- 90, 450, and -270 produce the identical layout', async () => {
+  const engine = createEngine();
+  const at90 = await engine.generateTextLayout({ ...BASE_PARAMS, rotationDeg: 90 });
+  const at450 = await engine.generateTextLayout({ ...BASE_PARAMS, rotationDeg: 450 });
+  const atNeg270 = await engine.generateTextLayout({ ...BASE_PARAMS, rotationDeg: -270 });
+  assert.deepEqual(at90.toJSON(), at450.toJSON());
+  assert.deepEqual(at90.toJSON(), atNeg270.toJSON());
+});
+
+await test('64. rotating a multi-line, center-aligned block preserves stone count and keeps every coordinate finite', async () => {
+  const engine = createEngine();
+  const layout = await engine.generateTextLayout({ ...BASE_PARAMS, text: 'Hi\nVitalina\nYou', align: 'center', lineSpacing: 1.2, rotationDeg: 37 });
+  assert.ok(layout.count > 0);
+  for (const stone of layout.stones) assert.ok(Number.isFinite(stone.xMm) && Number.isFinite(stone.yMm));
+});
+
+await test('65. curved text combined with multiple lines fails explicitly rather than silently curving only one line', async () => {
+  const engine = createEngine();
+  await assert.rejects(
+    () => engine.generateTextLayout({ ...BASE_CURVE_PARAMS, text: 'Hi\nYou' }),
+    /multiple lines/
+  );
+});
+
+await test('66. an invalid align value throws a clear, parameter-naming error', async () => {
+  const engine = createEngine();
+  await assert.rejects(() => engine.generateTextLayout({ ...BASE_PARAMS, align: 'justify' }), /align/);
+});
+
+await test('67. a non-positive lineSpacing throws a clear, parameter-naming error', async () => {
+  const engine = createEngine();
+  await assert.rejects(() => engine.generateTextLayout({ ...BASE_PARAMS, lineSpacing: 0 }), /lineSpacing/);
+  await assert.rejects(() => engine.generateTextLayout({ ...BASE_PARAMS, lineSpacing: -1 }), /lineSpacing/);
+});
+
+await test('68. resolveTextPolygons() reflects multi-line layout and alignment but not rotation (documented limitation)', async () => {
+  const engine = createEngine();
+  const straightPolygons = await engine.resolveTextPolygons({ text: 'Hi\nYou', fontId: BASE_PARAMS.fontId, layerId: BASE_PARAMS.layerId, heightMm: BASE_PARAMS.heightMm, align: 'center' });
+  const rotatedPolygons = await engine.resolveTextPolygons({ text: 'Hi\nYou', fontId: BASE_PARAMS.fontId, layerId: BASE_PARAMS.layerId, heightMm: BASE_PARAMS.heightMm, align: 'center', rotationDeg: 45 });
+  // Two lines produced (a taller bbox than a single line) and rotation is a no-op on this API.
+  assert.ok(straightPolygons.boundingBox.heightMm > BASE_PARAMS.heightMm, 'expected a two-line block to be taller than one line');
+  assert.deepEqual(straightPolygons.boundingBox.toJSON(), rotatedPolygons.boundingBox.toJSON());
+});
+
 console.log('GeometryEngine tests passed.');

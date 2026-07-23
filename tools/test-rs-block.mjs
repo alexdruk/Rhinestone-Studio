@@ -423,7 +423,9 @@ function expectedStonesForText(text) {
     }
     const glyph = getGlyphStoneMap(character);
     if (glyph) {
-      for (const stone of glyph.stones) stones.push({ xMm: stone.xMm + penXMm, yMm: stone.yMm });
+      // TXT-102: RhinestoneFontProvider negates the family's authored (Y-up) yMm into the engine's
+      // Y-down space -- mirrored here so this independent re-derivation matches real output.
+      for (const stone of glyph.stones) stones.push({ xMm: stone.xMm + penXMm, yMm: -stone.yMm });
       penXMm += glyph.advanceWidthMm;
     }
     previousCharacter = character;

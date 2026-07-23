@@ -487,7 +487,10 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // non-empty layerId per instance; each Stone still carries its own real layer id) so every
  // renderer/exporter downstream consumes the same canonical product.
  async generate(project){let raw=[];for(const l of project.layers){if(!l.visible)continue;if(l.type==='text')raw.push(...await this.generateTextStonesLive(l,project));if(SHAPE_LAYER_TYPES.has(l.type))raw.push(...await this.generateShapeStonesLive(l));if(l.type==='svg')raw.push(...await this.generateSvgStonesLive(l));if(l.type==='image')raw.push(...await this.generateImageStonesLive(l));if(l.type==='path')raw.push(...await this.generatePathStonesLive(l));}const stones=dedupeStonesByRadius(raw).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId}));return new StoneLayout({layerId:'project',stones})}
- async generateTextStonesLive(layer,project){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text)return[];const fontId=TEXT_ENGINE_FONT_IDS.has(layer.font)?layer.font:DEFAULT_TEXT_FONT_ID;const mode=resolveTextFillMode(layer.textMode);const base={text:layer.text,fontId,providerId:resolveFontProviderId(fontId),layerId:layer.id,heightMm:layer.height,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const{scale}=computeAutoFitScale(layer,project,result.widthMm);if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
+ async generateTextStonesLive(layer,project){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text)return[];const fontId=TEXT_ENGINE_FONT_IDS.has(layer.font)?layer.font:DEFAULT_TEXT_FONT_ID;const mode=resolveTextFillMode(layer.textMode);const base={text:layer.text,fontId,providerId:resolveFontProviderId(fontId),layerId:layer.id,heightMm:layer.height,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment,
+  // TXT-102: '??' fallbacks so a pre-TXT-102 saved project (no align/lineSpacing/rotationDeg on its
+  // text layers) renders byte-identical -- 'left'/1/0 are exactly GeometryEngine's own defaults.
+  align:layer.align??'left',lineSpacing:layer.lineSpacing??1,rotationDeg:layer.rotationDeg??0};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const{scale}=computeAutoFitScale(layer,project,result.widthMm);if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
   // RS-1009: text layers previously had no position field -- stones were always centered on the
   // canvas. layer.x/layer.y (mm, default 0) are a further offset applied on top of that same
   // auto-centered base position, so pre-RS-1009 Project JSON (no x/y on its text layers) renders
@@ -526,7 +529,7 @@ const DEFAULT_PROJECT_NAME='Untitled Project';
 // avoids a null-check at every call site that reads it (drawCup(), Production Sheet options, the
 // plate guide overlay), exactly like project.wrap already exists (and is read) even while a
 // cylindrical template that barely uses it is selected.
-function defaultProject(){return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,product:'mug',canvas:{width:210,height:90},cupColor:'#1f3556',wrap:'front',plate:getPlateDefaults(),layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:2,gap:.3,color:'gold',autoFit:true,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',x:0,y:0}]}}
+function defaultProject(){return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,product:'mug',canvas:{width:210,height:90},cupColor:'#1f3556',wrap:'front',plate:getPlateDefaults(),layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:2,gap:.3,color:'gold',autoFit:true,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0}]}}
 // RS-0003.5D1: validates an imported Project JSON file against the exact ad hoc project/layer
 // shape #exportProject already produces (JSON.stringify(project)). Throws a specific Error
 // describing the first problem found instead of silently accepting a malformed project; the
@@ -761,7 +764,10 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
   if(showStarFields){el('shapePoints').value=l.points??5;el('shapeInnerRadius').value=l.innerRadiusRatio??0.5}
   if(showRingField)el('shapeRingInner').value=l.innerRatio??0.5;
   if(l.type==='image')el('imageFillMode').value=resolveImageFillMode(l.fillMode);
-  if(isText){el('text').value=l.text;el('font').value=l.font;el('height').value=l.height;el('autoFit').value=l.autoFit?'on':'off';el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';el('curveRadiusMm').value=l.curveRadiusMm??40;el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??180;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';el('textX').value=l.x||0;el('textY').value=l.y||0}else{el('shapeX').value=l.type==='circle'?l.cx:l.x;el('shapeY').value=l.type==='circle'?l.cy:l.y;el('shapeW').value=l.type==='circle'?l.r:l.w;el('shapeH').value=l.type==='circle'?'':l.h;el('shapeWLabel').textContent=l.type==='circle'?'Radius (mm)':'Width (mm)';el('shapeHField').style.display=l.type==='circle'?'none':'';if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);el('gap').value=l.gap;el('stoneColor').value=l.color;
+  if(isText){el('text').value=l.text;el('font').value=l.font;el('height').value=l.height;el('autoFit').value=l.autoFit?'on':'off';el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';el('curveRadiusMm').value=l.curveRadiusMm??40;el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??180;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';el('textX').value=l.x||0;el('textY').value=l.y||0;
+  // TXT-102: '??'/'||' fallbacks so a pre-TXT-102 project (no align/lineSpacing/rotationDeg stored)
+  // displays GeometryEngine's own defaults, matching this line's existing curve-field convention.
+  el('textAlign').value=l.align||'left';el('lineSpacing').value=l.lineSpacing??1;el('rotationDeg').value=l.rotationDeg??0}else{el('shapeX').value=l.type==='circle'?l.cx:l.x;el('shapeY').value=l.type==='circle'?l.cy:l.y;el('shapeW').value=l.type==='circle'?l.r:l.w;el('shapeH').value=l.type==='circle'?'':l.h;el('shapeWLabel').textContent=l.type==='circle'?'Radius (mm)':'Width (mm)';el('shapeHField').style.display=l.type==='circle'?'none':'';if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);el('gap').value=l.gap;el('stoneColor').value=l.color;
   // RS-1002: project.cupColor/project.wrap are project-level (not per-layer) fields, so they must
   // be resynced here too -- otherwise an undo/redo restore (or a Project JSON import) leaves these
   // two dropdowns stale, and the *next* edit's writeSelectedControlsToLayer() would silently write
@@ -820,7 +826,11 @@ function writeSelectedControlsToLayer(){const l=selectedLayer();
     l.text=el('text').value;l.font=el('font').value;l.height=parseFloat(el('height').value)||25;l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;l.curveEnabled=el('curveEnabled').value==='on';l.curveRadiusMm=Math.max(0.1,parseFloat(el('curveRadiusMm').value)||40);l.curveDirection=el('curveDirection').value==='inside'?'inside':'outside';l.curveStartAngleDeg=parseFloat(el('curveStartAngleDeg').value)||0;l.curveSweepAngleDeg=parseFloat(el('curveSweepAngleDeg').value)||180;l.curveAlignment=el('curveAlignment').value;el('curveControls').style.display=l.curveEnabled?'block':'none';
   // UI-001: manual X/Y mm fields for the Text Lightbox, writing to the same layer.x/layer.y fields
   // RS-1009 already added (previously settable only by drag/nudge/align/distribute).
-  l.x=parseFloat(el('textX').value)||0;l.y=parseFloat(el('textY').value)||0}else if(l.type==='circle'){l.cx=parseFloat(el('shapeX').value)||105;l.cy=parseFloat(el('shapeY').value)||45;l.r=Math.max(1,parseFloat(el('shapeW').value)||18);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(l.type==='rectangle'){l.x=parseFloat(el('shapeX').value)||65;l.y=parseFloat(el('shapeY').value)||30;l.w=Math.max(1,parseFloat(el('shapeW').value)||80);l.h=Math.max(1,parseFloat(el('shapeH').value)||30);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(SHAPE_LIBRARY_KINDS.has(l.type)){
+  l.x=parseFloat(el('textX').value)||0;l.y=parseFloat(el('textY').value)||0;
+  // TXT-102: align/lineSpacing mirror curveAlignment/curveRadiusMm's own clamp-on-write convention
+  // just above -- lineSpacing clamped to the same [0.5,3] range the #lineSpacing input itself allows,
+  // rotationDeg normalized into [0,360) exactly like GeometryEngine's own normalizeRotationDeg().
+  l.align=el('textAlign').value;l.lineSpacing=Math.max(0.5,Math.min(3,parseFloat(el('lineSpacing').value)||1));l.rotationDeg=(((parseFloat(el('rotationDeg').value)||0)%360)+360)%360}else if(l.type==='circle'){l.cx=parseFloat(el('shapeX').value)||105;l.cy=parseFloat(el('shapeY').value)||45;l.r=Math.max(1,parseFloat(el('shapeW').value)||18);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(l.type==='rectangle'){l.x=parseFloat(el('shapeX').value)||65;l.y=parseFloat(el('shapeY').value)||30;l.w=Math.max(1,parseFloat(el('shapeW').value)||80);l.h=Math.max(1,parseFloat(el('shapeH').value)||30);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(SHAPE_LIBRARY_KINDS.has(l.type)){
   // S-110: every new shape kind shares Rectangle's x/y/w/h + Fill Style write-back, plus its own
   // configurable extra fields (Regular Polygon/Star/Ring only).
   l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||60);l.h=Math.max(1,parseFloat(el('shapeH').value)||60);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value);
@@ -1258,7 +1268,43 @@ const SELECTION_HANDLE_SIZE_PX=11;
 // once per multi-selected layer. Handles only ever draw when exactly one layer is selected
 // (multi-layer resize is out of scope for this milestone) -- unchanged single-selection visuals.
 function drawSelectionBox(ctx,s,ox,oy,dpr,b,showHandles){const rx=ox+b.x*s,ry=oy+b.y*s,rw=b.width*s,rh=b.height*s;ctx.save();ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=4*dpr;ctx.setLineDash([]);ctx.strokeRect(rx,ry,rw,rh);ctx.strokeStyle='#1478ff';ctx.lineWidth=1.75*dpr;ctx.setLineDash([6*dpr,3*dpr]);ctx.strokeRect(rx,ry,rw,rh);ctx.setLineDash([]);if(showHandles){for(const h of handlesFor(b)){const hs=SELECTION_HANDLE_SIZE_PX*dpr;ctx.shadowColor='rgba(20,30,50,.35)';ctx.shadowBlur=3*dpr;ctx.fillStyle='white';ctx.strokeStyle='#1478ff';ctx.lineWidth=1.75*dpr;ctx.beginPath();ctx.rect(ox+h.x*s-hs/2,oy+h.y*s-hs/2,hs,hs);ctx.fill();ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.stroke()}}ctx.restore()}
-function drawSelection(ctx,s,ox,oy,dpr){const selected=project.layers.filter(l=>selectedLayerIds.has(l.id));const single=selected.length===1;for(const l of selected)drawSelectionBox(ctx,s,ox,oy,dpr,getLayerBBox(l),single&&l.type!=='text')}
+function drawSelection(ctx,s,ox,oy,dpr){const selected=project.layers.filter(l=>selectedLayerIds.has(l.id));const single=selected.length===1;for(const l of selected){const b=getLayerBBox(l);drawSelectionBox(ctx,s,ox,oy,dpr,b,single&&l.type!=='text');
+  // TXT-102: text has no resize handles (see drawSelectionBox's showHandles above), but gets its own
+  // single rotate handle instead, only while it is the sole selection -- matching the existing
+  // single-selection-only precedent resize handles already set.
+  if(single&&l.type==='text')drawRotateHandle(ctx,s,ox,oy,dpr,b)}}
+// TXT-102: rotate handle geometry -- a small fixed mm gap directly above the bbox's own top-center,
+// independent of the layer's current rotationDeg. (An earlier version orbited the bbox center at a
+// radius derived from the bbox diagonal, matching Illustrator/Figma's "handle stays attached to the
+// shape's own rotated top" behavior -- but for ordinary single-line text, whose bbox is far wider
+// than it is tall, half the diagonal is dominated by half the *width*, placing the handle tens of mm
+// above the text: a real, confirmed-by-screenshot bug, not just a cosmetic quibble. A fixed gap above
+// the AABB's current top edge has no such blowup for any aspect ratio, at the cost of the handle not
+// visually orbiting with rotation -- an acceptable, simpler tradeoff.) Returns null for a degenerate
+// (zero-area) bbox -- nothing to rotate around yet (e.g. a text layer with no stones generated).
+const ROTATE_HANDLE_GAP_MM=10;
+const ROTATE_HANDLE_RADIUS_PX=7;
+const ROTATE_HANDLE_HIT_TOLERANCE_MM=4;
+// TXT-102: Shift-drag snap step for the rotate handle -- 15° divides evenly into every angle named
+// in the spec (0/15/30/45/60/90/...), matching Illustrator/Figma's own default rotation snap.
+const ROTATION_SNAP_STEP_DEG=15;
+function rotateHandlePositionMm(b){
+  if(b.width<=0&&b.height<=0)return null;
+  const topCenterX=b.x+b.width/2;
+  return{x:topCenterX,y:b.y-ROTATE_HANDLE_GAP_MM,anchorX:topCenterX,anchorY:b.y,cx:(b.x+b.x2)/2,cy:(b.y+b.y2)/2};
+}
+function drawRotateHandle(ctx,s,ox,oy,dpr,b){
+  const h=rotateHandlePositionMm(b);if(!h)return;
+  const hx=ox+h.x*s,hy=oy+h.y*s,ax=ox+h.anchorX*s,ay=oy+h.anchorY*s,r=ROTATE_HANDLE_RADIUS_PX*dpr;
+  ctx.save();
+  ctx.strokeStyle='rgba(20,120,255,.55)';ctx.lineWidth=1.25*dpr;ctx.setLineDash([3*dpr,3*dpr]);
+  ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(hx,hy);ctx.stroke();ctx.setLineDash([]);
+  ctx.shadowColor='rgba(20,30,50,.35)';ctx.shadowBlur=3*dpr;
+  ctx.fillStyle='white';ctx.strokeStyle='#1478ff';ctx.lineWidth=1.75*dpr;
+  ctx.beginPath();ctx.arc(hx,hy,r,0,Math.PI*2);ctx.fill();
+  ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.stroke();
+  ctx.restore();
+}
 // RS-1009: temporary drag-snap guide lines (magenta, full canvas span), populated only while a
 // move-drag is actively snapped and cleared on pointerup -- never persisted, never a user-created
 // guide (out of scope).
@@ -1322,7 +1368,24 @@ function composeCombinedPreviewCanvas(){
   return c;
 }
 function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(XYWH_SHAPE_TYPES.has(copy.type)){copy.x+=8;copy.y+=8}if(copy.type==='text'){copy.text+=' copy';copy.x=(copy.x||0)+8;copy.y=(copy.y||0)+8}project.layers.push(copy);selectedLayerId=copy.id;selectedLayerIds=selectOnly(copy.id);syncSelectedControlsFromLayer();updateAll()}function deleteLayer(id){if(project.layers.length<=1){el('status').textContent='Cannot delete the last layer';const hint=el('layerRuleHint');hint.style.display='block';hint.scrollIntoView({block:'nearest'});return}commitHistory();project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true)}
-function pointerToLayout(e){const r=layoutCanvas.getBoundingClientRect(),dpr=layoutTransform.dpr;return layoutPxToMm((e.clientX-r.left)*dpr,(e.clientY-r.top)*dpr)}function hitTest(mm){const layers=[...project.layers].reverse();for(const l of layers){const b=getLayerBBox(l);for(const h of handlesFor(b)){if(Math.abs(mm.x-h.x)<3&&Math.abs(mm.y-h.y)<3&&l.type!=='text')return{layer:l,kind:'resize',handle:h.name,b0:b}}if(mm.x>=b.x&&mm.x<=b.x2&&mm.y>=b.y&&mm.y<=b.y2)return{layer:l,kind:'move',b0:b}}return null}
+function pointerToLayout(e){const r=layoutCanvas.getBoundingClientRect(),dpr=layoutTransform.dpr;return layoutPxToMm((e.clientX-r.left)*dpr,(e.clientY-r.top)*dpr)}
+// TXT-102: checked before the generic per-layer loop below -- the rotate handle only ever exists
+// for the single currently-selected text layer (matching drawRotateHandle()'s own single&&
+// l.type==='text' gate), and it is drawn outside the layer's own bbox, so it would never be reached
+// by the bbox-contains 'move' check below anyway.
+function rotateHandleHitTest(mm){
+  if(selectedLayerIds.size!==1)return null;
+  const l=project.layers.find(x=>x.type==='text'&&selectedLayerIds.has(x.id));
+  if(!l)return null;
+  const b=getLayerBBox(l);
+  const h=rotateHandlePositionMm(b);
+  if(!h)return null;
+  if(Math.abs(mm.x-h.x)<ROTATE_HANDLE_HIT_TOLERANCE_MM&&Math.abs(mm.y-h.y)<ROTATE_HANDLE_HIT_TOLERANCE_MM){
+    return{layer:l,kind:'rotate',b0:b,center:{x:h.cx,y:h.cy}};
+  }
+  return null;
+}
+function hitTest(mm){const rotateHit=rotateHandleHitTest(mm);if(rotateHit)return rotateHit;const layers=[...project.layers].reverse();for(const l of layers){const b=getLayerBBox(l);for(const h of handlesFor(b)){if(Math.abs(mm.x-h.x)<3&&Math.abs(mm.y-h.y)<3&&l.type!=='text')return{layer:l,kind:'resize',handle:h.name,b0:b}}if(mm.x>=b.x&&mm.x<=b.x2&&mm.y>=b.y&&mm.y<=b.y2)return{layer:l,kind:'move',b0:b}}return null}
 // S-104: a move-drag previously mapped pointer movement to mm 1:1 (rawDx/rawDy applied verbatim),
 // which made small, precise placements -- text in particular, since it has no resize handles to
 // fall back on -- hard to land exactly. LAYER_MOVE_DRAG_SENSITIVITY scales the pointer's
@@ -1354,6 +1417,24 @@ layoutCanvas.addEventListener('pointerdown',e=>{
     syncSelectedControlsFromLayer();renderLayerUI();updateEditingUI();
     commitHistory();
     drag={kind:'resize',handle:hit.handle,layerId:hit.layer.id,start:mm,b0:hit.b0,l0:JSON.parse(JSON.stringify(hit.layer))};
+    layoutCanvas.setPointerCapture(e.pointerId);updateAll(true);return;
+  }
+  if(hit.kind==='rotate'){
+    // TXT-102: the layer is already the sole selection (rotateHandleHitTest() only ever matches the
+    // single selected text layer), so no selection-state change is needed here, unlike 'resize'
+    // above (which can start from a click that first changes selection). startPointerAngleDeg is
+    // the pointer's own angle from the bbox center at drag-start, in the same clockwise-from-up
+    // convention rotateHandlePositionMm()/rotateTextPoints() use -- pointermove below only ever
+    // needs the *change* in pointer angle from this reference, added to the layer's own starting
+    // rotationDeg, so the handle tracks the pointer exactly with no jump at drag-start.
+    commitHistory();
+    const dxMm=mm.x-hit.center.x,dyMm=mm.y-hit.center.y;
+    const startPointerAngleDeg=Math.atan2(dxMm,-dyMm)*180/Math.PI;
+    // start:mm is unused by the 'rotate' branch itself (it re-derives its own dxMm/dyMm from
+    // drag.center every move) but is still required here: pointermove's shared preamble
+    // (`rawDx=mm.x-drag.start.x`) runs unconditionally before branching on drag.kind, exactly like
+    // it already does for 'resize' (whose branch also ignores rawDx/rawDy in favor of raw mm).
+    drag={kind:'rotate',layerId:hit.layer.id,start:mm,center:hit.center,startRotationDeg:hit.layer.rotationDeg||0,startPointerAngleDeg};
     layoutCanvas.setPointerCapture(e.pointerId);updateAll(true);return;
   }
   if(e.shiftKey){
@@ -1435,6 +1516,15 @@ layoutCanvas.addEventListener('pointermove',e=>{
     const l=project.layers.find(x=>x.id===drag.layerId);if(!l)return;
     if(l.type==='circle'){l.r=Math.max(2,Math.hypot(mm.x-drag.l0.cx,mm.y-drag.l0.cy))}
     else if(XYWH_SHAPE_TYPES.has(l.type)){let x0=drag.b0.x,y0=drag.b0.y,x1=drag.b0.x2,y1=drag.b0.y2;if(drag.handle.includes('w'))x0=mm.x;if(drag.handle.includes('e'))x1=mm.x;if(drag.handle.includes('n'))y0=mm.y;if(drag.handle.includes('s'))y1=mm.y;l.x=Math.min(x0,x1);l.y=Math.min(y0,y1);l.w=Math.max(2,Math.abs(x1-x0));l.h=Math.max(2,Math.abs(y1-y0))}
+  }else if(drag.kind==='rotate'){
+    const l=project.layers.find(x=>x.id===drag.layerId);if(!l)return;
+    const dxMm=mm.x-drag.center.x,dyMm=mm.y-drag.center.y;
+    const pointerAngleDeg=Math.atan2(dxMm,-dyMm)*180/Math.PI;
+    let rotationDeg=drag.startRotationDeg+(pointerAngleDeg-drag.startPointerAngleDeg);
+    // TXT-102: "Shift snaps to common angles (0°, 15°, 30°, 45°, 60°, 90°, etc.)" -- snapping the
+    // live drag value to the nearest 15° multiple covers every angle the spec calls out by name.
+    if(e.shiftKey)rotationDeg=Math.round(rotationDeg/ROTATION_SNAP_STEP_DEG)*ROTATION_SNAP_STEP_DEG;
+    l.rotationDeg=((rotationDeg%360)+360)%360;
   }
   syncSelectedControlsFromLayer();updateAll(true);
 });
@@ -1455,7 +1545,7 @@ window.addEventListener('keydown',e=>{
 // (opened on the first 'input' event, closed on 'change'). `rotation`/`zoom` are view-only (not
 // part of `project`) and keep their original plain 'input' listener, untouched.
 // UI-001: 'textX'/'textY' are the new manual Text Lightbox position fields (see writeSelectedControlsToLayer()).
-const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget'];
+const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','textAlign','lineSpacing','rotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
 // RS-2002: Browse Fonts panel wiring. Toggling/closing never touches history (it only decides
@@ -1619,7 +1709,7 @@ async function addText(){
   const other=singleOtherSelectedLayer();
   const fitPartnerShape=(other&&FITTABLE_SHAPE_TYPES.has(other.type))?other:null;
   commitHistory();
-  const layer={id:'text'+Date.now(),type:'text',visible:true,text:'New Text',font:TEXT_ENGINE_FONT_IDS.has(l.font)?l.font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold',autoFit:true,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',x:0,y:0};
+  const layer={id:'text'+Date.now(),type:'text',visible:true,text:'New Text',font:TEXT_ENGINE_FONT_IDS.has(l.font)?l.font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold',autoFit:true,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0};
   project.layers.push(layer);
   selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);
   let statusText='Added text layer';

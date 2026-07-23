@@ -53,6 +53,10 @@ input[type="text"],input[type="number"],input:not([type]),select{
   width:100%;height:var(--control-height);padding:0 10px;border:1px solid var(--color-border-strong);
   border-radius:var(--radius-sm);background:var(--color-surface);color:var(--color-text);font-size:var(--font-size-md);
 }
+textarea{
+  width:100%;padding:8px 10px;border:1px solid var(--color-border-strong);resize:vertical;min-height:calc(var(--control-height) * 2);
+  border-radius:var(--radius-sm);background:var(--color-surface);color:var(--color-text);font-size:var(--font-size-md);
+}
 input[type="range"]{width:100%}
 input:disabled,select:disabled,button:disabled{opacity:.45;cursor:not-allowed}
 .field{margin-bottom:var(--space-3)}
@@ -492,7 +496,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
       <div id="textControls">
         <div class="field-section">
           <h3>Content</h3>
-          <div class="field"><label for="text">Text content</label><input id="text" value="Vitalina Serbin"></div>
+          <div class="field"><label for="text">Text content</label><textarea id="text" rows="3" title="Press Enter to start a new line.">Vitalina Serbin</textarea></div>
           <div class="field-row">
             <div class="field"><label for="font">Font</label><div class="font-pick-row"><select id="font"><option value="courier-prime-regular" selected>Courier Prime (monospace)</option><option value="great-vibes-regular">Great Vibes (script)</option></select><button type="button" class="icon-btn" id="fontLibraryBtn" title="Browse the font library" aria-haspopup="true" aria-expanded="false" aria-controls="fontLibraryPanel">🔎</button></div></div>
             <div class="field"><label for="textMode">Fill Style</label><select id="textMode" title="How rhinestones are arranged across this text.">
@@ -502,6 +506,14 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
               <option value="radial">Radial Fill - rings out from the center</option>
               <option value="contour">Contour Fill - rings that follow the letters inward</option>
             </select></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label for="textAlign">Alignment</label><select id="textAlign" title="How multiple lines align relative to each other. No effect on single-line text.">
+              <option value="left" selected>Left</option>
+              <option value="center">Center</option>
+              <option value="right">Right</option>
+            </select></div>
+            <div class="field"><label for="lineSpacing">Line spacing</label><input id="lineSpacing" type="number" min="0.5" max="3" step="0.1" value="1"></div>
           </div>
           <div id="fontLibraryPanel" class="font-library-panel" hidden>
             <div class="font-library-toolbar">
@@ -526,6 +538,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <p class="validation-message" id="textOutsidePrintableWarning" role="status">This text is outside the printable area.</p>
           <button type="button" class="btn sm primary" id="centerTextOnObject" title="Reset only this text layer's position to the center of the printable area — font, size, rotation, spacing, fill, and stone size are left unchanged">↺ Center on Object</button>
           <p class="hint">Text can also be moved by dragging on the 2D canvas, arrow-key nudging, or Align &amp; Snap. Dragged this text out of view? Click Center on Object above to bring it back. Long text that fits the object's printable circumference can be inspected by dragging the amber Front View Frame on the 2D canvas, or by rotating the Object Preview.</p>
+          <div class="field"><label for="rotationDeg">Rotation (deg)</label><input id="rotationDeg" type="number" min="0" max="360" step="1" value="0"></div>
+          <p class="hint">Drag the round handle above the selected text on the 2D canvas to rotate it freely, or type an exact angle here. Hold Shift while dragging the handle to snap to 15° steps.</p>
         </div>
         <div class="field-section">
           <h3>Curve</h3>

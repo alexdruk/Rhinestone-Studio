@@ -24,8 +24,7 @@ import {
 } from '../src/text/rhinestoneFont/index.js';
 import {
   descriptor,
-  PITCH_MM,
-  DESCENDER_BOTTOM_ROW,
+  CAP_HEIGHT_MM,
   TOTAL_HEIGHT_MM
 } from '../src/text/rhinestoneFont/families/rsBlock.js';
 import { GeometryEngine } from '../src/geometry/GeometryEngine.js';
@@ -81,13 +80,16 @@ async function renderWordCard(text) {
     text, fontId: FONT_ID, providerId: 'rhinestone', layerId: 'qa',
     heightMm: HEIGHT_MM_UNUSED_PLACEHOLDER, stoneSizeMm: STONE_SIZE_MM, gapMm: GAP_MM, mode: 'outline', color: 'gold'
   });
-  const stoneParts = layout.stones.map((s) => stoneCircleSvg(s.xMm + padMm, s.yMm, pxPerMm));
+  // TXT-102 bugfix: layout.stones.yMm is now already Y-down (ascender negative, descender positive),
+  // matching every other consumer of GeometryEngine output -- see RhinestoneFontProvider.js's sign-
+  // flip fix. baselineOffsetMm (distance from the card's top edge down to the baseline) replaces the
+  // old scale(1,-1) compensating-flip <g> wrapper this script used to need.
+  const baselineOffsetMm = CAP_HEIGHT_MM + padMm;
+  const stoneParts = layout.stones.map((s) => stoneCircleSvg(s.xMm + padMm, baselineOffsetMm + s.yMm, pxPerMm));
   const maxXmm = layout.stones.length > 0 ? Math.max(...layout.stones.map((s) => s.xMm)) : 0;
 
   const widthMm = maxXmm + padMm * 2;
   const heightMm = TOTAL_HEIGHT_MM + padMm * 2;
-  const bottomPadMm = padMm - DESCENDER_BOTTOM_ROW * PITCH_MM;
-  const flippedStones = `<g transform="translate(0, ${(heightMm * pxPerMm).toFixed(1)}) scale(1,-1) translate(0, ${(bottomPadMm * pxPerMm).toFixed(1)})">${stoneParts.join('')}</g>`;
 
   const statusLine = unsupported.length > 0
     ? `<span class="unsupported-flag">UNSUPPORTED: ${unsupported.join(', ')}</span>`
@@ -98,7 +100,7 @@ async function renderWordCard(text) {
       <div class="word-label">"${text}" ${statusLine}</div>
       <svg width="${(widthMm * pxPerMm).toFixed(0)}" height="${(heightMm * pxPerMm).toFixed(0)}" viewBox="0 0 ${(widthMm * pxPerMm).toFixed(0)} ${(heightMm * pxPerMm).toFixed(0)}">
         <rect width="100%" height="100%" fill="#1c1c22"/>
-        ${flippedStones}
+        ${stoneParts.join('')}
       </svg>
     </div>`;
 }
@@ -115,15 +117,14 @@ async function renderGlyphCard(character) {
   const glyph = family.getGlyphStoneMap(character);
   const widthMm = glyph.advanceWidthMm;
   const heightMm = TOTAL_HEIGHT_MM + padMm * 2;
-  const bottomPadMm = padMm - DESCENDER_BOTTOM_ROW * PITCH_MM;
-  const circles = layout.stones.map((s) => stoneCircleSvg(s.xMm + padMm, s.yMm, pxPerMm)).join('');
-  const flipped = `<g transform="translate(0, ${(heightMm * pxPerMm).toFixed(1)}) scale(1,-1) translate(0, ${(bottomPadMm * pxPerMm).toFixed(1)})">${circles}</g>`;
+  const baselineOffsetMm = CAP_HEIGHT_MM + padMm;
+  const circles = layout.stones.map((s) => stoneCircleSvg(s.xMm + padMm, baselineOffsetMm + s.yMm, pxPerMm)).join('');
   return `
     <div class="glyph-card">
       <div class="glyph-label">${character === ' ' ? '␣' : character}</div>
       <svg width="${(widthMm * pxPerMm).toFixed(0)}" height="${(heightMm * pxPerMm).toFixed(0)}" viewBox="0 0 ${(widthMm * pxPerMm).toFixed(0)} ${(heightMm * pxPerMm).toFixed(0)}">
         <rect width="100%" height="100%" fill="#1c1c22"/>
-        ${flipped}
+        ${circles}
       </svg>
       <div class="glyph-meta">${layout.stones.length} stones</div>
     </div>`;

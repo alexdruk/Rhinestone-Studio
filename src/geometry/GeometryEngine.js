@@ -51,6 +51,19 @@ const DEFAULT_MODE = 'outline';
 // shape, not a new engine method.
 const SHAPE_TYPES = new Set(['circle', 'rectangle', ...SHAPE_LIBRARY_KINDS]);
 
+// TXT-102: paragraph-style alignment of each line within its own multi-line text block. 'left'
+// (default) reproduces every pre-TXT-102 layout exactly (each line already starts its own pen walk
+// at local x=0, so no offset is ever applied for it -- see textAlignOffsetMm() below).
+const TEXT_ALIGNMENTS = new Set(['left', 'center', 'right']);
+// TXT-102: default single-line-spacing baseline pitch, as a multiple of the layer's own heightMm --
+// chosen so adjacent lines clear ascenders/descenders for ordinary text without the operator having
+// to touch the Line Spacing control. Not derived from font-specific ascender/descender metrics
+// because GeometryEngine only ever resolves one character's metrics at a time (see
+// _buildLineContours() below) and a line's own characters may have no ascender/descender at all --
+// a single fixed ratio is simpler, deterministic, and font-agnostic. Line Spacing (options.lineSpacing,
+// default 1) scales this multiplicatively.
+const TEXT_LINE_HEIGHT_RATIO = 1.4;
+
 export class GeometryEngine {
   /**
    * @param {object} [options]
@@ -90,6 +103,14 @@ export class GeometryEngine {
    * @param {number} [params.letterSpacingMm]
    * @param {'outline'|'fill'} [params.mode]
    * @param {string} [params.providerId] Font provider id, defaults to the registry default.
+   * @param {'left'|'center'|'right'} [params.align] TXT-102: per-line paragraph alignment within a
+   *   multi-line text block, default 'left'. No effect on single-line text (see
+   *   textAlignOffsetMm()).
+   * @param {number} [params.lineSpacing] TXT-102: multiplier applied to the default single-spacing
+   *   line pitch (TEXT_LINE_HEIGHT_RATIO * heightMm), default 1. No effect on single-line text.
+   * @param {number} [params.rotationDeg] TXT-102: whole-block rotation in degrees, clockwise,
+   *   applied last, around the text block's own (pre-rotation) bounding-box center. Default 0 (no
+   *   rotation, byte-identical to before this milestone). Normalized into [0, 360).
    * @returns {Promise<StoneLayout>}
    */
   async generateTextLayout(params = {}) {
@@ -114,7 +135,8 @@ export class GeometryEngine {
       if (options.curveEnabled) {
         throw new Error('GeometryEngine.generateTextLayout: curved text is not supported for fonts that supply authored stone centers.');
       }
-      stones = authoredStones.map((point, index) => new Stone({
+      const rotatedAuthoredStones = rotateTextPoints(authoredStones, options.rotationDeg);
+      stones = rotatedAuthoredStones.map((point, index) => new Stone({
         xMm: point.xMm,
         yMm: point.yMm,
         sizeMm: options.stoneSizeMm,
@@ -125,7 +147,8 @@ export class GeometryEngine {
       sourceMode = 'authored';
     } else {
       const spacingMm = options.stoneSizeMm + options.gapMm;
-      const points = sampleShapeFillPoints(options.mode, polygons, boundingBox, spacingMm, options.stoneSizeMm);
+      const sampledPoints = sampleShapeFillPoints(options.mode, polygons, boundingBox, spacingMm, options.stoneSizeMm);
+      const points = rotateTextPoints(sampledPoints, options.rotationDeg);
       stones = points.map((point, index) => new Stone({
         xMm: point.xMm,
         yMm: point.yMm,
@@ -148,6 +171,13 @@ export class GeometryEngine {
    * generateTextLayout() uses (including curved-text arc projection), so a text layer's boolean
    * outline and its stone-sampled outline are always the same geometry. Requires a
    * fontProviderRegistry, exactly like generateTextLayout().
+   *
+   * TXT-102: multi-line layout and per-line alignment ARE reflected here (both resolved inside the
+   * shared _textPolygons()/_buildPositionedContours() this method calls). params.rotationDeg is NOT
+   * applied here -- rotation is a final Stone-position transform generateTextLayout() applies after
+   * sampling (see rotateTextPoints()), so a Boolean Operation built from a rotated text layer's
+   * outline reflects that layer's un-rotated shape. Out of scope for this milestone; revisit if
+   * Boolean Operations need to compose with rotated text.
    *
    * @param {object} params Same shape as generateTextLayout()'s params, minus stoneSizeMm/gapMm/mode/color.
    * @returns {Promise<{polygons: import('../text/VectorPath.js').Point2D[][], boundingBox: BoundingBox|null}>}
@@ -192,15 +222,60 @@ export class GeometryEngine {
   }
 
   /**
-   * Resolve each character to a glyph VectorPath through the
-   * FontProviderRegistry and translate its contours to the correct pen
-   * position, honoring letter spacing between characters.
+   * TXT-102: splits options.text on '\n' (preserving empty lines -- an empty line still occupies a
+   * line-height slot, it just contributes no contours/stones) and lays each line out independently
+   * via _buildLineContours(), then stacks the lines vertically (line index 0 first, at the original
+   * y=0 baseline -- unchanged from before this milestone) and applies per-line horizontal alignment
+   * so each line's own width is measured against the widest line. Single-line text (the overwhelming
+   * common case, and every project saved before this milestone) has exactly one line, whose own
+   * width always equals maxWidthMm, so textAlignOffsetMm() always returns 0 for it regardless of
+   * options.align, and the single line's y-offset is always 0 -- byte-identical output to before.
    *
    * @param {ReturnType<typeof normalizeTextParams>} options
-   * @returns {Promise<{contours: import('../text/VectorPath.js').Contour[], totalAdvanceWidthMm: number}>}
+   * @returns {Promise<{contours: import('../text/VectorPath.js').Contour[], authoredStones: {xMm:number,yMm:number}[], totalAdvanceWidthMm: number}>}
    */
   async _buildPositionedContours(options) {
-    const characters = Array.from(options.text);
+    const lines = options.text.split('\n');
+    const lineHeightMm = options.heightMm * TEXT_LINE_HEIGHT_RATIO * options.lineSpacing;
+
+    const lineResults = [];
+    for (const lineText of lines) {
+      lineResults.push(await this._buildLineContours(lineText, options));
+    }
+
+    const maxWidthMm = lineResults.reduce((max, line) => Math.max(max, line.widthMm), 0);
+
+    const contours = [];
+    const authoredStones = [];
+    for (let lineIndex = 0; lineIndex < lineResults.length; lineIndex++) {
+      const { contours: lineContours, authoredStones: lineStones, widthMm } = lineResults[lineIndex];
+      const xOffsetMm = textAlignOffsetMm(options.align, maxWidthMm, widthMm);
+      const yOffsetMm = lineIndex * lineHeightMm;
+
+      for (const contour of lineContours) {
+        contours.push(translateContour(contour, xOffsetMm, yOffsetMm));
+      }
+      for (const stone of lineStones) {
+        authoredStones.push({ xMm: stone.xMm + xOffsetMm, yMm: stone.yMm + yOffsetMm });
+      }
+    }
+
+    return { contours, authoredStones, totalAdvanceWidthMm: maxWidthMm };
+  }
+
+  /**
+   * Resolve one line's worth of characters to glyph VectorPaths through the FontProviderRegistry and
+   * translate their contours to the correct pen position, honoring letter spacing/kerning between
+   * characters. Pre-TXT-102 single-line behavior, extracted unchanged so _buildPositionedContours()
+   * above can call it once per line -- a line's own pen position always starts at local x=0,
+   * matching this method's pre-extraction behavior exactly.
+   *
+   * @param {string} lineText
+   * @param {ReturnType<typeof normalizeTextParams>} options
+   * @returns {Promise<{contours: import('../text/VectorPath.js').Contour[], authoredStones: {xMm:number,yMm:number}[], widthMm: number}>}
+   */
+  async _buildLineContours(lineText, options) {
+    const characters = Array.from(lineText);
     const contours = [];
     const authoredStones = [];
     let penXMm = 0;
@@ -247,7 +322,7 @@ export class GeometryEngine {
       }
     }
 
-    return { contours, authoredStones, totalAdvanceWidthMm: penXMm };
+    return { contours, authoredStones, widthMm: penXMm };
   }
 
   /**
@@ -640,6 +715,14 @@ function normalizeTextParams(params) {
   }
 
   const curveEnabled = Boolean(params.curveEnabled);
+  // TXT-102: curved text assumes a single baseline mapped onto one arc (see ArcProjection.js) --
+  // mixing multiple lines onto one arc is a distinct feature this milestone does not implement, so
+  // the combination fails explicitly here rather than silently curving only one line or producing
+  // overlapping arcs, mirroring this file's existing "unsupported combination" pattern (see the
+  // authored-stone-centers + curve rejection just above in generateTextLayout()).
+  if (curveEnabled && params.text.includes('\n')) {
+    throw new Error('GeometryEngine.generateTextLayout: curved text does not support multiple lines (curveEnabled requires single-line text).');
+  }
   const curve = curveEnabled ? normalizeCurveParams(params) : {
     curveRadiusMm: null,
     curveDirection: null,
@@ -647,6 +730,15 @@ function normalizeTextParams(params) {
     curveSweepAngleDeg: null,
     curveAlignment: null
   };
+
+  const align = params.align ?? 'left';
+  if (!TEXT_ALIGNMENTS.has(align)) {
+    throw new TypeError(`align must be one of: ${[...TEXT_ALIGNMENTS].join(', ')}`);
+  }
+
+  const lineSpacing = assertPositiveNumber(params.lineSpacing ?? 1, 'lineSpacing');
+
+  const rotationDeg = normalizeRotationDeg(assertFiniteNumber(params.rotationDeg ?? 0, 'rotationDeg'));
 
   return {
     text: params.text,
@@ -660,8 +752,67 @@ function normalizeTextParams(params) {
     color: params.color ?? null,
     providerId: params.providerId ?? null,
     curveEnabled,
+    align,
+    lineSpacing,
+    rotationDeg,
     ...curve
   };
+}
+
+// TXT-102: normalizes any finite rotationDeg (including negative values or values >= 360, both
+// reachable from a continuous rotation-handle drag or a freely-typed numeric input) into [0, 360).
+function normalizeRotationDeg(value) {
+  const normalized = value % 360;
+  return normalized < 0 ? normalized + 360 : normalized;
+}
+
+// TXT-102: horizontal offset (mm) applied to one line of a multi-line text block so it reads as
+// left/center/right-aligned relative to the block's widest line. Always 0 for a single-line block
+// (maxWidthMm === widthMm regardless of align), which is what keeps single-line text byte-identical
+// to before this milestone.
+function textAlignOffsetMm(align, maxWidthMm, widthMm) {
+  if (align === 'center') return (maxWidthMm - widthMm) / 2;
+  if (align === 'right') return maxWidthMm - widthMm;
+  return 0;
+}
+
+// TXT-102: rigidly rotates a flat list of {xMm,yMm} points (final stone positions, sampled or
+// authored) around their own combined bounding-box center by rotationDeg (clockwise, since this
+// engine's mm space is Y-down -- see CanvasRenderer2D.js/SvgExporter.js, which map yMm to pixel/page
+// Y with no flip). Applied once, as the very last step before Stone construction in
+// generateTextLayout() -- after outline/fill sampling or after authored stone centers are resolved
+// -- so both a vector font's sampled points and a stone-map font's (RS Block) authored centers get
+// identical rotation behavior without duplicating this math for each source. Pivoting on the point
+// set's own center (rather than the pre-placement origin) keeps the text block rotating in place,
+// matching a typical rotation-handle UX. A 0 rotation (the default) returns the input unchanged, so
+// every project saved before this milestone renders byte-identical.
+function rotateTextPoints(points, rotationDeg) {
+  if (rotationDeg === 0 || points.length === 0) {
+    return points;
+  }
+
+  let minXmm = Infinity, minYmm = Infinity, maxXmm = -Infinity, maxYmm = -Infinity;
+  for (const point of points) {
+    if (point.xMm < minXmm) minXmm = point.xMm;
+    if (point.xMm > maxXmm) maxXmm = point.xMm;
+    if (point.yMm < minYmm) minYmm = point.yMm;
+    if (point.yMm > maxYmm) maxYmm = point.yMm;
+  }
+  const cxMm = (minXmm + maxXmm) / 2;
+  const cyMm = (minYmm + maxYmm) / 2;
+
+  const radians = rotationDeg * (Math.PI / 180);
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+
+  return points.map((point) => {
+    const dxMm = point.xMm - cxMm;
+    const dyMm = point.yMm - cyMm;
+    return {
+      xMm: cxMm + dxMm * cos - dyMm * sin,
+      yMm: cyMm + dxMm * sin + dyMm * cos
+    };
+  });
 }
 
 // RS-1003: validated only when curveEnabled is truthy, so straight text (the default) never reads
