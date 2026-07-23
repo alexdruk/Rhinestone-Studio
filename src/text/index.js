@@ -22,8 +22,7 @@ export {
   createRhinestoneFontProvider,
   RhinestoneFontRegistry,
   createRhinestoneFontRegistry,
-  createDefaultRhinestoneFontRegistry,
-  SKELETON_SUPPORTED_CHARACTERS
+  createDefaultRhinestoneFontRegistry
 } from './rhinestoneFont/index.js';
 
 export {

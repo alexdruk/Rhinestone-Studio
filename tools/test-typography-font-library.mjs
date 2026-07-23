@@ -163,8 +163,9 @@ await test('8. every currently-enabled manifest font id would be accepted as val
   const idsInSource = new Set(manager.listFonts().map((f) => f.id));
   // Simulates the real reassignment line's right-hand side against the real manifest.
   for (const id of idsInSource) assert.ok(typeof id === 'string' && id.length > 0);
-  // 9 RS-2002 desktop fonts + TXT-101A's 3 original rhinestone-native families.
-  assert.equal(idsInSource.size, 12);
+  // TXT-101A's rhinestone-native prototype is not manifest-registered (see
+  // src/text/rhinestoneFont/index.js), so this is still just the 9 RS-2002 desktop fonts.
+  assert.equal(idsInSource.size, 9);
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -182,8 +183,7 @@ await test('9. populateFontOptions() groups by category (alphabetical group orde
   const groupLabels = [...html.matchAll(/<optgroup label="([^"]+)">/g)].map((m) => m[1]);
   const sortedLabels = [...groupLabels].sort((a, b) => a.localeCompare(b));
   assert.deepEqual(groupLabels, sortedLabels, 'expected optgroup labels in alphabetical order');
-  // TXT-101A adds one more group: the 3 original rhinestone-native families share role:'rhinestone'.
-  assert.deepEqual(new Set(groupLabels), new Set(['Script', 'Serif', 'Sans Serif', 'Display', 'Monogram', 'Decorative', 'Block', 'Handwritten', 'Monospace', 'Rhinestone (Original)']));
+  assert.deepEqual(new Set(groupLabels), new Set(['Script', 'Serif', 'Sans Serif', 'Display', 'Monogram', 'Decorative', 'Block', 'Handwritten', 'Monospace']));
 
   // Within the "Monospace" group (Courier Prime + Roboto Mono is disabled, so only Courier Prime) --
   // use a group with 2+ members instead to actually exercise sorting: there is none among the

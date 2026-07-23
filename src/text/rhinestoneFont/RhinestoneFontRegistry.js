@@ -8,20 +8,31 @@
  * a recommended/minimum stone size, a recommended gap, and recommended production uses -- so it gets
  * its own registry rather than overloading FontManager's record shape.
  *
- * A family is registered as `{ descriptor, getGlyphStrokes, renderOptions }`:
+ * A family is registered as `{ descriptor, getGlyphStoneMap, renderOptions }`:
  *   - descriptor: plain, JSON-serializable metadata (id, displayName, category, recommended sizes,
  *     recommended uses, notes). `supportedCharacters` is derived, not authored -- see getMetadata().
- *   - getGlyphStrokes(character): returns that family's skeleton-stroke definition for one
- *     character (or null if unsupported), consumed by RhinestoneFontProvider.js.
- *   - renderOptions: stroke-construction parameters (capsuleSegments, defaultWidthUnits) consumed
- *     the same way.
+ *   - getGlyphStoneMap(character): returns that family's authored stone positions for one character
+ *     (`{advanceWidthMm, stones}`, already in millimeters at the family's own fixed pitch -- see
+ *     families/rsBlockPrototypeSS10.js) or null if unsupported, consumed by
+ *     RhinestoneFontProvider.js.
+ *   - renderOptions: reserved for future family-level render parameters; currently unused.
  *
- * Future families register the same way (see families/rsBlock.js for the shape to follow) -- no
- * change to this file, RhinestoneFontProvider.js, GeometryEngine, renderers, or exporters is needed
- * to add one, matching every other font already going through FontManager/FontProviderRegistry.
+ * Future families register the same way (see families/rsBlockPrototypeSS10.js for the shape to
+ * follow) -- no change to this file, RhinestoneFontProvider.js, GeometryEngine, renderers, or
+ * exporters is needed to add one, matching every other font already going through
+ * FontManager/FontProviderRegistry.
  */
 
-import { SKELETON_SUPPORTED_CHARACTERS } from './skeletonGlyphs.js';
+// Family-agnostic probe set for deriving `supportedCharacters`: every character any launch or
+// future family might plausibly support (a family simply returns null for the rest). Not itself a
+// coverage requirement for any one family -- see each family's own descriptor for what it actually
+// implements (RS Block Prototype (SS10) currently: A B C D G M N O P R S 8 only).
+const CANDIDATE_CHARACTERS = Object.freeze([
+  ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+  ...'abcdefghijklmnopqrstuvwxyz',
+  ...'0123456789',
+  ' ', '.', ',', '!', '?', "'", '-', '&'
+]);
 
 export class RhinestoneFontRegistry {
   constructor() {
@@ -33,11 +44,8 @@ export class RhinestoneFontRegistry {
     if (!family || !family.descriptor || typeof family.descriptor.id !== 'string' || !family.descriptor.id) {
       throw new TypeError('Rhinestone font family requires a descriptor with a non-empty id.');
     }
-    if (typeof family.getGlyphStrokes !== 'function') {
-      throw new TypeError(`Rhinestone font family "${family.descriptor.id}" requires getGlyphStrokes().`);
-    }
-    if (!family.renderOptions || typeof family.renderOptions.defaultWidthUnits !== 'number') {
-      throw new TypeError(`Rhinestone font family "${family.descriptor.id}" requires renderOptions.defaultWidthUnits.`);
+    if (typeof family.getGlyphStoneMap !== 'function') {
+      throw new TypeError(`Rhinestone font family "${family.descriptor.id}" requires getGlyphStoneMap().`);
     }
     if (this._families.has(family.descriptor.id)) {
       throw new Error(`Rhinestone font family already registered: ${family.descriptor.id}`);
@@ -63,7 +71,7 @@ export class RhinestoneFontRegistry {
     if (cached) return cached;
 
     const family = this.get(id);
-    const characters = SKELETON_SUPPORTED_CHARACTERS.filter((character) => family.getGlyphStrokes(character) !== null);
+    const characters = CANDIDATE_CHARACTERS.filter((character) => family.getGlyphStoneMap(character) !== null);
     this._supportedCharactersCache.set(id, characters);
     return characters;
   }
