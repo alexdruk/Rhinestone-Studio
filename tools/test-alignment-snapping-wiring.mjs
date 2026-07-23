@@ -24,6 +24,10 @@ const {
   SNAP_TOLERANCE_MM, NUDGE_STEP_MM, NUDGE_STEP_LARGE_MM
 } = await import('../src/editing/index.js');
 
+// TXT-102A: track failures so the final summary line (below) reports the real outcome instead of
+// unconditionally claiming success -- process.exitCode=1 already made a failure exit nonzero, but
+// the printed message previously said "tests passed" even when a test had just failed above it.
+let failureCount = 0;
 async function test(name, fn) {
   try {
     await fn();
@@ -31,6 +35,7 @@ async function test(name, fn) {
   } catch (error) {
     console.error(`✗ ${name}`);
     console.error(error);
+    failureCount++;
     process.exitCode = 1;
   }
 }
@@ -202,7 +207,16 @@ await test('14. the Settings Lightbox exposes plain-language snapping controls (
 await test('15. text layers\' optional x/y fields default through ||0 so pre-RS-1009 Project JSON is unaffected', () => {
   assert.match(appJs, /function computeTextPlacementOffset\(boundingBox,layer,project\)\{\s*const offsetX=\(boundingBox\?\(project\.canvas\.width-boundingBox\.widthMm\)\/2-boundingBox\.minXmm:0\)\+\(layer\.x\|\|0\);\s*const offsetY=\(boundingBox\?\(project\.canvas\.height-boundingBox\.heightMm\)\/2-boundingBox\.minYmm:0\)\+\(layer\.y\|\|0\);/);
   assert.match(appJs, /const\{offsetX,offsetY\}=computeTextPlacementOffset\(bb,layer,project\);/, 'expected generateTextStonesLive to call the extracted computeTextPlacementOffset helper');
-  assert.match(appJs, /curveAlignment:'center',x:0,y:0\}\]\}\}/, 'expected the default project\'s text layer to declare explicit x:0,y:0');
+  // TXT-102A: isolate the default project's single text-layer object literal, then check for
+  // explicit x:0/y:0 fields independently of property order or any other (e.g. TXT-102's
+  // align/lineSpacing/rotationDeg) fields that may sit between them and their neighbors -- a
+  // fragile exact-adjacency match (`curveAlignment:'center',x:0,y:0`) previously broke the moment
+  // TXT-102 inserted new fields before x/y, even though x/y themselves were untouched.
+  const defaultProjectMatch = appJs.match(/function defaultProject\(\)\{[\s\S]*?layers:\[\{id:'text',type:'text',[\s\S]*?\}\]\}\}/);
+  assert.ok(defaultProjectMatch, 'expected to find defaultProject()\'s single text layer literal in app.js');
+  const textLayerSource = defaultProjectMatch[0];
+  assert.match(textLayerSource, /(?:[{,])x:0(?:[,}])/, 'expected the default project\'s text layer to declare a numeric x:0 field (in any position)');
+  assert.match(textLayerSource, /(?:[{,])y:0(?:[,}])/, 'expected the default project\'s text layer to declare a numeric y:0 field (in any position)');
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -339,4 +353,8 @@ await test('21. snapping-disabled drag falls back to the (sensitivity-scaled) po
   assert.match(moveBranch[1], /if\(snapEnabled\)\{/, 'expected the snap computation to be fully gated behind snapEnabled, so dx/dy stay unsnapped when disabled');
 });
 
-console.log('Alignment & snapping wiring tests passed.');
+if (failureCount === 0) {
+  console.log('Alignment & snapping wiring tests passed.');
+} else {
+  console.error(`Alignment & snapping wiring tests FAILED (${failureCount} failing assertion(s) above).`);
+}
