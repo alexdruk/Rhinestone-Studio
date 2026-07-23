@@ -34,6 +34,7 @@ releases/
 screenshots/generated/
 tests/output/
 golden-output/
+tmp/
 
 # Archives
 *.zip

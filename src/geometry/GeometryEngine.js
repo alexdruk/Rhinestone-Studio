@@ -97,21 +97,47 @@ export class GeometryEngine {
       throw new TypeError('GeometryEngine.generateTextLayout requires a fontProviderRegistry (none was supplied to the constructor).');
     }
     const options = normalizeTextParams(params);
-    const { polygons } = await this._textPolygons(options);
-    const spacingMm = options.stoneSizeMm + options.gapMm;
+    const { polygons, boundingBox, authoredStones } = await this._textPolygons(options);
 
-    const points = sampleShapeFillPoints(options.mode, polygons, BoundingBox.fromPoints(polygons.flat()), spacingMm, options.stoneSizeMm);
+    let stones;
+    let sourceMode;
 
-    const stones = points.map((point, index) => new Stone({
-      xMm: point.xMm,
-      yMm: point.yMm,
-      sizeMm: options.stoneSizeMm,
-      color: options.color,
-      layerId: options.layerId,
-      index
-    }));
+    if (authoredStones.length > 0) {
+      // A font supplied explicit stone centers for at least one character (see
+      // FontProviderResult.stoneCenters) instead of ordinary glyph contours. These are already
+      // final millimeter positions -- converted straight into Stone objects, the same product
+      // every other layer type produces, with no contour flattening or StoneSampler involved.
+      // 'outline'/'fill' has no meaning for authored positions, so options.mode is intentionally
+      // never read here; sourceMode is recorded as 'authored' so downstream consumers (and this
+      // family's descriptor.fillModeIndependent metadata) can tell the stored fill-mode setting was
+      // not applied.
+      if (options.curveEnabled) {
+        throw new Error('GeometryEngine.generateTextLayout: curved text is not supported for fonts that supply authored stone centers.');
+      }
+      stones = authoredStones.map((point, index) => new Stone({
+        xMm: point.xMm,
+        yMm: point.yMm,
+        sizeMm: options.stoneSizeMm,
+        color: options.color,
+        layerId: options.layerId,
+        index
+      }));
+      sourceMode = 'authored';
+    } else {
+      const spacingMm = options.stoneSizeMm + options.gapMm;
+      const points = sampleShapeFillPoints(options.mode, polygons, boundingBox, spacingMm, options.stoneSizeMm);
+      stones = points.map((point, index) => new Stone({
+        xMm: point.xMm,
+        yMm: point.yMm,
+        sizeMm: options.stoneSizeMm,
+        color: options.color,
+        layerId: options.layerId,
+        index
+      }));
+      sourceMode = options.mode;
+    }
 
-    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
+    return new StoneLayout({ layerId: options.layerId, sourceMode, stones });
   }
 
   /**
@@ -131,11 +157,18 @@ export class GeometryEngine {
       throw new TypeError('GeometryEngine.resolveTextPolygons requires a fontProviderRegistry (none was supplied to the constructor).');
     }
     const options = normalizeTextParams({ ...params, stoneSizeMm: 1, mode: DEFAULT_MODE });
-    return this._textPolygons(options);
+    const { polygons, boundingBox, authoredStones } = await this._textPolygons(options);
+    if (authoredStones.length > 0) {
+      // A font that supplies authored stone centers has no vector outline for a Boolean Operation
+      // (see src/geometry/PathBoolean.js) to consume -- fail explicitly rather than silently
+      // returning an empty/wrong result.
+      throw new Error('GeometryEngine.resolveTextPolygons: this font supplies authored stone centers, not a vector outline, and cannot be used as a Boolean Operation input.');
+    }
+    return { polygons, boundingBox };
   }
 
   async _textPolygons(options) {
-    const { contours, totalAdvanceWidthMm } = await this._buildPositionedContours(options);
+    const { contours, authoredStones, totalAdvanceWidthMm } = await this._buildPositionedContours(options);
     let polygons = contours.map((contour) => flattenContourToPolygon(contour));
 
     // RS-1003: Arc projection stage. Runs after flattening (so it warps dense polygon vertices,
@@ -155,7 +188,7 @@ export class GeometryEngine {
       polygons = polygons.map((polygon) => projectPolygonToArc(polygon, arcOptions));
     }
 
-    return { polygons, boundingBox: BoundingBox.fromPoints(polygons.flat()) };
+    return { polygons, boundingBox: BoundingBox.fromPoints(polygons.flat()), authoredStones };
   }
 
   /**
@@ -169,6 +202,7 @@ export class GeometryEngine {
   async _buildPositionedContours(options) {
     const characters = Array.from(options.text);
     const contours = [];
+    const authoredStones = [];
     let penXMm = 0;
 
     for (let i = 0; i < characters.length; i++) {
@@ -183,13 +217,22 @@ export class GeometryEngine {
         contours.push(translateContour(contour, penXMm, 0));
       }
 
+      // A font may return explicit stone centers instead of contours for a character (see
+      // FontProviderResult.stoneCenters) -- translated by the running pen position exactly like
+      // contours are above (X only, matching translateContour(contour, penXMm, 0)).
+      if (Array.isArray(result.stoneCenters)) {
+        for (const center of result.stoneCenters) {
+          authoredStones.push({ xMm: center.xMm + penXMm, yMm: center.yMm });
+        }
+      }
+
       penXMm += result.metrics.advanceWidthMm;
       if (i < characters.length - 1) {
         penXMm += options.letterSpacingMm;
       }
     }
 
-    return { contours, totalAdvanceWidthMm: penXMm };
+    return { contours, authoredStones, totalAdvanceWidthMm: penXMm };
   }
 
   /**

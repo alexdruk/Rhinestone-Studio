@@ -77,7 +77,14 @@ export const descriptor = {
   minStoneSizeMm: 2.8,
   recommendedGapMm: 0.3,
   recommendedUses: ['Internal visual QA only -- not for production or customer-facing use'],
-  notes: 'Diagnostic-only prototype: 12 hand-placed 5x7 dot-matrix glyphs (A B C D G M N O P R S 8) at a fixed SS10 (2.8mm) + 0.3mm gap pitch. No lowercase, no digits beyond 8, no adaptive scaling to other heights/stone sizes. Not registered in the desktop font manifest -- reachable only via direct FontProviderRegistry/RhinestoneFontRegistry access (see tools/generate-rs-block-prototype-qa-sheet.mjs), not the normal font picker.'
+  // This family supplies explicit authored stone centers (see RhinestoneFontProvider.js), not
+  // vector glyph contours -- GeometryEngine.generateTextLayout() ignores a text layer's stored
+  // Outline/Fill mode entirely for these positions (ignoresFillMode note below), producing the same
+  // stones regardless of which fill mode a layer has stored. A future UI surfacing this family
+  // should read this flag to hide/disable the fill-mode selector rather than let a user pick a
+  // setting with no effect.
+  fillModeIndependent: true,
+  notes: 'Diagnostic-only prototype: 12 hand-placed 5x7 dot-matrix glyphs (A B C D G M N O P R S 8) at a fixed SS10 (2.8mm) + 0.3mm gap pitch. No lowercase, no digits beyond 8, no adaptive scaling to other heights/stone sizes. Authored stone positions are delivered to GeometryEngine as explicit stone centers (FontProviderResult.stoneCenters), not vector contours -- Outline/Fill mode has no effect on this family\'s geometry (fillModeIndependent: true). Not registered in the desktop font manifest -- reachable only via direct FontProviderRegistry/RhinestoneFontRegistry access (see tools/generate-rs-block-prototype-qa-sheet.mjs), not the normal font picker.'
 };
 
 /**
