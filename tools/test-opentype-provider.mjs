@@ -101,12 +101,17 @@ await test('works end-to-end through the FontProviderRegistry', async () => {
   assert.ok(result.path.contours.length > 0);
 });
 
-await test('createDefaultFontProviderRegistry() registers OpenTypeProvider as the one default provider', async () => {
+await test('createDefaultFontProviderRegistry() registers OpenTypeProvider as the default provider, alongside TXT-101A\'s RhinestoneFontProvider', async () => {
   const registry = createDefaultFontProviderRegistry(fontManager, { loadFontBuffer: loadFontBufferFromRepoRoot });
 
   assert.equal(registry.has('opentype'), true);
+  // OpenType stays the *default* provider (registered first) so every pre-TXT-101A call site that
+  // never passes providerId keeps resolving through it, unchanged.
   assert.equal(registry.defaultProviderId, 'opentype');
-  assert.deepEqual(registry.list(), [{ id: 'opentype', displayName: 'OpenType' }]);
+  assert.deepEqual(registry.list(), [
+    { id: 'opentype', displayName: 'OpenType' },
+    { id: 'rhinestone', displayName: 'Rhinestone Native' }
+  ]);
 
   const result = await registry.getTextPath({ fontId: 'courier-prime-regular', text: 'Vitalina', heightMm: 10 });
   assert.equal(result.text, 'Vitalina');

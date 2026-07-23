@@ -87,8 +87,8 @@
 import './src/browser/BrowserDependencyProbe.js';
 import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
-import { createDefaultFontProviderRegistry, BoundingBox } from './src/text/index.js';
-import { renderProductionLayout } from './src/renderer/CanvasRenderer2D.js';
+import { createDefaultFontProviderRegistry, createDefaultRhinestoneFontRegistry, BoundingBox } from './src/text/index.js';
+import { renderProductionLayout, renderStoneLayout, fitTransform } from './src/renderer/CanvasRenderer2D.js';
 import { createPreview3D } from './src/preview3d/index.js';
 import { circumferenceMm, frontViewFrameWidthMm, canvasXMmForRotationDeg, rotationDegForCanvasXMm, azimuthRadForCanvasXMm, wrapAngleRad } from './src/preview3d/ObjectDimensions.js';
 import { STONE_COLORS } from './src/renderer/StoneColors.js';
@@ -243,7 +243,7 @@ function updateStoneColorSwatch(){const c=STONE_COLORS[el('stoneColor').value];e
 // RS-2002 (Typography & Font Library) -- everything below builds the font picker on top of the
 // same fontManager.listFonts() call used to derive TEXT_ENGINE_FONT_IDS above. No font data lives
 // in app.js: category is font.role, family is font.family, both straight from the manifest.
-const FONT_CATEGORY_LABELS={script:'Script','sans-serif':'Sans Serif',serif:'Serif',display:'Display',monogram:'Monogram',decorative:'Decorative',block:'Block',handwritten:'Handwritten',monospace:'Monospace'};
+const FONT_CATEGORY_LABELS={script:'Script','sans-serif':'Sans Serif',serif:'Serif',display:'Display',monogram:'Monogram',decorative:'Decorative',block:'Block',handwritten:'Handwritten',monospace:'Monospace',rhinestone:'Rhinestone (Original)'};
 function fontCategoryLabel(role){return FONT_CATEGORY_LABELS[role]||(role?role.charAt(0).toUpperCase()+role.slice(1):'Other')}
 function groupFontsByCategory(fonts){const groups=new Map();for(const f of fonts){const key=f.role||'display';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(f)}for(const list of groups.values())list.sort((a,b)=>a.family.localeCompare(b.family));return[...groups.entries()].sort((a,b)=>fontCategoryLabel(a[0]).localeCompare(fontCategoryLabel(b[0])))}
 // A font family name safe to drop into a CSS font-family value / HTML style attribute. Every
@@ -255,7 +255,16 @@ function cssFontFamily(family){return String(family).replace(/["'\\]/g,'')}
 // @font-face does not itself download anything -- browsers fetch a given font file lazily, only
 // once an actually-rendered (not display:none) element needs to paint text in that font-family, so
 // this costs nothing until an option list is opened or a preview row is on-screen.
-function injectFontFaceRules(fonts){const style=document.createElement('style');style.textContent=fonts.map(f=>`@font-face{font-family:"${cssFontFamily(f.family)}";src:url("${f.path}") format("truetype");font-display:swap;}`).join('\n');document.head.appendChild(style)}
+// TXT-101A: only OpenType-backed fonts have a real font file to declare -- rs-*-regular's `path` is
+// a documentation-only identifier (see assets/fonts/manifest.json's notes), never an actual font
+// resource, so declaring an @font-face for it would just be a silently-failing 404 fetch for no
+// benefit (their Browse Fonts panel row renders a real rhinestone-layout preview instead, not a
+// CSS-styled text preview -- see populateFontPreviewCanvases()).
+function injectFontFaceRules(fonts){const style=document.createElement('style');style.textContent=fonts.filter(f=>f.providerId==='opentype').map(f=>`@font-face{font-family:"${cssFontFamily(f.family)}";src:url("${f.path}") format("truetype");font-display:swap;}`).join('\n');document.head.appendChild(style)}
+// Builds the #fontCategoryFilter <select>'s options from the same category grouping
+// populateFontOptions()/renderFontLibraryList() already use, so "category filter" never drifts
+// from what the panel's own group headers show.
+function populateFontCategoryFilterOptions(){if(!fontManager)return;const categories=groupFontsByCategory(fontManager.listFonts()).map(([role])=>role);el('fontCategoryFilter').innerHTML='<option value="">All categories</option>'+categories.map(role=>`<option value="${role}">${escapeHtml(fontCategoryLabel(role))}</option>`).join('')}
 // Builds the #font <select>'s <optgroup>s from the live manifest, grouped by category and sorted
 // alphabetically within each group -- mirrors populateStoneColorOptions()'s existing pattern.
 // Disabled fonts (just the RobotoMono placeholder today) are never listed, matching
@@ -268,20 +277,88 @@ const FONT_FAVORITES_STORAGE_KEY='rhinestoneStudio.favoriteFontIds';
 function loadFavoriteFontIds(){try{const raw=localStorage.getItem(FONT_FAVORITES_STORAGE_KEY);const arr=raw?JSON.parse(raw):[];return new Set(Array.isArray(arr)?arr.filter(id=>typeof id==='string'):[])}catch{return new Set()}}
 function saveFavoriteFontIds(ids){try{localStorage.setItem(FONT_FAVORITES_STORAGE_KEY,JSON.stringify([...ids]))}catch{}}
 let favoriteFontIds=loadFavoriteFontIds();
+// TXT-101A: "recently used" -- same client-side-only, not-project-data convention as favorites
+// above (see its own comment): most-recent-first, capped, read/written only here.
+const FONT_RECENT_STORAGE_KEY='rhinestoneStudio.recentFontIds';
+const FONT_RECENT_MAX=8;
+function loadRecentFontIds(){try{const raw=localStorage.getItem(FONT_RECENT_STORAGE_KEY);const arr=raw?JSON.parse(raw):[];return Array.isArray(arr)?arr.filter(id=>typeof id==='string'):[]}catch{return[]}}
+function saveRecentFontIds(ids){try{localStorage.setItem(FONT_RECENT_STORAGE_KEY,JSON.stringify(ids))}catch{}}
+let recentFontIds=loadRecentFontIds();
+function recordRecentFont(fontId){if(!fontId)return;recentFontIds=[fontId,...recentFontIds.filter(id=>id!==fontId)].slice(0,FONT_RECENT_MAX);saveRecentFontIds(recentFontIds);if(!el('fontLibraryPanel').hidden)renderFontLibraryList()}
 let fontSearchQuery='';
-function fontLibraryRowHtml(f,currentFontId){const isFav=favoriteFontIds.has(f.id);return`<div class="font-library-row"><button type="button" class="font-fav${isFav?' active':''}" data-fav-font="${f.id}" title="${isFav?'Remove from favorites':'Add to favorites'}" aria-pressed="${isFav}">${isFav?'★':'☆'}</button><button type="button" class="font-library-item" data-pick-font="${f.id}" role="option" aria-selected="${f.id===currentFontId}" style="font-family:'${cssFontFamily(f.family)}'"><span class="font-preview">${escapeHtml(f.family)}</span></button></div>`}
-// Renders the Browse Fonts panel's list: an optional pinned "Favorites" group (only among fonts
-// matching the current search), then every category group in alphabetical order. Re-run on every
-// search keystroke and every favorite toggle; cheap at this catalog size (9 fonts today).
-function renderFontLibraryList(){if(!fontManager)return;const list=el('fontLibraryList');const query=fontSearchQuery.trim().toLowerCase();const fonts=fontManager.listFonts().filter(f=>!query||f.family.toLowerCase().includes(query)||fontCategoryLabel(f.role).toLowerCase().includes(query));if(fonts.length===0){list.innerHTML='<div class="font-library-empty">No fonts match your search.</div>';return}const currentFontId=el('font').value;const favorites=fonts.filter(f=>favoriteFontIds.has(f.id)).sort((a,b)=>a.family.localeCompare(b.family));let html='';if(favorites.length)html+=`<div class="font-library-group">Favorites</div>${favorites.map(f=>fontLibraryRowHtml(f,currentFontId)).join('')}`;for(const[role,group]of groupFontsByCategory(fonts))html+=`<div class="font-library-group">${escapeHtml(fontCategoryLabel(role))}</div>${group.map(f=>fontLibraryRowHtml(f,currentFontId)).join('')}`;list.innerHTML=html}
+let fontCategoryFilterValue='';
+// TXT-101A: sample string for the Browse Fonts panel's live rhinestone-layout previews -- short
+// enough to render quickly, covers caps/lowercase/digits (the three broadest glyph classes every
+// bundled and rhinestone-native font supports).
+const FONT_PREVIEW_TEXT='Ag 123';
+const FONT_PREVIEW_HEIGHT_MM=9;
+const fontPreviewLayoutCache=new Map(); // fontId -> StoneLayout|null, never evicted (see class doc pattern in tools/rhinestone-studio-conventions memory).
+// Generates one font's preview StoneLayout through the real production pipeline
+// (permanentEngine.generateTextLayout -- the exact same call generateTextStonesLive() makes for a
+// real text layer), caching it so opening/filtering the panel after the first render is instant.
+// Uses each rhinestone-native family's own recommended stone size/gap (RhinestoneFontRegistry
+// metadata) so a preview looks like that family's actual intended production settings, not a
+// generic default.
+async function getFontPreviewLayout(font){
+  if(fontPreviewLayoutCache.has(font.id))return fontPreviewLayoutCache.get(font.id);
+  let layout=null;
+  if(permanentEngine.canGenerateText){
+    const meta=font.providerId==='rhinestone'?rhinestoneFontRegistry.getMetadata(font.id):null;
+    const stoneSizeMm=meta?meta.recommendedStoneSizeMm:1.5;
+    const gapMm=meta?meta.recommendedGapMm:0.3;
+    try{
+      layout=await permanentEngine.generateTextLayout({text:FONT_PREVIEW_TEXT,fontId:font.id,providerId:font.providerId,layerId:`font-preview:${font.id}`,heightMm:FONT_PREVIEW_HEIGHT_MM,stoneSizeMm,gapMm,mode:'outline',color:'crystal'});
+    }catch(error){console.error(`Font preview generation failed for "${font.id}"`,error)}
+  }
+  fontPreviewLayoutCache.set(font.id,layout);
+  return layout;
+}
+function renderFontPreviewCanvas(canvas,layout){
+  const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle='#fbfdff';ctx.fillRect(0,0,canvas.width,canvas.height);
+  if(!layout||layout.stones.length===0)return;
+  const transform=fitTransform(layout.getBoundingBox(),canvas.width,canvas.height,5);
+  renderStoneLayout(ctx,layout,transform,'layout');
+}
+function yieldToMainThread(){return new Promise(resolve=>setTimeout(resolve,0))}
+// Fires after every renderFontLibraryList() re-render: finds every row's preview canvas and fills
+// it in (from cache, or by generating and caching it) without blocking the list's own render.
+// Deliberately sequential with a yield between rows, not Promise.all -- generating a rhinestone
+// glyph outline the first time is real (if now much cheaper, see RhinestoneStrokeGeometry.js's own
+// perf doc) synchronous CPU work, and awaiting a batch of async calls whose bodies never actually
+// suspend does not yield to the browser between them; a tight Promise.all over ~12 fonts' worth of
+// first-time glyph generation would freeze the panel (no scroll/typing) for its full duration
+// instead of staying responsive while previews fill in progressively. isConnected guards against a
+// canvas that's already been replaced by a subsequent re-render (a fast second search keystroke,
+// say) resolving late and painting into a detached element.
+async function populateFontPreviewCanvases(container){
+  const canvases=[...container.querySelectorAll('[data-preview-font]')];
+  for(const canvas of canvases){
+    const fontId=canvas.dataset.previewFont;
+    if(fontManager.hasFont(fontId)){
+      const layout=await getFontPreviewLayout(fontManager.getFont(fontId));
+      if(canvas.isConnected)renderFontPreviewCanvas(canvas,layout);
+    }
+    await yieldToMainThread();
+  }
+}
+function fontLibraryRowHtml(f,currentFontId){const isFav=favoriteFontIds.has(f.id);return`<div class="font-library-row"><button type="button" class="font-fav${isFav?' active':''}" data-fav-font="${f.id}" title="${isFav?'Remove from favorites':'Add to favorites'}" aria-pressed="${isFav}">${isFav?'★':'☆'}</button><button type="button" class="font-library-item" data-pick-font="${f.id}" role="option" aria-selected="${f.id===currentFontId}"><canvas class="font-preview-canvas" data-preview-font="${f.id}" width="160" height="36" aria-hidden="true"></canvas><span class="font-library-item-meta"><span class="font-library-item-name">${escapeHtml(f.family)}</span><span class="font-library-item-category">${escapeHtml(fontCategoryLabel(f.role))}</span></span></button></div>`}
+// Renders the Browse Fonts panel's list: pinned "Recently Used" then "Favorites" groups (each only
+// among fonts matching the current search/category filter), then every category group in
+// alphabetical order, then kicks off (without awaiting) filling in every row's live rhinestone
+// preview. Re-run on every search keystroke, category change, and favorite toggle; cheap at this
+// catalog size (12 fonts today) since preview generation itself is cached.
+function renderFontLibraryList(){if(!fontManager)return;const list=el('fontLibraryList');const query=fontSearchQuery.trim().toLowerCase();const fonts=fontManager.listFonts().filter(f=>(!fontCategoryFilterValue||f.role===fontCategoryFilterValue)&&(!query||f.family.toLowerCase().includes(query)||fontCategoryLabel(f.role).toLowerCase().includes(query)));if(fonts.length===0){list.innerHTML='<div class="font-library-empty">No fonts match your search.</div>';return}const currentFontId=el('font').value;const recents=recentFontIds.map(id=>fonts.find(f=>f.id===id)).filter(Boolean);const favorites=fonts.filter(f=>favoriteFontIds.has(f.id)).sort((a,b)=>a.family.localeCompare(b.family));let html='';if(recents.length)html+=`<div class="font-library-group">Recently Used</div>${recents.map(f=>fontLibraryRowHtml(f,currentFontId)).join('')}`;if(favorites.length)html+=`<div class="font-library-group">Favorites</div>${favorites.map(f=>fontLibraryRowHtml(f,currentFontId)).join('')}`;for(const[role,group]of groupFontsByCategory(fonts))html+=`<div class="font-library-group">${escapeHtml(fontCategoryLabel(role))}</div>${group.map(f=>fontLibraryRowHtml(f,currentFontId)).join('')}`;list.innerHTML=html;populateFontPreviewCanvases(list).catch(error=>console.error('Font preview rendering failed',error))}
 function openFontLibraryPanel(){el('fontLibraryPanel').hidden=false;el('fontLibraryBtn').setAttribute('aria-expanded','true');fontSearchQuery='';el('fontSearch').value='';renderFontLibraryList();el('fontSearch').focus()}
 function closeFontLibraryPanel(){el('fontLibraryPanel').hidden=true;el('fontLibraryBtn').setAttribute('aria-expanded','false')}
 // Writes the picked font into the one real #font control and replays the exact 'input'+'change'
 // sequence a user picking from the native <select> would fire, so HISTORY_TRACKED_CONTROL_IDS'
 // existing listener (openHistorySession/updateAll on input, closeHistorySession on change) runs
 // unchanged -- this panel is a second way to set #font's value, never a second place that value
-// is read from.
-function pickFont(fontId){el('font').value=fontId;el('font').dispatchEvent(new Event('input'));el('font').dispatchEvent(new Event('change'));closeFontLibraryPanel()}
+// is read from. Also records the pick for "Recently Used", matching what picking directly from the
+// native <select> does via its own 'change' listener (see HISTORY_TRACKED_CONTROL_IDS wiring below).
+function pickFont(fontId){recordRecentFont(fontId);el('font').value=fontId;el('font').dispatchEvent(new Event('input'));el('font').dispatchEvent(new Event('change'));closeFontLibraryPanel()}
 function toggleFavoriteFont(fontId){if(favoriteFontIds.has(fontId))favoriteFontIds.delete(fontId);else favoriteFontIds.add(fontId);saveFavoriteFontIds(favoriteFontIds);renderFontLibraryList()}
 // RS-1009 originally, RS-1012 extracted to a standalone function: a text layer has no stored
 // absolute position of its own (unlike every other layer type) -- it is always auto-centered on the
@@ -410,7 +487,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // non-empty layerId per instance; each Stone still carries its own real layer id) so every
  // renderer/exporter downstream consumes the same canonical product.
  async generate(project){let raw=[];for(const l of project.layers){if(!l.visible)continue;if(l.type==='text')raw.push(...await this.generateTextStonesLive(l,project));if(SHAPE_LAYER_TYPES.has(l.type))raw.push(...await this.generateShapeStonesLive(l));if(l.type==='svg')raw.push(...await this.generateSvgStonesLive(l));if(l.type==='image')raw.push(...await this.generateImageStonesLive(l));if(l.type==='path')raw.push(...await this.generatePathStonesLive(l));}const stones=dedupeStonesByRadius(raw).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId}));return new StoneLayout({layerId:'project',stones})}
- async generateTextStonesLive(layer,project){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text)return[];const fontId=TEXT_ENGINE_FONT_IDS.has(layer.font)?layer.font:DEFAULT_TEXT_FONT_ID;const mode=resolveTextFillMode(layer.textMode);const base={text:layer.text,fontId,layerId:layer.id,heightMm:layer.height,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const{scale}=computeAutoFitScale(layer,project,result.widthMm);if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
+ async generateTextStonesLive(layer,project){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text)return[];const fontId=TEXT_ENGINE_FONT_IDS.has(layer.font)?layer.font:DEFAULT_TEXT_FONT_ID;const mode=resolveTextFillMode(layer.textMode);const base={text:layer.text,fontId,providerId:resolveFontProviderId(fontId),layerId:layer.id,heightMm:layer.height,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const{scale}=computeAutoFitScale(layer,project,result.widthMm);if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
   // RS-1009: text layers previously had no position field -- stones were always centered on the
   // canvas. layer.x/layer.y (mm, default 0) are a further offset applied on top of that same
   // auto-centered base position, so pre-RS-1009 Project JSON (no x/y on its text layers) renders
@@ -522,8 +599,17 @@ function validateProject(obj){
   // docs/specifications/S-112-RoundDinnerPlate.md, "Project Schema Impact".
   return{version:Number(obj.version)||2,units:'mm',name:typeof obj.name==='string'&&obj.name.length>0?obj.name:DEFAULT_PROJECT_NAME,product:getObjectTemplate(obj.product).id,canvas:{width:canvas.width,height:canvas.height},cupColor:typeof obj.cupColor==='string'?obj.cupColor:'#1f3556',wrap:typeof obj.wrap==='string'?obj.wrap:'front',plate:normalizePlateParams(obj.plate),layers:obj.layers.map(l=>({...l,visible:l.visible!==false}))}
 }
+// TXT-101A: pure construction data (no fetch), so it's always available even if the desktop-font
+// manifest fetch below fails -- the Browse Fonts panel's category/metadata lookups for RS Block/RS
+// Modern/RS Script never depend on network success.
+const rhinestoneFontRegistry=createDefaultRhinestoneFontRegistry();
 let fontProviderRegistry=null,permanentEngineError=null,fontManager=null;
-try{fontManager=await FontManager.fromUrl('./assets/fonts/manifest.json');fontProviderRegistry=createDefaultFontProviderRegistry(fontManager);TEXT_ENGINE_FONT_IDS=new Set(fontManager.listFonts().map(f=>f.id))}catch(error){permanentEngineError=error;console.error('Font manifest failed to load; text layers will render empty until this is resolved. Shape layers are unaffected.',error)}
+try{fontManager=await FontManager.fromUrl('./assets/fonts/manifest.json');fontProviderRegistry=createDefaultFontProviderRegistry(fontManager,{rhinestoneFontRegistry});TEXT_ENGINE_FONT_IDS=new Set(fontManager.listFonts().map(f=>f.id))}catch(error){permanentEngineError=error;console.error('Font manifest failed to load; text layers will render empty until this is resolved. Shape layers are unaffected.',error)}
+// TXT-101A: given a fontId already known-valid against TEXT_ENGINE_FONT_IDS (see the fallback
+// pattern at every generateTextStonesLive()/resolveLayerShapeSource()/fitTextToShape() call site),
+// resolves which FontProviderRegistry provider should render it. Falls back to 'opentype' (the
+// registry's own default) for any font predating this field or if fontManager never loaded.
+function resolveFontProviderId(fontId){return fontManager&&fontManager.hasFont(fontId)?fontManager.getFont(fontId).providerId:'opentype'}
 const permanentEngine=new PermanentGeometryEngine({fontProviderRegistry});
 const engine=new GeometryEngine(permanentEngine);let project=defaultProject(),selectedLayerId='text',layout=null,rotation=0,zoom=1,layoutTransform=null,drag=null,generationToken=0;const layoutCanvas=el('layout'),cupCanvas=el('cup');
 // RS-1009: the one multi-selection model (src/editing/Selection.js is the only place that
@@ -1044,7 +1130,7 @@ async function resolveLayerShapeSource(layer){
   if(layer.type==='text'){
     if(!permanentEngine.canGenerateText||!layer.text)return null;
     const fontId=TEXT_ENGINE_FONT_IDS.has(layer.font)?layer.font:DEFAULT_TEXT_FONT_ID;
-    const base={text:layer.text,fontId,layerId:layer.id,heightMm:layer.height,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};
+    const base={text:layer.text,fontId,providerId:resolveFontProviderId(fontId),layerId:layer.id,heightMm:layer.height,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};
     let resolved=await permanentEngine.resolveTextPolygons(base);
     if(layer.autoFit&&resolved.boundingBox){
       const{scale}=computeAutoFitScale(layer,project,resolved.boundingBox.widthMm);
@@ -1377,7 +1463,12 @@ for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAl
 // -- will fire for); only pickFont()'s dispatched events do.
 el('fontLibraryBtn').addEventListener('click',()=>{if(el('fontLibraryPanel').hidden)openFontLibraryPanel();else closeFontLibraryPanel()});
 el('fontSearch').addEventListener('input',()=>{fontSearchQuery=el('fontSearch').value;renderFontLibraryList()});
+el('fontCategoryFilter').addEventListener('change',()=>{fontCategoryFilterValue=el('fontCategoryFilter').value;renderFontLibraryList()});
 el('fontLibraryList').addEventListener('click',e=>{const favBtn=e.target.closest('[data-fav-font]');if(favBtn){toggleFavoriteFont(favBtn.dataset.favFont);return}const pickBtn=e.target.closest('[data-pick-font]');if(pickBtn)pickFont(pickBtn.dataset.pickFont)});
+// TXT-101A: "Recently Used" also tracks picks made directly from the native <select> (not just the
+// Browse Fonts panel) -- a second, independent listener on the same 'change' event
+// HISTORY_TRACKED_CONTROL_IDS already listens to above, not a replacement for it.
+el('font').addEventListener('change',()=>recordRecentFont(el('font').value));
 el('selectedLayer').addEventListener('change',()=>{selectedLayerId=el('selectedLayer').value;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true)});
 // RS-1004: switching the object template is one discrete, undoable action (matching addCircle/
 // addRect/deleteLayer's commitHistory()-then-mutate pattern below), not a continuous-session field
@@ -1568,7 +1659,7 @@ async function fitTextToShape(textLayer,shapeLayer){
     return{ok:false,reason:'empty-text',message:'This text layer has no content to fit.'};
   }
   const fontId=TEXT_ENGINE_FONT_IDS.has(textLayer.font)?textLayer.font:DEFAULT_TEXT_FONT_ID;
-  const measured=await permanentEngine.resolveTextPolygons({text:textLayer.text,fontId,layerId:textLayer.id,heightMm:textLayer.height,curveEnabled:false});
+  const measured=await permanentEngine.resolveTextPolygons({text:textLayer.text,fontId,providerId:resolveFontProviderId(fontId),layerId:textLayer.id,heightMm:textLayer.height,curveEnabled:false});
   if(!measured.boundingBox){
     return{ok:false,reason:'empty-text',message:'This text layer has no content to fit.'};
   }
@@ -2370,7 +2461,7 @@ populateStoneColorOptions();populateStoneSizeOptions();
 // index.html's static two-option #font markup (Courier Prime/Great Vibes) is left as the fallback,
 // and permanentEngineError's #status message (set inside updateAll(), see generate() above)
 // already tells the user text layers are empty.
-if(fontManager){populateFontOptions();injectFontFaceRules(fontManager.listFonts())}
+if(fontManager){populateFontOptions();injectFontFaceRules(fontManager.listFonts());populateFontCategoryFilterOptions()}
 syncSelectedControlsFromLayer();updateAll(true);
 // RC-005: reports the boot-time crash/refresh recovery decision (see the AutosaveManager setup
 // above) last, once startup has otherwise finished -- but never over permanentEngineError's own

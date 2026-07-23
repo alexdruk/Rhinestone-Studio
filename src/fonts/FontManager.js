@@ -26,7 +26,11 @@ function normalizeFontRecord(record) {
     path,
     role: String(record.role ?? 'display'),
     enabled: Boolean(record.enabled ?? true),
-    notes: record.notes === undefined ? '' : String(record.notes)
+    notes: record.notes === undefined ? '' : String(record.notes),
+    // TXT-101A: which FontProviderRegistry provider resolves this font id's glyph geometry.
+    // Defaults to 'opentype' so every font record from before this field existed (all 9 bundled
+    // desktop fonts) keeps resolving exactly as before with zero manifest changes required.
+    providerId: String(record.providerId ?? 'opentype')
   });
 }
 

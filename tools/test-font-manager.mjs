@@ -18,10 +18,11 @@ function test(name, fn) {
 test('FontManager loads deterministic manifest', () => {
   const manager = new FontManager(manifest);
   assert.equal(manager.manifest.version, 2);
-  // RS-2002: the Typography & Font Library milestone expanded the bundled collection from 3
-  // registry entries (2 enabled + 1 disabled placeholder) to 10 (9 enabled + the same disabled
-  // RobotoMono placeholder, kept untouched -- see assets/fonts/README.md).
-  assert.equal(manager.listFonts({ includeDisabled: true }).length, 10);
+  // RS-2002 expanded the bundled collection from 3 registry entries (2 enabled + 1 disabled
+  // placeholder) to 10 (9 enabled + the same disabled RobotoMono placeholder). TXT-101A adds the
+  // 3 original rhinestone-native families (rs-block-regular/rs-modern-regular/rs-script-regular,
+  // all enabled), bringing the total to 13.
+  assert.equal(manager.listFonts({ includeDisabled: true }).length, 13);
 });
 
 test('FontManager enables every bundled font except the RobotoMono placeholder', () => {
@@ -30,9 +31,24 @@ test('FontManager enables every bundled font except the RobotoMono placeholder',
   // loaded fonts by hardcoded id regardless of it. RS-2002 makes `enabled` the actual gate the
   // live app derives its font list from (see app.js's TEXT_ENGINE_FONT_IDS), so this manifest-level
   // invariant matters now: everything except the known-corrupt placeholder must be enabled.
-  assert.equal(manager.listFonts().length, 9);
+  assert.equal(manager.listFonts().length, 12);
   assert.equal(manager.listFonts({ includeDisabled: true }).length - manager.listFonts().length, 1);
   assert.equal(manager.getFont('roboto-mono-regular').enabled, false);
+});
+
+test('FontManager defaults providerId to "opentype" for every pre-TXT-101A font record, and TXT-101A rhinestone fonts declare "rhinestone"', () => {
+  const manager = new FontManager(manifest);
+  for (const id of ['courier-prime-regular', 'great-vibes-regular', 'anton-regular']) {
+    assert.equal(manager.getFont(id).providerId, 'opentype');
+  }
+  for (const id of ['rs-block-regular', 'rs-modern-regular', 'rs-script-regular']) {
+    assert.equal(manager.getFont(id).providerId, 'rhinestone');
+  }
+  // A manifest record predating the providerId field entirely (no key at all) must still default
+  // cleanly, not throw or produce undefined -- this is the actual backward-compatibility guarantee,
+  // not just "the shipped manifest happens to work".
+  const legacy = new FontManager({ version: 1, fonts: [{ id: 'legacy-font', family: 'Legacy', path: 'assets/fonts/Legacy.ttf' }] });
+  assert.equal(legacy.getFont('legacy-font').providerId, 'opentype');
 });
 
 test('FontManager resolves default font, still Courier Prime for backward compatibility', () => {
@@ -45,7 +61,7 @@ test('FontManager resolves default font, still Courier Prime for backward compat
 test('FontManager exposes a category (role) for every enabled font, matching RS-2002\'s taxonomy', () => {
   const manager = new FontManager(manifest);
   const expectedCategories = new Set([
-    'script', 'serif', 'sans-serif', 'display', 'monogram', 'decorative', 'block', 'handwritten', 'monospace'
+    'script', 'serif', 'sans-serif', 'display', 'monogram', 'decorative', 'block', 'handwritten', 'monospace', 'rhinestone'
   ]);
   const seen = new Set(manager.listFonts().map((font) => font.role));
   assert.deepEqual(seen, expectedCategories);
@@ -69,7 +85,7 @@ test('FontManager rejects duplicate ids', () => {
 test('FontManager serializes without mutation', () => {
   const manager = new FontManager(manifest);
   const json = manager.toJSON();
-  assert.equal(json.fonts.length, 10);
+  assert.equal(json.fonts.length, 13);
   json.fonts[0].family = 'Changed';
   assert.equal(manager.getFont(DEFAULT_FONT_ID).family, 'Courier Prime');
 });

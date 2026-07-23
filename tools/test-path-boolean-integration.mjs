@@ -189,7 +189,8 @@ await test('14. resolveLayerShapeSource() resolves every layer type into a boole
   // Regression: resolveTextPolygons()'s params must carry layerId (normalizeTextParams() throws
   // "requires a non-empty layerId" without it) -- caught by browser verification when a text layer
   // was included in a multi-selection alongside a shape.
-  assert.match(appJs, /const base=\{text:layer\.text,fontId,layerId:layer\.id,heightMm:layer\.height,curveEnabled:/);
+  // TXT-101A also threads providerId (resolveFontProviderId(fontId)) into this same params object.
+  assert.match(appJs, /const base=\{text:layer\.text,fontId,providerId:resolveFontProviderId\(fontId\),layerId:layer\.id,heightMm:layer\.height,curveEnabled:/);
 });
 
 await test('15. runBooleanOp() requires 2+ layers, commits history before mutating, removes the source layers, and reports a specific status message', () => {

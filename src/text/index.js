@@ -18,6 +18,15 @@ export {
 } from './defaultFontProviders.js';
 
 export {
+  RhinestoneFontProvider,
+  createRhinestoneFontProvider,
+  RhinestoneFontRegistry,
+  createRhinestoneFontRegistry,
+  createDefaultRhinestoneFontRegistry,
+  SKELETON_SUPPORTED_CHARACTERS
+} from './rhinestoneFont/index.js';
+
+export {
   Point2D,
   BoundingBox,
   PathCommand,

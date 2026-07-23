@@ -100,6 +100,39 @@
       "role": "monospace",
       "enabled": false,
       "notes": "Placeholder registry entry -- assets/fonts/RobotoMono-Regular.ttf is a 14-byte non-font stub, not a real font file. Left disabled and unused/untouched (see tools/test-opentype-provider.mjs's corrupt-font-file coverage, which depends on this file staying unparsable)."
+    },
+    {
+      "id": "rs-block-regular",
+      "family": "RS Block",
+      "style": "Regular",
+      "weight": 700,
+      "path": "internal:rhinestoneFont/rs-block",
+      "role": "rhinestone",
+      "providerId": "rhinestone",
+      "enabled": true,
+      "notes": "TXT-101A: original rhinestone-native family. Not a desktop font file -- glyph geometry is generated at runtime by RhinestoneFontProvider (src/text/rhinestoneFont/), so `path` is a documentation-only identifier, never fetched/parsed. See src/text/rhinestoneFont/RhinestoneFontRegistry.js for full metadata (category, recommended stone size/gap, recommended uses)."
+    },
+    {
+      "id": "rs-modern-regular",
+      "family": "RS Modern",
+      "style": "Regular",
+      "weight": 400,
+      "path": "internal:rhinestoneFont/rs-modern",
+      "role": "rhinestone",
+      "providerId": "rhinestone",
+      "enabled": true,
+      "notes": "TXT-101A: original rhinestone-native family. Not a desktop font file -- see rs-block-regular's note above; same mechanism."
+    },
+    {
+      "id": "rs-script-regular",
+      "family": "RS Script",
+      "style": "Regular",
+      "weight": 400,
+      "path": "internal:rhinestoneFont/rs-script",
+      "role": "rhinestone",
+      "providerId": "rhinestone",
+      "enabled": true,
+      "notes": "TXT-101A: original rhinestone-native family. Not a desktop font file -- see rs-block-regular's note above; same mechanism."
     }
   ]
 }
