@@ -118,8 +118,22 @@ export class RhinestoneFontProvider extends IFontProvider {
       const glyph = family.getGlyphStoneMap(character);
 
       if (glyph) {
+        // Bugfix (TXT-102): family glyph data (families/rsBlock.js, families/rsBlockPrototypeSS10.js)
+        // authors yMm in a Y-up convention ("rowFromBaseline" positive = above the baseline, matching
+        // how a human reads a grid of rows top-to-bottom with the baseline as a reference floor). The
+        // engine/renderer coordinate space used by every consumer downstream of this provider
+        // (GeometryEngine, CanvasRenderer2D, SvgExporter, ...) is Y-down, exactly like
+        // OpenTypeProvider's own output (which negates opentype.js's Y-up glyph coordinates for the
+        // same reason -- see convertGlyphCommandsToVectorPath()'s call site in OpenTypeProvider.js).
+        // This provider is the one place a rhinestone family's authored coordinates cross into that
+        // shared space, so the sign flip belongs here, once, rather than in either family's own row
+        // math (which stays a natural, renderer-agnostic Y-up authoring convention). Before this fix,
+        // every rhinestone-native glyph rendered vertically mirrored (confirmed: "L" rendered as "Γ")
+        // in the live app, even though tools/generate-rs-block-qa-sheets.mjs's QA sheets looked
+        // correct -- that script applied its own compensating flip when drawing to SVG, which masked
+        // the bug in every QA sheet without fixing the actual production path.
         for (const stone of glyph.stones) {
-          stoneCenters.push({ xMm: stone.xMm + advanceWidthMm, yMm: stone.yMm });
+          stoneCenters.push({ xMm: stone.xMm + advanceWidthMm, yMm: -stone.yMm });
         }
         advanceWidthMm += glyph.advanceWidthMm;
       } else {
@@ -128,11 +142,17 @@ export class RhinestoneFontProvider extends IFontProvider {
     }
 
     const boundingBox = BoundingBox.fromPoints(stoneCenters.map((c) => new Point2D(c.xMm, c.yMm)));
+    // ascenderMm/descenderMm follow GlyphMetrics' existing sign convention (see OpenTypeProvider.js):
+    // ascenderMm is a positive distance above the baseline, descenderMm a signed (negative, when
+    // present) distance below it. boundingBox is already in the flipped/Y-down space above, so the
+    // topmost ink (the ascender extent) is boundingBox.minYmm (negative) and the bottommost ink (the
+    // descender extent, when any) is boundingBox.maxYmm (positive) -- negate each to match the
+    // documented sign convention.
     const metrics = new GlyphMetrics({
       advanceWidthMm,
       boundingBox,
-      ascenderMm: boundingBox ? boundingBox.maxYmm : 0,
-      descenderMm: boundingBox ? boundingBox.minYmm : 0
+      ascenderMm: boundingBox ? -boundingBox.minYmm : 0,
+      descenderMm: boundingBox ? -boundingBox.maxYmm : 0
     });
 
     return new FontProviderResult({ path, metrics, fontId, text, heightMm, stoneCenters });

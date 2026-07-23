@@ -77,7 +77,9 @@ await test('3. a future family registers with no change to RhinestoneFontRegistr
   const provider = new RhinestoneFontProvider({ registry });
   const result = await provider.getTextPath({ fontId: 'rs-custom-test', text: 'X', heightMm: 20 });
   assert.equal(result.stoneCenters.length, 1);
-  assert.deepEqual(result.stoneCenters[0], { xMm: 0, yMm: 0 });
+  // TXT-102: RhinestoneFontProvider negates authored yMm into the engine's Y-down space (see its
+  // module doc) -- -0 for an authored yMm of 0, arithmetically identical to 0 everywhere it is used.
+  assert.deepEqual(result.stoneCenters[0], { xMm: 0, yMm: -0 });
 });
 
 await test('4. RhinestoneFontProvider is registered in the FontProviderRegistry alongside OpenTypeProvider (providerId compatibility retained)', async () => {
@@ -165,7 +167,9 @@ await test('11. every authored stone position reproduces exactly through the rea
 
     const sampled = new Set(layout.stones.map((s) => `${s.xMm.toFixed(3)},${s.yMm.toFixed(3)}`));
     for (const stone of authored) {
-      const key = `${stone.xMm.toFixed(3)},${stone.yMm.toFixed(3)}`;
+      // TXT-102: RhinestoneFontProvider negates authored yMm into the engine's Y-down space (see its
+      // module doc), so the real pipeline's output is the negated authored position.
+      const key = `${stone.xMm.toFixed(3)},${(-stone.yMm).toFixed(3)}`;
       assert.ok(sampled.has(key), `expected authored stone (${key}) for "${character}" to survive unchanged`);
     }
   }
