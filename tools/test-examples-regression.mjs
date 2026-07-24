@@ -58,14 +58,22 @@ async function extractValidateProject() {
   const source = appJs.slice(appJs.indexOf('const DEFAULT_PROJECT_NAME='), appJs.indexOf(match[0]) + match[0].length);
   // S-112: validateProject() also calls normalizePlateParams() -- injected as a function parameter
   // for the same reason getObjectTemplate is below.
-  const { getObjectTemplate, normalizePlateParams } = await import('../src/products/index.js');
+  const { getObjectTemplate, normalizePlateParams, VESSEL_PRODUCT_IDS, getVesselDefaults, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel } = await import('../src/products/index.js');
   // S-110: validateProject() (and its own extracted slice's SUPPORTED_LAYER_TYPES declaration) now
   // references XYWH_SHAPE_TYPES/SHAPE_LIBRARY_KINDS (declared well before this slice begins) --
   // injected as function parameters for the same reason getObjectTemplate is above.
   const { SHAPE_LIBRARY_KINDS } = await import('../src/geometry/index.js');
   const XYWH_SHAPE_TYPES = new Set(['rectangle', 'svg', 'image', 'path', ...SHAPE_LIBRARY_KINDS]);
+  // RS-2010: validateProject() also references VESSEL_PRODUCT_IDS/getVesselDefaults/
+  // normalizeVesselParams/deriveLegacyVesselParams -- injected for the same reason
+  // normalizePlateParams is above. computeCanvasFromVessel is included since it lives in the
+  // harmlessly-included defaultProject() slice too.
   // eslint-disable-next-line no-new-func
-  return new Function('getObjectTemplate', 'normalizePlateParams', 'XYWH_SHAPE_TYPES', 'SHAPE_LIBRARY_KINDS', `${source}\nreturn validateProject;`)(getObjectTemplate, normalizePlateParams, XYWH_SHAPE_TYPES, SHAPE_LIBRARY_KINDS);
+  return new Function(
+    'getObjectTemplate', 'normalizePlateParams', 'XYWH_SHAPE_TYPES', 'SHAPE_LIBRARY_KINDS',
+    'VESSEL_PRODUCT_IDS', 'getVesselDefaults', 'normalizeVesselParams', 'deriveLegacyVesselParams', 'computeCanvasFromVessel',
+    `${source}\nreturn validateProject;`
+  )(getObjectTemplate, normalizePlateParams, XYWH_SHAPE_TYPES, SHAPE_LIBRARY_KINDS, VESSEL_PRODUCT_IDS, getVesselDefaults, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel);
 }
 
 async function buildPermanentEngine() {

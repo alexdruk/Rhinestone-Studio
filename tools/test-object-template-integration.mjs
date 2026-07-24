@@ -43,7 +43,9 @@ async function test(name, fn) {
 async function extractProjectFunctions() {
   const validateMatch = appJs.match(/function validateProject\(obj\)\{[\s\S]*?\n\}\n/);
   assert.ok(validateMatch, 'expected to find validateProject() in app.js');
-  const defaultMatch = appJs.match(/function defaultProject\(\)\{return\{[\s\S]*?\}\}\n/);
+  // RS-2010: defaultProject() now computes a `const vessel=...;` before its `return{...}` (the
+  // vessel-derived canvas) -- the pattern no longer requires "return{" immediately after "(){".
+  const defaultMatch = appJs.match(/function defaultProject\(\)\{[\s\S]*?\}\}\n/);
   assert.ok(defaultMatch, 'expected to find defaultProject() in app.js');
 
   // RS-2002: TEXT_ENGINE_FONT_IDS became a `let` (reassigned once fontManager loads) and moved
@@ -59,8 +61,16 @@ async function extractProjectFunctions() {
   // S-112: defaultProject() calls getPlateDefaults() and validateProject() calls
   // normalizePlateParams() -- both injected as function parameters for the same reason
   // getObjectTemplate is.
+  // RS-2010: validateProject()/defaultProject() now also reference VESSEL_PRODUCT_IDS/
+  // getVesselDefaults/normalizeVesselParams/deriveLegacyVesselParams/computeCanvasFromVessel --
+  // injected as function parameters for the same reason getPlateDefaults/normalizePlateParams are.
+  const { VESSEL_PRODUCT_IDS, getVesselDefaults, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel } = await import('../src/products/index.js');
   // eslint-disable-next-line no-new-func
-  return new Function('getObjectTemplate', 'SHAPE_LIBRARY_KINDS', 'getPlateDefaults', 'normalizePlateParams', `${source}\nreturn { validateProject, defaultProject };`)(getObjectTemplate, SHAPE_LIBRARY_KINDS, getPlateDefaults, normalizePlateParams);
+  return new Function(
+    'getObjectTemplate', 'SHAPE_LIBRARY_KINDS', 'getPlateDefaults', 'normalizePlateParams',
+    'VESSEL_PRODUCT_IDS', 'getVesselDefaults', 'normalizeVesselParams', 'deriveLegacyVesselParams', 'computeCanvasFromVessel',
+    `${source}\nreturn { validateProject, defaultProject };`
+  )(getObjectTemplate, SHAPE_LIBRARY_KINDS, getPlateDefaults, normalizePlateParams, VESSEL_PRODUCT_IDS, getVesselDefaults, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel);
 }
 
 const { validateProject, defaultProject } = await extractProjectFunctions();
@@ -191,12 +201,16 @@ await test('8. a safe-area guide is drawn as an app.js editor overlay (not insid
 
 // --- 3. Backward compatibility ------------------------------------------------------------------
 
-await test('9. defaultProject() defaults to the mug template (product:\'mug\', canvas 210x90)', () => {
+await test('9. defaultProject() defaults to the mug template, canvas derived from the Standard Mug\'s physical dimensions (RS-2010: no longer the fixed 210x90mm preset)', () => {
   const project = defaultProject();
   assert.equal(project.product, 'mug');
-  assert.equal(project.canvas.width, 210);
-  assert.equal(project.canvas.height, 90);
-  assert.deepEqual(project.canvas, { width: getObjectTemplate('mug').productionWidthMm, height: getObjectTemplate('mug').productionHeightMm });
+  // RS-2010: a fresh project's canvas is vessel-derived (circumference/printable height), not
+  // ObjectTemplate.js's own fixed productionWidthMm/productionHeightMm preset -- see
+  // docs/specifications/RS-2010-PhysicalProductDimensions.md. That fixed preset is still what a
+  // *legacy* project (loaded via validateProject(), no project.vessel) keeps untouched -- see
+  // test 10 below and tools/test-product-vessel-dimensions.mjs's own backward-compatibility cases.
+  assert.ok(Math.abs(project.canvas.width - Math.PI * project.vessel.bodyDiameterMm) < 1e-9);
+  assert.equal(project.canvas.height, project.vessel.printableHeightMm);
 });
 
 await test('10. a Project JSON with no product field at all validates and defaults to mug (pre-RS-1004 files)', () => {

@@ -242,13 +242,19 @@ await test('12. StoneLayout reuse: text, circle, and SVG layers all generate cor
 async function extractProjectFunctions() {
   const validateMatch = appJs.match(/function validateProject\(obj\)\{[\s\S]*?\n\}\n/);
   assert.ok(validateMatch, 'expected to find validateProject() in app.js');
-  const defaultMatch = appJs.match(/function defaultProject\(\)\{return\{[\s\S]*?\}\}\n/);
+  // RS-2010: defaultProject() now computes a `const vessel=...;` before its `return{...}` (the
+  // vessel-derived canvas) -- the pattern no longer requires "return{" immediately after "(){".
+  const defaultMatch = appJs.match(/function defaultProject\(\)\{[\s\S]*?\}\}\n/);
   assert.ok(defaultMatch, 'expected to find defaultProject() in app.js');
   const constantsStart = appJs.indexOf('const DEFAULT_TEXT_FONT_ID=');
   const source = `${appJs.slice(constantsStart, appJs.indexOf(defaultMatch[0]) + defaultMatch[0].length)}\n${appJs.slice(appJs.indexOf('const SUPPORTED_LAYER_TYPES=new Set'), appJs.indexOf(validateMatch[0]) + validateMatch[0].length)}`;
   const { SHAPE_LIBRARY_KINDS } = await import('../src/geometry/index.js');
+  // RS-2010: validateProject()/defaultProject() now also reference VESSEL_PRODUCT_IDS/
+  // getVesselDefaults/normalizeVesselParams/deriveLegacyVesselParams/computeCanvasFromVessel --
+  // bound here the same way the plate helpers already are.
+  const { VESSEL_PRODUCT_IDS, getVesselDefaults, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel } = products;
   // eslint-disable-next-line no-new-func
-  return new Function('getObjectTemplate', 'SHAPE_LIBRARY_KINDS', 'getPlateDefaults', 'normalizePlateParams', `${source}\nreturn { validateProject, defaultProject };`)(getObjectTemplate, SHAPE_LIBRARY_KINDS, getPlateDefaults, normalizePlateParams);
+  return new Function('getObjectTemplate', 'SHAPE_LIBRARY_KINDS', 'getPlateDefaults', 'normalizePlateParams', 'VESSEL_PRODUCT_IDS', 'getVesselDefaults', 'normalizeVesselParams', 'deriveLegacyVesselParams', 'computeCanvasFromVessel', `${source}\nreturn { validateProject, defaultProject };`)(getObjectTemplate, SHAPE_LIBRARY_KINDS, getPlateDefaults, normalizePlateParams, VESSEL_PRODUCT_IDS, getVesselDefaults, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel);
 }
 const { validateProject, defaultProject } = await extractProjectFunctions();
 
@@ -288,8 +294,12 @@ await test('15. backward compatibility: a pre-plate-feature Mug project (no proj
 await test('16. backward compatibility: defaultProject() (product:"mug") is unaffected by the plate feature except for carrying a default-valued project.plate bag', () => {
   const d = defaultProject();
   assert.equal(d.product, 'mug');
-  assert.equal(d.canvas.width, 210);
-  assert.equal(d.canvas.height, 90);
+  // RS-2010: a *fresh* default project's canvas is now vessel-derived (circumference/printable
+  // height from the Standard Mug's own defaults), not the old fixed 210x90mm preset -- see
+  // docs/specifications/RS-2010-PhysicalProductDimensions.md. The fixed-preset value is asserted
+  // separately, unchanged, for a *legacy-loaded* project in test 17 below.
+  assert.ok(Math.abs(d.canvas.width - Math.PI * d.vessel.bodyDiameterMm) < 1e-9);
+  assert.equal(d.canvas.height, d.vessel.printableHeightMm);
   // Unlike validateProject() (which routes project.plate through normalizePlateParams(), stripping
   // the read-only weightGrams field), defaultProject() seeds it directly from getPlateDefaults() --
   // so the comparison here is unstripped.
@@ -359,7 +369,8 @@ await test('21. app.js: switching #objectType to plate reseeds project.plate/cup
 await test('22. app.js: the plate draws its own circular/annular design-target guide instead of the cylindrical Front View Frame, and drawCup() forwards plateParams to the 3D preview', () => {
   assert.match(appJs, /function drawPlateDesignTargetGuide\(/);
   assert.match(appJs, /if\(isPlate\)\{drawPlateDesignTargetGuide\(ctx,s,ox,oy,dpr\)\}else\{drawFrontViewFrame\(/);
-  assert.match(appJs, /preview3D\.update\(layout,\{cupColor:project\.cupColor,objectTemplate:currentObjectTemplate\(\),canvasWidthMm:project\.canvas\.width,canvasHeightMm:project\.canvas\.height,plateParams:project\.plate\}\)/);
+  // RS-2010: drawCup() now also forwards vesselParams:project.vessel alongside plateParams.
+  assert.match(appJs, /preview3D\.update\(layout,\{cupColor:project\.cupColor,objectTemplate:currentObjectTemplate\(\),canvasWidthMm:project\.canvas\.width,canvasHeightMm:project\.canvas\.height,plateParams:project\.plate,vesselParams:project\.vessel\}\)/);
 });
 
 await test('23. app.js: isPointerOnFrontViewFrame()/isTextTooLongForObject() both opt the plate out of the cylindrical wrap-around concepts that do not apply to a flat disc', () => {

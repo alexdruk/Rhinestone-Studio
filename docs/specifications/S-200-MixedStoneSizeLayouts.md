@@ -496,3 +496,90 @@ to `app.js`'s UI-wiring source-text shape.
   `test-path-boolean-integration` (18 listed; all pass).
 * Full 74-file suite was not rerun per this task's scope (focused verification only); the 2
   originally-failing files plus every directly related suite are confirmed green.
+
+## RS-2010 integration (develop merge, 2026-07-24)
+
+`develop` advanced with RS-2010 (Physical Product Dimensions) after S-200 branched. Merging
+`origin/develop` into `feature/s-200-mixed-stone-size-layouts` produced one real `app.js` conflict
+and one downstream test failure, both resolved on this branch (`develop` itself was never touched;
+this branch was not merged back).
+
+### The conflict
+
+`HISTORY_TRACKED_CONTROL_IDS` (app.js) — both milestones independently added their own new control
+ids to the end of this one array literal: S-200 appended `'sizeMode','mixedAllowedSs6',...,
+'conservativeDetail'`; RS-2010 appended `'vesselBodyDiameter','vesselBodyHeight',
+'vesselTopDiameter'`. **Resolution:** combined both sets into one array (RS-2010's three vessel ids
+placed before S-200's block, preserving each milestone's own internal ordering) — a pure union, no
+semantic conflict, since the two milestones' control ids are entirely disjoint and this array is
+just a flat list every listed id gets identical generic undo/redo wiring from (see the `for(const id
+of HISTORY_TRACKED_CONTROL_IDS)` loop immediately below it). No other part of `app.js` conflicted:
+RS-2010 never touched `validateProject()`'s per-layer S-200 fields, `mixedSizeParamsFor()`, the five
+`generate*StonesLive()` call sites, `FIELD_GROUPS`, or the Mixed Stone Size sync/write code; S-200
+never touched `defaultProject()`/`validateProject()`'s vessel handling, `getVesselDefaults()`,
+`normalizeVesselParams()`, or `deriveLegacyVesselParams()`. Audited directly post-merge (grepping
+for every S-200 symbol in the merged `app.js`) to confirm all five `mixedSizeParamsFor(layer)`
+forwarding call sites, `resolveSizeMode()`, and the sync/write wiring survived the auto-merge intact
+alongside RS-2010's vessel schema/UI additions.
+
+### The test failure — `tools/test-s200-app-integration.mjs` test 11
+
+**Symptom:** `ReferenceError: VESSEL_PRODUCT_IDS is not defined`, thrown from inside the sandboxed
+`validateProject()` this test's own `new Function(...)` extraction executes.
+
+**Cause:** RS-2010 extended `validateProject()` to also resolve `project.vessel` (via
+`VESSEL_PRODUCT_IDS.includes(productId)`, `normalizeVesselParams()`, `deriveLegacyVesselParams()`,
+`getVesselDefaults()` — see `docs/specifications/RS-2010-PhysicalProductDimensions.md`). Test 11's
+harness (written before RS-2010 existed) only injected minimal hand-rolled fakes for
+`getObjectTemplate()`/`normalizePlateParams()`, so the sandbox had no binding for these four new
+free variables `validateProject()` now references.
+
+**Category:** combined-state / cross-milestone test-fixture gap — not a genuine regression in
+either milestone (RS-2010's own `tools/test-project-validation-security.mjs`, which already extracts
+`validateProject()` with the real vessel functions injected, passed against the merged `app.js`
+without modification, proving the merged `validateProject()` itself is correct).
+
+**Fix:** test fixture only, no production code change. Rewrote test 11 to mirror
+`tools/test-project-validation-security.mjs`'s own established extraction pattern exactly: import
+the **real** `getObjectTemplate`, `getPlateDefaults`, `normalizePlateParams`, `VESSEL_PRODUCT_IDS`,
+`getVesselDefaults`, `normalizeVesselParams`, `deriveLegacyVesselParams`, `computeCanvasFromVessel`
+from `src/products/index.js` (and `SHAPE_LIBRARY_KINDS` from `src/geometry/index.js`) and inject
+those into the sandbox, rather than hand-rolling fakes for them — this is deliberately *more*
+faithful than a patch-in fake would have been, since it can never drift from the real
+implementations' actual behavior. Also strengthened the test with two new combined-state assertions
+(RS-2010 + S-200 must not interfere with each other): a legacy project with no `vessel` field keeps
+`project.canvas` byte-unchanged, and still derives a real `project.vessel` via
+`deriveLegacyVesselParams()`.
+
+### Combined-state verification
+
+* Every RS-2010 requirement (vessel dimensions as source of truth; `normalizeVesselParams()` for
+  new/edited vessels; `deriveLegacyVesselParams()` + untouched `project.canvas` for legacy projects;
+  Mug/Tumbler/Bottle/Plate dimension controls and switching) and every S-200 requirement (Uniform
+  mode backward-compatible; Mixed mode only activates when explicitly selected; Mixed-size inspector
+  controls wired; Mixed params reach `GeometryEngine`; Production Sheet grouping functional; existing
+  color/sizeMm/order/count/fill/text/SVG behavior intact) were re-verified together, not just each
+  milestone's own isolated suite — see "Test results" below.
+* Isolated Playwright browser verification (fresh profile, app served locally, no window named
+  `main`/`airbnb` touched) covered: Mug/Tumbler/Bottle vessel dimension fields shown and editable,
+  Bottle's independently-editable Top Diameter (taper); Plate's own S-112 fields unaffected and
+  vessel fields correctly hidden; Uniform mode stone generation; Mixed mode opt-in activation (a
+  freshly added layer defaults to Uniform, never silently Mixed); SVG export with multiple stone
+  radii; Production Sheet per-size breakdown line; reload persistence; and importing a genuine
+  legacy (pre-RS-2010, no `vessel` field, current layer schema) project, confirming
+  `deriveLegacyVesselParams()` runs with no throw and no console errors anywhere in the run.
+
+### Test results
+
+* `node tools/test-s200-app-integration.mjs` — 13/13 passing (test 11 fixed).
+* Focused categories re-run clean: S-200 app integration, S-200 mixed-size generation, S-200
+  Production Sheet grouping, vessel physical dimensions (`test-product-vessel-dimensions.mjs`),
+  object dimensions (`test-object-dimensions.mjs`), object geometry builder
+  (`test-object-geometry-builder.mjs`), fill algorithms (engine + integration), crystal color
+  integration, project import/legacy compatibility (`test-project-validation-security.mjs`,
+  `test-examples-regression.mjs`), object template integration, and the four architecture checks
+  (`test-architecture-module-boundaries`, `test-browser-dependency-loading`,
+  `test-module-graph-exports`, `test-project-model-consolidation`).
+* `npm test` (default tier): **24 selected, 24 passed, 0 failed.**
+* `npm run test:full`: **75 selected, 75 passed, 0 failed.**
+* Zero unresolved conflicts, zero conflict markers in the working tree after resolution.

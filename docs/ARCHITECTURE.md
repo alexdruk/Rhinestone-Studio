@@ -424,6 +424,31 @@ untouched. Unknown/missing `product` values fall back to `'mug'` (matching this 
 permissive style for `cupColor`/`wrap`), so every pre-RS-1004 Project JSON opens identically. See
 `docs/specifications/RS-1004-MultiObjectTemplates.md`.
 
+**RS-2010 update:** `project.canvas` (the printable area above) is no longer authored directly for
+Mug/Tumbler/Bottle — it is derived from a real physical product definition:
+
+```
+Product Definition (Standard Mug/Tumbler/Bottle)
+    ↓
+Physical Dimensions (project.vessel: bodyDiameterMm/topDiameterMm/bodyHeightMm/printableHeightMm)
+    ↓
+Derived Printable Area (project.canvas: width = printable circumference, height = printable height)
+    ↓
+GeometryEngine
+```
+
+`src/products/VesselProductDefinition.js` (mirroring the Round Dinner Plate's own
+`PlateProductDefinition.js`, S-112) supplies per-product mm ranges/defaults from JSON
+(`src/products/definitions/vessel-standard-{mug,tumbler,bottle}.json`); `computeCanvasFromVessel()`
+is the one place `project.canvas` is derived from live vessel params, called only when a fresh
+project is created, the object type is switched, or the operator edits a vessel dimension field —
+never during project load. A legacy project (saved before RS-2010, no `project.vessel`) keeps its
+existing `project.canvas` byte-identical on load; `deriveLegacyVesselParams()` reverse-derives a
+`project.vessel` record from that canvas purely for display, never rewriting the canvas itself. The
+Round Dinner Plate is unaffected (it already followed this derived-canvas pattern since S-112) and
+`GeometryEngine.js`/`StoneLayout.js` are untouched — this is a product-definition-layer change only.
+See `docs/specifications/RS-2010-PhysicalProductDimensions.md`.
+
 ---
 
 # Text Engine

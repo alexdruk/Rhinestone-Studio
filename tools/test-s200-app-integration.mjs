@@ -130,30 +130,49 @@ await test('10. populateMixedSizeSelectOptions() is called once at startup, alon
 // --- 3. Legacy / backward-compatibility ---------------------------------------------------------
 
 await test('11. validateProject() requires no S-200 fields — a legacy layer with none of them still validates', async () => {
-  // Extract and execute the real validateProject() against a minimal fake project, mirroring
-  // tools/test-fill-algorithms-integration.mjs's own validateProject() extraction pattern.
-  const start = appJs.indexOf('function validateProject');
-  const fnSource = appJs.slice(start, appJs.indexOf('\n}\n', start) + 2);
-  // validateProject() calls getObjectTemplate()/normalizePlateParams() -- minimal fakes sufficient
-  // for this structural check, matching the object-shape those two real functions return.
+  // RS-2010 merge follow-up (2026-07): validateProject() now also references
+  // VESSEL_PRODUCT_IDS/getVesselDefaults/normalizeVesselParams/deriveLegacyVesselParams (project.vessel
+  // handling), so the old minimal hand-rolled fakes for getObjectTemplate()/normalizePlateParams() no
+  // longer cover its full dependency surface (ReferenceError: VESSEL_PRODUCT_IDS is not defined).
+  // Rather than hand-roll fakes for the new vessel functions too (risking silently-wrong fixture
+  // behavior drifting from the real thing), this now mirrors
+  // tools/test-project-validation-security.mjs's own extraction exactly: the REAL
+  // getObjectTemplate/getPlateDefaults/normalizePlateParams/VESSEL_PRODUCT_IDS/getVesselDefaults/
+  // normalizeVesselParams/deriveLegacyVesselParams/computeCanvasFromVessel/SHAPE_LIBRARY_KINDS are
+  // imported from their actual modules and injected into the sandbox, so this test only ever
+  // exercises validateProject()'s own logic against genuine dependencies, not a second,
+  // maintained-by-hand implementation of them.
+  const { SHAPE_LIBRARY_KINDS } = await import('../src/geometry/index.js');
+  const {
+    getObjectTemplate, getPlateDefaults, normalizePlateParams,
+    VESSEL_PRODUCT_IDS, getVesselDefaults, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel
+  } = await import('../src/products/index.js');
+
+  const validateMatch = appJs.match(/function validateProject\(obj\)\{[\s\S]*?\n\}\n/);
+  assert.ok(validateMatch, 'expected to find validateProject() in app.js');
+  const constantsStart = appJs.indexOf('const DEFAULT_TEXT_FONT_ID=');
+  const source = appJs.slice(constantsStart, appJs.indexOf(validateMatch[0]) + validateMatch[0].length);
+
   const run = new Function(
-    'getObjectTemplate', 'normalizePlateParams',
-    `const SUPPORTED_LAYER_TYPES=new Set(['text','circle','rectangle','svg','image','path']);` +
-    `const XYWH_SHAPE_TYPES=new Set(['rectangle','svg','image','path']);` +
-    `const LAYER_ID_PATTERN=/^[A-Za-z0-9_-]{1,64}$/;` +
-    `const DEFAULT_PROJECT_NAME='Untitled Project';` +
-    `${fnSource}\nreturn validateProject;`
+    'getObjectTemplate', 'SHAPE_LIBRARY_KINDS', 'getPlateDefaults', 'normalizePlateParams',
+    'VESSEL_PRODUCT_IDS', 'getVesselDefaults', 'normalizeVesselParams', 'deriveLegacyVesselParams', 'computeCanvasFromVessel',
+    `${source}\nreturn validateProject;`
   );
   const validateProject = run(
-    () => ({ id: 'mug' }),
-    () => ({})
+    getObjectTemplate, SHAPE_LIBRARY_KINDS, getPlateDefaults, normalizePlateParams,
+    VESSEL_PRODUCT_IDS, getVesselDefaults, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel
   );
+
   const legacyProject = {
     version: 2, canvas: { width: 210, height: 90 },
     layers: [{ id: 'circle-1', type: 'circle', cx: 30, cy: 30, r: 10, stoneSize: 4, gap: 0.3 }]
   };
   const result = validateProject(legacyProject);
   assert.equal(result.layers[0].sizeMode, undefined, 'a legacy layer keeps no sizeMode field — resolved defensively downstream, not injected here');
+  // RS-2010 combined-state check: a legacy (no obj.vessel) project must still derive vessel from its
+  // own untouched canvas, not silently reset canvas from a fresh product default.
+  assert.deepEqual(result.canvas, { width: 210, height: 90 }, 'legacy project.canvas must be preserved unchanged, per RS-2010');
+  assert.ok(result.vessel && typeof result.vessel === 'object', 'expected a derived project.vessel for a legacy mug-shaped project');
 });
 
 // --- 4. CI follow-up regression guards (2026-07) -------------------------------------------------
