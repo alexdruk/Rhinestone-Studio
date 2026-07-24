@@ -265,6 +265,20 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .stone-count{font-size:var(--font-size-xs);color:var(--color-text-muted);margin-top:6px}
 .checkbox-row{display:flex;align-items:center;gap:8px;font-size:var(--font-size-sm);font-weight:500;color:var(--color-text);text-transform:none;margin-top:var(--space-1)}
 .checkbox-row input{width:auto;height:auto}
+/* RS-2012: dims the label text of an Allowed Sizes row whose size is ineligible for gap-filling
+   (not smaller than the primary Stone size, or outside the Minimum/Maximum Size range) -- toggled
+   alongside the checkbox's own [disabled]. Only recolors text (doesn't add opacity on top of the
+   browser's native input:disabled dimming above) so a checked-but-now-ineligible box still reads
+   clearly as checked, not merely near-invisible from two compounding opacities. */
+.checkbox-row.ineligible{color:var(--color-text-muted)}
+/* RS-2012: "Advanced" collapsible (Mixed Stone Size's Minimum/Maximum Size + Conservative Detail).
+   Custom marker (default <details> triangle varies by browser/platform) so it reads consistently. */
+.advanced-section{margin-top:var(--space-3);padding-top:var(--space-2);border-top:1px solid var(--color-border)}
+.advanced-section summary{cursor:pointer;font-size:var(--font-size-sm);font-weight:700;color:var(--color-text-muted);list-style:none;user-select:none}
+.advanced-section summary::-webkit-details-marker{display:none}
+.advanced-section summary::before{content:'▸';display:inline-block;width:1em;transition:transform .15s}
+.advanced-section[open] summary::before{transform:rotate(90deg)}
+.advanced-section[open] summary{color:var(--color-text);margin-bottom:var(--space-2)}
 .template-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-3)}
 .template-card{border:1px solid var(--color-border-strong);border-radius:var(--radius-md);padding:var(--space-3);cursor:pointer;background:var(--color-surface)}
 .template-card.active{border-color:var(--color-primary);background:var(--color-primary-tint)}
@@ -1119,6 +1133,11 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
     <div class="field"><label for="stoneSize">Stone size</label><select id="stoneSize" title="Standard rhinestone sizes (commercial name and actual diameter). Populated from the stone size library."></select></div>
     <div class="field"><label for="gap">Gap (mm)</label><input id="gap" type="number" min="0" max="5" step="0.1" value="0.3"></div>
   </div>
+  <!-- RS-2012: shown instead of relying on #gap's disabled look alone -- an authored Rhinestone
+       font (RS Block/RS Modern) bakes spacing into its stone positions, so Gap has no effect for it
+       (see isAuthoredStoneFontId() in app.js). Mirrors #textSizeFixedHint/#curveUnavailableHint's
+       existing "disable the control + explain why right below it" convention. -->
+  <p class="hint" id="gapFixedHint" style="display:none">Character spacing is built into this font.</p>
   <div class="field"><label for="stoneColor">Stone color</label><div class="color-pick-row"><select id="stoneColor"></select><span id="stoneColorSwatch" class="color-swatch" title="Selected color preview"></span></div></div>
 </div>
 <!-- S-200 (Mixed Stone-Size Layouts): shared, relocated field group (same relocateFieldGroups()
@@ -1144,13 +1163,24 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <label class="checkbox-row"><input type="checkbox" id="mixedAllowedSs16" value="4.0"> SS16 (4.0 mm)</label>
         <label class="checkbox-row"><input type="checkbox" id="mixedAllowedSs20" value="4.7"> SS20 (4.7 mm)</label>
         <label class="checkbox-row"><input type="checkbox" id="mixedAllowedSs30" value="6.4"> SS30 (6.4 mm)</label>
-        <p class="hint">Primary size is the Stone size field above. Only sizes smaller than the primary size are ever used to fill gaps.</p>
+        <!-- RS-2012: actionable ("fix this") feedback -- shown only when Mixed mode can currently
+             generate zero infill stones; toggled via classList 'visible' like #textTooLongWarning. -->
+        <p class="validation-message" id="mixedNoEligibleHint" role="status"></p>
+        <p class="hint">Primary size is the Stone size field above. Only sizes smaller than the primary size are ever used to fill gaps; ineligible sizes above are dimmed and unselectable.</p>
       </div>
-      <div class="field-row">
-        <div class="field"><label for="mixedMinSize">Minimum size</label><select id="mixedMinSize" title="Smallest size the Geometry Engine may ever place, regardless of Allowed Sizes."></select></div>
-        <div class="field"><label for="mixedMaxSize">Maximum size</label><select id="mixedMaxSize" title="Largest size eligible for gap-filling (never larger than the primary size)."></select></div>
-      </div>
-      <div class="field"><label for="conservativeDetail">Conservative detail</label><input id="conservativeDetail" type="range" min="0" max="1" step="0.05" value="0.3"></div>
+      <!-- RS-2012: Minimum/Maximum Size + Conservative Detail moved behind "Advanced" -- the primary
+           surface now exposes only Generation Mode + Allowed Sizes, per the milestone's "reduce
+           default cognitive load" goal. Native <details> needs no JS to expand/collapse; app.js only
+           sets its initial `open` state (auto-expanded when a layer already has non-default advanced
+           values, so returning to a tuned layer never hides that tuning silently). -->
+      <details class="advanced-section" id="mixedAdvancedSection">
+        <summary>Advanced</summary>
+        <div class="field-row">
+          <div class="field"><label for="mixedMinSize">Minimum size</label><select id="mixedMinSize" title="Smallest size the Geometry Engine may ever place, regardless of Allowed Sizes."></select></div>
+          <div class="field"><label for="mixedMaxSize">Maximum size</label><select id="mixedMaxSize" title="Largest size eligible for gap-filling (never larger than the primary size)."></select></div>
+        </div>
+        <div class="field"><label for="conservativeDetail">Conservative detail</label><input id="conservativeDetail" type="range" min="0" max="1" step="0.05" value="0.3"></div>
+      </details>
       <p class="hint">Mixed mode never removes or resizes the primary stones above — it only adds smaller stones into gaps the primary size can't reach, always keeping full manufacturing spacing.</p>
     </div>
   </div>

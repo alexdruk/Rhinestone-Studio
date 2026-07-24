@@ -888,6 +888,15 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
   for(const cb of MIXED_ALLOWED_SIZE_CHECKBOXES)el(cb.id).checked=allowedSizesMm.some(v=>Math.abs(v-cb.diameterMm)<0.005);
   setNumericSelectValue(el('mixedMinSize'),l.minSizeMm??l.stoneSize);setNumericSelectValue(el('mixedMaxSize'),l.maxSizeMm??l.stoneSize);
   el('conservativeDetail').value=l.conservativeDetail??0.3;
+  // RS-2012 (Part 3): Advanced starts collapsed, matching the "reduce default cognitive load" goal
+  // -- except it auto-expands when this layer already carries a non-default Minimum/Maximum Size or
+  // Conservative Detail, so switching to an already-tuned layer never hides that tuning silently.
+  // Only set here (per selection change), never from the live updateMixedSizeCapabilityUI() below,
+  // so manually toggling Advanced open/closed while editing is never fought by the next keystroke.
+  const hasCustomAdvanced=(l.minSizeMm!=null&&Math.abs(l.minSizeMm-l.stoneSize)>0.005)
+    ||(l.maxSizeMm!=null&&Math.abs(l.maxSizeMm-l.stoneSize)>0.005)
+    ||(l.conservativeDetail!=null&&Math.abs(l.conservativeDetail-0.3)>0.001);
+  el('mixedAdvancedSection').open=sizeMode==='mixed'&&hasCustomAdvanced;
   // RS-1002: project.cupColor/project.wrap are project-level (not per-layer) fields, so they must
   // be resynced here too -- otherwise an undo/redo restore (or a Project JSON import) leaves these
   // two dropdowns stale, and the *next* edit's writeSelectedControlsToLayer() would silently write
@@ -1426,6 +1435,7 @@ function updateEditingUI(){const n=selectedLayerIds.size;el('selectionSummary').
   el('fitTextToShapeFixedSizeHint').style.display=fitAuthored?'block':'none';
   if(!fitDisabled)clearFitTextToShapeError();
   updateTextFontCapabilityUI();
+  updateMixedSizeCapabilityUI();
 }
 // FONT-002: keeps every Text Lightbox control that doesn't apply to the selected layer's font
 // (Fill Style, Text height/Auto fit, Curved text) in a disabled/hidden + explained state, and shows
@@ -1448,6 +1458,70 @@ function updateTextFontCapabilityUI(){
   if(authored)el('curveControls').style.display='none';
   el('legacyFontHint').style.display=legacy?'block':'none';
   el('unknownFontHint').style.display=unknown?'block':'none';
+  // RS-2012: Gap (mm) is baked into an authored font's stone positions and has no effect for it --
+  // disable the shared #gap control (see #sharedStoneFields; also used by every non-text layer type,
+  // where Gap remains fully editable since `authored` is always false there) and explain why via
+  // #gapFixedHint, exactly like height/autoFit/curveEnabled just above. A future font whose provider
+  // supports adjustable spacing (e.g. OpenType) is simply not authored -- this leaves that font's Gap
+  // control untouched with zero architectural changes.
+  el('gap').disabled=authored;
+  el('gapFixedHint').style.display=authored?'block':'none';
+}
+// RS-2012: mirrors MixedSizeGenerator.js's normalizeMixedSizeParams() eligibility rule exactly
+// (value < stoneSizeMm && value >= minSizeMm && value <= maxSizeMm), computed live from the
+// currently displayed controls (#stoneSize/#mixedMinSize/#mixedMaxSize) -- the same "read the
+// controls, not the possibly-stale layer" convention writeSelectedControlsToLayer() itself uses --
+// so the UI's disabled/warning story can never drift from what the Geometry Engine will actually
+// place. Returns the set of MIXED_ALLOWED_SIZE_CHECKBOXES ids that are currently eligible.
+function mixedSizeEligibleIds(){
+  const stoneSizeMm=parseFloat(el('stoneSize').value)||0;
+  const minSizeMm=parseFloat(el('mixedMinSize').value)||0;
+  const maxSizeMmRaw=parseFloat(el('mixedMaxSize').value);
+  const maxSizeMm=Number.isFinite(maxSizeMmRaw)?maxSizeMmRaw:Infinity;
+  const ids=new Set();
+  for(const cb of MIXED_ALLOWED_SIZE_CHECKBOXES){
+    if(cb.diameterMm<stoneSizeMm&&cb.diameterMm>=minSizeMm&&cb.diameterMm<=maxSizeMm)ids.add(cb.id);
+  }
+  return ids;
+}
+// RS-2012 (Part 2 -- Mixed Stone Size usability): the mixed-size generator itself was already
+// correct (S-200); the problem was purely that a user could check an Allowed Size that can never
+// actually be used (too large, or outside Minimum/Maximum Size) and see no feedback at all. This
+// disables (+ dims + explains via title) every currently-ineligible checkbox and shows one
+// actionable #mixedNoEligibleHint message distinguishing "nothing is checked yet" from "no size can
+// ever be eligible with these settings" from "what's checked doesn't qualify" -- called from
+// updateEditingUI() so it reacts live to every relevant edit (sizeMode, Stone size, Min/Max Size,
+// or the checkboxes themselves), matching updateTextFontCapabilityUI()'s own call site just above.
+function updateMixedSizeCapabilityUI(){
+  const mixed=resolveSizeMode(el('sizeMode').value)==='mixed';
+  const stoneSizeMm=parseFloat(el('stoneSize').value)||0;
+  const eligibleIds=mixedSizeEligibleIds();
+  let anyChecked=false,anyCheckedEligible=false;
+  for(const cb of MIXED_ALLOWED_SIZE_CHECKBOXES){
+    const input=el(cb.id);
+    const row=input.closest('label');
+    const eligible=eligibleIds.has(cb.id);
+    input.disabled=!eligible;
+    row.classList.toggle('ineligible',!eligible);
+    row.title=eligible?''
+      :(cb.diameterMm>=stoneSizeMm
+        ?`Not smaller than the primary Stone size (${stoneSizeMm} mm) above, so it can never fill a gap.`
+        :'Outside the Minimum/Maximum Size range set in Advanced below.');
+    if(input.checked){anyChecked=true;if(eligible)anyCheckedEligible=true}
+  }
+  const hint=el('mixedNoEligibleHint');
+  if(!mixed||anyCheckedEligible){
+    hint.classList.remove('visible');hint.textContent='';
+  }else if(eligibleIds.size===0){
+    hint.textContent='No secondary size is eligible with the current Stone size and Minimum/Maximum Size settings — increase Stone size above, or widen the Minimum/Maximum Size range in Advanced.';
+    hint.classList.add('visible');
+  }else if(!anyChecked){
+    hint.textContent="Select at least one Allowed Size above — Mixed mode won't add any stones until one is checked.";
+    hint.classList.add('visible');
+  }else{
+    hint.textContent="None of the checked Allowed Sizes are currently eligible (dimmed above) — check an eligible size, or adjust Stone size / Minimum-Maximum Size in Advanced.";
+    hint.classList.add('visible');
+  }
 }
 // RS-0003.5D2: SELECTION_HANDLE_SIZE_PX enlarges the resize handles slightly (was a bare 10px
 // square) and a white halo is stroked behind the dashed outline so the selection reads clearly
