@@ -161,7 +161,9 @@ import { validateRhsProject, toAppProjectShape, parseCatalog, search as searchGa
 // font-management system: FontManager/the text-engine font provider/GeometryEngine are the only things that ever
 // turn a fontId into stone geometry; the panel only decides which fontId to write into #font.
 'use strict';
-const DEFAULT_TEXT_FONT_ID='courier-prime-regular';
+// FONT-002: RS Block (an authored Production Font) is the default -- Courier Prime remains fully
+// registered/enabled (existing projects load unchanged) but is no longer offered as the default pick.
+const DEFAULT_TEXT_FONT_ID='rs-block';
 // RS-2002: seeded with just the default font id so text still renders if the manifest fails to
 // load (see permanentEngineError below); reassigned from the live manifest immediately after
 // fontManager loads successfully.
@@ -243,7 +245,7 @@ function updateStoneColorSwatch(){const c=STONE_COLORS[el('stoneColor').value];e
 // RS-2002 (Typography & Font Library) -- everything below builds the font picker on top of the
 // same fontManager.listFonts() call used to derive TEXT_ENGINE_FONT_IDS above. No font data lives
 // in app.js: category is font.role, family is font.family, both straight from the manifest.
-const FONT_CATEGORY_LABELS={script:'Script','sans-serif':'Sans Serif',serif:'Serif',display:'Display',monogram:'Monogram',decorative:'Decorative',block:'Block',handwritten:'Handwritten',monospace:'Monospace',rhinestone:'Rhinestone (Original)'};
+const FONT_CATEGORY_LABELS={script:'Script','sans-serif':'Sans Serif',serif:'Serif',display:'Display',monogram:'Monogram',decorative:'Decorative',block:'Block',handwritten:'Handwritten',monospace:'Monospace',rhinestone:'Production Fonts'};
 function fontCategoryLabel(role){return FONT_CATEGORY_LABELS[role]||(role?role.charAt(0).toUpperCase()+role.slice(1):'Other')}
 function groupFontsByCategory(fonts){const groups=new Map();for(const f of fonts){const key=f.role||'display';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(f)}for(const list of groups.values())list.sort((a,b)=>a.family.localeCompare(b.family));return[...groups.entries()].sort((a,b)=>fontCategoryLabel(a[0]).localeCompare(fontCategoryLabel(b[0])))}
 // A font family name safe to drop into a CSS font-family value / HTML style attribute. Every
@@ -264,12 +266,44 @@ function injectFontFaceRules(fonts){const style=document.createElement('style');
 // Builds the #fontCategoryFilter <select>'s options from the same category grouping
 // populateFontOptions()/renderFontLibraryList() already use, so "category filter" never drifts
 // from what the panel's own group headers show.
-function populateFontCategoryFilterOptions(){if(!fontManager)return;const categories=groupFontsByCategory(fontManager.listFonts()).map(([role])=>role);el('fontCategoryFilter').innerHTML='<option value="">All categories</option>'+categories.map(role=>`<option value="${role}">${escapeHtml(fontCategoryLabel(role))}</option>`).join('')}
+function populateFontCategoryFilterOptions(){if(!fontManager)return;const categories=groupFontsByCategory(productionFonts()).map(([role])=>role);el('fontCategoryFilter').innerHTML='<option value="">All categories</option>'+categories.map(role=>`<option value="${role}">${escapeHtml(fontCategoryLabel(role))}</option>`).join('')}
 // Builds the #font <select>'s <optgroup>s from the live manifest, grouped by category and sorted
 // alphabetically within each group -- mirrors populateStoneColorOptions()'s existing pattern.
 // Disabled fonts (just the RobotoMono placeholder today) are never listed, matching
 // TEXT_ENGINE_FONT_IDS above.
-function populateFontOptions(){if(!fontManager)return;el('font').innerHTML=groupFontsByCategory(fontManager.listFonts()).map(([role,fonts])=>`<optgroup label="${escapeHtml(fontCategoryLabel(role))}">${fonts.map(f=>`<option value="${f.id}" style="font-family:'${cssFontFamily(f.family)}'">${escapeHtml(f.family)}</option>`).join('')}</optgroup>`).join('')}
+// FONT-002: only Production Fonts (providerId 'rhinestone') are offered here -- OpenType fonts stay
+// fully registered/enabled (existing projects keep loading/rendering/exporting unchanged, see
+// resolveFontProviderId() below) but are no longer offered as a *pick* for new/other text layers.
+// A layer that already uses one is handled by ensureFontOptionForLayer(), not by listing it here.
+function productionFonts(){return fontManager?fontManager.listFonts().filter(f=>f.providerId==='rhinestone'):[]}
+function populateFontOptions(){if(!fontManager)return;el('font').innerHTML=groupFontsByCategory(productionFonts()).map(([role,fonts])=>`<optgroup label="${escapeHtml(fontCategoryLabel(role))}">${fonts.map(f=>`<option value="${f.id}" style="font-family:'${cssFontFamily(f.family)}'">${escapeHtml(f.family)}</option>`).join('')}</optgroup>`).join('')}
+// FONT-002: a native <select> silently falls back to value='' if no <option> matches -- without
+// this, a layer already using a legacy (hidden-from-the-list) font would desync #font's displayed
+// value from l.font, and the very next edit's writeSelectedControlsToLayer() (l.font=el('font').value)
+// would silently overwrite the layer's real font with '' on the next input event. Called from
+// syncSelectedControlsFromLayer() right before el('font').value=l.font is set. The injected option is
+// tagged [data-legacy-option] and replaced (never accumulated) on every call, so switching selection
+// away from a legacy-fonted layer never leaves a stale entry in the list.
+function ensureFontOptionForLayer(fontId){
+  const select=el('font');
+  const stale=select.querySelector('option[data-legacy-option]');
+  if(stale)stale.remove();
+  if(!fontId||select.querySelector(`option[value="${fontId}"]`))return;
+  const option=document.createElement('option');
+  option.value=fontId;option.dataset.legacyOption='1';
+  if(isFontKnown(fontId)){
+    const font=fontManager.getFont(fontId);
+    option.style.fontFamily=`'${cssFontFamily(font.family)}'`;
+    option.textContent=`${font.family} (Legacy)`;
+  }else{
+    // Genuinely unknown font id -- still give the <select> a concrete matching option (never a
+    // blank/''-valued selection, which writeSelectedControlsToLayer()'s l.font=el('font').value
+    // guard also defends against separately) so the picker's displayed state always matches
+    // layer.font exactly, even though this id can't be resolved to real geometry.
+    option.textContent=`Unavailable font (${fontId})`;
+  }
+  select.appendChild(option);
+}
 // Favorites are a client-side browsing preference, not project data -- stored in localStorage,
 // never read/written by save/load/export/Design Library/Gallery, so they carry no compatibility
 // risk and don't need to round-trip through a project file.
@@ -349,7 +383,7 @@ function fontLibraryRowHtml(f,currentFontId){const isFav=favoriteFontIds.has(f.i
 // alphabetical order, then kicks off (without awaiting) filling in every row's live rhinestone
 // preview. Re-run on every search keystroke, category change, and favorite toggle; cheap at this
 // catalog size (12 fonts today) since preview generation itself is cached.
-function renderFontLibraryList(){if(!fontManager)return;const list=el('fontLibraryList');const query=fontSearchQuery.trim().toLowerCase();const fonts=fontManager.listFonts().filter(f=>(!fontCategoryFilterValue||f.role===fontCategoryFilterValue)&&(!query||f.family.toLowerCase().includes(query)||fontCategoryLabel(f.role).toLowerCase().includes(query)));if(fonts.length===0){list.innerHTML='<div class="font-library-empty">No fonts match your search.</div>';return}const currentFontId=el('font').value;const recents=recentFontIds.map(id=>fonts.find(f=>f.id===id)).filter(Boolean);const favorites=fonts.filter(f=>favoriteFontIds.has(f.id)).sort((a,b)=>a.family.localeCompare(b.family));let html='';if(recents.length)html+=`<div class="font-library-group">Recently Used</div>${recents.map(f=>fontLibraryRowHtml(f,currentFontId)).join('')}`;if(favorites.length)html+=`<div class="font-library-group">Favorites</div>${favorites.map(f=>fontLibraryRowHtml(f,currentFontId)).join('')}`;for(const[role,group]of groupFontsByCategory(fonts))html+=`<div class="font-library-group">${escapeHtml(fontCategoryLabel(role))}</div>${group.map(f=>fontLibraryRowHtml(f,currentFontId)).join('')}`;list.innerHTML=html;populateFontPreviewCanvases(list).catch(error=>console.error('Font preview rendering failed',error))}
+function renderFontLibraryList(){if(!fontManager)return;const list=el('fontLibraryList');const query=fontSearchQuery.trim().toLowerCase();const fonts=productionFonts().filter(f=>(!fontCategoryFilterValue||f.role===fontCategoryFilterValue)&&(!query||f.family.toLowerCase().includes(query)||fontCategoryLabel(f.role).toLowerCase().includes(query)));if(fonts.length===0){list.innerHTML='<div class="font-library-empty">No fonts match your search.</div>';return}const currentFontId=el('font').value;const recents=recentFontIds.map(id=>fonts.find(f=>f.id===id)).filter(Boolean);const favorites=fonts.filter(f=>favoriteFontIds.has(f.id)).sort((a,b)=>a.family.localeCompare(b.family));let html='';if(recents.length)html+=`<div class="font-library-group">Recently Used</div>${recents.map(f=>fontLibraryRowHtml(f,currentFontId)).join('')}`;if(favorites.length)html+=`<div class="font-library-group">Favorites</div>${favorites.map(f=>fontLibraryRowHtml(f,currentFontId)).join('')}`;for(const[role,group]of groupFontsByCategory(fonts))html+=`<div class="font-library-group">${escapeHtml(fontCategoryLabel(role))}</div>${group.map(f=>fontLibraryRowHtml(f,currentFontId)).join('')}`;list.innerHTML=html;populateFontPreviewCanvases(list).catch(error=>console.error('Font preview rendering failed',error))}
 function openFontLibraryPanel(){el('fontLibraryPanel').hidden=false;el('fontLibraryBtn').setAttribute('aria-expanded','true');fontSearchQuery='';el('fontSearch').value='';renderFontLibraryList();el('fontSearch').focus()}
 function closeFontLibraryPanel(){el('fontLibraryPanel').hidden=true;el('fontLibraryBtn').setAttribute('aria-expanded','false')}
 // Writes the picked font into the one real #font control and replays the exact 'input'+'change'
@@ -487,7 +521,11 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // non-empty layerId per instance; each Stone still carries its own real layer id) so every
  // renderer/exporter downstream consumes the same canonical product.
  async generate(project){let raw=[];for(const l of project.layers){if(!l.visible)continue;if(l.type==='text')raw.push(...await this.generateTextStonesLive(l,project));if(SHAPE_LAYER_TYPES.has(l.type))raw.push(...await this.generateShapeStonesLive(l));if(l.type==='svg')raw.push(...await this.generateSvgStonesLive(l));if(l.type==='image')raw.push(...await this.generateImageStonesLive(l));if(l.type==='path')raw.push(...await this.generatePathStonesLive(l));}const stones=dedupeStonesByRadius(raw).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId}));return new StoneLayout({layerId:'project',stones})}
- async generateTextStonesLive(layer,project){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text)return[];const fontId=TEXT_ENGINE_FONT_IDS.has(layer.font)?layer.font:DEFAULT_TEXT_FONT_ID;const mode=resolveTextFillMode(layer.textMode);const base={text:layer.text,fontId,providerId:resolveFontProviderId(fontId),layerId:layer.id,heightMm:layer.height,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment,
+ // FONT-002: an unknown font id (not just one hidden from the picker -- see isFontKnown()) is never
+ // silently substituted for DEFAULT_TEXT_FONT_ID; that layer's stones are skipped (same shape as an
+ // empty-text layer already returning []), and updateTextFontCapabilityUI() surfaces why while it's
+ // selected. layer.font itself is left untouched in `project`.
+ async generateTextStonesLive(layer,project){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text||!isFontKnown(layer.font))return[];const fontId=layer.font;const authored=isAuthoredStoneFontId(fontId);const mode=resolveTextFillMode(layer.textMode);const base={text:layer.text,fontId,providerId:resolveFontProviderId(fontId),layerId:layer.id,heightMm:layer.height,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,curveEnabled:authored?false:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment,
   // TXT-102: '??' fallbacks so a pre-TXT-102 saved project (no align/lineSpacing/rotationDeg on its
   // text layers) renders byte-identical -- 'left'/1/0 are exactly GeometryEngine's own defaults.
   align:layer.align??'left',lineSpacing:layer.lineSpacing??1,rotationDeg:layer.rotationDeg??0};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const{scale}=computeAutoFitScale(layer,project,result.widthMm);if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
@@ -529,7 +567,10 @@ const DEFAULT_PROJECT_NAME='Untitled Project';
 // avoids a null-check at every call site that reads it (drawCup(), Production Sheet options, the
 // plate guide overlay), exactly like project.wrap already exists (and is read) even while a
 // cylindrical template that barely uses it is selected.
-function defaultProject(){return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,product:'mug',canvas:{width:210,height:90},cupColor:'#1f3556',wrap:'front',plate:getPlateDefaults(),layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:2,gap:.3,color:'gold',autoFit:true,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0}]}}
+// FONT-002: stoneSize/gap default to RS Block's own recommendedStoneSizeMm/recommendedGapMm (2.8/0.3)
+// now that it's the default font, matching the family's own authored pitch (PITCH_MM=3.1 in
+// families/rsBlock.js) instead of the generic pre-FONT-002 2/0.3.
+function defaultProject(){return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,product:'mug',canvas:{width:210,height:90},cupColor:'#1f3556',wrap:'front',plate:getPlateDefaults(),layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:true,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0}]}}
 // RS-0003.5D1: validates an imported Project JSON file against the exact ad hoc project/layer
 // shape #exportProject already produces (JSON.stringify(project)). Throws a specific Error
 // describing the first problem found instead of silently accepting a malformed project; the
@@ -613,6 +654,17 @@ try{fontManager=await FontManager.fromUrl('./assets/fonts/manifest.json');fontPr
 // resolves which FontProviderRegistry provider should render it. Falls back to 'opentype' (the
 // registry's own default) for any font predating this field or if fontManager never loaded.
 function resolveFontProviderId(fontId){return fontManager&&fontManager.hasFont(fontId)?fontManager.getFont(fontId).providerId:'opentype'}
+// FONT-002: the one shared predicate every authored-stone-font capability gate (curve, Fill Style,
+// Text height/Auto fit, Fit Text to Shape, Boolean Operations messaging) reads, so "which text
+// features don't apply to this font" is decided in exactly one place. True for any font whose
+// provider supplies FontProviderResult.stoneCenters instead of a vector outline (currently just the
+// 'rhinestone' provider -- see RhinestoneFontProvider.js/stone-map-technique memory).
+function isAuthoredStoneFontId(fontId){return resolveFontProviderId(fontId)==='rhinestone'}
+// True only for a font id FontManager actually has a record for -- distinct from "is it offered in
+// the normal picker" (productionFonts() above is a stricter subset). A layer can have a known-but-
+// legacy font (isFontKnown true, isAuthoredStoneFontId false, not in productionFonts()) or a
+// genuinely unknown one (isFontKnown false) -- see generateTextStonesLive()'s handling of the latter.
+function isFontKnown(fontId){return Boolean(fontManager&&fontManager.hasFont(fontId))}
 const permanentEngine=new PermanentGeometryEngine({fontProviderRegistry});
 const engine=new GeometryEngine(permanentEngine);let project=defaultProject(),selectedLayerId='text',layout=null,rotation=0,zoom=1,layoutTransform=null,drag=null,generationToken=0;const layoutCanvas=el('layout'),cupCanvas=el('cup');
 // RS-1009: the one multi-selection model (src/editing/Selection.js is the only place that
@@ -764,7 +816,7 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
   if(showStarFields){el('shapePoints').value=l.points??5;el('shapeInnerRadius').value=l.innerRadiusRatio??0.5}
   if(showRingField)el('shapeRingInner').value=l.innerRatio??0.5;
   if(l.type==='image')el('imageFillMode').value=resolveImageFillMode(l.fillMode);
-  if(isText){el('text').value=l.text;el('font').value=l.font;el('height').value=l.height;el('autoFit').value=l.autoFit?'on':'off';el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';el('curveRadiusMm').value=l.curveRadiusMm??40;el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??180;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';el('textX').value=l.x||0;el('textY').value=l.y||0;
+  if(isText){el('text').value=l.text;ensureFontOptionForLayer(l.font);el('font').value=l.font;el('height').value=l.height;el('autoFit').value=l.autoFit?'on':'off';el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';el('curveRadiusMm').value=l.curveRadiusMm??40;el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??180;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';el('textX').value=l.x||0;el('textY').value=l.y||0;
   // TXT-102: '??'/'||' fallbacks so a pre-TXT-102 project (no align/lineSpacing/rotationDeg stored)
   // displays GeometryEngine's own defaults, matching this line's existing curve-field convention.
   el('textAlign').value=l.align||'left';el('lineSpacing').value=l.lineSpacing??1;el('rotationDeg').value=l.rotationDeg??0}else{el('shapeX').value=l.type==='circle'?l.cx:l.x;el('shapeY').value=l.type==='circle'?l.cy:l.y;el('shapeW').value=l.type==='circle'?l.r:l.w;el('shapeH').value=l.type==='circle'?'':l.h;el('shapeWLabel').textContent=l.type==='circle'?'Radius (mm)':'Width (mm)';el('shapeHField').style.display=l.type==='circle'?'none':'';if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);el('gap').value=l.gap;el('stoneColor').value=l.color;
@@ -823,7 +875,15 @@ function writeSelectedControlsToLayer(){const l=selectedLayer();
     // Center Well/Full Top Surface never run this block, so their text behavior is untouched, and the
     // operator can still freely edit every curve field afterward -- this only seeds a default.
     if(enteringRimBand){el('curveEnabled').value='on';el('curveRadiusMm').value=rimBandCurveRadiusMm().toFixed(2);el('curveDirection').value='outside';el('curveControls').style.display='block'}
-    l.text=el('text').value;l.font=el('font').value;l.height=parseFloat(el('height').value)||25;l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;l.curveEnabled=el('curveEnabled').value==='on';l.curveRadiusMm=Math.max(0.1,parseFloat(el('curveRadiusMm').value)||40);l.curveDirection=el('curveDirection').value==='inside'?'inside':'outside';l.curveStartAngleDeg=parseFloat(el('curveStartAngleDeg').value)||0;l.curveSweepAngleDeg=parseFloat(el('curveSweepAngleDeg').value)||180;l.curveAlignment=el('curveAlignment').value;el('curveControls').style.display=l.curveEnabled?'block':'none';
+    // FONT-002: '||l.font' guards against a select somehow reporting '' (should not happen now that
+    // ensureFontOptionForLayer() always gives it a matching option, but this is the one write site
+    // that could otherwise silently corrupt layer.font to an empty string on the next edit).
+    l.text=el('text').value;l.font=el('font').value||l.font;l.height=parseFloat(el('height').value)||25;l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;
+    // FONT-002: a Production Font has no curve support (GeometryEngine.generateTextLayout() throws
+    // for authored-stone-center fonts with curveEnabled) -- force it off in the stored layer data too
+    // (not just the disabled control) so switching *to* an authored font from a curved legacy layer
+    // can never leave curveEnabled:true sitting in the data.
+    l.curveEnabled=isAuthoredStoneFontId(l.font)?false:el('curveEnabled').value==='on';l.curveRadiusMm=Math.max(0.1,parseFloat(el('curveRadiusMm').value)||40);l.curveDirection=el('curveDirection').value==='inside'?'inside':'outside';l.curveStartAngleDeg=parseFloat(el('curveStartAngleDeg').value)||0;l.curveSweepAngleDeg=parseFloat(el('curveSweepAngleDeg').value)||180;l.curveAlignment=el('curveAlignment').value;el('curveControls').style.display=l.curveEnabled?'block':'none';
   // UI-001: manual X/Y mm fields for the Text Lightbox, writing to the same layer.x/layer.y fields
   // RS-1009 already added (previously settable only by drag/nudge/align/distribute).
   l.x=parseFloat(el('textX').value)||0;l.y=parseFloat(el('textY').value)||0;
@@ -1138,8 +1198,13 @@ async function resolveLayerShapeSource(layer){
     return boundingBox?{kind:'polygons',polygons}:null;
   }
   if(layer.type==='text'){
-    if(!permanentEngine.canGenerateText||!layer.text)return null;
-    const fontId=TEXT_ENGINE_FONT_IDS.has(layer.font)?layer.font:DEFAULT_TEXT_FONT_ID;
+    if(!permanentEngine.canGenerateText||!layer.text||!isFontKnown(layer.font))return null;
+    const fontId=layer.font;
+    // FONT-002: a Production Font supplies authored stone centers, not a vector outline
+    // (GeometryEngine.resolveTextPolygons() documents/throws for this) -- treated as "no closed
+    // shape to combine" here rather than letting that throw surface, so runBooleanOp()'s existing
+    // missing-shape message (extended below to name Production Fonts) is what the user sees.
+    if(isAuthoredStoneFontId(fontId))return null;
     const base={text:layer.text,fontId,providerId:resolveFontProviderId(fontId),layerId:layer.id,heightMm:layer.height,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};
     let resolved=await permanentEngine.resolveTextPolygons(base);
     if(layer.autoFit&&resolved.boundingBox){
@@ -1200,7 +1265,7 @@ async function runBooleanOp(operation){
   }
   const missingIndex=sources.findIndex(s=>!s);
   if(missingIndex!==-1){
-    showBooleanOpsError(`"${layerLabel(layers[missingIndex])}" has no closed shape to combine — Boolean Operations need a solid outline (not an empty text layer, an SVG made only of open lines, or an unplaced Image Trace).`);
+    showBooleanOpsError(`"${layerLabel(layers[missingIndex])}" has no closed shape to combine — Boolean Operations need a solid outline (not an empty text layer, a Production Font like RS Block or RS Modern, an SVG made only of open lines, or an unplaced Image Trace).`);
     return;
   }
 
@@ -1255,10 +1320,38 @@ function updateEditingUI(){const n=selectedLayerIds.size;el('selectionSummary').
   el('booleanOpsHint').style.display=boolDisabled?'block':'none';
   // S-110: Fit Text to Shape needs exactly one text layer + one other layer selected, mirroring
   // Boolean Operations' own disabled-button + hint pattern above.
-  const fitDisabled=!fitTextToShapeSelection();
+  const fitPair=fitTextToShapeSelection();
+  // FONT-002: a Production Font is a fixed size (see isAuthoredStoneFontId()) -- Fit Text to Shape
+  // is disabled for it with its own explanation, distinct from "wrong/missing selection".
+  const fitAuthored=Boolean(fitPair&&isAuthoredStoneFontId(fitPair.text.font));
+  const fitDisabled=!fitPair||fitAuthored;
   el('fitTextToShapeBtn').disabled=fitDisabled;
-  el('fitTextToShapeHint').style.display=fitDisabled?'block':'none';
+  el('fitTextToShapeHint').style.display=fitPair?'none':'block';
+  el('fitTextToShapeFixedSizeHint').style.display=fitAuthored?'block':'none';
   if(!fitDisabled)clearFitTextToShapeError();
+  updateTextFontCapabilityUI();
+}
+// FONT-002: keeps every Text Lightbox control that doesn't apply to the selected layer's font
+// (Fill Style, Text height/Auto fit, Curved text) in a disabled/hidden + explained state, and shows
+// the legacy-font / unavailable-font banners -- the one place all of that gating lives, called from
+// updateEditingUI() so it's always in sync (selection change, undo/redo, import, or a font pick).
+function updateTextFontCapabilityUI(){
+  const l=selectedLayer();
+  const isText=Boolean(l&&l.type==='text');
+  const fontId=isText?l.font:null;
+  const known=isText&&isFontKnown(fontId);
+  const authored=known&&isAuthoredStoneFontId(fontId);
+  const legacy=known&&!authored;
+  const unknown=isText&&!known;
+  el('textModeField').style.display=authored?'none':'block';
+  el('height').disabled=authored;
+  el('autoFit').disabled=authored;
+  el('textSizeFixedHint').style.display=authored?'block':'none';
+  el('curveEnabled').disabled=authored;
+  el('curveUnavailableHint').style.display=authored?'block':'none';
+  if(authored)el('curveControls').style.display='none';
+  el('legacyFontHint').style.display=legacy?'block':'none';
+  el('unknownFontHint').style.display=unknown?'block':'none';
 }
 // RS-0003.5D2: SELECTION_HANDLE_SIZE_PX enlarges the resize handles slightly (was a bare 10px
 // square) and a white halo is stroked behind the dashed outline so the selection reads clearly
@@ -1709,7 +1802,7 @@ async function addText(){
   const other=singleOtherSelectedLayer();
   const fitPartnerShape=(other&&FITTABLE_SHAPE_TYPES.has(other.type))?other:null;
   commitHistory();
-  const layer={id:'text'+Date.now(),type:'text',visible:true,text:'New Text',font:TEXT_ENGINE_FONT_IDS.has(l.font)?l.font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold',autoFit:true,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0};
+  const layer={id:'text'+Date.now(),type:'text',visible:true,text:'New Text',font:TEXT_ENGINE_FONT_IDS.has(l.font)?l.font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:l.stoneSize||2.8,gap:l.gap||.3,color:l.color||'gold',autoFit:true,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0};
   project.layers.push(layer);
   selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);
   let statusText='Added text layer';
@@ -1745,11 +1838,25 @@ async function fitTextToShape(textLayer,shapeLayer){
   if(!boundingBox){
     return{ok:false,reason:'empty-shape',message:`"${layerLabel(shapeLayer)}" has no usable area to fit text into.`};
   }
-  if(!permanentEngine.canGenerateText||!textLayer.text){
+  if(!permanentEngine.canGenerateText||!textLayer.text||!isFontKnown(textLayer.font)){
     return{ok:false,reason:'empty-text',message:'This text layer has no content to fit.'};
   }
-  const fontId=TEXT_ENGINE_FONT_IDS.has(textLayer.font)?textLayer.font:DEFAULT_TEXT_FONT_ID;
-  const measured=await permanentEngine.resolveTextPolygons({text:textLayer.text,fontId,providerId:resolveFontProviderId(fontId),layerId:textLayer.id,heightMm:textLayer.height,curveEnabled:false});
+  const fontId=textLayer.font;
+  // FONT-002: closes the audit-flagged gap (TXT-103A) where this call threw an *unhandled* error for
+  // any Production Font -- GeometryEngine.resolveTextPolygons() explicitly rejects authored-stone-
+  // center fonts (they have no vector outline to measure), and none of this function's three call
+  // sites ever caught that. Rejected upfront here, mirroring the curveEnabled check above, and the
+  // call itself is still wrapped in try/catch as defense-in-depth so this can never throw unhandled.
+  if(isAuthoredStoneFontId(fontId)){
+    return{ok:false,reason:'fixed-size',message:`"${layerLabel(textLayer)}" uses a Production Font, which is a fixed size and can’t be automatically fit to a shape — position it manually, or switch to a different font.`};
+  }
+  let measured;
+  try{
+    measured=await permanentEngine.resolveTextPolygons({text:textLayer.text,fontId,providerId:resolveFontProviderId(fontId),layerId:textLayer.id,heightMm:textLayer.height,curveEnabled:false});
+  }catch(error){
+    console.error('Fit Text to Shape: measuring text failed',error);
+    return{ok:false,reason:'measure-failed',message:`Could not measure "${layerLabel(textLayer)}" to fit it: ${error.message}`};
+  }
   if(!measured.boundingBox){
     return{ok:false,reason:'empty-text',message:'This text layer has no content to fit.'};
   }
