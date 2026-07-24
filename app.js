@@ -1697,9 +1697,14 @@ window.addEventListener('keydown',e=>{
 // part of `project`) and keep their original plain 'input' listener, untouched.
 // UI-001: 'textX'/'textY' are the new manual Text Lightbox position fields (see writeSelectedControlsToLayer()).
 // S-200: Mixed Stone Size controls (sizeMode/allowedSizesMm checkboxes/min-max size/conservative
-// detail) get the exact same generic undo/redo wiring as every other inspector control below --
-// see MIXED_ALLOWED_SIZE_CHECKBOXES above for the five checkbox ids.
-const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','textAlign','lineSpacing','rotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','sizeMode',...MIXED_ALLOWED_SIZE_CHECKBOXES.map(cb=>cb.id),'mixedMinSize','mixedMaxSize','conservativeDetail'];
+// detail) get the exact same generic undo/redo wiring as every other inspector control below. The
+// five checkbox ids are spelled out literally here (hand-synced with MIXED_ALLOWED_SIZE_CHECKBOXES
+// above, the same "kept in sync by hand" convention VECTOR_FILL_MODES already uses for
+// GeometryEngine's SAMPLE_MODES) rather than derived via `...MIXED_ALLOWED_SIZE_CHECKBOXES.map(...)`
+// -- this array's source text is a flat list of string literals other tooling reasonably treats as
+// JSON-parseable (e.g. tools/test-crystal-color-integration.mjs's own history-tracking check), and a
+// computed spread broke that. See docs/specifications/S-200-MixedStoneSizeLayouts.md, "Results".
+const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','textAlign','lineSpacing','rotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
 // RS-2002: Browse Fonts panel wiring. Toggling/closing never touches history (it only decides

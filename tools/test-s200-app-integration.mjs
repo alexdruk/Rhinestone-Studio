@@ -96,12 +96,20 @@ await test('7. syncSelectedControlsFromLayer()/writeSelectedControlsToLayer() ro
   assert.match(appJs, /l\.conservativeDetail=Math\.max\(0,Math\.min\(1,parseFloat\(el\('conservativeDetail'\)\.value\)\|\|0\)\)/);
 });
 
-await test('8. HISTORY_TRACKED_CONTROL_IDS includes sizeMode, every allowed-size checkbox, min/max size, and conservativeDetail', () => {
+await test('8. HISTORY_TRACKED_CONTROL_IDS includes sizeMode, every allowed-size checkbox (as literal ids), min/max size, and conservativeDetail', () => {
   const arrayMatch = appJs.match(/const HISTORY_TRACKED_CONTROL_IDS=\[([\s\S]*?)\];/);
   assert.ok(arrayMatch, 'expected to find HISTORY_TRACKED_CONTROL_IDS');
   const arraySource = arrayMatch[1];
   assert.match(arraySource, /'sizeMode'/);
-  assert.match(arraySource, /\.\.\.MIXED_ALLOWED_SIZE_CHECKBOXES\.map\(cb=>cb\.id\)/);
+  // CI follow-up (2026-07): the five checkbox ids must be literal string entries, not a computed
+  // `...MIXED_ALLOWED_SIZE_CHECKBOXES.map(cb=>cb.id)` spread -- a spread here broke
+  // tools/test-crystal-color-integration.mjs's own history-tracking check, which JSON.parses this
+  // array's source text (a reasonable assumption for a plain list of DOM control ids). See test 12
+  // below for the general-purpose regression guard.
+  for (const id of ['mixedAllowedSs6', 'mixedAllowedSs10', 'mixedAllowedSs16', 'mixedAllowedSs20', 'mixedAllowedSs30']) {
+    assert.match(arraySource, new RegExp(`'${id}'`), `expected a literal '${id}' entry`);
+  }
+  assert.doesNotMatch(arraySource, /\.\.\./, 'HISTORY_TRACKED_CONTROL_IDS must stay a flat list of string literals, no spread expressions');
   assert.match(arraySource, /'mixedMinSize'/);
   assert.match(arraySource, /'mixedMaxSize'/);
   assert.match(arraySource, /'conservativeDetail'/);
@@ -146,6 +154,30 @@ await test('11. validateProject() requires no S-200 fields — a legacy layer wi
   };
   const result = validateProject(legacyProject);
   assert.equal(result.layers[0].sizeMode, undefined, 'a legacy layer keeps no sizeMode field — resolved defensively downstream, not injected here');
+});
+
+// --- 4. CI follow-up regression guards (2026-07) -------------------------------------------------
+// Both added after a full-suite CI run caught two S-200-introduced incompatibilities that this
+// file's original test 8 did not catch (it directly encoded the very shape that broke another
+// suite). See docs/specifications/S-200-MixedStoneSizeLayouts.md, "Results" for the full root-cause
+// writeup.
+
+await test('12. HISTORY_TRACKED_CONTROL_IDS stays JSON-parseable as a flat string-literal array (other suites, e.g. test-crystal-color-integration.mjs, rely on this)', () => {
+  const arrayMatch = appJs.match(/const HISTORY_TRACKED_CONTROL_IDS=\[([\s\S]*?)\];/);
+  assert.ok(arrayMatch, 'expected to find HISTORY_TRACKED_CONTROL_IDS');
+  // Mirrors tools/test-crystal-color-integration.mjs's own extraction exactly: naive quote
+  // substitution then JSON.parse. Any computed expression (a spread, a function call, a template
+  // literal) inside this array makes it fail exactly like it did before this fix.
+  const ids = JSON.parse(`[${arrayMatch[1].replace(/'/g, '"')}]`);
+  assert.ok(Array.isArray(ids) && ids.length > 40, 'expected a large flat array of control ids');
+  assert.ok(ids.includes('sizeMode') && ids.includes('mixedAllowedSs6'), 'expected the S-200 control ids to still be present');
+});
+
+await test('13. generateSvgStonesLive()/generatePathStonesLive() params objects still satisfy tools/test-fill-algorithms-integration.mjs\'s mode-resolution regexes with the S-200 mixedSizeParamsFor(layer) spread present', () => {
+  // Guards against re-breaking those two pre-existing RS-1011 assertions the way the original
+  // trailing `,...mixedSizeParamsFor(layer)}` placement did (see the "Results" section of the spec).
+  assert.match(appJs, /mode:resolveVectorFillMode\(layer\.mode\),color:layer\.color(?:,\.\.\.mixedSizeParamsFor\(layer\))?\};const result=this\.permanentEngine\.generateSvgLayout/);
+  assert.match(appJs, /gapMm:layer\.gap,mode:resolveVectorFillMode\(layer\.fillMode\),color:layer\.color(?:,\.\.\.mixedSizeParamsFor\(layer\))?\};const result=this\.permanentEngine\.generatePathLayout/);
 });
 
 console.log('S-200 app integration tests complete.');

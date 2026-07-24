@@ -392,3 +392,107 @@ touching any window named `main`/`airbnb`:
 * Switch selection between a Mixed-mode layer and a Uniform-mode layer — confirm the inspector's
   Mixed Stone Size section shows/hides and repopulates correctly, no stale values.
 * No console errors throughout.
+
+## Results (CI follow-up, 2026-07)
+
+A full 74-file test run on this branch reported 2 failures outside the new S-200 test files:
+`tools/test-crystal-color-integration.mjs` and `tools/test-fill-algorithms-integration.mjs`. Both
+were investigated in isolation before any fix was made. **Neither was a genuine geometry/behavior
+regression** — `GeometryEngine`'s Uniform-mode output, per-stone `color`/`sizeMm`, stone ordering,
+and stone counts were all unaffected (re-confirmed by rerunning `tools/test-s200-mixed-stone-sizes.mjs`,
+which explicitly asserts Uniform-mode byte-identical output, after the fixes below). Both were
+app.js **source-text-shape incompatibilities** introduced by how the S-200 UI wiring (Part 3) built
+two specific object/array literals — pre-existing tests in other suites parse `app.js`'s source text
+directly (this repo's established convention for testing a browser entry point under plain Node,
+see `tools/test-variable-stone-sizes.mjs`'s own header comment) and made reasonable but narrower
+structural assumptions about those literals than the ones S-200 produced.
+
+### Root cause 1 — `tools/test-crystal-color-integration.mjs` test 3
+
+**Symptom:** `SyntaxError: Unexpected token '.', ..."sizeMode",...MIXED_A"... is not valid JSON`.
+
+**Cause:** `HISTORY_TRACKED_CONTROL_IDS` (app.js) was built with a computed spread —
+`...MIXED_ALLOWED_SIZE_CHECKBOXES.map(cb=>cb.id)` — to avoid hand-duplicating the five Allowed Size
+checkbox ids. `test-crystal-color-integration.mjs`'s own history-tracking check extracts this
+array's source text and runs it through `JSON.parse()` after a naive `'` → `"` substitution — a
+reasonable assumption for what is otherwise a flat list of quoted string literals, but one a spread
+expression can never satisfy (it is valid JavaScript, not valid JSON).
+
+**Category:** parameter-normalization/output-format side effect on an unrelated test's source-text
+assumption — not a genuine S-200 regression, not an outdated test expectation (the JSON-parseable
+assumption is reasonable and other code may rely on it too), not unintended Mixed-mode activation.
+
+**Fix:** production code (`app.js`, `HISTORY_TRACKED_CONTROL_IDS`) — the five checkbox ids are now
+spelled out as literal strings instead of a computed spread, restoring the array to a flat,
+JSON-parseable list. This matches the codebase's own established "kept in sync by hand" convention
+(the same one already used for `VECTOR_FILL_MODES` mirroring `GeometryEngine`'s `SAMPLE_MODES`) —
+`MIXED_ALLOWED_SIZE_CHECKBOXES` was already a fixed, hand-maintained list, so this loses no
+correctness or extensibility, only a `.map()` call. No test's expected values were weakened.
+
+### Root cause 2 — `tools/test-fill-algorithms-integration.mjs` tests 7 and 9
+
+**Symptom:** `assert.match` failures — the expected regex (`...color:layer\.color\};const
+result=this\.permanentEngine\.generateSvgLayout` / `...generatePathLayout`) no longer matched
+`app.js`.
+
+**Cause:** these two RS-1011 tests assert that `generateSvgStonesLive()`/`generatePathStonesLive()`'s
+params object literal ends immediately (`color:layer.color}`, no trailing content) before the
+closing brace. S-200 Part 1/3 **intentionally** extends all five `generate*StonesLive()` params
+objects with a trailing `,...mixedSizeParamsFor(layer)` spread, per this spec's own "Architecture >
+app.js / index.html" section ("`GeometryEngine.generate*StonesLive()` (app.js) forward the five new
+fields to the permanent engine's params exactly like `stoneSize`/`gap` already are") — this is
+approved, spec-mandated forwarding behavior, confirmed structurally by this milestone's own
+`tools/test-s200-app-integration.mjs` test 6. `generateShapeStonesLive`'s (test 6) and
+`generateImageStonesLive`'s (test 8) regexes did not require closing-brace adjacency, so they were
+unaffected; only the two tests requiring strict adjacency broke.
+
+**Category:** test expectation demonstrably asserting a source-text detail (object-literal tail
+shape) that the approved S-200 specification intentionally changed for all five call sites — not a
+genuine regression, not a normalization bug, not unintended Mixed-mode activation. What each test's
+name actually promises (mode resolves via `resolveVectorFillMode(layer.mode/.fillMode)`) remains
+true and unchanged.
+
+**Fix:** test expectation (`tools/test-fill-algorithms-integration.mjs` tests 7 and 9) — both
+regexes gained a non-capturing optional group, `(?:,\.\.\.mixedSizeParamsFor\(layer\))?`, between
+`color:layer.color` and the closing brace, so they tolerate the now-intentional trailing spread
+without weakening what they actually check (mode resolution, color forwarding, and the correct
+`generate*Layout` call target are still all required). Production code was not changed for this
+root cause — moving the spread earlier in each params object to dodge these two regexes was
+considered and rejected: `generateImageStonesLive`'s own passing regex (test 8) requires
+`color:layer.color,threshold:layer.threshold` to stay adjacent, so no single reordering satisfies
+all three methods' pre-existing regexes simultaneously, and contorting parameter order purely to
+satisfy brittle source-text adjacency (rather than fixing the assumption that no longer holds) would
+have been the "make it pass" anti-pattern this task explicitly warned against.
+
+### Files changed
+
+* `app.js` — `HISTORY_TRACKED_CONTROL_IDS` literal-ids fix (production code).
+* `tools/test-fill-algorithms-integration.mjs` — tests 7 and 9 regex tolerance (test expectation,
+  justified above).
+* `tools/test-s200-app-integration.mjs` — test 8 updated for the corrected literal-id shape; two new
+  regression tests added (12: `HISTORY_TRACKED_CONTROL_IDS` stays JSON-parseable; 13: the two
+  `generate*StonesLive()` params objects stay compatible with
+  `test-fill-algorithms-integration.mjs`'s own regexes).
+* `docs/specifications/S-200-MixedStoneSizeLayouts.md` — this section.
+
+No changes to `src/geometry/**`, `src/export/**`, or `index.html` — both root causes were isolated
+to `app.js`'s UI-wiring source-text shape.
+
+### Focused test results
+
+* `tools/test-crystal-color-integration.mjs` — 13/13 passing.
+* `tools/test-fill-algorithms-integration.mjs` — 18/18 passing.
+* `tools/test-s200-mixed-stone-sizes.mjs` — 19/19 passing (Uniform-mode byte-identical output
+  re-confirmed).
+* `tools/test-s200-production-sheet-grouping.mjs` — 7/7 passing.
+* `tools/test-s200-app-integration.mjs` — 13/13 passing (was 11; 2 new regression tests added).
+* All 14 previously-verified S-200-related suites re-run clean: `test-production-sheet-exporter`,
+  `test-variable-stone-sizes`, `test-fill-algorithms`, `test-geometry-engine`,
+  `test-geometry-stone-overlap-cross-contour`, `test-geometry-stone-overlap-cross-layer`,
+  `test-geometry-stone-overlap-same-contour`, `test-shape-library`,
+  `test-shape-library-integration`, `test-shape-fit`, `test-image-pipeline`,
+  `test-image-trace-regression`, `test-path-boolean`, `test-stone-size-library`,
+  `test-stone-layout-texture`, `test-production-export-validation`, `test-svg-integration`,
+  `test-path-boolean-integration` (18 listed; all pass).
+* Full 74-file suite was not rerun per this task's scope (focused verification only); the 2
+  originally-failing files plus every directly related suite are confirmed green.
