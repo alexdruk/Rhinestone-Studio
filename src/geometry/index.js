@@ -1,6 +1,8 @@
 export {
   GeometryEngine,
-  createGeometryEngine
+  createGeometryEngine,
+  TEXT_SCALE_FAILURE_REASONS,
+  AUTHORED_FONT_FITTING_GAP_MM
 } from './GeometryEngine.js';
 
 export {
