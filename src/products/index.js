@@ -30,3 +30,20 @@ export {
 } from './PlateProductDefinition.js';
 
 export { getPlateDesignTargetGuide } from './PlateGuides.js';
+
+// RS-2010: Standard Mug/Tumbler/Bottle physical product definitions. Kept as their own named
+// exports (not folded into ObjectTemplate.js's own exports) for the same reason the plate exports
+// above are separate -- these are vessel-specific, not part of the generic ObjectTemplate registry
+// contract every other template also uses.
+export {
+  VESSEL_PRODUCT_IDS,
+  isValidVesselProductId,
+  getVesselDefinition,
+  getVesselDimensionRange,
+  clampVesselDimensionMm,
+  computePrintableHeightMm,
+  getVesselDefaults,
+  normalizeVesselParams,
+  deriveLegacyVesselParams,
+  computeCanvasFromVessel
+} from './VesselProductDefinition.js';

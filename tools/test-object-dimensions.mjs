@@ -16,7 +16,7 @@ const {
   circumferenceMm, azimuthRadForCanvasXMm, canvasXMmForAzimuthRad,
   canvasXMmForRotationDeg, rotationDegForCanvasXMm, frontViewFrameWidthMm
 } = await import('../src/preview3d/ObjectDimensions.js');
-const { getObjectTemplate } = await import('../src/products/index.js');
+const { getObjectTemplate, getVesselDefaults } = await import('../src/products/index.js');
 
 async function test(name, fn) {
   try {
@@ -164,6 +164,50 @@ await test('17. frontViewFrameWidthMm(): wrap-mode ordering matches WRAP_ANGLE_D
 
 await test('18. frontViewFrameWidthMm() scales linearly with canvasWidthMm for a fixed wrap mode', () => {
   assert.ok(Math.abs(frontViewFrameWidthMm('wide', 420) - frontViewFrameWidthMm('wide', 210) * 2) < 1e-9);
+});
+
+// ---------------------------------------------------------------------------------------------
+// RS-2010: vesselParams -- real, independently-authored topDiameterMm
+// ---------------------------------------------------------------------------------------------
+
+await test('19. RS-2010: computeObjectDimensionsMm(..., vesselParams) uses vesselParams.topDiameterMm/2 as topRadiusMm exactly, not the old ratio-derived value', () => {
+  const template = getObjectTemplate('mug');
+  const vesselParams = { bodyDiameterMm: 82, topDiameterMm: 90, bodyHeightMm: 95, printableHeightMm: 85 };
+  const canvasWidthMm = Math.PI * vesselParams.bodyDiameterMm;
+  const dims = computeObjectDimensionsMm(template, canvasWidthMm, vesselParams.printableHeightMm, null, vesselParams);
+  assert.ok(Math.abs(dims.topRadiusMm - 45) < 1e-9, `expected topRadiusMm 45, got ${dims.topRadiusMm}`);
+  // Ratio-derived topRadiusMm (the legacy fallback) would differ -- confirms the mm-direct path was
+  // actually taken, not silently ignored.
+  const ratioTopRadius = computeObjectDimensionsMm(template, canvasWidthMm, vesselParams.printableHeightMm).topRadiusMm;
+  assert.notEqual(dims.topRadiusMm, ratioTopRadius);
+});
+
+await test('20. RS-2010: bodyRadiusMm is unaffected by vesselParams -- still purely a function of canvasWidthMm', () => {
+  const template = getObjectTemplate('mug');
+  const vesselParams = getVesselDefaults('mug');
+  const canvasWidthMm = Math.PI * vesselParams.bodyDiameterMm;
+  const withVessel = computeObjectDimensionsMm(template, canvasWidthMm, vesselParams.printableHeightMm, null, vesselParams);
+  const withoutVessel = computeObjectDimensionsMm(template, canvasWidthMm, vesselParams.printableHeightMm);
+  assert.equal(withVessel.bodyRadiusMm, withoutVessel.bodyRadiusMm);
+  assert.ok(Math.abs(withVessel.bodyRadiusMm - vesselParams.bodyDiameterMm / 2) < 1e-6);
+});
+
+await test('21. RS-2010: a straight tumbler\'s vesselParams (topDiameterMm===bodyDiameterMm) still yields topRadiusMm===bodyRadiusMm', () => {
+  const template = getObjectTemplate('tumbler');
+  const vesselParams = getVesselDefaults('tumbler');
+  assert.equal(vesselParams.topDiameterMm, vesselParams.bodyDiameterMm);
+  const canvasWidthMm = Math.PI * vesselParams.bodyDiameterMm;
+  const dims = computeObjectDimensionsMm(template, canvasWidthMm, vesselParams.printableHeightMm, null, vesselParams);
+  assert.ok(Math.abs(dims.topRadiusMm - dims.bodyRadiusMm) < 1e-9);
+});
+
+await test('22. RS-2010: omitting vesselParams (every pre-RS-2010 caller) is byte-identical to before -- regression guard for the legacy/backward-compatible path', () => {
+  for (const id of ['mug', 'tumbler', 'bottle']) {
+    const template = getObjectTemplate(id);
+    const withDefaultArg = computeObjectDimensionsMm(template, 210, 90);
+    const withExplicitNull = computeObjectDimensionsMm(template, 210, 90, null, null);
+    assert.deepEqual(withDefaultArg, withExplicitNull);
+  }
 });
 
 console.log('Object dimensions tests passed.');

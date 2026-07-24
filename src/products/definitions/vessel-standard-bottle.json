@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "id": "vessel-standard-bottle",
+  "name": "Standard Bottle",
+  "family": "vessel",
+  "type": "bottle",
+  "status": "proposed",
+  "dimensions": {
+    "bodyDiameterMm": {
+      "description": "Cylindrical body wall diameter of the label zone, below the shoulder/neck taper.",
+      "min": 62,
+      "average": 68,
+      "max": 74
+    },
+    "topDiameterMm": {
+      "description": "Diameter at the top of the cylindrical body zone, before the shoulder taper. The body is a straight cylinder up to the shoulder, so this always equals bodyDiameterMm.",
+      "min": 62,
+      "average": 68,
+      "max": 74
+    },
+    "bodyHeightMm": {
+      "description": "Physical height of the cylindrical body/label zone only -- excludes the shoulder/neck/cap, which remain the existing ratio-derived schematic.",
+      "min": 130,
+      "average": 150,
+      "max": 170
+    }
+  },
+  "printableMarginMm": 10,
+  "defaults": {
+    "bodyDiameterMm": 68,
+    "topDiameterMm": 68,
+    "bodyHeightMm": 150
+  },
+  "validation": {
+    "requirePositiveDimensions": true,
+    "requireTopDiameterEqualsBody": true
+  },
+  "research": {
+    "scope": "Conventional 500-750ml cylindrical sports/water bottle blanks; excludes contoured/faceted bottles.",
+    "notes": [
+      "The ranges are a practical modeling envelope, not an industry standard.",
+      "Shoulder/neck/cap dimensions remain the existing ObjectTemplate ratio fields (neckWidthFactor etc.), relative to this body diameter/height -- out of scope for this milestone."
+    ]
+  }
+}

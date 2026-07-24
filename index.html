@@ -698,6 +698,24 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           </div>
           <p class="hint" id="plateDetail">Rim width 37.5mm (derived) · Approx. weight 800 g (product information, read-only)</p>
         </div>
+        <!-- RS-2010: shown only when Object type is Mug/Straight Tumbler/Bottle (toggled by
+             updateObjectTemplateDetail() in app.js). Body Diameter/Body Height/Top Diameter are the
+             vessel's own user-adjustable mm parameters (project.vessel); Top Diameter is hidden for
+             the straight tumbler (forced equal to Body Diameter -- no independent taper). Printable
+             height and circumference are read-only/derived. Ranges (min/max/step) mirror
+             src/products/definitions/vessel-standard-*.json's dimensions and are re-applied per
+             product by updateObjectTemplateDetail() -- the JSON stays the single source of truth. -->
+        <div class="field-section" id="vesselFields" style="display:none">
+          <h3>Vessel dimensions</h3>
+          <div class="field-row">
+            <div class="field"><label for="vesselBodyDiameter">Body Diameter (mm)</label><input id="vesselBodyDiameter" type="number" step="0.5"></div>
+            <div class="field"><label for="vesselBodyHeight">Body Height (mm)</label><input id="vesselBodyHeight" type="number" step="0.5"></div>
+          </div>
+          <div class="field-row">
+            <div class="field" id="vesselTopDiameterField"><label for="vesselTopDiameter">Top Diameter (mm)</label><input id="vesselTopDiameter" type="number" step="0.5"></div>
+          </div>
+          <p class="hint" id="vesselDetail">Printable height 85.0mm (derived) · Circumference 257.6mm (product information, read-only)</p>
+        </div>
       </div>
     </div>
     <footer class="lightbox-footer">
