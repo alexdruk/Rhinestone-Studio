@@ -124,7 +124,7 @@ export class Preview3DRenderer {
   /**
    * @param {import('../geometry/StoneLayout.js').StoneLayout} stoneLayout
    * @param {{cupColor:string, objectTemplate:object, canvasWidthMm:number, canvasHeightMm:number,
-   *   plateParams:object|null}} options
+   *   plateParams:object|null, vesselParams:object|null}} options
    *   S-109: no `wrap` option -- the object mesh's texture UV is wrap-mode independent (built once
    *   inside ObjectGeometryBuilder.js's buildObjectMesh(), at the object's true circumference
    *   scale), so this method no longer needs to react to wrap-mode changes at all. The Front View
@@ -133,14 +133,16 @@ export class Preview3DRenderer {
    *   S-112: `plateParams` (project.plate, normalized) is only meaningful when
    *   objectTemplate.preview.kind==='plate' -- omitted/null for every other template, exactly like
    *   `wrap` used to be an option every non-relevant caller could simply not pass.
+   *   RS-2010: `vesselParams` (project.vessel, normalized) is only meaningful for mug/tumbler/
+   *   bottle -- same "omitted/null when not relevant" style as plateParams above.
    */
-  update(stoneLayout, { cupColor, objectTemplate, canvasWidthMm, canvasHeightMm, plateParams = null }) {
+  update(stoneLayout, { cupColor, objectTemplate, canvasWidthMm, canvasHeightMm, plateParams = null, vesselParams = null }) {
     if (!this._mounted) return;
 
-    const geometryKey = `${objectTemplate.id}:${canvasWidthMm}:${canvasHeightMm}:${plateParams ? JSON.stringify(plateParams) : ''}`;
+    const geometryKey = `${objectTemplate.id}:${canvasWidthMm}:${canvasHeightMm}:${plateParams ? JSON.stringify(plateParams) : ''}:${vesselParams ? JSON.stringify(vesselParams) : ''}`;
     const geometryChanged = geometryKey !== this._geometryKey;
     if (geometryChanged) {
-      this._rebuildMesh(objectTemplate, canvasWidthMm, canvasHeightMm, plateParams);
+      this._rebuildMesh(objectTemplate, canvasWidthMm, canvasHeightMm, plateParams, vesselParams);
       this._geometryKey = geometryKey;
     }
 
@@ -207,9 +209,9 @@ export class Preview3DRenderer {
     });
   }
 
-  _rebuildMesh(objectTemplate, canvasWidthMm, canvasHeightMm, plateParams) {
+  _rebuildMesh(objectTemplate, canvasWidthMm, canvasHeightMm, plateParams, vesselParams) {
     this._disposeGroup();
-    const { group, bodyMesh, handleMesh, underMesh, dimensions } = this._buildObjectMesh(objectTemplate, canvasWidthMm, canvasHeightMm, plateParams);
+    const { group, bodyMesh, handleMesh, underMesh, dimensions } = this._buildObjectMesh(objectTemplate, canvasWidthMm, canvasHeightMm, plateParams, vesselParams);
     this._group = group;
     this._bodyMesh = bodyMesh;
     this._handleMesh = handleMesh;

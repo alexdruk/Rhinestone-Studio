@@ -167,6 +167,16 @@ export function frontViewFrameWidthMm(wrapMode, canvasWidthMm) {
  * function does not itself enforce that; ObjectGeometryBuilder.js's plate UV mapping is what
  * actually depends on it (see that file's applyPlateTopSurfaceUv()).
  *
+ * RS-2010: for every revolved-vessel kind (mug/tumbler/bottle), an optional `vesselParams` (a
+ * normalized project.vessel record -- see src/products/VesselProductDefinition.js's
+ * normalizeVesselParams()) supplies a real, independently-authored top diameter instead of the
+ * legacy topWidthFactor/bottomWidthFactor ratio. bodyRadiusMm is unaffected -- it is still purely a
+ * function of canvasWidthMm (computeBodyRadiusMm()), which by construction already equals
+ * vesselParams.bodyDiameterMm/2 once project.canvas is vessel-derived (see
+ * VesselProductDefinition.js's computeCanvasFromVessel()). When `vesselParams` is omitted (every
+ * pre-RS-2010 caller/test), behavior is byte-identical to before -- the ratio-based fallback path
+ * below is untouched.
+ *
  * @param {object} template A record from src/products/ObjectTemplate.js (getObjectTemplate()).
  * @param {number} canvasWidthMm
  * @param {number} canvasHeightMm
@@ -174,9 +184,12 @@ export function frontViewFrameWidthMm(wrapMode, canvasWidthMm) {
  *   template.preview.kind==='plate' -- a normalized record with outerDiameterMm/
  *   innerWellDiameterMm/overallHeightMm/centerDepthMm/footRingOuterDiameterMm/footRingHeightMm/
  *   designTarget (see normalizePlateParams()).
+ * @param {object|null} [vesselParams] Optional, only meaningful when template.preview.kind is
+ *   'mug'/'tumbler'/'bottle' -- a normalized record with bodyDiameterMm/topDiameterMm/
+ *   bodyHeightMm/printableHeightMm (see normalizeVesselParams()).
  * @returns {object} Plain mm dimensions consumed by ObjectGeometryBuilder.js.
  */
-export function computeObjectDimensionsMm(template, canvasWidthMm, canvasHeightMm, plateParams = null) {
+export function computeObjectDimensionsMm(template, canvasWidthMm, canvasHeightMm, plateParams = null, vesselParams = null) {
   assertPositiveFiniteNumber(canvasHeightMm, 'canvasHeightMm');
   const preview = template.preview;
 
@@ -204,7 +217,9 @@ export function computeObjectDimensionsMm(template, canvasWidthMm, canvasHeightM
   }
 
   const bodyRadiusMm = computeBodyRadiusMm(canvasWidthMm);
-  const topRadiusMm = bodyRadiusMm * (preview.topWidthFactor / preview.bottomWidthFactor);
+  const topRadiusMm = vesselParams && typeof vesselParams.topDiameterMm === 'number'
+    ? vesselParams.topDiameterMm / 2
+    : bodyRadiusMm * (preview.topWidthFactor / preview.bottomWidthFactor);
   const bodyHeightMm = canvasHeightMm;
 
   const dims = {

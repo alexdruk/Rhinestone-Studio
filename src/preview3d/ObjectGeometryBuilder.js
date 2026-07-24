@@ -65,6 +65,10 @@ const PLATE_WELL_CONCAVE_BOW = 0.22; // how far the well's mid-radius curve cont
  * @param {number} canvasHeightMm
  * @param {object|null} [plateParams] Required when template.preview.kind==='plate' -- see
  *   ObjectDimensions.js's computeObjectDimensionsMm().
+ * @param {object|null} [vesselParams] RS-2010: optional, only meaningful for mug/tumbler/bottle --
+ *   see ObjectDimensions.js's computeObjectDimensionsMm(). Pure plumbing here: only changes which
+ *   dimensions object buildTaperedBodyGeometry()/buildBottleGeometry() read topRadiusMm from, no
+ *   change to either function itself.
  * @returns {{group: THREE.Group, bodyMesh: THREE.Mesh, handleMesh: THREE.Mesh|null, dimensions: object}}
  *   `bodyMesh` is the one surface the caller applies the StoneLayout canvas texture to (for a
  *   plate, this is the printable top surface only -- the non-printable underside/rim-edge/foot-ring
@@ -73,8 +77,8 @@ const PLATE_WELL_CONCAVE_BOW = 0.22; // how far the well's mid-radius curve cont
  *   `dimensions` is computeObjectDimensionsMm()'s own result, so the caller can frame its camera
  *   without recomputing radius/height itself.
  */
-export function buildObjectMesh(template, canvasWidthMm, canvasHeightMm, plateParams = null) {
-  const dimensions = computeObjectDimensionsMm(template, canvasWidthMm, canvasHeightMm, plateParams);
+export function buildObjectMesh(template, canvasWidthMm, canvasHeightMm, plateParams = null, vesselParams = null) {
+  const dimensions = computeObjectDimensionsMm(template, canvasWidthMm, canvasHeightMm, plateParams, vesselParams);
   const group = new THREE.Group();
 
   if (dimensions.kind === 'plate') {
