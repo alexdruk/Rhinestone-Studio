@@ -958,7 +958,11 @@ function writeSelectedControlsToLayer(){const l=selectedLayer();
     // FONT-002: '||l.font' guards against a select somehow reporting '' (should not happen now that
     // ensureFontOptionForLayer() always gives it a matching option, but this is the one write site
     // that could otherwise silently corrupt layer.font to an empty string on the next edit).
-    l.text=el('text').value;l.font=el('font').value||l.font;l.height=parseFloat(el('height').value)||25;l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;
+    // TXT-103: clamp to the #height input's own declared min/max (index.html), matching every sibling
+    // numeric field in this function (shapeW/shapeH/shapeSides/lineSpacing/etc. all clamp to their own
+    // declared HTML bounds) -- previously the only unclamped one, so a manually-typed value below the
+    // legibility floor silently produced sparse/empty glyphs instead of the field's advertised range.
+    l.text=el('text').value;l.font=el('font').value||l.font;l.height=Math.max(4,Math.min(80,parseFloat(el('height').value)||25));l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;
     // FONT-002: a Production Font has no curve support (GeometryEngine.generateTextLayout() throws
     // for authored-stone-center fonts with curveEnabled) -- force it off in the stored layer data too
     // (not just the disabled control) so switching *to* an authored font from a curved legacy layer
