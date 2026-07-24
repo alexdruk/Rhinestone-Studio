@@ -37,8 +37,13 @@ preview3D.resetView();
   mug/tumbler, a lathe-revolved profile for the bottle's body+shoulder+neck+cap, and a
   tube-geometry handle for the mug. Also exports `applyWrapUv()`, which maps the shared texture
   onto a wrap-mode-sized angular window on the body surface.
-* `Preview3DRenderer.js` — the actual `WebGLRenderer`/lighting/camera/`OrbitControls`/resize/
-  animation-loop orchestration. Three.js and `OrbitControls` are dynamic-imported inside `init()`.
+* `Preview3DRenderer.js` — the actual `WebGLRenderer`/lighting/camera/`OrbitControls`/resize
+  orchestration. Three.js and `OrbitControls` are dynamic-imported inside `init()`. RS-2011:
+  rendering is invalidation-based, not a continuous animation loop -- `_requestRender()` schedules a
+  single frame whenever the texture, geometry, camera, or viewport size actually changes (including
+  `OrbitControls`' own `'start'`/`'change'`/`'end'` events, which cover drag/orbit/zoom and damping's
+  residual motion); the scene sits idle with no further `requestAnimationFrame` calls once nothing is
+  pending. `getRenderCount()` exposes a plain render-call counter for verification.
 * `index.js` — the only module `app.js` imports statically; returns a synchronous facade that
   queues calls until `Preview3DRenderer.js` finishes its lazy Three.js load.
 
