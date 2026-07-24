@@ -105,6 +105,52 @@ function distinctCrystalColorNames(stones) {
   return names.sort();
 }
 
+// S-200 (Mixed Stone-Size Layouts): groups stones by color, then by size ascending within each
+// color -- the "Production Sheet must automatically group quantities" requirement's exact worked
+// example shape (e.g. Blue / SS6: 142 / SS10: 1856 / SS16: 48). Always computed, not gated on more
+// than one size/color being present, so its counts are independently checkable against
+// distinctSizesMm/stoneCount on every sheet, mixed-size or not. One O(stoneCount) pass building
+// nested Maps, not O(n^2).
+function computeSizeBreakdown(stones) {
+  const byColor = new Map();
+  for (const stone of stones) {
+    const colorName = (STONE_COLORS[stone.color] || {}).name || stone.color;
+    const sizeMm = roundMm(stone.sizeMm);
+    if (!byColor.has(colorName)) byColor.set(colorName, new Map());
+    const sizes = byColor.get(colorName);
+    sizes.set(sizeMm, (sizes.get(sizeMm) || 0) + 1);
+  }
+
+  const breakdown = [];
+  for (const colorName of [...byColor.keys()].sort()) {
+    const sizes = byColor.get(colorName);
+    for (const sizeMm of [...sizes.keys()].sort((a, b) => a - b)) {
+      breakdown.push({ colorName, sizeMm, sizeLabel: formatStoneSizeLabel(sizeMm), count: sizes.get(sizeMm) });
+    }
+  }
+  return breakdown;
+}
+
+// S-200: renders computeSizeBreakdown()'s groups as extra header body lines -- one line per color,
+// listing every distinct size present in that color and its count (e.g. "Blue: SS6 (2 mm): 142,
+// SS10 (2.8 mm): 1856, SS16 (4 mm): 48"). One line per color (not one line per size) is a
+// deliberate space budget choice: computeHeaderHeightMm()'s existing "no scaling — hard
+// requirement" policy (resolvePageOrientation() throws rather than shrink content) means every
+// extra header line narrows which page sizes/margins a production sheet still fits, and a project
+// with several crystal colors already in use (fully possible before this milestone, via per-layer
+// color choice) must not need more page room just because this milestone's grouping feature now
+// exists. Mirrors S-112's computePlateHeaderLineTexts() -> computeHeaderHeightMm(extraBodyLineCount)
+// integration -- no new page-layout/height-budgeting mechanism, same fixed-slot-height text
+// rendering SVG/PDF already share for every other header line.
+function computeSizeBreakdownLineTexts(breakdown) {
+  const byColor = new Map();
+  for (const entry of breakdown) {
+    if (!byColor.has(entry.colorName)) byColor.set(entry.colorName, []);
+    byColor.get(entry.colorName).push(`${entry.sizeLabel}: ${entry.count}`);
+  }
+  return [...byColor.entries()].map(([colorName, parts]) => ({ text: `${colorName}: ${parts.join(', ')}`, bold: false }));
+}
+
 function normalizeGapMm(gapMm) {
   if (gapMm === null || gapMm === undefined) return [];
   const values = Array.isArray(gapMm) ? gapMm : [gapMm];
@@ -220,7 +266,9 @@ export function computeProductionSheetLayout(stoneLayout, options = {}) {
   }
 
   const plateHeaderLineTexts = computePlateHeaderLineTexts(options);
-  const headerHeightMm = computeHeaderHeightMm(plateHeaderLineTexts.length);
+  const sizeBreakdown = computeSizeBreakdown(stoneLayout.stones);
+  const sizeBreakdownLines = computeSizeBreakdownLineTexts(sizeBreakdown);
+  const headerHeightMm = computeHeaderHeightMm(plateHeaderLineTexts.length + sizeBreakdownLines.length);
 
   const neededWidthMm = Math.max(productionWidthMm, SCALE_BAR_LENGTH_MM);
   const neededHeightMm = headerHeightMm + productionHeightMm + FOOTER_HEIGHT_MM;
@@ -259,7 +307,10 @@ export function computeProductionSheetLayout(stoneLayout, options = {}) {
     // S-112: [] for every non-plate template (computePlateHeaderLineTexts() above) -- headerHeightMm
     // was already sized to include exactly this many extra lines, so this can never overflow into
     // the production rect below.
-    ...plateHeaderLineTexts.map((text) => ({ text, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM }))
+    ...plateHeaderLineTexts.map((text) => ({ text, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM })),
+    // S-200: per-color/per-size quantity breakdown -- headerHeightMm above already includes
+    // sizeBreakdownLines.length, so this can never overflow into the production rect below either.
+    ...sizeBreakdownLines.map((line) => ({ text: line.text, bold: line.bold, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM }))
   ].map((line) => {
     // Baseline sits near the bottom of the line's own vertical slot (roughly text cap-height
     // above the baseline, matching how both SVG's y="baseline" and PDF's Td-positioned text work).
@@ -329,6 +380,10 @@ export function computeProductionSheetLayout(stoneLayout, options = {}) {
     distinctSizesMm,
     distinctColors,
     distinctGapsMm,
+    // S-200: per-color/per-size quantity groups (see computeSizeBreakdown()) -- raw data for
+    // callers/tests, independent of the rendered sizeBreakdownLines already folded into headerLines
+    // above.
+    sizeBreakdown,
     registrationMarks: marks,
     scaleReference
   };

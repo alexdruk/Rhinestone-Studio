@@ -446,6 +446,30 @@ const TEXT_MODE_TO_ENGINE_MODE={stroke:'outline',fill:'fill',staggered:'staggere
 function resolveTextFillMode(textMode){return TEXT_MODE_TO_ENGINE_MODE[textMode]||'outline'}
 function resolveVectorFillMode(value){return VECTOR_FILL_MODES.has(value)?value:'outline'}
 function resolveImageFillMode(value){return IMAGE_FILL_MODES.has(value)?value:'fill'}
+// S-200 (Mixed Stone-Size Layouts): Generation Mode -- 'uniform' (every stone in the layer is the
+// same size, unchanged pre-S-200 behavior) or 'mixed' (GeometryEngine.js's MixedSizeGenerator.js
+// may additively fill gaps with smaller stones). Mirrors resolveVectorFillMode()'s own "unrecognized
+// or missing value falls back to the pre-milestone default" convention, so every project saved
+// before this milestone (no sizeMode field on any layer) generates byte-identical geometry.
+const SIZE_MODES=new Set(['uniform','mixed']);
+function resolveSizeMode(value){return SIZE_MODES.has(value)?value:'uniform'}
+// The Mixed Stone Size inspector section's five Allowed Sizes checkboxes are static markup (see
+// index.html's #sharedMixedSizeFields comment for why, vs. #stoneSize's dynamically populated
+// catalog options) -- this array is the one place their ids are paired with the Stone Library
+// diameters they represent, read by writeSelectedControlsToLayer()/syncSelectedControlsFromLayer()
+// below. Kept in sync by hand with src/renderer/StoneSizes.js's shipped catalog, the same
+// convention VECTOR_FILL_MODES above already uses for GeometryEngine's own enums.
+const MIXED_ALLOWED_SIZE_CHECKBOXES=[
+  {id:'mixedAllowedSs6',diameterMm:2.0},
+  {id:'mixedAllowedSs10',diameterMm:2.8},
+  {id:'mixedAllowedSs16',diameterMm:4.0},
+  {id:'mixedAllowedSs20',diameterMm:4.7},
+  {id:'mixedAllowedSs30',diameterMm:6.4}
+];
+// Builds the #mixedMinSize/#mixedMaxSize <option> lists from the Stone Library, mirroring
+// populateStoneSizeOptions() exactly (same catalog, same "value is the plain mm diameter" contract)
+// -- called once at startup alongside it.
+function populateMixedSizeSelectOptions(){const optionsHtml=listStoneSizes().map(s=>`<option value="${s.diameterMm}">${escapeHtml(s.name)} — ${s.diameterMm.toFixed(1)} mm</option>`).join('');el('mixedMinSize').innerHTML=optionsHtml;el('mixedMaxSize').innerHTML=optionsHtml}
 // S-110 (Expanded Shape Library): every shape kind that resolves through GeometryEngine's
 // generateShapeLayout()/resolveShapePolygons() -- Circle/Rectangle plus the nine new
 // ShapeLibrary.js kinds (Ellipse/Capsule/Regular Polygon/Star/Heart/Arrow/Cross/Crescent/Ring).
@@ -509,6 +533,12 @@ function shapeLayerResolveParams(layer){
     ...shapeExtraParams(layer)
   };
 }
+// S-200: the one shared "layer -> engine mixed-size params" mapping, used by every
+// generate*StonesLive() below (mirrors shapeLayerResolveParams()'s own "read once, use everywhere"
+// convention). '??' fallbacks mean a layer saved before this milestone (no such fields at all)
+// forwards sizeMode:'uniform', so GeometryEngine.js's normalizeMixedSizeParams() short-circuits
+// immediately and every pre-S-200 project generates byte-identical geometry.
+function mixedSizeParamsFor(layer){return{sizeMode:resolveSizeMode(layer.sizeMode),allowedSizesMm:layer.allowedSizesMm??[],minSizeMm:layer.minSizeMm??null,maxSizeMm:layer.maxSizeMm??null,conservativeDetail:layer.conservativeDetail}}
 class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=permanentEngine}
  // Geometry generation happens exactly once here, per docs/ARCHITECTURE.md: every layer's stones
  // come straight from the permanent engine's per-layer StoneLayout; dedupeStonesByRadius() below
@@ -528,7 +558,9 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  async generateTextStonesLive(layer,project){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text||!isFontKnown(layer.font))return[];const fontId=layer.font;const authored=isAuthoredStoneFontId(fontId);const mode=resolveTextFillMode(layer.textMode);const base={text:layer.text,fontId,providerId:resolveFontProviderId(fontId),layerId:layer.id,heightMm:layer.height,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,curveEnabled:authored?false:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment,
   // TXT-102: '??' fallbacks so a pre-TXT-102 saved project (no align/lineSpacing/rotationDeg on its
   // text layers) renders byte-identical -- 'left'/1/0 are exactly GeometryEngine's own defaults.
-  align:layer.align??'left',lineSpacing:layer.lineSpacing??1,rotationDeg:layer.rotationDeg??0};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const{scale}=computeAutoFitScale(layer,project,result.widthMm);if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
+  align:layer.align??'left',lineSpacing:layer.lineSpacing??1,rotationDeg:layer.rotationDeg??0,
+  // S-200: see mixedSizeParamsFor()'s own doc comment.
+  ...mixedSizeParamsFor(layer)};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const{scale}=computeAutoFitScale(layer,project,result.widthMm);if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
   // RS-1009: text layers previously had no position field -- stones were always centered on the
   // canvas. layer.x/layer.y (mm, default 0) are a further offset applied on top of that same
   // auto-centered base position, so pre-RS-1009 Project JSON (no x/y on its text layers) renders
@@ -538,21 +570,21 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // generateShapeLayout(), mirroring generateTextStonesLive() above. S-110: every new shape kind
  // (Ellipse/Capsule/Regular Polygon/Star/Heart/Arrow/Cross/Crescent/Ring) goes through this exact
  // same call, via shapeLayerResolveParams()'s shared layer->params mapping (module scope, above).
- async generateShapeStonesLive(layer){if(!this.permanentEngine)return[];const params={...shapeLayerResolveParams(layer),stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.fillMode),color:layer.color};const result=this.permanentEngine.generateShapeLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
+ async generateShapeStonesLive(layer){if(!this.permanentEngine)return[];const params={...shapeLayerResolveParams(layer),stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.fillMode),color:layer.color,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateShapeLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
  // RS-1001: svg layers reuse the same x/y/w/h placement box rectangle layers use; src/svg/**
  // (not app.js) does the actual SVG parsing, inside generateSvgLayout().
- async generateSvgStonesLive(layer){if(!this.permanentEngine)return[];const params={svgSource:layer.svgSource,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.mode),color:layer.color};const result=this.permanentEngine.generateSvgLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
+ async generateSvgStonesLive(layer){if(!this.permanentEngine)return[];const params={svgSource:layer.svgSource,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.mode),color:layer.color,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateSvgLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
  // RS-1008A: image layers go through the permanent engine's generateImageLayout(), mirroring
  // generateSvgStonesLive()/generateShapeStonesLive() above -- src/image/** only prepares the
  // decoded pixel buffer (decode/cache happens here since that's the one async, DOM-only step;
  // generateImageLayout() itself is synchronous, like generateShapeLayout()). imageBufferCache means
  // the (comparatively expensive) browser image decode only re-runs the first time a given imageSrc
  // is seen; every subsequent call here only re-runs the permanent engine's pure/fast pipeline.
- async generateImageStonesLive(layer){if(!this.permanentEngine||!layer.imageSrc)return[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveImageFillMode(layer.fillMode),color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx};const result=this.permanentEngine.generateImageLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
+ async generateImageStonesLive(layer){if(!this.permanentEngine||!layer.imageSrc)return[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveImageFillMode(layer.fillMode),color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
  // RS-1012: 'path' layers (Boolean Operation results) go through the permanent engine's
  // generatePathLayout(), mirroring generateSvgStonesLive()/generateShapeStonesLive() above --
  // layer.contours is already plain (0,0)-rooted polygon data (no parsing step, unlike SVG).
- async generatePathStonesLive(layer){if(!this.permanentEngine)return[];const params={contours:layer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.fillMode),color:layer.color};const result=this.permanentEngine.generatePathLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
+ async generatePathStonesLive(layer){if(!this.permanentEngine)return[];const params={contours:layer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.fillMode),color:layer.color,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generatePathLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
  // RS-2000: the legacy bitmap text engine (FONT5 + generateText/sampleGlyphFill/
  // sampleGlyphStroke/line) and the legacy generateCircle/generateRect/bbox/layerBBox shape path
  // were deleted here -- unreachable since generateTextStonesLive/generateShapeStonesLive took over
@@ -839,6 +871,18 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
   // TXT-102: '??'/'||' fallbacks so a pre-TXT-102 project (no align/lineSpacing/rotationDeg stored)
   // displays GeometryEngine's own defaults, matching this line's existing curve-field convention.
   el('textAlign').value=l.align||'left';el('lineSpacing').value=l.lineSpacing??1;el('rotationDeg').value=l.rotationDeg??0}else{el('shapeX').value=l.type==='circle'?l.cx:l.x;el('shapeY').value=l.type==='circle'?l.cy:l.y;el('shapeW').value=l.type==='circle'?l.r:l.w;el('shapeH').value=l.type==='circle'?'':l.h;el('shapeWLabel').textContent=l.type==='circle'?'Radius (mm)':'Width (mm)';el('shapeHField').style.display=l.type==='circle'?'none':'';if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);el('gap').value=l.gap;el('stoneColor').value=l.color;
+  // S-200: Mixed Stone Size -- applies uniformly to every layer type, same as stoneSize/gap/color
+  // just above. allowedSizesMm is only ever catalog values (see MIXED_ALLOWED_SIZE_CHECKBOXES'
+  // doc comment), so each checkbox is simply checked when its own diameter is present in the
+  // layer's stored array -- no nearest-match/custom-value handling is needed here the way
+  // ensureStoneSizeOption() needs for the single #stoneSize picker. minSizeMm/maxSizeMm fall back to
+  // the layer's own stoneSize when unset (a fresh Mixed-mode layer, or a legacy layer with no such
+  // field), matching normalizeMixedSizeParams()'s own default derivation.
+  const sizeMode=resolveSizeMode(l.sizeMode);el('sizeMode').value=sizeMode;el('mixedSizeDetailFields').style.display=sizeMode==='mixed'?'block':'none';
+  const allowedSizesMm=Array.isArray(l.allowedSizesMm)?l.allowedSizesMm:[];
+  for(const cb of MIXED_ALLOWED_SIZE_CHECKBOXES)el(cb.id).checked=allowedSizesMm.some(v=>Math.abs(v-cb.diameterMm)<0.005);
+  setNumericSelectValue(el('mixedMinSize'),l.minSizeMm??l.stoneSize);setNumericSelectValue(el('mixedMaxSize'),l.maxSizeMm??l.stoneSize);
+  el('conservativeDetail').value=l.conservativeDetail??0.3;
   // RS-1002: project.cupColor/project.wrap are project-level (not per-layer) fields, so they must
   // be resynced here too -- otherwise an undo/redo restore (or a Project JSON import) leaves these
   // two dropdowns stale, and the *next* edit's writeSelectedControlsToLayer() would silently write
@@ -919,7 +963,21 @@ function writeSelectedControlsToLayer(){const l=selectedLayer();
   if(l.type==='polygon')l.sides=Math.max(3,Math.min(12,parseIntOr(el('shapeSides').value,6)));
   if(l.type==='star'){l.points=Math.max(3,Math.min(12,parseIntOr(el('shapePoints').value,5)));l.innerRadiusRatio=Math.max(0.1,Math.min(0.9,parseFloat(el('shapeInnerRadius').value)||0.5))}
   if(l.type==='ring')l.innerRatio=Math.max(0.1,Math.min(0.9,parseFloat(el('shapeRingInner').value)||0.5));
-}else if(l.type==='svg'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.mode=resolveVectorFillMode(el('svgMode').value)}else if(l.type==='image'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.fillMode=resolveImageFillMode(el('imageFillMode').value)}else if(l.type==='path'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(2,parseFloat(el('shapeW').value)||10);l.h=Math.max(2,parseFloat(el('shapeH').value)||10);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}l.stoneSize=parseFloat(el('stoneSize').value)||2;l.gap=parseFloat(el('gap').value)||.3;l.color=el('stoneColor').value;project.cupColor=el('cupColor').value;project.wrap=el('wrap').value;
+}else if(l.type==='svg'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.mode=resolveVectorFillMode(el('svgMode').value)}else if(l.type==='image'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.fillMode=resolveImageFillMode(el('imageFillMode').value)}else if(l.type==='path'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(2,parseFloat(el('shapeW').value)||10);l.h=Math.max(2,parseFloat(el('shapeH').value)||10);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}l.stoneSize=parseFloat(el('stoneSize').value)||2;l.gap=parseFloat(el('gap').value)||.3;l.color=el('stoneColor').value;
+  // S-200: Mixed Stone Size -- read back exactly like stoneSize/gap/color just above, applying to
+  // every layer type uniformly. allowedSizesMm is rebuilt from the checkbox states on every write
+  // (not merged with any prior stored value), matching this app's general "the UI is authoritative
+  // for the fields it displays" convention (see e.g. l.fillMode above).
+  l.sizeMode=resolveSizeMode(el('sizeMode').value);
+  // Mirrors #curveControls' own live show/hide (see the enteringRimBand block above): progressive
+  // disclosure must react to every edit of #sizeMode itself, not only to switching the selected
+  // layer (syncSelectedControlsFromLayer() already handles that case).
+  el('mixedSizeDetailFields').style.display=l.sizeMode==='mixed'?'block':'none';
+  l.allowedSizesMm=MIXED_ALLOWED_SIZE_CHECKBOXES.filter(cb=>el(cb.id).checked).map(cb=>cb.diameterMm);
+  l.minSizeMm=parseFloat(el('mixedMinSize').value)||null;
+  l.maxSizeMm=parseFloat(el('mixedMaxSize').value)||null;
+  l.conservativeDetail=Math.max(0,Math.min(1,parseFloat(el('conservativeDetail').value)||0));
+  project.cupColor=el('cupColor').value;project.wrap=el('wrap').value;
   // S-112: plate fields only read/written while the Round Dinner Plate template is active
   // (mirroring how e.g. bottle-only fields are template-gated) -- normalizePlateParams() clamps
   // every value into the JSON's approved range and re-derives a consistent inner/outer diameter
@@ -1671,7 +1729,18 @@ window.addEventListener('keydown',e=>{
 // (opened on the first 'input' event, closed on 'change'). `rotation`/`zoom` are view-only (not
 // part of `project`) and keep their original plain 'input' listener, untouched.
 // UI-001: 'textX'/'textY' are the new manual Text Lightbox position fields (see writeSelectedControlsToLayer()).
-const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','textAlign','lineSpacing','rotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter'];
+// S-200: Mixed Stone Size controls (sizeMode/allowedSizesMm checkboxes/min-max size/conservative
+// detail) get the exact same generic undo/redo wiring as every other inspector control below. The
+// five checkbox ids are spelled out literally here (hand-synced with MIXED_ALLOWED_SIZE_CHECKBOXES
+// above, the same "kept in sync by hand" convention VECTOR_FILL_MODES already uses for
+// GeometryEngine's SAMPLE_MODES) rather than derived via `...MIXED_ALLOWED_SIZE_CHECKBOXES.map(...)`
+// -- this array's source text is a flat list of string literals other tooling reasonably treats as
+// JSON-parseable (e.g. tools/test-crystal-color-integration.mjs's own history-tracking check), and a
+// computed spread broke that. See docs/specifications/S-200-MixedStoneSizeLayouts.md, "Results".
+// RS-2010: 'vesselBodyDiameter'/'vesselBodyHeight'/'vesselTopDiameter' (added by that milestone) are
+// the Mug/Tumbler/Bottle physical-dimension controls -- merged in alongside the S-200 ids above,
+// same generic undo/redo wiring, no interaction between the two milestones' fields.
+const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','textAlign','lineSpacing','rotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
 // RS-2002: Browse Fonts panel wiring. Toggling/closing never touches history (it only decides
@@ -2146,7 +2215,9 @@ window.addEventListener('resize',()=>updateAll(true));
 // that could disagree with the first. ----
 const FIELD_GROUPS={
   position:{field:'sharedPositionFields',home:'inspectorPositionSlot',lightboxSlots:{shapes:'shapesPositionSlot',import:'importPositionSlot',imagetrace:'imageTracePositionSlot'}},
-  stone:{field:'sharedStoneFields',home:'inspectorStoneSlot',lightboxSlots:{text:'textStoneSlot',shapes:'shapesStoneSlot',import:'importStoneSlot',imagetrace:'imageTraceStoneSlot'}}
+  stone:{field:'sharedStoneFields',home:'inspectorStoneSlot',lightboxSlots:{text:'textStoneSlot',shapes:'shapesStoneSlot',import:'importStoneSlot',imagetrace:'imageTraceStoneSlot'}},
+  // S-200: Mixed Stone Size -- same relocation shape as `stone` above (applies to every layer type).
+  mixedSize:{field:'sharedMixedSizeFields',home:'inspectorMixedSizeSlot',lightboxSlots:{text:'textMixedSizeSlot',shapes:'shapesMixedSizeSlot',import:'importMixedSizeSlot',imagetrace:'imageTraceMixedSizeSlot'}}
 };
 let activeFieldLightbox=null;
 function relocateFieldGroups(){
@@ -2709,7 +2780,7 @@ el('settingsApply').onclick=()=>{
   drawLayout();
 };
 
-populateStoneColorOptions();populateStoneSizeOptions();
+populateStoneColorOptions();populateStoneSizeOptions();populateMixedSizeSelectOptions();
 // RS-2002: only populated when fontManager actually loaded -- if the manifest fetch failed,
 // index.html's static two-option #font markup (Courier Prime/Great Vibes) is left as the fallback,
 // and permanentEngineError's #status message (set inside updateAll(), see generate() above)

@@ -37,6 +37,10 @@ import { CURVE_ALIGNMENTS, CURVE_DIRECTIONS, projectPolygonToArc } from './ArcPr
 // shapes are not a second shape system, just nine more natural-contour sources feeding the one
 // existing placement + sampling pipeline circle/rectangle/path already share.
 import { SHAPE_LIBRARY_KINDS, createShapeNaturalContours } from './ShapeLibrary.js';
+// S-200 (Mixed Stone-Size Layouts): normalizeMixedSizeParams()/generateMixedSizeInfillPoints()/
+// generateMixedSizeInfillStones() are the only S-200 entry points this module calls -- see
+// MixedSizeGenerator.js's own doc comment for why the algorithm itself lives there, not here.
+import { normalizeMixedSizeParams, generateMixedSizeInfillPoints, generateMixedSizeInfillStones } from './MixedSizeGenerator.js';
 
 // RS-1011: 'fill' is unchanged in meaning/output from before this milestone (a regular grid --
 // "Grid Fill" is only a clearer UI label for the same stored value); staggered/radial/contour are
@@ -147,12 +151,37 @@ export class GeometryEngine {
       sourceMode = 'authored';
     } else {
       const spacingMm = options.stoneSizeMm + options.gapMm;
-      const sampledPoints = sampleShapeFillPoints(options.mode, polygons, boundingBox, spacingMm, options.stoneSizeMm);
-      const points = rotateTextPoints(sampledPoints, options.rotationDeg);
+      const sampledPoints = sampleShapeFillPoints(options.mode, polygons, boundingBox, spacingMm, options.stoneSizeMm)
+        .map((point) => ({ xMm: point.xMm, yMm: point.yMm, sizeMm: options.stoneSizeMm }));
+
+      // S-200 (Mixed Stone-Size Layouts): infill candidates are sampled from the same pre-rotation
+      // polygons/boundingBox as the primary points. The pivot for rotation is deliberately computed
+      // from `sampledPoints` (primary only), not the combined primary+infill set: infill legitimately
+      // reaches closer to the shape's true boundary than the primary pitch does, which can shift a
+      // combined-set bounding-box center slightly -- pivoting on primary alone guarantees primary
+      // stones rotate to the exact same positions Uniform mode alone would produce, regardless of
+      // whether/how much infill is added, while infill points still rotate around that identical
+      // pivot (rotatePointsAroundCenter() is given one explicit center for the whole combined list),
+      // so they never misalign from their primary counterparts either. Falls back to the combined
+      // set's own center only in the edge case where the primary pass produced zero stones but a
+      // smaller eligible size still fits (nothing to preserve a "primary invariant" for in that case).
+      const infillPoints = options.mixedOptions
+        ? generateMixedSizeInfillPoints({
+            mode: options.mode,
+            source: { kind: 'vector', polygons, boundingBox },
+            mixedOptions: options.mixedOptions,
+            gapMm: options.gapMm,
+            baseStones: sampledPoints
+          })
+        : [];
+
+      const combinedPoints = sampledPoints.concat(infillPoints);
+      const pivot = boundingBoxCenterOfPoints(sampledPoints) ?? boundingBoxCenterOfPoints(combinedPoints);
+      const points = rotatePointsAroundCenter(combinedPoints, options.rotationDeg, pivot);
       stones = points.map((point, index) => new Stone({
         xMm: point.xMm,
         yMm: point.yMm,
-        sizeMm: options.stoneSizeMm,
+        sizeMm: point.sizeMm,
         color: options.color,
         layerId: options.layerId,
         index
@@ -352,11 +381,12 @@ export class GeometryEngine {
   generateShapeLayout(params = {}) {
     const options = normalizeShapeParams(params);
     const { polygons } = this._shapePolygons(options);
+    const boundingBox = BoundingBox.fromPoints(polygons.flat());
     const spacingMm = options.stoneSizeMm + options.gapMm;
 
-    const points = sampleShapeFillPoints(options.mode, polygons, BoundingBox.fromPoints(polygons.flat()), spacingMm, options.stoneSizeMm);
+    const points = sampleShapeFillPoints(options.mode, polygons, boundingBox, spacingMm, options.stoneSizeMm);
 
-    const stones = points.map((point, index) => new Stone({
+    let stones = points.map((point, index) => new Stone({
       xMm: point.xMm,
       yMm: point.yMm,
       sizeMm: options.stoneSizeMm,
@@ -364,6 +394,22 @@ export class GeometryEngine {
       layerId: options.layerId,
       index
     }));
+
+    // S-200 (Mixed Stone-Size Layouts): additive infill pass, see MixedSizeGenerator.js. No-op
+    // (stones unchanged) when options.mixedOptions is null -- the default/Uniform case.
+    if (options.mixedOptions) {
+      const infillStones = generateMixedSizeInfillStones({
+        mode: options.mode,
+        source: { kind: 'vector', polygons, boundingBox },
+        mixedOptions: options.mixedOptions,
+        gapMm: options.gapMm,
+        baseStones: stones,
+        layerId: options.layerId,
+        color: options.color,
+        startIndex: stones.length
+      });
+      stones = stones.concat(infillStones);
+    }
 
     return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
   }
@@ -498,7 +544,7 @@ export class GeometryEngine {
       for (const point of sampleMultiContourOutlinePoints([polygon], spacingMm, { closed: false, minSeparationMm: options.stoneSizeMm })) points.push(point);
     }
 
-    const stones = points.map((point, index) => new Stone({
+    let stones = points.map((point, index) => new Stone({
       xMm: point.xMm,
       yMm: point.yMm,
       sizeMm: options.stoneSizeMm,
@@ -506,6 +552,24 @@ export class GeometryEngine {
       layerId: options.layerId,
       index
     }));
+
+    // S-200 (Mixed Stone-Size Layouts): infill samples closed contours only -- an open contour (an
+    // SVG <line>/<polyline> or an unclosed <path> subpath) has no interior to gap-fill and its
+    // outline is already at full primary density (see docs/specifications/
+    // S-200-MixedStoneSizeLayouts.md, "SVG layers specifically").
+    if (options.mixedOptions) {
+      const infillStones = generateMixedSizeInfillStones({
+        mode: options.mode,
+        source: { kind: 'vector', polygons: closedPolygons, boundingBox: BoundingBox.fromPoints(closedPolygons.flat()) },
+        mixedOptions: options.mixedOptions,
+        gapMm: options.gapMm,
+        baseStones: stones,
+        layerId: options.layerId,
+        color: options.color,
+        startIndex: stones.length
+      });
+      stones = stones.concat(infillStones);
+    }
 
     return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
   }
@@ -593,15 +657,11 @@ export class GeometryEngine {
       maxHeightPx: options.maxHeightPx
     });
 
+    const placement = { xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm };
     const spacingMm = options.stoneSizeMm + options.gapMm;
-    const points = sampleFieldByMode(
-      options.mode,
-      field,
-      { xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm },
-      spacingMm
-    );
+    const points = sampleFieldByMode(options.mode, field, placement, spacingMm);
 
-    const stones = points.map((point, index) => new Stone({
+    let stones = points.map((point, index) => new Stone({
       xMm: point.xMm,
       yMm: point.yMm,
       sizeMm: options.stoneSizeMm,
@@ -609,6 +669,22 @@ export class GeometryEngine {
       layerId: options.layerId,
       index
     }));
+
+    // S-200 (Mixed Stone-Size Layouts): additive infill pass over the same density field, see
+    // MixedSizeGenerator.js.
+    if (options.mixedOptions) {
+      const infillStones = generateMixedSizeInfillStones({
+        mode: options.mode,
+        source: { kind: 'field', field, placement },
+        mixedOptions: options.mixedOptions,
+        gapMm: options.gapMm,
+        baseStones: stones,
+        layerId: options.layerId,
+        color: options.color,
+        startIndex: stones.length
+      });
+      stones = stones.concat(infillStones);
+    }
 
     return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
   }
@@ -647,10 +723,11 @@ export class GeometryEngine {
       return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones: [] });
     }
 
+    const placedBoundingBox = BoundingBox.fromPoints(polygons.flat());
     const spacingMm = options.stoneSizeMm + options.gapMm;
-    const points = sampleShapeFillPoints(options.mode, polygons, BoundingBox.fromPoints(polygons.flat()), spacingMm, options.stoneSizeMm);
+    const points = sampleShapeFillPoints(options.mode, polygons, placedBoundingBox, spacingMm, options.stoneSizeMm);
 
-    const stones = points.map((point, index) => new Stone({
+    let stones = points.map((point, index) => new Stone({
       xMm: point.xMm,
       yMm: point.yMm,
       sizeMm: options.stoneSizeMm,
@@ -658,6 +735,21 @@ export class GeometryEngine {
       layerId: options.layerId,
       index
     }));
+
+    // S-200 (Mixed Stone-Size Layouts): additive infill pass, see MixedSizeGenerator.js.
+    if (options.mixedOptions) {
+      const infillStones = generateMixedSizeInfillStones({
+        mode: options.mode,
+        source: { kind: 'vector', polygons, boundingBox: placedBoundingBox },
+        mixedOptions: options.mixedOptions,
+        gapMm: options.gapMm,
+        baseStones: stones,
+        layerId: options.layerId,
+        color: options.color,
+        startIndex: stones.length
+      });
+      stones = stones.concat(infillStones);
+    }
 
     return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
   }
@@ -755,7 +847,9 @@ function normalizeTextParams(params) {
     align,
     lineSpacing,
     rotationDeg,
-    ...curve
+    ...curve,
+    // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.
+    ...normalizeMixedSizeParams(params, stoneSizeMm)
   };
 }
 
@@ -776,21 +870,15 @@ function textAlignOffsetMm(align, maxWidthMm, widthMm) {
   return 0;
 }
 
-// TXT-102: rigidly rotates a flat list of {xMm,yMm} points (final stone positions, sampled or
-// authored) around their own combined bounding-box center by rotationDeg (clockwise, since this
-// engine's mm space is Y-down -- see CanvasRenderer2D.js/SvgExporter.js, which map yMm to pixel/page
-// Y with no flip). Applied once, as the very last step before Stone construction in
-// generateTextLayout() -- after outline/fill sampling or after authored stone centers are resolved
-// -- so both a vector font's sampled points and a stone-map font's (RS Block) authored centers get
-// identical rotation behavior without duplicating this math for each source. Pivoting on the point
-// set's own center (rather than the pre-placement origin) keeps the text block rotating in place,
-// matching a typical rotation-handle UX. A 0 rotation (the default) returns the input unchanged, so
-// every project saved before this milestone renders byte-identical.
-function rotateTextPoints(points, rotationDeg) {
-  if (rotationDeg === 0 || points.length === 0) {
-    return points;
+// S-200: extracted out of rotateTextPoints() below so a caller that needs one fixed pivot shared
+// across two different point sets (generateTextLayout()'s primary + Mixed Stone-Size infill points,
+// see its own comment) can compute that pivot once, from whichever point set it chooses, instead of
+// always re-deriving it from the exact array being rotated. Returns null for an empty input -- there
+// is no bounding box to speak of.
+function boundingBoxCenterOfPoints(points) {
+  if (points.length === 0) {
+    return null;
   }
-
   let minXmm = Infinity, minYmm = Infinity, maxXmm = -Infinity, maxYmm = -Infinity;
   for (const point of points) {
     if (point.xMm < minXmm) minXmm = point.xMm;
@@ -798,21 +886,50 @@ function rotateTextPoints(points, rotationDeg) {
     if (point.yMm < minYmm) minYmm = point.yMm;
     if (point.yMm > maxYmm) maxYmm = point.yMm;
   }
-  const cxMm = (minXmm + maxXmm) / 2;
-  const cyMm = (minYmm + maxYmm) / 2;
+  return { cxMm: (minXmm + maxXmm) / 2, cyMm: (minYmm + maxYmm) / 2 };
+}
 
+// TXT-102: rigidly rotates a flat list of {xMm,yMm} points (final stone positions, sampled or
+// authored) around an explicit pivot by rotationDeg (clockwise, since this engine's mm space is
+// Y-down -- see CanvasRenderer2D.js/SvgExporter.js, which map yMm to pixel/page Y with no flip).
+// Applied once, as the very last step before Stone construction in generateTextLayout() -- after
+// outline/fill sampling or after authored stone centers are resolved -- so both a vector font's
+// sampled points and a stone-map font's (RS Block) authored centers get identical rotation behavior
+// without duplicating this math for each source. A 0 rotation, an empty point list, or a null center
+// all return the input unchanged.
+function rotatePointsAroundCenter(points, rotationDeg, center) {
+  if (rotationDeg === 0 || points.length === 0 || !center) {
+    return points;
+  }
+
+  const { cxMm, cyMm } = center;
   const radians = rotationDeg * (Math.PI / 180);
   const cos = Math.cos(radians);
   const sin = Math.sin(radians);
 
+  // S-200: spreads the input point first (`...point`) so any extra field it carries -- notably
+  // Mixed Stone-Size infill points' own `sizeMm` -- survives rotation unchanged; only xMm/yMm are
+  // ever recomputed here. Every pre-S-200 caller's points carry no extra fields, so this is a
+  // behavior-preserving widening: output is identical to before for them.
   return points.map((point) => {
     const dxMm = point.xMm - cxMm;
     const dyMm = point.yMm - cyMm;
     return {
+      ...point,
       xMm: cxMm + dxMm * cos - dyMm * sin,
       yMm: cyMm + dxMm * sin + dyMm * cos
     };
   });
+}
+
+// Pivoting on the point set's own center (rather than the pre-placement origin) keeps the text
+// block rotating in place, matching a typical rotation-handle UX. A 0 rotation (the default)
+// returns the input unchanged, so every project saved before this milestone renders byte-identical.
+// generateTextLayout()'s non-authored branch does NOT use this directly for its combined
+// primary+infill point list -- see its own comment for why it computes an explicit, primary-derived
+// pivot via boundingBoxCenterOfPoints() + rotatePointsAroundCenter() instead.
+function rotateTextPoints(points, rotationDeg) {
+  return rotatePointsAroundCenter(points, rotationDeg, boundingBoxCenterOfPoints(points));
 }
 
 // RS-1003: validated only when curveEnabled is truthy, so straight text (the default) never reads
@@ -871,7 +988,9 @@ function normalizeShapeParams(params) {
     stoneSizeMm,
     gapMm,
     mode,
-    color: params.color ?? null
+    color: params.color ?? null,
+    // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.
+    ...normalizeMixedSizeParams(params, stoneSizeMm)
   };
 
   if (params.shape === 'circle') {
@@ -972,7 +1091,9 @@ function normalizeSvgParams(params) {
     stoneSizeMm,
     gapMm,
     mode,
-    color: params.color ?? null
+    color: params.color ?? null,
+    // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.
+    ...normalizeMixedSizeParams(params, stoneSizeMm)
   };
 }
 
@@ -1030,7 +1151,9 @@ function normalizeImageParams(params) {
     invert: params.invert,
     blurRadiusPx: params.blurRadiusPx,
     maxWidthPx: params.maxWidthPx,
-    maxHeightPx: params.maxHeightPx
+    maxHeightPx: params.maxHeightPx,
+    // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.
+    ...normalizeMixedSizeParams(params, stoneSizeMm)
   };
 }
 
@@ -1086,7 +1209,9 @@ function normalizePathParams(params) {
     stoneSizeMm,
     gapMm,
     mode,
-    color: params.color ?? null
+    color: params.color ?? null,
+    // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.
+    ...normalizeMixedSizeParams(params, stoneSizeMm)
   };
 }
 

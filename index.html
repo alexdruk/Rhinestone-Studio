@@ -473,6 +473,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
       </div>
       <div id="inspectorPositionSlot" class="field-slot"></div>
       <div id="inspectorStoneSlot" class="field-slot"></div>
+      <div id="inspectorMixedSizeSlot" class="field-slot"></div>
       <button class="btn block" id="moreOptionsBtn">More Options…</button>
     </section>
   </aside>
@@ -564,6 +565,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <div class="field-section">
           <h3>Stones</h3>
           <div id="textStoneSlot" class="field-slot"></div>
+          <div id="textMixedSizeSlot" class="field-slot"></div>
         </div>
       </div>
       <div class="validation-message" id="textValidation" role="alert"></div>
@@ -661,6 +663,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <div class="field-section">
             <h3>Stones</h3>
             <div id="shapesStoneSlot" class="field-slot"></div>
+            <div id="shapesMixedSizeSlot" class="field-slot"></div>
           </div>
         </div>
       </div>
@@ -758,6 +761,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <div class="field-section">
             <h3>Stones</h3>
             <div id="importStoneSlot" class="field-slot"></div>
+            <div id="importMixedSizeSlot" class="field-slot"></div>
           </div>
         </div>
         <p class="hint">Unsupported SVG elements are skipped and reported after import; scaling preserves proportions to fit the current canvas.</p>
@@ -844,6 +848,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <div class="field-section">
             <h3>Stones</h3>
             <div id="imageTraceStoneSlot" class="field-slot"></div>
+            <div id="imageTraceMixedSizeSlot" class="field-slot"></div>
           </div>
           <p class="hint">Images can also be edited by mouse in the 2D canvas: drag to move, drag blue handles to resize, press <span class="kbd">Delete</span> to remove.</p>
         </div>
@@ -1115,6 +1120,40 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
     <div class="field"><label for="gap">Gap (mm)</label><input id="gap" type="number" min="0" max="5" step="0.1" value="0.3"></div>
   </div>
   <div class="field"><label for="stoneColor">Stone color</label><div class="color-pick-row"><select id="stoneColor"></select><span id="stoneColorSwatch" class="color-swatch" title="Selected color preview"></span></div></div>
+</div>
+<!-- S-200 (Mixed Stone-Size Layouts): shared, relocated field group (same relocateFieldGroups()
+     mechanism as sharedPositionFields/sharedStoneFields above) -- Mixed mode applies uniformly to
+     every layer type, exactly like Stone size/Gap/Color. Primary Size is deliberately not
+     duplicated here -- it is the existing #stoneSize field above (see docs/specifications/
+     S-200-MixedStoneSizeLayouts.md, "app.js / index.html"). Allowed Sizes checkboxes mirror
+     src/renderer/StoneSizes.js's shipped catalog (ids/values kept in sync by hand -- the same
+     convention VECTOR_FILL_MODES already uses for GeometryEngine's SAMPLE_MODES) since there are
+     only ever five of them and static markup avoids the DOM-creation-order hazard a dynamically
+     built checkbox list would have against HISTORY_TRACKED_CONTROL_IDS' wiring loop. Minimum/
+     Maximum Size stay dynamically populated <select>s (like #stoneSize itself) since a <select>'s
+     options can safely be filled in after that wiring loop runs. -->
+<div id="sharedMixedSizeFields">
+  <div class="field-section">
+    <h3>Mixed Stone Size</h3>
+    <div class="field"><label for="sizeMode">Generation mode</label><select id="sizeMode" title="Uniform: every stone in this layer is the same size. Mixed: the Geometry Engine may add smaller stones into gaps this layer's primary size can't reach."><option value="uniform" selected>Uniform</option><option value="mixed">Mixed</option></select></div>
+    <div id="mixedSizeDetailFields" style="display:none">
+      <div class="field">
+        <label>Allowed sizes</label>
+        <label class="checkbox-row"><input type="checkbox" id="mixedAllowedSs6" value="2.0"> SS6 (2.0 mm)</label>
+        <label class="checkbox-row"><input type="checkbox" id="mixedAllowedSs10" value="2.8"> SS10 (2.8 mm)</label>
+        <label class="checkbox-row"><input type="checkbox" id="mixedAllowedSs16" value="4.0"> SS16 (4.0 mm)</label>
+        <label class="checkbox-row"><input type="checkbox" id="mixedAllowedSs20" value="4.7"> SS20 (4.7 mm)</label>
+        <label class="checkbox-row"><input type="checkbox" id="mixedAllowedSs30" value="6.4"> SS30 (6.4 mm)</label>
+        <p class="hint">Primary size is the Stone size field above. Only sizes smaller than the primary size are ever used to fill gaps.</p>
+      </div>
+      <div class="field-row">
+        <div class="field"><label for="mixedMinSize">Minimum size</label><select id="mixedMinSize" title="Smallest size the Geometry Engine may ever place, regardless of Allowed Sizes."></select></div>
+        <div class="field"><label for="mixedMaxSize">Maximum size</label><select id="mixedMaxSize" title="Largest size eligible for gap-filling (never larger than the primary size)."></select></div>
+      </div>
+      <div class="field"><label for="conservativeDetail">Conservative detail</label><input id="conservativeDetail" type="range" min="0" max="1" step="0.05" value="0.3"></div>
+      <p class="hint">Mixed mode never removes or resizes the primary stones above — it only adds smaller stones into gaps the primary size can't reach, always keeping full manufacturing spacing.</p>
+    </div>
+  </div>
 </div>
 
 <script type="importmap">

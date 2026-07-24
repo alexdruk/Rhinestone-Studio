@@ -83,7 +83,13 @@ await test('6. generateShapeStonesLive (circle/rectangle) resolves mode via reso
 });
 
 await test('7. generateSvgStonesLive resolves mode via resolveVectorFillMode(layer.mode)', () => {
-  assert.match(appJs, /mode:resolveVectorFillMode\(layer\.mode\),color:layer\.color\};const result=this\.permanentEngine\.generateSvgLayout/);
+  // S-200 CI follow-up (2026-07): the approved S-200 spec intentionally extends this same params
+  // object with a trailing `,...mixedSizeParamsFor(layer)` spread (forwarding Mixed Stone-Size
+  // params through every generate*StonesLive() method) -- see docs/specifications/
+  // S-200-MixedStoneSizeLayouts.md, "Architecture > app.js / index.html". The optional non-capturing
+  // group tolerates that addition without weakening what this test actually checks: mode resolution
+  // via resolveVectorFillMode(layer.mode) immediately followed by color:layer.color.
+  assert.match(appJs, /mode:resolveVectorFillMode\(layer\.mode\),color:layer\.color(?:,\.\.\.mixedSizeParamsFor\(layer\))?\};const result=this\.permanentEngine\.generateSvgLayout/);
 });
 
 await test('8. generateImageStonesLive forwards mode via resolveImageFillMode(layer.fillMode) -- previously no mode was forwarded at all', () => {
@@ -91,7 +97,8 @@ await test('8. generateImageStonesLive forwards mode via resolveImageFillMode(la
 });
 
 await test('9. generatePathStonesLive resolves mode via resolveVectorFillMode(layer.fillMode) -- previously hard-coded to \'outline\'', () => {
-  assert.match(appJs, /gapMm:layer\.gap,mode:resolveVectorFillMode\(layer\.fillMode\),color:layer\.color\};const result=this\.permanentEngine\.generatePathLayout/);
+  // S-200 CI follow-up (2026-07): same tolerance as test 7 above, for the same reason.
+  assert.match(appJs, /gapMm:layer\.gap,mode:resolveVectorFillMode\(layer\.fillMode\),color:layer\.color(?:,\.\.\.mixedSizeParamsFor\(layer\))?\};const result=this\.permanentEngine\.generatePathLayout/);
 });
 
 await test('10. the resolver helpers themselves default unknown/missing values to each layer type\'s pre-RS-1011 behavior (backward compatibility)', () => {
