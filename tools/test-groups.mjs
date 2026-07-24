@@ -69,6 +69,7 @@ export const GROUPS = {
     'test-ux-visual-polish.mjs',
     'test-object-template-integration.mjs',
     'test-product-plate-round-dinner.mjs',
+    'test-product-vessel-dimensions.mjs',
     'test-examples-regression.mjs',
     'test-production-sheet-exporter.mjs',
     'test-crystal-color-integration.mjs',
@@ -175,6 +176,7 @@ export const GROUPS = {
     'test-object-template-integration.mjs',
     'test-object-dimensions.mjs',
     'test-product-plate-round-dinner.mjs',
+    'test-product-vessel-dimensions.mjs',
   ],
   // Import/Export. test-svg-parser.mjs lives here (not in `text`) because it parses *imported* SVG
   // into VectorPath contours -- the import half of Import/Export, paired with its own integration

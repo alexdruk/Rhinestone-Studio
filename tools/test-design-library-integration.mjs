@@ -18,7 +18,7 @@ const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
 const indexHtml = await readFile(path.join(repoRoot, 'index.html'), 'utf8');
 const packageJson = JSON.parse(await readFile(path.join(repoRoot, 'package.json'), 'utf8'));
 
-const { getObjectTemplate, normalizePlateParams } = await import('../src/products/index.js');
+const { getObjectTemplate, normalizePlateParams, VESSEL_PRODUCT_IDS, getVesselDefaults, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel } = await import('../src/products/index.js');
 const { buildProjectFromItem, buildSelectionItemData, createLibraryItem } = await import('../src/library/index.js');
 // S-110: validateProject() (and its own extracted slice's SUPPORTED_LAYER_TYPES declaration) now
 // references XYWH_SHAPE_TYPES/SHAPE_LIBRARY_KINDS (module-level constants declared well before the
@@ -130,7 +130,11 @@ await test("12. buildProjectFromItem()'s output for a 'project' item passes the 
   const constantsStart = appJs.indexOf('const SUPPORTED_LAYER_TYPES=new Set');
   const source = appJs.slice(constantsStart, appJs.indexOf(validateMatch[0]) + validateMatch[0].length);
   // eslint-disable-next-line no-new-func
-  const { validateProject } = new Function('getObjectTemplate', 'normalizePlateParams', 'XYWH_SHAPE_TYPES', 'SHAPE_LIBRARY_KINDS', `${source}\nreturn { validateProject };`)(getObjectTemplate, normalizePlateParams, XYWH_SHAPE_TYPES, SHAPE_LIBRARY_KINDS);
+  const { validateProject } = new Function(
+    'getObjectTemplate', 'normalizePlateParams', 'XYWH_SHAPE_TYPES', 'SHAPE_LIBRARY_KINDS',
+    'VESSEL_PRODUCT_IDS', 'getVesselDefaults', 'normalizeVesselParams', 'deriveLegacyVesselParams', 'computeCanvasFromVessel',
+    `${source}\nreturn { validateProject };`
+  )(getObjectTemplate, normalizePlateParams, XYWH_SHAPE_TYPES, SHAPE_LIBRARY_KINDS, VESSEL_PRODUCT_IDS, getVesselDefaults, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel);
 
   const storedProject = {
     version: 2, units: 'mm', name: 'Saved Project', product: 'mug',
@@ -151,7 +155,11 @@ await test("13. buildProjectFromItem()'s output for a 'selection' item also pass
   const constantsStart = appJs.indexOf('const SUPPORTED_LAYER_TYPES=new Set');
   const source = appJs.slice(constantsStart, appJs.indexOf(validateMatch[0]) + validateMatch[0].length);
   // eslint-disable-next-line no-new-func
-  const { validateProject } = new Function('getObjectTemplate', 'normalizePlateParams', 'XYWH_SHAPE_TYPES', 'SHAPE_LIBRARY_KINDS', `${source}\nreturn { validateProject };`)(getObjectTemplate, normalizePlateParams, XYWH_SHAPE_TYPES, SHAPE_LIBRARY_KINDS);
+  const { validateProject } = new Function(
+    'getObjectTemplate', 'normalizePlateParams', 'XYWH_SHAPE_TYPES', 'SHAPE_LIBRARY_KINDS',
+    'VESSEL_PRODUCT_IDS', 'getVesselDefaults', 'normalizeVesselParams', 'deriveLegacyVesselParams', 'computeCanvasFromVessel',
+    `${source}\nreturn { validateProject };`
+  )(getObjectTemplate, normalizePlateParams, XYWH_SHAPE_TYPES, SHAPE_LIBRARY_KINDS, VESSEL_PRODUCT_IDS, getVesselDefaults, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel);
 
   const layers = [{ id: 'circle-1', type: 'circle', visible: true, cx: 105, cy: 45, r: 18, stoneSize: 2, gap: 0.3, color: 'gold' }];
   const data = buildSelectionItemData(layers, { width: 210, height: 90 });

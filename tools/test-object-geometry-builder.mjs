@@ -9,7 +9,7 @@ const THREE = await import('three');
 const ObjectGeometryBuilder = await import('../src/preview3d/ObjectGeometryBuilder.js');
 const { buildObjectMesh } = ObjectGeometryBuilder;
 const { computeObjectDimensionsMm } = await import('../src/preview3d/ObjectDimensions.js');
-const { getObjectTemplate, getPlateDefaults } = await import('../src/products/index.js');
+const { getObjectTemplate, getPlateDefaults, getVesselDefaults } = await import('../src/products/index.js');
 
 async function test(name, fn) {
   try {
@@ -337,6 +337,24 @@ await test('18. S-112: rebuilding the plate mesh at a different live outer diame
   assert.ok(large.bodyMesh.geometry.boundingBox.max.x > small.bodyMesh.geometry.boundingBox.max.x);
   assert.equal(small.dimensions.outerRadiusMm, 125);
   assert.equal(large.dimensions.outerRadiusMm, 150);
+});
+
+// --- RS-2010: vesselParams -----------------------------------------------------------------------
+
+await test('19. RS-2010: buildObjectMesh(..., vesselParams) uses the vessel\'s real topDiameterMm for the mug\'s body radius, replacing the old ratio-derived value', () => {
+  const mugTemplate = getObjectTemplate('mug');
+  const vessel = getVesselDefaults('mug');
+  const canvasWidthMm = Math.PI * vessel.bodyDiameterMm;
+  const built = buildObjectMesh(mugTemplate, canvasWidthMm, vessel.printableHeightMm, null, vessel);
+  assert.ok(Math.abs(built.dimensions.topRadiusMm - vessel.topDiameterMm / 2) < 1e-9);
+  // bodyRadiusMm is unaffected -- still purely a function of canvasWidthMm.
+  assert.ok(Math.abs(built.dimensions.bodyRadiusMm - vessel.bodyDiameterMm / 2) < 1e-6);
+});
+
+await test('20. RS-2010: omitting vesselParams (every pre-RS-2010 call site) is byte-identical to before -- the ratio-based fallback path is untouched', () => {
+  const withoutVessel = buildObjectMesh(getObjectTemplate('mug'), 210, 90);
+  const withNullVessel = buildObjectMesh(getObjectTemplate('mug'), 210, 90, null, null);
+  assert.deepEqual(withoutVessel.dimensions, withNullVessel.dimensions);
 });
 
 console.log('Object geometry builder tests passed.');

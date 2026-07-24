@@ -265,7 +265,11 @@ await test('21. save/load: a project containing a path layer round-trips through
   const XYWH_SHAPE_TYPES = new Set(['rectangle', 'svg', 'image', 'path', ...SHAPE_LIBRARY_KINDS]);
   // S-112: validateProject() also calls normalizePlateParams() -- injected as a function parameter
   // for the same reason getObjectTemplate is.
-  const fn = new Function('getObjectTemplate', 'normalizePlateParams', 'XYWH_SHAPE_TYPES', 'SHAPE_LIBRARY_KINDS', `${constantsSlice}\nreturn validateProject;`)(getObjectTemplateModule.getObjectTemplate, getObjectTemplateModule.normalizePlateParams, XYWH_SHAPE_TYPES, SHAPE_LIBRARY_KINDS);
+  const fn = new Function(
+    'getObjectTemplate', 'normalizePlateParams', 'XYWH_SHAPE_TYPES', 'SHAPE_LIBRARY_KINDS',
+    'VESSEL_PRODUCT_IDS', 'getVesselDefaults', 'normalizeVesselParams', 'deriveLegacyVesselParams', 'computeCanvasFromVessel',
+    `${constantsSlice}\nreturn validateProject;`
+  )(getObjectTemplateModule.getObjectTemplate, getObjectTemplateModule.normalizePlateParams, XYWH_SHAPE_TYPES, SHAPE_LIBRARY_KINDS, getObjectTemplateModule.VESSEL_PRODUCT_IDS, getObjectTemplateModule.getVesselDefaults, getObjectTemplateModule.normalizeVesselParams, getObjectTemplateModule.deriveLegacyVesselParams, getObjectTemplateModule.computeCanvasFromVessel);
 
   const validProject = {
     version: 2, name: 'Test', product: 'mug', canvas: { width: 210, height: 90 },

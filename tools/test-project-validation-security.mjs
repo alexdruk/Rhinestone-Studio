@@ -38,16 +38,22 @@ async function test(name, fn) {
 async function extractProjectFunctions() {
   const validateMatch = appJs.match(/function validateProject\(obj\)\{[\s\S]*?\n\}\n/);
   assert.ok(validateMatch, 'expected to find validateProject() in app.js');
-  const defaultMatch = appJs.match(/function defaultProject\(\)\{return\{[\s\S]*?\}\}\n/);
+  // RS-2010: defaultProject() now computes a `const vessel=...;` before its `return{...}` (the
+  // vessel-derived canvas) -- the pattern no longer requires "return{" immediately after "(){".
+  const defaultMatch = appJs.match(/function defaultProject\(\)\{[\s\S]*?\}\}\n/);
   assert.ok(defaultMatch, 'expected to find defaultProject() in app.js');
 
   const constantsStart = appJs.indexOf('const DEFAULT_TEXT_FONT_ID=');
   const source = `${appJs.slice(constantsStart, appJs.indexOf(defaultMatch[0]) + defaultMatch[0].length)}\n${appJs.slice(appJs.indexOf('const SUPPORTED_LAYER_TYPES=new Set'), appJs.indexOf(validateMatch[0]) + validateMatch[0].length)}`;
 
   const { SHAPE_LIBRARY_KINDS } = await import('../src/geometry/index.js');
-  const { getObjectTemplate, getPlateDefaults, normalizePlateParams } = await import('../src/products/index.js');
+  const { getObjectTemplate, getPlateDefaults, normalizePlateParams, VESSEL_PRODUCT_IDS, getVesselDefaults, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel } = await import('../src/products/index.js');
   // eslint-disable-next-line no-new-func
-  return new Function('getObjectTemplate', 'SHAPE_LIBRARY_KINDS', 'getPlateDefaults', 'normalizePlateParams', `${source}\nreturn { validateProject, defaultProject, LAYER_ID_PATTERN };`)(getObjectTemplate, SHAPE_LIBRARY_KINDS, getPlateDefaults, normalizePlateParams);
+  return new Function(
+    'getObjectTemplate', 'SHAPE_LIBRARY_KINDS', 'getPlateDefaults', 'normalizePlateParams',
+    'VESSEL_PRODUCT_IDS', 'getVesselDefaults', 'normalizeVesselParams', 'deriveLegacyVesselParams', 'computeCanvasFromVessel',
+    `${source}\nreturn { validateProject, defaultProject, LAYER_ID_PATTERN };`
+  )(getObjectTemplate, SHAPE_LIBRARY_KINDS, getPlateDefaults, normalizePlateParams, VESSEL_PRODUCT_IDS, getVesselDefaults, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel);
 }
 
 function extractEscapeHtml() {
