@@ -44,6 +44,12 @@ export function createPreview3D(canvas) {
     resetView() {
       if (real) real.resetView();
     },
+    // RS-2011: verification instrumentation only -- the number of actual WebGL renders performed so
+    // far, so idle-vs-active behavior can be confirmed by polling a number (e.g. from a Playwright
+    // browser test) instead of eyeballing the canvas. 0 before the real renderer has mounted.
+    getRenderCount() {
+      return real ? real.getRenderCount() : 0;
+    },
     set onAzimuthChange(fn) {
       pendingOnAzimuthChange = fn;
       if (real) real.onAzimuthChange = fn;

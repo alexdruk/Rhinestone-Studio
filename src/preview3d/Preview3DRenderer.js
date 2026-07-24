@@ -55,6 +55,13 @@ export class Preview3DRenderer {
     this._textureCanvas = null;
     this._textureCtx = null;
     this._texture = null;
+    // RS-2011: invalidation-based rendering replaces the old unconditional per-frame
+    // requestAnimationFrame loop -- see _requestRender()/_renderFrame(). _frameScheduled guards
+    // against queuing more than one pending frame; _renderCount is verification instrumentation only
+    // (a plain counter of actual renderer.render() calls, so idle-vs-active behavior can be confirmed
+    // by polling a number in a browser test instead of eyeballing the canvas).
+    this._frameScheduled = false;
+    this._renderCount = 0;
     // S-107: fires with the live camera azimuth (degrees, same -180..180/front=0 convention as
     // `rotation`) whenever the operator free-orbits the Object Preview with the mouse/touch, so
     // app.js can keep the 2D canvas's Front View Frame in sync -- see _onControlsChange() below for
@@ -95,21 +102,51 @@ export class Preview3DRenderer {
     this.controls.maxDistance = 5000;
     this.controls.minPolarAngle = MIN_POLAR_RAD;
     this.controls.maxPolarAngle = MAX_POLAR_RAD;
-    this.controls.addEventListener('change', () => this._onControlsChange());
+    this.controls.addEventListener('change', () => { this._onControlsChange(); this._requestRender(); });
+    // RS-2011: 'start'/'end' fire on pointerdown/pointerup (and wheel-dolly start/end) -- 'change'
+    // alone is not enough to kick off the very first frame of a drag, since a raw pointermove only
+    // accumulates OrbitControls' internal delta, it does not itself call update()/dispatch 'change'.
+    // 'start' schedules that first frame; the render loop's own controls.update() call then detects
+    // the accumulated delta and dispatches 'change' on every subsequent frame for as long as the
+    // operator keeps moving the pointer or damping still has residual velocity, self-terminating once
+    // OrbitControls stops reporting a change (see _requestRender()'s own comment).
+    this.controls.addEventListener('start', () => this._requestRender());
+    this.controls.addEventListener('end', () => this._requestRender());
 
     this._resizeObserver = new ResizeObserver(() => this._handleResize());
     this._resizeObserver.observe(this.canvas.parentElement || this.canvas);
 
     this._mounted = true;
     this._handleResize();
-    this._animate();
+    this._requestRender();
   }
 
-  _animate() {
+  // RS-2011: schedules a single requestAnimationFrame-bound render, deduplicated via
+  // _frameScheduled -- calling this any number of times before that frame fires still only renders
+  // once. Replaces the old unconditional per-frame _animate() loop: nothing here perpetuates itself
+  // except OrbitControls' own damping, which keeps re-invalidating (via the 'change' listener in
+  // init()) only while the camera is actually still moving -- see _renderFrame().
+  _requestRender() {
+    if (!this._mounted || this._frameScheduled) return;
+    this._frameScheduled = true;
+    requestAnimationFrame(() => this._renderFrame());
+  }
+
+  _renderFrame() {
+    this._frameScheduled = false;
     if (!this._mounted) return;
-    requestAnimationFrame(() => this._animate());
+    // OrbitControls.update() applies any pending drag/damping delta and (per its own implementation)
+    // dispatches 'change' -- which re-invalidates via _requestRender() -- only while the camera is
+    // still actually moving past its internal epsilon; once damping settles, update() stops
+    // dispatching 'change' and this loop naturally stops scheduling further frames.
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
+    this._renderCount++;
+  }
+
+  /** RS-2011: verification instrumentation -- the number of actual renderer.render() calls so far. */
+  getRenderCount() {
+    return this._renderCount;
   }
 
   _handleResize() {
@@ -119,6 +156,7 @@ export class Preview3DRenderer {
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
+    this._requestRender();
   }
 
   /**
@@ -149,6 +187,7 @@ export class Preview3DRenderer {
     this._updateTexture(stoneLayout, canvasWidthMm, canvasHeightMm, cupColor);
 
     if (geometryChanged) this._frameCamera();
+    this._requestRender();
   }
 
   /**
@@ -188,7 +227,7 @@ export class Preview3DRenderer {
     this._zoom = DEFAULT_ZOOM;
     this._sliderAzimuthDeg = 0;
     this._sliderZoom = DEFAULT_ZOOM;
-    if (this._mounted) this.controls.reset();
+    if (this._mounted) { this.controls.reset(); this._requestRender(); }
   }
 
   dispose() {
@@ -220,17 +259,34 @@ export class Preview3DRenderer {
     this.scene.add(group);
   }
 
+  // RS-2011: shared by both CanvasTexture construction sites below (initial creation and the
+  // resize-triggered recreation) so the fixed parameter set -- including generateMipmaps/anisotropy,
+  // which fix the "blurry, shimmering, or unstable stone rendering" defect a fixed-px-per-mm canvas
+  // texture shows when minified (a rotated vessel viewed at a distance, or the far side of the
+  // cylinder at a grazing angle) -- can never drift between the two.
+  _applyTextureParams(texture) {
+    const THREE = this._THREE;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    // Three.js 0.169 targets WebGL2, which supports mipmapping non-power-of-two textures natively --
+    // no padding/power-of-two constraint applies here. Mipmaps + anisotropic filtering are what
+    // resolve minification aliasing/shimmering on small high-contrast detail (stone edges) and blur
+    // at the oblique viewing angles a cylindrical wrap is normally seen at; ClampToEdgeWrapping
+    // (unchanged) already prevents any wraparound bleed at the seam.
+    texture.generateMipmaps = true;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+    texture.colorSpace = THREE.SRGBColorSpace;
+  }
+
   _updateTexture(stoneLayout, canvasWidthMm, canvasHeightMm, cupColor) {
     const THREE = this._THREE;
     if (!this._textureCanvas) {
       this._textureCanvas = document.createElement('canvas');
       this._textureCtx = this._textureCanvas.getContext('2d');
       this._texture = new THREE.CanvasTexture(this._textureCanvas);
-      this._texture.wrapS = THREE.ClampToEdgeWrapping;
-      this._texture.wrapT = THREE.ClampToEdgeWrapping;
-      this._texture.generateMipmaps = false;
-      this._texture.minFilter = THREE.LinearFilter;
-      this._texture.colorSpace = THREE.SRGBColorSpace;
+      this._applyTextureParams(this._texture);
     }
 
     const { widthPx, heightPx } = textureSizeForMm(canvasWidthMm, canvasHeightMm);
@@ -248,11 +304,7 @@ export class Preview3DRenderer {
       // first construction, so re-applying them here just keeps this block self-contained.
       this._texture.dispose();
       this._texture = new THREE.CanvasTexture(this._textureCanvas);
-      this._texture.wrapS = THREE.ClampToEdgeWrapping;
-      this._texture.wrapT = THREE.ClampToEdgeWrapping;
-      this._texture.generateMipmaps = false;
-      this._texture.minFilter = THREE.LinearFilter;
-      this._texture.colorSpace = THREE.SRGBColorSpace;
+      this._applyTextureParams(this._texture);
       if (this._bodyMesh) this._bodyMesh.material.map = null; // force the map-changed branch below to re-assign
     }
     drawStoneLayoutTexture(this._textureCtx, stoneLayout, { widthMm: canvasWidthMm, heightMm: canvasHeightMm, backgroundColor: cupColor });
@@ -323,6 +375,7 @@ export class Preview3DRenderer {
     const newOffset = new THREE.Vector3().setFromSpherical(spherical);
     this.camera.position.copy(target).add(newOffset);
     this.controls.update();
+    this._requestRender();
   }
 
   // S-107: reads the camera's *actual* current azimuth back out of its position (the same

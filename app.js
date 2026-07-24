@@ -742,6 +742,11 @@ let showSafeArea=true;
 // RS-1006: createPreview3D() returns a synchronous facade immediately -- Three.js itself loads
 // lazily inside it, so this line never blocks app.js's own startup.
 const preview3D=createPreview3D(cupCanvas);
+// RS-2011: exposes the facade's getRenderCount() instrumentation for QA/automated verification of
+// invalidation-based rendering (confirming the scene is idle vs. actively re-rendering by polling a
+// number instead of eyeballing the canvas) -- read-only in practice (nothing in app.js itself reads
+// window.__preview3D back), never used to drive any application logic.
+window.__preview3D=preview3D;
 // S-107 (requirement 2, "rotating the Object Preview must move the Front View Frame"): fires
 // whenever the operator free-orbits the Object Preview with the mouse/touch (Preview3DRenderer.js's
 // OrbitControls 'change' listener; never fires for our own slider/frame-drag-driven camera moves --
