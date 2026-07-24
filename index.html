@@ -498,8 +498,10 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <h3>Content</h3>
           <div class="field"><label for="text">Text content</label><textarea id="text" rows="3" title="Press Enter to start a new line.">Vitalina Serbin</textarea></div>
           <div class="field-row">
-            <div class="field"><label for="font">Font</label><div class="font-pick-row"><select id="font"><option value="courier-prime-regular" selected>Courier Prime (monospace)</option><option value="great-vibes-regular">Great Vibes (script)</option></select><button type="button" class="icon-btn" id="fontLibraryBtn" title="Browse the font library" aria-haspopup="true" aria-expanded="false" aria-controls="fontLibraryPanel">🔎</button></div></div>
-            <div class="field"><label for="textMode">Fill Style</label><select id="textMode" title="How rhinestones are arranged across this text.">
+            <div class="field"><label for="font">Font</label><div class="font-pick-row"><select id="font"><option value="courier-prime-regular" selected>Courier Prime (monospace)</option><option value="great-vibes-regular">Great Vibes (script)</option></select><button type="button" class="icon-btn" id="fontLibraryBtn" title="Browse the font library" aria-haspopup="true" aria-expanded="false" aria-controls="fontLibraryPanel">🔎</button></div>
+            <p class="hint" id="legacyFontHint" style="display:none">This text uses a legacy font. It still renders, edits, and exports correctly, but isn't offered for new picks — switch to a Production Font (RS Block / RS Modern) for the native rhinestone-dot workflow.</p>
+            <p class="validation-message" id="unknownFontHint" role="alert" style="display:none">This text uses a font that's not available. Its text and settings are preserved, but it won't render until a compatible font is restored.</p></div>
+            <div class="field" id="textModeField"><label for="textMode">Fill Style</label><select id="textMode" title="How rhinestones are arranged across this text.">
               <option value="stroke" selected>Outline - stones follow the letters</option>
               <option value="fill">Grid Fill - even rows and columns</option>
               <option value="staggered">Staggered Fill - offset rows, tighter packing</option>
@@ -526,6 +528,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
             <div class="field"><label for="height">Text height (mm)</label><input id="height" type="number" min="4" max="80" step="1" value="25"></div>
             <div class="field"><label for="autoFit">Auto fit</label><select id="autoFit"><option value="on">On</option><option value="off">Off</option></select></div>
           </div>
+          <p class="hint" id="textSizeFixedHint" style="display:none">Production Fonts are a fixed size — pick a different font for a different scale.</p>
         </div>
         <div class="field-section">
           <h3>Position</h3>
@@ -544,6 +547,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <div class="field-section">
           <h3>Curve</h3>
           <div class="field"><label for="curveEnabled">Curved text</label><select id="curveEnabled"><option value="off" selected>Off - straight</option><option value="on">On - curved</option></select></div>
+          <p class="hint" id="curveUnavailableHint" style="display:none">Curved text isn't available for Production Fonts yet — switch to a legacy font, or position this text manually.</p>
           <div id="curveControls" style="display:none">
             <div class="field-row">
               <div class="field"><label for="curveRadiusMm">Curve radius (mm)</label><input id="curveRadiusMm" type="number" min="1" step="1" value="40"></div>
@@ -618,6 +622,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <div class="field-section" id="fitTextToShapeSection">
           <h3>Text Fitting</h3>
           <p class="hint" id="fitTextToShapeHint">Select exactly one text layer and one compatible shape layer (Shift-click on the canvas, or in the Layers list) to fit the text inside the shape.</p>
+          <p class="hint" id="fitTextToShapeFixedSizeHint" style="display:none">The selected text uses a Production Font, which is a fixed size and can’t be automatically fit to a shape — position it manually, or switch to a different font.</p>
           <button class="btn" id="fitTextToShapeBtn" disabled title="Resize and reposition the selected text to fit inside the selected shape, without changing stone size, gap, font, fill style, or color.">Fit Text to Shape</button>
           <p class="hint">Adjusts only the text's position and height/scale. Text and shape stay separate, editable layers — this never merges them. Run again any time; it only overrides the position/height it itself last set, never a manual edit made afterward.</p>
           <div class="validation-message" id="fitTextToShapeValidation" role="alert"></div>

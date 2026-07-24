@@ -31,6 +31,7 @@ export const GROUPS = {
     'test-opentype-provider.mjs',
     'test-rhinestone-font-prototype.mjs',
     'test-rs-block.mjs',
+    'test-rs-modern.mjs',
     'test-svg-parser.mjs',
     'test-arc-projection.mjs',
     'test-geometry-engine.mjs',
@@ -159,6 +160,8 @@ export const GROUPS = {
     'test-typography-font-library.mjs',
     'test-rhinestone-font-prototype.mjs',
     'test-rs-block.mjs',
+    'test-rs-modern.mjs',
+    'test-font-002-production-font-mode.mjs',
   ],
   shapes: [
     'test-shape-fit.mjs',

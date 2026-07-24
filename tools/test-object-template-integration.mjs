@@ -65,14 +65,22 @@ async function extractProjectFunctions() {
 
 const { validateProject, defaultProject } = await extractProjectFunctions();
 
+// FONT-002: defaultProject()'s text layer now uses the default Production Font (rs-block, provider
+// 'rhinestone') instead of an OpenType font, so this file's own minimal generation port needs to
+// resolve providerId the same way app.js's resolveFontProviderId() does -- shared across
+// buildPermanentEngine() and generateMergedLayout() so they always agree.
+const sharedManifest = JSON.parse(await readFile(path.join(repoRoot, 'assets/fonts/manifest.json'), 'utf8'));
+const sharedFontManager = new FontManager(sharedManifest);
+function resolveFontProviderId(fontId) {
+  return sharedFontManager.hasFont(fontId) ? sharedFontManager.getFont(fontId).providerId : 'opentype';
+}
+
 async function buildPermanentEngine() {
-  const manifest = JSON.parse(await readFile(path.join(repoRoot, 'assets/fonts/manifest.json'), 'utf8'));
-  const fontManager = new FontManager(manifest);
   async function loadFontBufferFromRepoRoot(relativePath) {
     const buffer = await readFile(path.join(repoRoot, relativePath));
     return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
   }
-  const fontProviderRegistry = createDefaultFontProviderRegistry(fontManager, { loadFontBuffer: loadFontBufferFromRepoRoot });
+  const fontProviderRegistry = createDefaultFontProviderRegistry(sharedFontManager, { loadFontBuffer: loadFontBufferFromRepoRoot });
   return new GeometryEngine({ fontProviderRegistry });
 }
 
@@ -83,7 +91,7 @@ async function buildPermanentEngine() {
 async function generateMergedLayout(project, engine) {
   const layer = project.layers[0];
   const base = {
-    text: layer.text, fontId: layer.font, layerId: layer.id, heightMm: layer.height,
+    text: layer.text, fontId: layer.font, providerId: resolveFontProviderId(layer.font), layerId: layer.id, heightMm: layer.height,
     stoneSizeMm: layer.stoneSize, gapMm: layer.gap, mode: layer.textMode === 'fill' ? 'fill' : 'outline',
     color: layer.color, curveEnabled: Boolean(layer.curveEnabled), curveRadiusMm: layer.curveRadiusMm,
     curveDirection: layer.curveDirection, curveStartAngleDeg: layer.curveStartAngleDeg,

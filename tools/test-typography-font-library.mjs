@@ -163,17 +163,19 @@ await test('8. every currently-enabled manifest font id would be accepted as val
   const idsInSource = new Set(manager.listFonts().map((f) => f.id));
   // Simulates the real reassignment line's right-hand side against the real manifest.
   for (const id of idsInSource) assert.ok(typeof id === 'string' && id.length > 0);
-  // TXT-101B's pre-merge visual acceptance pass manifest-registered RS Block (rs-block,
-  // providerId:'rhinestone') alongside the 9 RS-2002 desktop fonts -- 10 total. The SS10 prototype
-  // remains manifest-unregistered (see src/text/rhinestoneFont/index.js).
-  assert.equal(idsInSource.size, 10);
+  // FONT-002 added RS Modern (rs-modern, providerId:'rhinestone') alongside RS Block and the 9
+  // RS-2002 desktop fonts -- 11 total (TEXT_ENGINE_FONT_IDS still derives from every *enabled*
+  // manifest font, OpenType included, so existing/legacy-fonted projects keep resolving -- only the
+  // picker's *offered* list is Production-Fonts-only, see test 9). The SS10 prototype remains
+  // manifest-unregistered (see src/text/rhinestoneFont/index.js).
+  assert.equal(idsInSource.size, 11);
 });
 
 // ---------------------------------------------------------------------------------------------
 // 4. Category grouping / alphabetical sorting (real code, run against the real manifest)
 // ---------------------------------------------------------------------------------------------
 
-await test('9. populateFontOptions() groups by category (alphabetical group order) and sorts fonts alphabetically within each group', () => {
+await test('9. populateFontOptions() offers only Production Fonts (FONT-002) -- one "Production Fonts" group, RS Block + RS Modern, alphabetically sorted, no OpenType fonts', () => {
   const manager = new FontManager(manifest);
   const { el } = makeDom();
   const source = extractFontLibrarySource();
@@ -182,13 +184,8 @@ await test('9. populateFontOptions() groups by category (alphabetical group orde
   run(el, manager);
   const html = el('font')._html;
   const groupLabels = [...html.matchAll(/<optgroup label="([^"]+)">/g)].map((m) => m[1]);
-  const sortedLabels = [...groupLabels].sort((a, b) => a.localeCompare(b));
-  assert.deepEqual(groupLabels, sortedLabels, 'expected optgroup labels in alphabetical order');
-  assert.deepEqual(new Set(groupLabels), new Set(['Script', 'Serif', 'Sans Serif', 'Display', 'Monogram', 'Decorative', 'Block', 'Handwritten', 'Monospace', 'Rhinestone (Original)']));
+  assert.deepEqual(groupLabels, ['Production Fonts'], 'expected exactly one "Production Fonts" group -- OpenType categories are no longer offered');
 
-  // Within the "Monospace" group (Courier Prime + Roboto Mono is disabled, so only Courier Prime) --
-  // use a group with 2+ members instead to actually exercise sorting: there is none among the
-  // current 10 fonts, so assert the general invariant against every group directly from the source.
   const groupBlocks = [...html.matchAll(/<optgroup label="([^"]+)">([\s\S]*?)<\/optgroup>/g)];
   for (const [, label, inner] of groupBlocks) {
     const families = [...inner.matchAll(/>([^<]+)<\/option>/g)].map((m) => m[1]);
@@ -196,11 +193,12 @@ await test('9. populateFontOptions() groups by category (alphabetical group orde
     assert.deepEqual(families, sortedFamilies, `expected fonts within group "${label}" to be alphabetically sorted`);
   }
   const allValues = [...html.matchAll(/<option value="([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(new Set(allValues), new Set(manager.listFonts().map((f) => f.id)));
+  assert.deepEqual(new Set(allValues), new Set(['rs-block', 'rs-modern']), 'expected only the two Production Fonts to be offered');
   assert.ok(!allValues.includes('roboto-mono-regular'), 'the disabled RobotoMono placeholder must never be offered');
+  assert.ok(!allValues.includes('courier-prime-regular'), 'OpenType fonts must not be offered in the normal picker (FONT-002)');
 });
 
-await test('10. every rendered <option> carries a font-family style for a live visual preview', () => {
+await test('10. every rendered Production Font <option> carries a font-family style for a live visual preview', () => {
   const manager = new FontManager(manifest);
   const { el } = makeDom();
   const source = extractFontLibrarySource();
@@ -208,11 +206,8 @@ await test('10. every rendered <option> carries a font-family style for a live v
   const run = new Function('el', 'fontManager', `${source}\npopulateFontOptions();`);
   run(el, manager);
   const html = el('font')._html;
-  // TXT-101B's "RS Block (Experimental)" family name contains regex metacharacters ('(', ')') --
-  // escape before building a RegExp, or that font's own check would silently pass for the wrong
-  // reason (matching "RS Block Experimental" without the parens actually present in the HTML).
   const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  for (const font of manager.listFonts()) {
+  for (const font of manager.listFonts().filter((f) => f.providerId === 'rhinestone')) {
     const re = new RegExp(`<option value="${escapeRegExp(font.id)}" style="font-family:'${escapeRegExp(font.family)}'">`);
     assert.match(html, re, `expected a font-face-previewed option for ${font.id}`);
   }
@@ -222,7 +217,7 @@ await test('10. every rendered <option> carries a font-family style for a live v
 // 5. Browse Fonts panel: search + favorites + grouping (real code)
 // ---------------------------------------------------------------------------------------------
 
-function runFontLibrary(manager, { favoriteIds = [], query = '', currentFontId = 'courier-prime-regular' } = {}) {
+function runFontLibrary(manager, { favoriteIds = [], query = '', currentFontId = 'rs-block' } = {}) {
   const { el } = makeDom();
   el('font').value = currentFontId;
   const source = extractFontLibrarySource();
@@ -234,18 +229,19 @@ function runFontLibrary(manager, { favoriteIds = [], query = '', currentFontId =
   return factory(el, manager, favoriteIds, query);
 }
 
-await test('11. searching by family name narrows the Browse Fonts list to matching fonts only', () => {
+await test('11. searching by family name narrows the Browse Fonts list to matching fonts only (Production Fonts only, FONT-002)', () => {
   const manager = new FontManager(manifest);
-  const html = runFontLibrary(manager, { query: 'lobster' });
-  assert.match(html, /data-pick-font="lobster-regular"/);
-  assert.ok(!html.includes('data-pick-font="cinzel-regular"'), 'expected non-matching fonts to be filtered out');
+  const html = runFontLibrary(manager, { query: 'modern' });
+  assert.match(html, /data-pick-font="rs-modern"/);
+  assert.ok(!html.includes('data-pick-font="rs-block"'), 'expected non-matching fonts to be filtered out');
+  assert.ok(!html.includes('data-pick-font="courier-prime-regular"'), 'expected OpenType fonts to never appear in the Browse Fonts panel');
 });
 
 await test('12. searching by category label narrows the list to every font in that category', () => {
   const manager = new FontManager(manifest);
-  const html = runFontLibrary(manager, { query: 'script' });
-  assert.match(html, /data-pick-font="great-vibes-regular"/);
-  assert.ok(!html.includes('data-pick-font="anton-regular"'), 'expected a non-script font to be filtered out by a category search');
+  const html = runFontLibrary(manager, { query: 'production' });
+  assert.match(html, /data-pick-font="rs-block"/);
+  assert.match(html, /data-pick-font="rs-modern"/);
 });
 
 await test('13. a search with no matches shows an explicit empty state, not a blank panel', () => {
@@ -257,18 +253,18 @@ await test('13. a search with no matches shows an explicit empty state, not a bl
 
 await test('14. a favorited font is pinned under its own "Favorites" group, ahead of its category group', () => {
   const manager = new FontManager(manifest);
-  const html = runFontLibrary(manager, { favoriteIds: ['anton-regular'] });
+  const html = runFontLibrary(manager, { favoriteIds: ['rs-modern'] });
   const favIndex = html.indexOf('Favorites');
-  const blockIndex = html.indexOf('Block');
-  assert.ok(favIndex >= 0 && blockIndex > favIndex, 'expected a Favorites group before the Block category group');
+  const categoryIndex = html.indexOf('Production Fonts');
+  assert.ok(favIndex >= 0 && categoryIndex > favIndex, 'expected a Favorites group before the Production Fonts category group');
   const favoritesSection = html.slice(favIndex, html.indexOf('font-library-group', favIndex + 1));
-  assert.match(favoritesSection, /data-fav-font="anton-regular"/);
+  assert.match(favoritesSection, /data-fav-font="rs-modern"/);
 });
 
 await test('15. the currently selected font is marked aria-selected in the panel', () => {
   const manager = new FontManager(manifest);
-  const html = runFontLibrary(manager, { currentFontId: 'caveat-regular' });
-  assert.match(html, /data-pick-font="caveat-regular" role="option" aria-selected="true"/);
+  const html = runFontLibrary(manager, { currentFontId: 'rs-modern' });
+  assert.match(html, /data-pick-font="rs-modern" role="option" aria-selected="true"/);
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -327,11 +323,15 @@ await test('18. the two pre-existing font ids/families are unchanged (old projec
   assert.equal(manager.getFont('great-vibes-regular').path, 'assets/fonts/GreatVibes-Regular.ttf');
 });
 
-await test('19. DEFAULT_FONT_ID / DEFAULT_TEXT_FONT_ID both still resolve to Courier Prime', async () => {
+await test('19. FontManager\'s own DEFAULT_FONT_ID is unchanged (Courier Prime); app.js\'s DEFAULT_TEXT_FONT_ID is now RS Block (FONT-002)', async () => {
+  // These are two deliberately separate constants (see app.js's own DEFAULT_TEXT_FONT_ID comment):
+  // FontManager.DEFAULT_FONT_ID is FontManager's own internal getDefaultFont() fallback, untouched
+  // by FONT-002; DEFAULT_TEXT_FONT_ID is app.js's picker/new-text-layer default, which FONT-002
+  // Part 1 explicitly changes to the default Production Font.
   const { DEFAULT_FONT_ID } = await import('../src/fonts/index.js');
   assert.equal(DEFAULT_FONT_ID, 'courier-prime-regular');
   const match = appJs.match(/const DEFAULT_TEXT_FONT_ID='([^']*)'/);
-  assert.equal(match[1], 'courier-prime-regular');
+  assert.equal(match[1], 'rs-block');
 });
 
 // ---------------------------------------------------------------------------------------------

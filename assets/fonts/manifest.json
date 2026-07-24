@@ -103,14 +103,25 @@
     },
     {
       "id": "rs-block",
-      "family": "RS Block (Experimental)",
+      "family": "RS Block",
       "style": "Regular",
       "weight": 400,
       "path": "rhinestone:rs-block",
       "role": "rhinestone",
       "enabled": true,
       "providerId": "rhinestone",
-      "notes": "TXT-101B pre-merge visual acceptance pass: RS Block, the first production-quality original rhinestone font (src/text/rhinestoneFont/families/rsBlock.js), temporarily exposed in the font picker under an explicit (Experimental) label pending manual visual approval of the completed alphabet. `path` is a documentation-only identifier, not a real font file -- RhinestoneFontProvider generates glyph geometry from authored stone centers at runtime and never fetches/parses it (see injectFontFaceRules() in app.js, which only declares @font-face rules for providerId:'opentype' entries). The diagnostic-only RS Block Prototype (SS10) remains intentionally unregistered here."
+      "notes": "FONT-002: the default Production Font (src/text/rhinestoneFont/families/rsBlock.js) -- every stone position is individually hand-authored, not sampled from a vector outline. `path` is a documentation-only identifier, not a real font file -- RhinestoneFontProvider generates glyph geometry from authored stone centers at runtime and never fetches/parses it (see injectFontFaceRules() in app.js, which only declares @font-face rules for providerId:'opentype' entries). The diagnostic-only RS Block Prototype (SS10) remains intentionally unregistered here."
+    },
+    {
+      "id": "rs-modern",
+      "family": "RS Modern",
+      "style": "Regular",
+      "weight": 400,
+      "path": "rhinestone:rs-modern",
+      "role": "rhinestone",
+      "enabled": true,
+      "providerId": "rhinestone",
+      "notes": "FONT-002: the second Production Font (src/text/rhinestoneFont/families/rsModern.js) -- a distinct geometric/grotesque style (no serifs, single-story a/g, round bowls) at the same authored pitch as RS Block. `path` is a documentation-only identifier, not a real font file -- see rs-block's own note above for why."
     }
   ]
 }

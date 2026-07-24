@@ -19,10 +19,10 @@ test('FontManager loads deterministic manifest', () => {
   const manager = new FontManager(manifest);
   assert.equal(manager.manifest.version, 2);
   // RS-2002 expanded the bundled collection from 3 registry entries (2 enabled + 1 disabled
-  // placeholder) to 10 (9 enabled + the same disabled RobotoMono placeholder). TXT-101B's pre-merge
-  // visual acceptance pass added one more manifest entry (rs-block, providerId:'rhinestone',
-  // temporarily exposed in the font picker under an explicit "(Experimental)" label) -- 11 total.
-  assert.equal(manager.listFonts({ includeDisabled: true }).length, 11);
+  // placeholder) to 10 (9 enabled + the same disabled RobotoMono placeholder). TXT-101B added
+  // rs-block (providerId:'rhinestone') -- 11. FONT-002 added rs-modern alongside it as the second
+  // Production Font -- 12 total.
+  assert.equal(manager.listFonts({ includeDisabled: true }).length, 12);
 });
 
 test('FontManager enables every bundled font except the RobotoMono placeholder', () => {
@@ -31,7 +31,7 @@ test('FontManager enables every bundled font except the RobotoMono placeholder',
   // loaded fonts by hardcoded id regardless of it. RS-2002 makes `enabled` the actual gate the
   // live app derives its font list from (see app.js's TEXT_ENGINE_FONT_IDS), so this manifest-level
   // invariant matters now: everything except the known-corrupt placeholder must be enabled.
-  assert.equal(manager.listFonts().length, 10);
+  assert.equal(manager.listFonts().length, 11);
   assert.equal(manager.listFonts({ includeDisabled: true }).length - manager.listFonts().length, 1);
   assert.equal(manager.getFont('roboto-mono-regular').enabled, false);
 });
@@ -92,7 +92,7 @@ test('FontManager rejects duplicate ids', () => {
 test('FontManager serializes without mutation', () => {
   const manager = new FontManager(manifest);
   const json = manager.toJSON();
-  assert.equal(json.fonts.length, 11);
+  assert.equal(json.fonts.length, 12);
   json.fonts[0].family = 'Changed';
   assert.equal(manager.getFont(DEFAULT_FONT_ID).family, 'Courier Prime');
 });
