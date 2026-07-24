@@ -1,13 +1,13 @@
 /**
- * TXT-101B -- RS Block, the first production-quality original rhinestone font (full A-Z, a-z,
- * 0-9, space, and . , ! ? ' - & coverage). Builds on RS Block Prototype (SS10)'s approved
- * stone-center-authored approach (see tools/test-rhinestone-font-prototype.mjs and
- * families/rsBlockPrototypeSS10.js's module doc) -- no contract change, no new rendering/export
- * path, no shared skeleton. This suite covers registration, full character coverage, unsupported
- * character handling, deterministic authored maps, serialization, GeometryEngine integration
- * (including curved-text/Boolean-operation rejection), SVG export, 2D-texture export, kerning, and
- * backward compatibility. It cannot and does not establish visual readability -- that is the QA
- * sheets' job (tools/generate-rs-block-qa-sheets.mjs) plus manual approval.
+ * FONT-002 -- RS Modern, the second production-quality original rhinestone font (full A-Z, a-z,
+ * 0-9, space, and . , ! ? ' - & coverage). Same authored stone-center contract as RS Block (see
+ * families/rsModern.js's module doc) -- no contract change, no new rendering/export path, no shared
+ * skeleton with RS Block. Mirrors tools/test-rs-block.mjs's structure/coverage exactly (registration,
+ * full character coverage, unsupported character handling, deterministic authored maps,
+ * serialization, GeometryEngine integration including curved-text/Boolean-operation rejection, SVG
+ * export, 2D-texture export, kerning, and backward compatibility). It cannot and does not establish
+ * visual readability -- that is the QA sheets' job (tools/generate-rs-modern-qa-sheets.mjs) plus
+ * manual approval.
  */
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -15,7 +15,7 @@ import {
   createDefaultRhinestoneFontRegistry,
   RhinestoneFontProvider
 } from '../src/text/rhinestoneFont/index.js';
-import { getGlyphStoneMap, getKerningAdjustmentMm, descriptor, PITCH_MM } from '../src/text/rhinestoneFont/families/rsBlock.js';
+import { getGlyphStoneMap, getKerningAdjustmentMm, descriptor, PITCH_MM } from '../src/text/rhinestoneFont/families/rsModern.js';
 import { createDefaultFontProviderRegistry } from '../src/text/defaultFontProviders.js';
 import { GeometryEngine } from '../src/geometry/GeometryEngine.js';
 import { StoneLayout } from '../src/geometry/StoneLayout.js';
@@ -23,7 +23,7 @@ import { Stone } from '../src/geometry/Stone.js';
 import { FontManager } from '../src/fonts/index.js';
 import { stoneLayoutToSvg } from '../src/export/SvgExporter.js';
 import { drawStoneLayoutTexture } from '../src/preview3d/StoneLayoutTexture.js';
-import { ALL_CONTENT_STRINGS } from './rsBlockQaCorpus.mjs';
+import { ALL_CONTENT_STRINGS } from './rsModernQaCorpus.mjs';
 
 async function test(name, fn) {
   try {
@@ -38,7 +38,7 @@ async function test(name, fn) {
 
 const manifest = JSON.parse(await readFile(new URL('../assets/fonts/manifest.json', import.meta.url), 'utf8'));
 
-const FONT_ID = 'rs-block';
+const FONT_ID = 'rs-modern';
 const SUPPORTED_CHARACTERS = [
   ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
   ...'abcdefghijklmnopqrstuvwxyz',
@@ -49,9 +49,6 @@ const SUPPORTED_CHARACTERS = [
 function makeEngine() {
   const registry = createDefaultRhinestoneFontRegistry();
   const provider = new RhinestoneFontProvider({ registry });
-  // Mirrors the real FontProviderRegistry's two delegated methods (see FontProviderRegistry.js) --
-  // including getKerningAdjustmentMm is required for kerning to actually apply through this fake,
-  // exactly like the real registry delegates it to whichever provider is resolved.
   const engine = new GeometryEngine({
     fontProviderRegistry: {
       getTextPath: (o) => provider.getTextPath(o),
@@ -82,16 +79,20 @@ function createFakeCtx() {
 // 1. Registration
 // ---------------------------------------------------------------------------------------------
 
-await test('1. the default registry registers RS Block alongside the SS10 prototype and RS Modern (FONT-002)', () => {
+await test('1. the default registry registers RS Modern alongside RS Block and the SS10 prototype', () => {
   const registry = createDefaultRhinestoneFontRegistry();
-  assert.deepEqual(registry.list().map((f) => f.id).sort(), ['rs-block', 'rs-block-prototype-ss10', 'rs-modern'].sort());
+  assert.deepEqual(
+    registry.list().map((f) => f.id).sort(),
+    ['rs-block', 'rs-block-prototype-ss10', 'rs-modern'].sort()
+  );
 });
 
-await test('2. RS Block descriptor is a production (non-experimental) rhinestone-native category', () => {
+await test('2. RS Modern descriptor is a production rhinestone-native category, distinct id from RS Block', () => {
   const registry = createDefaultRhinestoneFontRegistry();
   const meta = registry.getMetadata(FONT_ID);
   assert.equal(meta.category, 'rhinestone-native');
   assert.equal(meta.fillModeIndependent, true);
+  assert.notEqual(meta.id, 'rs-block');
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -195,7 +196,7 @@ await test('10. every glyph reproduces exactly through the real GeometryEngine p
 await test('11. both fill-mode selections (outline and fill) produce the identical authored-stone result for a full word', async () => {
   const { engine } = makeEngine();
   const base = {
-    text: "Sparkle Boutique 2026!", fontId: FONT_ID, providerId: 'rhinestone', layerId: 'x',
+    text: "Bright Studio 2026!", fontId: FONT_ID, providerId: 'rhinestone', layerId: 'x',
     heightMm: 30, stoneSizeMm: descriptor.recommendedStoneSizeMm, gapMm: descriptor.recommendedGapMm, color: 'gold'
   };
   const outlineLayout = await engine.generateTextLayout({ ...base, mode: 'outline' });
@@ -204,7 +205,7 @@ await test('11. both fill-mode selections (outline and fill) produce the identic
   assert.deepEqual(outlineLayout.stones.map(asKey).sort(), fillLayout.stones.map(asKey).sort());
 });
 
-await test('12. curved text combined with RS Block fails explicitly rather than silently ignoring the curve settings', async () => {
+await test('12. curved text combined with RS Modern fails explicitly rather than silently ignoring the curve settings', async () => {
   const { engine } = makeEngine();
   await assert.rejects(
     () => engine.generateTextLayout({
@@ -216,7 +217,7 @@ await test('12. curved text combined with RS Block fails explicitly rather than 
   );
 });
 
-await test('13. resolveTextPolygons fails explicitly for RS Block -- it has no vector outline for a Boolean Operation to consume', async () => {
+await test('13. resolveTextPolygons fails explicitly for RS Modern -- it has no vector outline for a Boolean Operation to consume', async () => {
   const { engine } = makeEngine();
   await assert.rejects(
     () => engine.resolveTextPolygons({ text: 'A', fontId: FONT_ID, providerId: 'rhinestone', layerId: 'x', heightMm: 30 }),
@@ -229,11 +230,6 @@ await test('13. resolveTextPolygons fails explicitly for RS Block -- it has no v
 // ---------------------------------------------------------------------------------------------
 
 await test('14. reviewed kerning pairs tighten the real GeometryEngine-produced layout relative to the unkerned sum of the two glyphs\' widths', async () => {
-  // Kerning is applied by GeometryEngine._buildPositionedContours() between separate
-  // single-character getTextPath() calls (see FontProviderRegistry.getKerningAdjustmentMm()'s
-  // module doc) -- NOT inside a single multi-character provider.getTextPath() call, since the real
-  // pipeline never makes one of those. This test therefore goes through the engine, not the
-  // provider directly, so it actually exercises the mechanism the app uses.
   const { engine } = makeEngine();
   const reviewedPairs = ['AV', 'VA', 'WA', 'AW', 'To', 'Yo', 'LA', 'LT', 'TT', 'TA', 'FA', 'PA', 'LY', 'RY'];
   for (const pair of reviewedPairs) {
@@ -246,8 +242,6 @@ await test('14. reviewed kerning pairs tighten the real GeometryEngine-produced 
     });
     const first = getGlyphStoneMap(pair[0]);
     const second = getGlyphStoneMap(pair[1]);
-    // The second glyph's leftmost stone (x=0 in its own authored space) must land at exactly
-    // first.advanceWidthMm + adjustment, not at the unkerned first.advanceWidthMm.
     const kernedSecondGlyphMinX = first.advanceWidthMm + adjustment;
     assert.ok(
       layout.stones.some((s) => Math.abs(s.xMm - kernedSecondGlyphMinX) < 1e-6),
@@ -283,7 +277,7 @@ await test('16b. FontProviderRegistry.getKerningAdjustmentMm() delegates to the 
   );
   assert.ok(
     providerRegistry.getKerningAdjustmentMm({ providerId: 'rhinestone', fontId: FONT_ID, prevChar: 'A', nextChar: 'V' }) < 0,
-    'expected the rhinestone provider to delegate to RS Block\'s reviewed "AV" kerning adjustment'
+    'expected the rhinestone provider to delegate to RS Modern\'s reviewed "AV" kerning adjustment'
   );
 });
 
@@ -291,7 +285,7 @@ await test('16b. FontProviderRegistry.getKerningAdjustmentMm() delegates to the 
 // 7. SVG export / 2D-3D texture (single source of truth)
 // ---------------------------------------------------------------------------------------------
 
-await test('17. generateTextLayout returns an ordinary StoneLayout of ordinary Stone instances for RS Block', async () => {
+await test('17. generateTextLayout returns an ordinary StoneLayout of ordinary Stone instances for RS Modern', async () => {
   const { engine } = makeEngine();
   const layout = await engine.generateTextLayout({
     text: 'Rhinestone Studio', fontId: FONT_ID, providerId: 'rhinestone', layerId: 'x',
@@ -302,7 +296,7 @@ await test('17. generateTextLayout returns an ordinary StoneLayout of ordinary S
   for (const stone of layout.stones) assert.ok(stone instanceof Stone);
 });
 
-await test('18. stoneLayoutToSvg renders one <circle> per stone with no special-casing for RS Block', async () => {
+await test('18. stoneLayoutToSvg renders one <circle> per stone with no special-casing for RS Modern', async () => {
   const { engine } = makeEngine();
   const layout = await engine.generateTextLayout({
     text: 'ABC', fontId: FONT_ID, providerId: 'rhinestone', layerId: 'x',
@@ -313,7 +307,7 @@ await test('18. stoneLayoutToSvg renders one <circle> per stone with no special-
   assert.equal(circleCount, layout.stones.length);
 });
 
-await test('19. drawStoneLayoutTexture draws exactly one arc per stone for RS Block (2D/3D texture path, no special-casing)', async () => {
+await test('19. drawStoneLayoutTexture draws exactly one arc per stone for RS Modern (2D/3D texture path, no special-casing)', async () => {
   const { engine } = makeEngine();
   const layout = await engine.generateTextLayout({
     text: 'ABC', fontId: FONT_ID, providerId: 'rhinestone', layerId: 'x',
@@ -328,9 +322,9 @@ await test('19. drawStoneLayoutTexture draws exactly one arc per stone for RS Bl
 // 8. Serialization
 // ---------------------------------------------------------------------------------------------
 
-await test('20. a project containing RS Block\'s font id serializes and deserializes cleanly through JSON.stringify/parse', () => {
+await test('20. a project containing RS Modern\'s font id serializes and deserializes cleanly through JSON.stringify/parse', () => {
   const project = {
-    version: 2, units: 'mm', name: 'RS Block QA', product: 'mug', canvas: { width: 210, height: 90 },
+    version: 2, units: 'mm', name: 'RS Modern QA', product: 'mug', canvas: { width: 210, height: 90 },
     layers: [{ id: 'text1', type: 'text', visible: true, text: 'ALEX', font: FONT_ID, height: 30, textMode: 'stroke', stoneSize: 2.8, gap: 0.3, color: 'gold', autoFit: false, x: 0, y: 0 }]
   };
   const roundTripped = JSON.parse(JSON.stringify(project));
@@ -352,16 +346,14 @@ await test('21. a generated StoneLayout round-trips through StoneLayout.toJSON/f
 // 9. Backward compatibility
 // ---------------------------------------------------------------------------------------------
 
-await test('22. RS Block is manifest-registered as a production font (FONT-002 dropped the "(Experimental)" label), every pre-existing font untouched', () => {
+await test('22. RS Modern is manifest-registered as a production font alongside RS Block, every pre-existing font untouched', () => {
   const manager = new FontManager(manifest);
   assert.equal(manager.hasFont(FONT_ID), true);
-  assert.equal(manager.getFont(FONT_ID).family, 'RS Block');
+  assert.equal(manager.getFont(FONT_ID).family, 'RS Modern');
   assert.equal(manager.getFont(FONT_ID).providerId, 'rhinestone');
   assert.equal(manager.getFont(FONT_ID).enabled, true);
-  // FONT-002 added a second Production Font (rs-modern) alongside RS Block, so the manifest total
-  // grew by one (9 OpenType incl. the disabled RobotoMono placeholder, + rs-block, + rs-modern).
   assert.equal(manager.listFonts({ includeDisabled: true }).length, 12);
-  for (const id of ['courier-prime-regular', 'great-vibes-regular', 'anton-regular']) {
+  for (const id of ['courier-prime-regular', 'great-vibes-regular', 'anton-regular', 'rs-block']) {
     assert.ok(manager.hasFont(id), `expected pre-existing font id "${id}" to still resolve`);
   }
 });
@@ -378,14 +370,18 @@ await test('24. RhinestoneFontProvider is still registered in the FontProviderRe
   assert.equal(registry.has('rhinestone'), true);
 });
 
-await test('25. the SS10 prototype family is untouched -- still 12 diagnostic glyphs, still fillModeIndependent', () => {
+await test('25. RS Block is untouched by RS Modern\'s addition -- still 70 characters, still its own distinct glyph shapes', async () => {
   const registry = createDefaultRhinestoneFontRegistry();
-  const meta = registry.getMetadata('rs-block-prototype-ss10');
-  assert.equal(meta.supportedCharacters.length, 12);
-  assert.equal(meta.fillModeIndependent, true);
+  const rsBlockMeta = registry.getMetadata('rs-block');
+  assert.equal(rsBlockMeta.supportedCharacters.length, 70);
+  const rsBlock = registry.get('rs-block');
+  const rsModern = registry.get('rs-modern');
+  // "I" is RS Modern's clearest documented differentiator (no serif) -- confirms the two families
+  // are independently authored, not aliases of the same data.
+  assert.notDeepEqual(rsBlock.getGlyphStoneMap('I').stones, rsModern.getGlyphStoneMap('I').stones);
 });
 
-await test('26. RS Block resolves end-to-end through the real app.js wiring path (FontManager -> resolveFontProviderId-equivalent -> createDefaultFontProviderRegistry -> GeometryEngine), not just the standalone RhinestoneFontProvider used elsewhere in this suite', async () => {
+await test('26. RS Modern resolves end-to-end through the real app.js wiring path (FontManager -> resolveFontProviderId-equivalent -> createDefaultFontProviderRegistry -> GeometryEngine), not just the standalone RhinestoneFontProvider used elsewhere in this suite', async () => {
   const manager = new FontManager(manifest);
   const providerRegistry = createDefaultFontProviderRegistry(manager);
   const engine = new GeometryEngine({ fontProviderRegistry: providerRegistry });
@@ -402,13 +398,9 @@ await test('26. RS Block resolves end-to-end through the real app.js wiring path
 });
 
 // ---------------------------------------------------------------------------------------------
-// 10. Corpus-wide automated QA (TXT-101B pre-merge visual acceptance pass, section 4: "Automatic
-// QA"). Runs every string across all 12 QA sheets (tools/rsBlockQaCorpus.mjs -- the exact same
-// content the PNGs in tmp/qa/ are rendered from) through structural checks a human eye can't
-// exhaustively perform: collisions, exact reproduction (catches missing/cropped glyphs and broken
-// counters), unexpected unsupported-character markers, and kerning-gap outliers. This cannot
-// replace the visual review itself (uneven spacing/ambiguous shapes still need a human), but it
-// catches any regression across the ~200-string corpus that visual spot-checking could miss.
+// 10. Corpus-wide automated QA -- mirrors tools/test-rs-block.mjs's section 10 exactly, against
+// RS Modern's own corpus (tools/rsModernQaCorpus.mjs, the exact same content the PNGs in tmp/qa/
+// are rendered from).
 // ---------------------------------------------------------------------------------------------
 
 /** Independently re-derives expected stone positions for `text` by walking the same pen-advance
@@ -425,8 +417,6 @@ function expectedStonesForText(text) {
     }
     const glyph = getGlyphStoneMap(character);
     if (glyph) {
-      // TXT-102: RhinestoneFontProvider negates the family's authored (Y-up) yMm into the engine's
-      // Y-down space -- mirrored here so this independent re-derivation matches real output.
       for (const stone of glyph.stones) stones.push({ xMm: stone.xMm + penXMm, yMm: -stone.yMm });
       penXMm += glyph.advanceWidthMm;
     }
@@ -481,17 +471,12 @@ await test('29. no two stones collide anywhere in the QA corpus (every pairwise 
 });
 
 await test('30. no pathological (outlier) letter-spacing gap anywhere in the QA corpus -- every adjacent non-space character pair\'s pen-advance gap stays within a sane multiple of the pitch', () => {
-  // A generous outlier threshold (10x pitch) -- not a tight typographic tolerance, just a
-  // regression guard against a future glyph/kerning edit that blows a gap open far past every
-  // pair actually reviewed in this corpus (the widest legitimate advance width in the family is 8
-  // columns -- m/w's 7-column ink width + 1 gap column, i.e. 8x pitch -- 10x pitch comfortably
-  // above that with real margin).
   const OUTLIER_THRESHOLD_MM = 10 * PITCH_MM;
   for (const text of ALL_CONTENT_STRINGS) {
     const characters = Array.from(text);
     for (let i = 0; i + 1 < characters.length; i++) {
       const [prev, next] = [characters[i], characters[i + 1]];
-      if (prev === ' ' || next === ' ') continue; // word-to-word gaps are intentionally large
+      if (prev === ' ' || next === ' ') continue;
       const prevGlyph = getGlyphStoneMap(prev);
       const kerning = getKerningAdjustmentMm(prev, next);
       const gapMm = prevGlyph.advanceWidthMm + kerning;
@@ -503,4 +488,4 @@ await test('30. no pathological (outlier) letter-spacing gap anywhere in the QA 
   }
 });
 
-console.log('RS Block (TXT-101B) tests passed.');
+console.log('RS Modern (FONT-002) tests passed.');

@@ -484,7 +484,11 @@ await test('36. the Rim Band default only applies to text layers, and seeds curv
   const textBranchStart = fn.indexOf("if(l.type==='text'){");
   assert.ok(textBranchStart !== -1);
   const enteringRimBandBlockIndex = fn.indexOf('if(enteringRimBand){');
-  const curveEnabledReadIndex = fn.indexOf("l.curveEnabled=el('curveEnabled').value==='on';");
+  // FONT-002: l.curveEnabled's read now also forces false for a Production Font (a ternary wraps
+  // the original DOM read) -- matched independent of that wrapper, order/neighbor-independent like
+  // TXT-102A's own fix to this exact brittleness pattern (see that milestone's memory).
+  const curveEnabledReadMatch = fn.match(/l\.curveEnabled=[^;]*el\('curveEnabled'\)\.value==='on'/);
+  const curveEnabledReadIndex = curveEnabledReadMatch ? curveEnabledReadMatch.index : -1;
   assert.ok(enteringRimBandBlockIndex !== -1 && curveEnabledReadIndex !== -1);
   assert.ok(textBranchStart < enteringRimBandBlockIndex, 'the Rim Band seeding must live inside the text-layer branch');
   assert.ok(enteringRimBandBlockIndex < curveEnabledReadIndex, 'the UI fields must be seeded before writeSelectedControlsToLayer() reads them back into the layer');
