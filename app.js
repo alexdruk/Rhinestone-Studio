@@ -97,7 +97,7 @@ import { stoneLayoutToSvg } from './src/export/SvgExporter.js';
 import { computeProductionSheetLayout, productionSheetToSvg, productionSheetToPdf } from './src/export/ProductionSheetExporter.js';
 import { parseSvgDocument } from './src/svg/index.js';
 import { HistoryManager } from './src/history/index.js';
-import { getObjectTemplate, getSafeAreaRectMm, getPlateDefaults, getPlateColorOptions, getPlateColor, normalizePlateParams, computeRimWidthMm, getPlateDesignTargetGuide, getPlateDesignTargetMeta, PLATE_ROUND_DINNER_DEFINITION } from './src/products/index.js';
+import { getObjectTemplate, getSafeAreaRectMm, getPlateDefaults, getPlateColorOptions, getPlateColor, normalizePlateParams, computeRimWidthMm, getPlateDesignTargetGuide, getPlateDesignTargetMeta, PLATE_ROUND_DINNER_DEFINITION, VESSEL_PRODUCT_IDS, getVesselDefaults, getVesselDimensionRange, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel } from './src/products/index.js';
 import { prepareImageField, maskFieldToRgba, decodeImageFileToBuffer, decodeDataUrlToBuffer, readFileAsDataUrl, isSupportedImageFile } from './src/image/index.js';
 // RS-1009 (Alignment & Snapping): src/editing/** is a new, pure, DOM-free module -- multi-select,
 // align/distribute, and drag/keyboard snapping math over layer bounding boxes in mm. It has no
@@ -567,10 +567,14 @@ const DEFAULT_PROJECT_NAME='Untitled Project';
 // avoids a null-check at every call site that reads it (drawCup(), Production Sheet options, the
 // plate guide overlay), exactly like project.wrap already exists (and is read) even while a
 // cylindrical template that barely uses it is selected.
+// RS-2010: project.vessel is the same always-present-but-only-meaningful-for-mug/tumbler/bottle
+// params bag, mirroring project.plate above. A fresh project's canvas is now *derived* from the
+// vessel defaults (circumference = pi*bodyDiameterMm, height = printableHeightMm) instead of a
+// fixed per-template preset -- see docs/specifications/RS-2010-PhysicalProductDimensions.md.
 // FONT-002: stoneSize/gap default to RS Block's own recommendedStoneSizeMm/recommendedGapMm (2.8/0.3)
 // now that it's the default font, matching the family's own authored pitch (PITCH_MM=3.1 in
 // families/rsBlock.js) instead of the generic pre-FONT-002 2/0.3.
-function defaultProject(){return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,product:'mug',canvas:{width:210,height:90},cupColor:'#1f3556',wrap:'front',plate:getPlateDefaults(),layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:true,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0}]}}
+function defaultProject(){const vessel=getVesselDefaults('mug');return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,product:'mug',canvas:computeCanvasFromVessel(vessel),cupColor:'#1f3556',wrap:'front',plate:getPlateDefaults(),vessel,layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:true,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0}]}}
 // RS-0003.5D1: validates an imported Project JSON file against the exact ad hoc project/layer
 // shape #exportProject already produces (JSON.stringify(project)). Throws a specific Error
 // describing the first problem found instead of silently accepting a malformed project; the
@@ -641,7 +645,22 @@ function validateProject(obj){
   // normalizePlateParams(undefined) returns the JSON's own defaults, so this never throws and never
   // needs obj.plate to exist. Backward compatible by construction — see
   // docs/specifications/S-112-RoundDinnerPlate.md, "Project Schema Impact".
-  return{version:Number(obj.version)||2,units:'mm',name:typeof obj.name==='string'&&obj.name.length>0?obj.name:DEFAULT_PROJECT_NAME,product:getObjectTemplate(obj.product).id,canvas:{width:canvas.width,height:canvas.height},cupColor:typeof obj.cupColor==='string'?obj.cupColor:'#1f3556',wrap:typeof obj.wrap==='string'?obj.wrap:'front',plate:normalizePlateParams(obj.plate),layers:obj.layers.map(l=>({...l,visible:l.visible!==false}))}
+  // RS-2010: project.vessel is the mug/tumbler/bottle counterpart of project.plate above, but with
+  // one extra wrinkle -- a *legacy* project (no obj.vessel at all) must never have its canvas
+  // recomputed from vessel defaults (that would silently change project.canvas.width/height, and so
+  // GeometryEngine's output, for every old save). Instead deriveLegacyVesselParams() reverses
+  // today's existing ratio/circumference formulas from the project's own (untouched) canvas.width/
+  // height, so project.vessel is populated with values that describe that exact canvas, not a
+  // fresh product default. project.canvas itself is never touched here — only the two live-editing
+  // call sites (object-type switch, vessel-field edit in writeSelectedControlsToLayer()) ever derive
+  // canvas *from* vessel. See docs/specifications/RS-2010-PhysicalProductDimensions.md, "Migration &
+  // compatibility strategy".
+  const productId=getObjectTemplate(obj.product).id;
+  const hasExplicitVessel=obj.vessel&&typeof obj.vessel==='object';
+  const vessel=VESSEL_PRODUCT_IDS.includes(productId)
+    ?(hasExplicitVessel?normalizeVesselParams(productId,obj.vessel):deriveLegacyVesselParams(productId,getObjectTemplate(productId),canvas.width,canvas.height))
+    :(hasExplicitVessel?normalizeVesselParams('mug',obj.vessel):getVesselDefaults('mug'));
+  return{version:Number(obj.version)||2,units:'mm',name:typeof obj.name==='string'&&obj.name.length>0?obj.name:DEFAULT_PROJECT_NAME,product:productId,canvas:{width:canvas.width,height:canvas.height},cupColor:typeof obj.cupColor==='string'?obj.cupColor:'#1f3556',wrap:typeof obj.wrap==='string'?obj.wrap:'front',plate:normalizePlateParams(obj.plate),vessel,layers:obj.layers.map(l=>({...l,visible:l.visible!==false}))}
 }
 // TXT-101A: pure construction data (no fetch), so it's always available even if the desktop-font
 // manifest fetch below fails -- the Browse Fonts panel's category/metadata lookups for RS Block/RS
@@ -832,6 +851,9 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
   // (undo/redo restore, Project JSON import, or a template switch away-and-back must never leave
   // these inputs showing a stale value that a later edit would silently write back).
   el('plateOuterDiameter').value=project.plate.outerDiameterMm;el('plateInnerWellDiameter').value=project.plate.innerWellDiameterMm;el('plateOverallHeight').value=project.plate.overallHeightMm;el('plateCenterDepth').value=project.plate.centerDepthMm;el('plateColor').value=project.plate.colorId;el('plateDesignTarget').value=project.plate.designTarget;
+  // RS-2010: project.vessel is likewise project-level -- resync for the same reason as project.plate
+  // just above.
+  el('vesselBodyDiameter').value=project.vessel.bodyDiameterMm;el('vesselBodyHeight').value=project.vessel.bodyHeightMm;el('vesselTopDiameter').value=project.vessel.topDiameterMm;
   // RS-1005: project.name is likewise project-level -- resync for the same reason.
   el('projectName').value=project.name;
   // S-105 follow-up: a type-specific Lightbox (Text/Import/Image Trace) that stays open (non-modal
@@ -910,6 +932,17 @@ function writeSelectedControlsToLayer(){const l=selectedLayer();
     project.plate=normalizePlateParams({outerDiameterMm:parseFloat(el('plateOuterDiameter').value),innerWellDiameterMm:parseFloat(el('plateInnerWellDiameter').value),overallHeightMm:parseFloat(el('plateOverallHeight').value),centerDepthMm:parseFloat(el('plateCenterDepth').value),footRingOuterDiameterMm:project.plate.footRingOuterDiameterMm,footRingHeightMm:project.plate.footRingHeightMm,colorId:el('plateColor').value,designTarget:el('plateDesignTarget').value});
     project.canvas={width:project.plate.outerDiameterMm,height:project.plate.outerDiameterMm};
     project.cupColor=getPlateColor(project.plate.colorId).hex;
+  }
+  // RS-2010: vessel fields only read/written while a Mug/Tumbler/Bottle template is active,
+  // mirroring the plate block just above. normalizeVesselParams() clamps every typed value into
+  // that product's approved commercial range and forces topDiameterMm===bodyDiameterMm for the
+  // straight-wall products (tumbler, bottle), so a malformed value can never desync project.vessel.
+  // project.canvas is re-derived from the live vessel params every edit (circumference/printable
+  // height), the vessel counterpart of the plate's own canvas-follows-outer-diameter line above.
+  if(VESSEL_PRODUCT_IDS.includes(currentObjectTemplate().id)){
+    const vesselProductId=currentObjectTemplate().id;
+    project.vessel=normalizeVesselParams(vesselProductId,{bodyDiameterMm:parseFloat(el('vesselBodyDiameter').value),topDiameterMm:parseFloat(el('vesselTopDiameter').value),bodyHeightMm:parseFloat(el('vesselBodyHeight').value)});
+    project.canvas=computeCanvasFromVessel(project.vessel);
   }
   project.name=el('projectName').value||DEFAULT_PROJECT_NAME;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
 async function updateAll(skipWrite=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated;try{generated=await engine.generate(project)}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Text generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;renderLayerUI();drawLayout();drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}// S-003: a project must always keep at least one layer (deleteLayer()'s guard below), so once
@@ -1414,7 +1447,7 @@ function handlesFor(b){return[{name:'nw',x:b.x,y:b.y},{name:'ne',x:b.x2,y:b.y},{
 // position/scale/orientation/proportions, subject only to normal cylindrical perspective. Wrap mode
 // still controls the Front View Frame overlay (drawFrontViewFrame(), frontViewFrameGeometry()) on
 // the 2D canvas, unchanged.
-function drawCup(){preview3D.update(layout,{cupColor:project.cupColor,objectTemplate:currentObjectTemplate(),canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height,plateParams:project.plate});preview3D.syncView(rotation,zoom)}
+function drawCup(){preview3D.update(layout,{cupColor:project.cupColor,objectTemplate:currentObjectTemplate(),canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height,plateParams:project.plate,vesselParams:project.vessel});preview3D.syncView(rotation,zoom)}
 // S-001: keeps the Front/Left/Right/Back buttons' highlighted state synchronized with `rotation`
 // regardless of how it changed (view-button click, reset, slider, or manual cup-drag), since this
 // is called from updateAll() rather than duplicated at each rotation-changing call site.
@@ -1638,7 +1671,7 @@ window.addEventListener('keydown',e=>{
 // (opened on the first 'input' event, closed on 'change'). `rotation`/`zoom` are view-only (not
 // part of `project`) and keep their original plain 'input' listener, untouched.
 // UI-001: 'textX'/'textY' are the new manual Text Lightbox position fields (see writeSelectedControlsToLayer()).
-const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','textAlign','lineSpacing','rotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget'];
+const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','textAlign','lineSpacing','rotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
 // RS-2002: Browse Fonts panel wiring. Toggling/closing never touches history (it only decides
@@ -1657,7 +1690,12 @@ el('selectedLayer').addEventListener('change',()=>{selectedLayerId=el('selectedL
 // addRect/deleteLayer's commitHistory()-then-mutate pattern below), not a continuous-session field
 // -- it also resets project.canvas/project.wrap to the new template's own defaults, so those two
 // resets are always committed together with the switch, never independently.
-el('objectType').addEventListener('change',()=>{commitHistory();const template=getObjectTemplate(el('objectType').value);project.product=template.id;project.canvas={width:template.productionWidthMm,height:template.productionHeightMm};project.wrap=template.wrap.default;
+el('objectType').addEventListener('change',()=>{commitHistory();const template=getObjectTemplate(el('objectType').value);project.product=template.id;project.wrap=template.wrap.default;
+  // RS-2010: switching to a Mug/Tumbler/Bottle resets project.vessel to that product's own
+  // defaults and derives project.canvas from them (circumference/printable height) -- the vessel
+  // counterpart of the plate reset just below. Falls back to the plain template preset for 'plate'
+  // (project.canvas is set again, differently, by the plate branch immediately below).
+  if(VESSEL_PRODUCT_IDS.includes(template.id)){project.vessel=getVesselDefaults(template.id);project.canvas=computeCanvasFromVessel(project.vessel)}else{project.canvas={width:template.productionWidthMm,height:template.productionHeightMm}}
   // S-112: switching to the Round Dinner Plate also resets project.plate to the JSON's own
   // defaults (mirroring how project.canvas/project.wrap already reset above) and seeds
   // project.cupColor from the plate's default color id so the Object Preview immediately shows
@@ -2195,6 +2233,7 @@ el('shapesTabTemplates').onclick=()=>setShapesTab('templates');
 function updateObjectTemplateDetail(){
   const t=currentObjectTemplate(),s=t.safeAreaInsetMm;
   const isPlate=t.preview.kind==='plate';
+  const isVessel=VESSEL_PRODUCT_IDS.includes(t.id);
   const detailEl=el('objectTemplateDetail');
   if(detailEl)detailEl.textContent=`Production ${t.productionWidthMm}×${t.productionHeightMm}mm · Safe area inset ${s.top}/${s.right}/${s.bottom}/${s.left}mm · Default wrap: ${t.wrap.default}`;
   const summaryEl=el('projectTemplateSummary');
@@ -2214,6 +2253,23 @@ function updateObjectTemplateDetail(){
     const targetName=getPlateDesignTargetMeta(project.plate.designTarget).name;
     const plateDetailEl=el('plateDetail');
     if(plateDetailEl)plateDetailEl.textContent=`Rim width ${rimWidthMm.toFixed(1)}mm (derived) · Design target: ${targetName} · Approx. weight ${PLATE_ROUND_DINNER_DEFINITION.weightGrams.average} g (product information, read-only)`;
+  }
+  // RS-2010: the vessel-only Body Diameter/Body Height/Top Diameter field group, shown only while
+  // a Mug/Tumbler/Bottle template is active. Top Diameter is hidden for the straight-wall tumbler
+  // (topDiameterMm is forced equal to bodyDiameterMm -- not an independently adjustable field, see
+  // VesselProductDefinition.js's normalizeVesselParams()). min/max/step are re-applied on every
+  // switch since the three vessel products share this one field group but have different
+  // commercial ranges (unlike the plate's single fixed range).
+  el('vesselFields').style.display=isVessel?'block':'none';
+  if(isVessel){
+    const straightWall=t.id==='tumbler';
+    el('vesselTopDiameterField').style.display=straightWall?'none':'block';
+    for(const[fieldId,field]of[['vesselBodyDiameter','bodyDiameterMm'],['vesselBodyHeight','bodyHeightMm'],['vesselTopDiameter','topDiameterMm']]){
+      const range=getVesselDimensionRange(t.id,field),input=el(fieldId);
+      input.min=range.min;input.max=range.max;
+    }
+    const vesselDetailEl=el('vesselDetail');
+    if(vesselDetailEl)vesselDetailEl.textContent=`Printable height ${project.vessel.printableHeightMm.toFixed(1)}mm (derived) · Circumference ${project.canvas.width.toFixed(1)}mm (product information, read-only)`;
   }
 }
 
