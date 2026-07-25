@@ -465,6 +465,22 @@ const TEXT_MODE_TO_ENGINE_MODE={stroke:'outline',fill:'fill',staggered:'staggere
 // rather than surfacing as a thrown error during ordinary live editing/rendering of a possibly
 // hand-edited or corrupted project file.
 function resolveAuthoredScale(layer){return typeof layer.authoredScale==='number'&&Number.isFinite(layer.authoredScale)&&layer.authoredScale>0?layer.authoredScale:1}
+// MONO-006A: layer.authoredScale (MONO-005A) is a persisted positional-fitting transform computed
+// by MonogramGenerator for one specific text+font+stoneSize+gap combination. Editing any of those
+// four fields means the stored scale describes geometry that no longer exists -- reapplying it to
+// the edited combination is what produced the below-minimum-scale regression this milestone fixes
+// (a stale fitted scale from a small production stone size rejected as illegal once stoneSize was
+// edited up to a larger one). Removing it here makes writeSelectedControlsToLayer() fall back to
+// resolveAuthoredScale()'s own absent-field default (1, the natural-layout path), so the text
+// regenerates normally instead of throwing. Color and position edits don't change what was fitted,
+// so they are deliberately not in this set. One centralized call site, not scattered
+// `delete layer.authoredScale` statements across every field's write-back, per this milestone's own
+// design requirement.
+const AUTHORED_SCALE_INVALIDATING_FIELDS=new Set(['text','font','stoneSize','gap']);
+function invalidateAuthoredScaleForGeometryChange(layer,changedField){
+  if(layer.authoredScale===undefined||!AUTHORED_SCALE_INVALIDATING_FIELDS.has(changedField))return;
+  delete layer.authoredScale;
+}
 function resolveTextFillMode(textMode){return TEXT_MODE_TO_ENGINE_MODE[textMode]||'outline'}
 function resolveVectorFillMode(value){return VECTOR_FILL_MODES.has(value)?value:'outline'}
 function resolveImageFillMode(value){return IMAGE_FILL_MODES.has(value)?value:'fill'}
@@ -991,7 +1007,9 @@ function writeSelectedControlsToLayer(){const l=selectedLayer();
     // numeric field in this function (shapeW/shapeH/shapeSides/lineSpacing/etc. all clamp to their own
     // declared HTML bounds) -- previously the only unclamped one, so a manually-typed value below the
     // legibility floor silently produced sparse/empty glyphs instead of the field's advertised range.
-    l.text=el('text').value;l.font=el('font').value||l.font;l.height=Math.max(4,Math.min(80,parseFloat(el('height').value)||25));l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;
+    const nextText=el('text').value;if(nextText!==l.text)invalidateAuthoredScaleForGeometryChange(l,'text');l.text=nextText;
+    const nextFont=el('font').value||l.font;if(nextFont!==l.font)invalidateAuthoredScaleForGeometryChange(l,'font');l.font=nextFont;
+    l.height=Math.max(4,Math.min(80,parseFloat(el('height').value)||25));l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;
     // FONT-002: a Production Font has no curve support (GeometryEngine.generateTextLayout() throws
     // for authored-stone-center fonts with curveEnabled) -- force it off in the stored layer data too
     // (not just the disabled control) so switching *to* an authored font from a curved legacy layer
@@ -1010,7 +1028,10 @@ function writeSelectedControlsToLayer(){const l=selectedLayer();
   if(l.type==='polygon')l.sides=Math.max(3,Math.min(12,parseIntOr(el('shapeSides').value,6)));
   if(l.type==='star'){l.points=Math.max(3,Math.min(12,parseIntOr(el('shapePoints').value,5)));l.innerRadiusRatio=Math.max(0.1,Math.min(0.9,parseFloat(el('shapeInnerRadius').value)||0.5))}
   if(l.type==='ring')l.innerRatio=Math.max(0.1,Math.min(0.9,parseFloat(el('shapeRingInner').value)||0.5));
-}else if(l.type==='svg'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.mode=resolveVectorFillMode(el('svgMode').value)}else if(l.type==='image'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.fillMode=resolveImageFillMode(el('imageFillMode').value)}else if(l.type==='path'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(2,parseFloat(el('shapeW').value)||10);l.h=Math.max(2,parseFloat(el('shapeH').value)||10);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}l.stoneSize=parseFloat(el('stoneSize').value)||2;l.gap=parseFloat(el('gap').value)||.3;l.color=el('stoneColor').value;
+}else if(l.type==='svg'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.mode=resolveVectorFillMode(el('svgMode').value)}else if(l.type==='image'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.fillMode=resolveImageFillMode(el('imageFillMode').value)}else if(l.type==='path'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(2,parseFloat(el('shapeW').value)||10);l.h=Math.max(2,parseFloat(el('shapeH').value)||10);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}
+  const nextStoneSize=parseFloat(el('stoneSize').value)||2;if(nextStoneSize!==l.stoneSize)invalidateAuthoredScaleForGeometryChange(l,'stoneSize');l.stoneSize=nextStoneSize;
+  const nextGap=parseFloat(el('gap').value)||.3;if(nextGap!==l.gap)invalidateAuthoredScaleForGeometryChange(l,'gap');l.gap=nextGap;
+  l.color=el('stoneColor').value;
   // S-200: Mixed Stone Size -- read back exactly like stoneSize/gap/color just above, applying to
   // every layer type uniformly. allowedSizesMm is rebuilt from the checkbox states on every write
   // (not merged with any prior stored value), matching this app's general "the UI is authoritative
@@ -1050,7 +1071,12 @@ function writeSelectedControlsToLayer(){const l=selectedLayer();
     project.canvas=computeCanvasFromVessel(project.vessel);
   }
   project.name=el('projectName').value||DEFAULT_PROJECT_NAME;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
-async function updateAll(skipWrite=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated;try{generated=await engine.generate(project)}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Text generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;renderLayerUI();drawLayout();drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}// S-003: a project must always keep at least one layer (deleteLayer()'s guard below), so once
+async function updateAll(skipWrite=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated;try{generated=await engine.generate(project)}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Text generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;
+  // MONO-006A: a prior failed generation (e.g. a stale authoredScale rejected by GeometryEngine)
+  // leaves this exact status message behind -- once generation succeeds again, it must not keep
+  // reading as broken even though the canvas has already recovered.
+  if(el('status').textContent.startsWith('Text generation failed'))el('status').textContent='Ready';
+  renderLayerUI();drawLayout();drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}// S-003: a project must always keep at least one layer (deleteLayer()'s guard below), so once
 // only one layer remains, every delete affordance -- the per-row trash icon and the sidebar
 // "Delete selected layer" button -- is disabled here (not just left clickable-but-a-no-op) and
 // #layerRuleHint (sitting directly under the button, always in view) explains why. This runs on

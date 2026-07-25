@@ -167,7 +167,10 @@ await test('A12b. the warning uses a partial-overlap-area ratio against the prin
 
 await test('A13. the warning is recomputed on every updateAll() call — live during drag (pointermove already calls updateAll() every move), after Undo/Redo, and on every keystroke in #textX/#textY, exactly like every other post-mutation UI refresh (renderLayerUI/drawLayout/updateStats)', () => {
   const updateAllFn = appJs.match(/async function updateAll\([\s\S]*?\n\}/)[0];
-  assert.match(updateAllFn, /layout=generated;renderLayerUI\(\);drawLayout\(\);drawCup\(\);updateStats\(\);updateHistoryUI\(\);updateEditingUI\(\);updateViewButtons\(\);updateTextOutsidePrintableWarning\(\);/);
+  // MONO-006A inserted a stale-generation-error status clear between `layout=generated;` and
+  // `renderLayerUI();` -- the sequence itself (still unconditional, still every updateAll() call)
+  // is what this test cares about, not byte-adjacency.
+  assert.match(updateAllFn, /layout=generated;[\s\S]*?renderLayerUI\(\);drawLayout\(\);drawCup\(\);updateStats\(\);updateHistoryUI\(\);updateEditingUI\(\);updateViewButtons\(\);updateTextOutsidePrintableWarning\(\);/);
 });
 
 await test('A15. the persistent right Inspector panel (never covered by a modal, always visible while dragging on the canvas) has its own "outside the printable area" warning with a "Center Text" action — not inside the Text Lightbox', () => {
