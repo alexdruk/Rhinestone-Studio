@@ -70,7 +70,9 @@ await test('6. the height clamp falls back to 25 (the pre-existing default) for 
 });
 
 await test('7. the same clamp pattern is NOT applied to #gap or #stoneSize by this milestone (both remain unclamped, a pre-existing and separately scoped gap noted for a future milestone, not silently widened here)', () => {
-  assert.match(appJs, /l\.gap=parseFloat\(el\('gap'\)\.value\)\|\|\.3;/, 'gap should remain unchanged by TXT-103 — a shared field across all layer types, out of this text-only milestone\'s scope');
+  // MONO-006A wrapped this read in a nextGap local (to detect changes for authoredScale
+  // invalidation, see invalidateAuthoredScaleForGeometryChange()) -- still no Math.max/min clamp.
+  assert.match(appJs, /const nextGap=parseFloat\(el\('gap'\)\.value\)\|\|\.3;/, 'gap should remain unclamped — a shared field across all layer types, out of this text-only milestone\'s scope');
 });
 
 console.log('TXT-103 Text Sizing Consistency tests complete.');
