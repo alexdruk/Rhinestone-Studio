@@ -193,6 +193,195 @@ export class GeometryEngine {
   }
 
   /**
+   * MONO-002: scale an already-generated authored-font StoneLayout's stone *positions* by
+   * `requestedScale`, around the layout's own bounding-box center -- the same pivot convention
+   * rotateTextPoints() already established for text rotation (see above). This is foundational
+   * engine work for a future Monogram Generator: it never manufactures a non-catalog stone
+   * diameter, never generates text, and adds no UI/monogram concepts of its own.
+   *
+   * Every stone's sizeMm, color, layerId, and metadata are carried through unchanged; only xMm/yMm
+   * move. Requires a StoneLayout with sourceMode === 'authored' -- the exact, reliable marker
+   * generateTextLayout() stamps only on its authored-stone-center branch (see above; every other
+   * producer sets sourceMode to a rendering-mode string such as 'outline'/'fill'/'staggered'/
+   * 'radial'/'contour', never 'authored'). A layout with any other sourceMode is rejected with a
+   * structured NOT_AUTHORED_SOURCE failure rather than silently scaled -- this transform's legality
+   * math (AUTHORED_FONT_FITTING_GAP_MM, minimumLegalScale) is specifically calibrated to authored
+   * fonts' fixed PITCH_MM pitch and is not meant as a generic position-scaling utility for sampled
+   * layouts.
+   *
+   * @param {StoneLayout} layout
+   * @param {number} requestedScale Must be finite and positive. 1 reproduces the input unchanged.
+   *   Values above 1 enlarge; values below 1 shrink and are rejected once they would bring stone
+   *   centers closer together than production allows (see minimumLegalScale below).
+   * @returns {{
+   *   ok: boolean,
+   *   reason?: string,
+   *   message?: string,
+   *   layout?: StoneLayout,
+   *   requestedScale: number|null,
+   *   minimumLegalScale: number|null,
+   *   naturalMinimumSpacingMm: number|null,
+   *   requiredSpacingMm: number|null,
+   *   originalBoundingBox: object|null,
+   *   scaledBoundingBox: object|null
+   * }}
+   */
+  scaleAuthoredTextLayout(layout, requestedScale) {
+    const requestedScaleForResult = typeof requestedScale === 'number' ? requestedScale : null;
+
+    if (!(layout instanceof StoneLayout) || layout.stones.length === 0) {
+      return {
+        ok: false,
+        reason: TEXT_SCALE_FAILURE_REASONS.INVALID_LAYOUT,
+        message: 'scaleAuthoredTextLayout requires a non-empty StoneLayout.',
+        requestedScale: requestedScaleForResult,
+        minimumLegalScale: null,
+        naturalMinimumSpacingMm: null,
+        requiredSpacingMm: null,
+        originalBoundingBox: null,
+        scaledBoundingBox: null
+      };
+    }
+
+    const originalBoundingBox = layout.getBoundingBox();
+
+    // generateTextLayout() stamps sourceMode 'authored' only on its authored-stone-center branch
+    // (see above) -- every other producer uses a rendering-mode string ('outline'/'fill'/'staggered'/
+    // 'radial'/'contour'), never 'authored'. That makes sourceMode a reliable, existing provenance
+    // marker: no need to guess from font id, spacing, or stone count.
+    if (layout.sourceMode !== 'authored') {
+      return {
+        ok: false,
+        reason: TEXT_SCALE_FAILURE_REASONS.NOT_AUTHORED_SOURCE,
+        message: `scaleAuthoredTextLayout requires a StoneLayout with sourceMode 'authored' (got ${JSON.stringify(layout.sourceMode)}).`,
+        requestedScale: requestedScaleForResult,
+        minimumLegalScale: null,
+        naturalMinimumSpacingMm: null,
+        requiredSpacingMm: null,
+        originalBoundingBox: originalBoundingBox?.toJSON() ?? null,
+        scaledBoundingBox: null
+      };
+    }
+
+    if (typeof requestedScale !== 'number' || !Number.isFinite(requestedScale) || requestedScale <= 0) {
+      return {
+        ok: false,
+        reason: TEXT_SCALE_FAILURE_REASONS.INVALID_SCALE,
+        message: 'requestedScale must be a finite, positive number.',
+        requestedScale: requestedScaleForResult,
+        minimumLegalScale: null,
+        naturalMinimumSpacingMm: null,
+        requiredSpacingMm: null,
+        originalBoundingBox: originalBoundingBox?.toJSON() ?? null,
+        scaledBoundingBox: null
+      };
+    }
+
+    // Every authored-font Stone is stamped with the layer's one stoneSizeMm (see the authored
+    // branch of generateTextLayout() above) -- this transform never resizes stones, so that one
+    // shared value is both "current stone size" and the basis for requiredSpacingMm below.
+    const stoneSizeMm = layout.stones[0].sizeMm;
+    const requiredSpacingMm = stoneSizeMm + AUTHORED_FONT_FITTING_GAP_MM;
+    const naturalMinimumSpacingMm = measureNaturalMinimumCenterDistanceMm(layout.stones);
+
+    // Fewer than two stones (or, degenerately, every stone at one position) means there is no
+    // pairwise spacing constraint to violate -- any positive finite scale is legal.
+    if (naturalMinimumSpacingMm === null) {
+      return this._buildScaledTextLayoutResult(layout, requestedScale, {
+        minimumLegalScale: 0,
+        naturalMinimumSpacingMm: null,
+        requiredSpacingMm,
+        originalBoundingBox
+      });
+    }
+
+    if (naturalMinimumSpacingMm <= 0) {
+      // Two or more stones sit at the exact same position already -- scaling positions around a
+      // pivot can never separate two coincident points (their distance stays 0 at every scale), so
+      // no requested scale can ever legalize this layout. Distinct from BELOW_MINIMUM_SCALE below,
+      // which always has a finite legal answer; this one does not.
+      return {
+        ok: false,
+        reason: TEXT_SCALE_FAILURE_REASONS.NATURAL_SPACING_VIOLATED,
+        message: 'The source layout has coincident stone centers; no scale can produce legal spacing.',
+        requestedScale: requestedScaleForResult,
+        minimumLegalScale: null,
+        naturalMinimumSpacingMm,
+        requiredSpacingMm,
+        originalBoundingBox: originalBoundingBox?.toJSON() ?? null,
+        scaledBoundingBox: null
+      };
+    }
+
+    // The natural (unscaled) layout's tightest center-to-center spacing scales linearly with
+    // requestedScale, so the scale at which it exactly equals requiredSpacingMm is this ratio --
+    // requesting less than it is guaranteed to bring some pair of stone centers closer together
+    // than requiredSpacingMm allows.
+    const minimumLegalScale = requiredSpacingMm / naturalMinimumSpacingMm;
+
+    // requiredSpacingMm and naturalMinimumSpacingMm are independently accumulated floating-point
+    // sums/sqrt results (see measureNaturalMinimumCenterDistanceMm above), so a layout that is
+    // mathematically exactly at its floor -- e.g. an authored font at its native catalog stone size,
+    // where requiredSpacingMm and the authored PITCH_MM coincide by construction (MONO-001A) -- can
+    // land a hair on either side of 1.0 (observed: 1.0000000000000018). Without tolerance, that noise
+    // would spuriously reject the identity scale on exactly the fonts/sizes this milestone must keep
+    // working. RELATIVE_SCALE_EPSILON is many orders of magnitude tighter than any real fitting
+    // decision (0.1 scale steps at minimum), so it only absorbs float noise, never a genuine shortfall.
+    if (requestedScale < minimumLegalScale - RELATIVE_SCALE_EPSILON) {
+      // Reject outright rather than silently clamping up to minimumLegalScale -- a caller that asked
+      // for a specific fit must be told it does not fit, not be handed a different, larger result
+      // that quietly ignores what was requested.
+      return {
+        ok: false,
+        reason: TEXT_SCALE_FAILURE_REASONS.BELOW_MINIMUM_SCALE,
+        message: `Requested scale ${requestedScale} is below the minimum legal scale ${minimumLegalScale} required to keep ${requiredSpacingMm}mm of center-to-center clearance.`,
+        requestedScale: requestedScaleForResult,
+        minimumLegalScale,
+        naturalMinimumSpacingMm,
+        requiredSpacingMm,
+        originalBoundingBox: originalBoundingBox?.toJSON() ?? null,
+        scaledBoundingBox: null
+      };
+    }
+
+    return this._buildScaledTextLayoutResult(layout, requestedScale, {
+      minimumLegalScale,
+      naturalMinimumSpacingMm,
+      requiredSpacingMm,
+      originalBoundingBox
+    });
+  }
+
+  // Applies requestedScale to every stone center around the layout's own bounding-box center (via
+  // the exact same boundingBoxCenterOfPoints()/pivot math rotateTextPoints() uses for rotation), and
+  // packages the successful, structured scaleAuthoredTextLayout() result. sizeMm/color/layerId/
+  // metadata are copied through unchanged on every Stone; only xMm/yMm are recomputed.
+  _buildScaledTextLayoutResult(layout, requestedScale, measurements) {
+    const pivot = boundingBoxCenterOfPoints(layout.stones);
+    const scaledStones = layout.stones.map((stone) => new Stone({
+      xMm: pivot.cxMm + (stone.xMm - pivot.cxMm) * requestedScale,
+      yMm: pivot.cyMm + (stone.yMm - pivot.cyMm) * requestedScale,
+      sizeMm: stone.sizeMm,
+      color: stone.color,
+      layerId: stone.layerId,
+      index: stone.index,
+      metadata: stone.metadata
+    }));
+    const scaledLayout = new StoneLayout({ layerId: layout.layerId, sourceMode: layout.sourceMode, stones: scaledStones });
+
+    return {
+      ok: true,
+      layout: scaledLayout,
+      requestedScale,
+      minimumLegalScale: measurements.minimumLegalScale,
+      naturalMinimumSpacingMm: measurements.naturalMinimumSpacingMm,
+      requiredSpacingMm: measurements.requiredSpacingMm,
+      originalBoundingBox: measurements.originalBoundingBox?.toJSON() ?? null,
+      scaledBoundingBox: scaledLayout.getBoundingBox()?.toJSON() ?? null
+    };
+  }
+
+  /**
    * Resolve a text run's flattened (and, if curved, arc-projected) polygon contours in absolute
    * millimeters, without sampling stones. RS-1012: the shared "get this text's vector outline"
    * entry point Vector Boolean Operations use to build a boolean input source (see
@@ -930,6 +1119,118 @@ function rotatePointsAroundCenter(points, rotationDeg, center) {
 // pivot via boundingBoxCenterOfPoints() + rotatePointsAroundCenter() instead.
 function rotateTextPoints(points, rotationDeg) {
   return rotatePointsAroundCenter(points, rotationDeg, boundingBoxCenterOfPoints(points));
+}
+
+// MONO-002 (Authored Font Positional Scaling): reason codes scaleAuthoredTextLayout() returns on
+// failure -- a future monogram-fitting caller (or UI) branches on these, not on message text.
+export const TEXT_SCALE_FAILURE_REASONS = Object.freeze({
+  INVALID_LAYOUT: 'invalid-layout',
+  NOT_AUTHORED_SOURCE: 'not-authored-source',
+  INVALID_SCALE: 'invalid-scale',
+  BELOW_MINIMUM_SCALE: 'below-minimum-scale',
+  NATURAL_SPACING_VIOLATED: 'natural-spacing-violated'
+});
+
+// MONO-002: authored-stone fonts (RS Block, RS Modern, the SS10 prototype -- any family behind
+// FontProviderResult.stoneCenters) have no configurable per-layer Gap: RS-2012 disables/hides the
+// Gap UI control for these layers, and generateTextLayout()'s authored branch above never reads
+// options.gapMm at all. That leaves no existing "how much edge-to-edge clearance should adjacent
+// stones keep" value to reuse when *repositioning* stones by an arbitrary scale -- the font
+// author's fixed PITCH_MM already bakes in a clearance for the natural, unscaled layout, but scaling
+// changes that pitch, so a legality check needs its own explicit constant, independent of any
+// per-layer field that may be stale, absent, or simply inapplicable to this layer.
+//
+// 0.3mm, not an invented value: families/rsBlockPrototypeSS10.js and families/rsBlock.js both
+// document their authored PITCH_MM=3.1 as "SS10's 2.8mm stone + 0.3mm gap" -- the repository's own
+// production-fitting-gap rule for this exact stone/pitch pairing (MONO-001A). Reusing it here means
+// SS10 at its authored pitch legitimately has ~zero legal shrink headroom (minimumLegalScale ~= 1.0),
+// which is the correct, conservative answer: SS10's dot-matrix glyphs were hand-placed at the tightest
+// clearance already judged production-safe, so this transform must not treat them as having slack
+// that was never actually there.
+export const AUTHORED_FONT_FITTING_GAP_MM = 0.3;
+
+// Tolerance for the minimumLegalScale comparison below, not a fitting-legality relaxation: absorbs
+// floating-point noise (~1e-15) in requiredSpacingMm/naturalMinimumSpacingMm, several orders of
+// magnitude below any real requested-scale difference this milestone cares about.
+const RELATIVE_SCALE_EPSILON = 1e-9;
+
+// MONO-002: the true nearest-neighbor center-to-center distance across every stone in `stones`, or
+// null if fewer than two stones exist (no pairwise constraint to measure). Reuses the exact
+// grid-hash bucket shape StoneSampler.dedupeStonesByRadius()/MixedSizeGenerator.
+// selectNonOverlappingSizedStones() already use above -- for a bucket cell size C, any pair closer
+// than C is guaranteed to land in the same or an adjacent (3x3) bucket, so scanning every point's
+// own 3x3 neighborhood can never miss a pair closer than C. The difference here is those two
+// existing helpers only ever test a fixed known threshold; this needs the actual minimum distance,
+// which is not known in advance. Starting the cell size at the layout's own stone size (the natural
+// order of magnitude for an authored font's pitch) and doubling until the closest pair found is
+// strictly inside the current cell size is what makes the result exact rather than approximate: any
+// pair closer than the current cell size would have been found (see the 3x3 guarantee above), so a
+// found distance strictly less than the cell size cannot be beaten by some pair the scan missed.
+// Doubling is capped at the point set's own bounding-box diagonal, which collapses every stone into
+// one bucket (an exhaustive, exact scan) and guarantees termination. Realistic text/monogram stone
+// counts keep this well clear of an O(n^2) all-pairs cost.
+function measureNaturalMinimumCenterDistanceMm(stones) {
+  if (stones.length < 2) {
+    return null;
+  }
+
+  let minXmm = Infinity, minYmm = Infinity, maxXmm = -Infinity, maxYmm = -Infinity;
+  for (const stone of stones) {
+    if (stone.xMm < minXmm) minXmm = stone.xMm;
+    if (stone.xMm > maxXmm) maxXmm = stone.xMm;
+    if (stone.yMm < minYmm) minYmm = stone.yMm;
+    if (stone.yMm > maxYmm) maxYmm = stone.yMm;
+  }
+  const diagonalMm = Math.hypot(maxXmm - minXmm, maxYmm - minYmm);
+
+  let cellSizeMm = stones[0].sizeMm;
+  const maxCellSizeMm = Math.max(diagonalMm, cellSizeMm) + 1;
+
+  for (;;) {
+    const minDistMm = nearestNeighborDistanceForCellSize(stones, cellSizeMm);
+    if (minDistMm !== null && minDistMm < cellSizeMm) {
+      return minDistMm;
+    }
+    if (cellSizeMm >= maxCellSizeMm) {
+      // A single bucket now covers every stone, so this scan was an exact all-pairs pass: return
+      // whatever it found (null only if every stone is truly alone, which cannot happen once
+      // stones.length >= 2, since every stone shares that one bucket with at least one other).
+      return minDistMm;
+    }
+    cellSizeMm *= 2;
+  }
+}
+
+function nearestNeighborDistanceForCellSize(stones, cellSizeMm) {
+  const buckets = new Map();
+  for (const stone of stones) {
+    const gx = Math.floor(stone.xMm / cellSizeMm);
+    const gy = Math.floor(stone.yMm / cellSizeMm);
+    const key = `${gx},${gy}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(stone);
+  }
+
+  let minDistSqMm = Infinity;
+  for (const stone of stones) {
+    const gx = Math.floor(stone.xMm / cellSizeMm);
+    const gy = Math.floor(stone.yMm / cellSizeMm);
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const bucket = buckets.get(`${gx + dx},${gy + dy}`);
+        if (!bucket) continue;
+        for (const other of bucket) {
+          if (other === stone) continue;
+          const ddx = stone.xMm - other.xMm;
+          const ddy = stone.yMm - other.yMm;
+          const distSqMm = ddx * ddx + ddy * ddy;
+          if (distSqMm < minDistSqMm) minDistSqMm = distSqMm;
+        }
+      }
+    }
+  }
+
+  return minDistSqMm === Infinity ? null : Math.sqrt(minDistSqMm);
 }
 
 // RS-1003: validated only when curveEnabled is truthy, so straight text (the default) never reads
