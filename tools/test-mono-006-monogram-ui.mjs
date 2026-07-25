@@ -438,13 +438,14 @@ for (const reason of Object.values(MONOGRAM_GENERATOR_FAILURE_REASONS)) {
     el('monogramWidth').value = '80';
     el('monogramHeight').value = '80';
     await s.generateMonogram();
-    // MONO-006C: monogramFailureMessage() now takes the full {reason,...} result plus the request
-    // that was sent to the generator, so it can name the actual frame size/stone size in the
-    // message (see app.js's own doc comment on monogramFailureMessage()) -- mirroring exactly what
-    // generateMonogram() itself passes, built from the same control values set above.
+    // MONO-006C/MONO-006E: monogramFailureMessage() now takes the full {reason,...} result plus the
+    // request that was sent to the generator, so it can name the actual layout/frame size/stone
+    // size in the message (see app.js's own doc comment on monogramFailureMessage()) -- mirroring
+    // exactly what generateMonogram() itself passes (including layoutId), built from the same
+    // control values set above.
     const message = s.monogramFailureMessage(
       { reason },
-      { frameId: 'circle', stoneSizeMm: 2.8, frameRect: { widthMm: 80, heightMm: 80 } }
+      { frameId: 'circle', layoutId: MONOGRAM_LAYOUTS.SINGLE, stoneSizeMm: 2.8, frameRect: { widthMm: 80, heightMm: 80 } }
     );
     assert.ok(message.length > 0);
     assert.ok(!message.includes('Error'), 'the displayed message must never be a raw exception string');

@@ -2571,26 +2571,41 @@ const MONOGRAM_FAILURE_MESSAGES={
   [MONOGRAM_GENERATOR_FAILURE_REASONS.INVALID_FONT]:'The selected font cannot be used for Monogram generation. Choose a different production font.',
   [MONOGRAM_GENERATOR_FAILURE_REASONS.INTERNAL_CONTRACT_MISMATCH]:'Monogram generation failed unexpectedly. Please try again.'
 };
-// MONO-006C: item 7 ("better user messages") -- for the sizing/spacing failure reasons (the ones a
-// user can actually correct by changing frame size or stone size), build a message naming the
-// frame size, frame shape, and stone size actually requested, plus a concrete corrective action,
-// instead of the old generic "A letter overlaps the frame." `request` is the same object
-// buildMonogramRequest() built for this generate() call (frameRect/stoneSizeMm are exactly what was
-// sent to the generator, so the message can never drift from what was actually tried). Every other
+// MONO-006C/MONO-006E: item 7 ("better fitting diagnostics") -- for the sizing/spacing failure
+// reasons (the ones a user can actually correct by changing frame size or stone size), build a
+// message naming the layout, frame size/shape, and stone size actually requested, plus a concrete
+// corrective action, instead of the old generic "A letter overlaps the frame." `request` is the
+// same object buildMonogramRequest() built for this generate() call (frameRect/stoneSizeMm/layoutId
+// are exactly what was sent to the generator, so the message can never drift from what was actually
+// tried). MONO-006E additionally reads `result.diagnostics` (MonogramGenerator's own per-letter
+// fitting diagnostics) when present, to name the specific limiting letter and the exact room it
+// needed versus what was available -- e.g. "the 'A' letter needs at least 31.1×44.5mm ... but only
+// 27.8×39.6mm is available there" -- rather than only a generic corrective suggestion. Every other
 // reason (bad selection, internal error) keeps its static MONOGRAM_FAILURE_MESSAGES copy -- there is
 // no frame/stone context that would make those more actionable.
 function monogramFailureMessage(result,request){
   const R=MONOGRAM_GENERATOR_FAILURE_REASONS,reason=result&&result.reason;
   const frame=request&&listFrames().find(f=>f.id===request.frameId);
   const frameLabel=frame?frame.label:'the';
+  const layoutLabel=request&&MONOGRAM_LAYOUT_LABELS[request.layoutId];
+  const designText=layoutLabel?`This ${layoutLabel} monogram`:'This design';
   const frameSizeText=request&&Number.isFinite(request.frameRect?.widthMm)&&Number.isFinite(request.frameRect?.heightMm)
     ?`${request.frameRect.widthMm}×${request.frameRect.heightMm}mm`:'the current';
   const stoneSizeMatch=request&&findStoneSizeByDiameterMm(request.stoneSizeMm);
   const stoneSizeText=stoneSizeMatch?stoneSizeMatch.name:(request?`${request.stoneSizeMm}mm`:'the current');
-  if(reason===R.FITTING_FAILED)return `This design cannot fit using ${stoneSizeText} stones inside a ${frameSizeText} ${frameLabel} frame, even at the smallest legal letter size. Increase the frame size, or choose a smaller stone size.`;
-  if(reason===R.BELOW_MINIMUM_SCALE)return `The letters would be smaller than production allows for ${stoneSizeText} stones in a ${frameSizeText} ${frameLabel} frame. Increase the frame size, or choose a smaller stone size.`;
-  if(reason===R.LETTER_COLLISION)return `Two or more letters would touch at ${stoneSizeText} spacing in a ${frameSizeText} ${frameLabel} frame. Increase the frame size, choose a different layout, or choose a smaller stone size.`;
-  if(reason===R.FRAME_COLLISION)return `A letter would touch the frame at ${stoneSizeText} spacing in a ${frameSizeText} ${frameLabel} frame. Increase the frame size, or choose a smaller stone size.`;
+  const diag=result&&result.diagnostics;
+  const minLegalScale=diag&&diag.scaleAuthoredTextLayoutResult&&diag.scaleAuthoredTextLayoutResult.minimumLegalScale;
+  let limitingFactorText='';
+  if(diag&&typeof diag.letter==='string'&&Number.isFinite(diag.naturalWidthMm)&&Number.isFinite(diag.naturalHeightMm)
+    &&Number.isFinite(diag.slotWidthMm)&&Number.isFinite(diag.slotHeightMm)&&Number.isFinite(minLegalScale)){
+    const neededWMm=(diag.naturalWidthMm*minLegalScale).toFixed(1);
+    const neededHMm=(diag.naturalHeightMm*minLegalScale).toFixed(1);
+    limitingFactorText=` -- the "${diag.letter}" letter needs at least ${neededWMm}×${neededHMm}mm of room at legal production spacing, but only ${diag.slotWidthMm.toFixed(1)}×${diag.slotHeightMm.toFixed(1)}mm is available there`;
+  }
+  if(reason===R.FITTING_FAILED)return `${designText} cannot fit using ${stoneSizeText} stones inside a ${frameSizeText} ${frameLabel} frame because the required production spacing exceeds the available interior${limitingFactorText}. Increase the frame size, or choose a smaller stone size.`;
+  if(reason===R.BELOW_MINIMUM_SCALE)return `${designText} cannot fit using ${stoneSizeText} stones inside a ${frameSizeText} ${frameLabel} frame${limitingFactorText}. Increase the frame size, or choose a smaller stone size.`;
+  if(reason===R.LETTER_COLLISION)return `Two or more letters in this${layoutLabel?` ${layoutLabel}`:''} monogram would touch at ${stoneSizeText} spacing in a ${frameSizeText} ${frameLabel} frame. Increase the frame size, choose a different layout, or choose a smaller stone size.`;
+  if(reason===R.FRAME_COLLISION)return `A letter would touch the frame in this${layoutLabel?` ${layoutLabel}`:''} monogram at ${stoneSizeText} spacing in a ${frameSizeText} ${frameLabel} frame. Increase the frame size, or choose a smaller stone size.`;
   return MONOGRAM_FAILURE_MESSAGES[reason]||'Monogram generation failed. Please check your settings and try again.';
 }
 // Frame choices come straight from FrameLibrary.listFrames() -- adding a frame there needs no

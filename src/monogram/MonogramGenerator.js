@@ -84,6 +84,63 @@ const ROUND_TRIP_POSITION_EPSILON_MM = 1e-6;
 const DEFAULT_FRAME_MODE = 'fill';
 const VECTOR_FILL_MODES = new Set(['outline', 'fill', 'staggered', 'radial', 'contour']);
 
+// MONO-006E: bounds on the group aspect ratio derived from the letters themselves (see
+// computeGroupAspectRatio() below) before it is handed to FrameLibrary's computeFrameFitRect().
+// Purely a numerical safety clamp against a pathological natural bounding box (e.g. a
+// near-zero-width letter) driving the search toward an unusable, degenerate rectangle -- not a
+// design choice about how wide or tall a real monogram may be.
+const MIN_GROUP_ASPECT_RATIO = 0.15;
+const MAX_GROUP_ASPECT_RATIO = 6;
+
+// MONO-006E: a fixed square probe box used only to learn a layout's own slot *proportions*
+// (MonogramLayouts' ratios are always expressed as fractions of frameInteriorRect's own
+// width/height -- see that module's own doc comment) independent of any real frame size. Its
+// absolute value never matters -- only the resulting slots' own width/height ratios do.
+const PROBE_BOX_MM = { xMm: 0, yMm: 0, widthMm: 1000, heightMm: 1000 };
+
+/**
+ * MONO-006E: derives the aspect ratio (width/height) the frame's own fitting rectangle should be
+ * requested at, from the letters actually being placed -- implementing this milestone's "the frame
+ * should fit the letters, not the opposite" objective, rather than the frame's own raw interior
+ * bounding box aspect (always ~1:1 for a symmetric frame like Circle/Diamond/Oval, which wastes
+ * most of a wide multi-letter group's real footprint -- see this module's own audit notes).
+ *
+ * For slot i, the box aspect ratio that would make that slot's own shape exactly match letter i's
+ * natural aspect ratio is `(naturalWidth_i / naturalHeight_i) * (slot_i.heightRatio /
+ * slot_i.widthRatio)` (probeSlots' targetRect, measured against the square PROBE_BOX_MM, *is* that
+ * ratio pair directly). Different letters rarely share one exact natural aspect ratio, so the
+ * geometric mean across every slot is used as the single best-compromise box aspect ratio -- a
+ * plain arithmetic mean would let one unusually wide or narrow letter dominate the result
+ * disproportionately; the geometric mean treats "wants the box twice as wide" and "wants it half
+ * as wide" symmetrically.
+ *
+ * @param {Array<{naturalBoundingBox: import('../text/VectorPath.js').BoundingBox}>} letterEntries
+ *   indexed identically to probeSlots[i].index.
+ * @param {Array<{index:number, targetRect:{widthMm:number,heightMm:number}}>} probeSlots
+ * @returns {number} A positive finite aspect ratio, clamped to
+ *   [MIN_GROUP_ASPECT_RATIO, MAX_GROUP_ASPECT_RATIO].
+ */
+function computeGroupAspectRatio(letterEntries, probeSlots) {
+  let logSum = 0;
+  let count = 0;
+  for (const slot of probeSlots) {
+    const entry = letterEntries[slot.index];
+    if (!entry) continue;
+    const { naturalBoundingBox } = entry;
+    if (!(naturalBoundingBox.widthMm > 0) || !(naturalBoundingBox.heightMm > 0)) continue;
+    if (!(slot.targetRect.widthMm > 0) || !(slot.targetRect.heightMm > 0)) continue;
+    const naturalAspect = naturalBoundingBox.widthMm / naturalBoundingBox.heightMm;
+    const slotRatioAspect = slot.targetRect.widthMm / slot.targetRect.heightMm; // fraction-of-box aspect (PROBE_BOX_MM is square)
+    const impliedBoxAspect = naturalAspect / slotRatioAspect;
+    if (!(impliedBoxAspect > 0) || !Number.isFinite(impliedBoxAspect)) continue;
+    logSum += Math.log(impliedBoxAspect);
+    count += 1;
+  }
+  if (count === 0) return 1;
+  const aspect = Math.exp(logSum / count);
+  return Math.min(MAX_GROUP_ASPECT_RATIO, Math.max(MIN_GROUP_ASPECT_RATIO, aspect));
+}
+
 // Ordinary text-layer field defaults, matching app.js's own newTextLayer()/defaultProject() shape
 // exactly (see app.js:1995/609) so a generated letter layer is field-for-field indistinguishable
 // from one a human created through the existing UI.
@@ -281,61 +338,30 @@ export class MonogramGenerator {
     // the collision check for why the formula is exactly stoneSizeMm+gapMm).
     const requiredSpacingMm = stoneSizeMm + gapMm;
 
-    // 2. Compute frame fitting rectangle -- the clearance-eroded interior region a letter may
-    // occupy (never the stone band itself; see FrameLibrary's own MONO-001A doc comment).
-    //
-    // MONO-006C: a frame's own clearanceMm (a small, fixed, per-frame constant) is not always enough
-    // geometric buffer for the *real* production spacing (requiredSpacingMm, which can reach ~6.7mm
-    // for the largest catalog stone) -- passing requiredSpacingMm as computeFrameInterior()'s
-    // minClearanceMm guarantees the fitting region always reserves at least that much room, so a
-    // letter sized to fit inside it does not go on to collide with the frame's own stones below.
-    //
-    // MONO-006C also replaces the interior's raw axis-aligned bounding box with
-    // computeFrameFitRect()'s inscribed rectangle at that same bounding box's own aspect ratio --
-    // for a round/diamond frame the bounding box is a strict superset of the true (curved) interior,
-    // so a slot sized to it could poke past the real boundary near the corners even though it fits
-    // the box; computeFrameFitRect() (already built for exactly this, MONO-003) guarantees the
-    // result is fully inside the true fitting polygon. For Square/Rounded-Square -- already
-    // (near-)rectangular -- this returns essentially the same rect as the raw bounding box, so no
-    // regression there.
+    // 2. Cheap up-front checks, before generating any letters: does this frame have any usable
+    // interior at all at this stone size (independent of layout), and is layoutId/letterCount
+    // structurally valid? Both failures are reported without needing a real font/letters, matching
+    // this generator's own established failure-priority order (frame -> layout -> font/fitting).
     const { boundingBox: interiorBoundingBox } = computeFrameInterior(frame, normalizedFrameRect, requiredSpacingMm);
     if (!interiorBoundingBox) {
       return failure(R.FITTING_FAILED, `Frame ${JSON.stringify(frameId)}'s interior is empty for the given frameRect and stoneSizeMm ${stoneSizeMm}/gapMm ${gapMm} (frame too small for its required production clearance).`);
     }
-    const inscribedInteriorRect = computeFrameFitRect(
-      frame, normalizedFrameRect, interiorBoundingBox.widthMm / interiorBoundingBox.heightMm, requiredSpacingMm
-    );
-    if (!inscribedInteriorRect) {
-      return failure(R.FITTING_FAILED, `Frame ${JSON.stringify(frameId)} has no usable rectangular interior region for the given frameRect and stoneSizeMm ${stoneSizeMm}/gapMm ${gapMm}.`);
-    }
-    const frameInteriorRect = {
-      xMm: inscribedInteriorRect.xMm,
-      yMm: inscribedInteriorRect.yMm,
-      widthMm: inscribedInteriorRect.widthMm,
-      heightMm: inscribedInteriorRect.heightMm
-    };
-
-    // 3. Compute layout slots.
-    const layoutResult = computeMonogramLayout({ layoutId, frameInteriorRect, letterCount: letters.length });
-    if (!layoutResult.ok) {
-      const reason = layoutResult.reason === MONOGRAM_LAYOUT_FAILURE_REASONS.UNKNOWN_LAYOUT ? R.LAYOUT_NOT_FOUND
-        : layoutResult.reason === MONOGRAM_LAYOUT_FAILURE_REASONS.UNSUPPORTED_LETTER_COUNT ? R.UNSUPPORTED_LETTER_COUNT
+    const probeLayoutResult = computeMonogramLayout({ layoutId, frameInteriorRect: PROBE_BOX_MM, letterCount: letters.length });
+    if (!probeLayoutResult.ok) {
+      const reason = probeLayoutResult.reason === MONOGRAM_LAYOUT_FAILURE_REASONS.UNKNOWN_LAYOUT ? R.LAYOUT_NOT_FOUND
+        : probeLayoutResult.reason === MONOGRAM_LAYOUT_FAILURE_REASONS.UNSUPPORTED_LETTER_COUNT ? R.UNSUPPORTED_LETTER_COUNT
         : R.INVALID_INPUT;
-      return failure(reason, layoutResult.message);
+      return failure(reason, probeLayoutResult.message);
     }
-    const slotByIndex = new Map(layoutResult.slots.map((slot) => [slot.index, slot]));
 
-    const frameLayerId = `monogram-${frameId}-${layoutId}-frame`;
-    const frameMode = VECTOR_FILL_MODES.has(frameOptions.mode) ? frameOptions.mode : DEFAULT_FRAME_MODE;
-    const frameColor = (typeof frameOptions.color === 'string' && frameOptions.color.length > 0)
-      ? frameOptions.color
-      : resolvedColor;
-
-    // 4. + 5. Generate every letter independently, then fit it into its assigned slot.
-    const letterResults = [];
+    // 3. Generate every letter's natural (unscaled) authored layout up front -- MONO-006E: "the
+    // frame should fit the letters, not the opposite". Each letter's own natural width/height is
+    // needed *before* the frame's fitting rectangle is sized, so that rectangle's own aspect ratio
+    // can be shaped around what these specific letters actually need (see computeGroupAspectRatio()
+    // below), rather than an arbitrary shape independent of them.
+    const letterEntries = [];
     for (let i = 0; i < letters.length; i++) {
       const letter = letters[i];
-      const slot = slotByIndex.get(i);
       const letterLayerId = `monogram-${frameId}-${layoutId}-letter-${i}`;
 
       let baseLayout;
@@ -369,44 +395,108 @@ export class MonogramGenerator {
         return failure(R.FITTING_FAILED, `Letter ${JSON.stringify(letter)} produced no stones for font ${JSON.stringify(fontId)}.`);
       }
 
-      // MONO-006C: letters default to the *smallest legal* scale (maximum legal stone density)
-      // rather than being stretched to fill their slot. An authored font's stoneCenters are a fixed,
-      // low-resolution dot-matrix grid (PITCH_MM, per family) -- scaling that fixed dot count up to
-      // fill a generous slot only spreads the same dots further apart (physical pitch = PITCH_MM *
-      // scale), which is what reads as "sparse" next to the frame's own tightly-packed fill stones.
-      // Requesting the minimum legal scale instead keeps every letter's stone-to-stone pitch at the
-      // production floor (requiredSpacingMm) -- the densest a legal authored letter can ever be.
-      //
-      // scaleAuthoredTextLayout()'s minimumLegalScale is independent of the scale value passed in
-      // (it's derived from the raw layout's own naturalMinimumSpacingMm and requiredSpacingMm --
-      // see GeometryEngine.js), so a throwaway probe call at scale 1 is enough to read it back
-      // (present in the result whether or not scale 1 itself happens to be legal).
-      const probeResult = this._engine.scaleAuthoredTextLayout(baseLayout, 1);
-      const minimumLegalScale = probeResult.minimumLegalScale;
-      if (!(minimumLegalScale > 0)) {
-        return failure(R.FITTING_FAILED, `Letter ${JSON.stringify(letter)} (slot ${i}): could not determine a minimum legal scale for font ${JSON.stringify(fontId)}.`);
-      }
-      const requestedScale = minimumLegalScale;
+      letterEntries.push({ letter, letterLayerId, baseLayout, naturalBoundingBox });
+    }
 
-      if (requestedScale * naturalBoundingBox.widthMm > slot.targetRect.widthMm
-        || requestedScale * naturalBoundingBox.heightMm > slot.targetRect.heightMm) {
-        return failure(R.FITTING_FAILED, `Letter ${JSON.stringify(letter)} (slot ${i}) does not fit its slot even at the smallest legal scale for stone size ${stoneSizeMm}mm/gap ${gapMm}mm -- the frame is too small for this letter at this stone size.`, {
-          diagnostics: {
-            letter, slotIndex: i, requiredSpacingMm, minimumLegalScale,
-            slotWidthMm: slot.targetRect.widthMm, slotHeightMm: slot.targetRect.heightMm,
-            minimumWidthMm: requestedScale * naturalBoundingBox.widthMm,
-            minimumHeightMm: requestedScale * naturalBoundingBox.heightMm
-          }
-        });
+    // 4. Compute the frame's real fitting rectangle -- clearance-eroded (never the stone band
+    // itself; FrameLibrary's own MONO-001A doc comment) and inscribed inside the frame's true
+    // (possibly curved) interior boundary (MONO-003's computeFrameFitRect(), so a round/diamond
+    // frame's corners can never be poked past -- MONO-006C's fix, still in force). Its aspect ratio
+    // is now driven by the letters themselves (MONO-006E) instead of the frame's own raw interior
+    // bounding box (always ~1:1 for a symmetric frame), so a wide multi-letter layout genuinely
+    // unlocks more of a round/diamond frame's real footprint than a forced-square region would.
+    const groupAspectRatio = computeGroupAspectRatio(letterEntries, probeLayoutResult.slots);
+    const inscribedInteriorRect = computeFrameFitRect(frame, normalizedFrameRect, groupAspectRatio, requiredSpacingMm);
+    if (!inscribedInteriorRect) {
+      return failure(R.FITTING_FAILED, `Frame ${JSON.stringify(frameId)} has no usable rectangular interior region for the given frameRect and stoneSizeMm ${stoneSizeMm}/gapMm ${gapMm}.`);
+    }
+    const frameInteriorRect = {
+      xMm: inscribedInteriorRect.xMm,
+      yMm: inscribedInteriorRect.yMm,
+      widthMm: inscribedInteriorRect.widthMm,
+      heightMm: inscribedInteriorRect.heightMm
+    };
+
+    // 5. Compute the real, absolute layout slots inside that letter-shaped fitting rectangle.
+    // MONO-006E: minGapMm enforces the real production clearance as an absolute mm floor on the
+    // gap between adjacent slots (never merely a fraction of the interior's own width, which could
+    // fall well short of requiredSpacingMm for a small frame) -- this is a geometry-level guarantee
+    // that adjacent letters (now fit to fill their own slot, see step 6 below) have production-legal
+    // room between them, not merely a hope that collision detection (still fully active, step 8)
+    // happens to pass.
+    const layoutResult = computeMonogramLayout({ layoutId, frameInteriorRect, letterCount: letters.length, minGapMm: requiredSpacingMm });
+    if (!layoutResult.ok) {
+      const reason = layoutResult.reason === MONOGRAM_LAYOUT_FAILURE_REASONS.UNKNOWN_LAYOUT ? R.LAYOUT_NOT_FOUND
+        : layoutResult.reason === MONOGRAM_LAYOUT_FAILURE_REASONS.UNSUPPORTED_LETTER_COUNT ? R.UNSUPPORTED_LETTER_COUNT
+        : layoutResult.reason === MONOGRAM_LAYOUT_FAILURE_REASONS.INSUFFICIENT_SPACE ? R.FITTING_FAILED
+        : R.INVALID_INPUT;
+      return failure(reason, layoutResult.message);
+    }
+    const slotByIndex = new Map(layoutResult.slots.map((slot) => [slot.index, slot]));
+
+    const frameLayerId = `monogram-${frameId}-${layoutId}-frame`;
+    const frameMode = VECTOR_FILL_MODES.has(frameOptions.mode) ? frameOptions.mode : DEFAULT_FRAME_MODE;
+    const frameColor = (typeof frameOptions.color === 'string' && frameOptions.color.length > 0)
+      ? frameOptions.color
+      : resolvedColor;
+
+    // 6. + 7. Fit every letter into its assigned slot, then verify it round-trips.
+    const letterResults = [];
+    for (let i = 0; i < letters.length; i++) {
+      const { letter, letterLayerId, baseLayout, naturalBoundingBox } = letterEntries[i];
+      const slot = slotByIndex.get(i);
+
+      // MONO-006E: letters are the primary design element -- fit each one to *fill* its own slot
+      // (the largest scale that still stays within the slot's own width/height), bounded only below
+      // by scaleAuthoredTextLayout()'s production-legal floor (checked next), never defaulted to
+      // that floor the way MONO-006C's "densest legal size" default did. That old default made a
+      // letter's rendered *size* completely independent of its slot's size -- every letter of a
+      // given font/stoneSizeMm rendered at the same fixed mm size regardless of the frame, which is
+      // both why letters looked tiny inside large frames and why Traditional Three's larger-center/
+      // smaller-side slot ratios had no visible effect (see MonogramLayouts.js's own doc comment).
+      //
+      // naturalBoundingBox (StoneLayout.getBoundingBox()) pads every stone's *center* position by
+      // its own radius (stoneSizeMm/2), so it is `pointSpread + stoneSizeMm`, not pointSpread alone
+      // -- and scaleAuthoredTextLayout() only scales stone *positions*, never sizeMm (see that
+      // method's own doc comment), so that radius padding does not grow with the scale. Naively
+      // requesting `slot / naturalBoundingBox` would therefore always under-fill the slot by a
+      // little (the unscaled radius padding eats into the ratio). Solving `pointSpread*scale +
+      // stoneSizeMm = slotSize` for scale instead -- i.e. subtracting the fixed radius padding from
+      // both the natural and target sizes before dividing -- fits the slot exactly.
+      const haloMm = stoneSizeMm;
+      const naturalPointWidthMm = naturalBoundingBox.widthMm - haloMm;
+      const naturalPointHeightMm = naturalBoundingBox.heightMm - haloMm;
+      const fillScaleCandidates = [];
+      if (naturalPointWidthMm > 0) {
+        const candidate = (slot.targetRect.widthMm - haloMm) / naturalPointWidthMm;
+        if (candidate > 0) fillScaleCandidates.push(candidate);
       }
+      if (naturalPointHeightMm > 0) {
+        const candidate = (slot.targetRect.heightMm - haloMm) / naturalPointHeightMm;
+        if (candidate > 0) fillScaleCandidates.push(candidate);
+      }
+      // Degenerate fallback (only reachable via a synthetic/single-stone fixture, never a real
+      // multi-stone authored letter): no halo-aware candidate was computable, so fall back to the
+      // simpler whole-bounding-box ratio rather than leaving requestedScale undefined.
+      if (fillScaleCandidates.length === 0) {
+        if (naturalBoundingBox.widthMm > 0) fillScaleCandidates.push(slot.targetRect.widthMm / naturalBoundingBox.widthMm);
+        if (naturalBoundingBox.heightMm > 0) fillScaleCandidates.push(slot.targetRect.heightMm / naturalBoundingBox.heightMm);
+      }
+      const requestedScale = fillScaleCandidates.length > 0 ? Math.min(...fillScaleCandidates) : 1;
 
       const scaleResult = this._engine.scaleAuthoredTextLayout(baseLayout, requestedScale);
       if (!scaleResult.ok) {
         const reason = scaleResult.reason === TEXT_SCALE_FAILURE_REASONS.BELOW_MINIMUM_SCALE
           ? R.BELOW_MINIMUM_SCALE
           : R.FITTING_FAILED;
-        return failure(reason, `Letter ${JSON.stringify(letter)} (slot ${i}): ${scaleResult.message}`, {
-          diagnostics: { letter, slotIndex: i, scaleAuthoredTextLayoutResult: scaleResult }
+        return failure(reason, `Letter ${JSON.stringify(letter)} (slot ${i}) cannot be produced legally inside its slot: at the largest scale that fits (${requestedScale.toFixed(4)}), ${scaleResult.message}`, {
+          diagnostics: {
+            letter, slotIndex: i, requestedScale,
+            slotWidthMm: slot.targetRect.widthMm, slotHeightMm: slot.targetRect.heightMm,
+            naturalWidthMm: naturalBoundingBox.widthMm, naturalHeightMm: naturalBoundingBox.heightMm,
+            frameId, layoutId, frameWidthMm: normalizedFrameRect.widthMm, frameHeightMm: normalizedFrameRect.heightMm,
+            stoneSizeMm, gapMm, scaleAuthoredTextLayoutResult: scaleResult
+          }
         });
       }
 

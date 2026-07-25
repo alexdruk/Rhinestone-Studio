@@ -39,7 +39,13 @@ function point(xMm, yMm) {
 // the same relationship createRingNaturalContours()'s own innerRatio already expresses for a
 // circular ring; every non-circular frame below reuses that exact relationship (see
 // scaleContourTowardCenter()) rather than a shape-specific formula.
-const DEFAULT_INNER_RATIO = 0.78;
+//
+// MONO-006E: raised from 0.78 (a 22%-of-radius border band) to 0.85 (15%) -- visual-QA review found
+// the frame's own border consuming an outsized share of the design relative to the letters it is
+// meant to merely surround (this milestone's "the frame is decorative, the letters are the primary
+// design element" objective). A thinner band directly grows every hollow frame's own fitting
+// interior too, compounding with this milestone's other fitting-rectangle improvements.
+const DEFAULT_INNER_RATIO = 0.85;
 // Rounded Square's corner radius, as a fraction of its own natural half-side.
 const ROUNDED_SQUARE_CORNER_RATIO = 0.28;
 const CORNER_SEGMENTS = 12;

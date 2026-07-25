@@ -8,19 +8,31 @@
 //
 // Real repository frame definitions and the real 'rs-block' authored font are used wherever a
 // scenario can be reached with them (every success case, frame/layout lookup failures, unsupported
-// letter count, invalid font, fitting-failed -- all found empirically to occur with real geometry,
-// see this file's own fixtures below). Letter-vs-letter collision, frame collision, and the
-// internal-contract-mismatch defense are exceptions: MONO-006C changed letter sizing to default to
-// the smallest *legal* scale (maximum legal stone density) rather than stretching to fill the slot
-// (see MonogramGenerator.generate()'s own doc comment) -- real letters are now small relative to
-// their frame, which makes a genuine letter-vs-letter or letter-vs-frame collision very hard to
-// reach with real fonts at any reasonable frame size (previously frame-collision, in particular, was
-// often actually MONO-006C's own bug B -- a round/diamond frame's true interior being smaller than
-// its bounding box -- not a real production collision; see the fitting-succeeds tests below for that
-// fix). An internal-contract mismatch should never happen with a correctly wired real engine at all.
-// All three use small, clearly-labeled synthetic fake geometryEngines instead, same "fake
-// collaborator" precedent test-mono-002-authored-font-positional-scaling.mjs already uses for its
-// own coincident-stone fixture.
+// letter count, invalid font, fitting-failed/below-minimum-scale -- all found empirically to occur
+// with real geometry, see this file's own fixtures below). Letter-vs-letter collision, frame
+// collision, and the internal-contract-mismatch defense are exceptions, still via small,
+// clearly-labeled synthetic fake geometryEngines (same "fake collaborator" precedent
+// test-mono-002-authored-font-positional-scaling.mjs already uses for its own coincident-stone
+// fixture): an internal-contract mismatch should never happen with a correctly wired real engine at
+// all, letter-vs-frame collision needs a deliberately-inconsistent fake to force a stone onto an
+// exact point, and (MONO-006E) letter-vs-letter collision is now a geometric near-impossibility to
+// reach with real geometry -- MonogramLayouts' minGapMm (the real production clearance) is now a
+// geometry-level *guarantee* on the gap between adjacent slots, and each letter is fit to exactly
+// fill its own slot (never larger), so two real, correctly-scaled letters can never end up closer
+// than the required spacing. The letter-collision fixture below instead simulates a *broken*
+// scaling collaborator (one that reports success but does not actually apply the requested scale --
+// see createCollidingFakeGenerator()'s own doc comment) to prove the collision check still catches a
+// real overlap even when an earlier pipeline stage misbehaves, i.e. it is not merely trusting
+// upstream fitting to always be correct.
+//
+// MONO-006E history: MONO-006C previously changed letter sizing to default to the smallest *legal*
+// scale (maximum legal stone density) rather than filling the slot -- visual-QA review found this
+// made every letter tiny relative to its frame regardless of the frame's actual size, and made
+// Traditional Three and Equal Three's differently-sized slots render identically (slot size no
+// longer had any effect on a letter's rendered size). MONO-006E reverted this: a letter is now fit
+// to the *largest* legal scale that still stays within its own slot, bounded only below by
+// scaleAuthoredTextLayout()'s production-legal floor -- see MonogramGenerator.generate()'s own doc
+// comment.
 
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -351,17 +363,19 @@ await test('a non-authored (OpenType) font returns a structured invalid-font fai
   assert.equal(result.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.INVALID_FONT);
 });
 
-await test('a letter that cannot legally fit its slot even at minimum scale returns fitting-failed', async () => {
+await test('a letter that cannot legally fit its slot even at the largest scale that fits returns below-minimum-scale', async () => {
   const { generator } = createRealGenerator();
-  // A frame small enough that even the authored font's own smallest legal scale (MONO-002's
-  // minimumLegalScale spacing floor -- MONO-006C's new default, see the module doc comment) doesn't
-  // fit inside the slot -- a real, not synthetic, fitting failure.
+  // MONO-006E: a letter is now fit to the *largest* scale that stays within its own slot (see the
+  // module doc comment above) -- the slot here is geometrically non-empty (this frame's interior
+  // is not empty at this stone size, so FITTING_FAILED's own "no usable region at all" check does
+  // not fire), but that largest-that-fits scale is still below scaleAuthoredTextLayout()'s real
+  // production-legal floor, a distinct, more specific failure than a generic fitting failure.
   const result = await generator.generate({
     frameId: 'circle', layoutId: 'single', letters: ['W'], ...RS_BLOCK,
     stoneSizeMm: 2.8, canvasMm: CANVAS_MM, frameRect: { xMm: 0, yMm: 0, widthMm: 20, heightMm: 20 }
   });
   assert.equal(result.ok, false);
-  assert.equal(result.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.FITTING_FAILED);
+  assert.equal(result.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.BELOW_MINIMUM_SCALE);
 });
 
 // --- MONO-006C fitting fix: a round frame's true (curved) interior, not its bounding box ----------
@@ -400,7 +414,7 @@ await test('two letters now fit inside an 85x85 square frame (MONO-006C fix for 
   assert.equal(result.layers.length, 3, 'frame layer + 2 letter layers');
 });
 
-await test('a real letter defaults to its minimum legal scale, not a slot-filling scale (MONO-006C density default)', async () => {
+await test('a real letter defaults to a slot-filling scale, not the smallest legal scale (MONO-006E fitting objective)', async () => {
   const { generator } = createRealGenerator();
   const result = await generator.generate({
     frameId: 'square', layoutId: 'single', letters: ['A'], ...RS_BLOCK,
@@ -408,7 +422,21 @@ await test('a real letter defaults to its minimum legal scale, not a slot-fillin
   });
   assert.equal(result.ok, true);
   const letterMeasurement = result.measurements.letters[0];
-  assert.equal(letterMeasurement.requestedScale, letterMeasurement.minimumLegalScale);
+  // The letter must be scaled well past its production-legal floor (a single letter in an 80mm
+  // square frame has plenty of room to grow) -- this is the letters-are-the-primary-design-element
+  // objective: a letter's rendered size now depends on its slot's own size, not only on the font/
+  // stone size (matching MONO-006C's very default this milestone reverted).
+  assert.ok(letterMeasurement.requestedScale > letterMeasurement.minimumLegalScale * 1.5,
+    `expected a slot-filling scale well above the minimum legal floor, got requestedScale=${letterMeasurement.requestedScale} vs minimumLegalScale=${letterMeasurement.minimumLegalScale}`);
+  // The fitted letter must actually touch (within floating-point tolerance) at least one dimension
+  // of its own slot -- proof that it was scaled to *fill* the slot, not to some independent value.
+  const slot = result.measurements.slots[0];
+  const fittedWidthMm = letterMeasurement.scaledBoundingBox.widthMm;
+  const fittedHeightMm = letterMeasurement.scaledBoundingBox.heightMm;
+  assert.ok(
+    fittedWidthMm > slot.targetRect.widthMm - 1e-6 || fittedHeightMm > slot.targetRect.heightMm - 1e-6,
+    'expected the fitted letter to reach its slot\'s own width or height'
+  );
 });
 
 await test('a letter placed exactly where the frame has a stone returns frame-collision (synthetic fixture)', async () => {
@@ -457,10 +485,19 @@ await test('a letter placed exactly where the frame has a stone returns frame-co
 
 await test('two letters placed too close together return letter-collision, distinct from frame-collision (synthetic fixture)', async () => {
   const generator = createCollidingFakeGenerator();
+  // MONO-006E: MonogramLayouts now geometrically guarantees at least the real production gap
+  // (minGapMm) between adjacent *slots* -- reachable here only because this fake's
+  // scaleAuthoredTextLayout() ignores requestedScale and always returns the letter at its full,
+  // unscaled 4mm-wide footprint (see createCollidingFakeGenerator()'s own doc comment), so it
+  // overflows well past whatever (possibly much smaller, shrunk-to-fit) slot it was actually
+  // assigned. A small-enough frame forces MonogramLayouts to shrink both slots hard (see
+  // layoutHorizontalGroup()'s own doc comment), so their *centers* end up closer together than this
+  // fake's own ignored-scale 4mm stone spread -- a real overlap the collision check must still
+  // catch even though the fitting stage "believed" it had picked a legal scale.
   const result = await generator.generate({
     frameId: 'square', layoutId: 'two-letter', letters: ['X', 'Y'], fontId: 'fake-font',
     stoneSizeMm: 2.8, gapMm: 0.3, canvasMm: CANVAS_MM,
-    frameRect: { xMm: 0, yMm: 0, widthMm: 20, heightMm: 20 }
+    frameRect: { xMm: 0, yMm: 0, widthMm: 15, heightMm: 15 }
   });
   assert.equal(result.ok, false);
   assert.equal(result.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.LETTER_COLLISION);
