@@ -338,6 +338,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
   <nav class="topmenu" aria-label="Main menu">
     <button class="topmenu-btn" id="menuText" title="Text (edit the selected text layer's content, font, and curve)"><span class="glyph">🅣</span>Text</button>
     <button class="topmenu-btn" id="menuShapes" title="Shapes and object templates"><span class="glyph">◇</span>Shapes</button>
+    <button class="topmenu-btn" id="menuMonogram" title="Generate a monogram from a frame, layout, and letters"><span class="glyph">🄼</span>Monogram</button>
     <button class="topmenu-btn" id="menuLibrary" title="Design Library is temporarily unavailable while Version 1.0 is under feature freeze (RC-006). All Design Library designs and code remain intact." disabled aria-disabled="true"><span class="glyph">📚</span>Design Library<span class="topmenu-badge">Coming Soon</span></button>
     <button class="topmenu-btn" id="menuGallery" title="Gallery is temporarily unavailable while product scope is reduced (S-103). All Gallery designs and code remain intact." disabled aria-disabled="true"><span class="glyph">✨</span>Gallery<span class="topmenu-badge">Coming Soon</span></button>
     <button class="topmenu-btn" id="menuImport" title="Import an SVG or a Project JSON file"><span class="glyph">⇪</span>Import</button>
@@ -587,6 +588,55 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
     <footer class="lightbox-footer">
       <span class="footer-note">Changes preview live and undo/redo normally.</span>
       <button class="btn" data-lightbox-close>Close</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ---------- MONOGRAM ---------- -->
+<!-- MONO-006: UI integration only -- this lightbox is a plain front-end. It collects a request and
+     calls MonogramGenerator.generate() (app.js); it never computes layout, fitting, or collisions
+     itself. No live preview: generation only runs on the Generate button. Non-modal so it matches
+     every other primary Lightbox (see .lightbox-overlay.non-modal above). -->
+<div class="lightbox-overlay non-modal" id="lightboxMonogram">
+  <div class="lightbox" role="dialog" aria-modal="false" aria-labelledby="lightboxMonogramTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxMonogramTitle">Monogram</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <div class="field-section">
+        <h3>Frame &amp; Layout</h3>
+        <div class="field-row">
+          <div class="field"><label for="monogramFrame">Frame</label><select id="monogramFrame" title="The frame shape stones are generated around."></select></div>
+          <div class="field"><label for="monogramLayout">Layout</label><select id="monogramLayout" title="How the letters are arranged inside the frame."></select></div>
+        </div>
+      </div>
+      <div class="field-section">
+        <h3>Letters</h3>
+        <div class="field"><label for="monogramLetters">Letters</label><input id="monogramLetters" type="text" maxlength="3" title="One character per slot in the selected layout."></div>
+        <p class="hint" id="monogramLetterCountHint"></p>
+      </div>
+      <div class="field-section">
+        <h3>Font</h3>
+        <div class="field"><label for="monogramFont">Font</label><select id="monogramFont" title="Authored production fonts only."></select></div>
+      </div>
+      <div class="field-section">
+        <h3>Stones</h3>
+        <div class="field-row">
+          <div class="field"><label for="monogramStoneSize">Stone size</label><select id="monogramStoneSize" title="Standard rhinestone sizes (commercial name and actual diameter)."></select></div>
+          <div class="field"><label for="monogramColor">Stone color</label><div class="color-pick-row"><select id="monogramColor"></select><span id="monogramColorSwatch" class="color-swatch" title="Selected color preview"></span></div></div>
+        </div>
+      </div>
+      <div class="field-section">
+        <h3>Frame Size</h3>
+        <div class="field-row">
+          <div class="field"><label for="monogramWidth">Width (mm)</label><input id="monogramWidth" type="number" step="1"></div>
+          <div class="field"><label for="monogramHeight">Height (mm)</label><input id="monogramHeight" type="number" step="1"></div>
+        </div>
+        <p class="hint" id="monogramFrameSizeHint"></p>
+      </div>
+      <div class="validation-message" id="monogramValidation" role="alert"></div>
+    </div>
+    <footer class="lightbox-footer">
+      <button class="btn" data-lightbox-close>Close</button>
+      <button class="btn primary" id="monogramGenerate">Generate</button>
     </footer>
   </div>
 </div>
