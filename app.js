@@ -1590,9 +1590,41 @@ function mixedSizeEligibleIds(){
 // ever be eligible with these settings" from "what's checked doesn't qualify" -- called from
 // updateEditingUI() so it reacts live to every relevant edit (sizeMode, Stone size, Min/Max Size,
 // or the checkboxes themselves), matching updateTextFontCapabilityUI()'s own call site just above.
+// MONO-006C: the count of already-generated secondary (infill) stones belonging to layer `l` --
+// reads the live, already-computed global `layout` (the same StoneLayout drawLayout()/updateStats()
+// already render from) rather than recomputing anything, so this can never disagree with what's on
+// screen. A stone counts as secondary when it's smaller than the layer's own primary size; every
+// infill stone is strictly smaller by construction (MixedSizeGenerator.js's eligibility filter,
+// `value < stoneSizeMm`), so this is an exact, not approximate, count.
+function mixedSizeSecondaryStoneCountFor(l){
+  if(!l||!layout||!Array.isArray(layout.stones))return 0;
+  return layout.stones.filter(s=>s.layerId===l.id&&s.sizeMm<l.stoneSize).length;
+}
 function updateMixedSizeCapabilityUI(){
-  const mixed=resolveSizeMode(el('sizeMode').value)==='mixed';
+  const l=selectedLayer();
+  let mixed=resolveSizeMode(el('sizeMode').value)==='mixed';
   const stoneSizeMm=parseFloat(el('stoneSize').value)||0;
+
+  // MONO-006C: Mixed mode can never place a secondary stone once the primary Stone size is already
+  // the smallest size in the catalog (there is nothing smaller left to fill a gap with) -- disabling
+  // the <option> itself (same disable+dim+explain idiom the 5 checkboxes below already use) prevents
+  // ever selecting that dead-end configuration in the first place. If a layer is already Mixed when
+  // Stone size is lowered into this state, it's corrected back to Uniform here -- safe to do
+  // silently and without a fresh regeneration, since eligibleSizesMm is provably always empty at the
+  // smallest catalog size (MixedSizeGenerator.js's own filter requires `value < stoneSizeMm`), so
+  // Mixed and Uniform already produce byte-identical geometry in this state.
+  const smallestStoneSizeMm=Math.min(...listStoneSizes().map(s=>s.diameterMm));
+  const atSmallestStone=stoneSizeMm>0&&stoneSizeMm<=smallestStoneSizeMm;
+  const mixedOption=el('sizeMode').querySelector('option[value="mixed"]');
+  if(mixedOption){
+    mixedOption.disabled=atSmallestStone;
+    mixedOption.title=atSmallestStone?`Mixed mode has no effect at the smallest available stone size (${stoneSizeMm} mm) — there is no smaller size left to fill gaps with.`:'';
+  }
+  if(atSmallestStone&&mixed&&l){
+    el('sizeMode').value='uniform';l.sizeMode='uniform';mixed=false;
+    el('mixedSizeDetailFields').style.display='none';
+  }
+
   const eligibleIds=mixedSizeEligibleIds();
   let anyChecked=false,anyCheckedEligible=false;
   for(const cb of MIXED_ALLOWED_SIZE_CHECKBOXES){
@@ -1608,7 +1640,7 @@ function updateMixedSizeCapabilityUI(){
     if(input.checked){anyChecked=true;if(eligible)anyCheckedEligible=true}
   }
   const hint=el('mixedNoEligibleHint');
-  if(!mixed||anyCheckedEligible){
+  if(!mixed){
     hint.classList.remove('visible');hint.textContent='';
   }else if(eligibleIds.size===0){
     hint.textContent='No secondary size is eligible with the current Stone size and Minimum/Maximum Size settings — increase Stone size above, or widen the Minimum/Maximum Size range in Advanced.';
@@ -1616,9 +1648,18 @@ function updateMixedSizeCapabilityUI(){
   }else if(!anyChecked){
     hint.textContent="Select at least one Allowed Size above — Mixed mode won't add any stones until one is checked.";
     hint.classList.add('visible');
-  }else{
+  }else if(!anyCheckedEligible){
     hint.textContent="None of the checked Allowed Sizes are currently eligible (dimmed above) — check an eligible size, or adjust Stone size / Minimum-Maximum Size in Advanced.";
     hint.classList.add('visible');
+  }else if(mixedSizeSecondaryStoneCountFor(l)===0){
+    // MONO-006C: configuration is valid (eligible sizes checked, range sane) but the generator
+    // legitimately placed zero secondary stones for this design (e.g. no gap large enough to fit
+    // one at the required spacing) -- without this branch, Mixed mode looks broken instead of
+    // correctly reporting that nothing was needed.
+    hint.textContent='No secondary stones are required for this design.';
+    hint.classList.add('visible');
+  }else{
+    hint.classList.remove('visible');hint.textContent='';
   }
 }
 // RS-0003.5D2: SELECTION_HANDLE_SIZE_PX enlarges the resize handles slightly (was a bare 10px
@@ -1763,6 +1804,15 @@ const LAYER_MOVE_DRAG_SENSITIVITY=0.5;
 // selection to just that layer first (preserving pre-existing single-selection behavior) before
 // starting its drag. Exactly one commitHistory() call happens per drag, at drag start.
 layoutCanvas.addEventListener('pointerdown',e=>{
+  // MONO-006C (UI-001 tool activation): Monogram is the one top-level tool whose Lightbox both (a)
+  // needs no canvas interaction to function (unlike Shapes/Import/Image Trace, which rely on canvas
+  // clicks to choose which shape's relocated fields show) and (b) generates whole new layers that
+  // must not be disturbed mid-generation by a concurrent canvas selection/drag/resize/rotate.
+  // Lightbox's own primary-exclusivity (src/ui/Lightbox.js) already closes the Text dialog when
+  // Monogram opens, but both dialogs are non-modal (canvas stays clickable underneath) -- this is
+  // the other half of "only one top-level tool is active": while Monogram is open, canvas selection
+  // is inert.
+  if(lightboxes.monogram.isOpen)return;
   const mm=pointerToLayout(e);const hit=hitTest(mm);
   // S-107: an empty-canvas click that lands inside the Front View Frame starts a frame drag
   // instead of clearing the selection -- a click on an actual layer/stone still takes priority
@@ -1896,6 +1946,10 @@ window.addEventListener('keydown',e=>{
   // these fire (and preventDefault) even while a text/number field has focus.
   if(mod&&key==='z'){e.preventDefault();if(e.shiftKey)performRedo();else performUndo();return}
   if(mod&&key==='y'){e.preventDefault();performRedo();return}
+  // MONO-006C (UI-001 tool activation): layer-editing shortcuts are inert while the Monogram
+  // Lightbox is open (see the matching pointerdown gate above for the full rationale). Undo/redo
+  // above stay global -- they act on the whole project, not on canvas layer editing.
+  if(lightboxes.monogram.isOpen)return;
   if(e.key==='Delete'||e.key==='Backspace'){const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;deleteLayer(selectedLayerId)}
   // RS-1009: arrow keys nudge the current multi-selection by a named mm step (NUDGE_STEP_MM,
   // src/editing/EditingConstants.js); Shift+Arrow uses the larger step. Guarded exactly like
@@ -1917,6 +1971,22 @@ window.addEventListener('keydown',e=>{
 // RS-2010: 'vesselBodyDiameter'/'vesselBodyHeight'/'vesselTopDiameter' (added by that milestone) are
 // the Mug/Tumbler/Bottle physical-dimension controls -- merged in alongside the S-200 ids above,
 // same generic undo/redo wiring, no interaction between the two milestones' fields.
+// MONO-006C: Minimum/Maximum Size must never invert (Minimum > Maximum) -- auto-adjusts the other
+// control's value the instant one crosses the other, via setNumericSelectValue() (the same
+// nearest-option helper syncSelectedControlsFromLayer() already uses for these two selects).
+// Registered here, before HISTORY_TRACKED_CONTROL_IDS' own 'input' listener on these same elements
+// below, so listener execution order (same event, same element -> registration order) guarantees
+// this clamp runs first: by the time the generic write+regenerate listener reads these controls,
+// the pair is already valid, and normalizeMixedSizeParams()'s own minSizeMm>maxSizeMm RangeError
+// (MixedSizeGenerator.js) can never be reached from the UI.
+el('mixedMinSize').addEventListener('input',()=>{
+  const minMm=parseFloat(el('mixedMinSize').value),maxMm=parseFloat(el('mixedMaxSize').value);
+  if(Number.isFinite(minMm)&&Number.isFinite(maxMm)&&minMm>maxMm)setNumericSelectValue(el('mixedMaxSize'),minMm);
+});
+el('mixedMaxSize').addEventListener('input',()=>{
+  const minMm=parseFloat(el('mixedMinSize').value),maxMm=parseFloat(el('mixedMaxSize').value);
+  if(Number.isFinite(minMm)&&Number.isFinite(maxMm)&&maxMm<minMm)setNumericSelectValue(el('mixedMinSize'),maxMm);
+});
 const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','textAlign','lineSpacing','rotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
@@ -2499,13 +2569,30 @@ const MONOGRAM_FAILURE_MESSAGES={
   [MONOGRAM_GENERATOR_FAILURE_REASONS.LAYOUT_NOT_FOUND]:'The selected layout is not available.',
   [MONOGRAM_GENERATOR_FAILURE_REASONS.UNSUPPORTED_LETTER_COUNT]:'The number of letters does not match the selected layout.',
   [MONOGRAM_GENERATOR_FAILURE_REASONS.INVALID_FONT]:'The selected font cannot be used for Monogram generation. Choose a different production font.',
-  [MONOGRAM_GENERATOR_FAILURE_REASONS.FITTING_FAILED]:'The letters do not fit this frame size. Try a larger frame.',
-  [MONOGRAM_GENERATOR_FAILURE_REASONS.BELOW_MINIMUM_SCALE]:'The letters would be too small to produce at this frame size. Try a larger frame or fewer letters.',
-  [MONOGRAM_GENERATOR_FAILURE_REASONS.LETTER_COLLISION]:'Letters overlap at this stone size. Try a larger frame or a smaller stone size.',
-  [MONOGRAM_GENERATOR_FAILURE_REASONS.FRAME_COLLISION]:'A letter overlaps the frame. Try a larger frame, or fewer/smaller letters.',
   [MONOGRAM_GENERATOR_FAILURE_REASONS.INTERNAL_CONTRACT_MISMATCH]:'Monogram generation failed unexpectedly. Please try again.'
 };
-function monogramFailureMessage(reason){return MONOGRAM_FAILURE_MESSAGES[reason]||'Monogram generation failed. Please check your settings and try again.'}
+// MONO-006C: item 7 ("better user messages") -- for the sizing/spacing failure reasons (the ones a
+// user can actually correct by changing frame size or stone size), build a message naming the
+// frame size, frame shape, and stone size actually requested, plus a concrete corrective action,
+// instead of the old generic "A letter overlaps the frame." `request` is the same object
+// buildMonogramRequest() built for this generate() call (frameRect/stoneSizeMm are exactly what was
+// sent to the generator, so the message can never drift from what was actually tried). Every other
+// reason (bad selection, internal error) keeps its static MONOGRAM_FAILURE_MESSAGES copy -- there is
+// no frame/stone context that would make those more actionable.
+function monogramFailureMessage(result,request){
+  const R=MONOGRAM_GENERATOR_FAILURE_REASONS,reason=result&&result.reason;
+  const frame=request&&listFrames().find(f=>f.id===request.frameId);
+  const frameLabel=frame?frame.label:'the';
+  const frameSizeText=request&&Number.isFinite(request.frameRect?.widthMm)&&Number.isFinite(request.frameRect?.heightMm)
+    ?`${request.frameRect.widthMm}×${request.frameRect.heightMm}mm`:'the current';
+  const stoneSizeMatch=request&&findStoneSizeByDiameterMm(request.stoneSizeMm);
+  const stoneSizeText=stoneSizeMatch?stoneSizeMatch.name:(request?`${request.stoneSizeMm}mm`:'the current');
+  if(reason===R.FITTING_FAILED)return `This design cannot fit using ${stoneSizeText} stones inside a ${frameSizeText} ${frameLabel} frame, even at the smallest legal letter size. Increase the frame size, or choose a smaller stone size.`;
+  if(reason===R.BELOW_MINIMUM_SCALE)return `The letters would be smaller than production allows for ${stoneSizeText} stones in a ${frameSizeText} ${frameLabel} frame. Increase the frame size, or choose a smaller stone size.`;
+  if(reason===R.LETTER_COLLISION)return `Two or more letters would touch at ${stoneSizeText} spacing in a ${frameSizeText} ${frameLabel} frame. Increase the frame size, choose a different layout, or choose a smaller stone size.`;
+  if(reason===R.FRAME_COLLISION)return `A letter would touch the frame at ${stoneSizeText} spacing in a ${frameSizeText} ${frameLabel} frame. Increase the frame size, or choose a smaller stone size.`;
+  return MONOGRAM_FAILURE_MESSAGES[reason]||'Monogram generation failed. Please check your settings and try again.';
+}
 // Frame choices come straight from FrameLibrary.listFrames() -- adding a frame there needs no
 // change here, mirroring populateStoneSizeOptions()/populateStoneColorOptions()'s existing
 // "index.html hardcodes no <option>, the catalog is the only source" convention.
@@ -2604,7 +2691,7 @@ async function generateMonogram(){
     return;
   }
   if(!result.ok){
-    showMonogramValidation(monogramFailureMessage(result.reason));
+    showMonogramValidation(monogramFailureMessage(result,request));
     updateMonogramGenerateButtonState();
     return;
   }

@@ -141,4 +141,105 @@ await test('11. syncSelectedControlsFromLayer() auto-expands Advanced only in Mi
   assert.doesNotMatch(liveFnSource, /mixedAdvancedSection/, 'live per-edit path must not reset the Advanced open/closed state');
 });
 
+// --- MONO-006C: Min/Max auto-adjust, impossible-config prevention, secondary-stone-count message --
+
+await test('12. #mixedMinSize/#mixedMaxSize auto-adjust listeners are registered before HISTORY_TRACKED_CONTROL_IDS\' own listener on the same elements', () => {
+  const minListenerIdx = appJs.indexOf("el('mixedMinSize').addEventListener('input'");
+  const maxListenerIdx = appJs.indexOf("el('mixedMaxSize').addEventListener('input'");
+  const historyLoopIdx = appJs.indexOf('for(const id of HISTORY_TRACKED_CONTROL_IDS)');
+  assert.ok(minListenerIdx !== -1, 'expected a dedicated #mixedMinSize input listener');
+  assert.ok(maxListenerIdx !== -1, 'expected a dedicated #mixedMaxSize input listener');
+  assert.ok(minListenerIdx < historyLoopIdx, 'the Min clamp listener must be registered before HISTORY_TRACKED_CONTROL_IDS\' loop (same-element listener order = execution order)');
+  assert.ok(maxListenerIdx < historyLoopIdx, 'the Max clamp listener must be registered before HISTORY_TRACKED_CONTROL_IDS\' loop (same-element listener order = execution order)');
+});
+
+await test('13. the Min/Max auto-adjust logic actually clamps the other control in both directions', () => {
+  const minStatementSrc = appJs.slice(
+    appJs.indexOf("el('mixedMinSize').addEventListener('input',"),
+    appJs.indexOf('});', appJs.indexOf("el('mixedMinSize').addEventListener('input',")) + 3
+  );
+  const maxStatementSrc = appJs.slice(
+    appJs.indexOf("el('mixedMaxSize').addEventListener('input',"),
+    appJs.indexOf('});', appJs.indexOf("el('mixedMaxSize').addEventListener('input',")) + 3
+  );
+  const setNumericSelectValueStart = appJs.indexOf('function setNumericSelectValue');
+  const setNumericSelectValueSrc = appJs.slice(setNumericSelectValueStart, appJs.indexOf('\n', setNumericSelectValueStart));
+
+  const OPTION_VALUES = [2.0, 2.8, 4.0, 4.7, 6.4];
+  function makeFakeElements(minValue, maxValue) {
+    const elements = {
+      mixedMinSize: { value: String(minValue), options: OPTION_VALUES.map((v) => ({ value: String(v) })), _listeners: {}, addEventListener(evt, cb) { this._listeners[evt] = cb } },
+      mixedMaxSize: { value: String(maxValue), options: OPTION_VALUES.map((v) => ({ value: String(v) })), _listeners: {}, addEventListener(evt, cb) { this._listeners[evt] = cb } }
+    };
+    return (id) => elements[id];
+  }
+
+  // Minimum raised above Maximum -> Maximum snaps up to match Minimum.
+  {
+    const el = makeFakeElements(4.7, 2.8);
+    const registerAndFire = new Function('el', `${setNumericSelectValueSrc}\n${minStatementSrc}\nel('mixedMinSize')._listeners.input();`);
+    registerAndFire(el);
+    assert.equal(parseFloat(el('mixedMaxSize').value), 4.7, 'Maximum must snap up to the new Minimum');
+  }
+
+  // Maximum lowered below Minimum -> Minimum snaps down to match Maximum.
+  {
+    const el = makeFakeElements(4.0, 2.0);
+    const registerAndFire = new Function('el', `${setNumericSelectValueSrc}\n${maxStatementSrc}\nel('mixedMaxSize')._listeners.input();`);
+    registerAndFire(el);
+    assert.equal(parseFloat(el('mixedMinSize').value), 2.0, 'Minimum must snap down to the new Maximum');
+  }
+
+  // Already-valid pairs are left untouched.
+  {
+    const el = makeFakeElements(2.0, 4.7);
+    const registerAndFire = new Function('el', `${setNumericSelectValueSrc}\n${minStatementSrc}\nel('mixedMinSize')._listeners.input();`);
+    registerAndFire(el);
+    assert.equal(parseFloat(el('mixedMaxSize').value), 4.7, 'a Minimum below the existing Maximum must not change it');
+  }
+});
+
+await test('14. updateMixedSizeCapabilityUI() disables the "Mixed" option and auto-switches back to Uniform at the smallest catalog stone size', () => {
+  const fnSource = appJs.slice(
+    appJs.indexOf('function updateMixedSizeCapabilityUI'),
+    appJs.indexOf('\nfunction ', appJs.indexOf('function updateMixedSizeCapabilityUI') + 1)
+  );
+  assert.match(fnSource, /const smallestStoneSizeMm=Math\.min\(\.\.\.listStoneSizes\(\)\.map\(s=>s\.diameterMm\)\);/, 'expected the smallest-catalog-size computation');
+  assert.match(fnSource, /mixedOption\.disabled=atSmallestStone;/, 'expected the Mixed <option> to be disabled at the smallest stone size');
+  assert.match(fnSource, /el\('sizeMode'\)\.value='uniform';l\.sizeMode='uniform';/, 'expected an already-Mixed layer to be switched back to Uniform when Stone size drops to the smallest catalog size');
+});
+
+await test('15. updateMixedSizeCapabilityUI() reports a positive "no secondary stones required" message when Mixed mode is correctly configured but produced zero secondary stones', () => {
+  const fnSource = appJs.slice(
+    appJs.indexOf('function updateMixedSizeCapabilityUI'),
+    appJs.indexOf('\nfunction ', appJs.indexOf('function updateMixedSizeCapabilityUI') + 1)
+  );
+  assert.match(fnSource, /mixedSizeSecondaryStoneCountFor\(l\)===0/, 'expected the live-generated secondary stone count to gate this message');
+  assert.match(fnSource, /No secondary stones are required for this design\./);
+});
+
+await test('16. mixedSizeSecondaryStoneCountFor() counts only stones smaller than the layer\'s own primary stone size, for that layer only', () => {
+  // mixedSizeSecondaryStoneCountFor(l) reads the module-level `layout` global by closure (the same
+  // already-computed StoneLayout drawLayout()/updateStats() render from) -- supplied here as an
+  // outer Function parameter of the same name, which real JS scoping resolves for the extracted
+  // function body exactly as it does inside the real app.js module.
+  const fnSource = appJs.slice(
+    appJs.indexOf('function mixedSizeSecondaryStoneCountFor'),
+    appJs.indexOf('}', appJs.indexOf('function mixedSizeSecondaryStoneCountFor')) + 1
+  );
+  const layer = { id: 'text', stoneSize: 4.0 };
+  const layout = {
+    stones: [
+      { layerId: 'text', sizeMm: 4.0 }, // primary, same layer -- not counted
+      { layerId: 'text', sizeMm: 2.8 }, // secondary, same layer -- counted
+      { layerId: 'text', sizeMm: 2.0 }, // secondary, same layer -- counted
+      { layerId: 'other-layer', sizeMm: 2.0 } // secondary, but a different layer -- not counted
+    ]
+  };
+  const run = new Function('layout', 'l', `${fnSource}\nreturn mixedSizeSecondaryStoneCountFor(l);`);
+  assert.equal(run(layout, layer), 2);
+  assert.equal(run(null, layer), 0, 'no generated layout yet must be a safe 0, not a crash');
+  assert.equal(run(layout, null), 0, 'no selected layer must be a safe 0, not a crash');
+});
+
 console.log('RS-2012 Text Gap & Mixed Stone Size UX tests complete.');

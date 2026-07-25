@@ -27,7 +27,7 @@
  * use for their own storage adapters.
  */
 
-import { getFrameDefinition, computeFrameInterior } from '../geometry/FrameLibrary.js';
+import { getFrameDefinition, computeFrameInterior, computeFrameFitRect } from '../geometry/FrameLibrary.js';
 import { computeMonogramLayout, MONOGRAM_LAYOUT_FAILURE_REASONS } from './MonogramLayouts.js';
 import {
   Stone,
@@ -275,17 +275,44 @@ export class MonogramGenerator {
     const normalizedCanvasMm = { widthMm: canvasMm.widthMm, heightMm: canvasMm.heightMm };
     const resolvedColor = color ?? DEFAULT_STONE_COLOR;
 
+    // MONO-006C: the real production center-to-center spacing every letter and the frame must
+    // respect -- computed once, up front, so it can drive both the fitting-region erosion below and
+    // the collision check further down (previously only the latter; see this constant's own use at
+    // the collision check for why the formula is exactly stoneSizeMm+gapMm).
+    const requiredSpacingMm = stoneSizeMm + gapMm;
+
     // 2. Compute frame fitting rectangle -- the clearance-eroded interior region a letter may
     // occupy (never the stone band itself; see FrameLibrary's own MONO-001A doc comment).
-    const { boundingBox: interiorBoundingBox } = computeFrameInterior(frame, normalizedFrameRect);
+    //
+    // MONO-006C: a frame's own clearanceMm (a small, fixed, per-frame constant) is not always enough
+    // geometric buffer for the *real* production spacing (requiredSpacingMm, which can reach ~6.7mm
+    // for the largest catalog stone) -- passing requiredSpacingMm as computeFrameInterior()'s
+    // minClearanceMm guarantees the fitting region always reserves at least that much room, so a
+    // letter sized to fit inside it does not go on to collide with the frame's own stones below.
+    //
+    // MONO-006C also replaces the interior's raw axis-aligned bounding box with
+    // computeFrameFitRect()'s inscribed rectangle at that same bounding box's own aspect ratio --
+    // for a round/diamond frame the bounding box is a strict superset of the true (curved) interior,
+    // so a slot sized to it could poke past the real boundary near the corners even though it fits
+    // the box; computeFrameFitRect() (already built for exactly this, MONO-003) guarantees the
+    // result is fully inside the true fitting polygon. For Square/Rounded-Square -- already
+    // (near-)rectangular -- this returns essentially the same rect as the raw bounding box, so no
+    // regression there.
+    const { boundingBox: interiorBoundingBox } = computeFrameInterior(frame, normalizedFrameRect, requiredSpacingMm);
     if (!interiorBoundingBox) {
-      return failure(R.FITTING_FAILED, `Frame ${JSON.stringify(frameId)}'s interior is empty for the given frameRect (frame too small for its own clearance).`);
+      return failure(R.FITTING_FAILED, `Frame ${JSON.stringify(frameId)}'s interior is empty for the given frameRect and stoneSizeMm ${stoneSizeMm}/gapMm ${gapMm} (frame too small for its required production clearance).`);
+    }
+    const inscribedInteriorRect = computeFrameFitRect(
+      frame, normalizedFrameRect, interiorBoundingBox.widthMm / interiorBoundingBox.heightMm, requiredSpacingMm
+    );
+    if (!inscribedInteriorRect) {
+      return failure(R.FITTING_FAILED, `Frame ${JSON.stringify(frameId)} has no usable rectangular interior region for the given frameRect and stoneSizeMm ${stoneSizeMm}/gapMm ${gapMm}.`);
     }
     const frameInteriorRect = {
-      xMm: interiorBoundingBox.minXmm,
-      yMm: interiorBoundingBox.minYmm,
-      widthMm: interiorBoundingBox.widthMm,
-      heightMm: interiorBoundingBox.heightMm
+      xMm: inscribedInteriorRect.xMm,
+      yMm: inscribedInteriorRect.yMm,
+      widthMm: inscribedInteriorRect.widthMm,
+      heightMm: inscribedInteriorRect.heightMm
     };
 
     // 3. Compute layout slots.
@@ -342,14 +369,36 @@ export class MonogramGenerator {
         return failure(R.FITTING_FAILED, `Letter ${JSON.stringify(letter)} produced no stones for font ${JSON.stringify(fontId)}.`);
       }
 
-      // The scale that makes the letter's natural bounding box fit snugly inside its slot's
-      // targetRect, preserving aspect ratio (the smaller of the two axis ratios governs). This
-      // becomes the letter layer's persisted authoredScale field (see below) -- the same value is
-      // used for the fitting/collision StoneLayout here and for the actual stored layer.
-      const requestedScale = Math.min(
-        slot.targetRect.widthMm / naturalBoundingBox.widthMm,
-        slot.targetRect.heightMm / naturalBoundingBox.heightMm
-      );
+      // MONO-006C: letters default to the *smallest legal* scale (maximum legal stone density)
+      // rather than being stretched to fill their slot. An authored font's stoneCenters are a fixed,
+      // low-resolution dot-matrix grid (PITCH_MM, per family) -- scaling that fixed dot count up to
+      // fill a generous slot only spreads the same dots further apart (physical pitch = PITCH_MM *
+      // scale), which is what reads as "sparse" next to the frame's own tightly-packed fill stones.
+      // Requesting the minimum legal scale instead keeps every letter's stone-to-stone pitch at the
+      // production floor (requiredSpacingMm) -- the densest a legal authored letter can ever be.
+      //
+      // scaleAuthoredTextLayout()'s minimumLegalScale is independent of the scale value passed in
+      // (it's derived from the raw layout's own naturalMinimumSpacingMm and requiredSpacingMm --
+      // see GeometryEngine.js), so a throwaway probe call at scale 1 is enough to read it back
+      // (present in the result whether or not scale 1 itself happens to be legal).
+      const probeResult = this._engine.scaleAuthoredTextLayout(baseLayout, 1);
+      const minimumLegalScale = probeResult.minimumLegalScale;
+      if (!(minimumLegalScale > 0)) {
+        return failure(R.FITTING_FAILED, `Letter ${JSON.stringify(letter)} (slot ${i}): could not determine a minimum legal scale for font ${JSON.stringify(fontId)}.`);
+      }
+      const requestedScale = minimumLegalScale;
+
+      if (requestedScale * naturalBoundingBox.widthMm > slot.targetRect.widthMm
+        || requestedScale * naturalBoundingBox.heightMm > slot.targetRect.heightMm) {
+        return failure(R.FITTING_FAILED, `Letter ${JSON.stringify(letter)} (slot ${i}) does not fit its slot even at the smallest legal scale for stone size ${stoneSizeMm}mm/gap ${gapMm}mm -- the frame is too small for this letter at this stone size.`, {
+          diagnostics: {
+            letter, slotIndex: i, requiredSpacingMm, minimumLegalScale,
+            slotWidthMm: slot.targetRect.widthMm, slotHeightMm: slot.targetRect.heightMm,
+            minimumWidthMm: requestedScale * naturalBoundingBox.widthMm,
+            minimumHeightMm: requestedScale * naturalBoundingBox.heightMm
+          }
+        });
+      }
 
       const scaleResult = this._engine.scaleAuthoredTextLayout(baseLayout, requestedScale);
       if (!scaleResult.ok) {
@@ -468,8 +517,8 @@ export class MonogramGenerator {
     // scaleAuthoredTextLayout()'s minimumLegalScale check / the frame's own stone sampler
     // respectively, so this only ever flags genuine cross-object collisions. Letter-vs-letter is
     // reported ahead of letter-vs-frame when both occur, matching this milestone's own listed
-    // failure-reason order.
-    const requiredSpacingMm = stoneSizeMm + gapMm;
+    // failure-reason order. requiredSpacingMm was already computed above (step 2, reused there for
+    // the fitting-region erosion) -- one shared value for both purposes, never redefined.
     const letterLayerIds = new Set(letterResults.map((r) => r.layerId));
     const allLetterStones = letterResults.flatMap((r) => r.stones);
     const collisionRecords = allLetterStones.concat(frameLayout.stones)

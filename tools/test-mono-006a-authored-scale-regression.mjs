@@ -289,7 +289,16 @@ await test('18. the full production regression: a monogram letter\'s fitted auth
     letters: ['W'],
     fontId: 'rs-modern',
     providerId: 'rhinestone',
-    stoneSizeMm: 2.8,
+    // MONO-006C: the original stone size here is deliberately SS6 (2.0mm), not the previous 2.8mm --
+    // MonogramGenerator now fits every letter at its minimum *legal* scale (see its own doc comment),
+    // and at 2.8mm that minimum legal scale happens to land at exactly 1.0 for rs-modern (2.8mm +
+    // the 0.3mm authored-font gap == this font's own natural pitch, by construction). authoredScale
+    // === 1 is GeometryEngine's documented "no explicit fit requested" default (test 16 above) and is
+    // therefore never validated at all, regardless of stoneSize -- reapplying it here would not
+    // reproduce the regression this test exists to cover. 2.0mm keeps the fitted scale below 1 (a
+    // genuine, validated explicit value) while still exercising the real MonogramGenerator fitting
+    // path end to end.
+    stoneSizeMm: 2.0,
     gapMm: 0.3,
     color: 'crystal',
     frameRect: { xMm: 0, yMm: 0, widthMm: 60, heightMm: 60 },
@@ -298,6 +307,7 @@ await test('18. the full production regression: a monogram letter\'s fitted auth
   assert.ok(genResult.ok, `expected the monogram to generate: ${genResult.reason} ${genResult.message}`);
   const letterLayer = genResult.layers.find((l) => l.type === 'text');
   assert.equal(typeof letterLayer.authoredScale, 'number', 'expected MonogramGenerator to persist an explicit authoredScale');
+  assert.notEqual(letterLayer.authoredScale, 1, 'fixture must not land on the unvalidated authoredScale===1 default (see comment above)');
 
   // Before the fix: editing stoneSize without invalidating authoredScale reproduces the reported
   // regression exactly (below-minimum-scale, same mechanism as the real bug).

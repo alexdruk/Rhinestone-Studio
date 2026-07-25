@@ -8,15 +8,19 @@
 //
 // Real repository frame definitions and the real 'rs-block' authored font are used wherever a
 // scenario can be reached with them (every success case, frame/layout lookup failures, unsupported
-// letter count, invalid font, below-minimum-scale, frame collision -- all found empirically to occur
-// with real geometry, see this file's own fixtures below). Letter-vs-letter collision and the
-// internal-contract-mismatch defense are the two exceptions: MonogramLayouts' own per-layout
-// inter-slot gap ratios (see its own doc comment) turned out to make a genuine adjacent-letter
-// collision very hard to reach with real fonts (the minimum-legal-scale constraint binds first at
-// every frame size tried), and an internal-contract mismatch should never happen with a correctly
-// wired real engine at all -- both use small, clearly-labeled synthetic fake geometryEngines instead,
-// same "fake collaborator" precedent test-mono-002-authored-font-positional-scaling.mjs already uses
-// for its own coincident-stone fixture.
+// letter count, invalid font, fitting-failed -- all found empirically to occur with real geometry,
+// see this file's own fixtures below). Letter-vs-letter collision, frame collision, and the
+// internal-contract-mismatch defense are exceptions: MONO-006C changed letter sizing to default to
+// the smallest *legal* scale (maximum legal stone density) rather than stretching to fill the slot
+// (see MonogramGenerator.generate()'s own doc comment) -- real letters are now small relative to
+// their frame, which makes a genuine letter-vs-letter or letter-vs-frame collision very hard to
+// reach with real fonts at any reasonable frame size (previously frame-collision, in particular, was
+// often actually MONO-006C's own bug B -- a round/diamond frame's true interior being smaller than
+// its bounding box -- not a real production collision; see the fitting-succeeds tests below for that
+// fix). An internal-contract mismatch should never happen with a correctly wired real engine at all.
+// All three use small, clearly-labeled synthetic fake geometryEngines instead, same "fake
+// collaborator" precedent test-mono-002-authored-font-positional-scaling.mjs already uses for its
+// own coincident-stone fixture.
 
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -347,27 +351,105 @@ await test('a non-authored (OpenType) font returns a structured invalid-font fai
   assert.equal(result.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.INVALID_FONT);
 });
 
-await test('a letter that cannot legally fit its slot returns below-minimum-scale', async () => {
+await test('a letter that cannot legally fit its slot even at minimum scale returns fitting-failed', async () => {
   const { generator } = createRealGenerator();
-  // A frame small enough that the required scale to fill the slot falls below the authored font's
-  // own minimum-legal-scale spacing floor (MONO-002) -- a real, not synthetic, fitting failure.
+  // A frame small enough that even the authored font's own smallest legal scale (MONO-002's
+  // minimumLegalScale spacing floor -- MONO-006C's new default, see the module doc comment) doesn't
+  // fit inside the slot -- a real, not synthetic, fitting failure.
   const result = await generator.generate({
     frameId: 'circle', layoutId: 'single', letters: ['W'], ...RS_BLOCK,
     stoneSizeMm: 2.8, canvasMm: CANVAS_MM, frameRect: { xMm: 0, yMm: 0, widthMm: 20, heightMm: 20 }
   });
   assert.equal(result.ok, false);
-  assert.equal(result.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.BELOW_MINIMUM_SCALE);
+  assert.equal(result.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.FITTING_FAILED);
 });
 
-await test('a letter reaching past a round frame\'s true interior returns frame-collision', async () => {
+// --- MONO-006C fitting fix: a round frame's true (curved) interior, not its bounding box ----------
+
+await test('a single letter now fits inside an 85x85 oval frame (MONO-006C fix for bug B)', async () => {
   const { generator } = createRealGenerator();
-  // Single layout's slot is the frame interior's full bounding rect (MONO-004: targetHeightRatio 1,
-  // no margin). For a circular frame, a letter whose ink reaches its own bounding-box corners (e.g.
-  // 'A') therefore pokes past the circle's true (smaller) interior into the frame's own stone band --
-  // a genuine collision, reliably reproduced at ordinary production stone size/frame size.
+  // Before MONO-006C, MonogramGenerator sized the single-letter slot to the frame interior's raw
+  // axis-aligned bounding box, which for an oval/circle/diamond frame is a strict superset of the
+  // true (curved) interior -- a letter fit to that bounding box could poke past the real boundary
+  // near its corners and spuriously collide with the frame's own stones. computeFrameFitRect() (an
+  // inscribed-rectangle search already built for exactly this in FrameLibrary.js, MONO-003) now
+  // constrains the slot to a rectangle guaranteed to lie fully inside the true interior; combined
+  // with MONO-006C's minimum-legal-scale letter sizing (small relative to the frame), this specific,
+  // previously-reported failing combination now succeeds.
   const result = await generator.generate({
-    frameId: 'circle', layoutId: 'single', letters: ['A'], ...RS_BLOCK,
+    frameId: 'oval', layoutId: 'single', letters: ['A'], ...RS_BLOCK,
+    stoneSizeMm: 2.8, canvasMm: CANVAS_MM, frameRect: { xMm: 0, yMm: 0, widthMm: 85, heightMm: 85 }
+  });
+  assert.equal(result.ok, true);
+  assert.ok(result.measurements.totalStoneCount > 0);
+});
+
+await test('two letters now fit inside an 85x85 square frame (MONO-006C fix for bug A)', async () => {
+  const { generator } = createRealGenerator();
+  // Before MONO-006C, FrameLibrary's fixed per-frame clearanceMm (1.5mm, every frame) did not scale
+  // with the real production spacing requirement (stoneSizeMm+gapMm, up to ~6.7mm for the largest
+  // catalog stone) -- at ordinary/larger stone sizes there wasn't enough geometric buffer between
+  // the fitting region and the frame's own stones, even for a plain rectangular frame like Square.
+  // computeFrameInterior()'s new minClearanceMm param (this generator now passes
+  // stoneSizeMm+gapMm) guarantees the fitting region always reserves the real required spacing.
+  const result = await generator.generate({
+    frameId: 'square', layoutId: 'two-letter', letters: ['A', 'B'], ...RS_BLOCK,
+    stoneSizeMm: 4.0, canvasMm: CANVAS_MM, frameRect: { xMm: 0, yMm: 0, widthMm: 85, heightMm: 85 }
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.layers.length, 3, 'frame layer + 2 letter layers');
+});
+
+await test('a real letter defaults to its minimum legal scale, not a slot-filling scale (MONO-006C density default)', async () => {
+  const { generator } = createRealGenerator();
+  const result = await generator.generate({
+    frameId: 'square', layoutId: 'single', letters: ['A'], ...RS_BLOCK,
     stoneSizeMm: 2.8, canvasMm: CANVAS_MM, frameRect: { xMm: 0, yMm: 0, widthMm: 80, heightMm: 80 }
+  });
+  assert.equal(result.ok, true);
+  const letterMeasurement = result.measurements.letters[0];
+  assert.equal(letterMeasurement.requestedScale, letterMeasurement.minimumLegalScale);
+});
+
+await test('a letter placed exactly where the frame has a stone returns frame-collision (synthetic fixture)', async () => {
+  // MONO-006C: real letters are now sized so small (minimum legal scale) that a genuine
+  // letter-vs-frame collision is very hard to reach with real fonts/frames -- this fake forces one
+  // deterministically (the letter's one stone and the frame's one stone both land on the exact same
+  // point) to prove the collision check itself is untouched by the fitting/density changes above.
+  const geometryEngine = {
+    async generateTextLayout({ layerId, color }) {
+      return new StoneLayout({
+        layerId, sourceMode: 'authored',
+        stones: [new Stone({ xMm: 0, yMm: 0, sizeMm: 2.8, color, layerId, index: 0 })]
+      });
+    },
+    scaleAuthoredTextLayout(layout, requestedScale) {
+      const scaledStones = layout.stones.map((s) => new Stone({
+        xMm: s.xMm * requestedScale, yMm: s.yMm * requestedScale,
+        sizeMm: s.sizeMm, color: s.color, layerId: s.layerId, index: s.index, metadata: s.metadata
+      }));
+      return {
+        ok: true,
+        layout: new StoneLayout({ layerId: layout.layerId, sourceMode: 'authored', stones: scaledStones }),
+        requestedScale, minimumLegalScale: 0.1, naturalMinimumSpacingMm: 4, requiredSpacingMm: 3.1,
+        originalBoundingBox: layout.getBoundingBox()?.toJSON() ?? null,
+        scaledBoundingBox: layout.getBoundingBox()?.toJSON() ?? null
+      };
+    },
+    // A frame stone placed exactly at the placement box's own center -- guaranteed to sit under
+    // wherever the 'single' layout centers its one letter (the frame interior's own center too).
+    generatePathLayout({ layerId, xMm, yMm, widthMm, heightMm }) {
+      return new StoneLayout({
+        layerId, sourceMode: 'fill',
+        stones: [new Stone({ xMm: xMm + widthMm / 2, yMm: yMm + heightMm / 2, sizeMm: 2.8, color: 'gold', layerId, index: 0 })]
+      });
+    }
+  };
+  const generator = new MonogramGenerator({ geometryEngine });
+  const result = await generator.generate({
+    frameId: 'square', layoutId: 'single', letters: ['X'], fontId: 'fake-font',
+    stoneSizeMm: 2.8, gapMm: 0.3, canvasMm: CANVAS_MM,
+    frameRect: { xMm: 0, yMm: 0, widthMm: 80, heightMm: 80 }
   });
   assert.equal(result.ok, false);
   assert.equal(result.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.FRAME_COLLISION);
