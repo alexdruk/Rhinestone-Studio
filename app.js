@@ -577,6 +577,16 @@ function shapeLayerResolveParams(layer){
 // forwards sizeMode:'uniform', so GeometryEngine.js's normalizeMixedSizeParams() short-circuits
 // immediately and every pre-S-200 project generates byte-identical geometry.
 function mixedSizeParamsFor(layer){return{sizeMode:resolveSizeMode(layer.sizeMode),allowedSizesMm:layer.allowedSizesMm??[],minSizeMm:layer.minSizeMm??null,maxSizeMm:layer.maxSizeMm??null,conservativeDetail:layer.conservativeDetail}}
+// MONO-006B: every field generateTextStonesLive() passes to permanentEngine.generateTextLayout()
+// except authoredScale itself -- factored out so recoverStaleAuthoredScales() below can generate
+// the exact same *natural* (unscaled) layout to validate a persisted authoredScale against, without
+// duplicating (and risking drift from) this field list.
+function buildTextLayoutBaseParams(layer){const fontId=layer.font;const authored=isAuthoredStoneFontId(fontId);const mode=resolveTextFillMode(layer.textMode);return{text:layer.text,fontId,providerId:resolveFontProviderId(fontId),layerId:layer.id,heightMm:layer.height,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,curveEnabled:authored?false:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment,
+  // TXT-102: '??' fallbacks so a pre-TXT-102 saved project (no align/lineSpacing/rotationDeg on its
+  // text layers) renders byte-identical -- 'left'/1/0 are exactly GeometryEngine's own defaults.
+  align:layer.align??'left',lineSpacing:layer.lineSpacing??1,rotationDeg:layer.rotationDeg??0,
+  // S-200: see mixedSizeParamsFor()'s own doc comment.
+  ...mixedSizeParamsFor(layer)}}
 class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=permanentEngine}
  // Geometry generation happens exactly once here, per docs/ARCHITECTURE.md: every layer's stones
  // come straight from the permanent engine's per-layer StoneLayout; dedupeStonesByRadius() below
@@ -588,20 +598,49 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // wrapped into one real StoneLayout ('project' is a sentinel layerId — StoneLayout requires one
  // non-empty layerId per instance; each Stone still carries its own real layer id) so every
  // renderer/exporter downstream consumes the same canonical product.
- async generate(project){let raw=[];for(const l of project.layers){if(!l.visible)continue;if(l.type==='text')raw.push(...await this.generateTextStonesLive(l,project));if(SHAPE_LAYER_TYPES.has(l.type))raw.push(...await this.generateShapeStonesLive(l));if(l.type==='svg')raw.push(...await this.generateSvgStonesLive(l));if(l.type==='image')raw.push(...await this.generateImageStonesLive(l));if(l.type==='path')raw.push(...await this.generatePathStonesLive(l));}const stones=dedupeStonesByRadius(raw).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId}));return new StoneLayout({layerId:'project',stones})}
+ // MONO-006B: a persisted layer.authoredScale (MONO-005A) can become illegal for reasons the layer
+ // itself was never edited for -- initial load, project import, autosave recovery, undo/redo, or
+ // simply selecting a different layer all reach this generate() call without ever going through
+ // writeSelectedControlsToLayer() (see updateAll(true)'s skipWrite callers), so MONO-006A's
+ // invalidateAuthoredScaleForGeometryChange() -- which only fires on a live edit of the *currently
+ // selected* layer -- never gets a chance to catch a value that was already stale before the first
+ // successful generation. Running this once per generate() call, before any layer's stones are
+ // built, means every regeneration entry path is covered by construction (this is the one place
+ // "geometry generation happens exactly once", per docs/ARCHITECTURE.md) rather than needing to be
+ // individually patched at each call site. Mutates `project` in place (the same live object every
+ // caller already shares) so the fix -- not just this one render -- is what autosave/Save/undo-redo
+ // history created afterward all see; it does not call commitHistory(), so it never manufactures an
+ // extra undo step of its own.
+ async recoverStaleAuthoredScales(project){
+  if(!this.permanentEngine||!this.permanentEngine.canGenerateText)return;
+  for(const l of project.layers){
+    if(l.type!=='text'||typeof l.authoredScale!=='number'||!l.text||!isFontKnown(l.font))continue;
+    // The natural (unscaled) layout for this layer's *current* text/font/stoneSize/gap --
+    // authoredScale:1 is generateTextLayout()'s own default and skips its internal scaling step
+    // entirely (see its doc comment), so this is exactly the layout scaleAuthoredTextLayout() below
+    // needs to judge the persisted scale against. Any throw here (unknown curve combination,
+    // manifest failure, etc.) is a genuine, unrelated error -- deliberately not caught, so it
+    // surfaces the same way it always has through updateAll()'s own try/catch, instead of being
+    // silently absorbed by this recovery pass.
+    const naturalLayout=await this.permanentEngine.generateTextLayout({...buildTextLayoutBaseParams(l),authoredScale:1});
+    if(naturalLayout.sourceMode!=='authored')continue; // no effect on sampled/OpenType text (MONO-002)
+    // scaleAuthoredTextLayout() never throws -- it returns a structured {ok,reason,...} verdict
+    // (MONO-002), the exact legality check generateTextLayout() itself uses internally. Reusing it
+    // here means this can never disagree with the engine's own judgment, and never needs to parse an
+    // exception message to tell a stale scale apart from any other kind of failure.
+    const scaleResult=this.permanentEngine.scaleAuthoredTextLayout(naturalLayout,l.authoredScale);
+    if(!scaleResult.ok)delete l.authoredScale;
+  }
+ }
+ async generate(project){await this.recoverStaleAuthoredScales(project);let raw=[];for(const l of project.layers){if(!l.visible)continue;if(l.type==='text')raw.push(...await this.generateTextStonesLive(l,project));if(SHAPE_LAYER_TYPES.has(l.type))raw.push(...await this.generateShapeStonesLive(l));if(l.type==='svg')raw.push(...await this.generateSvgStonesLive(l));if(l.type==='image')raw.push(...await this.generateImageStonesLive(l));if(l.type==='path')raw.push(...await this.generatePathStonesLive(l));}const stones=dedupeStonesByRadius(raw).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId}));return new StoneLayout({layerId:'project',stones})}
  // FONT-002: an unknown font id (not just one hidden from the picker -- see isFontKnown()) is never
  // silently substituted for DEFAULT_TEXT_FONT_ID; that layer's stones are skipped (same shape as an
  // empty-text layer already returning []), and updateTextFontCapabilityUI() surfaces why while it's
  // selected. layer.font itself is left untouched in `project`.
- async generateTextStonesLive(layer,project){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text||!isFontKnown(layer.font))return[];const fontId=layer.font;const authored=isAuthoredStoneFontId(fontId);const mode=resolveTextFillMode(layer.textMode);const base={text:layer.text,fontId,providerId:resolveFontProviderId(fontId),layerId:layer.id,heightMm:layer.height,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode,color:layer.color,curveEnabled:authored?false:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment,
-  // TXT-102: '??' fallbacks so a pre-TXT-102 saved project (no align/lineSpacing/rotationDeg on its
-  // text layers) renders byte-identical -- 'left'/1/0 are exactly GeometryEngine's own defaults.
-  align:layer.align??'left',lineSpacing:layer.lineSpacing??1,rotationDeg:layer.rotationDeg??0,
+ async generateTextStonesLive(layer,project){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text||!isFontKnown(layer.font))return[];const base={...buildTextLayoutBaseParams(layer),
   // MONO-005A: see resolveAuthoredScale()'s own doc comment. No effect on sampled/OpenType text --
   // GeometryEngine only ever reads authoredScale inside its authored-stone-center branch.
-  authoredScale:resolveAuthoredScale(layer),
-  // S-200: see mixedSizeParamsFor()'s own doc comment.
-  ...mixedSizeParamsFor(layer)};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const{scale}=computeAutoFitScale(layer,project,result.widthMm);if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
+  authoredScale:resolveAuthoredScale(layer)};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const{scale}=computeAutoFitScale(layer,project,result.widthMm);if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
   // RS-1009: text layers previously had no position field -- stones were always centered on the
   // canvas. layer.x/layer.y (mm, default 0) are a further offset applied on top of that same
   // auto-centered base position, so pre-RS-1009 Project JSON (no x/y on its text layers) renders
