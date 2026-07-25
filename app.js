@@ -85,7 +85,7 @@
 // pipeline stages re-run on every threshold/invert/blur/resize edit, but the (comparatively
 // expensive) browser image decode only ever runs once per distinct imageSrc value.
 import './src/browser/BrowserDependencyProbe.js';
-import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius } from './src/geometry/index.js';
+import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
 import { createDefaultFontProviderRegistry, createDefaultRhinestoneFontRegistry, BoundingBox } from './src/text/index.js';
 import { renderProductionLayout, renderStoneLayout, fitTransform } from './src/renderer/CanvasRenderer2D.js';
@@ -121,6 +121,17 @@ import { Lightbox, el, parseIntOr, download, exportCanvas, syncShippingFieldsFro
 // renderProductionLayout() pipeline (reused, unmodified, for thumbnail generation). See
 // docs/specifications/RS-1015-DesignLibrary.md.
 import { DesignLibrary, createLocalStorageAdapter, createMemoryStorageAdapter, buildSelectionItemData, buildProjectItemData, buildProjectFromItem, prepareLayersForInsert, getInsertableLayers } from './src/library/index.js';
+// MONO-006 (Monogram Generator UI): the Monogram Lightbox is a plain front-end -- it never
+// generates geometry, computes layouts, fits, or detects collisions itself. All of that is
+// delegated to MonogramGenerator.generate() (MONO-005/MONO-005A), which returns ordinary project
+// layers inserted through the same commitHistory()+project.layers.push() pattern
+// insertLibraryItem() already uses, so undo/redo treats a generated monogram as one step. Frame
+// choices come from FrameLibrary.listFrames() (imported below alongside the geometry barrel);
+// layout ids/required letter counts come from MonogramLayouts.js. Both are imported through a new
+// src/monogram/index.js barrel this milestone adds (src/monogram/** had none before -- only test
+// files imported it directly; app.js may only import permanent modules through a src/*/index.js
+// barrel, see tools/test-architecture-module-boundaries.mjs).
+import { MonogramGenerator, MONOGRAM_GENERATOR_FAILURE_REASONS, MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS } from './src/monogram/index.js';
 // RC-005 (Autosave & Crash Recovery): src/persistence/** is a new, pure, DOM-free module -- mirrors
 // src/library/**'s exact "storage-adapter injected, browser-global only at app.js's edge" shape.
 // It knows nothing about Project/Layer/StoneLayout; app.js is the only caller, and is the only
@@ -731,6 +742,10 @@ function isAuthoredStoneFontId(fontId){return resolveFontProviderId(fontId)==='r
 // genuinely unknown one (isFontKnown false) -- see generateTextStonesLive()'s handling of the latter.
 function isFontKnown(fontId){return Boolean(fontManager&&fontManager.hasFont(fontId))}
 const permanentEngine=new PermanentGeometryEngine({fontProviderRegistry});
+// MONO-006: MonogramGenerator needs generateTextLayout()/scaleAuthoredTextLayout()/
+// generatePathLayout() directly -- the *permanent* engine, not the local GeometryEngine wrapper
+// below (which only exposes app.js's own live-regeneration helpers).
+const monogramGenerator=new MonogramGenerator({geometryEngine:permanentEngine});
 const engine=new GeometryEngine(permanentEngine);let project=defaultProject(),selectedLayerId='text',layout=null,rotation=0,zoom=1,layoutTransform=null,drag=null,generationToken=0;const layoutCanvas=el('layout'),cupCanvas=el('cup');
 // RS-1009: the one multi-selection model (src/editing/Selection.js is the only place that
 // computes a new Set from an old one). selectedLayerId (above, pre-existing) keeps driving the
@@ -2351,11 +2366,17 @@ const lightboxes={
   library:new Lightbox('lightboxLibrary',{primary:true,onOpen(){onLibraryOpen()}}),
   libraryConfirm:new Lightbox('lightboxLibraryConfirm'),
   gallery:new Lightbox('lightboxGallery',{primary:true,onOpen(){onGalleryOpen()}}),
-  galleryPreview:new Lightbox('lightboxGalleryPreview')
+  galleryPreview:new Lightbox('lightboxGalleryPreview'),
+  // MONO-006: no shared field group participates in this Lightbox (Frame/Layout/Letters/Font/Stone
+  // Size/Color/Frame Size all live in dedicated #monogram* controls, never the relocated
+  // #stoneSize/#stoneColor/#font shared elements above), so it needs no relocateFieldGroups()
+  // onOpen/onClose pair -- onOpen only needs to (re)populate its own option lists.
+  monogram:new Lightbox('lightboxMonogram',{primary:true,onOpen(){onMonogramOpen()}})
 };
 
 el('menuText').onclick=()=>lightboxes.text.open();
 el('menuShapes').onclick=()=>lightboxes.shapes.open();
+el('menuMonogram').onclick=()=>lightboxes.monogram.open();
 // RC-006 (Version 1.0 Feature Freeze): #menuLibrary carries the native `disabled` attribute (see
 // index.html), which makes the browser withhold click/Enter/Space activation and tab focus
 // entirely -- this handler is wired the same as every other menu item and is deliberately left
@@ -2393,6 +2414,158 @@ el('moreOptionsBtn').onclick=()=>{
   const target=lightboxForLayerType(selectedLayer().type);
   if(target)target.open();
 };
+
+// ---- Monogram Lightbox (MONO-006) ----
+// UI integration only: every control here is read at Generate-click time and handed to
+// MonogramGenerator.generate() (constructed above as `monogramGenerator`). This section never
+// computes geometry, layout, fitting, or collisions -- it only builds a request object, calls the
+// generator, and (on success) inserts the returned ordinary layers through the exact same
+// commitHistory()+project.layers.push() pattern insertLibraryItem() already uses, so undo/redo
+// treats a generated monogram as a single step, same as inserting a Design Library item.
+const MONOGRAM_LAYOUT_LABELS={
+  [MONOGRAM_LAYOUTS.SINGLE]:'Single',
+  [MONOGRAM_LAYOUTS.TWO_LETTER]:'Two Letter',
+  [MONOGRAM_LAYOUTS.TRADITIONAL_THREE]:'Traditional Three',
+  [MONOGRAM_LAYOUTS.EQUAL_THREE]:'Equal Three'
+};
+const MONOGRAM_FAILURE_MESSAGES={
+  [MONOGRAM_GENERATOR_FAILURE_REASONS.INVALID_INPUT]:'Check the Monogram settings and try again.',
+  [MONOGRAM_GENERATOR_FAILURE_REASONS.FRAME_NOT_FOUND]:'The selected frame is not available.',
+  [MONOGRAM_GENERATOR_FAILURE_REASONS.LAYOUT_NOT_FOUND]:'The selected layout is not available.',
+  [MONOGRAM_GENERATOR_FAILURE_REASONS.UNSUPPORTED_LETTER_COUNT]:'The number of letters does not match the selected layout.',
+  [MONOGRAM_GENERATOR_FAILURE_REASONS.INVALID_FONT]:'The selected font cannot be used for Monogram generation. Choose a different production font.',
+  [MONOGRAM_GENERATOR_FAILURE_REASONS.FITTING_FAILED]:'The letters do not fit this frame size. Try a larger frame.',
+  [MONOGRAM_GENERATOR_FAILURE_REASONS.BELOW_MINIMUM_SCALE]:'The letters would be too small to produce at this frame size. Try a larger frame or fewer letters.',
+  [MONOGRAM_GENERATOR_FAILURE_REASONS.LETTER_COLLISION]:'Letters overlap at this stone size. Try a larger frame or a smaller stone size.',
+  [MONOGRAM_GENERATOR_FAILURE_REASONS.FRAME_COLLISION]:'A letter overlaps the frame. Try a larger frame, or fewer/smaller letters.',
+  [MONOGRAM_GENERATOR_FAILURE_REASONS.INTERNAL_CONTRACT_MISMATCH]:'Monogram generation failed unexpectedly. Please try again.'
+};
+function monogramFailureMessage(reason){return MONOGRAM_FAILURE_MESSAGES[reason]||'Monogram generation failed. Please check your settings and try again.'}
+// Frame choices come straight from FrameLibrary.listFrames() -- adding a frame there needs no
+// change here, mirroring populateStoneSizeOptions()/populateStoneColorOptions()'s existing
+// "index.html hardcodes no <option>, the catalog is the only source" convention.
+function populateMonogramFrameOptions(){el('monogramFrame').innerHTML=listFrames().map(f=>`<option value="${f.id}">${escapeHtml(f.label)}</option>`).join('')}
+function populateMonogramLayoutOptions(){el('monogramLayout').innerHTML=Object.values(MONOGRAM_LAYOUTS).map(id=>`<option value="${id}">${escapeHtml(MONOGRAM_LAYOUT_LABELS[id]||id)}</option>`).join('')}
+// Same production-font catalog #font already uses (productionFonts() above) -- authored
+// (stoneCenters-based) fonts only, never OpenType/sampled fonts, per this milestone's own
+// requirement. A dedicated #monogramFont select (not the shared #font element) so this Lightbox
+// never participates in relocateFieldGroups().
+function populateMonogramFontOptions(){if(!fontManager)return;el('monogramFont').innerHTML=groupFontsByCategory(productionFonts()).map(([role,fonts])=>`<optgroup label="${escapeHtml(fontCategoryLabel(role))}">${fonts.map(f=>`<option value="${f.id}">${escapeHtml(f.family)}</option>`).join('')}</optgroup>`).join('')}
+function populateMonogramStoneSizeOptions(){el('monogramStoneSize').innerHTML=listStoneSizes().map(s=>`<option value="${s.diameterMm}">${escapeHtml(s.name)} — ${s.diameterMm.toFixed(1)} mm</option>`).join('')}
+function populateMonogramColorOptions(){const groups=new Map();for(const c of Object.values(STONE_COLORS)){if(!groups.has(c.group))groups.set(c.group,[]);groups.get(c.group).push(c)}el('monogramColor').innerHTML=[...groups.entries()].map(([group,colors])=>`<optgroup label="${escapeHtml(group)}">${colors.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`).join('')}
+function updateMonogramColorSwatch(){const c=STONE_COLORS[el('monogramColor').value];el('monogramColorSwatch').style.background=c?c.previewColor:'transparent'}
+// Frame Size Width/Height bounds come from FrameLibrary's own scalingLimitsMm for the selected
+// frame -- the same field this app already uses to bound vessel/plate dimensions. Only resets the
+// current value when it falls outside the new frame's range, so switching frames back and forth
+// never fights a value the user just typed.
+function updateMonogramFrameSizeBounds(){
+  const frame=listFrames().find(f=>f.id===el('monogramFrame').value);
+  if(!frame)return;
+  const limits=frame.scalingLimitsMm;
+  const widthInput=el('monogramWidth'),heightInput=el('monogramHeight');
+  widthInput.min=String(limits.minWidthMm);widthInput.max=String(limits.maxWidthMm);
+  heightInput.min=String(limits.minHeightMm);heightInput.max=String(limits.maxHeightMm);
+  const currentW=parseFloat(widthInput.value),currentH=parseFloat(heightInput.value);
+  if(!Number.isFinite(currentW)||currentW<limits.minWidthMm||currentW>limits.maxWidthMm)widthInput.value=String(Math.round((limits.minWidthMm+limits.maxWidthMm)/2));
+  if(!Number.isFinite(currentH)||currentH<limits.minHeightMm||currentH>limits.maxHeightMm)heightInput.value=String(Math.round((limits.minHeightMm+limits.maxHeightMm)/2));
+  el('monogramFrameSizeHint').textContent=`${frame.label}: width ${limits.minWidthMm}-${limits.maxWidthMm}mm, height ${limits.minHeightMm}-${limits.maxHeightMm}mm.`;
+}
+// MONOGRAM_LAYOUT_LETTER_COUNTS is authoritative (MonogramLayouts.js) -- this only mirrors it into
+// a visible hint and the input's maxlength; the same count is re-checked in
+// validateMonogramControls() below before Generate is ever allowed to call the generator.
+function updateMonogramLetterCountHint(){
+  const count=MONOGRAM_LAYOUT_LETTER_COUNTS[el('monogramLayout').value];
+  el('monogramLetterCountHint').textContent=count?`This layout uses exactly ${count} letter${count===1?'':'s'}.`:'';
+  if(count)el('monogramLetters').maxLength=count;
+}
+function showMonogramValidation(message){const v=el('monogramValidation');v.textContent=message;v.style.display='block'}
+function clearMonogramValidation(){const v=el('monogramValidation');v.textContent='';v.style.display='none'}
+// UI-side validation (empty letters, wrong letter count, zero/blank frame size, no font selected)
+// -- prevents impossible requests from ever reaching the generator, per this milestone's own
+// requirement. MonogramGenerator.generate()'s own validation remains authoritative for everything
+// else (frame/letter fitting, collisions) -- this function deliberately does not duplicate that.
+function validateMonogramControls(){
+  const frameId=el('monogramFrame').value;
+  const layoutId=el('monogramLayout').value;
+  const fontId=el('monogramFont').value;
+  const lettersRaw=el('monogramLetters').value.trim();
+  const widthMm=parseFloat(el('monogramWidth').value);
+  const heightMm=parseFloat(el('monogramHeight').value);
+  if(!frameId)return{ok:false,message:'Choose a frame.'};
+  if(!layoutId)return{ok:false,message:'Choose a layout.'};
+  if(!fontId)return{ok:false,message:'Choose a font. Only production fonts are offered here.'};
+  if(lettersRaw.length===0)return{ok:false,message:'Enter at least one letter.'};
+  const letters=Array.from(lettersRaw);
+  const requiredCount=MONOGRAM_LAYOUT_LETTER_COUNTS[layoutId];
+  if(requiredCount&&letters.length!==requiredCount)return{ok:false,message:`This layout requires exactly ${requiredCount} letter${requiredCount===1?'':'s'} (got ${letters.length}).`};
+  if(!Number.isFinite(widthMm)||widthMm<=0||!Number.isFinite(heightMm)||heightMm<=0)return{ok:false,message:'Frame width and height must be greater than zero.'};
+  return{ok:true,frameId,layoutId,fontId,letters,widthMm,heightMm};
+}
+function updateMonogramGenerateButtonState(){el('monogramGenerate').disabled=!validateMonogramControls().ok}
+// request.frameRect centers the frame on the project's own canvas (the same coordinate space
+// every other placed layer type -- circle/rectangle/svg/path/image -- already places its x/y/w/h
+// in); request.canvasMm is project.canvas.width/height verbatim, required so the generator can
+// compute each letter's real text-layer x/y under the canvas-centered placement contract (see
+// MonogramGenerator.generate()'s own doc comment).
+function buildMonogramRequest(validated){
+  const stoneSizeMm=parseFloat(el('monogramStoneSize').value);
+  const color=el('monogramColor').value;
+  const frameRect={
+    xMm:(project.canvas.width-validated.widthMm)/2,
+    yMm:(project.canvas.height-validated.heightMm)/2,
+    widthMm:validated.widthMm,
+    heightMm:validated.heightMm
+  };
+  const canvasMm={widthMm:project.canvas.width,heightMm:project.canvas.height};
+  // resolveFontProviderId() -- same call generateTextStonesLive() already makes for every ordinary
+  // text layer -- so an authored font resolves through the real Rhinestone font provider, not the
+  // OpenType one; omitting this made the real GeometryEngine mis-resolve authored fonts entirely.
+  return{frameId:validated.frameId,layoutId:validated.layoutId,letters:validated.letters,fontId:validated.fontId,providerId:resolveFontProviderId(validated.fontId),stoneSizeMm,color,frameRect,canvasMm};
+}
+function onMonogramOpen(){clearMonogramValidation();updateMonogramGenerateButtonState()}
+async function generateMonogram(){
+  const validation=validateMonogramControls();
+  if(!validation.ok){showMonogramValidation(validation.message);return}
+  clearMonogramValidation();
+  const request=buildMonogramRequest(validation);
+  el('monogramGenerate').disabled=true;
+  let result;
+  try{
+    result=await monogramGenerator.generate(request);
+  }catch(error){
+    console.error('Monogram generation failed',error);
+    showMonogramValidation('Monogram generation failed. Please check your settings and try again.');
+    updateMonogramGenerateButtonState();
+    return;
+  }
+  if(!result.ok){
+    showMonogramValidation(monogramFailureMessage(result.reason));
+    updateMonogramGenerateButtonState();
+    return;
+  }
+  // Single undo step: one commitHistory() before pushing every generated layer, exactly like
+  // insertLibraryItem() -- HistoryManager snapshots the whole project, so undo removes (and redo
+  // restores) all of this monogram's layers together, never one layer at a time.
+  commitHistory();
+  project.layers.push(...result.layers);
+  selectedLayerIds=selectMany(result.layers.map(l=>l.id));
+  selectedLayerId=result.layers[result.layers.length-1].id;
+  syncSelectedControlsFromLayer();
+  updateAll(true);
+  lightboxes.monogram.close();
+  el('status').textContent=`Generated monogram (${result.layers.length} layer${result.layers.length===1?'':'s'}).`;
+}
+populateMonogramFrameOptions();populateMonogramLayoutOptions();populateMonogramStoneSizeOptions();populateMonogramColorOptions();
+updateMonogramColorSwatch();updateMonogramFrameSizeBounds();updateMonogramLetterCountHint();
+if(fontManager)populateMonogramFontOptions();
+el('monogramFrame').addEventListener('change',()=>{updateMonogramFrameSizeBounds();updateMonogramGenerateButtonState()});
+el('monogramLayout').addEventListener('change',()=>{updateMonogramLetterCountHint();updateMonogramGenerateButtonState()});
+el('monogramLetters').addEventListener('input',()=>updateMonogramGenerateButtonState());
+el('monogramFont').addEventListener('change',()=>updateMonogramGenerateButtonState());
+el('monogramColor').addEventListener('change',()=>{updateMonogramColorSwatch();updateMonogramGenerateButtonState()});
+el('monogramWidth').addEventListener('input',()=>updateMonogramGenerateButtonState());
+el('monogramHeight').addEventListener('input',()=>updateMonogramGenerateButtonState());
+el('monogramGenerate').onclick=()=>generateMonogram();
 
 // ---- Shapes Lightbox: Design Shapes / Object Templates tabs ----
 function setShapesTab(tab){
