@@ -2,3 +2,4 @@ export { SNAP_TOLERANCE_MM, NUDGE_STEP_MM, NUDGE_STEP_LARGE_MM } from './Editing
 export { alignLayers, distributeLayers, ALIGN_DIRECTIONS, DISTRIBUTE_AXES } from './AlignmentEngine.js';
 export { buildSnapTargets, computeSnapOffset } from './SnapEngine.js';
 export { selectOnly, toggleSelection, clearSelection, selectMany } from './Selection.js';
+export { computeTextPlacementOffsetMm, computeTextLayerPositionForTargetCenterMm } from './TextPlacement.js';

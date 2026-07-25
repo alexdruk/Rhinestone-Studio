@@ -267,6 +267,69 @@ export function dedupeStonesByRadius(stones) {
 }
 
 /**
+ * MONO-005A: a pure collision *query* over tagged groups of stones -- reuses dedupeStonesByRadius()'s
+ * exact grid-hash bucket technique (bucket size = the largest `d` in play, 3x3-neighborhood scan,
+ * cross-`layerId`-only comparisons, `(a.d+b.d)/2` touching threshold) but never drops or reorders a
+ * stone. dedupeStonesByRadius() is a *deduplication* API: it greedily discards the later of any
+ * colliding pair, so an already-dropped stone can never be compared against anything after it --
+ * fine for its own "keep a de-overlapped set" purpose, but the wrong tool for *classifying* which
+ * group-pairs collide (a caller checking two categories via two separate dedupe passes would need to
+ * reason carefully about processing order to be sure a real collision was never masked by an earlier,
+ * unrelated drop). This function instead inserts every stone unconditionally, checking each one
+ * against every already-inserted stone in its 3x3 neighborhood before inserting it -- the standard
+ * "sweep and insert, only look backward" correctness argument applies: every unordered close pair is
+ * found exactly once, when the later-inserted member of the pair is processed, regardless of overall
+ * input order. Distinct group-pairs are deduplicated in the *result* (not the scan), so calling this
+ * twice with the same stones in a different order always reports the identical set of colliding
+ * group-pairs.
+ *
+ * @param {{x: number, y: number, d: number, layerId: string}[]} stones
+ * @returns {{layerIdA: string, layerIdB: string}[]} One entry per distinct unordered pair of group
+ *   ids with at least one colliding stone pair between them. Empty if there are no collisions.
+ */
+export function findCrossGroupCollisions(stones) {
+  const collisions = [];
+  if (stones.length === 0) {
+    return collisions;
+  }
+
+  const cellSizeMm = Math.max(...stones.map((s) => s.d));
+  const buckets = new Map();
+  const seenGroupPairs = new Set();
+
+  for (const stone of stones) {
+    const gx = Math.floor(stone.x / cellSizeMm);
+    const gy = Math.floor(stone.y / cellSizeMm);
+
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const bucket = buckets.get(`${gx + dx},${gy + dy}`);
+        if (!bucket) continue;
+        for (const other of bucket) {
+          if (other.layerId === stone.layerId) continue;
+          const ddx = stone.x - other.x;
+          const ddy = stone.y - other.y;
+          const minSeparationMm = (stone.d + other.d) / 2;
+          if (ddx * ddx + ddy * ddy < minSeparationMm * minSeparationMm) {
+            const pairKey = [stone.layerId, other.layerId].sort().join(' ');
+            if (!seenGroupPairs.has(pairKey)) {
+              seenGroupPairs.add(pairKey);
+              collisions.push({ layerIdA: stone.layerId, layerIdB: other.layerId });
+            }
+          }
+        }
+      }
+    }
+
+    const key = `${gx},${gy}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(stone);
+  }
+
+  return collisions;
+}
+
+/**
  * RC-002 / RC-004A: sample every contour's outline points independently (via sampleOutlinePoints(),
  * so each contour's own spacingMm arc-length walk is completely unchanged), then drop any point
  * that lands within `minSeparationMm` of an already-kept point -- from that *same* contour or a

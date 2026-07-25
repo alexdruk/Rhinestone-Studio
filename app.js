@@ -105,7 +105,7 @@ import { prepareImageField, maskFieldToRgba, decodeImageFileToBuffer, decodeData
 // app.js is the only caller, and is the only place that knows a given layer's position field
 // names (cx/cy vs x/y) via the new getLayerPosition()/setLayerPosition() helpers below. See
 // docs/specifications/RS-1009-AlignmentSnapping.md.
-import { SNAP_TOLERANCE_MM, NUDGE_STEP_MM, NUDGE_STEP_LARGE_MM, alignLayers, distributeLayers, buildSnapTargets, computeSnapOffset, selectOnly, toggleSelection, clearSelection, selectMany } from './src/editing/index.js';
+import { SNAP_TOLERANCE_MM, NUDGE_STEP_MM, NUDGE_STEP_LARGE_MM, alignLayers, distributeLayers, buildSnapTargets, computeSnapOffset, selectOnly, toggleSelection, clearSelection, selectMany, computeTextPlacementOffsetMm, computeTextLayerPositionForTargetCenterMm } from './src/editing/index.js';
 // UI-001 (Complete Application Redesign): src/ui/** is a new, pure, DOM-only module -- a generic
 // Lightbox/dialog controller (open/close, focus trap, Escape, backdrop click). It has no knowledge
 // of Project/Layer/StoneLayout/layer type; app.js is the only caller, and is the only place that
@@ -424,10 +424,13 @@ function computeAutoFitScale(layer,project,measuredWidthMm){
   const minScale=spacingMm>0&&layer.height>0?(spacingMm*MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO)/layer.height:fitScale;
   return{scale:Math.min(1,Math.max(fitScale,minScale))};
 }
+// MONO-005A: delegates to src/editing/TextPlacement.js's own computeTextPlacementOffsetMm() -- the
+// single shared source of truth for this formula, now also used by MonogramGenerator to compute a
+// generated letter layer's x/y (via that module's inverse function). Behavior-preserving extraction
+// only; this wrapper's own signature/return shape is unchanged.
 function computeTextPlacementOffset(boundingBox,layer,project){
-  const offsetX=(boundingBox?(project.canvas.width-boundingBox.widthMm)/2-boundingBox.minXmm:0)+(layer.x||0);
-  const offsetY=(boundingBox?(project.canvas.height-boundingBox.heightMm)/2-boundingBox.minYmm:0)+(layer.y||0);
-  return{offsetX,offsetY};
+  const{offsetXMm,offsetYMm}=computeTextPlacementOffsetMm({boundingBoxMm:boundingBox,xMm:layer.x,yMm:layer.y,canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height});
+  return{offsetX:offsetXMm,offsetY:offsetYMm};
 }
 // RS-1011 (Fill Algorithms): "Fill Style" -- Outline/Grid Fill/Staggered Fill/Radial Fill/Contour
 // Fill -- for every vector layer type (text/circle/rectangle/svg/path), and the 4-mode subset
@@ -443,6 +446,14 @@ function computeTextPlacementOffset(boundingBox,layer,project){
 const VECTOR_FILL_MODES=new Set(['outline','fill','staggered','radial','contour']);
 const IMAGE_FILL_MODES=new Set(['fill','staggered','radial','contour']);
 const TEXT_MODE_TO_ENGINE_MODE={stroke:'outline',fill:'fill',staggered:'staggered',radial:'radial',contour:'contour'};
+// MONO-005A: layer.authoredScale is a new, optional, additive text-layer field -- GeometryEngine's
+// own normalizeTextParams() validates it strictly (throws for non-finite/non-positive), but this
+// read site follows this file's existing permissive-import style for optional numeric layer fields
+// (see e.g. mixedSizeParamsFor()'s '??' fallbacks): a missing, non-number, or invalid stored value
+// normalizes to 1 (identity, the same default GeometryEngine itself uses when the field is absent)
+// rather than surfacing as a thrown error during ordinary live editing/rendering of a possibly
+// hand-edited or corrupted project file.
+function resolveAuthoredScale(layer){return typeof layer.authoredScale==='number'&&Number.isFinite(layer.authoredScale)&&layer.authoredScale>0?layer.authoredScale:1}
 function resolveTextFillMode(textMode){return TEXT_MODE_TO_ENGINE_MODE[textMode]||'outline'}
 function resolveVectorFillMode(value){return VECTOR_FILL_MODES.has(value)?value:'outline'}
 function resolveImageFillMode(value){return IMAGE_FILL_MODES.has(value)?value:'fill'}
@@ -559,6 +570,9 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
   // TXT-102: '??' fallbacks so a pre-TXT-102 saved project (no align/lineSpacing/rotationDeg on its
   // text layers) renders byte-identical -- 'left'/1/0 are exactly GeometryEngine's own defaults.
   align:layer.align??'left',lineSpacing:layer.lineSpacing??1,rotationDeg:layer.rotationDeg??0,
+  // MONO-005A: see resolveAuthoredScale()'s own doc comment. No effect on sampled/OpenType text --
+  // GeometryEngine only ever reads authoredScale inside its authored-stone-center branch.
+  authoredScale:resolveAuthoredScale(layer),
   // S-200: see mixedSizeParamsFor()'s own doc comment.
   ...mixedSizeParamsFor(layer)};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const{scale}=computeAutoFitScale(layer,project,result.widthMm);if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
   // RS-1009: text layers previously had no position field -- stones were always centered on the
@@ -2063,16 +2077,21 @@ async function fitTextToShape(textLayer,shapeLayer){
   if(!scaleResult.ok){
     return{ok:false,reason:'legibility',message:`This text can’t fit inside "${layerLabel(shapeLayer)}" at the current stone size and gap without becoming unreadable. Its previous size and position were kept. Try a smaller stone size/gap, shorter text, or a larger shape.`};
   }
-  // computeTextPlacementOffset() always auto-centers a text layer's bbox on the canvas before
-  // adding layer.x/layer.y on top (see its own doc comment above) -- so the final rendered bbox
-  // center is always exactly (canvas.width/2 + layer.x, canvas.height/2 + layer.y), independent of
-  // the text's own measured extents. Solving that for layer.x/layer.y is what lands the bbox center
-  // on the inscribed rect's center; no second measurement of the rescaled text is needed.
+  // MONO-005A: delegates to src/editing/TextPlacement.js's computeTextLayerPositionForTargetCenterMm()
+  // -- the same "solve for x/y that lands the bbox center on a target point" identity this call site
+  // already relied on inline (see that module's own doc comment for the algebra), now the single
+  // shared source of truth instead of a second, independently-typed copy of it.
+  const{xMm,yMm}=computeTextLayerPositionForTargetCenterMm({
+    targetCenterXMm:inscribed.xMm+inscribed.widthMm/2,
+    targetCenterYMm:inscribed.yMm+inscribed.heightMm/2,
+    canvasWidthMm:project.canvas.width,
+    canvasHeightMm:project.canvas.height
+  });
   return{
     ok:true,
     heightMm:Math.max(1,textLayer.height*scaleResult.scale),
-    xMm:inscribed.xMm+inscribed.widthMm/2-project.canvas.width/2,
-    yMm:inscribed.yMm+inscribed.heightMm/2-project.canvas.height/2
+    xMm,
+    yMm
   };
 }
 function applyTextFitPlan(textLayer,plan){textLayer.height=plan.heightMm;textLayer.x=plan.xMm;textLayer.y=plan.yMm}

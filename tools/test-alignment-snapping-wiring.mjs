@@ -58,9 +58,12 @@ const setLayerPosition = extractFunction(appJs, 'setLayerPosition');
 // ---------------------------------------------------------------------------------------------
 
 await test('1. app.js imports the src/editing/** barrel with every symbol it uses', () => {
+  // MONO-005A: computeTextPlacementOffsetMm/computeTextLayerPositionForTargetCenterMm joined this
+  // same barrel import when computeTextPlacementOffset()'s formula was extracted into
+  // src/editing/TextPlacement.js -- see that module's own doc comment.
   assert.match(
     appJs,
-    /import\s*\{\s*SNAP_TOLERANCE_MM,\s*NUDGE_STEP_MM,\s*NUDGE_STEP_LARGE_MM,\s*alignLayers,\s*distributeLayers,\s*buildSnapTargets,\s*computeSnapOffset,\s*selectOnly,\s*toggleSelection,\s*clearSelection,\s*selectMany\s*\}\s*from\s*['"]\.\/src\/editing\/index\.js['"]/
+    /import\s*\{\s*SNAP_TOLERANCE_MM,\s*NUDGE_STEP_MM,\s*NUDGE_STEP_LARGE_MM,\s*alignLayers,\s*distributeLayers,\s*buildSnapTargets,\s*computeSnapOffset,\s*selectOnly,\s*toggleSelection,\s*clearSelection,\s*selectMany,\s*computeTextPlacementOffsetMm,\s*computeTextLayerPositionForTargetCenterMm\s*\}\s*from\s*['"]\.\/src\/editing\/index\.js['"]/
   );
 });
 
@@ -204,8 +207,15 @@ await test('14. the Settings Lightbox exposes plain-language snapping controls (
   assert.match(helpBody, /<span class="kbd">Alt\/Option\+Drag<\/span><span>Duplicate the selection/);
 });
 
-await test('15. text layers\' optional x/y fields default through ||0 so pre-RS-1009 Project JSON is unaffected', () => {
-  assert.match(appJs, /function computeTextPlacementOffset\(boundingBox,layer,project\)\{\s*const offsetX=\(boundingBox\?\(project\.canvas\.width-boundingBox\.widthMm\)\/2-boundingBox\.minXmm:0\)\+\(layer\.x\|\|0\);\s*const offsetY=\(boundingBox\?\(project\.canvas\.height-boundingBox\.heightMm\)\/2-boundingBox\.minYmm:0\)\+\(layer\.y\|\|0\);/);
+await test('15. text layers\' optional x/y fields default through ||0 so pre-RS-1009 Project JSON is unaffected', async () => {
+  // MONO-005A: the ||0 defaulting itself moved into src/editing/TextPlacement.js's
+  // computeTextPlacementOffsetMm() when computeTextPlacementOffset() was extracted to delegate to
+  // it (behavior-preserving refactor -- see that module's own doc comment); app.js's own wrapper now
+  // just forwards layer.x/layer.y through unchanged, with no defaulting of its own.
+  const textPlacementJs = await readFile(path.join(repoRoot, 'src/editing/TextPlacement.js'), 'utf8');
+  assert.match(textPlacementJs, /\(xMm \|\| 0\)/);
+  assert.match(textPlacementJs, /\(yMm \|\| 0\)/);
+  assert.match(appJs, /function computeTextPlacementOffset\(boundingBox,layer,project\)\{\s*const\{offsetXMm,offsetYMm\}=computeTextPlacementOffsetMm\(\{boundingBoxMm:boundingBox,xMm:layer\.x,yMm:layer\.y,canvasWidthMm:project\.canvas\.width,canvasHeightMm:project\.canvas\.height\}\);/);
   assert.match(appJs, /const\{offsetX,offsetY\}=computeTextPlacementOffset\(bb,layer,project\);/, 'expected generateTextStonesLive to call the extracted computeTextPlacementOffset helper');
   // TXT-102A: isolate the default project's single text-layer object literal, then check for
   // explicit x:0/y:0 fields independently of property order or any other (e.g. TXT-102's

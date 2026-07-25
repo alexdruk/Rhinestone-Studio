@@ -34,7 +34,8 @@ export {
   sampleShapeFillPoints,
   sampleFieldByMode,
   dedupeStonePoints,
-  dedupeStonesByRadius
+  dedupeStonesByRadius,
+  findCrossGroupCollisions
 } from './StoneSampler.js';
 
 export {
