@@ -67,3 +67,12 @@ export {
   computeShapeFitScale,
   computeContainingShapeScale
 } from './ShapeFit.js';
+
+export {
+  listFrames,
+  getFrameDefinition,
+  resolveGenerationContours,
+  resolveInnerFittingContours,
+  computeFrameInterior,
+  computeFrameFitRect
+} from './FrameLibrary.js';

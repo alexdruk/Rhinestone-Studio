@@ -56,6 +56,7 @@ export const GROUPS = {
     'test-shape-library.mjs',
     'test-shape-fit.mjs',
     'test-shape-library-integration.mjs',
+    'test-frame-library.mjs',
     'test-geometry-stone-overlap-cross-contour.mjs',
     'test-geometry-stone-overlap-cross-layer.mjs',
     'test-geometry-stone-overlap-same-contour.mjs',
@@ -170,6 +171,7 @@ export const GROUPS = {
     'test-shape-library-integration.mjs',
     'test-shapes-design-consolidation.mjs',
     'test-shapes-around-text-creation.mjs',
+    'test-frame-library.mjs',
   ],
   products: [
     'test-object-template.mjs',
