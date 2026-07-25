@@ -200,9 +200,14 @@ export class GeometryEngine {
    * diameter, never generates text, and adds no UI/monogram concepts of its own.
    *
    * Every stone's sizeMm, color, layerId, and metadata are carried through unchanged; only xMm/yMm
-   * move. Intended for a StoneLayout produced by generateTextLayout() for an authored-stone font
-   * (sourceMode 'authored'), but operates on any non-empty StoneLayout whose stones share one
-   * sizeMm -- it is a pure position transform and does not itself check sourceMode.
+   * move. Requires a StoneLayout with sourceMode === 'authored' -- the exact, reliable marker
+   * generateTextLayout() stamps only on its authored-stone-center branch (see above; every other
+   * producer sets sourceMode to a rendering-mode string such as 'outline'/'fill'/'staggered'/
+   * 'radial'/'contour', never 'authored'). A layout with any other sourceMode is rejected with a
+   * structured NOT_AUTHORED_SOURCE failure rather than silently scaled -- this transform's legality
+   * math (AUTHORED_FONT_FITTING_GAP_MM, minimumLegalScale) is specifically calibrated to authored
+   * fonts' fixed PITCH_MM pitch and is not meant as a generic position-scaling utility for sampled
+   * layouts.
    *
    * @param {StoneLayout} layout
    * @param {number} requestedScale Must be finite and positive. 1 reproduces the input unchanged.
@@ -239,6 +244,24 @@ export class GeometryEngine {
     }
 
     const originalBoundingBox = layout.getBoundingBox();
+
+    // generateTextLayout() stamps sourceMode 'authored' only on its authored-stone-center branch
+    // (see above) -- every other producer uses a rendering-mode string ('outline'/'fill'/'staggered'/
+    // 'radial'/'contour'), never 'authored'. That makes sourceMode a reliable, existing provenance
+    // marker: no need to guess from font id, spacing, or stone count.
+    if (layout.sourceMode !== 'authored') {
+      return {
+        ok: false,
+        reason: TEXT_SCALE_FAILURE_REASONS.NOT_AUTHORED_SOURCE,
+        message: `scaleAuthoredTextLayout requires a StoneLayout with sourceMode 'authored' (got ${JSON.stringify(layout.sourceMode)}).`,
+        requestedScale: requestedScaleForResult,
+        minimumLegalScale: null,
+        naturalMinimumSpacingMm: null,
+        requiredSpacingMm: null,
+        originalBoundingBox: originalBoundingBox?.toJSON() ?? null,
+        scaledBoundingBox: null
+      };
+    }
 
     if (typeof requestedScale !== 'number' || !Number.isFinite(requestedScale) || requestedScale <= 0) {
       return {
@@ -296,7 +319,15 @@ export class GeometryEngine {
     // than requiredSpacingMm allows.
     const minimumLegalScale = requiredSpacingMm / naturalMinimumSpacingMm;
 
-    if (requestedScale < minimumLegalScale) {
+    // requiredSpacingMm and naturalMinimumSpacingMm are independently accumulated floating-point
+    // sums/sqrt results (see measureNaturalMinimumCenterDistanceMm above), so a layout that is
+    // mathematically exactly at its floor -- e.g. an authored font at its native catalog stone size,
+    // where requiredSpacingMm and the authored PITCH_MM coincide by construction (MONO-001A) -- can
+    // land a hair on either side of 1.0 (observed: 1.0000000000000018). Without tolerance, that noise
+    // would spuriously reject the identity scale on exactly the fonts/sizes this milestone must keep
+    // working. RELATIVE_SCALE_EPSILON is many orders of magnitude tighter than any real fitting
+    // decision (0.1 scale steps at minimum), so it only absorbs float noise, never a genuine shortfall.
+    if (requestedScale < minimumLegalScale - RELATIVE_SCALE_EPSILON) {
       // Reject outright rather than silently clamping up to minimumLegalScale -- a caller that asked
       // for a specific fit must be told it does not fit, not be handed a different, larger result
       // that quietly ignores what was requested.
@@ -1094,6 +1125,7 @@ function rotateTextPoints(points, rotationDeg) {
 // failure -- a future monogram-fitting caller (or UI) branches on these, not on message text.
 export const TEXT_SCALE_FAILURE_REASONS = Object.freeze({
   INVALID_LAYOUT: 'invalid-layout',
+  NOT_AUTHORED_SOURCE: 'not-authored-source',
   INVALID_SCALE: 'invalid-scale',
   BELOW_MINIMUM_SCALE: 'below-minimum-scale',
   NATURAL_SPACING_VIOLATED: 'natural-spacing-violated'
@@ -1105,11 +1137,22 @@ export const TEXT_SCALE_FAILURE_REASONS = Object.freeze({
 // options.gapMm at all. That leaves no existing "how much edge-to-edge clearance should adjacent
 // stones keep" value to reuse when *repositioning* stones by an arbitrary scale -- the font
 // author's fixed PITCH_MM already bakes in a clearance for the natural, unscaled layout, but scaling
-// scaling changes that pitch, so a legality check needs its own explicit constant, independent of any
-// per-layer field that may be stale, absent, or simply inapplicable to this layer. Deliberately
-// small and conservative -- a manufacturing fitting floor, not a rendering/UI gap value; do not wire
-// this to any Gap control.
-export const AUTHORED_FONT_FITTING_GAP_MM = 0.2;
+// changes that pitch, so a legality check needs its own explicit constant, independent of any
+// per-layer field that may be stale, absent, or simply inapplicable to this layer.
+//
+// 0.3mm, not an invented value: families/rsBlockPrototypeSS10.js and families/rsBlock.js both
+// document their authored PITCH_MM=3.1 as "SS10's 2.8mm stone + 0.3mm gap" -- the repository's own
+// production-fitting-gap rule for this exact stone/pitch pairing (MONO-001A). Reusing it here means
+// SS10 at its authored pitch legitimately has ~zero legal shrink headroom (minimumLegalScale ~= 1.0),
+// which is the correct, conservative answer: SS10's dot-matrix glyphs were hand-placed at the tightest
+// clearance already judged production-safe, so this transform must not treat them as having slack
+// that was never actually there.
+export const AUTHORED_FONT_FITTING_GAP_MM = 0.3;
+
+// Tolerance for the minimumLegalScale comparison below, not a fitting-legality relaxation: absorbs
+// floating-point noise (~1e-15) in requiredSpacingMm/naturalMinimumSpacingMm, several orders of
+// magnitude below any real requested-scale difference this milestone cares about.
+const RELATIVE_SCALE_EPSILON = 1e-9;
 
 // MONO-002: the true nearest-neighbor center-to-center distance across every stone in `stones`, or
 // null if fewer than two stones exist (no pairwise constraint to measure). Reuses the exact

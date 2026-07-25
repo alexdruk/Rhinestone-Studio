@@ -115,14 +115,25 @@ await test('3. scale below 1.0 succeeds when a smaller catalog stone size provid
   assert.ok(result.minimumLegalScale < 0.7);
 });
 
-await test('4. SS10 at the authored 3.1mm pitch cannot shrink below its measured legal floor', async () => {
+await test('4. SS10 at its native 2.8mm stone size on the authored 3.1mm pitch has minimumLegalScale ~= 1.0 (effectively zero shrink headroom)', async () => {
   const engine = createEngine();
+  // SS10_BASE_PARAMS.stoneSizeMm is 2.8 -- SS10's own catalog diameter (src/renderer/StoneSizes.js),
+  // matching MONO-001A's documented pitch derivation (families/rsBlockPrototypeSS10.js,
+  // families/rsBlock.js: "3.1mm = SS10's 2.8mm stone + 0.3mm gap"). requiredSpacingMm is therefore
+  // 2.8 + AUTHORED_FONT_FITTING_GAP_MM(0.3) = 3.1mm, equal to the authored pitch itself, so
+  // minimumLegalScale should land at ~1.0 -- SS10 was hand-placed at the tightest clearance already
+  // judged production-safe, with no slack to shrink into.
   const layout = await engine.generateTextLayout(SS10_BASE_PARAMS);
 
   const belowFloor = engine.scaleAuthoredTextLayout(layout, 0.5);
   assert.equal(belowFloor.ok, false);
   assert.equal(belowFloor.reason, TEXT_SCALE_FAILURE_REASONS.BELOW_MINIMUM_SCALE);
-  assert.ok(belowFloor.minimumLegalScale > 0.5);
+  assert.ok(Math.abs(belowFloor.minimumLegalScale - 1) < 1e-6, `expected minimumLegalScale ~= 1.0, got ${belowFloor.minimumLegalScale}`);
+
+  // A requested scale meaningfully below 1.0 (not just an epsilon under the floor) is rejected.
+  const meaningfullyBelow = engine.scaleAuthoredTextLayout(layout, 0.9);
+  assert.equal(meaningfullyBelow.ok, false);
+  assert.equal(meaningfullyBelow.reason, TEXT_SCALE_FAILURE_REASONS.BELOW_MINIMUM_SCALE);
 
   const atFloor = engine.scaleAuthoredTextLayout(layout, belowFloor.minimumLegalScale);
   assert.equal(atFloor.ok, true, atFloor.message);
@@ -130,6 +141,26 @@ await test('4. SS10 at the authored 3.1mm pitch cannot shrink below its measured
   const justBelowFloor = engine.scaleAuthoredTextLayout(layout, belowFloor.minimumLegalScale - 1e-6);
   assert.equal(justBelowFloor.ok, false);
   assert.equal(justBelowFloor.reason, TEXT_SCALE_FAILURE_REASONS.BELOW_MINIMUM_SCALE);
+});
+
+await test('4b. SS6 on the same authored SS10 3.1mm pitch retains valid shrink capacity', async () => {
+  // Same authored font (fixed PITCH_MM=3.1 grid), but a smaller catalog stone size (SS6, 2.0mm --
+  // src/renderer/StoneSizes.js) laid onto that same 3.1mm-pitch grid. requiredSpacingMm becomes
+  // 2.0 + 0.3 = 2.3mm against a natural spacing of 3.1mm, so minimumLegalScale should be
+  // meaningfully below 1.0 (~2.3/3.1 = 0.7419), unlike SS10 at its own native size in test 4.
+  const engine = createEngine();
+  const layout = await engine.generateTextLayout({ ...SS10_BASE_PARAMS, stoneSizeMm: 2.0 });
+
+  const result = engine.scaleAuthoredTextLayout(layout, 1);
+  assert.equal(result.ok, true, result.message);
+  assert.ok(result.minimumLegalScale < 0.9, `expected meaningful shrink headroom, got minimumLegalScale ${result.minimumLegalScale}`);
+  assert.ok(Math.abs(result.minimumLegalScale - 2.3 / 3.1) < 1e-6);
+
+  const shrunk = engine.scaleAuthoredTextLayout(layout, (result.minimumLegalScale + 1) / 2);
+  assert.equal(shrunk.ok, true, shrunk.message);
+  for (const stone of shrunk.layout.stones) {
+    assert.equal(stone.sizeMm, 2.0);
+  }
 });
 
 await test('5. sizeMm remains unchanged for every stone', async () => {
@@ -220,10 +251,33 @@ await test('12. a non-StoneLayout input also fails cleanly with INVALID_LAYOUT',
   assert.equal(result.reason, TEXT_SCALE_FAILURE_REASONS.INVALID_LAYOUT);
 });
 
+await test('12b. a non-authored StoneLayout (sourceMode from a sampled shape layer) fails with NOT_AUTHORED_SOURCE', () => {
+  const engine = createEngine();
+  const shapeLayout = engine.generateShapeLayout({
+    shape: 'circle',
+    layerId: 'layer-1',
+    stoneSizeMm: 2.8,
+    gapMm: 0.3,
+    mode: 'outline',
+    cxMm: 20,
+    cyMm: 20,
+    radiusMm: 15
+  });
+  assert.notEqual(shapeLayout.sourceMode, 'authored');
+  assert.ok(shapeLayout.count > 0);
+
+  const result = engine.scaleAuthoredTextLayout(shapeLayout, 1);
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, TEXT_SCALE_FAILURE_REASONS.NOT_AUTHORED_SOURCE);
+  assert.equal(result.minimumLegalScale, null);
+  assert.ok(result.originalBoundingBox);
+});
+
 await test('13. coincident stone centers return NATURAL_SPACING_VIOLATED regardless of requested scale', () => {
   const engine = createEngine();
   const coincidentLayout = new StoneLayout({
     layerId: 'layer-1',
+    sourceMode: 'authored',
     stones: [
       new Stone({ xMm: 5, yMm: 5, sizeMm: 2.8, layerId: 'layer-1', index: 0 }),
       new Stone({ xMm: 5, yMm: 5, sizeMm: 2.8, layerId: 'layer-1', index: 1 }),
@@ -244,6 +298,7 @@ await test('14. a single-stone layout has no spacing constraint -- any positive 
   const engine = createEngine();
   const singleStoneLayout = new StoneLayout({
     layerId: 'layer-1',
+    sourceMode: 'authored',
     stones: [new Stone({ xMm: 5, yMm: 5, sizeMm: 2.8, layerId: 'layer-1', index: 0 })]
   });
 
