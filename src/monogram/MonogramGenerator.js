@@ -1,19 +1,25 @@
 /**
- * MONO-005: Headless Monogram Generator — the first complete monogram generation pipeline.
+ * MONO-005 / MONO-005A: Headless Monogram Generator — the first complete monogram generation
+ * pipeline, now producing project layers that reproduce their validated geometry through the
+ * *normal* application pipeline (project layer -> GeometryEngine.generateTextLayout() ->
+ * StoneLayout -> renderer/exporter), not just an ephemeral StoneLayout held inside this class.
  *
- * Pure orchestration: this module owns no geometry math of its own. It sequences three already-
- * built pieces (per their own milestones' scope boundaries, see each module's doc comment):
+ * Pure orchestration: this module owns no geometry math of its own. It sequences already-built
+ * pieces (per their own milestones' scope boundaries, see each module's doc comment):
  *   - FrameLibrary.js (MONO-003) for the frame's own stone-generation contours and its clearance-
  *     eroded interior region.
  *   - MonogramLayouts.js (MONO-004) for slot geometry inside that interior.
- *   - GeometryEngine (injected; MONO-002's scaleAuthoredTextLayout() in particular) for turning a
- *     letter + font into an authored StoneLayout and legally resizing it to fit its slot.
+ *   - GeometryEngine (injected; MONO-002's scaleAuthoredTextLayout(), and MONO-005A's
+ *     authoredScale param on generateTextLayout()) for turning a letter + font into an authored
+ *     StoneLayout and legally, persistently resizing it to fit its slot.
+ *   - src/editing/TextPlacement.js (MONO-005A) for the real text-layer x/y placement contract --
+ *     see MONOGRAM-005A's audit, summarized in generate()'s own doc comment.
  *
- * No UI, no Lightbox, no menu integration, no renderer changes, no `project.monograms`. This
- * module only ever returns plain data: ordinary project layer objects (the same shape a human
- * creates via the existing text/path layer tools) plus a structured success/failure result. It
- * never throws for a normal fitting/validation failure — see generate()'s own doc comment for the
- * full list of structured failure reasons.
+ * No UI, no Lightbox, no menu integration, no `project.monograms`. This module only ever returns
+ * plain data: ordinary project layer objects (the same shape a human creates via the existing
+ * text/path layer tools) plus a structured success/failure result. It never throws for a normal
+ * fitting/validation failure — see generate()'s own doc comment for the full list of structured
+ * failure reasons.
  *
  * No DOM, no app.js dependency. The GeometryEngine instance (and the fontProviderRegistry it was
  * built with) is supplied by the caller via the constructor, the same "collaborator injected, not
@@ -28,8 +34,9 @@ import {
   DEFAULT_STONE_COLOR,
   TEXT_SCALE_FAILURE_REASONS,
   AUTHORED_FONT_FITTING_GAP_MM,
-  dedupeStonesByRadius
+  findCrossGroupCollisions
 } from '../geometry/index.js';
+import { computeTextLayerPositionForTargetCenterMm } from '../editing/index.js';
 
 // Reason codes generate() returns on failure -- a caller branches on these, never on message text
 // (same convention as MONOGRAM_LAYOUT_FAILURE_REASONS/TEXT_SCALE_FAILURE_REASONS this module itself
@@ -43,7 +50,13 @@ export const MONOGRAM_GENERATOR_FAILURE_REASONS = Object.freeze({
   FITTING_FAILED: 'fitting-failed',
   BELOW_MINIMUM_SCALE: 'below-minimum-scale',
   LETTER_COLLISION: 'letter-collision',
-  FRAME_COLLISION: 'frame-collision'
+  FRAME_COLLISION: 'frame-collision',
+  // MONO-005A: the generated layer's own data, regenerated through the real, unmodified
+  // GeometryEngine.generateTextLayout() path, did not reproduce the fitted geometry used for
+  // validation. Should never happen in practice (see generate()'s round-trip check below) -- this
+  // is a defense against future drift between this module and GeometryEngine, not a normal,
+  // expected user-facing failure like the others above.
+  INTERNAL_CONTRACT_MISMATCH: 'internal-contract-mismatch'
 });
 
 // Production gap default, reused rather than reinvented -- the same 0.3mm constant MONO-002
@@ -57,8 +70,16 @@ const DEFAULT_GAP_MM = AUTHORED_FONT_FITTING_GAP_MM;
 // generateTextLayout() requires a positive heightMm, but it has zero effect on an authored font's
 // actual geometry (see RhinestoneFontProvider.js's own doc comment: "Deliberately NOT scaled by
 // heightMm"). Any positive placeholder works identically; the letter's true size is controlled
-// entirely by requestedScale via scaleAuthoredTextLayout() below.
+// entirely by authoredScale (MONO-005A; see GeometryEngine.generateTextLayout()'s own doc comment).
 const PLACEHOLDER_HEIGHT_MM = 25;
+
+// MONO-005A: tolerance for the round-trip position/bounding-box comparison below. Both the fitted
+// layout and the round-trip layout apply the identical scaleAuthoredTextLayout() transform to the
+// identical raw authored stones (see generate()'s own comment at the round-trip check), so any real
+// divergence is either a whole stone missing/extra or a gross positional error -- this is many
+// orders of magnitude tighter than any real fitting decision, purely to absorb float noise (e.g.
+// scaleAuthoredTextLayout() being applied via two independently-constructed StoneLayout instances).
+const ROUND_TRIP_POSITION_EPSILON_MM = 1e-6;
 
 const DEFAULT_FRAME_MODE = 'fill';
 const VECTOR_FILL_MODES = new Set(['outline', 'fill', 'staggered', 'radial', 'contour']);
@@ -80,12 +101,58 @@ function isPlainRect(rect) {
     && rect.widthMm > 0 && rect.heightMm > 0;
 }
 
+function isPlainSize(size) {
+  return !!size && typeof size === 'object'
+    && Number.isFinite(size.widthMm) && Number.isFinite(size.heightMm)
+    && size.widthMm > 0 && size.heightMm > 0;
+}
+
 function isSingleCharacterString(value) {
   return typeof value === 'string' && Array.from(value).length === 1;
 }
 
 function failure(reason, message, extra = {}) {
   return { ok: false, reason, message, layers: null, measurements: null, diagnostics: null, ...extra };
+}
+
+// MONO-005A: compares the StoneLayout used for fitting/collision validation against a fresh
+// regeneration through the real GeometryEngine.generateTextLayout() path (with the persisted
+// authoredScale applied internally) -- see generate()'s round-trip check for why these are expected
+// to be identical, not merely similar. Returns a short mismatch description, or null if they match.
+function describeRoundTripMismatch(fittedLayout, roundTripLayout) {
+  if (fittedLayout.stones.length !== roundTripLayout.stones.length) {
+    return `stone count ${fittedLayout.stones.length} vs ${roundTripLayout.stones.length}`;
+  }
+  for (let i = 0; i < fittedLayout.stones.length; i++) {
+    const expected = fittedLayout.stones[i];
+    const actual = roundTripLayout.stones[i];
+    if (Math.abs(expected.xMm - actual.xMm) > ROUND_TRIP_POSITION_EPSILON_MM
+      || Math.abs(expected.yMm - actual.yMm) > ROUND_TRIP_POSITION_EPSILON_MM) {
+      return `stone ${i} position (${expected.xMm}, ${expected.yMm}) vs (${actual.xMm}, ${actual.yMm})`;
+    }
+    if (expected.sizeMm !== actual.sizeMm) {
+      return `stone ${i} sizeMm ${expected.sizeMm} vs ${actual.sizeMm}`;
+    }
+    if (expected.color !== actual.color) {
+      return `stone ${i} color ${JSON.stringify(expected.color)} vs ${JSON.stringify(actual.color)}`;
+    }
+  }
+
+  const fittedBox = fittedLayout.getBoundingBox();
+  const roundTripBox = roundTripLayout.getBoundingBox();
+  if (!fittedBox !== !roundTripBox) {
+    return 'one bounding box is null and the other is not';
+  }
+  if (fittedBox && roundTripBox) {
+    const fields = ['minXmm', 'minYmm', 'widthMm', 'heightMm'];
+    for (const field of fields) {
+      if (Math.abs(fittedBox[field] - roundTripBox[field]) > ROUND_TRIP_POSITION_EPSILON_MM) {
+        return `bounding box ${field} ${fittedBox[field]} vs ${roundTripBox[field]}`;
+      }
+    }
+  }
+
+  return null;
 }
 
 export class MonogramGenerator {
@@ -105,12 +172,25 @@ export class MonogramGenerator {
   /**
    * Generate a complete monogram as ordinary project layers.
    *
-   * Pipeline (per MONO-005): resolve the frame -> compute its clearance-eroded fitting rectangle ->
-   * compute layout slots inside it -> generate + fit every letter independently (authored-font
-   * scaling via GeometryEngine.scaleAuthoredTextLayout()) -> generate the frame layer -> validate
-   * collisions (letter vs letter, letter vs frame) using real production spacing (stoneSizeMm +
-   * gapMm). Never auto-corrects: a letter/frame that does not fit is a structured failure, not a
-   * silently adjusted result.
+   * Pipeline (per MONO-005/MONO-005A): resolve the frame -> compute its clearance-eroded fitting
+   * rectangle -> compute layout slots inside it -> generate + fit every letter independently
+   * (authored-font scaling via GeometryEngine.scaleAuthoredTextLayout()), persist that scale as the
+   * letter layer's own authoredScale field, compute its x/y under the real text-layer placement
+   * contract, and verify both round-trip through the normal GeometryEngine.generateTextLayout()
+   * path -> generate the frame layer -> validate collisions (letter vs letter, letter vs frame)
+   * using real production spacing (stoneSizeMm + gapMm). Never auto-corrects: a letter/frame that
+   * does not fit is a structured failure, not a silently adjusted result.
+   *
+   * MONO-005A text x/y contract (see src/editing/TextPlacement.js for the full derivation and
+   * source-of-truth): a text layer has no stored absolute position of its own -- it is always
+   * auto-centered on the production canvas (project.canvas.width/height) first, then offset by its
+   * own x/y on top of that (app.js's RS-1009/RS-1012 `computeTextPlacementOffset()`). Solving that
+   * identity shows the final stone bounding-box *center* always lands at exactly
+   * `(canvasWidthMm/2 + xMm, canvasHeightMm/2 + yMm)`, independent of the text's own measured
+   * extents -- the same identity app.js's own `fitTextToShape()` already relies on. This generator
+   * is therefore given the target canvas size (`request.canvasMm`) and computes each letter's x/y
+   * from it via that shared helper, rather than storing an absolute frameRect-space coordinate a
+   * canvas-centered live renderer could never reproduce.
    *
    * @param {object} request
    * @param {string} request.frameId A FrameLibrary frame id (see listFrames()).
@@ -127,7 +207,13 @@ export class MonogramGenerator {
    * @param {string} [request.color] Default DEFAULT_STONE_COLOR.
    * @param {{xMm:number,yMm:number,widthMm:number,heightMm:number}} request.frameRect The box the
    *   frame's own stone-generation geometry is placed into (same convention every other placed
-   *   layer type -- circle/rectangle/svg/path/image -- already uses for its own x/y/w/h).
+   *   layer type -- circle/rectangle/svg/path/image -- already uses for its own x/y/w/h). Also the
+   *   coordinate space letter slots (and therefore each letter's target absolute stone position)
+   *   are computed in.
+   * @param {{widthMm:number,heightMm:number}} request.canvasMm The target project's canvas size
+   *   (project.canvas.width/height) -- required to compute a legal letter layer x/y under the real
+   *   text-layer placement contract (see this method's own doc comment above). The caller (a future
+   *   UI/integration milestone) always has this, since it already has the whole project.
    * @param {{mode?:string,color?:string}} [request.frameOptions] Frame-specific overrides; mode
    *   defaults to 'fill' (a solid stone band), color falls back to request.color.
    * @returns {Promise<{
@@ -143,7 +229,7 @@ export class MonogramGenerator {
     const {
       frameId, layoutId, letters, fontId, providerId,
       stoneSizeMm, gapMm = DEFAULT_GAP_MM, color,
-      frameRect, frameOptions = {}
+      frameRect, canvasMm, frameOptions = {}
     } = request || {};
     const R = MONOGRAM_GENERATOR_FAILURE_REASONS;
 
@@ -168,6 +254,9 @@ export class MonogramGenerator {
     if (!isPlainRect(frameRect)) {
       return failure(R.INVALID_INPUT, 'frameRect must be a {xMm,yMm,widthMm,heightMm} rectangle with finite coordinates and positive width/height.');
     }
+    if (!isPlainSize(canvasMm)) {
+      return failure(R.INVALID_INPUT, 'canvasMm must be a {widthMm,heightMm} object with positive finite values (the target project\'s canvas size).');
+    }
     if (color !== undefined && color !== null && (typeof color !== 'string' || color.length === 0)) {
       return failure(R.INVALID_INPUT, 'color must be a non-empty string when provided.');
     }
@@ -183,6 +272,7 @@ export class MonogramGenerator {
     const normalizedFrameRect = {
       xMm: frameRect.xMm, yMm: frameRect.yMm, widthMm: frameRect.widthMm, heightMm: frameRect.heightMm
     };
+    const normalizedCanvasMm = { widthMm: canvasMm.widthMm, heightMm: canvasMm.heightMm };
     const resolvedColor = color ?? DEFAULT_STONE_COLOR;
 
     // 2. Compute frame fitting rectangle -- the clearance-eroded interior region a letter may
@@ -239,9 +329,10 @@ export class MonogramGenerator {
         return failure(R.INVALID_FONT, `Failed to generate letter ${JSON.stringify(letter)} with font ${JSON.stringify(fontId)}: ${error.message}`);
       }
 
-      // scaleAuthoredTextLayout() (MONO-002) is the only supported resize path for these fonts --
-      // heightMm above has no effect on them (see PLACEHOLDER_HEIGHT_MM's doc comment) -- so a
-      // non-authored font (e.g. an OpenType family) can never be fit by this generator.
+      // scaleAuthoredTextLayout() (MONO-002)/authoredScale (MONO-005A) is the only supported resize
+      // path for these fonts -- heightMm above has no effect on them (see PLACEHOLDER_HEIGHT_MM's
+      // doc comment) -- so a non-authored font (e.g. an OpenType family) can never be fit by this
+      // generator.
       if (baseLayout.sourceMode !== 'authored') {
         return failure(R.INVALID_FONT, `Font ${JSON.stringify(fontId)} does not supply authored stone centers; MonogramGenerator only supports authored fonts (got sourceMode ${JSON.stringify(baseLayout.sourceMode)}).`);
       }
@@ -252,7 +343,9 @@ export class MonogramGenerator {
       }
 
       // The scale that makes the letter's natural bounding box fit snugly inside its slot's
-      // targetRect, preserving aspect ratio (the smaller of the two axis ratios governs).
+      // targetRect, preserving aspect ratio (the smaller of the two axis ratios governs). This
+      // becomes the letter layer's persisted authoredScale field (see below) -- the same value is
+      // used for the fitting/collision StoneLayout here and for the actual stored layer.
       const requestedScale = Math.min(
         slot.targetRect.widthMm / naturalBoundingBox.widthMm,
         slot.targetRect.heightMm / naturalBoundingBox.heightMm
@@ -270,13 +363,60 @@ export class MonogramGenerator {
 
       const scaledLayout = scaleResult.layout;
       const scaledBoundingBox = scaledLayout.getBoundingBox();
+
+      // MONO-005A round-trip verification: regenerate this exact letter through the real,
+      // unmodified GeometryEngine.generateTextLayout() path, with authoredScale=requestedScale
+      // baked in the normal way (the same code path live text-layer rendering will use once this
+      // layer is loaded into a project), and confirm it reproduces scaledLayout exactly. Both calls
+      // resolve the same raw authored stones from the font (generateTextLayout() is deterministic --
+      // see MONO-002/RS Block/RS Modern's own test suites) and apply the identical
+      // scaleAuthoredTextLayout() transform to them, so any divergence here is a real implementation
+      // bug, not an expected edge case -- reported as a structured INTERNAL_CONTRACT_MISMATCH
+      // failure rather than returned as a silently-wrong layer.
+      let roundTripLayout;
+      try {
+        roundTripLayout = await this._engine.generateTextLayout({
+          text: letter,
+          fontId,
+          providerId,
+          layerId: letterLayerId,
+          heightMm: PLACEHOLDER_HEIGHT_MM,
+          stoneSizeMm,
+          gapMm: 0,
+          mode: 'outline',
+          color: resolvedColor,
+          curveEnabled: false,
+          authoredScale: requestedScale
+        });
+      } catch (error) {
+        return failure(R.INTERNAL_CONTRACT_MISMATCH, `Letter ${JSON.stringify(letter)} (slot ${i}): regenerating through the normal GeometryEngine.generateTextLayout() path with authoredScale=${requestedScale} failed: ${error.message}`);
+      }
+      const mismatch = describeRoundTripMismatch(scaledLayout, roundTripLayout);
+      if (mismatch) {
+        return failure(R.INTERNAL_CONTRACT_MISMATCH, `Letter ${JSON.stringify(letter)} (slot ${i}): regenerating through the normal GeometryEngine.generateTextLayout() path did not reproduce the fitted geometry (${mismatch}).`, {
+          diagnostics: { letter, slotIndex: i }
+        });
+      }
+
       const targetCenterXMm = slot.targetRect.xMm + slot.targetRect.widthMm / 2;
       const targetCenterYMm = slot.targetRect.yMm + slot.targetRect.heightMm / 2;
+
+      // The letter layer's actual, persistable x/y -- computed under the real text-layer placement
+      // contract (see this method's own doc comment / src/editing/TextPlacement.js), so a live
+      // renderer that auto-centers this layer's regenerated (authoredScale-scaled) bounding box on
+      // canvasMm and then applies this x/y on top lands its center exactly on the slot's own center,
+      // independent of the letter's own measured extents.
+      const { xMm: layerXMm, yMm: layerYMm } = computeTextLayerPositionForTargetCenterMm({
+        targetCenterXMm, targetCenterYMm,
+        canvasWidthMm: normalizedCanvasMm.widthMm, canvasHeightMm: normalizedCanvasMm.heightMm
+      });
+
+      // Pure translation onto the slot's own center -- used for collision validation below (the
+      // real absolute stone positions a live renderer will produce, per the placement contract
+      // above; sizeMm/color/layerId/index/metadata carried through unchanged, mirroring
+      // scaleAuthoredTextLayout()'s own _buildScaledTextLayoutResult()).
       const deltaXMm = targetCenterXMm - scaledBoundingBox.center.xMm;
       const deltaYMm = targetCenterYMm - scaledBoundingBox.center.yMm;
-
-      // Pure translation onto the slot's own center -- sizeMm/color/layerId/index/metadata carried
-      // through unchanged, mirroring scaleAuthoredTextLayout()'s own _buildScaledTextLayoutResult().
       const finalStones = scaledLayout.stones.map((stone) => new Stone({
         xMm: stone.xMm + deltaXMm,
         yMm: stone.yMm + deltaYMm,
@@ -289,7 +429,7 @@ export class MonogramGenerator {
 
       letterResults.push({
         letter, slotIndex: i, slot, layerId: letterLayerId, stones: finalStones,
-        requestedScale,
+        requestedScale, layerXMm, layerYMm,
         minimumLegalScale: scaleResult.minimumLegalScale,
         naturalMinimumSpacingMm: scaleResult.naturalMinimumSpacingMm,
         requiredSpacingMm: scaleResult.requiredSpacingMm,
@@ -315,39 +455,46 @@ export class MonogramGenerator {
       color: frameColor
     });
 
-    // 7. Validate collisions -- reuses StoneSampler's existing dedupeStonesByRadius() grid-hash
-    // (3x3-neighborhood bucket scan, cross-layerId only) rather than a new O(n^2)/custom spatial
-    // structure. Passing d = stoneSizeMm + gapMm for every stone (instead of each stone's own real
-    // sizeMm) makes that function's own (a.d + b.d) / 2 touching threshold equal exactly
-    // stoneSizeMm + gapMm -- the real production center-to-center spacing requirement -- for every
-    // pair. Same-layerId pairs (a letter's own internal spacing, or the frame's own internal
-    // spacing) are already skipped by that function, and already independently guaranteed legal by
+    // 7. Validate collisions -- reuses StoneSampler's findCrossGroupCollisions() (MONO-005A), a
+    // pure collision *query* built from the same grid-hash bucket technique as
+    // dedupeStonesByRadius() but purpose-built for classification: it never drops a stone, so a
+    // colliding pair can never be hidden by an earlier, unrelated drop, and the set of reported
+    // colliding group-pairs is provably independent of input order (see that function's own doc
+    // comment). One pass classifies both categories: passing d = stoneSizeMm + gapMm for every
+    // stone (instead of each stone's own real sizeMm) makes the shared (a.d + b.d) / 2 touching
+    // threshold equal exactly stoneSizeMm + gapMm -- the real production center-to-center spacing
+    // requirement. Same-layerId pairs (a letter's own internal spacing, or the frame's own internal
+    // spacing) are never compared, and are already independently guaranteed legal by
     // scaleAuthoredTextLayout()'s minimumLegalScale check / the frame's own stone sampler
-    // respectively, so this only ever flags genuine cross-object collisions.
+    // respectively, so this only ever flags genuine cross-object collisions. Letter-vs-letter is
+    // reported ahead of letter-vs-frame when both occur, matching this milestone's own listed
+    // failure-reason order.
     const requiredSpacingMm = stoneSizeMm + gapMm;
-    const toDedupeRecords = (stones) => stones.map((s) => ({ x: s.xMm, y: s.yMm, d: requiredSpacingMm, layerId: s.layerId }));
+    const letterLayerIds = new Set(letterResults.map((r) => r.layerId));
     const allLetterStones = letterResults.flatMap((r) => r.stones);
+    const collisionRecords = allLetterStones.concat(frameLayout.stones)
+      .map((s) => ({ x: s.xMm, y: s.yMm, d: requiredSpacingMm, layerId: s.layerId }));
+    const collisions = findCrossGroupCollisions(collisionRecords);
 
-    const letterOnlyRecords = toDedupeRecords(allLetterStones);
-    if (dedupeStonesByRadius(letterOnlyRecords).length < letterOnlyRecords.length) {
+    if (collisions.some((c) => letterLayerIds.has(c.layerIdA) && letterLayerIds.has(c.layerIdB))) {
       return failure(R.LETTER_COLLISION, 'Two or more letters collide at the requested stone size/spacing.', {
-        diagnostics: { requiredSpacingMm }
+        diagnostics: { requiredSpacingMm, collisions }
       });
     }
-
-    const withFrameRecords = toDedupeRecords(allLetterStones.concat(frameLayout.stones));
-    if (dedupeStonesByRadius(withFrameRecords).length < withFrameRecords.length) {
+    if (collisions.some((c) => c.layerIdA === frameLayerId || c.layerIdB === frameLayerId)) {
       return failure(R.FRAME_COLLISION, 'A letter collides with the frame at the requested stone size/spacing.', {
-        diagnostics: { requiredSpacingMm }
+        diagnostics: { requiredSpacingMm, collisions }
       });
     }
 
     // --- Build ordinary project layers -------------------------------------------------------
     // Same field shapes app.js's own newTextLayer()/Boolean-Operation path-layer creation use (see
     // this module's own doc comment) -- these layers are indistinguishable, field-for-field, from
-    // ones a human created through the existing UI. Letters are ordered by slot drawOrder (not
-    // slotIndex) so a caller that simply appends this array to project.layers gets the conventional
-    // "center letter drawn on top" paint order MONOGRAM_LAYOUTS already establishes.
+    // ones a human created through the existing UI, plus one new additive field (authoredScale,
+    // MONO-005A) every pre-existing text layer already defaults to 1 for. Letters are ordered by
+    // slot drawOrder (not slotIndex) so a caller that simply appends this array to project.layers
+    // gets the conventional "center letter drawn on top" paint order MONOGRAM_LAYOUTS already
+    // establishes.
     const frameLayerObj = {
       id: frameLayerId,
       type: 'path',
@@ -373,15 +520,19 @@ export class MonogramGenerator {
         visible: true,
         text: r.letter,
         font: fontId,
-        // Informational: the letter's true fitted height (see scaledBoundingBox), forward-facing
-        // for a future milestone that wires authored-font scaling into live text-layer rendering --
-        // the current, unmodified renderer ignores heightMm for authored fonts entirely (see
-        // PLACEHOLDER_HEIGHT_MM's doc comment), so this field has no visual effect today.
+        // Informational only: heightMm has no effect on authored-font geometry (see
+        // PLACEHOLDER_HEIGHT_MM's doc comment) -- the letter's real fitted size is authoredScale
+        // below. Set to the fitted height anyway so it reads sensibly in any UI that displays it.
         height: r.scaledBoundingBox.heightMm,
         textMode: DEFAULT_TEXT_MODE,
         stoneSize: stoneSizeMm,
         gap: gapMm,
         color: resolvedColor,
+        // MONO-005A: the persisted, position-only authored-font scale (see GeometryEngine.
+        // generateTextLayout()'s own authoredScale doc comment) -- this is what makes the letter's
+        // fitted size reproducible through the normal generation path, verified above via this
+        // exact letter's own round-trip check.
+        authoredScale: r.requestedScale,
         // The generator has already performed fitting; autoFit is additionally a no-op for
         // authored fonts today (TXT-103A), so it is left off rather than implying it does anything.
         autoFit: false,
@@ -394,12 +545,10 @@ export class MonogramGenerator {
         align: 'left',
         lineSpacing: 1,
         rotationDeg: 0,
-        // Absolute mm anchor, in the same frameRect coordinate space every other placed layer type
-        // (circle/rectangle/svg/path/image) already uses for its own x/y -- see this module's own
-        // doc comment for why this differs from the live text-rendering pipeline's canvas-centered
-        // x/y offset convention (a known, documented limitation, not a bug).
-        x: r.slot.targetRect.xMm,
-        y: r.slot.targetRect.yMm
+        // MONO-005A: computed under the real text-layer placement contract (canvas-centered + this
+        // offset -- see this method's own doc comment), not a raw frameRect-space coordinate.
+        x: r.layerXMm,
+        y: r.layerYMm
       }));
 
     const layers = [frameLayerObj, ...letterLayerObjs];
@@ -409,6 +558,7 @@ export class MonogramGenerator {
       layoutId,
       frameRect: normalizedFrameRect,
       frameInteriorRect,
+      canvasMm: normalizedCanvasMm,
       slots: layoutResult.slots,
       letters: letterResults.map((r) => ({
         letter: r.letter,
@@ -420,7 +570,9 @@ export class MonogramGenerator {
         requiredSpacingMm: r.requiredSpacingMm,
         naturalBoundingBox: r.naturalBoundingBox.toJSON(),
         scaledBoundingBox: r.scaledBoundingBox.toJSON(),
-        stoneCount: r.stones.length
+        stoneCount: r.stones.length,
+        xMm: r.layerXMm,
+        yMm: r.layerYMm
       })),
       frameStoneCount: frameLayout.stones.length,
       letterStoneCount: allLetterStones.length,
@@ -429,7 +581,8 @@ export class MonogramGenerator {
 
     const diagnostics = {
       productionSpacingMm: requiredSpacingMm,
-      collisions: { letterCollision: false, frameCollision: false }
+      collisions: { letterCollision: false, frameCollision: false },
+      roundTripVerified: true
     };
 
     return { ok: true, layers, measurements, diagnostics };

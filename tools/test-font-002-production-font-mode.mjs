@@ -15,6 +15,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GeometryEngine, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale } from '../src/geometry/index.js';
+import { computeTextLayerPositionForTargetCenterMm } from '../src/editing/index.js';
 import { BoundingBox } from '../src/text/VectorPath.js';
 import { FontManager } from '../src/fonts/index.js';
 import { createDefaultFontProviderRegistry } from '../src/text/index.js';
@@ -71,7 +72,7 @@ const TEXT_ENGINE_FONT_IDS = new Set(fontManager.listFonts().map((f) => f.id));
 function build() {
   return new Function(
     'permanentEngine', 'fontManager', 'project', 'BoundingBox', 'FITTABLE_SHAPE_TYPES', 'computeInscribedRect', 'computeShapeFitScale',
-    'TEXT_ENGINE_FONT_IDS', 'DEFAULT_TEXT_FONT_ID',
+    'TEXT_ENGINE_FONT_IDS', 'DEFAULT_TEXT_FONT_ID', 'computeTextLayerPositionForTargetCenterMm',
     `
     ${resolveFontProviderIdSrc}
     ${isAuthoredStoneFontIdSrc}
@@ -85,7 +86,7 @@ function build() {
     ${fitTextToShapeSrc}
     return { fitTextToShape, isAuthoredStoneFontId, isFontKnown, resolveFontProviderId };
     `
-  )(permanentEngine, fontManager, project, BoundingBox, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, TEXT_ENGINE_FONT_IDS, DEFAULT_TEXT_FONT_ID);
+  )(permanentEngine, fontManager, project, BoundingBox, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, TEXT_ENGINE_FONT_IDS, DEFAULT_TEXT_FONT_ID, computeTextLayerPositionForTargetCenterMm);
 }
 
 const { fitTextToShape, isAuthoredStoneFontId, isFontKnown, resolveFontProviderId } = build();

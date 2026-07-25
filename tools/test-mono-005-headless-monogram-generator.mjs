@@ -1,20 +1,22 @@
-// MONO-005: Headless Monogram Generator.
+// MONO-005 / MONO-005A: Headless Monogram Generator.
 //
 // Focused tests for src/monogram/MonogramGenerator.js -- the first complete monogram generation
 // pipeline, orchestrating FrameLibrary (MONO-003), MonogramLayouts (MONO-004), and
-// GeometryEngine.scaleAuthoredTextLayout() (MONO-002) into ordinary project layers. No UI, no
-// project.monograms, no renderer changes are exercised or required here.
+// GeometryEngine.scaleAuthoredTextLayout()/authoredScale (MONO-002/MONO-005A) into ordinary project
+// layers that reproduce their validated geometry through the real GeometryEngine.generateTextLayout()
+// path. No UI, no project.monograms, no renderer changes are exercised or required here.
 //
 // Real repository frame definitions and the real 'rs-block' authored font are used wherever a
 // scenario can be reached with them (every success case, frame/layout lookup failures, unsupported
 // letter count, invalid font, below-minimum-scale, frame collision -- all found empirically to occur
-// with real geometry, see this file's own fixtures below). Letter-vs-letter collision is the one
-// exception: MonogramLayouts' own per-layout inter-slot gap ratios (see its own doc comment) turned
-// out to make a genuine adjacent-letter collision very hard to reach with real fonts (the minimum-
-// legal-scale constraint binds first at every frame size tried), so that one case uses a small,
-// clearly-labeled synthetic fake geometryEngine instead -- same "fake collaborator" precedent
-// test-mono-002-authored-font-positional-scaling.mjs already uses for its own coincident-stone
-// fixture.
+// with real geometry, see this file's own fixtures below). Letter-vs-letter collision and the
+// internal-contract-mismatch defense are the two exceptions: MonogramLayouts' own per-layout
+// inter-slot gap ratios (see its own doc comment) turned out to make a genuine adjacent-letter
+// collision very hard to reach with real fonts (the minimum-legal-scale constraint binds first at
+// every frame size tried), and an internal-contract mismatch should never happen with a correctly
+// wired real engine at all -- both use small, clearly-labeled synthetic fake geometryEngines instead,
+// same "fake collaborator" precedent test-mono-002-authored-font-positional-scaling.mjs already uses
+// for its own coincident-stone fixture.
 
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -23,6 +25,7 @@ import { fileURLToPath } from 'node:url';
 import { FontManager } from '../src/fonts/index.js';
 import { createDefaultFontProviderRegistry } from '../src/text/index.js';
 import { GeometryEngine, Stone, StoneLayout } from '../src/geometry/index.js';
+import { computeTextPlacementOffsetMm } from '../src/editing/index.js';
 import { MonogramGenerator, MONOGRAM_GENERATOR_FAILURE_REASONS } from '../src/monogram/MonogramGenerator.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -39,8 +42,15 @@ function createRealGenerator() {
     loadFontBuffer: loadFontBufferFromRepoRoot
   });
   const geometryEngine = new GeometryEngine({ fontProviderRegistry });
-  return new MonogramGenerator({ geometryEngine });
+  return { geometryEngine, generator: new MonogramGenerator({ geometryEngine }) };
 }
+
+// Arbitrary, reasonable production canvas size -- MonogramGenerator only uses this to compute each
+// letter layer's x/y under the real text-layer placement contract (see src/editing/TextPlacement.js
+// and MonogramGenerator.generate()'s own doc comment); its exact value doesn't matter to any
+// assertion below except the dedicated placement-contract test, which derives its own expectation
+// from this same value.
+const CANVAS_MM = { widthMm: 200, heightMm: 200 };
 
 // Deterministic, minimal fake -- both letters resolve to the exact same fixed two-stone authored
 // layout regardless of requested text/scale, so once translated onto two nearby slot centers they
@@ -77,6 +87,47 @@ function createCollidingFakeGenerator() {
   return new MonogramGenerator({ geometryEngine });
 }
 
+// Deliberately internally-inconsistent fake: generateTextLayout() ignores authoredScale entirely
+// (always the same two fixed stones), while scaleAuthoredTextLayout() actually moves the stones by
+// the requested scale -- simulating a hypothetical future drift between the two code paths
+// MonogramGenerator's round-trip check (MONO-005A) exists to catch. Never true of the real
+// GeometryEngine (see tools/test-mono-005a-authored-scale-persistence.mjs), used only to prove the
+// check fires when the two genuinely disagree.
+function createMismatchedFakeGenerator() {
+  const geometryEngine = {
+    async generateTextLayout({ layerId, color }) {
+      return new StoneLayout({
+        layerId,
+        sourceMode: 'authored',
+        stones: [
+          new Stone({ xMm: 0, yMm: 0, sizeMm: 2.8, color, layerId, index: 0 }),
+          new Stone({ xMm: 4, yMm: 0, sizeMm: 2.8, color, layerId, index: 1 })
+        ]
+      });
+    },
+    scaleAuthoredTextLayout(layout, requestedScale) {
+      const scaledStones = layout.stones.map((s) => new Stone({
+        xMm: s.xMm * requestedScale, yMm: s.yMm * requestedScale,
+        sizeMm: s.sizeMm, color: s.color, layerId: s.layerId, index: s.index, metadata: s.metadata
+      }));
+      return {
+        ok: true,
+        layout: new StoneLayout({ layerId: layout.layerId, sourceMode: 'authored', stones: scaledStones }),
+        requestedScale,
+        minimumLegalScale: 0.1,
+        naturalMinimumSpacingMm: 4,
+        requiredSpacingMm: 3.1,
+        originalBoundingBox: layout.getBoundingBox()?.toJSON() ?? null,
+        scaledBoundingBox: null
+      };
+    },
+    generatePathLayout({ layerId }) {
+      return new StoneLayout({ layerId, sourceMode: 'fill', stones: [] });
+    }
+  };
+  return new MonogramGenerator({ geometryEngine });
+}
+
 const RS_BLOCK = { fontId: 'rs-block', providerId: 'rhinestone' };
 
 async function test(name, fn) {
@@ -99,10 +150,10 @@ async function test(name, fn) {
 // generator -- square-family frames avoid the confound for these baseline success fixtures.
 
 await test('single-letter generation succeeds with real frame + authored font', async () => {
-  const generator = createRealGenerator();
+  const { generator } = createRealGenerator();
   const result = await generator.generate({
     frameId: 'square', layoutId: 'single', letters: ['A'], ...RS_BLOCK,
-    stoneSizeMm: 2.8, color: 'gold',
+    stoneSizeMm: 2.8, color: 'gold', canvasMm: CANVAS_MM,
     frameRect: { xMm: 0, yMm: 0, widthMm: 80, heightMm: 80 }
   });
 
@@ -116,10 +167,10 @@ await test('single-letter generation succeeds with real frame + authored font', 
 });
 
 await test('two-letter generation succeeds with real frame + authored font', async () => {
-  const generator = createRealGenerator();
+  const { generator } = createRealGenerator();
   const result = await generator.generate({
     frameId: 'square', layoutId: 'two-letter', letters: ['A', 'B'], ...RS_BLOCK,
-    stoneSizeMm: 2.8, color: 'gold',
+    stoneSizeMm: 2.8, color: 'gold', canvasMm: CANVAS_MM,
     frameRect: { xMm: 0, yMm: 0, widthMm: 110, heightMm: 80 }
   });
 
@@ -129,10 +180,10 @@ await test('two-letter generation succeeds with real frame + authored font', asy
 });
 
 await test('traditional three-letter generation succeeds with real frame + authored font', async () => {
-  const generator = createRealGenerator();
+  const { generator } = createRealGenerator();
   const result = await generator.generate({
     frameId: 'rounded-square', layoutId: 'traditional-three', letters: ['A', 'B', 'C'], ...RS_BLOCK,
-    stoneSizeMm: 2.8, color: 'gold',
+    stoneSizeMm: 2.8, color: 'gold', canvasMm: CANVAS_MM,
     frameRect: { xMm: 0, yMm: 0, widthMm: 100, heightMm: 100 }
   });
 
@@ -145,10 +196,10 @@ await test('traditional three-letter generation succeeds with real frame + autho
 });
 
 await test('equal three-letter generation succeeds with real frame + authored font', async () => {
-  const generator = createRealGenerator();
+  const { generator } = createRealGenerator();
   const result = await generator.generate({
     frameId: 'square', layoutId: 'equal-three', letters: ['A', 'B', 'C'], ...RS_BLOCK,
-    stoneSizeMm: 2.8, color: 'gold',
+    stoneSizeMm: 2.8, color: 'gold', canvasMm: CANVAS_MM,
     frameRect: { xMm: 0, yMm: 0, widthMm: 110, heightMm: 110 }
   });
 
@@ -161,10 +212,10 @@ await test('equal three-letter generation succeeds with real frame + authored fo
 // list): layer count, layer types, preserved stone sizes, preserved colors, preserved metadata.
 
 await test('generated layers preserve requested stone size and color, and match the ordinary layer schema', async () => {
-  const generator = createRealGenerator();
+  const { generator } = createRealGenerator();
   const result = await generator.generate({
     frameId: 'square', layoutId: 'two-letter', letters: ['A', 'B'], ...RS_BLOCK,
-    stoneSizeMm: 3.2, color: 'ruby',
+    stoneSizeMm: 3.2, color: 'ruby', canvasMm: CANVAS_MM,
     frameRect: { xMm: 5, yMm: 10, widthMm: 110, heightMm: 80 },
     frameOptions: { color: 'jet' }
   });
@@ -191,6 +242,9 @@ await test('generated layers preserve requested stone size and color, and match 
     assert.equal(typeof letterLayer.x, 'number');
     assert.equal(typeof letterLayer.y, 'number');
     assert.equal(typeof letterLayer.height, 'number');
+    // MONO-005A: the persisted, position-only authored-font scale field.
+    assert.equal(typeof letterLayer.authoredScale, 'number');
+    assert.ok(letterLayer.authoredScale > 0 && Number.isFinite(letterLayer.authoredScale));
   }
 });
 
@@ -200,7 +254,7 @@ await test('letter fitting preserves each stone\'s metadata unchanged through sc
   // path in isolation against the fake's stones, which are stamped with metadata:{fake:true}.
   const result = await generator.generate({
     frameId: 'square', layoutId: 'single', letters: ['X'], fontId: 'fake-font',
-    stoneSizeMm: 2.8, gapMm: 0.3,
+    stoneSizeMm: 2.8, gapMm: 0.3, canvasMm: CANVAS_MM,
     frameRect: { xMm: 0, yMm: 0, widthMm: 80, heightMm: 80 }
   });
 
@@ -208,13 +262,55 @@ await test('letter fitting preserves each stone\'s metadata unchanged through sc
   assert.equal(result.measurements.letters[0].stoneCount, 2);
 });
 
+// --- MONO-005A: the persisted text x/y contract ---------------------------------------------------
+
+await test('a generated letter layer\'s x/y renders at the intended slot center under the real text-layer coordinate contract', async () => {
+  const { geometryEngine, generator } = createRealGenerator();
+  const frameRect = { xMm: 0, yMm: 0, widthMm: 80, heightMm: 80 };
+  const result = await generator.generate({
+    frameId: 'square', layoutId: 'single', letters: ['A'], ...RS_BLOCK,
+    stoneSizeMm: 2.8, color: 'gold', canvasMm: CANVAS_MM, frameRect
+  });
+  assert.equal(result.ok, true);
+
+  const letterLayer = result.layers.find((l) => l.type === 'text');
+  const letterMeasurement = result.measurements.letters[0];
+  const slot = result.measurements.slots[0];
+  const expectedCenterXMm = slot.targetRect.xMm + slot.targetRect.widthMm / 2;
+  const expectedCenterYMm = slot.targetRect.yMm + slot.targetRect.heightMm / 2;
+
+  // Regenerate this letter exactly as the real, unmodified live application would: GeometryEngine.
+  // generateTextLayout() with the stored authoredScale, then app.js's own computeTextPlacementOffset()
+  // formula (via its shared pure helper) using the stored x/y and the target canvas size.
+  const regenerated = await geometryEngine.generateTextLayout({
+    text: letterLayer.text, fontId: letterLayer.font, providerId: RS_BLOCK.providerId,
+    layerId: letterLayer.id, heightMm: letterLayer.height || 25, stoneSizeMm: letterLayer.stoneSize,
+    gapMm: 0, mode: 'outline', color: letterLayer.color, curveEnabled: false,
+    authoredScale: letterLayer.authoredScale
+  });
+  const bb = regenerated.getBoundingBox();
+  const { offsetXMm, offsetYMm } = computeTextPlacementOffsetMm({
+    boundingBoxMm: bb, xMm: letterLayer.x, yMm: letterLayer.y,
+    canvasWidthMm: CANVAS_MM.widthMm, canvasHeightMm: CANVAS_MM.heightMm
+  });
+  const finalCenterXMm = bb.minXmm + bb.widthMm / 2 + offsetXMm;
+  const finalCenterYMm = bb.minYmm + bb.heightMm / 2 + offsetYMm;
+
+  const EPS = 1e-6;
+  assert.ok(Math.abs(finalCenterXMm - expectedCenterXMm) < EPS, `x center ${finalCenterXMm} vs ${expectedCenterXMm}`);
+  assert.ok(Math.abs(finalCenterYMm - expectedCenterYMm) < EPS, `y center ${finalCenterYMm} vs ${expectedCenterYMm}`);
+  // The stored x/y and measurements' own recorded x/y agree with each other.
+  assert.equal(letterLayer.x, letterMeasurement.xMm);
+  assert.equal(letterLayer.y, letterMeasurement.yMm);
+});
+
 // --- Structured failures ------------------------------------------------------------------------
 
 await test('unknown frameId returns a structured frame-not-found failure', async () => {
-  const generator = createRealGenerator();
+  const { generator } = createRealGenerator();
   const result = await generator.generate({
     frameId: 'not-a-real-frame', layoutId: 'single', letters: ['A'], ...RS_BLOCK,
-    stoneSizeMm: 2.8, frameRect: { xMm: 0, yMm: 0, widthMm: 80, heightMm: 80 }
+    stoneSizeMm: 2.8, canvasMm: CANVAS_MM, frameRect: { xMm: 0, yMm: 0, widthMm: 80, heightMm: 80 }
   });
   assert.equal(result.ok, false);
   assert.equal(result.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.FRAME_NOT_FOUND);
@@ -222,77 +318,92 @@ await test('unknown frameId returns a structured frame-not-found failure', async
 });
 
 await test('unknown layoutId returns a structured layout-not-found failure', async () => {
-  const generator = createRealGenerator();
+  const { generator } = createRealGenerator();
   const result = await generator.generate({
     frameId: 'square', layoutId: 'not-a-real-layout', letters: ['A'], ...RS_BLOCK,
-    stoneSizeMm: 2.8, frameRect: { xMm: 0, yMm: 0, widthMm: 80, heightMm: 80 }
+    stoneSizeMm: 2.8, canvasMm: CANVAS_MM, frameRect: { xMm: 0, yMm: 0, widthMm: 80, heightMm: 80 }
   });
   assert.equal(result.ok, false);
   assert.equal(result.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.LAYOUT_NOT_FOUND);
 });
 
 await test('a letters array of the wrong length returns unsupported-letter-count', async () => {
-  const generator = createRealGenerator();
+  const { generator } = createRealGenerator();
   const result = await generator.generate({
     frameId: 'square', layoutId: 'single', letters: ['A', 'B'], ...RS_BLOCK,
-    stoneSizeMm: 2.8, frameRect: { xMm: 0, yMm: 0, widthMm: 80, heightMm: 80 }
+    stoneSizeMm: 2.8, canvasMm: CANVAS_MM, frameRect: { xMm: 0, yMm: 0, widthMm: 80, heightMm: 80 }
   });
   assert.equal(result.ok, false);
   assert.equal(result.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.UNSUPPORTED_LETTER_COUNT);
 });
 
 await test('a non-authored (OpenType) font returns a structured invalid-font failure', async () => {
-  const generator = createRealGenerator();
+  const { generator } = createRealGenerator();
   const result = await generator.generate({
     frameId: 'square', layoutId: 'single', letters: ['A'], fontId: 'courier-prime-regular',
-    stoneSizeMm: 2.8, frameRect: { xMm: 0, yMm: 0, widthMm: 80, heightMm: 80 }
+    stoneSizeMm: 2.8, canvasMm: CANVAS_MM, frameRect: { xMm: 0, yMm: 0, widthMm: 80, heightMm: 80 }
   });
   assert.equal(result.ok, false);
   assert.equal(result.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.INVALID_FONT);
 });
 
 await test('a letter that cannot legally fit its slot returns below-minimum-scale', async () => {
-  const generator = createRealGenerator();
+  const { generator } = createRealGenerator();
   // A frame small enough that the required scale to fill the slot falls below the authored font's
   // own minimum-legal-scale spacing floor (MONO-002) -- a real, not synthetic, fitting failure.
   const result = await generator.generate({
     frameId: 'circle', layoutId: 'single', letters: ['W'], ...RS_BLOCK,
-    stoneSizeMm: 2.8, frameRect: { xMm: 0, yMm: 0, widthMm: 20, heightMm: 20 }
+    stoneSizeMm: 2.8, canvasMm: CANVAS_MM, frameRect: { xMm: 0, yMm: 0, widthMm: 20, heightMm: 20 }
   });
   assert.equal(result.ok, false);
   assert.equal(result.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.BELOW_MINIMUM_SCALE);
 });
 
 await test('a letter reaching past a round frame\'s true interior returns frame-collision', async () => {
-  const generator = createRealGenerator();
+  const { generator } = createRealGenerator();
   // Single layout's slot is the frame interior's full bounding rect (MONO-004: targetHeightRatio 1,
   // no margin). For a circular frame, a letter whose ink reaches its own bounding-box corners (e.g.
   // 'A') therefore pokes past the circle's true (smaller) interior into the frame's own stone band --
   // a genuine collision, reliably reproduced at ordinary production stone size/frame size.
   const result = await generator.generate({
     frameId: 'circle', layoutId: 'single', letters: ['A'], ...RS_BLOCK,
-    stoneSizeMm: 2.8, frameRect: { xMm: 0, yMm: 0, widthMm: 80, heightMm: 80 }
+    stoneSizeMm: 2.8, canvasMm: CANVAS_MM, frameRect: { xMm: 0, yMm: 0, widthMm: 80, heightMm: 80 }
   });
   assert.equal(result.ok, false);
   assert.equal(result.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.FRAME_COLLISION);
 });
 
-await test('two letters placed too close together return letter-collision (synthetic fixture)', async () => {
+await test('two letters placed too close together return letter-collision, distinct from frame-collision (synthetic fixture)', async () => {
   const generator = createCollidingFakeGenerator();
   const result = await generator.generate({
     frameId: 'square', layoutId: 'two-letter', letters: ['X', 'Y'], fontId: 'fake-font',
-    stoneSizeMm: 2.8, gapMm: 0.3,
+    stoneSizeMm: 2.8, gapMm: 0.3, canvasMm: CANVAS_MM,
     frameRect: { xMm: 0, yMm: 0, widthMm: 20, heightMm: 20 }
   });
   assert.equal(result.ok, false);
   assert.equal(result.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.LETTER_COLLISION);
+  assert.notEqual(result.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.FRAME_COLLISION);
+});
+
+await test('a letter layer that would not round-trip through the real GeometryEngine path returns internal-contract-mismatch (synthetic fixture)', async () => {
+  const generator = createMismatchedFakeGenerator();
+  const result = await generator.generate({
+    frameId: 'square', layoutId: 'single', letters: ['X'], fontId: 'fake-font',
+    stoneSizeMm: 2.8, gapMm: 0.3, canvasMm: CANVAS_MM,
+    // A frame large relative to the fake's fixed 4mm-wide stone pair guarantees requestedScale != 1,
+    // so the fake's authoredScale-ignoring generateTextLayout() and its scale-applying
+    // scaleAuthoredTextLayout() are guaranteed to disagree.
+    frameRect: { xMm: 0, yMm: 0, widthMm: 300, heightMm: 300 }
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.INTERNAL_CONTRACT_MISMATCH);
 });
 
 await test('invalid top-level input is rejected with invalid-input, never throws', async () => {
-  const generator = createRealGenerator();
+  const { generator } = createRealGenerator();
   const base = {
     frameId: 'square', layoutId: 'single', letters: ['A'], ...RS_BLOCK,
-    stoneSizeMm: 2.8, frameRect: { xMm: 0, yMm: 0, widthMm: 80, heightMm: 80 }
+    stoneSizeMm: 2.8, canvasMm: CANVAS_MM, frameRect: { xMm: 0, yMm: 0, widthMm: 80, heightMm: 80 }
   };
 
   const cases = [
@@ -306,7 +417,10 @@ await test('invalid top-level input is rejected with invalid-input, never throws
     { ...base, gapMm: -1 },
     { ...base, frameRect: null },
     { ...base, frameRect: { xMm: 0, yMm: 0, widthMm: 0, heightMm: 80 } },
-    { ...base, color: '' }
+    { ...base, color: '' },
+    { ...base, canvasMm: null },
+    { ...base, canvasMm: { widthMm: 0, heightMm: 200 } },
+    { ...base, canvasMm: { widthMm: 200, heightMm: -1 } }
   ];
 
   for (const request of cases) {
@@ -319,10 +433,10 @@ await test('invalid top-level input is rejected with invalid-input, never throws
 // --- Determinism ---------------------------------------------------------------------------------
 
 await test('identical requests produce byte-identical layer/measurement data', async () => {
-  const generator = createRealGenerator();
+  const { generator } = createRealGenerator();
   const request = {
     frameId: 'rounded-square', layoutId: 'traditional-three', letters: ['A', 'B', 'C'], ...RS_BLOCK,
-    stoneSizeMm: 2.8, color: 'gold',
+    stoneSizeMm: 2.8, color: 'gold', canvasMm: CANVAS_MM,
     frameRect: { xMm: 0, yMm: 0, widthMm: 100, heightMm: 100 }
   };
 
@@ -345,7 +459,7 @@ await test('frame layer stone count matches an independent, direct generatePathL
   const frameRect = { xMm: 0, yMm: 0, widthMm: 80, heightMm: 80 };
   const result = await generator.generate({
     frameId: 'square', layoutId: 'single', letters: ['A'], ...RS_BLOCK,
-    stoneSizeMm: 2.8, color: 'gold', frameRect
+    stoneSizeMm: 2.8, color: 'gold', canvasMm: CANVAS_MM, frameRect
   });
   assert.equal(result.ok, true);
 
@@ -359,6 +473,36 @@ await test('frame layer stone count matches an independent, direct generatePathL
   });
 
   assert.equal(result.measurements.frameStoneCount, directFrameLayout.stones.length);
+});
+
+await test('a generated letter layer round-trips through the real GeometryEngine.generateTextLayout() path with identical geometry', async () => {
+  const { geometryEngine, generator } = createRealGenerator();
+  const result = await generator.generate({
+    frameId: 'square', layoutId: 'single', letters: ['A'], ...RS_BLOCK,
+    stoneSizeMm: 2.8, color: 'gold', canvasMm: CANVAS_MM,
+    frameRect: { xMm: 0, yMm: 0, widthMm: 80, heightMm: 80 }
+  });
+  assert.equal(result.ok, true);
+
+  const letterLayer = result.layers.find((l) => l.type === 'text');
+  const letterMeasurement = result.measurements.letters[0];
+
+  const regenerated = await geometryEngine.generateTextLayout({
+    text: letterLayer.text, fontId: letterLayer.font, providerId: RS_BLOCK.providerId,
+    layerId: letterLayer.id, heightMm: letterLayer.height, stoneSizeMm: letterLayer.stoneSize,
+    gapMm: 0, mode: 'outline', color: letterLayer.color, curveEnabled: false,
+    authoredScale: letterLayer.authoredScale
+  });
+
+  assert.equal(regenerated.stones.length, letterMeasurement.stoneCount);
+  const bb = regenerated.getBoundingBox().toJSON();
+  const EPS = 1e-6;
+  assert.ok(Math.abs(bb.widthMm - letterMeasurement.scaledBoundingBox.widthMm) < EPS);
+  assert.ok(Math.abs(bb.heightMm - letterMeasurement.scaledBoundingBox.heightMm) < EPS);
+  for (const stone of regenerated.stones) {
+    assert.equal(stone.sizeMm, 2.8);
+    assert.equal(stone.color, 'gold');
+  }
 });
 
 if (process.exitCode === 1) {

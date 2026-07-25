@@ -115,6 +115,12 @@ export class GeometryEngine {
    * @param {number} [params.rotationDeg] TXT-102: whole-block rotation in degrees, clockwise,
    *   applied last, around the text block's own (pre-rotation) bounding-box center. Default 0 (no
    *   rotation, byte-identical to before this milestone). Normalized into [0, 360).
+   * @param {number} [params.authoredScale] MONO-005A: persistent, project-schema counterpart of
+   *   scaleAuthoredTextLayout() (MONO-002) -- a position-only scale applied to authored (stone-
+   *   center) fonts only, via that exact method (see below). Default 1 (byte-identical to before
+   *   this milestone). Has no effect on sampled/OpenType text -- those fonts have no authored
+   *   branch for it to apply to. Throws (does not silently clamp) if illegal for this layout, e.g.
+   *   below scaleAuthoredTextLayout()'s own minimum legal scale.
    * @returns {Promise<StoneLayout>}
    */
   async generateTextLayout(params = {}) {
@@ -139,14 +145,47 @@ export class GeometryEngine {
       if (options.curveEnabled) {
         throw new Error('GeometryEngine.generateTextLayout: curved text is not supported for fonts that supply authored stone centers.');
       }
-      const rotatedAuthoredStones = rotateTextPoints(authoredStones, options.rotationDeg);
-      stones = rotatedAuthoredStones.map((point, index) => new Stone({
+      let authoredResultStones = authoredStones.map((point, index) => new Stone({
         xMm: point.xMm,
         yMm: point.yMm,
         sizeMm: options.stoneSizeMm,
         color: options.color,
         layerId: options.layerId,
         index
+      }));
+
+      // MONO-005A: authoredScale is the persistent, project-schema counterpart of
+      // scaleAuthoredTextLayout() (MONO-002) -- applied here, in the one place every caller (live
+      // text-layer rendering via app.js, and any programmatic caller such as MonogramGenerator)
+      // shares, rather than as a second, external scaling step a caller could forget to apply.
+      // Reuses that exact method, not a re-derived transform, so the pivot/legality math is
+      // identical regardless of caller. Applied before rotation below: scaling and rotation around
+      // the same shared bounding-box-center pivot commute exactly (see rotateTextPoints()'s own doc
+      // comment for that pivot convention), so the order is not observable, but is fixed here as
+      // the one canonical order. Skipped entirely for the default authoredScale === 1 (the common
+      // case, and every pre-MONO-005A caller), so output is byte-identical to before this milestone
+      // whenever authoredScale is absent or 1.
+      if (options.authoredScale !== 1) {
+        const rawLayout = new StoneLayout({ layerId: options.layerId, sourceMode: 'authored', stones: authoredResultStones });
+        const scaleResult = this.scaleAuthoredTextLayout(rawLayout, options.authoredScale);
+        if (!scaleResult.ok) {
+          // Never silently accepted or clamped -- an illegal persisted authoredScale (e.g. below
+          // scaleAuthoredTextLayout()'s own minimum legal scale) is a hard, descriptive error,
+          // exactly like this method's other combination-based failures (e.g. curveEnabled above).
+          throw new Error(`GeometryEngine.generateTextLayout: authoredScale ${options.authoredScale} is invalid for this text (${scaleResult.reason}): ${scaleResult.message}`);
+        }
+        authoredResultStones = scaleResult.layout.stones;
+      }
+
+      const rotatedAuthoredStones = rotateTextPoints(authoredResultStones, options.rotationDeg);
+      stones = rotatedAuthoredStones.map((point) => new Stone({
+        xMm: point.xMm,
+        yMm: point.yMm,
+        sizeMm: point.sizeMm,
+        color: point.color,
+        layerId: point.layerId,
+        index: point.index,
+        metadata: point.metadata
       }));
       sourceMode = 'authored';
     } else {
@@ -1021,6 +1060,13 @@ function normalizeTextParams(params) {
 
   const rotationDeg = normalizeRotationDeg(assertFiniteNumber(params.rotationDeg ?? 0, 'rotationDeg'));
 
+  // MONO-005A: validated unconditionally here (like every other param), regardless of whether this
+  // call's font eventually turns out authored or sampled -- font resolution happens later, per
+  // character, inside _buildLineContours() (async, provider-dependent), so it cannot gate validation
+  // at this synchronous normalization step. Has no effect on the sampled branch of
+  // generateTextLayout(), which never reads options.authoredScale.
+  const authoredScale = assertPositiveNumber(params.authoredScale ?? 1, 'authoredScale');
+
   return {
     text: params.text,
     fontId: params.fontId,
@@ -1036,6 +1082,7 @@ function normalizeTextParams(params) {
     align,
     lineSpacing,
     rotationDeg,
+    authoredScale,
     ...curve,
     // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.
     ...normalizeMixedSizeParams(params, stoneSizeMm)
