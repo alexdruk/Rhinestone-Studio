@@ -32,7 +32,7 @@ import { el } from '../src/ui/index.js';
 import { HistoryManager } from '../src/history/index.js';
 import { selectMany } from '../src/editing/index.js';
 import { GeometryEngine, SHAPE_LIBRARY_KINDS, StoneLayout, listFrames } from '../src/geometry/index.js';
-import { listStoneSizes } from '../src/renderer/StoneSizes.js';
+import { listStoneSizes, findStoneSizeByDiameterMm } from '../src/renderer/StoneSizes.js';
 import { STONE_COLORS } from '../src/renderer/StoneColors.js';
 import { stoneLayoutToSvg } from '../src/export/SvgExporter.js';
 import { FontManager } from '../src/fonts/index.js';
@@ -136,7 +136,7 @@ function installFakeDom() {
 // ---------- Build a fresh sandbox ----------
 
 const sandboxFactory = new Function(
-  'Lightbox', 'HistoryManager', 'SHAPE_LIBRARY_KINDS', 'el', 'listFrames', 'listStoneSizes', 'STONE_COLORS',
+  'Lightbox', 'HistoryManager', 'SHAPE_LIBRARY_KINDS', 'el', 'listFrames', 'listStoneSizes', 'findStoneSizeByDiameterMm', 'STONE_COLORS',
   'MONOGRAM_LAYOUTS', 'MONOGRAM_LAYOUT_LETTER_COUNTS', 'MONOGRAM_GENERATOR_FAILURE_REASONS',
   'fontManager', 'initialProject', 'selectMany', 'syncSelectedControlsFromLayer', 'updateAll', 'updateHistoryUI',
   'monogramGenerator',
@@ -212,7 +212,7 @@ function makeStubMonogramGenerator(nextResult) {
 function buildScenario({ project, monogramGenerator, fontManager = makeFakeFontManager() } = {}) {
   installFakeDom();
   const sandbox = sandboxFactory(
-    Lightbox, HistoryManager, SHAPE_LIBRARY_KINDS, el, listFrames, listStoneSizes, STONE_COLORS,
+    Lightbox, HistoryManager, SHAPE_LIBRARY_KINDS, el, listFrames, listStoneSizes, findStoneSizeByDiameterMm, STONE_COLORS,
     MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS, MONOGRAM_GENERATOR_FAILURE_REASONS,
     fontManager, project || { canvas: { width: 200, height: 200 }, layers: [{ id: 'initial-layer', type: 'text' }] },
     selectMany, () => {}, () => {}, () => {},
@@ -438,7 +438,15 @@ for (const reason of Object.values(MONOGRAM_GENERATOR_FAILURE_REASONS)) {
     el('monogramWidth').value = '80';
     el('monogramHeight').value = '80';
     await s.generateMonogram();
-    const message = s.monogramFailureMessage(reason);
+    // MONO-006C/MONO-006E: monogramFailureMessage() now takes the full {reason,...} result plus the
+    // request that was sent to the generator, so it can name the actual layout/frame size/stone
+    // size in the message (see app.js's own doc comment on monogramFailureMessage()) -- mirroring
+    // exactly what generateMonogram() itself passes (including layoutId), built from the same
+    // control values set above.
+    const message = s.monogramFailureMessage(
+      { reason },
+      { frameId: 'circle', layoutId: MONOGRAM_LAYOUTS.SINGLE, stoneSizeMm: 2.8, frameRect: { widthMm: 80, heightMm: 80 } }
+    );
     assert.ok(message.length > 0);
     assert.ok(!message.includes('Error'), 'the displayed message must never be a raw exception string');
     assert.equal(el('monogramValidation').textContent, message);

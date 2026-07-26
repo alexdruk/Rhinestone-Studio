@@ -39,7 +39,13 @@ function point(xMm, yMm) {
 // the same relationship createRingNaturalContours()'s own innerRatio already expresses for a
 // circular ring; every non-circular frame below reuses that exact relationship (see
 // scaleContourTowardCenter()) rather than a shape-specific formula.
-const DEFAULT_INNER_RATIO = 0.78;
+//
+// MONO-006E: raised from 0.78 (a 22%-of-radius border band) to 0.85 (15%) -- visual-QA review found
+// the frame's own border consuming an outsized share of the design relative to the letters it is
+// meant to merely surround (this milestone's "the frame is decorative, the letters are the primary
+// design element" objective). A thinner band directly grows every hollow frame's own fitting
+// interior too, compounding with this milestone's other fitting-rectangle improvements.
+const DEFAULT_INNER_RATIO = 0.85;
 // Rounded Square's corner radius, as a fraction of its own natural half-side.
 const ROUNDED_SQUARE_CORNER_RATIO = 0.28;
 const CORNER_SEGMENTS = 12;
@@ -335,18 +341,25 @@ function insetPointTowardCenterByMm(p, centerXMm, centerYMm, insetMm) {
  * own center by that many mm — see insetPointTowardCenterByMm()), so a future caller does not need
  * to separately know about or apply clearanceMm itself.
  *
+ * MONO-006C: `minClearanceMm` lets a caller (MonogramGenerator, for real production stone spacing —
+ * stoneSizeMm+gapMm, which can exceed every frame's fixed clearanceMm at larger stone sizes) require
+ * *at least* that much erosion. The effective erosion is `Math.max(frame.clearanceMm,
+ * minClearanceMm)`, never less than the frame's own declared clearance. Default 0 preserves prior
+ * behavior for every existing caller.
+ *
  * @param {string|object} frameOrId A known frame id, or a frame-definition-shaped object (see resolveFrame()).
  * @param {{xMm:number,yMm:number,widthMm?:number,heightMm?:number}} box
+ * @param {number} [minClearanceMm]
  * @returns {{polygons: Point2D[][], boundingBox: BoundingBox|null}}
  */
-export function computeFrameInterior(frameOrId, box) {
+export function computeFrameInterior(frameOrId, box, minClearanceMm = 0) {
   const frame = resolveFrame(frameOrId);
   const { polygons, boundingBox } = resolveInnerFittingContours(frame, box);
   if (!boundingBox) {
     return { polygons, boundingBox };
   }
 
-  const clearanceMm = frame.clearanceMm || 0;
+  const clearanceMm = Math.max(frame.clearanceMm || 0, minClearanceMm || 0);
   if (!(clearanceMm > 0)) {
     return { polygons, boundingBox };
   }
@@ -367,9 +380,10 @@ export function computeFrameInterior(frameOrId, box) {
  * @param {string|object} frameOrId A known frame id, or a frame-definition-shaped object (see resolveFrame()).
  * @param {{xMm:number,yMm:number,widthMm?:number,heightMm?:number}} box
  * @param {number} aspectRatio width/height
+ * @param {number} [minClearanceMm] MONO-006C: forwarded to computeFrameInterior() — see its own doc comment.
  * @returns {{xMm:number,yMm:number,widthMm:number,heightMm:number,fitRatio:number}|null}
  */
-export function computeFrameFitRect(frameOrId, box, aspectRatio) {
-  const { polygons, boundingBox } = computeFrameInterior(frameOrId, box);
+export function computeFrameFitRect(frameOrId, box, aspectRatio, minClearanceMm = 0) {
+  const { polygons, boundingBox } = computeFrameInterior(frameOrId, box, minClearanceMm);
   return computeInscribedRect(polygons, boundingBox, aspectRatio);
 }

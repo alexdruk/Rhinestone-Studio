@@ -53,6 +53,30 @@ function sliceBetween(source, startMarker, endMarker, label) {
   return source.slice(start, endIdx);
 }
 
+// Brace-balanced extraction: finds startMarker, then the function body from its opening "{" through
+// the matching closing "}" (counting brace depth), regardless of how many physical lines or comments
+// sit in between. Unlike sliceBetween()'s fixed end-marker approach, this survives a function being
+// reformatted across multiple lines (e.g. a comment inserted mid-body) -- exactly what broke this
+// suite's own updateAll() extraction under MONO-006A: sliceBetween(..., '\n', ...) silently captured
+// only the function's first physical line once a multi-line comment pushed the rest of the body past
+// that first newline, so the assertions below saw a truncated fragment missing calls that are, in
+// fact, still present in the real function.
+function extractFunctionBody(source, startMarker, label) {
+  const start = source.indexOf(startMarker);
+  assert.ok(start !== -1, `expected to find "${startMarker}" (${label}) in app.js`);
+  const braceStart = source.indexOf('{', start);
+  assert.ok(braceStart !== -1, `expected to find the opening "{" of ${label} in app.js`);
+  let depth = 0;
+  for (let i = braceStart; i < source.length; i++) {
+    if (source[i] === '{') depth++;
+    else if (source[i] === '}') {
+      depth--;
+      if (depth === 0) return source.slice(start, i + 1);
+    }
+  }
+  throw new Error(`expected to find the matching closing "}" of ${label} in app.js`);
+}
+
 // ---------- 1. Boot-time recovery decision, executed for real ----------
 
 const recoverySrc = sliceBetween(appJs, 'let bootStatusMessage=null;', 'let cleanProjectJson=JSON.stringify(project);', 'the boot-time recovery block');
@@ -136,14 +160,106 @@ await test('a recovered record whose project fails validateProject() falls back 
 });
 
 // ---------- 2. scheduleAutosave() is wired into updateAll(), debounced, diff-gated ----------
+//
+// updateAll() is executed for real (not just text-searched) against fakes for every collaborator it
+// calls, so this suite proves actual runtime behavior -- call order, and that stale-token/failure
+// exits genuinely short-circuit before the successful-regeneration tail -- rather than merely where
+// names appear in the source text. This also makes the extraction immune to updateAll() being
+// reformatted across physical lines (a multi-line comment inserted mid-body is exactly what broke
+// the old sliceBetween(..., '\n', ...)-based version of this test under MONO-006A).
 
-await test('updateAll() calls scheduleAutosave() after regenerating (not before -- so it always sees the current project)', () => {
-  const updateAllSrc = sliceBetween(appJs, 'async function updateAll(skipWrite=false){', '\n', 'updateAll()');
-  const historyIdx = updateAllSrc.indexOf('updateHistoryUI()');
-  const scheduleIdx = updateAllSrc.indexOf('scheduleAutosave()');
-  assert.ok(historyIdx !== -1, 'expected updateAll() to call updateHistoryUI()');
-  assert.ok(scheduleIdx !== -1, 'expected updateAll() to call scheduleAutosave()');
-  assert.ok(scheduleIdx > historyIdx, 'scheduleAutosave() must run after the project has actually been regenerated/rendered this pass');
+function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', permanentEngineError = null } = {}) {
+  const calls = [];
+  const record = (name) => () => { calls.push(name); };
+  const consoleErrors = [];
+  let statusValue = statusText;
+  const el = (id) => {
+    assert.equal(id, 'status', `updateAll() must only touch #status, not #${id}`);
+    return { get textContent() { return statusValue; }, set textContent(v) { statusValue = v; } };
+  };
+  const engine = { generate: null };
+  const project = {};
+  const fakeConsole = { error: (...args) => consoleErrors.push(args) };
+  const writeSelectedControlsToLayer = record('writeSelectedControlsToLayer');
+  const renderLayerUI = record('renderLayerUI');
+  const drawLayout = record('drawLayout');
+  const drawCup = record('drawCup');
+  const updateStats = record('updateStats');
+  const updateHistoryUI = record('updateHistoryUI');
+  const updateEditingUI = record('updateEditingUI');
+  const updateViewButtons = record('updateViewButtons');
+  const updateTextOutsidePrintableWarning = record('updateTextOutsidePrintableWarning');
+  const scheduleAutosave = record('scheduleAutosave');
+
+  const updateAllSrc = extractFunctionBody(appJs, 'async function updateAll(skipWrite=false){', 'updateAll()');
+  const factory = new Function(
+    'writeSelectedControlsToLayer', 'engine', 'project', 'el', 'permanentEngineError', 'console',
+    'renderLayerUI', 'drawLayout', 'drawCup', 'updateStats', 'updateHistoryUI', 'updateEditingUI',
+    'updateViewButtons', 'updateTextOutsidePrintableWarning', 'scheduleAutosave',
+    `
+    let generationToken=0;
+    let layout;
+    function bumpGenerationToken(){generationToken++}
+    ${updateAllSrc}
+    return { updateAll, bumpGenerationToken };
+    `
+  );
+  const { updateAll, bumpGenerationToken } = factory(
+    writeSelectedControlsToLayer, engine, project, el, permanentEngineError, fakeConsole,
+    renderLayerUI, drawLayout, drawCup, updateStats, updateHistoryUI, updateEditingUI,
+    updateViewButtons, updateTextOutsidePrintableWarning, scheduleAutosave
+  );
+  if (buildGenerate) engine.generate = buildGenerate(bumpGenerationToken);
+  const tailCalls = () => calls.filter((c) => c !== 'writeSelectedControlsToLayer');
+  return { run: () => updateAll(skipWrite), calls, tailCalls, getStatus: () => statusValue, consoleErrors };
+}
+
+const SUCCESS_TAIL_ORDER = ['renderLayerUI', 'drawLayout', 'drawCup', 'updateStats', 'updateHistoryUI', 'updateEditingUI', 'updateViewButtons', 'updateTextOutsidePrintableWarning', 'scheduleAutosave'];
+
+await test('a successful regeneration draws/updates stats/history/warnings and only then schedules autosave, in the required order', async () => {
+  const { run, calls, getStatus } = runUpdateAll({ buildGenerate: () => async () => ({ count: 3 }) });
+  await run();
+  assert.deepEqual(calls, ['writeSelectedControlsToLayer', ...SUCCESS_TAIL_ORDER]);
+  assert.equal(getStatus(), 'Ready');
+});
+
+await test('updateAll(true) (skipWrite) skips writeSelectedControlsToLayer() but still completes the successful-regeneration tail', async () => {
+  const { run, calls } = runUpdateAll({ skipWrite: true, buildGenerate: () => async () => ({}) });
+  await run();
+  assert.deepEqual(calls, SUCCESS_TAIL_ORDER);
+});
+
+await test('a thrown generation error reports it via #status and console.error, and runs none of the successful-regeneration tail', async () => {
+  const { run, tailCalls, getStatus, consoleErrors } = runUpdateAll({ buildGenerate: () => async () => { throw new Error('boom'); } });
+  await run();
+  assert.deepEqual(tailCalls(), [], 'no draw/history/autosave call may run after a failed generation');
+  assert.equal(getStatus(), 'Text generation failed: boom');
+  assert.equal(consoleErrors.length, 1);
+});
+
+await test('a generation token superseded during the await (a newer updateAll() call started first) discards this pass entirely, even though generate() itself succeeded', async () => {
+  const { run, tailCalls, getStatus } = runUpdateAll({ buildGenerate: (bump) => async () => { bump(); return {}; } });
+  await run();
+  assert.deepEqual(tailCalls(), [], 'a stale/superseded pass must not run any of the successful-regeneration tail');
+  assert.equal(getStatus(), 'Ready', 'a discarded pass must not touch #status at all');
+});
+
+await test('a generation token superseded during the await also short-circuits the failure path (no status write, no console.error, no tail)', async () => {
+  const { run, tailCalls, getStatus, consoleErrors } = runUpdateAll({ buildGenerate: (bump) => async () => { bump(); throw new Error('boom'); } });
+  await run();
+  assert.deepEqual(tailCalls(), [], 'a stale/superseded pass must not run any of the successful-regeneration tail even on a failed generation');
+  assert.equal(getStatus(), 'Ready', 'a discarded failing pass must not overwrite #status');
+  assert.equal(consoleErrors.length, 0, 'a discarded failing pass must not log the error either');
+});
+
+await test('a lingering "Text generation failed" status is cleared back to Ready once generation succeeds again, and a font-manifest error still takes priority over it', async () => {
+  const recovered = runUpdateAll({ statusText: 'Text generation failed: boom', buildGenerate: () => async () => ({}) });
+  await recovered.run();
+  assert.equal(recovered.getStatus(), 'Ready');
+
+  const withManifestError = runUpdateAll({ statusText: 'Ready', permanentEngineError: new Error('manifest fetch failed'), buildGenerate: () => async () => ({}) });
+  await withManifestError.run();
+  assert.match(withManifestError.getStatus(), /Font manifest failed to load \(manifest fetch failed\)/);
 });
 
 await test('scheduleAutosave() and flushAutosaveNow() are diff-gated against lastAutosavedProjectJson, not unconditional', () => {

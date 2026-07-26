@@ -289,15 +289,31 @@ await test('18. the full production regression: a monogram letter\'s fitted auth
     letters: ['W'],
     fontId: 'rs-modern',
     providerId: 'rhinestone',
-    stoneSizeMm: 2.8,
+    // MONO-006C: the original stone size here is deliberately SS6 (2.0mm), not the previous 2.8mm --
+    // at 2.8mm rs-modern's own minimum legal scale happens to land at exactly 1.0 (2.8mm + the
+    // 0.3mm authored-font gap == this font's own natural pitch, by construction), and authoredScale
+    // === 1 is GeometryEngine's documented "no explicit fit requested" default (test 16 above),
+    // therefore never validated at all regardless of stoneSize -- reapplying it here would not
+    // reproduce the regression this test exists to cover.
+    //
+    // MONO-006E: MonogramGenerator now fits every letter to *fill* its own slot (see that module's
+    // own doc comment), not to its minimum legal scale -- so the fitted authoredScale below depends
+    // on frameRect too, not only on font/stoneSize. A modest 45x45mm frame (rather than the previous
+    // 60x60mm) keeps the fitted scale comfortably between 1.0 (the unvalidated default, must not
+    // land here) and ~2.16 (rs-modern's own minimum legal scale once stoneSize is later bumped to
+    // LARGE_PRODUCTION_STONE_MM below) -- large enough to still be a genuine, validated explicit
+    // value, small enough that the later stoneSize edit still makes it illegal, reproducing the
+    // real regression end to end.
+    stoneSizeMm: 2.0,
     gapMm: 0.3,
     color: 'crystal',
-    frameRect: { xMm: 0, yMm: 0, widthMm: 60, heightMm: 60 },
+    frameRect: { xMm: 0, yMm: 0, widthMm: 45, heightMm: 45 },
     canvasMm: { widthMm: 200, heightMm: 200 }
   });
   assert.ok(genResult.ok, `expected the monogram to generate: ${genResult.reason} ${genResult.message}`);
   const letterLayer = genResult.layers.find((l) => l.type === 'text');
   assert.equal(typeof letterLayer.authoredScale, 'number', 'expected MonogramGenerator to persist an explicit authoredScale');
+  assert.notEqual(letterLayer.authoredScale, 1, 'fixture must not land on the unvalidated authoredScale===1 default (see comment above)');
 
   // Before the fix: editing stoneSize without invalidating authoredScale reproduces the reported
   // regression exactly (below-minimum-scale, same mechanism as the real bug).
