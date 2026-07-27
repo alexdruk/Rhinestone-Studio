@@ -56,8 +56,14 @@ export function crystalSeedForStone(stone) {
   return fnv1aHash(key);
 }
 
-// ~1 in 8 stones is sparkle-eligible -- restrained per PREVIEW-001 ("not every stone").
+// ~1 in 8 stones is sparkle-eligible -- restrained per PREVIEW-001 ("not every stone"). Left
+// unchanged by PREVIEW-001A (already within the 10-12.5% band that milestone asked to preserve).
 const SPARKLE_ELIGIBILITY = 0.125;
+
+// PREVIEW-001A: sparkle-eligible stones get one of several deterministic glint shapes instead of
+// always the same cross -- see CrystalStoneRenderer.js's drawSparkle() for what each index draws
+// (0 small cross, 1 diagonal, 2 tiny point glint, 3 brighter highlight with no star shape).
+export const SPARKLE_VARIANT_COUNT = 4;
 
 /**
  * Derives bounded, deterministic visual-only parameters for one stone. Never mutates `stone`.
@@ -71,7 +77,8 @@ const SPARKLE_ELIGIBILITY = 0.125;
  *   secondaryIntensity:number,   // [0.25,0.55] -- secondary reflection strength
  *   shadowStrength:number,       // [0.3,0.55] -- cast-shadow/rim darkening strength
  *   brightness:number,           // [0.92,1.08] -- subtle body brightness multiplier
- *   sparkle:boolean               // deterministic sparkle eligibility (~12.5% of stones)
+ *   sparkle:boolean,              // deterministic sparkle eligibility (~12.5% of stones)
+ *   sparkleVariant:number         // [0,SPARKLE_VARIANT_COUNT) -- which glint shape, when sparkle is true
  * }}
  */
 export function getCrystalAppearance(stone) {
@@ -86,6 +93,7 @@ export function getCrystalAppearance(stone) {
     secondaryIntensity: 0.25 + rand() * 0.3,
     shadowStrength: 0.3 + rand() * 0.25,
     brightness: 0.92 + rand() * 0.16,
-    sparkle: rand() < SPARKLE_ELIGIBILITY
+    sparkle: rand() < SPARKLE_ELIGIBILITY,
+    sparkleVariant: Math.floor(rand() * SPARKLE_VARIANT_COUNT)
   };
 }

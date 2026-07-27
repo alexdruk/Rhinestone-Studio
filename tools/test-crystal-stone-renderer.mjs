@@ -10,9 +10,9 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
-const { drawCrystalStone, renderCrystalStoneLayout, adjustBrightness, _brightnessCacheSizeForTesting } =
+const { drawCrystalStone, renderCrystalStoneLayout, adjustBrightness, sparkleOpacityFor, _brightnessCacheSizeForTesting } =
   await import('../src/renderer/CrystalStoneRenderer.js');
-const { getCrystalAppearance } = await import('../src/renderer/CrystalAppearance.js');
+const { getCrystalAppearance, SPARKLE_VARIANT_COUNT } = await import('../src/renderer/CrystalAppearance.js');
 const { renderStoneLayout } = await import('../src/renderer/CanvasRenderer2D.js');
 const { Stone } = await import('../src/geometry/Stone.js');
 const { StoneLayout } = await import('../src/geometry/StoneLayout.js');
@@ -78,37 +78,72 @@ await test('2. drawCrystalStone draws more than a flat circle: shadow arc, facet
   assert.ok(calls.lineTo.length >= 2, 'expected at least the two contrasting facet chords');
 });
 
-await test('3. sparkle-eligible stones above the minimum radius draw an extra cross glint', () => {
-  // Search for a stone whose deterministic appearance is sparkle-eligible.
-  let sparkleStone = null;
-  for (let i = 0; i < 200; i++) {
-    const candidate = new Stone({ xMm: i * 1.7, yMm: i * 0.3, sizeMm: 4, layerId: 'l', index: i });
-    if (getCrystalAppearance(candidate).sparkle) { sparkleStone = candidate; break; }
+// PREVIEW-001A helper: find a stone whose deterministic appearance is sparkle-eligible with a
+// specific sparkleVariant, by sweeping candidate positions/indices. Throws if none found within
+// the search budget (a real failure, not a flaky test -- with SPARKLE_ELIGIBILITY ~12.5% and 4
+// variants, ~3% of samples should match each variant, so 2000 samples is generous headroom).
+function findStoneWithVariant(variant, searchBudget = 2000) {
+  for (let i = 0; i < searchBudget; i++) {
+    const candidate = new Stone({ xMm: i * 1.7, yMm: i * 0.31, sizeMm: 4, layerId: 'l', index: i });
+    const appearance = getCrystalAppearance(candidate);
+    if (appearance.sparkle && appearance.sparkleVariant === variant) return candidate;
   }
-  assert.ok(sparkleStone, 'expected to find at least one sparkle-eligible stone within 200 samples');
-  const { ctx: ctxNoSparkle, calls: callsNoSparkle } = createFakeCtx();
-  const nonSparkleAppearance = { ...getCrystalAppearance(sparkleStone), sparkle: false };
-  drawCrystalStone(ctxNoSparkle, 0, 0, 8, 'gold', nonSparkleAppearance);
+  throw new Error(`No sparkle-eligible stone with sparkleVariant=${variant} found within ${searchBudget} samples`);
+}
 
-  const { ctx: ctxSparkle, calls: callsSparkle } = createFakeCtx();
-  drawCrystalStone(ctxSparkle, 0, 0, 8, 'gold', getCrystalAppearance(sparkleStone));
+await test('3. every sparkle variant (0-3) draws something extra beyond the non-sparkle baseline', () => {
+  for (let variant = 0; variant < SPARKLE_VARIANT_COUNT; variant++) {
+    const stone = findStoneWithVariant(variant);
+    const appearance = getCrystalAppearance(stone);
+    assert.equal(appearance.sparkleVariant, variant);
 
-  assert.ok(callsSparkle.lineTo.length > callsNoSparkle.lineTo.length, 'sparkle should add extra line segments (the glint cross)');
+    const { ctx: ctxNoSparkle, calls: callsNoSparkle } = createFakeCtx();
+    drawCrystalStone(ctxNoSparkle, 0, 0, 8, 'gold', { ...appearance, sparkle: false });
+
+    const { ctx: ctxSparkle, calls: callsSparkle } = createFakeCtx();
+    drawCrystalStone(ctxSparkle, 0, 0, 8, 'gold', appearance);
+
+    if (variant === 0 || variant === 1) {
+      // Cross (0) / diagonal (1): two extra soft-edged lines -> two extra lineTo calls.
+      assert.equal(callsSparkle.lineTo.length, callsNoSparkle.lineTo.length + 2, `variant ${variant} should add exactly 2 lineTo calls`);
+      assert.equal(callsSparkle.arc.length, callsNoSparkle.arc.length, `variant ${variant} should not add any arc calls`);
+    } else {
+      // Point glint (2) / brighter-highlight-no-star (3): one extra soft radial glow -> one extra arc call, no lineTo.
+      assert.equal(callsSparkle.arc.length, callsNoSparkle.arc.length + 1, `variant ${variant} should add exactly 1 arc call`);
+      assert.equal(callsSparkle.lineTo.length, callsNoSparkle.lineTo.length, `variant ${variant} should not add any lineTo calls`);
+    }
+  }
 });
 
-await test('4. tiny stones never draw a sparkle glint even when sparkle-eligible', () => {
-  let sparkleStone = null;
-  for (let i = 0; i < 200; i++) {
-    const candidate = new Stone({ xMm: i * 1.7, yMm: i * 0.3, sizeMm: 4, layerId: 'l', index: i });
-    if (getCrystalAppearance(candidate).sparkle) { sparkleStone = candidate; break; }
-  }
-  assert.ok(sparkleStone);
-  const appearance = getCrystalAppearance(sparkleStone);
+await test('4. tiny stones never draw a sparkle glint even when sparkle-eligible (any variant)', () => {
+  const stone = findStoneWithVariant(0);
+  const appearance = getCrystalAppearance(stone);
   const { ctx: ctxTiny, calls: callsTiny } = createFakeCtx();
   drawCrystalStone(ctxTiny, 0, 0, 1.0, 'gold', appearance); // below MIN_SPARKLE_RADIUS_PX
   const { ctx: ctxLarge, calls: callsLarge } = createFakeCtx();
   drawCrystalStone(ctxLarge, 0, 0, 8, 'gold', appearance);
   assert.ok(callsLarge.lineTo.length > callsTiny.lineTo.length, 'a tiny radius should suppress the sparkle glint');
+});
+
+await test('3b. sparkle cross/diagonal arms are shorter than the pre-PREVIEW-001A 0.85*radius cross', () => {
+  const stone = findStoneWithVariant(0);
+  const appearance = getCrystalAppearance(stone);
+  const radiusPx = 100; // large radius makes the arm-length ratio easy to read back from coordinates
+  const { ctx, calls } = createFakeCtx();
+  drawCrystalStone(ctx, 0, 0, radiusPx, 'gold', appearance);
+  // The horizontal arm's lineTo endpoints are (+-len, 0) relative to stone center (0,0).
+  const maxAbsX = Math.max(...calls.lineTo.map(([x]) => Math.abs(x)));
+  assert.ok(maxAbsX < radiusPx * 0.85, `arm reach ${maxAbsX} should be well under the old 0.85*radius (${radiusPx * 0.85})`);
+  assert.ok(maxAbsX <= radiusPx * 0.6, `arm reach ${maxAbsX} should match the new ~0.55*radius (0.55-0.6*radius) length`);
+});
+
+await test('3c. sparkle opacity stays within the PREVIEW-001A target range [0.35,0.50] across the full highlightIntensity domain', () => {
+  for (let hi = 0.7; hi <= 1.0; hi += 0.02) {
+    const opacity = sparkleOpacityFor(hi);
+    assert.ok(opacity >= 0.35 && opacity <= 0.5, `sparkleOpacityFor(${hi})=${opacity} out of [0.35,0.50]`);
+  }
+  assert.ok(Math.abs(sparkleOpacityFor(0.7) - 0.35) < 1e-9, 'lowest highlightIntensity should map to the opacity floor 0.35');
+  assert.ok(Math.abs(sparkleOpacityFor(1.0) - 0.5) < 1e-9, 'highest highlightIntensity should map to the opacity ceiling 0.50');
 });
 
 await test('5. renderCrystalStoneLayout is deterministic: same StoneLayout renders identical call sequences', () => {

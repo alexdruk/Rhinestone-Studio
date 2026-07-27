@@ -73,16 +73,88 @@ function rotateOffset(dx, dy, angleRad) {
   return { x: dx * cos - dy * sin, y: dx * sin + dy * cos };
 }
 
-function drawSparkle(ctx, xPx, yPx, radiusPx, intensity) {
-  const len = radiusPx * 0.85;
+// PREVIEW-001A: the original cross (opacity ~0.55-0.9, arms to 0.85*radius, hard rgba edges) read
+// as visually dominant in dense text -- a repeated "+" pattern that drew more attention than the
+// rhinestones themselves. sparkleOpacityFor() remaps highlightIntensity's already-bounded
+// [0.7,1.0] range down onto a restrained [0.35,0.50] glint opacity, keeping sparkle as the last,
+// quietest tier of the visual hierarchy (body > facet shading > primary highlight > occasional
+// sparkle) instead of the first thing the eye catches.
+export function sparkleOpacityFor(highlightIntensity) {
+  return 0.35 + ((highlightIntensity - 0.7) / 0.3) * 0.15;
+}
+
+// A soft-edged line: a 3-stop linear gradient (transparent -> opaque -> transparent) along the
+// stroke, so each glint arm tapers to nothing at its tips instead of ending in a hard rgba edge.
+// lineCap 'round' avoids a flat/blocky stroke end at the (already-transparent) tips.
+function strokeSoftLine(ctx, x1, y1, x2, y2, opacity, lineWidth) {
+  const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
+  gradient.addColorStop(0, 'rgba(255,255,255,0)');
+  gradient.addColorStop(0.5, `rgba(255,255,255,${opacity.toFixed(3)})`);
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.strokeStyle = gradient;
+  ctx.lineWidth = lineWidth;
+  ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(xPx - len, yPx);
-  ctx.lineTo(xPx + len, yPx);
-  ctx.moveTo(xPx, yPx - len);
-  ctx.lineTo(xPx, yPx + len);
-  ctx.strokeStyle = `rgba(255,255,255,${(0.55 + 0.35 * intensity).toFixed(3)})`;
-  ctx.lineWidth = Math.max(0.3, radiusPx * 0.07);
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
   ctx.stroke();
+}
+
+function drawSoftGlow(ctx, xPx, yPx, r, opacity) {
+  const gradient = ctx.createRadialGradient(xPx, yPx, 0, xPx, yPx, r);
+  gradient.addColorStop(0, `rgba(255,255,255,${opacity.toFixed(3)})`);
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(xPx, yPx, r, 0, TAU);
+  ctx.fill();
+}
+
+/**
+ * Draws one of SPARKLE_VARIANT_COUNT deterministic glint shapes -- variety instead of the same
+ * cross on every sparkle-eligible stone (PREVIEW-001A). `appearance.sparkleVariant` selects the
+ * shape; nothing here reads Math.random() or any non-seeded source.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} xPx
+ * @param {number} yPx
+ * @param {number} radiusPx
+ * @param {ReturnType<typeof getCrystalAppearance>} appearance
+ * @param {{x:number,y:number}} highlightOffset the primary highlight's offset from stone center,
+ *   reused by variant 3 so its "brighter highlight, no star" reads as part of the existing
+ *   highlight rather than a new, separate mark.
+ */
+function drawSparkle(ctx, xPx, yPx, radiusPx, appearance, highlightOffset) {
+  const opacity = sparkleOpacityFor(appearance.highlightIntensity);
+  const lineWidth = Math.max(0.25, radiusPx * 0.045);
+
+  switch (appearance.sparkleVariant) {
+    case 0: {
+      // Small cross -- shorter arms than the pre-PREVIEW-001A cross, soft tapered edges.
+      const len = radiusPx * 0.55;
+      strokeSoftLine(ctx, xPx - len, yPx, xPx + len, yPx, opacity, lineWidth);
+      strokeSoftLine(ctx, xPx, yPx - len, xPx, yPx + len, opacity, lineWidth);
+      break;
+    }
+    case 1: {
+      // Diagonal sparkle -- same soft-tapered treatment, rotated 45 degrees for variety.
+      const len = radiusPx * 0.5;
+      const d = len * Math.SQRT1_2;
+      strokeSoftLine(ctx, xPx - d, yPx - d, xPx + d, yPx + d, opacity, lineWidth);
+      strokeSoftLine(ctx, xPx - d, yPx + d, xPx + d, yPx - d, opacity, lineWidth);
+      break;
+    }
+    case 2: {
+      // Tiny point glint -- a small soft dot, no arms at all.
+      drawSoftGlow(ctx, xPx, yPx, radiusPx * 0.16, opacity);
+      break;
+    }
+    default: {
+      // Brighter highlight, no separate star shape -- a soft extra glow layered directly over the
+      // stone's own primary highlight position.
+      drawSoftGlow(ctx, xPx + highlightOffset.x, yPx + highlightOffset.y, radiusPx * 0.28, opacity * 0.9);
+    }
+  }
 }
 
 /**
@@ -186,7 +258,7 @@ export function drawCrystalStone(ctx, xPx, yPx, radiusPx, colorKey, appearance) 
   ctx.stroke();
 
   if (appearance.sparkle && radiusPx > MIN_SPARKLE_RADIUS_PX) {
-    drawSparkle(ctx, xPx, yPx, radiusPx, appearance.highlightIntensity);
+    drawSparkle(ctx, xPx, yPx, radiusPx, appearance, highlightOffset);
   }
 }
 

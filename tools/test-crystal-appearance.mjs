@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 // Stone/StoneLayout it reads. These tests need no canvas/DOM, matching the fake-ctx-free
 // convention already used for other pure geometry/model modules under tools/.
 
-const { getCrystalAppearance, crystalSeedForStone } = await import('../src/renderer/CrystalAppearance.js');
+const { getCrystalAppearance, crystalSeedForStone, SPARKLE_VARIANT_COUNT } = await import('../src/renderer/CrystalAppearance.js');
 const { Stone } = await import('../src/geometry/Stone.js');
 
 async function test(name, fn) {
@@ -53,6 +53,7 @@ await test('4. different stone size/color/layerId/index each independently shift
 await test('5. all numeric fields stay within their declared bounds across a wide sweep', () => {
   let sparkleCount = 0;
   let total = 0;
+  const variantCounts = new Array(SPARKLE_VARIANT_COUNT).fill(0);
   for (let x = -50; x <= 50; x += 3.7) {
     for (let y = -50; y <= 50; y += 5.3) {
       for (const sizeMm of [1.5, 2.5, 4, 6]) {
@@ -64,13 +65,18 @@ await test('5. all numeric fields stay within their declared bounds across a wid
         assert.ok(appearance.shadowStrength >= 0.3 && appearance.shadowStrength <= 0.55, 'shadowStrength in [0.3,0.55]');
         assert.ok(appearance.brightness >= 0.92 && appearance.brightness <= 1.08, 'brightness in [0.92,1.08]');
         assert.equal(typeof appearance.sparkle, 'boolean');
+        assert.ok(Number.isInteger(appearance.sparkleVariant) && appearance.sparkleVariant >= 0 && appearance.sparkleVariant < SPARKLE_VARIANT_COUNT, `sparkleVariant in [0,${SPARKLE_VARIANT_COUNT})`);
+        variantCounts[appearance.sparkleVariant]++;
         total++;
         if (appearance.sparkle) sparkleCount++;
       }
     }
   }
   const rate = sparkleCount / total;
-  assert.ok(rate > 0.03 && rate < 0.25, `sparkle should be a restrained subset, got rate=${rate}`);
+  assert.ok(rate > 0.08 && rate < 0.16, `sparkle eligibility should stay near ~12.5% (10-16% tolerance), got rate=${rate}`);
+  for (let v = 0; v < SPARKLE_VARIANT_COUNT; v++) {
+    assert.ok(variantCounts[v] > 0, `sparkleVariant ${v} never appeared across the sweep -- variety requirement not met`);
+  }
 });
 
 await test('6. getCrystalAppearance never mutates the Stone it reads', () => {

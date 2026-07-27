@@ -33,6 +33,7 @@ function createFakeCtx() {
   // ctx instances stay deep-equal-comparable for the determinism test below.
   const target = {
     createRadialGradient() { return { addColorStop() {} }; },
+    createLinearGradient() { return { addColorStop() {} }; },
     clearRect(...args) { calls.clearRect.push(args); },
     fillRect(...args) { calls.fillRect.push({ args, fillStyle: target.fillStyle }); },
     arc(...args) { calls.arc.push({ args, isGradientFillStyle: typeof target.fillStyle === 'object' }); },
