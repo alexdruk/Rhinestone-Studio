@@ -22,8 +22,26 @@ import { StoneLayout } from '../src/geometry/StoneLayout.js';
 import { Stone } from '../src/geometry/Stone.js';
 import { FontManager } from '../src/fonts/index.js';
 import { stoneLayoutToSvg } from '../src/export/SvgExporter.js';
-import { drawStoneLayoutTexture } from '../src/preview3d/StoneLayoutTexture.js';
+import { drawStoneLayoutTexture, TEXTURE_PX_PER_MM } from '../src/preview3d/StoneLayoutTexture.js';
+import { getCrystalAppearance } from '../src/renderer/CrystalAppearance.js';
 import { ALL_CONTENT_STRINGS } from './rsBlockQaCorpus.mjs';
+
+// PREVIEW-001A: sparkle-eligible stones drawing the "point glint"/"brighter highlight" variants
+// (2/3) add one extra arc() call each; variants 0/1 (cross/diagonal) add none. So the expected
+// total is no longer a flat 4-per-stone -- it depends on each stone's own deterministic appearance.
+const MIN_SPARKLE_RADIUS_PX = 1.6;
+function expectedArcCallCount(stoneLayout, pxPerMm) {
+  let total = 0;
+  for (const stone of stoneLayout.stones) {
+    total += 4; // shadow + body + lower-edge-shade + crisp-edge, always drawn
+    const radiusPx = Math.max(0.75, (stone.sizeMm / 2) * pxPerMm);
+    const appearance = getCrystalAppearance(stone);
+    if (appearance.sparkle && radiusPx > MIN_SPARKLE_RADIUS_PX && (appearance.sparkleVariant === 2 || appearance.sparkleVariant === 3)) {
+      total += 1;
+    }
+  }
+  return total;
+}
 
 async function test(name, fn) {
   try {
@@ -65,11 +83,13 @@ function createFakeCtx() {
   const calls = { fillRect: [], arc: [] };
   const target = {
     createRadialGradient() { return { addColorStop() {} }; },
+    createLinearGradient() { return { addColorStop() {} }; },
     clearRect() {},
     fillRect(...args) { calls.fillRect.push(args); },
     arc(...args) { calls.arc.push(args); },
     beginPath() {},
-    fill() {}
+    fill() {},
+    stroke() {}
   };
   const ctx = new Proxy(target, {
     get(obj, prop) { return prop in obj ? obj[prop] : () => {}; },
@@ -313,7 +333,11 @@ await test('18. stoneLayoutToSvg renders one <circle> per stone with no special-
   assert.equal(circleCount, layout.stones.length);
 });
 
-await test('19. drawStoneLayoutTexture draws exactly one arc per stone for RS Block (2D/3D texture path, no special-casing)', async () => {
+await test('19. drawStoneLayoutTexture draws the same faceted-crystal treatment (4 arcs/stone) for RS Block, no special-casing', async () => {
+  // PREVIEW-001: drawStoneLayoutTexture() now draws every stone via the shared
+  // drawCrystalStone() (shadow + body + lower-edge-shade + crisp-edge arcs), regardless of which
+  // font/provider produced it -- "no special-casing" now means RS Block stones get exactly the
+  // same 4-arcs-per-stone treatment as any other stone, not literally 1 arc per stone.
   const { engine } = makeEngine();
   const layout = await engine.generateTextLayout({
     text: 'ABC', fontId: FONT_ID, providerId: 'rhinestone', layerId: 'x',
@@ -321,7 +345,7 @@ await test('19. drawStoneLayoutTexture draws exactly one arc per stone for RS Bl
   });
   const { ctx, calls } = createFakeCtx();
   drawStoneLayoutTexture(ctx, layout, { widthMm: 200, heightMm: 90, backgroundColor: '#1f3556' });
-  assert.equal(calls.arc.length, layout.stones.length);
+  assert.equal(calls.arc.length, expectedArcCallCount(layout, TEXTURE_PX_PER_MM));
 });
 
 // ---------------------------------------------------------------------------------------------

@@ -18,8 +18,10 @@ const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
 const indexHtml = await readFile(path.join(repoRoot, 'index.html'), 'utf8');
 
 const { STONE_COLORS, getCrystalColor } = await import('../src/renderer/CrystalColors.js');
-const { drawStone } = await import('../src/renderer/CanvasRenderer2D.js');
+const { drawStone, renderStoneLayout } = await import('../src/renderer/CanvasRenderer2D.js');
 const { drawStoneLayoutTexture } = await import('../src/preview3d/StoneLayoutTexture.js');
+const { adjustBrightness } = await import('../src/renderer/CrystalStoneRenderer.js');
+const { getCrystalAppearance } = await import('../src/renderer/CrystalAppearance.js');
 const { stoneCircleSvg, stoneLayoutToSvg } = await import('../src/export/SvgExporter.js');
 const { productionSheetToSvg } = await import('../src/export/ProductionSheetExporter.js');
 const { Stone } = await import('../src/geometry/Stone.js');
@@ -182,17 +184,30 @@ await test('10. the 2D canvas renderer resolves a new-catalog color to its exact
   assert.equal(stops.find((s) => s.offset === 1).color, expected.accent);
 });
 
-await test('11. the 3D texture (StoneLayoutTexture) resolves the same new-catalog color to the same fill/stroke/shine values', () => {
+await test('11. the 3D texture (StoneLayoutTexture) resolves the same new-catalog color to the same (brightness-adjusted) values as the 2D crystal renderer', () => {
+  // PREVIEW-001: both the 2D canvas and the 3D texture now draw stones via the shared
+  // drawCrystalStone() (src/renderer/CrystalStoneRenderer.js), which applies a deterministic,
+  // bounded per-stone brightness multiplier (see CrystalAppearance.js) to the catalog's
+  // shine/fill/accent before building the body gradient -- so exact catalog hex is no longer
+  // expected verbatim, but the same stone must still resolve to the exact same adjusted color in
+  // both consumers. The body gradient is the *second* createRadialGradient call per stone (the
+  // first is the cast shadow, which never uses catalog color at all).
+  const stone = new Stone({ xMm: 5, yMm: 5, sizeMm: 2, color: NEW_COLOR_ID, layerId: 'layer-1', index: 0 });
   const layout = makeLayout([{ xMm: 5, yMm: 5, sizeMm: 2, color: NEW_COLOR_ID }]);
   const { ctx, calls } = createFakeCtx();
   drawStoneLayoutTexture(ctx, layout, { widthMm: 20, heightMm: 20, backgroundColor: '#000000' });
   const expected = STONE_COLORS[NEW_COLOR_ID];
-  const stops = calls.gradients[0];
-  assert.equal(stops[0].color, expected.shine);
-  assert.equal(stops.find((s) => s.offset === 0.55).color, expected.fill);
-  assert.equal(stops.find((s) => s.offset === 1).color, expected.stroke);
-  // Renderer consistency: the 2D canvas and the 3D texture must agree on fill/shine for the same id.
-  assert.equal(expected.fill, STONE_COLORS[NEW_COLOR_ID].fill);
+  const appearance = getCrystalAppearance(stone);
+  const bodyStops = calls.gradients[1];
+  assert.equal(bodyStops[0].color, adjustBrightness(expected.shine, appearance.brightness));
+  assert.equal(bodyStops.find((s) => s.offset === 0.5).color, adjustBrightness(expected.fill, appearance.brightness));
+  assert.equal(bodyStops.find((s) => s.offset === 1).color, adjustBrightness(expected.accent, appearance.brightness));
+
+  // Renderer consistency: the 2D canvas (renderStoneLayout's default 'layout' style) and the 3D
+  // texture must produce byte-identical body-gradient stops for the same stone.
+  const { ctx: ctx2D, calls: calls2D } = createFakeCtx();
+  renderStoneLayout(ctx2D, layout, { s: 1, ox: 0, oy: 0 });
+  assert.deepEqual(calls2D.gradients[1], bodyStops);
 });
 
 await test('12. SVG export emits the correct fill/stroke/data-color for a new-catalog color', () => {
