@@ -307,7 +307,11 @@ await test('18. stoneLayoutToSvg renders one <circle> per stone with no special-
   assert.equal(circleCount, layout.stones.length);
 });
 
-await test('19. drawStoneLayoutTexture draws exactly one arc per stone for RS Modern (2D/3D texture path, no special-casing)', async () => {
+await test('19. drawStoneLayoutTexture draws the same faceted-crystal treatment (4 arcs/stone) for RS Modern, no special-casing', async () => {
+  // PREVIEW-001: drawStoneLayoutTexture() now draws every stone via the shared
+  // drawCrystalStone() (shadow + body + lower-edge-shade + crisp-edge arcs), regardless of which
+  // font/provider produced it -- "no special-casing" now means RS Modern stones get exactly the
+  // same 4-arcs-per-stone treatment as any other stone, not literally 1 arc per stone.
   const { engine } = makeEngine();
   const layout = await engine.generateTextLayout({
     text: 'ABC', fontId: FONT_ID, providerId: 'rhinestone', layerId: 'x',
@@ -315,7 +319,7 @@ await test('19. drawStoneLayoutTexture draws exactly one arc per stone for RS Mo
   });
   const { ctx, calls } = createFakeCtx();
   drawStoneLayoutTexture(ctx, layout, { widthMm: 200, heightMm: 90, backgroundColor: '#1f3556' });
-  assert.equal(calls.arc.length, layout.stones.length);
+  assert.equal(calls.arc.length, layout.stones.length * 4);
 });
 
 // ---------------------------------------------------------------------------------------------

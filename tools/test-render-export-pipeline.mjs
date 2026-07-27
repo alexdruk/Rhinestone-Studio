@@ -75,7 +75,14 @@ await test('3. SvgExporter exports stoneLayoutToSvg', () => {
   assert.equal(typeof stoneLayoutToSvg, 'function');
 });
 
-await test('4. renderStoneLayout draws every stone at the transformed pixel position', () => {
+await test('4. renderStoneLayout (crystal path) still centers every stone at its exact transformed pixel position/radius', () => {
+  // PREVIEW-001 replaced the flat single-circle stone with a faceted-crystal treatment (multiple
+  // canvas calls per stone -- see tools/test-crystal-stone-renderer.mjs for full coverage of the
+  // facets/highlights/sparkle). This test keeps verifying the one production-critical invariant
+  // that survives that change: the body-fill and crisp-edge arcs are still centered at the exact
+  // transformed stone position with the exact transformed radius, for every stone, in order. The
+  // original flat-shaded single-arc contract is preserved separately via the "exact" diagnostic
+  // style, covered by tools/test-crystal-stone-renderer.mjs test 9.
   const layout = makeLayout([
     { xMm: 10, yMm: 5, sizeMm: 2, color: 'gold' },
     { xMm: -3, yMm: 7, sizeMm: 4, color: 'jet' }
@@ -83,9 +90,14 @@ await test('4. renderStoneLayout draws every stone at the transformed pixel posi
   const transform = { s: 2, ox: 10, oy: 20 };
   const { ctx, arcCalls } = createFakeCtx();
   renderStoneLayout(ctx, layout, transform);
-  assert.equal(arcCalls.length, 2, 'expected exactly one arc() draw per stone');
-  assert.deepEqual(arcCalls[0], { x: 10 + 10 * 2, y: 20 + 5 * 2, r: Math.max(2, 2 * 2 / 2) });
-  assert.deepEqual(arcCalls[1], { x: 10 + -3 * 2, y: 20 + 7 * 2, r: Math.max(2, 4 * 2 / 2) });
+  const expected = [
+    { x: 10 + 10 * 2, y: 20 + 5 * 2, r: Math.max(2, 2 * 2 / 2) },
+    { x: 10 + -3 * 2, y: 20 + 7 * 2, r: Math.max(2, 4 * 2 / 2) }
+  ];
+  for (const stoneExpected of expected) {
+    const exactMatches = arcCalls.filter((c) => c.x === stoneExpected.x && c.y === stoneExpected.y && c.r === stoneExpected.r);
+    assert.equal(exactMatches.length, 2, `expected the body-fill and crisp-edge arcs at ${JSON.stringify(stoneExpected)}`);
+  }
 });
 
 await test('5. fitTransform computes the expected scale and offset for a known bounding box', () => {

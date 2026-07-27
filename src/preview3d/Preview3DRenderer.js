@@ -93,6 +93,13 @@ export class Preview3DRenderer {
     const directional = new THREE.DirectionalLight(0xffffff, 1.6);
     directional.position.set(60, 120, 90);
     this.scene.add(directional);
+    // PREVIEW-001: a second, dimmer fill light from the opposite side gives the design texture's
+    // own faceted-crystal highlights (CrystalStoneRenderer.js, baked in by
+    // StoneLayoutTexture.js) a second angle to catch, instead of relying on one directional light
+    // alone -- a lighting-only change, no geometry/material restructuring.
+    const fill = new THREE.DirectionalLight(0xffffff, 0.5);
+    fill.position.set(-70, 40, -60);
+    this.scene.add(fill);
 
     this.controls = new orbitModule.OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
@@ -257,6 +264,20 @@ export class Preview3DRenderer {
     this._underMesh = underMesh || null;
     this._dimensions = dimensions;
     this.scene.add(group);
+    this._applyCrystalMaterialResponse();
+  }
+
+  // PREVIEW-001: a small specular-response nudge on the design-bearing surface only (the mesh the
+  // baked crystal texture is mapped onto) -- ObjectGeometryBuilder.js's own module doc disclaims
+  // material decisions ("Geometry only: no material ... decisions are made here"), so this stays
+  // here rather than in that file. Deliberately modest (not a jump to full metalness/near-zero
+  // roughness) so glazed ceramic/ABS product bodies don't start reading as chrome; the underside,
+  // handle, and plate foot ring (non-design surfaces) are left at their original values.
+  _applyCrystalMaterialResponse() {
+    if (this._bodyMesh) {
+      this._bodyMesh.material.roughness = 0.42;
+      this._bodyMesh.material.metalness = 0.08;
+    }
   }
 
   // RS-2011: shared by both CanvasTexture construction sites below (initial creation and the

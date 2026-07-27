@@ -197,6 +197,8 @@ export const GROUPS = {
     'test-object-preview-renderer.mjs',
     'test-cup-rotation-stabilization.mjs',
     'test-object-geometry-builder.mjs',
+    'test-crystal-appearance.mjs',
+    'test-crystal-stone-renderer.mjs',
   ],
   // Pure alignment/snap/selection math reused by the UI, kept separate from `ui` (markup/wiring)
   // so --group editing targets exactly that math.

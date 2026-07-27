@@ -73,7 +73,10 @@ await test('3. draws exactly one background fillRect sized to textureSizeForMm, 
   assert.equal(calls.fillRect[0].fillStyle, '#1f3556');
 });
 
-await test('4. draws exactly one arc() per stone', () => {
+await test('4. draws the faceted-crystal treatment (4 arc() calls: shadow, body, lower-edge-shade, edge) per stone', () => {
+  // PREVIEW-001: drawStoneLayoutTexture() now reuses CrystalStoneRenderer.js's drawCrystalStone()
+  // (see tools/test-crystal-stone-renderer.mjs for full per-primitive coverage) instead of a
+  // single flat-shaded arc, so the 3D preview's baked texture matches the 2D canvas's look.
   const { ctx, calls } = createFakeCtx();
   const layout = makeLayout([
     { xMm: 0, yMm: 0, sizeMm: 2, color: 'gold' },
@@ -81,17 +84,19 @@ await test('4. draws exactly one arc() per stone', () => {
     { xMm: -3, yMm: 8, sizeMm: 3, color: 'jet' }
   ]);
   drawStoneLayoutTexture(ctx, layout, { widthMm: 100, heightMm: 50, backgroundColor: '#ffffff' });
-  assert.equal(calls.arc.length, 3);
+  assert.equal(calls.arc.length, 4 * 3);
 });
 
-await test('5. each stone\'s arc is drawn at its mm position scaled by TEXTURE_PX_PER_MM', () => {
+await test('5. each stone\'s body-fill/crisp-edge arcs are drawn at its true mm position scaled by TEXTURE_PX_PER_MM', () => {
   const { ctx, calls } = createFakeCtx();
   const layout = makeLayout([{ xMm: 12, yMm: -4, sizeMm: 2, color: 'gold' }]);
   drawStoneLayoutTexture(ctx, layout, { widthMm: 100, heightMm: 50, backgroundColor: '#ffffff' });
-  const [x, y, r] = calls.arc[0].args;
-  assert.ok(Math.abs(x - 12 * TEXTURE_PX_PER_MM) < 1e-9);
-  assert.ok(Math.abs(y - -4 * TEXTURE_PX_PER_MM) < 1e-9);
-  assert.ok(Math.abs(r - (2 / 2) * TEXTURE_PX_PER_MM) < 1e-9);
+  const expectedX = 12 * TEXTURE_PX_PER_MM;
+  const expectedY = -4 * TEXTURE_PX_PER_MM;
+  const expectedR = (2 / 2) * TEXTURE_PX_PER_MM;
+  const exactMatches = calls.arc.filter(({ args: [x, y, r] }) =>
+    Math.abs(x - expectedX) < 1e-9 && Math.abs(y - expectedY) < 1e-9 && Math.abs(r - expectedR) < 1e-9);
+  assert.equal(exactMatches.length, 2, 'expected exactly the body-fill and crisp-edge arcs at the true center/radius');
 });
 
 await test('6. an unknown stone color falls back to the gold palette rather than throwing', () => {

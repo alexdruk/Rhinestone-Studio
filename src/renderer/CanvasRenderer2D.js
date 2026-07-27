@@ -11,6 +11,8 @@
  */
 
 import { STONE_COLORS } from './StoneColors.js';
+import { drawCrystalStone } from './CrystalStoneRenderer.js';
+import { getCrystalAppearance } from './CrystalAppearance.js';
 
 /**
  * Draw a single stone at an already-transformed pixel position.
@@ -112,15 +114,29 @@ export function drawGrid(ctx, boundingBoxMm, transform) {
 /**
  * Draw every stone in a StoneLayout using an already-computed transform.
  *
+ * `'layout'` (the default) uses the faceted-crystal treatment (PREVIEW-001) -- the normal
+ * artistic preview for the 2D production canvas and thumbnails. `'cup'` is unchanged: CupRenderer
+ * calls drawStone() directly for its own per-stone drawing and never goes through this function.
+ * `'exact'` is an internal, UI-less diagnostic path (no toggle added -- see PREVIEW-001's report):
+ * it draws the original flat-shaded single-arc stone via drawStone(), for callers that need an
+ * exact-boundary reference without the decorative facets/sparkle.
+ *
  * @param {CanvasRenderingContext2D} ctx
  * @param {import('../geometry/StoneLayout.js').StoneLayout} stoneLayout
  * @param {{s:number,ox:number,oy:number}} transform
- * @param {'layout'|'cup'} [style]
+ * @param {'layout'|'cup'|'exact'} [style]
  */
 export function renderStoneLayout(ctx, stoneLayout, transform, style = 'layout') {
   const { s, ox, oy } = transform;
   for (const stone of stoneLayout.stones) {
-    drawStone(ctx, ox + stone.xMm * s, oy + stone.yMm * s, Math.max(2, stone.sizeMm * s / 2), stone.color, style);
+    const xPx = ox + stone.xMm * s;
+    const yPx = oy + stone.yMm * s;
+    const radiusPx = Math.max(2, stone.sizeMm * s / 2);
+    if (style === 'layout') {
+      drawCrystalStone(ctx, xPx, yPx, radiusPx, stone.color, getCrystalAppearance(stone));
+    } else {
+      drawStone(ctx, xPx, yPx, radiusPx, stone.color, style === 'exact' ? 'layout' : style);
+    }
   }
 }
 
