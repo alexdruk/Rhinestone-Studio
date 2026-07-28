@@ -1,0 +1,1128 @@
+{
+  "generatedAt": "2026-07-28T07:15:37.872Z",
+  "candidate": "fonts/candidates/Elegant-Cursive/ttf/v002/Elegant-Cursive.ttf",
+  "overall": "FAIL",
+  "checkCounts": {
+    "PASS": 12,
+    "WARNING": 3,
+    "FAIL": 2,
+    "NOT_VERIFIED": 0
+  },
+  "ttfChecks": [
+    {
+      "id": "ttf-parse",
+      "category": "parsing",
+      "label": "Successful TTF parsing",
+      "status": "PASS",
+      "detail": "opentype.js parsed the file without error.",
+      "evidence": null
+    },
+    {
+      "id": "outline-format",
+      "category": "structure",
+      "label": "Outline format",
+      "status": "PASS",
+      "detail": "CFF (PostScript-flavored) outlines. sfnt signature \"OTTO\" (OTTO), opentype.js outlinesFormat=\"cff\".",
+      "evidence": {
+        "sfntVersionTag": "OTTO",
+        "opentypeOutlinesFormat": "cff"
+      }
+    },
+    {
+      "id": "quadratic-outlines",
+      "category": "structure",
+      "label": "Quadratic TrueType outlines",
+      "status": "FAIL",
+      "detail": "The file is CFF-flavored OpenType (sfnt \"OTTO\"), not TrueType -- it has no quadratic (\"glyf\") outlines at all; its curves (if any) are cubic Bezier by construction. Sampled across the first 10 required glyphs: 1102 curve commands, 16 line commands.",
+      "evidence": {
+        "curveCommands": 1102,
+        "lineCommands": 16,
+        "sampledGlyphs": 10
+      }
+    },
+    {
+      "id": "units-per-em",
+      "category": "structure",
+      "label": "unitsPerEm",
+      "status": "PASS",
+      "detail": "unitsPerEm = 1000",
+      "evidence": {
+        "unitsPerEm": 1000
+      }
+    },
+    {
+      "id": "glyph-count",
+      "category": "structure",
+      "label": "Glyph count",
+      "status": "PASS",
+      "detail": "71 glyphs (font.numGlyphs=71).",
+      "evidence": {
+        "glyphCount": 71
+      }
+    },
+    {
+      "id": "notdef-glyph",
+      "category": "structure",
+      "label": ".notdef at glyph index 0",
+      "status": "PASS",
+      "detail": ".notdef confirmed at glyph index 0.",
+      "evidence": null
+    },
+    {
+      "id": "cmap-coverage",
+      "category": "coverage",
+      "label": "Unicode cmap coverage",
+      "status": "PASS",
+      "detail": "cmap maps 71 Unicode code point(s) to glyphs.",
+      "evidence": {
+        "cmapEntryCount": 71
+      }
+    },
+    {
+      "id": "required-characters",
+      "category": "coverage",
+      "label": "Required character coverage (A-Z, a-z, 0-9, space, . , ' - ! ?)",
+      "status": "PASS",
+      "detail": "All 69 required characters map to a real glyph (glyph index != 0).",
+      "evidence": {
+        "requiredCount": 69,
+        "missing": []
+      }
+    },
+    {
+      "id": "required-tables",
+      "category": "structure",
+      "label": "Required sfnt tables",
+      "status": "FAIL",
+      "detail": "Missing required table(s): glyf, loca. File contains: CFF, OS/2, cmap, head, hhea, hmtx, maxp, name, post (expected for a CFF-flavored OpenType file -- CFF outlines replace glyf+loca with a single \"CFF \" table, present here.)",
+      "evidence": {
+        "present": [
+          "CFF",
+          "OS/2",
+          "cmap",
+          "head",
+          "hhea",
+          "hmtx",
+          "maxp",
+          "name",
+          "post"
+        ],
+        "missing": [
+          "glyf",
+          "loca"
+        ],
+        "cffTablePresent": true
+      }
+    },
+    {
+      "id": "font-naming",
+      "category": "naming",
+      "label": "Family / subfamily / version / PostScript naming",
+      "status": "PASS",
+      "detail": "family=\"Elegant Cursive\", subfamily=\"Regular\", version=\"Version 0.1\", postScriptName=\"ElegantCursiveRegular\".",
+      "evidence": {
+        "family": "Elegant Cursive",
+        "subfamily": "Regular",
+        "version": "Version 0.1",
+        "postScriptName": "ElegantCursiveRegular"
+      }
+    },
+    {
+      "id": "vertical-metrics",
+      "category": "metrics",
+      "label": "Ascender, descender, line gap, horizontal metrics",
+      "status": "PASS",
+      "detail": "ascender=700, descender=-230, hhea.lineGap=0, advanceWidthMax=950, numberOfHMetrics=71 (hmtx table present: true).",
+      "evidence": {
+        "ascender": 700,
+        "descender": -230,
+        "lineGap": 0,
+        "advanceWidthMax": 950,
+        "numberOfHMetrics": 71,
+        "hmtxTablePresent": true
+      }
+    },
+    {
+      "id": "empty-glyphs",
+      "category": "geometry",
+      "label": "Invalid or empty glyphs",
+      "status": "PASS",
+      "detail": "No mapped, non-whitespace character resolves to an empty outline.",
+      "evidence": {
+        "unexpectedlyEmpty": []
+      }
+    },
+    {
+      "id": "open-contours",
+      "category": "geometry",
+      "label": "Open contours",
+      "status": "WARNING",
+      "detail": "68 of 69 character(s) have at least one contour with no explicit close command whose final point does not exactly return to its start point (gap sizes as % of the font's em square: average 1.69%, max 4.20% -- small precision gaps, not wide-open paths). Largest gaps: \".\" (42u, 4.2% of em), \"j\" (37.8u, 3.78% of em), \"i\" (31.6u, 3.16% of em), \"0\" (27u, 2.7% of em), \"a\" (20u, 2% of em). This is a consistent pattern across nearly every glyph, suggesting the source file was authored/exported without closepath operators, not an isolated defect. It is not production-blocking: src/text/OpenTypeProvider.js force-closes every contour during conversion (confirmed -- Part 3's real GeometryEngine.generateTextLayout() calls against this file produce valid StoneLayouts), but it is worth returning to the type designer as a file-hygiene issue.",
+      "evidence": {
+        "openContourChars": [
+          {
+            "char": "A",
+            "openContourCount": 2,
+            "maxOpenGapUnits": 15.7,
+            "maxOpenGapPercentOfEm": 1.57
+          },
+          {
+            "char": "B",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15.7,
+            "maxOpenGapPercentOfEm": 1.57
+          },
+          {
+            "char": "C",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15,
+            "maxOpenGapPercentOfEm": 1.5
+          },
+          {
+            "char": "D",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15.7,
+            "maxOpenGapPercentOfEm": 1.57
+          },
+          {
+            "char": "E",
+            "openContourCount": 2,
+            "maxOpenGapUnits": 16,
+            "maxOpenGapPercentOfEm": 1.6
+          },
+          {
+            "char": "F",
+            "openContourCount": 2,
+            "maxOpenGapUnits": 16,
+            "maxOpenGapPercentOfEm": 1.6
+          },
+          {
+            "char": "G",
+            "openContourCount": 2,
+            "maxOpenGapUnits": 15.3,
+            "maxOpenGapPercentOfEm": 1.53
+          },
+          {
+            "char": "H",
+            "openContourCount": 3,
+            "maxOpenGapUnits": 16.1,
+            "maxOpenGapPercentOfEm": 1.61
+          },
+          {
+            "char": "I",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15.1,
+            "maxOpenGapPercentOfEm": 1.51
+          },
+          {
+            "char": "J",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15.3,
+            "maxOpenGapPercentOfEm": 1.53
+          },
+          {
+            "char": "K",
+            "openContourCount": 2,
+            "maxOpenGapUnits": 15.7,
+            "maxOpenGapPercentOfEm": 1.57
+          },
+          {
+            "char": "L",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15.3,
+            "maxOpenGapPercentOfEm": 1.53
+          },
+          {
+            "char": "M",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15.7,
+            "maxOpenGapPercentOfEm": 1.57
+          },
+          {
+            "char": "N",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15.7,
+            "maxOpenGapPercentOfEm": 1.57
+          },
+          {
+            "char": "O",
+            "openContourCount": 2,
+            "maxOpenGapUnits": 19,
+            "maxOpenGapPercentOfEm": 1.9
+          },
+          {
+            "char": "P",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15.7,
+            "maxOpenGapPercentOfEm": 1.57
+          },
+          {
+            "char": "Q",
+            "openContourCount": 3,
+            "maxOpenGapUnits": 19,
+            "maxOpenGapPercentOfEm": 1.9
+          },
+          {
+            "char": "R",
+            "openContourCount": 2,
+            "maxOpenGapUnits": 15.7,
+            "maxOpenGapPercentOfEm": 1.57
+          },
+          {
+            "char": "S",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15.2,
+            "maxOpenGapPercentOfEm": 1.52
+          },
+          {
+            "char": "T",
+            "openContourCount": 2,
+            "maxOpenGapUnits": 15.8,
+            "maxOpenGapPercentOfEm": 1.58
+          },
+          {
+            "char": "U",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15.3,
+            "maxOpenGapPercentOfEm": 1.53
+          },
+          {
+            "char": "V",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15.3,
+            "maxOpenGapPercentOfEm": 1.53
+          },
+          {
+            "char": "W",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15.7,
+            "maxOpenGapPercentOfEm": 1.57
+          },
+          {
+            "char": "X",
+            "openContourCount": 2,
+            "maxOpenGapUnits": 14.9,
+            "maxOpenGapPercentOfEm": 1.49
+          },
+          {
+            "char": "Y",
+            "openContourCount": 3,
+            "maxOpenGapUnits": 15,
+            "maxOpenGapPercentOfEm": 1.5
+          },
+          {
+            "char": "Z",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 14.6,
+            "maxOpenGapPercentOfEm": 1.46
+          },
+          {
+            "char": "a",
+            "openContourCount": 3,
+            "maxOpenGapUnits": 20,
+            "maxOpenGapPercentOfEm": 2
+          },
+          {
+            "char": "b",
+            "openContourCount": 3,
+            "maxOpenGapUnits": 18,
+            "maxOpenGapPercentOfEm": 1.8
+          },
+          {
+            "char": "c",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15.1,
+            "maxOpenGapPercentOfEm": 1.51
+          },
+          {
+            "char": "d",
+            "openContourCount": 3,
+            "maxOpenGapUnits": 15,
+            "maxOpenGapPercentOfEm": 1.5
+          },
+          {
+            "char": "e",
+            "openContourCount": 2,
+            "maxOpenGapUnits": 15.3,
+            "maxOpenGapPercentOfEm": 1.53
+          },
+          {
+            "char": "f",
+            "openContourCount": 2,
+            "maxOpenGapUnits": 16,
+            "maxOpenGapPercentOfEm": 1.6
+          },
+          {
+            "char": "g",
+            "openContourCount": 3,
+            "maxOpenGapUnits": 18,
+            "maxOpenGapPercentOfEm": 1.8
+          },
+          {
+            "char": "h",
+            "openContourCount": 2,
+            "maxOpenGapUnits": 15.2,
+            "maxOpenGapPercentOfEm": 1.52
+          },
+          {
+            "char": "i",
+            "openContourCount": 3,
+            "maxOpenGapUnits": 31.6,
+            "maxOpenGapPercentOfEm": 3.16
+          },
+          {
+            "char": "j",
+            "openContourCount": 3,
+            "maxOpenGapUnits": 37.8,
+            "maxOpenGapPercentOfEm": 3.78
+          },
+          {
+            "char": "k",
+            "openContourCount": 2,
+            "maxOpenGapUnits": 15,
+            "maxOpenGapPercentOfEm": 1.5
+          },
+          {
+            "char": "l",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15,
+            "maxOpenGapPercentOfEm": 1.5
+          },
+          {
+            "char": "m",
+            "openContourCount": 2,
+            "maxOpenGapUnits": 16,
+            "maxOpenGapPercentOfEm": 1.6
+          },
+          {
+            "char": "n",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 16,
+            "maxOpenGapPercentOfEm": 1.6
+          },
+          {
+            "char": "o",
+            "openContourCount": 2,
+            "maxOpenGapUnits": 17,
+            "maxOpenGapPercentOfEm": 1.7
+          },
+          {
+            "char": "p",
+            "openContourCount": 3,
+            "maxOpenGapUnits": 15.3,
+            "maxOpenGapPercentOfEm": 1.53
+          },
+          {
+            "char": "q",
+            "openContourCount": 3,
+            "maxOpenGapUnits": 16.2,
+            "maxOpenGapPercentOfEm": 1.62
+          },
+          {
+            "char": "r",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15,
+            "maxOpenGapPercentOfEm": 1.5
+          },
+          {
+            "char": "s",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15.5,
+            "maxOpenGapPercentOfEm": 1.55
+          },
+          {
+            "char": "t",
+            "openContourCount": 2,
+            "maxOpenGapUnits": 15,
+            "maxOpenGapPercentOfEm": 1.5
+          },
+          {
+            "char": "u",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15.3,
+            "maxOpenGapPercentOfEm": 1.53
+          },
+          {
+            "char": "v",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15.3,
+            "maxOpenGapPercentOfEm": 1.53
+          },
+          {
+            "char": "w",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15.2,
+            "maxOpenGapPercentOfEm": 1.52
+          },
+          {
+            "char": "x",
+            "openContourCount": 2,
+            "maxOpenGapUnits": 15.8,
+            "maxOpenGapPercentOfEm": 1.58
+          },
+          {
+            "char": "y",
+            "openContourCount": 2,
+            "maxOpenGapUnits": 14.9,
+            "maxOpenGapPercentOfEm": 1.49
+          },
+          {
+            "char": "z",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15.5,
+            "maxOpenGapPercentOfEm": 1.55
+          },
+          {
+            "char": "0",
+            "openContourCount": 2,
+            "maxOpenGapUnits": 27,
+            "maxOpenGapPercentOfEm": 2.7
+          },
+          {
+            "char": "1",
+            "openContourCount": 2,
+            "maxOpenGapUnits": 15.6,
+            "maxOpenGapPercentOfEm": 1.56
+          },
+          {
+            "char": "2",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15.8,
+            "maxOpenGapPercentOfEm": 1.58
+          },
+          {
+            "char": "3",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15,
+            "maxOpenGapPercentOfEm": 1.5
+          },
+          {
+            "char": "4",
+            "openContourCount": 2,
+            "maxOpenGapUnits": 15.2,
+            "maxOpenGapPercentOfEm": 1.52
+          },
+          {
+            "char": "5",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15.1,
+            "maxOpenGapPercentOfEm": 1.51
+          },
+          {
+            "char": "6",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15,
+            "maxOpenGapPercentOfEm": 1.5
+          },
+          {
+            "char": "7",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 14.8,
+            "maxOpenGapPercentOfEm": 1.48
+          },
+          {
+            "char": "8",
+            "openContourCount": 4,
+            "maxOpenGapUnits": 16,
+            "maxOpenGapPercentOfEm": 1.6
+          },
+          {
+            "char": "9",
+            "openContourCount": 3,
+            "maxOpenGapUnits": 15,
+            "maxOpenGapPercentOfEm": 1.5
+          },
+          {
+            "char": ".",
+            "openContourCount": 2,
+            "maxOpenGapUnits": 42,
+            "maxOpenGapPercentOfEm": 4.2
+          },
+          {
+            "char": ",",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 15.8,
+            "maxOpenGapPercentOfEm": 1.58
+          },
+          {
+            "char": "'",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 14.9,
+            "maxOpenGapPercentOfEm": 1.49
+          },
+          {
+            "char": "-",
+            "openContourCount": 1,
+            "maxOpenGapUnits": 14.6,
+            "maxOpenGapPercentOfEm": 1.46
+          },
+          {
+            "char": "!",
+            "openContourCount": 3,
+            "maxOpenGapUnits": 18.1,
+            "maxOpenGapPercentOfEm": 1.81
+          },
+          {
+            "char": "?",
+            "openContourCount": 3,
+            "maxOpenGapUnits": 18.1,
+            "maxOpenGapPercentOfEm": 1.81
+          }
+        ]
+      }
+    },
+    {
+      "id": "self-intersections",
+      "category": "geometry",
+      "label": "Self-intersections",
+      "status": "WARNING",
+      "detail": "55 character(s) show flattened-outline segment crossings: \"A\" (self:2, cross-contour:6), \"B\" (self:9, cross-contour:0), \"D\" (self:4, cross-contour:0), \"E\" (self:0, cross-contour:2), \"F\" (self:0, cross-contour:4), \"G\" (self:3, cross-contour:6), \"H\" (self:2, cross-contour:4), \"K\" (self:3, cross-contour:6), \"M\" (self:5, cross-contour:0), \"N\" (self:4, cross-contour:0), \"O\" (self:1, cross-contour:0), \"P\" (self:5, cross-contour:0), \"Q\" (self:1, cross-contour:4), \"R\" (self:3, cross-contour:2), \"T\" (self:0, cross-contour:4), \"U\" (self:1, cross-contour:0), \"V\" (self:1, cross-contour:0), \"W\" (self:3, cross-contour:0), \"X\" (self:0, cross-contour:4), \"Y\" (self:0, cross-contour:12), \"Z\" (self:2, cross-contour:0), \"a\" (self:13, cross-contour:21), \"b\" (self:1, cross-contour:2), \"d\" (self:4, cross-contour:4), \"e\" (self:0, cross-contour:2), \"f\" (self:0, cross-contour:4), \"g\" (self:1, cross-contour:4), \"h\" (self:0, cross-contour:2), \"i\" (self:3, cross-contour:0), \"j\" (self:6, cross-contour:0), \"k\" (self:1, cross-contour:4), \"m\" (self:2, cross-contour:4), \"o\" (self:1, cross-contour:0), \"p\" (self:1, cross-contour:6), \"q\" (self:2, cross-contour:6), \"s\" (self:1, cross-contour:0), \"t\" (self:0, cross-contour:4), \"v\" (self:1, cross-contour:0), \"w\" (self:11, cross-contour:0), \"x\" (self:0, cross-contour:4), \"y\" (self:1, cross-contour:2), \"z\" (self:2, cross-contour:0), \"0\" (self:4, cross-contour:0), \"1\" (self:1, cross-contour:4), \"2\" (self:1, cross-contour:0), \"3\" (self:1, cross-contour:0), \"4\" (self:1, cross-contour:12), \"5\" (self:1, cross-contour:0), \"6\" (self:2, cross-contour:0), \"7\" (self:1, cross-contour:0), \"8\" (self:2, cross-contour:0), \"9\" (self:1, cross-contour:4), \".\" (self:6, cross-contour:0), \"!\" (self:1, cross-contour:2), \"?\" (self:1, cross-contour:0).",
+      "evidence": {
+        "selfIntersectingChars": [
+          {
+            "char": "A",
+            "selfIntersectionCount": 2,
+            "crossContourIntersectionCount": 6
+          },
+          {
+            "char": "B",
+            "selfIntersectionCount": 9,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "D",
+            "selfIntersectionCount": 4,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "E",
+            "selfIntersectionCount": 0,
+            "crossContourIntersectionCount": 2
+          },
+          {
+            "char": "F",
+            "selfIntersectionCount": 0,
+            "crossContourIntersectionCount": 4
+          },
+          {
+            "char": "G",
+            "selfIntersectionCount": 3,
+            "crossContourIntersectionCount": 6
+          },
+          {
+            "char": "H",
+            "selfIntersectionCount": 2,
+            "crossContourIntersectionCount": 4
+          },
+          {
+            "char": "K",
+            "selfIntersectionCount": 3,
+            "crossContourIntersectionCount": 6
+          },
+          {
+            "char": "M",
+            "selfIntersectionCount": 5,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "N",
+            "selfIntersectionCount": 4,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "O",
+            "selfIntersectionCount": 1,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "P",
+            "selfIntersectionCount": 5,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "Q",
+            "selfIntersectionCount": 1,
+            "crossContourIntersectionCount": 4
+          },
+          {
+            "char": "R",
+            "selfIntersectionCount": 3,
+            "crossContourIntersectionCount": 2
+          },
+          {
+            "char": "T",
+            "selfIntersectionCount": 0,
+            "crossContourIntersectionCount": 4
+          },
+          {
+            "char": "U",
+            "selfIntersectionCount": 1,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "V",
+            "selfIntersectionCount": 1,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "W",
+            "selfIntersectionCount": 3,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "X",
+            "selfIntersectionCount": 0,
+            "crossContourIntersectionCount": 4
+          },
+          {
+            "char": "Y",
+            "selfIntersectionCount": 0,
+            "crossContourIntersectionCount": 12
+          },
+          {
+            "char": "Z",
+            "selfIntersectionCount": 2,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "a",
+            "selfIntersectionCount": 13,
+            "crossContourIntersectionCount": 21
+          },
+          {
+            "char": "b",
+            "selfIntersectionCount": 1,
+            "crossContourIntersectionCount": 2
+          },
+          {
+            "char": "d",
+            "selfIntersectionCount": 4,
+            "crossContourIntersectionCount": 4
+          },
+          {
+            "char": "e",
+            "selfIntersectionCount": 0,
+            "crossContourIntersectionCount": 2
+          },
+          {
+            "char": "f",
+            "selfIntersectionCount": 0,
+            "crossContourIntersectionCount": 4
+          },
+          {
+            "char": "g",
+            "selfIntersectionCount": 1,
+            "crossContourIntersectionCount": 4
+          },
+          {
+            "char": "h",
+            "selfIntersectionCount": 0,
+            "crossContourIntersectionCount": 2
+          },
+          {
+            "char": "i",
+            "selfIntersectionCount": 3,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "j",
+            "selfIntersectionCount": 6,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "k",
+            "selfIntersectionCount": 1,
+            "crossContourIntersectionCount": 4
+          },
+          {
+            "char": "m",
+            "selfIntersectionCount": 2,
+            "crossContourIntersectionCount": 4
+          },
+          {
+            "char": "o",
+            "selfIntersectionCount": 1,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "p",
+            "selfIntersectionCount": 1,
+            "crossContourIntersectionCount": 6
+          },
+          {
+            "char": "q",
+            "selfIntersectionCount": 2,
+            "crossContourIntersectionCount": 6
+          },
+          {
+            "char": "s",
+            "selfIntersectionCount": 1,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "t",
+            "selfIntersectionCount": 0,
+            "crossContourIntersectionCount": 4
+          },
+          {
+            "char": "v",
+            "selfIntersectionCount": 1,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "w",
+            "selfIntersectionCount": 11,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "x",
+            "selfIntersectionCount": 0,
+            "crossContourIntersectionCount": 4
+          },
+          {
+            "char": "y",
+            "selfIntersectionCount": 1,
+            "crossContourIntersectionCount": 2
+          },
+          {
+            "char": "z",
+            "selfIntersectionCount": 2,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "0",
+            "selfIntersectionCount": 4,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "1",
+            "selfIntersectionCount": 1,
+            "crossContourIntersectionCount": 4
+          },
+          {
+            "char": "2",
+            "selfIntersectionCount": 1,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "3",
+            "selfIntersectionCount": 1,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "4",
+            "selfIntersectionCount": 1,
+            "crossContourIntersectionCount": 12
+          },
+          {
+            "char": "5",
+            "selfIntersectionCount": 1,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "6",
+            "selfIntersectionCount": 2,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "7",
+            "selfIntersectionCount": 1,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "8",
+            "selfIntersectionCount": 2,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "9",
+            "selfIntersectionCount": 1,
+            "crossContourIntersectionCount": 4
+          },
+          {
+            "char": ".",
+            "selfIntersectionCount": 6,
+            "crossContourIntersectionCount": 0
+          },
+          {
+            "char": "!",
+            "selfIntersectionCount": 1,
+            "crossContourIntersectionCount": 2
+          },
+          {
+            "char": "?",
+            "selfIntersectionCount": 1,
+            "crossContourIntersectionCount": 0
+          }
+        ],
+        "method": "Proper segment-intersection test on the 16-segments-per-curve flattened outline; non-adjacent segment pairs only."
+      }
+    },
+    {
+      "id": "zero-length-duplicate-segments",
+      "category": "geometry",
+      "label": "Zero-length or duplicate outline segments",
+      "status": "WARNING",
+      "detail": "43 character(s) affected: \"A\" (zero-length:55, duplicate:1), \"B\" (zero-length:149, duplicate:0), \"D\" (zero-length:52, duplicate:1), \"E\" (zero-length:12, duplicate:0), \"G\" (zero-length:7, duplicate:0), \"H\" (zero-length:52, duplicate:1), \"K\" (zero-length:56, duplicate:1), \"M\" (zero-length:72, duplicate:2), \"N\" (zero-length:61, duplicate:2), \"P\" (zero-length:75, duplicate:3), \"R\" (zero-length:92, duplicate:3), \"S\" (zero-length:4, duplicate:0), \"U\" (zero-length:16, duplicate:0), \"W\" (zero-length:21, duplicate:0), \"Z\" (zero-length:9, duplicate:0), \"a\" (zero-length:100, duplicate:0), \"c\" (zero-length:10, duplicate:0), \"g\" (zero-length:16, duplicate:0), \"h\" (zero-length:6, duplicate:0), \"i\" (zero-length:130, duplicate:0), \"j\" (zero-length:79, duplicate:0), \"k\" (zero-length:1, duplicate:0), \"l\" (zero-length:32, duplicate:0), \"m\" (zero-length:115, duplicate:0), \"n\" (zero-length:40, duplicate:0), \"q\" (zero-length:68, duplicate:1), \"r\" (zero-length:40, duplicate:1), \"s\" (zero-length:47, duplicate:0), \"u\" (zero-length:21, duplicate:0), \"v\" (zero-length:18, duplicate:0), \"w\" (zero-length:138, duplicate:2), \"y\" (zero-length:12, duplicate:0), \"z\" (zero-length:13, duplicate:0), \"0\" (zero-length:8, duplicate:0), \"1\" (zero-length:7, duplicate:0), \"3\" (zero-length:16, duplicate:0), \"4\" (zero-length:6, duplicate:0), \"5\" (zero-length:6, duplicate:0), \"7\" (zero-length:5, duplicate:0), \"8\" (zero-length:459, duplicate:0), \".\" (zero-length:18, duplicate:0), \"!\" (zero-length:4, duplicate:0), \"?\" (zero-length:4, duplicate:0).",
+      "evidence": {
+        "zeroLengthDuplicateChars": [
+          {
+            "char": "A",
+            "zeroLengthSegmentCount": 55,
+            "duplicateSegmentCount": 1
+          },
+          {
+            "char": "B",
+            "zeroLengthSegmentCount": 149,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "D",
+            "zeroLengthSegmentCount": 52,
+            "duplicateSegmentCount": 1
+          },
+          {
+            "char": "E",
+            "zeroLengthSegmentCount": 12,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "G",
+            "zeroLengthSegmentCount": 7,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "H",
+            "zeroLengthSegmentCount": 52,
+            "duplicateSegmentCount": 1
+          },
+          {
+            "char": "K",
+            "zeroLengthSegmentCount": 56,
+            "duplicateSegmentCount": 1
+          },
+          {
+            "char": "M",
+            "zeroLengthSegmentCount": 72,
+            "duplicateSegmentCount": 2
+          },
+          {
+            "char": "N",
+            "zeroLengthSegmentCount": 61,
+            "duplicateSegmentCount": 2
+          },
+          {
+            "char": "P",
+            "zeroLengthSegmentCount": 75,
+            "duplicateSegmentCount": 3
+          },
+          {
+            "char": "R",
+            "zeroLengthSegmentCount": 92,
+            "duplicateSegmentCount": 3
+          },
+          {
+            "char": "S",
+            "zeroLengthSegmentCount": 4,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "U",
+            "zeroLengthSegmentCount": 16,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "W",
+            "zeroLengthSegmentCount": 21,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "Z",
+            "zeroLengthSegmentCount": 9,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "a",
+            "zeroLengthSegmentCount": 100,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "c",
+            "zeroLengthSegmentCount": 10,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "g",
+            "zeroLengthSegmentCount": 16,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "h",
+            "zeroLengthSegmentCount": 6,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "i",
+            "zeroLengthSegmentCount": 130,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "j",
+            "zeroLengthSegmentCount": 79,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "k",
+            "zeroLengthSegmentCount": 1,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "l",
+            "zeroLengthSegmentCount": 32,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "m",
+            "zeroLengthSegmentCount": 115,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "n",
+            "zeroLengthSegmentCount": 40,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "q",
+            "zeroLengthSegmentCount": 68,
+            "duplicateSegmentCount": 1
+          },
+          {
+            "char": "r",
+            "zeroLengthSegmentCount": 40,
+            "duplicateSegmentCount": 1
+          },
+          {
+            "char": "s",
+            "zeroLengthSegmentCount": 47,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "u",
+            "zeroLengthSegmentCount": 21,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "v",
+            "zeroLengthSegmentCount": 18,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "w",
+            "zeroLengthSegmentCount": 138,
+            "duplicateSegmentCount": 2
+          },
+          {
+            "char": "y",
+            "zeroLengthSegmentCount": 12,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "z",
+            "zeroLengthSegmentCount": 13,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "0",
+            "zeroLengthSegmentCount": 8,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "1",
+            "zeroLengthSegmentCount": 7,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "3",
+            "zeroLengthSegmentCount": 16,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "4",
+            "zeroLengthSegmentCount": 6,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "5",
+            "zeroLengthSegmentCount": 6,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "7",
+            "zeroLengthSegmentCount": 5,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "8",
+            "zeroLengthSegmentCount": 459,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": ".",
+            "zeroLengthSegmentCount": 18,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "!",
+            "zeroLengthSegmentCount": 4,
+            "duplicateSegmentCount": 0
+          },
+          {
+            "char": "?",
+            "zeroLengthSegmentCount": 4,
+            "duplicateSegmentCount": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "coordinate-range",
+      "category": "geometry",
+      "label": "Coordinates outside valid TrueType ranges",
+      "status": "PASS",
+      "detail": "All required-character outline coordinates fall within the signed 16-bit range (-32768 to 32767). Note: this file is CFF-flavored, not glyf-based -- the int16 glyf range is a compatibility check only, not this format's native constraint.",
+      "evidence": {
+        "outOfRangeChars": [],
+        "formatIsCff": true
+      }
+    },
+    {
+      "id": "advance-width-consistency",
+      "category": "metrics",
+      "label": "Inconsistent or suspicious advance widths / side bearings",
+      "status": "PASS",
+      "detail": "Advance widths for required characters cluster reasonably around the median (583 units).",
+      "evidence": {
+        "medianWidthUnits": 583,
+        "suspiciousWidths": []
+      }
+    }
+  ],
+  "blockingIssues": [
+    "[TTF structure] Quadratic TrueType outlines: The file is CFF-flavored OpenType (sfnt \"OTTO\"), not TrueType -- it has no quadratic (\"glyf\") outlines at all; its curves (if any) are cubic Bezier by construction. Sampled across the first 10 required glyphs: 1102 curve commands, 16 line commands.",
+    "[TTF structure] Required sfnt tables: Missing required table(s): glyf, loca. File contains: CFF, OS/2, cmap, head, hhea, hmtx, maxp, name, post (expected for a CFF-flavored OpenType file -- CFF outlines replace glyf+loca with a single \"CFF \" table, present here.)"
+  ],
+  "refinementNotes": [
+    "[TTF] Open contours: 68 of 69 character(s) have at least one contour with no explicit close command whose final point does not exactly return to its start point (gap sizes as % of the font's em square: average 1.69%, max 4.20% -- small precision gaps, not wide-open paths). Largest gaps: \".\" (42u, 4.2% of em), \"j\" (37.8u, 3.78% of em), \"i\" (31.6u, 3.16% of em), \"0\" (27u, 2.7% of em), \"a\" (20u, 2% of em). This is a consistent pattern across nearly every glyph, suggesting the source file was authored/exported without closepath operators, not an isolated defect. It is not production-blocking: src/text/OpenTypeProvider.js force-closes every contour during conversion (confirmed -- Part 3's real GeometryEngine.generateTextLayout() calls against this file produce valid StoneLayouts), but it is worth returning to the type designer as a file-hygiene issue.",
+    "[TTF] Self-intersections: 55 character(s) show flattened-outline segment crossings: \"A\" (self:2, cross-contour:6), \"B\" (self:9, cross-contour:0), \"D\" (self:4, cross-contour:0), \"E\" (self:0, cross-contour:2), \"F\" (self:0, cross-contour:4), \"G\" (self:3, cross-contour:6), \"H\" (self:2, cross-contour:4), \"K\" (self:3, cross-contour:6), \"M\" (self:5, cross-contour:0), \"N\" (self:4, cross-contour:0), \"O\" (self:1, cross-contour:0), \"P\" (self:5, cross-contour:0), \"Q\" (self:1, cross-contour:4), \"R\" (self:3, cross-contour:2), \"T\" (self:0, cross-contour:4), \"U\" (self:1, cross-contour:0), \"V\" (self:1, cross-contour:0), \"W\" (self:3, cross-contour:0), \"X\" (self:0, cross-contour:4), \"Y\" (self:0, cross-contour:12), \"Z\" (self:2, cross-contour:0), \"a\" (self:13, cross-contour:21), \"b\" (self:1, cross-contour:2), \"d\" (self:4, cross-contour:4), \"e\" (self:0, cross-contour:2), \"f\" (self:0, cross-contour:4), \"g\" (self:1, cross-contour:4), \"h\" (self:0, cross-contour:2), \"i\" (self:3, cross-contour:0), \"j\" (self:6, cross-contour:0), \"k\" (self:1, cross-contour:4), \"m\" (self:2, cross-contour:4), \"o\" (self:1, cross-contour:0), \"p\" (self:1, cross-contour:6), \"q\" (self:2, cross-contour:6), \"s\" (self:1, cross-contour:0), \"t\" (self:0, cross-contour:4), \"v\" (self:1, cross-contour:0), \"w\" (self:11, cross-contour:0), \"x\" (self:0, cross-contour:4), \"y\" (self:1, cross-contour:2), \"z\" (self:2, cross-contour:0), \"0\" (self:4, cross-contour:0), \"1\" (self:1, cross-contour:4), \"2\" (self:1, cross-contour:0), \"3\" (self:1, cross-contour:0), \"4\" (self:1, cross-contour:12), \"5\" (self:1, cross-contour:0), \"6\" (self:2, cross-contour:0), \"7\" (self:1, cross-contour:0), \"8\" (self:2, cross-contour:0), \"9\" (self:1, cross-contour:4), \".\" (self:6, cross-contour:0), \"!\" (self:1, cross-contour:2), \"?\" (self:1, cross-contour:0).",
+    "[TTF] Zero-length or duplicate outline segments: 43 character(s) affected: \"A\" (zero-length:55, duplicate:1), \"B\" (zero-length:149, duplicate:0), \"D\" (zero-length:52, duplicate:1), \"E\" (zero-length:12, duplicate:0), \"G\" (zero-length:7, duplicate:0), \"H\" (zero-length:52, duplicate:1), \"K\" (zero-length:56, duplicate:1), \"M\" (zero-length:72, duplicate:2), \"N\" (zero-length:61, duplicate:2), \"P\" (zero-length:75, duplicate:3), \"R\" (zero-length:92, duplicate:3), \"S\" (zero-length:4, duplicate:0), \"U\" (zero-length:16, duplicate:0), \"W\" (zero-length:21, duplicate:0), \"Z\" (zero-length:9, duplicate:0), \"a\" (zero-length:100, duplicate:0), \"c\" (zero-length:10, duplicate:0), \"g\" (zero-length:16, duplicate:0), \"h\" (zero-length:6, duplicate:0), \"i\" (zero-length:130, duplicate:0), \"j\" (zero-length:79, duplicate:0), \"k\" (zero-length:1, duplicate:0), \"l\" (zero-length:32, duplicate:0), \"m\" (zero-length:115, duplicate:0), \"n\" (zero-length:40, duplicate:0), \"q\" (zero-length:68, duplicate:1), \"r\" (zero-length:40, duplicate:1), \"s\" (zero-length:47, duplicate:0), \"u\" (zero-length:21, duplicate:0), \"v\" (zero-length:18, duplicate:0), \"w\" (zero-length:138, duplicate:2), \"y\" (zero-length:12, duplicate:0), \"z\" (zero-length:13, duplicate:0), \"0\" (zero-length:8, duplicate:0), \"1\" (zero-length:7, duplicate:0), \"3\" (zero-length:16, duplicate:0), \"4\" (zero-length:6, duplicate:0), \"5\" (zero-length:6, duplicate:0), \"7\" (zero-length:5, duplicate:0), \"8\" (zero-length:459, duplicate:0), \".\" (zero-length:18, duplicate:0), \"!\" (zero-length:4, duplicate:0), \"?\" (zero-length:4, duplicate:0).",
+    "[Typography] Visual-weight (fill-ratio) outliers vs the a-z median: \"a\", \"b\", \"d\", \"g\", \"o\", \"p\", \"q\".",
+    "[Typography] Baseline anomalies: \"f\" do not match the expected descender/no-descender pattern."
+  ],
+  "totalCollisions": 0,
+  "claudeDesignFeedback": [
+    "Re-export Elegant-Cursive.ttf with true quadratic TrueType (\"glyf\") outlines, or explicitly confirm CFF/OpenType output is acceptable for this milestone -- the current file is CFF-flavored OpenType (sfnt signature \"OTTO\") and is missing the glyf/loca tables this certification's spec requires, despite the .ttf extension.",
+    "Close every glyph contour explicitly with a closepath command -- 68 of the required characters currently rely on the rendering pipeline's downstream auto-closure. The gaps are small (well under 5% of the em square) but should be zero in a production-ready file.",
+    "Review stroke weight consistency for: \"a\", \"b\", \"d\", \"g\", \"o\", \"p\", \"q\" -- their filled-area/bounding-box ratio deviates notably from the a-z median (0.409), suggesting uneven visual weight across the lowercase set.",
+    "Confirm this is intentional: \"f\" (199u below baseline) extend below the baseline like a conventional descender (g/j/p/q/y), which is not unusual for a cursive/script style but is worth a deliberate design confirmation rather than an accident of tracing."
+  ]
+}

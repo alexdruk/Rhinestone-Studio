@@ -1,0 +1,334 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>FONT-CERT-001 -- Elegant Cursive Certification Report</title>
+<style>
+  :root { color-scheme: light; }
+  body { background:#fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color:#0b1f3a; margin:0; padding: 32px 40px 80px; line-height:1.5; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  h2 { font-size: 19px; margin: 40px 0 12px; color:#0b1f3a; border-bottom: 2px solid #0b3d91; padding-bottom: 6px; }
+  h3 { font-size: 15px; margin: 20px 0 8px; color:#1c3d6e; }
+  .meta { color:#4a5568; font-size: 13px; }
+  .badge { display:inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight:700; letter-spacing:0.02em; }
+  .badge-large { font-size: 16px; padding: 6px 18px; border-radius: 14px; }
+  .badge-pass { background:#e3f5e9; color:#0f7a3d; }
+  .badge-warning { background:#fff4dd; color:#9a6400; }
+  .badge-fail { background:#fde3e3; color:#b0221c; }
+  .badge-nv { background:#e8ecf3; color:#4a5568; }
+  table { border-collapse: collapse; width:100%; margin-bottom: 14px; font-size: 13px; }
+  th, td { border:1px solid #d8e0ee; padding: 6px 10px; text-align:left; vertical-align: top; }
+  th { background:#f4f7fc; }
+  .checks-table .check-detail { font-size: 12.5px; color:#233; }
+  .glyph-table th, .glyph-table td, .similarity-table th, .similarity-table td { font-size: 12px; }
+  .row-flagged, .cell-warning { background:#fff4dd; }
+  .cell-error { background:#fde3e3; }
+  .summary-counts { display:flex; gap: 14px; margin: 14px 0 22px; }
+  .summary-chip { border:1px solid #d8e0ee; border-radius:8px; padding: 8px 14px; font-size: 13px; }
+  .blocking-list, .feedback-list { padding-left: 20px; }
+  .blocking-list li, .feedback-list li { margin-bottom: 8px; font-size: 13.5px; }
+  .specimen-image { max-width: 100%; border:1px solid #d8e0ee; border-radius: 6px; margin: 10px 0 18px; }
+  .feedback-block { background:#f4f7fc; border:1px solid #d8e0ee; border-radius:8px; padding: 18px 20px; margin-top: 12px; }
+  .table-note { font-size: 11.5px; color:#4a5568; margin-top: -8px; }
+  code { background:#f0f2f6; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+  <h1>FONT-CERT-001 &mdash; Elegant Cursive Certification Report</h1>
+  <div class="meta">
+    Candidate: <code>fonts/candidates/Elegant-Cursive/ttf/v001/Elegant-Cursive.ttf</code> &middot; Generated 2026-07-28T07:15:33.126Z
+  </div>
+
+  <h2>1. Executive certification result</h2>
+  <p><span class="badge badge-large badge-fail">FAIL</span></p>
+  <div class="summary-counts">
+    <div class="summary-chip"><span class="badge badge-pass">PASS</span> 12</div>
+    <div class="summary-chip"><span class="badge badge-warning">WARNING</span> 3</div>
+    <div class="summary-chip"><span class="badge badge-fail">FAIL</span> 2</div>
+    <div class="summary-chip"><span class="badge badge-nv">NOT VERIFIED</span> 0</div>
+  </div>
+  
+  <h3>Blocking issues</h3>
+  <ul class="blocking-list"><li>[TTF structure] Quadratic TrueType outlines: The file is CFF-flavored OpenType (sfnt &quot;OTTO&quot;), not TrueType -- it has no quadratic (&quot;glyf&quot;) outlines at all; its curves (if any) are cubic Bezier by construction. Sampled across the first 10 required glyphs: 0 curve commands, 2220 line commands.</li><li>[TTF structure] Required sfnt tables: Missing required table(s): glyf, loca. File contains: CFF, OS/2, cmap, head, hhea, hmtx, maxp, name, post (expected for a CFF-flavored OpenType file -- CFF outlines replace glyf+loca with a single &quot;CFF &quot; table, present here.)</li></ul>
+  
+  
+  <h3>Refinement notes (non-blocking)</h3>
+  <ul class="blocking-list"><li>[TTF] Open contours: 68 of 69 character(s) have at least one contour with no explicit close command whose final point does not exactly return to its start point (gap sizes as % of the font's em square: average 1.68%, max 4.20% -- small precision gaps, not wide-open paths). Largest gaps: &quot;.&quot; (42u, 4.2% of em), &quot;j&quot; (37.8u, 3.78% of em), &quot;i&quot; (31.6u, 3.16% of em), &quot;0&quot; (21u, 2.1% of em), &quot;a&quot; (20u, 2% of em). This is a consistent pattern across nearly every glyph, suggesting the source file was authored/exported without closepath operators, not an isolated defect. It is not production-blocking: src/text/OpenTypeProvider.js force-closes every contour during conversion (confirmed -- Part 3's real GeometryEngine.generateTextLayout() calls against this file produce valid StoneLayouts), but it is worth returning to the type designer as a file-hygiene issue.</li><li>[TTF] Self-intersections: 57 character(s) show flattened-outline segment crossings: &quot;A&quot; (self:2, cross-contour:6), &quot;B&quot; (self:13, cross-contour:0), &quot;D&quot; (self:9, cross-contour:0), &quot;E&quot; (self:0, cross-contour:2), &quot;F&quot; (self:0, cross-contour:4), &quot;G&quot; (self:3, cross-contour:10), &quot;H&quot; (self:7, cross-contour:4), &quot;K&quot; (self:8, cross-contour:6), &quot;M&quot; (self:9, cross-contour:0), &quot;N&quot; (self:8, cross-contour:0), &quot;O&quot; (self:1, cross-contour:0), &quot;P&quot; (self:12, cross-contour:0), &quot;Q&quot; (self:1, cross-contour:4), &quot;R&quot; (self:9, cross-contour:2), &quot;T&quot; (self:0, cross-contour:4), &quot;U&quot; (self:1, cross-contour:0), &quot;V&quot; (self:1, cross-contour:0), &quot;W&quot; (self:3, cross-contour:0), &quot;X&quot; (self:0, cross-contour:4), &quot;Y&quot; (self:0, cross-contour:21), &quot;Z&quot; (self:2, cross-contour:0), &quot;a&quot; (self:8, cross-contour:12), &quot;b&quot; (self:1, cross-contour:2), &quot;d&quot; (self:1, cross-contour:4), &quot;e&quot; (self:0, cross-contour:2), &quot;f&quot; (self:0, cross-contour:4), &quot;g&quot; (self:1, cross-contour:4), &quot;h&quot; (self:0, cross-contour:2), &quot;i&quot; (self:5, cross-contour:0), &quot;j&quot; (self:7, cross-contour:0), &quot;k&quot; (self:1, cross-contour:4), &quot;m&quot; (self:5, cross-contour:4), &quot;n&quot; (self:2, cross-contour:0), &quot;o&quot; (self:2, cross-contour:0), &quot;p&quot; (self:1, cross-contour:6), &quot;q&quot; (self:3, cross-contour:6), &quot;r&quot; (self:1, cross-contour:0), &quot;s&quot; (self:3, cross-contour:0), &quot;t&quot; (self:0, cross-contour:4), &quot;v&quot; (self:1, cross-contour:0), &quot;w&quot; (self:11, cross-contour:0), &quot;x&quot; (self:0, cross-contour:4), &quot;y&quot; (self:1, cross-contour:7), &quot;z&quot; (self:2, cross-contour:0), &quot;0&quot; (self:1, cross-contour:0), &quot;1&quot; (self:1, cross-contour:4), &quot;2&quot; (self:1, cross-contour:0), &quot;3&quot; (self:1, cross-contour:0), &quot;4&quot; (self:1, cross-contour:12), &quot;5&quot; (self:1, cross-contour:0), &quot;6&quot; (self:2, cross-contour:0), &quot;7&quot; (self:1, cross-contour:0), &quot;8&quot; (self:5, cross-contour:0), &quot;9&quot; (self:4, cross-contour:4), &quot;.&quot; (self:10, cross-contour:0), &quot;!&quot; (self:4, cross-contour:2), &quot;?&quot; (self:4, cross-contour:0).</li><li>[TTF] Zero-length or duplicate outline segments: 15 character(s) affected: &quot;B&quot; (zero-length:2, duplicate:0), &quot;D&quot; (zero-length:2, duplicate:1), &quot;H&quot; (zero-length:2, duplicate:1), &quot;K&quot; (zero-length:2, duplicate:1), &quot;M&quot; (zero-length:1, duplicate:1), &quot;N&quot; (zero-length:1, duplicate:1), &quot;P&quot; (zero-length:1, duplicate:0), &quot;R&quot; (zero-length:1, duplicate:0), &quot;a&quot; (zero-length:1, duplicate:1), &quot;m&quot; (zero-length:3, duplicate:0), &quot;n&quot; (zero-length:1, duplicate:0), &quot;q&quot; (zero-length:1, duplicate:0), &quot;r&quot; (zero-length:1, duplicate:0), &quot;s&quot; (zero-length:1, duplicate:0), &quot;w&quot; (zero-length:1, duplicate:2).</li><li>[Production similarity] &quot;O&quot; vs &quot;0&quot; at SS16: chamfer distance 0.0536 (threshold 0.09) -- visually close stone layouts; both produce a valid, differently-sized stone count (9 vs 9), verify legibility in rhinestone-specimen.png.</li><li>[Typography] Visual-weight (fill-ratio) outliers vs the a-z median: &quot;a&quot;, &quot;b&quot;, &quot;d&quot;, &quot;g&quot;, &quot;o&quot;, &quot;p&quot;, &quot;q&quot;.</li><li>[Typography] Baseline anomalies: &quot;f&quot; do not match the expected descender/no-descender pattern.</li><li>[Typography] Word-space too narrow in &quot;Happy Birthday&quot; between &quot;y&quot; and &quot;B&quot;: visual gap 111u is barely above the median intra-word letter gap (100u) -- the two words visually run together (confirmed in typography-specimen.png).</li></ul>
+  
+
+  <h2>2. TTF validation table</h2>
+  <table class="checks-table"><thead><tr><th>Status</th><th>Check</th><th>Category</th><th>Detail</th></tr></thead><tbody>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Successful TTF parsing</td>
+      <td class="check-category">parsing</td>
+      <td class="check-detail">opentype.js parsed the file without error.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Outline format</td>
+      <td class="check-category">structure</td>
+      <td class="check-detail">CFF (PostScript-flavored) outlines. sfnt signature &quot;OTTO&quot; (OTTO), opentype.js outlinesFormat=&quot;cff&quot;.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-fail">FAIL</span></td>
+      <td class="check-label">Quadratic TrueType outlines</td>
+      <td class="check-category">structure</td>
+      <td class="check-detail">The file is CFF-flavored OpenType (sfnt &quot;OTTO&quot;), not TrueType -- it has no quadratic (&quot;glyf&quot;) outlines at all; its curves (if any) are cubic Bezier by construction. Sampled across the first 10 required glyphs: 0 curve commands, 2220 line commands.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">unitsPerEm</td>
+      <td class="check-category">structure</td>
+      <td class="check-detail">unitsPerEm = 1000</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Glyph count</td>
+      <td class="check-category">structure</td>
+      <td class="check-detail">71 glyphs (font.numGlyphs=71).</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">.notdef at glyph index 0</td>
+      <td class="check-category">structure</td>
+      <td class="check-detail">.notdef confirmed at glyph index 0.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Unicode cmap coverage</td>
+      <td class="check-category">coverage</td>
+      <td class="check-detail">cmap maps 71 Unicode code point(s) to glyphs.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Required character coverage (A-Z, a-z, 0-9, space, . , ' - ! ?)</td>
+      <td class="check-category">coverage</td>
+      <td class="check-detail">All 69 required characters map to a real glyph (glyph index != 0).</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-fail">FAIL</span></td>
+      <td class="check-label">Required sfnt tables</td>
+      <td class="check-category">structure</td>
+      <td class="check-detail">Missing required table(s): glyf, loca. File contains: CFF, OS/2, cmap, head, hhea, hmtx, maxp, name, post (expected for a CFF-flavored OpenType file -- CFF outlines replace glyf+loca with a single &quot;CFF &quot; table, present here.)</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Family / subfamily / version / PostScript naming</td>
+      <td class="check-category">naming</td>
+      <td class="check-detail">family=&quot;Elegant Cursive&quot;, subfamily=&quot;Regular&quot;, version=&quot;Version 0.1&quot;, postScriptName=&quot;ElegantCursiveRegular&quot;.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Ascender, descender, line gap, horizontal metrics</td>
+      <td class="check-category">metrics</td>
+      <td class="check-detail">ascender=700, descender=-230, hhea.lineGap=0, advanceWidthMax=950, numberOfHMetrics=71 (hmtx table present: true).</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Invalid or empty glyphs</td>
+      <td class="check-category">geometry</td>
+      <td class="check-detail">No mapped, non-whitespace character resolves to an empty outline.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-warning">WARNING</span></td>
+      <td class="check-label">Open contours</td>
+      <td class="check-category">geometry</td>
+      <td class="check-detail">68 of 69 character(s) have at least one contour with no explicit close command whose final point does not exactly return to its start point (gap sizes as % of the font's em square: average 1.68%, max 4.20% -- small precision gaps, not wide-open paths). Largest gaps: &quot;.&quot; (42u, 4.2% of em), &quot;j&quot; (37.8u, 3.78% of em), &quot;i&quot; (31.6u, 3.16% of em), &quot;0&quot; (21u, 2.1% of em), &quot;a&quot; (20u, 2% of em). This is a consistent pattern across nearly every glyph, suggesting the source file was authored/exported without closepath operators, not an isolated defect. It is not production-blocking: src/text/OpenTypeProvider.js force-closes every contour during conversion (confirmed -- Part 3's real GeometryEngine.generateTextLayout() calls against this file produce valid StoneLayouts), but it is worth returning to the type designer as a file-hygiene issue.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-warning">WARNING</span></td>
+      <td class="check-label">Self-intersections</td>
+      <td class="check-category">geometry</td>
+      <td class="check-detail">57 character(s) show flattened-outline segment crossings: &quot;A&quot; (self:2, cross-contour:6), &quot;B&quot; (self:13, cross-contour:0), &quot;D&quot; (self:9, cross-contour:0), &quot;E&quot; (self:0, cross-contour:2), &quot;F&quot; (self:0, cross-contour:4), &quot;G&quot; (self:3, cross-contour:10), &quot;H&quot; (self:7, cross-contour:4), &quot;K&quot; (self:8, cross-contour:6), &quot;M&quot; (self:9, cross-contour:0), &quot;N&quot; (self:8, cross-contour:0), &quot;O&quot; (self:1, cross-contour:0), &quot;P&quot; (self:12, cross-contour:0), &quot;Q&quot; (self:1, cross-contour:4), &quot;R&quot; (self:9, cross-contour:2), &quot;T&quot; (self:0, cross-contour:4), &quot;U&quot; (self:1, cross-contour:0), &quot;V&quot; (self:1, cross-contour:0), &quot;W&quot; (self:3, cross-contour:0), &quot;X&quot; (self:0, cross-contour:4), &quot;Y&quot; (self:0, cross-contour:21), &quot;Z&quot; (self:2, cross-contour:0), &quot;a&quot; (self:8, cross-contour:12), &quot;b&quot; (self:1, cross-contour:2), &quot;d&quot; (self:1, cross-contour:4), &quot;e&quot; (self:0, cross-contour:2), &quot;f&quot; (self:0, cross-contour:4), &quot;g&quot; (self:1, cross-contour:4), &quot;h&quot; (self:0, cross-contour:2), &quot;i&quot; (self:5, cross-contour:0), &quot;j&quot; (self:7, cross-contour:0), &quot;k&quot; (self:1, cross-contour:4), &quot;m&quot; (self:5, cross-contour:4), &quot;n&quot; (self:2, cross-contour:0), &quot;o&quot; (self:2, cross-contour:0), &quot;p&quot; (self:1, cross-contour:6), &quot;q&quot; (self:3, cross-contour:6), &quot;r&quot; (self:1, cross-contour:0), &quot;s&quot; (self:3, cross-contour:0), &quot;t&quot; (self:0, cross-contour:4), &quot;v&quot; (self:1, cross-contour:0), &quot;w&quot; (self:11, cross-contour:0), &quot;x&quot; (self:0, cross-contour:4), &quot;y&quot; (self:1, cross-contour:7), &quot;z&quot; (self:2, cross-contour:0), &quot;0&quot; (self:1, cross-contour:0), &quot;1&quot; (self:1, cross-contour:4), &quot;2&quot; (self:1, cross-contour:0), &quot;3&quot; (self:1, cross-contour:0), &quot;4&quot; (self:1, cross-contour:12), &quot;5&quot; (self:1, cross-contour:0), &quot;6&quot; (self:2, cross-contour:0), &quot;7&quot; (self:1, cross-contour:0), &quot;8&quot; (self:5, cross-contour:0), &quot;9&quot; (self:4, cross-contour:4), &quot;.&quot; (self:10, cross-contour:0), &quot;!&quot; (self:4, cross-contour:2), &quot;?&quot; (self:4, cross-contour:0).</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-warning">WARNING</span></td>
+      <td class="check-label">Zero-length or duplicate outline segments</td>
+      <td class="check-category">geometry</td>
+      <td class="check-detail">15 character(s) affected: &quot;B&quot; (zero-length:2, duplicate:0), &quot;D&quot; (zero-length:2, duplicate:1), &quot;H&quot; (zero-length:2, duplicate:1), &quot;K&quot; (zero-length:2, duplicate:1), &quot;M&quot; (zero-length:1, duplicate:1), &quot;N&quot; (zero-length:1, duplicate:1), &quot;P&quot; (zero-length:1, duplicate:0), &quot;R&quot; (zero-length:1, duplicate:0), &quot;a&quot; (zero-length:1, duplicate:1), &quot;m&quot; (zero-length:3, duplicate:0), &quot;n&quot; (zero-length:1, duplicate:0), &quot;q&quot; (zero-length:1, duplicate:0), &quot;r&quot; (zero-length:1, duplicate:0), &quot;s&quot; (zero-length:1, duplicate:0), &quot;w&quot; (zero-length:1, duplicate:2).</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Coordinates outside valid TrueType ranges</td>
+      <td class="check-category">geometry</td>
+      <td class="check-detail">All required-character outline coordinates fall within the signed 16-bit range (-32768 to 32767). Note: this file is CFF-flavored, not glyf-based -- the int16 glyf range is a compatibility check only, not this format's native constraint.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Inconsistent or suspicious advance widths / side bearings</td>
+      <td class="check-category">metrics</td>
+      <td class="check-detail">Advance widths for required characters cluster reasonably around the median (583 units).</td>
+    </tr></tbody></table>
+
+  <h2>3. Typography specimen</h2>
+  <p>Rendered from the actual candidate TTF via a base64-embedded <code>@font-face</code> rule (the browser's own font rasterizer), not an approximation.</p>
+  <img class="specimen-image" src="typography-specimen.png" alt="Typography specimen">
+
+  <h2>4. Rhinestone specimen by supported stone size</h2>
+  <p>Rendered through the real production pipeline: FontManager &rarr; OpenTypeProvider &rarr; GeometryEngine.generateTextLayout() &rarr; StoneLayout. Text height 25mm, gap 0.3mm.</p>
+  <img class="specimen-image" src="rhinestone-specimen.png" alt="Rhinestone specimen">
+  <h3>Confusable-pair similarity (all 12 pairs, SS16 reference)</h3>
+  <table class="similarity-table">
+    <thead><tr><th>Pair</th><th>Size</th><th>Stone counts</th><th>Chamfer distance</th><th>Result</th></tr></thead>
+    <tbody>
+    <tr class="">
+      <td>"I" vs "l"</td>
+      <td>SS16</td>
+      <td>5 / 6</td>
+      <td>0.1288</td>
+      <td><span class="badge badge-pass">PASS</span></td>
+    </tr>
+    <tr class="">
+      <td>"l" vs "1"</td>
+      <td>SS16</td>
+      <td>6 / 7</td>
+      <td>0.1535</td>
+      <td><span class="badge badge-pass">PASS</span></td>
+    </tr>
+    <tr class="">
+      <td>"I" vs "1"</td>
+      <td>SS16</td>
+      <td>5 / 7</td>
+      <td>0.1677</td>
+      <td><span class="badge badge-pass">PASS</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"O" vs "0"</td>
+      <td>SS16</td>
+      <td>9 / 9</td>
+      <td>0.0536</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="">
+      <td>"S" vs "5"</td>
+      <td>SS16</td>
+      <td>11 / 10</td>
+      <td>0.1160</td>
+      <td><span class="badge badge-pass">PASS</span></td>
+    </tr>
+    <tr class="">
+      <td>"B" vs "8"</td>
+      <td>SS16</td>
+      <td>14 / 8</td>
+      <td>0.1036</td>
+      <td><span class="badge badge-pass">PASS</span></td>
+    </tr>
+    <tr class="">
+      <td>"G" vs "C"</td>
+      <td>SS16</td>
+      <td>10 / 8</td>
+      <td>0.1396</td>
+      <td><span class="badge badge-pass">PASS</span></td>
+    </tr>
+    <tr class="">
+      <td>"Q" vs "O"</td>
+      <td>SS16</td>
+      <td>11 / 9</td>
+      <td>0.1374</td>
+      <td><span class="badge badge-pass">PASS</span></td>
+    </tr>
+    <tr class="">
+      <td>"e" vs "c"</td>
+      <td>SS16</td>
+      <td>7 / 5</td>
+      <td>0.1444</td>
+      <td><span class="badge badge-pass">PASS</span></td>
+    </tr>
+    <tr class="">
+      <td>"e" vs "o"</td>
+      <td>SS16</td>
+      <td>7 / 5</td>
+      <td>0.2169</td>
+      <td><span class="badge badge-pass">PASS</span></td>
+    </tr>
+    <tr class="">
+      <td>"c" vs "o"</td>
+      <td>SS16</td>
+      <td>5 / 5</td>
+      <td>0.1277</td>
+      <td><span class="badge badge-pass">PASS</span></td>
+    </tr>
+    <tr class="">
+      <td>"6" vs "9"</td>
+      <td>SS16</td>
+      <td>9 / 8</td>
+      <td>0.1509</td>
+      <td><span class="badge badge-pass">PASS</span></td>
+    </tr></tbody>
+  </table>
+  <p class="table-note">Threshold: 0.09 (normalized, unit-height point clouds). Below threshold = flagged as visually similar.</p>
+
+  <h2>5. Glyph-by-glyph findings</h2>
+  <h3>Stone count per glyph, by stone size</h3>
+  <table class="glyph-table">
+    <thead><tr><th>Char</th><th>SS6</th><th>SS10</th><th>SS16</th><th>SS20</th><th>SS30</th></tr></thead>
+    <tbody><tr><th>"A"</th><td>40</td><td>18</td><td>10</td><td>9</td><td>5</td></tr><tr><th>"B"</th><td>44</td><td>22</td><td>14</td><td>11</td><td>5</td></tr><tr><th>"C"</th><td>27</td><td>12</td><td>8</td><td>7</td><td>4</td></tr><tr><th>"D"</th><td>43</td><td>21</td><td>14</td><td>11</td><td>6</td></tr><tr><th>"E"</th><td>26</td><td>11</td><td>8</td><td>6</td><td>3</td></tr><tr><th>"F"</th><td>20</td><td>12</td><td>7</td><td>6</td><td>5</td></tr><tr><th>"G"</th><td>31</td><td>13</td><td>10</td><td>8</td><td>5</td></tr><tr><th>"H"</th><td>34</td><td>18</td><td>11</td><td>9</td><td>6</td></tr><tr><th>"I"</th><td>16</td><td>6</td><td>5</td><td>4</td><td>3</td></tr><tr><th>"J"</th><td>16</td><td>10</td><td>7</td><td>6</td><td>5</td></tr><tr><th>"K"</th><td>36</td><td>17</td><td>11</td><td>9</td><td>6</td></tr><tr><th>"L"</th><td>15</td><td>8</td><td>6</td><td>5</td><td>4</td></tr><tr><th>"M"</th><td>48</td><td>23</td><td>15</td><td>9</td><td>6</td></tr><tr><th>"N"</th><td>41</td><td>20</td><td>12</td><td>9</td><td>7</td></tr><tr><th>"O"</th><td>32</td><td>13</td><td>9</td><td>8</td><td>6</td></tr><tr><th>"P"</th><td>36</td><td>17</td><td>10</td><td>8</td><td>5</td></tr><tr><th>"Q"</th><td>36</td><td>15</td><td>11</td><td>9</td><td>7</td></tr><tr><th>"R"</th><td>43</td><td>20</td><td>12</td><td>10</td><td>7</td></tr><tr><th>"S"</th><td>30</td><td>15</td><td>11</td><td>8</td><td>4</td></tr><tr><th>"T"</th><td>21</td><td>9</td><td>7</td><td>6</td><td>4</td></tr><tr><th>"U"</th><td>32</td><td>15</td><td>10</td><td>8</td><td>5</td></tr><tr><th>"V"</th><td>27</td><td>12</td><td>8</td><td>6</td><td>4</td></tr><tr><th>"W"</th><td>24</td><td>15</td><td>10</td><td>8</td><td>5</td></tr><tr><th>"X"</th><td>20</td><td>14</td><td>9</td><td>9</td><td>6</td></tr><tr><th>"Y"</th><td>28</td><td>14</td><td>9</td><td>8</td><td>6</td></tr><tr><th>"Z"</th><td>32</td><td>14</td><td>11</td><td>7</td><td>6</td></tr><tr><th>"a"</th><td>21</td><td>9</td><td>6</td><td>5</td><td>3</td></tr><tr><th>"b"</th><td>30</td><td>11</td><td>8</td><td>6</td><td>4</td></tr><tr><th>"c"</th><td>17</td><td>7</td><td>5</td><td>3</td><td>3</td></tr><tr><th>"d"</th><td>27</td><td>12</td><td>8</td><td>6</td><td>5</td></tr><tr><th>"e"</th><td>26</td><td>11</td><td>7</td><td>5</td><td>3</td></tr><tr><th>"f"</th><td>25</td><td>12</td><td>8</td><td>7</td><td>5</td></tr><tr><th>"g"</th><td>34</td><td>16</td><td>8</td><td>7</td><td>5</td></tr><tr><th>"h"</th><td>27</td><td>12</td><td>9</td><td>6</td><td>5</td></tr><tr><th>"i"</th><td>12</td><td>5</td><td>4</td><td>4</td><td>3</td></tr><tr><th>"j"</th><td>18</td><td>9</td><td>7</td><td>5</td><td>4</td></tr><tr><th>"k"</th><td>27</td><td>12</td><td>8</td><td>6</td><td>5</td></tr><tr><th>"l"</th><td>13</td><td>8</td><td>6</td><td>5</td><td>3</td></tr><tr><th>"m"</th><td>27</td><td>15</td><td>9</td><td>7</td><td>4</td></tr><tr><th>"n"</th><td>21</td><td>11</td><td>7</td><td>6</td><td>4</td></tr><tr><th>"o"</th><td>22</td><td>9</td><td>5</td><td>5</td><td>3</td></tr><tr><th>"p"</th><td>25</td><td>12</td><td>7</td><td>7</td><td>4</td></tr><tr><th>"q"</th><td>28</td><td>12</td><td>8</td><td>5</td><td>3</td></tr><tr><th>"r"</th><td>10</td><td>7</td><td>4</td><td>4</td><td>3</td></tr><tr><th>"s"</th><td>20</td><td>10</td><td>6</td><td>5</td><td>3</td></tr><tr><th>"t"</th><td>13</td><td>7</td><td>6</td><td>5</td><td>3</td></tr><tr><th>"u"</th><td>21</td><td>9</td><td>6</td><td>5</td><td>4</td></tr><tr><th>"v"</th><td>16</td><td>8</td><td>5</td><td>4</td><td>3</td></tr><tr><th>"w"</th><td>24</td><td>11</td><td>6</td><td>7</td><td>4</td></tr><tr><th>"x"</th><td>15</td><td>9</td><td>6</td><td>5</td><td>3</td></tr><tr><th>"y"</th><td>19</td><td>11</td><td>8</td><td>7</td><td>4</td></tr><tr><th>"z"</th><td>21</td><td>10</td><td>6</td><td>5</td><td>3</td></tr><tr><th>"0"</th><td>28</td><td>13</td><td>9</td><td>7</td><td>3</td></tr><tr><th>"1"</th><td>23</td><td>11</td><td>7</td><td>6</td><td>4</td></tr><tr><th>"2"</th><td>29</td><td>14</td><td>10</td><td>8</td><td>6</td></tr><tr><th>"3"</th><td>24</td><td>15</td><td>10</td><td>8</td><td>5</td></tr><tr><th>"4"</th><td>27</td><td>11</td><td>7</td><td>6</td><td>4</td></tr><tr><th>"5"</th><td>29</td><td>13</td><td>10</td><td>8</td><td>5</td></tr><tr><th>"6"</th><td>31</td><td>12</td><td>9</td><td>6</td><td>4</td></tr><tr><th>"7"</th><td>25</td><td>12</td><td>8</td><td>6</td><td>5</td></tr><tr><th>"8"</th><td>34</td><td>14</td><td>8</td><td>7</td><td>3</td></tr><tr><th>"9"</th><td>26</td><td>11</td><td>8</td><td>6</td><td>4</td></tr></tbody>
+  </table>
+  <p class="table-note">Cell values are stone count per glyph at that stone size ("coll." = colliding stone pairs found).</p>
+  <h3>Typography measurements</h3>
+  <p>x-height measured spread: 67.0 font units across 13 letters (declared OS/2 sxHeight: 438). Cap-height measured spread: 43.0 font units across 26 letters (declared OS/2 sCapHeight: 698).</p>
+  <p>Visual-weight outliers (fill-ratio vs a-z median 0.409): "a" (1.281), "b" (0.808), "d" (0.845), "g" (0.776), "o" (1.134), "p" (0.738), "q" (0.939).</p>
+  <p>Baseline anomalies: "f".</p>
+  <h3>Word-space adequacy</h3>
+  <p>Median intra-word (letter-to-letter) ink gap: 100 font units. A word-space is flagged if its own ink-to-ink gap is not at least 1.3&times; that median (i.e. it reads no wider than an ordinary letter gap).</p>
+  <table class="word-space-table">
+    <thead><tr><th>Word</th><th>Boundary</th><th>Gap (units)</th><th>vs. median</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr class="">
+        <td>Bride Squad</td>
+        <td>"e" | "S"</td>
+        <td>341</td>
+        <td>3.41&times;</td>
+        <td><span class="badge badge-pass">PASS</span></td>
+      </tr>
+      <tr class="row-flagged">
+        <td>Happy Birthday</td>
+        <td>"y" | "B"</td>
+        <td>111</td>
+        <td>1.11&times;</td>
+        <td><span class="badge badge-warning">WARNING</span></td>
+      </tr>
+      <tr class="">
+        <td>Dance Team</td>
+        <td>"e" | "T"</td>
+        <td>505</td>
+        <td>5.05&times;</td>
+        <td><span class="badge badge-pass">PASS</span></td>
+      </tr>
+      <tr class="">
+        <td>Class of 2027</td>
+        <td>"s" | "o"</td>
+        <td>344</td>
+        <td>3.44&times;</td>
+        <td><span class="badge badge-pass">PASS</span></td>
+      </tr>
+      <tr class="">
+        <td>Class of 2027</td>
+        <td>"f" | "2"</td>
+        <td>284</td>
+        <td>2.84&times;</td>
+        <td><span class="badge badge-pass">PASS</span></td>
+      </tr></tbody>
+  </table>
+  <p class="table-note">Confirmed visually in typography-specimen.png: "Happy Birthday" is the only tested phrase whose word gap reads as running the two words together.</p>
+
+  <h2>6. Word-level findings</h2>
+  <table class="word-findings-table">
+    <thead><tr><th>Word</th><th>SS6</th><th>SS10</th><th>SS16</th><th>SS20</th><th>SS30</th></tr></thead>
+    <tbody><tr><th>Ashley</th><td>145 stones, min spacing 2.00mm, 5 cluster(s)</td><td>69 stones, min spacing 2.80mm, 5 cluster(s)</td><td>46 stones, min spacing 4.11mm, 3 cluster(s)</td><td>36 stones, min spacing 4.71mm, 3 cluster(s)</td><td>21 stones, min spacing 6.68mm, 3 cluster(s)</td></tr><tr><th>Sophia</th><td>135 stones, min spacing 2.00mm, 4 cluster(s)</td><td>62 stones, min spacing 2.80mm, 5 cluster(s)</td><td>40 stones, min spacing 4.03mm, 5 cluster(s)</td><td>32 stones, min spacing 4.71mm, 5 cluster(s)</td><td>20 stones, min spacing 6.62mm, 2 cluster(s)</td></tr><tr><th>Michael</th><td>164 stones, min spacing 2.01mm, 5 cluster(s)</td><td>75 stones, min spacing 2.84mm, 7 cluster(s)</td><td>52 stones, min spacing 4.03mm, 4 cluster(s)</td><td>37 stones, min spacing 4.72mm, 6 cluster(s)</td><td>24 stones, min spacing 6.49mm, 3 cluster(s)</td></tr><tr><th>Emma</th><td>101 stones, min spacing 2.01mm, 4 cluster(s)</td><td>50 stones, min spacing 2.84mm, 5 cluster(s)</td><td>32 stones, min spacing 4.11mm, 6 cluster(s)</td><td>25 stones, min spacing 4.72mm, 3 cluster(s)</td><td>14 stones, min spacing 6.65mm, 3 cluster(s)</td></tr><tr><th>Bride</th><td>118 stones, min spacing 2.00mm, 3 cluster(s)</td><td>57 stones, min spacing 2.86mm, 3 cluster(s)</td><td>37 stones, min spacing 4.01mm, 4 cluster(s)</td><td>30 stones, min spacing 4.75mm, 3 cluster(s)</td><td>16 stones, min spacing 6.69mm, 1 cluster(s)</td></tr><tr><th>Bride Squad</th><td>243 stones, min spacing 2.00mm, 5 cluster(s)</td><td>114 stones, min spacing 2.80mm, 6 cluster(s)</td><td>74 stones, min spacing 4.01mm, 9 cluster(s)</td><td>58 stones, min spacing 4.71mm, 7 cluster(s)</td><td>35 stones, min spacing 6.62mm, 2 cluster(s)</td></tr><tr><th>Happy Birthday</th><td>297 stones, min spacing 2.00mm, 12 cluster(s)</td><td>147 stones, min spacing 2.84mm, 14 cluster(s)</td><td>98 stones, min spacing 4.01mm, 10 cluster(s)</td><td>81 stones, min spacing 4.70mm, 8 cluster(s)</td><td>49 stones, min spacing 6.66mm, 3 cluster(s)</td></tr><tr><th>Dance Team</th><td>223 stones, min spacing 2.00mm, 5 cluster(s)</td><td>103 stones, min spacing 2.83mm, 6 cluster(s)</td><td>68 stones, min spacing 4.05mm, 8 cluster(s)</td><td>52 stones, min spacing 4.71mm, 5 cluster(s)</td><td>32 stones, min spacing 6.43mm, 3 cluster(s)</td></tr><tr><th>Class of 2027</th><td>259 stones, min spacing 2.00mm, 8 cluster(s)</td><td>123 stones, min spacing 2.80mm, 6 cluster(s)</td><td>82 stones, min spacing 4.00mm, 4 cluster(s)</td><td>67 stones, min spacing 4.71mm, 5 cluster(s)</td><td>43 stones, min spacing 6.46mm, 5 cluster(s)</td></tr></tbody>
+  </table>
+
+  <h2>7. Production metrics</h2>
+  <table class="metrics-table"><tbody><tr><th>File size</th><td>43.4 KB</td></tr><tr><th>sfnt signature</th><td>OTTO</td></tr><tr><th>Outline format</th><td>cff</td></tr><tr><th>unitsPerEm</th><td>1000</td></tr><tr><th>Glyph count</th><td>71</td></tr><tr><th>cmap entries</th><td>71</td></tr><tr><th>Tables present</th><td>CFF, OS/2, cmap, head, hhea, hmtx, maxp, name, post</td></tr><tr><th>Family / Subfamily</th><td>Elegant Cursive / Regular</td></tr><tr><th>Version</th><td>Version 0.1</td></tr><tr><th>PostScript name</th><td>ElegantCursiveRegular</td></tr><tr><th>Ascender / Descender</th><td>700 / -230</td></tr><tr><th>Line gap</th><td>0</td></tr><tr><th>sxHeight / sCapHeight</th><td>438 / 698</td></tr><tr><th>Italic angle</th><td>0</td></tr><tr><th>Fixed pitch</th><td>no</td></tr><tr><th>Curve vs line commands (sample)</th><td>0 curve / 2220 line (10 glyphs)</td></tr></tbody></table>
+
+  <h2>8. Exact blocking issues</h2>
+  <ul class="blocking-list"><li>[TTF structure] Quadratic TrueType outlines: The file is CFF-flavored OpenType (sfnt &quot;OTTO&quot;), not TrueType -- it has no quadratic (&quot;glyf&quot;) outlines at all; its curves (if any) are cubic Bezier by construction. Sampled across the first 10 required glyphs: 0 curve commands, 2220 line commands.</li><li>[TTF structure] Required sfnt tables: Missing required table(s): glyf, loca. File contains: CFF, OS/2, cmap, head, hhea, hmtx, maxp, name, post (expected for a CFF-flavored OpenType file -- CFF outlines replace glyf+loca with a single &quot;CFF &quot; table, present here.)</li></ul>
+
+  <h2>9. Recommended Claude Design revision feedback</h2>
+  <div class="feedback-block">
+    <h3>Feedback for Claude Design</h3>
+    <ul class="feedback-list"><li>Re-export Elegant-Cursive.ttf with true quadratic TrueType (&quot;glyf&quot;) outlines, or explicitly confirm CFF/OpenType output is acceptable for this milestone -- the current file is CFF-flavored OpenType (sfnt signature &quot;OTTO&quot;) and is missing the glyf/loca tables this certification's spec requires, despite the .ttf extension.</li><li>Outlines are built entirely from straight-line segments (0 curve commands across 10 sampled glyphs, ~212 path commands/glyph on average) -- re-author with proper Bezier curves instead of polyline-traced paths; this will also shrink the file (currently 43.4 KB for only 71 glyphs).</li><li>Close every glyph contour explicitly with a closepath command -- 68 of the required characters currently rely on the rendering pipeline's downstream auto-closure. The gaps are small (well under 5% of the em square) but should be zero in a production-ready file.</li><li>Increase differentiation between &quot;O&quot; and &quot;0&quot; -- their rhinestone stone layouts at SS16 are nearly identical (chamfer distance 0.0536, below the 0.09 similarity threshold; stone counts 9 vs 9). Recommend a clearer distinguishing stroke.</li><li>Review stroke weight consistency for: &quot;a&quot;, &quot;b&quot;, &quot;d&quot;, &quot;g&quot;, &quot;o&quot;, &quot;p&quot;, &quot;q&quot; -- their filled-area/bounding-box ratio deviates notably from the a-z median (0.409), suggesting uneven visual weight across the lowercase set.</li><li>Confirm this is intentional: &quot;f&quot; (199u below baseline) extend below the baseline like a conventional descender (g/j/p/q/y), which is not unusual for a cursive/script style but is worth a deliberate design confirmation rather than an accident of tracing.</li><li>Widen the word space after &quot;y&quot; before &quot;B&quot; (as in &quot;Happy Birthday&quot;) -- the actual rendered gap (111 font units) is barely larger than an ordinary letter-to-letter gap (median 100 units), so the two words visually merge into one in typography-specimen.png. Every other tested multi-word phrase has a 280-500 unit gap; this one measures 111.</li></ul>
+  </div>
+</body>
+</html>

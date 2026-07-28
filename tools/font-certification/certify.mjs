@@ -12,11 +12,15 @@
  * FONT-CERT-001A: the candidate path is the one required positional argument -- there is no default
  * and no fallback to any previously-certified version (e.g. v001). The output folder is always
  * derived from the candidate path itself (see lib/candidatePath.mjs), so a v002 candidate always
- * writes to tmp/font-certification/<Family>/v002/, never v001's folder.
+ * writes to its own folder, never v001's.
+ *
+ * FONT-CERT-001B: that derived output folder lives beside the candidate itself --
+ * fonts/candidates/<Family>/certification/<Version>/ -- never under the repo's gitignored tmp/, so
+ * certification results are retained (reviewable, committable) rather than disposable build output.
  */
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { access, mkdir, writeFile } from 'node:fs/promises';
+import { access, mkdir, rm, writeFile } from 'node:fs/promises';
 import { repoPath } from './lib/repoPaths.mjs';
 import { deriveOutputRelativePath } from './lib/candidatePath.mjs';
 import { validateTtf } from './lib/ttfValidation.mjs';
@@ -156,6 +160,14 @@ export async function certify({ candidateRelativePath, outputRelativePath, skipS
       ],
       profileDir: repoPath('tmp/font-certification/.playwright-profile')
     });
+
+    // FONT-CERT-001B: outputDir is now a retained, committable location (fonts/candidates/.../
+    // certification/<Version>/), not disposable tmp/ build output -- so the intermediate HTML these
+    // two PNGs were screenshotted from is cleaned up rather than left behind as repo clutter. Only
+    // the 6 required deliverables (report.html, certification.json, font-metrics.json,
+    // glyph-findings.json, typography-specimen.png, rhinestone-specimen.png) remain.
+    await rm(path.join(outputDir, '_typography-specimen-source.html'), { force: true });
+    await rm(path.join(outputDir, '_rhinestone-specimen-source.html'), { force: true });
   }
 
   return { outputDir, classification, fontMetrics, ttfChecks, productionAnalysis, typographyFindings };

@@ -1,0 +1,36 @@
+{
+  "fileSizeBytes": 51212,
+  "sfntVersionTag": "OTTO",
+  "outlinesFormat": "cff",
+  "unitsPerEm": 1000,
+  "glyphCount": 71,
+  "cmapEntryCount": 71,
+  "tableTags": [
+    "CFF",
+    "OS/2",
+    "cmap",
+    "head",
+    "hhea",
+    "hmtx",
+    "maxp",
+    "name",
+    "post"
+  ],
+  "family": "Elegant Cursive",
+  "subfamily": "Regular",
+  "version": "Version 0.1",
+  "postScriptName": "ElegantCursiveRegular",
+  "ascender": 700,
+  "descender": -230,
+  "lineGap": 0,
+  "sxHeight": 438,
+  "sCapHeight": 698,
+  "italicAngle": 0,
+  "isFixedPitch": false,
+  "advanceWidthMedianUnits": 583,
+  "curveVsLineCommandSample": {
+    "curveCommands": 1102,
+    "lineCommands": 16,
+    "sampledGlyphs": 10
+  }
+}
