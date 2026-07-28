@@ -43,3 +43,7 @@ tmp/
 # Python helper caches
 __pycache__/
 *.pyc
+
+# FONT-CAL-001: temporary experimental candidate fonts (must never become production assets --
+# only the JSON measurements and the experiment report they support are committed)
+tools/font-cal-001/output/fonts/

@@ -111,9 +111,13 @@ export function normalizedStonePoints(stones) {
 }
 
 /**
- * Analyze one text string's StoneLayout at one stone size.
+ * Analyze one text string's StoneLayout at one stone size. Exported (in addition to being used
+ * internally by runProductionAnalysis() below) so other callers needing the exact same
+ * single-string/single-size measurement -- e.g. FONT-CAL-001's calibration tooling, which measures
+ * arbitrary glyphs/phrases rather than the fixed PRODUCTION_REVIEW_GLYPHS/WORDS corpus -- reuse
+ * this one measurement function against the real, unmodified pipeline instead of re-deriving it.
  */
-async function analyzeOne(engine, fontId, text, stoneSizeId, heightMm) {
+export async function analyzeOne(engine, fontId, text, stoneSizeId, heightMm) {
   const stoneSizeMm = STONE_SIZE_BY_ID[stoneSizeId].diameterMm;
   const pitchMm = stoneSizeMm + PRODUCTION_GAP_MM;
   let layout = null;
