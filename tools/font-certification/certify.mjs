@@ -2,17 +2,23 @@
 /**
  * FONT-CERT-001 certification CLI.
  *
- * Usage: node tools/font-certification/certify.mjs [candidateRelativePath] [outputRelativePath] [--no-screenshots]
+ * Usage: node tools/font-certification/certify.mjs <candidateRelativePath> [--no-screenshots]
  *
  * Orchestrates the three certification parts (TTF validation, typography review, rhinestone
  * production review) through the real, unmodified production pipeline and writes the required
  * report artifacts. See the lib/ modules for each part's implementation; this file only wires them
  * together and writes files -- no analysis logic lives here.
+ *
+ * FONT-CERT-001A: the candidate path is the one required positional argument -- there is no default
+ * and no fallback to any previously-certified version (e.g. v001). The output folder is always
+ * derived from the candidate path itself (see lib/candidatePath.mjs), so a v002 candidate always
+ * writes to tmp/font-certification/<Family>/v002/, never v001's folder.
  */
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { access, mkdir, writeFile } from 'node:fs/promises';
 import { repoPath } from './lib/repoPaths.mjs';
+import { deriveOutputRelativePath } from './lib/candidatePath.mjs';
 import { validateTtf } from './lib/ttfValidation.mjs';
 import { loadCandidateFont } from './lib/ttfParser.mjs';
 import { computeTypographyFindings } from './lib/typographyFindings.mjs';
@@ -24,8 +30,9 @@ import { buildReportHtml } from './lib/reportHtml.mjs';
 import { screenshotPages } from './lib/screenshotPages.mjs';
 import { STONE_SIZE_IDS } from './lib/requiredCharacters.mjs';
 
+// A real, known-good fixture path -- not a default candidate certify() falls back to. Existing
+// focused tests import this to know which committed fixture file to exercise explicitly.
 export const DEFAULT_CANDIDATE_RELATIVE_PATH = 'fonts/candidates/Elegant-Cursive/ttf/v001/Elegant-Cursive.ttf';
-export const DEFAULT_OUTPUT_RELATIVE_PATH = 'tmp/font-certification/Elegant-Cursive/v001';
 const RHINESTONE_SPECIMEN_SAMPLE_WORDS = ['Ashley', 'Bride Squad', 'Class of 2027'];
 
 function mapToPlainSummary(map) {
@@ -43,20 +50,23 @@ function mapToPlainSummary(map) {
 /**
  * Runs the full certification and writes every required artifact to outputRelativePath.
  *
- * @param {object} [options]
- * @param {string} [options.candidateRelativePath]
- * @param {string} [options.outputRelativePath]
+ * @param {object} options
+ * @param {string} options.candidateRelativePath Required -- no default, no fallback to any
+ *   previously-certified version.
+ * @param {string} [options.outputRelativePath] Defaults to the family/version folder derived from
+ *   candidateRelativePath (see lib/candidatePath.mjs). Override only for test isolation.
  * @param {boolean} [options.skipScreenshots] Skip the Playwright PNG-generation step (used by fast
  *   focused tests that only need the deterministic JSON/HTML artifacts).
  * @returns {Promise<{ outputDir: string, classification: object, fontMetrics: object }>}
  */
-export async function certify({
-  candidateRelativePath = DEFAULT_CANDIDATE_RELATIVE_PATH,
-  outputRelativePath = DEFAULT_OUTPUT_RELATIVE_PATH,
-  skipScreenshots = false
-} = {}) {
+export async function certify({ candidateRelativePath, outputRelativePath, skipScreenshots = false } = {}) {
+  if (typeof candidateRelativePath !== 'string' || candidateRelativePath.trim().length === 0) {
+    throw new Error('FONT-CERT-001: certify() requires a candidateRelativePath -- there is no default candidate.');
+  }
+
+  const resolvedOutputRelativePath = outputRelativePath ?? deriveOutputRelativePath(candidateRelativePath);
   const candidateAbsolutePath = repoPath(candidateRelativePath);
-  const outputDir = repoPath(outputRelativePath);
+  const outputDir = repoPath(resolvedOutputRelativePath);
 
   try {
     await access(candidateAbsolutePath);
@@ -154,24 +164,33 @@ export async function certify({
 const isMainModule = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMainModule) {
   const positionalArgs = process.argv.slice(2).filter((arg) => !arg.startsWith('--'));
-  const [candidateArg, outputArg] = positionalArgs;
   const skipScreenshots = process.argv.includes('--no-screenshots');
-  certify({
-    ...(candidateArg ? { candidateRelativePath: candidateArg } : {}),
-    ...(outputArg ? { outputRelativePath: outputArg } : {}),
-    skipScreenshots
-  })
-    .then(({ outputDir, classification }) => {
-      console.log(`FONT-CERT-001 certification complete: ${classification.overall}`);
-      console.log(`Checks: PASS=${classification.checkCounts.PASS} WARNING=${classification.checkCounts.WARNING} FAIL=${classification.checkCounts.FAIL} NOT_VERIFIED=${classification.checkCounts.NOT_VERIFIED}`);
-      console.log(`Report written to: ${path.join(outputDir, 'report.html')}`);
-      if (classification.blockingIssues.length > 0) {
-        console.log('\nBlocking issues:');
-        for (const issue of classification.blockingIssues) console.log(`  - ${issue}`);
-      }
-    })
-    .catch((error) => {
-      console.error('FONT-CERT-001 certification failed:', error.message);
-      process.exitCode = 1;
-    });
+
+  if (positionalArgs.length !== 1) {
+    console.error(
+      'FONT-CERT-001 certification failed: expected exactly one candidate TTF path argument.\n' +
+      'Usage: node tools/font-certification/certify.mjs <candidateRelativePath> [--no-screenshots]\n' +
+      `Example: node tools/font-certification/certify.mjs ${DEFAULT_CANDIDATE_RELATIVE_PATH}\n` +
+      (positionalArgs.length === 0 ? 'Received no positional arguments.' : `Received ${positionalArgs.length}: ${positionalArgs.join(', ')}`)
+    );
+    process.exitCode = 1;
+  } else {
+    const [candidateArg] = positionalArgs;
+    console.log(`FONT-CERT-001 candidate: ${candidateArg}`);
+
+    certify({ candidateRelativePath: candidateArg, skipScreenshots })
+      .then(({ outputDir, classification }) => {
+        console.log(`FONT-CERT-001 certification complete: ${classification.overall}`);
+        console.log(`Checks: PASS=${classification.checkCounts.PASS} WARNING=${classification.checkCounts.WARNING} FAIL=${classification.checkCounts.FAIL} NOT_VERIFIED=${classification.checkCounts.NOT_VERIFIED}`);
+        console.log(`Report written to: ${path.join(outputDir, 'report.html')}`);
+        if (classification.blockingIssues.length > 0) {
+          console.log('\nBlocking issues:');
+          for (const issue of classification.blockingIssues) console.log(`  - ${issue}`);
+        }
+      })
+      .catch((error) => {
+        console.error('FONT-CERT-001 certification failed:', error.message);
+        process.exitCode = 1;
+      });
+  }
 }

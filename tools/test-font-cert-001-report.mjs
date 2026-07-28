@@ -28,7 +28,7 @@ await rm(testOutputAbsolute, { recursive: true, force: true });
 // --- Report generation (JSON + HTML artifacts, screenshots skipped for test speed) -----------------
 
 await test('certify() writes every required JSON/HTML artifact for the real candidate', async () => {
-  const { classification } = await certify({ outputRelativePath: TEST_OUTPUT_RELATIVE, skipScreenshots: true });
+  const { classification } = await certify({ candidateRelativePath: DEFAULT_CANDIDATE_RELATIVE_PATH, outputRelativePath: TEST_OUTPUT_RELATIVE, skipScreenshots: true });
 
   const certification = await readJson('certification.json');
   const fontMetrics = await readJson('font-metrics.json');
@@ -62,8 +62,8 @@ await test('certify() writes every required JSON/HTML artifact for the real cand
 // --- Deterministic output --------------------------------------------------------------------------
 
 await test('certify() produces byte-identical certification.json/glyph-findings.json across repeated runs (excluding timestamps)', async () => {
-  await certify({ outputRelativePath: `${TEST_OUTPUT_RELATIVE}-run1`, skipScreenshots: true });
-  await certify({ outputRelativePath: `${TEST_OUTPUT_RELATIVE}-run2`, skipScreenshots: true });
+  await certify({ candidateRelativePath: DEFAULT_CANDIDATE_RELATIVE_PATH, outputRelativePath: `${TEST_OUTPUT_RELATIVE}-run1`, skipScreenshots: true });
+  await certify({ candidateRelativePath: DEFAULT_CANDIDATE_RELATIVE_PATH, outputRelativePath: `${TEST_OUTPUT_RELATIVE}-run2`, skipScreenshots: true });
 
   const stripTimestamp = (obj) => { const { generatedAt, ...rest } = obj; return rest; };
 
