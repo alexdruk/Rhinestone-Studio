@@ -14,7 +14,28 @@ import { STONE_SIZE_BY_ID } from '../../../src/renderer/StoneSizes.js';
 import { chamferDistance } from './shapeSimilarity.mjs';
 import { STONE_SIZE_IDS, CONFUSABLE_PAIRS, PRODUCTION_REVIEW_GLYPHS, PRODUCTION_REVIEW_WORDS } from './requiredCharacters.mjs';
 
-export const PRODUCTION_TEXT_HEIGHT_MM = 25; // matches defaultProject()'s own text layer height (app.js)
+// FONT-CERT-002: a single fixed 25mm text height for every stone size was the root cause of the
+// original specimen-readability problem -- a lowercase "o" at SS30 (6.4mm stones) held at 25mm text
+// height gets only 2 stones, nowhere near enough to read as a letter, while the same glyph at SS6
+// (2.0mm stones) gets 21. The fix: hold the height-to-stone-diameter *ratio* constant instead of the
+// absolute height, at the same ratio (12.5) the app's own default project already uses for its one
+// shipped height/stoneSize pair (25mm / SS6's 2.0mm, see defaultProject() in app.js). This keeps
+// stone count per glyph roughly constant across every stone size -- verified empirically: "o" now
+// gets 20-24 stones at every one of SS6/SS10/SS16/SS20/SS30. Applied uniformly to both the analysis
+// data (glyph-findings.json) and the rendered specimen, so what is reported and what is shown always
+// match -- there is deliberately no separate "specimen-only" height.
+const SPECIMEN_HEIGHT_TO_STONE_SIZE_RATIO = 12.5; // 25mm / 2.0mm (SS6), matching app.js's defaultProject()
+export function deriveSpecimenHeightMm(stoneSizeMm) {
+  return Math.round(stoneSizeMm * SPECIMEN_HEIGHT_TO_STONE_SIZE_RATIO);
+}
+// Documented per-size table (the concrete output of the formula above), for anything that wants to
+// display "what height does each size use" without recomputing it -- e.g. the report's methodology
+// section. Kept in lockstep with deriveSpecimenHeightMm() by construction (derived from it, not a
+// separately hand-maintained literal table).
+export const SPECIMEN_HEIGHT_MM_BY_SIZE = Object.fromEntries(
+  STONE_SIZE_IDS.map((id) => [id, deriveSpecimenHeightMm(STONE_SIZE_BY_ID[id].diameterMm)])
+);
+
 export const PRODUCTION_GAP_MM = 0.3; // matches defaultProject()'s own default gap (app.js)
 const CLUSTER_GAP_MULTIPLIER = 1.6; // stones within (pitch * this) of each other are one connected cluster
 const ISOLATION_MULTIPLIER = 2.5; // a stone farther than (pitch * this) from its nearest neighbor is "isolated"
@@ -75,7 +96,7 @@ function countClusters(stones, thresholdMm) {
   return new Set(Array.from({ length: n }, (_, i) => find(i))).size;
 }
 
-function normalizedStonePoints(stones) {
+export function normalizedStonePoints(stones) {
   if (stones.length === 0) return [];
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const s of stones) {
@@ -94,6 +115,7 @@ function normalizedStonePoints(stones) {
  */
 async function analyzeOne(engine, fontId, text, stoneSizeId) {
   const stoneSizeMm = STONE_SIZE_BY_ID[stoneSizeId].diameterMm;
+  const heightMm = deriveSpecimenHeightMm(stoneSizeMm);
   const pitchMm = stoneSizeMm + PRODUCTION_GAP_MM;
   let layout = null;
   let error = null;
@@ -102,7 +124,7 @@ async function analyzeOne(engine, fontId, text, stoneSizeId) {
       text,
       fontId,
       layerId: 'font-cert-001',
-      heightMm: PRODUCTION_TEXT_HEIGHT_MM,
+      heightMm,
       stoneSizeMm,
       gapMm: PRODUCTION_GAP_MM,
       mode: 'outline',
@@ -113,7 +135,7 @@ async function analyzeOne(engine, fontId, text, stoneSizeId) {
   }
 
   if (error) {
-    return { text, stoneSizeId, stoneSizeMm, error, stoneCount: 0 };
+    return { text, stoneSizeId, stoneSizeMm, heightMm, error, stoneCount: 0 };
   }
 
   const stones = layout.stones.map((s) => ({ xMm: s.xMm, yMm: s.yMm, sizeMm: s.sizeMm }));
@@ -126,6 +148,7 @@ async function analyzeOne(engine, fontId, text, stoneSizeId) {
     text,
     stoneSizeId,
     stoneSizeMm,
+    heightMm,
     error: null,
     stoneCount: stones.length,
     boundingBoxMm: boundingBox ? { widthMm: boundingBox.widthMm, heightMm: boundingBox.heightMm } : null,
@@ -187,7 +210,8 @@ export async function runProductionAnalysis(candidateAbsolutePath) {
 
   return {
     fontId,
-    heightMm: PRODUCTION_TEXT_HEIGHT_MM,
+    heightMmBySize: SPECIMEN_HEIGHT_MM_BY_SIZE,
+    heightToStoneSizeRatio: SPECIMEN_HEIGHT_TO_STONE_SIZE_RATIO,
     gapMm: PRODUCTION_GAP_MM,
     glyphResults,
     wordResults,

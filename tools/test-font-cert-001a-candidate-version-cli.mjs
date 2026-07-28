@@ -1,17 +1,39 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdir, copyFile, rm } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deriveOutputRelativePath } from './font-certification/lib/candidatePath.mjs';
-import { certify } from './font-certification/certify.mjs';
+import { certify, DEFAULT_CANDIDATE_RELATIVE_PATH } from './font-certification/certify.mjs';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const CERTIFY_SCRIPT = path.join(repoRoot, 'tools/font-certification/certify.mjs');
-const V001_CANDIDATE = 'fonts/candidates/Elegant-Cursive/ttf/v001/Elegant-Cursive.ttf';
-const V002_CANDIDATE = 'fonts/candidates/Elegant-Cursive/ttf/v002/Elegant-Cursive.ttf';
-const V001_OUTPUT_ABS = path.join(repoRoot, 'fonts/candidates/Elegant-Cursive/certification/v001');
-const V002_OUTPUT_ABS = path.join(repoRoot, 'fonts/candidates/Elegant-Cursive/certification/v002');
+
+// FONT-CERT-002: these tests exercise the CLI's *default derived output path* behavior (no
+// outputRelativePath override is possible from the CLI), which necessarily writes wherever
+// deriveOutputRelativePath() says a given candidate belongs. Running them against the real
+// Elegant-Cursive v001/v002 candidates would write into their real, committed
+// fonts/candidates/Elegant-Cursive/certification/ folders on every test run -- leaving them
+// "modified" by generatedAt alone even when nothing about the certification logic changed. A
+// scratch candidate family (copied from the real v001/v002 fixtures, so it's still a genuine,
+// parseable font) sidesteps that: its derived output lands in its own scratch folder, torn down
+// before and after this file runs, and the real Elegant-Cursive certification output is never
+// touched by this file at all.
+const SCRATCH_FAMILY = '__FontCertTest001A__';
+const SCRATCH_ROOT_RELATIVE = `fonts/candidates/${SCRATCH_FAMILY}`;
+const SCRATCH_ROOT_ABS = path.join(repoRoot, SCRATCH_ROOT_RELATIVE);
+const V001_CANDIDATE = `${SCRATCH_ROOT_RELATIVE}/ttf/v001/Test.ttf`;
+const V002_CANDIDATE = `${SCRATCH_ROOT_RELATIVE}/ttf/v002/Test.ttf`;
+const V001_OUTPUT_ABS = path.join(SCRATCH_ROOT_ABS, 'certification/v001');
+const V002_OUTPUT_ABS = path.join(SCRATCH_ROOT_ABS, 'certification/v002');
+
+async function setupScratchCandidates() {
+  await rm(SCRATCH_ROOT_ABS, { recursive: true, force: true });
+  await mkdir(path.join(SCRATCH_ROOT_ABS, 'ttf/v001'), { recursive: true });
+  await mkdir(path.join(SCRATCH_ROOT_ABS, 'ttf/v002'), { recursive: true });
+  await copyFile(path.join(repoRoot, DEFAULT_CANDIDATE_RELATIVE_PATH), path.join(SCRATCH_ROOT_ABS, 'ttf/v001/Test.ttf'));
+  await copyFile(path.join(repoRoot, 'fonts/candidates/Elegant-Cursive/ttf/v002/Elegant-Cursive.ttf'), path.join(SCRATCH_ROOT_ABS, 'ttf/v002/Test.ttf'));
+}
 
 async function test(name, fn) {
   try {
@@ -28,24 +50,22 @@ function runCli(args) {
   return spawnSync(process.execPath, [CERTIFY_SCRIPT, ...args], { cwd: repoRoot, encoding: 'utf8' });
 }
 
+await setupScratchCandidates();
+
 // --- deriveOutputRelativePath() (pure function) -----------------------------------------------------
 
 await test('deriveOutputRelativePath() derives the version-specific folder for v001 and v002', () => {
-  assert.equal(deriveOutputRelativePath(V001_CANDIDATE), 'fonts/candidates/Elegant-Cursive/certification/v001');
-  assert.equal(deriveOutputRelativePath(V002_CANDIDATE), 'fonts/candidates/Elegant-Cursive/certification/v002');
+  assert.equal(deriveOutputRelativePath(V001_CANDIDATE), `${SCRATCH_ROOT_RELATIVE}/certification/v001`);
+  assert.equal(deriveOutputRelativePath(V002_CANDIDATE), `${SCRATCH_ROOT_RELATIVE}/certification/v002`);
 });
 
 await test('deriveOutputRelativePath() throws a clear error for a path that does not match the fonts/candidates/<Family>/ttf/<Version>/ structure', () => {
   assert.throws(() => deriveOutputRelativePath('not/a/candidate/path.ttf'), /does not match the expected/);
 });
 
-// --- Explicit v001 input (real end-to-end run) -------------------------------------------------------
+// --- Explicit v001 input (real end-to-end run, via a scratch candidate) ------------------------------
 
-await test('CLI with an explicit v001 path certifies v001 and writes to fonts/candidates/Elegant-Cursive/certification/v001/', async () => {
-  // FONT-CERT-001B: this output folder is a retained, committed deliverable now, not disposable
-  // tmp/ build output -- deliberately no rm() here (a stale prior run's typography-specimen.png/
-  // rhinestone-specimen.png, only ever written when --no-screenshots is absent, must survive a
-  // --no-screenshots test run untouched, not get wiped as test hygiene).
+await test('CLI with an explicit v001 path certifies v001 and writes to that candidate\'s own certification/v001/ folder', async () => {
   const result = runCli([V001_CANDIDATE, '--no-screenshots']);
 
   assert.equal(result.status, 0, `expected exit code 0, got ${result.status}. stderr: ${result.stderr}`);
@@ -57,7 +77,7 @@ await test('CLI with an explicit v001 path certifies v001 and writes to fonts/ca
 
 // --- Explicit v002 input (real end-to-end run, never falling back to v001) --------------------------
 
-await test('CLI with an explicit v002 path certifies v002 and writes to fonts/candidates/Elegant-Cursive/certification/v002/, not v001\'s folder', async () => {
+await test('CLI with an explicit v002 path certifies v002 and writes to its own certification/v002/ folder, not v001\'s', async () => {
   const result = runCli([V002_CANDIDATE, '--no-screenshots']);
 
   assert.equal(result.status, 0, `expected exit code 0, got ${result.status}. stderr: ${result.stderr}`);
@@ -84,7 +104,7 @@ await test('CLI with no positional argument fails clearly and does not fall back
 // --- Nonexistent file ------------------------------------------------------------------------------
 
 await test('CLI with a nonexistent candidate path fails clearly, after printing that exact path', () => {
-  const missingPath = 'fonts/candidates/Elegant-Cursive/ttf/v999/Elegant-Cursive.ttf';
+  const missingPath = `${SCRATCH_ROOT_RELATIVE}/ttf/v999/Test.ttf`;
   const result = runCli([missingPath, '--no-screenshots']);
   assert.notEqual(result.status, 0, 'expected a non-zero exit code');
   assert.ok(result.stdout.includes(`FONT-CERT-001 candidate: ${missingPath}`), 'expected the exact (nonexistent) input path to still be printed before the existence check fails');
@@ -93,7 +113,7 @@ await test('CLI with a nonexistent candidate path fails clearly, after printing 
 
 await test('certify() (programmatic) rejects a nonexistent candidate without touching any output folder', async () => {
   await assert.rejects(
-    () => certify({ candidateRelativePath: 'fonts/candidates/Elegant-Cursive/ttf/v999/Elegant-Cursive.ttf', skipScreenshots: true }),
+    () => certify({ candidateRelativePath: `${SCRATCH_ROOT_RELATIVE}/ttf/v999/Test.ttf`, skipScreenshots: true }),
     /candidate font not found at expected path/
   );
 });
@@ -105,5 +125,7 @@ await test('v001 and v002 output folders coexist independently after both have b
   const v002Files = await readFile(path.join(V002_OUTPUT_ABS, 'certification.json'), 'utf8');
   assert.notEqual(JSON.parse(v001Files).candidate, JSON.parse(v002Files).candidate);
 });
+
+await rm(SCRATCH_ROOT_ABS, { recursive: true, force: true });
 
 console.log('FONT-CERT-001A candidate-version CLI tests passed.');
