@@ -150,7 +150,10 @@ function wrapStonesIntoRows(stones, pxPerMm, maxWidthPx) {
  * Renders one result's stones as an SVG, wrapping onto multiple rows (see wrapStonesIntoRows()) at a
  * fixed, never-shrunk pxPerMm rather than scaling the whole layout down to fit a target width.
  */
-function renderLayoutSvg(result, pxPerMm) {
+// FONT-SOURCE-001: exported (alongside escapeHtml below) so sourceSpecimenPages.mjs can reuse the exact
+// same stones-to-SVG rendering primitive for its min/mid/max height-variant sub-rows, instead of
+// re-deriving row-wrapping/circle-scaling logic.
+export function renderLayoutSvg(result, pxPerMm) {
   if (result.error || result.stones.length === 0) {
     return `<div class="stone-error">No stones (${result.error ?? 'empty layout'})</div>`;
   }
@@ -286,7 +289,7 @@ export function buildRhinestoneSpecimenHtml(productionAnalysis, sampleWords) {
 </html>`;
 }
 
-function escapeHtml(text) {
+export function escapeHtml(text) {
   return String(text)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

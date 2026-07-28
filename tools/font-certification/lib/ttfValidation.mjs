@@ -11,6 +11,30 @@ import { loadCandidateFont } from './ttfParser.mjs';
 import { analyzeGlyphOutline } from './glyphOutline.mjs';
 import { REQUIRED_CHARACTERS, REQUIRED_SFNT_TABLES } from './requiredCharacters.mjs';
 
+// FONT-SOURCE-001 fix: the empty-glyphs check below originally excluded only whitespace (via
+// String.prototype.trim()) from "unexpectedly empty" mapped characters. That missed an entire class of
+// characters that are legitimately, intentionally empty-outline in virtually every well-formed font --
+// invisible formatting/control characters and Private-Use-Area codepoints (often used for a font's own
+// internal ligature/OpenType-feature glyphs, not real visible characters). Verified empirically against
+// 14 real Google Fonts: 9 of 14 mapped at least one of these and were incorrectly FAILing this check for
+// a reason with zero bearing on rhinestone production quality. This does not touch the check's actual
+// purpose (catching a glyph that *should* be visible but silently isn't) -- it only excludes codepoints
+// that were never expected to render anything in the first place.
+function isInvisibleByDesignCodepoint(cp) {
+  if (cp === 0x00) return true; // NUL
+  if (cp <= 0x1f || cp === 0x7f) return true; // C0 controls + DEL
+  if (cp >= 0x80 && cp <= 0x9f) return true; // C1 controls
+  if (cp === 0x034f) return true; // combining grapheme joiner
+  if (cp >= 0x200b && cp <= 0x200f) return true; // zero-width space/non-joiner/joiner, LRM, RLM
+  if (cp >= 0x202a && cp <= 0x202e) return true; // bidi embedding/override controls
+  if (cp >= 0x2060 && cp <= 0x2064) return true; // word joiner and other invisible operators
+  if (cp === 0xfeff) return true; // zero-width no-break space / BOM
+  if (cp >= 0xe000 && cp <= 0xf8ff) return true; // BMP Private Use Area
+  if (cp >= 0xf0000 && cp <= 0xffffd) return true; // Supplementary Private Use Area-A
+  if (cp >= 0x100000 && cp <= 0x10fffd) return true; // Supplementary Private Use Area-B
+  return false;
+}
+
 function check({ id, category, label, status, detail, evidence = null }) {
   return { id, category, label, status, detail, evidence };
 }
@@ -218,7 +242,8 @@ export async function validateTtf(absolutePath) {
     const path = glyph.getPath(0, 0, font.unitsPerEm);
     if (path.commands.length > 0) continue;
     const codepoints = reverseCmap.get(i) ?? [];
-    const nonSpaceChars = codepoints.map((cp) => String.fromCodePoint(cp)).filter((c) => c.trim().length > 0);
+    const nonSpaceCodepoints = codepoints.filter((cp) => String.fromCodePoint(cp).trim().length > 0 && !isInvisibleByDesignCodepoint(cp));
+    const nonSpaceChars = nonSpaceCodepoints.map((cp) => String.fromCodePoint(cp));
     if (nonSpaceChars.length > 0) unexpectedlyEmpty.push({ glyphIndex: i, characters: nonSpaceChars });
   }
   checks.push(check({
@@ -227,7 +252,7 @@ export async function validateTtf(absolutePath) {
     label: 'Invalid or empty glyphs',
     status: unexpectedlyEmpty.length === 0 ? 'PASS' : 'FAIL',
     detail: unexpectedlyEmpty.length === 0
-      ? 'No mapped, non-whitespace character resolves to an empty outline.'
+      ? 'No mapped, non-whitespace, non-invisible-by-design character resolves to an empty outline.'
       : `${unexpectedlyEmpty.length} mapped character(s) resolve to an empty outline: ` +
         unexpectedlyEmpty.map((e) => `"${e.characters.join('/')}" (glyph ${e.glyphIndex})`).join(', ') + '.',
     evidence: { unexpectedlyEmpty }

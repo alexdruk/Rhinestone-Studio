@@ -6,7 +6,7 @@
 import { STONE_SIZE_IDS } from './requiredCharacters.mjs';
 import { MIN_MEANINGFUL_STONE_COUNT, MIN_STONE_COUNT_FOR_COUNTER_BEARING } from './readabilityMetrics.mjs';
 
-function escapeHtml(text) {
+export function escapeHtml(text) {
   return String(text ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -14,18 +14,18 @@ function escapeHtml(text) {
     .replace(/"/g, '&quot;');
 }
 
-function statusBadge(status) {
+export function statusBadge(status) {
   const cls = { PASS: 'badge-pass', WARNING: 'badge-warning', FAIL: 'badge-fail', NOT_VERIFIED: 'badge-nv' }[status] ?? 'badge-nv';
   return `<span class="badge ${cls}">${status.replace('_', ' ')}</span>`;
 }
 
-function overallBadge(overall) {
+export function overallBadge(overall) {
   const cls = { PASS: 'badge-pass', CONDITIONAL_PASS: 'badge-warning', FAIL: 'badge-fail' }[overall] ?? 'badge-nv';
   const label = { PASS: 'PASS', CONDITIONAL_PASS: 'CONDITIONAL PASS', FAIL: 'FAIL' }[overall] ?? overall;
   return `<span class="badge badge-large ${cls}">${label}</span>`;
 }
 
-function checksTable(checks) {
+export function checksTable(checks) {
   const rows = checks.map((c) => `
     <tr>
       <td>${statusBadge(c.status)}</td>
@@ -36,7 +36,7 @@ function checksTable(checks) {
   return `<table class="checks-table"><thead><tr><th>Status</th><th>Check</th><th>Category</th><th>Detail</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-function glyphFindingsTable(productionAnalysis) {
+export function glyphFindingsTable(productionAnalysis) {
   const rows = [];
   for (const char of Array.from('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789')) {
     const bySize = productionAnalysis.glyphResults.get(char);
@@ -56,7 +56,7 @@ function glyphFindingsTable(productionAnalysis) {
   <p class="table-note">Cell values are stone count per glyph at that stone size ("coll." = colliding stone pairs found).</p>`;
 }
 
-function wordFindingsTable(productionAnalysis) {
+export function wordFindingsTable(productionAnalysis) {
   const rows = [];
   for (const [word, bySize] of productionAnalysis.wordResults.entries()) {
     const cells = STONE_SIZE_IDS.map((sizeId) => {
@@ -100,7 +100,7 @@ export function wordSpaceNarrative(typographyFindings) {
     ' -- recommend visually confirming word separation in typography-specimen.png for these specific phrases.';
 }
 
-function readabilityMetricsSection(readabilityFindings) {
+export function readabilityMetricsSection(readabilityFindings) {
   if (!readabilityFindings) return '<p>Not computed.</p>';
   const { lowStoneCountFindings, counterCollapseFindings, nearIdenticalFindings, scaleCompliance } = readabilityFindings;
 
@@ -136,7 +136,7 @@ function readabilityMetricsSection(readabilityFindings) {
   `;
 }
 
-function similarityTable(productionAnalysis) {
+export function similarityTable(productionAnalysis) {
   const rows = productionAnalysis.similarityFindings.map((f) => `
     <tr class="${f.flagged ? 'row-flagged' : ''}">
       <td>"${escapeHtml(f.pair[0])}" vs "${escapeHtml(f.pair[1])}"</td>
@@ -152,7 +152,7 @@ function similarityTable(productionAnalysis) {
   <p class="table-note">Threshold: ${productionAnalysis.similarityThreshold} (normalized, unit-height point clouds). Below threshold = flagged as visually similar.</p>`;
 }
 
-function fontMetricsTable(fontMetrics) {
+export function fontMetricsTable(fontMetrics) {
   const entries = [
     ['File size', `${(fontMetrics.fileSizeBytes / 1024).toFixed(1)} KB`],
     ['sfnt signature', fontMetrics.sfntVersionTag],

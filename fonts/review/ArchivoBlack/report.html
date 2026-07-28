@@ -1,0 +1,555 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>FONT-SOURCE-001 -- Archivo Black Review</title>
+<style>
+  :root { color-scheme: light; }
+  body { background:#fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color:#0b1f3a; margin:0; padding: 32px 40px 80px; line-height:1.5; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  h2 { font-size: 19px; margin: 40px 0 12px; color:#0b1f3a; border-bottom: 2px solid #0b3d91; padding-bottom: 6px; }
+  h3 { font-size: 15px; margin: 24px 0 8px; color:#1c3d6e; }
+  h4 { font-size: 13px; margin: 16px 0 6px; color:#334155; }
+  .meta { color:#4a5568; font-size: 13px; }
+  .badge { display:inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight:700; letter-spacing:0.02em; }
+  .badge-large { font-size: 16px; padding: 6px 18px; border-radius: 14px; }
+  .badge-pass { background:#e3f5e9; color:#0f7a3d; }
+  .badge-warning { background:#fff4dd; color:#9a6400; }
+  .badge-fail { background:#fde3e3; color:#b0221c; }
+  .badge-nv { background:#e8ecf3; color:#4a5568; }
+  .badge-effort-low { background:#e3f5e9; color:#0f7a3d; }
+  .badge-effort-medium { background:#fff4dd; color:#9a6400; }
+  .badge-effort-high { background:#fde3e3; color:#b0221c; }
+  table { border-collapse: collapse; width:100%; margin-bottom: 14px; font-size: 13px; }
+  th, td { border:1px solid #d8e0ee; padding: 6px 10px; text-align:left; vertical-align: top; }
+  th { background:#f4f7fc; }
+  .glyph-table th, .glyph-table td, .similarity-table th, .similarity-table td { font-size: 12px; }
+  .row-flagged, .cell-warning { background:#fff4dd; }
+  .cell-error { background:#fde3e3; }
+  .summary-counts { display:flex; gap: 14px; margin: 14px 0 22px; }
+  .summary-chip { border:1px solid #d8e0ee; border-radius:8px; padding: 8px 14px; font-size: 13px; }
+  .blocking-list, .feedback-list { padding-left: 20px; }
+  .blocking-list li, .feedback-list li { margin-bottom: 8px; font-size: 13.5px; }
+  .specimen-image { max-width: 100%; border:1px solid #d8e0ee; border-radius: 6px; margin: 10px 0 18px; }
+  .feedback-block, .effort-block { background:#f4f7fc; border:1px solid #d8e0ee; border-radius:8px; padding: 18px 20px; margin-top: 12px; }
+  .table-note { font-size: 11.5px; color:#4a5568; margin-top: -8px; }
+  code { background:#f0f2f6; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+  <h1>FONT-SOURCE-001 &mdash; Archivo Black Review</h1>
+  <div class="meta">
+    Source: <code>fonts/sources/ArchivoBlack/ArchivoBlack.ttf</code> &middot; Category: heavy (heavy)
+    
+    &middot; Generated 2026-07-28T14:43:39.768Z
+  </div>
+
+  <h2>1. Executive result</h2>
+  <p><span class="badge badge-large badge-warning">CONDITIONAL PASS</span></p>
+  <div class="summary-counts">
+    <div class="summary-chip"><span class="badge badge-pass">PASS</span> 16</div>
+    <div class="summary-chip"><span class="badge badge-warning">WARNING</span> 1</div>
+    <div class="summary-chip"><span class="badge badge-fail">FAIL</span> 0</div>
+    <div class="summary-chip"><span class="badge badge-nv">NOT VERIFIED</span> 0</div>
+  </div>
+  <p>Classification and the feedback below are computed at the <strong>mid-range</strong> letter height for each stone size (the representative case). Full min/mid/max data is shown in section 4.</p>
+  <p>No blocking issues found.</p>
+  
+  <h3>Refinement notes (non-blocking)</h3>
+  <ul class="blocking-list"><li>[TTF] Zero-length or duplicate outline segments: 42 of 69 character(s) contain 309 raw zero-length draw command(s) total (a command whose endpoint exactly duplicates the current pen position -- draws nothing, harmless no-op, but real source-file redundancy), 0 duplicate outline segments. Not production-blocking: these commands have no visual or geometric effect. Per-character counts: &quot;B&quot; (zero-length:8, duplicate:0), &quot;C&quot; (zero-length:8, duplicate:0), &quot;D&quot; (zero-length:4, duplicate:0), &quot;G&quot; (zero-length:8, duplicate:0), &quot;J&quot; (zero-length:4, duplicate:0), &quot;M&quot; (zero-length:2, duplicate:0), &quot;O&quot; (zero-length:8, duplicate:0), &quot;P&quot; (zero-length:4, duplicate:0), +34 more.</li><li>[Production similarity] &quot;I&quot; vs &quot;l&quot; at SS16: chamfer distance 0.0259 (threshold 0.09) -- visually close stone layouts; both produce a valid, differently-sized stone count (30 vs 30), verify legibility in rhinestone-specimen.png.</li><li>[Production similarity] &quot;l&quot; vs &quot;1&quot; at SS16: chamfer distance 0.0631 (threshold 0.09) -- visually close stone layouts; both produce a valid, differently-sized stone count (30 vs 39), verify legibility in rhinestone-specimen.png.</li><li>[Production similarity] &quot;I&quot; vs &quot;1&quot; at SS16: chamfer distance 0.0530 (threshold 0.09) -- visually close stone layouts; both produce a valid, differently-sized stone count (30 vs 39), verify legibility in rhinestone-specimen.png.</li><li>[Production similarity] &quot;O&quot; vs &quot;0&quot; at SS16: chamfer distance 0.0541 (threshold 0.09) -- visually close stone layouts; both produce a valid, differently-sized stone count (62 vs 57), verify legibility in rhinestone-specimen.png.</li><li>[Production similarity] &quot;S&quot; vs &quot;5&quot; at SS16: chamfer distance 0.0406 (threshold 0.09) -- visually close stone layouts; both produce a valid, differently-sized stone count (62 vs 60), verify legibility in rhinestone-specimen.png.</li><li>[Production similarity] &quot;B&quot; vs &quot;8&quot; at SS16: chamfer distance 0.0619 (threshold 0.09) -- visually close stone layouts; both produce a valid, differently-sized stone count (63 vs 59), verify legibility in rhinestone-specimen.png.</li><li>[Production similarity] &quot;G&quot; vs &quot;C&quot; at SS16: chamfer distance 0.0358 (threshold 0.09) -- visually close stone layouts; both produce a valid, differently-sized stone count (69 vs 60), verify legibility in rhinestone-specimen.png.</li><li>[Production similarity] &quot;Q&quot; vs &quot;O&quot; at SS16: chamfer distance 0.0633 (threshold 0.09) -- visually close stone layouts; both produce a valid, differently-sized stone count (68 vs 62), verify legibility in rhinestone-specimen.png.</li><li>[Production similarity] &quot;e&quot; vs &quot;c&quot; at SS16: chamfer distance 0.0306 (threshold 0.09) -- visually close stone layouts; both produce a valid, differently-sized stone count (50 vs 48), verify legibility in rhinestone-specimen.png.</li><li>[Production similarity] &quot;e&quot; vs &quot;o&quot; at SS16: chamfer distance 0.0254 (threshold 0.09) -- visually close stone layouts; both produce a valid, differently-sized stone count (50 vs 47), verify legibility in rhinestone-specimen.png.</li><li>[Production similarity] &quot;c&quot; vs &quot;o&quot; at SS16: chamfer distance 0.0244 (threshold 0.09) -- visually close stone layouts; both produce a valid, differently-sized stone count (48 vs 47), verify legibility in rhinestone-specimen.png.</li><li>[Production similarity] &quot;6&quot; vs &quot;9&quot; at SS16: chamfer distance 0.0358 (threshold 0.09) -- visually close stone layouts; both produce a valid, differently-sized stone count (60 vs 60), verify legibility in rhinestone-specimen.png.</li><li>[Readability] 60 confusable-pair/size combination(s) produce near-identical stone layouts: SS6: 12, SS10: 12, SS16: 12, SS20: 12, SS30: 12 -- see report.html's readability metrics table for the full per-pair breakdown.</li></ul>
+  
+  <p>Min and max height produce no more collisions or low-stone-count findings than mid height.</p>
+
+  <h2>2. Modification effort estimate</h2>
+  <div class="effort-block">
+    <p><span class="badge badge-large badge-effort-medium">Medium</span></p>
+    <p>No blocking production failures, but 14 refinement note(s) were found (12 actionable item(s) below) -- readability, spacing, or anatomy concerns that would need addressing for production quality.</p>
+  </div>
+
+  <h2>3. TTF validation table</h2>
+  <table class="checks-table"><thead><tr><th>Status</th><th>Check</th><th>Category</th><th>Detail</th></tr></thead><tbody>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Successful TTF parsing</td>
+      <td class="check-category">parsing</td>
+      <td class="check-detail">opentype.js parsed the file without error.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Outline format</td>
+      <td class="check-category">structure</td>
+      <td class="check-detail">TrueType (quadratic) outlines. sfnt signature &quot;0x00010000&quot;, opentype.js outlinesFormat=&quot;truetype&quot;.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Quadratic TrueType outlines</td>
+      <td class="check-category">structure</td>
+      <td class="check-detail">TrueType file with quadratic curves confirmed: 60 curve commands found across 10 sampled glyphs.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">unitsPerEm</td>
+      <td class="check-category">structure</td>
+      <td class="check-detail">unitsPerEm = 1000</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Glyph count</td>
+      <td class="check-category">structure</td>
+      <td class="check-detail">426 glyphs (font.numGlyphs=426).</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">.notdef at glyph index 0</td>
+      <td class="check-category">structure</td>
+      <td class="check-detail">.notdef confirmed at glyph index 0.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Unicode cmap coverage</td>
+      <td class="check-category">coverage</td>
+      <td class="check-detail">cmap maps 423 Unicode code point(s) to glyphs.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Required character coverage (A-Z, a-z, 0-9, space, . , ' - ! ?)</td>
+      <td class="check-category">coverage</td>
+      <td class="check-detail">All 69 required characters map to a real glyph (glyph index != 0).</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Required sfnt tables</td>
+      <td class="check-category">structure</td>
+      <td class="check-detail">All required tables present: cmap, glyf, head, hhea, hmtx, loca, maxp, name, post, OS/2.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Family / subfamily / version / PostScript naming</td>
+      <td class="check-category">naming</td>
+      <td class="check-detail">family=&quot;Archivo Black&quot;, subfamily=&quot;Regular&quot;, version=&quot;Version 1.006&quot;, postScriptName=&quot;ArchivoBlack-Regular&quot;.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Ascender, descender, line gap, horizontal metrics</td>
+      <td class="check-category">metrics</td>
+      <td class="check-detail">ascender=878, descender=-210, hhea.lineGap=0, advanceWidthMax=1722, numberOfHMetrics=413 (hmtx table present: true).</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Invalid or empty glyphs</td>
+      <td class="check-category">geometry</td>
+      <td class="check-detail">No mapped, non-whitespace, non-invisible-by-design character resolves to an empty outline.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Open contours</td>
+      <td class="check-category">geometry</td>
+      <td class="check-detail">Every required-character contour closes explicitly (an explicit &quot;Z&quot;/closepath command) or implicitly (its final point returns to its starting point).</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Self-intersections</td>
+      <td class="check-category">geometry</td>
+      <td class="check-detail">Strict transversal-crossing test (deduplicated, 16-segments-per-curve flattened outline, 69 required characters) found no self- or cross-contour crossings.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-warning">WARNING</span></td>
+      <td class="check-label">Zero-length or duplicate outline segments</td>
+      <td class="check-category">geometry</td>
+      <td class="check-detail">42 of 69 character(s) contain 309 raw zero-length draw command(s) total (a command whose endpoint exactly duplicates the current pen position -- draws nothing, harmless no-op, but real source-file redundancy), 0 duplicate outline segments. Not production-blocking: these commands have no visual or geometric effect. Per-character counts: &quot;B&quot; (zero-length:8, duplicate:0), &quot;C&quot; (zero-length:8, duplicate:0), &quot;D&quot; (zero-length:4, duplicate:0), &quot;G&quot; (zero-length:8, duplicate:0), &quot;J&quot; (zero-length:4, duplicate:0), &quot;M&quot; (zero-length:2, duplicate:0), &quot;O&quot; (zero-length:8, duplicate:0), &quot;P&quot; (zero-length:4, duplicate:0), +34 more.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Coordinates outside valid TrueType ranges</td>
+      <td class="check-category">geometry</td>
+      <td class="check-detail">All required-character outline coordinates fall within the signed 16-bit range (-32768 to 32767).</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-pass">PASS</span></td>
+      <td class="check-label">Inconsistent or suspicious advance widths / side bearings</td>
+      <td class="check-category">metrics</td>
+      <td class="check-detail">Advance widths for required characters cluster reasonably around the median (667 units).</td>
+    </tr></tbody></table>
+
+  <h2>4. Specimens</h2>
+  <p>Rendered from the actual source TTF via a base64-embedded <code>@font-face</code> rule (typography), and through the real production pipeline FontManager &rarr; OpenTypeProvider &rarr; GeometryEngine.generateTextLayout() &rarr; StoneLayout (rhinestone), at this milestone's own physical letter-height range per stone size:</p>
+  <table class="metrics-table"><thead><tr><th>Stone size</th><th>Min</th><th>Mid (representative)</th><th>Max</th></tr></thead><tbody><tr><th>SS6</th><td>35mm</td><td>42.5mm</td><td>50mm</td></tr><tr><th>SS10</th><td>45mm</td><td>52.5mm</td><td>60mm</td></tr><tr><th>SS16</th><td>65mm</td><td>77.5mm</td><td>90mm</td></tr><tr><th>SS20</th><td>80mm</td><td>95mm</td><td>110mm</td></tr><tr><th>SS30</th><td>106mm</td><td>108.5mm</td><td>111mm</td></tr></tbody></table>
+  <img class="specimen-image" src="typography-specimen.png" alt="Typography specimen">
+  <img class="specimen-image" src="rhinestone-specimen.png" alt="Rhinestone specimen">
+  <p><strong>Successful layout generation (a non-empty StoneLayout with no collisions) is not the same as visual readability</strong> -- see each height variant's readability metrics below for objective, threshold-based findings.</p>
+  
+    <h3>Minimum height (35/45/65/80/106mm across SS6&rarr;SS30)</h3>
+    <table class="metrics-table"><tbody>
+      <tr><th>SS6</th><td>text height: 35mm</td></tr><tr><th>SS10</th><td>text height: 45mm</td></tr><tr><th>SS16</th><td>text height: 65mm</td></tr><tr><th>SS20</th><td>text height: 80mm</td></tr><tr><th>SS30</th><td>text height: 106mm</td></tr>
+    </tbody></table>
+    <h4>Confusable-pair similarity (SS16 reference)</h4>
+    <table class="similarity-table">
+    <thead><tr><th>Pair</th><th>Size</th><th>Stone counts</th><th>Chamfer distance</th><th>Result</th></tr></thead>
+    <tbody>
+    <tr class="row-flagged">
+      <td>"I" vs "l"</td>
+      <td>SS16</td>
+      <td>24 / 28</td>
+      <td>0.0276</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"l" vs "1"</td>
+      <td>SS16</td>
+      <td>28 / 33</td>
+      <td>0.0539</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"I" vs "1"</td>
+      <td>SS16</td>
+      <td>24 / 33</td>
+      <td>0.0483</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"O" vs "0"</td>
+      <td>SS16</td>
+      <td>51 / 48</td>
+      <td>0.0598</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"S" vs "5"</td>
+      <td>SS16</td>
+      <td>49 / 51</td>
+      <td>0.0439</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"B" vs "8"</td>
+      <td>SS16</td>
+      <td>51 / 49</td>
+      <td>0.0617</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"G" vs "C"</td>
+      <td>SS16</td>
+      <td>55 / 50</td>
+      <td>0.0416</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"Q" vs "O"</td>
+      <td>SS16</td>
+      <td>55 / 51</td>
+      <td>0.0656</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"e" vs "c"</td>
+      <td>SS16</td>
+      <td>41 / 40</td>
+      <td>0.0467</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"e" vs "o"</td>
+      <td>SS16</td>
+      <td>41 / 40</td>
+      <td>0.0478</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"c" vs "o"</td>
+      <td>SS16</td>
+      <td>40 / 40</td>
+      <td>0.0346</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"6" vs "9"</td>
+      <td>SS16</td>
+      <td>49 / 50</td>
+      <td>0.0302</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr></tbody>
+  </table>
+  <p class="table-note">Threshold: 0.09 (normalized, unit-height point clouds). Below threshold = flagged as visually similar.</p>
+    <h4>Stone count per glyph, by stone size</h4>
+    <table class="glyph-table">
+    <thead><tr><th>Char</th><th>SS6</th><th>SS10</th><th>SS16</th><th>SS20</th><th>SS30</th></tr></thead>
+    <tbody><tr><th>"A"</th><td>43</td><td>40</td><td>40</td><td>44</td><td>43</td></tr><tr><th>"B"</th><td>54</td><td>50</td><td>51</td><td>56</td><td>52</td></tr><tr><th>"C"</th><td>50</td><td>49</td><td>50</td><td>53</td><td>52</td></tr><tr><th>"D"</th><td>50</td><td>49</td><td>48</td><td>51</td><td>51</td></tr><tr><th>"E"</th><td>52</td><td>50</td><td>51</td><td>54</td><td>51</td></tr><tr><th>"F"</th><td>39</td><td>38</td><td>38</td><td>41</td><td>41</td></tr><tr><th>"G"</th><td>58</td><td>57</td><td>55</td><td>60</td><td>56</td></tr><tr><th>"H"</th><td>50</td><td>44</td><td>48</td><td>49</td><td>49</td></tr><tr><th>"I"</th><td>24</td><td>23</td><td>24</td><td>26</td><td>25</td></tr><tr><th>"J"</th><td>33</td><td>31</td><td>33</td><td>35</td><td>36</td></tr><tr><th>"K"</th><td>52</td><td>46</td><td>45</td><td>52</td><td>52</td></tr><tr><th>"L"</th><td>34</td><td>32</td><td>33</td><td>36</td><td>34</td></tr><tr><th>"M"</th><td>66</td><td>59</td><td>64</td><td>70</td><td>63</td></tr><tr><th>"N"</th><td>49</td><td>50</td><td>49</td><td>52</td><td>51</td></tr><tr><th>"O"</th><td>51</td><td>50</td><td>51</td><td>54</td><td>54</td></tr><tr><th>"P"</th><td>39</td><td>39</td><td>39</td><td>41</td><td>41</td></tr><tr><th>"Q"</th><td>56</td><td>53</td><td>55</td><td>58</td><td>56</td></tr><tr><th>"R"</th><td>48</td><td>47</td><td>48</td><td>50</td><td>50</td></tr><tr><th>"S"</th><td>51</td><td>49</td><td>49</td><td>53</td><td>52</td></tr><tr><th>"T"</th><td>34</td><td>34</td><td>34</td><td>37</td><td>36</td></tr><tr><th>"U"</th><td>50</td><td>47</td><td>49</td><td>52</td><td>51</td></tr><tr><th>"V"</th><td>43</td><td>39</td><td>41</td><td>46</td><td>43</td></tr><tr><th>"W"</th><td>62</td><td>60</td><td>62</td><td>64</td><td>64</td></tr><tr><th>"X"</th><td>51</td><td>43</td><td>45</td><td>47</td><td>47</td></tr><tr><th>"Y"</th><td>39</td><td>35</td><td>38</td><td>37</td><td>37</td></tr><tr><th>"Z"</th><td>49</td><td>44</td><td>45</td><td>48</td><td>47</td></tr><tr><th>"a"</th><td>46</td><td>40</td><td>43</td><td>45</td><td>44</td></tr><tr><th>"b"</th><td>46</td><td>45</td><td>44</td><td>48</td><td>47</td></tr><tr><th>"c"</th><td>41</td><td>38</td><td>40</td><td>41</td><td>41</td></tr><tr><th>"d"</th><td>46</td><td>45</td><td>47</td><td>48</td><td>47</td></tr><tr><th>"e"</th><td>41</td><td>41</td><td>41</td><td>44</td><td>42</td></tr><tr><th>"f"</th><td>29</td><td>26</td><td>26</td><td>30</td><td>27</td></tr><tr><th>"g"</th><td>64</td><td>61</td><td>60</td><td>65</td><td>62</td></tr><tr><th>"h"</th><td>48</td><td>44</td><td>43</td><td>46</td><td>44</td></tr><tr><th>"i"</th><td>32</td><td>24</td><td>32</td><td>27</td><td>27</td></tr><tr><th>"j"</th><td>36</td><td>31</td><td>36</td><td>34</td><td>34</td></tr><tr><th>"k"</th><td>43</td><td>40</td><td>41</td><td>42</td><td>41</td></tr><tr><th>"l"</th><td>28</td><td>23</td><td>28</td><td>27</td><td>26</td></tr><tr><th>"m"</th><td>61</td><td>55</td><td>60</td><td>60</td><td>59</td></tr><tr><th>"n"</th><td>40</td><td>38</td><td>41</td><td>39</td><td>39</td></tr><tr><th>"o"</th><td>40</td><td>37</td><td>40</td><td>41</td><td>41</td></tr><tr><th>"p"</th><td>45</td><td>43</td><td>44</td><td>46</td><td>46</td></tr><tr><th>"q"</th><td>46</td><td>42</td><td>44</td><td>48</td><td>46</td></tr><tr><th>"r"</th><td>26</td><td>23</td><td>25</td><td>24</td><td>25</td></tr><tr><th>"s"</th><td>40</td><td>36</td><td>37</td><td>39</td><td>39</td></tr><tr><th>"t"</th><td>28</td><td>23</td><td>25</td><td>27</td><td>25</td></tr><tr><th>"u"</th><td>41</td><td>38</td><td>41</td><td>43</td><td>41</td></tr><tr><th>"v"</th><td>33</td><td>30</td><td>31</td><td>34</td><td>32</td></tr><tr><th>"w"</th><td>54</td><td>44</td><td>47</td><td>55</td><td>48</td></tr><tr><th>"x"</th><td>40</td><td>34</td><td>32</td><td>35</td><td>37</td></tr><tr><th>"y"</th><td>40</td><td>39</td><td>39</td><td>42</td><td>43</td></tr><tr><th>"z"</th><td>34</td><td>31</td><td>34</td><td>35</td><td>36</td></tr><tr><th>"0"</th><td>48</td><td>45</td><td>48</td><td>51</td><td>50</td></tr><tr><th>"1"</th><td>32</td><td>30</td><td>33</td><td>35</td><td>33</td></tr><tr><th>"2"</th><td>45</td><td>44</td><td>45</td><td>50</td><td>49</td></tr><tr><th>"3"</th><td>46</td><td>44</td><td>44</td><td>47</td><td>47</td></tr><tr><th>"4"</th><td>45</td><td>41</td><td>42</td><td>43</td><td>42</td></tr><tr><th>"5"</th><td>53</td><td>49</td><td>51</td><td>54</td><td>53</td></tr><tr><th>"6"</th><td>50</td><td>47</td><td>49</td><td>52</td><td>52</td></tr><tr><th>"7"</th><td>35</td><td>33</td><td>36</td><td>36</td><td>38</td></tr><tr><th>"8"</th><td>50</td><td>48</td><td>49</td><td>52</td><td>51</td></tr><tr><th>"9"</th><td>49</td><td>48</td><td>50</td><td>52</td><td>51</td></tr></tbody>
+  </table>
+  <p class="table-note">Cell values are stone count per glyph at that stone size ("coll." = colliding stone pairs found).</p>
+    <h4>Word-level findings</h4>
+    <table class="word-findings-table">
+    <thead><tr><th>Word</th><th>SS6</th><th>SS10</th><th>SS16</th><th>SS20</th><th>SS30</th></tr></thead>
+    <tbody><tr><th>Ashley</th><td>240 stones, min spacing 2.00mm, 10 cluster(s)</td><td>223 stones, min spacing 2.82mm, 12 cluster(s)</td><td>228 stones, min spacing 4.02mm, 12 cluster(s)</td><td>242 stones, min spacing 4.73mm, 13 cluster(s)</td><td>237 stones, min spacing 6.47mm, 16 cluster(s)</td></tr><tr><th>Sophia</th><td>262 stones, min spacing 2.00mm, 5 cluster(s)</td><td>237 stones, min spacing 2.80mm, 6 cluster(s)</td><td>251 stones, min spacing 4.01mm, 5 cluster(s)</td><td>258 stones, min spacing 4.70mm, 13 cluster(s)</td><td>254 stones, min spacing 6.45mm, 12 cluster(s)</td></tr><tr><th>Michael</th><td>302 stones, min spacing 2.00mm, 7 cluster(s)</td><td>269 stones, min spacing 2.80mm, 13 cluster(s)</td><td>291 stones, min spacing 4.01mm, 6 cluster(s)</td><td>300 stones, min spacing 4.80mm, 13 cluster(s)</td><td>287 stones, min spacing 6.52mm, 18 cluster(s)</td></tr><tr><th>Emma</th><td>220 stones, min spacing 2.03mm, 11 cluster(s)</td><td>200 stones, min spacing 2.80mm, 12 cluster(s)</td><td>214 stones, min spacing 4.01mm, 6 cluster(s)</td><td>219 stones, min spacing 4.79mm, 12 cluster(s)</td><td>213 stones, min spacing 6.54mm, 18 cluster(s)</td></tr><tr><th>Bride</th><td>199 stones, min spacing 2.00mm, 4 cluster(s)</td><td>183 stones, min spacing 2.81mm, 4 cluster(s)</td><td>196 stones, min spacing 4.03mm, 3 cluster(s)</td><td>199 stones, min spacing 4.70mm, 12 cluster(s)</td><td>193 stones, min spacing 6.44mm, 12 cluster(s)</td></tr><tr><th>Bride Squad</th><td>429 stones, min spacing 2.00mm, 9 cluster(s)</td><td>397 stones, min spacing 2.80mm, 9 cluster(s)</td><td>420 stones, min spacing 4.01mm, 6 cluster(s)</td><td>436 stones, min spacing 4.70mm, 20 cluster(s)</td><td>423 stones, min spacing 6.44mm, 20 cluster(s)</td></tr><tr><th>Happy Birthday</th><td>543 stones, min spacing 2.00mm, 25 cluster(s)</td><td>495 stones, min spacing 2.80mm, 28 cluster(s)</td><td>522 stones, min spacing 4.01mm, 23 cluster(s)</td><td>541 stones, min spacing 4.70mm, 29 cluster(s)</td><td>532 stones, min spacing 6.44mm, 38 cluster(s)</td></tr><tr><th>Dance Team</th><td>400 stones, min spacing 2.03mm, 11 cluster(s)</td><td>376 stones, min spacing 2.80mm, 15 cluster(s)</td><td>391 stones, min spacing 4.01mm, 9 cluster(s)</td><td>406 stones, min spacing 4.77mm, 14 cluster(s)</td><td>398 stones, min spacing 6.52mm, 16 cluster(s)</td></tr><tr><th>Class of 2027</th><td>445 stones, min spacing 2.03mm, 14 cluster(s)</td><td>413 stones, min spacing 2.80mm, 17 cluster(s)</td><td>435 stones, min spacing 4.01mm, 16 cluster(s)</td><td>461 stones, min spacing 4.71mm, 15 cluster(s)</td><td>453 stones, min spacing 6.41mm, 18 cluster(s)</td></tr></tbody>
+  </table>
+    <h4>Readability metrics</h4>
+    
+    <h4>Low stone count (threshold: 6 stones)</h4>
+    <p>No glyph/size combination falls below the minimum meaningful stone count.</p>
+    <h4>Counter-bearing glyphs with too few stones (threshold: 10 stones)</h4>
+    <p>No counter-bearing glyph/size combination falls below the counter-bearing stone-count floor.</p>
+    <h4>Near-identical confusable-pair layouts (all 5 stone sizes)</h4>
+    <table class="checks-table"><thead><tr><th>Pair</th><th>Size</th><th>Chamfer distance</th><th>Stone counts</th></tr></thead><tbody>
+      <tr class="row-flagged"><td>"I" vs "l"</td><td>SS6</td><td>0.0272</td><td>24 / 28</td></tr><tr class="row-flagged"><td>"l" vs "1"</td><td>SS6</td><td>0.0579</td><td>28 / 32</td></tr><tr class="row-flagged"><td>"I" vs "1"</td><td>SS6</td><td>0.0506</td><td>24 / 32</td></tr><tr class="row-flagged"><td>"O" vs "0"</td><td>SS6</td><td>0.0597</td><td>51 / 48</td></tr><tr class="row-flagged"><td>"S" vs "5"</td><td>SS6</td><td>0.0463</td><td>51 / 53</td></tr><tr class="row-flagged"><td>"B" vs "8"</td><td>SS6</td><td>0.0641</td><td>54 / 50</td></tr><tr class="row-flagged"><td>"G" vs "C"</td><td>SS6</td><td>0.0392</td><td>58 / 50</td></tr><tr class="row-flagged"><td>"Q" vs "O"</td><td>SS6</td><td>0.0672</td><td>56 / 51</td></tr><tr class="row-flagged"><td>"e" vs "c"</td><td>SS6</td><td>0.0469</td><td>41 / 41</td></tr><tr class="row-flagged"><td>"e" vs "o"</td><td>SS6</td><td>0.0448</td><td>41 / 40</td></tr><tr class="row-flagged"><td>"c" vs "o"</td><td>SS6</td><td>0.0368</td><td>41 / 40</td></tr><tr class="row-flagged"><td>"6" vs "9"</td><td>SS6</td><td>0.0299</td><td>50 / 49</td></tr><tr class="row-flagged"><td>"I" vs "l"</td><td>SS10</td><td>0.0277</td><td>23 / 23</td></tr><tr class="row-flagged"><td>"l" vs "1"</td><td>SS10</td><td>0.0676</td><td>23 / 30</td></tr><tr class="row-flagged"><td>"I" vs "1"</td><td>SS10</td><td>0.0657</td><td>23 / 30</td></tr><tr class="row-flagged"><td>"O" vs "0"</td><td>SS10</td><td>0.0605</td><td>50 / 45</td></tr><tr class="row-flagged"><td>"S" vs "5"</td><td>SS10</td><td>0.0428</td><td>49 / 49</td></tr><tr class="row-flagged"><td>"B" vs "8"</td><td>SS10</td><td>0.0637</td><td>50 / 48</td></tr><tr class="row-flagged"><td>"G" vs "C"</td><td>SS10</td><td>0.0393</td><td>57 / 49</td></tr><tr class="row-flagged"><td>"Q" vs "O"</td><td>SS10</td><td>0.0630</td><td>53 / 50</td></tr><tr class="row-flagged"><td>"e" vs "c"</td><td>SS10</td><td>0.0478</td><td>41 / 38</td></tr><tr class="row-flagged"><td>"e" vs "o"</td><td>SS10</td><td>0.0238</td><td>41 / 37</td></tr><tr class="row-flagged"><td>"c" vs "o"</td><td>SS10</td><td>0.0431</td><td>38 / 37</td></tr><tr class="row-flagged"><td>"6" vs "9"</td><td>SS10</td><td>0.0398</td><td>47 / 48</td></tr><tr class="row-flagged"><td>"I" vs "l"</td><td>SS16</td><td>0.0276</td><td>24 / 28</td></tr><tr class="row-flagged"><td>"l" vs "1"</td><td>SS16</td><td>0.0539</td><td>28 / 33</td></tr><tr class="row-flagged"><td>"I" vs "1"</td><td>SS16</td><td>0.0483</td><td>24 / 33</td></tr><tr class="row-flagged"><td>"O" vs "0"</td><td>SS16</td><td>0.0598</td><td>51 / 48</td></tr><tr class="row-flagged"><td>"S" vs "5"</td><td>SS16</td><td>0.0439</td><td>49 / 51</td></tr><tr class="row-flagged"><td>"B" vs "8"</td><td>SS16</td><td>0.0617</td><td>51 / 49</td></tr><tr class="row-flagged"><td>"G" vs "C"</td><td>SS16</td><td>0.0416</td><td>55 / 50</td></tr><tr class="row-flagged"><td>"Q" vs "O"</td><td>SS16</td><td>0.0656</td><td>55 / 51</td></tr><tr class="row-flagged"><td>"e" vs "c"</td><td>SS16</td><td>0.0467</td><td>41 / 40</td></tr><tr class="row-flagged"><td>"e" vs "o"</td><td>SS16</td><td>0.0478</td><td>41 / 40</td></tr><tr class="row-flagged"><td>"c" vs "o"</td><td>SS16</td><td>0.0346</td><td>40 / 40</td></tr><tr class="row-flagged"><td>"6" vs "9"</td><td>SS16</td><td>0.0302</td><td>49 / 50</td></tr><tr class="row-flagged"><td>"I" vs "l"</td><td>SS20</td><td>0.0259</td><td>26 / 27</td></tr><tr class="row-flagged"><td>"l" vs "1"</td><td>SS20</td><td>0.0617</td><td>27 / 35</td></tr><tr class="row-flagged"><td>"I" vs "1"</td><td>SS20</td><td>0.0581</td><td>26 / 35</td></tr><tr class="row-flagged"><td>"O" vs "0"</td><td>SS20</td><td>0.0585</td><td>54 / 51</td></tr><tr class="row-flagged"><td>"S" vs "5"</td><td>SS20</td><td>0.0430</td><td>53 / 54</td></tr><tr class="row-flagged"><td>"B" vs "8"</td><td>SS20</td><td>0.0619</td><td>56 / 52</td></tr><tr class="row-flagged"><td>"G" vs "C"</td><td>SS20</td><td>0.0355</td><td>60 / 53</td></tr><tr class="row-flagged"><td>"Q" vs "O"</td><td>SS20</td><td>0.0649</td><td>58 / 54</td></tr><tr class="row-flagged"><td>"e" vs "c"</td><td>SS20</td><td>0.0397</td><td>44 / 41</td></tr><tr class="row-flagged"><td>"e" vs "o"</td><td>SS20</td><td>0.0341</td><td>44 / 41</td></tr><tr class="row-flagged"><td>"c" vs "o"</td><td>SS20</td><td>0.0241</td><td>41 / 41</td></tr><tr class="row-flagged"><td>"6" vs "9"</td><td>SS20</td><td>0.0347</td><td>52 / 52</td></tr><tr class="row-flagged"><td>"I" vs "l"</td><td>SS30</td><td>0.0252</td><td>25 / 26</td></tr><tr class="row-flagged"><td>"l" vs "1"</td><td>SS30</td><td>0.0632</td><td>26 / 33</td></tr><tr class="row-flagged"><td>"I" vs "1"</td><td>SS30</td><td>0.0567</td><td>25 / 33</td></tr><tr class="row-flagged"><td>"O" vs "0"</td><td>SS30</td><td>0.0588</td><td>54 / 50</td></tr><tr class="row-flagged"><td>"S" vs "5"</td><td>SS30</td><td>0.0467</td><td>52 / 53</td></tr><tr class="row-flagged"><td>"B" vs "8"</td><td>SS30</td><td>0.0637</td><td>52 / 51</td></tr><tr class="row-flagged"><td>"G" vs "C"</td><td>SS30</td><td>0.0369</td><td>56 / 52</td></tr><tr class="row-flagged"><td>"Q" vs "O"</td><td>SS30</td><td>0.0650</td><td>56 / 54</td></tr><tr class="row-flagged"><td>"e" vs "c"</td><td>SS30</td><td>0.0423</td><td>42 / 41</td></tr><tr class="row-flagged"><td>"e" vs "o"</td><td>SS30</td><td>0.0301</td><td>42 / 41</td></tr><tr class="row-flagged"><td>"c" vs "o"</td><td>SS30</td><td>0.0273</td><td>41 / 41</td></tr><tr class="row-flagged"><td>"6" vs "9"</td><td>SS30</td><td>0.0372</td><td>52 / 51</td></tr>
+      </tbody></table>
+    <h4>Specimen render-scale compliance (minimum 8px rendered stone diameter)</h4>
+    <table class="checks-table"><thead><tr><th>Size</th><th>Diameter</th><th>Scale</th><th>Rendered stone size</th><th>Result</th></tr></thead><tbody><tr><td>SS6</td><td>2mm</td><td>5px/mm</td><td>10px</td><td><span class="badge badge-pass">PASS</span></td></tr><tr><td>SS10</td><td>2.8mm</td><td>4px/mm</td><td>11.2px</td><td><span class="badge badge-pass">PASS</span></td></tr><tr><td>SS16</td><td>4mm</td><td>3.5px/mm</td><td>14px</td><td><span class="badge badge-pass">PASS</span></td></tr><tr><td>SS20</td><td>4.7mm</td><td>3px/mm</td><td>14.1px</td><td><span class="badge badge-pass">PASS</span></td></tr><tr><td>SS30</td><td>6.4mm</td><td>2.5px/mm</td><td>16px</td><td><span class="badge badge-pass">PASS</span></td></tr></tbody></table>
+  
+    
+
+    <h3>Mid-range height (42.5/52.5/77.5/95/108.5mm across SS6&rarr;SS30)</h3>
+    <table class="metrics-table"><tbody>
+      <tr><th>SS6</th><td>text height: 42.5mm</td></tr><tr><th>SS10</th><td>text height: 52.5mm</td></tr><tr><th>SS16</th><td>text height: 77.5mm</td></tr><tr><th>SS20</th><td>text height: 95mm</td></tr><tr><th>SS30</th><td>text height: 108.5mm</td></tr>
+    </tbody></table>
+    <h4>Confusable-pair similarity (SS16 reference)</h4>
+    <table class="similarity-table">
+    <thead><tr><th>Pair</th><th>Size</th><th>Stone counts</th><th>Chamfer distance</th><th>Result</th></tr></thead>
+    <tbody>
+    <tr class="row-flagged">
+      <td>"I" vs "l"</td>
+      <td>SS16</td>
+      <td>30 / 30</td>
+      <td>0.0259</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"l" vs "1"</td>
+      <td>SS16</td>
+      <td>30 / 39</td>
+      <td>0.0631</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"I" vs "1"</td>
+      <td>SS16</td>
+      <td>30 / 39</td>
+      <td>0.0530</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"O" vs "0"</td>
+      <td>SS16</td>
+      <td>62 / 57</td>
+      <td>0.0541</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"S" vs "5"</td>
+      <td>SS16</td>
+      <td>62 / 60</td>
+      <td>0.0406</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"B" vs "8"</td>
+      <td>SS16</td>
+      <td>63 / 59</td>
+      <td>0.0619</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"G" vs "C"</td>
+      <td>SS16</td>
+      <td>69 / 60</td>
+      <td>0.0358</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"Q" vs "O"</td>
+      <td>SS16</td>
+      <td>68 / 62</td>
+      <td>0.0633</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"e" vs "c"</td>
+      <td>SS16</td>
+      <td>50 / 48</td>
+      <td>0.0306</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"e" vs "o"</td>
+      <td>SS16</td>
+      <td>50 / 47</td>
+      <td>0.0254</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"c" vs "o"</td>
+      <td>SS16</td>
+      <td>48 / 47</td>
+      <td>0.0244</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"6" vs "9"</td>
+      <td>SS16</td>
+      <td>60 / 60</td>
+      <td>0.0358</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr></tbody>
+  </table>
+  <p class="table-note">Threshold: 0.09 (normalized, unit-height point clouds). Below threshold = flagged as visually similar.</p>
+    <h4>Stone count per glyph, by stone size</h4>
+    <table class="glyph-table">
+    <thead><tr><th>Char</th><th>SS6</th><th>SS10</th><th>SS16</th><th>SS20</th><th>SS30</th></tr></thead>
+    <tbody><tr><th>"A"</th><td>53</td><td>47</td><td>51</td><td>55</td><td>44</td></tr><tr><th>"B"</th><td>66</td><td>62</td><td>63</td><td>68</td><td>54</td></tr><tr><th>"C"</th><td>61</td><td>57</td><td>60</td><td>62</td><td>52</td></tr><tr><th>"D"</th><td>60</td><td>57</td><td>59</td><td>62</td><td>52</td></tr><tr><th>"E"</th><td>63</td><td>58</td><td>61</td><td>65</td><td>55</td></tr><tr><th>"F"</th><td>50</td><td>45</td><td>46</td><td>50</td><td>42</td></tr><tr><th>"G"</th><td>74</td><td>64</td><td>69</td><td>75</td><td>59</td></tr><tr><th>"H"</th><td>64</td><td>54</td><td>60</td><td>62</td><td>51</td></tr><tr><th>"I"</th><td>32</td><td>27</td><td>30</td><td>31</td><td>26</td></tr><tr><th>"J"</th><td>42</td><td>37</td><td>40</td><td>43</td><td>35</td></tr><tr><th>"K"</th><td>64</td><td>55</td><td>59</td><td>62</td><td>50</td></tr><tr><th>"L"</th><td>42</td><td>40</td><td>41</td><td>45</td><td>36</td></tr><tr><th>"M"</th><td>84</td><td>75</td><td>79</td><td>81</td><td>69</td></tr><tr><th>"N"</th><td>62</td><td>56</td><td>59</td><td>62</td><td>53</td></tr><tr><th>"O"</th><td>63</td><td>57</td><td>62</td><td>65</td><td>55</td></tr><tr><th>"P"</th><td>49</td><td>45</td><td>51</td><td>51</td><td>40</td></tr><tr><th>"Q"</th><td>68</td><td>63</td><td>68</td><td>69</td><td>58</td></tr><tr><th>"R"</th><td>60</td><td>55</td><td>57</td><td>62</td><td>51</td></tr><tr><th>"S"</th><td>68</td><td>60</td><td>62</td><td>66</td><td>53</td></tr><tr><th>"T"</th><td>44</td><td>40</td><td>43</td><td>45</td><td>37</td></tr><tr><th>"U"</th><td>62</td><td>56</td><td>59</td><td>62</td><td>53</td></tr><tr><th>"V"</th><td>52</td><td>47</td><td>50</td><td>53</td><td>44</td></tr><tr><th>"W"</th><td>82</td><td>72</td><td>76</td><td>82</td><td>66</td></tr><tr><th>"X"</th><td>61</td><td>52</td><td>56</td><td>59</td><td>48</td></tr><tr><th>"Y"</th><td>48</td><td>40</td><td>44</td><td>45</td><td>40</td></tr><tr><th>"Z"</th><td>57</td><td>54</td><td>55</td><td>60</td><td>48</td></tr><tr><th>"a"</th><td>56</td><td>50</td><td>56</td><td>57</td><td>45</td></tr><tr><th>"b"</th><td>58</td><td>51</td><td>55</td><td>57</td><td>47</td></tr><tr><th>"c"</th><td>48</td><td>45</td><td>48</td><td>50</td><td>42</td></tr><tr><th>"d"</th><td>57</td><td>51</td><td>54</td><td>57</td><td>48</td></tr><tr><th>"e"</th><td>53</td><td>47</td><td>50</td><td>54</td><td>44</td></tr><tr><th>"f"</th><td>36</td><td>30</td><td>32</td><td>36</td><td>28</td></tr><tr><th>"g"</th><td>80</td><td>71</td><td>78</td><td>81</td><td>66</td></tr><tr><th>"h"</th><td>57</td><td>50</td><td>56</td><td>57</td><td>47</td></tr><tr><th>"i"</th><td>33</td><td>30</td><td>33</td><td>33</td><td>28</td></tr><tr><th>"j"</th><td>43</td><td>38</td><td>41</td><td>43</td><td>34</td></tr><tr><th>"k"</th><td>55</td><td>48</td><td>48</td><td>54</td><td>42</td></tr><tr><th>"l"</th><td>32</td><td>29</td><td>30</td><td>32</td><td>27</td></tr><tr><th>"m"</th><td>72</td><td>68</td><td>70</td><td>74</td><td>62</td></tr><tr><th>"n"</th><td>48</td><td>44</td><td>47</td><td>48</td><td>41</td></tr><tr><th>"o"</th><td>48</td><td>44</td><td>47</td><td>50</td><td>41</td></tr><tr><th>"p"</th><td>55</td><td>51</td><td>54</td><td>56</td><td>47</td></tr><tr><th>"q"</th><td>56</td><td>51</td><td>53</td><td>56</td><td>48</td></tr><tr><th>"r"</th><td>30</td><td>26</td><td>28</td><td>28</td><td>26</td></tr><tr><th>"s"</th><td>50</td><td>43</td><td>46</td><td>50</td><td>41</td></tr><tr><th>"t"</th><td>34</td><td>30</td><td>33</td><td>34</td><td>29</td></tr><tr><th>"u"</th><td>49</td><td>44</td><td>49</td><td>50</td><td>43</td></tr><tr><th>"v"</th><td>41</td><td>35</td><td>38</td><td>42</td><td>33</td></tr><tr><th>"w"</th><td>64</td><td>56</td><td>61</td><td>66</td><td>52</td></tr><tr><th>"x"</th><td>48</td><td>42</td><td>41</td><td>44</td><td>37</td></tr><tr><th>"y"</th><td>51</td><td>46</td><td>50</td><td>50</td><td>43</td></tr><tr><th>"z"</th><td>42</td><td>39</td><td>40</td><td>44</td><td>35</td></tr><tr><th>"0"</th><td>59</td><td>54</td><td>57</td><td>60</td><td>51</td></tr><tr><th>"1"</th><td>44</td><td>38</td><td>39</td><td>43</td><td>35</td></tr><tr><th>"2"</th><td>60</td><td>53</td><td>56</td><td>58</td><td>48</td></tr><tr><th>"3"</th><td>56</td><td>53</td><td>56</td><td>57</td><td>48</td></tr><tr><th>"4"</th><td>54</td><td>50</td><td>49</td><td>55</td><td>45</td></tr><tr><th>"5"</th><td>68</td><td>57</td><td>60</td><td>64</td><td>55</td></tr><tr><th>"6"</th><td>64</td><td>56</td><td>60</td><td>63</td><td>53</td></tr><tr><th>"7"</th><td>44</td><td>40</td><td>43</td><td>44</td><td>37</td></tr><tr><th>"8"</th><td>61</td><td>56</td><td>59</td><td>62</td><td>53</td></tr><tr><th>"9"</th><td>62</td><td>57</td><td>60</td><td>65</td><td>54</td></tr></tbody>
+  </table>
+  <p class="table-note">Cell values are stone count per glyph at that stone size ("coll." = colliding stone pairs found).</p>
+    <h4>Word-level findings</h4>
+    <table class="word-findings-table">
+    <thead><tr><th>Word</th><th>SS6</th><th>SS10</th><th>SS16</th><th>SS20</th><th>SS30</th></tr></thead>
+    <tbody><tr><th>Ashley</th><td>296 stones, min spacing 2.02mm, 15 cluster(s)</td><td>262 stones, min spacing 2.80mm, 18 cluster(s)</td><td>283 stones, min spacing 4.00mm, 14 cluster(s)</td><td>298 stones, min spacing 4.70mm, 16 cluster(s)</td><td>246 stones, min spacing 6.41mm, 14 cluster(s)</td></tr><tr><th>Sophia</th><td>317 stones, min spacing 2.06mm, 16 cluster(s)</td><td>285 stones, min spacing 2.80mm, 14 cluster(s)</td><td>308 stones, min spacing 4.05mm, 8 cluster(s)</td><td>319 stones, min spacing 4.73mm, 12 cluster(s)</td><td>261 stones, min spacing 6.43mm, 8 cluster(s)</td></tr><tr><th>Michael</th><td>363 stones, min spacing 2.05mm, 18 cluster(s)</td><td>326 stones, min spacing 2.81mm, 17 cluster(s)</td><td>352 stones, min spacing 4.00mm, 13 cluster(s)</td><td>364 stones, min spacing 4.73mm, 15 cluster(s)</td><td>302 stones, min spacing 6.43mm, 13 cluster(s)</td></tr><tr><th>Emma</th><td>263 stones, min spacing 2.06mm, 16 cluster(s)</td><td>244 stones, min spacing 2.85mm, 13 cluster(s)</td><td>257 stones, min spacing 4.02mm, 15 cluster(s)</td><td>270 stones, min spacing 4.73mm, 14 cluster(s)</td><td>224 stones, min spacing 6.41mm, 9 cluster(s)</td></tr><tr><th>Bride</th><td>239 stones, min spacing 2.00mm, 13 cluster(s)</td><td>216 stones, min spacing 2.85mm, 12 cluster(s)</td><td>228 stones, min spacing 4.05mm, 14 cluster(s)</td><td>240 stones, min spacing 4.71mm, 13 cluster(s)</td><td>200 stones, min spacing 6.46mm, 12 cluster(s)</td></tr><tr><th>Bride Squad</th><td>525 stones, min spacing 2.00mm, 26 cluster(s)</td><td>472 stones, min spacing 2.80mm, 24 cluster(s)</td><td>502 stones, min spacing 4.04mm, 20 cluster(s)</td><td>526 stones, min spacing 4.71mm, 26 cluster(s)</td><td>437 stones, min spacing 6.40mm, 20 cluster(s)</td></tr><tr><th>Happy Birthday</th><td>663 stones, min spacing 2.00mm, 45 cluster(s)</td><td>595 stones, min spacing 2.80mm, 45 cluster(s)</td><td>646 stones, min spacing 4.02mm, 32 cluster(s)</td><td>663 stones, min spacing 4.70mm, 39 cluster(s)</td><td>551 stones, min spacing 6.41mm, 27 cluster(s)</td></tr><tr><th>Dance Team</th><td>490 stones, min spacing 2.06mm, 21 cluster(s)</td><td>448 stones, min spacing 2.85mm, 17 cluster(s)</td><td>479 stones, min spacing 4.03mm, 16 cluster(s)</td><td>501 stones, min spacing 4.73mm, 23 cluster(s)</td><td>412 stones, min spacing 6.44mm, 9 cluster(s)</td></tr><tr><th>Class of 2027</th><td>556 stones, min spacing 2.01mm, 19 cluster(s)</td><td>496 stones, min spacing 2.82mm, 22 cluster(s)</td><td>529 stones, min spacing 4.01mm, 21 cluster(s)</td><td>556 stones, min spacing 4.72mm, 21 cluster(s)</td><td>459 stones, min spacing 6.44mm, 26 cluster(s)</td></tr></tbody>
+  </table>
+    <h4>Readability metrics</h4>
+    
+    <h4>Low stone count (threshold: 6 stones)</h4>
+    <p>No glyph/size combination falls below the minimum meaningful stone count.</p>
+    <h4>Counter-bearing glyphs with too few stones (threshold: 10 stones)</h4>
+    <p>No counter-bearing glyph/size combination falls below the counter-bearing stone-count floor.</p>
+    <h4>Near-identical confusable-pair layouts (all 5 stone sizes)</h4>
+    <table class="checks-table"><thead><tr><th>Pair</th><th>Size</th><th>Chamfer distance</th><th>Stone counts</th></tr></thead><tbody>
+      <tr class="row-flagged"><td>"I" vs "l"</td><td>SS6</td><td>0.0272</td><td>32 / 32</td></tr><tr class="row-flagged"><td>"l" vs "1"</td><td>SS6</td><td>0.0659</td><td>32 / 44</td></tr><tr class="row-flagged"><td>"I" vs "1"</td><td>SS6</td><td>0.0634</td><td>32 / 44</td></tr><tr class="row-flagged"><td>"O" vs "0"</td><td>SS6</td><td>0.0545</td><td>63 / 59</td></tr><tr class="row-flagged"><td>"S" vs "5"</td><td>SS6</td><td>0.0386</td><td>68 / 68</td></tr><tr class="row-flagged"><td>"B" vs "8"</td><td>SS6</td><td>0.0592</td><td>66 / 61</td></tr><tr class="row-flagged"><td>"G" vs "C"</td><td>SS6</td><td>0.0357</td><td>74 / 61</td></tr><tr class="row-flagged"><td>"Q" vs "O"</td><td>SS6</td><td>0.0625</td><td>68 / 63</td></tr><tr class="row-flagged"><td>"e" vs "c"</td><td>SS6</td><td>0.0298</td><td>53 / 48</td></tr><tr class="row-flagged"><td>"e" vs "o"</td><td>SS6</td><td>0.0431</td><td>53 / 48</td></tr><tr class="row-flagged"><td>"c" vs "o"</td><td>SS6</td><td>0.0381</td><td>48 / 48</td></tr><tr class="row-flagged"><td>"6" vs "9"</td><td>SS6</td><td>0.0328</td><td>64 / 62</td></tr><tr class="row-flagged"><td>"I" vs "l"</td><td>SS10</td><td>0.0259</td><td>27 / 29</td></tr><tr class="row-flagged"><td>"l" vs "1"</td><td>SS10</td><td>0.0607</td><td>29 / 38</td></tr><tr class="row-flagged"><td>"I" vs "1"</td><td>SS10</td><td>0.0562</td><td>27 / 38</td></tr><tr class="row-flagged"><td>"O" vs "0"</td><td>SS10</td><td>0.0565</td><td>57 / 54</td></tr><tr class="row-flagged"><td>"S" vs "5"</td><td>SS10</td><td>0.0428</td><td>60 / 57</td></tr><tr class="row-flagged"><td>"B" vs "8"</td><td>SS10</td><td>0.0610</td><td>62 / 56</td></tr><tr class="row-flagged"><td>"G" vs "C"</td><td>SS10</td><td>0.0380</td><td>64 / 57</td></tr><tr class="row-flagged"><td>"Q" vs "O"</td><td>SS10</td><td>0.0644</td><td>63 / 57</td></tr><tr class="row-flagged"><td>"e" vs "c"</td><td>SS10</td><td>0.0339</td><td>47 / 45</td></tr><tr class="row-flagged"><td>"e" vs "o"</td><td>SS10</td><td>0.0295</td><td>47 / 44</td></tr><tr class="row-flagged"><td>"c" vs "o"</td><td>SS10</td><td>0.0197</td><td>45 / 44</td></tr><tr class="row-flagged"><td>"6" vs "9"</td><td>SS10</td><td>0.0385</td><td>56 / 57</td></tr><tr class="row-flagged"><td>"I" vs "l"</td><td>SS16</td><td>0.0259</td><td>30 / 30</td></tr><tr class="row-flagged"><td>"l" vs "1"</td><td>SS16</td><td>0.0631</td><td>30 / 39</td></tr><tr class="row-flagged"><td>"I" vs "1"</td><td>SS16</td><td>0.0530</td><td>30 / 39</td></tr><tr class="row-flagged"><td>"O" vs "0"</td><td>SS16</td><td>0.0541</td><td>62 / 57</td></tr><tr class="row-flagged"><td>"S" vs "5"</td><td>SS16</td><td>0.0406</td><td>62 / 60</td></tr><tr class="row-flagged"><td>"B" vs "8"</td><td>SS16</td><td>0.0619</td><td>63 / 59</td></tr><tr class="row-flagged"><td>"G" vs "C"</td><td>SS16</td><td>0.0358</td><td>69 / 60</td></tr><tr class="row-flagged"><td>"Q" vs "O"</td><td>SS16</td><td>0.0633</td><td>68 / 62</td></tr><tr class="row-flagged"><td>"e" vs "c"</td><td>SS16</td><td>0.0306</td><td>50 / 48</td></tr><tr class="row-flagged"><td>"e" vs "o"</td><td>SS16</td><td>0.0254</td><td>50 / 47</td></tr><tr class="row-flagged"><td>"c" vs "o"</td><td>SS16</td><td>0.0244</td><td>48 / 47</td></tr><tr class="row-flagged"><td>"6" vs "9"</td><td>SS16</td><td>0.0358</td><td>60 / 60</td></tr><tr class="row-flagged"><td>"I" vs "l"</td><td>SS20</td><td>0.0263</td><td>31 / 32</td></tr><tr class="row-flagged"><td>"l" vs "1"</td><td>SS20</td><td>0.0622</td><td>32 / 43</td></tr><tr class="row-flagged"><td>"I" vs "1"</td><td>SS20</td><td>0.0568</td><td>31 / 43</td></tr><tr class="row-flagged"><td>"O" vs "0"</td><td>SS20</td><td>0.0553</td><td>65 / 60</td></tr><tr class="row-flagged"><td>"S" vs "5"</td><td>SS20</td><td>0.0409</td><td>66 / 64</td></tr><tr class="row-flagged"><td>"B" vs "8"</td><td>SS20</td><td>0.0578</td><td>68 / 62</td></tr><tr class="row-flagged"><td>"G" vs "C"</td><td>SS20</td><td>0.0357</td><td>75 / 62</td></tr><tr class="row-flagged"><td>"Q" vs "O"</td><td>SS20</td><td>0.0625</td><td>69 / 65</td></tr><tr class="row-flagged"><td>"e" vs "c"</td><td>SS20</td><td>0.0307</td><td>54 / 50</td></tr><tr class="row-flagged"><td>"e" vs "o"</td><td>SS20</td><td>0.0246</td><td>54 / 50</td></tr><tr class="row-flagged"><td>"c" vs "o"</td><td>SS20</td><td>0.0288</td><td>50 / 50</td></tr><tr class="row-flagged"><td>"6" vs "9"</td><td>SS20</td><td>0.0339</td><td>63 / 65</td></tr><tr class="row-flagged"><td>"I" vs "l"</td><td>SS30</td><td>0.0251</td><td>26 / 27</td></tr><tr class="row-flagged"><td>"l" vs "1"</td><td>SS30</td><td>0.0617</td><td>27 / 35</td></tr><tr class="row-flagged"><td>"I" vs "1"</td><td>SS30</td><td>0.0597</td><td>26 / 35</td></tr><tr class="row-flagged"><td>"O" vs "0"</td><td>SS30</td><td>0.0578</td><td>55 / 51</td></tr><tr class="row-flagged"><td>"S" vs "5"</td><td>SS30</td><td>0.0434</td><td>53 / 55</td></tr><tr class="row-flagged"><td>"B" vs "8"</td><td>SS30</td><td>0.0628</td><td>54 / 53</td></tr><tr class="row-flagged"><td>"G" vs "C"</td><td>SS30</td><td>0.0377</td><td>59 / 52</td></tr><tr class="row-flagged"><td>"Q" vs "O"</td><td>SS30</td><td>0.0635</td><td>58 / 55</td></tr><tr class="row-flagged"><td>"e" vs "c"</td><td>SS30</td><td>0.0406</td><td>44 / 42</td></tr><tr class="row-flagged"><td>"e" vs "o"</td><td>SS30</td><td>0.0435</td><td>44 / 41</td></tr><tr class="row-flagged"><td>"c" vs "o"</td><td>SS30</td><td>0.0379</td><td>42 / 41</td></tr><tr class="row-flagged"><td>"6" vs "9"</td><td>SS30</td><td>0.0322</td><td>53 / 54</td></tr>
+      </tbody></table>
+    <h4>Specimen render-scale compliance (minimum 8px rendered stone diameter)</h4>
+    <table class="checks-table"><thead><tr><th>Size</th><th>Diameter</th><th>Scale</th><th>Rendered stone size</th><th>Result</th></tr></thead><tbody><tr><td>SS6</td><td>2mm</td><td>5px/mm</td><td>10px</td><td><span class="badge badge-pass">PASS</span></td></tr><tr><td>SS10</td><td>2.8mm</td><td>4px/mm</td><td>11.2px</td><td><span class="badge badge-pass">PASS</span></td></tr><tr><td>SS16</td><td>4mm</td><td>3.5px/mm</td><td>14px</td><td><span class="badge badge-pass">PASS</span></td></tr><tr><td>SS20</td><td>4.7mm</td><td>3px/mm</td><td>14.1px</td><td><span class="badge badge-pass">PASS</span></td></tr><tr><td>SS30</td><td>6.4mm</td><td>2.5px/mm</td><td>16px</td><td><span class="badge badge-pass">PASS</span></td></tr></tbody></table>
+  
+    
+
+    <h3>Maximum height (50/60/90/110/111mm across SS6&rarr;SS30)</h3>
+    <table class="metrics-table"><tbody>
+      <tr><th>SS6</th><td>text height: 50mm</td></tr><tr><th>SS10</th><td>text height: 60mm</td></tr><tr><th>SS16</th><td>text height: 90mm</td></tr><tr><th>SS20</th><td>text height: 110mm</td></tr><tr><th>SS30</th><td>text height: 111mm</td></tr>
+    </tbody></table>
+    <h4>Confusable-pair similarity (SS16 reference)</h4>
+    <table class="similarity-table">
+    <thead><tr><th>Pair</th><th>Size</th><th>Stone counts</th><th>Chamfer distance</th><th>Result</th></tr></thead>
+    <tbody>
+    <tr class="row-flagged">
+      <td>"I" vs "l"</td>
+      <td>SS16</td>
+      <td>36 / 35</td>
+      <td>0.0256</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"l" vs "1"</td>
+      <td>SS16</td>
+      <td>35 / 48</td>
+      <td>0.0598</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"I" vs "1"</td>
+      <td>SS16</td>
+      <td>36 / 48</td>
+      <td>0.0577</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"O" vs "0"</td>
+      <td>SS16</td>
+      <td>72 / 66</td>
+      <td>0.0569</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"S" vs "5"</td>
+      <td>SS16</td>
+      <td>75 / 71</td>
+      <td>0.0404</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"B" vs "8"</td>
+      <td>SS16</td>
+      <td>76 / 69</td>
+      <td>0.0599</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"G" vs "C"</td>
+      <td>SS16</td>
+      <td>82 / 70</td>
+      <td>0.0359</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"Q" vs "O"</td>
+      <td>SS16</td>
+      <td>78 / 72</td>
+      <td>0.0612</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"e" vs "c"</td>
+      <td>SS16</td>
+      <td>59 / 55</td>
+      <td>0.0342</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"e" vs "o"</td>
+      <td>SS16</td>
+      <td>59 / 54</td>
+      <td>0.0312</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"c" vs "o"</td>
+      <td>SS16</td>
+      <td>55 / 54</td>
+      <td>0.0210</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr>
+    <tr class="row-flagged">
+      <td>"6" vs "9"</td>
+      <td>SS16</td>
+      <td>71 / 71</td>
+      <td>0.0311</td>
+      <td><span class="badge badge-warning">WARNING</span></td>
+    </tr></tbody>
+  </table>
+  <p class="table-note">Threshold: 0.09 (normalized, unit-height point clouds). Below threshold = flagged as visually similar.</p>
+    <h4>Stone count per glyph, by stone size</h4>
+    <table class="glyph-table">
+    <thead><tr><th>Char</th><th>SS6</th><th>SS10</th><th>SS16</th><th>SS20</th><th>SS30</th></tr></thead>
+    <tbody><tr><th>"A"</th><td>63</td><td>55</td><td>62</td><td>63</td><td>45</td></tr><tr><th>"B"</th><td>77</td><td>69</td><td>76</td><td>79</td><td>57</td></tr><tr><th>"C"</th><td>74</td><td>66</td><td>70</td><td>73</td><td>54</td></tr><tr><th>"D"</th><td>71</td><td>66</td><td>68</td><td>72</td><td>54</td></tr><tr><th>"E"</th><td>79</td><td>67</td><td>74</td><td>78</td><td>58</td></tr><tr><th>"F"</th><td>60</td><td>53</td><td>58</td><td>60</td><td>42</td></tr><tr><th>"G"</th><td>87</td><td>75</td><td>82</td><td>87</td><td>62</td></tr><tr><th>"H"</th><td>73</td><td>65</td><td>67</td><td>74</td><td>54</td></tr><tr><th>"I"</th><td>36</td><td>32</td><td>36</td><td>38</td><td>27</td></tr><tr><th>"J"</th><td>51</td><td>45</td><td>47</td><td>50</td><td>36</td></tr><tr><th>"K"</th><td>74</td><td>65</td><td>69</td><td>74</td><td>52</td></tr><tr><th>"L"</th><td>52</td><td>43</td><td>48</td><td>52</td><td>36</td></tr><tr><th>"M"</th><td>100</td><td>84</td><td>92</td><td>100</td><td>70</td></tr><tr><th>"N"</th><td>75</td><td>67</td><td>71</td><td>72</td><td>54</td></tr><tr><th>"O"</th><td>75</td><td>66</td><td>72</td><td>75</td><td>56</td></tr><tr><th>"P"</th><td>62</td><td>52</td><td>57</td><td>59</td><td>43</td></tr><tr><th>"Q"</th><td>82</td><td>72</td><td>78</td><td>82</td><td>60</td></tr><tr><th>"R"</th><td>75</td><td>64</td><td>71</td><td>73</td><td>53</td></tr><tr><th>"S"</th><td>78</td><td>69</td><td>75</td><td>78</td><td>55</td></tr><tr><th>"T"</th><td>56</td><td>45</td><td>50</td><td>54</td><td>39</td></tr><tr><th>"U"</th><td>75</td><td>64</td><td>71</td><td>74</td><td>54</td></tr><tr><th>"V"</th><td>62</td><td>55</td><td>58</td><td>62</td><td>47</td></tr><tr><th>"W"</th><td>98</td><td>83</td><td>93</td><td>95</td><td>70</td></tr><tr><th>"X"</th><td>73</td><td>58</td><td>66</td><td>69</td><td>48</td></tr><tr><th>"Y"</th><td>54</td><td>47</td><td>51</td><td>55</td><td>40</td></tr><tr><th>"Z"</th><td>70</td><td>62</td><td>65</td><td>70</td><td>50</td></tr><tr><th>"a"</th><td>68</td><td>58</td><td>61</td><td>65</td><td>46</td></tr><tr><th>"b"</th><td>67</td><td>57</td><td>63</td><td>68</td><td>49</td></tr><tr><th>"c"</th><td>59</td><td>52</td><td>55</td><td>58</td><td>44</td></tr><tr><th>"d"</th><td>67</td><td>60</td><td>65</td><td>66</td><td>49</td></tr><tr><th>"e"</th><td>63</td><td>55</td><td>59</td><td>62</td><td>45</td></tr><tr><th>"f"</th><td>40</td><td>38</td><td>39</td><td>41</td><td>29</td></tr><tr><th>"g"</th><td>94</td><td>83</td><td>90</td><td>94</td><td>67</td></tr><tr><th>"h"</th><td>66</td><td>58</td><td>63</td><td>67</td><td>48</td></tr><tr><th>"i"</th><td>40</td><td>37</td><td>39</td><td>41</td><td>30</td></tr><tr><th>"j"</th><td>52</td><td>44</td><td>49</td><td>52</td><td>37</td></tr><tr><th>"k"</th><td>65</td><td>57</td><td>60</td><td>61</td><td>46</td></tr><tr><th>"l"</th><td>38</td><td>32</td><td>35</td><td>37</td><td>27</td></tr><tr><th>"m"</th><td>86</td><td>76</td><td>83</td><td>86</td><td>62</td></tr><tr><th>"n"</th><td>56</td><td>49</td><td>54</td><td>57</td><td>42</td></tr><tr><th>"o"</th><td>57</td><td>50</td><td>54</td><td>57</td><td>43</td></tr><tr><th>"p"</th><td>66</td><td>55</td><td>64</td><td>65</td><td>48</td></tr><tr><th>"q"</th><td>66</td><td>56</td><td>64</td><td>66</td><td>48</td></tr><tr><th>"r"</th><td>36</td><td>33</td><td>32</td><td>37</td><td>26</td></tr><tr><th>"s"</th><td>61</td><td>51</td><td>57</td><td>61</td><td>42</td></tr><tr><th>"t"</th><td>42</td><td>36</td><td>39</td><td>39</td><td>29</td></tr><tr><th>"u"</th><td>57</td><td>51</td><td>55</td><td>58</td><td>42</td></tr><tr><th>"v"</th><td>47</td><td>43</td><td>44</td><td>49</td><td>34</td></tr><tr><th>"w"</th><td>77</td><td>66</td><td>74</td><td>77</td><td>51</td></tr><tr><th>"x"</th><td>58</td><td>47</td><td>53</td><td>53</td><td>38</td></tr><tr><th>"y"</th><td>61</td><td>54</td><td>58</td><td>59</td><td>44</td></tr><tr><th>"z"</th><td>51</td><td>44</td><td>49</td><td>52</td><td>36</td></tr><tr><th>"0"</th><td>69</td><td>62</td><td>66</td><td>70</td><td>53</td></tr><tr><th>"1"</th><td>51</td><td>47</td><td>48</td><td>49</td><td>36</td></tr><tr><th>"2"</th><td>70</td><td>61</td><td>65</td><td>70</td><td>49</td></tr><tr><th>"3"</th><td>68</td><td>59</td><td>66</td><td>68</td><td>49</td></tr><tr><th>"4"</th><td>65</td><td>54</td><td>59</td><td>62</td><td>44</td></tr><tr><th>"5"</th><td>76</td><td>67</td><td>71</td><td>75</td><td>56</td></tr><tr><th>"6"</th><td>74</td><td>65</td><td>71</td><td>76</td><td>55</td></tr><tr><th>"7"</th><td>51</td><td>45</td><td>50</td><td>51</td><td>39</td></tr><tr><th>"8"</th><td>73</td><td>63</td><td>69</td><td>73</td><td>54</td></tr><tr><th>"9"</th><td>76</td><td>65</td><td>71</td><td>73</td><td>54</td></tr></tbody>
+  </table>
+  <p class="table-note">Cell values are stone count per glyph at that stone size ("coll." = colliding stone pairs found).</p>
+    <h4>Word-level findings</h4>
+    <table class="word-findings-table">
+    <thead><tr><th>Word</th><th>SS6</th><th>SS10</th><th>SS16</th><th>SS20</th><th>SS30</th></tr></thead>
+    <tbody><tr><th>Ashley</th><td>352 stones, min spacing 2.02mm, 18 cluster(s)</td><td>305 stones, min spacing 2.83mm, 15 cluster(s)</td><td>334 stones, min spacing 4.01mm, 18 cluster(s)</td><td>349 stones, min spacing 4.71mm, 19 cluster(s)</td><td>251 stones, min spacing 6.41mm, 17 cluster(s)</td></tr><tr><th>Sophia</th><td>375 stones, min spacing 2.02mm, 13 cluster(s)</td><td>327 stones, min spacing 2.83mm, 17 cluster(s)</td><td>356 stones, min spacing 4.01mm, 17 cluster(s)</td><td>373 stones, min spacing 4.71mm, 22 cluster(s)</td><td>270 stones, min spacing 6.41mm, 11 cluster(s)</td></tr><tr><th>Michael</th><td>434 stones, min spacing 2.02mm, 17 cluster(s)</td><td>376 stones, min spacing 2.83mm, 16 cluster(s)</td><td>404 stones, min spacing 4.03mm, 23 cluster(s)</td><td>430 stones, min spacing 4.71mm, 26 cluster(s)</td><td>310 stones, min spacing 6.41mm, 14 cluster(s)</td></tr><tr><th>Emma</th><td>319 stones, min spacing 2.07mm, 12 cluster(s)</td><td>277 stones, min spacing 2.83mm, 14 cluster(s)</td><td>301 stones, min spacing 4.02mm, 18 cluster(s)</td><td>315 stones, min spacing 4.75mm, 19 cluster(s)</td><td>228 stones, min spacing 6.42mm, 17 cluster(s)</td></tr><tr><th>Bride</th><td>283 stones, min spacing 2.02mm, 15 cluster(s)</td><td>254 stones, min spacing 2.80mm, 10 cluster(s)</td><td>271 stones, min spacing 4.00mm, 13 cluster(s)</td><td>285 stones, min spacing 4.81mm, 18 cluster(s)</td><td>207 stones, min spacing 6.41mm, 12 cluster(s)</td></tr><tr><th>Bride Squad</th><td>619 stones, min spacing 2.00mm, 27 cluster(s)</td><td>548 stones, min spacing 2.80mm, 25 cluster(s)</td><td>591 stones, min spacing 4.00mm, 29 cluster(s)</td><td>618 stones, min spacing 4.74mm, 35 cluster(s)</td><td>447 stones, min spacing 6.41mm, 21 cluster(s)</td></tr><tr><th>Happy Birthday</th><td>789 stones, min spacing 2.02mm, 37 cluster(s)</td><td>690 stones, min spacing 2.80mm, 44 cluster(s)</td><td>745 stones, min spacing 4.00mm, 46 cluster(s)</td><td>780 stones, min spacing 4.70mm, 50 cluster(s)</td><td>566 stones, min spacing 6.41mm, 43 cluster(s)</td></tr><tr><th>Dance Team</th><td>590 stones, min spacing 2.02mm, 21 cluster(s)</td><td>514 stones, min spacing 2.83mm, 23 cluster(s)</td><td>550 stones, min spacing 4.02mm, 28 cluster(s)</td><td>581 stones, min spacing 4.76mm, 31 cluster(s)</td><td>423 stones, min spacing 6.41mm, 15 cluster(s)</td></tr><tr><th>Class of 2027</th><td>659 stones, min spacing 2.01mm, 23 cluster(s)</td><td>575 stones, min spacing 2.83mm, 21 cluster(s)</td><td>619 stones, min spacing 4.01mm, 29 cluster(s)</td><td>656 stones, min spacing 4.72mm, 25 cluster(s)</td><td>473 stones, min spacing 6.42mm, 17 cluster(s)</td></tr></tbody>
+  </table>
+    <h4>Readability metrics</h4>
+    
+    <h4>Low stone count (threshold: 6 stones)</h4>
+    <p>No glyph/size combination falls below the minimum meaningful stone count.</p>
+    <h4>Counter-bearing glyphs with too few stones (threshold: 10 stones)</h4>
+    <p>No counter-bearing glyph/size combination falls below the counter-bearing stone-count floor.</p>
+    <h4>Near-identical confusable-pair layouts (all 5 stone sizes)</h4>
+    <table class="checks-table"><thead><tr><th>Pair</th><th>Size</th><th>Chamfer distance</th><th>Stone counts</th></tr></thead><tbody>
+      <tr class="row-flagged"><td>"I" vs "l"</td><td>SS6</td><td>0.0248</td><td>36 / 38</td></tr><tr class="row-flagged"><td>"l" vs "1"</td><td>SS6</td><td>0.0607</td><td>38 / 51</td></tr><tr class="row-flagged"><td>"I" vs "1"</td><td>SS6</td><td>0.0563</td><td>36 / 51</td></tr><tr class="row-flagged"><td>"O" vs "0"</td><td>SS6</td><td>0.0566</td><td>75 / 69</td></tr><tr class="row-flagged"><td>"S" vs "5"</td><td>SS6</td><td>0.0395</td><td>78 / 76</td></tr><tr class="row-flagged"><td>"B" vs "8"</td><td>SS6</td><td>0.0578</td><td>77 / 73</td></tr><tr class="row-flagged"><td>"G" vs "C"</td><td>SS6</td><td>0.0356</td><td>87 / 74</td></tr><tr class="row-flagged"><td>"Q" vs "O"</td><td>SS6</td><td>0.0609</td><td>82 / 75</td></tr><tr class="row-flagged"><td>"e" vs "c"</td><td>SS6</td><td>0.0363</td><td>63 / 59</td></tr><tr class="row-flagged"><td>"e" vs "o"</td><td>SS6</td><td>0.0379</td><td>63 / 57</td></tr><tr class="row-flagged"><td>"c" vs "o"</td><td>SS6</td><td>0.0302</td><td>59 / 57</td></tr><tr class="row-flagged"><td>"6" vs "9"</td><td>SS6</td><td>0.0341</td><td>74 / 76</td></tr><tr class="row-flagged"><td>"I" vs "l"</td><td>SS10</td><td>0.0261</td><td>32 / 32</td></tr><tr class="row-flagged"><td>"l" vs "1"</td><td>SS10</td><td>0.0611</td><td>32 / 47</td></tr><tr class="row-flagged"><td>"I" vs "1"</td><td>SS10</td><td>0.0571</td><td>32 / 47</td></tr><tr class="row-flagged"><td>"O" vs "0"</td><td>SS10</td><td>0.0556</td><td>66 / 62</td></tr><tr class="row-flagged"><td>"S" vs "5"</td><td>SS10</td><td>0.0426</td><td>69 / 67</td></tr><tr class="row-flagged"><td>"B" vs "8"</td><td>SS10</td><td>0.0583</td><td>69 / 63</td></tr><tr class="row-flagged"><td>"G" vs "C"</td><td>SS10</td><td>0.0354</td><td>75 / 66</td></tr><tr class="row-flagged"><td>"Q" vs "O"</td><td>SS10</td><td>0.0633</td><td>72 / 66</td></tr><tr class="row-flagged"><td>"e" vs "c"</td><td>SS10</td><td>0.0293</td><td>55 / 52</td></tr><tr class="row-flagged"><td>"e" vs "o"</td><td>SS10</td><td>0.0317</td><td>55 / 50</td></tr><tr class="row-flagged"><td>"c" vs "o"</td><td>SS10</td><td>0.0364</td><td>52 / 50</td></tr><tr class="row-flagged"><td>"6" vs "9"</td><td>SS10</td><td>0.0354</td><td>65 / 65</td></tr><tr class="row-flagged"><td>"I" vs "l"</td><td>SS16</td><td>0.0256</td><td>36 / 35</td></tr><tr class="row-flagged"><td>"l" vs "1"</td><td>SS16</td><td>0.0598</td><td>35 / 48</td></tr><tr class="row-flagged"><td>"I" vs "1"</td><td>SS16</td><td>0.0577</td><td>36 / 48</td></tr><tr class="row-flagged"><td>"O" vs "0"</td><td>SS16</td><td>0.0569</td><td>72 / 66</td></tr><tr class="row-flagged"><td>"S" vs "5"</td><td>SS16</td><td>0.0404</td><td>75 / 71</td></tr><tr class="row-flagged"><td>"B" vs "8"</td><td>SS16</td><td>0.0599</td><td>76 / 69</td></tr><tr class="row-flagged"><td>"G" vs "C"</td><td>SS16</td><td>0.0359</td><td>82 / 70</td></tr><tr class="row-flagged"><td>"Q" vs "O"</td><td>SS16</td><td>0.0612</td><td>78 / 72</td></tr><tr class="row-flagged"><td>"e" vs "c"</td><td>SS16</td><td>0.0342</td><td>59 / 55</td></tr><tr class="row-flagged"><td>"e" vs "o"</td><td>SS16</td><td>0.0312</td><td>59 / 54</td></tr><tr class="row-flagged"><td>"c" vs "o"</td><td>SS16</td><td>0.0210</td><td>55 / 54</td></tr><tr class="row-flagged"><td>"6" vs "9"</td><td>SS16</td><td>0.0311</td><td>71 / 71</td></tr><tr class="row-flagged"><td>"I" vs "l"</td><td>SS20</td><td>0.0257</td><td>38 / 37</td></tr><tr class="row-flagged"><td>"l" vs "1"</td><td>SS20</td><td>0.0578</td><td>37 / 49</td></tr><tr class="row-flagged"><td>"I" vs "1"</td><td>SS20</td><td>0.0527</td><td>38 / 49</td></tr><tr class="row-flagged"><td>"O" vs "0"</td><td>SS20</td><td>0.0567</td><td>75 / 70</td></tr><tr class="row-flagged"><td>"S" vs "5"</td><td>SS20</td><td>0.0384</td><td>78 / 75</td></tr><tr class="row-flagged"><td>"B" vs "8"</td><td>SS20</td><td>0.0582</td><td>79 / 73</td></tr><tr class="row-flagged"><td>"G" vs "C"</td><td>SS20</td><td>0.0344</td><td>87 / 73</td></tr><tr class="row-flagged"><td>"Q" vs "O"</td><td>SS20</td><td>0.0609</td><td>82 / 75</td></tr><tr class="row-flagged"><td>"e" vs "c"</td><td>SS20</td><td>0.0357</td><td>62 / 58</td></tr><tr class="row-flagged"><td>"e" vs "o"</td><td>SS20</td><td>0.0338</td><td>62 / 57</td></tr><tr class="row-flagged"><td>"c" vs "o"</td><td>SS20</td><td>0.0203</td><td>58 / 57</td></tr><tr class="row-flagged"><td>"6" vs "9"</td><td>SS20</td><td>0.0302</td><td>76 / 73</td></tr><tr class="row-flagged"><td>"I" vs "l"</td><td>SS30</td><td>0.0254</td><td>27 / 27</td></tr><tr class="row-flagged"><td>"l" vs "1"</td><td>SS30</td><td>0.0559</td><td>27 / 36</td></tr><tr class="row-flagged"><td>"I" vs "1"</td><td>SS30</td><td>0.0626</td><td>27 / 36</td></tr><tr class="row-flagged"><td>"O" vs "0"</td><td>SS30</td><td>0.0572</td><td>56 / 53</td></tr><tr class="row-flagged"><td>"S" vs "5"</td><td>SS30</td><td>0.0407</td><td>55 / 56</td></tr><tr class="row-flagged"><td>"B" vs "8"</td><td>SS30</td><td>0.0640</td><td>57 / 54</td></tr><tr class="row-flagged"><td>"G" vs "C"</td><td>SS30</td><td>0.0379</td><td>62 / 54</td></tr><tr class="row-flagged"><td>"Q" vs "O"</td><td>SS30</td><td>0.0639</td><td>60 / 56</td></tr><tr class="row-flagged"><td>"e" vs "c"</td><td>SS30</td><td>0.0414</td><td>45 / 44</td></tr><tr class="row-flagged"><td>"e" vs "o"</td><td>SS30</td><td>0.0312</td><td>45 / 43</td></tr><tr class="row-flagged"><td>"c" vs "o"</td><td>SS30</td><td>0.0450</td><td>44 / 43</td></tr><tr class="row-flagged"><td>"6" vs "9"</td><td>SS30</td><td>0.0336</td><td>55 / 54</td></tr>
+      </tbody></table>
+    <h4>Specimen render-scale compliance (minimum 8px rendered stone diameter)</h4>
+    <table class="checks-table"><thead><tr><th>Size</th><th>Diameter</th><th>Scale</th><th>Rendered stone size</th><th>Result</th></tr></thead><tbody><tr><td>SS6</td><td>2mm</td><td>5px/mm</td><td>10px</td><td><span class="badge badge-pass">PASS</span></td></tr><tr><td>SS10</td><td>2.8mm</td><td>4px/mm</td><td>11.2px</td><td><span class="badge badge-pass">PASS</span></td></tr><tr><td>SS16</td><td>4mm</td><td>3.5px/mm</td><td>14px</td><td><span class="badge badge-pass">PASS</span></td></tr><tr><td>SS20</td><td>4.7mm</td><td>3px/mm</td><td>14.1px</td><td><span class="badge badge-pass">PASS</span></td></tr><tr><td>SS30</td><td>6.4mm</td><td>2.5px/mm</td><td>16px</td><td><span class="badge badge-pass">PASS</span></td></tr></tbody></table>
+  
+    
+
+  <h3>Typography measurements</h3>
+  <p>x-height measured spread: 13.0 font units across 13 letters (declared OS/2 sxHeight: 528). Cap-height measured spread: 12.0 font units across 26 letters (declared OS/2 sCapHeight: 688).</p>
+  <p>No visual-weight outliers found across a-z.</p>
+  <p>No baseline anomalies found across a-z.</p>
+  <p class="table-note">All 5 tested word-space boundaries measure at least 1.3&times; the median intra-word letter gap (tightest: "Dance Team" between "e" and "T" at 4.26&times;) -- no word-space is flagged as reading like an ordinary letter gap.</p>
+
+  <h2>5. Production font metrics</h2>
+  <table class="metrics-table"><tbody><tr><th>File size</th><td>88.9 KB</td></tr><tr><th>sfnt signature</th><td>0x00010000</td></tr><tr><th>Outline format</th><td>truetype</td></tr><tr><th>unitsPerEm</th><td>1000</td></tr><tr><th>Glyph count</th><td>426</td></tr><tr><th>cmap entries</th><td>423</td></tr><tr><th>Tables present</th><td>DSIG, GDEF, GPOS, GSUB, OS/2, cmap, cvt, fpgm, gasp, glyf, head, hhea, hmtx, loca, maxp, name, post, prep</td></tr><tr><th>Family / Subfamily</th><td>Archivo Black / Regular</td></tr><tr><th>Version</th><td>Version 1.006</td></tr><tr><th>PostScript name</th><td>ArchivoBlack-Regular</td></tr><tr><th>Ascender / Descender</th><td>878 / -210</td></tr><tr><th>Line gap</th><td>0</td></tr><tr><th>sxHeight / sCapHeight</th><td>528 / 688</td></tr><tr><th>Italic angle</th><td>0</td></tr><tr><th>Fixed pitch</th><td>no</td></tr><tr><th>Curve vs line commands (sample)</th><td>60 curve / 118 line (10 glyphs)</td></tr></tbody></table>
+
+  <h2>6. Recommended Claude Design revision feedback</h2>
+  <div class="feedback-block">
+    <ul class="feedback-list"><li>Increase differentiation between &quot;I&quot; and &quot;l&quot; -- their rhinestone stone layouts at SS16 are nearly identical (chamfer distance 0.0259, below the 0.09 similarity threshold; stone counts 30 vs 30). Recommend a clearer distinguishing stroke.</li><li>Increase differentiation between &quot;l&quot; and &quot;1&quot; -- their rhinestone stone layouts at SS16 are nearly identical (chamfer distance 0.0631, below the 0.09 similarity threshold; stone counts 30 vs 39). Recommend a clearer distinguishing stroke.</li><li>Increase differentiation between &quot;I&quot; and &quot;1&quot; -- their rhinestone stone layouts at SS16 are nearly identical (chamfer distance 0.0530, below the 0.09 similarity threshold; stone counts 30 vs 39). Recommend a clearer distinguishing stroke.</li><li>Increase differentiation between &quot;O&quot; and &quot;0&quot; -- their rhinestone stone layouts at SS16 are nearly identical (chamfer distance 0.0541, below the 0.09 similarity threshold; stone counts 62 vs 57). Recommend a clearer distinguishing stroke.</li><li>Increase differentiation between &quot;S&quot; and &quot;5&quot; -- their rhinestone stone layouts at SS16 are nearly identical (chamfer distance 0.0406, below the 0.09 similarity threshold; stone counts 62 vs 60). Recommend a clearer distinguishing stroke.</li><li>Increase differentiation between &quot;B&quot; and &quot;8&quot; -- their rhinestone stone layouts at SS16 are nearly identical (chamfer distance 0.0619, below the 0.09 similarity threshold; stone counts 63 vs 59). Recommend a clearer distinguishing stroke.</li><li>Increase differentiation between &quot;G&quot; and &quot;C&quot; -- their rhinestone stone layouts at SS16 are nearly identical (chamfer distance 0.0358, below the 0.09 similarity threshold; stone counts 69 vs 60). Recommend a clearer distinguishing stroke.</li><li>Increase differentiation between &quot;Q&quot; and &quot;O&quot; -- their rhinestone stone layouts at SS16 are nearly identical (chamfer distance 0.0633, below the 0.09 similarity threshold; stone counts 68 vs 62). Recommend a clearer distinguishing stroke.</li><li>Increase differentiation between &quot;e&quot; and &quot;c&quot; -- their rhinestone stone layouts at SS16 are nearly identical (chamfer distance 0.0306, below the 0.09 similarity threshold; stone counts 50 vs 48). Recommend a clearer distinguishing stroke.</li><li>Increase differentiation between &quot;e&quot; and &quot;o&quot; -- their rhinestone stone layouts at SS16 are nearly identical (chamfer distance 0.0254, below the 0.09 similarity threshold; stone counts 50 vs 47). Recommend a clearer distinguishing stroke.</li><li>Increase differentiation between &quot;c&quot; and &quot;o&quot; -- their rhinestone stone layouts at SS16 are nearly identical (chamfer distance 0.0244, below the 0.09 similarity threshold; stone counts 48 vs 47). Recommend a clearer distinguishing stroke.</li><li>Increase differentiation between &quot;6&quot; and &quot;9&quot; -- their rhinestone stone layouts at SS16 are nearly identical (chamfer distance 0.0358, below the 0.09 similarity threshold; stone counts 60 vs 60). Recommend a clearer distinguishing stroke.</li></ul>
+  </div>
+</body>
+</html>
