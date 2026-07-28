@@ -60,9 +60,10 @@ function collectMaterialMisreads(productionAnalysis) {
  * @param {object[]} options.ttfChecks From ttfValidation.validateTtf().checks.
  * @param {object} options.productionAnalysis From productionAnalysis.runProductionAnalysis().
  * @param {object} options.typographyFindings From typographyFindings.computeTypographyFindings().
+ * @param {object} [options.readabilityFindings] From readabilityMetrics.computeReadabilityFindings().
  * @returns {object}
  */
-export function classifyCertification({ ttfChecks, productionAnalysis, typographyFindings }) {
+export function classifyCertification({ ttfChecks, productionAnalysis, typographyFindings, readabilityFindings }) {
   const checkCounts = summarizeCheckStatuses(ttfChecks);
 
   const structuralFailChecks = ttfChecks.filter((c) => c.status === 'FAIL' && ['structure', 'coverage'].includes(c.category));
@@ -102,7 +103,32 @@ export function classifyCertification({ ttfChecks, productionAnalysis, typograph
     refinementNotes.push(`[Typography] Baseline anomalies: ${typographyFindings.baselineAnomalies.map((a) => `"${a.char}"`).join(', ')} do not match the expected descender/no-descender pattern.`);
   }
   for (const f of (typographyFindings.inadequateWordSpaces ?? [])) {
-    refinementNotes.push(`[Typography] Word-space too narrow in "${f.word}" between "${f.leftChar}" and "${f.rightChar}": visual gap ${f.gapUnits}u is barely above the median intra-word letter gap (${f.medianIntraWordGapUnits}u) -- the two words visually run together (confirmed in typography-specimen.png).`);
+    refinementNotes.push(`[Typography] Word-space too narrow in "${f.word}" between "${f.leftChar}" and "${f.rightChar}": measured gap ${f.gapUnits}u is only ${(f.gapUnits / f.medianIntraWordGapUnits).toFixed(2)}x the median intra-word letter gap (${f.medianIntraWordGapUnits}u), below the 1.3x adequacy threshold -- recommend visually confirming word separation in typography-specimen.png.`);
+  }
+
+  // FONT-CERT-002: readability findings are deliberately WARNING-tier (refinementNotes), never
+  // blockingIssues -- "successful layout generation is different from visual readability" cuts both
+  // ways: a readability concern must not be silently absorbed into a clean PASS (see hasAnyWarning
+  // below), but it is also not the same class of defect as a collision, a missing required glyph, or
+  // an unusable layout, so it does not by itself fail the certification.
+  const readability = readabilityFindings ?? { lowStoneCountFindings: [], counterCollapseFindings: [], nearIdenticalFindings: [], scaleCompliance: { allCompliant: true, bySize: [] } };
+  if (readability.lowStoneCountFindings.length > 0) {
+    const worst = [...readability.lowStoneCountFindings].sort((a, b) => a.stoneCount - b.stoneCount).slice(0, 8);
+    refinementNotes.push(`[Readability] ${readability.lowStoneCountFindings.length} glyph/size combination(s) fall below the minimum meaningful stone count (threshold ${worst[0]?.threshold}): ` +
+      worst.map((f) => `"${f.char}"@${f.sizeId.toUpperCase()} (${f.stoneCount} stones)`).join(', ') +
+      (readability.lowStoneCountFindings.length > 8 ? `, +${readability.lowStoneCountFindings.length - 8} more` : '') + '.');
+  }
+  if (readability.counterCollapseFindings.length > 0) {
+    const worst = [...readability.counterCollapseFindings].sort((a, b) => a.stoneCount - b.stoneCount).slice(0, 8);
+    refinementNotes.push(`[Readability] ${readability.counterCollapseFindings.length} counter-bearing glyph/size combination(s) have too few stones to distinguish their outer stroke from their inner counter: ` +
+      worst.map((f) => `"${f.char}"@${f.sizeId.toUpperCase()} (${f.stoneCount} stones, threshold ${f.threshold})`).join(', ') +
+      (readability.counterCollapseFindings.length > 8 ? `, +${readability.counterCollapseFindings.length - 8} more` : '') + '.');
+  }
+  if (readability.nearIdenticalFindings.length > 0) {
+    const bySizeCounts = {};
+    for (const f of readability.nearIdenticalFindings) bySizeCounts[f.sizeId] = (bySizeCounts[f.sizeId] ?? 0) + 1;
+    refinementNotes.push(`[Readability] ${readability.nearIdenticalFindings.length} confusable-pair/size combination(s) produce near-identical stone layouts: ` +
+      Object.entries(bySizeCounts).map(([sizeId, count]) => `${sizeId.toUpperCase()}: ${count}`).join(', ') + ' -- see report.html\'s readability metrics table for the full per-pair breakdown.');
   }
 
   const hasAnyWarning = refinementNotes.length > 0;

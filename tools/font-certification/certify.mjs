@@ -27,6 +27,7 @@ import { validateTtf } from './lib/ttfValidation.mjs';
 import { loadCandidateFont } from './lib/ttfParser.mjs';
 import { computeTypographyFindings } from './lib/typographyFindings.mjs';
 import { runProductionAnalysis } from './lib/productionAnalysis.mjs';
+import { computeReadabilityFindings } from './lib/readabilityMetrics.mjs';
 import { classifyCertification } from './lib/classification.mjs';
 import { buildClaudeDesignFeedback } from './lib/claudeDesignFeedback.mjs';
 import { buildTypographySpecimenHtml, buildRhinestoneSpecimenHtml } from './lib/specimenPages.mjs';
@@ -37,7 +38,12 @@ import { STONE_SIZE_IDS } from './lib/requiredCharacters.mjs';
 // A real, known-good fixture path -- not a default candidate certify() falls back to. Existing
 // focused tests import this to know which committed fixture file to exercise explicitly.
 export const DEFAULT_CANDIDATE_RELATIVE_PATH = 'fonts/candidates/Elegant-Cursive/ttf/v001/Elegant-Cursive.ttf';
-const RHINESTONE_SPECIMEN_SAMPLE_WORDS = ['Ashley', 'Bride Squad', 'Class of 2027'];
+// FONT-CERT-002: covers a short single word (Ashley), the 2-word phrase specifically flagged by an
+// earlier candidate's word-space finding (Happy Birthday), and the longest/most complex phrase (Class
+// of 2027) -- kept to 3 (not the full 9-word corpus) since every stone size now gets its own full
+// section instead of one shared row, and glyph-findings.json/report.html's word-level findings table
+// already cover the complete word corpus numerically.
+const RHINESTONE_SPECIMEN_SAMPLE_WORDS = ['Ashley', 'Happy Birthday', 'Class of 2027'];
 
 function mapToPlainSummary(map) {
   const out = {};
@@ -58,7 +64,10 @@ function mapToPlainSummary(map) {
  * @param {string} options.candidateRelativePath Required -- no default, no fallback to any
  *   previously-certified version.
  * @param {string} [options.outputRelativePath] Defaults to the family/version folder derived from
- *   candidateRelativePath (see lib/candidatePath.mjs). Override only for test isolation.
+ *   candidateRelativePath (see lib/candidatePath.mjs). Override only for test isolation -- an
+ *   absolute path (e.g. under os.tmpdir()) is used as-is, never joined against the repo root, so
+ *   focused tests can certify a real candidate without writing into (or updating the generatedAt
+ *   timestamp of) its real, committed fonts/candidates/.../certification/ folder.
  * @param {boolean} [options.skipScreenshots] Skip the Playwright PNG-generation step (used by fast
  *   focused tests that only need the deterministic JSON/HTML artifacts).
  * @returns {Promise<{ outputDir: string, classification: object, fontMetrics: object }>}
@@ -70,7 +79,7 @@ export async function certify({ candidateRelativePath, outputRelativePath, skipS
 
   const resolvedOutputRelativePath = outputRelativePath ?? deriveOutputRelativePath(candidateRelativePath);
   const candidateAbsolutePath = repoPath(candidateRelativePath);
-  const outputDir = repoPath(resolvedOutputRelativePath);
+  const outputDir = path.isAbsolute(resolvedOutputRelativePath) ? resolvedOutputRelativePath : repoPath(resolvedOutputRelativePath);
 
   try {
     await access(candidateAbsolutePath);
@@ -100,8 +109,11 @@ export async function certify({ candidateRelativePath, outputRelativePath, skipS
 
   const typographyFindings = computeTypographyFindings(font, glyphAnalyses);
   const productionAnalysis = await runProductionAnalysis(candidateAbsolutePath);
-  const classification = classifyCertification({ ttfChecks, productionAnalysis, typographyFindings });
-  const claudeDesignFeedback = buildClaudeDesignFeedback({ fontMetrics, ttfChecks, productionAnalysis, typographyFindings, classification });
+  // Computed here, before mapToPlainSummary() strips each result's `stones` array for JSON output --
+  // the near-identical-layout check needs the actual stone positions.
+  const readabilityFindings = computeReadabilityFindings(productionAnalysis);
+  const classification = classifyCertification({ ttfChecks, productionAnalysis, typographyFindings, readabilityFindings });
+  const claudeDesignFeedback = buildClaudeDesignFeedback({ fontMetrics, ttfChecks, productionAnalysis, typographyFindings, readabilityFindings, classification });
   const generatedAt = new Date().toISOString();
 
   // --- JSON artifacts -------------------------------------------------------------------------
@@ -109,11 +121,12 @@ export async function certify({ candidateRelativePath, outputRelativePath, skipS
 
   const glyphFindingsJson = {
     generatedAt,
-    productionConfig: { heightMm: productionAnalysis.heightMm, gapMm: productionAnalysis.gapMm, stoneSizeIds: STONE_SIZE_IDS },
+    productionConfig: { heightMmBySize: productionAnalysis.heightMmBySize, heightToStoneSizeRatio: productionAnalysis.heightToStoneSizeRatio, gapMm: productionAnalysis.gapMm, stoneSizeIds: STONE_SIZE_IDS },
     glyphs: mapToPlainSummary(productionAnalysis.glyphResults),
     words: mapToPlainSummary(productionAnalysis.wordResults),
     similarityFindings: productionAnalysis.similarityFindings,
     similarityThreshold: productionAnalysis.similarityThreshold,
+    readability: readabilityFindings,
     typography: typographyFindings
   };
   await writeFile(path.join(outputDir, 'glyph-findings.json'), JSON.stringify(glyphFindingsJson, null, 2), 'utf8');
@@ -138,6 +151,7 @@ export async function certify({ candidateRelativePath, outputRelativePath, skipS
     ttfChecks,
     typographyFindings,
     productionAnalysis,
+    readabilityFindings,
     classification,
     claudeDesignFeedback,
     generatedAt

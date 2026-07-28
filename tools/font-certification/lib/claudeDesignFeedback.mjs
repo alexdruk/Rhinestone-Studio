@@ -5,7 +5,7 @@
  * new evidence.
  */
 
-export function buildClaudeDesignFeedback({ fontMetrics, ttfChecks, productionAnalysis, typographyFindings, classification }) {
+export function buildClaudeDesignFeedback({ fontMetrics, ttfChecks, productionAnalysis, typographyFindings, readabilityFindings, classification }) {
   const bullets = [];
 
   const requiredTables = ttfChecks.find((c) => c.id === 'required-tables');
@@ -60,8 +60,33 @@ export function buildClaudeDesignFeedback({ fontMetrics, ttfChecks, productionAn
   }
 
   for (const f of (typographyFindings.inadequateWordSpaces ?? [])) {
+    // FONT-CERT-002: this used to end with a hardcoded "Every other tested multi-word phrase has a
+    // 280-500 unit gap; this one measures 111" -- true for the specific candidate that sentence was
+    // written against, but a fixed literal, not derived from typographyFindings.wordSpaceFindings, so
+    // it kept printing verbatim for later candidates regardless of their actual measured gaps. Now
+    // computed from the same wordSpaceFindings this loop already has in scope.
+    const adequateFindings = (typographyFindings.wordSpaceFindings ?? []).filter((wsf) => wsf.adequate);
+    const comparisonText = adequateFindings.length > 0
+      ? `Every other tested word-space measures ${Math.min(...adequateFindings.map((a) => a.gapUnits))}-${Math.max(...adequateFindings.map((a) => a.gapUnits))} units; this one measures ${f.gapUnits}.`
+      : `This is the only tested word-space; no other measurement is available for comparison.`;
     bullets.push(
-      `Widen the word space after "${f.leftChar}" before "${f.rightChar}" (as in "${f.word}") -- the actual rendered gap (${f.gapUnits} font units) is barely larger than an ordinary letter-to-letter gap (median ${f.medianIntraWordGapUnits} units), so the two words visually merge into one in typography-specimen.png. Every other tested multi-word phrase has a 280-500 unit gap; this one measures 111.`
+      `Widen the word space after "${f.leftChar}" before "${f.rightChar}" (as in "${f.word}") -- the actual rendered gap (${f.gapUnits} font units) is barely larger than an ordinary letter-to-letter gap (median ${f.medianIntraWordGapUnits} units), so the two words visually merge into one in typography-specimen.png. ${comparisonText}`
+    );
+  }
+
+  if (readabilityFindings?.lowStoneCountFindings.length > 0) {
+    const worst = [...readabilityFindings.lowStoneCountFindings].sort((a, b) => a.stoneCount - b.stoneCount).slice(0, 5);
+    bullets.push(
+      `Increase stone resolution (or simplify these glyphs) for: ${worst.map((f) => `"${f.char}"@${f.sizeId.toUpperCase()} (${f.stoneCount} stones)`).join(', ')} -- ` +
+      `below the ${worst[0].threshold}-stone minimum this certification treats as the floor for a meaningfully recognizable letterform.`
+    );
+  }
+
+  if (readabilityFindings?.counterCollapseFindings.length > 0) {
+    const worst = [...readabilityFindings.counterCollapseFindings].sort((a, b) => a.stoneCount - b.stoneCount).slice(0, 5);
+    bullets.push(
+      `Widen or simplify the counters for: ${worst.map((f) => `"${f.char}"@${f.sizeId.toUpperCase()} (${f.stoneCount} stones)`).join(', ')} -- ` +
+      `counter-bearing characters need enough stones to trace both the outer stroke and the inner counter distinctly (threshold: ${worst[0].threshold} stones).`
     );
   }
 

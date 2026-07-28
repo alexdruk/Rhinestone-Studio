@@ -1,0 +1,37 @@
+{
+  "fileSizeBytes": 71492,
+  "sfntVersionTag": "0x00010000",
+  "outlinesFormat": "truetype",
+  "unitsPerEm": 1000,
+  "glyphCount": 71,
+  "cmapEntryCount": 70,
+  "tableTags": [
+    "OS/2",
+    "cmap",
+    "glyf",
+    "head",
+    "hhea",
+    "hmtx",
+    "loca",
+    "maxp",
+    "name",
+    "post"
+  ],
+  "family": "Elegant Cursive",
+  "subfamily": "Regular",
+  "version": "Version 1.000",
+  "postScriptName": "ElegantCursive-Regular",
+  "ascender": 700,
+  "descender": -230,
+  "lineGap": 0,
+  "sxHeight": 420,
+  "sCapHeight": 660,
+  "italicAngle": 0,
+  "isFixedPitch": false,
+  "advanceWidthMedianUnits": 583,
+  "curveVsLineCommandSample": {
+    "curveCommands": 1102,
+    "lineCommands": 1134,
+    "sampledGlyphs": 10
+  }
+}

@@ -4,6 +4,7 @@
  * formats.
  */
 import { STONE_SIZE_IDS } from './requiredCharacters.mjs';
+import { MIN_MEANINGFUL_STONE_COUNT, MIN_STONE_COUNT_FOR_COUNTER_BEARING } from './readabilityMetrics.mjs';
 
 function escapeHtml(text) {
   return String(text ?? '')
@@ -72,6 +73,69 @@ function wordFindingsTable(productionAnalysis) {
   </table>`;
 }
 
+/**
+ * FONT-CERT-002: this narrative used to be a hardcoded sentence naming "Happy Birthday" as the one
+ * phrase that "reads as running together" -- true for the candidate that text was written against,
+ * but never re-derived, so it kept printing verbatim even after a later candidate's actual measured
+ * gap ratio (3.05x the median) put it well above the adequacy threshold. Every word in this narrative
+ * must now come from typographyFindings.inadequateWordSpaces / wordSpaceFindings, never a fixed string.
+ */
+export function wordSpaceNarrative(typographyFindings) {
+  const findings = typographyFindings.wordSpaceFindings ?? [];
+  const inadequate = typographyFindings.inadequateWordSpaces ?? [];
+
+  if (findings.length === 0) {
+    return 'No multi-word phrases were available to measure word-space adequacy against.';
+  }
+
+  if (inadequate.length === 0) {
+    const tightest = [...findings].sort((a, b) => (a.gapUnits / a.medianIntraWordGapUnits) - (b.gapUnits / b.medianIntraWordGapUnits))[0];
+    return `All ${findings.length} tested word-space boundar${findings.length === 1 ? 'y' : 'ies'} measure at least 1.3&times; the median intra-word letter gap ` +
+      `(tightest: "${escapeHtml(tightest.word)}" between "${escapeHtml(tightest.leftChar)}" and "${escapeHtml(tightest.rightChar)}" at ${(tightest.gapUnits / tightest.medianIntraWordGapUnits).toFixed(2)}&times;) -- ` +
+      'no word-space is flagged as reading like an ordinary letter gap.';
+  }
+
+  return `${inadequate.length} of ${findings.length} tested word-space boundar${findings.length === 1 ? 'y' : 'ies'} measure below the 1.3&times; adequacy threshold: ` +
+    inadequate.map((f) => `"${escapeHtml(f.word)}" between "${escapeHtml(f.leftChar)}" and "${escapeHtml(f.rightChar)}" (${(f.gapUnits / f.medianIntraWordGapUnits).toFixed(2)}&times; median)`).join(', ') +
+    ' -- recommend visually confirming word separation in typography-specimen.png for these specific phrases.';
+}
+
+function readabilityMetricsSection(readabilityFindings) {
+  if (!readabilityFindings) return '<p>Not computed.</p>';
+  const { lowStoneCountFindings, counterCollapseFindings, nearIdenticalFindings, scaleCompliance } = readabilityFindings;
+
+  const lowStoneRows = lowStoneCountFindings.length === 0
+    ? '<p>No glyph/size combination falls below the minimum meaningful stone count.</p>'
+    : `<table class="checks-table"><thead><tr><th>Char</th><th>Size</th><th>Stone count</th><th>Threshold</th></tr></thead><tbody>
+      ${lowStoneCountFindings.map((f) => `<tr class="row-flagged"><td>"${escapeHtml(f.char)}"</td><td>${f.sizeId.toUpperCase()}</td><td>${f.stoneCount}</td><td>${f.threshold}</td></tr>`).join('')}
+      </tbody></table>`;
+
+  const counterRows = counterCollapseFindings.length === 0
+    ? '<p>No counter-bearing glyph/size combination falls below the counter-bearing stone-count floor.</p>'
+    : `<table class="checks-table"><thead><tr><th>Char</th><th>Size</th><th>Stone count</th><th>Threshold</th></tr></thead><tbody>
+      ${counterCollapseFindings.map((f) => `<tr class="row-flagged"><td>"${escapeHtml(f.char)}"</td><td>${f.sizeId.toUpperCase()}</td><td>${f.stoneCount}</td><td>${f.threshold}</td></tr>`).join('')}
+      </tbody></table>`;
+
+  const nearIdenticalRows = nearIdenticalFindings.length === 0
+    ? '<p>No confusable pair produces a near-identical layout at any stone size.</p>'
+    : `<table class="checks-table"><thead><tr><th>Pair</th><th>Size</th><th>Chamfer distance</th><th>Stone counts</th></tr></thead><tbody>
+      ${nearIdenticalFindings.map((f) => `<tr class="row-flagged"><td>"${escapeHtml(f.pair[0])}" vs "${escapeHtml(f.pair[1])}"</td><td>${f.sizeId.toUpperCase()}</td><td>${f.chamferDistance.toFixed(4)}</td><td>${f.stoneCountA} / ${f.stoneCountB}</td></tr>`).join('')}
+      </tbody></table>`;
+
+  const scaleRows = scaleCompliance.bySize.map((s) => `<tr><td>${s.sizeId.toUpperCase()}</td><td>${s.stoneSizeMm}mm</td><td>${s.pxPerMm}px/mm</td><td>${s.renderedStonePx}px</td><td>${s.compliant ? statusBadge('PASS') : statusBadge('FAIL')}</td></tr>`).join('');
+
+  return `
+    <h4>Low stone count (threshold: ${MIN_MEANINGFUL_STONE_COUNT} stones)</h4>
+    ${lowStoneRows}
+    <h4>Counter-bearing glyphs with too few stones (threshold: ${MIN_STONE_COUNT_FOR_COUNTER_BEARING} stones)</h4>
+    ${counterRows}
+    <h4>Near-identical confusable-pair layouts (all 5 stone sizes)</h4>
+    ${nearIdenticalRows}
+    <h4>Specimen render-scale compliance (minimum ${scaleCompliance.minStonePx}px rendered stone diameter)</h4>
+    <table class="checks-table"><thead><tr><th>Size</th><th>Diameter</th><th>Scale</th><th>Rendered stone size</th><th>Result</th></tr></thead><tbody>${scaleRows}</tbody></table>
+  `;
+}
+
 function similarityTable(productionAnalysis) {
   const rows = productionAnalysis.similarityFindings.map((f) => `
     <tr class="${f.flagged ? 'row-flagged' : ''}">
@@ -110,7 +174,7 @@ function fontMetricsTable(fontMetrics) {
   return `<table class="metrics-table"><tbody>${entries.map(([k, v]) => `<tr><th>${escapeHtml(k)}</th><td>${escapeHtml(v)}</td></tr>`).join('')}</tbody></table>`;
 }
 
-export function buildReportHtml({ candidateRelativePath, fontMetrics, ttfChecks, typographyFindings, productionAnalysis, classification, claudeDesignFeedback, generatedAt }) {
+export function buildReportHtml({ candidateRelativePath, fontMetrics, ttfChecks, typographyFindings, productionAnalysis, readabilityFindings, classification, claudeDesignFeedback, generatedAt }) {
   const counts = classification.checkCounts;
 
   return `<!doctype html>
@@ -179,7 +243,14 @@ export function buildReportHtml({ candidateRelativePath, fontMetrics, ttfChecks,
   <img class="specimen-image" src="typography-specimen.png" alt="Typography specimen">
 
   <h2>4. Rhinestone specimen by supported stone size</h2>
-  <p>Rendered through the real production pipeline: FontManager &rarr; OpenTypeProvider &rarr; GeometryEngine.generateTextLayout() &rarr; StoneLayout. Text height ${productionAnalysis.heightMm}mm, gap ${productionAnalysis.gapMm}mm.</p>
+  <p>Rendered through the real production pipeline: FontManager &rarr; OpenTypeProvider &rarr; GeometryEngine.generateTextLayout() &rarr; StoneLayout.
+     Gap ${productionAnalysis.gapMm}mm. Text height scales with stone size (height = ${productionAnalysis.heightToStoneSizeRatio}&times; stone diameter) rather than a single fixed height, so
+     every size keeps a comparable stone count per glyph -- see the per-size table below.
+     <strong>Successful layout generation (a non-empty StoneLayout with no collisions) is not the same as visual readability</strong>; see section 5's readability metrics for objective, threshold-based findings.</p>
+  <table class="metrics-table"><tbody>
+    ${STONE_SIZE_IDS.map((id) => `<tr><th>${id.toUpperCase()}</th><td>text height: ${productionAnalysis.heightMmBySize?.[id] ?? 'n/a'}mm</td></tr>`).join('')}
+  </tbody></table>
+  <p>The specimen below is organized as one clearly labeled section per stone size (SS6, SS10, SS16, SS20, SS30), each with its own representative lowercase letters, all 12 confusable pairs, and representative words/phrases -- not one shared, densely-scaled composite image.</p>
   <img class="specimen-image" src="rhinestone-specimen.png" alt="Rhinestone specimen">
   <h3>Confusable-pair similarity (all 12 pairs, SS16 reference)</h3>
   ${similarityTable(productionAnalysis)}
@@ -187,6 +258,9 @@ export function buildReportHtml({ candidateRelativePath, fontMetrics, ttfChecks,
   <h2>5. Glyph-by-glyph findings</h2>
   <h3>Stone count per glyph, by stone size</h3>
   ${glyphFindingsTable(productionAnalysis)}
+  <h3>Readability metrics</h3>
+  <p><strong>Successful layout generation (a non-empty StoneLayout with no collisions) is not the same as visual readability.</strong> The checks below are separate, threshold-based readability findings computed from the same production data.</p>
+  ${readabilityMetricsSection(readabilityFindings)}
   <h3>Typography measurements</h3>
   <p>x-height measured spread: ${typographyFindings.xHeight.measuredSpreadUnits.toFixed(1)} font units across ${typographyFindings.xHeight.measurements.length} letters (declared OS/2 sxHeight: ${typographyFindings.xHeight.declared}). Cap-height measured spread: ${typographyFindings.capHeight.measuredSpreadUnits.toFixed(1)} font units across ${typographyFindings.capHeight.measurements.length} letters (declared OS/2 sCapHeight: ${typographyFindings.capHeight.declared}).</p>
   ${typographyFindings.weightOutliers.length > 0 ? `<p>Visual-weight outliers (fill-ratio vs a-z median ${typographyFindings.medianFillRatio.toFixed(3)}): ${typographyFindings.weightOutliers.map((o) => `"${escapeHtml(o.char)}" (${o.ratio.toFixed(3)})`).join(', ')}.</p>` : '<p>No visual-weight outliers found across a-z.</p>'}
@@ -204,7 +278,7 @@ export function buildReportHtml({ candidateRelativePath, fontMetrics, ttfChecks,
         <td>${f.adequate ? statusBadge('PASS') : statusBadge('WARNING')}</td>
       </tr>`).join('')}</tbody>
   </table>
-  <p class="table-note">Confirmed visually in typography-specimen.png: "Happy Birthday" is the only tested phrase whose word gap reads as running the two words together.</p>
+  <p class="table-note">${wordSpaceNarrative(typographyFindings)}</p>
 
   <h2>6. Word-level findings</h2>
   ${wordFindingsTable(productionAnalysis)}

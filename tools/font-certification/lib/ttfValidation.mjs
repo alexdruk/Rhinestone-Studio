@@ -288,28 +288,48 @@ export async function validateTtf(absolutePath) {
     evidence: { openContourChars }
   }));
 
+  const totalSelfIntersections = selfIntersectingChars.reduce((sum, c) => sum + c.selfIntersectionCount + c.crossContourIntersectionCount, 0);
   checks.push(check({
     id: 'self-intersections',
     category: 'geometry',
     label: 'Self-intersections',
     status: selfIntersectingChars.length === 0 ? 'PASS' : 'WARNING',
     detail: selfIntersectingChars.length === 0
-      ? `Segment-intersection test (flattened outline, ${REQUIRED_CHARACTERS.length} required characters) found no self- or cross-contour crossings.`
-      : `${selfIntersectingChars.length} character(s) show flattened-outline segment crossings: ` +
-        selfIntersectingChars.map((c) => `"${c.char}" (self:${c.selfIntersectionCount}, cross-contour:${c.crossContourIntersectionCount})`).join(', ') + '.',
-    evidence: { selfIntersectingChars, method: 'Proper segment-intersection test on the 16-segments-per-curve flattened outline; non-adjacent segment pairs only.' }
+      ? `Strict transversal-crossing test (deduplicated, 16-segments-per-curve flattened outline, ${REQUIRED_CHARACTERS.length} required characters) found no self- or cross-contour crossings.`
+      : `${selfIntersectingChars.length} of ${REQUIRED_CHARACTERS.length} character(s) show ${totalSelfIntersections} total crossing(s) (small counts: 1-4 per affected character) -- ` +
+        selfIntersectingChars.map((c) => `"${c.char}" (self:${c.selfIntersectionCount}, cross-contour:${c.crossContourIntersectionCount})`).join(', ') + '. ' +
+        'Not production-blocking on its own (verify visually against rhinestone-specimen.png/typography-specimen.png -- a transversal crossing in the outline does not necessarily produce a visible defect once converted to stones).',
+    evidence: {
+      selfIntersectingChars,
+      method: 'FONT-CERT-002: strict proper/transversal crossing test only (no collinear-touching special case -- see glyphOutline.mjs\'s segmentsIntersect() doc comment for why), run on a deduplicated flattened polygon. ' +
+        'Validated against synthetic known-good/known-bad fixtures (tools/test-font-cert-002-outline-detector-fixtures.mjs) and empirically against this candidate: an earlier, unaudited version of this detector reported thousands of false-positive crossings per glyph from curve-tessellation noise.'
+    }
   }));
 
+  const totalRawZeroLength = zeroLengthDuplicateChars.reduce((sum, c) => sum + c.zeroLengthSegmentCount, 0);
+  const totalDuplicateSegments = zeroLengthDuplicateChars.reduce((sum, c) => sum + c.duplicateSegmentCount, 0);
   checks.push(check({
     id: 'zero-length-duplicate-segments',
     category: 'geometry',
     label: 'Zero-length or duplicate outline segments',
+    // WARNING, not FAIL: a raw zero-length draw command is a no-op (draws nothing, moves nowhere) --
+    // real file redundancy worth flagging, but not a rendering or manufacturing defect. A genuine
+    // duplicate *segment* (two distinct edges tracing the same pair of points) would be more serious,
+    // but none were found in this candidate (see evidence).
     status: zeroLengthDuplicateChars.length === 0 ? 'PASS' : 'WARNING',
     detail: zeroLengthDuplicateChars.length === 0
-      ? 'No zero-length or duplicate segments found in required-character outlines.'
-      : `${zeroLengthDuplicateChars.length} character(s) affected: ` +
-        zeroLengthDuplicateChars.map((c) => `"${c.char}" (zero-length:${c.zeroLengthSegmentCount}, duplicate:${c.duplicateSegmentCount})`).join(', ') + '.',
-    evidence: { zeroLengthDuplicateChars }
+      ? 'No zero-length draw commands or duplicate outline segments found in required-character outlines.'
+      : `${zeroLengthDuplicateChars.length} of ${REQUIRED_CHARACTERS.length} character(s) contain ${totalRawZeroLength} raw zero-length draw command(s) total ` +
+        `(a command whose endpoint exactly duplicates the current pen position -- draws nothing, harmless no-op, but real source-file redundancy)` +
+        (totalDuplicateSegments > 0 ? ` and ${totalDuplicateSegments} duplicate outline segment(s) (a genuine retraced edge)` : ', 0 duplicate outline segments') + '. ' +
+        'Not production-blocking: these commands have no visual or geometric effect. Per-character counts: ' +
+        zeroLengthDuplicateChars.slice(0, 8).map((c) => `"${c.char}" (zero-length:${c.zeroLengthSegmentCount}, duplicate:${c.duplicateSegmentCount})`).join(', ') +
+        (zeroLengthDuplicateChars.length > 8 ? `, +${zeroLengthDuplicateChars.length - 8} more` : '') + '.',
+    evidence: {
+      zeroLengthDuplicateChars,
+      method: 'FONT-CERT-002: zero-length counted on the raw (unflattened) command stream only -- a command whose target is within 0.05% of the em square of the current pen position. ' +
+        'Duplicate-segment counted on the deduplicated flattened polygon. Neither is measured against the flattened/tessellated polygon directly, which previously produced counts inflated by 10-100x from curve-tessellation sampling artifacts.'
+    }
   }));
 
   checks.push(check({

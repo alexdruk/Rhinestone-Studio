@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
-import { readFile, rm } from 'node:fs/promises';
+import { readFile, rm, mkdtemp } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { certify, DEFAULT_CANDIDATE_RELATIVE_PATH } from './font-certification/certify.mjs';
 
-const repoRoot = fileURLToPath(new URL('..', import.meta.url));
-const TEST_OUTPUT_RELATIVE = 'tmp/font-certification-test-output';
-const testOutputAbsolute = path.join(repoRoot, TEST_OUTPUT_RELATIVE);
+// FONT-CERT-002/FONT-CERT-001B: certification output must never be written under the repo's tmp/ --
+// test-isolated output goes under the OS temp directory instead (an absolute path, used as-is by
+// certify(), never joined against the repo root -- see certify.mjs's outputRelativePath handling).
+const scratchRoot = await mkdtemp(path.join(os.tmpdir(), 'font-cert-001-report-test-'));
+const testOutputAbsolute = path.join(scratchRoot, 'output');
 
 async function test(name, fn) {
   try {
@@ -28,7 +30,7 @@ await rm(testOutputAbsolute, { recursive: true, force: true });
 // --- Report generation (JSON + HTML artifacts, screenshots skipped for test speed) -----------------
 
 await test('certify() writes every required JSON/HTML artifact for the real candidate', async () => {
-  const { classification } = await certify({ candidateRelativePath: DEFAULT_CANDIDATE_RELATIVE_PATH, outputRelativePath: TEST_OUTPUT_RELATIVE, skipScreenshots: true });
+  const { classification } = await certify({ candidateRelativePath: DEFAULT_CANDIDATE_RELATIVE_PATH, outputRelativePath: testOutputAbsolute, skipScreenshots: true });
 
   const certification = await readJson('certification.json');
   const fontMetrics = await readJson('font-metrics.json');
@@ -62,28 +64,27 @@ await test('certify() writes every required JSON/HTML artifact for the real cand
 // --- Deterministic output --------------------------------------------------------------------------
 
 await test('certify() produces byte-identical certification.json/glyph-findings.json across repeated runs (excluding timestamps)', async () => {
-  await certify({ candidateRelativePath: DEFAULT_CANDIDATE_RELATIVE_PATH, outputRelativePath: `${TEST_OUTPUT_RELATIVE}-run1`, skipScreenshots: true });
-  await certify({ candidateRelativePath: DEFAULT_CANDIDATE_RELATIVE_PATH, outputRelativePath: `${TEST_OUTPUT_RELATIVE}-run2`, skipScreenshots: true });
+  const run1Dir = path.join(scratchRoot, 'run1');
+  const run2Dir = path.join(scratchRoot, 'run2');
+  await certify({ candidateRelativePath: DEFAULT_CANDIDATE_RELATIVE_PATH, outputRelativePath: run1Dir, skipScreenshots: true });
+  await certify({ candidateRelativePath: DEFAULT_CANDIDATE_RELATIVE_PATH, outputRelativePath: run2Dir, skipScreenshots: true });
 
   const stripTimestamp = (obj) => { const { generatedAt, ...rest } = obj; return rest; };
 
-  const cert1 = stripTimestamp(JSON.parse(await readFile(path.join(repoRoot, `${TEST_OUTPUT_RELATIVE}-run1`, 'certification.json'), 'utf8')));
-  const cert2 = stripTimestamp(JSON.parse(await readFile(path.join(repoRoot, `${TEST_OUTPUT_RELATIVE}-run2`, 'certification.json'), 'utf8')));
+  const cert1 = stripTimestamp(JSON.parse(await readFile(path.join(run1Dir, 'certification.json'), 'utf8')));
+  const cert2 = stripTimestamp(JSON.parse(await readFile(path.join(run2Dir, 'certification.json'), 'utf8')));
   assert.deepEqual(cert1, cert2);
 
-  const glyph1 = stripTimestamp(JSON.parse(await readFile(path.join(repoRoot, `${TEST_OUTPUT_RELATIVE}-run1`, 'glyph-findings.json'), 'utf8')));
-  const glyph2 = stripTimestamp(JSON.parse(await readFile(path.join(repoRoot, `${TEST_OUTPUT_RELATIVE}-run2`, 'glyph-findings.json'), 'utf8')));
+  const glyph1 = stripTimestamp(JSON.parse(await readFile(path.join(run1Dir, 'glyph-findings.json'), 'utf8')));
+  const glyph2 = stripTimestamp(JSON.parse(await readFile(path.join(run2Dir, 'glyph-findings.json'), 'utf8')));
   assert.deepEqual(glyph1, glyph2);
-
-  await rm(path.join(repoRoot, `${TEST_OUTPUT_RELATIVE}-run1`), { recursive: true, force: true });
-  await rm(path.join(repoRoot, `${TEST_OUTPUT_RELATIVE}-run2`), { recursive: true, force: true });
 });
 
 // --- Missing-file failure --------------------------------------------------------------------------
 
 await test('certify() rejects with a clear, specific error when the candidate file is missing', async () => {
   await assert.rejects(
-    () => certify({ candidateRelativePath: 'fonts/candidates/Does-Not-Exist/ttf/v001/Nope.ttf', outputRelativePath: `${TEST_OUTPUT_RELATIVE}-missing`, skipScreenshots: true }),
+    () => certify({ candidateRelativePath: 'fonts/candidates/Does-Not-Exist/ttf/v001/Nope.ttf', outputRelativePath: path.join(scratchRoot, 'missing'), skipScreenshots: true }),
     /candidate font not found at expected path/
   );
 });
@@ -96,8 +97,7 @@ await test('certify() surfaces the real candidate\'s known FAIL verdict (CFF out
   assert.ok(certification.blockingIssues.some((i) => i.includes('glyf')));
 });
 
-await rm(testOutputAbsolute, { recursive: true, force: true });
-await rm(path.join(repoRoot, `${TEST_OUTPUT_RELATIVE}-missing`), { recursive: true, force: true });
+await rm(scratchRoot, { recursive: true, force: true });
 
 console.log('FONT-CERT-001 report generation tests passed.');
 console.log(`(Verified candidate: ${DEFAULT_CANDIDATE_RELATIVE_PATH})`);
