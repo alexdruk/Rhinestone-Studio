@@ -1,0 +1,275 @@
+{
+  "label": "m-widen",
+  "candidatePath": "tools/font-cal-002/output/fonts/candidate-m-widen.ttf",
+  "generatedAt": "2026-07-28T19:15:16.112Z",
+  "heightMmBySize": {
+    "ss6": 42.5,
+    "ss10": 52.5,
+    "ss30": 108.5
+  },
+  "stoneSizeIds": [
+    "ss6",
+    "ss10",
+    "ss30"
+  ],
+  "selectedGlyphs": [
+    "m",
+    "n",
+    "v"
+  ],
+  "representativePhrase": "movement",
+  "results": [
+    {
+      "label": "m",
+      "text": "m",
+      "stoneSizeId": "ss6",
+      "stoneSizeMm": 2,
+      "heightMm": 42.5,
+      "error": null,
+      "stoneCount": 34,
+      "boundingBoxMm": {
+        "widthMm": 29.937398757229545,
+        "heightMm": 17.00543229317383
+      },
+      "minSpacingMm": 2.107893046149627,
+      "pitchMm": 2.3,
+      "collisionCount": 0,
+      "isolatedCount": 0,
+      "clusterCount": 1,
+      "isCounterBearing": false,
+      "meaningfulStoneFloor": 6,
+      "belowMeaningfulFloor": false
+    },
+    {
+      "label": "n",
+      "text": "n",
+      "stoneSizeId": "ss6",
+      "stoneSizeMm": 2,
+      "heightMm": 42.5,
+      "error": null,
+      "stoneCount": 19,
+      "boundingBoxMm": {
+        "widthMm": 19.954166491476933,
+        "heightMm": 11.25765182252235
+      },
+      "minSpacingMm": 2.031669643623652,
+      "pitchMm": 2.3,
+      "collisionCount": 0,
+      "isolatedCount": 0,
+      "clusterCount": 1,
+      "isCounterBearing": false,
+      "meaningfulStoneFloor": 6,
+      "belowMeaningfulFloor": false
+    },
+    {
+      "label": "v",
+      "text": "v",
+      "stoneSizeId": "ss6",
+      "stoneSizeMm": 2,
+      "heightMm": 42.5,
+      "error": null,
+      "stoneCount": 15,
+      "boundingBoxMm": {
+        "widthMm": 16.64491993562323,
+        "heightMm": 12.682891471216193
+      },
+      "minSpacingMm": 2.0618534606139067,
+      "pitchMm": 2.3,
+      "collisionCount": 0,
+      "isolatedCount": 0,
+      "clusterCount": 1,
+      "isCounterBearing": false,
+      "meaningfulStoneFloor": 6,
+      "belowMeaningfulFloor": false
+    },
+    {
+      "label": "movement",
+      "text": "movement",
+      "stoneSizeId": "ss6",
+      "stoneSizeMm": 2,
+      "heightMm": 42.5,
+      "error": null,
+      "stoneCount": 173,
+      "boundingBoxMm": {
+        "widthMm": 141.29327148044294,
+        "heightMm": 30.54670148187555
+      },
+      "minSpacingMm": 2.0206217062257363,
+      "pitchMm": 2.3,
+      "collisionCount": 0,
+      "isolatedCount": 0,
+      "clusterCount": 1,
+      "isCounterBearing": false,
+      "meaningfulStoneFloor": 6,
+      "belowMeaningfulFloor": false
+    },
+    {
+      "label": "m",
+      "text": "m",
+      "stoneSizeId": "ss10",
+      "stoneSizeMm": 2.8,
+      "heightMm": 52.5,
+      "error": null,
+      "stoneCount": 25,
+      "boundingBoxMm": {
+        "widthMm": 35.09932636306927,
+        "heightMm": 20.784053026233757
+      },
+      "minSpacingMm": 2.8034923475934033,
+      "pitchMm": 3.0999999999999996,
+      "collisionCount": 0,
+      "isolatedCount": 0,
+      "clusterCount": 2,
+      "isCounterBearing": false,
+      "meaningfulStoneFloor": 6,
+      "belowMeaningfulFloor": false
+    },
+    {
+      "label": "n",
+      "text": "n",
+      "stoneSizeId": "ss10",
+      "stoneSizeMm": 2.8,
+      "heightMm": 52.5,
+      "error": null,
+      "stoneCount": 17,
+      "boundingBoxMm": {
+        "widthMm": 25.84208868483957,
+        "heightMm": 14.296389830141111
+      },
+      "minSpacingMm": 2.873323330624121,
+      "pitchMm": 3.0999999999999996,
+      "collisionCount": 0,
+      "isolatedCount": 0,
+      "clusterCount": 1,
+      "isCounterBearing": false,
+      "meaningfulStoneFloor": 6,
+      "belowMeaningfulFloor": false
+    },
+    {
+      "label": "v",
+      "text": "v",
+      "stoneSizeId": "ss10",
+      "stoneSizeMm": 2.8,
+      "heightMm": 52.5,
+      "error": null,
+      "stoneCount": 11,
+      "boundingBoxMm": {
+        "widthMm": 20.700375067364085,
+        "heightMm": 14.399925840361817
+      },
+      "minSpacingMm": 2.962398476124916,
+      "pitchMm": 3.0999999999999996,
+      "collisionCount": 0,
+      "isolatedCount": 0,
+      "clusterCount": 3,
+      "isCounterBearing": false,
+      "meaningfulStoneFloor": 6,
+      "belowMeaningfulFloor": false
+    },
+    {
+      "label": "movement",
+      "text": "movement",
+      "stoneSizeId": "ss10",
+      "stoneSizeMm": 2.8,
+      "heightMm": 52.5,
+      "error": null,
+      "stoneCount": 141,
+      "boundingBoxMm": {
+        "widthMm": 174.1765687217463,
+        "heightMm": 36.10901890280206
+      },
+      "minSpacingMm": 2.8034923475934033,
+      "pitchMm": 3.0999999999999996,
+      "collisionCount": 0,
+      "isolatedCount": 0,
+      "clusterCount": 5,
+      "isCounterBearing": false,
+      "meaningfulStoneFloor": 6,
+      "belowMeaningfulFloor": false
+    },
+    {
+      "label": "m",
+      "text": "m",
+      "stoneSizeId": "ss30",
+      "stoneSizeMm": 6.4,
+      "heightMm": 108.5,
+      "error": null,
+      "stoneCount": 26,
+      "boundingBoxMm": {
+        "widthMm": 75.45233545508928,
+        "heightMm": 41.088778943919955
+      },
+      "minSpacingMm": 6.526367039006479,
+      "pitchMm": 6.7,
+      "collisionCount": 0,
+      "isolatedCount": 0,
+      "clusterCount": 1,
+      "isCounterBearing": false,
+      "meaningfulStoneFloor": 6,
+      "belowMeaningfulFloor": false
+    },
+    {
+      "label": "n",
+      "text": "n",
+      "stoneSizeId": "ss30",
+      "stoneSizeMm": 6.4,
+      "heightMm": 108.5,
+      "error": null,
+      "stoneCount": 13,
+      "boundingBoxMm": {
+        "widthMm": 51.19032621866636,
+        "heightMm": 31.912184228652812
+      },
+      "minSpacingMm": 6.4823282736323895,
+      "pitchMm": 6.7,
+      "collisionCount": 0,
+      "isolatedCount": 0,
+      "clusterCount": 2,
+      "isCounterBearing": false,
+      "meaningfulStoneFloor": 6,
+      "belowMeaningfulFloor": false
+    },
+    {
+      "label": "v",
+      "text": "v",
+      "stoneSizeId": "ss30",
+      "stoneSizeMm": 6.4,
+      "heightMm": 108.5,
+      "error": null,
+      "stoneCount": 10,
+      "boundingBoxMm": {
+        "widthMm": 45.17948290834858,
+        "heightMm": 34.20751588904039
+      },
+      "minSpacingMm": 6.65452400098491,
+      "pitchMm": 6.7,
+      "collisionCount": 0,
+      "isolatedCount": 0,
+      "clusterCount": 3,
+      "isCounterBearing": false,
+      "meaningfulStoneFloor": 6,
+      "belowMeaningfulFloor": false
+    },
+    {
+      "label": "movement",
+      "text": "movement",
+      "stoneSizeId": "ss30",
+      "stoneSizeMm": 6.4,
+      "heightMm": 108.5,
+      "error": null,
+      "stoneCount": 127,
+      "boundingBoxMm": {
+        "widthMm": 361.43418723877625,
+        "heightMm": 70.21095966364065
+      },
+      "minSpacingMm": 6.420507055269098,
+      "pitchMm": 6.7,
+      "collisionCount": 0,
+      "isolatedCount": 0,
+      "clusterCount": 7,
+      "isCounterBearing": false,
+      "meaningfulStoneFloor": 6,
+      "belowMeaningfulFloor": false
+    }
+  ]
+}
