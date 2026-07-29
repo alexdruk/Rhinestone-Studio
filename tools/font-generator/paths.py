@@ -34,8 +34,33 @@ FAMILY_SOURCE_FONTS = {
     "Baloo2": REPO_ROOT / "fonts" / "sources" / "Baloo2" / "Baloo2-Bold.ttf",
 }
 
+# FONT-GEN-003 -- families whose source font differs *per stone size* instead of being fixed for
+# the whole family. Baloo2Variable instances Baloo2.ttf's wght axis (400/500/600/700/800) to a
+# static TTF per named weight (tools/font-generator/select_source_weight.py), then, per size,
+# selects whichever instance's own native geometry needs the smallest correction to clear that
+# size's thresholds -- see docs/specifications/FONT-GEN-003-*.md Step 1/2. All 5 sizes selected
+# Regular (400) this run; the per-size registry is kept explicit rather than collapsed to a single
+# path so a future size/threshold change can select a different weight without code changes here.
+_BALOO2_WEIGHT_DIR = REPO_ROOT / "fonts" / "sources" / "Baloo2"
+FAMILY_SIZE_SOURCE_FONTS = {
+    "Baloo2Variable": {
+        "SS6": _BALOO2_WEIGHT_DIR / "Baloo2-wght400.ttf",
+        "SS10": _BALOO2_WEIGHT_DIR / "Baloo2-wght400.ttf",
+        "SS16": _BALOO2_WEIGHT_DIR / "Baloo2-wght400.ttf",
+        "SS20": _BALOO2_WEIGHT_DIR / "Baloo2-wght400.ttf",
+        "SS30": _BALOO2_WEIGHT_DIR / "Baloo2-wght400.ttf",
+    },
+}
 
-def source_font_for(family: str) -> Path:
+
+def source_font_for(family: str, size_id: str = None) -> Path:
+    if family in FAMILY_SIZE_SOURCE_FONTS:
+        if size_id is None:
+            raise SystemExit(f"family {family!r} has a per-size source font; size_id is required")
+        try:
+            return FAMILY_SIZE_SOURCE_FONTS[family][size_id.upper()]
+        except KeyError:
+            raise SystemExit(f"No source font registered for family {family!r} size {size_id!r}")
     try:
         return FAMILY_SOURCE_FONTS[family]
     except KeyError:

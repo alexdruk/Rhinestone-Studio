@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from paths import REPO_ROOT, DEFAULT_FAMILY, REVIEW_ROOT, REVIEW_ASSETS, output_dir, source_font_for, variant_filename, sized_json_filename
+from paths import REPO_ROOT, DEFAULT_FAMILY, FAMILY_SIZE_SOURCE_FONTS, REVIEW_ROOT, REVIEW_ASSETS, output_dir, source_font_for, variant_filename, sized_json_filename
 from lib.render_stones import render_review_png
 
 ALL_SIZES = ["SS6", "SS10", "SS16", "SS20", "SS30"]
@@ -101,7 +101,7 @@ def build_assets_for_size(size_upper, data, family):
 
     wanted = worst_ids | required_ids | representative_ids
     generated_path = output_dir(size_upper) / variant_filename(family, size_upper)
-    baseline_path = source_font_for(family)
+    baseline_path = source_font_for(family, size_upper)
     gen_by_id = fetch_stones(generated_path, gen_rows_by_id, wanted, f"{family}-{size_upper}-assets-generated")
     base_by_id = fetch_stones(baseline_path, base_rows_by_id, wanted, f"{family}-{size_upper}-assets-baseline")
 
@@ -374,7 +374,15 @@ def main():
             panel = panel.replace('class="size-panel"', 'class="size-panel active"', 1)
         panels_html.append(panel)
 
-    source_font_name = source_font_for(family).name
+    if family in FAMILY_SIZE_SOURCE_FONTS:
+        # Per-size source family (FONT-GEN-003) -- each size may be generated from a different
+        # weight instance, so the subtitle lists the actual source used per size rather than one
+        # global name.
+        source_font_desc = "; ".join(
+            f"{s}: {source_font_for(family, s).name}" for s in sizes_data
+        )
+    else:
+        source_font_desc = f"each generated directly from {source_font_for(family).name}"
     html = f"""<!doctype html>
 <html>
 <head>
@@ -385,7 +393,7 @@ def main():
 <body>
 <header>
   <h1>{milestone} -- Procedural {family} Rhinestone Family Review</h1>
-  <div class="sub">5 variants (SS6/SS10/SS16/SS20/SS30), each generated directly from {source_font_name}, evaluated via OCR-based readability testing against the real production pipeline.</div>
+  <div class="sub">5 variants (SS6/SS10/SS16/SS20/SS30), {source_font_desc}, evaluated via OCR-based readability testing against the real production pipeline.</div>
 </header>
 <nav class="sizes">{nav_html}</nav>
 {''.join(panels_html)}

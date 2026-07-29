@@ -29,7 +29,7 @@ def resolve_config(size_id, family=DEFAULT_FAMILY):
     with open(config_path) as f:
         raw = json.load(f)
 
-    source_font = TTFont(str(source_font_for(family)))
+    source_font = TTFont(str(source_font_for(family, size_id)))
     units_per_em = source_font["head"].unitsPerEm
 
     calibration_height_mm = raw["supportedHeightRangeMm"][0]
@@ -63,7 +63,7 @@ def generate_one(size_id, family=DEFAULT_FAMILY, verbose=True):
     out_dir = output_dir(size_id)
     out_font_path = out_dir / variant_filename(family, size_id)
     metadata_path = out_dir / sized_json_filename("generation-metadata", family, size_id)
-    source_font = source_font_for(family)
+    source_font = source_font_for(family, size_id)
 
     if verbose:
         print(f"[{size_id}] generating from {repo_relative(source_font)} -> {repo_relative(out_font_path)}")

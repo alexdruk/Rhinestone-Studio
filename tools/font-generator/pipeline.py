@@ -121,7 +121,7 @@ def evaluate_size(size_id_upper, corpus_items, required_ids, family=DEFAULT_FAMI
     case_meta_by_id = {c["id"]: {"category": c["category"], "heightLabel": c["heightLabel"], "baseId": c["baseId"]} for c in cases}
 
     generated_path = output_dir(size_id_upper) / variant_filename(family, size_id_upper)
-    baseline_path = source_font_for(family)
+    baseline_path = source_font_for(family, size_id_upper)
 
     if verbose:
         print(f"[{size_id_upper}] measuring generated variant ({len(cases)} cases)...")
