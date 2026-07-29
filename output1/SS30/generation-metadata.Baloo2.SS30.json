@@ -1,0 +1,2063 @@
+{
+  "sizeId": "ss30",
+  "sourceFont": "fonts/sources/Baloo2/Baloo2-Bold.ttf",
+  "outputFont": "output/SS30/Baloo2Rhinestone_SS30.ttf",
+  "unitsPerEm": 1000,
+  "config": {
+    "sizeId": "ss30",
+    "familyName": "Baloo2 Rhinestone SS30",
+    "stoneDiameterMm": 6.4,
+    "gapMm": 0.3,
+    "supportedHeightRangeMm": [
+      106,
+      111
+    ],
+    "minFeatureWidthMm": 9.9,
+    "minCounterOpeningMm": 16.3,
+    "minLoopOpeningMm": 21.2,
+    "cornerRoundMm": 3.84,
+    "terminalSimplifyMm": 2.9,
+    "sideBearingAdjustMm": 0.45,
+    "minAreaMm2": 3.69,
+    "calibrationNotes": "Initial pass, derived from stoneDiameterMm proportionally (see SS6.json for the formula). This is the size FONT-DIAG-001/FONT-CAL-001/002 studied directly -- its committed 106-111mm range is narrow (only 5mm), so calibration is measured across min/mid/max within that band rather than assuming mid-band results generalize.",
+    "calibrationHeightMm": 106,
+    "unitsPerEm": 1000,
+    "minFeatureWidthFu": 93.39622641509435,
+    "minCounterOpeningFu": 153.77358490566039,
+    "minLoopOpeningFu": 200.0,
+    "cornerRoundFu": 36.22641509433962,
+    "terminalSimplifyFu": 27.358490566037737,
+    "sideBearingAdjustFu": 4.245283018867925,
+    "minAreaFu": 328.40868636525454,
+    "stoneDiameterFu": 60.377358490566046
+  },
+  "glyphsTransformed": 94,
+  "glyphLogs": [
+    {
+      "char": "!",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 96170.6,
+      "areaAfter": 95992.2,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "exclam"
+    },
+    {
+      "char": "\"",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 71681.5,
+      "areaAfter": 71302.4,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "quotedbl"
+    },
+    {
+      "char": "#",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 181940.9,
+      "areaAfter": 170855.2,
+      "contoursBefore": 4,
+      "contoursAfter": 12,
+      "glyphName": "numbersign"
+    },
+    {
+      "char": "$",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 196428.8,
+      "areaAfter": 196037.9,
+      "contoursBefore": 3,
+      "contoursAfter": 3,
+      "glyphName": "dollar"
+    },
+    {
+      "char": "%",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "counter-enlargement",
+          "holesCorrected": 2,
+          "maxDeficitFu": 30.75
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 233226.6,
+      "areaAfter": 207782.5,
+      "contoursBefore": 5,
+      "contoursAfter": 5,
+      "glyphName": "percent"
+    },
+    {
+      "char": "&",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 209178.3,
+      "areaAfter": 205625.3,
+      "contoursBefore": 2,
+      "contoursAfter": 4,
+      "glyphName": "ampersand"
+    },
+    {
+      "char": "'",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 37917.5,
+      "areaAfter": 37759.4,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "quotesingle"
+    },
+    {
+      "char": "(",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 128608.9,
+      "areaAfter": 128293.2,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "parenleft"
+    },
+    {
+      "char": ")",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 128851.2,
+      "areaAfter": 128535.4,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "parenright"
+    },
+    {
+      "char": "*",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 52584.9,
+      "areaAfter": 52584.9,
+      "contoursBefore": 5,
+      "contoursAfter": 10,
+      "glyphName": "asterisk"
+    },
+    {
+      "char": "+",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 95361.0,
+      "areaAfter": 92486.2,
+      "contoursBefore": 2,
+      "contoursAfter": 4,
+      "glyphName": "plus"
+    },
+    {
+      "char": ",",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 46438.2,
+      "areaAfter": 46174.0,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "comma"
+    },
+    {
+      "char": "-",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 37950.1,
+      "areaAfter": 37744.7,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "hyphen"
+    },
+    {
+      "char": ".",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 30416.2,
+      "areaAfter": 30414.4,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "period"
+    },
+    {
+      "char": "/",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 129703.6,
+      "areaAfter": 129464.8,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "slash"
+    },
+    {
+      "char": "0",
+      "categories": [
+        "counter-bearing",
+        "numeral"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 219857.5,
+      "areaAfter": 219857.7,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "zero"
+    },
+    {
+      "char": "1",
+      "categories": [
+        "narrow-vertical",
+        "numeral"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 100314.8,
+      "areaAfter": 99479.8,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "one"
+    },
+    {
+      "char": "2",
+      "categories": [
+        "numeral"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 177003.7,
+      "areaAfter": 178852.1,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "two"
+    },
+    {
+      "char": "3",
+      "categories": [
+        "numeral"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 185364.2,
+      "areaAfter": 185468.0,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "three"
+    },
+    {
+      "char": "4",
+      "categories": [
+        "counter-bearing",
+        "numeral"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "counter-enlargement",
+          "holesCorrected": 1,
+          "maxDeficitFu": 30.75
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 197862.5,
+      "areaAfter": 179608.9,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "four"
+    },
+    {
+      "char": "5",
+      "categories": [
+        "numeral"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 186467.1,
+      "areaAfter": 184957.8,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "five"
+    },
+    {
+      "char": "6",
+      "categories": [
+        "counter-bearing",
+        "numeral"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 214407.3,
+      "areaAfter": 216432.1,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "six"
+    },
+    {
+      "char": "7",
+      "categories": [
+        "numeral"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 146624.9,
+      "areaAfter": 147181.0,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "seven"
+    },
+    {
+      "char": "8",
+      "categories": [
+        "counter-bearing",
+        "numeral"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 215835.9,
+      "areaAfter": 215835.9,
+      "contoursBefore": 2,
+      "contoursAfter": 4,
+      "glyphName": "eight"
+    },
+    {
+      "char": "9",
+      "categories": [
+        "numeral"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 213354.3,
+      "areaAfter": 215117.5,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "nine"
+    },
+    {
+      "char": ":",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 60832.5,
+      "areaAfter": 60828.9,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "colon"
+    },
+    {
+      "char": ";",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 76854.4,
+      "areaAfter": 76588.4,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "semicolon"
+    },
+    {
+      "char": "<",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 119267.9,
+      "areaAfter": 120752.5,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "less"
+    },
+    {
+      "char": "=",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 114989.5,
+      "areaAfter": 114541.1,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "equal"
+    },
+    {
+      "char": ">",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 118433.7,
+      "areaAfter": 119931.7,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "greater"
+    },
+    {
+      "char": "?",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 147455.6,
+      "areaAfter": 147252.0,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "question"
+    },
+    {
+      "char": "@",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 473351.5,
+      "areaAfter": 473351.5,
+      "contoursBefore": 2,
+      "contoursAfter": 4,
+      "glyphName": "at"
+    },
+    {
+      "char": "A",
+      "categories": [
+        "capital",
+        "counter-bearing"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 206777.8,
+      "areaAfter": 203992.6,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "A"
+    },
+    {
+      "char": "B",
+      "categories": [
+        "capital",
+        "counter-bearing"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 242393.8,
+      "areaAfter": 242393.8,
+      "contoursBefore": 2,
+      "contoursAfter": 4,
+      "glyphName": "B"
+    },
+    {
+      "char": "C",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 176999.0,
+      "areaAfter": 176671.4,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "C"
+    },
+    {
+      "char": "D",
+      "categories": [
+        "capital",
+        "counter-bearing"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 250769.7,
+      "areaAfter": 251223.1,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "D"
+    },
+    {
+      "char": "E",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 147143.8,
+      "areaAfter": 138294.0,
+      "contoursBefore": 5,
+      "contoursAfter": 5,
+      "glyphName": "E"
+    },
+    {
+      "char": "F",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 149377.7,
+      "areaAfter": 148123.5,
+      "contoursBefore": 4,
+      "contoursAfter": 5,
+      "glyphName": "F"
+    },
+    {
+      "char": "G",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 244310.5,
+      "areaAfter": 244482.4,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "G"
+    },
+    {
+      "char": "H",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 186716.3,
+      "areaAfter": 182533.1,
+      "contoursBefore": 5,
+      "contoursAfter": 5,
+      "glyphName": "H"
+    },
+    {
+      "char": "I",
+      "categories": [
+        "capital",
+        "narrow-vertical"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 66267.3,
+      "areaAfter": 64742.1,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "I"
+    },
+    {
+      "char": "J",
+      "categories": [
+        "capital",
+        "narrow-vertical"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 109277.3,
+      "areaAfter": 107843.8,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "J"
+    },
+    {
+      "char": "K",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 183406.4,
+      "areaAfter": 183406.4,
+      "contoursBefore": 4,
+      "contoursAfter": 6,
+      "glyphName": "K"
+    },
+    {
+      "char": "L",
+      "categories": [
+        "capital",
+        "narrow-vertical"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 87718.9,
+      "areaAfter": 84482.7,
+      "contoursBefore": 3,
+      "contoursAfter": 3,
+      "glyphName": "L"
+    },
+    {
+      "char": "M",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 294536.0,
+      "areaAfter": 308800.9,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "M"
+    },
+    {
+      "char": "N",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 254195.1,
+      "areaAfter": 251913.6,
+      "contoursBefore": 3,
+      "contoursAfter": 3,
+      "glyphName": "N"
+    },
+    {
+      "char": "O",
+      "categories": [
+        "capital",
+        "counter-bearing"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 248767.4,
+      "areaAfter": 248768.5,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "O"
+    },
+    {
+      "char": "P",
+      "categories": [
+        "capital",
+        "counter-bearing"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 189468.5,
+      "areaAfter": 187998.8,
+      "contoursBefore": 3,
+      "contoursAfter": 3,
+      "glyphName": "P"
+    },
+    {
+      "char": "Q",
+      "categories": [
+        "capital",
+        "counter-bearing"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 283763.0,
+      "areaAfter": 281758.5,
+      "contoursBefore": 3,
+      "contoursAfter": 3,
+      "glyphName": "Q"
+    },
+    {
+      "char": "R",
+      "categories": [
+        "capital",
+        "counter-bearing"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 221539.0,
+      "areaAfter": 217180.6,
+      "contoursBefore": 4,
+      "contoursAfter": 4,
+      "glyphName": "R"
+    },
+    {
+      "char": "S",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 203333.8,
+      "areaAfter": 203277.2,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "S"
+    },
+    {
+      "char": "T",
+      "categories": [
+        "capital",
+        "narrow-vertical"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 130814.4,
+      "areaAfter": 128706.5,
+      "contoursBefore": 3,
+      "contoursAfter": 3,
+      "glyphName": "T"
+    },
+    {
+      "char": "U",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 215796.3,
+      "areaAfter": 213138.8,
+      "contoursBefore": 3,
+      "contoursAfter": 3,
+      "glyphName": "U"
+    },
+    {
+      "char": "V",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 202136.4,
+      "areaAfter": 204753.6,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "V"
+    },
+    {
+      "char": "W",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 314100.9,
+      "areaAfter": 327145.0,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "W"
+    },
+    {
+      "char": "X",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 189965.9,
+      "areaAfter": 187247.9,
+      "contoursBefore": 2,
+      "contoursAfter": 4,
+      "glyphName": "X"
+    },
+    {
+      "char": "Y",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 155978.5,
+      "areaAfter": 153417.7,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "Y"
+    },
+    {
+      "char": "Z",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 189923.1,
+      "areaAfter": 186214.9,
+      "contoursBefore": 3,
+      "contoursAfter": 3,
+      "glyphName": "Z"
+    },
+    {
+      "char": "[",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 136386.7,
+      "areaAfter": 133928.7,
+      "contoursBefore": 3,
+      "contoursAfter": 3,
+      "glyphName": "bracketleft"
+    },
+    {
+      "char": "\\",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 110915.0,
+      "areaAfter": 110681.5,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "backslash"
+    },
+    {
+      "char": "]",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 135626.7,
+      "areaAfter": 133083.1,
+      "contoursBefore": 3,
+      "contoursAfter": 3,
+      "glyphName": "bracketright"
+    },
+    {
+      "char": "^",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 92793.3,
+      "areaAfter": 94833.2,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "asciicircum"
+    },
+    {
+      "char": "_",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 66070.8,
+      "areaAfter": 65846.4,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "underscore"
+    },
+    {
+      "char": "`",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 32223.3,
+      "areaAfter": 32151.5,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "grave"
+    },
+    {
+      "char": "a",
+      "categories": [
+        "counter-bearing",
+        "looped-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "loop-opening",
+          "holesCorrected": 1,
+          "maxDeficitFu": 50.0
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 178839.6,
+      "areaAfter": 156602.5,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "a"
+    },
+    {
+      "char": "b",
+      "categories": [
+        "ascender",
+        "counter-bearing",
+        "looped-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 211419.1,
+      "areaAfter": 211419.1,
+      "contoursBefore": 2,
+      "contoursAfter": 4,
+      "glyphName": "b"
+    },
+    {
+      "char": "c",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 131988.6,
+      "areaAfter": 131726.5,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "c"
+    },
+    {
+      "char": "d",
+      "categories": [
+        "ascender",
+        "counter-bearing",
+        "looped-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 211529.7,
+      "areaAfter": 211529.7,
+      "contoursBefore": 2,
+      "contoursAfter": 4,
+      "glyphName": "d"
+    },
+    {
+      "char": "e",
+      "categories": [
+        "counter-bearing",
+        "looped-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 168583.7,
+      "areaAfter": 168583.7,
+      "contoursBefore": 1,
+      "contoursAfter": 3,
+      "glyphName": "e"
+    },
+    {
+      "char": "f",
+      "categories": [
+        "ascender"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 147286.9,
+      "areaAfter": 147286.9,
+      "contoursBefore": 3,
+      "contoursAfter": 4,
+      "glyphName": "f"
+    },
+    {
+      "char": "g",
+      "categories": [
+        "counter-bearing",
+        "descender",
+        "looped-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 232604.3,
+      "areaAfter": 232604.3,
+      "contoursBefore": 2,
+      "contoursAfter": 4,
+      "glyphName": "g"
+    },
+    {
+      "char": "h",
+      "categories": [
+        "ascender"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 179549.7,
+      "areaAfter": 175182.2,
+      "contoursBefore": 4,
+      "contoursAfter": 4,
+      "glyphName": "h"
+    },
+    {
+      "char": "i",
+      "categories": [
+        "narrow-vertical"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 93278.8,
+      "areaAfter": 91767.7,
+      "contoursBefore": 3,
+      "contoursAfter": 3,
+      "glyphName": "i"
+    },
+    {
+      "char": "j",
+      "categories": [
+        "descender",
+        "narrow-vertical"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 133374.6,
+      "areaAfter": 131934.0,
+      "contoursBefore": 3,
+      "contoursAfter": 3,
+      "glyphName": "j"
+    },
+    {
+      "char": "k",
+      "categories": [
+        "ascender"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 179444.2,
+      "areaAfter": 170977.0,
+      "contoursBefore": 4,
+      "contoursAfter": 4,
+      "glyphName": "k"
+    },
+    {
+      "char": "l",
+      "categories": [
+        "ascender",
+        "narrow-vertical"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 96041.1,
+      "areaAfter": 94530.6,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "l"
+    },
+    {
+      "char": "m",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 245414.9,
+      "areaAfter": 239911.1,
+      "contoursBefore": 5,
+      "contoursAfter": 5,
+      "glyphName": "m"
+    },
+    {
+      "char": "n",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 161050.5,
+      "areaAfter": 158406.8,
+      "contoursBefore": 3,
+      "contoursAfter": 3,
+      "glyphName": "n"
+    },
+    {
+      "char": "o",
+      "categories": [
+        "counter-bearing",
+        "looped-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "loop-opening",
+          "holesCorrected": 1,
+          "maxDeficitFu": 10.0
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 183117.3,
+      "areaAfter": 175887.5,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "o"
+    },
+    {
+      "char": "p",
+      "categories": [
+        "counter-bearing",
+        "descender",
+        "looped-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 213159.3,
+      "areaAfter": 213159.3,
+      "contoursBefore": 2,
+      "contoursAfter": 4,
+      "glyphName": "p"
+    },
+    {
+      "char": "q",
+      "categories": [
+        "counter-bearing",
+        "descender",
+        "looped-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 216693.5,
+      "areaAfter": 216693.5,
+      "contoursBefore": 2,
+      "contoursAfter": 4,
+      "glyphName": "q"
+    },
+    {
+      "char": "r",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 95168.9,
+      "areaAfter": 93701.7,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "r"
+    },
+    {
+      "char": "s",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 153371.6,
+      "areaAfter": 161148.1,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "s"
+    },
+    {
+      "char": "t",
+      "categories": [
+        "ascender",
+        "narrow-vertical"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 123014.0,
+      "areaAfter": 120319.3,
+      "contoursBefore": 3,
+      "contoursAfter": 3,
+      "glyphName": "t"
+    },
+    {
+      "char": "u",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 161191.2,
+      "areaAfter": 158552.7,
+      "contoursBefore": 3,
+      "contoursAfter": 3,
+      "glyphName": "u"
+    },
+    {
+      "char": "v",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 150938.4,
+      "areaAfter": 154170.4,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "v"
+    },
+    {
+      "char": "w",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 249283.4,
+      "areaAfter": 262047.2,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "w"
+    },
+    {
+      "char": "x",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 137031.5,
+      "areaAfter": 134592.0,
+      "contoursBefore": 2,
+      "contoursAfter": 4,
+      "glyphName": "x"
+    },
+    {
+      "char": "y",
+      "categories": [
+        "descender"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 192267.9,
+      "areaAfter": 195115.5,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "y"
+    },
+    {
+      "char": "z",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 127972.6,
+      "areaAfter": 114661.9,
+      "contoursBefore": 3,
+      "contoursAfter": 3,
+      "glyphName": "z"
+    },
+    {
+      "char": "{",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 138547.2,
+      "areaAfter": 138536.3,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "braceleft"
+    },
+    {
+      "char": "|",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 127711.7,
+      "areaAfter": 127303.8,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "bar"
+    },
+    {
+      "char": "}",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 138528.7,
+      "areaAfter": 138536.0,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "braceright"
+    },
+    {
+      "char": "~",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "terminal-simplify",
+          "radiusFu": 27.358490566037737
+        },
+        {
+          "type": "corner-rounding",
+          "radiusFu": 36.22641509433962
+        }
+      ],
+      "areaBefore": 72608.5,
+      "areaAfter": 72467.1,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "asciitilde"
+    }
+  ]
+}
