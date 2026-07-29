@@ -1,5 +1,14 @@
 # FONT-GEN-001 — Procedural Sacramento Rhinestone Font Family
 
+> **Erratum (FONT-GEN-005):** every OCR/review render in this report was generated upside down
+> (`render_stones.py` orientation bug, shared by the review-PNG and OCR-scoring paths). The bug is
+> fixed and this milestone's OCR evidence was re-measured against the same TTFs — see
+> `docs/specifications/FONT-GEN-005-OCRRenderOrientationBugFix.md` for corrected numbers. The
+> **REJECT recommendation below is unchanged** (geometry/clusterCount evidence was never affected
+> and remains independently sufficient), but §6/§8/§9's specific OCR percentages, quoted failure
+> examples ("Ashley" → "Alley" etc.), and the "tesseract ceiling" framing should be read via
+> FONT-GEN-005's corrected tables, not trusted as originally stated here.
+
 Branch `feature/font-arch-001`, built on top of FONT-ARCH-001 / FONT-CAL-001 / FONT-DIAG-001 /
 FONT-CAL-002 / FONT-VIS-001 (all on this same branch, none merged).
 

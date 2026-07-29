@@ -8,65 +8,19 @@
   "generated": {
     "count": 171,
     "errors": 0,
-    "meanCharAccuracy": 0.1622,
-    "meanWordAccuracy": 0.0195,
-    "meanConfidence": 33.3,
-    "exactMatchRate": 0.0175,
+    "meanCharAccuracy": 0.6581,
+    "meanWordAccuracy": 0.3182,
+    "meanConfidence": 51.3,
+    "meanClusterCount": 10.58,
+    "meanCollisionCount": 0,
+    "meanStoneCount": 240.0,
+    "exactMatchRate": 0.2807,
     "requiredPhraseCount": 12,
-    "requiredPhrasePassCount": 0,
-    "requiredPhraseAccuracy": 0.0,
-    "unrecognizedCount": 83,
-    "unrecognizedFraction": 0.4854,
+    "requiredPhrasePassCount": 7,
+    "requiredPhraseAccuracy": 0.5833,
+    "unrecognizedCount": 23,
+    "unrecognizedFraction": 0.1345,
     "worst": [
-      {
-        "id": "req-ashley__min",
-        "text": "Ashley",
-        "heightMm": 45,
-        "charAccuracy": 0.0,
-        "rawOcrText": "YELIGA"
-      },
-      {
-        "id": "numerals__min",
-        "text": "0123456789",
-        "heightMm": 45,
-        "charAccuracy": 0.0,
-        "rawOcrText": "OISSGELASO"
-      },
-      {
-        "id": "name-ashley__min",
-        "text": "Ashley",
-        "heightMm": 45,
-        "charAccuracy": 0.0,
-        "rawOcrText": "YELIGA"
-      },
-      {
-        "id": "name-emma__min",
-        "text": "Emma",
-        "heightMm": 45,
-        "charAccuracy": 0.0,
-        "rawOcrText": "FUL"
-      },
-      {
-        "id": "name-noah__min",
-        "text": "Noah",
-        "heightMm": 45,
-        "charAccuracy": 0.0,
-        "rawOcrText": "YlsL"
-      },
-      {
-        "id": "word-blessed__min",
-        "text": "blessed",
-        "heightMm": 45,
-        "charAccuracy": 0.0,
-        "rawOcrText": "PjISsSssq"
-      },
-      {
-        "id": "repeat-letter__min",
-        "text": "letter",
-        "heightMm": 45,
-        "charAccuracy": 0.0,
-        "rawOcrText": "1G{ {GL"
-      },
       {
         "id": "repeat-llll__min",
         "text": "llll",
@@ -82,83 +36,79 @@
         "rawOcrText": ""
       },
       {
-        "id": "narrow-ijlt__min",
-        "text": "ijlt",
+        "id": "loop-bobble__min",
+        "text": "bobble",
         "heightMm": 45,
         "charAccuracy": 0.0,
-        "rawOcrText": "Hy"
+        "rawOcrText": "bDODdDDdDIe"
+      },
+      {
+        "id": "join-st__min",
+        "text": "st",
+        "heightMm": 45,
+        "charAccuracy": 0.0,
+        "rawOcrText": "gi"
+      },
+      {
+        "id": "amb-aoe__min",
+        "text": "aoe",
+        "heightMm": 45,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "amb-oeao__min",
+        "text": "oeao",
+        "heightMm": 45,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "amb-rvrv__min",
+        "text": "rvrv",
+        "heightMm": 45,
+        "charAccuracy": 0.0,
+        "rawOcrText": "Twi"
+      },
+      {
+        "id": "repeat-llll__mid",
+        "text": "llll",
+        "heightMm": 52.5,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "repeat-oooo__mid",
+        "text": "oooo",
+        "heightMm": 52.5,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "narrow-ijlt__mid",
+        "text": "ijlt",
+        "heightMm": 52.5,
+        "charAccuracy": 0.0,
+        "rawOcrText": "Hf"
       }
     ]
   },
   "baseline": {
     "count": 171,
     "errors": 0,
-    "meanCharAccuracy": 0.1698,
-    "meanWordAccuracy": 0.0234,
-    "meanConfidence": 37.9,
-    "exactMatchRate": 0.0175,
+    "meanCharAccuracy": 0.8397,
+    "meanWordAccuracy": 0.6092,
+    "meanConfidence": 70.1,
+    "meanClusterCount": 7.06,
+    "meanCollisionCount": 0,
+    "meanStoneCount": 244.9,
+    "exactMatchRate": 0.6023,
     "requiredPhraseCount": 12,
-    "requiredPhrasePassCount": 0,
-    "requiredPhraseAccuracy": 0.0,
-    "unrecognizedCount": 79,
-    "unrecognizedFraction": 0.462,
+    "requiredPhrasePassCount": 8,
+    "requiredPhraseAccuracy": 0.6667,
+    "unrecognizedCount": 10,
+    "unrecognizedFraction": 0.0585,
     "worst": [
-      {
-        "id": "req-ashley__min",
-        "text": "Ashley",
-        "heightMm": 45,
-        "charAccuracy": 0.0,
-        "rawOcrText": "WepjsA"
-      },
-      {
-        "id": "name-ashley__min",
-        "text": "Ashley",
-        "heightMm": 45,
-        "charAccuracy": 0.0,
-        "rawOcrText": "WepjsA"
-      },
-      {
-        "id": "name-emma__min",
-        "text": "Emma",
-        "heightMm": 45,
-        "charAccuracy": 0.0,
-        "rawOcrText": "Cwws"
-      },
-      {
-        "id": "name-noah__min",
-        "text": "Noah",
-        "heightMm": 45,
-        "charAccuracy": 0.0,
-        "rawOcrText": "ViCcsp"
-      },
-      {
-        "id": "word-love__min",
-        "text": "love",
-        "heightMm": 45,
-        "charAccuracy": 0.0,
-        "rawOcrText": "\u2018(OAS"
-      },
-      {
-        "id": "word-family__min",
-        "text": "family",
-        "heightMm": 45,
-        "charAccuracy": 0.0,
-        "rawOcrText": "LSA"
-      },
-      {
-        "id": "repeat-letter__min",
-        "text": "letter",
-        "heightMm": 45,
-        "charAccuracy": 0.0,
-        "rawOcrText": "{SFE SL"
-      },
-      {
-        "id": "repeat-moon__min",
-        "text": "moon",
-        "heightMm": 45,
-        "charAccuracy": 0.0,
-        "rawOcrText": "WwOooU"
-      },
       {
         "id": "repeat-llll__min",
         "text": "llll",
@@ -171,17 +121,72 @@
         "text": "oooo",
         "heightMm": 45,
         "charAccuracy": 0.0,
-        "rawOcrText": "\u00ae,0,6, @"
+        "rawOcrText": "6000"
+      },
+      {
+        "id": "amb-aoe__min",
+        "text": "aoe",
+        "heightMm": 45,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "amb-oeao__min",
+        "text": "oeao",
+        "heightMm": 45,
+        "charAccuracy": 0.0,
+        "rawOcrText": "6280"
+      },
+      {
+        "id": "amb-rvrv__min",
+        "text": "rvrv",
+        "heightMm": 45,
+        "charAccuracy": 0.0,
+        "rawOcrText": "ivr\u00b0yVv"
+      },
+      {
+        "id": "repeat-llll__mid",
+        "text": "llll",
+        "heightMm": 52.5,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "repeat-oooo__mid",
+        "text": "oooo",
+        "heightMm": 52.5,
+        "charAccuracy": 0.0,
+        "rawOcrText": "0000"
+      },
+      {
+        "id": "repeat-llll__max",
+        "text": "llll",
+        "heightMm": 60,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "repeat-oooo__max",
+        "text": "oooo",
+        "heightMm": 60,
+        "charAccuracy": 0.0,
+        "rawOcrText": "QO000"
+      },
+      {
+        "id": "amb-bhk__max",
+        "text": "bhk",
+        "heightMm": 60,
+        "charAccuracy": 0.0,
+        "rawOcrText": "oink"
       }
     ]
   },
   "verdict": {
     "passed": false,
     "findings": [
-      "meanCharAccuracy 0.1622 < 0.85",
-      "meanWordAccuracy 0.0195 < 0.8",
-      "requiredPhraseAccuracy 0.0 < 1.0",
-      "unrecognizedFraction 0.4854 > 0.15"
+      "meanCharAccuracy 0.6581 < 0.85",
+      "meanWordAccuracy 0.3182 < 0.8",
+      "requiredPhraseAccuracy 0.5833 < 1.0"
     ],
     "thresholds": {
       "minCharAccuracy": 0.85,

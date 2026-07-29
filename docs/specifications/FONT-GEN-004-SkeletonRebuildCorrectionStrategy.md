@@ -1,5 +1,15 @@
 # FONT-GEN-004 — Skeleton-Rebuild Correction Strategy (Transform-Mechanism Test)
 
+> **Erratum (FONT-GEN-005):** every OCR/review render in this report was generated upside down
+> (`render_stones.py` orientation bug, shared by the review-PNG and OCR-scoring paths — found and
+> fixed immediately after this milestone). Corrected OCR numbers are in
+> `docs/specifications/FONT-GEN-005-OCRRenderOrientationBugFix.md`; the change here is modest (mean
+> character accuracy roughly doubles but stays under 0.15 at every size, required phrases remain
+> 0/12 throughout, before and after). The **REJECT recommendation and §7-§9's clusterCount-based
+> mechanism findings are unchanged** — geometry evidence was never affected by this bug, and it was
+> already the section this report's real conclusion rested on. §9's double-loop-ring artifact is a
+> geometric/contour finding, not orientation-dependent, and remains valid as stated.
+
 Branch `feature/font-arch-001`, built on top of FONT-ARCH-001 / FONT-CAL-001 / FONT-DIAG-001 /
 FONT-CAL-002 / FONT-VIS-001 / FONT-GEN-001 / FONT-GEN-002 / FONT-GEN-003 (all on this same branch,
 none merged).

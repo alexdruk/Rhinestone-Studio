@@ -8,40 +8,22 @@
   "generated": {
     "count": 171,
     "errors": 0,
-    "meanCharAccuracy": 0.0648,
-    "meanWordAccuracy": 0.0058,
-    "meanConfidence": 25.8,
+    "meanCharAccuracy": 0.1265,
+    "meanWordAccuracy": 0.0205,
+    "meanConfidence": 27.5,
+    "meanClusterCount": 34.35,
+    "meanCollisionCount": 0,
+    "meanStoneCount": 209.6,
     "exactMatchRate": 0.0058,
     "requiredPhraseCount": 12,
     "requiredPhrasePassCount": 0,
     "requiredPhraseAccuracy": 0.0,
-    "unrecognizedCount": 133,
-    "unrecognizedFraction": 0.7778,
+    "unrecognizedCount": 112,
+    "unrecognizedFraction": 0.655,
     "worst": [
-      {
-        "id": "req-ashley__min",
-        "text": "Ashley",
-        "heightMm": 106,
-        "charAccuracy": 0.0,
-        "rawOcrText": ""
-      },
-      {
-        "id": "req-happy-birthday__min",
-        "text": "Happy Birthday",
-        "heightMm": 106,
-        "charAccuracy": 0.0,
-        "rawOcrText": "ETEK, BEE. ERIGHENA)"
-      },
       {
         "id": "req-class-of-2027__min",
         "text": "Class of 2027",
-        "heightMm": 106,
-        "charAccuracy": 0.0,
-        "rawOcrText": ""
-      },
-      {
-        "id": "lower-alphabet__min",
-        "text": "abcdefghijklmnopqrstuvwxyz",
         "heightMm": 106,
         "charAccuracy": 0.0,
         "rawOcrText": ""
@@ -58,58 +40,75 @@
         "text": "0123456789",
         "heightMm": 106,
         "charAccuracy": 0.0,
-        "rawOcrText": "OCOSESBQNGD)"
-      },
-      {
-        "id": "name-ashley__min",
-        "text": "Ashley",
-        "heightMm": 106,
-        "charAccuracy": 0.0,
-        "rawOcrText": ""
+        "rawOcrText": "ON9723\". oO BY,"
       },
       {
         "id": "name-emma__min",
         "text": "Emma",
         "heightMm": 106,
         "charAccuracy": 0.0,
-        "rawOcrText": "ER arig es"
+        "rawOcrText": "S huct"
+      },
+      {
+        "id": "name-olivia__min",
+        "text": "Olivia",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": "Cay"
       },
       {
         "id": "word-love__min",
         "text": "love",
         "heightMm": 106,
         "charAccuracy": 0.0,
-        "rawOcrText": ""
+        "rawOcrText": "as Ne"
       },
       {
         "id": "word-family__min",
         "text": "family",
         "heightMm": 106,
         "charAccuracy": 0.0,
+        "rawOcrText": "Be west"
+      },
+      {
+        "id": "word-forever__min",
+        "text": "forever",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
         "rawOcrText": ""
+      },
+      {
+        "id": "repeat-book__min",
+        "text": "book",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "repeat-letter__min",
+        "text": "letter",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": "Po gg OT"
       }
     ]
   },
   "baseline": {
     "count": 171,
     "errors": 0,
-    "meanCharAccuracy": 0.1013,
-    "meanWordAccuracy": 0.0058,
-    "meanConfidence": 28.3,
-    "exactMatchRate": 0.0058,
+    "meanCharAccuracy": 0.1778,
+    "meanWordAccuracy": 0.0439,
+    "meanConfidence": 27.5,
+    "meanClusterCount": 9.35,
+    "meanCollisionCount": 0,
+    "meanStoneCount": 233.5,
+    "exactMatchRate": 0.0117,
     "requiredPhraseCount": 12,
-    "requiredPhrasePassCount": 0,
-    "requiredPhraseAccuracy": 0.0,
-    "unrecognizedCount": 121,
-    "unrecognizedFraction": 0.7076,
+    "requiredPhrasePassCount": 1,
+    "requiredPhraseAccuracy": 0.0833,
+    "unrecognizedCount": 100,
+    "unrecognizedFraction": 0.5848,
     "worst": [
-      {
-        "id": "req-ashley__min",
-        "text": "Ashley",
-        "heightMm": 106,
-        "charAccuracy": 0.0,
-        "rawOcrText": ""
-      },
       {
         "id": "req-bride-squad__min",
         "text": "Bride Squad",
@@ -125,63 +124,70 @@
         "rawOcrText": ""
       },
       {
-        "id": "lower-alphabet__min",
-        "text": "abcdefghijklmnopqrstuvwxyz",
-        "heightMm": 106,
-        "charAccuracy": 0.0,
-        "rawOcrText": "DDCOEGLORSR ERIE SOO SR BEARS"
-      },
-      {
-        "id": "upper-alphabet__min",
-        "text": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-        "heightMm": 106,
-        "charAccuracy": 0.0,
-        "rawOcrText": "VICI RP OROTRRCIT INNO ORGS LRBARMIKAS"
-      },
-      {
-        "id": "numerals__min",
-        "text": "0123456789",
-        "heightMm": 106,
-        "charAccuracy": 0.0,
-        "rawOcrText": "OSI? CAVED)"
-      },
-      {
-        "id": "name-ashley__min",
-        "text": "Ashley",
-        "heightMm": 106,
-        "charAccuracy": 0.0,
-        "rawOcrText": ""
-      },
-      {
         "id": "name-emma__min",
         "text": "Emma",
         "heightMm": 106,
         "charAccuracy": 0.0,
-        "rawOcrText": "- Le"
+        "rawOcrText": ". aves aye. q"
       },
       {
         "id": "name-noah__min",
         "text": "Noah",
         "heightMm": 106,
         "charAccuracy": 0.0,
-        "rawOcrText": "YOORS"
+        "rawOcrText": ""
+      },
+      {
+        "id": "name-olivia__min",
+        "text": "Olivia",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
       },
       {
         "id": "word-family__min",
         "text": "family",
         "heightMm": 106,
         "charAccuracy": 0.0,
-        "rawOcrText": "ff TN CI \u00bb"
+        "rawOcrText": "f q ayn \u2018 ."
+      },
+      {
+        "id": "word-blessed__min",
+        "text": "blessed",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "word-together__min",
+        "text": "together",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": "ro Q) an ONE"
+      },
+      {
+        "id": "repeat-book__min",
+        "text": "book",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": "DKOXKO"
+      },
+      {
+        "id": "repeat-letter__min",
+        "text": "letter",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
       }
     ]
   },
   "verdict": {
     "passed": false,
     "findings": [
-      "meanCharAccuracy 0.0648 < 0.85",
-      "meanWordAccuracy 0.0058 < 0.8",
+      "meanCharAccuracy 0.1265 < 0.85",
+      "meanWordAccuracy 0.0205 < 0.8",
       "requiredPhraseAccuracy 0.0 < 1.0",
-      "unrecognizedFraction 0.7778 > 0.15"
+      "unrecognizedFraction 0.655 > 0.15"
     ],
     "thresholds": {
       "minCharAccuracy": 0.85,

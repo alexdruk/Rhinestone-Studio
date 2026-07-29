@@ -1,5 +1,15 @@
 # FONT-GEN-002 — Procedural Baloo 2 Rhinestone Font Family (Control Test)
 
+> **Erratum (FONT-GEN-005):** every OCR/review render in this report was generated upside down
+> (`render_stones.py` orientation bug, shared by the review-PNG and OCR-scoring paths). Corrected
+> OCR numbers are in `docs/specifications/FONT-GEN-005-OCRRenderOrientationBugFix.md` — the change
+> here is substantial: mean character accuracy roughly doubles-to-quadruples at every size and
+> required-phrase recognition goes from 0/12 everywhere to as high as 3/12. The **REJECT
+> recommendation is still unchanged** (no size clears the acceptance thresholds even corrected, and
+> `clusterCount` geometry evidence was never affected), but this report's "statistically
+> indistinguishable from baseline" OCR framing does not hold post-fix at every size — see
+> FONT-GEN-005 §5 for the corrected comparison.
+
 Branch `feature/font-arch-001`, built on top of FONT-ARCH-001 / FONT-CAL-001 / FONT-DIAG-001 /
 FONT-CAL-002 / FONT-VIS-001 / FONT-GEN-001 (all on this same branch, none merged).
 

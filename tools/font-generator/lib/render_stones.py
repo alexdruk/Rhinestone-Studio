@@ -48,7 +48,11 @@ def render_review_png(stones, out_path, px_per_mm=10, min_stone_px=6):
     draw = ImageDraw.Draw(img)
     for s in stones:
         cx = (s["xMm"] - minx) * px_per_mm
-        cy = h - (s["yMm"] - miny) * px_per_mm
+        # StoneLayout's yMm is already Y-down (opentype.js's getPath() negates font-space Y
+        # internally for direct canvas rendering, and GeometryEngine/CanvasRenderer2D.js's own
+        # renderStoneLayout() maps yPx = oy + stone.yMm * s with no flip at all -- see
+        # docs/specifications' FONT-GEN orientation-bug investigation). No flip here either.
+        cy = (s["yMm"] - miny) * px_per_mm
         r = max(min_stone_px / 2, (s["sizeMm"] / 2) * px_per_mm)
         draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(243, 189, 50), outline=(92, 66, 0))
     img.save(out_path)
@@ -70,7 +74,8 @@ def render_ocr_image(stones, px_per_mm=16, blur_mm=None):
     draw = ImageDraw.Draw(img)
     for s in stones:
         cx = (s["xMm"] - minx) * scale
-        cy = h - (s["yMm"] - miny) * scale
+        # See render_review_png()'s comment -- yMm is already Y-down, no flip needed.
+        cy = (s["yMm"] - miny) * scale
         r = (s["sizeMm"] / 2) * scale
         draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=0)
 

@@ -8,180 +8,186 @@
   "generated": {
     "count": 171,
     "errors": 0,
-    "meanCharAccuracy": 0.0918,
+    "meanCharAccuracy": 0.1387,
     "meanWordAccuracy": 0.0058,
-    "meanConfidence": 25.5,
-    "exactMatchRate": 0.0058,
+    "meanConfidence": 27.8,
+    "meanClusterCount": 4.46,
+    "meanCollisionCount": 0,
+    "meanStoneCount": 269.6,
+    "exactMatchRate": 0.0,
     "requiredPhraseCount": 12,
     "requiredPhrasePassCount": 0,
     "requiredPhraseAccuracy": 0.0,
-    "unrecognizedCount": 109,
-    "unrecognizedFraction": 0.6374,
+    "unrecognizedCount": 100,
+    "unrecognizedFraction": 0.5848,
     "worst": [
       {
-        "id": "req-ashley__min",
-        "text": "Ashley",
-        "heightMm": 35,
-        "charAccuracy": 0.0,
-        "rawOcrText": "eT \u2018"
-      },
-      {
-        "id": "lower-alphabet__min",
-        "text": "abcdefghijklmnopqrstuvwxyz",
+        "id": "req-happy-birthday__min",
+        "text": "Happy Birthday",
         "heightMm": 35,
         "charAccuracy": 0.0,
         "rawOcrText": ""
-      },
-      {
-        "id": "upper-alphabet__min",
-        "text": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-        "heightMm": 35,
-        "charAccuracy": 0.0,
-        "rawOcrText": ""
-      },
-      {
-        "id": "numerals__min",
-        "text": "0123456789",
-        "heightMm": 35,
-        "charAccuracy": 0.0,
-        "rawOcrText": "NOGSYeO Bo"
-      },
-      {
-        "id": "name-ashley__min",
-        "text": "Ashley",
-        "heightMm": 35,
-        "charAccuracy": 0.0,
-        "rawOcrText": "eT \u2018"
-      },
-      {
-        "id": "name-olivia__min",
-        "text": "Olivia",
-        "heightMm": 35,
-        "charAccuracy": 0.0,
-        "rawOcrText": "eyo"
-      },
-      {
-        "id": "word-love__min",
-        "text": "love",
-        "heightMm": 35,
-        "charAccuracy": 0.0,
-        "rawOcrText": "f~*"
-      },
-      {
-        "id": "word-blessed__min",
-        "text": "blessed",
-        "heightMm": 35,
-        "charAccuracy": 0.0,
-        "rawOcrText": "1 meni)"
-      },
-      {
-        "id": "repeat-book__min",
-        "text": "book",
-        "heightMm": 35,
-        "charAccuracy": 0.0,
-        "rawOcrText": "\\an"
-      },
-      {
-        "id": "repeat-letter__min",
-        "text": "letter",
-        "heightMm": 35,
-        "charAccuracy": 0.0,
-        "rawOcrText": "ri"
-      }
-    ]
-  },
-  "baseline": {
-    "count": 171,
-    "errors": 0,
-    "meanCharAccuracy": 0.1056,
-    "meanWordAccuracy": 0.0058,
-    "meanConfidence": 28.8,
-    "exactMatchRate": 0.0058,
-    "requiredPhraseCount": 12,
-    "requiredPhrasePassCount": 0,
-    "requiredPhraseAccuracy": 0.0,
-    "unrecognizedCount": 105,
-    "unrecognizedFraction": 0.614,
-    "worst": [
-      {
-        "id": "req-ashley__min",
-        "text": "Ashley",
-        "heightMm": 35,
-        "charAccuracy": 0.0,
-        "rawOcrText": "rr"
-      },
-      {
-        "id": "lower-alphabet__min",
-        "text": "abcdefghijklmnopqrstuvwxyz",
-        "heightMm": 35,
-        "charAccuracy": 0.0,
-        "rawOcrText": ""
-      },
-      {
-        "id": "upper-alphabet__min",
-        "text": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-        "heightMm": 35,
-        "charAccuracy": 0.0,
-        "rawOcrText": "Koc AS HAY 7 LAcdOoO ce CASTAM KIS."
-      },
-      {
-        "id": "numerals__min",
-        "text": "0123456789",
-        "heightMm": 35,
-        "charAccuracy": 0.0,
-        "rawOcrText": "QXXSSYecOAso"
-      },
-      {
-        "id": "name-ashley__min",
-        "text": "Ashley",
-        "heightMm": 35,
-        "charAccuracy": 0.0,
-        "rawOcrText": "rr"
       },
       {
         "id": "name-emma__min",
         "text": "Emma",
         "heightMm": 35,
         "charAccuracy": 0.0,
-        "rawOcrText": "rs."
-      },
-      {
-        "id": "name-noah__min",
-        "text": "Noah",
-        "heightMm": 35,
-        "charAccuracy": 0.0,
-        "rawOcrText": "Cyey"
-      },
-      {
-        "id": "name-olivia__min",
-        "text": "Olivia",
-        "heightMm": 35,
-        "charAccuracy": 0.0,
-        "rawOcrText": "(Ay"
-      },
-      {
-        "id": "word-love__min",
-        "text": "love",
-        "heightMm": 35,
-        "charAccuracy": 0.0,
-        "rawOcrText": "\\"
+        "rawOcrText": "Gencce"
       },
       {
         "id": "word-family__min",
         "text": "family",
         "heightMm": 35,
         "charAccuracy": 0.0,
-        "rawOcrText": "\u2018oa"
+        "rawOcrText": "pect,"
+      },
+      {
+        "id": "word-forever__min",
+        "text": "forever",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "Pessersis"
+      },
+      {
+        "id": "word-blessed__min",
+        "text": "blessed",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "Ab Bb \"s"
+      },
+      {
+        "id": "repeat-book__min",
+        "text": "book",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "IAN"
+      },
+      {
+        "id": "repeat-moon__min",
+        "text": "moon",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "Cyeetly"
+      },
+      {
+        "id": "repeat-llll__min",
+        "text": "llll",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "repeat-oooo__min",
+        "text": "oooo",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "narrow-ijlt__min",
+        "text": "ijlt",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "ad"
+      }
+    ]
+  },
+  "baseline": {
+    "count": 171,
+    "errors": 0,
+    "meanCharAccuracy": 0.3208,
+    "meanWordAccuracy": 0.1311,
+    "meanConfidence": 37.0,
+    "meanClusterCount": 2.57,
+    "meanCollisionCount": 0,
+    "meanStoneCount": 198.3,
+    "exactMatchRate": 0.1053,
+    "requiredPhraseCount": 12,
+    "requiredPhrasePassCount": 1,
+    "requiredPhraseAccuracy": 0.0833,
+    "unrecognizedCount": 73,
+    "unrecognizedFraction": 0.4269,
+    "worst": [
+      {
+        "id": "word-blessed__min",
+        "text": "blessed",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "URI)"
+      },
+      {
+        "id": "repeat-book__min",
+        "text": "book",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "L,"
+      },
+      {
+        "id": "repeat-moon__min",
+        "text": "moon",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "'"
+      },
+      {
+        "id": "repeat-oooo__min",
+        "text": "oooo",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "6608"
+      },
+      {
+        "id": "narrow-ijlt__min",
+        "text": "ijlt",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "we"
+      },
+      {
+        "id": "wide-mnuw__min",
+        "text": "mnuw",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "8"
+      },
+      {
+        "id": "descender-puppy__min",
+        "text": "puppy",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "if nO \u00a2"
+      },
+      {
+        "id": "descender-yoga__min",
+        "text": "yoga",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "i"
+      },
+      {
+        "id": "descender-gypsy__min",
+        "text": "gypsy",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "ia 8"
+      },
+      {
+        "id": "loop-bobble__min",
+        "text": "bobble",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "R000,"
       }
     ]
   },
   "verdict": {
     "passed": false,
     "findings": [
-      "meanCharAccuracy 0.0918 < 0.85",
+      "meanCharAccuracy 0.1387 < 0.85",
       "meanWordAccuracy 0.0058 < 0.8",
       "requiredPhraseAccuracy 0.0 < 1.0",
-      "unrecognizedFraction 0.6374 > 0.15"
+      "unrecognizedFraction 0.5848 > 0.15"
     ],
     "thresholds": {
       "minCharAccuracy": 0.85,

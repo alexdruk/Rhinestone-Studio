@@ -8,15 +8,18 @@
   "generated": {
     "count": 171,
     "errors": 0,
-    "meanCharAccuracy": 0.038,
-    "meanWordAccuracy": 0.0,
-    "meanConfidence": 24.8,
-    "exactMatchRate": 0.0,
+    "meanCharAccuracy": 0.0722,
+    "meanWordAccuracy": 0.0058,
+    "meanConfidence": 28.1,
+    "meanClusterCount": 24.51,
+    "meanCollisionCount": 0,
+    "meanStoneCount": 241.3,
+    "exactMatchRate": 0.0058,
     "requiredPhraseCount": 12,
     "requiredPhrasePassCount": 0,
     "requiredPhraseAccuracy": 0.0,
-    "unrecognizedCount": 143,
-    "unrecognizedFraction": 0.8363,
+    "unrecognizedCount": 134,
+    "unrecognizedFraction": 0.7836,
     "worst": [
       {
         "id": "req-ashley__min",
@@ -26,15 +29,15 @@
         "rawOcrText": ""
       },
       {
-        "id": "req-bride-squad__min",
-        "text": "Bride Squad",
-        "heightMm": 80,
-        "charAccuracy": 0.0,
-        "rawOcrText": "7\""
-      },
-      {
         "id": "req-happy-birthday__min",
         "text": "Happy Birthday",
+        "heightMm": 80,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "req-class-of-2027__min",
+        "text": "Class of 2027",
         "heightMm": 80,
         "charAccuracy": 0.0,
         "rawOcrText": ""
@@ -54,13 +57,6 @@
         "rawOcrText": ""
       },
       {
-        "id": "numerals__min",
-        "text": "0123456789",
-        "heightMm": 80,
-        "charAccuracy": 0.0,
-        "rawOcrText": "O$WSFeOLso"
-      },
-      {
         "id": "name-ashley__min",
         "text": "Ashley",
         "heightMm": 80,
@@ -68,47 +64,57 @@
         "rawOcrText": ""
       },
       {
-        "id": "name-emma__min",
-        "text": "Emma",
-        "heightMm": 80,
-        "charAccuracy": 0.0,
-        "rawOcrText": "cael"
-      },
-      {
         "id": "name-olivia__min",
         "text": "Olivia",
         "heightMm": 80,
         "charAccuracy": 0.0,
-        "rawOcrText": "es ."
+        "rawOcrText": "we\","
       },
       {
         "id": "word-love__min",
         "text": "love",
         "heightMm": 80,
         "charAccuracy": 0.0,
-        "rawOcrText": "(\\* HD"
+        "rawOcrText": "ST \u00bb Gi"
+      },
+      {
+        "id": "word-family__min",
+        "text": "family",
+        "heightMm": 80,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "word-blessed__min",
+        "text": "blessed",
+        "heightMm": 80,
+        "charAccuracy": 0.0,
+        "rawOcrText": "() %o"
       }
     ]
   },
   "baseline": {
     "count": 171,
     "errors": 0,
-    "meanCharAccuracy": 0.048,
-    "meanWordAccuracy": 0.0,
-    "meanConfidence": 28.4,
-    "exactMatchRate": 0.0,
+    "meanCharAccuracy": 0.1902,
+    "meanWordAccuracy": 0.0482,
+    "meanConfidence": 37.8,
+    "meanClusterCount": 4.19,
+    "meanCollisionCount": 0,
+    "meanStoneCount": 186.8,
+    "exactMatchRate": 0.0409,
     "requiredPhraseCount": 12,
     "requiredPhrasePassCount": 0,
     "requiredPhraseAccuracy": 0.0,
-    "unrecognizedCount": 129,
-    "unrecognizedFraction": 0.7544,
+    "unrecognizedCount": 104,
+    "unrecognizedFraction": 0.6082,
     "worst": [
       {
         "id": "req-ashley__min",
         "text": "Ashley",
         "heightMm": 80,
         "charAccuracy": 0.0,
-        "rawOcrText": "NV OT ,"
+        "rawOcrText": "MN ut )"
       },
       {
         "id": "req-bride-squad__min",
@@ -125,18 +131,25 @@
         "rawOcrText": ""
       },
       {
-        "id": "numerals__min",
-        "text": "0123456789",
+        "id": "req-class-of-2027__min",
+        "text": "Class of 2027",
         "heightMm": 80,
         "charAccuracy": 0.0,
-        "rawOcrText": "OLS STeCOASO"
+        "rawOcrText": ""
+      },
+      {
+        "id": "lower-alphabet__min",
+        "text": "abcdefghijklmnopqrstuvwxyz",
+        "heightMm": 80,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
       },
       {
         "id": "name-ashley__min",
         "text": "Ashley",
         "heightMm": 80,
         "charAccuracy": 0.0,
-        "rawOcrText": "NV OT ,"
+        "rawOcrText": "MN ut )"
       },
       {
         "id": "name-emma__min",
@@ -146,18 +159,11 @@
         "rawOcrText": ""
       },
       {
-        "id": "name-noah__min",
-        "text": "Noah",
-        "heightMm": 80,
-        "charAccuracy": 0.0,
-        "rawOcrText": "wry"
-      },
-      {
         "id": "word-love__min",
         "text": "love",
         "heightMm": 80,
         "charAccuracy": 0.0,
-        "rawOcrText": "\\"
+        "rawOcrText": "| ."
       },
       {
         "id": "word-family__min",
@@ -167,8 +173,8 @@
         "rawOcrText": ""
       },
       {
-        "id": "word-blessed__min",
-        "text": "blessed",
+        "id": "word-together__min",
+        "text": "together",
         "heightMm": 80,
         "charAccuracy": 0.0,
         "rawOcrText": ""
@@ -178,10 +184,10 @@
   "verdict": {
     "passed": false,
     "findings": [
-      "meanCharAccuracy 0.038 < 0.85",
-      "meanWordAccuracy 0.0 < 0.8",
+      "meanCharAccuracy 0.0722 < 0.85",
+      "meanWordAccuracy 0.0058 < 0.8",
       "requiredPhraseAccuracy 0.0 < 1.0",
-      "unrecognizedFraction 0.8363 > 0.15"
+      "unrecognizedFraction 0.7836 > 0.15"
     ],
     "thresholds": {
       "minCharAccuracy": 0.85,

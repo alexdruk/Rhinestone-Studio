@@ -1,5 +1,18 @@
 # FONT-GEN-003 — Per-Size Source Weight Selection (Correction-Magnitude Test)
 
+> **Erratum (FONT-GEN-005):** every OCR/review render in this report was generated upside down
+> (`render_stones.py` orientation bug, shared by the review-PNG and OCR-scoring paths). This is the
+> most affected of the four FONT-GEN reports: corrected mean character accuracy roughly quadruples
+> at every size (e.g. SS10 generated 0.16 → 0.66) and required-phrase recognition goes from 0/12
+> everywhere to as high as 7/12 — see `docs/specifications/FONT-GEN-005-OCRRenderOrientationBugFix.md`
+> for full corrected tables. The **REJECT recommendation is still unchanged** (no size clears the
+> acceptance thresholds even corrected, and `clusterCount` geometry evidence — this report's actual
+> mechanism-test finding, §7-§8 — was never affected). §6/§7's "OCR recognition is near-zero... same
+> already-documented tesseract-ceiling reason" framing does not hold post-fix: Baloo2Variable's
+> corrected baseline reaches up to 0.84 char accuracy and 9/12 required phrases at some sizes,
+> genuinely legible to OCR — see FONT-GEN-005 §5's discussion of which typefaces that framing does
+> and doesn't hold up for.
+
 Branch `feature/font-arch-001`, built on top of FONT-ARCH-001 / FONT-CAL-001 / FONT-DIAG-001 /
 FONT-CAL-002 / FONT-VIS-001 / FONT-GEN-001 / FONT-GEN-002 (all on this same branch, none merged).
 
