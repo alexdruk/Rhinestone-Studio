@@ -11,7 +11,7 @@ from fontTools.ttLib import TTFont, newTable
 from fontTools.pens.ttGlyphPen import TTGlyphPen
 
 from .glyph_geometry import flatten_glyph_to_contours, signed_area
-from .glyph_transform import transform_glyph
+from .glyph_transform import transform_glyph as default_transform_glyph
 from .glyph_category import categories_for_char
 
 ASCII_RANGE = range(32, 127)
@@ -39,14 +39,19 @@ def build_glyph_pen(glyph_set, contours):
     return pen.glyph()
 
 
-def generate_variant(source_path, config, out_path):
+def generate_variant(source_path, config, out_path, transform_fn=None):
     """
     @param source_path  Path to Sacramento.ttf
     @param config       Resolved size config dict, including *Fu (font-unit) thresholds already
                          converted from mm at the variant's minimum committed height
     @param out_path     Path to write the generated TTF
+    @param transform_fn (contours, char, config, categories) -> (new_contours, log), same contract
+                         as glyph_transform.transform_glyph. Defaults to that fatten/enlarge
+                         transform (FONT-GEN-001/002/003, unchanged) when not given -- FONT-GEN-004
+                         passes glyph_transform_skeleton.transform_glyph_skeleton instead.
     @returns generation log dict (glyph logs + summary), written alongside the font as metadata
     """
+    transform_fn = transform_fn or default_transform_glyph
     font = TTFont(str(source_path))
     glyf = font["glyf"]
     glyph_set = font.getGlyphSet()
@@ -68,7 +73,7 @@ def generate_variant(source_path, config, out_path):
             continue  # e.g. space-like/empty glyphs -- nothing to transform
 
         categories = categories_for_char(char)
-        new_contours, log = transform_glyph(contours, char, config, categories)
+        new_contours, log = transform_fn(contours, char, config, categories)
         log["glyphName"] = glyph_name
         glyph_logs.append(log)
 

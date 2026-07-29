@@ -20,8 +20,16 @@ from fontTools.ttLib import TTFont
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from paths import CONFIG_DIR, DEFAULT_FAMILY, output_dir, repo_relative, source_font_for, variant_filename, sized_json_filename
 from lib.font_build import generate_variant
+from lib.glyph_transform_skeleton import transform_glyph_skeleton
 
 ALL_SIZES = ["SS6", "SS10", "SS16", "SS20", "SS30"]
+
+# FONT-GEN-004 -- families whose transform is the skeleton-rebuild strategy instead of the default
+# fatten/enlarge one (glyph_transform.transform_glyph, still used for every family not listed
+# here -- FONT-GEN-001/002/003 unchanged).
+TRANSFORM_FOR_FAMILY = {
+    "SacramentoSkeleton": transform_glyph_skeleton,
+}
 
 
 def resolve_config(size_id, family=DEFAULT_FAMILY):
@@ -68,7 +76,8 @@ def generate_one(size_id, family=DEFAULT_FAMILY, verbose=True):
     if verbose:
         print(f"[{size_id}] generating from {repo_relative(source_font)} -> {repo_relative(out_font_path)}")
 
-    log = generate_variant(source_font, config, out_font_path)
+    transform_fn = TRANSFORM_FOR_FAMILY.get(family)
+    log = generate_variant(source_font, config, out_font_path, transform_fn=transform_fn)
     log["outputFont"] = repo_relative(out_font_path)
     log["sourceFont"] = repo_relative(source_font)
 

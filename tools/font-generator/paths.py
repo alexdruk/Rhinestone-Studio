@@ -32,6 +32,10 @@ FAMILY_SOURCE_FONTS = {
     # varLib.instancer -- see generation-metadata for the note. This static file is the actual
     # source every generate/measure step below reads.
     "Baloo2": REPO_ROOT / "fonts" / "sources" / "Baloo2" / "Baloo2-Bold.ttf",
+    # FONT-GEN-004 -- same Sacramento.ttf source as FONT-GEN-001, unchanged; only the transform
+    # strategy differs (skeleton-rebuild, see generate.py's TRANSFORM_FOR_FAMILY), a deliberate
+    # single-variable comparison against FONT-GEN-001's own numbers.
+    "SacramentoSkeleton": SOURCE_FONT,
 }
 
 # FONT-GEN-003 -- families whose source font differs *per stone size* instead of being fixed for

@@ -16,9 +16,17 @@
 # skia-pathops was considered for glyph boolean ops but shapely's buffer() already covers every
 # transform this milestone's procedural rules need (offset, open/close morphology, round joins)
 # without an extra native-code dependency.
+#
+# FONT-GEN-004 -- scikit-image's skeletonize() is the standard, well-tested medial-axis/thinning
+# implementation (Zhang-Suen-style topological thinning on a rasterized mask); reused here rather
+# than hand-rolled, same rationale as pytesseract above (established library over a bug-prone
+# from-scratch reimplementation of a well-known algorithm). Pulls in scipy and networkx as
+# transitive deps; networkx is reused directly for skeleton-pixel-graph path tracing rather than
+# hand-rolling BFS a second time.
 
 fontTools==4.63.0
 numpy>=1.26,<3
 shapely>=2.0,<3
 Pillow>=10.0
 pytesseract>=0.3.10
+scikit-image>=0.24

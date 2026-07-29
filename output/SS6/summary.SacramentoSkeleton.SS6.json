@@ -1,0 +1,201 @@
+{
+  "sizeId": "ss6",
+  "heightsMm": {
+    "min": 35,
+    "mid": 42.5,
+    "max": 50
+  },
+  "generated": {
+    "count": 171,
+    "errors": 0,
+    "meanCharAccuracy": 0.0704,
+    "meanWordAccuracy": 0.0,
+    "meanConfidence": 29.2,
+    "meanClusterCount": 4.86,
+    "meanCollisionCount": 0,
+    "meanStoneCount": 286.8,
+    "exactMatchRate": 0.0,
+    "requiredPhraseCount": 12,
+    "requiredPhrasePassCount": 0,
+    "requiredPhraseAccuracy": 0.0,
+    "unrecognizedCount": 113,
+    "unrecognizedFraction": 0.6608,
+    "worst": [
+      {
+        "id": "lower-alphabet__min",
+        "text": "abcdefghijklmnopqrstuvwxyz",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "upper-alphabet__min",
+        "text": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "numerals__min",
+        "text": "0123456789",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "SY POAVS"
+      },
+      {
+        "id": "name-emma__min",
+        "text": "Emma",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "o\u2014"
+      },
+      {
+        "id": "word-family__min",
+        "text": "family",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "porcoeath"
+      },
+      {
+        "id": "repeat-letter__min",
+        "text": "letter",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "ro"
+      },
+      {
+        "id": "repeat-moon__min",
+        "text": "moon",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "LIAS"
+      },
+      {
+        "id": "repeat-llll__min",
+        "text": "llll",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "narrow-illicit__min",
+        "text": "illicit",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "wp %"
+      },
+      {
+        "id": "narrow-will__min",
+        "text": "will",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "\u201c"
+      }
+    ]
+  },
+  "baseline": {
+    "count": 171,
+    "errors": 0,
+    "meanCharAccuracy": 0.1056,
+    "meanWordAccuracy": 0.0058,
+    "meanConfidence": 28.8,
+    "meanClusterCount": 2.57,
+    "meanCollisionCount": 0,
+    "meanStoneCount": 198.3,
+    "exactMatchRate": 0.0058,
+    "requiredPhraseCount": 12,
+    "requiredPhrasePassCount": 0,
+    "requiredPhraseAccuracy": 0.0,
+    "unrecognizedCount": 105,
+    "unrecognizedFraction": 0.614,
+    "worst": [
+      {
+        "id": "req-ashley__min",
+        "text": "Ashley",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "rr"
+      },
+      {
+        "id": "lower-alphabet__min",
+        "text": "abcdefghijklmnopqrstuvwxyz",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "upper-alphabet__min",
+        "text": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "Koc AS HAY 7 LAcdOoO ce CASTAM KIS."
+      },
+      {
+        "id": "numerals__min",
+        "text": "0123456789",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "QXXSSYecOAso"
+      },
+      {
+        "id": "name-ashley__min",
+        "text": "Ashley",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "rr"
+      },
+      {
+        "id": "name-emma__min",
+        "text": "Emma",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "rs."
+      },
+      {
+        "id": "name-noah__min",
+        "text": "Noah",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "Cyey"
+      },
+      {
+        "id": "name-olivia__min",
+        "text": "Olivia",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "(Ay"
+      },
+      {
+        "id": "word-love__min",
+        "text": "love",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "\\"
+      },
+      {
+        "id": "word-family__min",
+        "text": "family",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "\u2018oa"
+      }
+    ]
+  },
+  "verdict": {
+    "passed": false,
+    "findings": [
+      "meanCharAccuracy 0.0704 < 0.85",
+      "meanWordAccuracy 0.0 < 0.8",
+      "requiredPhraseAccuracy 0.0 < 1.0",
+      "unrecognizedFraction 0.6608 > 0.15"
+    ],
+    "thresholds": {
+      "minCharAccuracy": 0.85,
+      "minWordAccuracy": 0.8,
+      "minRequiredPhraseAccuracy": 1.0,
+      "minConfidence": 40.0,
+      "maxUnrecognizedSamples": 0.15,
+      "maxAmbiguousPairRepeats": 2
+    }
+  }
+}

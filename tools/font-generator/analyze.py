@@ -41,12 +41,21 @@ def summarize(evaluation, required_ids=None):
         required_pass = [r for r in required if r["ocr"]["exactMatch"]]
         unrecognized = [r for r in rows_with_ocr if r["ocr"]["charAccuracy"] == 0.0]
         errors = [r for r in rows if r.get("error")]
+        # Geometry metrics straight from the real production pipeline (measure.mjs), independent
+        # of OCR -- see FONT-GEN-001 report Sec.8/9 for why clusterCount is weighted as a second,
+        # unambiguous line of evidence alongside OCR.
+        cluster_counts = [r["clusterCount"] for r in rows if not r.get("error") and r.get("clusterCount") is not None]
+        collision_counts = [r["collisionCount"] for r in rows if not r.get("error") and r.get("collisionCount") is not None]
+        stone_counts = [r["stoneCount"] for r in rows if not r.get("error") and r.get("stoneCount") is not None]
         return {
             "count": len(rows),
             "errors": len(errors),
             "meanCharAccuracy": round(mean(char_accs), 4) if char_accs else None,
             "meanWordAccuracy": round(mean(word_accs), 4) if word_accs else None,
             "meanConfidence": round(mean(confidences), 1) if confidences else None,
+            "meanClusterCount": round(mean(cluster_counts), 2) if cluster_counts else None,
+            "meanCollisionCount": round(mean(collision_counts), 2) if collision_counts else None,
+            "meanStoneCount": round(mean(stone_counts), 1) if stone_counts else None,
             "exactMatchRate": round(len(exact) / len(rows_with_ocr), 4) if rows_with_ocr else None,
             "requiredPhraseCount": len(required),
             "requiredPhrasePassCount": len(required_pass),

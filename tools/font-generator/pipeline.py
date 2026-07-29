@@ -107,7 +107,7 @@ def evaluate_case(measurement, required_ids, case_meta_by_id):
     }
 
 
-def evaluate_size(size_id_upper, corpus_items, required_ids, family=DEFAULT_FAMILY, verbose=True):
+def evaluate_size(size_id_upper, corpus_items, required_ids, family=DEFAULT_FAMILY, verbose=True, reuse_baseline_from=None):
     size_id = size_id_upper.lower()
     with open(CONFIG_DIR / f"{size_id_upper}.json") as f:
         config = json.load(f)
@@ -121,22 +121,32 @@ def evaluate_size(size_id_upper, corpus_items, required_ids, family=DEFAULT_FAMI
     case_meta_by_id = {c["id"]: {"category": c["category"], "heightLabel": c["heightLabel"], "baseId": c["baseId"]} for c in cases}
 
     generated_path = output_dir(size_id_upper) / variant_filename(family, size_id_upper)
-    baseline_path = source_font_for(family, size_id_upper)
 
     if verbose:
         print(f"[{size_id_upper}] measuring generated variant ({len(cases)} cases)...")
     generated_results = run_measure(generated_path, cases, f"{family}-{size_id_upper}-generated")
 
     if verbose:
-        print(f"[{size_id_upper}] measuring baseline {family} ({len(cases)} cases)...")
-    baseline_results = run_measure(baseline_path, cases, f"{family}-{size_id_upper}-baseline")
-
-    if verbose:
         print(f"[{size_id_upper}] rendering + OCR generated...")
     generated_eval = [evaluate_case(m, required_ids, case_meta_by_id) for m in generated_results]
-    if verbose:
-        print(f"[{size_id_upper}] rendering + OCR baseline...")
-    baseline_eval = [evaluate_case(m, required_ids, case_meta_by_id) for m in baseline_results]
+
+    if reuse_baseline_from:
+        # Baseline is an unmodified source font this milestone didn't touch -- reuse a prior
+        # milestone's own already-computed baseline evaluation instead of re-measuring/re-OCRing
+        # it, per that milestone's "baseline hasn't changed" instruction.
+        reuse_eval_path = output_dir(size_id_upper) / sized_json_filename("evaluation", reuse_baseline_from, size_id_upper)
+        if verbose:
+            print(f"[{size_id_upper}] reusing baseline evaluation from {repo_relative(reuse_eval_path)} (not re-measured)")
+        with open(reuse_eval_path) as f:
+            baseline_eval = json.load(f)["baseline"]
+    else:
+        baseline_path = source_font_for(family, size_id_upper)
+        if verbose:
+            print(f"[{size_id_upper}] measuring baseline {family} ({len(cases)} cases)...")
+        baseline_results = run_measure(baseline_path, cases, f"{family}-{size_id_upper}-baseline")
+        if verbose:
+            print(f"[{size_id_upper}] rendering + OCR baseline...")
+        baseline_eval = [evaluate_case(m, required_ids, case_meta_by_id) for m in baseline_results]
 
     result = {
         "sizeId": size_id,
@@ -144,7 +154,8 @@ def evaluate_size(size_id_upper, corpus_items, required_ids, family=DEFAULT_FAMI
         "heightsMm": heights_mm,
         "config": config,
         "generated": generated_eval,
-        "baseline": baseline_eval
+        "baseline": baseline_eval,
+        "baselineReusedFrom": reuse_baseline_from
     }
 
     out_path = output_dir(size_id_upper) / sized_json_filename("evaluation", family, size_id_upper)
@@ -160,6 +171,7 @@ def main():
     parser.add_argument("--size", choices=ALL_SIZES)
     parser.add_argument("--all", action="store_true")
     parser.add_argument("--family", default=DEFAULT_FAMILY)
+    parser.add_argument("--reuse-baseline-from", default=None, help="Family whose already-computed baseline evaluation to reuse instead of re-measuring (source font must be unchanged).")
     args = parser.parse_args()
     if not args.size and not args.all:
         parser.error("--size <SIZE> or --all required")
@@ -167,7 +179,7 @@ def main():
     corpus_items, required_ids = load_corpus()
     sizes = ALL_SIZES if args.all else [args.size]
     for size_id in sizes:
-        evaluate_size(size_id, corpus_items, required_ids, args.family)
+        evaluate_size(size_id, corpus_items, required_ids, args.family, reuse_baseline_from=args.reuse_baseline_from)
 
 
 if __name__ == "__main__":
