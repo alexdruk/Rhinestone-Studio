@@ -12,14 +12,16 @@ framework rule).
 
 Usage:
   tmp/font-generator-venv/bin/python3 tools/font-generator/build_review_html.py
+  tmp/font-generator-venv/bin/python3 tools/font-generator/build_review_html.py --family Baloo2 --milestone FONT-GEN-002
 """
+import argparse
 import json
 import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from paths import REPO_ROOT, SOURCE_FONT, REVIEW_ROOT, REVIEW_ASSETS, output_dir
+from paths import REPO_ROOT, DEFAULT_FAMILY, REVIEW_ROOT, REVIEW_ASSETS, output_dir, source_font_for, variant_filename, sized_json_filename
 from lib.render_stones import render_review_png
 
 ALL_SIZES = ["SS6", "SS10", "SS16", "SS20", "SS30"]
@@ -27,11 +29,11 @@ WORST_N = 10
 NODE_MEASURE = REPO_ROOT / "tools" / "font-generator" / "measure.mjs"
 
 
-def load_size_data(size_upper):
+def load_size_data(size_upper, family):
     out_dir = output_dir(size_upper)
-    eval_path = out_dir / f"evaluation.{size_upper}.json"
-    summary_path = out_dir / f"summary.{size_upper}.json"
-    meta_path = out_dir / f"generation-metadata.{size_upper}.json"
+    eval_path = out_dir / sized_json_filename("evaluation", family, size_upper)
+    summary_path = out_dir / sized_json_filename("summary", family, size_upper)
+    meta_path = out_dir / sized_json_filename("generation-metadata", family, size_upper)
     if not eval_path.exists():
         return None
     with open(eval_path) as f:
@@ -60,7 +62,7 @@ def fetch_stones(font_path, rows_by_id, case_ids, tag):
     ]
     if not cases:
         return {}
-    tmp_dir = REPO_ROOT / "tmp" / "font-gen-001-review-assets"
+    tmp_dir = REPO_ROOT / "tmp" / "font-gen-review-assets"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     input_path = tmp_dir / f"{tag}.input.json"
     output_path = tmp_dir / f"{tag}.output.json"
@@ -76,12 +78,14 @@ def render_case_png(row, out_path):
     render_review_png(row["stones"], out_path)
 
 
-def build_assets_for_size(size_upper, data):
+def build_assets_for_size(size_upper, data, family):
     """Renders the curated PNG subset for one size, returns dict of {caseId: relPath}."""
     assets = {}
     gen_rows_by_id = {r["label"]: r for r in data["evaluation"]["generated"]}
     base_rows_by_id = {r["label"]: r for r in data["evaluation"]["baseline"]}
-    size_dir = REVIEW_ASSETS / size_upper
+    # Family-scoped subfolder -- keeps this run's PNGs from colliding with another family's
+    # (e.g. Sacramento's FONT-GEN-001 review assets) under the same review/assets/ root.
+    size_dir = REVIEW_ASSETS / family / size_upper
     size_dir.mkdir(parents=True, exist_ok=True)
 
     summary = data["summary"]
@@ -96,19 +100,20 @@ def build_assets_for_size(size_upper, data):
             break
 
     wanted = worst_ids | required_ids | representative_ids
-    generated_path = output_dir(size_upper) / f"SacramentoRhinestone_{size_upper}.ttf"
-    gen_by_id = fetch_stones(generated_path, gen_rows_by_id, wanted, f"{size_upper}-assets-generated")
-    base_by_id = fetch_stones(SOURCE_FONT, base_rows_by_id, wanted, f"{size_upper}-assets-baseline")
+    generated_path = output_dir(size_upper) / variant_filename(family, size_upper)
+    baseline_path = source_font_for(family)
+    gen_by_id = fetch_stones(generated_path, gen_rows_by_id, wanted, f"{family}-{size_upper}-assets-generated")
+    base_by_id = fetch_stones(baseline_path, base_rows_by_id, wanted, f"{family}-{size_upper}-assets-baseline")
 
     for case_id in wanted:
         if case_id in gen_by_id:
             out_path = size_dir / f"{case_id}.generated.png"
             render_case_png(gen_by_id[case_id], out_path)
-            assets[f"{case_id}.generated"] = f"assets/{size_upper}/{out_path.name}"
+            assets[f"{case_id}.generated"] = f"assets/{family}/{size_upper}/{out_path.name}"
         if case_id in base_by_id:
             out_path = size_dir / f"{case_id}.baseline.png"
             render_case_png(base_by_id[case_id], out_path)
-            assets[f"{case_id}.baseline"] = f"assets/{size_upper}/{out_path.name}"
+            assets[f"{case_id}.baseline"] = f"assets/{family}/{size_upper}/{out_path.name}"
 
     return assets, {"worstIds": sorted(worst_ids), "requiredIds": sorted(required_ids), "representativeIds": sorted(representative_ids)}
 
@@ -340,9 +345,15 @@ def build_size_panel(size_upper, data, assets, curated):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--family", default=DEFAULT_FAMILY)
+    parser.add_argument("--milestone", default="FONT-GEN-001")
+    args = parser.parse_args()
+    family, milestone = args.family, args.milestone
+
     sizes_data = {}
     for size_upper in ALL_SIZES:
-        data = load_size_data(size_upper)
+        data = load_size_data(size_upper, family)
         if data is not None:
             sizes_data[size_upper] = data
 
@@ -357,23 +368,24 @@ def main():
 
     panels_html = []
     for i, (size_upper, data) in enumerate(sizes_data.items()):
-        assets, curated = build_assets_for_size(size_upper, data)
+        assets, curated = build_assets_for_size(size_upper, data, family)
         panel = build_size_panel(size_upper, data, assets, curated)
         if i == 0:
             panel = panel.replace('class="size-panel"', 'class="size-panel active"', 1)
         panels_html.append(panel)
 
+    source_font_name = source_font_for(family).name
     html = f"""<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
-<title>FONT-GEN-001 Review -- Sacramento Rhinestone Family</title>
+<title>{milestone} Review -- {family} Rhinestone Family</title>
 <style>{PAGE_CSS}</style>
 </head>
 <body>
 <header>
-  <h1>FONT-GEN-001 -- Procedural Sacramento Rhinestone Family Review</h1>
-  <div class="sub">5 variants (SS6/SS10/SS16/SS20/SS30), each generated directly from Sacramento-Regular.ttf, evaluated via OCR-based readability testing against the real production pipeline.</div>
+  <h1>{milestone} -- Procedural {family} Rhinestone Family Review</h1>
+  <div class="sub">5 variants (SS6/SS10/SS16/SS20/SS30), each generated directly from {source_font_name}, evaluated via OCR-based readability testing against the real production pipeline.</div>
 </header>
 <nav class="sizes">{nav_html}</nav>
 {''.join(panels_html)}
@@ -381,7 +393,7 @@ def main():
 </body>
 </html>"""
 
-    out_path = REVIEW_ROOT / "FONT-GEN-001-review.html"
+    out_path = REVIEW_ROOT / f"{milestone}-review.html"
     with open(out_path, "w") as f:
         f.write(html)
     print(f"Wrote {out_path}")

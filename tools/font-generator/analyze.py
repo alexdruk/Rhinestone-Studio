@@ -13,7 +13,7 @@ from pathlib import Path
 from statistics import mean
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from paths import output_dir, repo_relative
+from paths import DEFAULT_FAMILY, output_dir, repo_relative, sized_json_filename
 
 ALL_SIZES = ["SS6", "SS10", "SS16", "SS20", "SS30"]
 
@@ -95,17 +95,18 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--size", choices=ALL_SIZES)
     parser.add_argument("--all", action="store_true")
+    parser.add_argument("--family", default=DEFAULT_FAMILY)
     args = parser.parse_args()
     sizes = ALL_SIZES if args.all else [args.size]
 
     for size_id in sizes:
-        eval_path = output_dir(size_id) / f"evaluation.{size_id}.json"
+        eval_path = output_dir(size_id) / sized_json_filename("evaluation", args.family, size_id)
         with open(eval_path) as f:
             evaluation = json.load(f)
         summary = summarize(evaluation)
         verdict = check_thresholds(summary)
 
-        summary_path = output_dir(size_id) / f"summary.{size_id}.json"
+        summary_path = output_dir(size_id) / sized_json_filename("summary", args.family, size_id)
         with open(summary_path, "w") as f:
             json.dump({**summary, "verdict": verdict}, f, indent=2)
 

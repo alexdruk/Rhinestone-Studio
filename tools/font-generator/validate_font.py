@@ -18,15 +18,15 @@ from pathlib import Path
 from fontTools.ttLib import TTFont
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from paths import output_dir, repo_relative
+from paths import DEFAULT_FAMILY, output_dir, repo_relative, variant_filename
 
 ALL_SIZES = ["SS6", "SS10", "SS16", "SS20", "SS30"]
 REQUIRED_TABLES = ["cmap", "glyf", "head", "hhea", "hmtx", "maxp", "name", "post", "loca"]
 REQUIRED_ASCII = list(range(32, 127))
 
 
-def validate(size_id_upper):
-    font_path = output_dir(size_id_upper) / f"SacramentoRhinestone_{size_id_upper}.ttf"
+def validate(size_id_upper, expected_family=DEFAULT_FAMILY):
+    font_path = output_dir(size_id_upper) / variant_filename(expected_family, size_id_upper)
     findings = []
     checks = {}
 
@@ -47,7 +47,7 @@ def validate(size_id_upper):
     family = font["name"].getDebugName(1)
     full_name = font["name"].getDebugName(4)
     checks["namingIsNotPlaceholder"] = "ElegantCursive" not in (family or "") and "ElegantCursive" not in (full_name or "")
-    checks["namingIdentifiesVariant"] = size_id_upper in (family or "") and "Sacramento" in (family or "")
+    checks["namingIdentifiesVariant"] = size_id_upper in (family or "") and expected_family in (family or "")
     if not checks["namingIdentifiesVariant"]:
         findings.append(f"Family name '{family}' does not clearly identify {size_id_upper}")
 
@@ -97,12 +97,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--size", choices=ALL_SIZES)
     parser.add_argument("--all", action="store_true")
+    parser.add_argument("--family", default=DEFAULT_FAMILY)
     args = parser.parse_args()
     sizes = ALL_SIZES if args.all else [args.size]
 
     results = {}
     for size_id in sizes:
-        result = validate(size_id)
+        result = validate(size_id, args.family)
         results[size_id] = result
         status = "PASS" if result["passed"] else "FAIL"
         print(f"[{size_id}] {status} -- {result['family']!r} -- findings: {result['findings'] or 'none'}")

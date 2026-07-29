@@ -19,6 +19,38 @@ SOURCE_FONT = REPO_ROOT / "fonts" / "sources" / "Sacramento" / "Sacramento.ttf"
 
 CORPUS_FILE = TOOL_ROOT / "corpus.json"
 
+# FONT-GEN-002 -- registry of source fonts this pipeline can generate rhinestone variants from.
+# "Sacramento" (FONT-GEN-001) stays the unprefixed default everywhere below, so its existing
+# output/ filenames are untouched -- every other family gets a family-qualified filename instead
+# (see variant_filename/sized_json_filename) so runs never collide with Sacramento's artifacts.
+DEFAULT_FAMILY = "Sacramento"
+
+FAMILY_SOURCE_FONTS = {
+    "Sacramento": SOURCE_FONT,
+    # Baloo 2 ships only as a variable font (wght 400-800); FONT-GEN-002 instances it to its
+    # heaviest available weight (wght=800, ExtraBold) once, ahead of time, via fontTools
+    # varLib.instancer -- see generation-metadata for the note. This static file is the actual
+    # source every generate/measure step below reads.
+    "Baloo2": REPO_ROOT / "fonts" / "sources" / "Baloo2" / "Baloo2-Bold.ttf",
+}
+
+
+def source_font_for(family: str) -> Path:
+    try:
+        return FAMILY_SOURCE_FONTS[family]
+    except KeyError:
+        raise SystemExit(f"Unknown family {family!r}; add it to FAMILY_SOURCE_FONTS in paths.py")
+
+
+def variant_filename(family: str, size_id_upper: str) -> str:
+    return f"{family}Rhinestone_{size_id_upper}.ttf"
+
+
+def sized_json_filename(prefix: str, family: str, size_id_upper: str) -> str:
+    if family == DEFAULT_FAMILY:
+        return f"{prefix}.{size_id_upper}.json"
+    return f"{prefix}.{family}.{size_id_upper}.json"
+
 
 def repo_path(*segments: str) -> Path:
     return REPO_ROOT.joinpath(*segments)

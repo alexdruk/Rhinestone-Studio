@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from paths import REPO_ROOT, CONFIG_DIR, CORPUS_FILE, SOURCE_FONT, output_dir, repo_relative
+from paths import REPO_ROOT, CONFIG_DIR, CORPUS_FILE, DEFAULT_FAMILY, output_dir, repo_relative, source_font_for, variant_filename, sized_json_filename
 from lib.render_stones import render_ocr_image
 from lib.ocr_eval import evaluate
 
@@ -107,7 +107,7 @@ def evaluate_case(measurement, required_ids, case_meta_by_id):
     }
 
 
-def evaluate_size(size_id_upper, corpus_items, required_ids, verbose=True):
+def evaluate_size(size_id_upper, corpus_items, required_ids, family=DEFAULT_FAMILY, verbose=True):
     size_id = size_id_upper.lower()
     with open(CONFIG_DIR / f"{size_id_upper}.json") as f:
         config = json.load(f)
@@ -120,15 +120,16 @@ def evaluate_size(size_id_upper, corpus_items, required_ids, verbose=True):
     cases = build_cases(corpus_items, size_id, heights_mm)
     case_meta_by_id = {c["id"]: {"category": c["category"], "heightLabel": c["heightLabel"], "baseId": c["baseId"]} for c in cases}
 
-    generated_path = output_dir(size_id_upper) / f"SacramentoRhinestone_{size_id_upper}.ttf"
+    generated_path = output_dir(size_id_upper) / variant_filename(family, size_id_upper)
+    baseline_path = source_font_for(family)
 
     if verbose:
         print(f"[{size_id_upper}] measuring generated variant ({len(cases)} cases)...")
-    generated_results = run_measure(generated_path, cases, f"{size_id_upper}-generated")
+    generated_results = run_measure(generated_path, cases, f"{family}-{size_id_upper}-generated")
 
     if verbose:
-        print(f"[{size_id_upper}] measuring baseline Sacramento ({len(cases)} cases)...")
-    baseline_results = run_measure(SOURCE_FONT, cases, f"{size_id_upper}-baseline")
+        print(f"[{size_id_upper}] measuring baseline {family} ({len(cases)} cases)...")
+    baseline_results = run_measure(baseline_path, cases, f"{family}-{size_id_upper}-baseline")
 
     if verbose:
         print(f"[{size_id_upper}] rendering + OCR generated...")
@@ -139,13 +140,14 @@ def evaluate_size(size_id_upper, corpus_items, required_ids, verbose=True):
 
     result = {
         "sizeId": size_id,
+        "family": family,
         "heightsMm": heights_mm,
         "config": config,
         "generated": generated_eval,
         "baseline": baseline_eval
     }
 
-    out_path = output_dir(size_id_upper) / f"evaluation.{size_id_upper}.json"
+    out_path = output_dir(size_id_upper) / sized_json_filename("evaluation", family, size_id_upper)
     with open(out_path, "w") as f:
         json.dump(result, f, indent=2)
     if verbose:
@@ -157,6 +159,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--size", choices=ALL_SIZES)
     parser.add_argument("--all", action="store_true")
+    parser.add_argument("--family", default=DEFAULT_FAMILY)
     args = parser.parse_args()
     if not args.size and not args.all:
         parser.error("--size <SIZE> or --all required")
@@ -164,7 +167,7 @@ def main():
     corpus_items, required_ids = load_corpus()
     sizes = ALL_SIZES if args.all else [args.size]
     for size_id in sizes:
-        evaluate_size(size_id, corpus_items, required_ids)
+        evaluate_size(size_id, corpus_items, required_ids, args.family)
 
 
 if __name__ == "__main__":
