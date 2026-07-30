@@ -47,33 +47,41 @@ comparison, not a different metric.
 | Family | Variant | n | Vision charAcc | Vision exact | pytesseract charAcc | pytesseract exact |
 |---|---|---|---|---|---|---|
 | Sacramento | baseline | 20 | 1.000 | 20/20 | 0.393 | 1/20 |
-| Sacramento | generated | 20 | 0.992 | 18/20 | 0.163 | 0/20 |
+| Sacramento | generated | 20 | 0.996 | 19/20 | 0.163 | 0/20 |
 | SacramentoSkeleton | generated | 20 | 1.000 | 20/20 | 0.242 | 0/20 |
 | Baloo2 | baseline | 20 | 1.000 | 20/20 | 0.599 | 4/20 |
 | Baloo2 | generated | 20 | 1.000 | 20/20 | 0.534 | 4/20 |
 | Baloo2Variable | baseline | 20 | 1.000 | 20/20 | 0.910 | 12/20 |
 | Baloo2Variable | generated | 20 | 0.957 | 13/20 | 0.916 | 9/20 |
-| **Overall** | | **140** | **0.993** | **131/140** | **0.537** | **30/140** |
+| **Overall** | | **140** | **0.993** | **132/140** | **0.537** | **30/140** |
+
+> **Correction (FONT-DIAG-002):** the original version of this table reported Sacramento
+> generated at 18/20 vision-exact, including an SS30 "Class of 2027" → "Class of 202" miss. Full-
+> resolution re-inspection during FONT-DIAG-002's root-cause pass found that miss was my own
+> transcription error against the compressed multi-row review sheet used at the time, not a real
+> rendering defect — the SS30 image reads "Class of 2027" correctly and completely. Corrected to
+> 19/20 above; the SS6 case is real and stands (see FONT-DIAG-002).
 
 **Every rhinestone design in this sample is legible to direct visual inspection.** pytesseract's
 required-phrase pass rate (30/140, 21%) massively understates real readability; the vision read
-(131/140, 94%) is the more trustworthy signal by a wide margin. Sacramento cursive is the starkest
+(132/140, 94%) is the more trustworthy signal by a wide margin. Sacramento cursive is the starkest
 case: pytesseract reads essentially nothing (0.163–0.393 char accuracy) on text a direct look reads
-correctly nearly every time (0.992–1.000).
+correctly nearly every time (0.996–1.000).
 
-**The 9 non-exact vision transcriptions are worth listing in full — they're real findings, not
-noise:**
+**The 8 remaining non-exact vision transcriptions are worth listing in full — they're real
+findings, confirmed by glyph-level root-cause analysis in FONT-DIAG-002, not noise:**
 
 | Family/variant | Size | Expected | Read as |
 |---|---|---|---|
 | Baloo2Variable generated | SS6/10/16/20/30 (5×) | "Happy Birthday" | "Happy Biri hday" |
 | Baloo2Variable generated | SS20 | "Class of 2027" | "C lass of 2027" |
-| Sacramento generated | SS6, SS30 (2×) | "Class of 2027" | "Class of 202" (trailing "7" dropped) |
+| Sacramento generated | SS6 | "Class of 2027" | "Class of 202" (trailing "7" collapses to a stray fragment) |
 | Baloo2Variable generated | SS6 | "Class of 2027" | "Class of 2021" |
 
 The "Biri hday" split reproduces at **every single size** for Baloo2Variable's generated (rhinestone
--transformed) family specifically — a real, consistent rendering defect in that family's "t"/"r"
-handling, not a size-dependent legibility edge case. This is new information FONT-GEN-003's own
+-transformed) family specifically — a real, consistent rendering defect, root-caused in FONT-DIAG-002
+to a specific transform step (terminal-simplification over-eroding the "t" crossbar as a "spur"), not
+a size-dependent legibility edge case. This is new information FONT-GEN-003's own
 pytesseract-based report never surfaced, because pytesseract's noise floor was too high to
 distinguish it from everything else scoring near zero.
 
