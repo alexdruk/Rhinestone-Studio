@@ -221,8 +221,8 @@ enough on its own to move Baloo2 out of REJECT given §5's threshold numbers abo
 
 **Fix**: `tools/font-generator/lib/render_stones.py` (both render functions' Y transform).
 **New test**: `tools/font-generator/tests/test_render_orientation.py`.
-**Regenerated** (OCR-derived data only, geometry fields byte-identical): `output/SS*/evaluation.SS*.json`,
-`output/SS*/evaluation.{Baloo2,Baloo2Variable,SacramentoSkeleton}.SS*.json` and their `summary.*.json`
+**Regenerated** (OCR-derived data only, geometry fields byte-identical): `generated-fonts/SS*/evaluation.SS*.json`,
+`generated-fonts/SS*/evaluation.{Baloo2,Baloo2Variable,SacramentoSkeleton}.SS*.json` and their `summary.*.json`
 counterparts (20 evaluation + 20 summary files). `generation-metadata.*.json` files are untouched
 (unrelated to rendering). `review/FONT-GEN-00{1,2,3,4}-review.html` and every PNG under
 `review/assets/**` regenerated with corrected orientation.

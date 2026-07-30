@@ -52,7 +52,7 @@ def stone_lookup(rows):
 def fetch_stones(font_path, rows_by_id, case_ids, tag):
     """
     evaluation.<SIZE>.json intentionally strips stone positions (per this milestone's output
-    restrictions, keeping output/ to fonts + metadata only) -- re-measures just the curated PNG
+    restrictions, keeping generated-fonts/ to fonts + metadata only) -- re-measures just the curated PNG
     subset on demand via the same real production pipeline (measure.mjs), instead of persisting
     stones for the full ~170-case corpus.
     """

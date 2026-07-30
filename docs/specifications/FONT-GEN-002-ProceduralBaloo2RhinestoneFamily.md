@@ -71,10 +71,10 @@ filenames, since FONT-GEN-001 never anticipated a second family:
   `sized_json_filename()`.
 - `generate.py`, `pipeline.py`, `analyze.py`, `validate_font.py`, `build_review_html.py`: each
   gained a `--family` CLI flag (default `Sacramento`, so every existing FONT-GEN-001 invocation and
-  output file is byte-identical to before — `output/<SIZE>/evaluation.<SIZE>.json` etc. are
+  output file is byte-identical to before — `generated-fonts/<SIZE>/evaluation.<SIZE>.json` etc. are
   untouched). For `--family Baloo2`, the generated TTF is named `Baloo2Rhinestone_<SIZE>.ttf` (per
   the brief) and its metadata/evaluation/summary JSON get a `.Baloo2.` infix
-  (`evaluation.Baloo2.SS6.json`) so the two families' artifacts coexist in the same `output/<SIZE>/`
+  (`evaluation.Baloo2.SS6.json`) so the two families' artifacts coexist in the same `generated-fonts/<SIZE>/`
   folder without collision.
 - `generate.py`'s `resolve_config()`: config JSON (thresholds) is reused completely unmodified
   across families — only the human-readable `familyName` string is relabeled
@@ -190,7 +190,7 @@ The required phrase "Ashley" was tesseract's worst case at every size for the ge
 consistent with FONT-GEN-001's pattern (short strings starting with a capital are systematically
 harder). Sample raw OCR output at minimum height: SS6 "VWERIGA", SS10 "WERRGIA", SS20 "W i 3A" —
 none of it resembling the input, matching FONT-GEN-001's near-zero required-phrase recognition. Full
-per-case breakdown is in `output/<SIZE>/evaluation.Baloo2.<SIZE>.json` and the HTML review (§10).
+per-case breakdown is in `generated-fonts/<SIZE>/evaluation.Baloo2.<SIZE>.json` and the HTML review (§10).
 
 ---
 
@@ -225,7 +225,7 @@ same `build_review_html.py` with `--family Baloo2 --milestone FONT-GEN-002`. Rev
 
 **No fonts registered.** Consistent with FONT-GEN-001/FONT-VIS-001's precedent (no variant surviving
 evaluation → no manifest registration), `assets/fonts/manifest.json` was not modified. Only new files
-were added: `fonts/sources/Baloo2/Baloo2-Bold.ttf` (the instanced static font), `output/<SIZE>/`
+were added: `fonts/sources/Baloo2/Baloo2-Bold.ttf` (the instanced static font), `generated-fonts/<SIZE>/`
 family-qualified artifacts, `review/FONT-GEN-002-review.html` + `review/assets/Baloo2/`, this report,
 and the `--family`-flag additions to the six `tools/font-generator/*.py` scripts listed in §3 (pure
 additive CLI parameters with `Sacramento`-default behavior — every FONT-GEN-001 output file and

@@ -118,11 +118,11 @@ apply here.
 ## 5. Generation and structural validation
 
 ```
-output/SS6/SacramentoSkeletonRhinestone_SS6.ttf
-output/SS10/SacramentoSkeletonRhinestone_SS10.ttf
-output/SS16/SacramentoSkeletonRhinestone_SS16.ttf
-output/SS20/SacramentoSkeletonRhinestone_SS20.ttf
-output/SS30/SacramentoSkeletonRhinestone_SS30.ttf
+generated-fonts/SS6/SacramentoSkeletonRhinestone_SS6.ttf
+generated-fonts/SS10/SacramentoSkeletonRhinestone_SS10.ttf
+generated-fonts/SS16/SacramentoSkeletonRhinestone_SS16.ttf
+generated-fonts/SS20/SacramentoSkeletonRhinestone_SS20.ttf
+generated-fonts/SS30/SacramentoSkeletonRhinestone_SS30.ttf
 ```
 
 `validate_font.py`: **PASS** for all 5 sizes (reload, required tables, cmap coverage, valid bounds,
@@ -150,7 +150,7 @@ same OCR rasterization + scoring, same acceptance thresholds. **Baseline was not
 the brief ("baseline hasn't changed"), `pipeline.py` gained an additive `--reuse-baseline-from`
 flag that loads a prior milestone's already-computed baseline evaluation rows instead of
 re-running `measure.mjs`/OCR against the same unmodified Sacramento.ttf a second time — used here as
-`--reuse-baseline-from Sacramento`, pointing at FONT-GEN-001's own `output/<SIZE>/evaluation.<SIZE>.json`.
+`--reuse-baseline-from Sacramento`, pointing at FONT-GEN-001's own `generated-fonts/<SIZE>/evaluation.<SIZE>.json`.
 Default behavior (flag unused) is unchanged, so FONT-GEN-001/002/003 remain re-runnable exactly as
 before. `analyze.py`'s per-size summary additionally now aggregates `meanClusterCount`,
 `meanCollisionCount`, `meanStoneCount` (purely additive fields; existing OCR-threshold verdict logic
@@ -305,7 +305,7 @@ change).
 ## 13. Studio integration
 
 **No fonts registered.** Consistent with every prior FONT-GEN/FONT-VIS milestone's precedent,
-`assets/fonts/manifest.json` was not modified. New files: `output/<SIZE>/SacramentoSkeletonRhinestone_<SIZE>.ttf`
+`assets/fonts/manifest.json` was not modified. New files: `generated-fonts/<SIZE>/SacramentoSkeletonRhinestone_<SIZE>.ttf`
 + metadata/evaluation/summary JSON, `review/FONT-GEN-004-review.html` + `review/assets/SacramentoSkeleton/`,
 this report, `tools/font-generator/lib/glyph_transform_skeleton.py`, and the additive changes in §12.
 Original Sacramento, Baloo2, Baloo2Variable, all existing fonts, existing projects, and exporters are

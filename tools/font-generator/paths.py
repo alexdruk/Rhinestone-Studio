@@ -10,7 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 TOOL_ROOT = REPO_ROOT / "tools" / "font-generator"
 CONFIG_DIR = TOOL_ROOT / "config"
-OUTPUT_ROOT = REPO_ROOT / "output"
+OUTPUT_ROOT = REPO_ROOT / "generated-fonts"
 REVIEW_ROOT = REPO_ROOT / "review"
 REVIEW_ASSETS = REVIEW_ROOT / "assets"
 DOCS_SPEC_DIR = REPO_ROOT / "docs" / "specifications"
@@ -21,7 +21,7 @@ CORPUS_FILE = TOOL_ROOT / "corpus.json"
 
 # FONT-GEN-002 -- registry of source fonts this pipeline can generate rhinestone variants from.
 # "Sacramento" (FONT-GEN-001) stays the unprefixed default everywhere below, so its existing
-# output/ filenames are untouched -- every other family gets a family-qualified filename instead
+# generated-fonts/ filenames are untouched -- every other family gets a family-qualified filename instead
 # (see variant_filename/sized_json_filename) so runs never collide with Sacramento's artifacts.
 DEFAULT_FAMILY = "Sacramento"
 

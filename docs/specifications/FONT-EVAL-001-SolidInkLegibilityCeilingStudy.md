@@ -137,7 +137,7 @@ Two secondary patterns, consistent with FONT-GEN-005's own findings:
 
 **New**: `tools/font-generator/lib/solid_ink.py` (was untracked, now committed),
 `tools/font-generator/evaluate_solidink.py`, `tools/font-generator/analyze_solidink.py`.
-**New output**: `output/SS*/evaluation.solidink.{generated,baseline}[.<family>].SS*.json` (35
+**New output**: `generated-fonts/SS*/evaluation.solidink.{generated,baseline}[.<family>].SS*.json` (35
 files) and matching `summary.solidink.*.json` (40 files, including the reused
 SacramentoSkeleton-baseline duplicate).
 

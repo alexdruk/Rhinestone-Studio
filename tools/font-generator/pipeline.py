@@ -6,7 +6,7 @@ For one stone size: builds the case list (fixed corpus x min/mid/max heights), m
 generated variant and the original Sacramento (baseline) through the real production pipeline
 (measure.mjs -> font-cal-001's measureProduction.mjs -> font-certification's productionAnalysis.mjs
 -- unchanged), rasterizes each case's stones, runs OCR, and writes one aggregated evaluation JSON
-per size to output/<SIZE>/. No CSV/SVG -- only TTFs, JSON metadata, and (for a curated subset)
+per size to generated-fonts/<SIZE>/. No CSV/SVG -- only TTFs, JSON metadata, and (for a curated subset)
 PNGs under review/assets/, per this milestone's output restrictions.
 
 Usage:
