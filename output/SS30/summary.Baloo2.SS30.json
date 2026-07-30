@@ -1,0 +1,201 @@
+{
+  "sizeId": "ss30",
+  "heightsMm": {
+    "min": 106,
+    "mid": 108.5,
+    "max": 111
+  },
+  "generated": {
+    "count": 171,
+    "errors": 0,
+    "meanCharAccuracy": 0.1265,
+    "meanWordAccuracy": 0.0205,
+    "meanConfidence": 27.5,
+    "meanClusterCount": 34.35,
+    "meanCollisionCount": 0,
+    "meanStoneCount": 209.6,
+    "exactMatchRate": 0.0058,
+    "requiredPhraseCount": 12,
+    "requiredPhrasePassCount": 0,
+    "requiredPhraseAccuracy": 0.0,
+    "unrecognizedCount": 112,
+    "unrecognizedFraction": 0.655,
+    "worst": [
+      {
+        "id": "req-class-of-2027__min",
+        "text": "Class of 2027",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "upper-alphabet__min",
+        "text": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "numerals__min",
+        "text": "0123456789",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": "ON9723\". oO BY,"
+      },
+      {
+        "id": "name-emma__min",
+        "text": "Emma",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": "S huct"
+      },
+      {
+        "id": "name-olivia__min",
+        "text": "Olivia",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": "Cay"
+      },
+      {
+        "id": "word-love__min",
+        "text": "love",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": "as Ne"
+      },
+      {
+        "id": "word-family__min",
+        "text": "family",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": "Be west"
+      },
+      {
+        "id": "word-forever__min",
+        "text": "forever",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "repeat-book__min",
+        "text": "book",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "repeat-letter__min",
+        "text": "letter",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": "Po gg OT"
+      }
+    ]
+  },
+  "baseline": {
+    "count": 171,
+    "errors": 0,
+    "meanCharAccuracy": 0.1778,
+    "meanWordAccuracy": 0.0439,
+    "meanConfidence": 27.5,
+    "meanClusterCount": 9.35,
+    "meanCollisionCount": 0,
+    "meanStoneCount": 233.5,
+    "exactMatchRate": 0.0117,
+    "requiredPhraseCount": 12,
+    "requiredPhrasePassCount": 1,
+    "requiredPhraseAccuracy": 0.0833,
+    "unrecognizedCount": 100,
+    "unrecognizedFraction": 0.5848,
+    "worst": [
+      {
+        "id": "req-bride-squad__min",
+        "text": "Bride Squad",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "req-happy-birthday__min",
+        "text": "Happy Birthday",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "name-emma__min",
+        "text": "Emma",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": ". aves aye. q"
+      },
+      {
+        "id": "name-noah__min",
+        "text": "Noah",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "name-olivia__min",
+        "text": "Olivia",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "word-family__min",
+        "text": "family",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": "f q ayn \u2018 ."
+      },
+      {
+        "id": "word-blessed__min",
+        "text": "blessed",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "word-together__min",
+        "text": "together",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": "ro Q) an ONE"
+      },
+      {
+        "id": "repeat-book__min",
+        "text": "book",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": "DKOXKO"
+      },
+      {
+        "id": "repeat-letter__min",
+        "text": "letter",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      }
+    ]
+  },
+  "verdict": {
+    "passed": false,
+    "findings": [
+      "meanCharAccuracy 0.1265 < 0.85",
+      "meanWordAccuracy 0.0205 < 0.8",
+      "requiredPhraseAccuracy 0.0 < 1.0",
+      "unrecognizedFraction 0.655 > 0.15"
+    ],
+    "thresholds": {
+      "minCharAccuracy": 0.85,
+      "minWordAccuracy": 0.8,
+      "minRequiredPhraseAccuracy": 1.0,
+      "minConfidence": 40.0,
+      "maxUnrecognizedSamples": 0.15,
+      "maxAmbiguousPairRepeats": 2
+    }
+  }
+}

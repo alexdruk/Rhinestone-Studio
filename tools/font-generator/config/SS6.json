@@ -1,0 +1,15 @@
+{
+  "sizeId": "ss6",
+  "familyName": "Sacramento Rhinestone SS6",
+  "stoneDiameterMm": 2.0,
+  "gapMm": 0.3,
+  "supportedHeightRangeMm": [35, 50],
+  "minFeatureWidthMm": 3.3,
+  "minCounterOpeningMm": 5.3,
+  "minLoopOpeningMm": 6.9,
+  "cornerRoundMm": 1.2,
+  "terminalSimplifyMm": 1.0,
+  "sideBearingAdjustMm": 0.45,
+  "minAreaMm2": 0.36,
+  "calibrationNotes": "Initial pass, derived from stoneDiameterMm proportionally (minFeatureWidth = 1.5x stone + gap; minCounterOpening = 2.5x stone + gap; minLoopOpening = 1.3x minCounterOpening). See FONT-GEN-001 report for calibration-round adjustments."
+}

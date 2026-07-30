@@ -1,0 +1,201 @@
+{
+  "sizeId": "ss6",
+  "heightsMm": {
+    "min": 35,
+    "mid": 42.5,
+    "max": 50
+  },
+  "generated": {
+    "count": 171,
+    "errors": 0,
+    "meanCharAccuracy": 0.1387,
+    "meanWordAccuracy": 0.0058,
+    "meanConfidence": 27.8,
+    "meanClusterCount": 4.46,
+    "meanCollisionCount": 0,
+    "meanStoneCount": 269.6,
+    "exactMatchRate": 0.0,
+    "requiredPhraseCount": 12,
+    "requiredPhrasePassCount": 0,
+    "requiredPhraseAccuracy": 0.0,
+    "unrecognizedCount": 100,
+    "unrecognizedFraction": 0.5848,
+    "worst": [
+      {
+        "id": "req-happy-birthday__min",
+        "text": "Happy Birthday",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "name-emma__min",
+        "text": "Emma",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "Gencce"
+      },
+      {
+        "id": "word-family__min",
+        "text": "family",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "pect,"
+      },
+      {
+        "id": "word-forever__min",
+        "text": "forever",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "Pessersis"
+      },
+      {
+        "id": "word-blessed__min",
+        "text": "blessed",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "Ab Bb \"s"
+      },
+      {
+        "id": "repeat-book__min",
+        "text": "book",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "IAN"
+      },
+      {
+        "id": "repeat-moon__min",
+        "text": "moon",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "Cyeetly"
+      },
+      {
+        "id": "repeat-llll__min",
+        "text": "llll",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "repeat-oooo__min",
+        "text": "oooo",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "narrow-ijlt__min",
+        "text": "ijlt",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "ad"
+      }
+    ]
+  },
+  "baseline": {
+    "count": 171,
+    "errors": 0,
+    "meanCharAccuracy": 0.3208,
+    "meanWordAccuracy": 0.1311,
+    "meanConfidence": 37.0,
+    "meanClusterCount": 2.57,
+    "meanCollisionCount": 0,
+    "meanStoneCount": 198.3,
+    "exactMatchRate": 0.1053,
+    "requiredPhraseCount": 12,
+    "requiredPhrasePassCount": 1,
+    "requiredPhraseAccuracy": 0.0833,
+    "unrecognizedCount": 73,
+    "unrecognizedFraction": 0.4269,
+    "worst": [
+      {
+        "id": "word-blessed__min",
+        "text": "blessed",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "URI)"
+      },
+      {
+        "id": "repeat-book__min",
+        "text": "book",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "L,"
+      },
+      {
+        "id": "repeat-moon__min",
+        "text": "moon",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "'"
+      },
+      {
+        "id": "repeat-oooo__min",
+        "text": "oooo",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "6608"
+      },
+      {
+        "id": "narrow-ijlt__min",
+        "text": "ijlt",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "we"
+      },
+      {
+        "id": "wide-mnuw__min",
+        "text": "mnuw",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "8"
+      },
+      {
+        "id": "descender-puppy__min",
+        "text": "puppy",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "if nO \u00a2"
+      },
+      {
+        "id": "descender-yoga__min",
+        "text": "yoga",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "i"
+      },
+      {
+        "id": "descender-gypsy__min",
+        "text": "gypsy",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "ia 8"
+      },
+      {
+        "id": "loop-bobble__min",
+        "text": "bobble",
+        "heightMm": 35,
+        "charAccuracy": 0.0,
+        "rawOcrText": "R000,"
+      }
+    ]
+  },
+  "verdict": {
+    "passed": false,
+    "findings": [
+      "meanCharAccuracy 0.1387 < 0.85",
+      "meanWordAccuracy 0.0058 < 0.8",
+      "requiredPhraseAccuracy 0.0 < 1.0",
+      "unrecognizedFraction 0.5848 > 0.15"
+    ],
+    "thresholds": {
+      "minCharAccuracy": 0.85,
+      "minWordAccuracy": 0.8,
+      "minRequiredPhraseAccuracy": 1.0,
+      "minConfidence": 40.0,
+      "maxUnrecognizedSamples": 0.15,
+      "maxAmbiguousPairRepeats": 2
+    }
+  }
+}

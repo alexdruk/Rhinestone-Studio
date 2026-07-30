@@ -1,0 +1,15 @@
+{
+  "sizeId": "ss10",
+  "familyName": "Sacramento Rhinestone SS10",
+  "stoneDiameterMm": 2.8,
+  "gapMm": 0.3,
+  "supportedHeightRangeMm": [45, 60],
+  "minFeatureWidthMm": 4.5,
+  "minCounterOpeningMm": 7.3,
+  "minLoopOpeningMm": 9.5,
+  "cornerRoundMm": 1.6,
+  "terminalSimplifyMm": 1.3,
+  "sideBearingAdjustMm": 0.45,
+  "minAreaMm2": 0.7,
+  "calibrationNotes": "Initial pass, derived from stoneDiameterMm proportionally (see SS6.json for the formula). See FONT-GEN-001 report for calibration-round adjustments."
+}

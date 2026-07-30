@@ -1,0 +1,200 @@
+{
+  "sizeId": "ss10",
+  "heightsMm": {
+    "min": 45,
+    "mid": 52.5,
+    "max": 60
+  },
+  "generated": {
+    "count": 171,
+    "errors": 0,
+    "meanCharAccuracy": 0.6581,
+    "meanWordAccuracy": 0.3182,
+    "meanConfidence": 51.3,
+    "meanClusterCount": 10.58,
+    "meanCollisionCount": 0,
+    "meanStoneCount": 240.0,
+    "exactMatchRate": 0.2807,
+    "requiredPhraseCount": 12,
+    "requiredPhrasePassCount": 7,
+    "requiredPhraseAccuracy": 0.5833,
+    "unrecognizedCount": 23,
+    "unrecognizedFraction": 0.1345,
+    "worst": [
+      {
+        "id": "repeat-llll__min",
+        "text": "llll",
+        "heightMm": 45,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "repeat-oooo__min",
+        "text": "oooo",
+        "heightMm": 45,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "loop-bobble__min",
+        "text": "bobble",
+        "heightMm": 45,
+        "charAccuracy": 0.0,
+        "rawOcrText": "bDODdDDdDIe"
+      },
+      {
+        "id": "join-st__min",
+        "text": "st",
+        "heightMm": 45,
+        "charAccuracy": 0.0,
+        "rawOcrText": "gi"
+      },
+      {
+        "id": "amb-aoe__min",
+        "text": "aoe",
+        "heightMm": 45,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "amb-oeao__min",
+        "text": "oeao",
+        "heightMm": 45,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "amb-rvrv__min",
+        "text": "rvrv",
+        "heightMm": 45,
+        "charAccuracy": 0.0,
+        "rawOcrText": "Twi"
+      },
+      {
+        "id": "repeat-llll__mid",
+        "text": "llll",
+        "heightMm": 52.5,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "repeat-oooo__mid",
+        "text": "oooo",
+        "heightMm": 52.5,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "narrow-ijlt__mid",
+        "text": "ijlt",
+        "heightMm": 52.5,
+        "charAccuracy": 0.0,
+        "rawOcrText": "Hf"
+      }
+    ]
+  },
+  "baseline": {
+    "count": 171,
+    "errors": 0,
+    "meanCharAccuracy": 0.8397,
+    "meanWordAccuracy": 0.6092,
+    "meanConfidence": 70.1,
+    "meanClusterCount": 7.06,
+    "meanCollisionCount": 0,
+    "meanStoneCount": 244.9,
+    "exactMatchRate": 0.6023,
+    "requiredPhraseCount": 12,
+    "requiredPhrasePassCount": 8,
+    "requiredPhraseAccuracy": 0.6667,
+    "unrecognizedCount": 10,
+    "unrecognizedFraction": 0.0585,
+    "worst": [
+      {
+        "id": "repeat-llll__min",
+        "text": "llll",
+        "heightMm": 45,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "repeat-oooo__min",
+        "text": "oooo",
+        "heightMm": 45,
+        "charAccuracy": 0.0,
+        "rawOcrText": "6000"
+      },
+      {
+        "id": "amb-aoe__min",
+        "text": "aoe",
+        "heightMm": 45,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "amb-oeao__min",
+        "text": "oeao",
+        "heightMm": 45,
+        "charAccuracy": 0.0,
+        "rawOcrText": "6280"
+      },
+      {
+        "id": "amb-rvrv__min",
+        "text": "rvrv",
+        "heightMm": 45,
+        "charAccuracy": 0.0,
+        "rawOcrText": "ivr\u00b0yVv"
+      },
+      {
+        "id": "repeat-llll__mid",
+        "text": "llll",
+        "heightMm": 52.5,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "repeat-oooo__mid",
+        "text": "oooo",
+        "heightMm": 52.5,
+        "charAccuracy": 0.0,
+        "rawOcrText": "0000"
+      },
+      {
+        "id": "repeat-llll__max",
+        "text": "llll",
+        "heightMm": 60,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "repeat-oooo__max",
+        "text": "oooo",
+        "heightMm": 60,
+        "charAccuracy": 0.0,
+        "rawOcrText": "QO000"
+      },
+      {
+        "id": "amb-bhk__max",
+        "text": "bhk",
+        "heightMm": 60,
+        "charAccuracy": 0.0,
+        "rawOcrText": "oink"
+      }
+    ]
+  },
+  "verdict": {
+    "passed": false,
+    "findings": [
+      "meanCharAccuracy 0.6581 < 0.85",
+      "meanWordAccuracy 0.3182 < 0.8",
+      "requiredPhraseAccuracy 0.5833 < 1.0"
+    ],
+    "thresholds": {
+      "minCharAccuracy": 0.85,
+      "minWordAccuracy": 0.8,
+      "minRequiredPhraseAccuracy": 1.0,
+      "minConfidence": 40.0,
+      "maxUnrecognizedSamples": 0.15,
+      "maxAmbiguousPairRepeats": 2
+    }
+  }
+}

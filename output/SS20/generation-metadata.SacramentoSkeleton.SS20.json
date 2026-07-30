@@ -1,0 +1,2830 @@
+{
+  "sizeId": "ss20",
+  "sourceFont": "fonts/sources/Sacramento/Sacramento.ttf",
+  "outputFont": "output/SS20/SacramentoSkeletonRhinestone_SS20.ttf",
+  "unitsPerEm": 2048,
+  "config": {
+    "sizeId": "ss20",
+    "familyName": "SacramentoSkeleton Rhinestone SS20",
+    "stoneDiameterMm": 4.7,
+    "gapMm": 0.3,
+    "supportedHeightRangeMm": [
+      80,
+      110
+    ],
+    "minFeatureWidthMm": 7.35,
+    "minCounterOpeningMm": 12.05,
+    "minLoopOpeningMm": 15.7,
+    "cornerRoundMm": 2.8,
+    "terminalSimplifyMm": 2.1,
+    "sideBearingAdjustMm": 0.45,
+    "minAreaMm2": 1.99,
+    "calibrationNotes": "Initial pass, derived from stoneDiameterMm proportionally (see SS6.json for the formula). Stone diameter uses the shipped STONE_SIZE_BY_ID catalog value (4.7mm) rather than the brief's stated 4.8mm -- see FONT-GEN-001 report's discrepancy note.",
+    "calibrationHeightMm": 80,
+    "unitsPerEm": 2048,
+    "minFeatureWidthFu": 188.16,
+    "minCounterOpeningFu": 308.48,
+    "minLoopOpeningFu": 401.92,
+    "cornerRoundFu": 71.67999999999999,
+    "terminalSimplifyFu": 53.760000000000005,
+    "sideBearingAdjustFu": 11.520000000000001,
+    "minAreaFu": 1304.1664000000003,
+    "stoneDiameterFu": 120.32000000000001
+  },
+  "glyphsTransformed": 94,
+  "glyphLogs": [
+    {
+      "char": "!",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 12,
+          "rows": 69,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 53,
+          "pathCount": 2
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 2
+        }
+      ],
+      "areaBefore": 99364.4,
+      "areaAfter": 281405.7,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "exclam"
+    },
+    {
+      "char": "\"",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 17,
+          "rows": 20,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 24,
+          "pathCount": 2
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 2
+        }
+      ],
+      "areaBefore": 43910.9,
+      "areaAfter": 137767.3,
+      "contoursBefore": 2,
+      "contoursAfter": 1,
+      "glyphName": "quotedbl"
+    },
+    {
+      "char": "#",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 33,
+          "rows": 46,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 108,
+          "pathCount": 50
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 50
+        }
+      ],
+      "areaBefore": 190186.0,
+      "areaAfter": 446720.5,
+      "contoursBefore": 2,
+      "contoursAfter": 1,
+      "glyphName": "numbersign"
+    },
+    {
+      "char": "$",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 45,
+          "rows": 67,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 124,
+          "pathCount": 15
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 15
+        }
+      ],
+      "areaBefore": 240037.8,
+      "areaAfter": 601463.3,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "dollar"
+    },
+    {
+      "char": "%",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 53,
+          "rows": 53,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 162,
+          "pathCount": 3
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 3
+        }
+      ],
+      "areaBefore": 280105.0,
+      "areaAfter": 834995.9,
+      "contoursBefore": 5,
+      "contoursAfter": 3,
+      "glyphName": "percent"
+    },
+    {
+      "char": "&",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 60,
+          "rows": 51,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 145,
+          "pathCount": 15
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 15
+        }
+      ],
+      "areaBefore": 273968.3,
+      "areaAfter": 708360.4,
+      "contoursBefore": 1,
+      "contoursAfter": 2,
+      "glyphName": "ampersand"
+    },
+    {
+      "char": "'",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 11,
+          "rows": 19,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 11,
+          "pathCount": 1
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 1
+        }
+      ],
+      "areaBefore": 21559.8,
+      "areaAfter": 72893.4,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "quotesingle"
+    },
+    {
+      "char": "(",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 30,
+          "rows": 84,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 75,
+          "pathCount": 1
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 1
+        }
+      ],
+      "areaBefore": 155882.9,
+      "areaAfter": 396135.4,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "parenleft"
+    },
+    {
+      "char": ")",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 30,
+          "rows": 84,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 77,
+          "pathCount": 1
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 1
+        }
+      ],
+      "areaBefore": 155964.3,
+      "areaAfter": 404562.8,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "parenright"
+    },
+    {
+      "char": "*",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 24,
+          "rows": 24,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 40,
+          "pathCount": 16
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 16
+        }
+      ],
+      "areaBefore": 73133.7,
+      "areaAfter": 201151.7,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "asterisk"
+    },
+    {
+      "char": "+",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 33,
+          "rows": 32,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 43,
+          "pathCount": 11
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 11
+        }
+      ],
+      "areaBefore": 83197.6,
+      "areaAfter": 209890.8,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "plus"
+    },
+    {
+      "char": ",",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 14,
+          "rows": 20,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 9,
+          "pathCount": 1
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 1
+        }
+      ],
+      "areaBefore": 24035.4,
+      "areaAfter": 65764.0,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "comma"
+    },
+    {
+      "char": "-",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 24,
+          "rows": 10,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 15,
+          "pathCount": 1
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 1
+        }
+      ],
+      "areaBefore": 30416.7,
+      "areaAfter": 89719.1,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "hyphen"
+    },
+    {
+      "char": ".",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 11,
+          "rows": 11,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 3,
+          "pathCount": 1
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 1
+        }
+      ],
+      "areaBefore": 9162.2,
+      "areaAfter": 36612.8,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "period"
+    },
+    {
+      "char": "/",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 44,
+          "rows": 69,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 61,
+          "pathCount": 1
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 1
+        }
+      ],
+      "areaBefore": 126701.2,
+      "areaAfter": 335168.4,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "slash"
+    },
+    {
+      "char": "0",
+      "categories": [
+        "counter-bearing",
+        "numeral"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 68,
+          "rows": 71,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 172,
+          "pathCount": 1
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 1
+        }
+      ],
+      "areaBefore": 331566.0,
+      "areaAfter": 850568.7,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "zero"
+    },
+    {
+      "char": "1",
+      "categories": [
+        "narrow-vertical",
+        "numeral"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 29,
+          "rows": 69,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 75,
+          "pathCount": 3
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 3
+        }
+      ],
+      "areaBefore": 159832.1,
+      "areaAfter": 369251.2,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "one"
+    },
+    {
+      "char": "2",
+      "categories": [
+        "numeral"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 82,
+          "rows": 71,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 211,
+          "pathCount": 12
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 12
+        }
+      ],
+      "areaBefore": 410800.2,
+      "areaAfter": 1030012.0,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "two"
+    },
+    {
+      "char": "3",
+      "categories": [
+        "numeral"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 54,
+          "rows": 72,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 166,
+          "pathCount": 12
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 12
+        }
+      ],
+      "areaBefore": 324052.6,
+      "areaAfter": 804776.3,
+      "contoursBefore": 2,
+      "contoursAfter": 1,
+      "glyphName": "three"
+    },
+    {
+      "char": "4",
+      "categories": [
+        "counter-bearing",
+        "numeral"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 75,
+          "rows": 73,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 173,
+          "pathCount": 31
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 31
+        }
+      ],
+      "areaBefore": 338866.8,
+      "areaAfter": 795253.1,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "four"
+    },
+    {
+      "char": "5",
+      "categories": [
+        "numeral"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 61,
+          "rows": 73,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 174,
+          "pathCount": 8
+        },
+        {
+          "type": "spur-prune",
+          "prunedCount": 1,
+          "thresholdFu": 47.04
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 7
+        }
+      ],
+      "areaBefore": 319933.6,
+      "areaAfter": 825768.4,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "five"
+    },
+    {
+      "char": "6",
+      "categories": [
+        "counter-bearing",
+        "numeral"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 64,
+          "rows": 73,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 181,
+          "pathCount": 1
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 1
+        }
+      ],
+      "areaBefore": 363430.7,
+      "areaAfter": 927338.8,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "six"
+    },
+    {
+      "char": "7",
+      "categories": [
+        "numeral"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 63,
+          "rows": 68,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 110,
+          "pathCount": 6
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 6
+        }
+      ],
+      "areaBefore": 224916.0,
+      "areaAfter": 561929.9,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "seven"
+    },
+    {
+      "char": "8",
+      "categories": [
+        "counter-bearing",
+        "numeral"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 59,
+          "rows": 73,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 206,
+          "pathCount": 6
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 6
+        }
+      ],
+      "areaBefore": 403188.6,
+      "areaAfter": 988246.5,
+      "contoursBefore": 3,
+      "contoursAfter": 3,
+      "glyphName": "eight"
+    },
+    {
+      "char": "9",
+      "categories": [
+        "numeral"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 64,
+          "rows": 73,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 184,
+          "pathCount": 1
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 1
+        }
+      ],
+      "areaBefore": 361571.9,
+      "areaAfter": 927752.4,
+      "contoursBefore": 1,
+      "contoursAfter": 2,
+      "glyphName": "nine"
+    },
+    {
+      "char": ":",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 11,
+          "rows": 28,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 6,
+          "pathCount": 2
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 2
+        }
+      ],
+      "areaBefore": 18324.4,
+      "areaAfter": 73225.6,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "colon"
+    },
+    {
+      "char": ";",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 14,
+          "rows": 37,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 12,
+          "pathCount": 2
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 2
+        }
+      ],
+      "areaBefore": 33197.6,
+      "areaAfter": 102376.8,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "semicolon"
+    },
+    {
+      "char": "<",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 30,
+          "rows": 39,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 40,
+          "pathCount": 8
+        },
+        {
+          "type": "spur-prune",
+          "prunedCount": 1,
+          "thresholdFu": 47.04
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 7
+        }
+      ],
+      "areaBefore": 94391.0,
+      "areaAfter": 233472.4,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "less"
+    },
+    {
+      "char": "=",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 32,
+          "rows": 21,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 46,
+          "pathCount": 2
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 2
+        }
+      ],
+      "areaBefore": 87058.1,
+      "areaAfter": 250342.7,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "equal"
+    },
+    {
+      "char": ">",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 30,
+          "rows": 39,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 39,
+          "pathCount": 3
+        },
+        {
+          "type": "spur-prune",
+          "prunedCount": 1,
+          "thresholdFu": 47.04
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 2
+        }
+      ],
+      "areaBefore": 94403.7,
+      "areaAfter": 231779.9,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "greater"
+    },
+    {
+      "char": "?",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 69,
+          "rows": 71,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 147,
+          "pathCount": 4
+        },
+        {
+          "type": "spur-prune",
+          "prunedCount": 1,
+          "thresholdFu": 47.04
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 3
+        }
+      ],
+      "areaBefore": 289938.9,
+      "areaAfter": 766434.6,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "question"
+    },
+    {
+      "char": "@",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 53,
+          "rows": 52,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 162,
+          "pathCount": 8
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 8
+        }
+      ],
+      "areaBefore": 314540.4,
+      "areaAfter": 810419.2,
+      "contoursBefore": 1,
+      "contoursAfter": 2,
+      "glyphName": "at"
+    },
+    {
+      "char": "A",
+      "categories": [
+        "capital",
+        "counter-bearing"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 105,
+          "rows": 72,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 247,
+          "pathCount": 24
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 24
+        }
+      ],
+      "areaBefore": 473327.7,
+      "areaAfter": 1146987.5,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "A"
+    },
+    {
+      "char": "B",
+      "categories": [
+        "capital",
+        "counter-bearing"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 100,
+          "rows": 73,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 314,
+          "pathCount": 23
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 23
+        }
+      ],
+      "areaBefore": 617698.2,
+      "areaAfter": 1484311.4,
+      "contoursBefore": 3,
+      "contoursAfter": 3,
+      "glyphName": "B"
+    },
+    {
+      "char": "C",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 75,
+          "rows": 70,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 209,
+          "pathCount": 1
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 1
+        }
+      ],
+      "areaBefore": 416599.5,
+      "areaAfter": 1055796.5,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "C"
+    },
+    {
+      "char": "D",
+      "categories": [
+        "capital",
+        "counter-bearing"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 90,
+          "rows": 70,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 282,
+          "pathCount": 13
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 13
+        }
+      ],
+      "areaBefore": 540358.4,
+      "areaAfter": 1352065.0,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "D"
+    },
+    {
+      "char": "E",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 74,
+          "rows": 72,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 202,
+          "pathCount": 10
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 10
+        }
+      ],
+      "areaBefore": 387889.0,
+      "areaAfter": 975208.9,
+      "contoursBefore": 2,
+      "contoursAfter": 1,
+      "glyphName": "E"
+    },
+    {
+      "char": "F",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 113,
+          "rows": 71,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 291,
+          "pathCount": 24
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 24
+        }
+      ],
+      "areaBefore": 537696.3,
+      "areaAfter": 1349447.3,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "F"
+    },
+    {
+      "char": "G",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 77,
+          "rows": 102,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 285,
+          "pathCount": 10
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 10
+        }
+      ],
+      "areaBefore": 558766.3,
+      "areaAfter": 1389085.7,
+      "contoursBefore": 2,
+      "contoursAfter": 3,
+      "glyphName": "G"
+    },
+    {
+      "char": "H",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 114,
+          "rows": 74,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 308,
+          "pathCount": 33
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 33
+        }
+      ],
+      "areaBefore": 561849.0,
+      "areaAfter": 1417035.7,
+      "contoursBefore": 2,
+      "contoursAfter": 1,
+      "glyphName": "H"
+    },
+    {
+      "char": "I",
+      "categories": [
+        "capital",
+        "narrow-vertical"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 63,
+          "rows": 75,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 163,
+          "pathCount": 8
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 8
+        }
+      ],
+      "areaBefore": 325013.8,
+      "areaAfter": 806523.0,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "I"
+    },
+    {
+      "char": "J",
+      "categories": [
+        "capital",
+        "narrow-vertical"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 53,
+          "rows": 104,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 222,
+          "pathCount": 13
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 13
+        }
+      ],
+      "areaBefore": 439728.5,
+      "areaAfter": 1066108.1,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "J"
+    },
+    {
+      "char": "K",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 105,
+          "rows": 72,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 275,
+          "pathCount": 34
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 34
+        }
+      ],
+      "areaBefore": 531193.8,
+      "areaAfter": 1300457.8,
+      "contoursBefore": 3,
+      "contoursAfter": 1,
+      "glyphName": "K"
+    },
+    {
+      "char": "L",
+      "categories": [
+        "capital",
+        "narrow-vertical"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 86,
+          "rows": 71,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 203,
+          "pathCount": 12
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 12
+        }
+      ],
+      "areaBefore": 376100.5,
+      "areaAfter": 965775.9,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "L"
+    },
+    {
+      "char": "M",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 120,
+          "rows": 73,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 287,
+          "pathCount": 31
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 31
+        }
+      ],
+      "areaBefore": 601542.1,
+      "areaAfter": 1381511.3,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "M"
+    },
+    {
+      "char": "N",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 118,
+          "rows": 73,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 251,
+          "pathCount": 13
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 13
+        }
+      ],
+      "areaBefore": 506180.2,
+      "areaAfter": 1228078.3,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "N"
+    },
+    {
+      "char": "O",
+      "categories": [
+        "capital",
+        "counter-bearing"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 76,
+          "rows": 71,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 223,
+          "pathCount": 9
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 9
+        }
+      ],
+      "areaBefore": 436378.6,
+      "areaAfter": 1093467.0,
+      "contoursBefore": 2,
+      "contoursAfter": 3,
+      "glyphName": "O"
+    },
+    {
+      "char": "P",
+      "categories": [
+        "capital",
+        "counter-bearing"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 82,
+          "rows": 73,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 233,
+          "pathCount": 2
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 2
+        }
+      ],
+      "areaBefore": 454155.2,
+      "areaAfter": 1176694.4,
+      "contoursBefore": 2,
+      "contoursAfter": 1,
+      "glyphName": "P"
+    },
+    {
+      "char": "Q",
+      "categories": [
+        "capital",
+        "counter-bearing"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 91,
+          "rows": 79,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 267,
+          "pathCount": 20
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 20
+        }
+      ],
+      "areaBefore": 498653.2,
+      "areaAfter": 1243845.8,
+      "contoursBefore": 3,
+      "contoursAfter": 3,
+      "glyphName": "Q"
+    },
+    {
+      "char": "R",
+      "categories": [
+        "capital",
+        "counter-bearing"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 95,
+          "rows": 73,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 299,
+          "pathCount": 31
+        },
+        {
+          "type": "spur-prune",
+          "prunedCount": 1,
+          "thresholdFu": 47.04
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 30
+        }
+      ],
+      "areaBefore": 572091.2,
+      "areaAfter": 1423274.0,
+      "contoursBefore": 2,
+      "contoursAfter": 1,
+      "glyphName": "R"
+    },
+    {
+      "char": "S",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 80,
+          "rows": 72,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 202,
+          "pathCount": 1
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 1
+        }
+      ],
+      "areaBefore": 384655.1,
+      "areaAfter": 985709.5,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "S"
+    },
+    {
+      "char": "T",
+      "categories": [
+        "capital",
+        "narrow-vertical"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 102,
+          "rows": 73,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 224,
+          "pathCount": 5
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 5
+        }
+      ],
+      "areaBefore": 436352.3,
+      "areaAfter": 1101919.0,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "T"
+    },
+    {
+      "char": "U",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 95,
+          "rows": 71,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 231,
+          "pathCount": 17
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 17
+        }
+      ],
+      "areaBefore": 457848.9,
+      "areaAfter": 1109523.6,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "U"
+    },
+    {
+      "char": "V",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 95,
+          "rows": 83,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 210,
+          "pathCount": 8
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 8
+        }
+      ],
+      "areaBefore": 409331.6,
+      "areaAfter": 1052806.6,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "V"
+    },
+    {
+      "char": "W",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 122,
+          "rows": 78,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 309,
+          "pathCount": 24
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 24
+        }
+      ],
+      "areaBefore": 612268.1,
+      "areaAfter": 1482124.3,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "W"
+    },
+    {
+      "char": "X",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 92,
+          "rows": 75,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 209,
+          "pathCount": 13
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 13
+        }
+      ],
+      "areaBefore": 432836.1,
+      "areaAfter": 1093415.5,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "X"
+    },
+    {
+      "char": "Y",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 91,
+          "rows": 104,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 302,
+          "pathCount": 13
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 13
+        }
+      ],
+      "areaBefore": 590702.5,
+      "areaAfter": 1432041.4,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "Y"
+    },
+    {
+      "char": "Z",
+      "categories": [
+        "capital"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 83,
+          "rows": 71,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 232,
+          "pathCount": 8
+        },
+        {
+          "type": "spur-prune",
+          "prunedCount": 1,
+          "thresholdFu": 47.04
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 7
+        }
+      ],
+      "areaBefore": 464477.4,
+      "areaAfter": 1140336.3,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "Z"
+    },
+    {
+      "char": "[",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 26,
+          "rows": 87,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 98,
+          "pathCount": 1
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 1
+        }
+      ],
+      "areaBefore": 184600.4,
+      "areaAfter": 458285.7,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "bracketleft"
+    },
+    {
+      "char": "\\",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 44,
+          "rows": 69,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 62,
+          "pathCount": 1
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 1
+        }
+      ],
+      "areaBefore": 126490.4,
+      "areaAfter": 337350.2,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "backslash"
+    },
+    {
+      "char": "]",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 26,
+          "rows": 87,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 98,
+          "pathCount": 1
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 1
+        }
+      ],
+      "areaBefore": 184576.9,
+      "areaAfter": 457288.0,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "bracketright"
+    },
+    {
+      "char": "^",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 25,
+          "rows": 20,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 23,
+          "pathCount": 3
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 3
+        }
+      ],
+      "areaBefore": 43808.2,
+      "areaAfter": 141625.6,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "asciicircum"
+    },
+    {
+      "char": "_",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 33,
+          "rows": 10,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 22,
+          "pathCount": 1
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 1
+        }
+      ],
+      "areaBefore": 45337.7,
+      "areaAfter": 120697.7,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "underscore"
+    },
+    {
+      "char": "`",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 16,
+          "rows": 16,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 11,
+          "pathCount": 1
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 1
+        }
+      ],
+      "areaBefore": 18094.8,
+      "areaAfter": 80227.2,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "grave"
+    },
+    {
+      "char": "a",
+      "categories": [
+        "counter-bearing",
+        "looped-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 40,
+          "rows": 28,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 68,
+          "pathCount": 8
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 8
+        }
+      ],
+      "areaBefore": 132434.1,
+      "areaAfter": 347448.8,
+      "contoursBefore": 1,
+      "contoursAfter": 2,
+      "glyphName": "a"
+    },
+    {
+      "char": "b",
+      "categories": [
+        "ascender",
+        "counter-bearing",
+        "looped-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 43,
+          "rows": 70,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 171,
+          "pathCount": 39
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 39
+        }
+      ],
+      "areaBefore": 312412.2,
+      "areaAfter": 738249.6,
+      "contoursBefore": 2,
+      "contoursAfter": 3,
+      "glyphName": "b"
+    },
+    {
+      "char": "c",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 34,
+          "rows": 31,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 54,
+          "pathCount": 1
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 1
+        }
+      ],
+      "areaBefore": 113185.1,
+      "areaAfter": 295770.1,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "c"
+    },
+    {
+      "char": "d",
+      "categories": [
+        "ascender",
+        "counter-bearing",
+        "looped-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 42,
+          "rows": 64,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 151,
+          "pathCount": 13
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 13
+        }
+      ],
+      "areaBefore": 281800.1,
+      "areaAfter": 682839.4,
+      "contoursBefore": 2,
+      "contoursAfter": 3,
+      "glyphName": "d"
+    },
+    {
+      "char": "e",
+      "categories": [
+        "counter-bearing",
+        "looped-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 32,
+          "rows": 29,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 61,
+          "pathCount": 7
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 7
+        }
+      ],
+      "areaBefore": 114966.9,
+      "areaAfter": 295414.9,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "e"
+    },
+    {
+      "char": "f",
+      "categories": [
+        "ascender"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 29,
+          "rows": 110,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 209,
+          "pathCount": 15
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 15
+        }
+      ],
+      "areaBefore": 382257.4,
+      "areaAfter": 920954.0,
+      "contoursBefore": 3,
+      "contoursAfter": 3,
+      "glyphName": "f"
+    },
+    {
+      "char": "g",
+      "categories": [
+        "counter-bearing",
+        "descender",
+        "looped-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 37,
+          "rows": 73,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 154,
+          "pathCount": 21
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 21
+        }
+      ],
+      "areaBefore": 292164.3,
+      "areaAfter": 705361.8,
+      "contoursBefore": 2,
+      "contoursAfter": 3,
+      "glyphName": "g"
+    },
+    {
+      "char": "h",
+      "categories": [
+        "ascender"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 42,
+          "rows": 69,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 158,
+          "pathCount": 10
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 10
+        }
+      ],
+      "areaBefore": 298860.3,
+      "areaAfter": 715929.6,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "h"
+    },
+    {
+      "char": "i",
+      "categories": [
+        "narrow-vertical"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 29,
+          "rows": 45,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 59,
+          "pathCount": 2
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 2
+        }
+      ],
+      "areaBefore": 101191.3,
+      "areaAfter": 305649.8,
+      "contoursBefore": 3,
+      "contoursAfter": 2,
+      "glyphName": "i"
+    },
+    {
+      "char": "j",
+      "categories": [
+        "descender",
+        "narrow-vertical"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 37,
+          "rows": 86,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 136,
+          "pathCount": 15
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 15
+        }
+      ],
+      "areaBefore": 245603.9,
+      "areaAfter": 637550.6,
+      "contoursBefore": 4,
+      "contoursAfter": 3,
+      "glyphName": "j"
+    },
+    {
+      "char": "k",
+      "categories": [
+        "ascender"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 40,
+          "rows": 68,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 123,
+          "pathCount": 25
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 25
+        }
+      ],
+      "areaBefore": 234331.2,
+      "areaAfter": 563448.0,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "k"
+    },
+    {
+      "char": "l",
+      "categories": [
+        "ascender",
+        "narrow-vertical"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 31,
+          "rows": 70,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 127,
+          "pathCount": 7
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 7
+        }
+      ],
+      "areaBefore": 235442.9,
+      "areaAfter": 588023.6,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "l"
+    },
+    {
+      "char": "m",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 65,
+          "rows": 30,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 115,
+          "pathCount": 11
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 11
+        }
+      ],
+      "areaBefore": 239129.3,
+      "areaAfter": 548484.5,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "m"
+    },
+    {
+      "char": "n",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 48,
+          "rows": 29,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 78,
+          "pathCount": 13
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 13
+        }
+      ],
+      "areaBefore": 165336.0,
+      "areaAfter": 378473.9,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "n"
+    },
+    {
+      "char": "o",
+      "categories": [
+        "counter-bearing",
+        "looped-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 38,
+          "rows": 28,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 78,
+          "pathCount": 19
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 19
+        }
+      ],
+      "areaBefore": 138319.7,
+      "areaAfter": 340485.5,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "o"
+    },
+    {
+      "char": "p",
+      "categories": [
+        "counter-bearing",
+        "descender",
+        "looped-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 50,
+          "rows": 76,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 179,
+          "pathCount": 30
+        },
+        {
+          "type": "spur-prune",
+          "prunedCount": 1,
+          "thresholdFu": 47.04
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 29
+        }
+      ],
+      "areaBefore": 342468.4,
+      "areaAfter": 786803.0,
+      "contoursBefore": 2,
+      "contoursAfter": 3,
+      "glyphName": "p"
+    },
+    {
+      "char": "q",
+      "categories": [
+        "counter-bearing",
+        "descender",
+        "looped-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 37,
+          "rows": 73,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 153,
+          "pathCount": 12
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 12
+        }
+      ],
+      "areaBefore": 291003.5,
+      "areaAfter": 705961.9,
+      "contoursBefore": 2,
+      "contoursAfter": 3,
+      "glyphName": "q"
+    },
+    {
+      "char": "r",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 39,
+          "rows": 35,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 67,
+          "pathCount": 10
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 10
+        }
+      ],
+      "areaBefore": 125181.0,
+      "areaAfter": 321017.2,
+      "contoursBefore": 2,
+      "contoursAfter": 1,
+      "glyphName": "r"
+    },
+    {
+      "char": "s",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 33,
+          "rows": 35,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 55,
+          "pathCount": 13
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 13
+        }
+      ],
+      "areaBefore": 118522.1,
+      "areaAfter": 283932.3,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "s"
+    },
+    {
+      "char": "t",
+      "categories": [
+        "ascender",
+        "narrow-vertical"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 58,
+          "rows": 58,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 153,
+          "pathCount": 28
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 28
+        }
+      ],
+      "areaBefore": 267863.1,
+      "areaAfter": 664842.9,
+      "contoursBefore": 3,
+      "contoursAfter": 2,
+      "glyphName": "t"
+    },
+    {
+      "char": "u",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 40,
+          "rows": 28,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 63,
+          "pathCount": 8
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 8
+        }
+      ],
+      "areaBefore": 127472.0,
+      "areaAfter": 328569.5,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "u"
+    },
+    {
+      "char": "v",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 38,
+          "rows": 29,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 57,
+          "pathCount": 10
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 10
+        }
+      ],
+      "areaBefore": 112541.0,
+      "areaAfter": 296119.7,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "v"
+    },
+    {
+      "char": "w",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 50,
+          "rows": 29,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 88,
+          "pathCount": 15
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 15
+        }
+      ],
+      "areaBefore": 169090.7,
+      "areaAfter": 433165.5,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "w"
+    },
+    {
+      "char": "x",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 42,
+          "rows": 35,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 76,
+          "pathCount": 17
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 17
+        }
+      ],
+      "areaBefore": 155903.6,
+      "areaAfter": 398230.3,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "x"
+    },
+    {
+      "char": "y",
+      "categories": [
+        "descender"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 37,
+          "rows": 67,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 139,
+          "pathCount": 30
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 30
+        }
+      ],
+      "areaBefore": 265255.5,
+      "areaAfter": 636241.7,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "y"
+    },
+    {
+      "char": "z",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 41,
+          "rows": 69,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 135,
+          "pathCount": 15
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 15
+        }
+      ],
+      "areaBefore": 268712.1,
+      "areaAfter": 649227.3,
+      "contoursBefore": 2,
+      "contoursAfter": 2,
+      "glyphName": "z"
+    },
+    {
+      "char": "{",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 32,
+          "rows": 81,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 92,
+          "pathCount": 8
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 8
+        }
+      ],
+      "areaBefore": 176620.7,
+      "areaAfter": 450680.7,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "braceleft"
+    },
+    {
+      "char": "|",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 11,
+          "rows": 78,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 69,
+          "pathCount": 1
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 1
+        }
+      ],
+      "areaBefore": 125477.2,
+      "areaAfter": 328729.9,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "bar"
+    },
+    {
+      "char": "}",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 32,
+          "rows": 81,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 91,
+          "pathCount": 8
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 8
+        }
+      ],
+      "areaBefore": 176556.7,
+      "areaAfter": 449614.9,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "braceright"
+    },
+    {
+      "char": "~",
+      "categories": [
+        "plain-lowercase"
+      ],
+      "operations": [
+        {
+          "type": "rasterize",
+          "cols": 32,
+          "rows": 19,
+          "cellSizeFu": 23.52
+        },
+        {
+          "type": "skeleton-extract",
+          "skeletonPixelCount": 37,
+          "pathCount": 1
+        },
+        {
+          "type": "stroke-rebuild",
+          "widthFu": 188.16,
+          "strokeCount": 1
+        }
+      ],
+      "areaBefore": 77626.4,
+      "areaAfter": 206644.8,
+      "contoursBefore": 1,
+      "contoursAfter": 1,
+      "glyphName": "asciitilde"
+    }
+  ]
+}

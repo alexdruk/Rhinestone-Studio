@@ -1,0 +1,201 @@
+{
+  "sizeId": "ss30",
+  "heightsMm": {
+    "min": 106,
+    "mid": 108.5,
+    "max": 111
+  },
+  "generated": {
+    "count": 171,
+    "errors": 0,
+    "meanCharAccuracy": 0.3967,
+    "meanWordAccuracy": 0.1408,
+    "meanConfidence": 36.2,
+    "meanClusterCount": 16.64,
+    "meanCollisionCount": 0,
+    "meanStoneCount": 200.7,
+    "exactMatchRate": 0.1111,
+    "requiredPhraseCount": 12,
+    "requiredPhrasePassCount": 7,
+    "requiredPhraseAccuracy": 0.5833,
+    "unrecognizedCount": 65,
+    "unrecognizedFraction": 0.3801,
+    "worst": [
+      {
+        "id": "word-together__min",
+        "text": "together",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "repeat-book__min",
+        "text": "book",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": "Delp\u2019:"
+      },
+      {
+        "id": "repeat-moon__min",
+        "text": "moon",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": "pet"
+      },
+      {
+        "id": "repeat-llll__min",
+        "text": "llll",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "repeat-oooo__min",
+        "text": "oooo",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "narrow-will__min",
+        "text": "will",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": "woyses"
+      },
+      {
+        "id": "narrow-ijlt__min",
+        "text": "ijlt",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "wide-mound__min",
+        "text": "mound",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": "ITC"
+      },
+      {
+        "id": "wide-mnuw__min",
+        "text": "mnuw",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": "TTIERLITY"
+      },
+      {
+        "id": "descender-yoga__min",
+        "text": "yoga",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": ",@F,"
+      }
+    ]
+  },
+  "baseline": {
+    "count": 171,
+    "errors": 0,
+    "meanCharAccuracy": 0.7949,
+    "meanWordAccuracy": 0.5634,
+    "meanConfidence": 66.8,
+    "meanClusterCount": 7.11,
+    "meanCollisionCount": 0,
+    "meanStoneCount": 225.2,
+    "exactMatchRate": 0.5497,
+    "requiredPhraseCount": 12,
+    "requiredPhrasePassCount": 8,
+    "requiredPhraseAccuracy": 0.6667,
+    "unrecognizedCount": 13,
+    "unrecognizedFraction": 0.076,
+    "worst": [
+      {
+        "id": "repeat-llll__min",
+        "text": "llll",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "repeat-oooo__min",
+        "text": "oooo",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": "0000"
+      },
+      {
+        "id": "descender-yoga__min",
+        "text": "yoga",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": "6 a\u2019,"
+      },
+      {
+        "id": "amb-aoe__min",
+        "text": "aoe",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "amb-rvrv__min",
+        "text": "rvrv",
+        "heightMm": 106,
+        "charAccuracy": 0.0,
+        "rawOcrText": "rVvtiVv"
+      },
+      {
+        "id": "repeat-llll__mid",
+        "text": "llll",
+        "heightMm": 108.5,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "repeat-oooo__mid",
+        "text": "oooo",
+        "heightMm": 108.5,
+        "charAccuracy": 0.0,
+        "rawOcrText": "0000"
+      },
+      {
+        "id": "descender-yoga__mid",
+        "text": "yoga",
+        "heightMm": 108.5,
+        "charAccuracy": 0.0,
+        "rawOcrText": ", 6 G oe"
+      },
+      {
+        "id": "repeat-llll__max",
+        "text": "llll",
+        "heightMm": 111,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "repeat-oooo__max",
+        "text": "oooo",
+        "heightMm": 111,
+        "charAccuracy": 0.0,
+        "rawOcrText": "06000"
+      }
+    ]
+  },
+  "verdict": {
+    "passed": false,
+    "findings": [
+      "meanCharAccuracy 0.3967 < 0.85",
+      "meanWordAccuracy 0.1408 < 0.8",
+      "requiredPhraseAccuracy 0.5833 < 1.0",
+      "unrecognizedFraction 0.3801 > 0.15"
+    ],
+    "thresholds": {
+      "minCharAccuracy": 0.85,
+      "minWordAccuracy": 0.8,
+      "minRequiredPhraseAccuracy": 1.0,
+      "minConfidence": 40.0,
+      "maxUnrecognizedSamples": 0.15,
+      "maxAmbiguousPairRepeats": 2
+    }
+  }
+}

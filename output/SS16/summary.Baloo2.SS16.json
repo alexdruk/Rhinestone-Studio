@@ -1,0 +1,201 @@
+{
+  "sizeId": "ss16",
+  "heightsMm": {
+    "min": 65,
+    "mid": 77.5,
+    "max": 90
+  },
+  "generated": {
+    "count": 171,
+    "errors": 0,
+    "meanCharAccuracy": 0.2424,
+    "meanWordAccuracy": 0.0375,
+    "meanConfidence": 26.4,
+    "meanClusterCount": 24.84,
+    "meanCollisionCount": 0,
+    "meanStoneCount": 253.5,
+    "exactMatchRate": 0.0234,
+    "requiredPhraseCount": 12,
+    "requiredPhrasePassCount": 1,
+    "requiredPhraseAccuracy": 0.0833,
+    "unrecognizedCount": 82,
+    "unrecognizedFraction": 0.4795,
+    "worst": [
+      {
+        "id": "req-happy-birthday__min",
+        "text": "Happy Birthday",
+        "heightMm": 65,
+        "charAccuracy": 0.0,
+        "rawOcrText": "ODO) BSETELICGIN"
+      },
+      {
+        "id": "req-class-of-2027__min",
+        "text": "Class of 2027",
+        "heightMm": 65,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "lower-alphabet__min",
+        "text": "abcdefghijklmnopqrstuvwxyz",
+        "heightMm": 65,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "numerals__min",
+        "text": "0123456789",
+        "heightMm": 65,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "name-emma__min",
+        "text": "Emma",
+        "heightMm": 65,
+        "charAccuracy": 0.0,
+        "rawOcrText": "Saye"
+      },
+      {
+        "id": "word-forever__min",
+        "text": "forever",
+        "heightMm": 65,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "word-blessed__min",
+        "text": "blessed",
+        "heightMm": 65,
+        "charAccuracy": 0.0,
+        "rawOcrText": "HYOGGOC"
+      },
+      {
+        "id": "word-together__min",
+        "text": "together",
+        "heightMm": 65,
+        "charAccuracy": 0.0,
+        "rawOcrText": "180) S. oe Py 5 ag"
+      },
+      {
+        "id": "repeat-llll__min",
+        "text": "llll",
+        "heightMm": 65,
+        "charAccuracy": 0.0,
+        "rawOcrText": "RAR"
+      },
+      {
+        "id": "narrow-will__min",
+        "text": "will",
+        "heightMm": 65,
+        "charAccuracy": 0.0,
+        "rawOcrText": "wPPO0"
+      }
+    ]
+  },
+  "baseline": {
+    "count": 171,
+    "errors": 0,
+    "meanCharAccuracy": 0.2284,
+    "meanWordAccuracy": 0.0668,
+    "meanConfidence": 24.4,
+    "meanClusterCount": 10.23,
+    "meanCollisionCount": 0,
+    "meanStoneCount": 270.1,
+    "exactMatchRate": 0.0409,
+    "requiredPhraseCount": 12,
+    "requiredPhrasePassCount": 2,
+    "requiredPhraseAccuracy": 0.1667,
+    "unrecognizedCount": 85,
+    "unrecognizedFraction": 0.4971,
+    "worst": [
+      {
+        "id": "lower-alphabet__min",
+        "text": "abcdefghijklmnopqrstuvwxyz",
+        "heightMm": 65,
+        "charAccuracy": 0.0,
+        "rawOcrText": "OCOSP CB EWA OD GIT Saesyvrwaxen za"
+      },
+      {
+        "id": "numerals__min",
+        "text": "0123456789",
+        "heightMm": 65,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "name-noah__min",
+        "text": "Noah",
+        "heightMm": 65,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "word-love__min",
+        "text": "love",
+        "heightMm": 65,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "word-forever__min",
+        "text": "forever",
+        "heightMm": 65,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "repeat-book__min",
+        "text": "book",
+        "heightMm": 65,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "repeat-letter__min",
+        "text": "letter",
+        "heightMm": 65,
+        "charAccuracy": 0.0,
+        "rawOcrText": "HGRROT"
+      },
+      {
+        "id": "repeat-moon__min",
+        "text": "moon",
+        "heightMm": 65,
+        "charAccuracy": 0.0,
+        "rawOcrText": ""
+      },
+      {
+        "id": "narrow-will__min",
+        "text": "will",
+        "heightMm": 65,
+        "charAccuracy": 0.0,
+        "rawOcrText": "VJ bt"
+      },
+      {
+        "id": "narrow-ijlt__min",
+        "text": "ijlt",
+        "heightMm": 65,
+        "charAccuracy": 0.0,
+        "rawOcrText": "ae"
+      }
+    ]
+  },
+  "verdict": {
+    "passed": false,
+    "findings": [
+      "meanCharAccuracy 0.2424 < 0.85",
+      "meanWordAccuracy 0.0375 < 0.8",
+      "requiredPhraseAccuracy 0.0833 < 1.0",
+      "unrecognizedFraction 0.4795 > 0.15"
+    ],
+    "thresholds": {
+      "minCharAccuracy": 0.85,
+      "minWordAccuracy": 0.8,
+      "minRequiredPhraseAccuracy": 1.0,
+      "minConfidence": 40.0,
+      "maxUnrecognizedSamples": 0.15,
+      "maxAmbiguousPairRepeats": 2
+    }
+  }
+}

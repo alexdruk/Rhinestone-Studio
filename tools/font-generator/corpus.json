@@ -1,0 +1,84 @@
+{
+  "_comment": "FONT-GEN-001 fixed automated readability corpus. Shared verbatim by generate/evaluate (Python) and measure.mjs (Node) -- one definition, not duplicated per language. Every entry is {id, text, category, requiredPhrase}. requiredPhrase entries must pass at every tested height per the milestone brief; all others are the automated bulk corpus used for aggregate scoring and exception-only review surfacing.",
+  "requiredPhrases": [
+    { "id": "req-ashley", "text": "Ashley", "category": "short-name" },
+    { "id": "req-bride-squad", "text": "Bride Squad", "category": "short-phrase" },
+    { "id": "req-happy-birthday", "text": "Happy Birthday", "category": "short-phrase" },
+    { "id": "req-class-of-2027", "text": "Class of 2027", "category": "short-phrase" }
+  ],
+  "items": [
+    { "id": "lower-alphabet", "text": "abcdefghijklmnopqrstuvwxyz", "category": "lowercase-alphabet" },
+    { "id": "upper-alphabet", "text": "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "category": "uppercase-alphabet" },
+    { "id": "numerals", "text": "0123456789", "category": "numerals" },
+
+    { "id": "name-ashley", "text": "Ashley", "category": "short-name" },
+    { "id": "name-emma", "text": "Emma", "category": "short-name" },
+    { "id": "name-noah", "text": "Noah", "category": "short-name" },
+    { "id": "name-olivia", "text": "Olivia", "category": "short-name" },
+
+    { "id": "word-love", "text": "love", "category": "common-word" },
+    { "id": "word-family", "text": "family", "category": "common-word" },
+    { "id": "word-forever", "text": "forever", "category": "common-word" },
+    { "id": "word-blessed", "text": "blessed", "category": "common-word" },
+    { "id": "word-together", "text": "together", "category": "common-word" },
+
+    { "id": "repeat-book", "text": "book", "category": "repeated-letters" },
+    { "id": "repeat-letter", "text": "letter", "category": "repeated-letters" },
+    { "id": "repeat-coffee", "text": "coffee", "category": "repeated-letters" },
+    { "id": "repeat-moon", "text": "moon", "category": "repeated-letters" },
+    { "id": "repeat-llll", "text": "llll", "category": "repeated-letters" },
+    { "id": "repeat-oooo", "text": "oooo", "category": "repeated-letters" },
+
+    { "id": "narrow-illicit", "text": "illicit", "category": "narrow-letters" },
+    { "id": "narrow-will", "text": "will", "category": "narrow-letters" },
+    { "id": "narrow-title", "text": "title", "category": "narrow-letters" },
+    { "id": "narrow-ijlt", "text": "ijlt", "category": "narrow-letters" },
+
+    { "id": "wide-mound", "text": "mound", "category": "wide-letters" },
+    { "id": "wide-wave", "text": "wave", "category": "wide-letters" },
+    { "id": "wide-mnuw", "text": "mnuw", "category": "wide-letters" },
+
+    { "id": "ascender-height", "text": "height", "category": "ascenders" },
+    { "id": "ascender-birthday", "text": "birthday", "category": "ascenders" },
+    { "id": "ascender-blush", "text": "blush", "category": "ascenders" },
+
+    { "id": "descender-puppy", "text": "puppy", "category": "descenders" },
+    { "id": "descender-yoga", "text": "yoga", "category": "descenders" },
+    { "id": "descender-gypsy", "text": "gypsy", "category": "descenders" },
+
+    { "id": "loop-bobble", "text": "bobble", "category": "loops-counters" },
+    { "id": "loop-google", "text": "google", "category": "loops-counters" },
+    { "id": "loop-bubble", "text": "bubble", "category": "loops-counters" },
+
+    { "id": "join-the", "text": "the", "category": "cursive-joins" },
+    { "id": "join-and", "text": "and", "category": "cursive-joins" },
+    { "id": "join-st", "text": "st", "category": "cursive-joins" },
+    { "id": "join-ck", "text": "ck", "category": "cursive-joins" },
+    { "id": "join-th", "text": "th", "category": "cursive-joins" },
+
+    { "id": "phrase-best-day-ever", "text": "Best Day Ever", "category": "longer-phrase" },
+    { "id": "phrase-happily-ever-after", "text": "Happily Ever After", "category": "longer-phrase" },
+    { "id": "phrase-mr-and-mrs", "text": "Mr and Mrs Smith", "category": "longer-phrase" },
+
+    { "id": "amb-aoe", "text": "aoe", "category": "ambiguous-synthetic" },
+    { "id": "amb-oeao", "text": "oeao", "category": "ambiguous-synthetic" },
+    { "id": "amb-ijlt", "text": "ijlt", "category": "ambiguous-synthetic" },
+    { "id": "amb-till", "text": "till", "category": "ambiguous-synthetic" },
+    { "id": "amb-mnuw", "text": "mnuw", "category": "ambiguous-synthetic" },
+    { "id": "amb-numnum", "text": "numnum", "category": "ambiguous-synthetic" },
+    { "id": "amb-cece", "text": "cece", "category": "ambiguous-synthetic" },
+    { "id": "amb-rvrv", "text": "rvrv", "category": "ambiguous-synthetic" },
+    { "id": "amb-sfsf", "text": "sfsf", "category": "ambiguous-synthetic" },
+    { "id": "amb-bhk", "text": "bhk", "category": "ambiguous-synthetic" },
+    { "id": "amb-gqy", "text": "gqy", "category": "ambiguous-synthetic" }
+  ],
+  "confusablePairs": [
+    ["a", "o"], ["a", "e"], ["o", "e"],
+    ["i", "j"], ["i", "l"], ["l", "t"], ["j", "t"],
+    ["m", "n"], ["n", "u"], ["u", "w"], ["m", "w"],
+    ["c", "e"], ["r", "v"], ["s", "f"],
+    ["b", "h"], ["h", "k"], ["b", "k"],
+    ["g", "q"], ["q", "y"], ["g", "y"],
+    ["O", "0"], ["S", "5"], ["B", "8"], ["6", "9"]
+  ]
+}

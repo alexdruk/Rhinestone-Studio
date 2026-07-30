@@ -1,0 +1,32 @@
+{
+  "sizeId": "ss10",
+  "family": "Sacramento",
+  "variant": "generated",
+  "count": 171,
+  "meanCharAccuracy": 0.2639,
+  "meanWordAccuracy": 0.039,
+  "exactMatchRate": 0.0292,
+  "requiredPhraseCount": 12,
+  "requiredPhrasePassCount": 2,
+  "requiredPhraseAccuracy": 0.1667,
+  "unrecognizedCount": 79,
+  "unrecognizedFraction": 0.462,
+  "verdict": {
+    "passed": false,
+    "findings": [
+      "meanCharAccuracy 0.2639 < 0.85",
+      "meanWordAccuracy 0.039 < 0.8",
+      "requiredPhraseAccuracy 0.1667 < 1.0",
+      "unrecognizedFraction 0.462 > 0.15"
+    ],
+    "thresholds": {
+      "minCharAccuracy": 0.85,
+      "minWordAccuracy": 0.8,
+      "minRequiredPhraseAccuracy": 1.0,
+      "minConfidence": 40.0,
+      "maxUnrecognizedSamples": 0.15,
+      "maxAmbiguousPairRepeats": 2
+    }
+  },
+  "displayFamily": "Sacramento"
+}

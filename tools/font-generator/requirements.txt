@@ -1,0 +1,32 @@
+# FONT-GEN-001 -- Procedural Sacramento Rhinestone Font Family
+#
+# Scoped to this tool only (per CLAUDE.md: smallest reliable dependency set).
+#
+#   fontTools    read/modify/write the source TTF's glyph outlines and tables
+#   numpy        vector math for glyph-category classification and grid conversions
+#   shapely      polygon buffer/offset ops -- the actual procedural transform primitive used for
+#                contour offsetting, stroke expansion/contraction, morphological open/close
+#                (min-width enforcement, counter enlargement, loop opening), and corner rounding
+#   Pillow       rasterizes computed rhinestone stone centers (already produced by the real
+#                GeometryEngine/StoneLayout pipeline via Node) into PNG images for OCR and review
+#   pytesseract  thin wrapper around the system `tesseract` OCR binary (already installed on this
+#                machine, MIT-licensed, actively maintained) -- avoids the multi-GB PyTorch/ONNX
+#                download that PaddleOCR/EasyOCR would require for this task
+#
+# skia-pathops was considered for glyph boolean ops but shapely's buffer() already covers every
+# transform this milestone's procedural rules need (offset, open/close morphology, round joins)
+# without an extra native-code dependency.
+#
+# FONT-GEN-004 -- scikit-image's skeletonize() is the standard, well-tested medial-axis/thinning
+# implementation (Zhang-Suen-style topological thinning on a rasterized mask); reused here rather
+# than hand-rolled, same rationale as pytesseract above (established library over a bug-prone
+# from-scratch reimplementation of a well-known algorithm). Pulls in scipy and networkx as
+# transitive deps; networkx is reused directly for skeleton-pixel-graph path tracing rather than
+# hand-rolling BFS a second time.
+
+fontTools==4.63.0
+numpy>=1.26,<3
+shapely>=2.0,<3
+Pillow>=10.0
+pytesseract>=0.3.10
+scikit-image>=0.24

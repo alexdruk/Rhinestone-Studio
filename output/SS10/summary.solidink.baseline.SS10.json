@@ -1,0 +1,32 @@
+{
+  "sizeId": "ss10",
+  "family": "Sacramento",
+  "variant": "baseline",
+  "count": 171,
+  "meanCharAccuracy": 0.2761,
+  "meanWordAccuracy": 0.0916,
+  "exactMatchRate": 0.0702,
+  "requiredPhraseCount": 12,
+  "requiredPhrasePassCount": 0,
+  "requiredPhraseAccuracy": 0.0,
+  "unrecognizedCount": 83,
+  "unrecognizedFraction": 0.4854,
+  "verdict": {
+    "passed": false,
+    "findings": [
+      "meanCharAccuracy 0.2761 < 0.85",
+      "meanWordAccuracy 0.0916 < 0.8",
+      "requiredPhraseAccuracy 0.0 < 1.0",
+      "unrecognizedFraction 0.4854 > 0.15"
+    ],
+    "thresholds": {
+      "minCharAccuracy": 0.85,
+      "minWordAccuracy": 0.8,
+      "minRequiredPhraseAccuracy": 1.0,
+      "minConfidence": 40.0,
+      "maxUnrecognizedSamples": 0.15,
+      "maxAmbiguousPairRepeats": 2
+    }
+  },
+  "displayFamily": "SacramentoSkeleton"
+}
