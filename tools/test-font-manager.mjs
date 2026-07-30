@@ -21,8 +21,9 @@ test('FontManager loads deterministic manifest', () => {
   // RS-2002 expanded the bundled collection from 3 registry entries (2 enabled + 1 disabled
   // placeholder) to 10 (9 enabled + the same disabled RobotoMono placeholder). TXT-101B added
   // rs-block (providerId:'rhinestone') -- 11. FONT-002 added rs-modern alongside it as the second
-  // Production Font -- 12 total.
-  assert.equal(manager.listFonts({ includeDisabled: true }).length, 12);
+  // Production Font -- 12. FONT-DECISION-001 added baloo2-variable-regular (providerId:'opentype',
+  // rhinestoneValidated:true) -- 13 total.
+  assert.equal(manager.listFonts({ includeDisabled: true }).length, 13);
 });
 
 test('FontManager enables every bundled font except the RobotoMono placeholder', () => {
@@ -31,7 +32,7 @@ test('FontManager enables every bundled font except the RobotoMono placeholder',
   // loaded fonts by hardcoded id regardless of it. RS-2002 makes `enabled` the actual gate the
   // live app derives its font list from (see app.js's TEXT_ENGINE_FONT_IDS), so this manifest-level
   // invariant matters now: everything except the known-corrupt placeholder must be enabled.
-  assert.equal(manager.listFonts().length, 11);
+  assert.equal(manager.listFonts().length, 12);
   assert.equal(manager.listFonts({ includeDisabled: true }).length - manager.listFonts().length, 1);
   assert.equal(manager.getFont('roboto-mono-regular').enabled, false);
 });
@@ -58,6 +59,14 @@ test('FontManager defaults providerId to "opentype" for every bundled record, an
   assert.equal(legacy.getFont('legacy-font').providerId, 'opentype');
 });
 
+test('FontManager defaults rhinestoneValidated to false, and passes through true for baloo2-variable-regular', () => {
+  const manager = new FontManager(manifest);
+  assert.equal(manager.getFont('baloo2-variable-regular').rhinestoneValidated, true);
+  assert.equal(manager.getFont('courier-prime-regular').rhinestoneValidated, false);
+  const legacy = new FontManager({ version: 1, fonts: [{ id: 'legacy-font', family: 'Legacy', path: 'assets/fonts/Legacy.ttf' }] });
+  assert.equal(legacy.getFont('legacy-font').rhinestoneValidated, false);
+});
+
 test('FontManager resolves default font, still Courier Prime for backward compatibility', () => {
   const manager = new FontManager(manifest);
   const font = manager.getDefaultFont();
@@ -68,7 +77,7 @@ test('FontManager resolves default font, still Courier Prime for backward compat
 test('FontManager exposes a category (role) for every enabled font, matching RS-2002\'s taxonomy', () => {
   const manager = new FontManager(manifest);
   const expectedCategories = new Set([
-    'script', 'serif', 'sans-serif', 'display', 'monogram', 'decorative', 'block', 'handwritten', 'monospace', 'rhinestone'
+    'script', 'serif', 'sans-serif', 'display', 'monogram', 'decorative', 'block', 'handwritten', 'monospace', 'rhinestone', 'rounded-sans'
   ]);
   const seen = new Set(manager.listFonts().map((font) => font.role));
   assert.deepEqual(seen, expectedCategories);
@@ -92,7 +101,7 @@ test('FontManager rejects duplicate ids', () => {
 test('FontManager serializes without mutation', () => {
   const manager = new FontManager(manifest);
   const json = manager.toJSON();
-  assert.equal(json.fonts.length, 12);
+  assert.equal(json.fonts.length, 13);
   json.fonts[0].family = 'Changed';
   assert.equal(manager.getFont(DEFAULT_FONT_ID).family, 'Courier Prime');
 });

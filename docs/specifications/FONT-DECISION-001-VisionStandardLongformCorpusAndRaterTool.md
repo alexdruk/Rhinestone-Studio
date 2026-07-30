@@ -226,3 +226,107 @@ No change to any generated TTF, `generation-metadata.*.json`, `evaluation.*.json
 re-run of SS16 producing purely additive new keys, then that regenerated file was reverted since
 this milestone doesn't ask for regenerating pytesseract summaries). Existing
 `tools/font-generator/tests/` suite re-run and passes unmodified.
+
+---
+
+## Part E — Final recommendation
+
+**Rating data used**: `review/FONT-DECISION-001-rater-v2.html`, 156 items, rendered with
+`render_review_png()` (genuine gold-on-dark stone-dot output — what a real product looks like),
+exported as `font-decision-001-ratings-v2.json`. This supersedes Part C's original 60-item
+`render_ocr_image()` (blur/rebinarize) pass: a spot-check found the two render modes mostly agree
+but diverge on dense letter clusters, where the blur step over-merges stones into a blob that reads
+*less* legibly than the real dot pattern. The 60-item v1 numbers are cited below only where noted;
+every other number in this section is from the 156-item v2 batch.
+
+### Human rating results (v2, n=156)
+
+| Family / variant | SS6 | SS16 | SS20 | Total | Readable | Unreadable |
+|---|---|---|---|---|---|---|
+| **Baloo2Variable baseline wght400** | 13/16 R, 3 NS | 14/16 R, 2 NS | 14/16 R, 2 NS | 48 | **85.4%** | **0%** |
+| Baloo2Variable baseline wght500 | 12/16 R, 4 NS | 11/16 R, 5 NS | 9/16 R, 7 NS | 48 | 66.7% | 0% |
+| Baloo2Variable generated (fatten/enlarge) | 4 R, 8 NS, 20 U | 3 R, 10 NS, 19 U | 2 R, 9 NS, 21 U | 48 | 18.8% | 25.0% |
+| Sacramento baseline (comparison anchor) | — | 8/12 R, 4 NS | — | 12 | 66.7% | 0% |
+
+(R = Readable, NS = Not Sure, U = Unreadable. Each cell spans all 16 phrases — 12 longform + 4
+required — except the Sacramento anchor, which is longform-only at SS16.)
+
+### 1. Recommended candidate: Baloo2Variable baseline, weight 400
+
+**Zero Unreadable ratings across all 48 human-rated items** spanning 3 sizes (SS6/SS16/SS20) and 16
+phrases, including the longform corpus purpose-built to surface the defects that sank every prior
+candidate (t-crossbar erosion, digit erosion, SS20 "C"-splitting — see Part A/B). 85.4% rated
+Readable outright, the remainder Not Sure, never Unreadable. This is corroborated by the automated
+vision-transcription baseline: 100% exact match (20/20 required-phrase corpus, 60/60 longform
+corpus across all 5 sizes — Part A Table 1, Part B's priority-subset table). No other family/variant
+evaluated in this project — Sacramento, Baloo2 (static), SacramentoSkeleton, or Baloo2Variable's own
+generated transform — has cleared this bar. **Baloo2Variable baseline wght400 is the recommended
+production candidate.**
+
+wght500 was rated alongside it (this project's first-ever human read of that weight) and is also
+zero-Unreadable, but at a visibly lower Readable rate (66.7% vs. 85.4%) — wght400 remains the
+better default; wght500 is not recommended for production but the data is kept here since it may be
+useful if a bolder weight is ever requested.
+
+### 2. The fatten/enlarge transform pipeline should not be applied to this candidate
+
+Baloo2Variable's *generated* (procedurally fattened/enlarged) variant scores 18.8% Readable / 25.0%
+Unreadable on the identical 48 items — a large, unambiguous regression from the untransformed
+baseline's 85.4% / 0%. Two specific defects were already root-caused (Part B): a "t"-crossbar
+erosion affecting nearly every medial-t word at every size, and an SS20-only capital-"C" defect.
+The gap between 18.8% and 85.4% is far wider than those two defects alone would explain across a
+16-phrase corpus where most phrases contain neither a medial "t" nor a capital C at SS20 — meaning
+the transform is degrading general legibility beyond its two named, previously-documented defects.
+Combined with every prior milestone's clusterCount findings (fatten/enlarge consistently
+fragments stone geometry at every size, every source font tried — Sacramento, Baloo2, Baloo2Variable
+alike), this closes the question FONT-CAL-002/FONT-VIS-001/FONT-GEN-001/002/003 all deferred to
+"FONT-POLICY-001": **the procedural fatten/enlarge approach does not belong in production for this
+family, and by extension is not a promising general strategy** — the untransformed source font is
+the better rhinestone candidate every time it has been tested.
+
+### 3. Geometry sanity check: clusterCount / collisionCount, baseline wght400, all 5 sizes
+
+The human rating batch only covered SS6/16/20; SS10 and SS30 are confirmed here from already-measured
+automated data (no new rendering) as a final check that nothing anomalous happens at the two
+untested sizes:
+
+| Metric (baseline wght400) | SS6 | SS10 | SS16 | SS20 | SS30 |
+|---|---|---|---|---|---|
+| clusterCount, required-phrase corpus (n=12) | 7.86 | 7.06 | 8.51 | 8.87 | 7.11 |
+| clusterCount, longform corpus (n=12) | 34.08 | 32.92 | 34.00 | 35.58 | 35.17 |
+| collisionCount, required-phrase corpus | 0 | 0 | 0 | 0 | 0 |
+| vision exact-match, longform corpus | 12/12 | 12/12 | 12/12 | 12/12 | 12/12 |
+
+Both clusterCount series are flat across all 5 sizes — no spike or trend at SS10 or SS30, the two
+sizes the rating batch didn't cover — and collisionCount is zero everywhere. This is a sharp contrast
+with the *generated* variant, whose longform clusterCount rises monotonically with size (44 → 56 →
+93 → 122 → 93) — the geometry data agrees with the human-rating verdict at every size, including the
+two that were never shown to the rater. No red flags; the geometry sanity check passes.
+
+### 4. Caveat: single-rater result
+
+All 216 ratings across both sessions (v1's 60 + v2's 156) were made by one rater — the same person
+across two sessions, real and internally consistent (the v1→v2 re-render comparison above shows
+their judgments track a known rendering-fidelity difference in the expected direction, rather than
+being noisy), but this is **not a statistically validated panel**. Before treating this as final
+beyond an internal production default, I'd want: a second independent rater blind to which font is
+which (the tool already hides family/size labels during rating for this reason), and/or feedback
+from real physical product samples (a printed/transferred rhinestone mug or tumbler using this font),
+since a screen render of gold dots on black is still one step removed from stones on a physical
+surface under real lighting. Absent either of those, this recommendation should be treated as a
+strong, evidence-backed internal default — not a claim that has survived independent replication.
+
+### Studio integration
+
+**Registered** — the first non-experimental Studio font registration this project has ever
+triggered (every prior candidate's own "Studio integration" section concluded "No fonts registered").
+`assets/fonts/manifest.json` gained one new entry, `baloo2-variable-regular`, pointing at the
+already-committed, unmodified source file `fonts/sources/Baloo2/Baloo2-wght400.ttf` (`providerId:
+'opentype'` — real vector glyph geometry sampled by the existing `StoneSampler`/`OpenTypeProvider`
+path, same mechanism as the 9 bundled legacy fonts, not the authored dot-matrix DSL RS Block/RS
+Modern use). A new additive manifest field, `rhinestoneValidated: true`, marks it as having cleared
+this project's human-and-metric legibility bar; `productionFonts()` (app.js) now offers a font if
+`providerId==='rhinestone'` **or** `rhinestoneValidated===true`, so it appears in the normal font
+picker and Monogram font list alongside RS Block/RS Modern, under its own "Rounded Sans" category —
+the 9 unvalidated legacy OpenType fonts remain hidden from the picker exactly as FONT-002 decided,
+unaffected by this change. See the code-level detail in the commit that lands this section.

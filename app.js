@@ -256,7 +256,7 @@ function updateStoneColorSwatch(){const c=STONE_COLORS[el('stoneColor').value];e
 // RS-2002 (Typography & Font Library) -- everything below builds the font picker on top of the
 // same fontManager.listFonts() call used to derive TEXT_ENGINE_FONT_IDS above. No font data lives
 // in app.js: category is font.role, family is font.family, both straight from the manifest.
-const FONT_CATEGORY_LABELS={script:'Script','sans-serif':'Sans Serif',serif:'Serif',display:'Display',monogram:'Monogram',decorative:'Decorative',block:'Block',handwritten:'Handwritten',monospace:'Monospace',rhinestone:'Production Fonts'};
+const FONT_CATEGORY_LABELS={script:'Script','sans-serif':'Sans Serif',serif:'Serif',display:'Display',monogram:'Monogram',decorative:'Decorative',block:'Block',handwritten:'Handwritten',monospace:'Monospace',rhinestone:'Production Fonts','rounded-sans':'Rounded Sans'};
 function fontCategoryLabel(role){return FONT_CATEGORY_LABELS[role]||(role?role.charAt(0).toUpperCase()+role.slice(1):'Other')}
 function groupFontsByCategory(fonts){const groups=new Map();for(const f of fonts){const key=f.role||'display';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(f)}for(const list of groups.values())list.sort((a,b)=>a.family.localeCompare(b.family));return[...groups.entries()].sort((a,b)=>fontCategoryLabel(a[0]).localeCompare(fontCategoryLabel(b[0])))}
 // A font family name safe to drop into a CSS font-family value / HTML style attribute. Every
@@ -285,8 +285,11 @@ function populateFontCategoryFilterOptions(){if(!fontManager)return;const catego
 // FONT-002: only Production Fonts (providerId 'rhinestone') are offered here -- OpenType fonts stay
 // fully registered/enabled (existing projects keep loading/rendering/exporting unchanged, see
 // resolveFontProviderId() below) but are no longer offered as a *pick* for new/other text layers.
+// FONT-DECISION-001: an OpenType font can also earn a place here by clearing this project's
+// human-and-metric rhinestone legibility bar (manifest `rhinestoneValidated:true`) -- unvalidated
+// legacy OpenType fonts remain hidden exactly as FONT-002 decided.
 // A layer that already uses one is handled by ensureFontOptionForLayer(), not by listing it here.
-function productionFonts(){return fontManager?fontManager.listFonts().filter(f=>f.providerId==='rhinestone'):[]}
+function productionFonts(){return fontManager?fontManager.listFonts().filter(f=>f.providerId==='rhinestone'||f.rhinestoneValidated===true):[]}
 function populateFontOptions(){if(!fontManager)return;el('font').innerHTML=groupFontsByCategory(productionFonts()).map(([role,fonts])=>`<optgroup label="${escapeHtml(fontCategoryLabel(role))}">${fonts.map(f=>`<option value="${f.id}" style="font-family:'${cssFontFamily(f.family)}'">${escapeHtml(f.family)}</option>`).join('')}</optgroup>`).join('')}
 // FONT-002: a native <select> silently falls back to value='' if no <option> matches -- without
 // this, a layer already using a legacy (hidden-from-the-list) font would desync #font's displayed
@@ -1545,7 +1548,10 @@ function updateTextFontCapabilityUI(){
   const fontId=isText?l.font:null;
   const known=isText&&isFontKnown(fontId);
   const authored=known&&isAuthoredStoneFontId(fontId);
-  const legacy=known&&!authored;
+  // FONT-DECISION-001: a known, non-authored font can still be one of productionFonts()'s offered
+  // picks (rhinestoneValidated:true) -- only a font that's neither authored nor offered is "legacy".
+  const validated=known&&!authored&&fontManager.getFont(fontId).rhinestoneValidated===true;
+  const legacy=known&&!authored&&!validated;
   const unknown=isText&&!known;
   el('textModeField').style.display=authored?'none':'block';
   el('height').disabled=authored;
@@ -2613,11 +2619,15 @@ function monogramFailureMessage(result,request){
 // "index.html hardcodes no <option>, the catalog is the only source" convention.
 function populateMonogramFrameOptions(){el('monogramFrame').innerHTML=listFrames().map(f=>`<option value="${f.id}">${escapeHtml(f.label)}</option>`).join('')}
 function populateMonogramLayoutOptions(){el('monogramLayout').innerHTML=Object.values(MONOGRAM_LAYOUTS).map(id=>`<option value="${id}">${escapeHtml(MONOGRAM_LAYOUT_LABELS[id]||id)}</option>`).join('')}
-// Same production-font catalog #font already uses (productionFonts() above) -- authored
-// (stoneCenters-based) fonts only, never OpenType/sampled fonts, per this milestone's own
-// requirement. A dedicated #monogramFont select (not the shared #font element) so this Lightbox
-// never participates in relocateFieldGroups().
-function populateMonogramFontOptions(){if(!fontManager)return;el('monogramFont').innerHTML=groupFontsByCategory(productionFonts()).map(([role,fonts])=>`<optgroup label="${escapeHtml(fontCategoryLabel(role))}">${fonts.map(f=>`<option value="${f.id}">${escapeHtml(f.family)}</option>`).join('')}</optgroup>`).join('')}
+// Authored (stoneCenters-based) fonts only, never OpenType/sampled fonts, per this milestone's own
+// requirement -- MonogramGenerator only supports authored fonts (see its own "invalid-font"
+// rejection), so this deliberately filters providerId==='rhinestone' directly rather than reusing
+// productionFonts() (FONT-DECISION-001 widened that shared helper to also include validated
+// OpenType fonts for the ordinary #font picker, which MonogramGenerator cannot use). A dedicated
+// #monogramFont select (not the shared #font element) so this Lightbox never participates in
+// relocateFieldGroups().
+function authoredProductionFonts(){return fontManager?fontManager.listFonts().filter(f=>f.providerId==='rhinestone'):[]}
+function populateMonogramFontOptions(){if(!fontManager)return;el('monogramFont').innerHTML=groupFontsByCategory(authoredProductionFonts()).map(([role,fonts])=>`<optgroup label="${escapeHtml(fontCategoryLabel(role))}">${fonts.map(f=>`<option value="${f.id}">${escapeHtml(f.family)}</option>`).join('')}</optgroup>`).join('')}
 function populateMonogramStoneSizeOptions(){el('monogramStoneSize').innerHTML=listStoneSizes().map(s=>`<option value="${s.diameterMm}">${escapeHtml(s.name)} — ${s.diameterMm.toFixed(1)} mm</option>`).join('')}
 function populateMonogramColorOptions(){const groups=new Map();for(const c of Object.values(STONE_COLORS)){if(!groups.has(c.group))groups.set(c.group,[]);groups.get(c.group).push(c)}el('monogramColor').innerHTML=[...groups.entries()].map(([group,colors])=>`<optgroup label="${escapeHtml(group)}">${colors.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`).join('')}
 function updateMonogramColorSwatch(){const c=STONE_COLORS[el('monogramColor').value];el('monogramColorSwatch').style.background=c?c.previewColor:'transparent'}

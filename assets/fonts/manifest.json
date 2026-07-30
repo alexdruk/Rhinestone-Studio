@@ -122,6 +122,18 @@
       "enabled": true,
       "providerId": "rhinestone",
       "notes": "FONT-002: the second Production Font (src/text/rhinestoneFont/families/rsModern.js) -- a distinct geometric/grotesque style (no serifs, single-story a/g, round bowls) at the same authored pitch as RS Block. `path` is a documentation-only identifier, not a real font file -- see rs-block's own note above for why."
+    },
+    {
+      "id": "baloo2-variable-regular",
+      "family": "Baloo 2",
+      "style": "Regular",
+      "weight": 400,
+      "path": "fonts/sources/Baloo2/Baloo2-wght400.ttf",
+      "role": "rounded-sans",
+      "enabled": true,
+      "providerId": "opentype",
+      "rhinestoneValidated": true,
+      "notes": "FONT-DECISION-001: the first OpenType/StoneSampler font to clear this project's human-and-metric rhinestone legibility bar -- untransformed (baseline, not the rejected fatten/enlarge-generated variant), rated Readable/Not Sure with zero Unreadable across 48 human-rated items (85.4% Readable) spanning SS6/SS16/SS20 and 16 phrases (12 longform + 4 required), corroborated by 100% vision-transcription exact match and flat clusterCount/zero collisionCount at all 5 stone sizes. See docs/specifications/FONT-DECISION-001-VisionStandardLongformCorpusAndRaterTool.md Part E."
     }
   ]
 }

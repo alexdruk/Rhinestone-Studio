@@ -30,7 +30,14 @@ function normalizeFontRecord(record) {
     // TXT-101A: which FontProviderRegistry provider resolves this font id's glyph geometry.
     // Defaults to 'opentype' so every font record from before this field existed (all 9 bundled
     // desktop fonts) keeps resolving exactly as before with zero manifest changes required.
-    providerId: String(record.providerId ?? 'opentype')
+    providerId: String(record.providerId ?? 'opentype'),
+    // FONT-DECISION-001: an OpenType-provider font that has separately cleared this project's
+    // human-and-metric rhinestone legibility bar (vision-transcription + rated dot-render review),
+    // and should therefore be offered in the production font picker alongside the authored
+    // providerId:'rhinestone' fonts. Defaults to false so every pre-existing OpenType record (the
+    // 9 legacy desktop fonts, never validated for stone-dot legibility) stays hidden from the
+    // picker exactly as FONT-002 decided.
+    rhinestoneValidated: Boolean(record.rhinestoneValidated ?? false)
   });
 }
 
