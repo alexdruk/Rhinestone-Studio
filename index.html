@@ -541,10 +541,11 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
             <div id="fontLibraryList" class="font-library-list" role="listbox" aria-label="Font library"></div>
           </div>
           <div class="field-row">
-            <div class="field"><label for="height">Text height (mm)</label><input id="height" type="number" min="4" max="80" step="1" value="25"></div>
+            <div class="field"><label for="height">Text height (mm)</label><input id="height" type="number" min="4" max="111" step="1" value="25"></div>
             <div class="field"><label for="autoFit">Auto fit</label><select id="autoFit"><option value="on">On</option><option value="off">Off</option></select></div>
           </div>
           <p class="hint" id="textSizeFixedHint" style="display:none">Production Fonts are a fixed size — pick a different font for a different scale.</p>
+          <p class="hint" id="heightAutoAdjustedHint" style="display:none"></p>
         </div>
         <div class="field-section">
           <h3>Position</h3>

@@ -157,7 +157,12 @@ await test('5. Production Sheet SVG and stoneLayoutToSvg() both render every sto
 });
 
 await test('6. app.js imports the Stone Library and populates #stoneSize from it at startup (no hardcoded <option> list left in index.html)', () => {
-  assert.match(appJs, /import\s*\{\s*listStoneSizes,\s*findStoneSizeByDiameterMm\s*\}\s*from\s*['"]\.\/src\/renderer\/StoneSizes\.js['"]/);
+  // FONT-DECISION-001 (Studio Integration follow-up) widened this import with three more named
+  // exports (stoneSizeHeightMidpointMm/isHeightWithinStoneSizeRange/stoneSizeEntirelyExceedsPrintableHeight)
+  // -- matched loosely (listStoneSizes/findStoneSizeByDiameterMm present, somewhere before the closing
+  // brace) rather than requiring an exact two-name list, so future additions to this import don't
+  // require touching this milestone's own test.
+  assert.match(appJs, /import\s*\{\s*listStoneSizes,\s*findStoneSizeByDiameterMm,[^}]*\}\s*from\s*['"]\.\/src\/renderer\/StoneSizes\.js['"]/);
   assert.match(appJs, /function populateStoneSizeOptions\(\)\{/, 'expected a populateStoneSizeOptions helper');
   // RS-2002 inserted its own conditional font-population startup call between
   // populateStoneSizeOptions() and syncSelectedControlsFromLayer() (see app.js) -- match loosely

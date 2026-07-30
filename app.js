@@ -92,7 +92,7 @@ import { renderProductionLayout, renderStoneLayout, fitTransform } from './src/r
 import { createPreview3D } from './src/preview3d/index.js';
 import { circumferenceMm, frontViewFrameWidthMm, canvasXMmForRotationDeg, rotationDegForCanvasXMm, azimuthRadForCanvasXMm, wrapAngleRad } from './src/preview3d/ObjectDimensions.js';
 import { STONE_COLORS } from './src/renderer/StoneColors.js';
-import { listStoneSizes, findStoneSizeByDiameterMm } from './src/renderer/StoneSizes.js';
+import { listStoneSizes, findStoneSizeByDiameterMm, stoneSizeHeightMidpointMm, isHeightWithinStoneSizeRange, stoneSizeEntirelyExceedsPrintableHeight } from './src/renderer/StoneSizes.js';
 import { stoneLayoutToSvg } from './src/export/SvgExporter.js';
 import { computeProductionSheetLayout, productionSheetToSvg, productionSheetToPdf } from './src/export/ProductionSheetExporter.js';
 import { parseSvgDocument } from './src/svg/index.js';
@@ -959,7 +959,7 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
   if(showStarFields){el('shapePoints').value=l.points??5;el('shapeInnerRadius').value=l.innerRadiusRatio??0.5}
   if(showRingField)el('shapeRingInner').value=l.innerRatio??0.5;
   if(l.type==='image')el('imageFillMode').value=resolveImageFillMode(l.fillMode);
-  if(isText){el('text').value=l.text;ensureFontOptionForLayer(l.font);el('font').value=l.font;el('height').value=l.height;el('autoFit').value=l.autoFit?'on':'off';el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';el('curveRadiusMm').value=l.curveRadiusMm??40;el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??180;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';el('textX').value=l.x||0;el('textY').value=l.y||0;
+  if(isText){el('text').value=l.text;ensureFontOptionForLayer(l.font);el('font').value=l.font;el('height').value=l.height;el('heightAutoAdjustedHint').style.display='none';el('autoFit').value=l.autoFit?'on':'off';el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';el('curveRadiusMm').value=l.curveRadiusMm??40;el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??180;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';el('textX').value=l.x||0;el('textY').value=l.y||0;
   // TXT-102: '??'/'||' fallbacks so a pre-TXT-102 project (no align/lineSpacing/rotationDeg stored)
   // displays GeometryEngine's own defaults, matching this line's existing curve-field convention.
   el('textAlign').value=l.align||'left';el('lineSpacing').value=l.lineSpacing??1;el('rotationDeg').value=l.rotationDeg??0}else{el('shapeX').value=l.type==='circle'?l.cx:l.x;el('shapeY').value=l.type==='circle'?l.cy:l.y;el('shapeW').value=l.type==='circle'?l.r:l.w;el('shapeH').value=l.type==='circle'?'':l.h;el('shapeWLabel').textContent=l.type==='circle'?'Radius (mm)':'Width (mm)';el('shapeHField').style.display=l.type==='circle'?'none':'';if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);el('gap').value=l.gap;el('stoneColor').value=l.color;
@@ -1051,7 +1051,11 @@ function writeSelectedControlsToLayer(){const l=selectedLayer();
     // legibility floor silently produced sparse/empty glyphs instead of the field's advertised range.
     const nextText=el('text').value;if(nextText!==l.text)invalidateAuthoredScaleForGeometryChange(l,'text');l.text=nextText;
     const nextFont=el('font').value||l.font;if(nextFont!==l.font)invalidateAuthoredScaleForGeometryChange(l,'font');l.font=nextFont;
-    l.height=Math.max(4,Math.min(80,parseFloat(el('height').value)||25));l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;
+    // FONT-DECISION-001 (Studio Integration follow-up): ceiling raised from TXT-103's original 80 to
+    // 111 -- the true max across every catalog size's supportedHeightRangeMm (StoneSizes.js's SS30
+    // entry, [106,111]) -- so the largest validated stone sizes' own auto-set midpoints (see
+    // #stoneSize's 'input' listener below) are never clamped back down below their own valid range.
+    l.height=Math.max(4,Math.min(111,parseFloat(el('height').value)||25));l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;
     // FONT-002: a Production Font has no curve support (GeometryEngine.generateTextLayout() throws
     // for authored-stone-center fonts with curveEnabled) -- force it off in the stored layer data too
     // (not just the disabled control) so switching *to* an authored font from a curved legacy layer
@@ -1537,6 +1541,7 @@ function updateEditingUI(){const n=selectedLayerIds.size;el('selectionSummary').
   if(!fitDisabled)clearFitTextToShapeError();
   updateTextFontCapabilityUI();
   updateMixedSizeCapabilityUI();
+  updateStoneSizePrintableCapabilityUI();
 }
 // FONT-002: keeps every Text Lightbox control that doesn't apply to the selected layer's font
 // (Fill Style, Text height/Auto fit, Curved text) in a disabled/hidden + explained state, and shows
@@ -1666,6 +1671,30 @@ function updateMixedSizeCapabilityUI(){
     hint.classList.add('visible');
   }else{
     hint.classList.remove('visible');hint.textContent='';
+  }
+}
+// FONT-DECISION-001 (Studio Integration follow-up): disables + dims + explains (via title) every
+// #stoneSize <option> whose entire FONT-DECISION-001-validated supportedHeightRangeMm (StoneSizes.js)
+// is taller than the currently-selected object shape can print, mirroring
+// updateMixedSizeCapabilityUI()'s mixedOption.disabled/.title idiom just above. Shape-aware, not
+// font-aware: keys off getSafeAreaRectMm(currentObjectTemplate(), project.canvas.width,
+// project.canvas.height) -- the exact same safe-area rectangle isTextOutsidePrintableArea() already
+// checks text against -- so switching shape (or editing a vessel's live body height/diameter, which
+// re-derives project.canvas) always re-evaluates against the real, current printable height, never a
+// stale/static per-template preset. Only meaningful for text layers (supportedHeightRangeMm is a text
+// legibility range, not a general geometry constraint) -- every option is left fully enabled for
+// every other layer type, exactly like #sharedStoneFields' Gap field has no such text-only gating.
+function updateStoneSizePrintableCapabilityUI(){
+  const l=selectedLayer();
+  const isText=Boolean(l&&l.type==='text');
+  const template=currentObjectTemplate();
+  const safe=isText?getSafeAreaRectMm(template,project.canvas.width,project.canvas.height):null;
+  for(const size of listStoneSizes()){
+    const option=el('stoneSize').querySelector(`option[value="${size.diameterMm}"]`);
+    if(!option)continue;
+    const exceeds=isText&&stoneSizeEntirelyExceedsPrintableHeight(size,safe.heightMm);
+    option.disabled=exceeds;
+    option.title=exceeds?`${size.name} needs ${size.supportedHeightRangeMm[0]}-${size.supportedHeightRangeMm[1]}mm height — doesn't fit this ${template.displayName}'s printable area (${safe.heightMm.toFixed(0)}mm available).`:'';
   }
 }
 // RS-0003.5D2: SELECTION_HANDLE_SIZE_PX enlarges the resize handles slightly (was a bare 10px
@@ -1992,6 +2021,61 @@ el('mixedMinSize').addEventListener('input',()=>{
 el('mixedMaxSize').addEventListener('input',()=>{
   const minMm=parseFloat(el('mixedMinSize').value),maxMm=parseFloat(el('mixedMaxSize').value);
   if(Number.isFinite(minMm)&&Number.isFinite(maxMm)&&maxMm<minMm)setNumericSelectValue(el('mixedMinSize'),maxMm);
+});
+// FONT-DECISION-001 (Studio Integration follow-up): the auto-set/snap decision behind #stoneSize's
+// listener below, factored into its own named function -- mirroring this file's existing "pure
+// decision function + thin DOM listener" split (e.g. mixedSizeEligibleIds(),
+// updateStoneSizePrintableCapabilityUI() above) -- so tools/test-font-decision-001-stone-size-ux.mjs
+// can extract and directly execute it against a stub el()/layer.
+//
+// Sets Text height to the newly-selected stone size's own validated midpoint
+// (StoneSizes.js's stoneSizeHeightMidpointMm(), sourced from tools/font-generator/config/SS*.json's
+// supportedHeightRangeMm -- the single source of truth for both this and
+// updateStoneSizePrintableCapabilityUI() above) -- unless the operator has already manually typed a
+// height for *this* layer (l.heightManuallyEdited, set by #height's own listener below) AND that
+// height is still within the newly-selected size's valid range, in which case their choice is left
+// alone. An out-of-range manual height is still corrected (with a brief #heightAutoAdjustedHint note
+// explaining why), since an invalid height is never a legitimate choice to preserve.
+//
+// Never called for an authored Production Font (see the #stoneSize listener's own isAuthoredStoneFontId()
+// guard below) -- FONT-002 already disables #height entirely for one (a fixed-pitch character grid
+// scaled only by stoneSizeMm, not a resizable outline), so supportedHeightRangeMm -- calibrated for
+// OpenType/vision-validated fonts, see tools/font-generator's whole pipeline -- has nothing to say
+// about it, and auto-setting a value the operator can neither see take effect nor override would be
+// pure noise.
+function applyStoneSizeHeightAutoSet(l,size){
+  const currentHeight=parseFloat(el('height').value);
+  const staysValid=l.heightManuallyEdited&&Number.isFinite(currentHeight)&&isHeightWithinStoneSizeRange(size,currentHeight);
+  el('heightAutoAdjustedHint').style.display='none';
+  if(staysValid)return;
+  el('height').value=stoneSizeHeightMidpointMm(size);
+  // Only surface the note when this overrides an existing manual choice -- the very first auto-set
+  // on a fresh/never-edited layer is expected, unannounced behavior (matching #height's own
+  // un-explained "25" default), not a correction that needs calling out.
+  if(l.heightManuallyEdited){
+    el('heightAutoAdjustedHint').textContent=`Height adjusted for ${size.name} (${size.supportedHeightRangeMm[0]}-${size.supportedHeightRangeMm[1]}mm).`;
+    el('heightAutoAdjustedHint').style.display='block';
+  }
+}
+// Registered here, before HISTORY_TRACKED_CONTROL_IDS' own 'input' listener on #stoneSize below
+// (same element/event -> registration order), so #height already holds the auto-set/snapped value
+// by the time the generic write+regenerate listener reads it into l.height.
+el('stoneSize').addEventListener('input',()=>{
+  const l=selectedLayer();
+  if(!l||l.type!=='text'||isAuthoredStoneFontId(l.font))return;
+  const size=findStoneSizeByDiameterMm(parseFloat(el('stoneSize').value));
+  if(!size)return;
+  applyStoneSizeHeightAutoSet(l,size);
+});
+// Marks this layer's height as a deliberate manual choice so the Stone size listener above stops
+// silently overriding it on future changes (as long as it stays valid for the newly-selected size).
+// Only a genuine user edit of #height reaches this -- programmatic value assignment (e.g. the
+// auto-set above, or syncSelectedControlsFromLayer() on a selection switch) never dispatches an
+// 'input' event, so neither can ever mark a layer manual on its own.
+el('height').addEventListener('input',()=>{
+  const l=selectedLayer();
+  if(l&&l.type==='text')l.heightManuallyEdited=true;
+  el('heightAutoAdjustedHint').style.display='none';
 });
 const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','textAlign','lineSpacing','rotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}

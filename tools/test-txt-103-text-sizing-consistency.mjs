@@ -11,6 +11,13 @@ import { fileURLToPath } from 'node:url';
 // This is a pure UI-layer clamp: GeometryEngine/StoneLayout/project schema are untouched — the
 // engine already regenerates safely at any heightMm (see docs/specifications/
 // TXT-103A-TextSizingArchitectureAudit.md, §2).
+//
+// FONT-DECISION-001 (Studio Integration follow-up): the ceiling was raised from this milestone's
+// original 80 to 111 -- the true max across every StoneSizes.js catalog entry's
+// supportedHeightRangeMm (SS30's [106,111]) -- so that stone size's own auto-set midpoint (see
+// tools/test-stone-size-library.mjs) is never clamped back down below its own valid range. The
+// floor (4) is unchanged: it predates per-size validation and also covers custom/legacy stoneSize
+// values outside the named catalog.
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
@@ -27,23 +34,22 @@ async function test(name, fn) {
   }
 }
 
-await test('1. index.html declares #height min="4" max="80"', () => {
-  assert.match(indexHtml, /<input id="height" type="number" min="4" max="80" step="1" value="25">/);
+await test('1. index.html declares #height min="4" max="111"', () => {
+  assert.match(indexHtml, /<input id="height" type="number" min="4" max="111" step="1" value="25">/);
 });
 
-await test('2. writeSelectedControlsToLayer() clamps l.height to [4,80], matching #height\'s declared bounds', () => {
+await test('2. writeSelectedControlsToLayer() clamps l.height to [4,111], matching #height\'s declared bounds', () => {
   assert.match(
     appJs,
-    /l\.height=Math\.max\(4,Math\.min\(80,parseFloat\(el\('height'\)\.value\)\|\|25\)\);/,
-    'expected l.height to clamp with Math.max(4,Math.min(80,...)), mirroring every sibling numeric field in this function'
+    /l\.height=Math\.max\(4,Math\.min\(111,parseFloat\(el\('height'\)\.value\)\|\|25\)\);/,
+    'expected l.height to clamp with Math.max(4,Math.min(111,...)), mirroring every sibling numeric field in this function'
   );
 });
 
 function runHeightClamp(rawValue) {
-  const clampSource = "return Math.max(4,Math.min(80,parseFloat(el('height').value)||25));";
   // Prove the exact clamp expression found in app.js above actually behaves as claimed, rather
   // than only asserting its source text is present.
-  const clampMatch = appJs.match(/l\.height=(Math\.max\(4,Math\.min\(80,parseFloat\(el\('height'\)\.value\)\|\|25\)\));/);
+  const clampMatch = appJs.match(/l\.height=(Math\.max\(4,Math\.min\(111,parseFloat\(el\('height'\)\.value\)\|\|25\)\));/);
   assert.ok(clampMatch, 'expected to find the l.height clamp expression to extract and execute');
   const run = new Function('el', `return ${clampMatch[1]};`);
   return run(() => ({ value: rawValue }));
@@ -54,14 +60,14 @@ await test('3. the height clamp raises a below-floor manual entry up to 4 (previ
   assert.equal(runHeightClamp('-10'), 4);
 });
 
-await test('4. the height clamp caps an above-ceiling manual entry at 80', () => {
-  assert.equal(runHeightClamp('999'), 80);
+await test('4. the height clamp caps an above-ceiling manual entry at 111', () => {
+  assert.equal(runHeightClamp('999'), 111);
 });
 
 await test('5. the height clamp passes typical in-range values through unchanged', () => {
   assert.equal(runHeightClamp('25'), 25);
   assert.equal(runHeightClamp('4'), 4);
-  assert.equal(runHeightClamp('80'), 80);
+  assert.equal(runHeightClamp('111'), 111);
 });
 
 await test('6. the height clamp falls back to 25 (the pre-existing default) for a blank/invalid entry, then clamps that default too', () => {

@@ -15,26 +15,31 @@
  * posture `CrystalColors.js` already takes for its hex values.
  *
  * Each entry:
- *   id          stable, unique, lowercase-kebab string (e.g. "ss16")
- *   name        commercial display name (e.g. "SS16")
- *   diameterMm  nominal stone diameter in millimeters — the value stored as a layer's stoneSize /
- *               a Stone's sizeMm when this catalog entry is selected
+ *   id                    stable, unique, lowercase-kebab string (e.g. "ss16")
+ *   name                  commercial display name (e.g. "SS16")
+ *   diameterMm            nominal stone diameter in millimeters — the value stored as a layer's
+ *                         stoneSize / a Stone's sizeMm when this catalog entry is selected
+ *   supportedHeightRangeMm  [min,max] text-height range (mm) FONT-DECISION-001 validated for this
+ *                         size, mirrored from tools/font-generator/config/SS*.json's own
+ *                         `supportedHeightRangeMm` field (that JSON is the offline font-calibration
+ *                         source of truth; tools/test-stone-size-library.mjs cross-checks these
+ *                         values against it on every run so the two can never silently drift apart)
  *
  * Adding a new standard size later is exactly one more `defineStoneSize()` entry below — no
  * switch statement anywhere in this codebase branches on stone size.
  */
 
-function defineStoneSize({ id, name, diameterMm }) {
-  return { id, name, diameterMm };
+function defineStoneSize({ id, name, diameterMm, supportedHeightRangeMm }) {
+  return { id, name, diameterMm, supportedHeightRangeMm };
 }
 
 // Order is deliberate: it is the order the stone-size selector lists sizes in (ascending diameter).
 const STONE_SIZE_LIST = [
-  defineStoneSize({ id: 'ss6', name: 'SS6', diameterMm: 2.0 }),
-  defineStoneSize({ id: 'ss10', name: 'SS10', diameterMm: 2.8 }),
-  defineStoneSize({ id: 'ss16', name: 'SS16', diameterMm: 4.0 }),
-  defineStoneSize({ id: 'ss20', name: 'SS20', diameterMm: 4.7 }),
-  defineStoneSize({ id: 'ss30', name: 'SS30', diameterMm: 6.4 })
+  defineStoneSize({ id: 'ss6', name: 'SS6', diameterMm: 2.0, supportedHeightRangeMm: [35, 50] }),
+  defineStoneSize({ id: 'ss10', name: 'SS10', diameterMm: 2.8, supportedHeightRangeMm: [45, 60] }),
+  defineStoneSize({ id: 'ss16', name: 'SS16', diameterMm: 4.0, supportedHeightRangeMm: [65, 90] }),
+  defineStoneSize({ id: 'ss20', name: 'SS20', diameterMm: 4.7, supportedHeightRangeMm: [80, 110] }),
+  defineStoneSize({ id: 'ss30', name: 'SS30', diameterMm: 6.4, supportedHeightRangeMm: [106, 111] })
 ];
 
 export const STONE_SIZES = STONE_SIZE_LIST;
@@ -96,6 +101,35 @@ export function formatStoneSizeLabel(diameterMm, toleranceMm = DEFAULT_MATCH_TOL
 }
 
 /**
+ * The midpoint (mm) of a catalog entry's FONT-DECISION-001-validated text-height range — e.g. SS16's
+ * [65,90] range midpoints at 77.5mm. Used by the app's stone-size picker to auto-set Text Height to
+ * a known-good value the moment a size is chosen, rather than leaving whatever height was set for a
+ * previous (possibly incompatible) size.
+ */
+export function stoneSizeHeightMidpointMm(size) {
+  const [min, max] = size.supportedHeightRangeMm;
+  return (min + max) / 2;
+}
+
+/** Whether `heightMm` falls inside `size`'s own validated supportedHeightRangeMm (inclusive). */
+export function isHeightWithinStoneSizeRange(size, heightMm) {
+  const [min, max] = size.supportedHeightRangeMm;
+  return heightMm >= min && heightMm <= max;
+}
+
+/**
+ * True when `size`'s entire validated height range is taller than `printableHeightMm` — i.e. no
+ * height in its supportedHeightRangeMm could ever fit, so the size should be disabled outright
+ * rather than merely warned about. A size whose range only *partially* exceeds printableHeightMm
+ * returns false here (it stays selectable — the existing "outside printable area" warning covers
+ * that case once actual text is placed and sized).
+ */
+export function stoneSizeEntirelyExceedsPrintableHeight(size, printableHeightMm) {
+  const [min] = size.supportedHeightRangeMm;
+  return min > printableHeightMm;
+}
+
+/**
  * Validates a stone-size catalog array (defaults to the shipped catalog). Throws a descriptive
  * Error on the first problem found; returns true otherwise — mirrors
  * `validateCrystalColorCatalog()`'s contract exactly, exercised by
@@ -137,6 +171,17 @@ export function validateStoneSizeCatalog(list = STONE_SIZE_LIST) {
       throw new TypeError(`Stone size catalog must be sorted by strictly ascending diameterMm (offending entry: "${size.id}").`);
     }
     previousDiameterMm = size.diameterMm;
+    const range = size.supportedHeightRangeMm;
+    if (
+      !Array.isArray(range) ||
+      range.length !== 2 ||
+      !range.every((n) => typeof n === 'number' && Number.isFinite(n) && n > 0)
+    ) {
+      throw new TypeError(`Stone size "${size.id}" must have a supportedHeightRangeMm [min,max] of two positive numbers.`);
+    }
+    if (range[0] >= range[1]) {
+      throw new TypeError(`Stone size "${size.id}" supportedHeightRangeMm must have min < max.`);
+    }
   }
   return true;
 }
