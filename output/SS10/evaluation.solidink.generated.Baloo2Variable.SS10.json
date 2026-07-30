@@ -1,0 +1,5545 @@
+{
+  "sizeId": "ss10",
+  "family": "Baloo2Variable",
+  "variant": "generated",
+  "heightsMm": {
+    "min": 45,
+    "mid": 52.5,
+    "max": 60
+  },
+  "config": {
+    "sizeId": "ss10",
+    "familyName": "Sacramento Rhinestone SS10",
+    "stoneDiameterMm": 2.8,
+    "gapMm": 0.3,
+    "supportedHeightRangeMm": [
+      45,
+      60
+    ],
+    "minFeatureWidthMm": 4.5,
+    "minCounterOpeningMm": 7.3,
+    "minLoopOpeningMm": 9.5,
+    "cornerRoundMm": 1.6,
+    "terminalSimplifyMm": 1.3,
+    "sideBearingAdjustMm": 0.45,
+    "minAreaMm2": 0.7,
+    "calibrationNotes": "Initial pass, derived from stoneDiameterMm proportionally (see SS6.json for the formula). See FONT-GEN-001 report for calibration-round adjustments."
+  },
+  "sourcePath": "output/SS10/Baloo2VariableRhinestone_SS10.ttf",
+  "solidink": [
+    {
+      "label": "req-ashley__min",
+      "baseId": "req-ashley",
+      "text": "Ashley",
+      "category": "short-name",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "Ashley",
+        "rawOcrText": "Ashtey",
+        "expectedNormalized": "ashley",
+        "actualNormalized": "ashtey",
+        "exactMatch": false,
+        "charAccuracy": 0.8333,
+        "wordAccuracy": 0.0,
+        "confidence": 83.0,
+        "substitutedChars": [
+          [
+            "l",
+            "t"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": true
+    },
+    {
+      "label": "req-bride-squad__min",
+      "baseId": "req-bride-squad",
+      "text": "Bride Squad",
+      "category": "short-phrase",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "Bride Squad",
+        "rawOcrText": "Bride Squad",
+        "expectedNormalized": "bride squad",
+        "actualNormalized": "bride squad",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 55.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": true
+    },
+    {
+      "label": "req-happy-birthday__min",
+      "baseId": "req-happy-birthday",
+      "text": "Happy Birthday",
+      "category": "short-phrase",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "Happy Birthday",
+        "rawOcrText": "naopy BirinAgay",
+        "expectedNormalized": "happy birthday",
+        "actualNormalized": "naopy birinagay",
+        "exactMatch": false,
+        "charAccuracy": 0.5714,
+        "wordAccuracy": 0.0,
+        "confidence": 4.5,
+        "substitutedChars": [
+          [
+            "h",
+            "n"
+          ],
+          [
+            "p",
+            "o"
+          ],
+          [
+            "t",
+            "n"
+          ],
+          [
+            "h",
+            "a"
+          ],
+          [
+            "d",
+            "g"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "i"
+        ],
+        "editDistance": 6
+      },
+      "ocrError": null,
+      "isRequiredPhrase": true
+    },
+    {
+      "label": "req-class-of-2027__min",
+      "baseId": "req-class-of-2027",
+      "text": "Class of 2027",
+      "category": "short-phrase",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "Class of 2027",
+        "rawOcrText": "Class of 2027",
+        "expectedNormalized": "class of 2027",
+        "actualNormalized": "class of 2027",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 95.7,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": true
+    },
+    {
+      "label": "lower-alphabet__min",
+      "baseId": "lower-alphabet",
+      "text": "abcdefghijklmnopqrstuvwxyz",
+      "category": "lowercase-alphabet",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "abcdefghijklmnopqrstuvwxyz",
+        "rawOcrText": "abcderghijkimnoparsi uvwxyZz",
+        "expectedNormalized": "abcdefghijklmnopqrstuvwxyz",
+        "actualNormalized": "abcderghijkimnoparsi uvwxyzz",
+        "exactMatch": false,
+        "charAccuracy": 0.7692,
+        "wordAccuracy": 0.0,
+        "confidence": 48.0,
+        "substitutedChars": [
+          [
+            "f",
+            "r"
+          ],
+          [
+            "l",
+            "i"
+          ],
+          [
+            "q",
+            "a"
+          ],
+          [
+            "t",
+            " "
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "i",
+          "z"
+        ],
+        "editDistance": 6
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "upper-alphabet__min",
+      "baseId": "upper-alphabet",
+      "text": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+      "category": "uppercase-alphabet",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        "rawOcrText": "ABCDEFGHIKLMNOPQORSTUVWKYZ",
+        "expectedNormalized": "abcdefghijklmnopqrstuvwxyz",
+        "actualNormalized": "abcdefghiklmnopqorstuvwkyz",
+        "exactMatch": false,
+        "charAccuracy": 0.8846,
+        "wordAccuracy": 0.0,
+        "confidence": 37.0,
+        "substitutedChars": [
+          [
+            "x",
+            "k"
+          ]
+        ],
+        "omittedChars": [
+          "j"
+        ],
+        "insertedChars": [
+          "o"
+        ],
+        "editDistance": 3
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "numerals__min",
+      "baseId": "numerals",
+      "text": "0123456789",
+      "category": "numerals",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "0123456789",
+        "rawOcrText": "0123456789",
+        "expectedNormalized": "0123456789",
+        "actualNormalized": "0123456789",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 92.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "name-ashley__min",
+      "baseId": "name-ashley",
+      "text": "Ashley",
+      "category": "short-name",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "Ashley",
+        "rawOcrText": "Ashtey",
+        "expectedNormalized": "ashley",
+        "actualNormalized": "ashtey",
+        "exactMatch": false,
+        "charAccuracy": 0.8333,
+        "wordAccuracy": 0.0,
+        "confidence": 83.0,
+        "substitutedChars": [
+          [
+            "l",
+            "t"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "name-emma__min",
+      "baseId": "name-emma",
+      "text": "Emma",
+      "category": "short-name",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "Emma",
+        "rawOcrText": "\u201cMMA",
+        "expectedNormalized": "emma",
+        "actualNormalized": "\u201cmma",
+        "exactMatch": false,
+        "charAccuracy": 0.75,
+        "wordAccuracy": 0.0,
+        "confidence": 5.0,
+        "substitutedChars": [
+          [
+            "e",
+            "\u201c"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "name-noah__min",
+      "baseId": "name-noah",
+      "text": "Noah",
+      "category": "short-name",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "Noah",
+        "rawOcrText": "Noah",
+        "expectedNormalized": "noah",
+        "actualNormalized": "noah",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 90.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "name-olivia__min",
+      "baseId": "name-olivia",
+      "text": "Olivia",
+      "category": "short-name",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "Olivia",
+        "rawOcrText": "Olivia",
+        "expectedNormalized": "olivia",
+        "actualNormalized": "olivia",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 91.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "word-love__min",
+      "baseId": "word-love",
+      "text": "love",
+      "category": "common-word",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "love",
+        "rawOcrText": "\u2018ove",
+        "expectedNormalized": "love",
+        "actualNormalized": "\u2018ove",
+        "exactMatch": false,
+        "charAccuracy": 0.75,
+        "wordAccuracy": 0.0,
+        "confidence": 57.0,
+        "substitutedChars": [
+          [
+            "l",
+            "\u2018"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "word-family__min",
+      "baseId": "word-family",
+      "text": "family",
+      "category": "common-word",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "family",
+        "rawOcrText": "ramily",
+        "expectedNormalized": "family",
+        "actualNormalized": "ramily",
+        "exactMatch": false,
+        "charAccuracy": 0.8333,
+        "wordAccuracy": 0.0,
+        "confidence": 83.0,
+        "substitutedChars": [
+          [
+            "f",
+            "r"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "word-forever__min",
+      "baseId": "word-forever",
+      "text": "forever",
+      "category": "common-word",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "forever",
+        "rawOcrText": "rorever",
+        "expectedNormalized": "forever",
+        "actualNormalized": "rorever",
+        "exactMatch": false,
+        "charAccuracy": 0.8571,
+        "wordAccuracy": 0.0,
+        "confidence": 63.0,
+        "substitutedChars": [
+          [
+            "f",
+            "r"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "word-blessed__min",
+      "baseId": "word-blessed",
+      "text": "blessed",
+      "category": "common-word",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "blessed",
+        "rawOcrText": "o!essed",
+        "expectedNormalized": "blessed",
+        "actualNormalized": "o essed",
+        "exactMatch": false,
+        "charAccuracy": 0.7143,
+        "wordAccuracy": 0.0,
+        "confidence": 30.0,
+        "substitutedChars": [
+          [
+            "b",
+            "o"
+          ],
+          [
+            "l",
+            " "
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "word-together__min",
+      "baseId": "word-together",
+      "text": "together",
+      "category": "common-word",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "together",
+        "rawOcrText": "iogeiner",
+        "expectedNormalized": "together",
+        "actualNormalized": "iogeiner",
+        "exactMatch": false,
+        "charAccuracy": 0.625,
+        "wordAccuracy": 0.0,
+        "confidence": 68.0,
+        "substitutedChars": [
+          [
+            "t",
+            "i"
+          ],
+          [
+            "t",
+            "i"
+          ],
+          [
+            "h",
+            "n"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 3
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "repeat-book__min",
+      "baseId": "repeat-book",
+      "text": "book",
+      "category": "repeated-letters",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "book",
+        "rawOcrText": "DOOK",
+        "expectedNormalized": "book",
+        "actualNormalized": "dook",
+        "exactMatch": false,
+        "charAccuracy": 0.75,
+        "wordAccuracy": 0.0,
+        "confidence": 88.0,
+        "substitutedChars": [
+          [
+            "b",
+            "d"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "repeat-letter__min",
+      "baseId": "repeat-letter",
+      "text": "letter",
+      "category": "repeated-letters",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "letter",
+        "rawOcrText": "leiier",
+        "expectedNormalized": "letter",
+        "actualNormalized": "leiier",
+        "exactMatch": false,
+        "charAccuracy": 0.6667,
+        "wordAccuracy": 0.0,
+        "confidence": 77.0,
+        "substitutedChars": [
+          [
+            "t",
+            "i"
+          ],
+          [
+            "t",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "repeat-coffee__min",
+      "baseId": "repeat-coffee",
+      "text": "coffee",
+      "category": "repeated-letters",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "coffee",
+        "rawOcrText": "corree",
+        "expectedNormalized": "coffee",
+        "actualNormalized": "corree",
+        "exactMatch": false,
+        "charAccuracy": 0.6667,
+        "wordAccuracy": 0.0,
+        "confidence": 67.0,
+        "substitutedChars": [
+          [
+            "f",
+            "r"
+          ],
+          [
+            "f",
+            "r"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "repeat-moon__min",
+      "baseId": "repeat-moon",
+      "text": "moon",
+      "category": "repeated-letters",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "moon",
+        "rawOcrText": "iiOONn",
+        "expectedNormalized": "moon",
+        "actualNormalized": "iioonn",
+        "exactMatch": false,
+        "charAccuracy": 0.25,
+        "wordAccuracy": 0.0,
+        "confidence": 0.0,
+        "substitutedChars": [
+          [
+            "m",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "i",
+          "n"
+        ],
+        "editDistance": 3
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "repeat-llll__min",
+      "baseId": "repeat-llll",
+      "text": "llll",
+      "category": "repeated-letters",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "llll",
+        "rawOcrText": "",
+        "expectedNormalized": "llll",
+        "actualNormalized": "",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": null,
+        "substitutedChars": [],
+        "omittedChars": [
+          "l",
+          "l",
+          "l",
+          "l"
+        ],
+        "insertedChars": [],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "repeat-oooo__min",
+      "baseId": "repeat-oooo",
+      "text": "oooo",
+      "category": "repeated-letters",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "oooo",
+        "rawOcrText": "OOOO",
+        "expectedNormalized": "oooo",
+        "actualNormalized": "oooo",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 63.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "narrow-illicit__min",
+      "baseId": "narrow-illicit",
+      "text": "illicit",
+      "category": "narrow-letters",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "illicit",
+        "rawOcrText": "ict",
+        "expectedNormalized": "illicit",
+        "actualNormalized": "ict",
+        "exactMatch": false,
+        "charAccuracy": 0.4286,
+        "wordAccuracy": 0.0,
+        "confidence": 54.0,
+        "substitutedChars": [],
+        "omittedChars": [
+          "i",
+          "l",
+          "l",
+          "i"
+        ],
+        "insertedChars": [],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "narrow-will__min",
+      "baseId": "narrow-will",
+      "text": "will",
+      "category": "narrow-letters",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "will",
+        "rawOcrText": "will!",
+        "expectedNormalized": "will",
+        "actualNormalized": "will",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 72.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "narrow-title__min",
+      "baseId": "narrow-title",
+      "text": "title",
+      "category": "narrow-letters",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "title",
+        "rawOcrText": "itile",
+        "expectedNormalized": "title",
+        "actualNormalized": "itile",
+        "exactMatch": false,
+        "charAccuracy": 0.6,
+        "wordAccuracy": 0.0,
+        "confidence": 69.0,
+        "substitutedChars": [],
+        "omittedChars": [
+          "t"
+        ],
+        "insertedChars": [
+          "i"
+        ],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "narrow-ijlt__min",
+      "baseId": "narrow-ijlt",
+      "text": "ijlt",
+      "category": "narrow-letters",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "ijlt",
+        "rawOcrText": "",
+        "expectedNormalized": "ijlt",
+        "actualNormalized": "",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": null,
+        "substitutedChars": [],
+        "omittedChars": [
+          "i",
+          "j",
+          "l",
+          "t"
+        ],
+        "insertedChars": [],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "wide-mound__min",
+      "baseId": "wide-mound",
+      "text": "mound",
+      "category": "wide-letters",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "mound",
+        "rawOcrText": "Mound",
+        "expectedNormalized": "mound",
+        "actualNormalized": "mound",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 52.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "wide-wave__min",
+      "baseId": "wide-wave",
+      "text": "wave",
+      "category": "wide-letters",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "wave",
+        "rawOcrText": "Wave",
+        "expectedNormalized": "wave",
+        "actualNormalized": "wave",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 10.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "wide-mnuw__min",
+      "baseId": "wide-mnuw",
+      "text": "mnuw",
+      "category": "wide-letters",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "mnuw",
+        "rawOcrText": "riteeus WW",
+        "expectedNormalized": "mnuw",
+        "actualNormalized": "riteeus ww",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 17.5,
+        "substitutedChars": [
+          [
+            "m",
+            "e"
+          ],
+          [
+            "n",
+            "e"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "r",
+          "i",
+          "t",
+          "s",
+          " ",
+          "w"
+        ],
+        "editDistance": 8
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "ascender-height__min",
+      "baseId": "ascender-height",
+      "text": "height",
+      "category": "ascenders",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "height",
+        "rawOcrText": "neigni",
+        "expectedNormalized": "height",
+        "actualNormalized": "neigni",
+        "exactMatch": false,
+        "charAccuracy": 0.5,
+        "wordAccuracy": 0.0,
+        "confidence": 79.0,
+        "substitutedChars": [
+          [
+            "h",
+            "n"
+          ],
+          [
+            "h",
+            "n"
+          ],
+          [
+            "t",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 3
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "ascender-birthday__min",
+      "baseId": "ascender-birthday",
+      "text": "birthday",
+      "category": "ascenders",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "birthday",
+        "rawOcrText": "oiringay",
+        "expectedNormalized": "birthday",
+        "actualNormalized": "oiringay",
+        "exactMatch": false,
+        "charAccuracy": 0.5,
+        "wordAccuracy": 0.0,
+        "confidence": 12.0,
+        "substitutedChars": [
+          [
+            "b",
+            "o"
+          ],
+          [
+            "t",
+            "i"
+          ],
+          [
+            "h",
+            "n"
+          ],
+          [
+            "d",
+            "g"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "ascender-blush__min",
+      "baseId": "ascender-blush",
+      "text": "blush",
+      "category": "ascenders",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "blush",
+        "rawOcrText": "Olush",
+        "expectedNormalized": "blush",
+        "actualNormalized": "olush",
+        "exactMatch": false,
+        "charAccuracy": 0.8,
+        "wordAccuracy": 0.0,
+        "confidence": 60.0,
+        "substitutedChars": [
+          [
+            "b",
+            "o"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "descender-puppy__min",
+      "baseId": "descender-puppy",
+      "text": "puppy",
+      "category": "descenders",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "puppy",
+        "rawOcrText": "DUDPYy",
+        "expectedNormalized": "puppy",
+        "actualNormalized": "dudpyy",
+        "exactMatch": false,
+        "charAccuracy": 0.4,
+        "wordAccuracy": 0.0,
+        "confidence": 30.0,
+        "substitutedChars": [
+          [
+            "p",
+            "d"
+          ],
+          [
+            "p",
+            "y"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "d"
+        ],
+        "editDistance": 3
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "descender-yoga__min",
+      "baseId": "descender-yoga",
+      "text": "yoga",
+      "category": "descenders",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "yoga",
+        "rawOcrText": "yoga",
+        "expectedNormalized": "yoga",
+        "actualNormalized": "yoga",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 95.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "descender-gypsy__min",
+      "baseId": "descender-gypsy",
+      "text": "gypsy",
+      "category": "descenders",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "gypsy",
+        "rawOcrText": "QYPsy",
+        "expectedNormalized": "gypsy",
+        "actualNormalized": "qypsy",
+        "exactMatch": false,
+        "charAccuracy": 0.8,
+        "wordAccuracy": 0.0,
+        "confidence": 48.0,
+        "substitutedChars": [
+          [
+            "g",
+            "q"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "loop-bobble__min",
+      "baseId": "loop-bobble",
+      "text": "bobble",
+      "category": "loops-counters",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "bobble",
+        "rawOcrText": "pDovDD!e",
+        "expectedNormalized": "bobble",
+        "actualNormalized": "pdovdd e",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 13.0,
+        "substitutedChars": [
+          [
+            "b",
+            "d"
+          ],
+          [
+            "b",
+            "d"
+          ],
+          [
+            "b",
+            "d"
+          ],
+          [
+            "l",
+            " "
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "p",
+          "v"
+        ],
+        "editDistance": 6
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "loop-google__min",
+      "baseId": "loop-google",
+      "text": "google",
+      "category": "loops-counters",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "google",
+        "rawOcrText": "googie",
+        "expectedNormalized": "google",
+        "actualNormalized": "googie",
+        "exactMatch": false,
+        "charAccuracy": 0.8333,
+        "wordAccuracy": 0.0,
+        "confidence": 87.0,
+        "substitutedChars": [
+          [
+            "l",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "loop-bubble__min",
+      "baseId": "loop-bubble",
+      "text": "bubble",
+      "category": "loops-counters",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "bubble",
+        "rawOcrText": "oudDD!Ie",
+        "expectedNormalized": "bubble",
+        "actualNormalized": "ouddd ie",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 16.0,
+        "substitutedChars": [
+          [
+            "b",
+            "o"
+          ],
+          [
+            "b",
+            "d"
+          ],
+          [
+            "b",
+            " "
+          ],
+          [
+            "l",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "d",
+          "d"
+        ],
+        "editDistance": 6
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "join-the__min",
+      "baseId": "join-the",
+      "text": "the",
+      "category": "cursive-joins",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "the",
+        "rawOcrText": "ihe",
+        "expectedNormalized": "the",
+        "actualNormalized": "ihe",
+        "exactMatch": false,
+        "charAccuracy": 0.6667,
+        "wordAccuracy": 0.0,
+        "confidence": 65.0,
+        "substitutedChars": [
+          [
+            "t",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "join-and__min",
+      "baseId": "join-and",
+      "text": "and",
+      "category": "cursive-joins",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "and",
+        "rawOcrText": "and",
+        "expectedNormalized": "and",
+        "actualNormalized": "and",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 76.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "join-st__min",
+      "baseId": "join-st",
+      "text": "st",
+      "category": "cursive-joins",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "st",
+        "rawOcrText": "Si",
+        "expectedNormalized": "st",
+        "actualNormalized": "si",
+        "exactMatch": false,
+        "charAccuracy": 0.5,
+        "wordAccuracy": 0.0,
+        "confidence": 95.0,
+        "substitutedChars": [
+          [
+            "t",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "join-ck__min",
+      "baseId": "join-ck",
+      "text": "ck",
+      "category": "cursive-joins",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "ck",
+        "rawOcrText": "\u2018ar",
+        "expectedNormalized": "ck",
+        "actualNormalized": "\u2018ar",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 45.0,
+        "substitutedChars": [
+          [
+            "c",
+            "a"
+          ],
+          [
+            "k",
+            "r"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "\u2018"
+        ],
+        "editDistance": 3
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "join-th__min",
+      "baseId": "join-th",
+      "text": "th",
+      "category": "cursive-joins",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "th",
+        "rawOcrText": "a.",
+        "expectedNormalized": "th",
+        "actualNormalized": "a",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 57.0,
+        "substitutedChars": [
+          [
+            "h",
+            "a"
+          ]
+        ],
+        "omittedChars": [
+          "t"
+        ],
+        "insertedChars": [],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "phrase-best-day-ever__min",
+      "baseId": "phrase-best-day-ever",
+      "text": "Best Day Ever",
+      "category": "longer-phrase",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "Best Day Ever",
+        "rawOcrText": "Besi Day Ever",
+        "expectedNormalized": "best day ever",
+        "actualNormalized": "besi day ever",
+        "exactMatch": false,
+        "charAccuracy": 0.9231,
+        "wordAccuracy": 0.6667,
+        "confidence": 89.7,
+        "substitutedChars": [
+          [
+            "t",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "phrase-happily-ever-after__min",
+      "baseId": "phrase-happily-ever-after",
+      "text": "Happily Ever After",
+      "category": "longer-phrase",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "Happily Ever After",
+        "rawOcrText": "napoily Ever Arier",
+        "expectedNormalized": "happily ever after",
+        "actualNormalized": "napoily ever arier",
+        "exactMatch": false,
+        "charAccuracy": 0.7778,
+        "wordAccuracy": 0.3333,
+        "confidence": 74.0,
+        "substitutedChars": [
+          [
+            "h",
+            "n"
+          ],
+          [
+            "p",
+            "o"
+          ],
+          [
+            "f",
+            "r"
+          ],
+          [
+            "t",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "phrase-mr-and-mrs__min",
+      "baseId": "phrase-mr-and-mrs",
+      "text": "Mr and Mrs Smith",
+      "category": "longer-phrase",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "Mr and Mrs Smith",
+        "rawOcrText": "Mrang MrsSmiin",
+        "expectedNormalized": "mr and mrs smith",
+        "actualNormalized": "mrang mrssmiin",
+        "exactMatch": false,
+        "charAccuracy": 0.6875,
+        "wordAccuracy": 0.0,
+        "confidence": 58.0,
+        "substitutedChars": [
+          [
+            "d",
+            "g"
+          ],
+          [
+            "t",
+            "i"
+          ],
+          [
+            "h",
+            "n"
+          ]
+        ],
+        "omittedChars": [
+          " ",
+          " "
+        ],
+        "insertedChars": [],
+        "editDistance": 5
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-aoe__min",
+      "baseId": "amb-aoe",
+      "text": "aoe",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "aoe",
+        "rawOcrText": "JdOC",
+        "expectedNormalized": "aoe",
+        "actualNormalized": "jdoc",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 31.0,
+        "substitutedChars": [
+          [
+            "a",
+            "d"
+          ],
+          [
+            "e",
+            "c"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "j"
+        ],
+        "editDistance": 3
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-oeao__min",
+      "baseId": "amb-oeao",
+      "text": "oeao",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "oeao",
+        "rawOcrText": "OCdJAO",
+        "expectedNormalized": "oeao",
+        "actualNormalized": "ocdjao",
+        "exactMatch": false,
+        "charAccuracy": 0.25,
+        "wordAccuracy": 0.0,
+        "confidence": 36.0,
+        "substitutedChars": [
+          [
+            "e",
+            "j"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "c",
+          "d"
+        ],
+        "editDistance": 3
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-ijlt__min",
+      "baseId": "amb-ijlt",
+      "text": "ijlt",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "ijlt",
+        "rawOcrText": "",
+        "expectedNormalized": "ijlt",
+        "actualNormalized": "",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": null,
+        "substitutedChars": [],
+        "omittedChars": [
+          "i",
+          "j",
+          "l",
+          "t"
+        ],
+        "insertedChars": [],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-till__min",
+      "baseId": "amb-till",
+      "text": "till",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "till",
+        "rawOcrText": "Ht",
+        "expectedNormalized": "till",
+        "actualNormalized": "ht",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 24.0,
+        "substitutedChars": [
+          [
+            "l",
+            "h"
+          ],
+          [
+            "l",
+            "t"
+          ]
+        ],
+        "omittedChars": [
+          "t",
+          "i"
+        ],
+        "insertedChars": [],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-mnuw__min",
+      "baseId": "amb-mnuw",
+      "text": "mnuw",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "mnuw",
+        "rawOcrText": "riteeus WW",
+        "expectedNormalized": "mnuw",
+        "actualNormalized": "riteeus ww",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 17.5,
+        "substitutedChars": [
+          [
+            "m",
+            "e"
+          ],
+          [
+            "n",
+            "e"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "r",
+          "i",
+          "t",
+          "s",
+          " ",
+          "w"
+        ],
+        "editDistance": 8
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-numnum__min",
+      "baseId": "amb-numnum",
+      "text": "numnum",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "numnum",
+        "rawOcrText": "SLeTAR TAL Slee",
+        "expectedNormalized": "numnum",
+        "actualNormalized": "sletar tal slee",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 0.0,
+        "substitutedChars": [
+          [
+            "n",
+            "l"
+          ],
+          [
+            "u",
+            " "
+          ],
+          [
+            "m",
+            "s"
+          ],
+          [
+            "n",
+            "l"
+          ],
+          [
+            "u",
+            "e"
+          ],
+          [
+            "m",
+            "e"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "s",
+          "l",
+          "e",
+          "t",
+          "a",
+          "r",
+          " ",
+          "t",
+          "a"
+        ],
+        "editDistance": 15
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-cece__min",
+      "baseId": "amb-cece",
+      "text": "cece",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "cece",
+        "rawOcrText": "CeCCC",
+        "expectedNormalized": "cece",
+        "actualNormalized": "ceccc",
+        "exactMatch": false,
+        "charAccuracy": 0.5,
+        "wordAccuracy": 0.0,
+        "confidence": 69.0,
+        "substitutedChars": [
+          [
+            "e",
+            "c"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "c"
+        ],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-rvrv__min",
+      "baseId": "amb-rvrv",
+      "text": "rvrv",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "rvrv",
+        "rawOcrText": "iViV",
+        "expectedNormalized": "rvrv",
+        "actualNormalized": "iviv",
+        "exactMatch": false,
+        "charAccuracy": 0.5,
+        "wordAccuracy": 0.0,
+        "confidence": 43.0,
+        "substitutedChars": [
+          [
+            "r",
+            "i"
+          ],
+          [
+            "r",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-sfsf__min",
+      "baseId": "amb-sfsf",
+      "text": "sfsf",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "sfsf",
+        "rawOcrText": "ssf",
+        "expectedNormalized": "sfsf",
+        "actualNormalized": "ssf",
+        "exactMatch": false,
+        "charAccuracy": 0.75,
+        "wordAccuracy": 0.0,
+        "confidence": 0.0,
+        "substitutedChars": [],
+        "omittedChars": [
+          "f"
+        ],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-bhk__min",
+      "baseId": "amb-bhk",
+      "text": "bhk",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "bhk",
+        "rawOcrText": "olatt",
+        "expectedNormalized": "bhk",
+        "actualNormalized": "olatt",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 0.0,
+        "substitutedChars": [
+          [
+            "b",
+            "a"
+          ],
+          [
+            "h",
+            "t"
+          ],
+          [
+            "k",
+            "t"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "o",
+          "l"
+        ],
+        "editDistance": 5
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-gqy__min",
+      "baseId": "amb-gqy",
+      "text": "gqy",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "min",
+      "heightMm": 45,
+      "ocr": {
+        "expectedText": "gqy",
+        "rawOcrText": "gay",
+        "expectedNormalized": "gqy",
+        "actualNormalized": "gay",
+        "exactMatch": false,
+        "charAccuracy": 0.6667,
+        "wordAccuracy": 0.0,
+        "confidence": 92.0,
+        "substitutedChars": [
+          [
+            "q",
+            "a"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "req-ashley__mid",
+      "baseId": "req-ashley",
+      "text": "Ashley",
+      "category": "short-name",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "Ashley",
+        "rawOcrText": "Ashiey",
+        "expectedNormalized": "ashley",
+        "actualNormalized": "ashiey",
+        "exactMatch": false,
+        "charAccuracy": 0.8333,
+        "wordAccuracy": 0.0,
+        "confidence": 88.0,
+        "substitutedChars": [
+          [
+            "l",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": true
+    },
+    {
+      "label": "req-bride-squad__mid",
+      "baseId": "req-bride-squad",
+      "text": "Bride Squad",
+      "category": "short-phrase",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "Bride Squad",
+        "rawOcrText": "Bride Squad",
+        "expectedNormalized": "bride squad",
+        "actualNormalized": "bride squad",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 51.5,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": true
+    },
+    {
+      "label": "req-happy-birthday__mid",
+      "baseId": "req-happy-birthday",
+      "text": "Happy Birthday",
+      "category": "short-phrase",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "Happy Birthday",
+        "rawOcrText": "nappy BiriAgay",
+        "expectedNormalized": "happy birthday",
+        "actualNormalized": "nappy biriagay",
+        "exactMatch": false,
+        "charAccuracy": 0.7143,
+        "wordAccuracy": 0.0,
+        "confidence": 31.0,
+        "substitutedChars": [
+          [
+            "h",
+            "n"
+          ],
+          [
+            "t",
+            "i"
+          ],
+          [
+            "h",
+            "a"
+          ],
+          [
+            "d",
+            "g"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": true
+    },
+    {
+      "label": "req-class-of-2027__mid",
+      "baseId": "req-class-of-2027",
+      "text": "Class of 2027",
+      "category": "short-phrase",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "Class of 2027",
+        "rawOcrText": "Class of 2027",
+        "expectedNormalized": "class of 2027",
+        "actualNormalized": "class of 2027",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 93.7,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": true
+    },
+    {
+      "label": "lower-alphabet__mid",
+      "baseId": "lower-alphabet",
+      "text": "abcdefghijklmnopqrstuvwxyz",
+      "category": "lowercase-alphabet",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "abcdefghijklmnopqrstuvwxyz",
+        "rawOcrText": "abcderghijkimnoparsi uvwxyZz",
+        "expectedNormalized": "abcdefghijklmnopqrstuvwxyz",
+        "actualNormalized": "abcderghijkimnoparsi uvwxyzz",
+        "exactMatch": false,
+        "charAccuracy": 0.7692,
+        "wordAccuracy": 0.0,
+        "confidence": 48.0,
+        "substitutedChars": [
+          [
+            "f",
+            "r"
+          ],
+          [
+            "l",
+            "i"
+          ],
+          [
+            "q",
+            "a"
+          ],
+          [
+            "t",
+            " "
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "i",
+          "z"
+        ],
+        "editDistance": 6
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "upper-alphabet__mid",
+      "baseId": "upper-alphabet",
+      "text": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+      "category": "uppercase-alphabet",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        "rawOcrText": "ABCDEFGHIKLMNOPQORSTUVWKYZ",
+        "expectedNormalized": "abcdefghijklmnopqrstuvwxyz",
+        "actualNormalized": "abcdefghiklmnopqorstuvwkyz",
+        "exactMatch": false,
+        "charAccuracy": 0.8846,
+        "wordAccuracy": 0.0,
+        "confidence": 25.0,
+        "substitutedChars": [
+          [
+            "x",
+            "k"
+          ]
+        ],
+        "omittedChars": [
+          "j"
+        ],
+        "insertedChars": [
+          "o"
+        ],
+        "editDistance": 3
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "numerals__mid",
+      "baseId": "numerals",
+      "text": "0123456789",
+      "category": "numerals",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "0123456789",
+        "rawOcrText": "0123456789",
+        "expectedNormalized": "0123456789",
+        "actualNormalized": "0123456789",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 92.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "name-ashley__mid",
+      "baseId": "name-ashley",
+      "text": "Ashley",
+      "category": "short-name",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "Ashley",
+        "rawOcrText": "Ashiey",
+        "expectedNormalized": "ashley",
+        "actualNormalized": "ashiey",
+        "exactMatch": false,
+        "charAccuracy": 0.8333,
+        "wordAccuracy": 0.0,
+        "confidence": 88.0,
+        "substitutedChars": [
+          [
+            "l",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "name-emma__mid",
+      "baseId": "name-emma",
+      "text": "Emma",
+      "category": "short-name",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "Emma",
+        "rawOcrText": "=\u201cmMmM~a",
+        "expectedNormalized": "emma",
+        "actualNormalized": "\u201cmmmm a",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 26.0,
+        "substitutedChars": [
+          [
+            "e",
+            "m"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "\u201c",
+          "m",
+          " "
+        ],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "name-noah__mid",
+      "baseId": "name-noah",
+      "text": "Noah",
+      "category": "short-name",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "Noah",
+        "rawOcrText": "Noah",
+        "expectedNormalized": "noah",
+        "actualNormalized": "noah",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 88.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "name-olivia__mid",
+      "baseId": "name-olivia",
+      "text": "Olivia",
+      "category": "short-name",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "Olivia",
+        "rawOcrText": "Olivia",
+        "expectedNormalized": "olivia",
+        "actualNormalized": "olivia",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 92.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "word-love__mid",
+      "baseId": "word-love",
+      "text": "love",
+      "category": "common-word",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "love",
+        "rawOcrText": "\u2018ove",
+        "expectedNormalized": "love",
+        "actualNormalized": "\u2018ove",
+        "exactMatch": false,
+        "charAccuracy": 0.75,
+        "wordAccuracy": 0.0,
+        "confidence": 47.0,
+        "substitutedChars": [
+          [
+            "l",
+            "\u2018"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "word-family__mid",
+      "baseId": "word-family",
+      "text": "family",
+      "category": "common-word",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "family",
+        "rawOcrText": "ramily",
+        "expectedNormalized": "family",
+        "actualNormalized": "ramily",
+        "exactMatch": false,
+        "charAccuracy": 0.8333,
+        "wordAccuracy": 0.0,
+        "confidence": 86.0,
+        "substitutedChars": [
+          [
+            "f",
+            "r"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "word-forever__mid",
+      "baseId": "word-forever",
+      "text": "forever",
+      "category": "common-word",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "forever",
+        "rawOcrText": "rorever",
+        "expectedNormalized": "forever",
+        "actualNormalized": "rorever",
+        "exactMatch": false,
+        "charAccuracy": 0.8571,
+        "wordAccuracy": 0.0,
+        "confidence": 71.0,
+        "substitutedChars": [
+          [
+            "f",
+            "r"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "word-blessed__mid",
+      "baseId": "word-blessed",
+      "text": "blessed",
+      "category": "common-word",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "blessed",
+        "rawOcrText": "o!essed",
+        "expectedNormalized": "blessed",
+        "actualNormalized": "o essed",
+        "exactMatch": false,
+        "charAccuracy": 0.7143,
+        "wordAccuracy": 0.0,
+        "confidence": 12.0,
+        "substitutedChars": [
+          [
+            "b",
+            "o"
+          ],
+          [
+            "l",
+            " "
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "word-together__mid",
+      "baseId": "word-together",
+      "text": "together",
+      "category": "common-word",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "together",
+        "rawOcrText": "iogei ner",
+        "expectedNormalized": "together",
+        "actualNormalized": "iogei ner",
+        "exactMatch": false,
+        "charAccuracy": 0.5,
+        "wordAccuracy": 0.0,
+        "confidence": 75.5,
+        "substitutedChars": [
+          [
+            "t",
+            "i"
+          ],
+          [
+            "t",
+            " "
+          ],
+          [
+            "h",
+            "n"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "i"
+        ],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "repeat-book__mid",
+      "baseId": "repeat-book",
+      "text": "book",
+      "category": "repeated-letters",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "book",
+        "rawOcrText": "DOOK",
+        "expectedNormalized": "book",
+        "actualNormalized": "dook",
+        "exactMatch": false,
+        "charAccuracy": 0.75,
+        "wordAccuracy": 0.0,
+        "confidence": 90.0,
+        "substitutedChars": [
+          [
+            "b",
+            "d"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "repeat-letter__mid",
+      "baseId": "repeat-letter",
+      "text": "letter",
+      "category": "repeated-letters",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "letter",
+        "rawOcrText": "leiier",
+        "expectedNormalized": "letter",
+        "actualNormalized": "leiier",
+        "exactMatch": false,
+        "charAccuracy": 0.6667,
+        "wordAccuracy": 0.0,
+        "confidence": 55.0,
+        "substitutedChars": [
+          [
+            "t",
+            "i"
+          ],
+          [
+            "t",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "repeat-coffee__mid",
+      "baseId": "repeat-coffee",
+      "text": "coffee",
+      "category": "repeated-letters",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "coffee",
+        "rawOcrText": "corree",
+        "expectedNormalized": "coffee",
+        "actualNormalized": "corree",
+        "exactMatch": false,
+        "charAccuracy": 0.6667,
+        "wordAccuracy": 0.0,
+        "confidence": 80.0,
+        "substitutedChars": [
+          [
+            "f",
+            "r"
+          ],
+          [
+            "f",
+            "r"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "repeat-moon__mid",
+      "baseId": "repeat-moon",
+      "text": "moon",
+      "category": "repeated-letters",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "moon",
+        "rawOcrText": "OONm",
+        "expectedNormalized": "moon",
+        "actualNormalized": "oonm",
+        "exactMatch": false,
+        "charAccuracy": 0.5,
+        "wordAccuracy": 0.0,
+        "confidence": 0.0,
+        "substitutedChars": [],
+        "omittedChars": [
+          "m"
+        ],
+        "insertedChars": [
+          "m"
+        ],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "repeat-llll__mid",
+      "baseId": "repeat-llll",
+      "text": "llll",
+      "category": "repeated-letters",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "llll",
+        "rawOcrText": "",
+        "expectedNormalized": "llll",
+        "actualNormalized": "",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": null,
+        "substitutedChars": [],
+        "omittedChars": [
+          "l",
+          "l",
+          "l",
+          "l"
+        ],
+        "insertedChars": [],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "repeat-oooo__mid",
+      "baseId": "repeat-oooo",
+      "text": "oooo",
+      "category": "repeated-letters",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "oooo",
+        "rawOcrText": "OOOO",
+        "expectedNormalized": "oooo",
+        "actualNormalized": "oooo",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 19.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "narrow-illicit__mid",
+      "baseId": "narrow-illicit",
+      "text": "illicit",
+      "category": "narrow-letters",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "illicit",
+        "rawOcrText": "ics",
+        "expectedNormalized": "illicit",
+        "actualNormalized": "ics",
+        "exactMatch": false,
+        "charAccuracy": 0.2857,
+        "wordAccuracy": 0.0,
+        "confidence": 49.0,
+        "substitutedChars": [
+          [
+            "t",
+            "s"
+          ]
+        ],
+        "omittedChars": [
+          "i",
+          "l",
+          "l",
+          "i"
+        ],
+        "insertedChars": [],
+        "editDistance": 5
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "narrow-will__mid",
+      "baseId": "narrow-will",
+      "text": "will",
+      "category": "narrow-letters",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "will",
+        "rawOcrText": "wil!",
+        "expectedNormalized": "will",
+        "actualNormalized": "wil",
+        "exactMatch": false,
+        "charAccuracy": 0.75,
+        "wordAccuracy": 0.0,
+        "confidence": 72.0,
+        "substitutedChars": [],
+        "omittedChars": [
+          "l"
+        ],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "narrow-title__mid",
+      "baseId": "narrow-title",
+      "text": "title",
+      "category": "narrow-letters",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "title",
+        "rawOcrText": "itile",
+        "expectedNormalized": "title",
+        "actualNormalized": "itile",
+        "exactMatch": false,
+        "charAccuracy": 0.6,
+        "wordAccuracy": 0.0,
+        "confidence": 62.0,
+        "substitutedChars": [],
+        "omittedChars": [
+          "t"
+        ],
+        "insertedChars": [
+          "i"
+        ],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "narrow-ijlt__mid",
+      "baseId": "narrow-ijlt",
+      "text": "ijlt",
+      "category": "narrow-letters",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "ijlt",
+        "rawOcrText": "",
+        "expectedNormalized": "ijlt",
+        "actualNormalized": "",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": null,
+        "substitutedChars": [],
+        "omittedChars": [
+          "i",
+          "j",
+          "l",
+          "t"
+        ],
+        "insertedChars": [],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "wide-mound__mid",
+      "baseId": "wide-mound",
+      "text": "mound",
+      "category": "wide-letters",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "mound",
+        "rawOcrText": "MouNG",
+        "expectedNormalized": "mound",
+        "actualNormalized": "moung",
+        "exactMatch": false,
+        "charAccuracy": 0.8,
+        "wordAccuracy": 0.0,
+        "confidence": 40.0,
+        "substitutedChars": [
+          [
+            "d",
+            "g"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "wide-wave__mid",
+      "baseId": "wide-wave",
+      "text": "wave",
+      "category": "wide-letters",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "wave",
+        "rawOcrText": "WAaVe",
+        "expectedNormalized": "wave",
+        "actualNormalized": "waave",
+        "exactMatch": false,
+        "charAccuracy": 0.75,
+        "wordAccuracy": 0.0,
+        "confidence": 37.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [
+          "a"
+        ],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "wide-mnuw__mid",
+      "baseId": "wide-mnuw",
+      "text": "mnuw",
+      "category": "wide-letters",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "mnuw",
+        "rawOcrText": "rie wus WW",
+        "expectedNormalized": "mnuw",
+        "actualNormalized": "rie wus ww",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 9.7,
+        "substitutedChars": [
+          [
+            "m",
+            " "
+          ],
+          [
+            "n",
+            "w"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "r",
+          "i",
+          "e",
+          "s",
+          " ",
+          "w"
+        ],
+        "editDistance": 8
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "ascender-height__mid",
+      "baseId": "ascender-height",
+      "text": "height",
+      "category": "ascenders",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "height",
+        "rawOcrText": "neigni",
+        "expectedNormalized": "height",
+        "actualNormalized": "neigni",
+        "exactMatch": false,
+        "charAccuracy": 0.5,
+        "wordAccuracy": 0.0,
+        "confidence": 82.0,
+        "substitutedChars": [
+          [
+            "h",
+            "n"
+          ],
+          [
+            "h",
+            "n"
+          ],
+          [
+            "t",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 3
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "ascender-birthday__mid",
+      "baseId": "ascender-birthday",
+      "text": "birthday",
+      "category": "ascenders",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "birthday",
+        "rawOcrText": "oirinday",
+        "expectedNormalized": "birthday",
+        "actualNormalized": "oirinday",
+        "exactMatch": false,
+        "charAccuracy": 0.625,
+        "wordAccuracy": 0.0,
+        "confidence": 5.0,
+        "substitutedChars": [
+          [
+            "b",
+            "o"
+          ],
+          [
+            "t",
+            "i"
+          ],
+          [
+            "h",
+            "n"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 3
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "ascender-blush__mid",
+      "baseId": "ascender-blush",
+      "text": "blush",
+      "category": "ascenders",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "blush",
+        "rawOcrText": "Olush",
+        "expectedNormalized": "blush",
+        "actualNormalized": "olush",
+        "exactMatch": false,
+        "charAccuracy": 0.8,
+        "wordAccuracy": 0.0,
+        "confidence": 61.0,
+        "substitutedChars": [
+          [
+            "b",
+            "o"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "descender-puppy__mid",
+      "baseId": "descender-puppy",
+      "text": "puppy",
+      "category": "descenders",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "puppy",
+        "rawOcrText": "DUDDYy",
+        "expectedNormalized": "puppy",
+        "actualNormalized": "duddyy",
+        "exactMatch": false,
+        "charAccuracy": 0.2,
+        "wordAccuracy": 0.0,
+        "confidence": 60.0,
+        "substitutedChars": [
+          [
+            "p",
+            "d"
+          ],
+          [
+            "p",
+            "d"
+          ],
+          [
+            "p",
+            "y"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "d"
+        ],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "descender-yoga__mid",
+      "baseId": "descender-yoga",
+      "text": "yoga",
+      "category": "descenders",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "yoga",
+        "rawOcrText": "yoga",
+        "expectedNormalized": "yoga",
+        "actualNormalized": "yoga",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 88.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "descender-gypsy__mid",
+      "baseId": "descender-gypsy",
+      "text": "gypsy",
+      "category": "descenders",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "gypsy",
+        "rawOcrText": "QYDsy",
+        "expectedNormalized": "gypsy",
+        "actualNormalized": "qydsy",
+        "exactMatch": false,
+        "charAccuracy": 0.6,
+        "wordAccuracy": 0.0,
+        "confidence": 32.0,
+        "substitutedChars": [
+          [
+            "g",
+            "q"
+          ],
+          [
+            "p",
+            "d"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "loop-bobble__mid",
+      "baseId": "loop-bobble",
+      "text": "bobble",
+      "category": "loops-counters",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "bobble",
+        "rawOcrText": "povD!e",
+        "expectedNormalized": "bobble",
+        "actualNormalized": "povd e",
+        "exactMatch": false,
+        "charAccuracy": 0.3333,
+        "wordAccuracy": 0.0,
+        "confidence": 29.0,
+        "substitutedChars": [
+          [
+            "b",
+            "p"
+          ],
+          [
+            "b",
+            "v"
+          ],
+          [
+            "b",
+            "d"
+          ],
+          [
+            "l",
+            " "
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "loop-google__mid",
+      "baseId": "loop-google",
+      "text": "google",
+      "category": "loops-counters",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "google",
+        "rawOcrText": "googie",
+        "expectedNormalized": "google",
+        "actualNormalized": "googie",
+        "exactMatch": false,
+        "charAccuracy": 0.8333,
+        "wordAccuracy": 0.0,
+        "confidence": 88.0,
+        "substitutedChars": [
+          [
+            "l",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "loop-bubble__mid",
+      "baseId": "loop-bubble",
+      "text": "bubble",
+      "category": "loops-counters",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "bubble",
+        "rawOcrText": "oubDD!e",
+        "expectedNormalized": "bubble",
+        "actualNormalized": "oubdd e",
+        "exactMatch": false,
+        "charAccuracy": 0.3333,
+        "wordAccuracy": 0.0,
+        "confidence": 0.0,
+        "substitutedChars": [
+          [
+            "b",
+            "o"
+          ],
+          [
+            "b",
+            "d"
+          ],
+          [
+            "l",
+            " "
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "d"
+        ],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "join-the__mid",
+      "baseId": "join-the",
+      "text": "the",
+      "category": "cursive-joins",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "the",
+        "rawOcrText": "ihe",
+        "expectedNormalized": "the",
+        "actualNormalized": "ihe",
+        "exactMatch": false,
+        "charAccuracy": 0.6667,
+        "wordAccuracy": 0.0,
+        "confidence": 59.0,
+        "substitutedChars": [
+          [
+            "t",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "join-and__mid",
+      "baseId": "join-and",
+      "text": "and",
+      "category": "cursive-joins",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "and",
+        "rawOcrText": "and",
+        "expectedNormalized": "and",
+        "actualNormalized": "and",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 74.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "join-st__mid",
+      "baseId": "join-st",
+      "text": "st",
+      "category": "cursive-joins",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "st",
+        "rawOcrText": "Si",
+        "expectedNormalized": "st",
+        "actualNormalized": "si",
+        "exactMatch": false,
+        "charAccuracy": 0.5,
+        "wordAccuracy": 0.0,
+        "confidence": 95.0,
+        "substitutedChars": [
+          [
+            "t",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "join-ck__mid",
+      "baseId": "join-ck",
+      "text": "ck",
+      "category": "cursive-joins",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "ck",
+        "rawOcrText": "\u2018ar",
+        "expectedNormalized": "ck",
+        "actualNormalized": "\u2018ar",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 44.0,
+        "substitutedChars": [
+          [
+            "c",
+            "a"
+          ],
+          [
+            "k",
+            "r"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "\u2018"
+        ],
+        "editDistance": 3
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "join-th__mid",
+      "baseId": "join-th",
+      "text": "th",
+      "category": "cursive-joins",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "th",
+        "rawOcrText": "a.",
+        "expectedNormalized": "th",
+        "actualNormalized": "a",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 45.0,
+        "substitutedChars": [
+          [
+            "h",
+            "a"
+          ]
+        ],
+        "omittedChars": [
+          "t"
+        ],
+        "insertedChars": [],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "phrase-best-day-ever__mid",
+      "baseId": "phrase-best-day-ever",
+      "text": "Best Day Ever",
+      "category": "longer-phrase",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "Best Day Ever",
+        "rawOcrText": "Besi Day Ever",
+        "expectedNormalized": "best day ever",
+        "actualNormalized": "besi day ever",
+        "exactMatch": false,
+        "charAccuracy": 0.9231,
+        "wordAccuracy": 0.6667,
+        "confidence": 91.3,
+        "substitutedChars": [
+          [
+            "t",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "phrase-happily-ever-after__mid",
+      "baseId": "phrase-happily-ever-after",
+      "text": "Happily Ever After",
+      "category": "longer-phrase",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "Happily Ever After",
+        "rawOcrText": "napoily Ever Arier",
+        "expectedNormalized": "happily ever after",
+        "actualNormalized": "napoily ever arier",
+        "exactMatch": false,
+        "charAccuracy": 0.7778,
+        "wordAccuracy": 0.3333,
+        "confidence": 79.7,
+        "substitutedChars": [
+          [
+            "h",
+            "n"
+          ],
+          [
+            "p",
+            "o"
+          ],
+          [
+            "f",
+            "r"
+          ],
+          [
+            "t",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "phrase-mr-and-mrs__mid",
+      "baseId": "phrase-mr-and-mrs",
+      "text": "Mr and Mrs Smith",
+      "category": "longer-phrase",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "Mr and Mrs Smith",
+        "rawOcrText": "Mrang Mrs Smiin",
+        "expectedNormalized": "mr and mrs smith",
+        "actualNormalized": "mrang mrs smiin",
+        "exactMatch": false,
+        "charAccuracy": 0.75,
+        "wordAccuracy": 0.25,
+        "confidence": 68.3,
+        "substitutedChars": [
+          [
+            "d",
+            "g"
+          ],
+          [
+            "t",
+            "i"
+          ],
+          [
+            "h",
+            "n"
+          ]
+        ],
+        "omittedChars": [
+          " "
+        ],
+        "insertedChars": [],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-aoe__mid",
+      "baseId": "amb-aoe",
+      "text": "aoe",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "aoe",
+        "rawOcrText": "dOC",
+        "expectedNormalized": "aoe",
+        "actualNormalized": "doc",
+        "exactMatch": false,
+        "charAccuracy": 0.3333,
+        "wordAccuracy": 0.0,
+        "confidence": 32.0,
+        "substitutedChars": [
+          [
+            "a",
+            "d"
+          ],
+          [
+            "e",
+            "c"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-oeao__mid",
+      "baseId": "amb-oeao",
+      "text": "oeao",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "oeao",
+        "rawOcrText": "OCdO",
+        "expectedNormalized": "oeao",
+        "actualNormalized": "ocdo",
+        "exactMatch": false,
+        "charAccuracy": 0.5,
+        "wordAccuracy": 0.0,
+        "confidence": 41.0,
+        "substitutedChars": [
+          [
+            "e",
+            "c"
+          ],
+          [
+            "a",
+            "d"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-ijlt__mid",
+      "baseId": "amb-ijlt",
+      "text": "ijlt",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "ijlt",
+        "rawOcrText": "",
+        "expectedNormalized": "ijlt",
+        "actualNormalized": "",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": null,
+        "substitutedChars": [],
+        "omittedChars": [
+          "i",
+          "j",
+          "l",
+          "t"
+        ],
+        "insertedChars": [],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-till__mid",
+      "baseId": "amb-till",
+      "text": "till",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "till",
+        "rawOcrText": "aH",
+        "expectedNormalized": "till",
+        "actualNormalized": "ah",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 39.0,
+        "substitutedChars": [
+          [
+            "l",
+            "a"
+          ],
+          [
+            "l",
+            "h"
+          ]
+        ],
+        "omittedChars": [
+          "t",
+          "i"
+        ],
+        "insertedChars": [],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-mnuw__mid",
+      "baseId": "amb-mnuw",
+      "text": "mnuw",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "mnuw",
+        "rawOcrText": "rie wus WW",
+        "expectedNormalized": "mnuw",
+        "actualNormalized": "rie wus ww",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 9.7,
+        "substitutedChars": [
+          [
+            "m",
+            " "
+          ],
+          [
+            "n",
+            "w"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "r",
+          "i",
+          "e",
+          "s",
+          " ",
+          "w"
+        ],
+        "editDistance": 8
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-numnum__mid",
+      "baseId": "amb-numnum",
+      "text": "numnum",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "numnum",
+        "rawOcrText": "SLeTARTALeTaS",
+        "expectedNormalized": "numnum",
+        "actualNormalized": "sletartaletas",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 0.0,
+        "substitutedChars": [
+          [
+            "n",
+            "a"
+          ],
+          [
+            "u",
+            "l"
+          ],
+          [
+            "m",
+            "e"
+          ],
+          [
+            "n",
+            "t"
+          ],
+          [
+            "u",
+            "a"
+          ],
+          [
+            "m",
+            "s"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "s",
+          "l",
+          "e",
+          "t",
+          "a",
+          "r",
+          "t"
+        ],
+        "editDistance": 13
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-cece__mid",
+      "baseId": "amb-cece",
+      "text": "cece",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "cece",
+        "rawOcrText": "CCCC",
+        "expectedNormalized": "cece",
+        "actualNormalized": "cccc",
+        "exactMatch": false,
+        "charAccuracy": 0.5,
+        "wordAccuracy": 0.0,
+        "confidence": 58.0,
+        "substitutedChars": [
+          [
+            "e",
+            "c"
+          ],
+          [
+            "e",
+            "c"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-rvrv__mid",
+      "baseId": "amb-rvrv",
+      "text": "rvrv",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "rvrv",
+        "rawOcrText": "iViV",
+        "expectedNormalized": "rvrv",
+        "actualNormalized": "iviv",
+        "exactMatch": false,
+        "charAccuracy": 0.5,
+        "wordAccuracy": 0.0,
+        "confidence": 26.0,
+        "substitutedChars": [
+          [
+            "r",
+            "i"
+          ],
+          [
+            "r",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-sfsf__mid",
+      "baseId": "amb-sfsf",
+      "text": "sfsf",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "sfsf",
+        "rawOcrText": "ssf",
+        "expectedNormalized": "sfsf",
+        "actualNormalized": "ssf",
+        "exactMatch": false,
+        "charAccuracy": 0.75,
+        "wordAccuracy": 0.0,
+        "confidence": 0.0,
+        "substitutedChars": [],
+        "omittedChars": [
+          "f"
+        ],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-bhk__mid",
+      "baseId": "amb-bhk",
+      "text": "bhk",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "bhk",
+        "rawOcrText": "olat",
+        "expectedNormalized": "bhk",
+        "actualNormalized": "olat",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 0.0,
+        "substitutedChars": [
+          [
+            "b",
+            "l"
+          ],
+          [
+            "h",
+            "a"
+          ],
+          [
+            "k",
+            "t"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "o"
+        ],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-gqy__mid",
+      "baseId": "amb-gqy",
+      "text": "gqy",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "mid",
+      "heightMm": 52.5,
+      "ocr": {
+        "expectedText": "gqy",
+        "rawOcrText": "gay",
+        "expectedNormalized": "gqy",
+        "actualNormalized": "gay",
+        "exactMatch": false,
+        "charAccuracy": 0.6667,
+        "wordAccuracy": 0.0,
+        "confidence": 90.0,
+        "substitutedChars": [
+          [
+            "q",
+            "a"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "req-ashley__max",
+      "baseId": "req-ashley",
+      "text": "Ashley",
+      "category": "short-name",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "Ashley",
+        "rawOcrText": "Ashiey",
+        "expectedNormalized": "ashley",
+        "actualNormalized": "ashiey",
+        "exactMatch": false,
+        "charAccuracy": 0.8333,
+        "wordAccuracy": 0.0,
+        "confidence": 88.0,
+        "substitutedChars": [
+          [
+            "l",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": true
+    },
+    {
+      "label": "req-bride-squad__max",
+      "baseId": "req-bride-squad",
+      "text": "Bride Squad",
+      "category": "short-phrase",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "Bride Squad",
+        "rawOcrText": "Bride Squad",
+        "expectedNormalized": "bride squad",
+        "actualNormalized": "bride squad",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 81.5,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": true
+    },
+    {
+      "label": "req-happy-birthday__max",
+      "baseId": "req-happy-birthday",
+      "text": "Happy Birthday",
+      "category": "short-phrase",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "Happy Birthday",
+        "rawOcrText": "naoopy Biringay",
+        "expectedNormalized": "happy birthday",
+        "actualNormalized": "naoopy biringay",
+        "exactMatch": false,
+        "charAccuracy": 0.5714,
+        "wordAccuracy": 0.0,
+        "confidence": 41.5,
+        "substitutedChars": [
+          [
+            "h",
+            "n"
+          ],
+          [
+            "p",
+            "o"
+          ],
+          [
+            "t",
+            "i"
+          ],
+          [
+            "h",
+            "n"
+          ],
+          [
+            "d",
+            "g"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "o"
+        ],
+        "editDistance": 6
+      },
+      "ocrError": null,
+      "isRequiredPhrase": true
+    },
+    {
+      "label": "req-class-of-2027__max",
+      "baseId": "req-class-of-2027",
+      "text": "Class of 2027",
+      "category": "short-phrase",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "Class of 2027",
+        "rawOcrText": "Class of 2027",
+        "expectedNormalized": "class of 2027",
+        "actualNormalized": "class of 2027",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 93.7,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": true
+    },
+    {
+      "label": "lower-alphabet__max",
+      "baseId": "lower-alphabet",
+      "text": "abcdefghijklmnopqrstuvwxyz",
+      "category": "lowercase-alphabet",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "abcdefghijklmnopqrstuvwxyz",
+        "rawOcrText": "abcderghijkimnoparsi UVWxyZz",
+        "expectedNormalized": "abcdefghijklmnopqrstuvwxyz",
+        "actualNormalized": "abcderghijkimnoparsi uvwxyzz",
+        "exactMatch": false,
+        "charAccuracy": 0.7692,
+        "wordAccuracy": 0.0,
+        "confidence": 53.0,
+        "substitutedChars": [
+          [
+            "f",
+            "r"
+          ],
+          [
+            "l",
+            "i"
+          ],
+          [
+            "q",
+            "a"
+          ],
+          [
+            "t",
+            " "
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "i",
+          "z"
+        ],
+        "editDistance": 6
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "upper-alphabet__max",
+      "baseId": "upper-alphabet",
+      "text": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+      "category": "uppercase-alphabet",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        "rawOcrText": "ABCDEFGHIKLMNOPQORSTUVWKYZ",
+        "expectedNormalized": "abcdefghijklmnopqrstuvwxyz",
+        "actualNormalized": "abcdefghiklmnopqorstuvwkyz",
+        "exactMatch": false,
+        "charAccuracy": 0.8846,
+        "wordAccuracy": 0.0,
+        "confidence": 25.0,
+        "substitutedChars": [
+          [
+            "x",
+            "k"
+          ]
+        ],
+        "omittedChars": [
+          "j"
+        ],
+        "insertedChars": [
+          "o"
+        ],
+        "editDistance": 3
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "numerals__max",
+      "baseId": "numerals",
+      "text": "0123456789",
+      "category": "numerals",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "0123456789",
+        "rawOcrText": "0123456789",
+        "expectedNormalized": "0123456789",
+        "actualNormalized": "0123456789",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 85.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "name-ashley__max",
+      "baseId": "name-ashley",
+      "text": "Ashley",
+      "category": "short-name",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "Ashley",
+        "rawOcrText": "Ashiey",
+        "expectedNormalized": "ashley",
+        "actualNormalized": "ashiey",
+        "exactMatch": false,
+        "charAccuracy": 0.8333,
+        "wordAccuracy": 0.0,
+        "confidence": 88.0,
+        "substitutedChars": [
+          [
+            "l",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "name-emma__max",
+      "baseId": "name-emma",
+      "text": "Emma",
+      "category": "short-name",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "Emma",
+        "rawOcrText": "=\u201cmMmM~a",
+        "expectedNormalized": "emma",
+        "actualNormalized": "\u201cmmmm a",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 19.0,
+        "substitutedChars": [
+          [
+            "e",
+            "m"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "\u201c",
+          "m",
+          " "
+        ],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "name-noah__max",
+      "baseId": "name-noah",
+      "text": "Noah",
+      "category": "short-name",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "Noah",
+        "rawOcrText": "Noah",
+        "expectedNormalized": "noah",
+        "actualNormalized": "noah",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 86.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "name-olivia__max",
+      "baseId": "name-olivia",
+      "text": "Olivia",
+      "category": "short-name",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "Olivia",
+        "rawOcrText": "Olivia",
+        "expectedNormalized": "olivia",
+        "actualNormalized": "olivia",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 92.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "word-love__max",
+      "baseId": "word-love",
+      "text": "love",
+      "category": "common-word",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "love",
+        "rawOcrText": "\u2018ove",
+        "expectedNormalized": "love",
+        "actualNormalized": "\u2018ove",
+        "exactMatch": false,
+        "charAccuracy": 0.75,
+        "wordAccuracy": 0.0,
+        "confidence": 46.0,
+        "substitutedChars": [
+          [
+            "l",
+            "\u2018"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "word-family__max",
+      "baseId": "word-family",
+      "text": "family",
+      "category": "common-word",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "family",
+        "rawOcrText": "ramily",
+        "expectedNormalized": "family",
+        "actualNormalized": "ramily",
+        "exactMatch": false,
+        "charAccuracy": 0.8333,
+        "wordAccuracy": 0.0,
+        "confidence": 88.0,
+        "substitutedChars": [
+          [
+            "f",
+            "r"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "word-forever__max",
+      "baseId": "word-forever",
+      "text": "forever",
+      "category": "common-word",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "forever",
+        "rawOcrText": "rorever",
+        "expectedNormalized": "forever",
+        "actualNormalized": "rorever",
+        "exactMatch": false,
+        "charAccuracy": 0.8571,
+        "wordAccuracy": 0.0,
+        "confidence": 78.0,
+        "substitutedChars": [
+          [
+            "f",
+            "r"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "word-blessed__max",
+      "baseId": "word-blessed",
+      "text": "blessed",
+      "category": "common-word",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "blessed",
+        "rawOcrText": "D!1eSSeGd",
+        "expectedNormalized": "blessed",
+        "actualNormalized": "d 1essegd",
+        "exactMatch": false,
+        "charAccuracy": 0.4286,
+        "wordAccuracy": 0.0,
+        "confidence": 6.0,
+        "substitutedChars": [
+          [
+            "b",
+            " "
+          ],
+          [
+            "l",
+            "1"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "d",
+          "g"
+        ],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "word-together__max",
+      "baseId": "word-together",
+      "text": "together",
+      "category": "common-word",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "together",
+        "rawOcrText": "iogeiner",
+        "expectedNormalized": "together",
+        "actualNormalized": "iogeiner",
+        "exactMatch": false,
+        "charAccuracy": 0.625,
+        "wordAccuracy": 0.0,
+        "confidence": 55.0,
+        "substitutedChars": [
+          [
+            "t",
+            "i"
+          ],
+          [
+            "t",
+            "i"
+          ],
+          [
+            "h",
+            "n"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 3
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "repeat-book__max",
+      "baseId": "repeat-book",
+      "text": "book",
+      "category": "repeated-letters",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "book",
+        "rawOcrText": "DOOK",
+        "expectedNormalized": "book",
+        "actualNormalized": "dook",
+        "exactMatch": false,
+        "charAccuracy": 0.75,
+        "wordAccuracy": 0.0,
+        "confidence": 89.0,
+        "substitutedChars": [
+          [
+            "b",
+            "d"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "repeat-letter__max",
+      "baseId": "repeat-letter",
+      "text": "letter",
+      "category": "repeated-letters",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "letter",
+        "rawOcrText": "leiier",
+        "expectedNormalized": "letter",
+        "actualNormalized": "leiier",
+        "exactMatch": false,
+        "charAccuracy": 0.6667,
+        "wordAccuracy": 0.0,
+        "confidence": 52.0,
+        "substitutedChars": [
+          [
+            "t",
+            "i"
+          ],
+          [
+            "t",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "repeat-coffee__max",
+      "baseId": "repeat-coffee",
+      "text": "coffee",
+      "category": "repeated-letters",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "coffee",
+        "rawOcrText": "corree",
+        "expectedNormalized": "coffee",
+        "actualNormalized": "corree",
+        "exactMatch": false,
+        "charAccuracy": 0.6667,
+        "wordAccuracy": 0.0,
+        "confidence": 92.0,
+        "substitutedChars": [
+          [
+            "f",
+            "r"
+          ],
+          [
+            "f",
+            "r"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "repeat-moon__max",
+      "baseId": "repeat-moon",
+      "text": "moon",
+      "category": "repeated-letters",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "moon",
+        "rawOcrText": "OO",
+        "expectedNormalized": "moon",
+        "actualNormalized": "oo",
+        "exactMatch": false,
+        "charAccuracy": 0.5,
+        "wordAccuracy": 0.0,
+        "confidence": 22.0,
+        "substitutedChars": [],
+        "omittedChars": [
+          "m",
+          "n"
+        ],
+        "insertedChars": [],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "repeat-llll__max",
+      "baseId": "repeat-llll",
+      "text": "llll",
+      "category": "repeated-letters",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "llll",
+        "rawOcrText": "",
+        "expectedNormalized": "llll",
+        "actualNormalized": "",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": null,
+        "substitutedChars": [],
+        "omittedChars": [
+          "l",
+          "l",
+          "l",
+          "l"
+        ],
+        "insertedChars": [],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "repeat-oooo__max",
+      "baseId": "repeat-oooo",
+      "text": "oooo",
+      "category": "repeated-letters",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "oooo",
+        "rawOcrText": "OOOO",
+        "expectedNormalized": "oooo",
+        "actualNormalized": "oooo",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 71.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "narrow-illicit__max",
+      "baseId": "narrow-illicit",
+      "text": "illicit",
+      "category": "narrow-letters",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "illicit",
+        "rawOcrText": "Rivet",
+        "expectedNormalized": "illicit",
+        "actualNormalized": "rivet",
+        "exactMatch": false,
+        "charAccuracy": 0.2857,
+        "wordAccuracy": 0.0,
+        "confidence": 17.0,
+        "substitutedChars": [
+          [
+            "l",
+            "r"
+          ],
+          [
+            "c",
+            "v"
+          ],
+          [
+            "i",
+            "e"
+          ]
+        ],
+        "omittedChars": [
+          "i",
+          "l"
+        ],
+        "insertedChars": [],
+        "editDistance": 5
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "narrow-will__max",
+      "baseId": "narrow-will",
+      "text": "will",
+      "category": "narrow-letters",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "will",
+        "rawOcrText": "will!",
+        "expectedNormalized": "will",
+        "actualNormalized": "will",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 73.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "narrow-title__max",
+      "baseId": "narrow-title",
+      "text": "title",
+      "category": "narrow-letters",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "title",
+        "rawOcrText": "itile",
+        "expectedNormalized": "title",
+        "actualNormalized": "itile",
+        "exactMatch": false,
+        "charAccuracy": 0.6,
+        "wordAccuracy": 0.0,
+        "confidence": 41.0,
+        "substitutedChars": [],
+        "omittedChars": [
+          "t"
+        ],
+        "insertedChars": [
+          "i"
+        ],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "narrow-ijlt__max",
+      "baseId": "narrow-ijlt",
+      "text": "ijlt",
+      "category": "narrow-letters",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "ijlt",
+        "rawOcrText": "",
+        "expectedNormalized": "ijlt",
+        "actualNormalized": "",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": null,
+        "substitutedChars": [],
+        "omittedChars": [
+          "i",
+          "j",
+          "l",
+          "t"
+        ],
+        "insertedChars": [],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "wide-mound__max",
+      "baseId": "wide-mound",
+      "text": "mound",
+      "category": "wide-letters",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "mound",
+        "rawOcrText": "MouNG",
+        "expectedNormalized": "mound",
+        "actualNormalized": "moung",
+        "exactMatch": false,
+        "charAccuracy": 0.8,
+        "wordAccuracy": 0.0,
+        "confidence": 68.0,
+        "substitutedChars": [
+          [
+            "d",
+            "g"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "wide-wave__max",
+      "baseId": "wide-wave",
+      "text": "wave",
+      "category": "wide-letters",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "wave",
+        "rawOcrText": "WAVC",
+        "expectedNormalized": "wave",
+        "actualNormalized": "wavc",
+        "exactMatch": false,
+        "charAccuracy": 0.75,
+        "wordAccuracy": 0.0,
+        "confidence": 50.0,
+        "substitutedChars": [
+          [
+            "e",
+            "c"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "wide-mnuw__max",
+      "baseId": "wide-mnuw",
+      "text": "mnuw",
+      "category": "wide-letters",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "mnuw",
+        "rawOcrText": "SRTReA",
+        "expectedNormalized": "mnuw",
+        "actualNormalized": "srtrea",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 0.0,
+        "substitutedChars": [
+          [
+            "m",
+            "t"
+          ],
+          [
+            "n",
+            "r"
+          ],
+          [
+            "u",
+            "e"
+          ],
+          [
+            "w",
+            "a"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "s",
+          "r"
+        ],
+        "editDistance": 6
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "ascender-height__max",
+      "baseId": "ascender-height",
+      "text": "height",
+      "category": "ascenders",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "height",
+        "rawOcrText": "neigni",
+        "expectedNormalized": "height",
+        "actualNormalized": "neigni",
+        "exactMatch": false,
+        "charAccuracy": 0.5,
+        "wordAccuracy": 0.0,
+        "confidence": 76.0,
+        "substitutedChars": [
+          [
+            "h",
+            "n"
+          ],
+          [
+            "h",
+            "n"
+          ],
+          [
+            "t",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 3
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "ascender-birthday__max",
+      "baseId": "ascender-birthday",
+      "text": "birthday",
+      "category": "ascenders",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "birthday",
+        "rawOcrText": "oirinagay",
+        "expectedNormalized": "birthday",
+        "actualNormalized": "oirinagay",
+        "exactMatch": false,
+        "charAccuracy": 0.375,
+        "wordAccuracy": 0.0,
+        "confidence": 32.0,
+        "substitutedChars": [
+          [
+            "b",
+            "o"
+          ],
+          [
+            "t",
+            "n"
+          ],
+          [
+            "h",
+            "a"
+          ],
+          [
+            "d",
+            "g"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "i"
+        ],
+        "editDistance": 5
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "ascender-blush__max",
+      "baseId": "ascender-blush",
+      "text": "blush",
+      "category": "ascenders",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "blush",
+        "rawOcrText": "Olush",
+        "expectedNormalized": "blush",
+        "actualNormalized": "olush",
+        "exactMatch": false,
+        "charAccuracy": 0.8,
+        "wordAccuracy": 0.0,
+        "confidence": 75.0,
+        "substitutedChars": [
+          [
+            "b",
+            "o"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "descender-puppy__max",
+      "baseId": "descender-puppy",
+      "text": "puppy",
+      "category": "descenders",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "puppy",
+        "rawOcrText": "DUDDY",
+        "expectedNormalized": "puppy",
+        "actualNormalized": "duddy",
+        "exactMatch": false,
+        "charAccuracy": 0.4,
+        "wordAccuracy": 0.0,
+        "confidence": 86.0,
+        "substitutedChars": [
+          [
+            "p",
+            "d"
+          ],
+          [
+            "p",
+            "d"
+          ],
+          [
+            "p",
+            "d"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 3
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "descender-yoga__max",
+      "baseId": "descender-yoga",
+      "text": "yoga",
+      "category": "descenders",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "yoga",
+        "rawOcrText": "yoga",
+        "expectedNormalized": "yoga",
+        "actualNormalized": "yoga",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 85.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "descender-gypsy__max",
+      "baseId": "descender-gypsy",
+      "text": "gypsy",
+      "category": "descenders",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "gypsy",
+        "rawOcrText": "QyYPpsy",
+        "expectedNormalized": "gypsy",
+        "actualNormalized": "qyyppsy",
+        "exactMatch": false,
+        "charAccuracy": 0.4,
+        "wordAccuracy": 0.0,
+        "confidence": 11.0,
+        "substitutedChars": [
+          [
+            "g",
+            "y"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "q",
+          "p"
+        ],
+        "editDistance": 3
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "loop-bobble__max",
+      "baseId": "loop-bobble",
+      "text": "bobble",
+      "category": "loops-counters",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "bobble",
+        "rawOcrText": "DoODD!Ie",
+        "expectedNormalized": "bobble",
+        "actualNormalized": "doodd ie",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 13.0,
+        "substitutedChars": [
+          [
+            "b",
+            "o"
+          ],
+          [
+            "b",
+            "d"
+          ],
+          [
+            "b",
+            " "
+          ],
+          [
+            "l",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "d",
+          "d"
+        ],
+        "editDistance": 6
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "loop-google__max",
+      "baseId": "loop-google",
+      "text": "google",
+      "category": "loops-counters",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "google",
+        "rawOcrText": "googie",
+        "expectedNormalized": "google",
+        "actualNormalized": "googie",
+        "exactMatch": false,
+        "charAccuracy": 0.8333,
+        "wordAccuracy": 0.0,
+        "confidence": 85.0,
+        "substitutedChars": [
+          [
+            "l",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "loop-bubble__max",
+      "baseId": "loop-bubble",
+      "text": "bubble",
+      "category": "loops-counters",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "bubble",
+        "rawOcrText": "DuDDIe",
+        "expectedNormalized": "bubble",
+        "actualNormalized": "duddie",
+        "exactMatch": false,
+        "charAccuracy": 0.3333,
+        "wordAccuracy": 0.0,
+        "confidence": 40.0,
+        "substitutedChars": [
+          [
+            "b",
+            "d"
+          ],
+          [
+            "b",
+            "d"
+          ],
+          [
+            "b",
+            "d"
+          ],
+          [
+            "l",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "join-the__max",
+      "baseId": "join-the",
+      "text": "the",
+      "category": "cursive-joins",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "the",
+        "rawOcrText": "ihe",
+        "expectedNormalized": "the",
+        "actualNormalized": "ihe",
+        "exactMatch": false,
+        "charAccuracy": 0.6667,
+        "wordAccuracy": 0.0,
+        "confidence": 48.0,
+        "substitutedChars": [
+          [
+            "t",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "join-and__max",
+      "baseId": "join-and",
+      "text": "and",
+      "category": "cursive-joins",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "and",
+        "rawOcrText": "and",
+        "expectedNormalized": "and",
+        "actualNormalized": "and",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 93.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "join-st__max",
+      "baseId": "join-st",
+      "text": "st",
+      "category": "cursive-joins",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "st",
+        "rawOcrText": "Si",
+        "expectedNormalized": "st",
+        "actualNormalized": "si",
+        "exactMatch": false,
+        "charAccuracy": 0.5,
+        "wordAccuracy": 0.0,
+        "confidence": 95.0,
+        "substitutedChars": [
+          [
+            "t",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "join-ck__max",
+      "baseId": "join-ck",
+      "text": "ck",
+      "category": "cursive-joins",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "ck",
+        "rawOcrText": "\u2018ar",
+        "expectedNormalized": "ck",
+        "actualNormalized": "\u2018ar",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 44.0,
+        "substitutedChars": [
+          [
+            "c",
+            "a"
+          ],
+          [
+            "k",
+            "r"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "\u2018"
+        ],
+        "editDistance": 3
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "join-th__max",
+      "baseId": "join-th",
+      "text": "th",
+      "category": "cursive-joins",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "th",
+        "rawOcrText": "a.",
+        "expectedNormalized": "th",
+        "actualNormalized": "a",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 47.0,
+        "substitutedChars": [
+          [
+            "h",
+            "a"
+          ]
+        ],
+        "omittedChars": [
+          "t"
+        ],
+        "insertedChars": [],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "phrase-best-day-ever__max",
+      "baseId": "phrase-best-day-ever",
+      "text": "Best Day Ever",
+      "category": "longer-phrase",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "Best Day Ever",
+        "rawOcrText": "Besi Day ever",
+        "expectedNormalized": "best day ever",
+        "actualNormalized": "besi day ever",
+        "exactMatch": false,
+        "charAccuracy": 0.9231,
+        "wordAccuracy": 0.6667,
+        "confidence": 88.0,
+        "substitutedChars": [
+          [
+            "t",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "phrase-happily-ever-after__max",
+      "baseId": "phrase-happily-ever-after",
+      "text": "Happily Ever After",
+      "category": "longer-phrase",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "Happily Ever After",
+        "rawOcrText": "napoily Ever Arier",
+        "expectedNormalized": "happily ever after",
+        "actualNormalized": "napoily ever arier",
+        "exactMatch": false,
+        "charAccuracy": 0.7778,
+        "wordAccuracy": 0.3333,
+        "confidence": 79.7,
+        "substitutedChars": [
+          [
+            "h",
+            "n"
+          ],
+          [
+            "p",
+            "o"
+          ],
+          [
+            "f",
+            "r"
+          ],
+          [
+            "t",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "phrase-mr-and-mrs__max",
+      "baseId": "phrase-mr-and-mrs",
+      "text": "Mr and Mrs Smith",
+      "category": "longer-phrase",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "Mr and Mrs Smith",
+        "rawOcrText": "Mrang Mrs Smiin",
+        "expectedNormalized": "mr and mrs smith",
+        "actualNormalized": "mrang mrs smiin",
+        "exactMatch": false,
+        "charAccuracy": 0.75,
+        "wordAccuracy": 0.25,
+        "confidence": 68.3,
+        "substitutedChars": [
+          [
+            "d",
+            "g"
+          ],
+          [
+            "t",
+            "i"
+          ],
+          [
+            "h",
+            "n"
+          ]
+        ],
+        "omittedChars": [
+          " "
+        ],
+        "insertedChars": [],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-aoe__max",
+      "baseId": "amb-aoe",
+      "text": "aoe",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "aoe",
+        "rawOcrText": "JdOC",
+        "expectedNormalized": "aoe",
+        "actualNormalized": "jdoc",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 42.0,
+        "substitutedChars": [
+          [
+            "a",
+            "d"
+          ],
+          [
+            "e",
+            "c"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "j"
+        ],
+        "editDistance": 3
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-oeao__max",
+      "baseId": "amb-oeao",
+      "text": "oeao",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "oeao",
+        "rawOcrText": "OCdO",
+        "expectedNormalized": "oeao",
+        "actualNormalized": "ocdo",
+        "exactMatch": false,
+        "charAccuracy": 0.5,
+        "wordAccuracy": 0.0,
+        "confidence": 54.0,
+        "substitutedChars": [
+          [
+            "e",
+            "c"
+          ],
+          [
+            "a",
+            "d"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-ijlt__max",
+      "baseId": "amb-ijlt",
+      "text": "ijlt",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "ijlt",
+        "rawOcrText": "",
+        "expectedNormalized": "ijlt",
+        "actualNormalized": "",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": null,
+        "substitutedChars": [],
+        "omittedChars": [
+          "i",
+          "j",
+          "l",
+          "t"
+        ],
+        "insertedChars": [],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-till__max",
+      "baseId": "amb-till",
+      "text": "till",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "till",
+        "rawOcrText": "at",
+        "expectedNormalized": "till",
+        "actualNormalized": "at",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 53.0,
+        "substitutedChars": [
+          [
+            "l",
+            "a"
+          ],
+          [
+            "l",
+            "t"
+          ]
+        ],
+        "omittedChars": [
+          "t",
+          "i"
+        ],
+        "insertedChars": [],
+        "editDistance": 4
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-mnuw__max",
+      "baseId": "amb-mnuw",
+      "text": "mnuw",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "mnuw",
+        "rawOcrText": "SRTReA",
+        "expectedNormalized": "mnuw",
+        "actualNormalized": "srtrea",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 0.0,
+        "substitutedChars": [
+          [
+            "m",
+            "t"
+          ],
+          [
+            "n",
+            "r"
+          ],
+          [
+            "u",
+            "e"
+          ],
+          [
+            "w",
+            "a"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "s",
+          "r"
+        ],
+        "editDistance": 6
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-numnum__max",
+      "baseId": "amb-numnum",
+      "text": "numnum",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "numnum",
+        "rawOcrText": "Pits A eres",
+        "expectedNormalized": "numnum",
+        "actualNormalized": "pits a eres",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 0.0,
+        "substitutedChars": [
+          [
+            "n",
+            "a"
+          ],
+          [
+            "u",
+            " "
+          ],
+          [
+            "m",
+            "e"
+          ],
+          [
+            "n",
+            "r"
+          ],
+          [
+            "u",
+            "e"
+          ],
+          [
+            "m",
+            "s"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "p",
+          "i",
+          "t",
+          "s",
+          " "
+        ],
+        "editDistance": 11
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-cece__max",
+      "baseId": "amb-cece",
+      "text": "cece",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "cece",
+        "rawOcrText": "CeCe",
+        "expectedNormalized": "cece",
+        "actualNormalized": "cece",
+        "exactMatch": true,
+        "charAccuracy": 1.0,
+        "wordAccuracy": 1.0,
+        "confidence": 20.0,
+        "substitutedChars": [],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 0
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-rvrv__max",
+      "baseId": "amb-rvrv",
+      "text": "rvrv",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "rvrv",
+        "rawOcrText": "iViVv",
+        "expectedNormalized": "rvrv",
+        "actualNormalized": "ivivv",
+        "exactMatch": false,
+        "charAccuracy": 0.25,
+        "wordAccuracy": 0.0,
+        "confidence": 34.0,
+        "substitutedChars": [
+          [
+            "r",
+            "i"
+          ],
+          [
+            "r",
+            "v"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "i"
+        ],
+        "editDistance": 3
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-sfsf__max",
+      "baseId": "amb-sfsf",
+      "text": "sfsf",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "sfsf",
+        "rawOcrText": "srsr",
+        "expectedNormalized": "sfsf",
+        "actualNormalized": "srsr",
+        "exactMatch": false,
+        "charAccuracy": 0.5,
+        "wordAccuracy": 0.0,
+        "confidence": 45.0,
+        "substitutedChars": [
+          [
+            "f",
+            "r"
+          ],
+          [
+            "f",
+            "r"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 2
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-bhk__max",
+      "baseId": "amb-bhk",
+      "text": "bhk",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "bhk",
+        "rawOcrText": "olaii",
+        "expectedNormalized": "bhk",
+        "actualNormalized": "olaii",
+        "exactMatch": false,
+        "charAccuracy": 0.0,
+        "wordAccuracy": 0.0,
+        "confidence": 0.0,
+        "substitutedChars": [
+          [
+            "b",
+            "a"
+          ],
+          [
+            "h",
+            "i"
+          ],
+          [
+            "k",
+            "i"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [
+          "o",
+          "l"
+        ],
+        "editDistance": 5
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    },
+    {
+      "label": "amb-gqy__max",
+      "baseId": "amb-gqy",
+      "text": "gqy",
+      "category": "ambiguous-synthetic",
+      "heightLabel": "max",
+      "heightMm": 60,
+      "ocr": {
+        "expectedText": "gqy",
+        "rawOcrText": "gay",
+        "expectedNormalized": "gqy",
+        "actualNormalized": "gay",
+        "exactMatch": false,
+        "charAccuracy": 0.6667,
+        "wordAccuracy": 0.0,
+        "confidence": 87.0,
+        "substitutedChars": [
+          [
+            "q",
+            "a"
+          ]
+        ],
+        "omittedChars": [],
+        "insertedChars": [],
+        "editDistance": 1
+      },
+      "ocrError": null,
+      "isRequiredPhrase": false
+    }
+  ]
+}

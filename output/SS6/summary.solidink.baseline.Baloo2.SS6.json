@@ -1,0 +1,31 @@
+{
+  "sizeId": "ss6",
+  "family": "Baloo2",
+  "variant": "baseline",
+  "count": 171,
+  "meanCharAccuracy": 0.6166,
+  "meanWordAccuracy": 0.2261,
+  "exactMatchRate": 0.1696,
+  "requiredPhraseCount": 12,
+  "requiredPhrasePassCount": 0,
+  "requiredPhraseAccuracy": 0.0,
+  "unrecognizedCount": 25,
+  "unrecognizedFraction": 0.1462,
+  "verdict": {
+    "passed": false,
+    "findings": [
+      "meanCharAccuracy 0.6166 < 0.85",
+      "meanWordAccuracy 0.2261 < 0.8",
+      "requiredPhraseAccuracy 0.0 < 1.0"
+    ],
+    "thresholds": {
+      "minCharAccuracy": 0.85,
+      "minWordAccuracy": 0.8,
+      "minRequiredPhraseAccuracy": 1.0,
+      "minConfidence": 40.0,
+      "maxUnrecognizedSamples": 0.15,
+      "maxAmbiguousPairRepeats": 2
+    }
+  },
+  "displayFamily": "Baloo2"
+}
