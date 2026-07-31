@@ -191,11 +191,11 @@ sizes pointing at `Baloo2-wght400.ttf`, since Regular was selected everywhere), 
 transform pipeline and per-size thresholds as FONT-GEN-001/002:
 
 ```
-output/SS6/Baloo2VariableRhinestone_SS6.ttf
-output/SS10/Baloo2VariableRhinestone_SS10.ttf
-output/SS16/Baloo2VariableRhinestone_SS16.ttf
-output/SS20/Baloo2VariableRhinestone_SS20.ttf
-output/SS30/Baloo2VariableRhinestone_SS30.ttf
+generated-fonts/SS6/Baloo2VariableRhinestone_SS6.ttf
+generated-fonts/SS10/Baloo2VariableRhinestone_SS10.ttf
+generated-fonts/SS16/Baloo2VariableRhinestone_SS16.ttf
+generated-fonts/SS20/Baloo2VariableRhinestone_SS20.ttf
+generated-fonts/SS30/Baloo2VariableRhinestone_SS30.ttf
 ```
 
 `validate_font.py`: **PASS** for all 5 sizes (reload, required tables, cmap coverage, valid bounds,
@@ -328,7 +328,7 @@ committed state.
 
 **No fonts registered.** Consistent with FONT-GEN-001/002/FONT-VIS-001's precedent, `assets/fonts/manifest.json`
 was not modified. New files: `fonts/sources/Baloo2/Baloo2-wght{400,500,600,700,800}.ttf` (the 5
-instanced static fonts), `output/<SIZE>/` family-qualified artifacts, `review/FONT-GEN-003-review.html`
+instanced static fonts), `generated-fonts/<SIZE>/` family-qualified artifacts, `review/FONT-GEN-003-review.html`
 + `review/assets/Baloo2Variable/`, this report, `tools/font-generator/select_source_weight.py`, and the
 per-size-source additions to `paths.py`/`generate.py`/`pipeline.py`/`build_review_html.py` described in
 §11. Original Baloo 2, Sacramento, `Baloo2-Bold.ttf` (FONT-GEN-002's ExtraBold instance), all existing

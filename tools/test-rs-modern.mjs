@@ -376,7 +376,7 @@ await test('22. RS Modern is manifest-registered as a production font alongside 
   assert.equal(manager.getFont(FONT_ID).family, 'RS Modern');
   assert.equal(manager.getFont(FONT_ID).providerId, 'rhinestone');
   assert.equal(manager.getFont(FONT_ID).enabled, true);
-  assert.equal(manager.listFonts({ includeDisabled: true }).length, 12);
+  assert.equal(manager.listFonts({ includeDisabled: true }).length, 13);
   for (const id of ['courier-prime-regular', 'great-vibes-regular', 'anton-regular', 'rs-block']) {
     assert.ok(manager.hasFont(id), `expected pre-existing font id "${id}" to still resolve`);
   }

@@ -33,7 +33,7 @@ function buildEntry(sizeUpper, validatedHeightRangeMm) {
     family: `Sacramento Rhinestone ${sizeUpper}`,
     style: 'Regular',
     weight: 400,
-    path: `output/${sizeUpper}/SacramentoRhinestone_${sizeUpper}.ttf`,
+    path: `generated-fonts/${sizeUpper}/SacramentoRhinestone_${sizeUpper}.ttf`,
     role: 'rhinestone-experimental',
     enabled: true,
     providerId: 'opentype',
@@ -52,7 +52,7 @@ async function main() {
   for (const sizeUpper of sizes) {
     if (!(sizeUpper in CONFIG_BY_SIZE)) throw new Error(`Unknown size: ${sizeUpper}`);
 
-    const metaPath = repoPath(`output/${sizeUpper}/summary.${sizeUpper}.json`);
+    const metaPath = repoPath(`generated-fonts/${sizeUpper}/summary.${sizeUpper}.json`);
     const summary = JSON.parse(await readFile(metaPath, 'utf8'));
     const heightRange = summary.heightsMm ? [summary.heightsMm.min, summary.heightsMm.max] : [null, null];
 

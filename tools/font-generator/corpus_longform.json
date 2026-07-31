@@ -1,0 +1,17 @@
+{
+  "_comment": "FONT-DECISION-001 Part B -- longer test strings, each deliberately combining multiple previously-identified problem categories (mixed case, ampersands, ordinals, numerals, dates, possessives, em-dashes, hashtags) in flowing text rather than isolated words. Kept separate from corpus.json (the fixed automated corpus) -- additive, not a replacement.",
+  "items": [
+    { "id": "long-01", "text": "Olivia & Sophia — Bride Squad 2027", "category": "longform-mixed" },
+    { "id": "long-02", "text": "8th Grade Graduation, Class of 2016", "category": "longform-mixed" },
+    { "id": "long-03", "text": "Grandma's Sunday Brunch Club, Est. 2018", "category": "longform-mixed" },
+    { "id": "long-04", "text": "Mommy and Daddy's Little Angel, born 5/16", "category": "longform-mixed" },
+    { "id": "long-05", "text": "Congratulations Graduate — Go Bulldogs #88", "category": "longform-mixed" },
+    { "id": "long-06", "text": "Willow Grove Farms, Since 1996", "category": "longform-mixed" },
+    { "id": "long-07", "text": "Bonnie & Ollie's Wedding, Forever and Always", "category": "longform-mixed" },
+    { "id": "long-08", "text": "S. Miller, 05/16/2027, Room 608", "category": "longform-mixed" },
+    { "id": "long-09", "text": "Happy 30th Birthday, Grandma Georgia", "category": "longform-mixed" },
+    { "id": "long-10", "text": "Nana's Noodle & Dumpling Kitchen", "category": "longform-mixed" },
+    { "id": "long-11", "text": "Milwaukee Dance Team — Cheer Squad 16", "category": "longform-mixed" },
+    { "id": "long-12", "text": "Little Miss Sunshine, Summer 2027", "category": "longform-mixed" }
+  ]
+}

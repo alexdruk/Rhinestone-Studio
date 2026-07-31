@@ -268,7 +268,7 @@ Every one of the 4 required phrases (Ashley, Bride Squad, Happy Birthday, Class 
 exact-match OCR at all 3 tested heights, for all 5 sizes, for both generated and baseline — 0/12 in
 every row of the table above. The full per-case breakdown (worst-10 per size, every OCR failure,
 raw OCR text, substituted/omitted/inserted characters) is in
-`output/<SIZE>/evaluation.<SIZE>.json` and surfaced in the HTML review (§12).
+`generated-fonts/<SIZE>/evaluation.<SIZE>.json` and surfaced in the HTML review (§12).
 
 Ambiguous-glyph-pair collapse checks (single-character OCR comparison across the 24 confusable
 pairs in `corpus.json`) are included in the review page per size; given the near-zero single-glyph
@@ -309,7 +309,7 @@ every corpus item, per the brief's exception-focused requirement).
 
 **No fonts registered.** Per the REJECT recommendation below (consistent with FONT-VIS-001's
 precedent: no variant surviving evaluation → no manifest registration), `assets/fonts/manifest.json`
-was not modified. `git status` confirms zero existing files changed — only new files under `output/`,
+was not modified. `git status` confirms zero existing files changed — only new files under `generated-fonts/`,
 `review/`, and `tools/font-generator/` were added. Original Sacramento, all existing fonts, existing
 projects, and exporters are unaffected because nothing that they depend on was touched.
 

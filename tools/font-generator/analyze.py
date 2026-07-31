@@ -14,12 +14,19 @@ from statistics import mean
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from paths import DEFAULT_FAMILY, output_dir, repo_relative, sized_json_filename
+from lib import vision_eval
 
 ALL_SIZES = ["SS6", "SS10", "SS16", "SS20", "SS30"]
 
-# FONT-GEN-001 documented acceptance thresholds -- applied identically to every size (per brief:
-# "Apply the same threshold definitions to all five variants... do not silently lower a threshold
-# to accept a weak font").
+# FONT-GEN-001 documented acceptance thresholds -- applied identically to every size. Retired as
+# the acceptance gate per FONT-EVAL-002 Sec.5 / FONT-DECISION-001: pytesseract was found to be the
+# confound behind every REJECT verdict, not font legibility (a vision-capable read of the same
+# renders scored 132/140 exact where pytesseract scored 30/140). Kept here unchanged, and
+# check_thresholds() still computes against it, purely as a secondary/legacy metric for
+# continuity with FONT-GEN-001-004's historical numbers -- it is NOT the signal acceptance
+# decisions are based on going forward. No calibrated numeric vision threshold exists (or is
+# invented here); direct/vision review is the acceptance signal (see FONT-DECISION-001's rater
+# tool). See meanCharAccuracyVision/requiredPhraseAccuracyVision below for the primary metric.
 THRESHOLDS = {
     "minCharAccuracy": 0.85,
     "minWordAccuracy": 0.80,
@@ -30,7 +37,28 @@ THRESHOLDS = {
 }
 
 
-def summarize(evaluation, required_ids=None):
+def attach_vision(rows, vision_lookup):
+    """
+    FONT-DECISION-001 -- attaches a `visionOcr` field (vision_eval.evaluate() result) to any row
+    whose (baseId, heightLabel) matches a supplied manual vision-transcription. `vision_lookup` is
+    keyed by (baseId, heightLabel) -> transcribedText. Rows with no matching transcription are
+    left untouched (no `visionOcr` key) -- vision-transcription is manual and only ever covers a
+    curated subset, never the full corpus, so absence here is expected, not an error.
+    """
+    if not vision_lookup:
+        return rows
+    for r in rows:
+        transcribed = vision_lookup.get((r.get("baseId"), r.get("heightLabel")))
+        if transcribed is not None:
+            r["visionOcr"] = vision_eval.evaluate(r["text"], transcribed)
+    return rows
+
+
+def summarize(evaluation, required_ids=None, vision_lookup=None):
+    if vision_lookup:
+        attach_vision(evaluation["generated"], vision_lookup)
+        attach_vision(evaluation["baseline"], vision_lookup)
+
     def agg(rows):
         rows_with_ocr = [r for r in rows if r.get("ocr")]
         char_accs = [r["ocr"]["charAccuracy"] for r in rows_with_ocr]
@@ -47,6 +75,19 @@ def summarize(evaluation, required_ids=None):
         cluster_counts = [r["clusterCount"] for r in rows if not r.get("error") and r.get("clusterCount") is not None]
         collision_counts = [r["collisionCount"] for r in rows if not r.get("error") and r.get("collisionCount") is not None]
         stone_counts = [r["stoneCount"] for r in rows if not r.get("error") and r.get("stoneCount") is not None]
+
+        # FONT-DECISION-001 -- vision-transcription aggregates, additive only. Populated only for
+        # rows a manual vision pass actually covered (attach_vision(), called from summarize() when
+        # a vision_lookup is supplied) -- vision-transcription is manual and never covers the full
+        # corpus, so these are None/empty whenever no vision data was attached, same as before this
+        # change. This, not meanCharAccuracy/requiredPhraseAccuracy above, is the primary
+        # acceptance-relevant signal per FONT-EVAL-002/FONT-DECISION-001.
+        rows_with_vision = [r for r in rows if r.get("visionOcr")]
+        vision_char_accs = [r["visionOcr"]["charAccuracy"] for r in rows_with_vision]
+        vision_exact = [r for r in rows_with_vision if r["visionOcr"]["exactMatch"]]
+        vision_required = [r for r in rows_with_vision if r["isRequiredPhrase"]]
+        vision_required_pass = [r for r in vision_required if r["visionOcr"]["exactMatch"]]
+
         return {
             "count": len(rows),
             "errors": len(errors),
@@ -62,6 +103,12 @@ def summarize(evaluation, required_ids=None):
             "requiredPhraseAccuracy": round(len(required_pass) / len(required), 4) if required else None,
             "unrecognizedCount": len(unrecognized),
             "unrecognizedFraction": round(len(unrecognized) / len(rows_with_ocr), 4) if rows_with_ocr else None,
+            "visionSampleCount": len(rows_with_vision),
+            "meanCharAccuracyVision": round(mean(vision_char_accs), 4) if vision_char_accs else None,
+            "exactMatchRateVision": round(len(vision_exact) / len(rows_with_vision), 4) if rows_with_vision else None,
+            "requiredPhraseCountVision": len(vision_required),
+            "requiredPhrasePassCountVision": len(vision_required_pass),
+            "requiredPhraseAccuracyVision": round(len(vision_required_pass) / len(vision_required), 4) if vision_required else None,
             "worst": sorted(
                 ({"id": r["label"], "text": r["text"], "heightMm": r["heightMm"],
                   "charAccuracy": r["ocr"]["charAccuracy"], "rawOcrText": r["ocr"]["rawOcrText"]}
@@ -79,6 +126,14 @@ def summarize(evaluation, required_ids=None):
 
 
 def check_thresholds(summary):
+    """
+    Legacy pytesseract-based gate (FONT-GEN-001). Retired as the acceptance signal per
+    FONT-EVAL-002 Sec.5 / FONT-DECISION-001 -- retained unmodified, computing the same thresholds
+    against the same pytesseract fields, purely so historical PASS/FAIL numbers stay comparable
+    across milestones. Do not treat this verdict as the acceptance decision; see
+    meanCharAccuracyVision/requiredPhraseAccuracyVision in summarize() and this repo's
+    docs/specifications/FONT-DECISION-001-*.md for the metric decisions are actually based on now.
+    """
     g = summary["generated"]
     findings = []
     passed = True
@@ -97,7 +152,7 @@ def check_thresholds(summary):
     if g["unrecognizedFraction"] is not None and g["unrecognizedFraction"] > THRESHOLDS["maxUnrecognizedSamples"]:
         fail(f"unrecognizedFraction {g['unrecognizedFraction']} > {THRESHOLDS['maxUnrecognizedSamples']}")
 
-    return {"passed": passed, "findings": findings, "thresholds": THRESHOLDS}
+    return {"passed": passed, "findings": findings, "thresholds": THRESHOLDS, "metric": "legacyPytesseract"}
 
 
 def main():

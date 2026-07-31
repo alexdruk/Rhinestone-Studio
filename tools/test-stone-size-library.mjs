@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // RS-1013 — Variable Stone Sizes. Verifies the new Stone Library catalog module
 // (src/renderer/StoneSizes.js) directly: required commercial sizes present with correct
@@ -17,8 +20,13 @@ const {
   listStoneSizes,
   findStoneSizeByDiameterMm,
   formatStoneSizeLabel,
-  validateStoneSizeCatalog
+  validateStoneSizeCatalog,
+  stoneSizeHeightMidpointMm,
+  isHeightWithinStoneSizeRange,
+  stoneSizeEntirelyExceedsPrintableHeight
 } = await import('../src/renderer/StoneSizes.js');
+
+const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
 async function test(name, fn) {
   try {
@@ -114,34 +122,103 @@ await test('8. formatStoneSizeLabel() shows commercial name + mm for a catalog m
   assert.equal(formatStoneSizeLabel(1.234), '1.23 mm');
 });
 
+// Every fixture below carries a valid supportedHeightRangeMm so the assertion under test (id/name/
+// diameterMm shape) is isolated from FONT-DECISION-001's own supportedHeightRangeMm checks (test 11).
+const RANGE = { supportedHeightRangeMm: [10, 20] };
+
 await test('9. validateStoneSizeCatalog() accepts the shipped catalog and rejects broken fixtures', () => {
   assert.equal(validateStoneSizeCatalog(), true);
   assert.equal(validateStoneSizeCatalog(STONE_SIZES), true);
 
   assert.throws(() => validateStoneSizeCatalog([]), TypeError, 'empty catalog must be rejected');
   assert.throws(
-    () => validateStoneSizeCatalog([{ id: 'a', name: 'A', diameterMm: 1 }, { id: 'a', name: 'B', diameterMm: 2 }]),
+    () => validateStoneSizeCatalog([{ id: 'a', name: 'A', diameterMm: 1, ...RANGE }, { id: 'a', name: 'B', diameterMm: 2, ...RANGE }]),
     /Duplicate/,
     'duplicate id must be rejected'
   );
   assert.throws(
-    () => validateStoneSizeCatalog([{ id: 'a', name: 'A', diameterMm: 1 }, { id: 'b', name: 'A', diameterMm: 2 }]),
+    () => validateStoneSizeCatalog([{ id: 'a', name: 'A', diameterMm: 1, ...RANGE }, { id: 'b', name: 'A', diameterMm: 2, ...RANGE }]),
     /Duplicate/,
     'duplicate name must be rejected'
   );
-  assert.throws(() => validateStoneSizeCatalog([{ id: '', name: 'A', diameterMm: 1 }]), TypeError, 'empty id must be rejected');
-  assert.throws(() => validateStoneSizeCatalog([{ id: 'Not-Kebab', name: 'A', diameterMm: 1 }]), TypeError, 'non-lowercase-kebab id must be rejected');
-  assert.throws(() => validateStoneSizeCatalog([{ id: 'a', name: '', diameterMm: 1 }]), TypeError, 'empty name must be rejected');
-  assert.throws(() => validateStoneSizeCatalog([{ id: 'a', name: 'A', diameterMm: 0 }]), TypeError, 'zero diameterMm must be rejected');
-  assert.throws(() => validateStoneSizeCatalog([{ id: 'a', name: 'A', diameterMm: -1 }]), TypeError, 'negative diameterMm must be rejected');
+  assert.throws(() => validateStoneSizeCatalog([{ id: '', name: 'A', diameterMm: 1, ...RANGE }]), TypeError, 'empty id must be rejected');
+  assert.throws(() => validateStoneSizeCatalog([{ id: 'Not-Kebab', name: 'A', diameterMm: 1, ...RANGE }]), TypeError, 'non-lowercase-kebab id must be rejected');
+  assert.throws(() => validateStoneSizeCatalog([{ id: 'a', name: '', diameterMm: 1, ...RANGE }]), TypeError, 'empty name must be rejected');
+  assert.throws(() => validateStoneSizeCatalog([{ id: 'a', name: 'A', diameterMm: 0, ...RANGE }]), TypeError, 'zero diameterMm must be rejected');
+  assert.throws(() => validateStoneSizeCatalog([{ id: 'a', name: 'A', diameterMm: -1, ...RANGE }]), TypeError, 'negative diameterMm must be rejected');
   assert.throws(
-    () => validateStoneSizeCatalog([{ id: 'a', name: 'A', diameterMm: 3 }, { id: 'b', name: 'B', diameterMm: 2 }]),
+    () => validateStoneSizeCatalog([{ id: 'a', name: 'A', diameterMm: 3, ...RANGE }, { id: 'b', name: 'B', diameterMm: 2, ...RANGE }]),
     /ascending/,
     'non-ascending diameterMm order must be rejected'
   );
 });
 
-await test('10. no manufacturer trademark reference in the catalog module (generic industry size names only)', () => {
+await test('11. validateStoneSizeCatalog() validates supportedHeightRangeMm shape', () => {
+  assert.throws(
+    () => validateStoneSizeCatalog([{ id: 'a', name: 'A', diameterMm: 1 }]),
+    /supportedHeightRangeMm/,
+    'missing supportedHeightRangeMm must be rejected'
+  );
+  assert.throws(
+    () => validateStoneSizeCatalog([{ id: 'a', name: 'A', diameterMm: 1, supportedHeightRangeMm: [10] }]),
+    /supportedHeightRangeMm/,
+    'a single-element range must be rejected'
+  );
+  assert.throws(
+    () => validateStoneSizeCatalog([{ id: 'a', name: 'A', diameterMm: 1, supportedHeightRangeMm: [10, -5] }]),
+    /supportedHeightRangeMm/,
+    'a non-positive range bound must be rejected'
+  );
+  assert.throws(
+    () => validateStoneSizeCatalog([{ id: 'a', name: 'A', diameterMm: 1, supportedHeightRangeMm: [20, 10] }]),
+    /min < max/,
+    'a min >= max range must be rejected'
+  );
+  assert.equal(validateStoneSizeCatalog([{ id: 'a', name: 'A', diameterMm: 1, supportedHeightRangeMm: [10, 20] }]), true);
+});
+
+// FONT-DECISION-001: tools/font-generator/config/SS*.json's own supportedHeightRangeMm is the
+// calibration source these catalog values are mirrored from (see StoneSizes.js's doc comment) --
+// this proves they can never silently drift apart, since that JSON isn't imported at runtime (it's
+// offline Python-tooling config, not shipped to the browser app; see FONT-DECISION-001 milestone
+// notes on why a live fetch of tools/ config isn't used here).
+await test('12. every catalog supportedHeightRangeMm exactly matches its tools/font-generator/config/SS*.json source', async () => {
+  for (const s of STONE_SIZES) {
+    const configPath = path.join(repoRoot, 'tools/font-generator/config', `${s.name}.json`);
+    const config = JSON.parse(await readFile(configPath, 'utf8'));
+    assert.deepEqual(
+      s.supportedHeightRangeMm,
+      config.supportedHeightRangeMm,
+      `${s.name} catalog supportedHeightRangeMm must match ${configPath}`
+    );
+  }
+});
+
+await test('13. stoneSizeHeightMidpointMm() returns each catalog size\'s validated midpoint', () => {
+  assert.equal(stoneSizeHeightMidpointMm(getStoneSize('ss6')), 42.5);
+  assert.equal(stoneSizeHeightMidpointMm(getStoneSize('ss10')), 52.5);
+  assert.equal(stoneSizeHeightMidpointMm(getStoneSize('ss16')), 77.5);
+  assert.equal(stoneSizeHeightMidpointMm(getStoneSize('ss20')), 95);
+  assert.equal(stoneSizeHeightMidpointMm(getStoneSize('ss30')), 108.5);
+});
+
+await test('14. isHeightWithinStoneSizeRange() is inclusive of both range bounds', () => {
+  const ss16 = getStoneSize('ss16'); // [65,90]
+  assert.ok(isHeightWithinStoneSizeRange(ss16, 65));
+  assert.ok(isHeightWithinStoneSizeRange(ss16, 90));
+  assert.ok(isHeightWithinStoneSizeRange(ss16, 77.5));
+  assert.ok(!isHeightWithinStoneSizeRange(ss16, 64.9));
+  assert.ok(!isHeightWithinStoneSizeRange(ss16, 90.1));
+});
+
+await test('15. stoneSizeEntirelyExceedsPrintableHeight() is true only when the whole range is too tall', () => {
+  const ss20 = getStoneSize('ss20'); // [80,110]
+  assert.ok(stoneSizeEntirelyExceedsPrintableHeight(ss20, 65), 'a 65mm printable height fits none of SS20\'s [80,110] range');
+  assert.ok(!stoneSizeEntirelyExceedsPrintableHeight(ss20, 90), 'a 90mm printable height fits part of SS20\'s [80,110] range (80-90)');
+  assert.ok(!stoneSizeEntirelyExceedsPrintableHeight(ss20, 129), 'a 129mm printable height fits all of SS20\'s [80,110] range');
+});
+
+await test('16. no manufacturer trademark reference in the catalog module (generic industry size names only)', () => {
   const source = STONE_SIZES.map((s) => s.name).join(' ').toLowerCase();
   for (const brand of ['swarovski', 'preciosa']) {
     assert.ok(!source.includes(brand), `catalog must not reference manufacturer name "${brand}"`);

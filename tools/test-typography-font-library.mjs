@@ -164,18 +164,19 @@ await test('8. every currently-enabled manifest font id would be accepted as val
   // Simulates the real reassignment line's right-hand side against the real manifest.
   for (const id of idsInSource) assert.ok(typeof id === 'string' && id.length > 0);
   // FONT-002 added RS Modern (rs-modern, providerId:'rhinestone') alongside RS Block and the 9
-  // RS-2002 desktop fonts -- 11 total (TEXT_ENGINE_FONT_IDS still derives from every *enabled*
-  // manifest font, OpenType included, so existing/legacy-fonted projects keep resolving -- only the
-  // picker's *offered* list is Production-Fonts-only, see test 9). The SS10 prototype remains
-  // manifest-unregistered (see src/text/rhinestoneFont/index.js).
-  assert.equal(idsInSource.size, 11);
+  // RS-2002 desktop fonts -- 11. FONT-DECISION-001 added baloo2-variable-regular -- 12 total.
+  // (TEXT_ENGINE_FONT_IDS still derives from every *enabled* manifest font, OpenType included, so
+  // existing/legacy-fonted projects keep resolving -- only the picker's *offered* list is
+  // Production-Fonts-only, see test 9). The SS10 prototype remains manifest-unregistered (see
+  // src/text/rhinestoneFont/index.js).
+  assert.equal(idsInSource.size, 12);
 });
 
 // ---------------------------------------------------------------------------------------------
 // 4. Category grouping / alphabetical sorting (real code, run against the real manifest)
 // ---------------------------------------------------------------------------------------------
 
-await test('9. populateFontOptions() offers only Production Fonts (FONT-002) -- one "Production Fonts" group, RS Block + RS Modern, alphabetically sorted, no OpenType fonts', () => {
+await test('9. populateFontOptions() offers only Production Fonts (FONT-002) plus validated OpenType fonts (FONT-DECISION-001) -- alphabetically sorted, unvalidated legacy OpenType fonts excluded', () => {
   const manager = new FontManager(manifest);
   const { el } = makeDom();
   const source = extractFontLibrarySource();
@@ -184,7 +185,9 @@ await test('9. populateFontOptions() offers only Production Fonts (FONT-002) -- 
   run(el, manager);
   const html = el('font')._html;
   const groupLabels = [...html.matchAll(/<optgroup label="([^"]+)">/g)].map((m) => m[1]);
-  assert.deepEqual(groupLabels, ['Production Fonts'], 'expected exactly one "Production Fonts" group -- OpenType categories are no longer offered');
+  // FONT-DECISION-001 added a second group: Baloo 2 (providerId:'opentype', rhinestoneValidated:true)
+  // sits under its own "Rounded Sans" category, alongside the authored "Production Fonts" group.
+  assert.deepEqual(groupLabels, ['Production Fonts', 'Rounded Sans'], 'expected the authored "Production Fonts" group plus the new validated-OpenType "Rounded Sans" group');
 
   const groupBlocks = [...html.matchAll(/<optgroup label="([^"]+)">([\s\S]*?)<\/optgroup>/g)];
   for (const [, label, inner] of groupBlocks) {
@@ -193,9 +196,9 @@ await test('9. populateFontOptions() offers only Production Fonts (FONT-002) -- 
     assert.deepEqual(families, sortedFamilies, `expected fonts within group "${label}" to be alphabetically sorted`);
   }
   const allValues = [...html.matchAll(/<option value="([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(new Set(allValues), new Set(['rs-block', 'rs-modern']), 'expected only the two Production Fonts to be offered');
+  assert.deepEqual(new Set(allValues), new Set(['rs-block', 'rs-modern', 'baloo2-variable-regular']), 'expected the two authored Production Fonts plus the one validated OpenType font to be offered');
   assert.ok(!allValues.includes('roboto-mono-regular'), 'the disabled RobotoMono placeholder must never be offered');
-  assert.ok(!allValues.includes('courier-prime-regular'), 'OpenType fonts must not be offered in the normal picker (FONT-002)');
+  assert.ok(!allValues.includes('courier-prime-regular'), 'unvalidated OpenType fonts must not be offered in the normal picker (FONT-002/FONT-DECISION-001)');
 });
 
 await test('10. every rendered Production Font <option> carries a font-family style for a live visual preview', () => {
@@ -207,7 +210,7 @@ await test('10. every rendered Production Font <option> carries a font-family st
   run(el, manager);
   const html = el('font')._html;
   const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  for (const font of manager.listFonts().filter((f) => f.providerId === 'rhinestone')) {
+  for (const font of manager.listFonts().filter((f) => f.providerId === 'rhinestone' || f.rhinestoneValidated === true)) {
     const re = new RegExp(`<option value="${escapeRegExp(font.id)}" style="font-family:'${escapeRegExp(font.family)}'">`);
     assert.match(html, re, `expected a font-face-previewed option for ${font.id}`);
   }
@@ -332,6 +335,19 @@ await test('19. FontManager\'s own DEFAULT_FONT_ID is unchanged (Courier Prime);
   assert.equal(DEFAULT_FONT_ID, 'courier-prime-regular');
   const match = appJs.match(/const DEFAULT_TEXT_FONT_ID='([^']*)'/);
   assert.equal(match[1], 'rs-block');
+});
+
+await test('20. FONT-DECISION-001: baloo2-variable-regular is registered, validated, and keeps full OpenType capability (resizable/curvable, unlike the fixed-pitch authored fonts)', () => {
+  const manager = new FontManager(manifest);
+  const font = manager.getFont('baloo2-variable-regular');
+  assert.equal(font.providerId, 'opentype');
+  assert.equal(font.rhinestoneValidated, true);
+  assert.equal(font.enabled, true);
+  assert.equal(font.path, 'fonts/sources/Baloo2/Baloo2-wght400.ttf');
+  // isAuthoredStoneFontId (app.js) gates Fill Style/Text height/Curved text/Fit-to-Shape off only
+  // for providerId:'rhinestone' -- this font must NOT trip that gate, since it's a real vector font
+  // sampled by the existing StoneSampler, not the fixed-pitch authored dot-matrix DSL.
+  assert.match(appJs, /function isAuthoredStoneFontId\(fontId\)\{return resolveFontProviderId\(fontId\)==='rhinestone'\}/);
 });
 
 // ---------------------------------------------------------------------------------------------
