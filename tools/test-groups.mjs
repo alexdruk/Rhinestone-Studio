@@ -93,6 +93,7 @@ export const GROUPS = {
     'test-design-library-freeze-gate.mjs',
     'test-autosave-recovery-wiring.mjs',
     'test-font-decision-001-stone-size-ux.mjs',
+    'test-font-portfolio-001-stone-size-gating.mjs',
   ],
   // Permanent architectural rules (one GeometryEngine, one StoneLayout/project model, app.js
   // barrel-only imports, browser dependency loading).
@@ -181,6 +182,7 @@ export const GROUPS = {
     'test-product-plate-round-dinner.mjs',
     'test-product-vessel-dimensions.mjs',
     'test-font-decision-001-stone-size-ux.mjs',
+    'test-font-portfolio-001-stone-size-gating.mjs',
   ],
   // Import/Export. test-svg-parser.mjs lives here (not in `text`) because it parses *imported* SVG
   // into VectorPath contours -- the import half of Import/Export, paired with its own integration
@@ -218,6 +220,7 @@ export const GROUPS = {
     'test-text-position-workflow.mjs',
     'test-ux-visual-polish.mjs',
     'test-font-decision-001-stone-size-ux.mjs',
+    'test-font-portfolio-001-stone-size-gating.mjs',
   ],
   'design-library': [
     'test-design-library.mjs',

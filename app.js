@@ -1684,17 +1684,31 @@ function updateMixedSizeCapabilityUI(){
 // stale/static per-template preset. Only meaningful for text layers (supportedHeightRangeMm is a text
 // legibility range, not a general geometry constraint) -- every option is left fully enabled for
 // every other layer type, exactly like #sharedStoneFields' Gap field has no such text-only gating.
+//
+// FONT-PORTFOLIO-001: also gates on the selected font itself -- some fonts' own human rating pass
+// collapsed at a size no shape constraint would otherwise rule out (e.g. Anton/Sacramento/Dancing
+// Script all fail at SS30 even on a shape whose printable height comfortably fits it). This second
+// gate reads manifest.json's per-font `unsupportedStoneSizes` (FontManager.js) -- purely
+// data-driven, so re-enabling a size later (once FONT-POLICY-001 resolves the underlying SS30
+// height-ceiling issue) is a manifest edit, never a code change. A size disabled by either gate is
+// disabled; the title explains whichever reason applies (shape wins if somehow both do).
 function updateStoneSizePrintableCapabilityUI(){
   const l=selectedLayer();
   const isText=Boolean(l&&l.type==='text');
   const template=currentObjectTemplate();
   const safe=isText?getSafeAreaRectMm(template,project.canvas.width,project.canvas.height):null;
+  const font=isText&&isFontKnown(l.font)?fontManager.getFont(l.font):null;
   for(const size of listStoneSizes()){
     const option=el('stoneSize').querySelector(`option[value="${size.diameterMm}"]`);
     if(!option)continue;
-    const exceeds=isText&&stoneSizeEntirelyExceedsPrintableHeight(size,safe.heightMm);
-    option.disabled=exceeds;
-    option.title=exceeds?`${size.name} needs ${size.supportedHeightRangeMm[0]}-${size.supportedHeightRangeMm[1]}mm height — doesn't fit this ${template.displayName}'s printable area (${safe.heightMm.toFixed(0)}mm available).`:'';
+    const exceedsShape=isText&&stoneSizeEntirelyExceedsPrintableHeight(size,safe.heightMm);
+    const unsupportedByFont=Boolean(font&&font.unsupportedStoneSizes.includes(size.id));
+    option.disabled=exceedsShape||unsupportedByFont;
+    option.title=exceedsShape
+      ?`${size.name} needs ${size.supportedHeightRangeMm[0]}-${size.supportedHeightRangeMm[1]}mm height — doesn't fit this ${template.displayName}'s printable area (${safe.heightMm.toFixed(0)}mm available).`
+      :unsupportedByFont
+        ?`${size.name} isn't recommended with ${font.family} — readability testing showed poor results at this size (pending a height-calibration fix).`
+        :'';
   }
 }
 // RS-0003.5D2: SELECTION_HANDLE_SIZE_PX enlarges the resize handles slightly (was a bare 10px

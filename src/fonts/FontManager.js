@@ -37,7 +37,15 @@ function normalizeFontRecord(record) {
     // providerId:'rhinestone' fonts. Defaults to false so every pre-existing OpenType record (the
     // 9 legacy desktop fonts, never validated for stone-dot legibility) stays hidden from the
     // picker exactly as FONT-002 decided.
-    rhinestoneValidated: Boolean(record.rhinestoneValidated ?? false)
+    rhinestoneValidated: Boolean(record.rhinestoneValidated ?? false),
+    // FONT-PORTFOLIO-001: stone-size ids (StoneSizes.js's lowercase "ss30"-style ids) this font's
+    // own human rating pass found unreadable at, independent of any shape's printable-area limit --
+    // e.g. Anton/Sacramento/Dancing Script all collapsed at SS30. Defaults to [] so every existing
+    // record (including a font with no rating data at all) stays fully enabled across all sizes,
+    // exactly like before this field existed. Purely data: app.js's
+    // updateStoneSizePrintableCapabilityUI() reads this list to gray out a stone size, so
+    // re-enabling one later is a manifest edit, never a code change.
+    unsupportedStoneSizes: Object.freeze(Array.isArray(record.unsupportedStoneSizes) ? record.unsupportedStoneSizes.map(String) : [])
   });
 }
 
