@@ -2,9 +2,10 @@
 
 Version: 2.0
 
-Last synchronized with the live repository at commit `5fb768c` (`develop`), which merges
-`feature/rs-0003.5c2-unified-rendering-pipeline` (task RS-0003.5C2). Where this document and the
-repository disagree, the repository is the source of truth — see `docs/AI_ENGINEER.md`.
+Last synchronized with the live repository at commit `aac458b` (`develop`), the ARCH-REVIEW-001
+full architecture and codebase review, immediately prior to RC-008's Version 1.0 release-closure
+audit. Where this document and the repository disagree, the repository is the source of truth —
+see `docs/AI_ENGINEER.md`.
 
 ---
 

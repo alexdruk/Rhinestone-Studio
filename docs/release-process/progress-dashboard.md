@@ -4,7 +4,8 @@
 was not kept current through the dozens of `RS-xxxx`/`S-xxx`/`RC-xxx` milestones shipped since.**
 The ASCII progress bars below are a historical snapshot, not current status — do not rely on them.
 The Design Library/Gallery freeze context in this note reflects `RC-006`/`S-103` as of that
-milestone's completion; check `docs/PRODUCT_ROADMAP.md` for anything more recent.
+milestone's completion; check `docs/PRODUCT_ROADMAP.md` for anything more recent. Version 1.0 is
+now formally released (`RC-008`) — see `docs/PRODUCT_ROADMAP.md` and `docs/ARCHITECTURE.md`.
 
 For current implementation status, use `docs/ARCHITECTURE.md` (authoritative, updated per
 milestone with an "Implementation status" note for every architectural section) or `git log` for
