@@ -91,10 +91,18 @@ function makeEnv() {
   let layer = { type: 'text' };
   let template = getObjectTemplate('mug');
   const project = { canvas: computeCanvasFromVessel(getVesselDefaults('mug')) };
+  // FONT-PORTFOLIO-001: updateStoneSizePrintableCapabilityUI() now also reads isFontKnown()/
+  // fontManager (its own font-based gate) -- this suite only exercises the pre-existing shape
+  // gate, so a layer here never sets `font`/isFontKnown always resolves false, leaving that
+  // second gate a no-op exactly as before this field existed (see
+  // test-font-portfolio-001-stone-size-gating.mjs for the font-gate's own coverage).
+  const isFontKnown = () => false;
+  const fontManager = null;
   const factory = new Function(
     'el', 'selectedLayer', 'currentObjectTemplate', 'project',
     'listStoneSizes', 'getSafeAreaRectMm', 'stoneSizeEntirelyExceedsPrintableHeight',
     'isHeightWithinStoneSizeRange', 'stoneSizeHeightMidpointMm',
+    'isFontKnown', 'fontManager',
     `
     ${applyStoneSizeHeightAutoSetSrc}
     ${updateStoneSizePrintableCapabilityUISrc}
@@ -104,7 +112,8 @@ function makeEnv() {
   const { applyStoneSizeHeightAutoSet, updateStoneSizePrintableCapabilityUI } = factory(
     el, () => layer, () => template, project,
     listStoneSizes, getSafeAreaRectMm, stoneSizeEntirelyExceedsPrintableHeight,
-    isHeightWithinStoneSizeRange, stoneSizeHeightMidpointMm
+    isHeightWithinStoneSizeRange, stoneSizeHeightMidpointMm,
+    isFontKnown, fontManager
   );
   return {
     dom,

@@ -92,13 +92,19 @@ function makeDom() {
 // 1. Manifest / category coverage
 // ---------------------------------------------------------------------------------------------
 
-await test('1. every category the spec requires (Script/Serif/Sans Serif/Display/Monogram/Decorative/Block/Handwritten) is represented by exactly one enabled font', () => {
+await test('1. every category the spec requires (Serif/Sans Serif/Display/Monogram/Decorative/Block/Handwritten) is represented by exactly one enabled font', () => {
   const manager = new FontManager(manifest);
-  const required = ['script', 'serif', 'sans-serif', 'display', 'monogram', 'decorative', 'block', 'handwritten'];
+  const required = ['serif', 'sans-serif', 'display', 'monogram', 'decorative', 'handwritten'];
   for (const role of required) {
     const matches = manager.listFonts().filter((f) => f.role === role);
     assert.equal(matches.length, 1, `expected exactly one enabled font for category "${role}", found ${matches.length}`);
   }
+  // FONT-PORTFOLIO-001 registered sacramento-regular/dancing-script-regular alongside the
+  // pre-existing great-vibes-regular, all role 'script' -- the one category the spec's original
+  // "exactly one" rule no longer holds for.
+  assert.equal(manager.listFonts().filter((f) => f.role === 'script').length, 3, 'expected 3 enabled script fonts after FONT-PORTFOLIO-001 (Great Vibes, Sacramento, Dancing Script)');
+  // block still holds at exactly one (Anton) -- FONT-PORTFOLIO-001 validated it, not duplicated it.
+  assert.equal(manager.listFonts().filter((f) => f.role === 'block').length, 1);
 });
 
 await test('2. the manifest still has exactly one disabled entry (the RobotoMono placeholder), and it is unchanged', () => {
@@ -164,12 +170,13 @@ await test('8. every currently-enabled manifest font id would be accepted as val
   // Simulates the real reassignment line's right-hand side against the real manifest.
   for (const id of idsInSource) assert.ok(typeof id === 'string' && id.length > 0);
   // FONT-002 added RS Modern (rs-modern, providerId:'rhinestone') alongside RS Block and the 9
-  // RS-2002 desktop fonts -- 11. FONT-DECISION-001 added baloo2-variable-regular -- 12 total.
+  // RS-2002 desktop fonts -- 11. FONT-DECISION-001 added baloo2-variable-regular -- 12.
+  // FONT-PORTFOLIO-001 added sacramento-regular and dancing-script-regular -- 14 total.
   // (TEXT_ENGINE_FONT_IDS still derives from every *enabled* manifest font, OpenType included, so
   // existing/legacy-fonted projects keep resolving -- only the picker's *offered* list is
   // Production-Fonts-only, see test 9). The SS10 prototype remains manifest-unregistered (see
   // src/text/rhinestoneFont/index.js).
-  assert.equal(idsInSource.size, 12);
+  assert.equal(idsInSource.size, 14);
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -187,7 +194,9 @@ await test('9. populateFontOptions() offers only Production Fonts (FONT-002) plu
   const groupLabels = [...html.matchAll(/<optgroup label="([^"]+)">/g)].map((m) => m[1]);
   // FONT-DECISION-001 added a second group: Baloo 2 (providerId:'opentype', rhinestoneValidated:true)
   // sits under its own "Rounded Sans" category, alongside the authored "Production Fonts" group.
-  assert.deepEqual(groupLabels, ['Production Fonts', 'Rounded Sans'], 'expected the authored "Production Fonts" group plus the new validated-OpenType "Rounded Sans" group');
+  // FONT-PORTFOLIO-001 validated 3 more OpenType fonts, adding "Block" (Anton) and "Script"
+  // (Sacramento, Dancing Script; Great Vibes stays unvalidated so does NOT join this group).
+  assert.deepEqual(groupLabels, ['Block', 'Production Fonts', 'Rounded Sans', 'Script'], 'expected the authored "Production Fonts" group plus every validated-OpenType category');
 
   const groupBlocks = [...html.matchAll(/<optgroup label="([^"]+)">([\s\S]*?)<\/optgroup>/g)];
   for (const [, label, inner] of groupBlocks) {
@@ -196,7 +205,7 @@ await test('9. populateFontOptions() offers only Production Fonts (FONT-002) plu
     assert.deepEqual(families, sortedFamilies, `expected fonts within group "${label}" to be alphabetically sorted`);
   }
   const allValues = [...html.matchAll(/<option value="([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(new Set(allValues), new Set(['rs-block', 'rs-modern', 'baloo2-variable-regular']), 'expected the two authored Production Fonts plus the one validated OpenType font to be offered');
+  assert.deepEqual(new Set(allValues), new Set(['rs-block', 'rs-modern', 'baloo2-variable-regular', 'anton-regular', 'sacramento-regular', 'dancing-script-regular']), 'expected the two authored Production Fonts plus every validated OpenType font to be offered');
   assert.ok(!allValues.includes('roboto-mono-regular'), 'the disabled RobotoMono placeholder must never be offered');
   assert.ok(!allValues.includes('courier-prime-regular'), 'unvalidated OpenType fonts must not be offered in the normal picker (FONT-002/FONT-DECISION-001)');
 });

@@ -79,7 +79,9 @@
       "path": "assets/fonts/Anton-Regular.ttf",
       "role": "block",
       "enabled": true,
-      "notes": "RS-2002: ultra-bold condensed block sans for maximum impact/legibility at a distance."
+      "rhinestoneValidated": true,
+      "unsupportedStoneSizes": ["ss30"],
+      "notes": "RS-2002: ultra-bold condensed block sans for maximum impact/legibility at a distance. FONT-PORTFOLIO-001: cleared this project's human rhinestone legibility bar (71% Readable overall across SS6/10/16/20/30) -- registered rhinestoneValidated:true alongside Baloo2Variable. SS30 disabled (unsupportedStoneSizes) -- human rating collapsed to 38% Readable at that size specifically; see docs/specifications/FONT-DIAG-001-StoneSamplerSensitivityInvestigation.md's still-unresolved FONT-POLICY-001 recommendation for the root cause (SS30's own narrow/tall height ceiling, not this font's outline)."
     },
     {
       "id": "caveat-regular",
@@ -133,7 +135,34 @@
       "enabled": true,
       "providerId": "opentype",
       "rhinestoneValidated": true,
-      "notes": "FONT-DECISION-001: the first OpenType/StoneSampler font to clear this project's human-and-metric rhinestone legibility bar -- untransformed (baseline, not the rejected fatten/enlarge-generated variant), rated Readable/Not Sure with zero Unreadable across 48 human-rated items (85.4% Readable) spanning SS6/SS16/SS20 and 16 phrases (12 longform + 4 required), corroborated by 100% vision-transcription exact match and flat clusterCount/zero collisionCount at all 5 stone sizes. See docs/specifications/FONT-DECISION-001-VisionStandardLongformCorpusAndRaterTool.md Part E."
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-DECISION-001: the first OpenType/StoneSampler font to clear this project's human-and-metric rhinestone legibility bar -- untransformed (baseline, not the rejected fatten/enlarge-generated variant), rated Readable/Not Sure with zero Unreadable across 48 human-rated items (85.4% Readable) spanning SS6/SS16/SS20 and 16 phrases (12 longform + 4 required), corroborated by 100% vision-transcription exact match and flat clusterCount/zero collisionCount at all 5 stone sizes. See docs/specifications/FONT-DECISION-001-VisionStandardLongformCorpusAndRaterTool.md Part E. FONT-PORTFOLIO-001: also rated at the two remaining sizes (SS10 94%, SS30 94% Readable) -- the only one of the 4-font portfolio with no size disabled (unsupportedStoneSizes: [])."
+    },
+    {
+      "id": "sacramento-regular",
+      "family": "Sacramento",
+      "style": "Regular",
+      "weight": 400,
+      "path": "fonts/sources/Sacramento/Sacramento.ttf",
+      "role": "script",
+      "enabled": true,
+      "providerId": "opentype",
+      "rhinestoneValidated": true,
+      "unsupportedStoneSizes": ["ss30"],
+      "notes": "FONT-PORTFOLIO-001: monoline connected script, cleared this project's human rhinestone legibility bar at an overall 58% Readable across SS6/10/16/20/30 -- registered as a production font distinct from the earlier, since-rejected procedurally-transformed 'Sacramento Rhinestone' experiment (FONT-GEN-001/FONT-CAL-001/FONT-CAL-002/FONT-VIS-001, never manifest-registered). SS30 disabled (unsupportedStoneSizes) -- human rating collapsed to 13% Readable at that size specifically; see FONT-DIAG-001's still-open FONT-POLICY-001 recommendation (SS30's own height ceiling, not this font's outline)."
+    },
+    {
+      "id": "dancing-script-regular",
+      "family": "Dancing Script",
+      "style": "Regular",
+      "weight": 400,
+      "path": "fonts/sources/DancingScript/DancingScript.ttf",
+      "role": "script",
+      "enabled": true,
+      "providerId": "opentype",
+      "rhinestoneValidated": true,
+      "unsupportedStoneSizes": ["ss30"],
+      "notes": "FONT-PORTFOLIO-001: casual connected script, cleared this project's human rhinestone legibility bar at an overall 61% Readable across SS6/10/16/20/30. SS30 disabled (unsupportedStoneSizes) -- human rating collapsed to 6% Readable at that size specifically; see FONT-DIAG-001's still-open FONT-POLICY-001 recommendation (SS30's own height ceiling, not this font's outline). Raters also flagged one narrow, size-independent defect (\"8th\" misread as \"86h\") present at all 5 sizes -- tracked but not size-gated, since it does not correlate with stone size the way the SS30 collapse does."
     }
   ]
 }
