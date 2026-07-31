@@ -94,6 +94,7 @@ export const GROUPS = {
     'test-autosave-recovery-wiring.mjs',
     'test-font-decision-001-stone-size-ux.mjs',
     'test-font-portfolio-001-stone-size-gating.mjs',
+    'test-auto-fit-default-toggle-warning.mjs',
   ],
   // Permanent architectural rules (one GeometryEngine, one StoneLayout/project model, app.js
   // barrel-only imports, browser dependency loading).
@@ -221,6 +222,7 @@ export const GROUPS = {
     'test-ux-visual-polish.mjs',
     'test-font-decision-001-stone-size-ux.mjs',
     'test-font-portfolio-001-stone-size-gating.mjs',
+    'test-auto-fit-default-toggle-warning.mjs',
   ],
   'design-library': [
     'test-design-library.mjs',

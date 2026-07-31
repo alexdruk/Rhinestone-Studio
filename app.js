@@ -689,7 +689,7 @@ const DEFAULT_PROJECT_NAME='Untitled Project';
 // FONT-002: stoneSize/gap default to RS Block's own recommendedStoneSizeMm/recommendedGapMm (2.8/0.3)
 // now that it's the default font, matching the family's own authored pitch (PITCH_MM=3.1 in
 // families/rsBlock.js) instead of the generic pre-FONT-002 2/0.3.
-function defaultProject(){const vessel=getVesselDefaults('mug');return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,product:'mug',canvas:computeCanvasFromVessel(vessel),cupColor:'#1f3556',wrap:'front',plate:getPlateDefaults(),vessel,layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:true,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0}]}}
+function defaultProject(){const vessel=getVesselDefaults('mug');return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,product:'mug',canvas:computeCanvasFromVessel(vessel),cupColor:'#1f3556',wrap:'front',plate:getPlateDefaults(),vessel,layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0}]}}
 // RS-0003.5D1: validates an imported Project JSON file against the exact ad hoc project/layer
 // shape #exportProject already produces (JSON.stringify(project)). Throws a specific Error
 // describing the first problem found instead of silently accepting a malformed project; the
@@ -959,7 +959,7 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
   if(showStarFields){el('shapePoints').value=l.points??5;el('shapeInnerRadius').value=l.innerRadiusRatio??0.5}
   if(showRingField)el('shapeRingInner').value=l.innerRatio??0.5;
   if(l.type==='image')el('imageFillMode').value=resolveImageFillMode(l.fillMode);
-  if(isText){el('text').value=l.text;ensureFontOptionForLayer(l.font);el('font').value=l.font;el('height').value=l.height;el('heightAutoAdjustedHint').style.display='none';el('autoFit').value=l.autoFit?'on':'off';el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';el('curveRadiusMm').value=l.curveRadiusMm??40;el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??180;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';el('textX').value=l.x||0;el('textY').value=l.y||0;
+  if(isText){el('text').value=l.text;ensureFontOptionForLayer(l.font);el('font').value=l.font;el('height').value=l.height;el('heightAutoAdjustedHint').style.display='none';el('autoFit').value=l.autoFit?'on':'off';el('autoFitOnHint').style.display='none';el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';el('curveRadiusMm').value=l.curveRadiusMm??40;el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??180;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';el('textX').value=l.x||0;el('textY').value=l.y||0;
   // TXT-102: '??'/'||' fallbacks so a pre-TXT-102 project (no align/lineSpacing/rotationDeg stored)
   // displays GeometryEngine's own defaults, matching this line's existing curve-field convention.
   el('textAlign').value=l.align||'left';el('lineSpacing').value=l.lineSpacing??1;el('rotationDeg').value=l.rotationDeg??0}else{el('shapeX').value=l.type==='circle'?l.cx:l.x;el('shapeY').value=l.type==='circle'?l.cy:l.y;el('shapeW').value=l.type==='circle'?l.r:l.w;el('shapeH').value=l.type==='circle'?'':l.h;el('shapeWLabel').textContent=l.type==='circle'?'Radius (mm)':'Width (mm)';el('shapeHField').style.display=l.type==='circle'?'none':'';if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);el('gap').value=l.gap;el('stoneColor').value=l.color;
@@ -2091,6 +2091,18 @@ el('height').addEventListener('input',()=>{
   if(l&&l.type==='text')l.heightManuallyEdited=true;
   el('heightAutoAdjustedHint').style.display='none';
 });
+// Auto Fit now defaults to Off for new layers (Text height reflects the actual rendered size), so
+// switching it back On is a deliberate, easy-to-miss trade-off -- Auto Fit can shrink text below the
+// height needed for reliable readability at the selected stone size. Surfaced every time the operator
+// flips Off->On (registered before HISTORY_TRACKED_CONTROL_IDS' own generic listener on the same
+// element/event below -- registration order -- so l.autoFit here still holds the pre-toggle value).
+// Never shown for On->Off, nor for a layer that was already On before this edit (loaded from a saved
+// project, or from switching selection -- syncSelectedControlsFromLayer() above always hides it first).
+el('autoFit').addEventListener('input',()=>{
+  const l=selectedLayer();
+  const turningOn=el('autoFit').value==='on';
+  el('autoFitOnHint').style.display=(l&&l.type==='text'&&!l.autoFit&&turningOn)?'block':'none';
+});
 const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','textAlign','lineSpacing','rotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
@@ -2260,7 +2272,7 @@ async function addText(){
   const other=singleOtherSelectedLayer();
   const fitPartnerShape=(other&&FITTABLE_SHAPE_TYPES.has(other.type))?other:null;
   commitHistory();
-  const layer={id:'text'+Date.now(),type:'text',visible:true,text:'New Text',font:TEXT_ENGINE_FONT_IDS.has(l.font)?l.font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:l.stoneSize||2.8,gap:l.gap||.3,color:l.color||'gold',autoFit:true,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0};
+  const layer={id:'text'+Date.now(),type:'text',visible:true,text:'New Text',font:TEXT_ENGINE_FONT_IDS.has(l.font)?l.font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:l.stoneSize||2.8,gap:l.gap||.3,color:l.color||'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0};
   project.layers.push(layer);
   selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);
   let statusText='Added text layer';
