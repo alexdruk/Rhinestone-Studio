@@ -67,6 +67,7 @@ upward the way Sacramento and Dancing Script did here.
 The sweep data, contact-sheet renders, and the 165mm-candidate rater-tool batch built earlier this
 session (`tools/font-generator/render_font_policy_001.py`,
 `render_font_policy_001_rater_batch.py`, `build_rater_tool_font_policy_001.py`, and
-`review/FONT-POLICY-001-rater-*.html`) remain in the repo/history as reusable tooling and evidence
-for whenever SS30 is revisited -- none of it was acted on for a production change, per the decision
-above.
+`review/FONT-POLICY-001-rater-*.html`) were removed in RC-009 (file-structure cleanup) to reclaim
+space, once their findings were confirmed captured in this document -- none of it was acted on for
+a production change, per the decision above, and the SS30 analysis/no-action conclusion recorded
+in this document is unaffected.

@@ -47,6 +47,3 @@ __pycache__/
 # FONT-CAL-001: temporary experimental candidate fonts (must never become production assets --
 # only the JSON measurements and the experiment report they support are committed)
 tools/font-cal-001/output/fonts/
-
-# FONT-CAL-002: same policy, this milestone's own candidate fonts
-tools/font-cal-002/output/fonts/
