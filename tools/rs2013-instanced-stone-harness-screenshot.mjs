@@ -7,6 +7,12 @@
  *
  * RS-2013 step 2: extended to capture one screenshot per ?product= view (plate/mug/tumbler/bottle)
  * in addition to the original step-1 static grid, each named rs2013-instanced-stone-harness-<view>.png.
+ *
+ * RS-2013 step 3: extended again to capture an additional "-lighting" variant per product
+ * (?lighting=extended), for a direct before/after comparison against the unchanged original
+ * screenshots (the default rig, i.e. today's live Preview3DRenderer.js lighting, unaffected by this
+ * step). The step-1 grid view is intentionally not given a lighting variant -- step 3's scope is the
+ * real placed/oriented stones from step 2, not the flat test grid.
  */
 import http from 'node:http';
 import path from 'node:path';
@@ -46,7 +52,11 @@ const VIEWS = [
   { name: 'plate', query: '?product=plate' },
   { name: 'mug', query: '?product=mug' },
   { name: 'tumbler', query: '?product=tumbler' },
-  { name: 'bottle', query: '?product=bottle' }
+  { name: 'bottle', query: '?product=bottle' },
+  { name: 'plate-lighting', query: '?product=plate&lighting=extended' },
+  { name: 'mug-lighting', query: '?product=mug&lighting=extended' },
+  { name: 'tumbler-lighting', query: '?product=tumbler&lighting=extended' },
+  { name: 'bottle-lighting', query: '?product=bottle&lighting=extended' }
 ];
 
 for (const view of VIEWS) {
