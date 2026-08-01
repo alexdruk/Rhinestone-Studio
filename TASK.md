@@ -1,75 +1,68 @@
 # Task
 
-**Task ID:** RC-010
-**Task Type:** Audit (Gated, two-phase) — Review Assets Regeneratability
-**Status:** IMPLEMENTED (Phase 1 only — gate not satisfied)
-**Branch:** chore/review-assets-regeneration-audit
+**Task ID:** RS-2013 (Phase A — Design & Audit)
+**Task Type:** Design/Audit only — no implementation
+**Status:** IMPLEMENTED (design document produced; no application code changed)
+**Branch:** design/instanced-stone-rendering-audit
 
 ## Goal
 
-`review/` (repo root, ~20 MB) contains 4 HTML report pages
-(`FONT-GEN-001-review.html` through `FONT-GEN-004-review.html`) and `review/assets/` (442 PNGs)
-they link to via relative `<img src>`. These survived `RC-009`'s file-structure cleanup because
-they were confirmed genuinely referenced. This milestone determines whether that surviving content
-is actually regeneratable from current repository tooling — and if, and only if, it genuinely is,
-replaces it with a regeneration doc and deletes it. Given `RC-009` already deleted
-tools/font-generator/build_review_html.py (the script that built these HTML pages) as an
-unimported, milestone-named script, the honest answer may well be "not regeneratable" — that is a
-fine, complete outcome for this milestone.
+`ARCH-REVIEW-001` re-confirmed that the 3D preview's vessel *body* geometry is real and
+dimension-driven (`RS-1006`/`RS-1006A`/`RS-2010`/`RS-2011`), but the *stones* themselves are still
+2D gradient-disc canvas draws (`drawCrystalStone()`) baked into a flat `CanvasTexture`
+(`src/preview3d/StoneLayoutTexture.js`) applied onto that body mesh — and ranked replacing that with
+real instanced, faceted 3D geometry lit by environment lighting as the #2 next milestone (Part 4,
+item 2 of that report). This phase (Phase A) produces the design document for that replacement. A
+later, separate implementation phase (or several — see the design doc's §4 sequencing) will carry
+out the actual work.
 
-## Required Outcome — Phase 1 (Audit)
+**This phase is design and audit only.** No implementation code, test file, or 3D geometry was
+written, modified, or generated. The only deliverable is a written spec document.
 
-1. Confirm `build_review_html.py`'s absence and determine, from its last committed version, exactly
-   what it did: pure templating from data produced elsewhere, or something requiring judgment
-   calls (e.g. curation).
-2. Identify what data still exists that the script would have templated
-   (`generated-fonts/*/evaluation.*.json`, `summary.*.json`, etc.), and whether that data is itself
-   independently regeneratable from `fonts/sources/` + `generated-fonts/` + current tooling.
-3. For the PNG curation question: determine whether the selection of the curated PNG subset is
-   recorded somewhere deterministic (making it reproducible) or was a one-time choice with no
-   record.
-4. Only if steps 1–3 suggest genuine reproducibility is plausible: attempt an actual regeneration
-   of the full set into scratch space and diff against committed. Do NOT write a replacement for
-   `build_review_html.py` to make this possible — that is new tooling work, out of scope for an
-   audit. If reconstruction would be required, report reproducibility as blocked on missing
-   tooling instead.
-5. Check every `docs/specifications/*.md` reference to `review/` or `review/assets/` for a
-   point-in-time evidentiary claim.
+## Required Outcome
 
-## GATE
+1. **Current-state audit** — read `src/preview3d/StoneLayoutTexture.js`,
+   `ObjectGeometryBuilder.js`, `Preview3DRenderer.js` in full; document exactly how the texture-
+   baking pipeline works and every point where 3D-specific stone-appearance logic lives. Read
+   `src/renderer/CrystalStoneRenderer.js`/`CrystalAppearance.js`/`CrystalColors.js` and identify
+   what a 3D instanced approach can directly reuse vs. must not duplicate. Establish a realistic
+   stone-count ceiling from `examples/baselines.json` and product/stone-size catalog bounds.
+2. **Two smaller correctness items, audit only** — confirm the texture's `wrapS`/`wrapT` mode
+   (`ClampToEdgeWrapping` vs. `RepeatWrapping`) with exact file/line, and grep
+   `src/geometry/**`/`src/preview3d/**`/`src/export/**` for the `Math.min(...array)`/
+   `Math.max(...array)` spread-on-large-array pattern, reporting every occurrence and the real
+   engine limit that would trigger it. Neither fixed in this phase.
+3. **Design proposal** — geometry shape/polygon budget, instancing mechanism
+   (confirming the actual pinned Three.js version first), placement/orientation on the curved
+   vessel surface, lighting approach, color/appearance mapping, a coexistence/migration path with
+   the existing texture approach, and why this approach won't repeat any previously-rejected
+   approach (researched, not assumed).
+4. **Scope and sequencing** — an ordered, independently-testable list of implementation steps for
+   a future milestone.
+5. Determine the correct next milestone ID from the `docs/specifications/` naming convention.
 
-Proceed to Phase 2 only if ALL of the following hold:
+## Allowed files
 
-- The full pipeline (data + HTML + the specific curated PNG subset) can be regenerated using ONLY
-  tooling that exists in the repository right now, with no new script needing to be written.
-- Every regenerated file is byte-identical or functionally identical to committed.
-- No hand-editing found beyond the already-known, already-recorded curation step (if reproducible).
-- No spec doc cites `review/` content as point-in-time decision evidence in a way undermined by
-  relying on future regeneration.
+- `docs/specifications/RS-2013-InstancedFacetedStoneRenderingDesign.md` (new)
+- `TASK.md`
+- `TASK_RESULT.md`
 
-If not fully satisfied: stop, delete nothing, write `TASK_RESULT.md` with Phase 1 findings and an
-explicit "gate not satisfied" statement naming which condition failed. Skip Phase 2.
+## Forbidden files
 
-## Required Outcome — Phase 2 (only if gate passed)
-
-1. Write docs/specifications/FONT-GEN-REVIEW-REGENERATION.md with exact, copy-pasteable
-   regeneration command(s), plus a dated verification note.
-2. Delete `review/` (HTML pages + `review/assets/`) in full.
-3. Grep the whole repo for references to the `review/` path and update each to point at the new
-   regeneration doc, without altering the substance/findings of any spec doc.
+- Everything under `src/**`
+- `app.js`, `index.html`
+- Any test file (`tools/test-*.mjs`)
+- Any other file not listed under "Allowed files"
 
 ## Rules
 
-- Do not touch `fonts/review/`, `fonts/sources/`, or `generated-fonts/` — out of scope, decided
-  separately.
-- No `src/**`, `app.js`, `index.html` changes.
-- Writing a new script to reconstruct `build_review_html.py`'s functionality is explicitly out of
-  scope, even if it would make the gate pass.
-- Any scratch/temp regeneration output must go outside the repo/gitignored, never committed.
-- When in doubt at the gate, fail closed.
+- No changes to any file under `src/**`, `app.js`, `index.html`, or any test file.
+- Do not implement any part of the design, even a small proof-of-concept, in this phase.
+- Leave changes staged/unstaged — do not commit.
 
 ## Deliverables
 
+- `docs/specifications/RS-2013-InstancedFacetedStoneRenderingDesign.md` — the design document,
+  containing all required-outcome items above.
 - `TASK.md` (this file).
-- `TASK_RESULT.md` — Phase 1 findings, explicit gate pass/fail verdict, and (if Phase 2 ran) what
-  was deleted and what doc references were fixed.
+- `TASK_RESULT.md` — summary of audit findings and a pointer to the design doc.
