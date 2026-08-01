@@ -2,39 +2,57 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>RS-2013 step 1 — instanced faceted stone geometry test harness</title>
+<title>RS-2013 — instanced faceted stone geometry test harness</title>
 <style>
   html, body { margin: 0; height: 100%; background: #e9eef5; overflow: hidden; }
   canvas { display: block; width: 100%; height: 100%; }
   #info {
-    position: fixed; top: 8px; left: 8px; max-width: 60ch;
+    position: fixed; top: 8px; left: 8px; max-width: 62ch;
     font-family: -apple-system, sans-serif; font-size: 12px; line-height: 1.4; color: #223;
     background: rgba(255, 255, 255, 0.85); padding: 8px 12px; border-radius: 6px;
+  }
+  #info a { color: #1a4fb4; }
+  #error {
+    position: fixed; top: 8px; right: 8px; max-width: 60ch;
+    font-family: -apple-system, sans-serif; font-size: 12px; line-height: 1.4; color: #600;
+    background: rgba(255, 230, 230, 0.95); padding: 8px 12px; border-radius: 6px; display: none;
+    white-space: pre-wrap;
   }
 </style>
 <script type="importmap">
 {
   "imports": {
+    "opentype.js": "../src/browser/OpenTypeBrowserAdapter.js",
     "three": "../node_modules/three/build/three.module.js"
   }
 }
 </script>
 </head>
 <body>
-<div id="info">
-  RS-2013 &sect;4 step 1 &mdash; static <code>THREE.InstancedMesh</code> of octahedral-bipyramid
-  stones, one row per <code>CrystalColors.js</code> color &times; one column per
-  <code>StoneSizes.js</code> catalog size. Trivial flat grid only &mdash; not mapped onto any
-  vessel surface, not reading a real <code>StoneLayout</code> (that is step 2). Drag to orbit.
-</div>
+<div id="info"></div>
+<div id="error"></div>
 <canvas id="canvas"></canvas>
 <script type="module">
   import * as THREE from 'three';
   import { OrbitControls } from '../node_modules/three/examples/jsm/controls/OrbitControls.js';
   import { CRYSTAL_COLORS, getCrystalColor } from '../src/renderer/CrystalColors.js';
   import { STONE_SIZES } from '../src/renderer/StoneSizes.js';
+  import { getCrystalAppearance } from '../src/renderer/CrystalAppearance.js';
+  import { drawStoneLayoutTexture, textureSizeForMm } from '../src/preview3d/StoneLayoutTexture.js';
+  import { buildObjectMesh, wallRadiusAt } from '../src/preview3d/ObjectGeometryBuilder.js';
+  import { computeObjectDimensionsMm, azimuthRadForCanvasXMm } from '../src/preview3d/ObjectDimensions.js';
+  import { getObjectTemplate, normalizePlateParams } from '../src/products/index.js';
+  import { FontManager } from '../src/fonts/index.js';
+  import { createDefaultFontProviderRegistry } from '../src/text/index.js';
+  import { GeometryEngine } from '../src/geometry/index.js';
+  import { validateRhsProject, generateProjectStoneLayout } from '../src/gallery/index.js';
 
   const canvas = document.getElementById('canvas');
+  const infoEl = document.getElementById('info');
+  const errorEl = document.getElementById('error');
+  const params = new URLSearchParams(location.search);
+  const product = params.get('product'); // null => step-1 static grid mode (unchanged)
+
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -56,63 +74,8 @@
   fill.position.set(-70, 40, -60);
   scene.add(fill);
 
-  // Design doc §3.1: octahedral bipyramid via THREE.OctahedronGeometry(radius, 0) -- an 8-triangle,
-  // 6-vertex solid, zero custom geometry authoring. Built at a unit radius; real per-stone size comes
-  // from each instance's own transform scale, not from rebuilding geometry per size.
-  const UNIT_RADIUS = 1;
-  const geometry = new THREE.OctahedronGeometry(UNIT_RADIUS, 0);
-  const material = new THREE.MeshStandardMaterial({ roughness: 0.42, metalness: 0.08 });
-
-  const rows = CRYSTAL_COLORS.length;
-  const cols = STONE_SIZES.length;
-  const count = rows * cols;
-  const mesh = new THREE.InstancedMesh(geometry, material, count);
-
-  const PITCH_MM = 12; // fixed grid spacing -- a trivial test layout, not a packed production layout
-  const matrix = new THREE.Matrix4();
-  const position = new THREE.Vector3();
-  const quaternion = new THREE.Quaternion();
-  const scale = new THREE.Vector3();
-
-  let index = 0;
-  for (let row = 0; row < rows; row++) {
-    // Design doc §3.5: color resolved through CrystalColors.js's own lookup, never invented here.
-    const color = new THREE.Color(getCrystalColor(CRYSTAL_COLORS[row].id).fill);
-    for (let col = 0; col < cols; col++) {
-      const radiusMm = STONE_SIZES[col].diameterMm / 2;
-      position.set(col * PITCH_MM, 0, row * PITCH_MM);
-      quaternion.identity();
-      scale.setScalar(radiusMm / UNIT_RADIUS);
-      matrix.compose(position, quaternion, scale);
-      mesh.setMatrixAt(index, matrix);
-      mesh.setColorAt(index, color);
-      index++;
-    }
-  }
-  mesh.instanceMatrix.needsUpdate = true;
-  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-  scene.add(mesh);
-
-  const centerX = ((cols - 1) * PITCH_MM) / 2;
-  const centerZ = ((rows - 1) * PITCH_MM) / 2;
-  const target = new THREE.Vector3(centerX, 0, centerZ);
-
-  // Frames the whole grid regardless of its row/column count: half-diagonal of the grid's bounding
-  // box (plus the largest stone's own radius as margin -- STONE_SIZES is catalog-length and
-  // documented ascending, so its last entry is the largest, not a stone-count-scaled lookup) divided
-  // by half the vertical FOV gives a distance that keeps the full extent inside frame at a fixed
-  // elevation angle.
-  const marginMm = STONE_SIZES[cols - 1].diameterMm;
-  const halfDiagonalMm = Math.sqrt((centerX + marginMm) ** 2 + (centerZ + marginMm) ** 2);
-  const verticalFovRad = (camera.fov * Math.PI) / 180;
-  const distance = (halfDiagonalMm / Math.sin(verticalFovRad / 2)) * 1.05;
-  const elevationRad = (35 * Math.PI) / 180;
-
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
-  controls.target.copy(target);
-  camera.position.set(centerX, distance * Math.sin(elevationRad), centerZ + distance * Math.cos(elevationRad));
-  controls.update();
 
   function resize() {
     const width = window.innerWidth;
@@ -131,9 +94,296 @@
   }
   animate();
 
-  // Signals the Playwright screenshot script (rs2013-instanced-stone-harness-screenshot.mjs) that the
-  // instance buffer is built and at least the setup above has run -- not tied to any test-runner file.
-  window.__rs2013HarnessReady = true;
+  function frameCamera(target, radiusMm) {
+    const verticalFovRad = (camera.fov * Math.PI) / 180;
+    const distance = (radiusMm / Math.sin(verticalFovRad / 2)) * 1.05;
+    const elevationRad = (28 * Math.PI) / 180;
+    controls.target.copy(target);
+    camera.position.set(target.x, target.y + distance * Math.sin(elevationRad), target.z + distance * Math.cos(elevationRad));
+    controls.update();
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Step 1 (unchanged): static instanced geometry on a flat test plane. See TASK_RESULT.md from
+  // the step-0/1 milestone for what this validates -- kept exactly as before, reachable with no
+  // `?product=` query param, so the original step-1 regression screenshot keeps working unchanged.
+  // ---------------------------------------------------------------------------------------------
+  function runStep1Grid() {
+    infoEl.innerHTML = 'RS-2013 &sect;4 step 1 &mdash; static <code>THREE.InstancedMesh</code> of octahedral-bipyramid ' +
+      'stones, one row per <code>CrystalColors.js</code> color &times; one column per <code>StoneSizes.js</code> catalog size. ' +
+      'Trivial flat grid only. Drag to orbit. Add <code>?product=plate|mug|tumbler|bottle</code> for step 2.';
+
+    const UNIT_RADIUS = 1;
+    const geometry = new THREE.OctahedronGeometry(UNIT_RADIUS, 0);
+    const material = new THREE.MeshStandardMaterial({ roughness: 0.42, metalness: 0.08 });
+
+    const rows = CRYSTAL_COLORS.length;
+    const cols = STONE_SIZES.length;
+    const count = rows * cols;
+    const mesh = new THREE.InstancedMesh(geometry, material, count);
+
+    const PITCH_MM = 12;
+    const matrix = new THREE.Matrix4();
+    const position = new THREE.Vector3();
+    const quaternion = new THREE.Quaternion();
+    const scale = new THREE.Vector3();
+
+    let index = 0;
+    for (let row = 0; row < rows; row++) {
+      const color = new THREE.Color(getCrystalColor(CRYSTAL_COLORS[row].id).fill);
+      for (let col = 0; col < cols; col++) {
+        const radiusMm = STONE_SIZES[col].diameterMm / 2;
+        position.set(col * PITCH_MM, 0, row * PITCH_MM);
+        quaternion.identity();
+        scale.setScalar(radiusMm / UNIT_RADIUS);
+        matrix.compose(position, quaternion, scale);
+        mesh.setMatrixAt(index, matrix);
+        mesh.setColorAt(index, color);
+        index++;
+      }
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    scene.add(mesh);
+
+    const centerX = ((cols - 1) * PITCH_MM) / 2;
+    const centerZ = ((rows - 1) * PITCH_MM) / 2;
+    const marginMm = STONE_SIZES[cols - 1].diameterMm;
+    const halfDiagonalMm = Math.sqrt((centerX + marginMm) ** 2 + (centerZ + marginMm) ** 2);
+    frameCamera(new THREE.Vector3(centerX, 0, centerZ), halfDiagonalMm);
+
+    window.__rs2013HarnessReady = true;
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Step 2 (RS-2013 §4 step 2): correct placement/orientation of real StoneLayout stones on a real
+  // object surface. Renders the SAME real StoneLayout two ways, side by side, for visual
+  // comparison: left = the existing texture-based path (StoneLayoutTexture.js's own
+  // drawStoneLayoutTexture(), applied exactly as Preview3DRenderer._updateTexture() does), right =
+  // the new instanced-stone placement math on an undecorated body. See TASK.md/TASK_RESULT.md for
+  // the full rationale, including the plateTopY design-doc discrepancy resolution.
+  // ---------------------------------------------------------------------------------------------
+
+  // No plate example project exists in examples/ (audited: every examples/*.rhs fixture is
+  // mug/tumbler/bottle) -- this inline object mirrors the same flat .rhs schema/style those files
+  // use, built via the identical generateProjectStoneLayout() entry point app.js's own Gallery
+  // feature uses for every other example. Two concentric outline rings sit inside the plate's own
+  // default innerWellDiameterMm (195mm, i.e. radius 97.5mm), so both are visually assignable to
+  // "inside the well" vs "on the rim" for the plateTopY verification below.
+  const PLATE_PROJECT = {
+    version: 1, product: 'plate', units: 'mm',
+    canvas: { width: 270, height: 270 },
+    cupColor: '#1f3556',
+    layers: [
+      { id: 'outer-ring', type: 'circle', name: 'Outer Ring', visible: true, cxMm: 135, cyMm: 135, radiusMm: 85, fillMode: 'outline', stoneSizeMm: 2.2, gapMm: 0.3, color: 'gold' },
+      { id: 'inner-ring', type: 'circle', name: 'Inner Ring', visible: true, cxMm: 135, cyMm: 135, radiusMm: 55, fillMode: 'outline', stoneSizeMm: 1.8, gapMm: 0.3, color: 'crystal' }
+    ]
+  };
+
+  const EXAMPLE_PATH_BY_PRODUCT = {
+    mug: '../examples/short-name-block.rhs',
+    tumbler: '../examples/tumbler-wrap-design.rhs',
+    bottle: '../examples/bottle-front-design.rhs'
+  };
+
+  async function loadRhsProject(productId) {
+    if (productId === 'plate') return validateRhsProject(PLATE_PROJECT, 'inline plate project');
+    const path = EXAMPLE_PATH_BY_PRODUCT[productId];
+    if (!path) throw new Error(`Unknown ?product= value "${productId}". Expected one of: plate, mug, tumbler, bottle.`);
+    const res = await fetch(path);
+    if (!res.ok) throw new Error(`Failed to fetch ${path}: ${res.status}`);
+    const raw = await res.json();
+    return validateRhsProject(raw, path);
+  }
+
+  // FontManager's manifest stores each font's `path` as a repo-root-relative string
+  // (e.g. "assets/fonts/CourierPrime-Regular.ttf") -- app.js resolves that correctly because
+  // index.html itself is served from the repo root. This harness is served from tools/, so the
+  // same relative path would resolve one directory too deep; loadFontBuffer resolves it against
+  // the repo root explicitly instead.
+  const REPO_ROOT_URL = new URL('../', location.href);
+
+  async function buildPermanentEngine() {
+    const fontManager = await FontManager.fromUrl(new URL('assets/fonts/manifest.json', REPO_ROOT_URL).href);
+    const fontProviderRegistry = createDefaultFontProviderRegistry(fontManager, {
+      loadFontBuffer: async (path) => {
+        const res = await fetch(new URL(path, REPO_ROOT_URL).href);
+        if (!res.ok) throw new Error(`Unable to load font file "${path}": ${res.status} ${res.statusText}`);
+        return res.arrayBuffer();
+      }
+    });
+    return new GeometryEngine({ fontProviderRegistry });
+  }
+
+  // RS-2013 step 2 finding: §3.3 describes the plate's printable face as "flat" and 2a's placement
+  // as a single-constant plateTopY, but the real plate mesh (buildPlateProfilePoints()) has genuine
+  // ~12-15mm vertical relief (a concave center well + a sloped rim) -- only its UV mapping is a
+  // flat orthographic projection, not the geometry itself. Raised with the human owner
+  // (AskUserQuestion) before implementing; approved resolution: plateTopY is the well/rim
+  // transition height, derived here by scanning the real built top-surface mesh for the vertex
+  // nearest r=innerWellRadiusMm and reading its actual Y -- reusing the real built geometry instead
+  // of duplicating ObjectGeometryBuilder.js's private profile constants a second time. See
+  // TASK.md/TASK_RESULT.md for the full discrepancy writeup.
+  function findRimPlaneY(topGeometry, dimensions) {
+    const position = topGeometry.attributes.position;
+    let bestIndex = -1, bestDiff = Infinity;
+    for (let i = 0; i < position.count; i++) {
+      const r = Math.hypot(position.getX(i), position.getZ(i));
+      const diff = Math.abs(r - dimensions.innerWellRadiusMm);
+      if (diff < bestDiff) { bestDiff = diff; bestIndex = i; }
+    }
+    return position.getY(bestIndex);
+  }
+
+  async function runStep2Placement(productId) {
+    infoEl.innerHTML = `RS-2013 &sect;4 step 2 &mdash; real <code>StoneLayout</code> placement for <b>${productId}</b>. ` +
+      'Left: existing texture-based reference render (StoneLayoutTexture.js). Right: new instanced-stone placement math. ' +
+      'Drag to orbit. Switch product: ' +
+      ['plate', 'mug', 'tumbler', 'bottle'].map((p) => `<a href="?product=${p}">${p}</a>`).join(' &middot; ');
+
+    const rhsProject = await loadRhsProject(productId);
+    const engine = await buildPermanentEngine();
+    const layout = await generateProjectStoneLayout(rhsProject, engine);
+
+    const template = getObjectTemplate(rhsProject.product);
+    const plateParams = rhsProject.product === 'plate' ? normalizePlateParams(null) : null;
+    const canvasWidthMm = rhsProject.canvas.width;
+    const canvasHeightMm = rhsProject.canvas.height;
+    const dimensions = computeObjectDimensionsMm(template, canvasWidthMm, canvasHeightMm, plateParams, null);
+    const cupColor = rhsProject.cupColor || '#ffffff';
+
+    // --- Reference render (left): the real, unmodified StoneLayoutTexture.js path ---------------
+    const refBuilt = buildObjectMesh(template, canvasWidthMm, canvasHeightMm, plateParams, null);
+    const refCanvas = document.createElement('canvas');
+    const refCtx = refCanvas.getContext('2d');
+    const { widthPx, heightPx } = textureSizeForMm(canvasWidthMm, canvasHeightMm);
+    refCanvas.width = widthPx;
+    refCanvas.height = heightPx;
+    drawStoneLayoutTexture(refCtx, layout, { widthMm: canvasWidthMm, heightMm: canvasHeightMm, backgroundColor: cupColor });
+    const refTexture = new THREE.CanvasTexture(refCanvas);
+    // Mirrors Preview3DRenderer._applyTextureParams()'s wrap-mode fix (RS-2013 step 0) exactly.
+    refTexture.wrapS = dimensions.kind !== 'plate' ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
+    refTexture.wrapT = THREE.ClampToEdgeWrapping;
+    refTexture.colorSpace = THREE.SRGBColorSpace;
+    refTexture.needsUpdate = true;
+    refBuilt.bodyMesh.material.map = refTexture;
+    refBuilt.bodyMesh.material.color.set(0xffffff);
+    refBuilt.bodyMesh.material.needsUpdate = true;
+    if (refBuilt.handleMesh) refBuilt.handleMesh.material.color.set(cupColor);
+    if (refBuilt.underMesh) refBuilt.underMesh.material.color.set(cupColor);
+
+    // --- New instanced-stone render (right): undecorated body + real placement math -------------
+    const instBuilt = buildObjectMesh(template, canvasWidthMm, canvasHeightMm, plateParams, null);
+    instBuilt.bodyMesh.material.map = null;
+    instBuilt.bodyMesh.material.color.set(cupColor);
+    if (instBuilt.handleMesh) instBuilt.handleMesh.material.color.set(cupColor);
+    if (instBuilt.underMesh) instBuilt.underMesh.material.color.set(cupColor);
+
+    const stoneGeometry = new THREE.OctahedronGeometry(1, 0);
+    const stoneMaterial = new THREE.MeshStandardMaterial({ roughness: 0.42, metalness: 0.08 });
+    const stones = layout.stones;
+    const instancedMesh = new THREE.InstancedMesh(stoneGeometry, stoneMaterial, Math.max(1, stones.length));
+
+    let plateTopY = 0;
+    if (dimensions.kind === 'plate') {
+      plateTopY = findRimPlaneY(refBuilt.bodyMesh.geometry, dimensions);
+    }
+
+    const zAxis = new THREE.Vector3(0, 0, 1);
+    const matrix = new THREE.Matrix4();
+    const position = new THREE.Vector3();
+    const quaternion = new THREE.Quaternion();
+    const qAlign = new THREE.Quaternion();
+    const qSpin = new THREE.Quaternion();
+    const scaleV = new THREE.Vector3();
+    const normal = new THREE.Vector3();
+
+    for (let i = 0; i < stones.length; i++) {
+      const stone = stones[i];
+
+      if (dimensions.kind === 'plate') {
+        // §3.3 2a: position=(xMm-cw/2, plateTopY, -(yMm-ch/2)), normal=+Y, no orientation
+        // computation -- an unrotated octahedron already has a vertex pointing along +Y by
+        // construction (its 6 vertices sit on the +-X/+-Y/+-Z axes), so identity is correct here.
+        position.set(stone.xMm - canvasWidthMm / 2, plateTopY, -(stone.yMm - canvasHeightMm / 2));
+        quaternion.identity();
+      } else {
+        // §3.3 2b/2c: azimuth via the one shared, already-unit-tested function (never a fresh
+        // atan2 -- see that function's own header for the two real bugs this sidesteps); height
+        // clamped to [0, bodyHeightMm] matching the texture's own V-clamp-via-ClampToEdgeWrapping
+        // behavior for off-body content (e.g. a bottle's shoulder overflow).
+        //
+        // Y-axis finding (verified visually -- an early build placed "Emma" upside down on the
+        // mug): stone.yMm is Y-DOWN, the same production-canvas convention CanvasRenderer2D.js
+        // uses (design top = yMm=0). World Y here is Y-UP (mesh base = 0, mesh top = bodyHeightMm).
+        // applyBodyHeightUv() sets V = position.getY()/bodyHeightMm with no flip of its own; the
+        // texture path only reads correctly because THREE.CanvasTexture's default flipY=true
+        // silently re-inverts V when sampling the source <canvas> (row 0 = canvas top). Going
+        // directly from stone.yMm to a world Y position (no texture, no flipY) has to bake that
+        // same inversion in manually, or the design renders upside down.
+        const azimuth = azimuthRadForCanvasXMm(stone.xMm, canvasWidthMm);
+        const clampedYMm = Math.max(0, Math.min(dimensions.bodyHeightMm, stone.yMm));
+        const y = dimensions.bodyHeightMm - clampedYMm;
+        // 2c (bottle): constant bodyRadiusMm, no interpolation. 2b (mug/tumbler): wallRadiusAt().
+        const radius = dimensions.kind === 'bottle' ? dimensions.bodyRadiusMm : wallRadiusAt(y, dimensions);
+        const sinAz = Math.sin(azimuth);
+        const cosAz = Math.cos(azimuth);
+        position.set(radius * sinAz, y, radius * cosAz);
+
+        // Pure radial-normal approximation (ignores the small taper-induced tilt) -- §3.3
+        // recommends trying this before the exact tangent-based normal.
+        normal.set(sinAz, 0, cosAz);
+        qAlign.setFromUnitVectors(zAxis, normal);
+        // Orientation refinement (2b/2c): per-instance spin around the outward-normal axis reuses
+        // CrystalAppearance.js's own facetAngleDeg -- spinning around the local Z axis *before*
+        // aligning it to the normal is equivalent to spinning around the final outward-normal axis
+        // after alignment (rotating a vector commutes with the subsequent rotation that carries it
+        // elsewhere), so this is the standard "local spin, then align" composition.
+        const appearance = getCrystalAppearance(stone);
+        qSpin.setFromAxisAngle(zAxis, (appearance.facetAngleDeg * Math.PI) / 180);
+        quaternion.copy(qAlign).multiply(qSpin);
+      }
+
+      const radiusMm = stone.sizeMm / 2;
+      scaleV.setScalar(radiusMm);
+      matrix.compose(position, quaternion, scaleV);
+      instancedMesh.setMatrixAt(i, matrix);
+      instancedMesh.setColorAt(i, new THREE.Color(getCrystalColor(stone.color).fill));
+    }
+    instancedMesh.instanceMatrix.needsUpdate = true;
+    if (instancedMesh.instanceColor) instancedMesh.instanceColor.needsUpdate = true;
+    instBuilt.group.add(instancedMesh);
+
+    // --- Side-by-side layout -----------------------------------------------------------------
+    const spanMm = dimensions.kind === 'plate' ? dimensions.outerRadiusMm * 2 : Math.max(dimensions.bodyRadiusMm, dimensions.topRadiusMm || 0) * 2;
+    const gapMm = spanMm * 0.6;
+    refBuilt.group.position.x = -(spanMm / 2 + gapMm / 2);
+    instBuilt.group.position.x = spanMm / 2 + gapMm / 2;
+    scene.add(refBuilt.group);
+    scene.add(instBuilt.group);
+
+    const totalHeightMm = dimensions.totalHeightMm || dimensions.bodyHeightMm || spanMm;
+    const centerY = totalHeightMm / 2;
+    const halfWidthMm = spanMm + gapMm / 2 + spanMm / 2;
+    const framingRadiusMm = Math.sqrt(halfWidthMm ** 2 + (totalHeightMm / 2) ** 2) * 1.15;
+    frameCamera(new THREE.Vector3(0, centerY, 0), framingRadiusMm);
+
+    window.__rs2013HarnessReady = true;
+    window.__rs2013StoneCount = stones.length;
+  }
+
+  // Dispatch last, after every const/function declaration above -- calling this earlier hits a
+  // TDZ ReferenceError on PLATE_PROJECT/EXAMPLE_PATH_BY_PRODUCT (they run() synchronously up to
+  // their first await, before this module's later top-level const bindings evaluate).
+  if (!product) {
+    runStep1Grid();
+  } else {
+    runStep2Placement(product).catch((error) => {
+      console.error(error);
+      errorEl.textContent = String(error && error.stack || error);
+      errorEl.style.display = 'block';
+    });
+  }
 </script>
 </body>
 </html>

@@ -332,7 +332,11 @@ function applyBodyHeightUv(geometry, bodyHeightMm) {
   uv.needsUpdate = true;
 }
 
-function wallRadiusAt(y, dimensions) {
+// RS-2013 step 2: exported so the instanced-stone placement code (currently only
+// tools/rs2013-instanced-stone-harness.html) can reuse this exact interpolation for a stone's
+// radius-at-height instead of duplicating its 3-line formula in a second place -- no change to the
+// function's own behavior.
+export function wallRadiusAt(y, dimensions) {
   const { bodyRadiusMm, topRadiusMm, bodyHeightMm } = dimensions;
   const t = Math.max(0, Math.min(1, y / bodyHeightMm));
   return bodyRadiusMm + (topRadiusMm - bodyRadiusMm) * t;

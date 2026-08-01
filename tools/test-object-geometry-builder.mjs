@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 
 const THREE = await import('three');
 const ObjectGeometryBuilder = await import('../src/preview3d/ObjectGeometryBuilder.js');
-const { buildObjectMesh } = ObjectGeometryBuilder;
+const { buildObjectMesh, wallRadiusAt } = ObjectGeometryBuilder;
 const { computeObjectDimensionsMm } = await import('../src/preview3d/ObjectDimensions.js');
 const { getObjectTemplate, getPlateDefaults, getVesselDefaults } = await import('../src/products/index.js');
 
@@ -355,6 +355,39 @@ await test('20. RS-2010: omitting vesselParams (every pre-RS-2010 call site) is 
   const withoutVessel = buildObjectMesh(getObjectTemplate('mug'), 210, 90);
   const withNullVessel = buildObjectMesh(getObjectTemplate('mug'), 210, 90, null, null);
   assert.deepEqual(withoutVessel.dimensions, withNullVessel.dimensions);
+});
+
+// --- RS-2013 step 2: wallRadiusAt() export ------------------------------------------------------
+
+await test('21. RS-2013: wallRadiusAt() is exported and matches the real body-wall base vertex\'s own radius (mug/tumbler\'s LatheGeometry profile has no intermediate control point between y=0 and the rim, so the base is the only wall vertex the plain linear interpolation formula alone accounts for -- the rim above it applies its own extra flare/fold factors, checked separately by test 11)', () => {
+  const template = getObjectTemplate('mug');
+  const dimensions = computeObjectDimensionsMm(template, 210, 90);
+  const { bodyMesh } = buildObjectMesh(template, 210, 90);
+  const position = bodyMesh.geometry.attributes.position;
+
+  // The wall-base ring: y=0, r=bodyRadiusMm (distinct from the closed-base apex at y=0, r=0).
+  let bestIndex = -1, bestR = -Infinity;
+  for (let i = 0; i < position.count; i++) {
+    if (Math.abs(position.getY(i)) < 1e-6) {
+      const r = Math.hypot(position.getX(i), position.getZ(i));
+      if (r > bestR) { bestR = r; bestIndex = i; }
+    }
+  }
+  assert.ok(bestIndex >= 0, 'expected to find a y=0 wall-base vertex');
+  const r = Math.hypot(position.getX(bestIndex), position.getZ(bestIndex));
+  assert.ok(Math.abs(r - wallRadiusAt(0, dimensions)) < 1e-3, `expected wallRadiusAt(0) to match the real wall-base vertex radius ${r}, got ${wallRadiusAt(0, dimensions)}`);
+
+  // Endpoints: at y=0, radius is bodyRadiusMm; at y=bodyHeightMm, radius is topRadiusMm.
+  assert.ok(Math.abs(wallRadiusAt(0, dimensions) - dimensions.bodyRadiusMm) < 1e-9);
+  assert.ok(Math.abs(wallRadiusAt(dimensions.bodyHeightMm, dimensions) - dimensions.topRadiusMm) < 1e-9);
+
+  // Interpolation is linear and clamped to [0, bodyHeightMm] -- matches the function's own
+  // Math.max(0, Math.min(1, y/bodyHeightMm)) contract.
+  const mid = wallRadiusAt(dimensions.bodyHeightMm / 2, dimensions);
+  const expectedMid = (dimensions.bodyRadiusMm + dimensions.topRadiusMm) / 2;
+  assert.ok(Math.abs(mid - expectedMid) < 1e-9, `expected the midpoint radius to be the linear average, got ${mid} vs ${expectedMid}`);
+  assert.equal(wallRadiusAt(-10, dimensions), wallRadiusAt(0, dimensions), 'expected below-base y to clamp to the base radius');
+  assert.equal(wallRadiusAt(dimensions.bodyHeightMm + 10, dimensions), wallRadiusAt(dimensions.bodyHeightMm, dimensions), 'expected above-top y to clamp to the top radius');
 });
 
 console.log('Object geometry builder tests passed.');
