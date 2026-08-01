@@ -1,0 +1,139 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>RS-2013 step 1 — instanced faceted stone geometry test harness</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #e9eef5; overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; }
+  #info {
+    position: fixed; top: 8px; left: 8px; max-width: 60ch;
+    font-family: -apple-system, sans-serif; font-size: 12px; line-height: 1.4; color: #223;
+    background: rgba(255, 255, 255, 0.85); padding: 8px 12px; border-radius: 6px;
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "../node_modules/three/build/three.module.js"
+  }
+}
+</script>
+</head>
+<body>
+<div id="info">
+  RS-2013 &sect;4 step 1 &mdash; static <code>THREE.InstancedMesh</code> of octahedral-bipyramid
+  stones, one row per <code>CrystalColors.js</code> color &times; one column per
+  <code>StoneSizes.js</code> catalog size. Trivial flat grid only &mdash; not mapped onto any
+  vessel surface, not reading a real <code>StoneLayout</code> (that is step 2). Drag to orbit.
+</div>
+<canvas id="canvas"></canvas>
+<script type="module">
+  import * as THREE from 'three';
+  import { OrbitControls } from '../node_modules/three/examples/jsm/controls/OrbitControls.js';
+  import { CRYSTAL_COLORS, getCrystalColor } from '../src/renderer/CrystalColors.js';
+  import { STONE_SIZES } from '../src/renderer/StoneSizes.js';
+
+  const canvas = document.getElementById('canvas');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.NoToneMapping;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xe9eef5);
+
+  const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 1, 5000);
+
+  // Same fixed ambient + two-directional-light rig Preview3DRenderer.js already uses (PREVIEW-001) --
+  // reused as-is purely so the facets are visible; extending/tuning the rig for real facet normals is
+  // design doc §3.4/§4 step 3, out of scope here.
+  scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+  const directional = new THREE.DirectionalLight(0xffffff, 1.6);
+  directional.position.set(60, 120, 90);
+  scene.add(directional);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.5);
+  fill.position.set(-70, 40, -60);
+  scene.add(fill);
+
+  // Design doc §3.1: octahedral bipyramid via THREE.OctahedronGeometry(radius, 0) -- an 8-triangle,
+  // 6-vertex solid, zero custom geometry authoring. Built at a unit radius; real per-stone size comes
+  // from each instance's own transform scale, not from rebuilding geometry per size.
+  const UNIT_RADIUS = 1;
+  const geometry = new THREE.OctahedronGeometry(UNIT_RADIUS, 0);
+  const material = new THREE.MeshStandardMaterial({ roughness: 0.42, metalness: 0.08 });
+
+  const rows = CRYSTAL_COLORS.length;
+  const cols = STONE_SIZES.length;
+  const count = rows * cols;
+  const mesh = new THREE.InstancedMesh(geometry, material, count);
+
+  const PITCH_MM = 12; // fixed grid spacing -- a trivial test layout, not a packed production layout
+  const matrix = new THREE.Matrix4();
+  const position = new THREE.Vector3();
+  const quaternion = new THREE.Quaternion();
+  const scale = new THREE.Vector3();
+
+  let index = 0;
+  for (let row = 0; row < rows; row++) {
+    // Design doc §3.5: color resolved through CrystalColors.js's own lookup, never invented here.
+    const color = new THREE.Color(getCrystalColor(CRYSTAL_COLORS[row].id).fill);
+    for (let col = 0; col < cols; col++) {
+      const radiusMm = STONE_SIZES[col].diameterMm / 2;
+      position.set(col * PITCH_MM, 0, row * PITCH_MM);
+      quaternion.identity();
+      scale.setScalar(radiusMm / UNIT_RADIUS);
+      matrix.compose(position, quaternion, scale);
+      mesh.setMatrixAt(index, matrix);
+      mesh.setColorAt(index, color);
+      index++;
+    }
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  scene.add(mesh);
+
+  const centerX = ((cols - 1) * PITCH_MM) / 2;
+  const centerZ = ((rows - 1) * PITCH_MM) / 2;
+  const target = new THREE.Vector3(centerX, 0, centerZ);
+
+  // Frames the whole grid regardless of its row/column count: half-diagonal of the grid's bounding
+  // box (plus the largest stone's own radius as margin -- STONE_SIZES is catalog-length and
+  // documented ascending, so its last entry is the largest, not a stone-count-scaled lookup) divided
+  // by half the vertical FOV gives a distance that keeps the full extent inside frame at a fixed
+  // elevation angle.
+  const marginMm = STONE_SIZES[cols - 1].diameterMm;
+  const halfDiagonalMm = Math.sqrt((centerX + marginMm) ** 2 + (centerZ + marginMm) ** 2);
+  const verticalFovRad = (camera.fov * Math.PI) / 180;
+  const distance = (halfDiagonalMm / Math.sin(verticalFovRad / 2)) * 1.05;
+  const elevationRad = (35 * Math.PI) / 180;
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.target.copy(target);
+  camera.position.set(centerX, distance * Math.sin(elevationRad), centerZ + distance * Math.cos(elevationRad));
+  controls.update();
+
+  function resize() {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    renderer.setSize(width, height, false);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  // Signals the Playwright screenshot script (rs2013-instanced-stone-harness-screenshot.mjs) that the
+  // instance buffer is built and at least the setup above has run -- not tied to any test-runner file.
+  window.__rs2013HarnessReady = true;
+</script>
+</body>
+</html>

@@ -287,7 +287,16 @@ export class Preview3DRenderer {
   // cylinder at a grazing angle) -- can never drift between the two.
   _applyTextureParams(texture) {
     const THREE = this._THREE;
-    texture.wrapS = THREE.ClampToEdgeWrapping;
+    // RS-2013 step 0: every revolved-vessel body (mug/tumbler/bottle) always fully wraps 360
+    // degrees around its own seam now (S-107/S-109 -- the whole canvas maps exactly once around the
+    // full circumference regardless of the project's own wrap-mode setting; ObjectDimensions.js's own
+    // header confirms "the design always wraps fully and continuously around the object now"), so
+    // texture.wrapS must repeat there: ClampToEdgeWrapping would clamp to the wrong edge texel at
+    // that seam once mipmap/anisotropic filtering (below) samples slightly outside [0,1]. The plate's
+    // flat top surface (dimensions.kind === 'plate') has no revolve and no circumferential seam at
+    // all, so it keeps clamping on both axes. wrapT (height) never wraps for any object kind.
+    const wrapsFully = this._dimensions && this._dimensions.kind !== 'plate';
+    texture.wrapS = wrapsFully ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
     texture.wrapT = THREE.ClampToEdgeWrapping;
     // Three.js 0.169 targets WebGL2, which supports mipmapping non-power-of-two textures natively --
     // no padding/power-of-two constraint applies here. Mipmaps + anisotropic filtering are what
