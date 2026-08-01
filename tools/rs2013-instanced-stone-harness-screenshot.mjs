@@ -13,6 +13,13 @@
  * screenshots (the default rig, i.e. today's live Preview3DRenderer.js lighting, unaffected by this
  * step). The step-1 grid view is intentionally not given a lighting variant -- step 3's scope is the
  * real placed/oriented stones from step 2, not the flat test grid.
+ *
+ * RS-2013 step 3b: step 3 found the extended lighting rig alone can't redistribute per-facet
+ * highlights (a structural ceiling from the 8-facet octahedron + diffuse-dominant material, not a
+ * lighting-angle problem). This step evaluates two candidate fixes -- richer facet geometry
+ * (?facet=bipyramid16) and a more specular material response (?material=specular) -- on the mug
+ * view (the same view step 3 used for its own rig tuning), then applies whichever candidate wins to
+ * all 4 products. See TASK_RESULT.md for the evaluation methodology and verdict.
  */
 import http from 'node:http';
 import path from 'node:path';
@@ -56,7 +63,19 @@ const VIEWS = [
   { name: 'plate-lighting', query: '?product=plate&lighting=extended' },
   { name: 'mug-lighting', query: '?product=mug&lighting=extended' },
   { name: 'tumbler-lighting', query: '?product=tumbler&lighting=extended' },
-  { name: 'bottle-lighting', query: '?product=bottle&lighting=extended' }
+  { name: 'bottle-lighting', query: '?product=bottle&lighting=extended' },
+  // RS-2013 step 3b evaluation set (mug only, extended lighting throughout -- holds lighting
+  // constant so the comparison isolates geometry/material, per this step's scope). The baseline
+  // for this comparison (facet=octahedron, material=diffuse, lighting=extended) is exactly
+  // mug-lighting.png above -- not re-captured here under a second name.
+  { name: 'mug-candidate-a', query: '?product=mug&lighting=extended&facet=bipyramid16' },
+  { name: 'mug-candidate-b', query: '?product=mug&lighting=extended&material=specular' },
+  { name: 'mug-candidate-c', query: '?product=mug&lighting=extended&facet=bipyramid16&material=specular' },
+  // RS-2013 step 3b: winning candidate (material=specular, "Candidate B" -- see TASK_RESULT.md)
+  // applied to the remaining 3 products (mug is already covered by mug-candidate-b above).
+  { name: 'plate-candidate-b', query: '?product=plate&lighting=extended&material=specular' },
+  { name: 'tumbler-candidate-b', query: '?product=tumbler&lighting=extended&material=specular' },
+  { name: 'bottle-candidate-b', query: '?product=bottle&lighting=extended&material=specular' }
 ];
 
 for (const view of VIEWS) {

@@ -1,95 +1,99 @@
 # Task
 
-**Task ID:** RS-2013 (Implementation Phase — §4 step 3)
-**Task Type:** Implementation
-**Status:** IMPLEMENTED
-**Branch:** feature/rs-2013-instanced-stones-step3-lighting
+**Task ID:** RS-2013 (Implementation Phase — inserted step between §4 step 3 and step 4, "step 3b")
+**Task Type:** Evaluation (build-and-measure, not a shipping decision)
+**Status:** EVALUATED
+**Branch:** feature/rs-2013-instanced-stones-step3b-facet-material
 
-## Goal
+## Why this milestone exists
 
-`docs/specifications/RS-2013-InstancedFacetedStoneRenderingDesign.md`'s §4 step 3: extend the
-existing directional-light rig (§3.4) so it "better serves real facet normals," applied to the
-step-2 harness's real placed/oriented stones (plate/mug/tumbler/bottle) — not the step-1 flat test
-grid. Exactly step 3 — nothing from step 4 (flag/`Preview3DRenderer` wiring) or an HDRI evaluation
-(explicitly deferred by §3.4 unless this step under-delivers, which it does — see below).
+`docs/specifications/RS-2013-InstancedFacetedStoneRenderingDesign.md` §4 step 3's own
+`TASK_RESULT.md` (lighting rig extension) reached an honest, evidence-backed negative result: the
+extended 4-light rig is a real, measured change (~3.4% RMSE on the mug view) but does not read as
+"faceted gem" over "flat painted polygon" any better than the original 2-light rig. A diagnostic
+(an out-of-bounds 2.4-intensity test light, reverted before shipping) confirmed this is not a
+mis-tuned angle: even a light brighter than the key light could not flip which facet reads bright
+vs. dark on a stone. Root cause, as reported: a structural combination of (a) an 8-facet octahedron
+where only ~2-4 faces are ever front-facing to the camera, and (b) a diffuse-dominant
+`MeshStandardMaterial` response (`roughness=0.42/metalness=0.08`), under which every additional
+light source's contribution *adds* to a facet's brightness rather than *redistributing* which facet
+catches the highlight.
 
-## Pre-flight check (per the task brief)
+§3.1 of the design doc had already anticipated this exact fallback ("a later, separate step
+evaluating a richer cut ... only if the visual result under-delivers") and named a specific
+alternative shape (a 16-triangle "double bipyramid"). §3.4/step 3's own finding named the second
+lever (material response), independently. This milestone is that inserted step: it evaluates both
+candidates (plus their combination) against the same methodology step 3 already validated, before
+step 4 (flag-gated `Preview3DRenderer` integration) commits to carrying anything forward.
 
-Read `Preview3DRenderer.js`'s `init()` (lines 92-102) before changing anything: ambient
-`0xffffff @ 0.75`, key directional `0xffffff @ 1.6` at `(60,120,90)`, fill directional
-`0xffffff @ 0.5` at `(-70,40,-60)` (added by `PREVIEW-001`, per its own inline comment, "to give the
-design texture's own faceted-crystal highlights a second angle to catch"). **No drift found** — this
-matches §3.4's description exactly, and also matches the harness's own step-1/2 lighting block
-verbatim. No discrepancy to raise this time (unlike step 0's wrap-mode finding and step 2's
-plate-flatness finding).
+## Scope
 
-## What was built
+Build-and-measure evaluation only — **not** a decision to ship either candidate as the new default.
+Extends `tools/rs2013-instanced-stone-harness.html` (still not wired into the live
+`Preview3DRenderer`/`app.js`/Studio UI) with two new, independently selectable URL params:
 
-Added a `?lighting=default|extended` URL param to the harness (`default` when omitted). `default`
-is byte-identical to the original rig (unchanged, still the harness's own regression baseline).
-`extended` adds two more directional lights and lowers ambient, all still `MeshStandardMaterial` +
-ambient/directional only — no `scene.environment`, no `PMREMGenerator`, no HDRI asset, per the
-task's explicit prohibition. Both the reference (left, texture-based) and instanced (right) panels
-share one `THREE.Scene`, so both panels always render under whichever rig is selected — this is a
-global scene property in three.js, not a per-mesh one (there is no built-in per-object light-list
-override in stock `MeshStandardMaterial`/`WebGLRenderer`, so a true split-screen "rig A on the left
-mesh, rig B on the right mesh, same canvas" is not achievable without maintaining two full separate
-scenes+viewports; a URL-param toggle was the smaller, coherent option explicitly offered by the
-task brief and was chosen over that).
+- `?facet=octahedron|bipyramid16` — geometry primitive. `octahedron` (unchanged, 8 triangles) is
+  still the default. `bipyramid16` is Candidate A: an "octagonal bipyramid" (2 apex vertices + an
+  8-vertex equatorial ring = 16 triangular faces), the design doc's own anticipated fallback shape.
+- `?material=diffuse|specular` — `MeshStandardMaterial` roughness/metalness preset. `diffuse`
+  (unchanged, `roughness=0.42/metalness=0.08`) is still the default. `specular` is Candidate B: a
+  more specular-dominant response, tuned via a 3-combination sweep (see `TASK_RESULT.md`) to
+  `roughness=0.12/metalness=0.55`.
+- Candidate C is both together: `?facet=bipyramid16&material=specular`.
+- Raw `?roughness=`/`?metalness=` overrides also exist, for reproducing/extending the tuning sweep
+  without editing the file.
 
-Screenshots exist for both rigs per product (`-<product>.png` = default/unchanged,
-`-<product>-lighting.png` = extended), giving a direct before/after image comparison. The step-1
-grid view was **not** given a lighting variant, per the task's explicit scope ("apply this to the
-harness's instanced stones from step 2 ... not the flat test grid from step 1").
+`?lighting=default|extended` (step 3's own param) is unchanged and held at `extended` throughout
+this step's evaluation and final product-kind renders, per the task brief's explicit instruction to
+vary geometry/material only, holding placement and lighting constant.
 
-## Rig-tuning process (why the numbers are what they are)
+## Triangle-budget check (§3.1, restated with real numbers)
 
-This was a real "build it and look" step, not a one-shot guess:
+16 triangles/stone × 15,000 stones (§1.3's theoretical worst case) = **240,000 triangles** — still
+trivially within a single `InstancedMesh` draw call's budget on any WebGL2-class GPU, exactly as
+§3.1 anticipated. At §1.3's largest *actual* fixture (1,161 stones), that's 18,576 triangles. No
+polygon-budget pressure from Candidate A or C.
 
-1. First attempt: two extra lights at moderate intensity (0.55/0.45), ambient 0.75→0.6. Measured
-   difference via `magick compare -metric RMSE`: ~1.7% on the mug view. Visually indistinguishable
-   from the original at the same crop.
-2. Second attempt: a much brighter (1.0) low-elevation grazing side light 90° off the key light's
-   azimuth, ambient→0.4. RMSE rose to ~2.2%, but the new light's azimuth pointed at the *side* of
-   the vessel, not the front face where a design's stones actually sit — negligible visible change
-   on the design itself.
-3. Third (shipped) attempt: identified that both original lights are only *one* front-hemisphere
-   source for camera-facing stones (the fill light's azimuth points at the back of the object from
-   the camera's viewpoint) — added a second front-hemisphere light from a distinctly different
-   azimuth/elevation (front-left, low), plus a third front light from underneath, ambient→0.4.
-   RMSE ~3.4% on the mug view — a real, non-trivial pixel difference.
-4. **Diagnostic-only check** (reverted before shipping): temporarily set the new front-secondary
-   light's intensity to 2.4 (higher than the key light's 1.6) to test whether *any* lighting-only
-   change could redraw which facets read bright vs. dark on a given stone, or whether the visible
-   split is effectively locked in by geometry + the key light regardless of what else is added. Even
-   at this unrealistic intensity, the same two facets stayed bright/dark in the same proportions —
-   just uniformly brighter. This confirmed the effect is a ceiling in this material/geometry
-   combination, not a mis-tuned angle, before finalizing the shipped (moderate-intensity) rig.
+## Methodology — same as step 3, applied to the new variable
+
+- RMSE (`magick compare -metric RMSE`) between each candidate and the unchanged 8-tri/diffuse
+  baseline, both full-frame and on step 3's own macro-crop region (a tight, nearest-neighbor-upscaled
+  crop of a handful of stones — no resampling blur).
+- A new check this step adds: a grayscale difference-magnitude image (`-compose difference
+  -colorspace Gray -auto-level`, not the default red/binary compare mask) on the macro crop, to
+  distinguish "this stone's silhouette shifted brightness/tone uniformly" (step 3's finding) from
+  "the difference is concentrated at internal facet-boundary lines within each stone" (the thing step
+  3 confirmed was absent and this step is specifically testing for).
+- Evaluation done on the mug view (matching step 3's own primary tuning view) before deciding whether
+  any candidate wins; the winning candidate (if any) is then applied to all 4 product kinds.
 
 ## Allowed files
 
-- `tools/rs2013-instanced-stone-harness.html` (extended: `?lighting=` param, `LIGHT_RIGS` table,
-  `applyLightRig()`, updated info text).
-- `tools/rs2013-instanced-stone-harness-screenshot.mjs` (extended: 4 new `-lighting` views).
-- New screenshot assets: `rs2013-instanced-stone-harness-{plate,mug,tumbler,bottle}-lighting.png`.
+- `tools/rs2013-instanced-stone-harness.html` (extended: `?facet=`/`?material=`/raw override params,
+  `buildBipyramid16Geometry()`, `MATERIAL_PRESETS`, updated info text/links; one necessary
+  generalization to the plate-placement branch's orientation math, see `TASK_RESULT.md`).
+- `tools/rs2013-instanced-stone-harness-screenshot.mjs` (extended: mug evaluation set + winning
+  candidate applied to the other 3 products).
+- New screenshot/crop/diff assets, same naming convention as prior steps.
 - `TASK.md`, `TASK_RESULT.md`.
 
-No other file was touched. `src/preview3d/Preview3DRenderer.js`, `StoneLayoutTexture.js`, and the
-step-2 placement/orientation math were not modified, per the task's forbidden-files list.
+## Forbidden in this milestone
+
+- Any change to `app.js`, `index.html`, or the live Studio UI.
+- Any change to `src/preview3d/Preview3DRenderer.js` or `src/preview3d/ObjectGeometryBuilder.js`.
+- Any change to placement/orientation math or lighting rig values from steps 2/3, beyond the one
+  documented generalization needed so the plate branch's orientation quaternion works correctly for
+  a geometry primitive whose apex axis isn't incidentally aligned with world +Y (see
+  `TASK_RESULT.md` — verified to produce a pixel-identical result for the still-default octahedron).
+- HDRI/environment-map/`PMREMGenerator` work.
+- Silently making either candidate the new default `?lighting=extended`/step-1/2 view.
 
 ## Testing
 
-- `node tools/run-tests.mjs --all`: 98/98 passed.
-- `node tools/test-documentation-consistency.mjs`: passed.
-- All 8 product+lighting harness views load with zero console/page errors (verified via the
-  screenshot script's own error-capturing logic).
-- Screenshot sizes checked (`du -sh`): 104K-252K, consistent with steps 1/2's existing asset sizes;
-  nothing unexpectedly large.
+- `node tools/run-tests.mjs --all` — must be 100% pass.
+- `node tools/test-documentation-consistency.mjs` before committing.
 
-## Honest outcome (see TASK_RESULT.md for the full writeup)
+## Deliverables
 
-The extended rig is a real, working, in-bounds lighting change, but it does **not** clearly deliver
-"faceted gem" over "flat painted polygon" beyond what the original 2-light rig already achieves at
-this primitive/material/camera combination. The difference between rigs reads mainly as a brightness/
-tone shift, not a qualitatively different facet highlight pattern — reported plainly, not smoothed
-over, per the task's explicit "be honest, not optimistic" instruction.
+- This file.
+- `TASK_RESULT.md` — full evidence writeup, verdict per candidate, final recommendation for step 4.

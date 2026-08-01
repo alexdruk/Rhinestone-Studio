@@ -53,6 +53,18 @@
   const params = new URLSearchParams(location.search);
   const product = params.get('product'); // null => step-1 static grid mode (unchanged)
   const lighting = params.get('lighting') === 'extended' ? 'extended' : 'default'; // RS-2013 step 3
+  // RS-2013 step 3b: candidates for step 3's finding that neither lighting angle nor intensity can
+  // redistribute which facet reads bright vs. dark on an 8-facet octahedron under a diffuse-dominant
+  // material -- see TASK_RESULT.md. `?facet=` selects the geometry primitive, `?material=` selects
+  // the MeshStandardMaterial roughness/metalness preset. Both default to the unchanged step-1/2/3
+  // baseline (plain octahedron, roughness=0.42/metalness=0.08) so this harness's default view is
+  // still exactly what steps 1-3 shipped.
+  const facetMode = params.get('facet') === 'bipyramid16' ? 'bipyramid16' : 'octahedron';
+  const materialMode = params.get('material') === 'specular' ? 'specular' : 'diffuse';
+  // Raw tuning overrides (not part of the two named presets above) -- lets the roughness/metalness
+  // sweep documented in TASK_RESULT.md be reproduced/extended without editing this file.
+  const roughnessOverride = params.has('roughness') ? parseFloat(params.get('roughness')) : null;
+  const metalnessOverride = params.has('metalness') ? parseFloat(params.get('metalness')) : null;
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -111,6 +123,68 @@
   }
   applyLightRig(lighting);
 
+  // RS-2013 step 3b, Candidate A: an "octagonal bipyramid" (two apex vertices + an 8-vertex
+  // equatorial ring = 16 triangular faces) -- the design doc's §3.1 "16-triangle double bipyramid"
+  // fallback. Built by hand (non-indexed, 3 unique vertices per triangle) rather than composing two
+  // THREE.OctahedronGeometry instances, so computeVertexNormals() yields flat per-facet normals for
+  // free (no vertex is shared between triangles, so each vertex's "averaged" normal is just its own
+  // face's normal) -- the same flat-shading property THREE.OctahedronGeometry(radius,0) already has.
+  // Bounding radius is 1 (apexes at |z|=1, equatorial ring at radius 1), matching
+  // THREE.OctahedronGeometry(1,0)'s own vertex distance from origin, so the existing
+  // `scaleV.setScalar(radiusMm)` call scales this geometry identically to the plain octahedron.
+  // Local +Z is the apex-to-apex axis (same convention the octahedron's own construction axes give
+  // it), so the existing outward-normal alignment (`qAlign.setFromUnitVectors(zAxis, normal)`) and
+  // facet-spin (`qSpin` around zAxis) logic in runStep2Placement() work unchanged for either shape.
+  function buildBipyramid16Geometry(radius) {
+    const sides = 8;
+    const equator = [];
+    for (let i = 0; i < sides; i++) {
+      const theta = (i / sides) * Math.PI * 2;
+      equator.push([radius * Math.cos(theta), radius * Math.sin(theta), 0]);
+    }
+    const topApex = [0, 0, radius];
+    const bottomApex = [0, 0, -radius];
+    const verts = [];
+    for (let i = 0; i < sides; i++) {
+      const a = equator[i];
+      const b = equator[(i + 1) % sides];
+      verts.push(topApex, a, b);
+      verts.push(bottomApex, b, a);
+    }
+    const array = new Float32Array(verts.length * 3);
+    verts.forEach((v, i) => { array[i * 3] = v[0]; array[i * 3 + 1] = v[1]; array[i * 3 + 2] = v[2]; });
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(array, 3));
+    geometry.computeVertexNormals();
+    return geometry;
+  }
+
+  function buildFacetGeometry(mode) {
+    return mode === 'bipyramid16' ? buildBipyramid16Geometry(1) : new THREE.OctahedronGeometry(1, 0);
+  }
+
+  // RS-2013 step 3b, Candidate B: a more specular-dominant MeshStandardMaterial response. `diffuse`
+  // is the unchanged step-1/2/3 baseline nudge (_applyCrystalMaterialResponse()'s own
+  // roughness=0.42/metalness=0.08). `specular` is the winning combination from the 3-combination
+  // sweep documented in TASK_RESULT.md -- sharp, position/angle-dependent highlights without
+  // crossing into a chrome/liquid-metal look.
+  const MATERIAL_PRESETS = {
+    diffuse: { roughness: 0.42, metalness: 0.08 },
+    specular: { roughness: 0.12, metalness: 0.55 }
+  };
+
+  function resolveMaterialParams(mode) {
+    const preset = MATERIAL_PRESETS[mode];
+    return {
+      roughness: roughnessOverride !== null && !Number.isNaN(roughnessOverride) ? roughnessOverride : preset.roughness,
+      metalness: metalnessOverride !== null && !Number.isNaN(metalnessOverride) ? metalnessOverride : preset.metalness
+    };
+  }
+
+  function buildFacetMaterial(mode) {
+    return new THREE.MeshStandardMaterial(resolveMaterialParams(mode));
+  }
+
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
 
@@ -148,11 +222,12 @@
   function runStep1Grid() {
     infoEl.innerHTML = 'RS-2013 &sect;4 step 1 &mdash; static <code>THREE.InstancedMesh</code> of octahedral-bipyramid ' +
       'stones, one row per <code>CrystalColors.js</code> color &times; one column per <code>StoneSizes.js</code> catalog size. ' +
+      `Facet: <b>${facetMode}</b>, material: <b>${materialMode}</b>. ` +
       'Trivial flat grid only. Drag to orbit. Add <code>?product=plate|mug|tumbler|bottle</code> for step 2.';
 
     const UNIT_RADIUS = 1;
-    const geometry = new THREE.OctahedronGeometry(UNIT_RADIUS, 0);
-    const material = new THREE.MeshStandardMaterial({ roughness: 0.42, metalness: 0.08 });
+    const geometry = buildFacetGeometry(facetMode);
+    const material = buildFacetMaterial(materialMode);
 
     const rows = CRYSTAL_COLORS.length;
     const cols = STONE_SIZES.length;
@@ -274,12 +349,17 @@
 
   async function runStep2Placement(productId) {
     const otherLighting = lighting === 'extended' ? 'default' : 'extended';
-    infoEl.innerHTML = `RS-2013 &sect;4 step 2/3 &mdash; real <code>StoneLayout</code> placement for <b>${productId}</b>, ` +
-      `<b>${lighting}</b> lighting rig. ` +
+    const otherFacet = facetMode === 'bipyramid16' ? 'octahedron' : 'bipyramid16';
+    const otherMaterial = materialMode === 'specular' ? 'diffuse' : 'specular';
+    const keep = `lighting=${lighting}&facet=${facetMode}&material=${materialMode}`;
+    infoEl.innerHTML = `RS-2013 &sect;4 step 2/3/3b &mdash; real <code>StoneLayout</code> placement for <b>${productId}</b>, ` +
+      `<b>${lighting}</b> lighting, <b>${facetMode}</b> facet, <b>${materialMode}</b> material. ` +
       'Left: existing texture-based reference render (StoneLayoutTexture.js). Right: new instanced-stone placement math. ' +
       'Drag to orbit. Switch product: ' +
-      ['plate', 'mug', 'tumbler', 'bottle'].map((p) => `<a href="?product=${p}&lighting=${lighting}">${p}</a>`).join(' &middot; ') +
-      `. <a href="?product=${productId}&lighting=${otherLighting}">Switch to ${otherLighting} lighting</a>.`;
+      ['plate', 'mug', 'tumbler', 'bottle'].map((p) => `<a href="?product=${p}&${keep}">${p}</a>`).join(' &middot; ') +
+      `. <a href="?product=${productId}&lighting=${otherLighting}&facet=${facetMode}&material=${materialMode}">Switch to ${otherLighting} lighting</a>` +
+      ` &middot; <a href="?product=${productId}&lighting=${lighting}&facet=${otherFacet}&material=${materialMode}">Switch to ${otherFacet} facet</a>` +
+      ` &middot; <a href="?product=${productId}&lighting=${lighting}&facet=${facetMode}&material=${otherMaterial}">Switch to ${otherMaterial} material</a>.`;
 
     const rhsProject = await loadRhsProject(productId);
     const engine = await buildPermanentEngine();
@@ -319,8 +399,8 @@
     if (instBuilt.handleMesh) instBuilt.handleMesh.material.color.set(cupColor);
     if (instBuilt.underMesh) instBuilt.underMesh.material.color.set(cupColor);
 
-    const stoneGeometry = new THREE.OctahedronGeometry(1, 0);
-    const stoneMaterial = new THREE.MeshStandardMaterial({ roughness: 0.42, metalness: 0.08 });
+    const stoneGeometry = buildFacetGeometry(facetMode);
+    const stoneMaterial = buildFacetMaterial(materialMode);
     const stones = layout.stones;
     const instancedMesh = new THREE.InstancedMesh(stoneGeometry, stoneMaterial, Math.max(1, stones.length));
 
@@ -342,11 +422,23 @@
       const stone = stones[i];
 
       if (dimensions.kind === 'plate') {
-        // §3.3 2a: position=(xMm-cw/2, plateTopY, -(yMm-ch/2)), normal=+Y, no orientation
-        // computation -- an unrotated octahedron already has a vertex pointing along +Y by
-        // construction (its 6 vertices sit on the +-X/+-Y/+-Z axes), so identity is correct here.
+        // §3.3 2a: position=(xMm-cw/2, plateTopY, -(yMm-ch/2)), normal=+Y, no per-stone spin (that
+        // choice is unchanged from step 2). Step 2 used quaternion.identity() here because an
+        // unrotated octahedron already has a vertex pointing along +Y by construction (its 6
+        // vertices sit on the +-X/+-Y/+-Z axes) -- but that is a coincidence of the octahedron's own
+        // axis-aligned construction, not a property of "no orientation needed for a flat surface".
+        // RS-2013 step 3b's bipyramid16 candidate has its apex axis on local Z, not Y, so identity
+        // would lay it on its side here. Aligning local Z to the plate's constant +Y normal (the
+        // same qAlign the curved-surface branch below already uses, just with a fixed normal instead
+        // of a per-stone one) is a strict generalization: for the octahedron it produces a
+        // spatially/visually identical result to identity() (a regular octahedron is symmetric under
+        // this exact rotation -- the same 6 vertex positions end up occupied, just by different
+        // original vertices), and it is now also correct for the new geometry. No behavior change
+        // for the shipped default (facet=octahedron) view.
         position.set(stone.xMm - canvasWidthMm / 2, plateTopY, -(stone.yMm - canvasHeightMm / 2));
-        quaternion.identity();
+        normal.set(0, 1, 0);
+        qAlign.setFromUnitVectors(zAxis, normal);
+        quaternion.copy(qAlign);
       } else {
         // §3.3 2b/2c: azimuth via the one shared, already-unit-tested function (never a fresh
         // atan2 -- see that function's own header for the two real bugs this sidesteps); height
