@@ -6,218 +6,267 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-RS-2013 (Implementation Phase) — §4 step 4: flag-gated integration into the real
-`Preview3DRenderer`
+RS-2013 (Implementation Phase) — §4 step 5: stone-count stress testing
 
 ---
 
 # Status
 
-IMPLEMENTED. `instancedStones` option added to `Preview3DRenderer.update()`, default `false`
-(byte-identical to pre-step-4 behavior, confirmed both by code inspection and a real-browser
-screenshot comparison — see below). `true` builds a real `THREE.InstancedMesh` of octahedral
-stones, positioned/oriented via the harness's already-validated math, alongside the existing
-`bodyMesh`/`handleMesh`/`underMesh`. Not wired into `app.js`/the Studio UI — reachable
-programmatically only, per this step's own scope.
+COMPLETE. New benchmark script (`tools/measure-instanced-stone-performance.mjs`) built, run, and
+its real numbers captured below. No application code was touched — this step is measurement only,
+per its own scope.
 
 ---
 
 # Branch
 
-feature/rs-2013-instanced-stones-step4-integration (already checked out at task start, cut from the
-step-3b closure commit `14ea561`)
+feature/rs-2013-instanced-stones-step5-stress-testing (already checked out at task start, cut from
+the step-4 integration commit `5ad66a1`, verified as HEAD before any work began).
 
 ---
 
-# Cleanup accounting (steps 1-3b scratch assets)
+# Cleanup accounting
 
-Checked `tools/*.png` before starting any work: **zero PNG files present** (`find tools -iname
-"*.png"` returned nothing; `du -sh tools` = 3.6M with no image files). The prior commit (`14ea561
-RS-2013: remove all step 3/3b screenshot scratch assets`) already deleted every step 1-3b
-screenshot; there was nothing left for this step to clean up. `tools/` size is unchanged by this
-milestone's own work: **3.6M before and after** (the harness `.html`/`.mjs` files themselves were
-not touched, per this step's scope — no changes were needed there).
+`du -sh tools/*.png` at task start: no PNG files matched (`tools/*.png` — zero files), consistent
+with step 4's own report that steps 1-3b's screenshot scratch assets were already fully removed by
+`14ea561`. Nothing to clean up before starting, and this step produced no screenshots of its own —
+the benchmark is a pure Node/console-output measurement, no browser or image output at all.
 
 ---
 
 # What was built
 
-## `src/preview3d/Preview3DRenderer.js`
+## `tools/measure-instanced-stone-performance.mjs` (new)
 
-1. **`instancedStones` option on `update()`** (default `false`), documented in the method's own
-   JSDoc alongside `plateParams`/`vesselParams`.
-2. **Regression-safety guarantee for `false`/omitted**: no line inside `_updateTexture()`,
-   `_applyTextureParams()`, or `_applyCrystalMaterialResponse()` was touched — those three methods
-   are byte-for-byte identical to the pre-step-4 file. The only additions on the default path are
-   two guarded early-returns that do nothing the first time they run and nothing at all thereafter:
-   - `_applyLightRig(false)`: `instancedStones(false) === this._lightRigExtended` (initialized
-     `false` in the constructor) is `true` on the very first call, so it returns immediately —
-     ambient intensity and the light rig are never touched.
-   - `_teardownInstancedStones()`: `if (!this._stoneMesh) return;` — `_stoneMesh` starts `null` and
-     is only ever set by `_updateInstancedStones()`, which never runs unless `instancedStones` was
-     at some point `true`. For a renderer that has never had `instancedStones: true` passed to
-     `update()`, this is a pure no-op on every call.
-   Confirmed two ways: (a) by inspection — the diff to `_updateTexture()`/`_applyTextureParams()`/
-   `_applyCrystalMaterialResponse()` is empty; (b) a real-browser screenshot of the same design (the
-   `short-name-block.rhs` "Emma" mug example) rendered through the real `Preview3DRenderer` class
-   with `instancedStones` omitted looks pixel-for-pixel like the live Studio's current output (baked
-   gradient-disc stones on the texture, not real geometry) — see "Browser verification" below.
-3. **`_updateInstancedStones()`**: builds/updates a `THREE.InstancedMesh(OctahedronGeometry(1,0),
-   MeshStandardMaterial({roughness:0.42, metalness:0.08}), capacity)`, ported directly from
-   `tools/rs2013-instanced-stone-harness.html`'s `runStep2Placement()` — same azimuth
-   (`azimuthRadForCanvasXMm()`), height (Y-down→Y-up inversion + `bodyHeightMm` clamp), radius
-   (`wallRadiusAt()` for mug/tumbler, constant `bodyRadiusMm` for bottle, cached `_plateTopY` for
-   plate), outward-normal alignment (`qAlign.setFromUnitVectors(zAxis, normal)`), and per-instance
-   spin (`CrystalAppearance.js`'s `facetAngleDeg`) math, unchanged. Skips assigning the baked
-   texture to `bodyMesh.material.map` when active (tints the body to `cupColor` instead), per §3.6.
-   `capacity` (the `InstancedMesh`'s fixed buffer size) only triggers a full mesh rebuild when the
-   stone count actually changes, not on every `update()` call — `.count` alone is adjusted otherwise.
-4. **`_applyLightRig()`**: toggles the harness's step-3 "extended" 4-light rig (ambient lowered to
-   0.4, two extra directional lights) on/off, idempotent across repeated same-flag calls (tracked
-   via `_lightRigExtended`). Only active while `instancedStones` is `true`.
-5. **`findPlateRimPlaneY()`** (module-level function): ported from the harness's `findRimPlaneY()`
-   — scans the plate's real built top-surface mesh for the vertex nearest `innerWellRadiusMm` and
-   reads its actual world Y, reusing the real built geometry instead of duplicating
-   `ObjectGeometryBuilder.js`'s private profile constants a second time. Computed once per
-   `_rebuildMesh()` (geometry-key change), cached in `this._plateTopY`, not recomputed on every
-   `update()` call (it only depends on the built mesh, not the live `StoneLayout`).
-6. **Lifecycle**: `_stoneMesh` is disposed as part of `_disposeGroup()`'s existing traversal
-   (geometry-key change → full rebuild, same as `bodyMesh`/`handleMesh`/`underMesh`) and explicitly
-   torn down by `_teardownInstancedStones()` when the flag turns off without a geometry change — no
-   parallel lifecycle mechanism introduced.
+A standalone Node script — **not** a `tools/test-*.mjs` file, deliberately: it does not match
+`run-tests.mjs`'s `^test-.*\.mjs$` discovery pattern, so it is automatically excluded from
+`npm test`/`node tools/run-tests.mjs --all` without needing an entry in
+`tools/test-groups.mjs`'s `EXCLUDED_FROM_DEFAULT` — the same "prints measured numbers for a human to
+read, no pass/fail assertion" role `tools/measure-performance.mjs` and
+`tools/measure-boolean-precision.mjs` already play, and the file naming convention that keeps them
+out of the test suite automatically. Run with `node tools/measure-instanced-stone-performance.mjs`.
 
-## `src/preview3d/ObjectGeometryBuilder.js`
+**Fixture generation**: a hex-packed grid generator (`generateHexGridStoneParams()`) that solves for
+a pitch producing *exactly* the requested stone count on a given canvas (binary-shrink the pitch
+until the grid overshoots the target, then trim to the exact count) — synthetic, not hand-authored,
+per the task brief. Stones use SS6's real diameter (2.0mm, `src/renderer/StoneSizes.js`) and a
+single color (`'gold'`); at the denser counts adjacent stones visually overlap, which is expected
+and irrelevant here — this benchmark exercises a fixed per-stone CPU cost, not a rendered look.
 
-**Not modified.** `wallRadiusAt()` was already exported (by RS-2013 step 2, for the harness's own
-use) — confirmed by reading the file before writing any code; no further export needed.
+**Renderer harness**: the exact same "mounted without a real `init()`" convention
+`tools/test-preview3d-instanced-stones.mjs` already established (real `Preview3DRenderer`, real
+`'three'`, real `ObjectGeometryBuilder.js`; `WebGLRenderer`/`OrbitControls`/`ResizeObserver` — real
+browser/DOM dependencies `update()` never touches — are bypassed with the same plain fakes that file
+uses). This means the benchmark runs the **actual, unmodified** `_updateInstancedStones()` code
+path, not a re-description of it.
 
-## No `app.js`/`index.html` changes
+**What is measured, at N = 1,000 / 5,000 / 15,000 stones on a mug (the curved-surface path —
+azimuth trig, `wallRadiusAt()`, outward-normal alignment, per-stone spin — the most expensive of the
+three product kinds `_updateInstancedStones()` handles) plus a supplementary 300mm-plate run at
+N = 15,000 (the flat-plane path, and the literal scenario §1.3's worked ceiling calculation uses)**:
 
-Confirmed by `git status`/the allowed-files list — the flag is reachable only by a caller of
-`Preview3DRenderer.update()` passing `instancedStones: true` directly (e.g. from a test, a future
-milestone's UI wiring, or the browser console via the existing `window.__preview3D` debug handle
-`app.js` already exposes).
+1. **Initial build cost**: the first `instance.update(layout, {..., instancedStones: true})` call at
+   a new stone count — allocates the `InstancedMesh` buffer at that capacity and runs the full
+   per-stone loop once.
+2. **Steady-state per-`update()` cost during a simulated drag**: 20 further `update()` calls in
+   quick succession, each with every stone's `xMm`/`yMm` perturbed by a small sinusoidal offset and a
+   fresh `StoneLayout` constructed each time — mirroring `app.js`'s real, un-throttled
+   `pointermove` → `updateAll()` path (cited in the design doc's §3.2 and step 3's own findings) —
+   with **no capacity change**, so this isolates the per-stone matrix/color rebuild loop's cost from
+   the one-time buffer-allocation cost measured in (1). Reported as min/median/mean/max across the
+   20 calls, not just an average.
 
 ---
 
-# Browser verification
+# The numbers (two independent runs, same machine, to check for run-to-run noise)
 
-A temporary, **uncommitted** verification page (`tools/_tmp-rs2013-step4-verify.html` +
-a matching Playwright screenshot script) was built to exercise the real `Preview3DRenderer` class
-end-to-end in an actual browser — not the harness's own hand-rolled placement math, the real
-integrated code this milestone shipped. It imported `Preview3DRenderer` directly, called `init()`
-and `update()` with the real `short-name-block.rhs` (mug) and an inline plate project (mirroring
-the harness's own `PLATE_PROJECT`), and screenshotted three views:
+## Run 1
 
-- `instancedStones` omitted, mug — real Studio texture-baked stones (gradient discs), matching
-  today's live output exactly, zero console/page errors.
-- `instancedStones: true`, mug — real faceted octahedra correctly wrapped around the curved body,
-  following the same "Emma" text placement/curvature the texture path shows, zero console/page
-  errors.
-- `instancedStones: true`, plate — two rings of faceted stones correctly sitting flat at the
-  well/rim transition height (normal straight up), zero console/page errors.
+| Config | N | Build (first `update()`) | Drag `update()` min | median | mean | max |
+|---|---|---|---|---|---|---|
+| mug | 1,000 | 23.5ms | 1.66ms | 2.22ms | 2.99ms | 8.38ms |
+| mug | 5,000 | 17.9ms | 8.32ms | 9.61ms | 9.88ms | 14.36ms |
+| mug | 15,000 | 31.4ms | 26.78ms | 27.89ms | 28.58ms | 38.11ms |
+| plate | 15,000 | 18.5ms | 6.97ms | 7.22ms | 7.25ms | 7.83ms |
 
-All three screenshots were reviewed and confirmed correct, then **the temporary verification
-file, its screenshot script, and all three PNGs were deleted before this commit** — they were a
-one-off check of the ported code, not a deliverable, and are not part of git history. No screenshot
-file paths are being handed to Sasha for this step: the verification confirmed the ported code
-renders correctly, but produced nothing meant to be reviewed as a visual-design decision (that is
-step 6's job, once this flag is wired into the UI). If a re-check is wanted, the same page can be
-trivially rebuilt (it is ~70 lines, described in full above) or the flag exercised directly via
-`window.__preview3D.update(...)` in a running `npm run dev` session.
+## Run 2 (repeat, confirming these are not one-off noise)
+
+| Config | N | Build | Drag `update()` min | median | mean | max |
+|---|---|---|---|---|---|---|
+| mug | 1,000 | 19.6ms | 1.67ms | 2.13ms | 2.94ms | 8.10ms |
+| mug | 5,000 | 17.6ms | 8.40ms | 8.90ms | 9.14ms | 13.43ms |
+| mug | 15,000 | 39.2ms | 27.65ms | 29.30ms | 29.81ms | 34.21ms |
+| plate | 15,000 | 18.1ms | 6.95ms | 7.28ms | 7.67ms | 10.76ms |
+
+The two runs agree closely (medians within ~10% of each other at every config) — these are real,
+repeatable measurements on this machine, not noise.
 
 ---
 
-# Known limitations carried forward (not resolved in this step, per scope)
+# What this does and does not measure (read before trusting these numbers for anything beyond this
+machine)
 
-1. **Light-colored stones (`crystal`/`crystal-clear`) show real facet washout.** Confirmed in step
-   3b's single-stone close-up pass: the brightest facet can land within a few luminance units of
-   (or, for `crystal-clear` on the bottle, become indistinguishable from) this renderer's own
-   `0xe9eef5` scene background, at some stone orientations. Severity at realistic (non-close-up)
-   camera distance, and whether the extended lighting rig this step ports changes that severity at
-   all, was **not tested in this step** — out of scope per the task brief. Does not block this
-   step's integration; the flag ships off by default, so no live Studio view is affected. A future
-   visual-validation step (§4 step 6, or an inserted step before it) should check this specifically
-   before ever flipping the default.
-2. **Dark stone colors (`jet`, `sapphire`, `siam`, `emerald`, etc.) were never tested at all**, in
-   this step or any prior RS-2013 step — no fixture reachable through the harness's (or this step's
-   temporary verification page's) `?product=` mapping contains one. A real coverage gap, not a
-   passed check. Also out of scope here; carried forward for whichever future step ships a real
-   visual-validation pass.
+**Does measure**: real wall-clock time of the actual, unmodified `_updateInstancedStones()` CPU-side
+loop (azimuth/radius/normal trigonometry, `getCrystalAppearance()`/`getCrystalColor()` lookups per
+stone, `Matrix4.compose()`, `InstancedMesh.setMatrixAt()`/`setColorAt()`), running in real Node
+against the real `'three'` module and real `ObjectGeometryBuilder.js` geometry — not a mock, not a
+re-implementation, not an estimate.
+
+**Does NOT measure**: actual GPU frame time (the rasterization/shading cost of the resulting
+`InstancedMesh` draw call). There is no real GPU in this environment. A headless-Chromium/Playwright
+run (the mechanism step 3/step 4 used for their own screenshot verification) was considered and
+deliberately not used for this specific measurement — headless Chromium without a real GPU falls
+back to a software rasterizer (SwiftShader/ANGLE), which would produce a number, but not one
+representative of the real desktop-class GPUs this preview actually ships to; it would not have been
+a more honest measurement, just a different unrepresentative one. The Node-side timing harness above
+is the more honest choice for *this specific* measurement in *this specific* environment, precisely
+because it's explicit about measuring the one real, environment-independent cost (CPU-side JS
+execution) rather than producing a plausible-looking but misleading GPU number.
+
+In place of a direct GPU measurement, the design doc's own analytical argument (§1.3/§3.1/§3.2)
+stands: 15,000 stones × 8 triangles/octahedron = 120,000 triangles in **one** `InstancedMesh` draw
+call is trivial for any WebGL2-class GPU (contemporary hardware comfortably renders single-digit
+*millions* of instanced triangles per frame) — there is no polygon-budget or draw-call-count concern
+at this stone-count ceiling, on any real GPU. This benchmark's job, and the one the design doc
+identified as the actual open question, is the CPU-side cost below — not GPU triangle throughput.
+
+Also worth naming as a caveat on the "build" numbers specifically: the very first `update()` call in
+a fresh process pays a JIT warm-up cost (V8 hasn't yet optimized `_updateInstancedStones()`'s hot
+loop) on top of the real one-time `InstancedMesh` buffer allocation — the "build" column above is not
+a pure measurement of buffer-allocation cost alone. This is why the steady-state drag numbers (20
+already-warm calls) are the numbers that matter for the real question this step exists to answer, not
+the build column.
+
+---
+
+# Answering step 3's central question directly
+
+**Is the CPU-side rebuild cost at the ceiling stone count (~15,000) fast enough to feel responsive
+during a live drag — comfortably under the ~16ms 60fps frame budget?**
+
+**No, not for the mug/tumbler curved-surface path.** At N = 15,000 on a mug, every `update()` call
+during a simulated drag took a **median ~28-29ms and a max ~34-38ms** — roughly double the 16ms
+budget on the median case alone, in both independent runs. This is not a "just fast enough, some
+noise" result: the *minimum* observed call (26.8ms) already exceeds the budget by ~68%. **A drag at
+this stone count would visibly stutter** — every pointer-move-driven `update()` call would take
+roughly two 60fps frame-times' worth of main-thread JS execution before a frame could even be
+requested, on top of whatever the (currently unmeasured, and per the analysis above, expected-cheap)
+GPU render itself costs.
+
+**At N = 5,000, it is borderline but currently within budget**: median ~9-9.6ms, max ~13.4-14.4ms —
+under 16ms in both runs, but with less than half the budget left as headroom on the median and only
+~2-3ms of margin on the observed max. This is "acceptable today," not "comfortably fast" — a modestly
+slower machine, a busier main thread (other `update()`-triggered work, autosave, etc. per §3.2's own
+autosave-debounce citation), or a richer future facet geometry (§3.1 flags a 16-triangle candidate as
+a possible follow-up) would plausibly push this over budget too.
+
+**At N = 1,000 (today's actual largest real example, `mixed-fill-styles-and-sizes.rhs` at 1,161
+stones per §1.3), it is comfortably fast**: median ~2.1-2.2ms, max ~8.1-8.4ms — 2-8x headroom under
+budget in the worst case. **Today's real designs are not at risk.** This finding is scoped
+specifically to the *theoretical ceiling* stone count, not current production usage.
+
+**The flat-plane (plate) path is meaningfully cheaper than the curved-surface (mug/tumbler) path at
+the same stone count**: 15,000 stones on the 300mm plate took a median ~7.2-7.3ms, well within
+budget — roughly a quarter of the mug's cost at the identical stone count. This confirms the design
+doc's own §3.3 observation that the plate's placement math (flat projection, no `wallRadiusAt()`
+interpolation, no per-stone spin) is strictly cheaper than the mug/tumbler/bottle curved-surface
+math — and means the *product kind*, not just stone count, materially affects whether this concern
+is live for a given design. A 15,000-stone plate design would drag smoothly today; a 15,000-stone
+mug/tumbler design would not.
+
+---
+
+# What's now known vs. still unknown about performance at scale
+
+**Now known** (this step):
+- The exact per-`update()` wall-clock cost, on this machine, at three realistic-to-ceiling stone
+  counts, for both the expensive (curved-surface) and cheap (flat-plane) placement paths — real
+  numbers, not an estimate.
+- The CPU-side rebuild cost genuinely becomes a live, user-visible responsiveness problem for
+  mug/tumbler/bottle designs at the ~15,000-stone ceiling, and is borderline (not comfortably safe)
+  already at ~5,000 stones on those product kinds.
+- The InstancedMesh itself builds successfully and reaches the correct instance count at every
+  tested stone count, on every tested product kind — no crash, no silent truncation, no error at
+  scale.
+
+**Still unknown** (out of scope for this measurement-only step, flagged for whoever scopes next):
+- Real GPU-side render/frame time on actual client hardware (desktop and, notably, any lower-end
+  device this browser tool might run on) — this environment has no real GPU to measure against; see
+  "what this does and does not measure" above. The analytical triangle-budget argument is a strong
+  a-priori case that this is *not* the bottleneck, but it has not been directly measured on real
+  hardware, in a real browser, at these stone counts.
+- Whether tumbler/bottle (the other two curved-surface product kinds `_updateInstancedStones()`
+  handles) show materially different costs from the mug numbers above — not separately measured in
+  this step; `wallRadiusAt()`'s cost (mug/tumbler) vs. the bottle's simpler constant-radius branch
+  are structurally different in the source (`_updateInstancedStones()`, per-stone `if
+  (dimensions.kind === 'bottle')` branch) and could plausibly differ, untested here.
+- How this cost composes with other real per-`update()` work in a live Studio session (autosave
+  scheduling, other renderer updates, DOM/UI reactivity) — this benchmark measures
+  `_updateInstancedStones()` in isolation via a mounted-but-not-live renderer, not inside a real
+  running `npm run dev` session under real event-loop contention.
+
+---
+
+# Are the mitigation options step 3 named now a hard requirement, or still just options?
+
+The design doc's §3.2 named two options for the CPU-side cost, "worth evaluating during
+implementation, not decided [t]here": (a) debouncing/throttling the instance-buffer rebuild during a
+continuous drag, or (b) incremental/partial instance updates instead of a full rebuild every call.
+
+**This step's findings make (a) or (b) a clear prerequisite before the instanced path could
+reasonably ship *enabled by default* for mug/tumbler/bottle products at realistic-to-ceiling stone
+counts** — not merely a nice-to-have. A ~28ms median per-`update()` cost during a drag is a real,
+user-visible stutter, not a theoretical concern; §4 step 6 (visual validation + default flip)
+should not flip the default on without one of these mitigations landing first, at least for
+mug/tumbler/bottle. The plate path, and any product kind at ≤~1,000 stones, does not currently need
+either mitigation per these numbers — so a plausible narrower framing for whoever scopes the next
+step is "required before default-on for curved-surface products at high stone counts," not
+"required unconditionally for every configuration." This step does not implement either option, per
+its own scope — that determination and implementation is explicitly left to a future milestone.
 
 ---
 
 # Scope discipline
 
-- No change to `app.js`, `index.html`, or the live Studio UI.
-- No change to `src/preview3d/ObjectGeometryBuilder.js` (already exported what was needed).
-- Candidate A (16-triangle bipyramid) and Candidate B (specular material) from step 3b are **not**
-  present anywhere in this commit — `_updateInstancedStones()` hardcodes the plain octahedron
-  (`THREE.OctahedronGeometry(1, 0)`) and the unmodified diffuse preset
-  (`roughness: 0.42, metalness: 0.08`), matching step 3b's final recommendation.
-- `StoneLayoutTexture.js` was not opened for editing and is untouched — `_updateTexture()` (which
-  calls it) is byte-for-byte the same function it was before this milestone.
-- No attempt made to fix the light-color washout or test dark colors (see "Known limitations"
-  above).
-- The flag is reachable programmatically (any `update()` caller can pass `instancedStones: true`)
-  but no end-user-facing control was added anywhere.
+- No change to `src/preview3d/**`, `src/geometry/**`, `app.js`, `index.html`, or any other
+  application code — confirmed by `git status` before committing.
+- No change to the placement/lighting/material logic already shipped in step 4.
+- Neither mitigation option (debouncing, incremental updates) was implemented — measurement only,
+  per this step's own scope.
+- No screenshots or browser verification were produced or needed — this is a pure Node/console
+  measurement; `du -sh tools/*.png` before and after this step: zero files both times (nothing to
+  report as before/after size change).
 
 ---
 
 # Testing
 
-- `node tools/run-tests.mjs --all`: **100/100 passed** (99 pre-existing + this milestone's new
-  `test-preview3d-instanced-stones.mjs`, 10 tests).
-- `node tools/test-documentation-consistency.mjs`: passed.
-- Real-browser verification: see "Browser verification" above — zero console/page errors across all
-  three views checked.
-
-## `tools/test-preview3d-instanced-stones.mjs` (new, 10 tests)
-
-Uses real `'three'` + real `ObjectGeometryBuilder.js` (both pure computation, no WebGL context
-needed — same convention `tools/test-object-geometry-builder.mjs` already uses), with
-`Preview3DRenderer` "mounted" the way `init()` would leave it but without any of `init()`'s real
-browser/DOM dependencies (`WebGLRenderer`/`OrbitControls`/`ResizeObserver` all bypassed, mirroring
-`tools/test-preview3d-render-scheduling.mjs`'s existing "mounted without a real `init()`"
-convention). Covers:
-
-1. `instancedStones` omitted takes the exact texture path (real `CanvasTexture` assigned, no stone
-   mesh created).
-2. `instancedStones: false` is identical to omitting it.
-3. `false`/omitted never touches the lighting rig (ambient stays 0.75, no extra lights).
-4. `instancedStones: true` builds a real `THREE.InstancedMesh` with one instance per stone, added
-   alongside `bodyMesh`/`handleMesh`.
-5. `true` skips the baked texture entirely (`material.map` stays `null`, body tinted to `cupColor`,
-   `_updateTexture()` never runs — no texture canvas lazily created).
-6. `true` lowers ambient to 0.4 and adds exactly the two extended-rig directional lights, not
-   re-added on a second `update()` call.
-7. A real mug stone's instance matrix decomposes to the exact expected position (azimuth × radius ×
-   height, independently recomputed in the test from `azimuthRadForCanvasXMm()`/`wallRadiusAt()`)
-   and the correct outward-normal-aligned orientation, plus the correct instance color.
-8. A real plate stone sits at the cached `_plateTopY` rim/well transition height with a straight-up
-   (+Y) normal and no per-stone spin.
-9. Toggling `instancedStones` back to `false` tears the instanced mesh down, restores the default
-   ambient intensity, removes the extra lights, and resumes the texture path.
-10. A stone-count change with no geometry-key change (an edit adding/removing stones) rebuilds the
-    `InstancedMesh` at the new count rather than leaving stale instances or leaking a second mesh.
+- `node tools/measure-instanced-stone-performance.mjs` — the new benchmark itself; produces the
+  numbers reported above. Not part of `npm test`/`run-tests.mjs --all` by design (see "What was
+  built" above).
+- `node tools/run-tests.mjs preview3d` (the two pre-existing `Preview3DRenderer`-related test files,
+  untouched by this step): **2/2 files, all tests passed** — confirms this measurement-only work
+  introduced no regression to the code it exercises.
+- `npm run test:full`/`node tools/run-tests.mjs --all` was **not** run for this step, per
+  `CLAUDE.md`'s testing policy ("run only tests directly related to the current task" — this step
+  changes no shared architecture, schema, or exporter code).
 
 ---
 
 # Deliverables
 
-- `src/preview3d/Preview3DRenderer.js` (the integration).
-- `tools/test-preview3d-instanced-stones.mjs` (new).
+- `tools/measure-instanced-stone-performance.mjs` (new).
 - `TASK.md` (this milestone's), `TASK_RESULT.md` (this file).
 
 ---
 
-# How to exercise/verify the flag
+# How to re-run this benchmark yourself
 
-- **Test suite**: `node tools/run-tests.mjs test-preview3d-instanced-stones` (or `--all` for the
-  full suite).
-- **Manual/browser**: with `npm run dev` running and the Studio open, the browser console already
-  has a debug handle (`window.__preview3D`, set by `app.js`, "never used to drive any application
-  logic" per its own comment) — call
-  `window.__preview3D.update(<a real StoneLayout>, { ...<the same options drawCup() passes>,
-  instancedStones: true })` to see real faceted geometry in place of the baked texture on the live
-  object. No UI control exists for this yet (by design, per this step's scope).
+```bash
+node tools/measure-instanced-stone-performance.mjs
+```
+
+No build step, no browser, no flags — prints the build cost and drag-simulation
+min/median/mean/max for N = 1,000/5,000/15,000 on a mug, plus the supplementary 300mm-plate
+N = 15,000 run, followed by a summary table and an explicit within/exceeds-budget verdict per
+configuration.

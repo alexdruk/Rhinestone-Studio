@@ -1,78 +1,57 @@
 # Task
 
-**Task ID:** RS-2013 (Implementation Phase) — §4 step 4: flag-gated integration into the real
-`Preview3DRenderer`
-**Task Type:** Implementation (porting already-validated code, not new design)
-**Status:** IMPLEMENTED
-**Branch:** feature/rs-2013-instanced-stones-step4-integration
+**Task ID:** RS-2013 (Implementation Phase) — §4 step 5: stone-count stress testing
+**Task Type:** Measurement only (no application-code changes)
+**Status:** COMPLETE
+**Branch:** feature/rs-2013-instanced-stones-step5-stress-testing
 
 ## Why this milestone exists
 
-`docs/specifications/RS-2013-InstancedFacetedStoneRenderingDesign.md` §4 sequences the
-instanced-faceted-stone work into 7 steps. Steps 1-3 (static grid, real placement/orientation,
-lighting) and the inserted step 3b (facet geometry + material response evaluation) were all built
-and evaluated in `tools/rs2013-instanced-stone-harness.html`, a standalone test harness never wired
-into the live Studio. Step 3b's own `TASK_RESULT.md` (including its later single-stone,
-render-time-resolution correction) landed on a clear scope for step 4: carry forward the plain
-octahedron + **unmodified diffuse** `MeshStandardMaterial` (roughness=0.42, metalness=0.08) —
-step 3b evaluated and rejected both a richer 16-triangle geometry (Candidate A) and a more
-specular material preset (Candidate B) as the shipped default, so this milestone ships neither.
-
-This milestone is step 4 itself: port the harness's validated placement/orientation math (step 2)
-and extended lighting rig (step 3) into the real `Preview3DRenderer.js`, behind a new
-`instancedStones` option on `update()`, defaulting to `false` (today's texture-baking path,
-completely unchanged). Not a redesign — a porting exercise from an already-working reference
-implementation.
+The design doc (`docs/specifications/RS-2013-InstancedFacetedStoneRenderingDesign.md`) §1.3
+identified a real, previously-unaddressed test-coverage gap: no file in `tools/` constructs a
+many-thousands-of-stones fixture, so neither the steady-state GPU render cost nor the per-`update()`
+CPU-side instance-buffer rebuild cost had ever been measured at realistic scale. §3.2 raised the
+specific concern this step exists to answer: `Preview3DRenderer._updateInstancedStones()`'s
+per-stone `Matrix4`/`Color` rebuild loop runs on **every** `update()` call, and `update()` fires on
+every project edit including continuous, un-throttled `pointermove`-driven drags (`app.js:1366`,
+cited by §3.2). Step 4 (flag-gated integration, `5ad66a1`) shipped the `instancedStones` option but
+explicitly deferred performance-at-scale to this step.
 
 ## Scope
 
-- Add `instancedStones` (default `false`) to `Preview3DRenderer.update()`'s options object.
-- `false`/omitted: byte-identical to pre-step-4 behavior — `StoneLayoutTexture.js`'s texture-baking
-  path runs exactly as before, completely untouched.
-- `true`: build/update a `THREE.InstancedMesh` of stones (plain octahedron + unmodified diffuse
-  material) as an additional child mesh alongside `bodyMesh`/`handleMesh`/`underMesh`, using the
-  exact placement/orientation math already validated in the harness (azimuth/height/radius/normal
-  per §3.3, ported not reimplemented), and skip assigning the baked stone texture to
-  `bodyMesh.material.map` — the two modes are mutually exclusive per-frame.
-- Also ports the harness's step-3 "extended" 4-light rig, applied only while `instancedStones` is
-  on (toggled by `_applyLightRig()`); the default 2-light + 0.75-ambient rig `init()` already sets
-  up is otherwise untouched.
-- Follows the existing `_disposeGroup()`/`_rebuildMesh()` dispose/rebuild lifecycle for the new
-  mesh — no parallel lifecycle mechanism.
-- NOT exposed in `app.js`/`index.html`/the Studio UI in this step — reachable programmatically only
-  (any caller of `Preview3DRenderer.update()` can pass `instancedStones: true`), consistent with
-  `docs/specifications/RS-2013-InstancedFacetedStoneRenderingDesign.md` §4 step 4's own scope (step
-  6, visual validation + default flip, is a separate future milestone; UI exposure is a separate
-  decision for whoever scopes that step).
+- Build a synthetic, programmatically-generated (not hand-authored) large-N `StoneLayout` fixture
+  spanning §1.3's realistic-to-ceiling range: ~1,000 / ~5,000 / ~15,000 stones.
+- Measure (a) `InstancedMesh` build success and cost at each count, and (b) the real per-`update()`
+  wall-clock cost during a simulated rapid drag, at each count — report actual numbers, not a
+  pass/fail.
+- State plainly whether the CPU-side rebuild cost at the ceiling count is fast enough to stay under
+  one 60fps frame budget (~16ms), the concrete threshold step 3/the design doc raised.
+- Add a new, re-runnable benchmark script (not a `test-*.mjs` pass/fail test — a performance
+  measurement, following `tools/measure-performance.mjs`'s existing convention).
+- `TASK.md`/`TASK_RESULT.md` only, plus the new benchmark script. No changes to
+  `src/preview3d/**`, `src/geometry/**`, `app.js`, `index.html`, or any other application code —
+  this step measures, it does not optimize or fix.
 
 ## Allowed files
 
-- `src/preview3d/Preview3DRenderer.js`
-- `src/preview3d/ObjectGeometryBuilder.js` (not touched — `wallRadiusAt()` was already exported by
-  step 2, no further export needed)
-- New test file for `Preview3DRenderer` covering both flag states
-  (`tools/test-preview3d-instanced-stones.mjs`)
+- New benchmark script: `tools/measure-instanced-stone-performance.mjs`
 - `TASK.md`, `TASK_RESULT.md`
 
 ## Forbidden in this milestone
 
-- Any change to `app.js`, `index.html`, or exposing a UI control for the flag.
-- Carrying forward Candidate A (bipyramid16) or Candidate B (specular material) — step 3b rejected
-  both; ship the plain octahedron + original diffuse material only.
-- Deleting or modifying `StoneLayoutTexture.js`'s existing behavior — it remains fully functional
-  and is the default (flag off).
-- Attempting to fix the light-color washout (crystal/crystal-clear) or testing dark colors — both
-  carried forward as known limitations, not resolved here (see `TASK_RESULT.md`).
+- Implementing either mitigation option (debouncing the rebuild, incremental/partial instance
+  updates) that the design doc named as future options — measurement only.
+- Any change to the placement/lighting/material logic already shipped in step 4.
+- Any change to `app.js`, `index.html`, or the live Studio UI.
 
 ## Testing
 
-- `node tools/run-tests.mjs --all` — 100/100 passed (99 pre-existing + this milestone's new file).
-- `node tools/test-documentation-consistency.mjs` — passed.
-- Real-browser verification via a temporary (uncommitted, deleted before this commit), Playwright
-  screenshot of the actual `Preview3DRenderer` class — see `TASK_RESULT.md`.
+- `node tools/measure-instanced-stone-performance.mjs` — the new benchmark itself; see
+  `TASK_RESULT.md` for the actual numbers.
+- `node tools/run-tests.mjs preview3d` — pre-existing `Preview3DRenderer`/instanced-stones tests
+  (untouched by this step) still pass, confirming no regression from this measurement-only work.
 
 ## Deliverables
 
-- `src/preview3d/Preview3DRenderer.js` (the integration itself).
-- `tools/test-preview3d-instanced-stones.mjs` (new Node test file, 10 tests).
+- `tools/measure-instanced-stone-performance.mjs` (new).
 - `TASK.md` (this file), `TASK_RESULT.md`.
