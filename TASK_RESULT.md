@@ -351,3 +351,136 @@ Serve the repo root (e.g. `npx http-server .` or any static server) and open:
 - Candidate B: same URL + `&material=specular`
 - Candidate A: same URL + `&facet=bipyramid16` (not re-verified in this pass, see above)
 - `&stoneIndex=1` through `4` (or higher) to check other stones/orientations.
+
+---
+
+## Follow-up — does the diffuse baseline's per-facet differentiation hold across colors/lighting? (2026-08-03)
+
+The correction above confirmed the plain diffuse baseline (unchanged since step 1) shows genuine
+per-facet brightness differentiation on one mug stone, gold color, extended lighting. This section
+checks whether that was a one-stone/one-color coincidence, using the same unmodified `?view=singlestone`
+tool — no HTML/harness changes were needed for this pass.
+
+### What was checked
+
+Eight single-stone close-ups, all baseline (`facet=octahedron`, `material=diffuse` — no candidate
+params), spanning:
+
+| Product  | stoneIndex | Color (real StoneLayout value) | Lighting   |
+|----------|-----------|----------------------------------|------------|
+| mug      | 0         | gold                              | default    |
+| mug      | 0         | gold                              | extended*  |
+| tumbler  | 0         | gold                              | default    |
+| tumbler  | 182       | crystal (light)                   | extended   |
+| bottle   | 208       | topaz (medium/amber)               | default    |
+| bottle   | 412       | crystal-clear (very light)         | extended   |
+| plate    | 0         | gold                              | extended   |
+| plate    | 213       | crystal (light)                    | default    |
+
+\* already covered by the existing `mug-singlestone-baseline.png` from the correction above — not
+re-captured under a new name.
+
+Stone indices were determined by actually generating each product's real `StoneLayout` (via the
+same `loadRhsProject`/`generateProjectStoneLayout` pipeline the harness itself uses, run headlessly
+once to print `stones[i].color` for every stone) rather than guessed — the color transitions
+landed at exactly the boundaries shown above for each project's layer order.
+
+**Color coverage caveat, stated plainly:** the 4 example fixtures the harness's `?product=` mapping
+already uses (`short-name-block.rhs`, `tumbler-wrap-design.rhs`, `bottle-front-design.rhs`, plus the
+inline plate project) only contain 4 colors between them: `gold`, `topaz`, `crystal`, and
+`crystal-clear` — no genuinely dark/saturated color (e.g. `jet`, `sapphire`, `siam`, `emerald`) is
+reachable through the current per-product fixture mapping without swapping which example file a
+product loads, which this task's scope forbids (it would change what every *other* step's unchanged
+`?product=` views render, since those baseline screenshots are also generated from the same
+mapping). **A true dark color was not tested in this pass — this is a real gap, not a checked-and-passed
+condition, and is called out as an open item below.**
+
+### Result: it does NOT hold up consistently — light colors are a real, distinct failure mode
+
+**Gold and topaz (medium/saturated colors) hold up well, under both lighting rigs:**
+Pixel-quantized (`magick -colors 8 -unique-colors`) facet clusters and their luminance
+(`0.299R+0.587G+0.114B`):
+
+- mug/gold/default: 3 clusters, luminance 106→170 (dark facet vs. brightest facet, ~1.6x spread).
+- tumbler/gold/default: 5-cluster gradient collapsing to 2 real solid facets, luminance 94→169
+  (~1.8x).
+- bottle/topaz/default: 4 clusters, luminance 104→148 (~1.4x).
+- plate/gold/extended: 4 clusters, luminance 137→189 (~1.4x).
+
+All four are visually unmistakable multi-facet fans when looked at directly (not just at the pixel
+level) — consistent with the correction section's mug/gold/extended finding. Gold and topaz do not
+need Candidate A/B/C; the step-1 baseline already delivers real per-facet contrast for these colors
+under both lighting rigs.
+
+**Light colors (`crystal`, `crystal-clear`) are a distinct, real weak point:**
+
+- tumbler/crystal/extended: pixel-quantized to `rgb(168,179,185)` (darkest, luminance 176),
+  `rgb(191,202,209)` (mid, luminance 200), and `rgb(229,236,243)` (brightest facet) — but that
+  brightest value is only 4 luminance units away from this harness's own page background,
+  `rgb(233,238,245)` (luminance 237 vs. 235). Looked at directly, the top-left facet visibly
+  *nearly disappears into the surrounding page* — the stone's silhouette in that region is defined
+  almost entirely by the two darker facets' edges, not by the bright facet reading as a facet.
+- bottle/crystal-clear/extended: worse — the brightest facet quantizes to `rgb(232,235,240)`,
+  which is 1-3 units per channel from the exact background `rgb(233,238,245)`, i.e.
+  *indistinguishable by eye*. Looking at the render directly: the top half of the stone is a flat
+  white void with no visible facet line separating what should be two distinct top facets — only
+  the two lower facets are visible at all, and those two are the *same* gray tone as each other
+  (both quantize to `rgb(188,188,188)`, zero differentiation between them). At this stone's
+  orientation, the diffuse baseline produces **no visible per-facet differentiation at all** — the
+  worst result found anywhere in this milestone, for either candidate or the baseline.
+- plate/crystal/default: a partial exception — 3 real clusters (luminance 158/187/194), the
+  brightest still close to background (231 vs. 237) but not fully merged, so this specific
+  stone/orientation is a legible (if weak) 2-tone read rather than a total washout.
+
+This is orientation- and lighting-dependent, not a fixed property of the color: the same `crystal`
+color read as "weak but present" on the plate under default lighting and "one facet nearly gone"
+on the tumbler under extended lighting. But across all 3 light-color renders checked, none matched
+gold/topaz's robustness, and one (`bottle`/`crystal-clear`/extended) failed outright.
+
+### Honest verdict
+
+**The baseline does not hold up consistently across colors — it is genuinely good for gold and
+topaz, and a real (sometimes severe) weak point for light colors (`crystal`, `crystal-clear`),
+where the brightest facet can wash out against this harness's own light page background
+(`#e9eef5`) closely enough to erase visible faceting for part or most of the stone.** This is a
+distinct finding from the material-candidate question the correction above settled: it's not that
+Candidate B fixes this (Candidate A/B/C were not re-opened here, per scope — this section is
+baseline-only), it's that the "no material/geometry change needed" conclusion for gold does not
+generalize to light colors, and that gap was never checked until this pass.
+
+**Open items for whoever scopes step 4:**
+
+1. **Light colors may need special-casing** (a different ambient/ratio, or per-color material
+   tuning) — the current baseline material/lighting combination is demonstrably insufficient for
+   `crystal`/`crystal-clear` at some orientations, independent of the Candidate A/B/C findings
+   above.
+2. **Dark colors were never tested in this milestone at all**, in either the wide-shot or
+   single-stone close-up passes, because no fixture reachable through the harness's current
+   `?product=` mapping contains one. This is a real coverage gap, not a passed check — it should be
+   closed before step 4 treats *any* color as settled.
+3. The washout observed here is partly a function of this harness's own flat, light page background
+   color, which is not necessarily representative of a real product's surface color/lighting
+   context in the actual `Preview3DRenderer` scene (a colored cup body, not a plain page, usually
+   sits behind/around the stones in production). Whether the light-color washout reproduces against
+   a realistic product-body background is a real open question this pass did not check, and is
+   flagged rather than assumed either way.
+
+### Final representative screenshot set (kept; other renders from this pass were reviewed and deleted)
+
+- `tools/rs2013-instanced-stone-harness-mug-gold-default.png` — gold holds up under the *original*
+  (non-extended) lighting rig too, not just extended.
+- `tools/rs2013-instanced-stone-harness-bottle-topaz-default.png` — a second saturated color
+  confirming the gold finding generalizes to at least one other mid-value hue.
+- `tools/rs2013-instanced-stone-harness-tumbler-crystal-extended.png` — light color, partial
+  washout (brightest facet within ~4 luminance units of the page background).
+- `tools/rs2013-instanced-stone-harness-bottle-crystalclear-extended.png` — light color, total
+  washout (brightest facet indistinguishable from background; the two remaining visible facets are
+  the same tone as each other).
+
+`tools/rs2013-instanced-stone-harness-mug-singlestone-baseline.png` (already committed) remains the
+gold/extended reference. Four additional renders from this pass
+(`plate-gold-extended`/`plate-crystal-default`/`tumbler-gold-default` plus the color-lookup pass)
+were generated to build the table above, reviewed, and deleted — they didn't add a distinct
+conclusion beyond what the four kept files already show. `du -ch tools/*.png` before this pass:
+**2.5M** (19 files); after adding the 4 new representative PNGs: **2.9M** (23 files) — consistent
+with this harness's existing ~90-110K per-singlestone-capture size, not unexpectedly large.
