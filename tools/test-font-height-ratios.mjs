@@ -163,4 +163,66 @@ await test('10. solveEngineHeightMm() throws a clear error for fonts with no cap
   }
 });
 
+// --- TXT-104 step 4a: solveDesiredCapHeightMm() + computeLetterHeightBoundsMm() ---
+//
+// Same extraction-via-new-Function convention as solveEngineHeightMm() above. solveDesiredCapHeightMm()
+// only reads the module-level fontManager (injected the same way); computeLetterHeightBoundsMm() also
+// reads the RAW_ENGINE_HEIGHT_MM_MIN/MAX module-level constants and calls solveDesiredCapHeightMm(),
+// so its extracted source is stitched together with those, and the already-extracted
+// solveDesiredCapHeightMm function is injected as a free variable.
+
+const solveDesiredCapHeightMmSrc = extractBlock(appJs, /function solveDesiredCapHeightMm\([^)]*\)\{[\s\S]*?\n\}/, 'function solveDesiredCapHeightMm()');
+// eslint-disable-next-line no-new-func
+const solveDesiredCapHeightMm = new Function('fontManager', `return ${solveDesiredCapHeightMmSrc};`)(fontManager);
+
+const rawHeightConstSrc = extractBlock(appJs, /const RAW_ENGINE_HEIGHT_MM_MIN=\d+,RAW_ENGINE_HEIGHT_MM_MAX=\d+;/, 'RAW_ENGINE_HEIGHT_MM_MIN/MAX constants');
+const computeLetterHeightBoundsMmSrc = extractBlock(appJs, /function computeLetterHeightBoundsMm\([^)]*\)\{[\s\S]*?\n\}/, 'function computeLetterHeightBoundsMm()');
+// eslint-disable-next-line no-new-func
+const computeLetterHeightBoundsMm = new Function('solveDesiredCapHeightMm', `${rawHeightConstSrc}\nreturn ${computeLetterHeightBoundsMmSrc};`)(solveDesiredCapHeightMm);
+
+await test('11. solveDesiredCapHeightMm() is the exact inverse of solveEngineHeightMm() for every in-scope font', () => {
+  for (const id of EXPECTED_IN_SCOPE_IDS) {
+    for (const desiredCapHeightMm of [10, 30, 75]) {
+      const engineHeightMm = solveEngineHeightMm({ fontId: id, desiredCapHeightMm });
+      const roundTripped = solveDesiredCapHeightMm({ fontId: id, engineHeightMm });
+      assert.ok(
+        Math.abs(roundTripped - desiredCapHeightMm) < 1e-9,
+        `${id}: round-trip of ${desiredCapHeightMm} through solveEngineHeightMm() then solveDesiredCapHeightMm() gave ${roundTripped}`
+      );
+    }
+  }
+});
+
+await test('12. computeLetterHeightBoundsMm() produces a different {minMm,maxMm} per font (capHeightRatio must not be silently ignored)', () => {
+  const bounds = EXPECTED_IN_SCOPE_IDS.map((id) => computeLetterHeightBoundsMm(id));
+  const allSameMin = bounds.every((b) => b.minMm === bounds[0].minMm);
+  const allSameMax = bounds.every((b) => b.maxMm === bounds[0].maxMm);
+  assert.ok(!allSameMin && !allSameMax, `expected computeLetterHeightBoundsMm() bounds to differ per font, got ${JSON.stringify(bounds)}`);
+});
+
+await test('13. computeLetterHeightBoundsMm()\'s minMm/maxMm round-trip back through solveEngineHeightMm() to exactly the raw engine clamp (4, 111)', () => {
+  for (const id of EXPECTED_IN_SCOPE_IDS) {
+    const { minMm, maxMm } = computeLetterHeightBoundsMm(id);
+    const engineMin = solveEngineHeightMm({ fontId: id, desiredCapHeightMm: minMm });
+    const engineMax = solveEngineHeightMm({ fontId: id, desiredCapHeightMm: maxMm });
+    assert.ok(Math.abs(engineMin - 4) < 1e-9, `${id}: minMm round-trip expected 4, got ${engineMin}`);
+    assert.ok(Math.abs(engineMax - 111) < 1e-9, `${id}: maxMm round-trip expected 111, got ${engineMax}`);
+  }
+});
+
+await test('14. solveDesiredCapHeightMm() and computeLetterHeightBoundsMm() throw for fonts with no capHeightRatio (RS Block, RS Modern, any non-validated legacy OpenType font)', () => {
+  for (const id of ['rs-block', 'rs-modern', 'courier-prime-regular']) {
+    assert.throws(
+      () => solveDesiredCapHeightMm({ fontId: id, engineHeightMm: 30 }),
+      /capHeightRatio/,
+      `expected solveDesiredCapHeightMm('${id}') to throw a capHeightRatio-related error, not return NaN`
+    );
+    assert.throws(
+      () => computeLetterHeightBoundsMm(id),
+      /capHeightRatio/,
+      `expected computeLetterHeightBoundsMm('${id}') to throw a capHeightRatio-related error, not return NaN`
+    );
+  }
+});
+
 console.log('Font height ratio tests passed.');

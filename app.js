@@ -451,6 +451,33 @@ function solveEngineHeightMm({fontId,desiredCapHeightMm}){
   if(typeof font.capHeightRatio!=='number')throw new Error(`solveEngineHeightMm: font "${fontId}" has no capHeightRatio -- only the validated OpenType portfolio (Baloo 2, Anton, Sacramento, Dancing Script) supports cap-height-accurate sizing.`);
   return desiredCapHeightMm/font.capHeightRatio;
 }
+// TXT-104 step 4a: exact inverse of solveEngineHeightMm() above -- given the raw engineHeightMm a
+// text layer's layer.height already holds (per this milestone's design invariant, unchanged by
+// heightMode), recovers the real cap-height in mm that value renders at. Same capHeightRatio-required
+// contract and throw behavior as solveEngineHeightMm(): a font with no ratio has no meaningful cap
+// height to convert to/from.
+function solveDesiredCapHeightMm({fontId,engineHeightMm}){
+  const font=fontManager.getFont(fontId);
+  if(typeof font.capHeightRatio!=='number')throw new Error(`solveDesiredCapHeightMm: font "${fontId}" has no capHeightRatio -- only the validated OpenType portfolio (Baloo 2, Anton, Sacramento, Dancing Script) supports cap-height-accurate sizing.`);
+  return engineHeightMm*font.capHeightRatio;
+}
+// TXT-104 step 4a: the raw engineHeightMm bounds writeSelectedControlsToLayer()'s #height write-back
+// clamps to (app.js:~1071, `Math.max(4,Math.min(111,...))`) -- named here so a future Letter Height
+// control's real-mm bounds (computeLetterHeightBoundsMm() below) and that clamp always derive from
+// the same two numbers instead of a second hardcoded copy silently drifting from the first.
+const RAW_ENGINE_HEIGHT_MM_MIN=4,RAW_ENGINE_HEIGHT_MM_MAX=111;
+// TXT-104 step 4a: the design doc's section 3.4 open question -- a future Letter Height control must
+// NOT inherit [RAW_ENGINE_HEIGHT_MM_MIN,RAW_ENGINE_HEIGHT_MM_MAX] unmodified, since that's a raw
+// em-square heightMm range, not a real cap-height range: each font's actual min/max Letter Height in
+// mm differs because capHeightRatio differs per font. Runs the engine's own raw clamp constants
+// through solveDesiredCapHeightMm() so the bounds always round-trip back to exactly that clamp. Same
+// throw behavior as solveDesiredCapHeightMm() for a font with no capHeightRatio.
+function computeLetterHeightBoundsMm(fontId){
+  return{
+    minMm:solveDesiredCapHeightMm({fontId,engineHeightMm:RAW_ENGINE_HEIGHT_MM_MIN}),
+    maxMm:solveDesiredCapHeightMm({fontId,engineHeightMm:RAW_ENGINE_HEIGHT_MM_MAX})
+  };
+}
 // MONO-005A: delegates to src/editing/TextPlacement.js's own computeTextPlacementOffsetMm() -- the
 // single shared source of truth for this formula, now also used by MonogramGenerator to compute a
 // generated letter layer's x/y (via that module's inverse function). Behavior-preserving extraction
@@ -1068,7 +1095,7 @@ function writeSelectedControlsToLayer(){const l=selectedLayer();
     // 111 -- the true max across every catalog size's supportedHeightRangeMm (StoneSizes.js's SS30
     // entry, [106,111]) -- so the largest validated stone sizes' own auto-set midpoints (see
     // #stoneSize's 'input' listener below) are never clamped back down below their own valid range.
-    l.height=Math.max(4,Math.min(111,parseFloat(el('height').value)||25));l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;
+    l.height=Math.max(RAW_ENGINE_HEIGHT_MM_MIN,Math.min(RAW_ENGINE_HEIGHT_MM_MAX,parseFloat(el('height').value)||25));l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;
     // FONT-002: a Production Font has no curve support (GeometryEngine.generateTextLayout() throws
     // for authored-stone-center fonts with curveEnabled) -- force it off in the stored layer data too
     // (not just the disabled control) so switching *to* an authored font from a curved legacy layer
