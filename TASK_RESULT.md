@@ -248,3 +248,106 @@ changed.
   winning-candidate application to plate/tumbler/bottle.
 - New screenshot/crop/diff assets (see file list above and in the repo).
 - `TASK.md` (this milestone's), `TASK_RESULT.md` (this file).
+
+---
+
+## Correction — single-stone, render-time close-up verification (2026-08-03)
+
+**This section walks back the "Candidate B wins" verdict above.** The evidence below shows the
+wide-shot crop/upscale evidence the verdict was based on could not actually resolve per-facet
+brightness at the pixel level, and that a real render-time close-up does not reproduce the effect —
+if anything, it points the other way.
+
+### Why this check was needed
+
+Every piece of evidence in the sections above (`-crop.png`, `-facetdiff.png`) came from cropping a
+tight region out of a wide ~20-stone shot and upscaling it 8x with nearest-neighbor (`-filter point
+-resize 800%`). At the wide shot's native resolution, one stone is only a few pixels across — facet
+edges in that crop are 1-2 source pixels wide, blown up into blocky steps, not real anti-aliased
+facet geometry. A human reviewer looking at that crop directly (not the further-upscaled derivative)
+reported seeing no visible facet structure, just a blurry blob. That is a legitimate objection: the
+crop/upscale method cannot actually support a claim about *per-facet* brightness, only about
+*whole-crop-region* RMSE.
+
+### What was built for this check
+
+`?view=singlestone` (new URL param, `tools/rs2013-instanced-stone-harness.html`): renders exactly
+one real stone from the product's own `StoneLayout` (default `stones[0]`, or `&stoneIndex=N`) at the
+origin, camera framed close using that stone's own `sizeMm` (not the whole object's bounding
+radius) via the existing `frameCamera()` helper — so the stone fills most of the frame as a render-
+time result, not a post-hoc crop. `?facet=`/`?material=`/`?lighting=` all still apply, so baseline
+vs. Candidate A/B/C are directly comparable at this resolution. Captured at a 900x900 viewport,
+deviceScaleFactor 2 (1800x1800 real pixels) — `runSingleStoneCloseup()` in the harness, new views in
+`tools/rs2013-instanced-stone-harness-screenshot.mjs`.
+
+### What the close-up actually shows
+
+Baseline (`mug-singlestone-baseline.png`, stone #0, extended lighting, octahedron, diffuse) shows a
+clean 3-facet fan, each a genuinely distinct flat color — sampled and quantized (`magick -colors 12
+-unique-colors`) to three solid clusters at this stone's orientation: `rgb(145,112,28)`,
+`rgb(168,130,34)`, `rgb(216,169,50)` (luminance 112 / 130 / 170 — a real ~1.5x brightest-to-darkest
+spread). This pattern held across 4 more stones sampled the same way (indices 1-4): every baseline
+render resolved into 2-3 distinct facet clusters with brightest/darkest luminance ratios of roughly
+1.3x-1.6x.
+
+Candidate B (`mug-singlestone-candidate-b.png`, same stone, same lighting, `material=specular`) is
+visibly darker and more uniformly olive/brown overall, and at the pixel level resolves into *fewer*
+distinct clusters, not more: `rgb(160,123,29)` and `rgb(150,116,27)` were the only two solid facet
+colors distinguishable at 12-color quantization for this stone (luminance 119 / 116 — ~1.03x, i.e.
+close to indistinguishable) plus one darker facet at `rgb(121,92,20)` (luminance ~88, giving a
+119/88 = 1.35x spread against the darkest facet only). Repeated across the same 4 additional stones:
+Candidate B's brightest/darkest facet luminance ratio came out flat-to-lower than baseline at every
+single stone checked (stone 1: 1.27x vs. baseline's 1.58x; stone 2: 1.32x vs. 1.59x; stones 3-4:
+baseline still resolved 2 distinct clusters, Candidate B collapsed to essentially one dominant facet
+tone with the rest blending into antialiasing gradients). No stone, at any of the 5 indices checked,
+showed Candidate B producing a sharper or more numerous facet split than its baseline counterpart.
+
+The grayscale difference-magnitude image for this exact pair
+(`rs2013-instanced-stone-harness-mug-singlestone-facetdiff.png`, `-compose difference -colorspace
+Gray -auto-level` on the two singlestone renders) makes the same point visually: the diff is a
+near-uniform mid-gray across the entire stone silhouette, with only very faint internal
+facet-boundary lines — the "uniform silhouette-wide shift" pattern step 3 identified as the *absent*
+signature, not the "concentrated at facet-boundary lines" pattern this whole milestone was built to
+find. RMSE for this single-stone pair: 11.4% (`magick compare -metric RMSE`) — a real, measurable
+difference, consistent with the wide-shot finding, but the grayscale diff shows that difference is
+mostly a flat darkening (lower roughness/higher metalness reduces the ambient/diffuse contribution
+per facet fairly evenly under this lighting), not a redistribution of which facet catches a
+highlight.
+
+### Honest verdict (superseding the section above)
+
+**The step-3b "Candidate B wins" verdict is not confirmed by this closer look, and should be
+treated as unresolved rather than a basis for carrying anything forward into step 4.** The wide-shot
+RMSE increase Candidate B produced is real, but this close-up check — built specifically to test
+whether that RMSE increase corresponds to genuine per-facet contrast — does not support that
+reading. At single-stone, render-time resolution, Candidate B looks flatter and more uniformly dark
+than the baseline, not more faceted; the baseline's diffuse material actually resolves *more*
+distinct facet tones per stone than the specular preset does, at every stone orientation checked.
+Candidate A (geometry) was not re-tested at this resolution in this pass — this correction is scoped
+to Candidate B, the one the original verdict named as the winner. Candidate A's `?facet=bipyramid16`
+close-up view exists (same `?view=singlestone` param) and should be checked with the same rigor
+before any step-4 decision, since it was never independently confirmed at this resolution either.
+
+**Recommendation for step 4:** do not carry forward Candidate B's material preset as a resolved fix
+for the "flat painted polygon" read. Both candidates from this milestone are now back to unresolved
+status. If step 4 needs an actual answer, the next real lever to test (not yet tried anywhere in
+this milestone) is whether a specular *highlight* — a small bright hotspot from a light angle that
+actually catches a facet's reflection cone at grazing incidence — can be produced at all under
+`MeshStandardMaterial` + directional lights without HDRI, since neither material tuning nor the
+16-triangle geometry increases the number of front-facing normal directions enough on its own to
+guarantee one lands inside a viewer's typical viewing/lighting angle.
+
+### New screenshot assets (this correction only; none of the prior section's assets removed)
+
+- `tools/rs2013-instanced-stone-harness-mug-singlestone-baseline.png`
+- `tools/rs2013-instanced-stone-harness-mug-singlestone-candidate-b.png`
+- `tools/rs2013-instanced-stone-harness-mug-singlestone-facetdiff.png`
+
+### How to view these yourself
+
+Serve the repo root (e.g. `npx http-server .` or any static server) and open:
+
+- Baseline: `tools/rs2013-instanced-stone-harness.html?product=mug&view=singlestone&stoneIndex=0&lighting=extended`
+- Candidate B: same URL + `&material=specular`
+- Candidate A: same URL + `&facet=bipyramid16` (not re-verified in this pass, see above)
+- `&stoneIndex=1` through `4` (or higher) to check other stones/orientations.

@@ -65,6 +65,13 @@
   // sweep documented in TASK_RESULT.md be reproduced/extended without editing this file.
   const roughnessOverride = params.has('roughness') ? parseFloat(params.get('roughness')) : null;
   const metalnessOverride = params.has('metalness') ? parseFloat(params.get('metalness')) : null;
+  // RS-2013 step 3b verification: the step-3b `-crop.png`/`-facetdiff.png` evidence was a
+  // nearest-neighbor-upscaled crop of a wide ~20-stone shot -- at that source resolution individual
+  // facet edges are sub-pixel, not real detail. `?view=singlestone` renders exactly ONE real stone
+  // from the product's own StoneLayout, camera-close at render time (not post-hoc crop/upscale), so
+  // facet edges are real pixels. `?stoneIndex=N` picks which stone (default 0).
+  const viewMode = params.get('view') === 'singlestone' ? 'singlestone' : null;
+  const stoneIndexParam = params.has('stoneIndex') ? parseInt(params.get('stoneIndex'), 10) : 0;
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -504,11 +511,73 @@
     window.__rs2013StoneCount = stones.length;
   }
 
+  // ---------------------------------------------------------------------------------------------
+  // RS-2013 step 3b verification: single-stone, camera-close render. Reuses the exact same
+  // StoneLayout generation (loadRhsProject/buildPermanentEngine/generateProjectStoneLayout) and the
+  // exact same buildFacetGeometry/buildFacetMaterial/applyLightRig this step's other candidates use
+  // -- only the placement (one stone, at the origin) and camera framing (radius derived from that
+  // one stone's own sizeMm, not the whole object) differ. No change to step 2/3/3b's real
+  // placement/orientation math for the side-by-side view above.
+  // ---------------------------------------------------------------------------------------------
+  async function runSingleStoneCloseup(productId) {
+    const rhsProject = await loadRhsProject(productId);
+    const engine = await buildPermanentEngine();
+    const layout = await generateProjectStoneLayout(rhsProject, engine);
+    const stones = layout.stones;
+    if (!stones.length) throw new Error(`Product "${productId}" has no stones in its StoneLayout.`);
+    const stoneIndex = Number.isInteger(stoneIndexParam) && stoneIndexParam >= 0 && stoneIndexParam < stones.length ? stoneIndexParam : 0;
+    const stone = stones[stoneIndex];
+
+    const otherMaterial = materialMode === 'specular' ? 'diffuse' : 'specular';
+    const otherFacet = facetMode === 'bipyramid16' ? 'octahedron' : 'bipyramid16';
+    const keep = `view=singlestone&stoneIndex=${stoneIndex}&lighting=${lighting}`;
+    infoEl.innerHTML = `RS-2013 step 3b verification &mdash; single-stone close-up, <b>${productId}</b> stone #${stoneIndex} ` +
+      `(sizeMm=${stone.sizeMm}, color=${stone.color}), <b>${lighting}</b> lighting, <b>${facetMode}</b> facet, <b>${materialMode}</b> material. ` +
+      `Rendered close at full canvas resolution -- not a crop/upscale. Drag to orbit. ` +
+      `<a href="?product=${productId}&${keep}&facet=${facetMode}&material=${otherMaterial}">Switch to ${otherMaterial} material</a>` +
+      ` &middot; <a href="?product=${productId}&${keep}&facet=${otherFacet}&material=${materialMode}">Switch to ${otherFacet} facet</a>` +
+      ` &middot; <a href="?product=${productId}&view=singlestone&lighting=${lighting}&facet=${facetMode}&material=${materialMode}&stoneIndex=${stoneIndex + 1}">Next stone</a>.`;
+
+    const stoneGeometry = buildFacetGeometry(facetMode);
+    const stoneMaterial = buildFacetMaterial(materialMode);
+    stoneMaterial.color.set(getCrystalColor(stone.color).fill);
+    const mesh = new THREE.Mesh(stoneGeometry, stoneMaterial);
+
+    const radiusMm = stone.sizeMm / 2;
+    // Same "local spin around the apex axis" convention runStep2Placement uses for curved-surface
+    // stones -- the real per-stone facetAngleDeg, so this close-up shows that stone's actual
+    // authored facet rotation rather than an arbitrary fixed pose. No surface normal to align to
+    // here (this stone isn't sitting on an object), so local Z (the apex axis) simply faces world
+    // +Z, i.e. toward the camera's default azimuth -- frameCamera's own 28-degree elevation is what
+    // reveals more than one facet, exactly as it already does for runStep1Grid's flat instances.
+    const zAxis = new THREE.Vector3(0, 0, 1);
+    const appearance = getCrystalAppearance(stone);
+    const qSpin = new THREE.Quaternion().setFromAxisAngle(zAxis, (appearance.facetAngleDeg * Math.PI) / 180);
+    const matrix = new THREE.Matrix4().compose(new THREE.Vector3(0, 0, 0), qSpin, new THREE.Vector3(radiusMm, radiusMm, radiusMm));
+    mesh.matrixAutoUpdate = false;
+    mesh.matrix.copy(matrix);
+    scene.add(mesh);
+
+    // Fill most of the frame: frameCamera() already bakes in a 5% margin, so passing the stone's
+    // own radius (not the whole object's bounding radius, unlike every other view in this harness)
+    // is what makes this "camera-close" rather than a wide shot cropped after the fact.
+    frameCamera(new THREE.Vector3(0, 0, 0), radiusMm);
+
+    window.__rs2013HarnessReady = true;
+    window.__rs2013StoneCount = 1;
+  }
+
   // Dispatch last, after every const/function declaration above -- calling this earlier hits a
   // TDZ ReferenceError on PLATE_PROJECT/EXAMPLE_PATH_BY_PRODUCT (they run() synchronously up to
   // their first await, before this module's later top-level const bindings evaluate).
   if (!product) {
     runStep1Grid();
+  } else if (viewMode === 'singlestone') {
+    runSingleStoneCloseup(product).catch((error) => {
+      console.error(error);
+      errorEl.textContent = String(error && error.stack || error);
+      errorEl.style.display = 'block';
+    });
   } else {
     runStep2Placement(product).catch((error) => {
       console.error(error);

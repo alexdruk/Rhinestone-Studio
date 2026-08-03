@@ -15,7 +15,7 @@ extended 4-light rig is a real, measured change (~3.4% RMSE on the mug view) but
 mis-tuned angle: even a light brighter than the key light could not flip which facet reads bright
 vs. dark on a stone. Root cause, as reported: a structural combination of (a) an 8-facet octahedron
 where only ~2-4 faces are ever front-facing to the camera, and (b) a diffuse-dominant
-`MeshStandardMaterial` response (`roughness=0.42/metalness=0.08`), under which every additional
+`MeshStandardMaterial` response (`roughness=0.42, metalness=0.08`), under which every additional
 light source's contribution *adds* to a facet's brightness rather than *redistributing* which facet
 catches the highlight.
 
@@ -36,9 +36,9 @@ Extends `tools/rs2013-instanced-stone-harness.html` (still not wired into the li
   still the default. `bipyramid16` is Candidate A: an "octagonal bipyramid" (2 apex vertices + an
   8-vertex equatorial ring = 16 triangular faces), the design doc's own anticipated fallback shape.
 - `?material=diffuse|specular` — `MeshStandardMaterial` roughness/metalness preset. `diffuse`
-  (unchanged, `roughness=0.42/metalness=0.08`) is still the default. `specular` is Candidate B: a
+  (unchanged, `roughness=0.42, metalness=0.08`) is still the default. `specular` is Candidate B: a
   more specular-dominant response, tuned via a 3-combination sweep (see `TASK_RESULT.md`) to
-  `roughness=0.12/metalness=0.55`.
+  `roughness=0.12, metalness=0.55`.
 - Candidate C is both together: `?facet=bipyramid16&material=specular`.
 - Raw `?roughness=`/`?metalness=` overrides also exist, for reproducing/extending the tuning sweep
   without editing the file.

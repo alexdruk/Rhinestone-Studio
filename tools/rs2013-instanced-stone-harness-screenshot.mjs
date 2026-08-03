@@ -20,6 +20,12 @@
  * (?facet=bipyramid16) and a more specular material response (?material=specular) -- on the mug
  * view (the same view step 3 used for its own rig tuning), then applies whichever candidate wins to
  * all 4 products. See TASK_RESULT.md for the evaluation methodology and verdict.
+ *
+ * RS-2013 step 3b verification: the step-3b evidence above was a crop+upscale of a wide shot, where
+ * individual facet edges are sub-pixel. Added a real render-time close-up (?view=singlestone) of a
+ * single stone, captured here at a larger square viewport (not just cropped from the standard
+ * 1400x850 shot) so facet edges are genuine rendered pixels. See TASK_RESULT.md's verification
+ * section for the honest look at whether this confirms or walks back the step-3b verdict.
  */
 import http from 'node:http';
 import path from 'node:path';
@@ -75,11 +81,18 @@ const VIEWS = [
   // applied to the remaining 3 products (mug is already covered by mug-candidate-b above).
   { name: 'plate-candidate-b', query: '?product=plate&lighting=extended&material=specular' },
   { name: 'tumbler-candidate-b', query: '?product=tumbler&lighting=extended&material=specular' },
-  { name: 'bottle-candidate-b', query: '?product=bottle&lighting=extended&material=specular' }
+  { name: 'bottle-candidate-b', query: '?product=bottle&lighting=extended&material=specular' },
+  // RS-2013 step 3b verification: single-stone, render-time close-ups (not crop/upscale). Larger
+  // square viewport (900x900 @ deviceScaleFactor 2 = 1800x1800 real pixels) so facet edges are
+  // genuine rendered detail. Same mug stone (#0), same extended lighting, baseline vs. the
+  // step-3b "winner" (Candidate B, specular material) -- the exact pair this verification compares.
+  { name: 'mug-singlestone-baseline', query: '?product=mug&view=singlestone&stoneIndex=0&lighting=extended', viewport: { width: 900, height: 900 } },
+  { name: 'mug-singlestone-candidate-b', query: '?product=mug&view=singlestone&stoneIndex=0&lighting=extended&material=specular', viewport: { width: 900, height: 900 } }
 ];
 
 for (const view of VIEWS) {
   const page = await browser.newPage();
+  if (view.viewport) await page.setViewportSize(view.viewport);
   const consoleErrors = [];
   page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
   page.on('pageerror', (err) => consoleErrors.push(String(err)));
