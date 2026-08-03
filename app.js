@@ -702,7 +702,7 @@ const DEFAULT_PROJECT_NAME='Untitled Project';
 // FONT-002: stoneSize/gap default to RS Block's own recommendedStoneSizeMm/recommendedGapMm (2.8/0.3)
 // now that it's the default font, matching the family's own authored pitch (PITCH_MM=3.1 in
 // families/rsBlock.js) instead of the generic pre-FONT-002 2/0.3.
-function defaultProject(){const vessel=getVesselDefaults('mug');return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,product:'mug',canvas:computeCanvasFromVessel(vessel),cupColor:'#1f3556',wrap:'front',plate:getPlateDefaults(),vessel,layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0}]}}
+function defaultProject(){const vessel=getVesselDefaults('mug');return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,product:'mug',canvas:computeCanvasFromVessel(vessel),cupColor:'#1f3556',wrap:'front',plate:getPlateDefaults(),vessel,layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:25,heightMode:'capHeight',textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0}]}}
 // RS-0003.5D1: validates an imported Project JSON file against the exact ad hoc project/layer
 // shape #exportProject already produces (JSON.stringify(project)). Throws a specific Error
 // describing the first problem found instead of silently accepting a malformed project; the
@@ -2285,7 +2285,7 @@ async function addText(){
   const other=singleOtherSelectedLayer();
   const fitPartnerShape=(other&&FITTABLE_SHAPE_TYPES.has(other.type))?other:null;
   commitHistory();
-  const layer={id:'text'+Date.now(),type:'text',visible:true,text:'New Text',font:TEXT_ENGINE_FONT_IDS.has(l.font)?l.font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:l.stoneSize||2.8,gap:l.gap||.3,color:l.color||'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0};
+  const layer={id:'text'+Date.now(),type:'text',visible:true,text:'New Text',font:TEXT_ENGINE_FONT_IDS.has(l.font)?l.font:DEFAULT_TEXT_FONT_ID,height:25,heightMode:'capHeight',textMode:'stroke',stoneSize:l.stoneSize||2.8,gap:l.gap||.3,color:l.color||'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0};
   project.layers.push(layer);
   selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);
   let statusText='Added text layer';
