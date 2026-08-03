@@ -478,6 +478,16 @@ function computeLetterHeightBoundsMm(fontId){
     maxMm:solveDesiredCapHeightMm({fontId,engineHeightMm:RAW_ENGINE_HEIGHT_MM_MAX})
   };
 }
+// TXT-104 step 4b: the read/display half of #letterHeight's bidirectional sync with #height -- called
+// from updateTextFontCapabilityUI() (the one place guaranteed to run after every source of a #height
+// value change: a direct edit, the stone-size auto-set snap, or a fresh layer selection) whenever
+// #letterHeightField is shown. Pure DOM read -> solveDesiredCapHeightMm() -> DOM write; never itself
+// dispatches an event, so it can never trigger #letterHeight's own write-direction listener below.
+function syncLetterHeightFromHeight(fontId){
+  const engineHeightMm=parseFloat(el('height').value);
+  if(!Number.isFinite(engineHeightMm))return;
+  el('letterHeight').value=solveDesiredCapHeightMm({fontId,engineHeightMm}).toFixed(2);
+}
 // MONO-005A: delegates to src/editing/TextPlacement.js's own computeTextPlacementOffsetMm() -- the
 // single shared source of truth for this formula, now also used by MonogramGenerator to compute a
 // generated letter layer's x/y (via that module's inverse function). Behavior-preserving extraction
@@ -1599,6 +1609,28 @@ function updateTextFontCapabilityUI(){
   const legacy=known&&!authored&&!validated;
   const unknown=isText&&!known;
   el('textModeField').style.display=authored?'none':'block';
+  // TXT-104 step 4b: a capHeight-mode layer on a validated (capHeightRatio-bearing) font displays
+  // #letterHeight -- a derived view of #height in real cap-height mm -- instead of raw #height
+  // itself; every other combination (raw mode, authored font, legacy/unknown font) keeps showing
+  // #height exactly as before. `validated` already excludes authored/legacy/unknown fonts, so this
+  // is the one gate needed for the capHeight-mode-but-unvalidated-font fallback the design doc calls
+  // for (e.g. a capHeight-mode layer switched to RS Block or a legacy font falls straight back to
+  // #height with its existing raw value).
+  const capHeightMode=isText&&l.heightMode==='capHeight';
+  const showLetterHeight=validated&&capHeightMode;
+  el('heightField').style.display=showLetterHeight?'none':'block';
+  el('letterHeightField').style.display=showLetterHeight?'block':'none';
+  if(showLetterHeight){
+    const bounds=computeLetterHeightBoundsMm(fontId);
+    el('letterHeight').min=bounds.minMm;el('letterHeight').max=bounds.maxMm;
+    syncLetterHeightFromHeight(fontId);
+  }
+  // Mode-switch affordance (design doc section 3.3): only offered for a validated font, since a
+  // heightMode the UI can never display (no capHeightRatio to convert with) isn't a real choice.
+  // Only l.heightMode flips here -- l.height itself is untouched, so nothing about the rendered
+  // output changes at the moment of switching, only which field/units the operator edits from then on.
+  el('heightModeToggleHint').style.display=validated?'block':'none';
+  if(validated)el('heightModeToggleBtn').textContent=capHeightMode?'Switch to raw engine height':'Switch to letter height';
   el('height').disabled=authored;
   el('autoFit').disabled=authored;
   el('textSizeFixedHint').style.display=authored?'block':'none';
@@ -2130,6 +2162,39 @@ el('height').addEventListener('input',()=>{
   const l=selectedLayer();
   if(l&&l.type==='text')l.heightManuallyEdited=true;
   el('heightAutoAdjustedHint').style.display='none';
+});
+// TXT-104 step 4b: #letterHeight's write direction -- only ever reachable while #letterHeightField is
+// shown (capHeight mode + a validated font, see updateTextFontCapabilityUI()), so l.font is guaranteed
+// to carry a capHeightRatio here. Converts the entered cap-height mm back to the raw engine-facing
+// em-square height via solveEngineHeightMm(), clamps it to the exact same
+// [RAW_ENGINE_HEIGHT_MM_MIN,RAW_ENGINE_HEIGHT_MM_MAX] range #height's own write-back clamps to
+// (writeSelectedControlsToLayer()), writes that into #height, then dispatches a real 'input' event on
+// #height so the entire existing #height chain -- heightManuallyEdited marking just above,
+// HISTORY_TRACKED_CONTROL_IDS' write+regenerate listener below -- fires exactly as it does for a direct
+// #height edit today. #letterHeight is deliberately NOT one of HISTORY_TRACKED_CONTROL_IDS: it never
+// writes to a layer field directly, only ever drives #height, which is already tracked there.
+el('letterHeight').addEventListener('input',()=>{
+  const l=selectedLayer();
+  if(!l||l.type!=='text')return;
+  const desiredCapHeightMm=parseFloat(el('letterHeight').value);
+  if(!Number.isFinite(desiredCapHeightMm))return;
+  const engineHeightMm=solveEngineHeightMm({fontId:l.font,desiredCapHeightMm});
+  el('height').value=Math.max(RAW_ENGINE_HEIGHT_MM_MIN,Math.min(RAW_ENGINE_HEIGHT_MM_MAX,engineHeightMm));
+  el('height').dispatchEvent(new Event('input'));
+});
+// TXT-104 step 4b: heightMode mode-switch affordance (design doc section 3.3) -- flips only
+// l.heightMode, never l.height itself, so nothing about the rendered output changes at the moment of
+// switching, only which field/units the operator edits from then on. Mirrors the layersList visibility
+// checkbox's own direct-mutation pattern just above (commitHistory() then mutate then updateAll(true))
+// since this is a single discrete click, not a continuous typing/dragging session. updateAll(true)
+// already calls updateEditingUI()->updateTextFontCapabilityUI() internally, which both re-shows the
+// correct field and (via syncLetterHeightFromHeight()) refreshes #letterHeight's displayed value.
+el('heightModeToggleBtn').addEventListener('click',()=>{
+  const l=selectedLayer();
+  if(!l||l.type!=='text')return;
+  commitHistory();
+  l.heightMode=l.heightMode==='capHeight'?'raw':'capHeight';
+  updateAll(true);
 });
 // Auto Fit now defaults to Off for new layers (Text height reflects the actual rendered size), so
 // switching it back On is a deliberate, easy-to-miss trade-off -- Auto Fit can shrink text below the
