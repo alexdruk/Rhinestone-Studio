@@ -13,9 +13,11 @@ import { fileURLToPath } from 'node:url';
 // forgets to re-run the measurement script is caught here, not silently shipped.
 
 const { measureFontHeightRatios, roundRatio } = await import('./measure-font-height-ratios.mjs');
+const { FontManager } = await import('../src/fonts/FontManager.js');
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const manifestPath = path.join(repoRoot, 'assets/fonts/manifest.json');
+const appJsPath = path.join(repoRoot, 'app.js');
 
 async function test(name, fn) {
   try {
@@ -96,6 +98,69 @@ await test('6. measureFontHeightRatios() is deterministic across repeated calls 
   const first = await measureFontHeightRatios();
   const second = await measureFontHeightRatios();
   assert.deepEqual(first, second);
+});
+
+// --- TXT-104 step 2: FontManager exposure + solveEngineHeightMm() ---
+//
+// FontManager.getFont() is a plain normalizeFontRecord() field allowlist (src/fonts/FontManager.js),
+// not a passthrough of the raw manifest record -- these tests confirm capHeightRatio/xHeightRatio
+// were actually added to that allowlist, not just present in the manifest test 1-4 already cover.
+//
+// solveEngineHeightMm() lives in app.js, which is a browser entry point with no exports (not
+// import()-able under plain Node) -- extracted and executed via `new Function`, the established
+// convention for testing app.js's pure logic functions (see tools/test-text-position-workflow.mjs's
+// computeAutoFitScale() extraction). Because solveEngineHeightMm() reads the module-level
+// `fontManager` variable rather than taking it as an argument (matching how it's called live in
+// app.js), a real FontManager instance is injected as a function parameter of the same name.
+
+const fontManager = new FontManager(JSON.parse(await readFile(manifestPath, 'utf8')));
+
+await test('7. FontManager.getFont() exposes capHeightRatio/xHeightRatio for the validated OpenType portfolio, matching the manifest exactly', () => {
+  for (const id of EXPECTED_IN_SCOPE_IDS) {
+    const font = fontManager.getFont(id);
+    assert.equal(font.capHeightRatio, fontsById.get(id).capHeightRatio, `${id}: FontManager.getFont() capHeightRatio must match the manifest`);
+    assert.equal(font.xHeightRatio, fontsById.get(id).xHeightRatio, `${id}: FontManager.getFont() xHeightRatio must match the manifest`);
+  }
+});
+
+await test('8. FontManager.getFont() leaves capHeightRatio/xHeightRatio undefined for RS Block/RS Modern and legacy non-validated OpenType fonts', () => {
+  for (const font of fontManager.manifest.fonts) {
+    if (EXPECTED_IN_SCOPE_IDS.includes(font.id)) continue;
+    assert.equal(font.capHeightRatio, undefined, `${font.id}: FontManager.getFont() must not expose a capHeightRatio`);
+    assert.equal(font.xHeightRatio, undefined, `${font.id}: FontManager.getFont() must not expose an xHeightRatio`);
+  }
+});
+
+const appJs = await readFile(appJsPath, 'utf8');
+function extractBlock(source, pattern, label) {
+  const match = source.match(pattern);
+  assert.ok(match, `expected to find ${label} in app.js`);
+  return match[0];
+}
+const solveEngineHeightMmSrc = extractBlock(appJs, /function solveEngineHeightMm\([^)]*\)\{[\s\S]*?\n\}/, 'function solveEngineHeightMm()');
+// eslint-disable-next-line no-new-func
+const solveEngineHeightMm = new Function('fontManager', `return ${solveEngineHeightMmSrc};`)(fontManager);
+
+await test('9. solveEngineHeightMm() solves the em-square heightMm from a desired cap height, matching desiredCapHeightMm / manifest capHeightRatio', () => {
+  for (const id of EXPECTED_IN_SCOPE_IDS) {
+    const desiredCapHeightMm = 30;
+    const expected = desiredCapHeightMm / fontsById.get(id).capHeightRatio;
+    const actual = solveEngineHeightMm({ fontId: id, desiredCapHeightMm });
+    assert.ok(Math.abs(actual - expected) < 1e-9, `${id}: expected ~${expected}, got ${actual}`);
+  }
+  // Explicit sanity check against the exact example from the design doc's step-2 acceptance criteria.
+  const baloo2 = solveEngineHeightMm({ fontId: 'baloo2-variable-regular', desiredCapHeightMm: 30 });
+  assert.ok(Math.abs(baloo2 - 30 / 0.618) < 0.01, `expected baloo2-variable-regular's solved height to be ~${30 / 0.618}, got ${baloo2}`);
+});
+
+await test('10. solveEngineHeightMm() throws a clear error for fonts with no capHeightRatio (RS Block, and any non-validated legacy OpenType font)', () => {
+  for (const id of ['rs-block', 'rs-modern', 'courier-prime-regular']) {
+    assert.throws(
+      () => solveEngineHeightMm({ fontId: id, desiredCapHeightMm: 30 }),
+      /capHeightRatio/,
+      `expected solveEngineHeightMm('${id}') to throw a capHeightRatio-related error, not return NaN`
+    );
+  }
 });
 
 console.log('Font height ratio tests passed.');

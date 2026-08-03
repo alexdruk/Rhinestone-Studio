@@ -438,6 +438,19 @@ function computeAutoFitScale(layer,project,measuredWidthMm){
   const minScale=spacingMm>0&&layer.height>0?(spacingMm*MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO)/layer.height:fitScale;
   return{scale:Math.min(1,Math.max(fitScale,minScale))};
 }
+// TXT-104 step 2: solves the em-square heightMm generateTextLayout() must be called with so that a
+// font's rendered capital letters come out to desiredCapHeightMm, per the design doc's section 3.1
+// formula (engineHeightMm = desiredCapHeightMm / capHeightRatio(fontId)). Pure -- reads only the
+// module-level fontManager (the same registry every other font lookup in this file already uses),
+// no DOM, no layer/project object. Only meaningful for the four validated OpenType fonts that carry
+// a capHeightRatio (FontManager.js's normalizeFontRecord()); RS Block/RS Modern (authored stone
+// centers, heightMm already a no-op) and every non-validated legacy OpenType font have no
+// capHeightRatio and throw here rather than silently returning NaN.
+function solveEngineHeightMm({fontId,desiredCapHeightMm}){
+  const font=fontManager.getFont(fontId);
+  if(typeof font.capHeightRatio!=='number')throw new Error(`solveEngineHeightMm: font "${fontId}" has no capHeightRatio -- only the validated OpenType portfolio (Baloo 2, Anton, Sacramento, Dancing Script) supports cap-height-accurate sizing.`);
+  return desiredCapHeightMm/font.capHeightRatio;
+}
 // MONO-005A: delegates to src/editing/TextPlacement.js's own computeTextPlacementOffsetMm() -- the
 // single shared source of truth for this formula, now also used by MonogramGenerator to compute a
 // generated letter layer's x/y (via that module's inverse function). Behavior-preserving extraction
