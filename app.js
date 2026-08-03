@@ -2182,6 +2182,9 @@ el('letterHeight').addEventListener('input',()=>{
   el('height').value=Math.max(RAW_ENGINE_HEIGHT_MM_MIN,Math.min(RAW_ENGINE_HEIGHT_MM_MAX,engineHeightMm));
   el('height').dispatchEvent(new Event('input'));
 });
+el('letterHeight').addEventListener('change',()=>{
+  el('height').dispatchEvent(new Event('change'));
+});
 // TXT-104 step 4b: heightMode mode-switch affordance (design doc section 3.3) -- flips only
 // l.heightMode, never l.height itself, so nothing about the rendered output changes at the moment of
 // switching, only which field/units the operator edits from then on. Mirrors the layersList visibility
