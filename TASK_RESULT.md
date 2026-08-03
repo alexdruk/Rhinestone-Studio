@@ -6,267 +6,291 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-RS-2013 (Implementation Phase) — §4 step 5: stone-count stress testing
+RS-2013 (Implementation Phase) — §4 step 5b: curved-surface perf mitigation
 
 ---
 
 # Status
 
-COMPLETE. New benchmark script (`tools/measure-instanced-stone-performance.mjs`) built, run, and
-its real numbers captured below. No application code was touched — this step is measurement only,
-per its own scope.
+COMPLETE. Chose and implemented mitigation option (a) — a leading-edge-plus-guaranteed-trailing
+throttle on `_updateInstancedStones()` — in `Preview3DRenderer.js`. Re-ran the step 5 benchmark
+(with one minimal, explained addition) and verified the mitigation's real effect with a realistic
+inter-call cadence. **Honest verdict: the mitigation substantially reduces how often the expensive
+rebuild fires during a sustained drag (duty cycle ~70% → ~9-12% at N=15,000 on the mug), but does
+NOT bring any individual rebuild under the 16ms/60fps budget — each rebuild that does fire still
+costs the same ~28-39ms it always did. The gap is only partially closed.**
 
 ---
 
 # Branch
 
-feature/rs-2013-instanced-stones-step5-stress-testing (already checked out at task start, cut from
-the step-4 integration commit `5ad66a1`, verified as HEAD before any work began).
+`feature/rs-2013-instanced-stones-step5b-perf-mitigation` (already checked out at task start, cut
+from the step-5 stress-testing commit `9e98550`, verified as HEAD before any work began; working
+tree was clean).
 
 ---
 
-# Cleanup accounting
+# Investigating both named options before choosing
 
-`du -sh tools/*.png` at task start: no PNG files matched (`tools/*.png` — zero files), consistent
-with step 4's own report that steps 1-3b's screenshot scratch assets were already fully removed by
-`14ea561`. Nothing to clean up before starting, and this step produced no screenshots of its own —
-the benchmark is a pure Node/console-output measurement, no browser or image output at all.
+## Option (b): incremental/partial instance updates
 
----
+The brief asked whether `StoneLayout`/`GeometryEngine` currently expose any way to know *which*
+stones changed between two calls. Read `src/geometry/StoneLayout.js` in full: it is a plain wrapper
+around `stones: Stone[]` with no identity tracking, no dirty-flag concept, no previous-state
+reference, and no diff/patch representation of any kind — `toJSON()`/`fromJSON()` round-trip the
+whole array, nothing more. `app.js`'s real edit path (`updateAll()` → `engine.generate(project)`,
+confirmed at `app.js:1120`) constructs a **brand-new** `StoneLayout` on every single call, including
+every `pointermove`-driven frame of a drag (`app.js:1927-1930`, unthrottled, cited by the design
+doc's §3.2). There is no per-stone identity that survives across two calls to compare against —
+option (b) would require inventing new upstream plumbing (a diff/dirty-stone-index list threaded
+through `GeometryEngine`) that does not exist today. Per the milestone's own explicit instruction,
+this is reported as **out of reach for this scope** — a separate, bigger milestone — rather than
+faked.
 
-# What was built
+## Option (a): debounce/throttle
 
-## `tools/measure-instanced-stone-performance.mjs` (new)
+The brief asked specifically whether a debounce's visible lag is an acceptable tradeoff, or needs
+visual validation first. Considered a **pure trailing debounce**, mirroring `app.js`'s
+`AUTOSAVE_DEBOUNCE_MS` precedent (`app.js:872`, `flushAutosaveNow()`/`scheduleAutosave()`) exactly:
+`clearTimeout`+reschedule on every call, fire only after the window elapses with no new calls.
+Concluded this shape is **wrong for this specific case** without needing a browser trial: autosave
+debounces a background `localStorage` write nobody watches happen in real time; a pure trailing
+debounce on the instanced-stone rebuild would freeze the entire stone layer for the full duration of
+every drag (however long the operator keeps moving the pointer, since every new call resets the
+timer) and only snap into place once the pointer stops for the whole window — a materially different
+and much worse UX than autosave's "invisible until it matters" property. This is knowable from the
+mechanism itself, not something that required a visual A/B to rule out.
 
-A standalone Node script — **not** a `tools/test-*.mjs` file, deliberately: it does not match
-`run-tests.mjs`'s `^test-.*\.mjs$` discovery pattern, so it is automatically excluded from
-`npm test`/`node tools/run-tests.mjs --all` without needing an entry in
-`tools/test-groups.mjs`'s `EXCLUDED_FROM_DEFAULT` — the same "prints measured numbers for a human to
-read, no pass/fail assertion" role `tools/measure-performance.mjs` and
-`tools/measure-boolean-precision.mjs` already play, and the file naming convention that keeps them
-out of the test suite automatically. Run with `node tools/measure-instanced-stone-performance.mjs`.
+Chose a **leading-edge-plus-guaranteed-trailing throttle** instead — same broad "coalesce a
+high-frequency signal" family as option (a), same `setTimeout`-based mechanism as the
+`AUTOSAVE_DEBOUNCE_MS` precedent, but adapted from "delay until quiet" to "cap the rate, never
+freeze":
+- The first call after a quiet period (>= 100ms since the last real rebuild) always rebuilds
+  **immediately** — a single discrete edit, or the first movement of a drag, is never delayed.
+- Only calls arriving faster than the 100ms window get coalesced, always into exactly **one**
+  trailing rebuild once the burst quiets (the latest call's data always wins — no staleness).
+- A stone-**count** change (add/remove) is never throttled — it always rebuilds synchronously,
+  since `InstancedMesh.count` must never lag an actual add/remove, and this is not the
+  high-frequency-drag scenario step 5 measured (that was same-count position updates).
 
-**Fixture generation**: a hex-packed grid generator (`generateHexGridStoneParams()`) that solves for
-a pitch producing *exactly* the requested stone count on a given canvas (binary-shrink the pitch
-until the grid overshoots the target, then trim to the exact count) — synthetic, not hand-authored,
-per the task brief. Stones use SS6's real diameter (2.0mm, `src/renderer/StoneSizes.js`) and a
-single color (`'gold'`); at the denser counts adjacent stones visually overlap, which is expected
-and irrelevant here — this benchmark exercises a fixed per-stone CPU cost, not a rendered look.
-
-**Renderer harness**: the exact same "mounted without a real `init()`" convention
-`tools/test-preview3d-instanced-stones.mjs` already established (real `Preview3DRenderer`, real
-`'three'`, real `ObjectGeometryBuilder.js`; `WebGLRenderer`/`OrbitControls`/`ResizeObserver` — real
-browser/DOM dependencies `update()` never touches — are bypassed with the same plain fakes that file
-uses). This means the benchmark runs the **actual, unmodified** `_updateInstancedStones()` code
-path, not a re-description of it.
-
-**What is measured, at N = 1,000 / 5,000 / 15,000 stones on a mug (the curved-surface path —
-azimuth trig, `wallRadiusAt()`, outward-normal alignment, per-stone spin — the most expensive of the
-three product kinds `_updateInstancedStones()` handles) plus a supplementary 300mm-plate run at
-N = 15,000 (the flat-plane path, and the literal scenario §1.3's worked ceiling calculation uses)**:
-
-1. **Initial build cost**: the first `instance.update(layout, {..., instancedStones: true})` call at
-   a new stone count — allocates the `InstancedMesh` buffer at that capacity and runs the full
-   per-stone loop once.
-2. **Steady-state per-`update()` cost during a simulated drag**: 20 further `update()` calls in
-   quick succession, each with every stone's `xMm`/`yMm` perturbed by a small sinusoidal offset and a
-   fresh `StoneLayout` constructed each time — mirroring `app.js`'s real, un-throttled
-   `pointermove` → `updateAll()` path (cited in the design doc's §3.2 and step 3's own findings) —
-   with **no capacity change**, so this isolates the per-stone matrix/color rebuild loop's cost from
-   the one-time buffer-allocation cost measured in (1). Reported as min/median/mean/max across the
-   20 calls, not just an average.
+This directly answers the brief's question: **no, a pure debounce is not an acceptable tradeoff
+here — a rate-limiting throttle with a guaranteed trailing update is the right shape**, and it did
+not need a dedicated visual-lag validation pass to reach that conclusion, because the pure-debounce
+failure mode (whole-drag freeze) is evident from the mechanism itself, not from ambiguity that only
+a screenshot could resolve.
 
 ---
 
-# The numbers (two independent runs, same machine, to check for run-to-run noise)
+# What was implemented
 
-## Run 1
+`src/preview3d/Preview3DRenderer.js`:
+- `INSTANCED_STONES_REBUILD_THROTTLE_MS = 100` — comfortably exceeds the worst single-rebuild cost
+  step 5 measured at the ceiling (~34-38ms), so a fast burst always coalesces to at most ~10
+  rebuilds/sec rather than the throttle being a no-op at the exact stone count that matters most;
+  still short enough that the stone layer keeps visibly moving during a drag (not frozen the way
+  `AUTOSAVE_DEBOUNCE_MS`'s 1200ms would read).
+- `_updateInstancedStonesThrottled()` — the new gate `update()` now calls instead of
+  `_updateInstancedStones()` directly when `instancedStones: true`. Computes the same
+  `capacity`/`capacityChanged` check `_updateInstancedStones()` itself already does (cheap, no
+  duplication of the actual rebuild logic) to decide whether to bypass the throttle. On the
+  immediate path, calls the **exact same, unmodified** `_updateInstancedStones()` — this method's
+  own per-stone loop was not touched at all, so its per-call cost is provably identical to what
+  step 5 measured. On the throttled path, stores the latest args and schedules (or reschedules) one
+  `setTimeout`.
+- `_clearPendingInstancedRebuild()` — cancels any pending trailing timer; called from
+  `_teardownInstancedStones()` (switching `instancedStones` off must not let a stale timer resurrect
+  a torn-down mesh) and `dispose()`.
+- No change to `_updateInstancedStones()`'s own body, to placement/orientation math, to the
+  lighting rig (`_applyLightRig()`), or to material/color logic — all of step 4's shipped behavior
+  is untouched; only *when* the existing rebuild function gets called changed.
 
-| Config | N | Build (first `update()`) | Drag `update()` min | median | mean | max |
-|---|---|---|---|---|---|---|
-| mug | 1,000 | 23.5ms | 1.66ms | 2.22ms | 2.99ms | 8.38ms |
-| mug | 5,000 | 17.9ms | 8.32ms | 9.61ms | 9.88ms | 14.36ms |
-| mug | 15,000 | 31.4ms | 26.78ms | 27.89ms | 28.58ms | 38.11ms |
-| plate | 15,000 | 18.5ms | 6.97ms | 7.22ms | 7.25ms | 7.83ms |
+---
 
-## Run 2 (repeat, confirming these are not one-off noise)
+# Re-running the step 5 benchmark
+
+## Why one new parameter was needed (not optional polish)
+
+The mitigation is a real-elapsed-wall-clock throttle. Step 5's `runDragSimulation()` calls
+`update()` 20 times **back-to-back with zero delay** — against a throttle, that means 19 of the 20
+calls resolve via the near-instant "coalesce, defer to a trailing rebuild" path, and the deferred
+trailing rebuild (a real `setTimeout`) never gets a chance to fire *inside* the synchronous
+20-call loop — Node's event loop can't run a timer callback until the calling function returns.
+Reporting the raw before/after numbers from the unmodified loop as-is would show a median crashing
+to ~0.01ms, which is real but **misleading on its own**: it looks like "the rebuild got cheap," when
+actually most calls just got cheap *to issue*, with the identical, unmodified rebuild cost deferred
+to a later, unmeasured moment.
+
+Added exactly one optional parameter, `intervalMs` (default `0`), to `runDragSimulation()` — when
+omitted (every one of step 5's original 4 call sites), behavior/output is byte-identical to the
+unmodified script; when `>0`, the loop awaits a real `setTimeout`-based pause between calls,
+simulating realistic pointer-event spacing so the throttle's actual coalescing/duty-cycle behavior
+can be measured and reported honestly. One new section using this parameter was added
+("Mitigation verification"); nothing else in the script changed.
+
+## The four original blocks, re-run against the mitigated code (two independent runs)
+
+These reuse step 5's exact zero-delay loop, unmodified — read per the caveat above: a near-zero
+median here means "most calls now resolve almost instantly by coalescing," not "the rebuild itself
+got faster."
+
+### Run 1
 
 | Config | N | Build | Drag `update()` min | median | mean | max |
 |---|---|---|---|---|---|---|
-| mug | 1,000 | 19.6ms | 1.67ms | 2.13ms | 2.94ms | 8.10ms |
-| mug | 5,000 | 17.6ms | 8.40ms | 8.90ms | 9.14ms | 13.43ms |
-| mug | 15,000 | 39.2ms | 27.65ms | 29.30ms | 29.81ms | 34.21ms |
-| plate | 15,000 | 18.1ms | 6.95ms | 7.28ms | 7.67ms | 10.76ms |
+| mug | 1,000 | 19.97ms | 0.001ms | 0.005ms | 0.014ms | 0.089ms |
+| mug | 5,000 | 31.75ms | 0.002ms | 0.005ms | 0.006ms | 0.027ms |
+| mug | 15,000 | 38.22ms | 0.003ms | 0.009ms | 1.775ms | 35.286ms |
+| plate | 15,000 | 20.96ms | 0.006ms | 0.015ms | 0.403ms | 7.735ms |
 
-The two runs agree closely (medians within ~10% of each other at every config) — these are real,
-repeatable measurements on this machine, not noise.
+### Run 2
 
----
+| Config | N | Build | Drag `update()` min | median | mean | max |
+|---|---|---|---|---|---|---|
+| mug | 1,000 | 20.17ms | 0.001ms | 0.005ms | 0.019ms | 0.096ms |
+| mug | 5,000 | 32.39ms | 0.002ms | 0.005ms | 0.008ms | 0.035ms |
+| mug | 15,000 | 39.46ms | 0.003ms | 0.009ms | 1.752ms | 34.826ms |
+| plate | 15,000 | 20.66ms | 0.006ms | 0.016ms | 0.393ms | 7.426ms |
 
-# What this does and does not measure (read before trusting these numbers for anything beyond this
-machine)
+Note the **max at N=15,000 mug is still ~35-39ms** in both runs — in this exact 20-call zero-delay
+loop, real (unmeasured, via `makeLayout()`'s own 15,000-`Stone` construction cost, which happens
+*outside* the timed `instance.update()` call) time accumulates across iterations until it exceeds
+the 100ms window partway through the loop, at which point one call in the batch does trigger a real,
+full-cost immediate rebuild — visible as the single ~35-39ms spike in the per-call arrays. This is
+not a bug in the mitigation; it is exactly the same unmodified rebuild cost step 5 already measured,
+firing once instead of 20 times.
 
-**Does measure**: real wall-clock time of the actual, unmodified `_updateInstancedStones()` CPU-side
-loop (azimuth/radius/normal trigonometry, `getCrystalAppearance()`/`getCrystalColor()` lookups per
-stone, `Matrix4.compose()`, `InstancedMesh.setMatrixAt()`/`setColorAt()`), running in real Node
-against the real `'three'` module and real `ObjectGeometryBuilder.js` geometry — not a mock, not a
-re-implementation, not an estimate.
+## Mitigation verification: realistic-cadence drag simulation (the honest read)
 
-**Does NOT measure**: actual GPU frame time (the rasterization/shading cost of the resulting
-`InstancedMesh` draw call). There is no real GPU in this environment. A headless-Chromium/Playwright
-run (the mechanism step 3/step 4 used for their own screenshot verification) was considered and
-deliberately not used for this specific measurement — headless Chromium without a real GPU falls
-back to a software rasterizer (SwiftShader/ANGLE), which would produce a number, but not one
-representative of the real desktop-class GPUs this preview actually ships to; it would not have been
-a more honest measurement, just a different unrepresentative one. The Node-side timing harness above
-is the more honest choice for *this specific* measurement in *this specific* environment, precisely
-because it's explicit about measuring the one real, environment-independent cost (CPU-side JS
-execution) rather than producing a plausible-looking but misleading GPU number.
+`tools/measure-instanced-stone-performance.mjs` now includes a new section simulating 120
+pointermove events at a genuine ~8ms real interval (a deliberately fast, ~120Hz-ish cadence — faster
+than a 60Hz display can even render, to stress the coalescing behavior the way a high-poll-rate
+input device would), at N=15,000 on the mug — the one configuration step 5 found exceeds budget.
 
-In place of a direct GPU measurement, the design doc's own analytical argument (§1.3/§3.1/§3.2)
-stands: 15,000 stones × 8 triangles/octahedron = 120,000 triangles in **one** `InstancedMesh` draw
-call is trivial for any WebGL2-class GPU (contemporary hardware comfortably renders single-digit
-*millions* of instanced triangles per frame) — there is no polygon-budget or draw-call-count concern
-at this stone-count ceiling, on any real GPU. This benchmark's job, and the one the design doc
-identified as the actual open question, is the CPU-side cost below — not GPU triangle throughput.
+**Before (mitigation reverted, same realistic ~8ms cadence, for a fair comparison):**
 
-Also worth naming as a caveat on the "build" numbers specifically: the very first `update()` call in
-a fresh process pays a JIT warm-up cost (V8 hasn't yet optimized `_updateInstancedStones()`'s hot
-loop) on top of the real one-time `InstancedMesh` buffer allocation — the "build" column above is not
-a pure measurement of buffer-allocation cost alone. This is why the steady-state drag numbers (20
-already-warm calls) are the numbers that matter for the real question this step exists to answer, not
-the build column.
+```
+120 simulated pointermove events over 5088.797ms of real time (~8ms apart):
+  120 of 120 calls actually rebuilt; 0 were coalesced.
+  Total main-thread time spent in rebuilds: 3547.558ms of 5088.797ms real time (69.713% duty cycle).
+  Per-rebuild cost: min=27.644ms median=29.383ms max=33.573ms.
+```
 
----
+**After (mitigation active, two runs):**
 
-# Answering step 3's central question directly
+```
+Run 1: 120 events over 2371.400ms.  9 of 120 rebuilt (111 coalesced).
+       Total rebuild time: 282.716ms of 2371.400ms (11.922% duty cycle).
+       Per-rebuild cost: min=28.513ms median=30.295ms max=38.845ms.
+       After settling: mesh reflects the final stone position -- CONFIRMED.
 
-**Is the CPU-side rebuild cost at the ceiling stone count (~15,000) fast enough to feel responsive
-during a live drag — comfortably under the ~16ms 60fps frame budget?**
+Run 2: 120 events over 2229.953ms.  7 of 120 rebuilt (113 coalesced).
+       Total rebuild time: 203.440ms of 2229.953ms (9.123% duty cycle).
+       Per-rebuild cost: min=28.070ms median=29.186ms max=29.814ms.
+       After settling: mesh reflects the final stone position -- CONFIRMED.
+```
 
-**No, not for the mug/tumbler curved-surface path.** At N = 15,000 on a mug, every `update()` call
-during a simulated drag took a **median ~28-29ms and a max ~34-38ms** — roughly double the 16ms
-budget on the median case alone, in both independent runs. This is not a "just fast enough, some
-noise" result: the *minimum* observed call (26.8ms) already exceeds the budget by ~68%. **A drag at
-this stone count would visibly stutter** — every pointer-move-driven `update()` call would take
-roughly two 60fps frame-times' worth of main-thread JS execution before a frame could even be
-requested, on top of whatever the (currently unmeasured, and per the analysis above, expected-cheap)
-GPU render itself costs.
-
-**At N = 5,000, it is borderline but currently within budget**: median ~9-9.6ms, max ~13.4-14.4ms —
-under 16ms in both runs, but with less than half the budget left as headroom on the median and only
-~2-3ms of margin on the observed max. This is "acceptable today," not "comfortably fast" — a modestly
-slower machine, a busier main thread (other `update()`-triggered work, autosave, etc. per §3.2's own
-autosave-debounce citation), or a richer future facet geometry (§3.1 flags a 16-triangle candidate as
-a possible follow-up) would plausibly push this over budget too.
-
-**At N = 1,000 (today's actual largest real example, `mixed-fill-styles-and-sizes.rhs` at 1,161
-stones per §1.3), it is comfortably fast**: median ~2.1-2.2ms, max ~8.1-8.4ms — 2-8x headroom under
-budget in the worst case. **Today's real designs are not at risk.** This finding is scoped
-specifically to the *theoretical ceiling* stone count, not current production usage.
-
-**The flat-plane (plate) path is meaningfully cheaper than the curved-surface (mug/tumbler) path at
-the same stone count**: 15,000 stones on the 300mm plate took a median ~7.2-7.3ms, well within
-budget — roughly a quarter of the mug's cost at the identical stone count. This confirms the design
-doc's own §3.3 observation that the plate's placement math (flat projection, no `wallRadiusAt()`
-interpolation, no per-stone spin) is strictly cheaper than the mug/tumbler/bottle curved-surface
-math — and means the *product kind*, not just stone count, materially affects whether this concern
-is live for a given design. A 15,000-stone plate design would drag smoothly today; a 15,000-stone
-mug/tumbler design would not.
+**What changed and what didn't:**
+- **Duty cycle** (fraction of real drag time spent blocked in a stone rebuild) drops from **~70%**
+  to **~9-12%** at the stone-count ceiling. Without the mitigation, the main thread would need to
+  spend roughly 3.5 seconds rebuilding to process ~1 second of realistic-cadence pointer input —
+  a guaranteed, continuous backlog/stutter for the whole drag. With it, only ~9-12% of the drag's
+  real duration is spent blocked, leaving the rest genuinely free for rendering/input.
+- **Per-rebuild cost when one does fire is unchanged**: ~28-39ms either way, since
+  `_updateInstancedStones()`'s own body was never modified. This is the number option (b) could
+  have reduced, and couldn't be reduced by option (a) at all — rate-limiting *how often* an
+  operation runs cannot make one occurrence of it faster.
+- **Correctness preserved**: in both mitigated runs, after the burst quiets the mesh always settles
+  on the exact final requested stone position (verified against the analytically-expected azimuth/
+  radius/height, not just eyeballed) — the trailing-guarantee mechanism works as designed, nothing
+  is ever left permanently stale.
 
 ---
 
-# What's now known vs. still unknown about performance at scale
+# Does this close the gap?
 
-**Now known** (this step):
-- The exact per-`update()` wall-clock cost, on this machine, at three realistic-to-ceiling stone
-  counts, for both the expensive (curved-surface) and cheap (flat-plane) placement paths — real
-  numbers, not an estimate.
-- The CPU-side rebuild cost genuinely becomes a live, user-visible responsiveness problem for
-  mug/tumbler/bottle designs at the ~15,000-stone ceiling, and is borderline (not comfortably safe)
-  already at ~5,000 stones on those product kinds.
-- The InstancedMesh itself builds successfully and reaches the correct instance count at every
-  tested stone count, on every tested product kind — no crash, no silent truncation, no error at
-  scale.
+**No, not in the strict sense of every individual rebuild landing under 16ms — only partially.**
+At N=15,000 on the mug/tumbler/bottle curved-surface path, any rebuild that actually fires still
+costs ~28-39ms, unchanged from step 5, still roughly double-to-more-than-double the 60fps frame
+budget. **What the mitigation achieves is frequency, not per-call cost**: it converts what would be
+a continuous, unbroken stutter (every single `pointermove` event individually blocking the main
+thread for ~28ms+, with the browser guaranteed to fall further and further behind real pointer
+input) into **periodic, bounded hitches** — at the measured ~9-12% duty cycle, roughly one ~28-39ms
+hitch every few hundred milliseconds of sustained fast dragging, with the main thread free the rest
+of the time. That is a real, substantial, honestly-measurable improvement in aggregate
+responsiveness and CPU load — but it is not "smooth," and it does not make the instanced path safe
+to ship enabled by default for mug/tumbler/bottle at the ~15,000-stone ceiling on its own. Only
+option (b) (reducing the per-rebuild cost itself via incremental/partial updates) could close the
+gap in that stricter sense, and it is out of reach for this scope per the investigation above.
 
-**Still unknown** (out of scope for this measurement-only step, flagged for whoever scopes next):
-- Real GPU-side render/frame time on actual client hardware (desktop and, notably, any lower-end
-  device this browser tool might run on) — this environment has no real GPU to measure against; see
-  "what this does and does not measure" above. The analytical triangle-budget argument is a strong
-  a-priori case that this is *not* the bottleneck, but it has not been directly measured on real
-  hardware, in a real browser, at these stone counts.
-- Whether tumbler/bottle (the other two curved-surface product kinds `_updateInstancedStones()`
-  handles) show materially different costs from the mug numbers above — not separately measured in
-  this step; `wallRadiusAt()`'s cost (mug/tumbler) vs. the bottle's simpler constant-radius branch
-  are structurally different in the source (`_updateInstancedStones()`, per-stone `if
-  (dimensions.kind === 'bottle')` branch) and could plausibly differ, untested here.
-- How this cost composes with other real per-`update()` work in a live Studio session (autosave
-  scheduling, other renderer updates, DOM/UI reactivity) — this benchmark measures
-  `_updateInstancedStones()` in isolation via a mounted-but-not-live renderer, not inside a real
-  running `npm run dev` session under real event-loop contention.
+At N=5,000 and below (including today's real designs, ~1,161 stones at most), step 5 already found
+the per-call cost comfortably within budget — the throttle is effectively a no-op there in practice
+(ordinary edits are spaced far more than 100ms apart), so nothing changes for those cases, which is
+the intended, unaffected behavior.
 
----
-
-# Are the mitigation options step 3 named now a hard requirement, or still just options?
-
-The design doc's §3.2 named two options for the CPU-side cost, "worth evaluating during
-implementation, not decided [t]here": (a) debouncing/throttling the instance-buffer rebuild during a
-continuous drag, or (b) incremental/partial instance updates instead of a full rebuild every call.
-
-**This step's findings make (a) or (b) a clear prerequisite before the instanced path could
-reasonably ship *enabled by default* for mug/tumbler/bottle products at realistic-to-ceiling stone
-counts** — not merely a nice-to-have. A ~28ms median per-`update()` cost during a drag is a real,
-user-visible stutter, not a theoretical concern; §4 step 6 (visual validation + default flip)
-should not flip the default on without one of these mitigations landing first, at least for
-mug/tumbler/bottle. The plate path, and any product kind at ≤~1,000 stones, does not currently need
-either mitigation per these numbers — so a plausible narrower framing for whoever scopes the next
-step is "required before default-on for curved-surface products at high stone counts," not
-"required unconditionally for every configuration." This step does not implement either option, per
-its own scope — that determination and implementation is explicitly left to a future milestone.
+**For Sasha:** this mitigation is real and worth landing, but it is not free money — it trades
+"continuous stutter" for "the stone layer visibly updates in coarser, throttled steps during a very
+fast/sustained drag at extreme stone counts, with an occasional ~28-39ms hitch when a coalesced
+rebuild does land," which is a genuinely better but still imperfect experience at the theoretical
+ceiling. This is a resolvable-in-principle (via option (b)'s incremental updates, a separate,
+larger milestone) but currently-unavoidable UX tradeoff at extreme stone counts — not a full fix.
 
 ---
 
-# Scope discipline
+# Required confirmations
 
-- No change to `src/preview3d/**`, `src/geometry/**`, `app.js`, `index.html`, or any other
-  application code — confirmed by `git status` before committing.
-- No change to the placement/lighting/material logic already shipped in step 4.
-- Neither mitigation option (debouncing, incremental updates) was implemented — measurement only,
-  per this step's own scope.
-- No screenshots or browser verification were produced or needed — this is a pure Node/console
-  measurement; `du -sh tools/*.png` before and after this step: zero files both times (nothing to
-  report as before/after size change).
+1. **`instancedStones` still defaults to `false`, unaffected.** The throttle lives entirely inside
+   the `instancedStones: true` branch of `update()` (`_updateInstancedStonesThrottled()`, only
+   called when that flag is true) — nothing about the default/omitted path changed. Tests 1-3
+   (regression safety) pass unchanged.
+2. **No change to already-shipped placement/lighting/material behavior at low/moderate stone
+   counts.** `_updateInstancedStones()`'s own body — the placement math, orientation, color mapping,
+   lighting rig toggle — was not touched at all; only *when* it gets invoked changed. Tests 4-10
+   (placement/orientation/color/lighting for mug and plate, toggling on/off, stone-count changes)
+   all pass unchanged, and test 12 explicitly confirms ordinary, non-burst edits (calls spaced
+   further apart than the throttle window) still rebuild immediately with no added lag.
+3. **Capacity changes are never throttled** (test 13) — an added/removed stone always reflects
+   immediately, even mid-burst, so the mesh's instance count never lags behind a structural edit.
+4. **No stale-timer resurrection** (test 14) — switching `instancedStones` off while a trailing
+   rebuild is pending cancels it; nothing can revive a torn-down mesh later.
 
 ---
 
 # Testing
 
-- `node tools/measure-instanced-stone-performance.mjs` — the new benchmark itself; produces the
-  numbers reported above. Not part of `npm test`/`run-tests.mjs --all` by design (see "What was
-  built" above).
-- `node tools/run-tests.mjs preview3d` (the two pre-existing `Preview3DRenderer`-related test files,
-  untouched by this step): **2/2 files, all tests passed** — confirms this measurement-only work
-  introduced no regression to the code it exercises.
-- `npm run test:full`/`node tools/run-tests.mjs --all` was **not** run for this step, per
-  `CLAUDE.md`'s testing policy ("run only tests directly related to the current task" — this step
-  changes no shared architecture, schema, or exporter code).
+- `node tools/test-preview3d-instanced-stones.mjs` — 14/14 pass (10 pre-existing, unchanged; 4 new
+  throttle-behavior tests: 11-14).
+- `node tools/run-tests.mjs preview3d` — 2/2 files pass (both `Preview3DRenderer`-related test
+  files).
+- `node tools/measure-instanced-stone-performance.mjs` — numbers above; run twice for
+  run-to-run-noise sanity, plus a before/after comparison of the new realistic-cadence section
+  (mitigation reverted vs. active) using the same benchmark file.
+- `npm run test:full`/`node tools/run-tests.mjs --all` **not** run, per `CLAUDE.md`'s testing
+  policy — no shared architecture, project schema, or exporter code changed; this milestone touched
+  only `Preview3DRenderer.js` and its two dedicated test/tool files.
+
+---
+
+# Scope discipline
+
+- No change to `app.js`, `index.html`, or the live Studio UI.
+- No change to placement/orientation/lighting/material logic already shipped in step 4 — confirmed
+  by tests 4-10 passing unchanged.
+- Option (b) was not implemented — confirmed out of reach for this scope (no `StoneLayout` diffing
+  capability exists to build on; inventing one is a separate, bigger milestone).
+- `instancedStones` default unchanged (`false`).
+- Only the allowed files were touched: `src/preview3d/Preview3DRenderer.js`,
+  `tools/measure-instanced-stone-performance.mjs` (one optional parameter + one new section),
+  `tools/test-preview3d-instanced-stones.mjs` (4 new tests), `TASK.md`/`TASK_RESULT.md`.
 
 ---
 
 # Deliverables
 
-- `tools/measure-instanced-stone-performance.mjs` (new).
-- `TASK.md` (this milestone's), `TASK_RESULT.md` (this file).
-
----
-
-# How to re-run this benchmark yourself
-
-```bash
-node tools/measure-instanced-stone-performance.mjs
-```
-
-No build step, no browser, no flags — prints the build cost and drag-simulation
-min/median/mean/max for N = 1,000/5,000/15,000 on a mug, plus the supplementary 300mm-plate
-N = 15,000 run, followed by a summary table and an explicit within/exceeds-budget verdict per
-configuration.
+- `src/preview3d/Preview3DRenderer.js` — leading-edge-plus-guaranteed-trailing throttle on
+  `_updateInstancedStones()`.
+- `tools/measure-instanced-stone-performance.mjs` — `intervalMs` parameter on
+  `runDragSimulation()` (default 0, existing call sites unaffected) + new "mitigation verification"
+  section.
+- `tools/test-preview3d-instanced-stones.mjs` — 4 new tests (11-14) covering throttle/coalesce,
+  no-lag-when-spaced-out, capacity-changes-bypass-throttle, and teardown-cancels-pending-timer.
+- `TASK.md`, `TASK_RESULT.md` (this file).

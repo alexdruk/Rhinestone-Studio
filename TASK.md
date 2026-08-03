@@ -1,57 +1,81 @@
 # Task
 
-**Task ID:** RS-2013 (Implementation Phase) — §4 step 5: stone-count stress testing
-**Task Type:** Measurement only (no application-code changes)
+**Task ID:** RS-2013 (Implementation Phase) — §4 step 5b: curved-surface perf mitigation
+**Task Type:** Implementation (one named mitigation option) + verification against the step 5 benchmark
 **Status:** COMPLETE
-**Branch:** feature/rs-2013-instanced-stones-step5-stress-testing
+**Branch:** feature/rs-2013-instanced-stones-step5b-perf-mitigation (cut from the step-5 commit
+`9e98550`, verified as HEAD before any work began)
 
 ## Why this milestone exists
 
-The design doc (`docs/specifications/RS-2013-InstancedFacetedStoneRenderingDesign.md`) §1.3
-identified a real, previously-unaddressed test-coverage gap: no file in `tools/` constructs a
-many-thousands-of-stones fixture, so neither the steady-state GPU render cost nor the per-`update()`
-CPU-side instance-buffer rebuild cost had ever been measured at realistic scale. §3.2 raised the
-specific concern this step exists to answer: `Preview3DRenderer._updateInstancedStones()`'s
-per-stone `Matrix4`/`Color` rebuild loop runs on **every** `update()` call, and `update()` fires on
-every project edit including continuous, un-throttled `pointermove`-driven drags (`app.js:1366`,
-cited by §3.2). Step 4 (flag-gated integration, `5ad66a1`) shipped the `instancedStones` option but
-explicitly deferred performance-at-scale to this step.
+Step 5 (`9e98550`) measured `Preview3DRenderer._updateInstancedStones()`'s real per-`update()` cost
+at the design doc's ~15,000-stone theoretical ceiling and found the curved-surface (mug/tumbler/
+bottle) path has a median ~28-29ms and max ~34-38ms during a simulated continuous drag — roughly
+double the 16ms/60fps frame budget. The flat plate path (~7ms) and today's real designs (~1,161
+stones, ~2.1ms median) are not at risk. The design doc's §3.2 named two mitigation options, neither
+implemented: (a) debounce/throttle the rebuild, or (b) incrementally update only changed instances.
+This step investigates both, picks one, implements it, and re-proves the result against the same
+benchmark step 5 built.
 
 ## Scope
 
-- Build a synthetic, programmatically-generated (not hand-authored) large-N `StoneLayout` fixture
-  spanning §1.3's realistic-to-ceiling range: ~1,000 / ~5,000 / ~15,000 stones.
-- Measure (a) `InstancedMesh` build success and cost at each count, and (b) the real per-`update()`
-  wall-clock cost during a simulated rapid drag, at each count — report actual numbers, not a
-  pass/fail.
-- State plainly whether the CPU-side rebuild cost at the ceiling count is fast enough to stay under
-  one 60fps frame budget (~16ms), the concrete threshold step 3/the design doc raised.
-- Add a new, re-runnable benchmark script (not a `test-*.mjs` pass/fail test — a performance
-  measurement, following `tools/measure-performance.mjs`'s existing convention).
-- `TASK.md`/`TASK_RESULT.md` only, plus the new benchmark script. No changes to
-  `src/preview3d/**`, `src/geometry/**`, `app.js`, `index.html`, or any other application code —
-  this step measures, it does not optimize or fix.
+- Investigate option (b) first: does `StoneLayout`/`GeometryEngine` expose any way to know which
+  stones changed between two calls? If not (confirmed: `StoneLayout` is a plain array of `Stone`
+  objects with no identity/dirty tracking, and every edit is a fresh full regeneration —
+  `src/geometry/StoneLayout.js` has no diff/dirty-index concept at all), report (b) as out of reach
+  for this scope (it would require inventing new upstream diffing plumbing, a separate, bigger
+  milestone) rather than faking a diffing capability that doesn't exist.
+- Investigate option (a): would a debounce introduce unacceptable visible lag for a live 3D preview?
+  Conclusion: a *pure trailing debounce* (mirroring `AUTOSAVE_DEBOUNCE_MS`'s exact shape) would
+  freeze the stone layer for the entire duration of a drag, snapping into place only once the
+  pointer stops for the full window — acceptable for a background write nobody watches happen, not
+  for a live preview. Chose a **leading-edge-plus-guaranteed-trailing throttle** instead: the first
+  call in a burst (or any call spaced further apart than the throttle window) always rebuilds
+  immediately; only calls arriving faster than `INSTANCED_STONES_REBUILD_THROTTLE_MS` (100ms) get
+  coalesced into exactly one trailing rebuild once the burst quiets. A stone-count change (add/
+  remove) is never throttled — only same-count position/color updates are, since that's the specific
+  high-frequency-drag scenario step 5 measured.
+- Implement the chosen mitigation in `Preview3DRenderer.js` only.
+- Re-run `tools/measure-instanced-stone-performance.mjs` and report the new numbers. Because the
+  mitigation is time-based and the original benchmark's drag simulation has zero real delay between
+  its 20 calls, add one minimal new parameter (`intervalMs` on `runDragSimulation()`, default 0 —
+  every existing call site is unaffected) plus one new "mitigation verification" section that awaits
+  a realistic ~8ms inter-call gap, so the throttle's real coalescing/duty-cycle behavior is honestly
+  exercised and reported, not hidden behind an artifact of the zero-delay tight loop.
+- Extend `tools/test-preview3d-instanced-stones.mjs` with tests for the new throttle behavior.
+- State plainly whether the mitigation closes the gap (every call under 16ms) or only partially
+  helps, and report the debounce/throttle-introduced lag tradeoff honestly.
 
 ## Allowed files
 
-- New benchmark script: `tools/measure-instanced-stone-performance.mjs`
-- `TASK.md`, `TASK_RESULT.md`
+- `src/preview3d/Preview3DRenderer.js` (the mitigation itself).
+- `tools/measure-instanced-stone-performance.mjs` (one new optional parameter + one new section, per
+  above).
+- `tools/test-preview3d-instanced-stones.mjs` (extended with throttle-behavior tests).
+- `TASK.md`, `TASK_RESULT.md`.
 
 ## Forbidden in this milestone
 
-- Implementing either mitigation option (debouncing the rebuild, incremental/partial instance
-  updates) that the design doc named as future options — measurement only.
-- Any change to the placement/lighting/material logic already shipped in step 4.
 - Any change to `app.js`, `index.html`, or the live Studio UI.
+- Any change to placement/orientation/lighting/material logic already shipped in step 4, except as
+  strictly required by the mitigation's own mechanism (none was required here).
+- Choosing option (b), since it would require inventing a `StoneLayout` diffing capability that
+  doesn't exist today.
+- Changing the `instancedStones` default (still `false`).
 
 ## Testing
 
-- `node tools/measure-instanced-stone-performance.mjs` — the new benchmark itself; see
-  `TASK_RESULT.md` for the actual numbers.
-- `node tools/run-tests.mjs preview3d` — pre-existing `Preview3DRenderer`/instanced-stones tests
-  (untouched by this step) still pass, confirming no regression from this measurement-only work.
+- `node tools/test-preview3d-instanced-stones.mjs` (extended, 14 tests, all pass).
+- `node tools/run-tests.mjs preview3d` (both `Preview3DRenderer`-related test files, 2/2 pass).
+- `node tools/measure-instanced-stone-performance.mjs` — see `TASK_RESULT.md` for the actual
+  before/after numbers.
+- `npm run test:full`/`node tools/run-tests.mjs --all` not run, per `CLAUDE.md`'s testing policy —
+  no shared architecture, schema, or exporter code changed.
 
 ## Deliverables
 
-- `tools/measure-instanced-stone-performance.mjs` (new).
+- `src/preview3d/Preview3DRenderer.js` (throttle mitigation).
+- `tools/measure-instanced-stone-performance.mjs` (minimal extension: `intervalMs` param + one new
+  verification section).
+- `tools/test-preview3d-instanced-stones.mjs` (4 new tests: 11-14).
 - `TASK.md` (this file), `TASK_RESULT.md`.

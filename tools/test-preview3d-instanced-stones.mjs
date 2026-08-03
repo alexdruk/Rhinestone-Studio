@@ -318,4 +318,98 @@ await test('10. a stone-count change (no geometry-key change) rebuilds the insta
   assert.equal(instance._group.children.filter((c) => c instanceof THREE.InstancedMesh).length, 1, 'expected exactly one instanced-stone mesh, not a leaked stale one');
 });
 
+// --- RS-2013 §4 step 5b: throttled rebuild during a rapid same-count burst ---------------------
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+await test('11. a rapid same-count update() burst does not rebuild on every call: the second call within the throttle window leaves the mesh at the first call\'s position, but schedules a trailing rebuild that lands on the latest position once the window elapses', async () => {
+  const instance = makeMountedRenderer();
+  const first = makeLayout([{ xMm: 40, yMm: 20, sizeMm: 2, color: 'gold' }]);
+  const second = makeLayout([{ xMm: 90, yMm: 70, sizeMm: 2, color: 'gold' }]);
+
+  instance.update(first, { ...MUG_OPTIONS, instancedStones: true });
+  const matrixAfterFirst = new THREE.Matrix4();
+  instance._stoneMesh.getMatrixAt(0, matrixAfterFirst);
+  const posAfterFirst = new THREE.Vector3().setFromMatrixPosition(matrixAfterFirst);
+
+  // Fires immediately after the first call (same synchronous tick) -- well inside the throttle
+  // window, so this must NOT rebuild yet.
+  instance.update(second, { ...MUG_OPTIONS, instancedStones: true });
+  const matrixRightAfterSecond = new THREE.Matrix4();
+  instance._stoneMesh.getMatrixAt(0, matrixRightAfterSecond);
+  const posRightAfterSecond = new THREE.Vector3().setFromMatrixPosition(matrixRightAfterSecond);
+  assert.ok(posRightAfterSecond.distanceTo(posAfterFirst) < 1e-6, 'expected the throttled second call to leave the mesh at the first call\'s position (no immediate rebuild)');
+  assert.ok(instance._instancedRebuildTimer !== null, 'expected a trailing rebuild to have been scheduled');
+
+  // Wait past the throttle window: the trailing rebuild must have fired on its own, with the
+  // *latest* (second) call's data, even though update() was never called a third time.
+  await sleep(150);
+  assert.equal(instance._instancedRebuildTimer, null, 'expected the trailing timer to have fired and cleared itself');
+  const matrixAfterSettle = new THREE.Matrix4();
+  instance._stoneMesh.getMatrixAt(0, matrixAfterSettle);
+  const posAfterSettle = new THREE.Vector3().setFromMatrixPosition(matrixAfterSettle);
+  assert.ok(posAfterSettle.distanceTo(posAfterFirst) > 1, 'expected the trailing rebuild to have moved the stone to the second call\'s (different) position');
+});
+
+await test('12. update() calls spaced further apart than the throttle window each rebuild immediately (no lag for ordinary, non-burst edits)', async () => {
+  const instance = makeMountedRenderer();
+  const first = makeLayout([{ xMm: 40, yMm: 20, sizeMm: 2, color: 'gold' }]);
+  const second = makeLayout([{ xMm: 90, yMm: 70, sizeMm: 2, color: 'gold' }]);
+
+  instance.update(first, { ...MUG_OPTIONS, instancedStones: true });
+  await sleep(150); // longer than the throttle window
+  instance.update(second, { ...MUG_OPTIONS, instancedStones: true });
+
+  // No trailing rebuild should have been scheduled -- the second call rebuilt synchronously.
+  assert.equal(instance._instancedRebuildTimer, null, 'expected no pending trailing rebuild -- the spaced-out call should rebuild immediately');
+  const matrix = new THREE.Matrix4();
+  instance._stoneMesh.getMatrixAt(0, matrix);
+  const position = new THREE.Vector3().setFromMatrixPosition(matrix);
+  const azimuth = azimuthRadForCanvasXMm(second.stones[0].xMm, MUG_CANVAS.widthMm);
+  const dims = instance._dimensions;
+  const y = dims.bodyHeightMm - second.stones[0].yMm;
+  const radius = wallRadiusAt(y, dims);
+  const expected = new THREE.Vector3(radius * Math.sin(azimuth), y, radius * Math.cos(azimuth));
+  assert.ok(position.distanceTo(expected) < 1e-4, 'expected the immediately-rebuilt mesh to already reflect the second call\'s position');
+});
+
+await test('13. a stone-count change during a throttled burst still rebuilds immediately (capacity changes are never throttled)', async () => {
+  const instance = makeMountedRenderer();
+  const one = makeLayout([{ xMm: 40, yMm: 20, sizeMm: 2, color: 'gold' }]);
+  const two = makeLayout([
+    { xMm: 40, yMm: 20, sizeMm: 2, color: 'gold' },
+    { xMm: 60, yMm: 30, sizeMm: 2, color: 'gold' }
+  ]);
+
+  instance.update(one, { ...MUG_OPTIONS, instancedStones: true });
+  instance.update(two, { ...MUG_OPTIONS, instancedStones: true }); // same tick, but capacity changed 1 -> 2
+
+  assert.equal(instance._stoneMesh.count, 2, 'expected the capacity-changing call to rebuild immediately despite arriving inside the throttle window');
+  assert.equal(instance._instancedRebuildTimer, null, 'expected no leftover pending rebuild from the immediate capacity-change path');
+});
+
+await test('14. switching instancedStones off while a trailing rebuild is pending cancels it (no stale mesh resurrection)', async () => {
+  const restoreDocument = installFakeDocument();
+  try {
+    const instance = makeMountedRenderer();
+    const first = makeLayout([{ xMm: 40, yMm: 20, sizeMm: 2, color: 'gold' }]);
+    const second = makeLayout([{ xMm: 90, yMm: 70, sizeMm: 2, color: 'gold' }]);
+
+    instance.update(first, { ...MUG_OPTIONS, instancedStones: true });
+    instance.update(second, { ...MUG_OPTIONS, instancedStones: true }); // throttled, schedules a trailing rebuild
+    assert.ok(instance._instancedRebuildTimer !== null);
+
+    instance.update(first, { ...MUG_OPTIONS, instancedStones: false }); // tears down before the trailing timer fires
+    assert.equal(instance._instancedRebuildTimer, null, 'expected the pending trailing rebuild to have been cancelled by teardown');
+    assert.equal(instance._stoneMesh, null);
+
+    await sleep(150); // if the old timer had survived, it would throw/misbehave here
+    assert.equal(instance._stoneMesh, null, 'expected no instanced mesh to have been resurrected by a stale timer');
+  } finally {
+    restoreDocument();
+  }
+});
+
 console.log('Preview3D instanced-stones tests passed.');

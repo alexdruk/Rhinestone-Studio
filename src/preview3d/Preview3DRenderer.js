@@ -60,6 +60,25 @@ const INSTANCED_EXTRA_LIGHTS = [
   { intensity: 0.7, position: [25, -39, 142] }
 ];
 
+// RS-2013 §4 step 5b: rate-limits how often _updateInstancedStones()'s expensive per-stone loop
+// actually runs during a rapid burst of same-stone-count update() calls (a continuous drag fires
+// update() on every pointermove, unthrottled -- app.js:1927/1930, cited in the design doc's §3.2).
+// Mirrors the *spirit* of app.js's own AUTOSAVE_DEBOUNCE_MS precedent (app.js:872) -- coalescing a
+// high-frequency edit signal before doing expensive work -- but not its trailing-only shape: a pure
+// debounce would freeze the stone layer for the *entire* drag and only snap into place once the
+// pointer stops for the full window, which is fine for a background localStorage write nobody
+// watches happen but not for a live visual preview the operator is actively looking at. See
+// _updateInstancedStonesThrottled() below and TASK_RESULT.md for the full reasoning and measured
+// numbers. 100ms comfortably exceeds the worst single-rebuild cost step 5 measured at the
+// ~15,000-stone ceiling (~34-38ms max) -- so a burst of calls faster than that always coalesces to
+// at most ~10 rebuilds/sec, not zero throttling effect -- while still keeping the stone layer
+// visibly moving during a drag (not frozen the way AUTOSAVE_DEBOUNCE_MS's 1200ms would read).
+const INSTANCED_STONES_REBUILD_THROTTLE_MS = 100;
+
+function nowMs() {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
+
 // RS-2013 §4 step 4: ported from tools/rs2013-instanced-stone-harness.html's findRimPlaneY() --
 // the plate's real printable top surface has genuine vertical relief (a concave well + sloped
 // rim; only its UV mapping is a flat orthographic projection, not the geometry itself), so a
@@ -105,6 +124,11 @@ export class Preview3DRenderer {
     this._stoneMesh = null;
     this._plateTopY = 0;
     this._wallRadiusAt = null;
+    // RS-2013 §4 step 5b: throttle bookkeeping for _updateInstancedStonesThrottled() -- see that
+    // method and INSTANCED_STONES_REBUILD_THROTTLE_MS's own comment above for the reasoning.
+    this._lastInstancedRebuildAt = -Infinity;
+    this._instancedRebuildTimer = null;
+    this._pendingInstancedArgs = null;
     this._ambientLight = null;
     this._extraLights = [];
     this._lightRigExtended = false;
@@ -259,7 +283,7 @@ export class Preview3DRenderer {
     this._applyLightRig(instancedStones);
 
     if (instancedStones) {
-      this._updateInstancedStones(stoneLayout, canvasWidthMm, canvasHeightMm, cupColor);
+      this._updateInstancedStonesThrottled(stoneLayout, canvasWidthMm, canvasHeightMm, cupColor);
     } else {
       this._teardownInstancedStones();
       this._updateTexture(stoneLayout, canvasWidthMm, canvasHeightMm, cupColor);
@@ -311,6 +335,7 @@ export class Preview3DRenderer {
 
   dispose() {
     this._mounted = false;
+    this._clearPendingInstancedRebuild();
     this._resizeObserver?.disconnect();
     this.controls?.dispose();
     this._disposeGroup();
@@ -379,6 +404,51 @@ export class Preview3DRenderer {
       for (const light of this._extraLights) this.scene.remove(light);
       this._extraLights = [];
     }
+  }
+
+  // RS-2013 §4 step 5b: gates _updateInstancedStones()'s expensive per-stone loop behind a
+  // leading-edge-plus-guaranteed-trailing throttle -- see INSTANCED_STONES_REBUILD_THROTTLE_MS's
+  // comment for the reasoning. A stone-COUNT change (add/remove -- a structural edit, not the
+  // continuous-drag case this mitigation targets) always rebuilds immediately, never throttled:
+  // capacity has to change synchronously so InstancedMesh.count never lags an added/removed stone,
+  // and this is not the high-frequency scenario step 5 measured (that was same-count position
+  // updates during a drag). Otherwise: the first call after a quiet period (>=THROTTLE_MS since the
+  // last real rebuild) fires immediately too, so a single discrete edit or the *first* movement of
+  // a drag is never delayed -- only calls arriving faster than that get coalesced, always into
+  // exactly one trailing rebuild (the latest args win, any earlier pending call is superseded) once
+  // the burst quiets, so the mesh is never left stuck showing a stale position.
+  _updateInstancedStonesThrottled(stoneLayout, canvasWidthMm, canvasHeightMm, cupColor) {
+    const capacity = Math.max(1, stoneLayout.stones.length);
+    const capacityChanged = !this._stoneMesh || this._stoneMesh.userData.capacity !== capacity;
+    const elapsed = nowMs() - this._lastInstancedRebuildAt;
+
+    if (capacityChanged || elapsed >= INSTANCED_STONES_REBUILD_THROTTLE_MS) {
+      this._clearPendingInstancedRebuild();
+      this._lastInstancedRebuildAt = nowMs();
+      this._updateInstancedStones(stoneLayout, canvasWidthMm, canvasHeightMm, cupColor);
+      return;
+    }
+
+    this._pendingInstancedArgs = { stoneLayout, canvasWidthMm, canvasHeightMm, cupColor };
+    if (!this._instancedRebuildTimer) {
+      this._instancedRebuildTimer = setTimeout(() => {
+        this._instancedRebuildTimer = null;
+        const args = this._pendingInstancedArgs;
+        this._pendingInstancedArgs = null;
+        if (!args || !this._mounted) return;
+        this._lastInstancedRebuildAt = nowMs();
+        this._updateInstancedStones(args.stoneLayout, args.canvasWidthMm, args.canvasHeightMm, args.cupColor);
+        this._requestRender();
+      }, INSTANCED_STONES_REBUILD_THROTTLE_MS - elapsed);
+    }
+  }
+
+  _clearPendingInstancedRebuild() {
+    if (this._instancedRebuildTimer) {
+      clearTimeout(this._instancedRebuildTimer);
+      this._instancedRebuildTimer = null;
+    }
+    this._pendingInstancedArgs = null;
   }
 
   // RS-2013 §4 step 4: builds/updates the instanced-stone mesh from a real StoneLayout, ported
@@ -484,6 +554,9 @@ export class Preview3DRenderer {
   // default/unset-flag path byte-identical to pre-step-4 behavior: nothing here executes any
   // different logic in that case beyond this one guarded early return.
   _teardownInstancedStones() {
+    // RS-2013 §4 step 5b: a pending throttled rebuild must never fire after the instanced path has
+    // been switched off -- it would resurrect a torn-down mesh with stale args.
+    this._clearPendingInstancedRebuild();
     if (!this._stoneMesh) return;
     this._group.remove(this._stoneMesh);
     this._stoneMesh.geometry.dispose();

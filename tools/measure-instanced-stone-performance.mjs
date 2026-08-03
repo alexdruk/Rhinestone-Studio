@@ -46,6 +46,7 @@ globalThis.requestAnimationFrame = () => 0;
 
 const THREE = await import('three');
 const { buildObjectMesh, wallRadiusAt } = await import('../src/preview3d/ObjectGeometryBuilder.js');
+const { azimuthRadForCanvasXMm } = await import('../src/preview3d/ObjectDimensions.js');
 const { getObjectTemplate, normalizePlateParams } = await import('../src/products/index.js');
 const { Stone } = await import('../src/geometry/Stone.js');
 const { StoneLayout } = await import('../src/geometry/StoneLayout.js');
@@ -161,15 +162,35 @@ function stats(samples) {
 
 function fmt(n) { return n.toFixed(3); }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // Simulates a continuous drag: app.js's pointermove -> updateAll() path fires update() on every
 // pointer move with no throttling (per the design doc's §3.2 citation of app.js:1366). Perturbs
 // every stone's xMm/yMm by a small amount each call, rebuilding a fresh StoneLayout each time (the
 // same "GeometryEngine regenerates the full StoneLayout on every edit" shape a real drag produces),
 // so this measures the real per-call cost including StoneLayout/Stone construction, not just the
 // matrix loop in isolation.
-function runDragSimulation(instance, baseStoneParams, options, callCount) {
+//
+// RS-2013 §4 step 5b: `intervalMs` (default 0, matching step 5's original behavior exactly when
+// omitted -- every existing call site below omits it) is the one new parameter this step's
+// mitigation requires: Preview3DRenderer.js now throttles _updateInstancedStones() by real elapsed
+// wall-clock time (see that file's INSTANCED_STONES_REBUILD_THROTTLE_MS), and the original
+// zero-delay tight loop (`intervalMs=0`) lets no real time pass between calls beyond each call's own
+// execution -- against a throttle, that makes 19 of every ~20 calls resolve via the near-instant
+// "coalesced, defer to a trailing rebuild" path, which is real and correct behavior, but reports a
+// median near 0ms that would be misleading read on its own as "the mitigation made every call cheap"
+// -- it did not; it made most calls *skip*, deferring the identical unmodified-cost rebuild to a
+// single later trailing call this synchronous loop never lets fire or measure. `intervalMs>0` awaits
+// a real pause between calls (via a real setTimeout, not a busy-wait) so the throttle gate sees
+// realistic pointer-event spacing, giving an honest read of how many calls actually rebuild vs.
+// coalesce, and how much total main-thread time is spent on rebuilds over a real span of drag time --
+// see the new "mitigation verification" section below for the one place this is used.
+async function runDragSimulation(instance, baseStoneParams, options, callCount, intervalMs = 0) {
   const perCallMs = [];
   for (let call = 0; call < callCount; call++) {
+    if (intervalMs > 0 && call > 0) await sleep(intervalMs);
     const dx = Math.sin(call) * 0.5;
     const dy = Math.cos(call) * 0.5;
     const layout = makeLayout(baseStoneParams.map((p) => ({ ...p, xMm: p.xMm + dx, yMm: p.yMm + dy })));
@@ -186,6 +207,15 @@ const FRAME_BUDGET_MS = 16; // one 60fps frame
 
 console.log('RS-2013 §4 step 5 — instanced-stone stress-test performance measurement');
 console.log(`Node ${process.version}, three ${THREE.REVISION}\n`);
+console.log('RS-2013 §4 step 5b note: the four "steady-state" blocks below reuse step 5\'s exact');
+console.log('zero-delay tight loop (20 update() calls back-to-back, no pause). Preview3DRenderer.js');
+console.log('now throttles _updateInstancedStones() by real elapsed time (see');
+console.log('INSTANCED_STONES_REBUILD_THROTTLE_MS), so most of these 20 calls now resolve almost');
+console.log('instantly by *coalescing* into a single later trailing rebuild this zero-delay loop never');
+console.log('waits around to let fire -- read a near-zero median here as "most calls are now cheap to');
+console.log('issue", not "the rebuild itself got cheaper". See the "mitigation verification" section');
+console.log('below (which awaits realistic gaps between calls) for the honest before/after read on');
+console.log('actual rebuild frequency and cost, and TASK_RESULT.md for the full explanation.\n');
 
 const results = [];
 
@@ -202,7 +232,7 @@ for (const targetCount of [1000, 5000, 15000]) {
   if (instance._stoneMesh.count !== targetCount) throw new Error(`N=${targetCount}: expected instance count ${targetCount}, got ${instance._stoneMesh.count}`);
   console.log(`InstancedMesh build (first update(), includes buffer allocation): ${fmt(buildMs)}ms`);
 
-  const dragMs = runDragSimulation(instance, stoneParams, MUG_OPTIONS, DRAG_CALL_COUNT);
+  const dragMs = await runDragSimulation(instance, stoneParams, MUG_OPTIONS, DRAG_CALL_COUNT);
   const s = stats(dragMs);
   console.log(`Steady-state update() during simulated drag (${DRAG_CALL_COUNT} calls, no capacity change):`);
   console.log(`  min=${fmt(s.min)}ms  median=${fmt(s.median)}ms  mean=${fmt(s.mean)}ms  max=${fmt(s.max)}ms`);
@@ -230,7 +260,7 @@ console.log('=== Supplementary: N = 15,000 stones (300mm plate, flat-plane path,
   if (instance._stoneMesh.count !== targetCount) throw new Error(`plate: expected instance count ${targetCount}, got ${instance._stoneMesh.count}`);
   console.log(`InstancedMesh build (first update()): ${fmt(buildMs)}ms`);
 
-  const dragMs = runDragSimulation(instance, stoneParams, PLATE_OPTIONS, DRAG_CALL_COUNT);
+  const dragMs = await runDragSimulation(instance, stoneParams, PLATE_OPTIONS, DRAG_CALL_COUNT);
   const s = stats(dragMs);
   console.log(`Steady-state update() during simulated drag (${DRAG_CALL_COUNT} calls, no capacity change):`);
   console.log(`  min=${fmt(s.min)}ms  median=${fmt(s.median)}ms  mean=${fmt(s.mean)}ms  max=${fmt(s.max)}ms`);
@@ -239,6 +269,67 @@ console.log('=== Supplementary: N = 15,000 stones (300mm plate, flat-plane path,
   console.log('');
 
   results.push({ product: 'plate', targetCount, buildMs, dragStats: s, dragSamples: dragMs, withinBudget });
+}
+
+// RS-2013 §4 step 5b: mitigation verification, with realistic inter-call spacing -----------------
+//
+// The four zero-delay blocks above prove the throttle *coalesces* a burst of back-to-back calls
+// (real, correct behavior), but their own tight loop never lets real time pass between calls, so
+// they can't show what actually happens across a real span of drag time: how many calls end up
+// actually rebuilding, and how much total main-thread time that costs. This block awaits a genuine
+// ~8ms pause between calls (a real setTimeout, not a busy-wait) -- roughly a 120Hz pointer-event
+// cadence, deliberately faster than the ~60Hz a display can even render, so it stresses the
+// coalescing behavior the way a fast/high-poll-rate input device firing pointermove faster than the
+// 16ms frame budget would -- over a longer, ~1-second simulated drag at N=15,000 on the mug (the one
+// configuration step 5 found EXCEEDS budget), the case this mitigation exists for.
+console.log('=== Mitigation verification: realistic-cadence drag simulation, N = 15,000 (mug) ===');
+{
+  const targetCount = 15000;
+  const REALISTIC_CALL_COUNT = 120;
+  const INTERVAL_MS = 8; // ~120Hz simulated pointermove cadence
+  const stoneParams = generateHexGridStoneParams({ canvasWidthMm: MUG_OPTIONS.canvasWidthMm, canvasHeightMm: MUG_OPTIONS.canvasHeightMm, targetCount });
+  const instance = makeMountedRenderer();
+  instance.update(makeLayout(stoneParams), MUG_OPTIONS); // warm/build, not part of the measured window
+
+  const wallStart = performance.now();
+  const dragMs = await runDragSimulation(instance, stoneParams, MUG_OPTIONS, REALISTIC_CALL_COUNT, INTERVAL_MS);
+  const wallElapsedMs = performance.now() - wallStart;
+
+  // A skipped (coalesced) call resolves in well under 1ms; a call that actually ran
+  // _updateInstancedStones() at N=15,000 costs tens of ms (per the blocks above) -- 1ms is a safe
+  // threshold between the two, not a tuned/fragile cutoff.
+  const REBUILD_THRESHOLD_MS = 1;
+  const rebuiltCalls = dragMs.filter((ms) => ms > REBUILD_THRESHOLD_MS);
+  const totalRebuildMs = rebuiltCalls.reduce((a, b) => a + b, 0);
+  const dutyCyclePct = (totalRebuildMs / wallElapsedMs) * 100;
+
+  console.log(`${REALISTIC_CALL_COUNT} simulated pointermove events over ${fmt(wallElapsedMs)}ms of real time (~${INTERVAL_MS}ms apart):`);
+  console.log(`  ${rebuiltCalls.length} of ${REALISTIC_CALL_COUNT} calls actually rebuilt (elapsed > ${REBUILD_THRESHOLD_MS}ms); ${REALISTIC_CALL_COUNT - rebuiltCalls.length} were coalesced.`);
+  console.log(`  Total main-thread time spent in rebuilds: ${fmt(totalRebuildMs)}ms of ${fmt(wallElapsedMs)}ms real time (${fmt(dutyCyclePct)}% duty cycle).`);
+  if (rebuiltCalls.length) {
+    const rs = stats(rebuiltCalls);
+    console.log(`  Per-rebuild cost when one does fire: min=${fmt(rs.min)}ms median=${fmt(rs.median)}ms max=${fmt(rs.max)}ms -- unchanged from the blocks above (same unmodified _updateInstancedStones()).`);
+  }
+
+  // Correctness, not just perf: once the burst quiets, the trailing rebuild must still land on the
+  // *latest* requested stone position -- confirms the mesh is never left permanently stale.
+  await sleep(150); // > INSTANCED_STONES_REBUILD_THROTTLE_MS past the last call
+  const lastCall = REALISTIC_CALL_COUNT - 1;
+  const expectedDx = Math.sin(lastCall) * 0.5;
+  const expectedX = stoneParams[0].xMm + expectedDx;
+  const matrix = new THREE.Matrix4();
+  instance._stoneMesh.getMatrixAt(0, matrix);
+  const position = new THREE.Vector3().setFromMatrixPosition(matrix);
+  const azimuth = azimuthRadForCanvasXMm(expectedX, MUG_OPTIONS.canvasWidthMm);
+  const dims = instance._dimensions;
+  const clampedYMm = Math.max(0, Math.min(dims.bodyHeightMm, stoneParams[0].yMm + Math.cos(lastCall) * 0.5));
+  const y = dims.bodyHeightMm - clampedYMm;
+  const radius = wallRadiusAt(y, dims);
+  const expected = new THREE.Vector3(radius * Math.sin(azimuth), y, radius * Math.cos(azimuth));
+  const settledCorrectly = position.distanceTo(expected) < 1e-3;
+  console.log(`  After settling: mesh reflects the final (last-call) stone position -- ${settledCorrectly ? 'CONFIRMED' : 'MISMATCH'}.`);
+  if (!settledCorrectly) throw new Error(`Mitigation correctness check failed: expected ${expected.toArray()}, got ${position.toArray()}`);
+  console.log('');
 }
 
 console.log('=== Summary ===');
