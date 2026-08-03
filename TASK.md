@@ -1,87 +1,95 @@
 # Task
 
-**Task ID:** RS-2013 (Implementation Phase) — §4 step 6b: tumbler wrap-seam clustering investigation
-**Task Type:** Investigation only (root-cause a visual artifact found in step 6's own evidence) — not
-a fix, not a mechanical test
+**Task ID:** RS-2013 (Implementation Phase) — §4 step 6c: default-flip decision
+**Task Type:** Implementation — one-line default flip + caller audit + test-suite update
 **Status:** COMPLETE
-**Branch:** feature/rs-2013-instanced-stones-step6b-tumbler-seam (cut from the step-5b commit
-`cdccc33`; fast-forwarded onto step 6's own commit `ff36886` at the start of this task, since the
-branch had been cut before step 6 landed and this investigation depends directly on step 6's
-evidence/screenshots)
+**Branch:** `feature/rs-2013-instanced-stones-step6c-default-flip` (already checked out at task
+start; clean tree; HEAD included the step 6b tumbler-seam investigation commit `04d0ff6`)
 
 ## Why this milestone exists
 
-Step 6's real-design visual-validation evidence found a new, previously-unreported artifact on the
-tumbler's `tumbler-wrap-design.rhs` example: the crystal accent ring's stones visibly cluster/overlap
-in screen space near the left and right edges of the visible surface in the instanced render, while
-the texture render shows the same region as a clean, evenly blurred line. Step 6 explicitly did not
-investigate or fix this — it only reported it, and flagged it as "very likely" a viewing-angle
-artifact rather than a placement bug, without confirming that. This step's job is to actually root-
-cause it: is it a world-space stone-placement bug, or a screen-space rendering artifact — and is it
-really tumbler-specific, or a property of any curved-surface product under the right design
-conditions.
+Steps 1-6/6b built, tested, stress-tested, and visually validated the instanced-stone rendering
+path behind a flag, and investigated the one open visual question (tumbler wrap-seam clustering)
+down to a root cause. Sasha has now made the default-flip decision described in §4 step 6 of
+`docs/specifications/RS-2013-InstancedFacetedStoneRenderingDesign.md`, informed by that evidence
+and three documented, non-blocking known limitations:
+
+1. Light-colored stone washout against the live background (step 3b).
+2. A curved-surface CPU-rebuild perf ceiling at extreme (~15,000) stone counts, partially
+   mitigated by throttling (step 5b).
+3. Grazing-angle stone crowding on high-azimuth-extent curved-surface designs (step 6b) — an
+   inherent property of discrete 3D geometry at silhouette viewing angles, not a bug.
+
+None of these block this decision; all three are carried forward as known, accepted limitations
+of the newly-default behavior (see TASK_RESULT.md).
 
 ## Scope
 
-1. Confirm the artifact is real and reproducible in a live browser session (not a screenshot/camera
-   fluke), across multiple camera angles/zoom levels.
-2. Compare the tumbler's real dimensions/profile against mug and bottle (radius, height, taper) using
-   the actual product definitions and `ObjectDimensions.js`/`ObjectGeometryBuilder.js` math.
-3. Determine, with direct evidence (not inference), whether this is a world-space placement bug (do
-   two stones' actual 3D positions come out closer together than their canvas-space spacing implies)
-   or a rendering/projection artifact (are the true 3D positions correctly spaced, with the apparent
-   clustering coming from the camera/perspective/discrete-geometry-footprint side instead).
-4. Determine whether the artifact is genuinely tumbler-specific or a general property of curved-
-   surface products that happened to only show up on the tumbler because of which example designs
-   step 6 chose.
-5. Write up the finding plainly. No code fix in scope for this step.
+Flip `instancedStones`'s default from `false` to `true` in
+`src/preview3d/Preview3DRenderer.js`'s `update()` — and nothing else. This is intentionally the
+entire scope: no placement/lighting/material/throttle logic changes, no attempt to further
+mitigate the three known limitations above.
+
+1. The one-line default flip itself.
+2. Audit every caller of `preview3D.update(...)` for an assumption baked in around the OLD
+   default, and fix what needs fixing to keep testing/behaving as originally intended.
+3. Confirm (not assume) that `true`/omitted now produces byte-identical behavior to what explicit
+   `instancedStones: true` already produced and was already fully tested by steps 4/5b.
+4. Update the test suite: every existing test must still test what it originally intended to test,
+   plus one new test confirming `instancedStones` omitted now behaves identically to
+   `instancedStones: true` (the mirror image of step 4's own regression test for the OLD default).
 
 ## Allowed files
 
-- New screenshot assets (this step's own comparison PNGs, `tools/rs2013-step6b-*.png`).
+- `src/preview3d/Preview3DRenderer.js` (the one-line default flip).
+- Any test file requiring an explicit `instancedStones: false` to keep testing the texture path.
+- `tools/rs2013-instanced-stone-harness.html` (only if it needed an explicit `false` per the
+  caller audit — audited, did not: see TASK_RESULT.md §2).
 - `TASK.md`, `TASK_RESULT.md`.
-- No production source files touched — this is a read-only investigation.
+- `app.js` — not originally listed, but the caller audit (§2 of the brief) explicitly required
+  auditing app.js's own call site and step 6's dev toggle for an OLD-default assumption; one was
+  found and required a fix for the default flip to have its intended real-world effect. See
+  TASK_RESULT.md §2 for the full reasoning on why this was in-scope despite not being pre-listed.
 
 ## Forbidden in this milestone
 
-- Any change to placement/orientation/lighting/material/throttle logic already shipped.
-- Proposing or implementing a fix/mitigation as part of this step (a future mitigation may exist —
-  noted as an open option for a later, separate decision, not designed or scoped here).
-- Flipping `instancedStones`'s default anywhere.
-- Any change to `app.js`, `Preview3DRenderer.js`, `ObjectDimensions.js`, or any other production file.
+- Any change to placement/lighting/material/throttle logic.
+- Attempting to fix or further mitigate any of the three known limitations.
 
 ## Method
 
-- Headless numeric verification: generated the real `StoneLayout` for `tumbler-wrap-design.rhs` via
-  `GeometryEngine`/`generateProjectStoneLayout` (the same path `tools/generate-example-baselines.mjs`
-  uses), then computed nearest-neighbor stone spacing two ways — in canvas (2D, as-authored) space
-  and in true 3D world space using the exact position formula from `Preview3DRenderer.js`'s
-  `_updateInstancedStones()` — to test for placement compression directly, not by inference.
-- Live browser verification: Playwright + Chromium against the real running Studio
-  (`index.html?instancedStones=1`), importing the real `tumbler-wrap-design.rhs` example through the
-  actual `#importProjectFile` path (converted via `toAppProjectShape()`/`validateRhsProject()`, the
-  same real bridge functions step 6 used), then driving `#rotation`/`#zoom` and screenshotting `#cup`
-  at several camera states.
-- Generalization test: added a synthetic circle/outline ring layer to the mug's own
-  `short-name-block.rhs` example, sized to sweep the same azimuth extent (~±62°) as the tumbler's
-  ring, to test whether the same artifact reproduces on a different product kind under equivalent
-  design conditions.
-- No `tools/*.mjs` scripts committed (scratch-only, per this milestone's Allowed Files list — same
-  convention step 6 used for its own Playwright verification).
+- Grepped the whole repo (`app.js`, every `src/`/`tools/` file, every test file) for every
+  `instancedStones` reference and every `preview3D.update(...)`/`Preview3DRenderer.update(...)`
+  call site, to build the exhaustive caller list required by the brief.
+- Read `docs/specifications/RS-2013-InstancedFacetedStoneRenderingDesign.md` §4 steps 6-7 in full
+  before starting, to confirm step 7 (removing the old texture path) is explicitly out of scope
+  for this step.
+- Ran the full focused test suite for every touched/adjacent area:
+  `tools/test-preview3d-instanced-stones.mjs`, `tools/test-preview3d-render-scheduling.mjs`,
+  `tools/test-object-template-integration.mjs`, `tools/test-render-export-pipeline.mjs`,
+  `tools/test-text-position-workflow.mjs`, `tools/test-object-geometry-builder.mjs`.
+- Live browser verification (Playwright + Chromium, isolated instance, closed after use) against
+  the real running Studio (`python3 -m http.server 5173`) at three URLs
+  (`index.html`, `index.html?instancedStones=0`, `index.html?instancedStones=1`), screenshotting
+  the default project's real Object Preview in each mode and checking for console/page errors.
 
 ## Testing
 
-- No source files changed, so no syntax/unit tests apply.
-- `npm test`/`npm run test:full` not run — no shared architecture, schema, or exporter code touched,
-  per `CLAUDE.md`'s testing policy.
+- `node tools/test-preview3d-instanced-stones.mjs` — 14/14 pass (was 14 tests, 1 removed as
+  testing a now-false premise, 2 fixed to explicit `false`, 1 new mirror test added).
+- `node tools/test-preview3d-render-scheduling.mjs`, `test-object-template-integration.mjs`,
+  `test-render-export-pipeline.mjs`, `test-text-position-workflow.mjs`,
+  `test-object-geometry-builder.mjs` — all pass, unchanged.
+- `npm test`/`npm run test:full` not run — per `CLAUDE.md`'s testing policy, this milestone
+  touches one default value in one renderer option plus its direct callers/tests, not shared
+  architecture, project schema, or exporters.
+- Browser verification: 3 modes, 0 console/page errors in any, visually confirmed instanced
+  (faceted 3D gems) vs. texture (flat blurred dots) rendering in the correct mode each time.
 
 ## Deliverables
 
-- `TASK.md` (this file), `TASK_RESULT.md` (root-cause finding).
-- `tools/rs2013-step6b-tumbler-front-instanced.png` — reproduces the reported clustering at a closer,
-  more legible framing than step 6's own screenshot.
-- `tools/rs2013-step6b-tumbler-az62-instanced.png` / `tools/rs2013-step6b-tumbler-az62-texture.png` —
-  matched camera-state pair proving the clustering is instanced-only and camera-relative (rotating
-  the clustering-prone azimuth to center clears it there and moves it to the new grazing edge).
-- `tools/rs2013-step6b-mug-synthetic-ring-instanced.png` — the same artifact reproduced on the mug via
-  a synthetic same-azimuth-extent ring, proving this is not tumbler-specific.
+- `TASK.md` (this file), `TASK_RESULT.md` (full caller audit + findings).
+- `src/preview3d/Preview3DRenderer.js` — the default flip + updated doc comment.
+- `app.js` — dev-toggle baseline flip (see TASK_RESULT.md §2).
+- `tools/test-preview3d-instanced-stones.mjs` — 3 tests fixed to explicit `instancedStones:
+  false`, 1 new mirror test added, tests renumbered 1-14 sequentially.

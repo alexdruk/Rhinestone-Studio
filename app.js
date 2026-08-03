@@ -835,12 +835,17 @@ const preview3D=createPreview3D(cupCanvas);
 // window.__preview3D back), never used to drive any application logic.
 window.__preview3D=preview3D;
 // RS-2013 step 6 (dev-only, temporary): lets Sasha toggle the instanced-stone rendering path on a
-// real running project via `?instancedStones=1` in the URL, without touching devtools internals
-// repeatedly. Read once at startup only -- not a live/persisted setting, not user-facing, not part
-// of `project`. Remove once step 6's evidence-gathering purpose is done (either the default flips
-// per step 6/7 of docs/specifications/RS-2013-InstancedFacetedStoneRenderingDesign.md, or this flag
-// is superseded by a real UI control, which is explicitly out of scope for this milestone).
-const __devInstancedStones=new URLSearchParams(location.search).get('instancedStones')==='1';
+// real running project without touching devtools internals repeatedly. Read once at startup only --
+// not a live/persisted setting, not user-facing, not part of `project`.
+// RS-2013 step 6c: Preview3DRenderer.js's own `instancedStones` default flipped true, so this
+// call site's own explicit pass-through (`instancedStones:__devInstancedStonesState.on`, never
+// omitted -- see drawCup() below) must flip its baseline to match, or the renderer-level default
+// flip would have zero real effect here. Baseline is now `true` (no URL param needed); pass
+// `?instancedStones=0` (or window.__setInstancedStones(false)) to force the old texture-baking
+// path for comparison -- the ability to see it is kept, only which side requires an argument has
+// flipped, per this milestone's scope.
+const __devInstancedStonesParam=new URLSearchParams(location.search).get('instancedStones');
+const __devInstancedStones=__devInstancedStonesParam!=='0';
 window.__setInstancedStones=v=>{__devInstancedStonesState.on=!!v;drawCup()};
 const __devInstancedStonesState={on:__devInstancedStones};
 // S-107 (requirement 2, "rotating the Object Preview must move the Front View Frame"): fires

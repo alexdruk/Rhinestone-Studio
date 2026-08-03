@@ -6,208 +6,227 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-RS-2013 (Implementation Phase) — §4 step 6b: tumbler wrap-seam clustering investigation
+RS-2013 (Implementation Phase) — §4 step 6c: default-flip decision
 
 ---
 
 # Status
 
-COMPLETE. Root cause identified with direct evidence, not inference. **This is a genuine screen-
-space rendering property of instanced discrete stones on a curved surface at grazing/silhouette
-viewing angles — not a bug in stone placement, and not specific to the tumbler.** No code fix was
-made or is being proposed as part of this step.
+COMPLETE. `instancedStones` now defaults to `true` in `Preview3DRenderer.js`'s `update()`. Every
+caller was audited; one (app.js's own real call site, via its step-6 dev toggle) required a fix
+for the flip to have its intended real-world effect on the shipping product — see §2. Every other
+caller either already passed the option explicitly or needed no change. Test suite updated per
+§4 below. Live-browser-verified in all three relevant modes with zero console/page errors.
 
 ---
 
-# Branch
+# 1. Design-doc context read (§4 steps 6-7)
 
-`feature/rs-2013-instanced-stones-step6b-tumbler-seam`. Verified at task start: correct branch,
-clean working tree, but HEAD was stale — it had been cut from the step-5b commit (`cdccc33`) before
-step 6 landed, so it did not yet include step 6's own commit (`ff36886`, on a sibling branch) or its
-screenshots/`TASK_RESULT.md`. Fast-forwarded onto `ff36886` before starting (a clean fast-forward,
-zero unique commits lost — `step6b` had made no commits of its own yet).
+Read in full before starting. Step 6 ("Visual validation pass and default flip") is this
+milestone. Step 7 ("Remove the old texture path") is explicitly **out of scope** — the doc
+describes it as "deliberately last, and deliberately not bundled into any earlier step," gated on
+the instanced path having "been the shipped default for long enough to be confident no fallback is
+needed." Nothing in this milestone removes `StoneLayoutTexture.js`'s stone-drawing responsibility,
+the `false` code path in `Preview3DRenderer.js`, or the dev toggle's ability to reach it.
+
+**Known, accepted limitations of the newly-default instanced-stone behavior** (documented here per
+the brief, none block this decision):
+
+1. **Light-colored stone washout against the live background** (step 3b) — neither lighting-rig
+   angle/intensity changes nor the two facet-shape/material candidates tested could redistribute
+   which facet reads bright vs. dark under a diffuse-dominant material; some light stone colors
+   read washed out against certain backgrounds. No fix attempted or proposed here.
+2. **Curved-surface CPU-rebuild perf ceiling at extreme (~15,000) stone counts** (step 5b) — the
+   per-`update()` CPU cost of rebuilding the instance buffer during interactive drags/edits on a
+   curved surface degrades at the top of the realistic stone-count range; step 5b's throttling
+   mitigates but does not eliminate this. No further mitigation attempted here.
+3. **Grazing-angle stone crowding on high-azimuth-extent curved-surface designs** (step 6b) —
+   confirmed by direct measurement to be a genuine, inherent screen-space property of discrete 3D
+   geometry near a camera's silhouette/grazing edge (not a world-space placement bug, not
+   tumbler-specific), affecting any curved-surface product whose design content — most commonly a
+   circular/elliptical outline — sweeps far enough in azimuth to approach the current camera's
+   grazing edge. No fix attempted or proposed here.
 
 ---
 
-# 1. Pre-existing evidence this step builds on
+# 2. Caller audit — every `instancedStones` reference / `preview3D.update()` call site
 
-Step 6's own `TASK_RESULT.md` §3 (tumbler section) reported, but explicitly did not investigate:
+Exhaustive grep of the whole repo (`app.js`, every `src/**`, every `tools/**`, every test file) for
+`instancedStones` and every `.update(` call resolving to `Preview3DRenderer.js`'s `update()` (via
+the `preview3D` facade or directly). Full list, and what each site's behavior was **before** and
+**after** this flip:
 
-> a new, previously-unreported visual artifact showed up here... near the seam where the wrap
-> closes... the instanced stones visibly cluster/overlap in screen space, while the texture version
-> shows the same region as a single, cleanly blurred column... very likely an artifact of viewing
-> discrete 3D geometry at a steep grazing angle near the surface silhouette... not a data or
-> placement bug... not investigated or fixed, per this step's scope.
-
-This step confirms that hypothesis with direct evidence, and also confirms/corrects the "tumbler
-seam" framing (see §4 below — the ring's real azimuth extent is nowhere near the actual wrap seam).
-
----
-
-# 2. Dimensions/profile comparison (mug vs. tumbler vs. bottle)
-
-Computed via the real `computeObjectDimensionsMm()` (`src/preview3d/ObjectDimensions.js`) against
-each product's own definition (`src/products/definitions/*.json`, `src/products/ObjectTemplate.js`):
-
-| Product | bodyRadiusMm | topRadiusMm | Taper? | bodyHeightMm |
+| Call site | Passes `instancedStones`? | Before flip | After flip | Change needed? |
 |---|---|---|---|---|
-| mug (`short-name-block.rhs`, canvas 210×90) | 33.42 | 34.68 (ratio 85/82=1.037) | slight, mugs flare outward | 90 |
-| tumbler (`tumbler-wrap-design.rhs`, canvas 230×100) | 36.61 | 36.61 (ratio 1.0, exact) | **none — true cylinder** (`requireTopDiameterEqualsBody: true`) | 100 |
-| bottle (body/label zone) | ~34 (from `vessel-standard-bottle.json` defaults, 68mm/2) | = body | **none — true cylinder** below the shoulder | varies |
+| `app.js:1789` `drawCup()` — the **only** real-Studio call site into `preview3D.update()` | **Always explicit**: `instancedStones:__devInstancedStonesState.on` (never omitted) | `.on` defaulted `false` unless `?instancedStones=1` in the URL — real users always got the texture path | Still gated by `.on`, but `.on`'s own baseline changed (see below) — real users now get the instanced path unless `?instancedStones=0` | **Yes — app.js's dev-toggle baseline, not the renderer default itself** (see finding below) |
+| `app.js:847` `__devInstancedStones` (step-6 dev toggle baseline) | N/A — computes the `.on` value `drawCup()` passes | `param==='1' ? true : false` — baseline `false`, `?instancedStones=1` opts in | `param==='0' ? false : true` — baseline `true`, `?instancedStones=0` opts out | **Fixed** — see below |
+| `tools/test-preview3d-instanced-stones.mjs` tests (was 1-3, now 1-2) | Omitted (bare `MUG_OPTIONS`) | Texture path (asserted) | Would silently become instanced path — assertions would fail | **Fixed** — explicit `instancedStones: false` added |
+| `tools/test-preview3d-instanced-stones.mjs` tests (was 4-14, all `instancedStones:true`-only paths) | Always explicit `true` (or explicit `false` for teardown/comparison cases) | Instanced path | Unchanged — same explicit value | **No change needed** |
+| `tools/measure-instanced-stone-performance.mjs` | Always explicit `instancedStones: true` | Instanced path | Unchanged | **No change needed** |
+| `tools/rs2013-instanced-stone-harness.html` | **Never calls `preview3D.update()` at all** — its step-2 "reference" render manually calls `drawStoneLayoutTexture()`/`StoneLayoutTexture.js` directly and its "instanced" render manually builds its own `THREE.InstancedMesh` with its own placement math, neither going through `Preview3DRenderer.js` or its `instancedStones` option | N/A | N/A | **No change needed — confirmed by reading the whole file, not just grepping for the string** |
+| `tools/test-object-template-integration.mjs` test 7 | N/A — regexes `app.js`'s source text for `preview3D.update(layout,{...objectTemplate:...` | Static source-text assertion, unrelated to `instancedStones` | Unaffected | **No change needed** |
+| `tools/test-render-export-pipeline.mjs` | N/A — regexes `app.js`'s source text for `preview3D.update(layout,` | Static source-text assertion | Unaffected | **No change needed** |
+| `tools/test-text-position-workflow.mjs` line 313 | N/A — asserts `Preview3DRenderer.update` exists as a function, never calls it | N/A | Unaffected | **No change needed** |
+| `tools/test-preview3d-render-scheduling.mjs` | N/A — exercises `controls.update()`/`_applyTextureParams()` directly, never calls the real `update()` with an options object | N/A | Unaffected | **No change needed** |
+| `src/preview3d/index.js` (the `createPreview3D()` facade) | N/A — pure pass-through: `real.update(stoneLayout, options)`, forwards whatever `options` object the caller gave it | N/A | Unaffected | **No change needed** |
 
-The tumbler is **not** the smallest-radius or most-tapered product — the bottle's body radius is
-smaller, and both tumbler and bottle are true (untapered) cylinders by product-definition contract.
-`wallRadiusAt()` (`ObjectGeometryBuilder.js`) is therefore *constant* for both, not a source of
-radius-dependent compression. There is nothing about the tumbler's real-world geometry that makes it
-uniquely susceptible to this artifact — see §4/§5, the actual variable is the *design content's*
-azimuth extent, not the product kind.
+## The one real finding: app.js never actually relied on the renderer's own default
 
----
+The brief's own framing assumed *"if app.js currently never mentions `instancedStones` at all, it
+will now silently ship with instanced stones live."* That premise is **false** — checked directly
+at `app.js:1789` — and it matters:
 
-# 3. World-space placement math: verified correct, not the cause
+```js
+function drawCup(){preview3D.update(layout,{...,instancedStones:__devInstancedStonesState.on});...}
+```
 
-Generated the real `StoneLayout` for `tumbler-wrap-design.rhs` headlessly via `GeometryEngine`/
-`generateProjectStoneLayout()` (same path `tools/generate-example-baselines.mjs` uses), then computed
-each ring stone's nearest-neighbor distance two ways:
+`drawCup()` **always** explicitly passes `instancedStones`, every call, never omitted. So flipping
+`Preview3DRenderer.js`'s own default value has **zero effect on the real running Studio product**
+by itself — app.js's call site never falls through to that default; it always supplies its own
+boolean, taken from the step-6 dev-toggle state (`__devInstancedStonesState.on`).
 
-- **Canvas space** (2D, mm, as-authored) — `Math.hypot(xMm delta, yMm delta)`.
-- **True 3D world space** — using the *exact* position formula from `Preview3DRenderer.js`'s
-  `_updateInstancedStones()` (`azimuth = azimuthRadForCanvasXMm(...)`, `radius = wallRadiusAt(y,
-  dims)`, `x = radius*sin(azimuth)`, `z = radius*cos(azimuth)`).
+That dev toggle (`app.js:838-849`, added in step 6, confirmed still present via
+`TASK_RESULT.md`'s own step-6b evidence: `index.html?instancedStones=1`) computed its baseline as
+`false` unless `?instancedStones=1` was in the URL — i.e., **real Studio users, with no query
+string, were always on the texture path**, regardless of what `Preview3DRenderer.js`'s own default
+said.
 
-Result, across all 104 ring stones including right at the ring's azimuth extremes (±62°): **world/
-canvas nearest-neighbor ratio = 1.0000 everywhere** (min 0.9999, max 1.0000 — floating-point noise
-only). No compression at any azimuth. This is expected given `ObjectDimensions.js`'s own design
-contract: `bodyRadiusMm = canvasWidthMm / 2π`, so a full wrap always has exactly `canvasWidthMm` of
-true circumference by construction — canvas-space spacing is preserved exactly into world-space,
-everywhere, for a true cylinder. **The placement math is correct. This rules out a world-space
-placement bug conclusively**, not by inference from reading the code, but by direct measurement of
-the real generated layout.
+This is exactly the scenario the brief's §2 flagged and asked to check: *"does its own logic
+assume `false` is the baseline it toggles away from? Update if so."* It did, and I updated it:
 
----
+```js
+// before: param==='1' ? true : false   (baseline false, opt IN to instanced via ?instancedStones=1)
+const __devInstancedStonesParam=new URLSearchParams(location.search).get('instancedStones');
+const __devInstancedStones=__devInstancedStonesParam!=='0';
+// after: baseline true, opt OUT of instanced (back to texture) via ?instancedStones=0
+```
 
-# 4. Live browser reproduction: camera-relative, not stone-relative
+This is the change that actually makes "flip the default" true for real Studio users — without
+it, the renderer-level flip alone would have been a no-op for the shipping product, silently
+contradicted by app.js's own explicit pass-through. Per the brief's instruction, the ability to
+force the OLD texture path is deliberately kept (now via `?instancedStones=0` or
+`window.__setInstancedStones(false)`), not removed — only which side requires an argument has
+flipped. This is the intended real effect of this milestone: **real Studio users now see instanced
+stones by default, with no URL param needed.**
 
-Loaded the real `tumbler-wrap-design.rhs` example in the actual running Studio
-(`index.html?instancedStones=1`) via Playwright/Chromium, importing through the real
-`#importProjectFile` path (same `toAppProjectShape()`/`validateRhsProject()` bridge step 6 used — no
-reimplementation). Drove `#rotation`/`#zoom` and screenshotted `#cup` at several camera states.
-
-**Correction to step 6's "wrap seam" framing:** the accent ring (`cx=115`=canvas-center, `radius=40`
-on a 230mm-wide canvas) only sweeps azimuth **±62°**, nowhere near the true back-seam at ±180°. The
-apparent "seam" step 6 described is really the ring's own left/right extremes in canvas-x, which land
-well inside the front-visible hemisphere at typical camera framing — not the object's physical wrap
-seam.
-
-At the default front view, `rs2013-step6b-tumbler-front-instanced.png` reproduces the reported
-clustering clearly at both ring edges. Critically:
-
-- Rotating the camera to bring that exact azimuth (62°) to dead-center
-  (`rs2013-step6b-tumbler-az62-instanced.png`) makes the ring render **cleanly, evenly spaced** at
-  that spot — while the *opposite* side of the ring (now at the new grazing edge) starts clustering
-  instead. **The clustering moves with the camera; it is not fixed to particular stones or world
-  positions.** This is the signature of a projection/viewing artifact, not a data or placement bug.
-- At that same camera state, toggling to the texture path
-  (`rs2013-step6b-tumbler-az62-texture.png`) shows **no clustering at all** — clean, evenly spaced
-  dots the whole way to the edge.
-
-**Why instanced and not texture, given §3 proved positions are correct in both:** stone *positions*
-correctly foreshorten toward the silhouette edge under the perspective camera (this is real,
-unavoidable 3D perspective — a curved surface's own screen-space angular density increases as it
-curves toward edge-on). A continuous texture's rendered surface foreshortens by exactly the same
-factor as its underlying positions, so it looks fine — a compressed but still-continuous line. A
-discrete instanced stone, however, has its own fixed real-world footprint (its `sizeMm`) that does
-*not* shrink at the same rate its screen-space position spacing does near the grazing edge — so
-neighboring stones' rendered footprints start overlapping in screen space before their true 3D
-positions are anywhere near coincident. This is an inherent consequence of representing discrete 3D
-geometry (vs. a continuous texture) on a strongly curved surface near a grazing viewing angle.
+`app.js` was not in the brief's pre-listed "Allowed files," but its own §2 explicitly instructed
+auditing and fixing this exact dev-toggle assumption if found — which required touching this file.
+I treated that explicit instruction as authoritative over the file list (which reads as
+illustrative of the *categories* of allowed changes — test files, the harness — rather than an
+exhaustive enumeration that anticipated this specific, explicitly-requested fix).
 
 ---
 
-# 5. Generalization test: reproduces on the mug — not tumbler-specific
+# 3. Regression safety: `true`/omitted === explicit `true` (steps 4/5b's tested behavior)
 
-Added a synthetic circle/outline ring layer to the mug's own `short-name-block.rhs` example
-(`cx`=canvas-center, radius chosen to sweep the same ±62° azimuth extent as the tumbler's ring),
-imported it the same real way, and screenshotted at an equivalent camera state:
-`rs2013-step6b-mug-synthetic-ring-instanced.png` shows **the identical clustering artifact at both
-ring edges**, despite the mug having a *larger* body radius than the tumbler (§2) and a genuine (if
-slight) taper the tumbler doesn't have.
-
-This confirms the artifact is a general property of **any curved-surface product (mug/tumbler/
-bottle) whose design content sweeps far enough in azimuth to approach the camera's current grazing/
-silhouette zone** — not a tumbler-specific geometry issue. It only showed up on the tumbler in step
-6's own evidence because `tumbler-wrap-design.rhs` was the only one of the three chosen examples with
-a curved (circular) outline-mode layer sweeping that far around; `short-name-block.rhs` (mug) was
-front-facing text only, and `bottle-front-design.rhs` used a *rectangle* outline, whose straight
-edges have constant or linearly-varying canvas-x and never approach this condition regardless of how
-wide the rectangle is.
+Since `update()`'s only change is the parameter's default value — no new branches, no changed
+logic inside the function body — `instancedStones` omitted now takes the exact same code path
+(`if (instancedStones) { ... }` evaluates to the same `true` branch) as explicit
+`instancedStones: true` always did. Confirmed explicitly, not assumed, via new test 14 (§4 below):
+constructs two renderer instances, one with `instancedStones` omitted and one with
+`instancedStones: true`, and asserts identical `_stoneMesh` construction, identical body-material
+(`map` stays `null`), identical lighting-rig state, and byte-identical instance-matrix elements for
+the same stone.
 
 ---
 
-# 6. Consolidated finding
+# 4. Test suite changes (`tools/test-preview3d-instanced-stones.mjs`)
 
-**This is a genuine, inherent screen-space rendering property of instanced discrete stones on a
-curved surface at grazing/silhouette viewing angles — confirmed by direct measurement to not be a
-world-space placement bug (§3), confirmed live to be camera-relative rather than stone-relative
-(§4), and confirmed to generalize beyond the tumbler via a controlled same-azimuth-extent test on
-the mug (§5).** It will appear on any curved-surface product (mug/tumbler/bottle) whenever a design's
-content — most commonly a circular/elliptical outline shape, since straight edges don't trigger it —
-sweeps far enough in azimuth to approach the camera's current grazing edge at whatever framing/zoom
-is in use. No code fix was made or is being proposed as part of this step.
+Result: **14/14 pass.**
 
-**Noted, without implementing, for a later, separate decision:** a future mitigation could look like
-shrinking instance scale as a stone's azimuth approaches the camera's current grazing angle, or a
-texture/instance hybrid (continuous texture near the silhouette, discrete instanced stones near the
-front-facing center). Neither is designed or scoped here — both are options to evaluate later, not a
-recommendation.
+- **Test "1. instancedStones omitted takes the exact pre-step-4 texture path..."** → now
+  **"1. instancedStones:false takes the exact pre-step-4 texture path..."** — `MUG_OPTIONS` (bare,
+  omitted) replaced with `{ ...MUG_OPTIONS, instancedStones: false }`. Same assertions, same intent
+  (verify the texture path), now reached the correct way under the new default.
+- **Test "2. instancedStones:false is identical to instancedStones omitted"** → **removed**. Its
+  premise (`false === omitted`) was true only under the OLD default; under the NEW default,
+  `omitted === true`, not `false`. Keeping it as written would have made it assert a falsehood;
+  rewriting it to compare `false` against `false` would have made it a redundant duplicate of test
+  1. Replaced by its mirror image, new test 14 (see below), which is what the brief's §4
+  explicitly asked for.
+- **Test "3. instancedStones false/omitted never touches the lighting rig..."** → renumbered to
+  **"2."**, same fix: both `MUG_OPTIONS` bare calls replaced with explicit
+  `{ ...MUG_OPTIONS, instancedStones: false }`.
+- **Tests 4-14** (all already using explicit `instancedStones: true`/`false` throughout) —
+  unchanged logic, renumbered 3-13 to stay sequential after test 2's removal.
+- **New test 14** — *"instancedStones omitted is identical to instancedStones:true"*, the mirror
+  image of the old test 2 (which checked the OLD default's `false === omitted` equivalence; this
+  checks the NEW default's `true === omitted` equivalence). Builds two renderer instances, one
+  `instancedStones` omitted, one explicit `true`; asserts identical `InstancedMesh` construction,
+  identical stone count, identical skipped-texture body material, identical lighting-rig state,
+  identical group child count, and byte-identical instance-matrix elements for stone 0.
+
+`tools/measure-instanced-stone-performance.mjs` already passed `instancedStones: true` explicitly
+throughout — no change needed.
+
+`tools/rs2013-instanced-stone-harness.html` — read in full; confirmed it never calls
+`preview3D.update()` or references the `instancedStones` option at all (its own "reference" and
+"instanced" renders are both hand-built independently of `Preview3DRenderer.js`) — no change
+needed.
 
 ---
 
-# Cleanup check
+# 5. Live browser verification
 
-`du -sh tools/*.png` before this step's own captures: the 8 PNGs from step 6 (still valid, still
-referenced by step 6's own `TASK_RESULT.md` — not superseded by this step, which investigates them
-rather than replacing them). This step's own exploratory screenshots (several rotation/zoom
-iterations, a mislabeled camera-state pair from an early script bug) were written only to a private
-scratch directory outside the repo, never to `tools/` — so no superseded files existed in `tools/` to
-clean up. Only this step's final, correctly-labeled 4-screenshot set was written there. `du -sh
-tools/*.png` after: 12 PNGs total (step 6's original 8 + this step's 4), all currently valid.
+Isolated Playwright/Chromium instance (closed after use, per `CLAUDE.md`'s browser-testing rule),
+against the real running Studio (`python3 -m http.server 5173`, the repo's own `npm start`),
+loading the real default project (mug, "Vitalina Serbin" text layer, 157 stones) at three URLs:
+
+| URL | Expected | Observed | Console/page errors |
+|---|---|---|---|
+| `index.html` (no param) | Instanced (new default, no argument needed) | Faceted 3D gem geometry, correct per-stone shading | 0 |
+| `index.html?instancedStones=0` | Texture (forced old path, still reachable) | Flat, softly blurred dot texture — visually distinct from the instanced render | 0 |
+| `index.html?instancedStones=1` | Instanced (explicit, now a no-op matching the default) | Visually identical to the no-param case | 0 |
+
+Screenshots confirm the instanced render shows individually shaded 3D facets per stone (visible
+highlight/shadow variation within each gem), while the forced-texture render shows uniformly flat,
+slightly blurred dots — the same visual signature steps 2/3/6's own comparison screenshots
+established. Zero console or page errors in any of the three modes.
 
 ---
 
 # Testing
 
-- No production source files were changed — this was a read-only investigation. No syntax/unit tests
-  apply.
-- Headless numeric verification (§3): real `GeometryEngine`/`generateProjectStoneLayout()` output,
-  cross-checked against `Preview3DRenderer.js`'s exact position formula — not a re-derivation or
-  approximation.
-- Live Playwright/Chromium verification (§4/§5) against the real running Studio, real import path,
-  real `#rotation`/`#zoom` controls — confirmed zero console/page errors across all camera states and
-  both product kinds tested.
-- No shared architecture, project schema, or exporter code touched — per `CLAUDE.md`'s testing
-  policy, `npm test`/`npm run test:full` was not run for this step.
+- `node tools/test-preview3d-instanced-stones.mjs` — 14/14 pass.
+- `node tools/test-preview3d-render-scheduling.mjs` — 9/9 pass, unchanged.
+- `node tools/test-object-template-integration.mjs` — pass, unchanged.
+- `node tools/test-render-export-pipeline.mjs` — 9/9 pass, unchanged.
+- `node tools/test-text-position-workflow.mjs` — pass, unchanged.
+- `node tools/test-object-geometry-builder.mjs` — pass, unchanged.
+- Live Playwright/Chromium verification against the real running Studio — 3 modes, 0 console/page
+  errors, correct render mode confirmed visually in each.
+- `npm test`/`npm run test:full` not run — per `CLAUDE.md`'s testing policy, this change is a
+  single default-value flip in one renderer option plus its direct callers/tests, not shared
+  architecture, project schema, or exporter code.
 
 ---
 
 # Scope discipline
 
-- No production file was modified (`app.js`, `Preview3DRenderer.js`, `ObjectDimensions.js`, etc. all
-  untouched) — this was a pure investigation.
-- No fix was implemented or proposed as a concrete plan — §6's mitigation ideas are noted as future
-  options only, not designed here.
-- `instancedStones` default remains unchanged (`false`) everywhere.
-- No Playwright/Node scratch scripts were committed — same convention step 6 used.
+- No placement/lighting/material/throttle logic touched — `update()`'s only change is the
+  parameter's default value.
+- No attempt made to fix or further mitigate any of the three known limitations (§1) — all three
+  carried forward as documented, accepted limitations of the newly-default behavior.
+- Step 7 (removing the old texture path) explicitly not started — the texture path, its tests, and
+  the ability to reach it via `instancedStones: false` all remain fully intact and working.
+- The one file touched beyond the pre-listed "Allowed files" (`app.js`) was touched only because
+  the brief's own §2 explicitly instructed auditing and fixing exactly this dev-toggle assumption
+  — reasoning documented in full in §2 above, not treated as an incidental scope creep.
+- No Playwright/Node scratch scripts committed (written to the session scratch directory outside
+  the repo, same convention step 6b used) — no new screenshot assets committed to `tools/` either,
+  since this step's verification was a live-browser check, not new documented visual evidence.
 
 ---
 
 # Deliverables
 
 - `TASK.md` (this milestone's brief), `TASK_RESULT.md` (this file).
-- `tools/rs2013-step6b-tumbler-front-instanced.png` — reproduces the reported clustering.
-- `tools/rs2013-step6b-tumbler-az62-instanced.png` — camera rotated to bring the clustering-prone
-  azimuth to center; clean there, proving the artifact is camera-relative.
-- `tools/rs2013-step6b-tumbler-az62-texture.png` — same camera state, texture path; no clustering,
-  proving the artifact is instanced-only.
-- `tools/rs2013-step6b-mug-synthetic-ring-instanced.png` — same artifact reproduced on the mug via a
-  synthetic same-azimuth-extent ring, proving it is not tumbler-specific.
+- `src/preview3d/Preview3DRenderer.js` — `instancedStones = false` → `instancedStones = true` in
+  `update()`'s signature, plus an updated doc comment reflecting the new default and confirming
+  `false` still reaches the untouched texture path.
+- `app.js` — step-6 dev-toggle baseline flipped (`?instancedStones=1`/opt-in → baseline
+  true/`?instancedStones=0` opt-out), so the real Studio product's actual default behavior matches
+  the renderer-level flip's intent; comment updated to explain why.
+- `tools/test-preview3d-instanced-stones.mjs` — 2 tests fixed to explicit `instancedStones: false`
+  (renumbered 1-2), 1 test removed (its OLD-default premise no longer holds), 1 new test added at
+  the end (14, the NEW-default mirror check), remaining tests renumbered 3-13 to stay sequential.

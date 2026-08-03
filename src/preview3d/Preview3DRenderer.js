@@ -263,14 +263,16 @@ export class Preview3DRenderer {
    *   `wrap` used to be an option every non-relevant caller could simply not pass.
    *   RS-2010: `vesselParams` (project.vessel, normalized) is only meaningful for mug/tumbler/
    *   bottle -- same "omitted/null when not relevant" style as plateParams above.
-   *   RS-2013 §4 step 4: `instancedStones` (default false) mirrors plateParams/vesselParams'
-   *   "optional, product-agnostic display option" style. `false`/omitted is byte-identical to
-   *   pre-step-4 behavior -- the texture-baking path (_updateTexture()) runs exactly as before,
-   *   completely untouched by this option. `true` builds/updates a THREE.InstancedMesh of stones
-   *   instead (see _updateInstancedStones()) and skips assigning the baked texture to
+   *   RS-2013 §4 step 4: `instancedStones` mirrors plateParams/vesselParams' "optional,
+   *   product-agnostic display option" style. `true` builds/updates a THREE.InstancedMesh of
+   *   stones instead (see _updateInstancedStones()) and skips assigning the baked texture to
    *   bodyMesh.material.map -- the two modes are mutually exclusive per-frame, never both.
+   *   RS-2013 §4 step 6c: default flipped to `true` -- `true`/omitted now takes the instanced
+   *   path (steps 4/5b's already-tested logic, unchanged by this flip). Passing `false`
+   *   explicitly still takes the pre-step-4 texture-baking path (_updateTexture()), for any
+   *   caller that still needs it (e.g. a reference/comparison render).
    */
-  update(stoneLayout, { cupColor, objectTemplate, canvasWidthMm, canvasHeightMm, plateParams = null, vesselParams = null, instancedStones = false }) {
+  update(stoneLayout, { cupColor, objectTemplate, canvasWidthMm, canvasHeightMm, plateParams = null, vesselParams = null, instancedStones = true }) {
     if (!this._mounted) return;
 
     const geometryKey = `${objectTemplate.id}:${canvasWidthMm}:${canvasHeightMm}:${plateParams ? JSON.stringify(plateParams) : ''}:${vesselParams ? JSON.stringify(vesselParams) : ''}`;
