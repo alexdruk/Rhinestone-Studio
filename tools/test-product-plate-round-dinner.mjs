@@ -370,7 +370,9 @@ await test('22. app.js: the plate draws its own circular/annular design-target g
   assert.match(appJs, /function drawPlateDesignTargetGuide\(/);
   assert.match(appJs, /if\(isPlate\)\{drawPlateDesignTargetGuide\(ctx,s,ox,oy,dpr\)\}else\{drawFrontViewFrame\(/);
   // RS-2010: drawCup() now also forwards vesselParams:project.vessel alongside plateParams.
-  assert.match(appJs, /preview3D\.update\(layout,\{cupColor:project\.cupColor,objectTemplate:currentObjectTemplate\(\),canvasWidthMm:project\.canvas\.width,canvasHeightMm:project\.canvas\.height,plateParams:project\.plate,vesselParams:project\.vessel\}\)/);
+  // RS-2013 step 6c: drawCup() now also forwards instancedStones:__devInstancedStonesState.on
+  // after vesselParams -- additive only, plateParams/vesselParams forwarding itself is unchanged.
+  assert.match(appJs, /preview3D\.update\(layout,\{cupColor:project\.cupColor,objectTemplate:currentObjectTemplate\(\),canvasWidthMm:project\.canvas\.width,canvasHeightMm:project\.canvas\.height,plateParams:project\.plate,vesselParams:project\.vessel,instancedStones:__devInstancedStonesState\.on\}\)/);
 });
 
 await test('23. app.js: isPointerOnFrontViewFrame()/isTextTooLongForObject() both opt the plate out of the cylindrical wrap-around concepts that do not apply to a flat disc', () => {

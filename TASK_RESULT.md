@@ -230,3 +230,104 @@ established. Zero console or page errors in any of the three modes.
 - `tools/test-preview3d-instanced-stones.mjs` — 2 tests fixed to explicit `instancedStones: false`
   (renumbered 1-2), 1 test removed (its OLD-default premise no longer holds), 1 new test added at
   the end (14, the NEW-default mirror check), remaining tests renumbered 3-13 to stay sequential.
+
+---
+
+# Follow-up: literal-source-text regression in two pre-existing, unrelated tests
+
+**Found after the fact, in a separate pass — not part of this milestone's own original scope, and
+not something its own caller audit (§2) was told to anticipate.** `node tools/run-tests.mjs --all`
+(the full suite, not the "focused tests for the current task" default this milestone's own testing
+followed per `CLAUDE.md`'s policy) surfaced two failures:
+
+- `tools/test-product-plate-round-dinner.mjs` test 22 — *"app.js: the plate draws its own
+  circular/annular design-target guide instead of the cylindrical Front View Frame, and drawCup()
+  forwards plateParams to the 3D preview"* (the brief that assigned this follow-up described it as
+  "test 23" in this file; the actual failing test, confirmed by running the file directly, is
+  test 22 — a minor off-by-one in the brief, not a second failure).
+- `tools/test-product-vessel-dimensions.mjs` test 23 — *"app.js: drawCup() forwards
+  vesselParams:project.vessel to the 3D preview alongside plateParams"*.
+
+## Why it happened
+
+Both tests use a pattern this codebase relies on elsewhere: `assert.match(appJs, /literal regex
+matching the exact call-site source text/)` — reading `app.js`'s own source as a string and regex-
+matching it verbatim, rather than importing and exercising the function. This is a real,
+intentional test style in this repo (confirmed present in `tools/test-object-template-integration.
+mjs` and `tools/test-render-export-pipeline.mjs` too — see below), not a mistake in those two
+files. Both regexes were anchored to the call site's exact closing `...vesselParams:project.
+vessel})` — this milestone's own change (§2 above) appended `,instancedStones:
+__devInstancedStonesState.on` immediately before that closing `})`, so the literal text no longer
+matched. **The regex failure was purely textual — neither test was checking anything this
+milestone actually broke.**
+
+## Confirmation: plateParams/vesselParams forwarding was never broken
+
+Read the actual current call site directly, `app.js:1789`:
+
+```js
+function drawCup(){preview3D.update(layout,{cupColor:project.cupColor,objectTemplate:currentObjectTemplate(),canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height,plateParams:project.plate,vesselParams:project.vessel,instancedStones:__devInstancedStonesState.on});preview3D.syncView(rotation,zoom)}
+```
+
+`plateParams:project.plate` and `vesselParams:project.vessel` are both still present, forwarded
+exactly as before, in exactly the same position relative to each other. This milestone's own
+change is purely additive — `,instancedStones:__devInstancedStonesState.on` appended immediately
+after `vesselParams:project.vessel` and before the closing `}`. Nothing these two tests originally
+cared about (that `drawCup()` forwards `plateParams`/`vesselParams` to the 3D preview) was removed
+or altered.
+
+## Fix applied
+
+Updated both regexes to match the new exact call-site text, preserving each test's original rigor
+(a precise, anchored match — not loosened to a vague "contains preview3D.update" substring check):
+
+- `tools/test-product-plate-round-dinner.mjs` (test 22): appended
+  `,instancedStones:__devInstancedStonesState\.on` before the closing `\}\)` in the regex, plus a
+  one-line comment noting the RS-2013 step 6c addition (mirroring the file's existing comment style
+  for the RS-2010 vesselParams addition immediately above it).
+- `tools/test-product-vessel-dimensions.mjs` (test 23): identical fix.
+
+Both regexes now match this exact, full call-site string (quoted verbatim from the current
+`app.js:1789`):
+
+```
+preview3D.update(layout,{cupColor:project.cupColor,objectTemplate:currentObjectTemplate(),canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height,plateParams:project.plate,vesselParams:project.vessel,instancedStones:__devInstancedStonesState.on})
+```
+
+## Search for other latent instances of the same problem
+
+Grepped every `tools/*.mjs` test file for any other literal source-text match against this same
+`preview3D.update(...)` call site, or any regex referencing `plateParams:project.plate`,
+`vesselParams:project.vessel`, or `__devInstancedStones` against `appJs`:
+
+- `tools/test-object-template-integration.mjs` test 7 — matches
+  `/preview3D\.update\(layout,\{[^}]*objectTemplate:currentObjectTemplate\(\)/` — a `[^}]*`
+  wildcard between the opening `{` and `objectTemplate:...`, not anchored to the end of the object
+  literal. Unaffected by the appended `instancedStones` field (still passed before this milestone's
+  change and after it). Confirmed passing.
+- `tools/test-render-export-pipeline.mjs` — matches `/preview3D\.update\(layout,/`, an unanchored
+  prefix-only match. Unaffected. Confirmed passing.
+- No other file in `tools/*.mjs` references `__devInstancedStones`/`instancedStones` against
+  `appJs`'s source text, and no other file regexes `plateParams:project\.plate` or
+  `vesselParams:project\.vessel` at all.
+- Both fixed files are registered in `tools/test-groups.mjs` under groups included by `--all`
+  (confirmed: both appear, and pass, in the `node tools/run-tests.mjs --all` run below) — there is
+  no `test:full`-only or excluded-from-default-group variant of either file to separately check.
+
+**No other latent instances found.** The two fixed tests were the only ones anchored precisely
+enough to this call site's exact end-of-literal text to have broken.
+
+## Testing (follow-up)
+
+- `node tools/test-product-plate-round-dinner.mjs` — all 39 tests pass (was failing at test 22).
+- `node tools/test-product-vessel-dimensions.mjs` — all 25 tests pass (was failing at test 23).
+- `node tools/run-tests.mjs --all` — **`Selected: 99 / Passed: 99 / Failed: 0`** — full suite,
+  including both fixed files and everything else, confirming nothing else was affected.
+- `node tools/test-documentation-consistency.mjs` — passes, unchanged.
+
+## Scope discipline (follow-up)
+
+- Only the two failing tests' regexes were touched — no change to `app.js`, `Preview3DRenderer.js`,
+  or any other production file; the underlying behavior was never broken.
+- No other test's assertions were loosened, removed, or made less specific.
+- Committed as a small follow-up commit on the same branch, not pushed (per instruction).
