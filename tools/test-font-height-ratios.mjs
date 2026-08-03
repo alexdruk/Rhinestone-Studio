@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { computeShapeFitScale } from '../src/geometry/ShapeFit.js';
 
 // TXT-104 step 1 -- cross-checks assets/fonts/manifest.json's stored capHeightRatio/xHeightRatio
 // for the shipped OpenType production portfolio (Baloo 2, Anton, Sacramento, Dancing Script)
@@ -223,6 +224,68 @@ await test('14. solveDesiredCapHeightMm() and computeLetterHeightBoundsMm() thro
       `expected computeLetterHeightBoundsMm('${id}') to throw a capHeightRatio-related error, not return NaN`
     );
   }
+});
+
+// --- TXT-104 step 5: Auto Fit / Fit-to-Shape verification pass ---
+//
+// Design doc section 3.4/4 step 5 claims computeAutoFitScale() and ShapeFit.computeShapeFitScale()
+// already treat layer.height as an opaque scalar to re-scale and re-measure, with no opinion on
+// what it "means" -- i.e. heightMode ('raw' vs 'capHeight') cannot affect either function's output,
+// since neither function reads heightMode at all (confirmed by re-reading both bodies: app.js:432-440
+// only reads layer.autoFit/layer.stoneSize/layer.gap/layer.height/project.canvas.width;
+// ShapeFit.computeShapeFitScale() takes currentHeightMm/measuredWidthMm/measuredHeightMm/spacingMm/
+// targetWidthMm/targetHeightMm/minHeightToSpacingRatio as plain numbers, never a layer object). These
+// tests prove that claim empirically with two otherwise-identical layers differing only in
+// heightMode, rather than resting on the design doc's inspection alone. Zero production code change
+// expected or made for this step.
+
+const computeAutoFitScaleSrc = extractBlock(appJs, /function computeAutoFitScale\([^)]*\)\{[\s\S]*?\n\}/, 'function computeAutoFitScale()');
+const minAutoFitRatioDecl = extractBlock(appJs, /const MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO=\d+(\.\d+)?;/, 'the MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO declaration');
+const MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO = Number(minAutoFitRatioDecl.match(/=([\d.]+);/)[1]);
+// eslint-disable-next-line no-new-func
+const computeAutoFitScale = new Function(`${minAutoFitRatioDecl}\nreturn ${computeAutoFitScaleSrc};`)();
+
+const shapeFitProject = { canvas: { width: 210, height: 90 } };
+
+await test('15. computeAutoFitScale() returns an identical scale for two layers differing only in heightMode (mode-agnostic, per design doc section 3.4)', () => {
+  const rawLayer = { autoFit: true, height: 25, heightMode: 'raw', stoneSize: 2, gap: 0.3 };
+  const capHeightLayer = { ...rawLayer, heightMode: 'capHeight' };
+  const measuredWidthMm = 250; // forces mild overflow (fit-to-width shrink, scale < 1)
+
+  const rawResult = computeAutoFitScale(rawLayer, shapeFitProject, measuredWidthMm);
+  const capHeightResult = computeAutoFitScale(capHeightLayer, shapeFitProject, measuredWidthMm);
+
+  assert.ok(rawResult.scale < 1, `expected this width to force a shrink, got scale=${rawResult.scale}`);
+  assert.equal(rawResult.scale, capHeightResult.scale, 'expected heightMode alone to never change the returned scale');
+
+  // "shrinks the effective corrected value coherently" (design doc section 3.4), made concrete: the
+  // effective cap height at the scaled engine height must equal the unscaled effective cap height
+  // times the same scale, for a validated font.
+  const fontId = 'baloo2-variable-regular';
+  const scaledHeight = capHeightLayer.height * capHeightResult.scale;
+  const scaledCapHeightMm = solveDesiredCapHeightMm({ fontId, engineHeightMm: scaledHeight });
+  const unscaledCapHeightMm = solveDesiredCapHeightMm({ fontId, engineHeightMm: capHeightLayer.height });
+  assert.ok(
+    Math.abs(scaledCapHeightMm - unscaledCapHeightMm * capHeightResult.scale) < 1e-9,
+    `expected the scaled effective cap height (${scaledCapHeightMm}) to equal the unscaled effective cap height (${unscaledCapHeightMm}) times the auto-fit scale (${capHeightResult.scale})`
+  );
+});
+
+await test('16. ShapeFit.computeShapeFitScale() returns an identical scale for two layers differing only in heightMode (mode-agnostic, per design doc section 3.4)', () => {
+  const rawLayer = { height: 25, heightMode: 'raw', stoneSize: 2, gap: 0.3 };
+  const capHeightLayer = { ...rawLayer, heightMode: 'capHeight' };
+  // measuredWidthMm/measuredHeightMm/targetWidthMm/targetHeightMm chosen so the width axis is the
+  // binding constraint (scaleForWidth=0.75 < scaleForHeight=0.9), forcing a shrink (scale < 1) that
+  // stays above the legibility floor (spacingMm*minHeightToSpacingRatio = 2.3*6 = 13.8mm), so this
+  // test isolates the mode-agnostic claim rather than the separate legibility-floor path.
+  const fitParams = { measuredWidthMm: 200, measuredHeightMm: 50, targetWidthMm: 150, targetHeightMm: 45, minHeightToSpacingRatio: MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO };
+
+  const rawResult = computeShapeFitScale({ currentHeightMm: rawLayer.height, spacingMm: rawLayer.stoneSize + rawLayer.gap, ...fitParams });
+  const capHeightResult = computeShapeFitScale({ currentHeightMm: capHeightLayer.height, spacingMm: capHeightLayer.stoneSize + capHeightLayer.gap, ...fitParams });
+
+  assert.ok(rawResult.ok && capHeightResult.ok, `expected both fits to succeed, got ${JSON.stringify(rawResult)} / ${JSON.stringify(capHeightResult)}`);
+  assert.ok(rawResult.scale < 1, `expected this target box to force a shrink, got scale=${rawResult.scale}`);
+  assert.equal(rawResult.scale, capHeightResult.scale, 'expected heightMode alone to never change the returned scale');
 });
 
 console.log('Font height ratio tests passed.');
