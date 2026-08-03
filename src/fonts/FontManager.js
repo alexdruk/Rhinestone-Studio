@@ -45,7 +45,15 @@ function normalizeFontRecord(record) {
     // exactly like before this field existed. Purely data: app.js's
     // updateStoneSizePrintableCapabilityUI() reads this list to gray out a stone size, so
     // re-enabling one later is a manifest edit, never a code change.
-    unsupportedStoneSizes: Object.freeze(Array.isArray(record.unsupportedStoneSizes) ? record.unsupportedStoneSizes.map(String) : [])
+    unsupportedStoneSizes: Object.freeze(Array.isArray(record.unsupportedStoneSizes) ? record.unsupportedStoneSizes.map(String) : []),
+    // TXT-104: ratio of a rendered capital letter's (resp. lowercase 'x''s) real bounding-box height
+    // to the em-square heightMm the engine is actually given -- see assets/fonts/manifest.json's own
+    // values and tools/measure-font-height-ratios.mjs for how these are derived. Defaults to
+    // undefined for every record that doesn't carry it (the two authored rhinestone fonts, which have
+    // no OpenType em-box concept at all, and every non-validated legacy OpenType font), so nothing
+    // existing changes behavior.
+    capHeightRatio: typeof record.capHeightRatio === 'number' ? record.capHeightRatio : undefined,
+    xHeightRatio: typeof record.xHeightRatio === 'number' ? record.xHeightRatio : undefined
   });
 }
 

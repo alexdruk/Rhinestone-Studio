@@ -6,189 +6,147 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-RS-2013 (Implementation Phase) — §4 step 7: remove the old texture path
+TXT-104 — Text Height Accuracy: Design and Audit Phase
 
 ---
 
 # Status
 
-COMPLETE. Audit (§1-6 below) was written and reported before any deletion, per the repo's "report
-before action" discipline for destructive changes. Two judgment calls were required; both are
-resolved below (one by explicit user confirmation, since it was a real product decision, not a
-technical one). All deletions/edits then applied exactly as scoped. Full default test suite
-(`node tools/run-tests.mjs`, 96 files) passes. Live-browser-verified: mug and plate both render
-faceted instanced stones correctly (solid-colored body, no texture, correct lighting/placement),
-switching object type works, zero console errors.
+COMPLETE. Design/audit-only phase, per the task brief's explicit instruction — no `src/**`,
+`app.js`, `index.html`, or test file was touched. Deliverable is
+`docs/specifications/TXT-104-TextHeightAccuracyDesign.md`, `TASK.md`, and this file.
 
 ---
 
-# 1. Context
+# 1. Headline finding — flagged prominently, same as in the design doc itself
 
-`instancedStones` now defaults to `true` (step 6c, commit `473487b`), and Sasha has visually
-validated the new default (this task's brief). §3.6/§4 step 7 of
-`docs/specifications/RS-2013-InstancedFacetedStoneRenderingDesign.md` calls for removing the old
-canvas-texture stone-drawing path and the now-dead flag entirely, since there is no longer a second
-behavior to gate.
-
-This section is the full "what becomes dead code" audit, required before any deletion.
-
----
-
-# 2. `StoneLayoutTexture.js` — is any of it still needed?
-
-**Finding: no. The entire file is stone-drawing responsibility and can be deleted outright.**
-
-The design doc's own open question (§4 step 7 note) asks whether the file's background-fill
-responsibility might still be needed for non-stone-covered regions. Looking at the real code:
-
-- `drawStoneLayoutTexture(ctx, stoneLayout, { widthMm, heightMm, backgroundColor })`
-  (`StoneLayoutTexture.js:45`) does exactly two things in one function: `fillRect()` the whole
-  canvas with `backgroundColor`, then draw every stone on top. There is no separate/standalone
-  background-fill entry point — it's one function, not two responsibilities split across two
-  call sites.
-- The "background" it paints is `cupColor` (`Preview3DRenderer._updateTexture()` passes
-  `backgroundColor: cupColor` at `Preview3DRenderer.js:626`), and that texture is assigned to
-  `bodyMesh.material.map`.
-- In the instanced path (`_updateInstancedStones()`, `Preview3DRenderer.js:544-548`), the body
-  already gets **exactly the same visual outcome** without any texture at all: `bodyMesh.material.map`
-  is cleared to `null` and `bodyMesh.material.color.set(cupColor)` is called directly. A plain
-  `MeshStandardMaterial` with `.color = cupColor` and no map **is** the background-fill, just done
-  as a flat material color instead of a baked canvas texture — there is no region of the body left
-  uncovered by either mechanism.
-
-Conclusion: the background-fill "responsibility" was never a separate thing to preserve — it was
-always the same function that draws stones, and the instanced path already has its own equivalent
-(plain material color) wired up and working today. Nothing in `StoneLayoutTexture.js` needs to
-survive. `TEXTURE_PX_PER_MM`/`textureSizeForMm()` are also not needed by anything outside this file
-and the (also-being-addressed) harness — see §5.
+**ARCH-REVIEW-001's claim that finding #5 ("`heightMm` is em size, not physical letter height") is
+already closed by `TXT-103A` is a mischaracterization.** Having read `TXT-103A` in full, its entire
+scope is a *different* question — whether it's safe to change `heightMm` (does it regenerate
+geometry rather than illegally re-scaling stone positions?). It never discusses em-box proportions,
+cap-height, x-height, or any font-metrics ratio, and never measures how far a requested `heightMm`
+diverges from a font's actual rendered letter height. **The actual gap ARCH-REVIEW-001 originally
+described has never been measured or fixed by any shipped milestone and is fully open today.**
 
 ---
 
-# 3. `Preview3DRenderer.js` — everything that exists only to support the texture path
+# 2. Re-verification of TXT-103A's other findings
 
-Audited the full file (726 lines). Dead once the flag is gone permanently:
+Every other specific, checkable claim `TXT-103A` makes (safe regeneration semantics, no illegal
+point-scaling, RS Block's fixed-pitch no-op behavior, exporter correctness, generic collision
+handling) was re-checked line-by-line against the current code and **is still accurate** — full
+per-claim table with current file/line citations is in
+`docs/specifications/TXT-104-TextHeightAccuracyDesign.md` §1.
 
-| Item | Location | Why dead |
-|---|---|---|
-| `import { drawStoneLayoutTexture, textureSizeForMm } from './StoneLayoutTexture.js'` | line 15 | file being deleted |
-| `_textureCanvas`, `_textureCtx`, `_texture` fields | constructor, lines 117-119 | only read/written by `_updateTexture()`/`_applyTextureParams()`/`dispose()` |
-| `this._texture?.dispose()` in `dispose()` | line 344 | texture no longer exists |
-| `_updateTexture()` method (CanvasTexture construction/resize/redraw) | lines 599-643 | the whole texture-baking path |
-| `_applyTextureParams()` method (wrap-mode/mipmap/anisotropy setup) | lines 574-597 | only called by `_updateTexture()`; step 0's wrap-mode fix (§2.1) becomes moot with no texture to wrap |
-| `_teardownInstancedStones()` | lines 558-567 | only exists to undo the instanced path when falling back to texture; with texture gone there is nothing to fall back to, so the instanced mesh is simply always present |
-| The `if (instancedStones) {...} else {...}` branch in `update()` | lines 287-292 | only one branch survives |
-| `instancedStones` parameter itself | `update()` signature, line 275 | no second behavior to gate |
-| `_applyLightRig(instancedStones)` and its `_lightRigExtended` toggle field | lines 134, 392-409 | only one rig is ever reachable once there's one path — folds into `init()`'s light setup directly |
-| `DEFAULT_AMBIENT_INTENSITY` (0.75) | line 56 | the "default" rig's ambient value is dead once `_applyLightRig`'s false-branch is unreachable — only `INSTANCED_AMBIENT_INTENSITY` (0.4) survives, renamed to a single constant |
-| The original 2-light rig set up in `init()` (ambient@0.75 + 2 directional lights) | lines 174-185 | superseded by the extended rig; `init()` should build the extended (4-light, ambient@0.4) rig directly, not toggle into it later |
-| Comment references to "the flag was false"/"texture path"/PREVIEW-001's baked-texture framing | scattered (lines 49-61, 179-182, 266-273 doc comment) | describe removed behavior |
-
-**Kept, unchanged** (confirmed still real, load-bearing behavior, not flag-related):
-- `_updateInstancedStonesThrottled()` / `_clearPendingInstancedRebuild()` / the throttle constant
-  `INSTANCED_STONES_REBUILD_THROTTLE_MS` — step 5b's perf finding is orthogonal to the flag and
-  applies regardless of default. `update()` will call `_updateInstancedStonesThrottled()`
-  unconditionally instead of behind an `if`.
-- `_updateInstancedStones()` itself (placement/orientation/color math) — unchanged.
-- `_applyCrystalMaterialResponse()`, `_frameCamera()`, `_repositionCamera()`, `_rebuildMesh()`,
-  `_disposeGroup()`, camera/azimuth/render-scheduling code — untouched, no relation to the flag.
+Two things did change since `TXT-103A`, neither contradicting it:
+- The `#height` field's clamp (`TXT-103`, referenced but not separately audited by `TXT-103A`) is
+  now `[4, 111]` (raised from `TXT-103`'s original 80 by the FONT-DECISION-001 studio-integration
+  follow-up), still bounding the *raw* em-size field, not correcting its meaning.
+- `TXT-103A`'s one flagged-but-out-of-scope gap — `fitTextToShape()` throwing unhandled for
+  authored-stone-center fonts like RS Block — **was fixed since, by FONT-002** (confirmed in the
+  live `app.js` function body, which explicitly cites TXT-103A in its own comment).
 
 ---
 
-# 4. Every call site passing `instancedStones`
+# 3. Quantified gap (real measurements, not estimates)
 
-- **`app.js`**: `drawCup()` (line 1789 currently) passes
-  `instancedStones:__devInstancedStonesState.on` explicitly. The dev-toggle machinery that sets
-  that state (`__devInstancedStonesParam`/`__devInstancedStones`/`__devInstancedStonesState`/
-  `window.__setInstancedStones`, lines 837-850) exists solely to let Sasha flip between the two
-  paths via a URL param — **this is the one genuinely ambiguous product-not-technical call the
-  brief flagged**. I asked explicitly rather than assuming; confirmed answer: **remove it
-  entirely**, since deleting the flag from `update()` leaves nothing left to toggle to. All of
-  this is removed; `drawCup()`'s call to `preview3D.update()` drops the `instancedStones` key
-  entirely.
-- **`tools/rs2013-instanced-stone-harness.html`**: uses `?lighting=extended` — its own independent
-  lighting-rig toggle (harness-local `LIGHT_RIGS` object, not `Preview3DRenderer.js`'s flag), and
-  separately imports `drawStoneLayoutTexture` directly for its own step-2 side-by-side reference
-  render (see §5 — this is a different mechanism from the `instancedStones` parameter, but shares
-  the same fate: the file it imports is going away).
-- **`tools/measure-instanced-stone-performance.mjs`**: passes `instancedStones: true` in
-  `MUG_OPTIONS`/`PLATE_OPTIONS` (lines 131, 141). Harmless to leave (an extra unread property once
-  the parameter is dropped from the destructure), but removed for clarity since it now documents a
-  flag that no longer exists.
-- **Every test file** — see §6.
+Parsed all four shipped OpenType production fonts (Baloo2, Anton, Sacramento, Dancing Script — the
+`rhinestoneValidated:true`/`providerId:'opentype'` fonts `productionFonts()` actually offers) with
+`opentype.js`, the same library already used in production, and measured both the OS/2 table's
+metrics and the actual rendered bounding box of reference glyphs:
 
-No other production call site (`src/`) references `instancedStones` or calls `Preview3DRenderer.update()` with it.
+| Font | Measured cap-height ratio (of em) | Actual cap height at requested `heightMm=30` | Shortfall |
+|---|---|---|---|
+| Baloo 2 | 0.618 | 18.54mm | **38.2% smaller** |
+| Anton | 0.859 | 25.78mm | **14.1% smaller** |
+| Sacramento | 0.778 | 23.35mm | **22.2% smaller** |
+| Dancing Script | 0.807 | 24.21mm | **19.3% smaller** |
+
+RS Block / RS Modern (authored stone-center fonts) have no OpenType em-box at all — `heightMm` is
+already a confirmed no-op for them, unrelated to this gap.
+
+Also found: the OS/2 table's own `sCapHeight` field disagrees with the font's actual rendered
+glyph outline by up to 12% (worst for the two script faces) — meaning a naive "trust the OS/2
+metrics table" heuristic would leave real residual error exactly where the gap is largest. Full
+measurement methodology and tables are in the design doc §2.
 
 ---
 
-# 5. `tools/rs2013-instanced-stone-harness.html` — obsolete, or still useful?
+# 4. Design proposal summary
 
-**Decision: trim, don't delete.** Reasoning:
+Full reasoning is in the design doc §3; headline decisions:
 
-The harness has three independent view modes, gated by URL params:
-1. `runStep1Grid()` (no `?product=`) — static flat-grid geometry/color check. No dependency on
-   `StoneLayoutTexture.js` at all.
-2. `runStep2Placement(productId)` (`?product=`) — renders the **same real StoneLayout twice**:
-   left = the old texture reference (via `drawStoneLayoutTexture`/`textureSizeForMm`, duplicating
-   what `Preview3DRenderer._updateTexture()`/`_applyTextureParams()` used to do), right = the
-   instanced mesh. This is the one mode that hard-depends on the file being deleted.
-3. `runSingleStoneCloseup(productId)` (`?view=singlestone`) — close-up single-instance view for
-   facet/material/lighting comparison. No `StoneLayoutTexture.js` dependency.
-
-The side-by-side comparison in mode 2 was purpose-built to validate the instanced path *against*
-the texture path — that validation is done (Sasha's approval, this task's premise) and the
-comparison target (`StoneLayoutTexture.js`) is being deleted, so that half of mode 2 is genuinely
-obsolete, not merely unused. But modes 1 and 3, and the *instanced-only* right-hand render in mode
-2, remain a real standalone tool for visually inspecting placement/lighting/facet/material
-combinations against real product StoneLayouts outside the full app — the same role
-`tools/rs2013-instanced-stone-harness.html`-style standalone Three.js harnesses already play
-elsewhere in this repo (per prior milestones' pattern of keeping such tools around for future
-tuning work, e.g. the font program's `FONT-CAL-*`/`FONT-GEN-*` visual-comparison tooling).
-
-**Action taken**: removed the left-hand texture-reference render and its `drawStoneLayoutTexture`/
-`textureSizeForMm` import from `runStep2Placement()`, kept the right-hand instanced render (now
-simply "the" render, not "the new one"), and kept modes 1 and 3 unchanged. The info banner text
-was updated to drop "left/right compare" language since there is now only one render.
+- **Correction belongs at the user-intent boundary in `app.js`'s orchestration layer**, translating
+  a new "desired physical letter height" into the existing `heightMm` before it reaches
+  `GeometryEngine` — not inside `generateTextLayout()`/`OpenTypeProvider` sampling, because every
+  downstream consumer (Auto Fit, Fit-to-Shape, the `[4,111]` clamp, and critically the
+  human-calibrated SS30 legibility gate) already depends on `heightMm` meaning what it means today.
+- **Per-font-file ratios, measured through the real pipeline** (not a hand-tuned table, and not a
+  blind trust in OS/2 metrics, per the 12% divergence found above), precomputed offline and stored
+  as a new optional `assets/fonts/manifest.json` field — the same additive-field pattern
+  `rhinestoneValidated`/`unsupportedStoneSizes` already use.
+- **Backward compatibility**: a new additive `layer.heightMode` field (`'raw'`|`'capHeight'`),
+  defaulting to `'raw'` for every existing project (zero behavior change, no schema-version bump
+  needed — this repo has none), with new layers defaulting to the corrected mode going forward.
+- **Auto Fit / Fit-to-Shape**: both already treat `heightMm` as an opaque scalar to scale and
+  re-measure — need zero logic changes, as long as they keep consuming whatever value
+  `layer.height` resolves to.
+- **SS30 gating (FONT-POLICY-001)**: untouched by construction, since it's calibrated against the
+  same raw `heightMm` this design deliberately never redefines at the engine level.
 
 ---
 
-# 6. Test files — audited and updated/removed
+# 5. Scope and sequencing for implementation
 
-| File | Action | Why |
-|---|---|---|
-| `tools/test-stone-layout-texture.mjs` | **deleted** | tests only `StoneLayoutTexture.js`'s own exports, all of which are gone |
-| `tools/test-preview3d-instanced-stones.mjs` | **updated** | tests 1, 2, 8, 13 tested the `false`/toggle-off path specifically — deleted (behavior no longer exists). Test 14 ("omitted === explicit true") is now vacuous once `instancedStones` isn't a parameter at all — deleted. Tests 3-7, 9-12 test real, still-existing behavior (mesh construction, placement math, lighting rig, throttling) — kept, with `instancedStones: true`/`instancedStones: false` removed from every options object (no longer a recognized option) and comments updated to drop "flag-gated" framing. |
-| `tools/test-preview3d-render-scheduling.mjs` | **updated** | tests 7-9 test `_applyTextureParams()` directly — deleted (method removed). Tests 1-6 (render-scheduling, unrelated to the flag) kept unchanged. |
-| `tools/test-object-geometry-builder.mjs` | **updated (comment only)** | test 17's assertion (`underMesh.material.map` stays `null`) is a real, still-true `ObjectGeometryBuilder.js` invariant unrelated to which rendering path is active — kept, but its comment referenced `Preview3DRenderer._updateTexture()` by name; reworded to not cite a method that no longer exists. |
-| `tools/test-rs-block.mjs`, `tools/test-rs-modern.mjs` | **updated** | test 19 in each exercised `drawStoneLayoutTexture` directly purely as a cross-check that the shared crystal-drawing code renders consistently for that font — deleted (no second consumer left to cross-check against); the import of `drawStoneLayoutTexture`/`TEXTURE_PX_PER_MM` removed. All other tests in both files are unrelated (font/geometry/serialization) and kept. |
-| `tools/test-crystal-color-integration.mjs` | **updated** | test 11 cross-checked 2D-canvas vs. 3D-texture color consistency — deleted (only one consumer left). |
-| `tools/test-crystal-stone-renderer.mjs` | **updated** | test 12 checked that both `CanvasRenderer2D.js` and `StoneLayoutTexture.js` import the shared crystal modules — deleted (second file gone); its `stoneLayoutTextureSource` read removed. |
-| `tools/test-fill-algorithms-integration.mjs` | **updated** | test 16's `rendererFiles` list included `'src/preview3d/StoneLayoutTexture.js'` — removed from the list (file gone; the test's actual point, "no renderer branches on sourceMode," still holds for the remaining files). |
-| `tools/test-module-graph-exports.mjs` | **updated** | test 3 checked both `ObjectDimensions.js` and `StoneLayoutTexture.js` for purity — narrowed to `ObjectDimensions.js` only (still a real, useful invariant); `StoneLayoutTexture.js` read removed. |
-| `tools/test-product-plate-round-dinner.mjs`, `tools/test-product-vessel-dimensions.mjs` | **updated** | both regex-match `drawCup()`'s literal call to `preview3D.update()`, including `instancedStones:__devInstancedStonesState.on` — updated to match the new call site with no `instancedStones` key at all. |
-| `tools/measure-instanced-stone-performance.mjs` | **updated** | removed the now-meaningless `instancedStones: true` from both options objects (not a test file, not run by `npm test`, but kept accurate). |
-
-Doc-comment-only references to `StoneLayoutTexture.js` as a "consumer" in `src/renderer/CrystalStoneRenderer.js`,
-`src/renderer/StoneColors.js`, `src/renderer/CrystalColors.js`, `src/renderer/CrystalAppearance.js`,
-and `src/preview3d/ObjectGeometryBuilder.js` (one line each, listing it alongside `CanvasRenderer2D.js`
-as a place the shared color/appearance modules are consumed) were updated to drop the stale
-reference — no behavior change, just accuracy.
+Design doc §4 lays out 7 ordered, independently-testable steps: (1) derive/validate ratios,
+manifest-only, no behavior change; (2) a pure helper solving `engineHeightMm` from desired
+cap-height; (3) additive `layer.heightMode` field + new-layer-only wiring, verified against the
+existing example-fixture regression suite for byte-identical legacy output; (4) UI exposure; (5)
+Auto Fit/Fit-to-Shape verification; (6) RS Block/RS Modern no-op regression lock-in; (7) SS30 gating
+regression confirmation. Steps 1-3 are the compatibility-critical steps, deliberately isolated from
+UI work.
 
 ---
 
-# 7. Summary of what was removed
+# 6. Commands executed
 
-- `src/preview3d/StoneLayoutTexture.js` — deleted entirely.
-- `Preview3DRenderer.js` — `_updateTexture()`, `_applyTextureParams()`, `_teardownInstancedStones()`,
-  `_textureCanvas`/`_textureCtx`/`_texture` fields, the `instancedStones` parameter, the
-  if/else branch in `update()`, `_applyLightRig()`/`_lightRigExtended`, `DEFAULT_AMBIENT_INTENSITY`.
-  The extended 4-light rig is now simply *the* rig, built once in `init()`.
-- `app.js` — `__devInstancedStonesParam`/`__devInstancedStones`/`__devInstancedStonesState`/
-  `window.__setInstancedStones`, and `instancedStones:...` dropped from `drawCup()`'s call.
-- `tools/test-stone-layout-texture.mjs` — deleted entirely.
-- Texture-path-specific tests removed from 8 other test files (listed in §6); real-behavior tests
-  in those same files preserved.
-- `tools/rs2013-instanced-stone-harness.html` — left-hand texture-reference render removed from
-  step-2 mode; step-1/single-stone-closeup modes and the instanced render kept.
+```
+git branch --show-current
+git status
+git log --oneline -3
+```
 
-Preserved exactly as before: placement/orientation math, lighting values (now the single rig),
-throttling behavior, color/material handling, camera framing, render scheduling.
+(pre-flight checks only — no build/test commands, since no code changed)
+
+---
+
+# 7. Automated test results
+
+None run — not applicable to a documentation-only milestone, per `docs/AI_ENGINEER.md`'s testing
+policy ("run only tests directly related to the current task").
+
+---
+
+# 8. Browser/manual verification
+
+Not applicable — no UI or behavior change in this phase.
+
+---
+
+# 9. Warnings / known limitations
+
+- The design doc's proposed `layer.heightMode` field name, its exact UI label ("Letter Height" vs.
+  "Cap Height" vs. other), and the corrected control's own real-mm bounds (flagged in design doc
+  §3.4 as bumping against the existing `[4,111]` clamp for some font/height combinations) are all
+  left as open decisions for the implementation milestone, not resolved here.
+- x-height ratios were measured alongside cap-height ratios for completeness but the design
+  recommends cap-height as the primary target metric; whether x-height should also be exposed is
+  left to the implementation milestone.
+
+---
+
+# 10. Recommended next milestone
+
+Implementation step 1 from the design doc's §4 sequencing: derive and validate cap-height ratios
+for the four shipped OpenType production fonts, manifest-only, no pipeline or UI changes — the
+lowest-risk, fully isolated first slice, pending ChatGPT's milestone-level review of this design.

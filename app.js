@@ -438,6 +438,56 @@ function computeAutoFitScale(layer,project,measuredWidthMm){
   const minScale=spacingMm>0&&layer.height>0?(spacingMm*MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO)/layer.height:fitScale;
   return{scale:Math.min(1,Math.max(fitScale,minScale))};
 }
+// TXT-104 step 2: solves the em-square heightMm generateTextLayout() must be called with so that a
+// font's rendered capital letters come out to desiredCapHeightMm, per the design doc's section 3.1
+// formula (engineHeightMm = desiredCapHeightMm / capHeightRatio(fontId)). Pure -- reads only the
+// module-level fontManager (the same registry every other font lookup in this file already uses),
+// no DOM, no layer/project object. Only meaningful for the four validated OpenType fonts that carry
+// a capHeightRatio (FontManager.js's normalizeFontRecord()); RS Block/RS Modern (authored stone
+// centers, heightMm already a no-op) and every non-validated legacy OpenType font have no
+// capHeightRatio and throw here rather than silently returning NaN.
+function solveEngineHeightMm({fontId,desiredCapHeightMm}){
+  const font=fontManager.getFont(fontId);
+  if(typeof font.capHeightRatio!=='number')throw new Error(`solveEngineHeightMm: font "${fontId}" has no capHeightRatio -- only the validated OpenType portfolio (Baloo 2, Anton, Sacramento, Dancing Script) supports cap-height-accurate sizing.`);
+  return desiredCapHeightMm/font.capHeightRatio;
+}
+// TXT-104 step 4a: exact inverse of solveEngineHeightMm() above -- given the raw engineHeightMm a
+// text layer's layer.height already holds (per this milestone's design invariant, unchanged by
+// heightMode), recovers the real cap-height in mm that value renders at. Same capHeightRatio-required
+// contract and throw behavior as solveEngineHeightMm(): a font with no ratio has no meaningful cap
+// height to convert to/from.
+function solveDesiredCapHeightMm({fontId,engineHeightMm}){
+  const font=fontManager.getFont(fontId);
+  if(typeof font.capHeightRatio!=='number')throw new Error(`solveDesiredCapHeightMm: font "${fontId}" has no capHeightRatio -- only the validated OpenType portfolio (Baloo 2, Anton, Sacramento, Dancing Script) supports cap-height-accurate sizing.`);
+  return engineHeightMm*font.capHeightRatio;
+}
+// TXT-104 step 4a: the raw engineHeightMm bounds writeSelectedControlsToLayer()'s #height write-back
+// clamps to (app.js:~1071, `Math.max(4,Math.min(111,...))`) -- named here so a future Letter Height
+// control's real-mm bounds (computeLetterHeightBoundsMm() below) and that clamp always derive from
+// the same two numbers instead of a second hardcoded copy silently drifting from the first.
+const RAW_ENGINE_HEIGHT_MM_MIN=4,RAW_ENGINE_HEIGHT_MM_MAX=111;
+// TXT-104 step 4a: the design doc's section 3.4 open question -- a future Letter Height control must
+// NOT inherit [RAW_ENGINE_HEIGHT_MM_MIN,RAW_ENGINE_HEIGHT_MM_MAX] unmodified, since that's a raw
+// em-square heightMm range, not a real cap-height range: each font's actual min/max Letter Height in
+// mm differs because capHeightRatio differs per font. Runs the engine's own raw clamp constants
+// through solveDesiredCapHeightMm() so the bounds always round-trip back to exactly that clamp. Same
+// throw behavior as solveDesiredCapHeightMm() for a font with no capHeightRatio.
+function computeLetterHeightBoundsMm(fontId){
+  return{
+    minMm:solveDesiredCapHeightMm({fontId,engineHeightMm:RAW_ENGINE_HEIGHT_MM_MIN}),
+    maxMm:solveDesiredCapHeightMm({fontId,engineHeightMm:RAW_ENGINE_HEIGHT_MM_MAX})
+  };
+}
+// TXT-104 step 4b: the read/display half of #letterHeight's bidirectional sync with #height -- called
+// from updateTextFontCapabilityUI() (the one place guaranteed to run after every source of a #height
+// value change: a direct edit, the stone-size auto-set snap, or a fresh layer selection) whenever
+// #letterHeightField is shown. Pure DOM read -> solveDesiredCapHeightMm() -> DOM write; never itself
+// dispatches an event, so it can never trigger #letterHeight's own write-direction listener below.
+function syncLetterHeightFromHeight(fontId){
+  const engineHeightMm=parseFloat(el('height').value);
+  if(!Number.isFinite(engineHeightMm))return;
+  el('letterHeight').value=solveDesiredCapHeightMm({fontId,engineHeightMm}).toFixed(2);
+}
 // MONO-005A: delegates to src/editing/TextPlacement.js's own computeTextPlacementOffsetMm() -- the
 // single shared source of truth for this formula, now also used by MonogramGenerator to compute a
 // generated letter layer's x/y (via that module's inverse function). Behavior-preserving extraction
@@ -689,7 +739,7 @@ const DEFAULT_PROJECT_NAME='Untitled Project';
 // FONT-002: stoneSize/gap default to RS Block's own recommendedStoneSizeMm/recommendedGapMm (2.8/0.3)
 // now that it's the default font, matching the family's own authored pitch (PITCH_MM=3.1 in
 // families/rsBlock.js) instead of the generic pre-FONT-002 2/0.3.
-function defaultProject(){const vessel=getVesselDefaults('mug');return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,product:'mug',canvas:computeCanvasFromVessel(vessel),cupColor:'#1f3556',wrap:'front',plate:getPlateDefaults(),vessel,layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0}]}}
+function defaultProject(){const vessel=getVesselDefaults('mug');return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,product:'mug',canvas:computeCanvasFromVessel(vessel),cupColor:'#1f3556',wrap:'front',plate:getPlateDefaults(),vessel,layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:25,heightMode:'capHeight',textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0}]}}
 // RS-0003.5D1: validates an imported Project JSON file against the exact ad hoc project/layer
 // shape #exportProject already produces (JSON.stringify(project)). Throws a specific Error
 // describing the first problem found instead of silently accepting a malformed project; the
@@ -1055,7 +1105,7 @@ function writeSelectedControlsToLayer(){const l=selectedLayer();
     // 111 -- the true max across every catalog size's supportedHeightRangeMm (StoneSizes.js's SS30
     // entry, [106,111]) -- so the largest validated stone sizes' own auto-set midpoints (see
     // #stoneSize's 'input' listener below) are never clamped back down below their own valid range.
-    l.height=Math.max(4,Math.min(111,parseFloat(el('height').value)||25));l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;
+    l.height=Math.max(RAW_ENGINE_HEIGHT_MM_MIN,Math.min(RAW_ENGINE_HEIGHT_MM_MAX,parseFloat(el('height').value)||25));l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;
     // FONT-002: a Production Font has no curve support (GeometryEngine.generateTextLayout() throws
     // for authored-stone-center fonts with curveEnabled) -- force it off in the stored layer data too
     // (not just the disabled control) so switching *to* an authored font from a curved legacy layer
@@ -1559,6 +1609,28 @@ function updateTextFontCapabilityUI(){
   const legacy=known&&!authored&&!validated;
   const unknown=isText&&!known;
   el('textModeField').style.display=authored?'none':'block';
+  // TXT-104 step 4b: a capHeight-mode layer on a validated (capHeightRatio-bearing) font displays
+  // #letterHeight -- a derived view of #height in real cap-height mm -- instead of raw #height
+  // itself; every other combination (raw mode, authored font, legacy/unknown font) keeps showing
+  // #height exactly as before. `validated` already excludes authored/legacy/unknown fonts, so this
+  // is the one gate needed for the capHeight-mode-but-unvalidated-font fallback the design doc calls
+  // for (e.g. a capHeight-mode layer switched to RS Block or a legacy font falls straight back to
+  // #height with its existing raw value).
+  const capHeightMode=isText&&l.heightMode==='capHeight';
+  const showLetterHeight=validated&&capHeightMode;
+  el('heightField').style.display=showLetterHeight?'none':'block';
+  el('letterHeightField').style.display=showLetterHeight?'block':'none';
+  if(showLetterHeight){
+    const bounds=computeLetterHeightBoundsMm(fontId);
+    el('letterHeight').min=bounds.minMm;el('letterHeight').max=bounds.maxMm;
+    syncLetterHeightFromHeight(fontId);
+  }
+  // Mode-switch affordance (design doc section 3.3): only offered for a validated font, since a
+  // heightMode the UI can never display (no capHeightRatio to convert with) isn't a real choice.
+  // Only l.heightMode flips here -- l.height itself is untouched, so nothing about the rendered
+  // output changes at the moment of switching, only which field/units the operator edits from then on.
+  el('heightModeToggleHint').style.display=validated?'block':'none';
+  if(validated)el('heightModeToggleBtn').textContent=capHeightMode?'Switch to raw engine height':'Switch to letter height';
   el('height').disabled=authored;
   el('autoFit').disabled=authored;
   el('textSizeFixedHint').style.display=authored?'block':'none';
@@ -2091,6 +2163,42 @@ el('height').addEventListener('input',()=>{
   if(l&&l.type==='text')l.heightManuallyEdited=true;
   el('heightAutoAdjustedHint').style.display='none';
 });
+// TXT-104 step 4b: #letterHeight's write direction -- only ever reachable while #letterHeightField is
+// shown (capHeight mode + a validated font, see updateTextFontCapabilityUI()), so l.font is guaranteed
+// to carry a capHeightRatio here. Converts the entered cap-height mm back to the raw engine-facing
+// em-square height via solveEngineHeightMm(), clamps it to the exact same
+// [RAW_ENGINE_HEIGHT_MM_MIN,RAW_ENGINE_HEIGHT_MM_MAX] range #height's own write-back clamps to
+// (writeSelectedControlsToLayer()), writes that into #height, then dispatches a real 'input' event on
+// #height so the entire existing #height chain -- heightManuallyEdited marking just above,
+// HISTORY_TRACKED_CONTROL_IDS' write+regenerate listener below -- fires exactly as it does for a direct
+// #height edit today. #letterHeight is deliberately NOT one of HISTORY_TRACKED_CONTROL_IDS: it never
+// writes to a layer field directly, only ever drives #height, which is already tracked there.
+el('letterHeight').addEventListener('input',()=>{
+  const l=selectedLayer();
+  if(!l||l.type!=='text')return;
+  const desiredCapHeightMm=parseFloat(el('letterHeight').value);
+  if(!Number.isFinite(desiredCapHeightMm))return;
+  const engineHeightMm=solveEngineHeightMm({fontId:l.font,desiredCapHeightMm});
+  el('height').value=Math.max(RAW_ENGINE_HEIGHT_MM_MIN,Math.min(RAW_ENGINE_HEIGHT_MM_MAX,engineHeightMm));
+  el('height').dispatchEvent(new Event('input'));
+});
+el('letterHeight').addEventListener('change',()=>{
+  el('height').dispatchEvent(new Event('change'));
+});
+// TXT-104 step 4b: heightMode mode-switch affordance (design doc section 3.3) -- flips only
+// l.heightMode, never l.height itself, so nothing about the rendered output changes at the moment of
+// switching, only which field/units the operator edits from then on. Mirrors the layersList visibility
+// checkbox's own direct-mutation pattern just above (commitHistory() then mutate then updateAll(true))
+// since this is a single discrete click, not a continuous typing/dragging session. updateAll(true)
+// already calls updateEditingUI()->updateTextFontCapabilityUI() internally, which both re-shows the
+// correct field and (via syncLetterHeightFromHeight()) refreshes #letterHeight's displayed value.
+el('heightModeToggleBtn').addEventListener('click',()=>{
+  const l=selectedLayer();
+  if(!l||l.type!=='text')return;
+  commitHistory();
+  l.heightMode=l.heightMode==='capHeight'?'raw':'capHeight';
+  updateAll(true);
+});
 // Auto Fit now defaults to Off for new layers (Text height reflects the actual rendered size), so
 // switching it back On is a deliberate, easy-to-miss trade-off -- Auto Fit can shrink text below the
 // height needed for reliable readability at the selected stone size. Surfaced every time the operator
@@ -2272,7 +2380,7 @@ async function addText(){
   const other=singleOtherSelectedLayer();
   const fitPartnerShape=(other&&FITTABLE_SHAPE_TYPES.has(other.type))?other:null;
   commitHistory();
-  const layer={id:'text'+Date.now(),type:'text',visible:true,text:'New Text',font:TEXT_ENGINE_FONT_IDS.has(l.font)?l.font:DEFAULT_TEXT_FONT_ID,height:25,textMode:'stroke',stoneSize:l.stoneSize||2.8,gap:l.gap||.3,color:l.color||'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0};
+  const layer={id:'text'+Date.now(),type:'text',visible:true,text:'New Text',font:TEXT_ENGINE_FONT_IDS.has(l.font)?l.font:DEFAULT_TEXT_FONT_ID,height:25,heightMode:'capHeight',textMode:'stroke',stoneSize:l.stoneSize||2.8,gap:l.gap||.3,color:l.color||'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0};
   project.layers.push(layer);
   selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);
   let statusText='Added text layer';

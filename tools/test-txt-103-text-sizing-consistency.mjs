@@ -41,18 +41,29 @@ await test('1. index.html declares #height min="4" max="111"', () => {
 await test('2. writeSelectedControlsToLayer() clamps l.height to [4,111], matching #height\'s declared bounds', () => {
   assert.match(
     appJs,
-    /l\.height=Math\.max\(4,Math\.min\(111,parseFloat\(el\('height'\)\.value\)\|\|25\)\);/,
-    'expected l.height to clamp with Math.max(4,Math.min(111,...)), mirroring every sibling numeric field in this function'
+    /l\.height=Math\.max\(RAW_ENGINE_HEIGHT_MM_MIN,Math\.min\(RAW_ENGINE_HEIGHT_MM_MAX,parseFloat\(el\('height'\)\.value\)\|\|25\)\);/,
+    'expected l.height to clamp with Math.max(RAW_ENGINE_HEIGHT_MM_MIN,Math.min(RAW_ENGINE_HEIGHT_MM_MAX,...)), mirroring every sibling numeric field in this function'
   );
 });
+
+// RAW_ENGINE_HEIGHT_MM_MIN/MAX below are literal stand-ins for the same-named constants defined
+// in app.js (currently 4/111, see TXT-104 step 4a) -- they must be kept in sync with app.js's
+// values so the extracted expression below runs with the same bounds it has in production.
+const RAW_ENGINE_HEIGHT_MM_MIN = 4;
+const RAW_ENGINE_HEIGHT_MM_MAX = 111;
 
 function runHeightClamp(rawValue) {
   // Prove the exact clamp expression found in app.js above actually behaves as claimed, rather
   // than only asserting its source text is present.
-  const clampMatch = appJs.match(/l\.height=(Math\.max\(4,Math\.min\(111,parseFloat\(el\('height'\)\.value\)\|\|25\)\));/);
+  const clampMatch = appJs.match(/l\.height=(Math\.max\(RAW_ENGINE_HEIGHT_MM_MIN,Math\.min\(RAW_ENGINE_HEIGHT_MM_MAX,parseFloat\(el\('height'\)\.value\)\|\|25\)\));/);
   assert.ok(clampMatch, 'expected to find the l.height clamp expression to extract and execute');
-  const run = new Function('el', `return ${clampMatch[1]};`);
-  return run(() => ({ value: rawValue }));
+  const run = new Function(
+    'el',
+    'RAW_ENGINE_HEIGHT_MM_MIN',
+    'RAW_ENGINE_HEIGHT_MM_MAX',
+    `return ${clampMatch[1]};`
+  );
+  return run(() => ({ value: rawValue }), RAW_ENGINE_HEIGHT_MM_MIN, RAW_ENGINE_HEIGHT_MM_MAX);
 }
 
 await test('3. the height clamp raises a below-floor manual entry up to 4 (previously silently produced sparse/empty glyphs)', () => {

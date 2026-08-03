@@ -1,95 +1,81 @@
 # Task
 
-**Task ID:** RS-2013 (Implementation Phase) — §4 step 6c: default-flip decision
-**Task Type:** Implementation — one-line default flip + caller audit + test-suite update
+**Task ID:** TXT-104 — Text Height Accuracy: Design and Audit Phase
+**Task Type:** Design/audit only — no implementation code, no tests, no application changes
 **Status:** COMPLETE
-**Branch:** `feature/rs-2013-instanced-stones-step6c-default-flip` (already checked out at task
-start; clean tree; HEAD included the step 6b tumbler-seam investigation commit `04d0ff6`)
+**Branch:** `feature/txt-104-text-height-accuracy` (already checked out at task start; clean tree;
+HEAD was `e3cc809`, RS-2013 step 7's follow-up commit)
 
 ## Why this milestone exists
 
-Steps 1-6/6b built, tested, stress-tested, and visually validated the instanced-stone rendering
-path behind a flag, and investigated the one open visual question (tumbler wrap-seam clustering)
-down to a root cause. Sasha has now made the default-flip decision described in §4 step 6 of
-`docs/specifications/RS-2013-InstancedFacetedStoneRenderingDesign.md`, informed by that evidence
-and three documented, non-blocking known limitations:
-
-1. Light-colored stone washout against the live background (step 3b).
-2. A curved-surface CPU-rebuild perf ceiling at extreme (~15,000) stone counts, partially
-   mitigated by throttling (step 5b).
-3. Grazing-angle stone crowding on high-azimuth-extent curved-surface designs (step 6b) — an
-   inherent property of discrete 3D geometry at silhouette viewing angles, not a bug.
-
-None of these block this decision; all three are carried forward as known, accepted limitations
-of the newly-default behavior (see TASK_RESULT.md).
+Sasha's stated top product priority is text-quality/opentype outline sampling accuracy. ARCH-REVIEW-001
+listed "`heightMm` is em size, not physical letter height" as already closed, attributing the fix to
+`TXT-103A`. Since `TXT-103A` predates the entire font-portfolio program (Baloo2/Anton/Sacramento/
+DancingScript, SS30 gating) and RS-2013's 3D-rendering arc, this milestone re-verifies that claim
+against the live codebase rather than trusting the prior summary, and — per this milestone's own
+explicit brief — produces a design proposal for closing the gap if it's confirmed still open. This
+phase is deliberately review-only (no implementation) because the change touches persistent project
+data (`layer.height`'s interpretation) and interacts with an existing, human-calibrated legibility
+gate (SS30/`supportedHeightRangeMm`), both of which `docs/MILESTONE_WORKFLOW.md` classifies as
+requiring a separate specification-review phase before implementation.
 
 ## Scope
 
-Flip `instancedStones`'s default from `false` to `true` in
-`src/preview3d/Preview3DRenderer.js`'s `update()` — and nothing else. This is intentionally the
-entire scope: no placement/lighting/material/throttle logic changes, no attempt to further
-mitigate the three known limitations above.
-
-1. The one-line default flip itself.
-2. Audit every caller of `preview3D.update(...)` for an assumption baked in around the OLD
-   default, and fix what needs fixing to keep testing/behaving as originally intended.
-3. Confirm (not assume) that `true`/omitted now produces byte-identical behavior to what explicit
-   `instancedStones: true` already produced and was already fully tested by steps 4/5b.
-4. Update the test suite: every existing test must still test what it originally intended to test,
-   plus one new test confirming `instancedStones` omitted now behaves identically to
-   `instancedStones: true` (the mirror image of step 4's own regression test for the OLD default).
+1. Read `TXT-103A` (`docs/specifications/TXT-103A-TextSizingArchitectureAudit.md`) in full and
+   re-check every specific, checkable claim it makes against the current `src/text/**`,
+   `src/fonts/**`, and `src/geometry/**` code — not from memory, not from ARCH-REVIEW-001's summary.
+2. Confirm whether the actual ARCH-REVIEW-001 gap ("heightMm is em size, not physical letter
+   height") is still live, and quantify it with real measurements from the shipped font files
+   (Baloo2, Anton, Sacramento, Dancing Script, RS Block, RS Modern), not estimates.
+3. Propose a concrete design for closing the gap: where the correction belongs in the pipeline,
+   per-font vs. generic-heuristic derivation, backward compatibility for existing saved projects,
+   and interaction with Auto Fit and the SS30 height-ceiling gating (FONT-POLICY-001).
+4. Break the implementation into ordered, independently-testable steps for a later milestone on
+   this same branch.
 
 ## Allowed files
 
-- `src/preview3d/Preview3DRenderer.js` (the one-line default flip).
-- Any test file requiring an explicit `instancedStones: false` to keep testing the texture path.
-- `tools/rs2013-instanced-stone-harness.html` (only if it needed an explicit `false` per the
-  caller audit — audited, did not: see TASK_RESULT.md §2).
+- `docs/specifications/TXT-104-TextHeightAccuracyDesign.md` (new).
 - `TASK.md`, `TASK_RESULT.md`.
-- `app.js` — not originally listed, but the caller audit (§2 of the brief) explicitly required
-  auditing app.js's own call site and step 6's dev toggle for an OLD-default assumption; one was
-  found and required a fix for the default flip to have its intended real-world effect. See
-  TASK_RESULT.md §2 for the full reasoning on why this was in-scope despite not being pre-listed.
 
 ## Forbidden in this milestone
 
-- Any change to placement/lighting/material/throttle logic.
-- Attempting to fix or further mitigate any of the three known limitations.
+- Any change to `src/**`, `app.js`, `index.html`, or any test file.
+- Any proof-of-concept implementation, even partial.
 
 ## Method
 
-- Grepped the whole repo (`app.js`, every `src/`/`tools/` file, every test file) for every
-  `instancedStones` reference and every `preview3D.update(...)`/`Preview3DRenderer.update(...)`
-  call site, to build the exhaustive caller list required by the brief.
-- Read `docs/specifications/RS-2013-InstancedFacetedStoneRenderingDesign.md` §4 steps 6-7 in full
-  before starting, to confirm step 7 (removing the old texture path) is explicitly out of scope
-  for this step.
-- Ran the full focused test suite for every touched/adjacent area:
-  `tools/test-preview3d-instanced-stones.mjs`, `tools/test-preview3d-render-scheduling.mjs`,
-  `tools/test-object-template-integration.mjs`, `tools/test-render-export-pipeline.mjs`,
-  `tools/test-text-position-workflow.mjs`, `tools/test-object-geometry-builder.mjs`.
-- Live browser verification (Playwright + Chromium, isolated instance, closed after use) against
-  the real running Studio (`python3 -m http.server 5173`) at three URLs
-  (`index.html`, `index.html?instancedStones=0`, `index.html?instancedStones=1`), screenshotting
-  the default project's real Object Preview in each mode and checking for console/page errors.
+- Verified starting repo state (branch, clean tree, recent HEAD) before any work, per the task
+  brief's explicit instruction.
+- Read `docs/AI_ENGINEER.md`, `docs/CLAUDE_GUIDE.md`, `docs/MILESTONE_WORKFLOW.md`, and
+  `docs/ARCHITECTURE.md` in full.
+- Read `docs/specifications/TXT-103A-TextSizingArchitectureAudit.md` in full and
+  `docs/specifications/ARCH-REVIEW-001-FullArchitectureAndCodebaseReview.md`'s relevant sections.
+- Re-read the current `src/text/OpenTypeProvider.js`, `src/text/rhinestoneFont/RhinestoneFontProvider.js`,
+  `src/text/IFontProvider.js`, `src/geometry/ShapeFit.js`, relevant `src/geometry/GeometryEngine.js`
+  regions, `src/fonts/FontManager.js`, and the relevant `app.js` sections (Auto Fit, Fit-to-Shape,
+  the `#height` clamp, `updateStoneSizePrintableCapabilityUI()`) to re-verify every TXT-103A claim
+  line by line.
+- Inspected `assets/fonts/manifest.json` and the actual shipped font files (`assets/fonts/**`,
+  `fonts/sources/**`) to confirm which fonts `productionFonts()` actually offers today.
+- **Measured real font metrics** for the four shipped OpenType production fonts (Baloo2, Anton,
+  Sacramento, Dancing Script) by parsing each `.ttf` with `opentype.js` (the same library
+  `OpenTypeProvider.js` already uses) and reading both the OS/2 table's `sCapHeight`/`sxHeight`
+  fields and the actual rendered bounding box of reference glyphs (`H`, `x`) — no estimates.
+- Checked for an existing `FONT-PORTFOLIO-001` spec file (none exists as a standalone doc; its
+  content lives only in manifest.json annotations and other specs' cross-references) and confirmed
+  the live `productionFonts()` gate in `app.js` matches what those annotations describe.
+- Determined the next milestone id (`TXT-104`) by checking `docs/specifications/`'s existing
+  `TXT-10x` naming (only `TXT-103A` exists; `TXT-103B` was recommended but never filed) and the
+  branch name.
 
 ## Testing
 
-- `node tools/test-preview3d-instanced-stones.mjs` — 14/14 pass (was 14 tests, 1 removed as
-  testing a now-false premise, 2 fixed to explicit `false`, 1 new mirror test added).
-- `node tools/test-preview3d-render-scheduling.mjs`, `test-object-template-integration.mjs`,
-  `test-render-export-pipeline.mjs`, `test-text-position-workflow.mjs`,
-  `test-object-geometry-builder.mjs` — all pass, unchanged.
-- `npm test`/`npm run test:full` not run — per `CLAUDE.md`'s testing policy, this milestone
-  touches one default value in one renderer option plus its direct callers/tests, not shared
-  architecture, project schema, or exporters.
-- Browser verification: 3 modes, 0 console/page errors in any, visually confirmed instanced
-  (faceted 3D gems) vs. texture (flat blurred dots) rendering in the correct mode each time.
+Not applicable — no code changed. No automated tests were run or are required for a
+documentation-only deliverable.
 
 ## Deliverables
 
-- `TASK.md` (this file), `TASK_RESULT.md` (full caller audit + findings).
-- `src/preview3d/Preview3DRenderer.js` — the default flip + updated doc comment.
-- `app.js` — dev-toggle baseline flip (see TASK_RESULT.md §2).
-- `tools/test-preview3d-instanced-stones.mjs` — 3 tests fixed to explicit `instancedStones:
-  false`, 1 new mirror test added, tests renumbered 1-14 sequentially.
+- `docs/specifications/TXT-104-TextHeightAccuracyDesign.md` — full re-verification, quantified gap
+  confirmation, design proposal, and implementation sequencing.
+- `TASK.md` (this file), `TASK_RESULT.md` (audit summary).
