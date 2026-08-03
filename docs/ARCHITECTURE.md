@@ -242,16 +242,20 @@ geometry, or export schema changed — see
 `docs/specifications/S-001-CupRenderingStabilization.md`.
 
 As of RS-1006, the Object Preview panel's fake 2D schematic is replaced by a real, interactive
-Three.js 3D preview: `src/preview3d/**` (`ObjectDimensions.js`, `StoneLayoutTexture.js`,
-`ObjectGeometryBuilder.js`, `Preview3DRenderer.js`, `index.js`), consuming only a `StoneLayout` plus
+Three.js 3D preview: `src/preview3d/**` (`ObjectDimensions.js`, `ObjectGeometryBuilder.js`,
+`Preview3DRenderer.js`, `index.js`), consuming only a `StoneLayout` plus
 plain display options (`cupColor`, `wrap`, `objectTemplate`, and the live `project.canvas` mm size)
 — the exact same contract `CupRenderer.js` already followed, extended with the live mm canvas size
 so the mesh and its canvas texture share one real millimeter scale (a 2D "fit to viewport" renderer
 never needed this). A real revolved `THREE.Mesh` per object template (a tapered open cylinder for
 mug/tumbler, a `LatheGeometry`-revolved profile for the bottle's body+shoulder+neck+cap, a
-`TubeGeometry` handle for the mug) replaces the 2D silhouette; a canvas texture generated directly
-from `StoneLayout` (`StoneLayoutTexture.js`) is mapped onto the body surface across an angular
-window sized by the current wrap mode (`ObjectGeometryBuilder.js`'s `applyWrapUv()`); one ambient
+`TubeGeometry` handle for the mug) replaces the 2D silhouette. RS-1006 originally mapped a canvas
+texture generated directly from `StoneLayout` (`StoneLayoutTexture.js`) onto the body surface
+across an angular window sized by the current wrap mode (`ObjectGeometryBuilder.js`'s
+`applyWrapUv()`); RS-2013 replaced this with real per-stone 3D geometry (a `THREE.InstancedMesh`
+positioned/oriented directly from `StoneLayout`'s own mm data, one instance per stone) and removed
+`StoneLayoutTexture.js` entirely once that path was validated and shipped as the only renderer —
+see `docs/specifications/RS-2013-InstancedFacetedStoneRenderingDesign.md`. One ambient
 and one directional light replace the previous hand-drawn 2D gradients; `OrbitControls` provides
 damped mouse rotate/zoom/pan directly on the canvas, superseding `app.js`'s previous custom
 pointer-drag-to-rotate handler and its `CUP_ROTATION_SENSITIVITY` constant (both removed). The
@@ -273,8 +277,8 @@ crystal-color catalog: `src/renderer/CrystalColors.js` (id/name/`previewColor`/o
 `highlight`/`shadow`/`group`, plus the pre-existing `fill`/`stroke`/`shine`/`accent` render-channel
 fields, aliased 1:1 so both naming schemes always agree). `src/renderer/StoneColors.js` becomes a
 one-line compatibility re-export of the same `STONE_COLORS` id-keyed map from that catalog, so its
-five pre-existing consumers (`CanvasRenderer2D.js`, `CupRenderer.js` via `drawStone`,
-`StoneLayoutTexture.js`, `SvgExporter.js`, `ProductionSheetExporter.js`) and `app.js`'s own
+pre-existing consumers (`CanvasRenderer2D.js`, `CupRenderer.js` via `drawStone`,
+`SvgExporter.js`, `ProductionSheetExporter.js`) and `app.js`'s own
 `STONE_COLORS` import needed zero changes — every one of them already resolved a stone's color
 generically via `STONE_COLORS[stone.color]`, so growing the catalog's *content* required no
 renderer/exporter change, only the catalog module itself and the color-picker UI. The 7
@@ -539,7 +543,7 @@ Audit finding: per-layer variable stone size was **already fully implemented** b
 milestone — `GeometryEngine`'s six `generate*Layout()` methods (text, shape, svg, image, path, plus
 curved text as a text-layout option) each already take their own `stoneSizeMm`/`gapMm`, `Stone`
 already carries an individual `sizeMm`, and every renderer/exporter (`CanvasRenderer2D.js`,
-`CupRenderer.js`, `StoneLayoutTexture.js`, `SvgExporter.js`, `ProductionSheetExporter.js`) already
+`CupRenderer.js`, `SvgExporter.js`, `ProductionSheetExporter.js`) already
 draws each stone at its own `sizeMm` — mixing sizes across layers in one project required zero
 geometry/renderer/exporter changes. `app.js`'s undo/redo (`HISTORY_TRACKED_CONTROL_IDS`), duplicate
 (`duplicateLayer()`'s whole-layer deep clone), and save/load (`JSON.stringify(project)`) already

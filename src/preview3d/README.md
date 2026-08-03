@@ -30,9 +30,6 @@ preview3D.resetView();
 * `ObjectDimensions.js` — pure mm-scale math (no Three.js, no DOM). Derives real body radius/height
   (and, for bottles, neck/shoulder/cap extents) from an `ObjectTemplate` record plus the live
   project canvas size.
-* `StoneLayoutTexture.js` — pure Canvas-2D texture drawing (no Three.js, no canvas creation — the
-  caller supplies the 2D context). Draws the object's base color plus every stone at its true mm
-  position, at a fixed px-per-mm resolution.
 * `ObjectGeometryBuilder.js` — Three.js geometry construction: a tapered open cylinder for
   mug/tumbler, a lathe-revolved profile for the bottle's body+shoulder+neck+cap, and a
   tube-geometry handle for the mug. Also exports `applyWrapUv()`, which maps the shared texture

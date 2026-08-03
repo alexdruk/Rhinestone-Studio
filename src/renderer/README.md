@@ -51,10 +51,10 @@ commercial color line.
 
 `StoneColors.js` is now a one-line compatibility shim re-exporting the same `STONE_COLORS`
 (id-keyed) map from `CrystalColors.js`, so every existing consumer — both renderers
-(`CanvasRenderer2D.js`, `CupRenderer.js` via `drawStone`), `src/preview3d/StoneLayoutTexture.js`,
-`src/export/SvgExporter.js`, `src/export/ProductionSheetExporter.js`, and `app.js` — keeps working
-unchanged. The 7 ids that existed before RS-1007 (`crystal`, `gold`, `silver`, `jet`, `rose`,
-`sapphire`, `emerald`) keep byte-identical `fill`/`stroke`/`shine`/`accent` values.
+(`CanvasRenderer2D.js`, `CupRenderer.js` via `drawStone`), `src/export/SvgExporter.js`,
+`src/export/ProductionSheetExporter.js`, and `app.js` — keeps working unchanged. The 7 ids that
+existed before RS-1007 (`crystal`, `gold`, `silver`, `jet`, `rose`, `sapphire`, `emerald`) keep
+byte-identical `fill`/`stroke`/`shine`/`accent` values.
 
 ```js
 import { STONE_COLORS } from './src/renderer/StoneColors.js'; // unchanged import path/shape
