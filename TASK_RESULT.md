@@ -6,248 +6,208 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-RS-2013 (Implementation Phase) — §4 step 6: visual validation evidence
+RS-2013 (Implementation Phase) — §4 step 6b: tumbler wrap-seam clustering investigation
 
 ---
 
 # Status
 
-COMPLETE. Added a dev-only toggle for `instancedStones` in the real running Studio, captured
-texture-vs-instanced comparison screenshots for one real example per product kind (plate/mug/
-tumbler/bottle), and wrote an honest per-example comparison plus a consolidated statement of steps
-3b/5b's known limitations against this evidence. **`instancedStones` still defaults to `false`
-everywhere. No recommendation is made — the comparison below is evidence for Sasha's own call, not
-a verdict.**
+COMPLETE. Root cause identified with direct evidence, not inference. **This is a genuine screen-
+space rendering property of instanced discrete stones on a curved surface at grazing/silhouette
+viewing angles — not a bug in stone placement, and not specific to the tumbler.** No code fix was
+made or is being proposed as part of this step.
 
 ---
 
 # Branch
 
-`feature/rs-2013-instanced-stones-step6-visual-validation` (already checked out at task start, cut
-from the step-5b throttle-mitigation commit `cdccc33`, verified as HEAD before any work began;
-working tree was clean).
+`feature/rs-2013-instanced-stones-step6b-tumbler-seam`. Verified at task start: correct branch,
+clean working tree, but HEAD was stale — it had been cut from the step-5b commit (`cdccc33`) before
+step 6 landed, so it did not yet include step 6's own commit (`ff36886`, on a sibling branch) or its
+screenshots/`TASK_RESULT.md`. Fast-forwarded onto `ff36886` before starting (a clean fast-forward,
+zero unique commits lost — `step6b` had made no commits of its own yet).
 
 ---
 
-# 1. Toggling `instancedStones` in the real running Studio
+# 1. Pre-existing evidence this step builds on
 
-## What already worked (confirmed, unchanged)
+Step 6's own `TASK_RESULT.md` §3 (tumbler section) reported, but explicitly did not investigate:
 
-`window.__preview3D` (`app.js:836`, added by RS-2011 for render-count instrumentation) is a real,
-already-exposed console handle onto the live `Preview3DRenderer` instance. Calling
-`window.__preview3D.update(layout, {...options, instancedStones: true})` directly still works
-today — but it required reconstructing the full options object (`cupColor`/`objectTemplate`/
-`canvasWidthMm`/`canvasHeightMm`/`plateParams`/`vesselParams`) by hand in the console, and there was
-no exposed reference to the live `layout` object to pass as the first argument, making this
-awkward for repeated toggling on a real project rather than a quick one-off check.
+> a new, previously-unreported visual artifact showed up here... near the seam where the wrap
+> closes... the instanced stones visibly cluster/overlap in screen space, while the texture version
+> shows the same region as a single, cleanly blurred column... very likely an artifact of viewing
+> discrete 3D geometry at a steep grazing angle near the surface silhouette... not a data or
+> placement bug... not investigated or fixed, per this step's scope.
 
-## What was added (dev-only, temporary, isolated to `app.js`)
-
-Two small, clearly-commented additions right next to the existing `window.__preview3D` debug
-handle (`app.js:836-843`), both reusing the exact same `drawCup()` call `app.js` already makes for
-every ordinary edit — no new rendering path, no new options object to reconstruct by hand:
-
-1. **`?instancedStones=1` URL query param** — read once at page load into a module-level flag.
-   Loading the Studio at `index.html?instancedStones=1` renders every project with the instanced
-   path from the start.
-2. **`window.__setInstancedStones(true|false)`** — a console helper that flips the flag live and
-   immediately redraws the current project via the existing `drawCup()` — no page reload, no
-   options object to rebuild by hand, no need to re-import/re-open whatever project is already
-   loaded. This is what this step's own screenshot capture used to take the "before"/"after" shot
-   of each pair from the exact same loaded project and camera state.
-
-**Sasha's instructions:**
-- To start already in instanced mode: open the Studio at `http://localhost:5173/index.html?instancedStones=1` (or append `?instancedStones=1` to whatever URL you normally use), then load any project as usual.
-- To toggle on an already-open project: open the browser console and run `window.__setInstancedStones(true)` (or `false` to go back to the texture path). The Object Preview updates immediately.
-
-Both are dev-only: never wired to any UI control, never persisted, never part of `project`, and
-explicitly commented in `app.js` as temporary (RS-2013 step 6), to be removed once this evidence-
-gathering purpose is done.
+This step confirms that hypothesis with direct evidence, and also confirms/corrects the "tumbler
+seam" framing (see §4 below — the ring's real azimuth extent is nowhere near the actual wrap seam).
 
 ---
 
-# 2. Selecting real examples per product kind
+# 2. Dimensions/profile comparison (mug vs. tumbler vs. bottle)
 
-## A real gap found before capturing anything: the Gallery UI is currently disabled
+Computed via the real `computeObjectDimensionsMm()` (`src/preview3d/ObjectDimensions.js`) against
+each product's own definition (`src/products/definitions/*.json`, `src/products/ObjectTemplate.js`):
 
-The intended way to open a real committed `examples/*.rhs` project inside the actual Studio is the
-Gallery feature (Menu → Gallery → card → "Open Copy"). On attempting this, `#menuGallery` is a
-`disabled` button today: *"Gallery is temporarily unavailable while product scope is reduced
-(S-103)."* This is the S-103 scope freeze (see memory `rhinestone_studio_scope_freezes.md`) — the
-Gallery's data and code are intact, only its top-menu entry point is frozen. This is stated here
-because it changes how "real committed example" evidence had to be gathered for this step, not
-because fixing it was in scope (it explicitly is not).
+| Product | bodyRadiusMm | topRadiusMm | Taper? | bodyHeightMm |
+|---|---|---|---|---|
+| mug (`short-name-block.rhs`, canvas 210×90) | 33.42 | 34.68 (ratio 85/82=1.037) | slight, mugs flare outward | 90 |
+| tumbler (`tumbler-wrap-design.rhs`, canvas 230×100) | 36.61 | 36.61 (ratio 1.0, exact) | **none — true cylinder** (`requireTopDiameterEqualsBody: true`) | 100 |
+| bottle (body/label zone) | ~34 (from `vessel-standard-bottle.json` defaults, 68mm/2) | = body | **none — true cylinder** below the shoulder | varies |
 
-**Workaround used, kept as real as possible:** the Studio's *other* live, un-frozen way to load a
-project is the "Import Project JSON" file input (`#importProjectFile`). Its schema differs from
-`examples/*.rhs`'s own gallery-fixture schema (e.g. `cxMm`/`stoneSizeMm` vs. the live app's
-`cx`/`stoneSize`), so each real example was converted through `toAppProjectShape()`/
-`validateRhsProject()` — the *exact same* bridge functions the (currently frozen) Gallery feature
-itself calls internally (`src/gallery/index.js`, `src/gallery/RhsFixtureBridge.js`) — then imported
-through the real file input. No stone position, color, or layer data was altered; only the schema
-shape was translated, using the repo's own real conversion path, not a reimplementation of it.
-
-## Chosen examples
-
-| Product | Example | Why |
-|---|---|---|
-| mug | `examples/short-name-block.rhs` | Simple, single-color (`gold`) text design — a clean baseline read. |
-| tumbler | `examples/tumbler-wrap-design.rhs` | Real wrap design, two colors (`gold` text + `crystal` outline ring) — gives a light-color data point on a curved surface. |
-| bottle | `examples/bottle-front-design.rhs` | Real front-label design, three colors including `crystal-clear` — the exact color step 3b found its worst-case washout on. |
-| plate | *(no committed example exists)* | Audited: every one of the 27 `examples/*.rhs` fixtures is mug/tumbler/bottle; none is a plate design. This is the identical gap step 2's own test harness (`rs2013-instanced-stone-harness.html`) hit and solved the same way — a small inline two-ring project (outer `gold` ring + inner `crystal` ring, 270mm canvas matching the plate's own default `outerDiameterMm`), imported through the real Import Project JSON input, not a synthetic stress fixture. |
-
-This set satisfies the brief's requirement of including at least one light-stone-color (`crystal`/
-`crystal-clear`) example without cherry-picking only saturated colors — both the tumbler and the
-plate substitute carry `crystal`, and the bottle carries `crystal-clear` directly from a real
-committed fixture.
-
-**Honest caveat on the plate substitution:** it is a real design (real product template, real
-`GeometryEngine`/`StoneLayout` pipeline, real production layer schema, imported through the actual
-Studio's actual Import feature) but it was authored for this step, not pulled from
-`examples/`, because no plate example exists there to pull. It is not a synthetic stress fixture
-(only 2 rings, realistic stone counts), but it is not "an example a real customer already made"
-either — flagged plainly rather than presented as more representative than it is.
+The tumbler is **not** the smallest-radius or most-tapered product — the bottle's body radius is
+smaller, and both tumbler and bottle are true (untapered) cylinders by product-definition contract.
+`wallRadiusAt()` (`ObjectGeometryBuilder.js`) is therefore *constant* for both, not a source of
+radius-dependent compression. There is nothing about the tumbler's real-world geometry that makes it
+uniquely susceptible to this artifact — see §4/§5, the actual variable is the *design content's*
+azimuth extent, not the product kind.
 
 ---
 
-# 3. Per-example honest comparison
+# 3. World-space placement math: verified correct, not the cause
 
-All screenshots: `tools/rs2013-step6-<product>-texture.png` (current default) and
-`tools/rs2013-step6-<product>-instanced.png` (flag on), same loaded project, same camera angle, same
-lighting rig call (`instancedStones` also gates the extended lighting rig — see
-`Preview3DRenderer.js`'s `_applyLightRig()` — so the "instanced" shot uses the extended rig, exactly
-as it would if the flag were flipped for real).
+Generated the real `StoneLayout` for `tumbler-wrap-design.rhs` headlessly via `GeometryEngine`/
+`generateProjectStoneLayout()` (same path `tools/generate-example-baselines.mjs` uses), then computed
+each ring stone's nearest-neighbor distance two ways:
 
-### mug — `short-name-block.rhs` (gold text, "Emma")
+- **Canvas space** (2D, mm, as-authored) — `Math.hypot(xMm delta, yMm delta)`.
+- **True 3D world space** — using the *exact* position formula from `Preview3DRenderer.js`'s
+  `_updateInstancedStones()` (`azimuth = azimuthRadForCanvasXMm(...)`, `radius = wallRadiusAt(y,
+  dims)`, `x = radius*sin(azimuth)`, `z = radius*cos(azimuth)`).
 
-Instanced reads **clearly better** for this design. The texture version renders "Emma" as a row of
-soft amber discs with a baked, fixed-looking gradient. The instanced version shows each stone as a
-small, distinct faceted diamond with real specular glints that shift with the per-stone rotation —
-it visibly reads as "individual cut stones," not "printed dots," at normal viewing distance. This
-matches step 3b's own finding that gold holds up well without any color/material special-casing.
-
-### tumbler — `tumbler-wrap-design.rhs` (gold script text "Wanderlust" + crystal outline ring)
-
-**Mixed for this specific design** — clearly better for the gold script text (same faceted-vs-disc
-improvement as the mug), and the crystal outline ring reads *fine*, not washed out, since it sits
-against this design's dark navy cup color rather than a light background (see §4 below). But a new,
-previously-unreported visual artifact showed up here, specific to this design's near-360° ring
-layer on a curved surface: near the seam where the wrap closes (both left and right silhouette
-edges of the same physical seam, visible on both sides of the front view), the instanced stones
-visibly cluster/overlap in screen space, while the texture version shows the same region as a
-single, cleanly blurred column. This is very likely an artifact of viewing discrete 3D geometry at
-a steep grazing angle near the surface silhouette (many different azimuths compress toward the same
-screen-space position) versus the texture path's mipmap-blurred 2D appearance smoothing the same
-region — not a data or placement bug (the underlying stone positions are the same real
-`StoneLayout` both paths consume). This is a genuinely new observation from this step's own
-evidence, not one of steps 3b/5b's already-known items — reported here as-is, not investigated or
-fixed, per this step's scope.
-
-### bottle — `bottle-front-design.rhs` (gold ring bands + serif brand text mixing gold/topaz/crystal-clear)
-
-Instanced reads **clearly better**. The gold bands read as individually faceted stones the same way
-the mug's text does. The `crystal-clear` portion of the brand text — the exact color step 3b found
-its most severe washout on — is **legible and not washed out** in both the texture and instanced
-renders here, because this design's cup color is a dark maroon (`#7a1f2b`), not the harness's own
-flat light page background (`#e9eef5`) step 3b measured against. This directly answers step 3b's
-own open item 3 (the harness's washout may be specific to the harness's own light background) for
-this one design: on a dark real product body, the washout does not reproduce.
-
-### plate — inline two-ring substitute (gold outer ring, crystal inner ring)
-
-**Comparable, leaning better** for the instanced path, though the plate's default camera framing is
-distant enough (the whole plate is small in frame) that the per-facet difference is much less
-pronounced than on the mug/bottle close-ups. Both rings are legible in both renders; the crystal
-ring shows individual facet glints in the instanced version that the texture version's soft dot
-pattern doesn't have, but the effect is subtle at this camera distance. No washout: this design's
-cup color (`#1f3556`, dark blue) again is not the light-background scenario step 3b measured.
+Result, across all 104 ring stones including right at the ring's azimuth extremes (±62°): **world/
+canvas nearest-neighbor ratio = 1.0000 everywhere** (min 0.9999, max 1.0000 — floating-point noise
+only). No compression at any azimuth. This is expected given `ObjectDimensions.js`'s own design
+contract: `bodyRadiusMm = canvasWidthMm / 2π`, so a full wrap always has exactly `canvasWidthMm` of
+true circumference by construction — canvas-space spacing is preserved exactly into world-space,
+everywhere, for a true cylinder. **The placement math is correct. This rules out a world-space
+placement bug conclusively**, not by inference from reading the code, but by direct measurement of
+the real generated layout.
 
 ---
 
-# 4. Consolidated known limitations (from steps 3b/5b, not re-investigated) — applied to this evidence
+# 4. Live browser reproduction: camera-relative, not stone-relative
 
-- **Light-colored stones may wash out against the actual live background (step 3b finding).** Step
-  3b measured this specifically against its own standalone test harness's flat, light page
-  background (`#e9eef5`), and explicitly flagged as an open question whether this reproduces
-  against a real product body color in the actual `Preview3DRenderer` scene. **This step's evidence
-  partially answers that**: none of today's 4 real examples pair a light stone color with a light
-  cup/body color (tumbler and plate both use dark cup colors with their `crystal` stones; the
-  bottle uses a dark maroon body with its `crystal-clear` stones) — the washout scenario is not
-  reproduced in any of this evidence, but that is because no real example captured here happens to
-  create the light-on-light pairing, not because the underlying material/lighting limitation was
-  fixed (it wasn't touched). A design with a light cup color (e.g. `examples/front-wrap-light-cup.rhs`,
-  `#ffffff`) *and* a light stone color together was not available among today's real examples to
-  test directly.
-- **Dark stone colors were never tested (step 3b gap, still open).** None of the 4 examples chosen
-  for this step happen to use a genuinely dark/saturated color like `jet`/`sapphire`/`siam`/
-  `emerald` either (though several other `examples/*.rhs` fixtures do — e.g. `image-trace-monogram.rhs`
-  uses `jet`, `circle-only.rhs` uses `sapphire` — they simply weren't among the 4 picked here to keep
-  one example per product kind). This gap remains open, unchanged by this step.
-- **Curved-surface products (mug/tumbler/bottle) at very high stone counts (~15,000 theoretical
-  ceiling) have a real, only-partially-mitigated performance cost** (single-rebuild cost ~28-39ms at
-  that ceiling even after step 5b's throttle) — **not a concern at today's realistic stone counts.**
-  All 4 examples captured here are far below that ceiling (`short-name-block.rhs` and
-  `tumbler-wrap-design.rhs` are simple single-line-text/ring designs, `bottle-front-design.rhs` is a
-  multi-band label, the plate substitute is 2 outline rings) — every one of them is well within the
-  ~1,000-stone realistic range step 5 measured at ~2ms, not the stress-tested ceiling. The step 5b
-  limitation is real for a hypothetical future large design, but is not visible or relevant in any
-  of this step's own evidence.
-- **The plate path has no known performance concern at any tested stone count** — unaffected by, and
-  not re-tested in, this step.
-- **New item found in this step, not previously known:** the tumbler's near-360° ring layer shows
-  visible stone clustering/overlap near the wrap seam in the instanced render at a steep grazing
-  camera angle, not present (or not as visible) in the texture render at the same angle — see §3
-  above. Not investigated further or fixed here, per this step's scope; flagged for whoever looks at
-  this evidence next.
+Loaded the real `tumbler-wrap-design.rhs` example in the actual running Studio
+(`index.html?instancedStones=1`) via Playwright/Chromium, importing through the real
+`#importProjectFile` path (same `toAppProjectShape()`/`validateRhsProject()` bridge step 6 used — no
+reimplementation). Drove `#rotation`/`#zoom` and screenshotted `#cup` at several camera states.
+
+**Correction to step 6's "wrap seam" framing:** the accent ring (`cx=115`=canvas-center, `radius=40`
+on a 230mm-wide canvas) only sweeps azimuth **±62°**, nowhere near the true back-seam at ±180°. The
+apparent "seam" step 6 described is really the ring's own left/right extremes in canvas-x, which land
+well inside the front-visible hemisphere at typical camera framing — not the object's physical wrap
+seam.
+
+At the default front view, `rs2013-step6b-tumbler-front-instanced.png` reproduces the reported
+clustering clearly at both ring edges. Critically:
+
+- Rotating the camera to bring that exact azimuth (62°) to dead-center
+  (`rs2013-step6b-tumbler-az62-instanced.png`) makes the ring render **cleanly, evenly spaced** at
+  that spot — while the *opposite* side of the ring (now at the new grazing edge) starts clustering
+  instead. **The clustering moves with the camera; it is not fixed to particular stones or world
+  positions.** This is the signature of a projection/viewing artifact, not a data or placement bug.
+- At that same camera state, toggling to the texture path
+  (`rs2013-step6b-tumbler-az62-texture.png`) shows **no clustering at all** — clean, evenly spaced
+  dots the whole way to the edge.
+
+**Why instanced and not texture, given §3 proved positions are correct in both:** stone *positions*
+correctly foreshorten toward the silhouette edge under the perspective camera (this is real,
+unavoidable 3D perspective — a curved surface's own screen-space angular density increases as it
+curves toward edge-on). A continuous texture's rendered surface foreshortens by exactly the same
+factor as its underlying positions, so it looks fine — a compressed but still-continuous line. A
+discrete instanced stone, however, has its own fixed real-world footprint (its `sizeMm`) that does
+*not* shrink at the same rate its screen-space position spacing does near the grazing edge — so
+neighboring stones' rendered footprints start overlapping in screen space before their true 3D
+positions are anywhere near coincident. This is an inherent consequence of representing discrete 3D
+geometry (vs. a continuous texture) on a strongly curved surface near a grazing viewing angle.
+
+---
+
+# 5. Generalization test: reproduces on the mug — not tumbler-specific
+
+Added a synthetic circle/outline ring layer to the mug's own `short-name-block.rhs` example
+(`cx`=canvas-center, radius chosen to sweep the same ±62° azimuth extent as the tumbler's ring),
+imported it the same real way, and screenshotted at an equivalent camera state:
+`rs2013-step6b-mug-synthetic-ring-instanced.png` shows **the identical clustering artifact at both
+ring edges**, despite the mug having a *larger* body radius than the tumbler (§2) and a genuine (if
+slight) taper the tumbler doesn't have.
+
+This confirms the artifact is a general property of **any curved-surface product (mug/tumbler/
+bottle) whose design content sweeps far enough in azimuth to approach the camera's current grazing/
+silhouette zone** — not a tumbler-specific geometry issue. It only showed up on the tumbler in step
+6's own evidence because `tumbler-wrap-design.rhs` was the only one of the three chosen examples with
+a curved (circular) outline-mode layer sweeping that far around; `short-name-block.rhs` (mug) was
+front-facing text only, and `bottle-front-design.rhs` used a *rectangle* outline, whose straight
+edges have constant or linearly-varying canvas-x and never approach this condition regardless of how
+wide the rectangle is.
+
+---
+
+# 6. Consolidated finding
+
+**This is a genuine, inherent screen-space rendering property of instanced discrete stones on a
+curved surface at grazing/silhouette viewing angles — confirmed by direct measurement to not be a
+world-space placement bug (§3), confirmed live to be camera-relative rather than stone-relative
+(§4), and confirmed to generalize beyond the tumbler via a controlled same-azimuth-extent test on
+the mug (§5).** It will appear on any curved-surface product (mug/tumbler/bottle) whenever a design's
+content — most commonly a circular/elliptical outline shape, since straight edges don't trigger it —
+sweeps far enough in azimuth to approach the camera's current grazing edge at whatever framing/zoom
+is in use. No code fix was made or is being proposed as part of this step.
+
+**Noted, without implementing, for a later, separate decision:** a future mitigation could look like
+shrinking instance scale as a stone's azimuth approaches the camera's current grazing angle, or a
+texture/instance hybrid (continuous texture near the silhouette, discrete instanced stones near the
+front-facing center). Neither is designed or scoped here — both are options to evaluate later, not a
+recommendation.
 
 ---
 
 # Cleanup check
 
-`du -sh tools/*.png` before this step's own captures: no matches (empty) — steps 5/5b's own reports
-already confirmed no leftover screenshot assets remained in `tools/`. Confirmed clean again at the
-start of this step; only this step's own 8 PNGs exist in `tools/` now.
+`du -sh tools/*.png` before this step's own captures: the 8 PNGs from step 6 (still valid, still
+referenced by step 6's own `TASK_RESULT.md` — not superseded by this step, which investigates them
+rather than replacing them). This step's own exploratory screenshots (several rotation/zoom
+iterations, a mislabeled camera-state pair from an early script bug) were written only to a private
+scratch directory outside the repo, never to `tools/` — so no superseded files existed in `tools/` to
+clean up. Only this step's final, correctly-labeled 4-screenshot set was written there. `du -sh
+tools/*.png` after: 12 PNGs total (step 6's original 8 + this step's 4), all currently valid.
 
 ---
 
 # Testing
 
-- `node -c app.js` — syntax check on the only source file touched, passes.
-- Manual Playwright verification (via a scratch-only script, not committed — the milestone's
-  Allowed Files list does not include a new `tools/*.mjs` script) confirmed:
-  - `window.__setInstancedStones(true)` on a live, already-loaded real project immediately redraws
-    the Object Preview via the instanced path — confirmed both by the dramatic visual difference
-    between each pair's two screenshots (same camera state, same project) and by zero console/page
-    errors across all 4 product kinds.
-  - `?instancedStones=1` on initial page load exposes the same `window.__setInstancedStones`
-    helper and the same underlying flag path, confirmed present via a separate headless check.
-- No shared architecture, project schema, or exporter code changed — per `CLAUDE.md`'s testing
+- No production source files were changed — this was a read-only investigation. No syntax/unit tests
+  apply.
+- Headless numeric verification (§3): real `GeometryEngine`/`generateProjectStoneLayout()` output,
+  cross-checked against `Preview3DRenderer.js`'s exact position formula — not a re-derivation or
+  approximation.
+- Live Playwright/Chromium verification (§4/§5) against the real running Studio, real import path,
+  real `#rotation`/`#zoom` controls — confirmed zero console/page errors across all camera states and
+  both product kinds tested.
+- No shared architecture, project schema, or exporter code touched — per `CLAUDE.md`'s testing
   policy, `npm test`/`npm run test:full` was not run for this step.
 
 ---
 
 # Scope discipline
 
-- `instancedStones` default is unchanged (`false`) everywhere — confirmed by re-reading the final
-  `app.js` diff: the only new code reads a URL param / exposes a console helper, both defaulting to
-  `false` unless explicitly set.
-- No user-facing UI control was added — both mechanisms are console/URL-only, clearly commented as
-  dev-only and temporary in `app.js`.
-- None of steps 3b/5b's known limitations were fixed, re-investigated, or re-measured — §4 above
-  only restates and honestly cross-references them against this step's own real-design evidence.
-- No change to placement/orientation/lighting/material/throttle logic already shipped.
-- No recommendation on whether to flip the default was made — §3/§4 are evidence, not a verdict.
+- No production file was modified (`app.js`, `Preview3DRenderer.js`, `ObjectDimensions.js`, etc. all
+  untouched) — this was a pure investigation.
+- No fix was implemented or proposed as a concrete plan — §6's mitigation ideas are noted as future
+  options only, not designed here.
+- `instancedStones` default remains unchanged (`false`) everywhere.
+- No Playwright/Node scratch scripts were committed — same convention step 6 used.
 
 ---
 
 # Deliverables
 
-- `app.js` — dev-only `?instancedStones=1` URL param (`app.js:843`) + `window.__setInstancedStones(bool)`
-  console helper (`app.js:844-845`), threaded into `drawCup()`'s existing `preview3D.update()` call
-  (`app.js:1784`).
-- Screenshots (8 total, all in `tools/`):
-  - `tools/rs2013-step6-plate-texture.png` / `tools/rs2013-step6-plate-instanced.png`
-  - `tools/rs2013-step6-mug-texture.png` / `tools/rs2013-step6-mug-instanced.png`
-  - `tools/rs2013-step6-tumbler-texture.png` / `tools/rs2013-step6-tumbler-instanced.png`
-  - `tools/rs2013-step6-bottle-texture.png` / `tools/rs2013-step6-bottle-instanced.png`
 - `TASK.md` (this milestone's brief), `TASK_RESULT.md` (this file).
+- `tools/rs2013-step6b-tumbler-front-instanced.png` — reproduces the reported clustering.
+- `tools/rs2013-step6b-tumbler-az62-instanced.png` — camera rotated to bring the clustering-prone
+  azimuth to center; clean there, proving the artifact is camera-relative.
+- `tools/rs2013-step6b-tumbler-az62-texture.png` — same camera state, texture path; no clustering,
+  proving the artifact is instanced-only.
+- `tools/rs2013-step6b-mug-synthetic-ring-instanced.png` — same artifact reproduced on the mug via a
+  synthetic same-azimuth-extent ring, proving it is not tumbler-specific.

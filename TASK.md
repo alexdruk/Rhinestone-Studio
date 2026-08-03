@@ -1,66 +1,87 @@
 # Task
 
-**Task ID:** RS-2013 (Implementation Phase) — §4 step 6: visual validation evidence
-**Task Type:** Evidence-gathering for a human-in-the-loop decision (not a mechanical test, not a
-default flip)
+**Task ID:** RS-2013 (Implementation Phase) — §4 step 6b: tumbler wrap-seam clustering investigation
+**Task Type:** Investigation only (root-cause a visual artifact found in step 6's own evidence) — not
+a fix, not a mechanical test
 **Status:** COMPLETE
-**Branch:** feature/rs-2013-instanced-stones-step6-visual-validation (cut from the step-5b commit
-`cdccc33`, verified as HEAD before any work began)
+**Branch:** feature/rs-2013-instanced-stones-step6b-tumbler-seam (cut from the step-5b commit
+`cdccc33`; fast-forwarded onto step 6's own commit `ff36886` at the start of this task, since the
+branch had been cut before step 6 landed and this investigation depends directly on step 6's
+evidence/screenshots)
 
 ## Why this milestone exists
 
-Steps 1-5b built and validated the instanced-stone rendering path in isolation (static grid, real
-placement/orientation, lighting, flag-gated integration, and stress/perf testing + throttle
-mitigation). Per the design doc's own §4 step 6, flipping `instancedStones`'s default from `false`
-to `true` is explicitly "a human-in-the-loop judgment call, not a mechanical test" — deliberately
-not something an earlier step's automated tests or synthetic-fixture screenshots can settle on
-their own. This step's job is to produce the clearest possible real-design comparison evidence
-across all four product kinds so Sasha can make that call well-informed. **This step does not flip
-the default and does not make a ship/don't-ship recommendation** — both are explicitly out of scope,
-per the milestone brief.
+Step 6's real-design visual-validation evidence found a new, previously-unreported artifact on the
+tumbler's `tumbler-wrap-design.rhs` example: the crystal accent ring's stones visibly cluster/overlap
+in screen space near the left and right edges of the visible surface in the instanced render, while
+the texture render shows the same region as a clean, evenly blurred line. Step 6 explicitly did not
+investigate or fix this — it only reported it, and flagged it as "very likely" a viewing-angle
+artifact rather than a placement bug, without confirming that. This step's job is to actually root-
+cause it: is it a world-space stone-placement bug, or a screen-space rendering artifact — and is it
+really tumbler-specific, or a property of any curved-surface product under the right design
+conditions.
 
 ## Scope
 
-1. Confirm/add a convenient way to toggle `instancedStones` on a real running project in the actual
-   Studio (not just the standalone `rs2013-instanced-stone-harness.html` test harness prior steps
-   used) — dev-only, clearly isolated, not a user-facing control.
-2. Capture real-design comparison screenshots (texture path vs. instanced path, same project, same
-   camera angle) for one representative example per product kind (plate/mug/tumbler/bottle), pulled
-   from actual committed `examples/*.rhs` fixtures wherever one exists — not synthetic stress
-   fixtures — including at least one light stone color (crystal/crystal-clear) so step 3b's washout
-   finding is honestly represented, not hidden by cherry-picking only saturated colors.
-3. Write an honest, per-example comparison (better/comparable/worse for THIS design) — not an
-   averaged verdict, not a recommendation.
-4. Consolidate steps 3b/5b's already-known limitations in one place, stated plainly against what
-   step 2 above actually shows (or doesn't show) for today's real examples.
+1. Confirm the artifact is real and reproducible in a live browser session (not a screenshot/camera
+   fluke), across multiple camera angles/zoom levels.
+2. Compare the tumbler's real dimensions/profile against mug and bottle (radius, height, taper) using
+   the actual product definitions and `ObjectDimensions.js`/`ObjectGeometryBuilder.js` math.
+3. Determine, with direct evidence (not inference), whether this is a world-space placement bug (do
+   two stones' actual 3D positions come out closer together than their canvas-space spacing implies)
+   or a rendering/projection artifact (are the true 3D positions correctly spaced, with the apparent
+   clustering coming from the camera/perspective/discrete-geometry-footprint side instead).
+4. Determine whether the artifact is genuinely tumbler-specific or a general property of curved-
+   surface products that happened to only show up on the tumbler because of which example designs
+   step 6 chose.
+5. Write up the finding plainly. No code fix in scope for this step.
 
 ## Allowed files
 
-- `app.js` — only the minimal, clearly-isolated, dev-only toggle from item 1 above.
-- New screenshot assets (the 8 real-design comparison PNGs from item 2).
+- New screenshot assets (this step's own comparison PNGs, `tools/rs2013-step6b-*.png`).
 - `TASK.md`, `TASK_RESULT.md`.
+- No production source files touched — this is a read-only investigation.
 
 ## Forbidden in this milestone
 
-- Flipping `instancedStones`'s default to `true` anywhere.
-- Adding any user-facing UI control for the flag.
-- Fixing, re-investigating, or re-measuring any of steps 3b/5b's known limitations.
-- Any change to placement/lighting/material/throttle logic already shipped.
+- Any change to placement/orientation/lighting/material/throttle logic already shipped.
+- Proposing or implementing a fix/mitigation as part of this step (a future mitigation may exist —
+  noted as an open option for a later, separate decision, not designed or scoped here).
+- Flipping `instancedStones`'s default anywhere.
+- Any change to `app.js`, `Preview3DRenderer.js`, `ObjectDimensions.js`, or any other production file.
+
+## Method
+
+- Headless numeric verification: generated the real `StoneLayout` for `tumbler-wrap-design.rhs` via
+  `GeometryEngine`/`generateProjectStoneLayout` (the same path `tools/generate-example-baselines.mjs`
+  uses), then computed nearest-neighbor stone spacing two ways — in canvas (2D, as-authored) space
+  and in true 3D world space using the exact position formula from `Preview3DRenderer.js`'s
+  `_updateInstancedStones()` — to test for placement compression directly, not by inference.
+- Live browser verification: Playwright + Chromium against the real running Studio
+  (`index.html?instancedStones=1`), importing the real `tumbler-wrap-design.rhs` example through the
+  actual `#importProjectFile` path (converted via `toAppProjectShape()`/`validateRhsProject()`, the
+  same real bridge functions step 6 used), then driving `#rotation`/`#zoom` and screenshotting `#cup`
+  at several camera states.
+- Generalization test: added a synthetic circle/outline ring layer to the mug's own
+  `short-name-block.rhs` example, sized to sweep the same azimuth extent (~±62°) as the tumbler's
+  ring, to test whether the same artifact reproduces on a different product kind under equivalent
+  design conditions.
+- No `tools/*.mjs` scripts committed (scratch-only, per this milestone's Allowed Files list — same
+  convention step 6 used for its own Playwright verification).
 
 ## Testing
 
-- `node -c app.js` (syntax check on the touched file).
-- Manual Playwright-driven verification (scratch-only script, not committed) that both toggle
-  mechanisms actually flip the live `Preview3DRenderer`'s rendering path on a real loaded project —
-  see `TASK_RESULT.md` for what was observed.
-- No shared architecture, schema, or exporter code changed — per `CLAUDE.md`'s testing policy,
-  `npm test`/`npm run test:full` was not run for this step.
+- No source files changed, so no syntax/unit tests apply.
+- `npm test`/`npm run test:full` not run — no shared architecture, schema, or exporter code touched,
+  per `CLAUDE.md`'s testing policy.
 
 ## Deliverables
 
-- `app.js` — dev-only `?instancedStones=1` URL param + `window.__setInstancedStones(bool)` console
-  helper.
-- 8 screenshots in `tools/` (`rs2013-step6-<product>-texture.png` /
-  `rs2013-step6-<product>-instanced.png` for plate/mug/tumbler/bottle).
-- `TASK.md` (this file), `TASK_RESULT.md` (per-example honest comparison + consolidated
-  limitations).
+- `TASK.md` (this file), `TASK_RESULT.md` (root-cause finding).
+- `tools/rs2013-step6b-tumbler-front-instanced.png` — reproduces the reported clustering at a closer,
+  more legible framing than step 6's own screenshot.
+- `tools/rs2013-step6b-tumbler-az62-instanced.png` / `tools/rs2013-step6b-tumbler-az62-texture.png` —
+  matched camera-state pair proving the clustering is instanced-only and camera-relative (rotating
+  the clustering-prone azimuth to center clears it there and moves it to the new grazing edge).
+- `tools/rs2013-step6b-mug-synthetic-ring-instanced.png` — the same artifact reproduced on the mug via
+  a synthetic same-azimuth-extent ring, proving this is not tumbler-specific.
