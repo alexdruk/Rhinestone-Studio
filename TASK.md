@@ -1,99 +1,78 @@
 # Task
 
-**Task ID:** RS-2013 (Implementation Phase — inserted step between §4 step 3 and step 4, "step 3b")
-**Task Type:** Evaluation (build-and-measure, not a shipping decision)
-**Status:** EVALUATED
-**Branch:** feature/rs-2013-instanced-stones-step3b-facet-material
+**Task ID:** RS-2013 (Implementation Phase) — §4 step 4: flag-gated integration into the real
+`Preview3DRenderer`
+**Task Type:** Implementation (porting already-validated code, not new design)
+**Status:** IMPLEMENTED
+**Branch:** feature/rs-2013-instanced-stones-step4-integration
 
 ## Why this milestone exists
 
-`docs/specifications/RS-2013-InstancedFacetedStoneRenderingDesign.md` §4 step 3's own
-`TASK_RESULT.md` (lighting rig extension) reached an honest, evidence-backed negative result: the
-extended 4-light rig is a real, measured change (~3.4% RMSE on the mug view) but does not read as
-"faceted gem" over "flat painted polygon" any better than the original 2-light rig. A diagnostic
-(an out-of-bounds 2.4-intensity test light, reverted before shipping) confirmed this is not a
-mis-tuned angle: even a light brighter than the key light could not flip which facet reads bright
-vs. dark on a stone. Root cause, as reported: a structural combination of (a) an 8-facet octahedron
-where only ~2-4 faces are ever front-facing to the camera, and (b) a diffuse-dominant
-`MeshStandardMaterial` response (`roughness=0.42, metalness=0.08`), under which every additional
-light source's contribution *adds* to a facet's brightness rather than *redistributing* which facet
-catches the highlight.
+`docs/specifications/RS-2013-InstancedFacetedStoneRenderingDesign.md` §4 sequences the
+instanced-faceted-stone work into 7 steps. Steps 1-3 (static grid, real placement/orientation,
+lighting) and the inserted step 3b (facet geometry + material response evaluation) were all built
+and evaluated in `tools/rs2013-instanced-stone-harness.html`, a standalone test harness never wired
+into the live Studio. Step 3b's own `TASK_RESULT.md` (including its later single-stone,
+render-time-resolution correction) landed on a clear scope for step 4: carry forward the plain
+octahedron + **unmodified diffuse** `MeshStandardMaterial` (roughness=0.42, metalness=0.08) —
+step 3b evaluated and rejected both a richer 16-triangle geometry (Candidate A) and a more
+specular material preset (Candidate B) as the shipped default, so this milestone ships neither.
 
-§3.1 of the design doc had already anticipated this exact fallback ("a later, separate step
-evaluating a richer cut ... only if the visual result under-delivers") and named a specific
-alternative shape (a 16-triangle "double bipyramid"). §3.4/step 3's own finding named the second
-lever (material response), independently. This milestone is that inserted step: it evaluates both
-candidates (plus their combination) against the same methodology step 3 already validated, before
-step 4 (flag-gated `Preview3DRenderer` integration) commits to carrying anything forward.
+This milestone is step 4 itself: port the harness's validated placement/orientation math (step 2)
+and extended lighting rig (step 3) into the real `Preview3DRenderer.js`, behind a new
+`instancedStones` option on `update()`, defaulting to `false` (today's texture-baking path,
+completely unchanged). Not a redesign — a porting exercise from an already-working reference
+implementation.
 
 ## Scope
 
-Build-and-measure evaluation only — **not** a decision to ship either candidate as the new default.
-Extends `tools/rs2013-instanced-stone-harness.html` (still not wired into the live
-`Preview3DRenderer`/`app.js`/Studio UI) with two new, independently selectable URL params:
-
-- `?facet=octahedron|bipyramid16` — geometry primitive. `octahedron` (unchanged, 8 triangles) is
-  still the default. `bipyramid16` is Candidate A: an "octagonal bipyramid" (2 apex vertices + an
-  8-vertex equatorial ring = 16 triangular faces), the design doc's own anticipated fallback shape.
-- `?material=diffuse|specular` — `MeshStandardMaterial` roughness/metalness preset. `diffuse`
-  (unchanged, `roughness=0.42, metalness=0.08`) is still the default. `specular` is Candidate B: a
-  more specular-dominant response, tuned via a 3-combination sweep (see `TASK_RESULT.md`) to
-  `roughness=0.12, metalness=0.55`.
-- Candidate C is both together: `?facet=bipyramid16&material=specular`.
-- Raw `?roughness=`/`?metalness=` overrides also exist, for reproducing/extending the tuning sweep
-  without editing the file.
-
-`?lighting=default|extended` (step 3's own param) is unchanged and held at `extended` throughout
-this step's evaluation and final product-kind renders, per the task brief's explicit instruction to
-vary geometry/material only, holding placement and lighting constant.
-
-## Triangle-budget check (§3.1, restated with real numbers)
-
-16 triangles/stone × 15,000 stones (§1.3's theoretical worst case) = **240,000 triangles** — still
-trivially within a single `InstancedMesh` draw call's budget on any WebGL2-class GPU, exactly as
-§3.1 anticipated. At §1.3's largest *actual* fixture (1,161 stones), that's 18,576 triangles. No
-polygon-budget pressure from Candidate A or C.
-
-## Methodology — same as step 3, applied to the new variable
-
-- RMSE (`magick compare -metric RMSE`) between each candidate and the unchanged 8-tri/diffuse
-  baseline, both full-frame and on step 3's own macro-crop region (a tight, nearest-neighbor-upscaled
-  crop of a handful of stones — no resampling blur).
-- A new check this step adds: a grayscale difference-magnitude image (`-compose difference
-  -colorspace Gray -auto-level`, not the default red/binary compare mask) on the macro crop, to
-  distinguish "this stone's silhouette shifted brightness/tone uniformly" (step 3's finding) from
-  "the difference is concentrated at internal facet-boundary lines within each stone" (the thing step
-  3 confirmed was absent and this step is specifically testing for).
-- Evaluation done on the mug view (matching step 3's own primary tuning view) before deciding whether
-  any candidate wins; the winning candidate (if any) is then applied to all 4 product kinds.
+- Add `instancedStones` (default `false`) to `Preview3DRenderer.update()`'s options object.
+- `false`/omitted: byte-identical to pre-step-4 behavior — `StoneLayoutTexture.js`'s texture-baking
+  path runs exactly as before, completely untouched.
+- `true`: build/update a `THREE.InstancedMesh` of stones (plain octahedron + unmodified diffuse
+  material) as an additional child mesh alongside `bodyMesh`/`handleMesh`/`underMesh`, using the
+  exact placement/orientation math already validated in the harness (azimuth/height/radius/normal
+  per §3.3, ported not reimplemented), and skip assigning the baked stone texture to
+  `bodyMesh.material.map` — the two modes are mutually exclusive per-frame.
+- Also ports the harness's step-3 "extended" 4-light rig, applied only while `instancedStones` is
+  on (toggled by `_applyLightRig()`); the default 2-light + 0.75-ambient rig `init()` already sets
+  up is otherwise untouched.
+- Follows the existing `_disposeGroup()`/`_rebuildMesh()` dispose/rebuild lifecycle for the new
+  mesh — no parallel lifecycle mechanism.
+- NOT exposed in `app.js`/`index.html`/the Studio UI in this step — reachable programmatically only
+  (any caller of `Preview3DRenderer.update()` can pass `instancedStones: true`), consistent with
+  `docs/specifications/RS-2013-InstancedFacetedStoneRenderingDesign.md` §4 step 4's own scope (step
+  6, visual validation + default flip, is a separate future milestone; UI exposure is a separate
+  decision for whoever scopes that step).
 
 ## Allowed files
 
-- `tools/rs2013-instanced-stone-harness.html` (extended: `?facet=`/`?material=`/raw override params,
-  `buildBipyramid16Geometry()`, `MATERIAL_PRESETS`, updated info text/links; one necessary
-  generalization to the plate-placement branch's orientation math, see `TASK_RESULT.md`).
-- `tools/rs2013-instanced-stone-harness-screenshot.mjs` (extended: mug evaluation set + winning
-  candidate applied to the other 3 products).
-- New screenshot/crop/diff assets, same naming convention as prior steps.
-- `TASK.md`, `TASK_RESULT.md`.
+- `src/preview3d/Preview3DRenderer.js`
+- `src/preview3d/ObjectGeometryBuilder.js` (not touched — `wallRadiusAt()` was already exported by
+  step 2, no further export needed)
+- New test file for `Preview3DRenderer` covering both flag states
+  (`tools/test-preview3d-instanced-stones.mjs`)
+- `TASK.md`, `TASK_RESULT.md`
 
 ## Forbidden in this milestone
 
-- Any change to `app.js`, `index.html`, or the live Studio UI.
-- Any change to `src/preview3d/Preview3DRenderer.js` or `src/preview3d/ObjectGeometryBuilder.js`.
-- Any change to placement/orientation math or lighting rig values from steps 2/3, beyond the one
-  documented generalization needed so the plate branch's orientation quaternion works correctly for
-  a geometry primitive whose apex axis isn't incidentally aligned with world +Y (see
-  `TASK_RESULT.md` — verified to produce a pixel-identical result for the still-default octahedron).
-- HDRI/environment-map/`PMREMGenerator` work.
-- Silently making either candidate the new default `?lighting=extended`/step-1/2 view.
+- Any change to `app.js`, `index.html`, or exposing a UI control for the flag.
+- Carrying forward Candidate A (bipyramid16) or Candidate B (specular material) — step 3b rejected
+  both; ship the plain octahedron + original diffuse material only.
+- Deleting or modifying `StoneLayoutTexture.js`'s existing behavior — it remains fully functional
+  and is the default (flag off).
+- Attempting to fix the light-color washout (crystal/crystal-clear) or testing dark colors — both
+  carried forward as known limitations, not resolved here (see `TASK_RESULT.md`).
 
 ## Testing
 
-- `node tools/run-tests.mjs --all` — must be 100% pass.
-- `node tools/test-documentation-consistency.mjs` before committing.
+- `node tools/run-tests.mjs --all` — 100/100 passed (99 pre-existing + this milestone's new file).
+- `node tools/test-documentation-consistency.mjs` — passed.
+- Real-browser verification via a temporary (uncommitted, deleted before this commit), Playwright
+  screenshot of the actual `Preview3DRenderer` class — see `TASK_RESULT.md`.
 
 ## Deliverables
 
-- This file.
-- `TASK_RESULT.md` — full evidence writeup, verdict per candidate, final recommendation for step 4.
+- `src/preview3d/Preview3DRenderer.js` (the integration itself).
+- `tools/test-preview3d-instanced-stones.mjs` (new Node test file, 10 tests).
+- `TASK.md` (this file), `TASK_RESULT.md`.
