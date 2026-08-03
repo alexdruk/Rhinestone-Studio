@@ -1,17 +1,10 @@
 import assert from 'node:assert/strict';
 
-// RS-2013 §4 step 4 — verifies Preview3DRenderer.js's flag-gated `instancedStones` option in
-// update(): (a) regression safety, `false` must be byte-identical to pre-step-4 behavior (the
-// texture-baking path untouched), and (b) `true` must build a real THREE.InstancedMesh with
-// the right instance count/positions/orientation for a known StoneLayout, reusing the same
-// placement math tools/rs2013-instanced-stone-harness.html's step 2/3 already validated.
-//
-// RS-2013 §4 step 6c: the default flipped to `true` -- `instancedStones` omitted now takes the
-// instanced path, not the texture path. The two tests that need the texture path (now numbered
-// 1, 2) pass `instancedStones: false` explicitly instead of relying on omission. The old "false
-// is identical to omitted" test (true under the OLD default) is gone, replaced by its mirror
-// image, test 14 at the end of this file ("omitted is identical to explicit true"), which is
-// what's true under the NEW default -- every other test below is renumbered to stay sequential.
+// RS-2013 §4 step 4/7 — verifies Preview3DRenderer.js's instanced-stone mesh construction/placement/
+// lighting/throttling. Step 4 introduced this behind a flag-gated `instancedStones` option; step 6c
+// flipped its default to `true`; step 7 removed the flag (and the old texture-baking path) entirely,
+// once the instanced path became the sole renderer -- update() now always builds/updates the
+// instanced mesh, so every test below simply omits the option.
 //
 // Real 'three' + real ObjectGeometryBuilder.js (both pure computation, no WebGL context needed --
 // same convention tools/test-object-geometry-builder.mjs already uses) so this exercises the
@@ -47,39 +40,6 @@ async function test(name, fn) {
 function makeLayout(stoneParams, layerId = 'layer-1') {
   const stones = stoneParams.map((p, index) => new Stone({ layerId, index, ...p }));
   return new StoneLayout({ layerId, stones });
-}
-
-// A fake CanvasRenderingContext2D, same dependency-free convention tools/test-stone-layout-texture.mjs
-// already uses -- only needed for the instancedStones:false path, which still runs the real
-// _updateTexture()/drawStoneLayoutTexture() code.
-function fakeCtx2D() {
-  const target = {
-    createRadialGradient() { return { addColorStop() {} }; },
-    createLinearGradient() { return { addColorStop() {} }; },
-    clearRect() {},
-    fillRect() {},
-    beginPath() {},
-    fill() {}
-  };
-  return new Proxy(target, {
-    get(obj, prop) { return prop in obj ? obj[prop] : () => {}; },
-    set(obj, prop, value) { obj[prop] = value; return true; }
-  });
-}
-
-// Node has no global `document` -- _updateTexture() calls document.createElement('canvas'). Only
-// installed for the duration of a single test (restored after) so it never leaks into other
-// tools/test-*.mjs files sharing this process... though run-tests.mjs already runs every file in
-// its own child process, so this is redundant belt-and-suspenders, not load-bearing.
-function installFakeDocument() {
-  const previous = globalThis.document;
-  globalThis.document = {
-    createElement(tag) {
-      assert.equal(tag, 'canvas', `unexpected document.createElement(${tag})`);
-      return { width: 0, height: 0, getContext: (type) => (type === '2d' ? fakeCtx2D() : null) };
-    }
-  };
-  return () => { globalThis.document = previous; };
 }
 
 // Builds a Preview3DRenderer "mounted" the way init() would leave it, but without any of init()'s
@@ -123,84 +83,31 @@ function makeMugLayout() {
   ]);
 }
 
-// --- Regression safety: instancedStones:false -----------------------------------------------
-
-await test('1. instancedStones:false takes the exact pre-step-4 texture path: bodyMesh gets the CanvasTexture, no stone mesh exists', async () => {
-  const restoreDocument = installFakeDocument();
-  try {
-    const instance = makeMountedRenderer();
-    const layout = makeMugLayout();
-    instance.update(layout, { ...MUG_OPTIONS, instancedStones: false });
-
-    assert.ok(instance._bodyMesh.material.map instanceof THREE.CanvasTexture, 'expected the baked stone texture assigned to bodyMesh.material.map');
-    assert.equal(instance._stoneMesh, null, 'expected no instanced-stone mesh to have been created');
-    assert.equal(instance._group.children.includes(instance._bodyMesh), true);
-    // mug: bodyMesh + handleMesh only, no third (stone) mesh added to the group.
-    assert.equal(instance._group.children.length, 2, 'expected only bodyMesh+handleMesh in the group, no instanced-stone mesh');
-  } finally {
-    restoreDocument();
-  }
-});
-
-await test('2. instancedStones:false never touches the lighting rig: ambient stays at the original 0.75 intensity, no extra lights added to the scene', async () => {
-  const restoreDocument = installFakeDocument();
-  try {
-    const instance = makeMountedRenderer();
-    const layout = makeMugLayout();
-    const sceneChildrenBefore = instance.scene.children.length;
-    instance.update(layout, { ...MUG_OPTIONS, instancedStones: false });
-    instance.update(layout, { ...MUG_OPTIONS, instancedStones: false });
-
-    assert.equal(instance._ambientLight.intensity, 0.75, 'expected the default ambient intensity, untouched');
-    assert.equal(instance.scene.children.length, sceneChildrenBefore + 1, 'expected only the group to have been added to the scene, no extra lights');
-    assert.equal(instance._extraLights.length, 0);
-  } finally {
-    restoreDocument();
-  }
-});
-
-// --- instancedStones:true --------------------------------------------------------------------
-
-await test('3. instancedStones:true builds a real THREE.InstancedMesh with one instance per stone, added alongside bodyMesh/handleMesh', async () => {
+await test('1. update() builds a real THREE.InstancedMesh with one instance per stone, added alongside bodyMesh/handleMesh', async () => {
   const instance = makeMountedRenderer();
   const layout = makeMugLayout();
-  instance.update(layout, { ...MUG_OPTIONS, instancedStones: true });
+  instance.update(layout, MUG_OPTIONS);
 
   assert.ok(instance._stoneMesh instanceof THREE.InstancedMesh);
   assert.equal(instance._stoneMesh.count, layout.stones.length);
   assert.equal(instance._group.children.includes(instance._stoneMesh), true);
-  assert.equal(instance._group.children.length, 3, 'expected bodyMesh + handleMesh + the new instanced-stone mesh');
+  assert.equal(instance._group.children.length, 3, 'expected bodyMesh + handleMesh + the instanced-stone mesh');
 });
 
-await test('4. instancedStones:true skips the baked texture entirely: bodyMesh.material.map stays null, body tinted to cupColor', async () => {
+await test('2. the body never carries a design texture: bodyMesh.material.map stays null, body tinted to cupColor', async () => {
   const instance = makeMountedRenderer();
   const layout = makeMugLayout();
-  instance.update(layout, { ...MUG_OPTIONS, instancedStones: true });
+  instance.update(layout, MUG_OPTIONS);
 
   assert.equal(instance._bodyMesh.material.map, null);
   assert.equal(instance._bodyMesh.material.color.getHexString(), new THREE.Color(MUG_OPTIONS.cupColor).getHexString());
-  assert.equal(instance._textureCanvas, null, '_updateTexture() must never have run -- no texture canvas lazily created');
 });
 
-await test('5. instancedStones:true lowers ambient and adds the two extended-rig directional lights exactly once', async () => {
-  const instance = makeMountedRenderer();
-  const layout = makeMugLayout();
-  instance.update(layout, { ...MUG_OPTIONS, instancedStones: true });
-  instance.update(layout, { ...MUG_OPTIONS, instancedStones: true });
-
-  assert.equal(instance._ambientLight.intensity, 0.4);
-  assert.equal(instance._extraLights.length, 2, 'expected exactly 2 extra lights, not re-added on the second update() call');
-  for (const light of instance._extraLights) {
-    assert.ok(light instanceof THREE.DirectionalLight);
-    assert.equal(instance.scene.children.includes(light), true);
-  }
-});
-
-await test('6. a mug stone\'s instance matrix places it at the correct azimuth/radius/height and orients its local +Z along the outward radial normal', async () => {
+await test('3. a mug stone\'s instance matrix places it at the correct azimuth/radius/height and orients its local +Z along the outward radial normal', async () => {
   const instance = makeMountedRenderer();
   const stone = { xMm: 170, yMm: 60, sizeMm: 1.8, color: 'crystal' };
   const layout = makeLayout([stone]);
-  instance.update(layout, { ...MUG_OPTIONS, instancedStones: true });
+  instance.update(layout, MUG_OPTIONS);
 
   const dims = instance._dimensions;
   const azimuth = azimuthRadForCanvasXMm(stone.xMm, MUG_CANVAS.widthMm);
@@ -236,7 +143,7 @@ await test('6. a mug stone\'s instance matrix places it at the correct azimuth/r
   assert.ok(appearance.facetAngleDeg !== undefined, 'sanity check: getCrystalAppearance() returns a facetAngleDeg for this stone');
 });
 
-await test('7. a plate stone sits at the rim/well transition height with a straight-up (+Y) normal, no per-stone spin', async () => {
+await test('4. a plate stone sits at the rim/well transition height with a straight-up (+Y) normal, no per-stone spin', async () => {
   const instance = makeMountedRenderer();
   const plateParams = normalizePlateParams(null);
   const canvasWidthMm = plateParams.outerDiameterMm;
@@ -249,8 +156,7 @@ await test('7. a plate stone sits at the rim/well transition height with a strai
     objectTemplate: getObjectTemplate('plate'),
     canvasWidthMm,
     canvasHeightMm,
-    plateParams,
-    instancedStones: true
+    plateParams
   });
 
   const matrix = new THREE.Matrix4();
@@ -268,28 +174,7 @@ await test('7. a plate stone sits at the rim/well transition height with a strai
   assert.ok(rotatedZ.distanceTo(new THREE.Vector3(0, 1, 0)) < 1e-6, 'expected local +Z aligned straight up (+Y) for the flat plate surface');
 });
 
-await test('8. toggling instancedStones back to false tears the instanced mesh down and restores the default lighting rig, texture path resumes', async () => {
-  const restoreDocument = installFakeDocument();
-  try {
-    const instance = makeMountedRenderer();
-    const layout = makeMugLayout();
-    instance.update(layout, { ...MUG_OPTIONS, instancedStones: true });
-    assert.ok(instance._stoneMesh instanceof THREE.InstancedMesh);
-    assert.equal(instance._ambientLight.intensity, 0.4);
-
-    instance.update(layout, { ...MUG_OPTIONS, instancedStones: false });
-
-    assert.equal(instance._stoneMesh, null, 'expected the instanced-stone mesh to be torn down');
-    assert.equal(instance._group.children.length, 2, 'expected the group back to bodyMesh+handleMesh only');
-    assert.equal(instance._ambientLight.intensity, 0.75, 'expected the default ambient intensity restored');
-    assert.equal(instance._extraLights.length, 0, 'expected the extended rig\'s extra lights removed');
-    assert.ok(instance._bodyMesh.material.map instanceof THREE.CanvasTexture, 'expected the texture path to resume');
-  } finally {
-    restoreDocument();
-  }
-});
-
-await test('9. a stone-count change (no geometry-key change) rebuilds the instanced mesh at the new count instead of leaving stale instances', async () => {
+await test('5. a stone-count change (no geometry-key change) rebuilds the instanced mesh at the new count instead of leaving stale instances', async () => {
   const instance = makeMountedRenderer();
   const small = makeLayout([{ xMm: 40, yMm: 20, sizeMm: 2, color: 'gold' }]);
   const large = makeLayout([
@@ -298,10 +183,10 @@ await test('9. a stone-count change (no geometry-key change) rebuilds the instan
     { xMm: 80, yMm: 40, sizeMm: 2, color: 'gold' }
   ]);
 
-  instance.update(small, { ...MUG_OPTIONS, instancedStones: true });
+  instance.update(small, MUG_OPTIONS);
   assert.equal(instance._stoneMesh.count, 1);
 
-  instance.update(large, { ...MUG_OPTIONS, instancedStones: true });
+  instance.update(large, MUG_OPTIONS);
   assert.equal(instance._stoneMesh.count, 3);
   assert.equal(instance._group.children.filter((c) => c instanceof THREE.InstancedMesh).length, 1, 'expected exactly one instanced-stone mesh, not a leaked stale one');
 });
@@ -312,19 +197,19 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-await test('10. a rapid same-count update() burst does not rebuild on every call: the second call within the throttle window leaves the mesh at the first call\'s position, but schedules a trailing rebuild that lands on the latest position once the window elapses', async () => {
+await test('6. a rapid same-count update() burst does not rebuild on every call: the second call within the throttle window leaves the mesh at the first call\'s position, but schedules a trailing rebuild that lands on the latest position once the window elapses', async () => {
   const instance = makeMountedRenderer();
   const first = makeLayout([{ xMm: 40, yMm: 20, sizeMm: 2, color: 'gold' }]);
   const second = makeLayout([{ xMm: 90, yMm: 70, sizeMm: 2, color: 'gold' }]);
 
-  instance.update(first, { ...MUG_OPTIONS, instancedStones: true });
+  instance.update(first, MUG_OPTIONS);
   const matrixAfterFirst = new THREE.Matrix4();
   instance._stoneMesh.getMatrixAt(0, matrixAfterFirst);
   const posAfterFirst = new THREE.Vector3().setFromMatrixPosition(matrixAfterFirst);
 
   // Fires immediately after the first call (same synchronous tick) -- well inside the throttle
   // window, so this must NOT rebuild yet.
-  instance.update(second, { ...MUG_OPTIONS, instancedStones: true });
+  instance.update(second, MUG_OPTIONS);
   const matrixRightAfterSecond = new THREE.Matrix4();
   instance._stoneMesh.getMatrixAt(0, matrixRightAfterSecond);
   const posRightAfterSecond = new THREE.Vector3().setFromMatrixPosition(matrixRightAfterSecond);
@@ -341,14 +226,14 @@ await test('10. a rapid same-count update() burst does not rebuild on every call
   assert.ok(posAfterSettle.distanceTo(posAfterFirst) > 1, 'expected the trailing rebuild to have moved the stone to the second call\'s (different) position');
 });
 
-await test('11. update() calls spaced further apart than the throttle window each rebuild immediately (no lag for ordinary, non-burst edits)', async () => {
+await test('7. update() calls spaced further apart than the throttle window each rebuild immediately (no lag for ordinary, non-burst edits)', async () => {
   const instance = makeMountedRenderer();
   const first = makeLayout([{ xMm: 40, yMm: 20, sizeMm: 2, color: 'gold' }]);
   const second = makeLayout([{ xMm: 90, yMm: 70, sizeMm: 2, color: 'gold' }]);
 
-  instance.update(first, { ...MUG_OPTIONS, instancedStones: true });
+  instance.update(first, MUG_OPTIONS);
   await sleep(150); // longer than the throttle window
-  instance.update(second, { ...MUG_OPTIONS, instancedStones: true });
+  instance.update(second, MUG_OPTIONS);
 
   // No trailing rebuild should have been scheduled -- the second call rebuilt synchronously.
   assert.equal(instance._instancedRebuildTimer, null, 'expected no pending trailing rebuild -- the spaced-out call should rebuild immediately');
@@ -363,7 +248,7 @@ await test('11. update() calls spaced further apart than the throttle window eac
   assert.ok(position.distanceTo(expected) < 1e-4, 'expected the immediately-rebuilt mesh to already reflect the second call\'s position');
 });
 
-await test('12. a stone-count change during a throttled burst still rebuilds immediately (capacity changes are never throttled)', async () => {
+await test('8. a stone-count change during a throttled burst still rebuilds immediately (capacity changes are never throttled)', async () => {
   const instance = makeMountedRenderer();
   const one = makeLayout([{ xMm: 40, yMm: 20, sizeMm: 2, color: 'gold' }]);
   const two = makeLayout([
@@ -371,58 +256,11 @@ await test('12. a stone-count change during a throttled burst still rebuilds imm
     { xMm: 60, yMm: 30, sizeMm: 2, color: 'gold' }
   ]);
 
-  instance.update(one, { ...MUG_OPTIONS, instancedStones: true });
-  instance.update(two, { ...MUG_OPTIONS, instancedStones: true }); // same tick, but capacity changed 1 -> 2
+  instance.update(one, MUG_OPTIONS);
+  instance.update(two, MUG_OPTIONS); // same tick, but capacity changed 1 -> 2
 
   assert.equal(instance._stoneMesh.count, 2, 'expected the capacity-changing call to rebuild immediately despite arriving inside the throttle window');
   assert.equal(instance._instancedRebuildTimer, null, 'expected no leftover pending rebuild from the immediate capacity-change path');
-});
-
-await test('13. switching instancedStones off while a trailing rebuild is pending cancels it (no stale mesh resurrection)', async () => {
-  const restoreDocument = installFakeDocument();
-  try {
-    const instance = makeMountedRenderer();
-    const first = makeLayout([{ xMm: 40, yMm: 20, sizeMm: 2, color: 'gold' }]);
-    const second = makeLayout([{ xMm: 90, yMm: 70, sizeMm: 2, color: 'gold' }]);
-
-    instance.update(first, { ...MUG_OPTIONS, instancedStones: true });
-    instance.update(second, { ...MUG_OPTIONS, instancedStones: true }); // throttled, schedules a trailing rebuild
-    assert.ok(instance._instancedRebuildTimer !== null);
-
-    instance.update(first, { ...MUG_OPTIONS, instancedStones: false }); // tears down before the trailing timer fires
-    assert.equal(instance._instancedRebuildTimer, null, 'expected the pending trailing rebuild to have been cancelled by teardown');
-    assert.equal(instance._stoneMesh, null);
-
-    await sleep(150); // if the old timer had survived, it would throw/misbehave here
-    assert.equal(instance._stoneMesh, null, 'expected no instanced mesh to have been resurrected by a stale timer');
-  } finally {
-    restoreDocument();
-  }
-});
-
-// --- RS-2013 §4 step 6c: default-flip regression safety ----------------------------------------
-
-await test('14. instancedStones omitted is identical to instancedStones:true (mirror of the old step-4 test 2, which checked the OLD default -- this is the NEW default)', async () => {
-  const a = makeMountedRenderer();
-  const b = makeMountedRenderer();
-  const layout = makeMugLayout();
-  a.update(layout, MUG_OPTIONS);
-  b.update(layout, { ...MUG_OPTIONS, instancedStones: true });
-
-  assert.ok(a._stoneMesh instanceof THREE.InstancedMesh, 'expected instancedStones omitted to build a real InstancedMesh');
-  assert.ok(b._stoneMesh instanceof THREE.InstancedMesh);
-  assert.equal(a._stoneMesh.count, b._stoneMesh.count);
-  assert.equal(a._bodyMesh.material.map, null, 'expected the baked texture to be skipped, same as explicit true');
-  assert.equal(b._bodyMesh.material.map, null);
-  assert.equal(a._ambientLight.intensity, b._ambientLight.intensity);
-  assert.equal(a._extraLights.length, b._extraLights.length);
-  assert.equal(a._group.children.length, b._group.children.length);
-
-  const matrixA = new THREE.Matrix4();
-  const matrixB = new THREE.Matrix4();
-  a._stoneMesh.getMatrixAt(0, matrixA);
-  b._stoneMesh.getMatrixAt(0, matrixB);
-  assert.deepEqual(matrixA.elements, matrixB.elements, 'expected identical instance placement between omitted and explicit true');
 });
 
 console.log('Preview3D instanced-stones tests passed.');

@@ -104,48 +104,4 @@ await test('6. getRenderCount() reflects the number of actual renderer.render() 
   assert.equal(instance.getRenderCount(), 1, 'three invalidations before the frame fired must still produce exactly one render');
 });
 
-// RS-2013 step 0 -- _applyTextureParams()'s wrap-mode fix: RepeatWrapping on wrapS for every
-// revolved-vessel body (whose texture always fully wraps 360 degrees around a seam, regardless of
-// the project's own wrap-mode setting -- see ObjectDimensions.js), ClampToEdgeWrapping for the
-// plate (a flat top surface with no circumferential seam at all). wrapT never wraps either way.
-function makeRendererForTextureParams(dimensionsKind) {
-  const instance = new Preview3DRenderer({ getBoundingClientRect: () => ({ width: 100, height: 100 }) });
-  instance._mounted = true;
-  instance._dimensions = { kind: dimensionsKind };
-  instance._THREE = {
-    RepeatWrapping: 'RepeatWrapping',
-    ClampToEdgeWrapping: 'ClampToEdgeWrapping',
-    LinearMipmapLinearFilter: 'LinearMipmapLinearFilter',
-    LinearFilter: 'LinearFilter',
-    SRGBColorSpace: 'SRGBColorSpace'
-  };
-  instance.renderer = { capabilities: { getMaxAnisotropy: () => 4 } };
-  return instance;
-}
-
-await test('7. _applyTextureParams() sets RepeatWrapping on wrapS for a revolved-vessel body (mug), whose texture always fully wraps 360 degrees around its own seam', () => {
-  const instance = makeRendererForTextureParams('mug');
-  const texture = {};
-  instance._applyTextureParams(texture);
-  assert.equal(texture.wrapS, 'RepeatWrapping');
-  assert.equal(texture.wrapT, 'ClampToEdgeWrapping');
-});
-
-await test('8. _applyTextureParams() sets RepeatWrapping on wrapS for tumbler/bottle bodies too, not just mug', () => {
-  for (const kind of ['tumbler', 'bottle']) {
-    const instance = makeRendererForTextureParams(kind);
-    const texture = {};
-    instance._applyTextureParams(texture);
-    assert.equal(texture.wrapS, 'RepeatWrapping', `expected RepeatWrapping for kind=${kind}`);
-  }
-});
-
-await test('9. _applyTextureParams() keeps ClampToEdgeWrapping on both axes for the plate, whose flat top surface has no circumferential seam', () => {
-  const instance = makeRendererForTextureParams('plate');
-  const texture = {};
-  instance._applyTextureParams(texture);
-  assert.equal(texture.wrapS, 'ClampToEdgeWrapping');
-  assert.equal(texture.wrapT, 'ClampToEdgeWrapping');
-});
-
 console.log('Preview3D render scheduling tests passed.');

@@ -8,8 +8,8 @@
  *
  * This module never reads or writes a Stone/StoneLayout beyond the fields listed above: it has no
  * knowledge of rendering, canvas, or Three.js, and produces plain numbers/booleans only. Consumed
- * by src/renderer/CrystalStoneRenderer.js (2D canvas) and src/preview3d/StoneLayoutTexture.js (3D
- * texture) so both previews derive the same per-stone look from the same seed.
+ * by src/renderer/CrystalStoneRenderer.js (2D canvas) and src/preview3d/Preview3DRenderer.js (3D
+ * instanced stones) so both previews derive the same per-stone look from the same seed.
  */
 
 // FNV-1a: a small, fast, well-distributed non-cryptographic string hash -- deterministic across

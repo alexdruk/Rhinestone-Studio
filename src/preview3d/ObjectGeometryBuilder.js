@@ -145,10 +145,10 @@ function buildPlateObjectMesh(group, dimensions, canvasWidthMm, canvasHeightMm) 
   const bodyMesh = new THREE.Mesh(topGeometry, topMaterial);
   group.add(bodyMesh);
 
-  // The underside/rim-edge/foot-ring never carries the design texture (a real manufactured plate
-  // has no rhinestones under the rim) -- a plain material colored to match the plate's own
-  // cupColor is set once here; Preview3DRenderer.js's _updateTexture() also refreshes this color
-  // on every update() call so it always tracks the live plate color, matching how the mug's handle
+  // The underside/rim-edge/foot-ring never carries stones (a real manufactured plate has no
+  // rhinestones under the rim) -- a plain material colored to match the plate's own cupColor is
+  // set once here; Preview3DRenderer.js's _updateInstancedStones() also refreshes this color on
+  // every update() call so it always tracks the live plate color, matching how the mug's handle
   // material already tracks cupColor.
   const underGeometry = new THREE.LatheGeometry(underPoints, LATHE_SEGMENTS, -Math.PI, Math.PI * 2);
   // Same reasoning as topGeometry above -- the foot ring's own radius reversal (outer wall down,

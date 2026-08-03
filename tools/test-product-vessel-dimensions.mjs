@@ -279,9 +279,9 @@ await test('22. app.js: switching #objectType to a vessel product reseeds projec
 });
 
 await test('23. app.js: drawCup() forwards vesselParams:project.vessel to the 3D preview alongside plateParams', () => {
-  // RS-2013 step 6c: drawCup() now also forwards instancedStones:__devInstancedStonesState.on
-  // after vesselParams -- additive only, plateParams/vesselParams forwarding itself is unchanged.
-  assert.match(appJs, /preview3D\.update\(layout,\{cupColor:project\.cupColor,objectTemplate:currentObjectTemplate\(\),canvasWidthMm:project\.canvas\.width,canvasHeightMm:project\.canvas\.height,plateParams:project\.plate,vesselParams:project\.vessel,instancedStones:__devInstancedStonesState\.on\}\)/);
+  // RS-2013 step 7: the instancedStones dev toggle forwarded here (step 6/6c) was removed once the
+  // instanced path became the sole renderer -- plateParams/vesselParams forwarding itself is unchanged.
+  assert.match(appJs, /preview3D\.update\(layout,\{cupColor:project\.cupColor,objectTemplate:currentObjectTemplate\(\),canvasWidthMm:project\.canvas\.width,canvasHeightMm:project\.canvas\.height,plateParams:project\.plate,vesselParams:project\.vessel\}\)/);
 });
 
 // --- 8. Out-of-scope guard: GeometryEngine/StoneLayout untouched ------------------------------------

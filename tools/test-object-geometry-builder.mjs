@@ -321,11 +321,10 @@ await test('16. S-112: the plate\'s printable top surface uses a direct planar (
   assert.ok(Math.abs(uv.getX(centerIndex) - 0.5) < 1e-5 && Math.abs(uv.getY(centerIndex) - 0.5) < 1e-5);
 });
 
-await test('17. S-112: the plate\'s underside/foot-ring mesh has no printable UV mapping (StoneLayoutTexture is never applied to it -- Preview3DRenderer.js gives it a plain color material instead)', () => {
+await test('17. S-112: the plate\'s underside/foot-ring mesh has no printable UV mapping (it is never given a design texture or map of any kind)', () => {
   const { underMesh } = buildObjectMesh(PLATE_TEMPLATE, 270, 270, PLATE_DEFAULTS);
-  // buildObjectMesh() never assigns .map itself (Preview3DRenderer._updateTexture() does that,
-  // live, only for bodyMesh) -- MeshStandardMaterial defaults .map to null, so this confirms the
-  // underside mesh is built with no texture reference of any kind at construction time.
+  // buildObjectMesh() never assigns .map itself for any mesh -- MeshStandardMaterial defaults .map
+  // to null, so this confirms the underside mesh is built with no texture reference at construction time.
   assert.equal(underMesh.material.map, null, 'the underside mesh must not carry a design texture');
 });
 

@@ -117,13 +117,10 @@ await test('2. src/export/ProductionSheetExporter.js\'s stoneCircleSvg import sp
   assert.match(productionSheetExporterSource, /import\s*\{\s*stoneCircleSvg\s*\}\s*from\s*['"]\.\/SvgExporter\.js['"]/);
 });
 
-await test('3. src/preview3d/ObjectDimensions.js and StoneLayoutTexture.js stay pure: no Three.js import, no Project/Layer coupling', async () => {
+await test('3. src/preview3d/ObjectDimensions.js stays pure: no Three.js import, no Project/Layer coupling', async () => {
   const objectDimensionsSource = readFileSync(path.join(repoRoot, 'src/preview3d/ObjectDimensions.js'), 'utf8');
-  const stoneLayoutTextureSource = readFileSync(path.join(repoRoot, 'src/preview3d/StoneLayoutTexture.js'), 'utf8');
-  for (const source of [objectDimensionsSource, stoneLayoutTextureSource]) {
-    assert.ok(!source.includes("from 'three'"), 'expected pure-math/texture modules to have no Three.js import');
-    assert.ok(!/project\.layers|layer\.type|Project\.js|Layer\.js/.test(source));
-  }
+  assert.ok(!objectDimensionsSource.includes("from 'three'"), 'expected the pure-math module to have no Three.js import');
+  assert.ok(!/project\.layers|layer\.type|Project\.js|Layer\.js/.test(objectDimensionsSource));
 });
 
 console.log('Module graph export tests passed.');

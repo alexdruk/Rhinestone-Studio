@@ -7,9 +7,9 @@ import { fileURLToPath } from 'node:url';
 // (see tools/test-crystal-color-catalog.mjs): app.js/index.html's organized color selector and
 // live swatch, that every layer type can carry a new-catalog color end to end through the real
 // permanent GeometryEngine, that Project JSON save/load and undo/redo don't lose a new-catalog
-// color, and that the 2D renderer / 3D texture / SVG exporter / Production Sheet exporter all
-// resolve a brand-new catalog color identically with zero changes to those files (structural
-// guard + a runtime consistency check). app.js/index.html are structurally inspected (not
+// color, and that the 2D renderer / SVG exporter / Production Sheet exporter all resolve a
+// brand-new catalog color identically with zero changes to those files (structural guard + a
+// runtime consistency check). app.js/index.html are structurally inspected (not
 // executed) since app.js is a browser entry point, matching the established convention in
 // tools/test-undo-redo-integration.mjs / tools/test-shape-geometry-integration.mjs.
 
@@ -19,9 +19,6 @@ const indexHtml = await readFile(path.join(repoRoot, 'index.html'), 'utf8');
 
 const { STONE_COLORS, getCrystalColor } = await import('../src/renderer/CrystalColors.js');
 const { drawStone, renderStoneLayout } = await import('../src/renderer/CanvasRenderer2D.js');
-const { drawStoneLayoutTexture } = await import('../src/preview3d/StoneLayoutTexture.js');
-const { adjustBrightness } = await import('../src/renderer/CrystalStoneRenderer.js');
-const { getCrystalAppearance } = await import('../src/renderer/CrystalAppearance.js');
 const { stoneCircleSvg, stoneLayoutToSvg } = await import('../src/export/SvgExporter.js');
 const { productionSheetToSvg } = await import('../src/export/ProductionSheetExporter.js');
 const { Stone } = await import('../src/geometry/Stone.js');
@@ -184,33 +181,7 @@ await test('10. the 2D canvas renderer resolves a new-catalog color to its exact
   assert.equal(stops.find((s) => s.offset === 1).color, expected.accent);
 });
 
-await test('11. the 3D texture (StoneLayoutTexture) resolves the same new-catalog color to the same (brightness-adjusted) values as the 2D crystal renderer', () => {
-  // PREVIEW-001: both the 2D canvas and the 3D texture now draw stones via the shared
-  // drawCrystalStone() (src/renderer/CrystalStoneRenderer.js), which applies a deterministic,
-  // bounded per-stone brightness multiplier (see CrystalAppearance.js) to the catalog's
-  // shine/fill/accent before building the body gradient -- so exact catalog hex is no longer
-  // expected verbatim, but the same stone must still resolve to the exact same adjusted color in
-  // both consumers. The body gradient is the *second* createRadialGradient call per stone (the
-  // first is the cast shadow, which never uses catalog color at all).
-  const stone = new Stone({ xMm: 5, yMm: 5, sizeMm: 2, color: NEW_COLOR_ID, layerId: 'layer-1', index: 0 });
-  const layout = makeLayout([{ xMm: 5, yMm: 5, sizeMm: 2, color: NEW_COLOR_ID }]);
-  const { ctx, calls } = createFakeCtx();
-  drawStoneLayoutTexture(ctx, layout, { widthMm: 20, heightMm: 20, backgroundColor: '#000000' });
-  const expected = STONE_COLORS[NEW_COLOR_ID];
-  const appearance = getCrystalAppearance(stone);
-  const bodyStops = calls.gradients[1];
-  assert.equal(bodyStops[0].color, adjustBrightness(expected.shine, appearance.brightness));
-  assert.equal(bodyStops.find((s) => s.offset === 0.5).color, adjustBrightness(expected.fill, appearance.brightness));
-  assert.equal(bodyStops.find((s) => s.offset === 1).color, adjustBrightness(expected.accent, appearance.brightness));
-
-  // Renderer consistency: the 2D canvas (renderStoneLayout's default 'layout' style) and the 3D
-  // texture must produce byte-identical body-gradient stops for the same stone.
-  const { ctx: ctx2D, calls: calls2D } = createFakeCtx();
-  renderStoneLayout(ctx2D, layout, { s: 1, ox: 0, oy: 0 });
-  assert.deepEqual(calls2D.gradients[1], bodyStops);
-});
-
-await test('12. SVG export emits the correct fill/stroke/data-color for a new-catalog color', () => {
+await test('11. SVG export emits the correct fill/stroke/data-color for a new-catalog color', () => {
   const layout = makeLayout([{ xMm: 5, yMm: 5, sizeMm: 2, color: NEW_COLOR_ID }]);
   const svg = stoneLayoutToSvg(layout, { widthMm: 20, heightMm: 20 });
   const expected = STONE_COLORS[NEW_COLOR_ID];
@@ -222,7 +193,7 @@ await test('12. SVG export emits the correct fill/stroke/data-color for a new-ca
   assert.ok(single.includes(`data-color="${NEW_COLOR_ID}"`));
 });
 
-await test('13. Production Sheet export lists the correct color name for a new-catalog color', () => {
+await test('12. Production Sheet export lists the correct color name for a new-catalog color', () => {
   const layout = makeLayout([{ xMm: 5, yMm: 5, sizeMm: 2, color: NEW_COLOR_ID }]);
   const svg = productionSheetToSvg(layout, {
     projectName: 'Test', objectType: 'Mug', productionWidthMm: 210, productionHeightMm: 90, gapMm: 0.3

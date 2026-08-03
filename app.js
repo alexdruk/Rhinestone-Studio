@@ -834,20 +834,6 @@ const preview3D=createPreview3D(cupCanvas);
 // number instead of eyeballing the canvas) -- read-only in practice (nothing in app.js itself reads
 // window.__preview3D back), never used to drive any application logic.
 window.__preview3D=preview3D;
-// RS-2013 step 6 (dev-only, temporary): lets Sasha toggle the instanced-stone rendering path on a
-// real running project without touching devtools internals repeatedly. Read once at startup only --
-// not a live/persisted setting, not user-facing, not part of `project`.
-// RS-2013 step 6c: Preview3DRenderer.js's own `instancedStones` default flipped true, so this
-// call site's own explicit pass-through (`instancedStones:__devInstancedStonesState.on`, never
-// omitted -- see drawCup() below) must flip its baseline to match, or the renderer-level default
-// flip would have zero real effect here. Baseline is now `true` (no URL param needed); pass
-// `?instancedStones=0` (or window.__setInstancedStones(false)) to force the old texture-baking
-// path for comparison -- the ability to see it is kept, only which side requires an argument has
-// flipped, per this milestone's scope.
-const __devInstancedStonesParam=new URLSearchParams(location.search).get('instancedStones');
-const __devInstancedStones=__devInstancedStonesParam!=='0';
-window.__setInstancedStones=v=>{__devInstancedStonesState.on=!!v;drawCup()};
-const __devInstancedStonesState={on:__devInstancedStones};
 // S-107 (requirement 2, "rotating the Object Preview must move the Front View Frame"): fires
 // whenever the operator free-orbits the Object Preview with the mouse/touch (Preview3DRenderer.js's
 // OrbitControls 'change' listener; never fires for our own slider/frame-drag-driven camera moves --
@@ -1305,16 +1291,16 @@ function centerSelectedTextOnObject(){
 // the printable object" is a PARTIAL-overlap test against the printable safe area, not a full-
 // disjoint one. Coordinate-space audit behind this: layer.x/y and getLayerBBox()'s bbox are both in
 // the flat production-canvas mm frame (the same frame stones are generated in); getSafeAreaRectMm()
-// is that same frame's inset rectangle. The 3D preview (src/preview3d/StoneLayoutTexture.js's
-// drawStoneLayoutTexture(), fed canvasWidthMm/canvasHeightMm from this exact project.canvas by
-// Preview3DRenderer.js's update()) rasterizes the *entire* flat canvas into one texture and
-// ObjectGeometryBuilder.js's applyAzimuthUv() maps that whole texture (U 0..1 = canvas
-// x 0..canvasWidthMm) around the object's true, wrap-mode-independent circumference (S-109) -- so
-// anything within the flat canvas's mm bounds is always on the object at the same mm position
-// regardless of wrap mode or camera rotation, and anything outside those mm bounds is clipped out of
-// the texture before it ever reaches the mesh. The flat canvas-mm safe-area comparison is therefore already the
-// correct coordinate space for "visible on the object" -- no 3D projection math is needed or was
-// touched. What was wrong was the *threshold*: the first version only warned once the bbox had zero
+// is that same frame's inset rectangle. The 3D preview (Preview3DRenderer.js's
+// _updateInstancedStones(), fed canvasWidthMm/canvasHeightMm from this exact project.canvas by
+// update()) places every stone's instance by mapping its flat canvas xMm/yMm through
+// ObjectDimensions.js's azimuthRadForCanvasXMm() (U 0..1-equivalent = canvas x 0..canvasWidthMm)
+// around the object's true, wrap-mode-independent circumference (S-109) -- so anything within the
+// flat canvas's mm bounds is always on the object at the same mm position regardless of wrap mode
+// or camera rotation, and stones outside those mm bounds are height-clamped rather than placed off
+// the body (see _updateInstancedStones()'s clampedYMm). The flat canvas-mm safe-area comparison is
+// therefore already the correct coordinate space for "visible on the object" -- no 3D projection
+// math is needed or was touched. What was wrong was the *threshold*: the first version only warned once the bbox had zero
 // overlap with the safe area at all. Real-mouse verification (raw CDP drag, see the S-104 spec's
 // audit) showed that is too lenient for text wider than the safe area (the default project's own
 // auto-fit text is 199.4mm wide vs. a 182mm-wide safe area) -- a drag that pushes most, but not
@@ -1786,7 +1772,7 @@ function handlesFor(b){return[{name:'nw',x:b.x,y:b.y},{name:'ne',x:b.x2,y:b.y},{
 // position/scale/orientation/proportions, subject only to normal cylindrical perspective. Wrap mode
 // still controls the Front View Frame overlay (drawFrontViewFrame(), frontViewFrameGeometry()) on
 // the 2D canvas, unchanged.
-function drawCup(){preview3D.update(layout,{cupColor:project.cupColor,objectTemplate:currentObjectTemplate(),canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height,plateParams:project.plate,vesselParams:project.vessel,instancedStones:__devInstancedStonesState.on});preview3D.syncView(rotation,zoom)}
+function drawCup(){preview3D.update(layout,{cupColor:project.cupColor,objectTemplate:currentObjectTemplate(),canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height,plateParams:project.plate,vesselParams:project.vessel});preview3D.syncView(rotation,zoom)}
 // S-001: keeps the Front/Left/Right/Back buttons' highlighted state synchronized with `rotation`
 // regardless of how it changed (view-button click, reset, slider, or manual cup-drag), since this
 // is called from updateAll() rather than duplicated at each rotation-changing call site.

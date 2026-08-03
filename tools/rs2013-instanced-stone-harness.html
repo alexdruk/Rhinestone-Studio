@@ -38,7 +38,6 @@
   import { CRYSTAL_COLORS, getCrystalColor } from '../src/renderer/CrystalColors.js';
   import { STONE_SIZES } from '../src/renderer/StoneSizes.js';
   import { getCrystalAppearance } from '../src/renderer/CrystalAppearance.js';
-  import { drawStoneLayoutTexture, textureSizeForMm } from '../src/preview3d/StoneLayoutTexture.js';
   import { buildObjectMesh, wallRadiusAt } from '../src/preview3d/ObjectGeometryBuilder.js';
   import { computeObjectDimensionsMm, azimuthRadForCanvasXMm } from '../src/preview3d/ObjectDimensions.js';
   import { getObjectTemplate, normalizePlateParams } from '../src/products/index.js';
@@ -276,11 +275,15 @@
 
   // ---------------------------------------------------------------------------------------------
   // Step 2 (RS-2013 §4 step 2): correct placement/orientation of real StoneLayout stones on a real
-  // object surface. Renders the SAME real StoneLayout two ways, side by side, for visual
-  // comparison: left = the existing texture-based path (StoneLayoutTexture.js's own
-  // drawStoneLayoutTexture(), applied exactly as Preview3DRenderer._updateTexture() does), right =
-  // the new instanced-stone placement math on an undecorated body. See TASK.md/TASK_RESULT.md for
-  // the full rationale, including the plateTopY design-doc discrepancy resolution.
+  // object surface, on an undecorated body. See TASK.md/TASK_RESULT.md for the full rationale,
+  // including the plateTopY design-doc discrepancy resolution.
+  //
+  // RS-2013 step 7: this originally rendered the same StoneLayout twice, side by side -- left the
+  // old texture-baked reference (StoneLayoutTexture.js), right this instanced placement math --
+  // to visually validate the new path against the old one. That validation is done (the instanced
+  // path is now the sole renderer; the texture path and StoneLayoutTexture.js are gone), so the
+  // reference render was removed. This remains a real standalone tool for inspecting placement/
+  // lighting/facet/material combinations against real product StoneLayouts outside the full app.
   // ---------------------------------------------------------------------------------------------
 
   // No plate example project exists in examples/ (audited: every examples/*.rhs fixture is
@@ -361,7 +364,6 @@
     const keep = `lighting=${lighting}&facet=${facetMode}&material=${materialMode}`;
     infoEl.innerHTML = `RS-2013 &sect;4 step 2/3/3b &mdash; real <code>StoneLayout</code> placement for <b>${productId}</b>, ` +
       `<b>${lighting}</b> lighting, <b>${facetMode}</b> facet, <b>${materialMode}</b> material. ` +
-      'Left: existing texture-based reference render (StoneLayoutTexture.js). Right: new instanced-stone placement math. ' +
       'Drag to orbit. Switch product: ' +
       ['plate', 'mug', 'tumbler', 'bottle'].map((p) => `<a href="?product=${p}&${keep}">${p}</a>`).join(' &middot; ') +
       `. <a href="?product=${productId}&lighting=${otherLighting}&facet=${facetMode}&material=${materialMode}">Switch to ${otherLighting} lighting</a>` +
@@ -379,27 +381,7 @@
     const dimensions = computeObjectDimensionsMm(template, canvasWidthMm, canvasHeightMm, plateParams, null);
     const cupColor = rhsProject.cupColor || '#ffffff';
 
-    // --- Reference render (left): the real, unmodified StoneLayoutTexture.js path ---------------
-    const refBuilt = buildObjectMesh(template, canvasWidthMm, canvasHeightMm, plateParams, null);
-    const refCanvas = document.createElement('canvas');
-    const refCtx = refCanvas.getContext('2d');
-    const { widthPx, heightPx } = textureSizeForMm(canvasWidthMm, canvasHeightMm);
-    refCanvas.width = widthPx;
-    refCanvas.height = heightPx;
-    drawStoneLayoutTexture(refCtx, layout, { widthMm: canvasWidthMm, heightMm: canvasHeightMm, backgroundColor: cupColor });
-    const refTexture = new THREE.CanvasTexture(refCanvas);
-    // Mirrors Preview3DRenderer._applyTextureParams()'s wrap-mode fix (RS-2013 step 0) exactly.
-    refTexture.wrapS = dimensions.kind !== 'plate' ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
-    refTexture.wrapT = THREE.ClampToEdgeWrapping;
-    refTexture.colorSpace = THREE.SRGBColorSpace;
-    refTexture.needsUpdate = true;
-    refBuilt.bodyMesh.material.map = refTexture;
-    refBuilt.bodyMesh.material.color.set(0xffffff);
-    refBuilt.bodyMesh.material.needsUpdate = true;
-    if (refBuilt.handleMesh) refBuilt.handleMesh.material.color.set(cupColor);
-    if (refBuilt.underMesh) refBuilt.underMesh.material.color.set(cupColor);
-
-    // --- New instanced-stone render (right): undecorated body + real placement math -------------
+    // Undecorated body + real instanced-stone placement math.
     const instBuilt = buildObjectMesh(template, canvasWidthMm, canvasHeightMm, plateParams, null);
     instBuilt.bodyMesh.material.map = null;
     instBuilt.bodyMesh.material.color.set(cupColor);
@@ -413,7 +395,7 @@
 
     let plateTopY = 0;
     if (dimensions.kind === 'plate') {
-      plateTopY = findRimPlaneY(refBuilt.bodyMesh.geometry, dimensions);
+      plateTopY = findRimPlaneY(instBuilt.bodyMesh.geometry, dimensions);
     }
 
     const zAxis = new THREE.Vector3(0, 0, 1);
@@ -449,17 +431,14 @@
       } else {
         // §3.3 2b/2c: azimuth via the one shared, already-unit-tested function (never a fresh
         // atan2 -- see that function's own header for the two real bugs this sidesteps); height
-        // clamped to [0, bodyHeightMm] matching the texture's own V-clamp-via-ClampToEdgeWrapping
-        // behavior for off-body content (e.g. a bottle's shoulder overflow).
+        // clamped to [0, bodyHeightMm] so off-body content (e.g. a bottle's shoulder overflow)
+        // never places a stone outside the printable body.
         //
         // Y-axis finding (verified visually -- an early build placed "Emma" upside down on the
         // mug): stone.yMm is Y-DOWN, the same production-canvas convention CanvasRenderer2D.js
-        // uses (design top = yMm=0). World Y here is Y-UP (mesh base = 0, mesh top = bodyHeightMm).
-        // applyBodyHeightUv() sets V = position.getY()/bodyHeightMm with no flip of its own; the
-        // texture path only reads correctly because THREE.CanvasTexture's default flipY=true
-        // silently re-inverts V when sampling the source <canvas> (row 0 = canvas top). Going
-        // directly from stone.yMm to a world Y position (no texture, no flipY) has to bake that
-        // same inversion in manually, or the design renders upside down.
+        // uses (design top = yMm=0). World Y here is Y-UP (mesh base = 0, mesh top = bodyHeightMm),
+        // so going from stone.yMm to a world Y position has to bake that inversion in manually, or
+        // the design renders upside down.
         const azimuth = azimuthRadForCanvasXMm(stone.xMm, canvasWidthMm);
         const clampedYMm = Math.max(0, Math.min(dimensions.bodyHeightMm, stone.yMm));
         const y = dimensions.bodyHeightMm - clampedYMm;
@@ -493,18 +472,12 @@
     if (instancedMesh.instanceColor) instancedMesh.instanceColor.needsUpdate = true;
     instBuilt.group.add(instancedMesh);
 
-    // --- Side-by-side layout -----------------------------------------------------------------
-    const spanMm = dimensions.kind === 'plate' ? dimensions.outerRadiusMm * 2 : Math.max(dimensions.bodyRadiusMm, dimensions.topRadiusMm || 0) * 2;
-    const gapMm = spanMm * 0.6;
-    refBuilt.group.position.x = -(spanMm / 2 + gapMm / 2);
-    instBuilt.group.position.x = spanMm / 2 + gapMm / 2;
-    scene.add(refBuilt.group);
     scene.add(instBuilt.group);
 
+    const spanMm = dimensions.kind === 'plate' ? dimensions.outerRadiusMm * 2 : Math.max(dimensions.bodyRadiusMm, dimensions.topRadiusMm || 0) * 2;
     const totalHeightMm = dimensions.totalHeightMm || dimensions.bodyHeightMm || spanMm;
     const centerY = totalHeightMm / 2;
-    const halfWidthMm = spanMm + gapMm / 2 + spanMm / 2;
-    const framingRadiusMm = Math.sqrt(halfWidthMm ** 2 + (totalHeightMm / 2) ** 2) * 1.15;
+    const framingRadiusMm = Math.sqrt((spanMm / 2) ** 2 + (totalHeightMm / 2) ** 2) * 1.15;
     frameCamera(new THREE.Vector3(0, centerY, 0), framingRadiusMm);
 
     window.__rs2013HarnessReady = true;
@@ -517,7 +490,7 @@
   // exact same buildFacetGeometry/buildFacetMaterial/applyLightRig this step's other candidates use
   // -- only the placement (one stone, at the origin) and camera framing (radius derived from that
   // one stone's own sizeMm, not the whole object) differ. No change to step 2/3/3b's real
-  // placement/orientation math for the side-by-side view above.
+  // placement/orientation math for the render above.
   // ---------------------------------------------------------------------------------------------
   async function runSingleStoneCloseup(productId) {
     const rhsProject = await loadRhsProject(productId);

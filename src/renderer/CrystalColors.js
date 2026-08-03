@@ -19,8 +19,8 @@
  *   highlight   optional lighter hex accent — aliases `shine` below
  *   shadow      optional darker hex accent — aliases `accent` below
  *   fill/stroke/shine/accent  the four render-channel fields every existing consumer
- *               (CanvasRenderer2D.js, CupRenderer.js via drawStone, StoneLayoutTexture.js,
- *               SvgExporter.js, ProductionSheetExporter.js) already reads by these exact names.
+ *               (CanvasRenderer2D.js, CupRenderer.js via drawStone, SvgExporter.js,
+ *               ProductionSheetExporter.js) already reads by these exact names.
  *
  * `previewColor`/`highlight`/`shadow` are provided for the color-selector UI and for any future
  * consumer that wants the plainer names; `fill`/`stroke`/`shine`/`accent` remain the load-bearing

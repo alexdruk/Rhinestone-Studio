@@ -18,7 +18,6 @@ const { Stone } = await import('../src/geometry/Stone.js');
 const { StoneLayout } = await import('../src/geometry/StoneLayout.js');
 
 const canvasRenderer2DSource = await readFile(path.join(repoRoot, 'src/renderer/CanvasRenderer2D.js'), 'utf8');
-const stoneLayoutTextureSource = await readFile(path.join(repoRoot, 'src/preview3d/StoneLayoutTexture.js'), 'utf8');
 const svgExporterSource = await readFile(path.join(repoRoot, 'src/export/SvgExporter.js'), 'utf8');
 const productionSheetExporterSource = await readFile(path.join(repoRoot, 'src/export/ProductionSheetExporter.js'), 'utf8');
 
@@ -226,11 +225,9 @@ await test('11. adjustBrightness quantizes nearby factors into the same cache bu
   assert.equal(after, before + 1, 'factors within the same 0.02 bucket should share one cache entry');
 });
 
-await test('12. renderer wiring: CanvasRenderer2D.js and StoneLayoutTexture.js both import the shared crystal modules', () => {
+await test('12. renderer wiring: CanvasRenderer2D.js imports the shared crystal modules', () => {
   assert.match(canvasRenderer2DSource, /import\s*\{\s*drawCrystalStone\s*\}\s*from\s*['"]\.\/CrystalStoneRenderer\.js['"]/);
   assert.match(canvasRenderer2DSource, /import\s*\{\s*getCrystalAppearance\s*\}\s*from\s*['"]\.\/CrystalAppearance\.js['"]/);
-  assert.match(stoneLayoutTextureSource, /import\s*\{\s*drawCrystalStone\s*\}\s*from\s*['"]\.\.\/renderer\/CrystalStoneRenderer\.js['"]/);
-  assert.match(stoneLayoutTextureSource, /import\s*\{\s*getCrystalAppearance\s*\}\s*from\s*['"]\.\.\/renderer\/CrystalAppearance\.js['"]/);
 });
 
 await test('13. separation of views: exporters never import the crystal-preview modules', () => {

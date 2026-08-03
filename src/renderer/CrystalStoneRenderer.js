@@ -10,8 +10,7 @@
  * pixel position (matching drawStone()'s existing contract in CanvasRenderer2D.js) and issues only
  * absolute-coordinate ctx calls (arc/ellipse/moveTo/lineTo/gradients), never ctx.translate/rotate.
  * That keeps it testable with the same dependency-free fake CanvasRenderingContext2D convention
- * every other renderer test in tools/ already uses, and lets src/preview3d/StoneLayoutTexture.js
- * reuse this exact function for the 3D preview's baked texture instead of duplicating the look.
+ * every other renderer test in tools/ already uses.
  *
  * Rendering-only: never reads or writes anything beyond a stone's xMm/yMm/sizeMm/color and the
  * bounded appearance object from CrystalAppearance.js. Never touches StoneLayout/Stone/geometry.

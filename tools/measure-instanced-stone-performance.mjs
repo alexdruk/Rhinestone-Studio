@@ -10,8 +10,9 @@
  *
  * Measures the two costs RS-2013's design doc (§1.3/§3.2) and step 3's TASK_RESULT.md flagged as
  * real-but-unmeasured for the instanced-stone rendering path (`Preview3DRenderer.js`'s
- * `instancedStones: true` option), against synthetic hex-packed StoneLayout fixtures at three
- * stone counts spanning §1.3's realistic-to-theoretical-ceiling range (~1,000 / ~5,000 / ~15,000):
+ * `_updateInstancedStones()`, the sole rendering path since step 7), against synthetic hex-packed
+ * StoneLayout fixtures at three stone counts spanning §1.3's realistic-to-theoretical-ceiling range
+ * (~1,000 / ~5,000 / ~15,000):
  *
  *   1. Initial InstancedMesh build cost (first `update()` call at a new stone count: allocates the
  *      InstancedMesh buffer at that capacity and runs the full per-stone matrix/color loop once).
@@ -127,8 +128,7 @@ const MUG_OPTIONS = {
   cupColor: '#1f3556',
   objectTemplate: getObjectTemplate('mug'),
   canvasWidthMm: 210,
-  canvasHeightMm: 90,
-  instancedStones: true
+  canvasHeightMm: 90
 };
 
 const PLATE_PARAMS = normalizePlateParams({ outerDiameterMm: 300 });
@@ -137,8 +137,7 @@ const PLATE_OPTIONS = {
   objectTemplate: getObjectTemplate('plate'),
   canvasWidthMm: PLATE_PARAMS.outerDiameterMm,
   canvasHeightMm: PLATE_PARAMS.outerDiameterMm,
-  plateParams: PLATE_PARAMS,
-  instancedStones: true
+  plateParams: PLATE_PARAMS
 };
 
 // --- Timing helpers ------------------------------------------------------------------------------

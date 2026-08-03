@@ -149,7 +149,7 @@ await test('15. validateProject() stays permissive for the new fillMode field, m
 await test('16. no renderer or exporter branches on StoneLayout.sourceMode (every consumer only ever reads stone positions/size/color)', async () => {
   const rendererFiles = [
     'src/renderer/CanvasRenderer2D.js', 'src/renderer/CupRenderer.js',
-    'src/preview3d/StoneLayoutTexture.js', 'src/export/SvgExporter.js', 'src/export/ProductionSheetExporter.js'
+    'src/export/SvgExporter.js', 'src/export/ProductionSheetExporter.js'
   ];
   for (const relativePath of rendererFiles) {
     const source = await readFile(path.join(repoRoot, relativePath), 'utf8');

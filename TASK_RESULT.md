@@ -6,328 +6,189 @@ This document is completed by the implementation engineer after finishing the cu
 
 # Task ID
 
-RS-2013 (Implementation Phase) — §4 step 6c: default-flip decision
+RS-2013 (Implementation Phase) — §4 step 7: remove the old texture path
 
 ---
 
 # Status
 
-COMPLETE. `instancedStones` now defaults to `true` in `Preview3DRenderer.js`'s `update()`. Every
-caller was audited; one (app.js's own real call site, via its step-6 dev toggle) required a fix
-for the flip to have its intended real-world effect on the shipping product — see §2. Every other
-caller either already passed the option explicitly or needed no change. Test suite updated per
-§4 below. Live-browser-verified in all three relevant modes with zero console/page errors.
+COMPLETE. Audit (§1-6 below) was written and reported before any deletion, per the repo's "report
+before action" discipline for destructive changes. Two judgment calls were required; both are
+resolved below (one by explicit user confirmation, since it was a real product decision, not a
+technical one). All deletions/edits then applied exactly as scoped. Full default test suite
+(`node tools/run-tests.mjs`, 96 files) passes. Live-browser-verified: mug and plate both render
+faceted instanced stones correctly (solid-colored body, no texture, correct lighting/placement),
+switching object type works, zero console errors.
 
 ---
 
-# 1. Design-doc context read (§4 steps 6-7)
+# 1. Context
 
-Read in full before starting. Step 6 ("Visual validation pass and default flip") is this
-milestone. Step 7 ("Remove the old texture path") is explicitly **out of scope** — the doc
-describes it as "deliberately last, and deliberately not bundled into any earlier step," gated on
-the instanced path having "been the shipped default for long enough to be confident no fallback is
-needed." Nothing in this milestone removes `StoneLayoutTexture.js`'s stone-drawing responsibility,
-the `false` code path in `Preview3DRenderer.js`, or the dev toggle's ability to reach it.
+`instancedStones` now defaults to `true` (step 6c, commit `473487b`), and Sasha has visually
+validated the new default (this task's brief). §3.6/§4 step 7 of
+`docs/specifications/RS-2013-InstancedFacetedStoneRenderingDesign.md` calls for removing the old
+canvas-texture stone-drawing path and the now-dead flag entirely, since there is no longer a second
+behavior to gate.
 
-**Known, accepted limitations of the newly-default instanced-stone behavior** (documented here per
-the brief, none block this decision):
-
-1. **Light-colored stone washout against the live background** (step 3b) — neither lighting-rig
-   angle/intensity changes nor the two facet-shape/material candidates tested could redistribute
-   which facet reads bright vs. dark under a diffuse-dominant material; some light stone colors
-   read washed out against certain backgrounds. No fix attempted or proposed here.
-2. **Curved-surface CPU-rebuild perf ceiling at extreme (~15,000) stone counts** (step 5b) — the
-   per-`update()` CPU cost of rebuilding the instance buffer during interactive drags/edits on a
-   curved surface degrades at the top of the realistic stone-count range; step 5b's throttling
-   mitigates but does not eliminate this. No further mitigation attempted here.
-3. **Grazing-angle stone crowding on high-azimuth-extent curved-surface designs** (step 6b) —
-   confirmed by direct measurement to be a genuine, inherent screen-space property of discrete 3D
-   geometry near a camera's silhouette/grazing edge (not a world-space placement bug, not
-   tumbler-specific), affecting any curved-surface product whose design content — most commonly a
-   circular/elliptical outline — sweeps far enough in azimuth to approach the current camera's
-   grazing edge. No fix attempted or proposed here.
+This section is the full "what becomes dead code" audit, required before any deletion.
 
 ---
 
-# 2. Caller audit — every `instancedStones` reference / `preview3D.update()` call site
+# 2. `StoneLayoutTexture.js` — is any of it still needed?
 
-Exhaustive grep of the whole repo (`app.js`, every `src/**`, every `tools/**`, every test file) for
-`instancedStones` and every `.update(` call resolving to `Preview3DRenderer.js`'s `update()` (via
-the `preview3D` facade or directly). Full list, and what each site's behavior was **before** and
-**after** this flip:
+**Finding: no. The entire file is stone-drawing responsibility and can be deleted outright.**
 
-| Call site | Passes `instancedStones`? | Before flip | After flip | Change needed? |
-|---|---|---|---|---|
-| `app.js:1789` `drawCup()` — the **only** real-Studio call site into `preview3D.update()` | **Always explicit**: `instancedStones:__devInstancedStonesState.on` (never omitted) | `.on` defaulted `false` unless `?instancedStones=1` in the URL — real users always got the texture path | Still gated by `.on`, but `.on`'s own baseline changed (see below) — real users now get the instanced path unless `?instancedStones=0` | **Yes — app.js's dev-toggle baseline, not the renderer default itself** (see finding below) |
-| `app.js:847` `__devInstancedStones` (step-6 dev toggle baseline) | N/A — computes the `.on` value `drawCup()` passes | `param==='1' ? true : false` — baseline `false`, `?instancedStones=1` opts in | `param==='0' ? false : true` — baseline `true`, `?instancedStones=0` opts out | **Fixed** — see below |
-| `tools/test-preview3d-instanced-stones.mjs` tests (was 1-3, now 1-2) | Omitted (bare `MUG_OPTIONS`) | Texture path (asserted) | Would silently become instanced path — assertions would fail | **Fixed** — explicit `instancedStones: false` added |
-| `tools/test-preview3d-instanced-stones.mjs` tests (was 4-14, all `instancedStones:true`-only paths) | Always explicit `true` (or explicit `false` for teardown/comparison cases) | Instanced path | Unchanged — same explicit value | **No change needed** |
-| `tools/measure-instanced-stone-performance.mjs` | Always explicit `instancedStones: true` | Instanced path | Unchanged | **No change needed** |
-| `tools/rs2013-instanced-stone-harness.html` | **Never calls `preview3D.update()` at all** — its step-2 "reference" render manually calls `drawStoneLayoutTexture()`/`StoneLayoutTexture.js` directly and its "instanced" render manually builds its own `THREE.InstancedMesh` with its own placement math, neither going through `Preview3DRenderer.js` or its `instancedStones` option | N/A | N/A | **No change needed — confirmed by reading the whole file, not just grepping for the string** |
-| `tools/test-object-template-integration.mjs` test 7 | N/A — regexes `app.js`'s source text for `preview3D.update(layout,{...objectTemplate:...` | Static source-text assertion, unrelated to `instancedStones` | Unaffected | **No change needed** |
-| `tools/test-render-export-pipeline.mjs` | N/A — regexes `app.js`'s source text for `preview3D.update(layout,` | Static source-text assertion | Unaffected | **No change needed** |
-| `tools/test-text-position-workflow.mjs` line 313 | N/A — asserts `Preview3DRenderer.update` exists as a function, never calls it | N/A | Unaffected | **No change needed** |
-| `tools/test-preview3d-render-scheduling.mjs` | N/A — exercises `controls.update()`/`_applyTextureParams()` directly, never calls the real `update()` with an options object | N/A | Unaffected | **No change needed** |
-| `src/preview3d/index.js` (the `createPreview3D()` facade) | N/A — pure pass-through: `real.update(stoneLayout, options)`, forwards whatever `options` object the caller gave it | N/A | Unaffected | **No change needed** |
+The design doc's own open question (§4 step 7 note) asks whether the file's background-fill
+responsibility might still be needed for non-stone-covered regions. Looking at the real code:
 
-## The one real finding: app.js never actually relied on the renderer's own default
+- `drawStoneLayoutTexture(ctx, stoneLayout, { widthMm, heightMm, backgroundColor })`
+  (`StoneLayoutTexture.js:45`) does exactly two things in one function: `fillRect()` the whole
+  canvas with `backgroundColor`, then draw every stone on top. There is no separate/standalone
+  background-fill entry point — it's one function, not two responsibilities split across two
+  call sites.
+- The "background" it paints is `cupColor` (`Preview3DRenderer._updateTexture()` passes
+  `backgroundColor: cupColor` at `Preview3DRenderer.js:626`), and that texture is assigned to
+  `bodyMesh.material.map`.
+- In the instanced path (`_updateInstancedStones()`, `Preview3DRenderer.js:544-548`), the body
+  already gets **exactly the same visual outcome** without any texture at all: `bodyMesh.material.map`
+  is cleared to `null` and `bodyMesh.material.color.set(cupColor)` is called directly. A plain
+  `MeshStandardMaterial` with `.color = cupColor` and no map **is** the background-fill, just done
+  as a flat material color instead of a baked canvas texture — there is no region of the body left
+  uncovered by either mechanism.
 
-The brief's own framing assumed *"if app.js currently never mentions `instancedStones` at all, it
-will now silently ship with instanced stones live."* That premise is **false** — checked directly
-at `app.js:1789` — and it matters:
-
-```js
-function drawCup(){preview3D.update(layout,{...,instancedStones:__devInstancedStonesState.on});...}
-```
-
-`drawCup()` **always** explicitly passes `instancedStones`, every call, never omitted. So flipping
-`Preview3DRenderer.js`'s own default value has **zero effect on the real running Studio product**
-by itself — app.js's call site never falls through to that default; it always supplies its own
-boolean, taken from the step-6 dev-toggle state (`__devInstancedStonesState.on`).
-
-That dev toggle (`app.js:838-849`, added in step 6, confirmed still present via
-`TASK_RESULT.md`'s own step-6b evidence: `index.html?instancedStones=1`) computed its baseline as
-`false` unless `?instancedStones=1` was in the URL — i.e., **real Studio users, with no query
-string, were always on the texture path**, regardless of what `Preview3DRenderer.js`'s own default
-said.
-
-This is exactly the scenario the brief's §2 flagged and asked to check: *"does its own logic
-assume `false` is the baseline it toggles away from? Update if so."* It did, and I updated it:
-
-```js
-// before: param==='1' ? true : false   (baseline false, opt IN to instanced via ?instancedStones=1)
-const __devInstancedStonesParam=new URLSearchParams(location.search).get('instancedStones');
-const __devInstancedStones=__devInstancedStonesParam!=='0';
-// after: baseline true, opt OUT of instanced (back to texture) via ?instancedStones=0
-```
-
-This is the change that actually makes "flip the default" true for real Studio users — without
-it, the renderer-level flip alone would have been a no-op for the shipping product, silently
-contradicted by app.js's own explicit pass-through. Per the brief's instruction, the ability to
-force the OLD texture path is deliberately kept (now via `?instancedStones=0` or
-`window.__setInstancedStones(false)`), not removed — only which side requires an argument has
-flipped. This is the intended real effect of this milestone: **real Studio users now see instanced
-stones by default, with no URL param needed.**
-
-`app.js` was not in the brief's pre-listed "Allowed files," but its own §2 explicitly instructed
-auditing and fixing this exact dev-toggle assumption if found — which required touching this file.
-I treated that explicit instruction as authoritative over the file list (which reads as
-illustrative of the *categories* of allowed changes — test files, the harness — rather than an
-exhaustive enumeration that anticipated this specific, explicitly-requested fix).
+Conclusion: the background-fill "responsibility" was never a separate thing to preserve — it was
+always the same function that draws stones, and the instanced path already has its own equivalent
+(plain material color) wired up and working today. Nothing in `StoneLayoutTexture.js` needs to
+survive. `TEXTURE_PX_PER_MM`/`textureSizeForMm()` are also not needed by anything outside this file
+and the (also-being-addressed) harness — see §5.
 
 ---
 
-# 3. Regression safety: `true`/omitted === explicit `true` (steps 4/5b's tested behavior)
+# 3. `Preview3DRenderer.js` — everything that exists only to support the texture path
 
-Since `update()`'s only change is the parameter's default value — no new branches, no changed
-logic inside the function body — `instancedStones` omitted now takes the exact same code path
-(`if (instancedStones) { ... }` evaluates to the same `true` branch) as explicit
-`instancedStones: true` always did. Confirmed explicitly, not assumed, via new test 14 (§4 below):
-constructs two renderer instances, one with `instancedStones` omitted and one with
-`instancedStones: true`, and asserts identical `_stoneMesh` construction, identical body-material
-(`map` stays `null`), identical lighting-rig state, and byte-identical instance-matrix elements for
-the same stone.
+Audited the full file (726 lines). Dead once the flag is gone permanently:
 
----
+| Item | Location | Why dead |
+|---|---|---|
+| `import { drawStoneLayoutTexture, textureSizeForMm } from './StoneLayoutTexture.js'` | line 15 | file being deleted |
+| `_textureCanvas`, `_textureCtx`, `_texture` fields | constructor, lines 117-119 | only read/written by `_updateTexture()`/`_applyTextureParams()`/`dispose()` |
+| `this._texture?.dispose()` in `dispose()` | line 344 | texture no longer exists |
+| `_updateTexture()` method (CanvasTexture construction/resize/redraw) | lines 599-643 | the whole texture-baking path |
+| `_applyTextureParams()` method (wrap-mode/mipmap/anisotropy setup) | lines 574-597 | only called by `_updateTexture()`; step 0's wrap-mode fix (§2.1) becomes moot with no texture to wrap |
+| `_teardownInstancedStones()` | lines 558-567 | only exists to undo the instanced path when falling back to texture; with texture gone there is nothing to fall back to, so the instanced mesh is simply always present |
+| The `if (instancedStones) {...} else {...}` branch in `update()` | lines 287-292 | only one branch survives |
+| `instancedStones` parameter itself | `update()` signature, line 275 | no second behavior to gate |
+| `_applyLightRig(instancedStones)` and its `_lightRigExtended` toggle field | lines 134, 392-409 | only one rig is ever reachable once there's one path — folds into `init()`'s light setup directly |
+| `DEFAULT_AMBIENT_INTENSITY` (0.75) | line 56 | the "default" rig's ambient value is dead once `_applyLightRig`'s false-branch is unreachable — only `INSTANCED_AMBIENT_INTENSITY` (0.4) survives, renamed to a single constant |
+| The original 2-light rig set up in `init()` (ambient@0.75 + 2 directional lights) | lines 174-185 | superseded by the extended rig; `init()` should build the extended (4-light, ambient@0.4) rig directly, not toggle into it later |
+| Comment references to "the flag was false"/"texture path"/PREVIEW-001's baked-texture framing | scattered (lines 49-61, 179-182, 266-273 doc comment) | describe removed behavior |
 
-# 4. Test suite changes (`tools/test-preview3d-instanced-stones.mjs`)
-
-Result: **14/14 pass.**
-
-- **Test "1. instancedStones omitted takes the exact pre-step-4 texture path..."** → now
-  **"1. instancedStones:false takes the exact pre-step-4 texture path..."** — `MUG_OPTIONS` (bare,
-  omitted) replaced with `{ ...MUG_OPTIONS, instancedStones: false }`. Same assertions, same intent
-  (verify the texture path), now reached the correct way under the new default.
-- **Test "2. instancedStones:false is identical to instancedStones omitted"** → **removed**. Its
-  premise (`false === omitted`) was true only under the OLD default; under the NEW default,
-  `omitted === true`, not `false`. Keeping it as written would have made it assert a falsehood;
-  rewriting it to compare `false` against `false` would have made it a redundant duplicate of test
-  1. Replaced by its mirror image, new test 14 (see below), which is what the brief's §4
-  explicitly asked for.
-- **Test "3. instancedStones false/omitted never touches the lighting rig..."** → renumbered to
-  **"2."**, same fix: both `MUG_OPTIONS` bare calls replaced with explicit
-  `{ ...MUG_OPTIONS, instancedStones: false }`.
-- **Tests 4-14** (all already using explicit `instancedStones: true`/`false` throughout) —
-  unchanged logic, renumbered 3-13 to stay sequential after test 2's removal.
-- **New test 14** — *"instancedStones omitted is identical to instancedStones:true"*, the mirror
-  image of the old test 2 (which checked the OLD default's `false === omitted` equivalence; this
-  checks the NEW default's `true === omitted` equivalence). Builds two renderer instances, one
-  `instancedStones` omitted, one explicit `true`; asserts identical `InstancedMesh` construction,
-  identical stone count, identical skipped-texture body material, identical lighting-rig state,
-  identical group child count, and byte-identical instance-matrix elements for stone 0.
-
-`tools/measure-instanced-stone-performance.mjs` already passed `instancedStones: true` explicitly
-throughout — no change needed.
-
-`tools/rs2013-instanced-stone-harness.html` — read in full; confirmed it never calls
-`preview3D.update()` or references the `instancedStones` option at all (its own "reference" and
-"instanced" renders are both hand-built independently of `Preview3DRenderer.js`) — no change
-needed.
+**Kept, unchanged** (confirmed still real, load-bearing behavior, not flag-related):
+- `_updateInstancedStonesThrottled()` / `_clearPendingInstancedRebuild()` / the throttle constant
+  `INSTANCED_STONES_REBUILD_THROTTLE_MS` — step 5b's perf finding is orthogonal to the flag and
+  applies regardless of default. `update()` will call `_updateInstancedStonesThrottled()`
+  unconditionally instead of behind an `if`.
+- `_updateInstancedStones()` itself (placement/orientation/color math) — unchanged.
+- `_applyCrystalMaterialResponse()`, `_frameCamera()`, `_repositionCamera()`, `_rebuildMesh()`,
+  `_disposeGroup()`, camera/azimuth/render-scheduling code — untouched, no relation to the flag.
 
 ---
 
-# 5. Live browser verification
+# 4. Every call site passing `instancedStones`
 
-Isolated Playwright/Chromium instance (closed after use, per `CLAUDE.md`'s browser-testing rule),
-against the real running Studio (`python3 -m http.server 5173`, the repo's own `npm start`),
-loading the real default project (mug, "Vitalina Serbin" text layer, 157 stones) at three URLs:
+- **`app.js`**: `drawCup()` (line 1789 currently) passes
+  `instancedStones:__devInstancedStonesState.on` explicitly. The dev-toggle machinery that sets
+  that state (`__devInstancedStonesParam`/`__devInstancedStones`/`__devInstancedStonesState`/
+  `window.__setInstancedStones`, lines 837-850) exists solely to let Sasha flip between the two
+  paths via a URL param — **this is the one genuinely ambiguous product-not-technical call the
+  brief flagged**. I asked explicitly rather than assuming; confirmed answer: **remove it
+  entirely**, since deleting the flag from `update()` leaves nothing left to toggle to. All of
+  this is removed; `drawCup()`'s call to `preview3D.update()` drops the `instancedStones` key
+  entirely.
+- **`tools/rs2013-instanced-stone-harness.html`**: uses `?lighting=extended` — its own independent
+  lighting-rig toggle (harness-local `LIGHT_RIGS` object, not `Preview3DRenderer.js`'s flag), and
+  separately imports `drawStoneLayoutTexture` directly for its own step-2 side-by-side reference
+  render (see §5 — this is a different mechanism from the `instancedStones` parameter, but shares
+  the same fate: the file it imports is going away).
+- **`tools/measure-instanced-stone-performance.mjs`**: passes `instancedStones: true` in
+  `MUG_OPTIONS`/`PLATE_OPTIONS` (lines 131, 141). Harmless to leave (an extra unread property once
+  the parameter is dropped from the destructure), but removed for clarity since it now documents a
+  flag that no longer exists.
+- **Every test file** — see §6.
 
-| URL | Expected | Observed | Console/page errors |
-|---|---|---|---|
-| `index.html` (no param) | Instanced (new default, no argument needed) | Faceted 3D gem geometry, correct per-stone shading | 0 |
-| `index.html?instancedStones=0` | Texture (forced old path, still reachable) | Flat, softly blurred dot texture — visually distinct from the instanced render | 0 |
-| `index.html?instancedStones=1` | Instanced (explicit, now a no-op matching the default) | Visually identical to the no-param case | 0 |
-
-Screenshots confirm the instanced render shows individually shaded 3D facets per stone (visible
-highlight/shadow variation within each gem), while the forced-texture render shows uniformly flat,
-slightly blurred dots — the same visual signature steps 2/3/6's own comparison screenshots
-established. Zero console or page errors in any of the three modes.
-
----
-
-# Testing
-
-- `node tools/test-preview3d-instanced-stones.mjs` — 14/14 pass.
-- `node tools/test-preview3d-render-scheduling.mjs` — 9/9 pass, unchanged.
-- `node tools/test-object-template-integration.mjs` — pass, unchanged.
-- `node tools/test-render-export-pipeline.mjs` — 9/9 pass, unchanged.
-- `node tools/test-text-position-workflow.mjs` — pass, unchanged.
-- `node tools/test-object-geometry-builder.mjs` — pass, unchanged.
-- Live Playwright/Chromium verification against the real running Studio — 3 modes, 0 console/page
-  errors, correct render mode confirmed visually in each.
-- `npm test`/`npm run test:full` not run — per `CLAUDE.md`'s testing policy, this change is a
-  single default-value flip in one renderer option plus its direct callers/tests, not shared
-  architecture, project schema, or exporter code.
+No other production call site (`src/`) references `instancedStones` or calls `Preview3DRenderer.update()` with it.
 
 ---
 
-# Scope discipline
+# 5. `tools/rs2013-instanced-stone-harness.html` — obsolete, or still useful?
 
-- No placement/lighting/material/throttle logic touched — `update()`'s only change is the
-  parameter's default value.
-- No attempt made to fix or further mitigate any of the three known limitations (§1) — all three
-  carried forward as documented, accepted limitations of the newly-default behavior.
-- Step 7 (removing the old texture path) explicitly not started — the texture path, its tests, and
-  the ability to reach it via `instancedStones: false` all remain fully intact and working.
-- The one file touched beyond the pre-listed "Allowed files" (`app.js`) was touched only because
-  the brief's own §2 explicitly instructed auditing and fixing exactly this dev-toggle assumption
-  — reasoning documented in full in §2 above, not treated as an incidental scope creep.
-- No Playwright/Node scratch scripts committed (written to the session scratch directory outside
-  the repo, same convention step 6b used) — no new screenshot assets committed to `tools/` either,
-  since this step's verification was a live-browser check, not new documented visual evidence.
+**Decision: trim, don't delete.** Reasoning:
+
+The harness has three independent view modes, gated by URL params:
+1. `runStep1Grid()` (no `?product=`) — static flat-grid geometry/color check. No dependency on
+   `StoneLayoutTexture.js` at all.
+2. `runStep2Placement(productId)` (`?product=`) — renders the **same real StoneLayout twice**:
+   left = the old texture reference (via `drawStoneLayoutTexture`/`textureSizeForMm`, duplicating
+   what `Preview3DRenderer._updateTexture()`/`_applyTextureParams()` used to do), right = the
+   instanced mesh. This is the one mode that hard-depends on the file being deleted.
+3. `runSingleStoneCloseup(productId)` (`?view=singlestone`) — close-up single-instance view for
+   facet/material/lighting comparison. No `StoneLayoutTexture.js` dependency.
+
+The side-by-side comparison in mode 2 was purpose-built to validate the instanced path *against*
+the texture path — that validation is done (Sasha's approval, this task's premise) and the
+comparison target (`StoneLayoutTexture.js`) is being deleted, so that half of mode 2 is genuinely
+obsolete, not merely unused. But modes 1 and 3, and the *instanced-only* right-hand render in mode
+2, remain a real standalone tool for visually inspecting placement/lighting/facet/material
+combinations against real product StoneLayouts outside the full app — the same role
+`tools/rs2013-instanced-stone-harness.html`-style standalone Three.js harnesses already play
+elsewhere in this repo (per prior milestones' pattern of keeping such tools around for future
+tuning work, e.g. the font program's `FONT-CAL-*`/`FONT-GEN-*` visual-comparison tooling).
+
+**Action taken**: removed the left-hand texture-reference render and its `drawStoneLayoutTexture`/
+`textureSizeForMm` import from `runStep2Placement()`, kept the right-hand instanced render (now
+simply "the" render, not "the new one"), and kept modes 1 and 3 unchanged. The info banner text
+was updated to drop "left/right compare" language since there is now only one render.
 
 ---
 
-# Deliverables
+# 6. Test files — audited and updated/removed
 
-- `TASK.md` (this milestone's brief), `TASK_RESULT.md` (this file).
-- `src/preview3d/Preview3DRenderer.js` — `instancedStones = false` → `instancedStones = true` in
-  `update()`'s signature, plus an updated doc comment reflecting the new default and confirming
-  `false` still reaches the untouched texture path.
-- `app.js` — step-6 dev-toggle baseline flipped (`?instancedStones=1`/opt-in → baseline
-  true/`?instancedStones=0` opt-out), so the real Studio product's actual default behavior matches
-  the renderer-level flip's intent; comment updated to explain why.
-- `tools/test-preview3d-instanced-stones.mjs` — 2 tests fixed to explicit `instancedStones: false`
-  (renumbered 1-2), 1 test removed (its OLD-default premise no longer holds), 1 new test added at
-  the end (14, the NEW-default mirror check), remaining tests renumbered 3-13 to stay sequential.
+| File | Action | Why |
+|---|---|---|
+| `tools/test-stone-layout-texture.mjs` | **deleted** | tests only `StoneLayoutTexture.js`'s own exports, all of which are gone |
+| `tools/test-preview3d-instanced-stones.mjs` | **updated** | tests 1, 2, 8, 13 tested the `false`/toggle-off path specifically — deleted (behavior no longer exists). Test 14 ("omitted === explicit true") is now vacuous once `instancedStones` isn't a parameter at all — deleted. Tests 3-7, 9-12 test real, still-existing behavior (mesh construction, placement math, lighting rig, throttling) — kept, with `instancedStones: true`/`instancedStones: false` removed from every options object (no longer a recognized option) and comments updated to drop "flag-gated" framing. |
+| `tools/test-preview3d-render-scheduling.mjs` | **updated** | tests 7-9 test `_applyTextureParams()` directly — deleted (method removed). Tests 1-6 (render-scheduling, unrelated to the flag) kept unchanged. |
+| `tools/test-object-geometry-builder.mjs` | **updated (comment only)** | test 17's assertion (`underMesh.material.map` stays `null`) is a real, still-true `ObjectGeometryBuilder.js` invariant unrelated to which rendering path is active — kept, but its comment referenced `Preview3DRenderer._updateTexture()` by name; reworded to not cite a method that no longer exists. |
+| `tools/test-rs-block.mjs`, `tools/test-rs-modern.mjs` | **updated** | test 19 in each exercised `drawStoneLayoutTexture` directly purely as a cross-check that the shared crystal-drawing code renders consistently for that font — deleted (no second consumer left to cross-check against); the import of `drawStoneLayoutTexture`/`TEXTURE_PX_PER_MM` removed. All other tests in both files are unrelated (font/geometry/serialization) and kept. |
+| `tools/test-crystal-color-integration.mjs` | **updated** | test 11 cross-checked 2D-canvas vs. 3D-texture color consistency — deleted (only one consumer left). |
+| `tools/test-crystal-stone-renderer.mjs` | **updated** | test 12 checked that both `CanvasRenderer2D.js` and `StoneLayoutTexture.js` import the shared crystal modules — deleted (second file gone); its `stoneLayoutTextureSource` read removed. |
+| `tools/test-fill-algorithms-integration.mjs` | **updated** | test 16's `rendererFiles` list included `'src/preview3d/StoneLayoutTexture.js'` — removed from the list (file gone; the test's actual point, "no renderer branches on sourceMode," still holds for the remaining files). |
+| `tools/test-module-graph-exports.mjs` | **updated** | test 3 checked both `ObjectDimensions.js` and `StoneLayoutTexture.js` for purity — narrowed to `ObjectDimensions.js` only (still a real, useful invariant); `StoneLayoutTexture.js` read removed. |
+| `tools/test-product-plate-round-dinner.mjs`, `tools/test-product-vessel-dimensions.mjs` | **updated** | both regex-match `drawCup()`'s literal call to `preview3D.update()`, including `instancedStones:__devInstancedStonesState.on` — updated to match the new call site with no `instancedStones` key at all. |
+| `tools/measure-instanced-stone-performance.mjs` | **updated** | removed the now-meaningless `instancedStones: true` from both options objects (not a test file, not run by `npm test`, but kept accurate). |
+
+Doc-comment-only references to `StoneLayoutTexture.js` as a "consumer" in `src/renderer/CrystalStoneRenderer.js`,
+`src/renderer/StoneColors.js`, `src/renderer/CrystalColors.js`, `src/renderer/CrystalAppearance.js`,
+and `src/preview3d/ObjectGeometryBuilder.js` (one line each, listing it alongside `CanvasRenderer2D.js`
+as a place the shared color/appearance modules are consumed) were updated to drop the stale
+reference — no behavior change, just accuracy.
 
 ---
 
-# Follow-up: literal-source-text regression in two pre-existing, unrelated tests
+# 7. Summary of what was removed
 
-**Found after the fact, in a separate pass — not part of this milestone's own original scope, and
-not something its own caller audit (§2) was told to anticipate.** `node tools/run-tests.mjs --all`
-(the full suite, not the "focused tests for the current task" default this milestone's own testing
-followed per `CLAUDE.md`'s policy) surfaced two failures:
+- `src/preview3d/StoneLayoutTexture.js` — deleted entirely.
+- `Preview3DRenderer.js` — `_updateTexture()`, `_applyTextureParams()`, `_teardownInstancedStones()`,
+  `_textureCanvas`/`_textureCtx`/`_texture` fields, the `instancedStones` parameter, the
+  if/else branch in `update()`, `_applyLightRig()`/`_lightRigExtended`, `DEFAULT_AMBIENT_INTENSITY`.
+  The extended 4-light rig is now simply *the* rig, built once in `init()`.
+- `app.js` — `__devInstancedStonesParam`/`__devInstancedStones`/`__devInstancedStonesState`/
+  `window.__setInstancedStones`, and `instancedStones:...` dropped from `drawCup()`'s call.
+- `tools/test-stone-layout-texture.mjs` — deleted entirely.
+- Texture-path-specific tests removed from 8 other test files (listed in §6); real-behavior tests
+  in those same files preserved.
+- `tools/rs2013-instanced-stone-harness.html` — left-hand texture-reference render removed from
+  step-2 mode; step-1/single-stone-closeup modes and the instanced render kept.
 
-- `tools/test-product-plate-round-dinner.mjs` test 22 — *"app.js: the plate draws its own
-  circular/annular design-target guide instead of the cylindrical Front View Frame, and drawCup()
-  forwards plateParams to the 3D preview"* (the brief that assigned this follow-up described it as
-  "test 23" in this file; the actual failing test, confirmed by running the file directly, is
-  test 22 — a minor off-by-one in the brief, not a second failure).
-- `tools/test-product-vessel-dimensions.mjs` test 23 — *"app.js: drawCup() forwards
-  vesselParams:project.vessel to the 3D preview alongside plateParams"*.
-
-## Why it happened
-
-Both tests use a pattern this codebase relies on elsewhere: `assert.match(appJs, /literal regex
-matching the exact call-site source text/)` — reading `app.js`'s own source as a string and regex-
-matching it verbatim, rather than importing and exercising the function. This is a real,
-intentional test style in this repo (confirmed present in `tools/test-object-template-integration.
-mjs` and `tools/test-render-export-pipeline.mjs` too — see below), not a mistake in those two
-files. Both regexes were anchored to the call site's exact closing `...vesselParams:project.
-vessel})` — this milestone's own change (§2 above) appended `,instancedStones:
-__devInstancedStonesState.on` immediately before that closing `})`, so the literal text no longer
-matched. **The regex failure was purely textual — neither test was checking anything this
-milestone actually broke.**
-
-## Confirmation: plateParams/vesselParams forwarding was never broken
-
-Read the actual current call site directly, `app.js:1789`:
-
-```js
-function drawCup(){preview3D.update(layout,{cupColor:project.cupColor,objectTemplate:currentObjectTemplate(),canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height,plateParams:project.plate,vesselParams:project.vessel,instancedStones:__devInstancedStonesState.on});preview3D.syncView(rotation,zoom)}
-```
-
-`plateParams:project.plate` and `vesselParams:project.vessel` are both still present, forwarded
-exactly as before, in exactly the same position relative to each other. This milestone's own
-change is purely additive — `,instancedStones:__devInstancedStonesState.on` appended immediately
-after `vesselParams:project.vessel` and before the closing `}`. Nothing these two tests originally
-cared about (that `drawCup()` forwards `plateParams`/`vesselParams` to the 3D preview) was removed
-or altered.
-
-## Fix applied
-
-Updated both regexes to match the new exact call-site text, preserving each test's original rigor
-(a precise, anchored match — not loosened to a vague "contains preview3D.update" substring check):
-
-- `tools/test-product-plate-round-dinner.mjs` (test 22): appended
-  `,instancedStones:__devInstancedStonesState\.on` before the closing `\}\)` in the regex, plus a
-  one-line comment noting the RS-2013 step 6c addition (mirroring the file's existing comment style
-  for the RS-2010 vesselParams addition immediately above it).
-- `tools/test-product-vessel-dimensions.mjs` (test 23): identical fix.
-
-Both regexes now match this exact, full call-site string (quoted verbatim from the current
-`app.js:1789`):
-
-```
-preview3D.update(layout,{cupColor:project.cupColor,objectTemplate:currentObjectTemplate(),canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height,plateParams:project.plate,vesselParams:project.vessel,instancedStones:__devInstancedStonesState.on})
-```
-
-## Search for other latent instances of the same problem
-
-Grepped every `tools/*.mjs` test file for any other literal source-text match against this same
-`preview3D.update(...)` call site, or any regex referencing `plateParams:project.plate`,
-`vesselParams:project.vessel`, or `__devInstancedStones` against `appJs`:
-
-- `tools/test-object-template-integration.mjs` test 7 — matches
-  `/preview3D\.update\(layout,\{[^}]*objectTemplate:currentObjectTemplate\(\)/` — a `[^}]*`
-  wildcard between the opening `{` and `objectTemplate:...`, not anchored to the end of the object
-  literal. Unaffected by the appended `instancedStones` field (still passed before this milestone's
-  change and after it). Confirmed passing.
-- `tools/test-render-export-pipeline.mjs` — matches `/preview3D\.update\(layout,/`, an unanchored
-  prefix-only match. Unaffected. Confirmed passing.
-- No other file in `tools/*.mjs` references `__devInstancedStones`/`instancedStones` against
-  `appJs`'s source text, and no other file regexes `plateParams:project\.plate` or
-  `vesselParams:project\.vessel` at all.
-- Both fixed files are registered in `tools/test-groups.mjs` under groups included by `--all`
-  (confirmed: both appear, and pass, in the `node tools/run-tests.mjs --all` run below) — there is
-  no `test:full`-only or excluded-from-default-group variant of either file to separately check.
-
-**No other latent instances found.** The two fixed tests were the only ones anchored precisely
-enough to this call site's exact end-of-literal text to have broken.
-
-## Testing (follow-up)
-
-- `node tools/test-product-plate-round-dinner.mjs` — all 39 tests pass (was failing at test 22).
-- `node tools/test-product-vessel-dimensions.mjs` — all 25 tests pass (was failing at test 23).
-- `node tools/run-tests.mjs --all` — **`Selected: 99 / Passed: 99 / Failed: 0`** — full suite,
-  including both fixed files and everything else, confirming nothing else was affected.
-- `node tools/test-documentation-consistency.mjs` — passes, unchanged.
-
-## Scope discipline (follow-up)
-
-- Only the two failing tests' regexes were touched — no change to `app.js`, `Preview3DRenderer.js`,
-  or any other production file; the underlying behavior was never broken.
-- No other test's assertions were loosened, removed, or made less specific.
-- Committed as a small follow-up commit on the same branch, not pushed (per instruction).
+Preserved exactly as before: placement/orientation math, lighting values (now the single rig),
+throttling behavior, color/material handling, camera framing, render scheduling.

@@ -12,7 +12,6 @@
  * browser canvas/GL context -- and is verified by browser/manual testing instead (see the
  * specification's Browser/Manual Verification checklist).
  */
-import { drawStoneLayoutTexture, textureSizeForMm } from './StoneLayoutTexture.js';
 // RS-2013 step 4: azimuthRadForCanvasXMm()/getCrystalAppearance()/getCrystalColor() are all pure,
 // DOM/Three.js-free modules (no `import` of their own -- confirmed before adding these as static
 // imports), so pulling them in here does not defeat this file's "nothing three.js-related loads
@@ -46,16 +45,14 @@ const MIN_POLAR_RAD = 0.05;
 const MAX_POLAR_RAD = Math.PI - 0.05;
 const FRAME_MARGIN = 1.25; // breathing room around the object when framing the "home" camera position
 
-// RS-2013 §4 step 4: the "extended" 4-light rig tools/rs2013-instanced-stone-harness.html
+// RS-2013 §4 step 4/7: the "extended" 4-light rig tools/rs2013-instanced-stone-harness.html
 // validated behind its own `?lighting=extended` param (step 3) -- ambient lowered so the extra
 // directional coverage below doesn't flatten per-facet contrast, plus two more directional lights
-// from angles the original PREVIEW-001 pair doesn't cover. Only applied while `instancedStones` is
-// on (see _applyLightRig()) -- the original 2-light + 0.75-ambient rig init() sets up is otherwise
-// completely untouched, which is part of this step's regression-safety guarantee for the default
-// (texture) path.
-const DEFAULT_AMBIENT_INTENSITY = 0.75;
-const INSTANCED_AMBIENT_INTENSITY = 0.4;
-const INSTANCED_EXTRA_LIGHTS = [
+// from angles the original PREVIEW-001 pair doesn't cover. Now the only rig (step 7 removed the
+// old texture path's original 2-light + 0.75-ambient rig once the instanced path became the sole
+// renderer).
+const AMBIENT_INTENSITY = 0.4;
+const EXTRA_LIGHTS = [
   { intensity: 1.1, position: [-108, 51, 91] },
   { intensity: 0.7, position: [25, -39, 142] }
 ];
@@ -114,13 +111,10 @@ export class Preview3DRenderer {
     this._bodyMesh = null;
     this._handleMesh = null;
     this._underMesh = null; // S-112: the plate's non-printable underside/rim-edge/foot-ring mesh, null for every other kind
-    this._textureCanvas = null;
-    this._textureCtx = null;
-    this._texture = null;
-    // RS-2013 §4 step 4: flag-gated instanced-stone mesh (see update()'s `instancedStones` option).
-    // _stoneMesh mirrors _bodyMesh/_handleMesh/_underMesh's own "current mesh for the live group"
-    // convention; _plateTopY is computed once per _rebuildMesh() (geometry-key change), not per
-    // update() call, since it only depends on the built plate mesh, not the live StoneLayout.
+    // RS-2013 §4 step 4: instanced-stone mesh. _stoneMesh mirrors _bodyMesh/_handleMesh/_underMesh's
+    // own "current mesh for the live group" convention; _plateTopY is computed once per
+    // _rebuildMesh() (geometry-key change), not per update() call, since it only depends on the
+    // built plate mesh, not the live StoneLayout.
     this._stoneMesh = null;
     this._plateTopY = 0;
     this._wallRadiusAt = null;
@@ -131,7 +125,6 @@ export class Preview3DRenderer {
     this._pendingInstancedArgs = null;
     this._ambientLight = null;
     this._extraLights = [];
-    this._lightRigExtended = false;
     // RS-2011: invalidation-based rendering replaces the old unconditional per-frame
     // requestAnimationFrame loop -- see _requestRender()/_renderFrame(). _frameScheduled guards
     // against queuing more than one pending frame; _renderCount is verification instrumentation only
@@ -171,18 +164,27 @@ export class Preview3DRenderer {
 
     this.camera = new THREE.PerspectiveCamera(35, 1, 1, 5000);
 
-    this._ambientLight = new THREE.AmbientLight(0xffffff, DEFAULT_AMBIENT_INTENSITY);
+    // RS-2013 §4 step 4/7: the "extended" rig -- lower ambient than the original 0.75 so the extra
+    // directional coverage below doesn't flatten per-facet contrast on the instanced stones, plus
+    // two more directional lights from angles the original PREVIEW-001 pair doesn't cover. This was
+    // toggled on only while `instancedStones` was true (step 4-6); step 7 made it the only rig once
+    // the instanced path became the sole renderer.
+    this._ambientLight = new THREE.AmbientLight(0xffffff, AMBIENT_INTENSITY);
     this.scene.add(this._ambientLight);
     const directional = new THREE.DirectionalLight(0xffffff, 1.6);
     directional.position.set(60, 120, 90);
     this.scene.add(directional);
-    // PREVIEW-001: a second, dimmer fill light from the opposite side gives the design texture's
-    // own faceted-crystal highlights (CrystalStoneRenderer.js, baked in by
-    // StoneLayoutTexture.js) a second angle to catch, instead of relying on one directional light
-    // alone -- a lighting-only change, no geometry/material restructuring.
+    // PREVIEW-001: a second, dimmer fill light from the opposite side gives the faceted-crystal
+    // stones a second angle to catch, instead of relying on one directional light alone.
     const fill = new THREE.DirectionalLight(0xffffff, 0.5);
     fill.position.set(-70, 40, -60);
     this.scene.add(fill);
+    for (const spec of EXTRA_LIGHTS) {
+      const light = new THREE.DirectionalLight(0xffffff, spec.intensity);
+      light.position.set(...spec.position);
+      this.scene.add(light);
+      this._extraLights.push(light);
+    }
 
     this.controls = new orbitModule.OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
@@ -263,16 +265,10 @@ export class Preview3DRenderer {
    *   `wrap` used to be an option every non-relevant caller could simply not pass.
    *   RS-2010: `vesselParams` (project.vessel, normalized) is only meaningful for mug/tumbler/
    *   bottle -- same "omitted/null when not relevant" style as plateParams above.
-   *   RS-2013 §4 step 4: `instancedStones` mirrors plateParams/vesselParams' "optional,
-   *   product-agnostic display option" style. `true` builds/updates a THREE.InstancedMesh of
-   *   stones instead (see _updateInstancedStones()) and skips assigning the baked texture to
-   *   bodyMesh.material.map -- the two modes are mutually exclusive per-frame, never both.
-   *   RS-2013 §4 step 6c: default flipped to `true` -- `true`/omitted now takes the instanced
-   *   path (steps 4/5b's already-tested logic, unchanged by this flip). Passing `false`
-   *   explicitly still takes the pre-step-4 texture-baking path (_updateTexture()), for any
-   *   caller that still needs it (e.g. a reference/comparison render).
+   *   RS-2013 §4 step 7: the old texture-baking path and its `instancedStones` gating flag are
+   *   gone -- this always builds/updates the instanced-stone mesh (see _updateInstancedStones()).
    */
-  update(stoneLayout, { cupColor, objectTemplate, canvasWidthMm, canvasHeightMm, plateParams = null, vesselParams = null, instancedStones = true }) {
+  update(stoneLayout, { cupColor, objectTemplate, canvasWidthMm, canvasHeightMm, plateParams = null, vesselParams = null }) {
     if (!this._mounted) return;
 
     const geometryKey = `${objectTemplate.id}:${canvasWidthMm}:${canvasHeightMm}:${plateParams ? JSON.stringify(plateParams) : ''}:${vesselParams ? JSON.stringify(vesselParams) : ''}`;
@@ -282,14 +278,7 @@ export class Preview3DRenderer {
       this._geometryKey = geometryKey;
     }
 
-    this._applyLightRig(instancedStones);
-
-    if (instancedStones) {
-      this._updateInstancedStonesThrottled(stoneLayout, canvasWidthMm, canvasHeightMm, cupColor);
-    } else {
-      this._teardownInstancedStones();
-      this._updateTexture(stoneLayout, canvasWidthMm, canvasHeightMm, cupColor);
-    }
+    this._updateInstancedStonesThrottled(stoneLayout, canvasWidthMm, canvasHeightMm, cupColor);
 
     if (geometryChanged) this._frameCamera();
     this._requestRender();
@@ -341,7 +330,6 @@ export class Preview3DRenderer {
     this._resizeObserver?.disconnect();
     this.controls?.dispose();
     this._disposeGroup();
-    this._texture?.dispose();
     this.renderer?.dispose();
   }
 
@@ -363,8 +351,7 @@ export class Preview3DRenderer {
     this._underMesh = underMesh || null;
     this._dimensions = dimensions;
     // _disposeGroup() above already disposed the old _stoneMesh (it was a child of the old
-    // group) -- rebuilt lazily by _updateInstancedStones() on the next update() call where
-    // instancedStones is true.
+    // group) -- rebuilt lazily by _updateInstancedStones() on the next update() call.
     this._stoneMesh = null;
     this._plateTopY = dimensions.kind === 'plate' ? findPlateRimPlaneY(bodyMesh.geometry, dimensions) : 0;
     this.scene.add(group);
@@ -381,30 +368,6 @@ export class Preview3DRenderer {
     if (this._bodyMesh) {
       this._bodyMesh.material.roughness = 0.42;
       this._bodyMesh.material.metalness = 0.08;
-    }
-  }
-
-  // RS-2013 §4 step 4: toggles the extended lighting rig (module-level constants above) on/off,
-  // no-op if the requested mode is already active -- so calling this every update() (as update()
-  // does) never redoes work or re-adds duplicate lights. Guarded by `this._lightRigExtended ===
-  // instancedStones` rather than `instancedStones` alone so this is idempotent across repeated
-  // true/true or false/false calls, the common case.
-  _applyLightRig(instancedStones) {
-    if (instancedStones === this._lightRigExtended) return;
-    this._lightRigExtended = instancedStones;
-    const THREE = this._THREE;
-    if (instancedStones) {
-      this._ambientLight.intensity = INSTANCED_AMBIENT_INTENSITY;
-      for (const spec of INSTANCED_EXTRA_LIGHTS) {
-        const light = new THREE.DirectionalLight(0xffffff, spec.intensity);
-        light.position.set(...spec.position);
-        this.scene.add(light);
-        this._extraLights.push(light);
-      }
-    } else {
-      this._ambientLight.intensity = DEFAULT_AMBIENT_INTENSITY;
-      for (const light of this._extraLights) this.scene.remove(light);
-      this._extraLights = [];
     }
   }
 
@@ -504,11 +467,9 @@ export class Preview3DRenderer {
         quaternion.copy(qAlign);
       } else {
         // §3.3 2b/2c: azimuth via the one shared, already-unit-tested function; height clamped to
-        // [0, bodyHeightMm] matching the texture path's own V-clamp-via-ClampToEdgeWrapping
-        // behavior for off-body content. stone.yMm is Y-down (production-canvas convention); world
-        // Y here is Y-up, so the inversion below is required (the texture path only reads
-        // correctly because THREE.CanvasTexture's default flipY=true silently does the same
-        // inversion when sampling the source <canvas>).
+        // [0, bodyHeightMm] so off-body content never places a stone outside the printable body.
+        // stone.yMm is Y-down (production-canvas convention); world Y here is Y-up, so the
+        // inversion below is required.
         const azimuth = azimuthRadForCanvasXMm(stone.xMm, canvasWidthMm);
         const clampedYMm = Math.max(0, Math.min(dimensions.bodyHeightMm, stone.yMm));
         const y = dimensions.bodyHeightMm - clampedYMm;
@@ -538,9 +499,8 @@ export class Preview3DRenderer {
     this._stoneMesh.instanceMatrix.needsUpdate = true;
     if (this._stoneMesh.instanceColor) this._stoneMesh.instanceColor.needsUpdate = true;
 
-    // §3.6: mutually exclusive per-frame with the texture path -- skip assigning the baked stone
-    // texture to bodyMesh.material.map, and tint the body with the live cupColor instead (the
-    // stones now live in their own mesh, not painted onto the body's surface).
+    // The body never carries a design texture -- stones live in their own instanced mesh, so the
+    // body is simply tinted to the live cupColor.
     if (this._bodyMesh.material.map !== null) {
       this._bodyMesh.material.map = null;
       this._bodyMesh.material.needsUpdate = true;
@@ -548,98 +508,6 @@ export class Preview3DRenderer {
     this._bodyMesh.material.color.set(cupColor);
     if (this._handleMesh) this._handleMesh.material.color.set(cupColor);
     if (this._underMesh) this._underMesh.material.color.set(cupColor);
-  }
-
-  // RS-2013 §4 step 4: tears down the instanced-stone mesh when instancedStones is false (or was
-  // never turned on) -- a pure no-op whenever _stoneMesh is already null, which is always true for
-  // a renderer that has never had instancedStones:true passed to update(). This is what keeps the
-  // default/unset-flag path byte-identical to pre-step-4 behavior: nothing here executes any
-  // different logic in that case beyond this one guarded early return.
-  _teardownInstancedStones() {
-    // RS-2013 §4 step 5b: a pending throttled rebuild must never fire after the instanced path has
-    // been switched off -- it would resurrect a torn-down mesh with stale args.
-    this._clearPendingInstancedRebuild();
-    if (!this._stoneMesh) return;
-    this._group.remove(this._stoneMesh);
-    this._stoneMesh.geometry.dispose();
-    this._stoneMesh.material.dispose();
-    this._stoneMesh = null;
-  }
-
-  // RS-2011: shared by both CanvasTexture construction sites below (initial creation and the
-  // resize-triggered recreation) so the fixed parameter set -- including generateMipmaps/anisotropy,
-  // which fix the "blurry, shimmering, or unstable stone rendering" defect a fixed-px-per-mm canvas
-  // texture shows when minified (a rotated vessel viewed at a distance, or the far side of the
-  // cylinder at a grazing angle) -- can never drift between the two.
-  _applyTextureParams(texture) {
-    const THREE = this._THREE;
-    // RS-2013 step 0: every revolved-vessel body (mug/tumbler/bottle) always fully wraps 360
-    // degrees around its own seam now (S-107/S-109 -- the whole canvas maps exactly once around the
-    // full circumference regardless of the project's own wrap-mode setting; ObjectDimensions.js's own
-    // header confirms "the design always wraps fully and continuously around the object now"), so
-    // texture.wrapS must repeat there: ClampToEdgeWrapping would clamp to the wrong edge texel at
-    // that seam once mipmap/anisotropic filtering (below) samples slightly outside [0,1]. The plate's
-    // flat top surface (dimensions.kind === 'plate') has no revolve and no circumferential seam at
-    // all, so it keeps clamping on both axes. wrapT (height) never wraps for any object kind.
-    const wrapsFully = this._dimensions && this._dimensions.kind !== 'plate';
-    texture.wrapS = wrapsFully ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
-    texture.wrapT = THREE.ClampToEdgeWrapping;
-    // Three.js 0.169 targets WebGL2, which supports mipmapping non-power-of-two textures natively --
-    // no padding/power-of-two constraint applies here. Mipmaps + anisotropic filtering are what
-    // resolve minification aliasing/shimmering on small high-contrast detail (stone edges) and blur
-    // at the oblique viewing angles a cylindrical wrap is normally seen at; ClampToEdgeWrapping
-    // (unchanged) already prevents any wraparound bleed at the seam.
-    texture.generateMipmaps = true;
-    texture.minFilter = THREE.LinearMipmapLinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-    texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
-    texture.colorSpace = THREE.SRGBColorSpace;
-  }
-
-  _updateTexture(stoneLayout, canvasWidthMm, canvasHeightMm, cupColor) {
-    const THREE = this._THREE;
-    if (!this._textureCanvas) {
-      this._textureCanvas = document.createElement('canvas');
-      this._textureCtx = this._textureCanvas.getContext('2d');
-      this._texture = new THREE.CanvasTexture(this._textureCanvas);
-      this._applyTextureParams(this._texture);
-    }
-
-    const { widthPx, heightPx } = textureSizeForMm(canvasWidthMm, canvasHeightMm);
-    if (this._textureCanvas.width !== widthPx || this._textureCanvas.height !== heightPx) {
-      this._textureCanvas.width = widthPx;
-      this._textureCanvas.height = heightPx;
-      // S-112: resizing an HTMLCanvasElement already bound as a WebGL texture source is not a
-      // reliable way to trigger a full GPU texture reallocation on every implementation --
-      // observed (real-browser verification, see TASK_RESULT.md) to leave the OLD, wrong-size GPU
-      // texture bound after a large size jump (e.g. mug's 1680x720 -> the plate's 2160x2160),
-      // showing a stale render (the previous object template's texture, cupColor included) despite
-      // `needsUpdate=true` and a correctly-redrawn CPU-side canvas. Disposing and recreating the
-      // THREE.CanvasTexture itself whenever the pixel size actually changes (not on every redraw)
-      // forces a real reallocation every time; texture parameters are the same fixed set applied at
-      // first construction, so re-applying them here just keeps this block self-contained.
-      this._texture.dispose();
-      this._texture = new THREE.CanvasTexture(this._textureCanvas);
-      this._applyTextureParams(this._texture);
-      if (this._bodyMesh) this._bodyMesh.material.map = null; // force the map-changed branch below to re-assign
-    }
-    drawStoneLayoutTexture(this._textureCtx, stoneLayout, { widthMm: canvasWidthMm, heightMm: canvasHeightMm, backgroundColor: cupColor });
-    this._texture.needsUpdate = true;
-
-    if (this._bodyMesh.material.map !== this._texture) {
-      this._bodyMesh.material.map = this._texture;
-      this._bodyMesh.material.color.set(0xffffff);
-      this._bodyMesh.material.needsUpdate = true;
-    }
-    if (this._handleMesh) {
-      this._handleMesh.material.color.set(cupColor);
-    }
-    // S-112: the plate's underside/rim-edge/foot-ring mesh has no texture map -- it always shows
-    // the plate's own solid color, kept in sync with the live cupColor exactly like the mug
-    // handle's material color already is above.
-    if (this._underMesh) {
-      this._underMesh.material.color.set(cupColor);
-    }
   }
 
   // Fits both the object's height and its full diameter inside the current viewport, accounting
