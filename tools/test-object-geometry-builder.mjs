@@ -308,7 +308,7 @@ await test('16. S-112: the plate\'s printable top surface uses a direct planar (
     // rounding versus the float64 expected value computed here -- 1e-5 is generous while still
     // catching any real formula mismatch (which would differ by orders of magnitude more).
     const expectedU = (canvasWidthMm / 2 + position.getX(i)) / canvasWidthMm;
-    const expectedV = (canvasHeightMm / 2 - position.getZ(i)) / canvasHeightMm;
+    const expectedV = (canvasHeightMm / 2 + position.getZ(i)) / canvasHeightMm;
     assert.ok(Math.abs(uv.getX(i) - expectedU) < 1e-5, `vertex ${i}: U must equal the direct planar projection`);
     assert.ok(Math.abs(uv.getY(i) - expectedV) < 1e-5, `vertex ${i}: V must equal the direct planar projection`);
     checked++;

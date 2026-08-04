@@ -55,3 +55,7 @@ tools/txt104-verification-screenshots/
 # RC-011: ad hoc live-browser Visual QA screenshots (Category 4 gate check) -- same category as
 # the TXT-104 folder above, never a repo artifact
 tools/rc011-verification-screenshots/
+
+# RC-013: ad hoc live-browser Visual QA screenshots for the plate vertical-flip fix, same category
+# as the RC-011 folder above, never a repo artifact
+tools/rc013-verification-screenshots/

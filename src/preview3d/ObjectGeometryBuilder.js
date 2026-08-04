@@ -289,24 +289,20 @@ function buildPlateProfilePoints(dimensions) {
 // (app.js keeps project.canvas in sync with project.plate.outerDiameterMm) -- the plate is centered
 // at the canvas's own center, exactly like every stone in the merged StoneLayout already is.
 //
-// V uses -worldZ (not +worldZ, unlike U's direct +worldX): THREE.CanvasTexture defaults
-// `flipY=true` (reconciling the source <canvas>'s top-left-origin row order with GL's
-// bottom-left-origin V axis), which every revolved-vessel kind's applyBodyHeightUv() also relies on
-// implicitly -- but that mapping is safe from extra sign confusion because it ties V directly to
-// the object's own vertical axis, which the camera's "up" always agrees with regardless of viewing
-// angle. The plate's V axis instead comes from a *horizontal* world axis (Z, since the printable
-// face lies in the X-Z plane); combined with flipY and this preview's near-top-down camera (positioned
-// at +Z, looking toward -Z per Preview3DRenderer.js's default theta=0), the object's own +Z --
-// nearer the camera, reading as the *bottom* of the screen given the downward tilt -- must map to
-// the *bottom* of the 2D design (large canvas-Y mm), not its top. -worldZ is what makes that hold;
-// confirmed by real-browser verification (TASK_RESULT.md) that text reads upright and left-to-right
-// from the default camera position, matching the 2D Canvas exactly.
+// V uses +worldZ (not -worldZ): RC-013 found this function's sign was backwards, the same defect
+// as (and very likely the copy source for) the plate stone-position formula in
+// Preview3DRenderer.js's _updateInstancedStones(), which mapped stone.yMm to -worldZ and rendered
+// every letter vertically flipped. canvasYMm and worldZ must move together, not oppositely: this
+// function is currently dormant for visible output (the body has carried no design texture since
+// RS-2013 step 7 set material.map = null, so THREE.CanvasTexture's flipY=true default is not in
+// play here at all), which is how the backwards sign went unnoticed until RC-013. Kept correct and
+// consistent with the stone formula in case a texture consumer of this UV data is reintroduced.
 function applyPlateTopSurfaceUv(geometry, canvasWidthMm, canvasHeightMm) {
   const position = geometry.attributes.position;
   const uv = geometry.attributes.uv;
   for (let i = 0; i < position.count; i++) {
     const canvasXMm = canvasWidthMm / 2 + position.getX(i);
-    const canvasYMm = canvasHeightMm / 2 - position.getZ(i);
+    const canvasYMm = canvasHeightMm / 2 + position.getZ(i);
     uv.setXY(i, canvasXMm / canvasWidthMm, canvasYMm / canvasHeightMm);
   }
   uv.needsUpdate = true;

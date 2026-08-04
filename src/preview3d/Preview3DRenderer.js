@@ -478,7 +478,12 @@ export class Preview3DRenderer {
 
       if (dimensions.kind === 'plate') {
         // §3.3 2a: flat top surface, normal always +Y, no per-stone spin.
-        position.set(stone.xMm - canvasWidthMm / 2, this._plateTopY, -(stone.yMm - canvasHeightMm / 2));
+        // RC-013: no sign flip on Z -- stone positions carry no texture and are never sampled by
+        // THREE.CanvasTexture, so flipY=true (the reason applyPlateTopSurfaceUv() in
+        // ObjectGeometryBuilder.js negates this same term) does not apply here. The prior negation
+        // was very likely copied from that function and inverted the Y-to-Z mapping, rendering every
+        // letter vertically flipped (a "V" as "Λ").
+        position.set(stone.xMm - canvasWidthMm / 2, this._plateTopY, (stone.yMm - canvasHeightMm / 2));
         normal.set(0, 1, 0);
         qAlign.setFromUnitVectors(zAxis, normal);
         quaternion.copy(qAlign);

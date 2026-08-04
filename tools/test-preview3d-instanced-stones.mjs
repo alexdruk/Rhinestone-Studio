@@ -167,7 +167,7 @@ await test('4. a plate stone sits at the rim/well transition height with a strai
   matrix.decompose(position, quaternion, scale);
 
   assert.ok(Math.abs(position.x - (stone.xMm - canvasWidthMm / 2)) < 1e-9);
-  assert.ok(Math.abs(position.z - (-(stone.yMm - canvasHeightMm / 2))) < 1e-9);
+  assert.ok(Math.abs(position.z - (stone.yMm - canvasHeightMm / 2)) < 1e-9);
   assert.ok(Math.abs(position.y - instance._plateTopY) < 1e-9, 'expected the stone\'s world Y to equal the cached plate rim/well transition height');
 
   const rotatedZ = new THREE.Vector3(0, 0, 1).applyQuaternion(quaternion);
