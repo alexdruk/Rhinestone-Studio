@@ -132,12 +132,38 @@ Category 4 (Visual QA) has strong headless coverage for stone presence/placement
 `test-preview3d-instanced-stones.mjs` verifies instance count matches stone count, per-instance
 azimuth/radius/height/orientation for both mug and plate, and throttle-window correctness under
 rapid edits — but headless Node tests exercise Three.js math only, not actual WebGL pixel output.
-Whether stones visually read as distinct faceted gems under the current lighting rig, on current
-`develop`'s tip (post-step-7 texture-path removal), was last verified live in a browser during
-`RS-2013` steps 3b/6/6b/6c, on intermediate commits rather than the current tip. **Flagged, not
-performed as part of this audit:** a fresh live-browser screenshot pass (mug/tumbler/bottle/plate,
-default camera) against current `develop` before finalizing a release decision — this milestone was
-docs/tests-only and did not launch a browser.
+A live-browser screenshot pass (mug/tumbler/bottle/plate, default camera, current `develop` tip)
+was performed as part of this audit, closing the gap left by `RS-2013` steps 3b/6/6b/6c's
+verification having predated the step-7 texture-path removal. At default camera, all four products
+show correctly faceted, non-mirrored stones. The plate specifically does not hold up under further
+interaction: a small, unremarkable downward drag — well within the existing `OrbitControls`
+`minPolarAngle`/`maxPolarAngle` constraints, not an edge case — mirrors the entire stone layout once
+the camera's polar angle crosses ~90° (the horizon). Reproduced precisely via scripted
+`OrbitControls`-formula mouse drags rather than trial-and-error: polar 89° still renders correctly,
+90° is the first mirrored frame, and the mirroring persists through the full swept range up to 175°
+(`tools/rc011-plate-mirror-investigation.mjs`, screenshots in
+`tools/rc011-verification-screenshots/plate-mirror-sweep-polar*.png`). Root cause, found by reading
+`_updateInstancedStones()`'s plate branch in `Preview3DRenderer.js`: every plate stone is placed at
+a fixed world height (`this._plateTopY`) with a hardcoded upward-facing normal (`normal.set(0, 1,
+0)`, `Preview3DRenderer.js:462-467`) and no check of the stone-plane orientation relative to the
+camera — so past ~90° polar the camera is looking at the underside of that fixed-orientation
+geometry with an unobstructed view, well before the plate's own top-surface mesh would correctly
+cull the stones from view. This is distinct from, though in the same code region as, the
+already-documented plate rim/well relief simplification below — that item is about vertical
+position only; this one is about orientation, and it is user-visible as backwards-reading stone
+placement. `StoneLayout`/production mm data is unaffected; this is a preview-only rendering defect.
+
+**DEFECT — plate stones render mirrored past ~90° camera polar angle.** Found by this audit's
+live-browser Visual QA pass (see Category 4 above); not a documented visual limitation like the
+three items below, and should not be read as one — it is trivially reachable through ordinary
+camera interaction (a small downward drag well within the existing `OrbitControls` constraints, not
+an edge case) and visually alarming (the entire stone design reads backwards). Root cause:
+`_updateInstancedStones()`'s plate branch (`Preview3DRenderer.js:462-467`) places every stone at a
+fixed world height and fixed upward-facing orientation with no check of camera-vs-stone-plane
+relationship, so once the camera crosses the horizon relative to the plate it has an unobstructed
+view of the stones' undersides. `StoneLayout`/production mm data is unaffected — this is a
+preview-only rendering gap, not a production-correctness defect — but it is a real Category 4
+functional failure, not a cosmetic or documented-limitation item, and is treated as blocking below.
 
 Known issues documented for this release, carried forward or newly surfaced:
 
@@ -146,8 +172,9 @@ Known issues documented for this release, carried forward or newly surfaced:
   ("twenty-seven suites" — actual count is now 100 `tools/test-*.mjs` files); missing narrative
   implementation-status paragraphs for `SEC-001`–`RC-006`; Gallery (RS-2001) and Design Library
   (RS-1015) remain intentionally UI-disabled (`S-103`, `RC-006`), not defects.
-- New from `RS-2013`, both investigated and both left as documented visual limitations rather than
-  fixed (neither is scoped as a defect requiring a fix before release):
+- New from `RS-2013`, all three investigated and left as accepted visual simplifications a user is
+  unlikely to stumble into during ordinary use — unlike the plate-mirroring defect above, none of
+  these is scoped as a defect requiring a fix before release:
   - **Plate rim/well relief flattening.** The plate's real printable top surface has ~12-15mm of
     genuine vertical relief (a concave well + sloped rim) — `RS-2013` step 2 found the design doc's
     original flat-plane assumption was wrong and corrected the *reference* plane (`plateTopY` is now
@@ -169,10 +196,10 @@ Known issues documented for this release, carried forward or newly surfaced:
 The version-bump/tag/main-merge decision `RC-008` deferred remains outstanding — `RC-011` is a
 re-audit, not that decision, and made no `src/**`/`app.js`/`index.html` changes itself.
 
-**Recommendation:** the audited findings above are all non-blocking (moot, resolved, or documented
-visual limitations, not functional defects), and the automated suite is green at 99/99. The one gap
-this audit could not close itself is Category 4's live-browser verification against the current
-tip — recommend capturing that screenshot pass (mug/tumbler/bottle/plate, default camera, current
-`develop`) as a quick confirming step before making the version-bump/tag/main-merge decision, given
-how much of `RS-2013`'s own validation evidence predates the step-7 texture-path removal. With that
-one check done, nothing else found here should block the decision.
+**Recommendation:** every other item audited in `RC-011` is non-blocking (moot, resolved, or an
+accepted documented visual limitation, not a functional defect), and the automated suite is green
+at 99/99. However, the live-browser Visual QA pass this audit performed found one real Category 4
+failure — plate stones render mirrored past ~90° camera polar angle, reachable via ordinary
+interaction, not a documented limitation — and the version-bump/tag/main-merge decision should wait
+until it is fixed and re-verified live in a browser. Nothing else found in this audit should block
+that decision; this one item does.
