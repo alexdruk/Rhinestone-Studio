@@ -43,6 +43,19 @@ const DEFAULT_POLAR_RAD = 1.3; // ~74.5 degrees from +Y (~15.5 degrees above the
 const PLATE_DEFAULT_POLAR_RAD = 1.35; // ~77 degrees from +Y (~13 degrees of elevation above horizon)
 const MIN_POLAR_RAD = 0.05;
 const MAX_POLAR_RAD = Math.PI - 0.05;
+// RC-011-FIX: _updateInstancedStones()'s plate branch (see its own comment below) places every
+// plate stone with a hardcoded normal.set(0, 1, 0) -- correct as long as the camera stays above
+// the horizon, but once OrbitControls' polar angle crosses Math.PI/2 the camera is looking at the
+// stones' undersides with no per-instance orientation correction, so they read as mirrored. A
+// plate has no legitimate "view from underneath" (the underside isn't a design surface -- it's
+// the foot ring resting on a table), so the chosen fix constrains the camera itself rather than
+// adding a new per-frame camera-relative re-orientation path (which the vessel branch doesn't
+// have either, and isn't justified for a plate-only bug): cap maxPolarAngle just above the
+// horizon. Same 0.05 rad margin convention as MIN_POLAR_RAD/MAX_POLAR_RAD above. Only applied for
+// dimensions.kind === 'plate' (see _rebuildMesh()) -- every revolved-vessel kind keeps today's
+// MIN_POLAR_RAD/MAX_POLAR_RAD range unchanged, since PLATE_DEFAULT_POLAR_RAD (1.35 rad) is well
+// within this cap and every other kind's stones are unaffected by this defect.
+const PLATE_MAX_POLAR_RAD = Math.PI / 2 - 0.05;
 const FRAME_MARGIN = 1.25; // breathing room around the object when framing the "home" camera position
 
 // RS-2013 §4 step 4/7: the "extended" 4-light rig tools/rs2013-instanced-stone-harness.html
@@ -350,6 +363,10 @@ export class Preview3DRenderer {
     this._handleMesh = handleMesh;
     this._underMesh = underMesh || null;
     this._dimensions = dimensions;
+    // RC-011-FIX: re-applied on every geometry rebuild (not just once in init()) so switching
+    // between a plate project and a vessel project always gets the right cap -- see
+    // PLATE_MAX_POLAR_RAD's own comment above for why plate needs a tighter maxPolarAngle.
+    this.controls.maxPolarAngle = dimensions.kind === 'plate' ? PLATE_MAX_POLAR_RAD : MAX_POLAR_RAD;
     // _disposeGroup() above already disposed the old _stoneMesh (it was a child of the old
     // group) -- rebuilt lazily by _updateInstancedStones() on the next update() call.
     this._stoneMesh = null;
