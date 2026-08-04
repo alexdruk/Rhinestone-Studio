@@ -232,3 +232,83 @@ deleted investigation script, fixed above in this same `RC-012` entry) and is 99
 
 This closes the one real defect `RC-011` found. `docs/release-process/release-gate.md` is now
 self-contained ahead of the version-bump/tag/main-merge decision `RC-008` deferred.
+
+### RC-014 — release-gate re-audit: RC-013 rigorous re-verification + FONT-CLEANUP-001/CLEANUP-002 spot-check, 2026-08-04
+
+Three milestones landed on `develop` after `RC-012`'s gate-pass: `RC-013` (a second, unrelated
+plate rendering defect), `FONT-CLEANUP-001`, and `CLEANUP-002` (repository/tooling hygiene, no
+`src/**` logic changes). `RC-014` re-audits all three, with `RC-013` re-verified by a stricter,
+programmatic method than `RC-011` used — see below for why that distinction matters.
+
+**`RC-013` — plate vertical-flip fix, root cause.** Sasha reported plate text rendering vertically
+flipped (a "V" reading as "Λ") in the Object Preview — a *different* defect from `RC-011`'s
+mirroring bug: present at every camera angle, not just past the horizon. Root cause:
+`_updateInstancedStones()`'s plate branch in `Preview3DRenderer.js` negated the Z term
+(`-(stone.yMm - canvasHeightMm / 2)`), inverting the Y-to-Z mapping. This was very likely copied
+from `applyPlateTopSurfaceUv()` in `ObjectGeometryBuilder.js`, where the negation legitimately
+compensates for `THREE.CanvasTexture`'s `flipY = true` default — but stone positions carry no
+texture and are never sampled by a `CanvasTexture`, so that compensation does not apply to them.
+
+**Fix (`RC-013`, `6c1564b`):** removed the sign flip at both call sites (the UV helper's negation
+is dormant for visible output since `RS-2013` step 7 set `material.map = null`, but was fixed
+anyway for consistency). `tools/test-object-geometry-builder.mjs` and
+`tools/test-preview3d-instanced-stones.mjs` each had one test with the old backwards sign locked
+in as the expected value; both were updated to assert the corrected sign.
+
+**Why `RC-011`'s sweep would not have caught this:** `RC-011`'s Category 4 Visual QA pass was a
+live-browser screenshot review at each product's default camera position — a human eyeballing
+whether the rendered output "looked right." That method is exactly what let this defect ship
+undetected: a vertically flipped glyph is easy to miss by eye, especially in a short, unfamiliar
+test string, and nothing about the sweep's process would have flagged it short of someone noticing
+a specific letterform looked wrong. `RC-013` itself was only found because Sasha pushed back on an
+initial (incorrect) diagnosis with graduated-angle screenshots — a stricter process than the
+original sweep, but still visual, still dependent on someone truly looking.
+
+**Verification (this audit, stricter than `RC-013`'s own live-browser check):** a scratch
+verification script under `tools/` (gitignored, not committed — this repo's standing convention
+for ad hoc QA tooling, the same one `RC-011`'s own investigation script followed) replaced
+eyeballing with a numeric assertion. It generates a real `StoneLayout` for the glyph "F" (RS Block,
+authored/rhinestone provider) — chosen because its top row is solid and every row below is just a
+left stem, so a vertical flip is structurally unmistakable, unlike a vertically symmetric letter
+such as "O" or "H" — runs it
+through the real `Preview3DRenderer.update()` → `_updateInstancedStones()` plate branch (the exact
+code `RC-013` fixed), decomposes each stone's real instance matrix, and projects it through the
+real `THREE.Camera` via `Vector3.project(camera)` at the renderer's actual default "home" framing.
+It then asserts that top-of-glyph stones (small design `yMm`, the 2D-canvas Y-down ground truth)
+project to a smaller screen-space Y than bottom-of-glyph stones, and that the ordering is
+monotonic across every stone — the check a visual sweep has no equivalent of. Repeated at a second,
+near-top-down camera angle (0.2 rad from +Y) to rule out an angle-dependent regression. Both passed
+cleanly, with zero inverted adjacent pairs at either angle.
+
+As a negative control proving the check itself has teeth, the same projection was re-run with the
+old, pre-`RC-013` buggy sign substituted back in: it correctly failed (top-of-glyph screen Y
+306.7 landed *below*, not above, bottom-of-glyph screen Y 295.3 — the inverted ordering the real
+defect produced). This confirms the script would have caught `RC-013` had it existed before that
+fix, unlike `RC-011`'s sweep. `tools/test-preview3d-instanced-stones.mjs` (8/8) and
+`tools/test-object-geometry-builder.mjs` (21/21) were also re-run directly and pass in full.
+
+**`FONT-CLEANUP-001`/`CLEANUP-002` — repository hygiene, no logic changes.** `FONT-CLEANUP-001`
+migrated the three fonts still loaded from the old `fonts`/`sources` tree at runtime (Baloo 2,
+Sacramento, Dancing Script) into `assets/fonts/` (the convention every other live font already
+used) and deleted the old top-level `fonts`, `review`, and `generated-fonts` directories entirely
+(~246MB of obsolete font-R&D/QA artifacts, confirmed via `git ls-tree -r -l` against the
+pre-cleanup tree). `CLEANUP-002` removed stale `RS-2013` step-6
+texture-vs-instanced comparison PNGs (a closed, merged milestone with no remaining references) and
+the `font-cal-001` tooling directory under `tools/` (calibration tooling for the already-rejected
+Sacramento procedural-font approach, unreferenced by any test file).
+
+**Verification:** loaded the app in a real browser and rendered a short "Studio" text layer in each
+of Baloo2, Sacramento, and Dancing Script — all three render cleanly on both the 2D canvas and 3D
+preview with no missing glyphs or console errors (screenshots reviewed, not committed — ad hoc QA
+per this repo's convention). `du -sh tools/` was 2.6M before this audit's screenshot generation and
+3.2M after (the 632K screenshot folder itself is gitignored); no stale prior-session screenshot or
+scratch assets remained to delete — `CLEANUP-002` had already removed them. A grep for the deleted
+`fonts`/`sources`, `review`, `generated-fonts`, and `font-cal-001` paths across `src/`, `app.js`,
+`index.html`, and `docs/` found zero hits in the first three; the only `docs/` hits are in
+`docs/specifications/*.md` historical milestone reports (exempt, per `FONT-CLEANUP-001`'s own
+commit message and this project's historical-vs-authoritative documentation convention) plus one
+narrative (non-path) mention of `RC-010` in this file. No stale references requiring action.
+
+`node tools/run-tests.mjs --all` is 99/99, unchanged from `RC-012`. No `src/**`/`app.js`/
+`index.html` regressions from any of the three milestones this entry covers. The
+version-bump/tag/main-merge decision `RC-008` deferred remains outstanding.
