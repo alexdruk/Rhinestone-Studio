@@ -1,0 +1,780 @@
+/**
+ * Stone placement sampling for the Geometry Engine.
+ *
+ * These functions turn flattened polygons (already millimeters, already
+ * positioned) into candidate stone center points for outline or fill
+ * placement. They contain no font, rendering, or export concerns.
+ */
+
+import { Point2D } from '../text/VectorPath.js';
+import { computeInwardRingPolygons } from './ContourRingSampler.js';
+
+/**
+ * Walk a polygon's perimeter and return points spaced spacingMm apart along the outline, starting
+ * at the polygon's first vertex. By default the polygon is treated as closed (a final segment
+ * connects the last vertex back to the first, matching a filled shape's true outline); pass
+ * `{ closed: false }` to walk an open path instead (e.g. an SVG `<line>`/`<polyline>` or an
+ * unclosed `<path>` subpath), which omits that wrap-around segment.
+ *
+ * @param {Point2D[]} polygon
+ * @param {number} spacingMm
+ * @param {{closed?: boolean}} [options]
+ * @returns {Point2D[]}
+ */
+export function sampleOutlinePoints(polygon, spacingMm, { closed = true } = {}) {
+  if (spacingMm <= 0) {
+    throw new RangeError('sampleOutlinePoints requires a positive spacingMm.');
+  }
+  if (polygon.length < 2) {
+    return [];
+  }
+
+  const pathPoints = closed ? [...polygon, polygon[0]] : polygon;
+  const segmentLengthsMm = [];
+  let perimeterMm = 0;
+
+  for (let i = 0; i < pathPoints.length - 1; i++) {
+    const length = pathPoints[i].distanceTo(pathPoints[i + 1]);
+    segmentLengthsMm.push(length);
+    perimeterMm += length;
+  }
+
+  if (perimeterMm <= 0) {
+    return [];
+  }
+
+  const samples = [];
+  let segmentIndex = 0;
+  let segmentStartMm = 0;
+
+  for (let targetMm = 0; targetMm < perimeterMm; targetMm += spacingMm) {
+    while (
+      segmentIndex < segmentLengthsMm.length - 1 &&
+      segmentStartMm + segmentLengthsMm[segmentIndex] < targetMm
+    ) {
+      segmentStartMm += segmentLengthsMm[segmentIndex];
+      segmentIndex++;
+    }
+
+    const segmentLengthMm = segmentLengthsMm[segmentIndex];
+    const t = segmentLengthMm === 0 ? 0 : (targetMm - segmentStartMm) / segmentLengthMm;
+    const start = pathPoints[segmentIndex];
+    const end = pathPoints[segmentIndex + 1];
+
+    samples.push(new Point2D(
+      start.xMm + (end.xMm - start.xMm) * t,
+      start.yMm + (end.yMm - start.yMm) * t
+    ));
+  }
+
+  return samples;
+}
+
+/**
+ * Fill the interior of one or more polygons with a regular grid of points
+ * spaced spacingMm apart, keeping only points that fall inside an odd number
+ * of polygons (even-odd rule). This correctly excludes glyph counters
+ * (e.g. the hole in "o") when the outer and inner contours are both passed.
+ *
+ * @param {Point2D[][]} polygons
+ * @param {import('../text/VectorPath.js').BoundingBox|null} boundingBox
+ * @param {number} spacingMm
+ * @returns {Point2D[]}
+ */
+export function sampleFillPoints(polygons, boundingBox, spacingMm) {
+  if (spacingMm <= 0) {
+    throw new RangeError('sampleFillPoints requires a positive spacingMm.');
+  }
+  if (!boundingBox) {
+    return [];
+  }
+
+  const points = [];
+
+  for (let yMm = boundingBox.minYmm + spacingMm / 2; yMm <= boundingBox.maxYmm; yMm += spacingMm) {
+    for (let xMm = boundingBox.minXmm + spacingMm / 2; xMm <= boundingBox.maxXmm; xMm += spacingMm) {
+      const candidate = new Point2D(xMm, yMm);
+      if (isPointInsidePolygons(candidate, polygons)) {
+        points.push(candidate);
+      }
+    }
+  }
+
+  return points;
+}
+
+/**
+ * Even-odd point-in-polygon test across multiple polygons, so glyph holes
+ * (inner contours) correctly subtract from outer contours.
+ *
+ * @param {Point2D} point
+ * @param {Point2D[][]} polygons
+ * @returns {boolean}
+ */
+export function isPointInsidePolygons(point, polygons) {
+  let inside = false;
+  for (const polygon of polygons) {
+    if (isPointInsidePolygon(point, polygon)) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function isPointInsidePolygon(point, polygon) {
+  let inside = false;
+  const n = polygon.length;
+
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const vi = polygon[i];
+    const vj = polygon[j];
+
+    const intersects = (vi.yMm > point.yMm) !== (vj.yMm > point.yMm) &&
+      point.xMm < ((vj.xMm - vi.xMm) * (point.yMm - vi.yMm)) / (vj.yMm - vi.yMm) + vi.xMm;
+
+    if (intersects) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
+}
+
+/**
+ * Drop any point closer than minDistanceMm to a point already kept, scanning in input order (so the
+ * first of any close pair always wins -- deterministic, matching every other sampler's fixed scan
+ * order). Uses the same bucketed-neighbor-check shape as app.js's pre-existing cross-layer
+ * dedupe() (grid-hash cell lookup, only the 3x3 neighborhood of cells around each candidate is
+ * checked), just generalized to arbitrary Point2D input rather than plain {x,y} stone records.
+ *
+ * RS-1011: used by Contour Fill and Radial Fill, the two modes whose ring/spoke geometry can
+ * legitimately place two candidate points closer than the nominal spacingMm pitch near a shape's
+ * boundary (see docs/specifications/RS-1011-FillAlgorithms.md, "avoid duplicate stones where
+ * contours converge"). Grid Fill, Staggered Fill, and Outline mode never need this -- their fixed
+ * scan order makes duplicates geometrically impossible.
+ *
+ * @param {Point2D[]} points
+ * @param {number} minDistanceMm
+ * @returns {Point2D[]}
+ */
+export function dedupeStonePoints(points, minDistanceMm) {
+  if (!(minDistanceMm > 0) || points.length === 0) {
+    return points;
+  }
+
+  const cellSizeMm = minDistanceMm;
+  const minDistanceSqMm = minDistanceMm * minDistanceMm;
+  const buckets = new Map();
+  const kept = [];
+
+  for (const point of points) {
+    const gx = Math.floor(point.xMm / cellSizeMm);
+    const gy = Math.floor(point.yMm / cellSizeMm);
+    let tooClose = false;
+
+    for (let dy = -1; dy <= 1 && !tooClose; dy++) {
+      for (let dx = -1; dx <= 1 && !tooClose; dx++) {
+        const bucket = buckets.get(`${gx + dx},${gy + dy}`);
+        if (!bucket) continue;
+        for (const other of bucket) {
+          const ddx = point.xMm - other.xMm;
+          const ddy = point.yMm - other.yMm;
+          if (ddx * ddx + ddy * ddy < minDistanceSqMm) {
+            tooClose = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!tooClose) {
+      kept.push(point);
+      const key = `${gx},${gy}`;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(point);
+    }
+  }
+
+  return kept;
+}
+
+/**
+ * RC-004: drop any stone whose center lands within the physically-correct "touching" distance of
+ * an already-kept stone *from a different layer* -- the sum of the two stones' own radii, i.e.
+ * `(a.d + b.d) / 2` -- scanning in input order (first of any overlapping pair wins, matching
+ * dedupeStonePoints()'s convention).
+ *
+ * This is the cross-layer counterpart to sampleMultiContourOutlinePoints()'s RC-002 fix, applied
+ * at layer granularity the same way that one applies at contour granularity: a point is never
+ * dropped for being close to another point from its *own* layerId, only for landing on top of a
+ * different layer's stone. `app.js`'s per-layer GeometryEngine calls (and RC-002's own
+ * cross-contour guard inside each of those calls) are already the sole authority for a layer's own
+ * internal spacing -- including deliberately-preserved tight spots like a glyph's concave corners
+ * or a Star's inner notches (see sampleMultiContourOutlinePoints()'s doc comment) -- so re-checking
+ * same-layer pairs here would both duplicate that logic and undo those intentional exceptions.
+ *
+ * Threshold is computed per pair from each stone's own `d` (not one global value) because RS-1013
+ * (Variable Stone Sizes) allows a different stoneSizeMm per layer, so two overlapping stones from
+ * different layers are not necessarily the same size.
+ *
+ * Takes/returns the flat `{x, y, d, layerId}` stone-record shape `app.js`/`RhsFixtureBridge.js`
+ * build *before* wrapping survivors in real `Stone` instances (matching the pre-existing
+ * `dedupe()` calling convention at both call sites), not `Stone`/`Point2D`.
+ *
+ * @param {{x: number, y: number, d: number, layerId: string}[]} stones
+ * @returns {object[]}
+ */
+export function dedupeStonesByRadius(stones) {
+  if (stones.length === 0) {
+    return stones;
+  }
+
+  const cellSizeMm = Math.max(...stones.map((s) => s.d));
+  const buckets = new Map();
+  const kept = [];
+
+  for (const stone of stones) {
+    const gx = Math.floor(stone.x / cellSizeMm);
+    const gy = Math.floor(stone.y / cellSizeMm);
+    let overlaps = false;
+
+    for (let dy = -1; dy <= 1 && !overlaps; dy++) {
+      for (let dx = -1; dx <= 1 && !overlaps; dx++) {
+        const bucket = buckets.get(`${gx + dx},${gy + dy}`);
+        if (!bucket) continue;
+        for (const other of bucket) {
+          if (other.layerId === stone.layerId) continue;
+          const ddx = stone.x - other.x;
+          const ddy = stone.y - other.y;
+          const minSeparationMm = (stone.d + other.d) / 2;
+          if (ddx * ddx + ddy * ddy < minSeparationMm * minSeparationMm) {
+            overlaps = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!overlaps) {
+      kept.push(stone);
+      const key = `${gx},${gy}`;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(stone);
+    }
+  }
+
+  return kept;
+}
+
+/**
+ * MONO-005A: a pure collision *query* over tagged groups of stones -- reuses dedupeStonesByRadius()'s
+ * exact grid-hash bucket technique (bucket size = the largest `d` in play, 3x3-neighborhood scan,
+ * cross-`layerId`-only comparisons, `(a.d+b.d)/2` touching threshold) but never drops or reorders a
+ * stone. dedupeStonesByRadius() is a *deduplication* API: it greedily discards the later of any
+ * colliding pair, so an already-dropped stone can never be compared against anything after it --
+ * fine for its own "keep a de-overlapped set" purpose, but the wrong tool for *classifying* which
+ * group-pairs collide (a caller checking two categories via two separate dedupe passes would need to
+ * reason carefully about processing order to be sure a real collision was never masked by an earlier,
+ * unrelated drop). This function instead inserts every stone unconditionally, checking each one
+ * against every already-inserted stone in its 3x3 neighborhood before inserting it -- the standard
+ * "sweep and insert, only look backward" correctness argument applies: every unordered close pair is
+ * found exactly once, when the later-inserted member of the pair is processed, regardless of overall
+ * input order. Distinct group-pairs are deduplicated in the *result* (not the scan), so calling this
+ * twice with the same stones in a different order always reports the identical set of colliding
+ * group-pairs.
+ *
+ * @param {{x: number, y: number, d: number, layerId: string}[]} stones
+ * @returns {{layerIdA: string, layerIdB: string}[]} One entry per distinct unordered pair of group
+ *   ids with at least one colliding stone pair between them. Empty if there are no collisions.
+ */
+export function findCrossGroupCollisions(stones) {
+  const collisions = [];
+  if (stones.length === 0) {
+    return collisions;
+  }
+
+  const cellSizeMm = Math.max(...stones.map((s) => s.d));
+  const buckets = new Map();
+  const seenGroupPairs = new Set();
+
+  for (const stone of stones) {
+    const gx = Math.floor(stone.x / cellSizeMm);
+    const gy = Math.floor(stone.y / cellSizeMm);
+
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const bucket = buckets.get(`${gx + dx},${gy + dy}`);
+        if (!bucket) continue;
+        for (const other of bucket) {
+          if (other.layerId === stone.layerId) continue;
+          const ddx = stone.x - other.x;
+          const ddy = stone.y - other.y;
+          const minSeparationMm = (stone.d + other.d) / 2;
+          if (ddx * ddx + ddy * ddy < minSeparationMm * minSeparationMm) {
+            const pairKey = [stone.layerId, other.layerId].sort().join(' ');
+            if (!seenGroupPairs.has(pairKey)) {
+              seenGroupPairs.add(pairKey);
+              collisions.push({ layerIdA: stone.layerId, layerIdB: other.layerId });
+            }
+          }
+        }
+      }
+    }
+
+    const key = `${gx},${gy}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(stone);
+  }
+
+  return collisions;
+}
+
+/**
+ * RC-002 / RC-004A: sample every contour's outline points independently (via sampleOutlinePoints(),
+ * so each contour's own spacingMm arc-length walk is completely unchanged), then drop any point
+ * that lands within `minSeparationMm` of an already-kept point -- from that *same* contour or a
+ * *different* one alike.
+ *
+ * RC-002 (cross-contour): outline mode samples stone centers directly on each contour's boundary
+ * curve. For a multi-contour shape (Ring's outer+inner circle; a glyph's outer contour and an
+ * interior counter/hole like "o" or "e"; a Boolean Operation difference result; an SVG document
+ * with nested closed paths) two *different* contours can pass closer to each other than one stone
+ * pitch -- e.g. a Ring whose annulus (outer radius - inner radius) is narrower than stoneSizeMm --
+ * and independently sampling each contour then produces physically overlapping stones, since
+ * nothing previously related one contour's points to another's.
+ *
+ * RC-004A (same-contour): a single contour's arc-length walk only guarantees consecutive samples
+ * are spacingMm apart *along the perimeter* -- the straight-line (chord) distance between them is
+ * always <= that, and sharp curvature (a cursive font's tight loop or cusp, a sharp corner) or a
+ * short closing-seam remainder (the walk's last sample back to its first) can pull that chord below
+ * the physically-correct touching distance, even between *immediately adjacent* samples. This is
+ * confirmed directly against `long-script-name.rhs`'s own contours: 132 adjacent-sample pairs and
+ * all 48 closing seams landed under the physical threshold before this fix (see
+ * tools/test-rc-004a-same-contour-overlap.mjs). An "arc-length-adjacent samples are always fine"
+ * exemption was considered and rejected: it left exactly these worst overlaps (near-zero clearance)
+ * in place, because that is precisely where the defect lives.
+ *
+ * Both cases use the exact same rule, so there is only one to state: nothing is ever pruned merely
+ * for being *close*. A tight-but-non-overlapping notch or cusp (e.g. Star's inner notches) never
+ * breaches the physical sum-of-radii threshold and survives untouched; only a literal physical
+ * overlap -- same-contour or cross-contour alike -- is ever removed. Earlier samples (by input
+ * order, contour-by-contour then sample-by-sample) are therefore always fully preserved; a later
+ * sample is the only one ever pruned, matching dedupeStonePoints()'s existing "first of any close
+ * pair wins" convention -- this function's body is in fact now exactly dedupeStonePoints() applied
+ * to every contour's points concatenated in that fixed order.
+ *
+ * `minSeparationMm` defaults to `spacingMm` (matching dedupeStonePoints()'s existing "full pitch"
+ * floor for Contour/Radial Fill's own convergence problem), but callers should pass stoneSizeMm
+ * explicitly: the reported defect is literal physical overlap (center-to-center distance less than
+ * the sum of two stones' radii, i.e. less than stoneSizeMm for same-size stones), not merely
+ * "closer than the full gap-inclusive pitch". Flooring at the full spacingMm pitch instead measurably
+ * thins outline stone counts even for widely-used shapes/text that never actually overlap (dense
+ * script fonts' nearby strokes, in particular) -- a much larger, more visible behavior change than
+ * this fix's scope calls for. Flooring at stoneSizeMm is the minimal change that still strictly
+ * guarantees no two stones -- from the same contour or different ones -- ever overlap.
+ *
+ * @param {Point2D[][]} polygons
+ * @param {number} spacingMm
+ * @param {{closed?: boolean, minSeparationMm?: number}} [options]
+ * @returns {Point2D[]}
+ */
+export function sampleMultiContourOutlinePoints(polygons, spacingMm, { closed = true, minSeparationMm = spacingMm } = {}) {
+  const points = polygons.flatMap((polygon) => sampleOutlinePoints(polygon, spacingMm, { closed }));
+  return dedupeStonePoints(points, minSeparationMm);
+}
+
+// RS-1011: dedupeStonePoints()'s minimum-distance floor for Contour/Radial Fill, as a fraction of
+// the stone pitch. This is 1.0 -- the *full* pitch, not a discount -- deliberately: StoneSampler.js
+// only ever receives the combined spacingMm (stoneSizeMm + gapMm), never the two values separately,
+// so there is no safe smaller floor that is guaranteed non-overlapping for every stoneSize/gap
+// split a user could configure (e.g. a small gap would let a fractional floor like 0.9*spacingMm
+// fall below stoneSizeMm itself -- literal physical overlap). Every other mode's target minimum
+// spacing is already exactly spacingMm; Contour/Radial Fill hold to the same one number, per "use
+// the existing stone pitch convention, do not invent a second spacing formula" -- see
+// docs/specifications/RS-1011-FillAlgorithms.md, "Precision and Fail-Safes".
+const DEDUPE_FRACTION_OF_SPACING = 1.0;
+
+/**
+ * Fill the interior of one or more polygons with a hexagonal ("staggered") point arrangement:
+ * alternating rows offset by spacingMm/2, with row-to-row spacing of spacingMm*sqrt(3)/2 -- the
+ * unique row spacing at which every point's nearest neighbors (same row and both adjacent rows) are
+ * all exactly spacingMm apart. This is standard hexagonal packing derived from the one stone-pitch
+ * value every other mode already uses (see docs/specifications/RS-1011-FillAlgorithms.md,
+ * "Staggered Fill"), not a second spacing formula: square (Grid Fill) packing gives 4 nearest
+ * neighbors at spacingMm; this gives 6, at the same spacingMm, over the same area.
+ *
+ * @param {Point2D[][]} polygons
+ * @param {import('../text/VectorPath.js').BoundingBox|null} boundingBox
+ * @param {number} spacingMm
+ * @returns {Point2D[]}
+ */
+export function sampleStaggeredFillPoints(polygons, boundingBox, spacingMm) {
+  if (spacingMm <= 0) {
+    throw new RangeError('sampleStaggeredFillPoints requires a positive spacingMm.');
+  }
+  if (!boundingBox) {
+    return [];
+  }
+
+  const rowSpacingMm = spacingMm * (Math.sqrt(3) / 2);
+  const points = [];
+  let rowIndex = 0;
+
+  for (let yMm = boundingBox.minYmm + spacingMm / 2; yMm <= boundingBox.maxYmm; yMm += rowSpacingMm, rowIndex++) {
+    const rowOffsetMm = (rowIndex % 2 === 1) ? spacingMm / 2 : 0;
+    for (let xMm = boundingBox.minXmm + spacingMm / 2 + rowOffsetMm; xMm <= boundingBox.maxXmm; xMm += spacingMm) {
+      const candidate = new Point2D(xMm, yMm);
+      if (isPointInsidePolygons(candidate, polygons)) {
+        points.push(candidate);
+      }
+    }
+  }
+
+  return points;
+}
+
+function boundingBoxCenter(boundingBox) {
+  return new Point2D(
+    (boundingBox.minXmm + boundingBox.maxXmm) / 2,
+    (boundingBox.minYmm + boundingBox.maxYmm) / 2
+  );
+}
+
+function boundingBoxFarthestCornerDistanceMm(boundingBox, center) {
+  let maxDistanceMm = 0;
+  for (const xMm of [boundingBox.minXmm, boundingBox.maxXmm]) {
+    for (const yMm of [boundingBox.minYmm, boundingBox.maxYmm]) {
+      maxDistanceMm = Math.max(maxDistanceMm, Math.hypot(xMm - center.xMm, yMm - center.yMm));
+    }
+  }
+  return maxDistanceMm;
+}
+
+// RS-1011: how many equally-spaced points fit around a ring of this radius while guaranteeing every
+// pair of adjacent points' straight-line (chord) distance is still >= spacingMm -- not just their
+// arc-length distance, which is always slightly *more* than chord distance for a positive radius, so
+// targeting arc length alone (`round(2*pi*r/spacingMm)`) can silently place points closer than
+// spacingMm in a straight line. Chord length for n equally-spaced points is `2*r*sin(pi/n)`, a
+// function that decreases as n increases; solving `2*r*sin(pi/n) = spacingMm` for n and flooring
+// picks the *largest* n (most points) whose chord still meets or exceeds spacingMm.
+function radialStepCount(radiusMm, spacingMm) {
+  const halfChordRatio = Math.min(1, spacingMm / (2 * radiusMm));
+  return Math.max(1, Math.floor(Math.PI / Math.asin(halfChordRatio)));
+}
+
+/**
+ * Fill the interior of one or more polygons with concentric rings of points spaced radially and
+ * along each ring's own arc-length by spacingMm, centered on the shape's own bounding-box center
+ * (see docs/specifications/RS-1011-FillAlgorithms.md, "Radial Fill" -- always well-defined, so no
+ * per-layer center override field is needed). One stone sits at the exact center when the center
+ * point itself is inside the shape.
+ *
+ * @param {Point2D[][]} polygons
+ * @param {import('../text/VectorPath.js').BoundingBox|null} boundingBox
+ * @param {number} spacingMm
+ * @returns {Point2D[]}
+ */
+export function sampleRadialFillPoints(polygons, boundingBox, spacingMm) {
+  if (spacingMm <= 0) {
+    throw new RangeError('sampleRadialFillPoints requires a positive spacingMm.');
+  }
+  if (!boundingBox) {
+    return [];
+  }
+
+  const center = boundingBoxCenter(boundingBox);
+  const maxRadiusMm = boundingBoxFarthestCornerDistanceMm(boundingBox, center);
+  const points = [];
+
+  if (isPointInsidePolygons(center, polygons)) {
+    points.push(center);
+  }
+
+  for (let radiusMm = spacingMm; radiusMm <= maxRadiusMm; radiusMm += spacingMm) {
+    const stepCount = radialStepCount(radiusMm, spacingMm);
+    for (let step = 0; step < stepCount; step++) {
+      const angleRad = (step / stepCount) * 2 * Math.PI;
+      const candidate = new Point2D(
+        center.xMm + radiusMm * Math.cos(angleRad),
+        center.yMm + radiusMm * Math.sin(angleRad)
+      );
+      if (isPointInsidePolygons(candidate, polygons)) {
+        points.push(candidate);
+      }
+    }
+  }
+
+  return dedupeStonePoints(points, spacingMm * DEDUPE_FRACTION_OF_SPACING);
+}
+
+/**
+ * Fill one or more polygons with repeated inward contour rings: the outline itself, then rings
+ * eroded inward by spacingMm at a time (see src/geometry/ContourRingSampler.js and
+ * docs/specifications/RS-1011-FillAlgorithms.md, "Contour Fill"). Holes are preserved with no
+ * hole-specific code -- the same even-odd isPointInsidePolygons() every other mode uses defines
+ * "inside" for the distance transform too, so a hole's interior seeds as "outside" automatically.
+ *
+ * @param {Point2D[][]} polygons
+ * @param {import('../text/VectorPath.js').BoundingBox|null} boundingBox
+ * @param {number} spacingMm
+ * @returns {Point2D[]}
+ */
+export function sampleContourFillPoints(polygons, boundingBox, spacingMm) {
+  if (spacingMm <= 0) {
+    throw new RangeError('sampleContourFillPoints requires a positive spacingMm.');
+  }
+  if (!boundingBox) {
+    return [];
+  }
+
+  // Appended one-by-one (not `points.push(...bigArray)`): spreading a very large sample array as
+  // call arguments overflows the JS call stack -- the same hazard GeometryEngine.generateSvgLayout()
+  // already documents and avoids, reachable here too because a shape's placement size and a fine
+  // stone pitch are independent of each other.
+  const points = [];
+  for (const polygon of polygons) {
+    for (const point of sampleOutlinePoints(polygon, spacingMm, { closed: true })) points.push(point);
+  }
+
+  const insideAt = (xMm, yMm) => isPointInsidePolygons(new Point2D(xMm, yMm), polygons);
+  const rings = computeInwardRingPolygons({ insideAt, boundingBox, spacingMm, startOffsetMm: spacingMm });
+  for (const ring of rings) {
+    const ringPolygon = ring.map((p) => new Point2D(p.xMm, p.yMm));
+    for (const point of sampleOutlinePoints(ringPolygon, spacingMm, { closed: true })) points.push(point);
+  }
+
+  return dedupeStonePoints(points, spacingMm * DEDUPE_FRACTION_OF_SPACING);
+}
+
+/**
+ * Dispatch to the vector sampler for a given fill mode -- the one place every
+ * generate*Layout() method in GeometryEngine.js asks "given this mode, these polygons, this
+ * spacing, which points survive", replacing what was previously four near-identical
+ * `mode === 'fill' ? sampleFillPoints(...) : sampleOutlinePoints(...)` ternaries (see
+ * docs/specifications/RS-1011-FillAlgorithms.md, "GeometryEngine dispatch").
+ *
+ * @param {'outline'|'fill'|'staggered'|'radial'|'contour'} mode
+ * @param {Point2D[][]} polygons
+ * @param {import('../text/VectorPath.js').BoundingBox|null} boundingBox
+ * @param {number} spacingMm
+ * @param {number} [stoneSizeMm] RC-002: outline mode's cross-contour overlap floor (see
+ *   sampleMultiContourOutlinePoints()). Only 'outline' reads this; every other mode ignores it.
+ *   Defaults to spacingMm (the pre-RC-002 floor) when omitted, so callers that only care about
+ *   fill/staggered/radial/contour modes need not pass it.
+ * @returns {Point2D[]}
+ */
+export function sampleShapeFillPoints(mode, polygons, boundingBox, spacingMm, stoneSizeMm = spacingMm) {
+  switch (mode) {
+    case 'fill': return sampleFillPoints(polygons, boundingBox, spacingMm);
+    case 'staggered': return sampleStaggeredFillPoints(polygons, boundingBox, spacingMm);
+    case 'radial': return sampleRadialFillPoints(polygons, boundingBox, spacingMm);
+    case 'contour': return sampleContourFillPoints(polygons, boundingBox, spacingMm);
+    case 'outline':
+    default:
+      return sampleMultiContourOutlinePoints(polygons, spacingMm, { minSeparationMm: stoneSizeMm });
+  }
+}
+
+// Density field "on" (RS-1008A): a field value at/above this level counts as foreground for
+// sampleFieldFillPoints(), the same 0-255 density scale Blur.js/Threshold.js already use
+// (thresholded/uninverted 0/1 masks rescale to 0/255, so 128 is the natural midpoint cutoff).
+const FIELD_ON_THRESHOLD = 128;
+
+/**
+ * Fill a placement box with a regular grid of points spaced spacingMm apart, keeping only points
+ * whose corresponding pixel in a raster density field (RS-1008 Image Trace: grayscale -> threshold
+ * -> optional invert -> optional blur -> optional resize) is at/above FIELD_ON_THRESHOLD.
+ *
+ * This is the raster analogue of sampleFillPoints() above: "inside a polygon" (even-odd point-in-
+ * polygon test) becomes "at/above the field's density threshold" (nearest-pixel field lookup), but
+ * the grid-walk-and-keep-if-on shape is otherwise identical. It lives here (not in src/image/**)
+ * so every stone-sampling algorithm — vector outline, vector fill, and now raster fill — has
+ * exactly one home, per docs/ARCHITECTURE.md's single-source-of-truth principle; src/image/**
+ * prepares the neutral field input, GeometryEngine.generateImageLayout() is the only caller of
+ * this function, matching how it is the only caller of sampleFillPoints()/sampleOutlinePoints().
+ *
+ * @param {{widthPx: number, heightPx: number, data: Uint8ClampedArray}} field Density field (0-255).
+ * @param {object} placement
+ * @param {number} placement.xMm Placement top-left X.
+ * @param {number} placement.yMm Placement top-left Y.
+ * @param {number} placement.widthMm Placement width (must be positive).
+ * @param {number} placement.heightMm Placement height (must be positive).
+ * @param {number} spacingMm Grid spacing (must be positive).
+ * @returns {Point2D[]}
+ */
+export function sampleFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm) {
+  if (spacingMm <= 0) {
+    throw new RangeError('sampleFieldFillPoints requires a positive spacingMm.');
+  }
+  if (widthMm <= 0 || heightMm <= 0) {
+    return [];
+  }
+
+  const { widthPx, heightPx, data } = field;
+  const points = [];
+
+  for (let localYMm = spacingMm / 2; localYMm <= heightMm; localYMm += spacingMm) {
+    const pixelY = Math.min(heightPx - 1, Math.max(0, Math.floor((localYMm / heightMm) * heightPx)));
+    for (let localXMm = spacingMm / 2; localXMm <= widthMm; localXMm += spacingMm) {
+      const pixelX = Math.min(widthPx - 1, Math.max(0, Math.floor((localXMm / widthMm) * widthPx)));
+      if (data[pixelY * widthPx + pixelX] >= FIELD_ON_THRESHOLD) {
+        points.push(new Point2D(xMm + localXMm, yMm + localYMm));
+      }
+    }
+  }
+
+  return points;
+}
+
+function fieldPixelOn(field, localXMm, localYMm, widthMm, heightMm) {
+  if (localXMm < 0 || localYMm < 0 || localXMm > widthMm || localYMm > heightMm) {
+    return false;
+  }
+  const pixelX = Math.min(field.widthPx - 1, Math.max(0, Math.floor((localXMm / widthMm) * field.widthPx)));
+  const pixelY = Math.min(field.heightPx - 1, Math.max(0, Math.floor((localYMm / heightMm) * field.heightPx)));
+  return field.data[pixelY * field.widthPx + pixelX] >= FIELD_ON_THRESHOLD;
+}
+
+/**
+ * Raster counterpart to sampleStaggeredFillPoints() -- a hexagonal point arrangement over a density
+ * field's placement box, keeping only points whose pixel is at/above FIELD_ON_THRESHOLD.
+ *
+ * @param {{widthPx: number, heightPx: number, data: Uint8ClampedArray}} field
+ * @param {object} placement
+ * @param {number} placement.xMm
+ * @param {number} placement.yMm
+ * @param {number} placement.widthMm
+ * @param {number} placement.heightMm
+ * @param {number} spacingMm
+ * @returns {Point2D[]}
+ */
+export function sampleStaggeredFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm) {
+  if (spacingMm <= 0) {
+    throw new RangeError('sampleStaggeredFieldFillPoints requires a positive spacingMm.');
+  }
+  if (widthMm <= 0 || heightMm <= 0) {
+    return [];
+  }
+
+  const rowSpacingMm = spacingMm * (Math.sqrt(3) / 2);
+  const points = [];
+  let rowIndex = 0;
+
+  for (let localYMm = spacingMm / 2; localYMm <= heightMm; localYMm += rowSpacingMm, rowIndex++) {
+    const rowOffsetMm = (rowIndex % 2 === 1) ? spacingMm / 2 : 0;
+    for (let localXMm = spacingMm / 2 + rowOffsetMm; localXMm <= widthMm; localXMm += spacingMm) {
+      if (fieldPixelOn(field, localXMm, localYMm, widthMm, heightMm)) {
+        points.push(new Point2D(xMm + localXMm, yMm + localYMm));
+      }
+    }
+  }
+
+  return points;
+}
+
+/**
+ * Raster counterpart to sampleRadialFillPoints() -- concentric rings centered on the placement
+ * box's own center, keeping only points whose pixel is at/above FIELD_ON_THRESHOLD.
+ *
+ * @param {{widthPx: number, heightPx: number, data: Uint8ClampedArray}} field
+ * @param {object} placement
+ * @param {number} placement.xMm
+ * @param {number} placement.yMm
+ * @param {number} placement.widthMm
+ * @param {number} placement.heightMm
+ * @param {number} spacingMm
+ * @returns {Point2D[]}
+ */
+export function sampleRadialFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm) {
+  if (spacingMm <= 0) {
+    throw new RangeError('sampleRadialFieldFillPoints requires a positive spacingMm.');
+  }
+  if (widthMm <= 0 || heightMm <= 0) {
+    return [];
+  }
+
+  const centerLocalXMm = widthMm / 2;
+  const centerLocalYMm = heightMm / 2;
+  const maxRadiusMm = Math.hypot(widthMm / 2, heightMm / 2);
+  const points = [];
+
+  if (fieldPixelOn(field, centerLocalXMm, centerLocalYMm, widthMm, heightMm)) {
+    points.push(new Point2D(xMm + centerLocalXMm, yMm + centerLocalYMm));
+  }
+
+  for (let radiusMm = spacingMm; radiusMm <= maxRadiusMm; radiusMm += spacingMm) {
+    const stepCount = radialStepCount(radiusMm, spacingMm);
+    for (let step = 0; step < stepCount; step++) {
+      const angleRad = (step / stepCount) * 2 * Math.PI;
+      const localXMm = centerLocalXMm + radiusMm * Math.cos(angleRad);
+      const localYMm = centerLocalYMm + radiusMm * Math.sin(angleRad);
+      if (fieldPixelOn(field, localXMm, localYMm, widthMm, heightMm)) {
+        points.push(new Point2D(xMm + localXMm, yMm + localYMm));
+      }
+    }
+  }
+
+  return dedupeStonePoints(points, spacingMm * DEDUPE_FRACTION_OF_SPACING);
+}
+
+/**
+ * Raster counterpart to sampleContourFillPoints() -- repeated inward contour rings traced directly
+ * from the density field's own pixel mask (no polygon rasterization step needed, unlike the vector
+ * case: a raster field already is a grid). There is no true vector perimeter to reuse for a "ring 0"
+ * the way the vector sampler reuses sampleOutlinePoints() on the original polygons, so the first
+ * ring here sits at spacingMm/2 in from the edge -- the same "start half a pitch in" convention
+ * sampleFieldFillPoints()/sampleStaggeredFieldFillPoints() already use for their own first row.
+ *
+ * @param {{widthPx: number, heightPx: number, data: Uint8ClampedArray}} field
+ * @param {object} placement
+ * @param {number} placement.xMm
+ * @param {number} placement.yMm
+ * @param {number} placement.widthMm
+ * @param {number} placement.heightMm
+ * @param {number} spacingMm
+ * @returns {Point2D[]}
+ */
+export function sampleContourFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm) {
+  if (spacingMm <= 0) {
+    throw new RangeError('sampleContourFieldFillPoints requires a positive spacingMm.');
+  }
+  if (widthMm <= 0 || heightMm <= 0) {
+    return [];
+  }
+
+  const insideAt = (localXMm, localYMm) => fieldPixelOn(field, localXMm, localYMm, widthMm, heightMm);
+  const boundingBox = { minXmm: 0, minYmm: 0, maxXmm: widthMm, maxYmm: heightMm };
+  const rings = computeInwardRingPolygons({ insideAt, boundingBox, spacingMm, startOffsetMm: spacingMm / 2 });
+
+  // One-by-one, not spread -- see sampleContourFillPoints()'s identical safeguard above.
+  const points = [];
+  for (const ring of rings) {
+    const placedRing = ring.map((p) => new Point2D(xMm + p.xMm, yMm + p.yMm));
+    for (const point of sampleOutlinePoints(placedRing, spacingMm, { closed: true })) points.push(point);
+  }
+
+  return dedupeStonePoints(points, spacingMm * DEDUPE_FRACTION_OF_SPACING);
+}
+
+/**
+ * Dispatch to the raster sampler for a given fill mode -- the field-based counterpart to
+ * sampleShapeFillPoints(), used by GeometryEngine.generateImageLayout(). There is no 'outline' case
+ * (a raster density field has no vector perimeter to walk); 'fill' is the default, matching
+ * generateImageLayout()'s previous, only, always-fill behavior.
+ *
+ * @param {'fill'|'staggered'|'radial'|'contour'} mode
+ * @param {{widthPx: number, heightPx: number, data: Uint8ClampedArray}} field
+ * @param {object} placement
+ * @param {number} spacingMm
+ * @returns {Point2D[]}
+ */
+export function sampleFieldByMode(mode, field, placement, spacingMm) {
+  switch (mode) {
+    case 'staggered': return sampleStaggeredFieldFillPoints(field, placement, spacingMm);
+    case 'radial': return sampleRadialFieldFillPoints(field, placement, spacingMm);
+    case 'contour': return sampleContourFieldFillPoints(field, placement, spacingMm);
+    case 'fill':
+    default:
+      return sampleFieldFillPoints(field, placement, spacingMm);
+  }
+}

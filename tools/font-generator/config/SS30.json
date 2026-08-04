@@ -1,0 +1,15 @@
+{
+  "sizeId": "ss30",
+  "familyName": "Sacramento Rhinestone SS30",
+  "stoneDiameterMm": 6.4,
+  "gapMm": 0.3,
+  "supportedHeightRangeMm": [106, 111],
+  "minFeatureWidthMm": 9.9,
+  "minCounterOpeningMm": 16.3,
+  "minLoopOpeningMm": 21.2,
+  "cornerRoundMm": 3.84,
+  "terminalSimplifyMm": 2.9,
+  "sideBearingAdjustMm": 0.45,
+  "minAreaMm2": 3.69,
+  "calibrationNotes": "Initial pass, derived from stoneDiameterMm proportionally (see SS6.json for the formula). This is the size FONT-DIAG-001/FONT-CAL-001/002 studied directly -- its committed 106-111mm range is narrow (only 5mm), so calibration is measured across min/mid/max within that band rather than assuming mid-band results generalize."
+}

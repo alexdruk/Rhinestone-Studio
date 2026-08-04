@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "product": "mug",
+  "units": "mm",
+  "canvas": {
+    "width": 210,
+    "height": 90
+  },
+  "cupColor": "#101820",
+  "wrap": "front",
+  "layers": [
+    {
+      "id": "rect-underline",
+      "type": "rectangle",
+      "name": "Underline Bar",
+      "visible": true,
+      "xMm": 45,
+      "yMm": 60,
+      "widthMm": 120,
+      "heightMm": 6,
+      "fillMode": "fill",
+      "stoneSizeMm": 1.4,
+      "gapMm": 0.2,
+      "color": "siam"
+    },
+    {
+      "type": "text",
+      "visible": true,
+      "font": "Courier Prime",
+      "mode": "fill",
+      "autoFit": true,
+      "id": "team-eagles",
+      "name": "Eagles",
+      "text": "EAGLES 12",
+      "heightMm": 24,
+      "stoneSizeMm": 2,
+      "gapMm": 0.3,
+      "color": "crystal-clear"
+    }
+  ]
+}

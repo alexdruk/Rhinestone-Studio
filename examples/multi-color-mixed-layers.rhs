@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "product": "mug",
+  "units": "mm",
+  "canvas": {
+    "width": 210,
+    "height": 90
+  },
+  "cupColor": "#0b0b0b",
+  "wrap": "front",
+  "layers": [
+    {
+      "id": "rect-top",
+      "type": "rectangle",
+      "name": "Top Bar",
+      "visible": true,
+      "xMm": 20,
+      "yMm": 8,
+      "widthMm": 170,
+      "heightMm": 9,
+      "fillMode": "outline",
+      "stoneSizeMm": 1.4,
+      "gapMm": 0.2,
+      "color": "sapphire"
+    },
+    {
+      "id": "circle-outer",
+      "type": "circle",
+      "name": "Outer Ring",
+      "visible": true,
+      "cxMm": 105,
+      "cyMm": 45,
+      "radiusMm": 32,
+      "fillMode": "outline",
+      "stoneSizeMm": 2,
+      "gapMm": 0.3,
+      "color": "crystal"
+    },
+    {
+      "id": "circle-inner",
+      "type": "circle",
+      "name": "Inner Ring",
+      "visible": true,
+      "cxMm": 105,
+      "cyMm": 45,
+      "radiusMm": 20,
+      "fillMode": "outline",
+      "stoneSizeMm": 1.6,
+      "gapMm": 0.25,
+      "color": "siam"
+    },
+    {
+      "type": "text",
+      "visible": true,
+      "font": "Courier Prime",
+      "mode": "centerline",
+      "autoFit": true,
+      "id": "name-ava",
+      "name": "Ava",
+      "text": "Ava",
+      "heightMm": 22,
+      "stoneSizeMm": 2.2,
+      "gapMm": 0.35,
+      "color": "gold"
+    },
+    {
+      "id": "rect-bottom",
+      "type": "rectangle",
+      "name": "Bottom Bar",
+      "visible": true,
+      "xMm": 20,
+      "yMm": 73,
+      "widthMm": 170,
+      "heightMm": 9,
+      "fillMode": "fill",
+      "stoneSizeMm": 1.4,
+      "gapMm": 0.2,
+      "color": "emerald"
+    }
+  ]
+}

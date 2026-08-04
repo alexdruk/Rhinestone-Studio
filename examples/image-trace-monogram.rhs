@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "product": "mug",
+  "units": "mm",
+  "canvas": {
+    "width": 210,
+    "height": 90
+  },
+  "cupColor": "#ffffff",
+  "wrap": "front",
+  "layers": [
+    {
+      "id": "monogram-trace",
+      "type": "image",
+      "name": "Monogram (Image Trace)",
+      "visible": true,
+      "imageSrc": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAAD40lEQVR4Aeyc0XLiMBAE7fx44Mu5zBFVfLoYyzLSSruduo0DCEvT08XDPfDx4Cc0gY+Fn9AEECB0/cuCAAgQnEDw+HwCIEBwAsHj8wkQVIAUGwESiaBXBAhafIqNAIlE0CsCBC0+xUaARCLoFQGCFp9iI0AiEfSKAMGKz+N2F2Bd12Vd/U4OePTH3QUYHUi08yFAtMazvAiQAYn2EAGiNZ7lRYAMSLSHCBCt8SwvAmRAvD7cy4UAe2SCPI8AQYrei4kAe2SCPI8AQYrei4kAe2SCPI8AQYrei4kAe2SCPI8Azos+ijedAI/HY2k5R8C8vT6dAN4KsM6DANYNGO+PAMYFWG+PANYNGO+PAMYFWG+PANYNGO+PAMYFtNq+9L4IUErK6ToEcFpsaSwEKCXldB0COC22NBYClJJyug4BnBZbGgsBSkk5XYcAzoo9G2c6Ada17XcLnAU4+/rpBJgd+GjnR4DRGul8HgToDHy07RBgtEY6nwcBOgMfbTsEGK2RzudBgM7AW21Xe18EqCXn5H0I4KTI2hgIUEvOyfsQwEmRtTEQoJack/chgJMia2MgQC05J+9DgMmLvHr86QS43W5Nvx/g6ncPXC2k9/unFOB+v/fm5Ha/6QRQE/oUQAKRuD5TCqDYSCAK12daARQdCUTh2kwtgKIjgSjUz/QCKDoSiELduBBA0aNJoMzvGDcCCAYSiMK5cSWAoiOBKJSPOwEUHQlEoWxcCqDoSCAKxzOdACr2ONZzhdbyP4ZPFnu/pxPg8/NzUbF7gfLntRYJcio/j6cTQEdHAlF4z0wpgKJHlUDZ3znTCiAISCAK12ZqARQdCUShfqYXQNGRQBTqxoUAio4EonB+3Aig6EggCufGlQCKjgSiUD7uBFB0JBCFsnEpgKJ7k0CZWoxbAQQLCUTh9bgWQNGRQBT2x70Aio4EovD7hBBA0ZFAFP6fMAIoOhKIwr8TSgBFRwJR+JlwAig6EojCc0IKoOizSKCztpywAggqEixLaAGQAAHkwBL5kyD8J8BfA75+RZUAAb7KT/8iSoAAqf3vazQJEOC7+O0lkgQIsG1+87e1BJujNP0TAV7gjSABArwQQC95lwAB1PLBeJYAAQ7KTy97lQABUsMFV48SIEBB8dsl3iRAgG27hX97kgABCkvPl7WSIN+n9ePuAnj6Pn5JcCaP1rcu9Oz9uwtw9oCsb0sAAdryHf7uCDB8RW0PiABt+Q5/dwQYvqK2B0SAtnyHvzsCDFKR1TEQwIr8IPsiwCBFWB0DAazID7IvAgxShNUxEMCK/CD7IsAgRVgdAwGsyA+yLwIYF2G9/R8AAAD////ir7wAAAAGSURBVAMACwEJPekLcQAAAAAASUVORK5CYII=",
+      "xMm": 70,
+      "yMm": 10,
+      "widthMm": 70,
+      "heightMm": 70,
+      "threshold": 128,
+      "invert": false,
+      "blurRadiusPx": 1,
+      "maxWidthPx": 400,
+      "maxHeightPx": 400,
+      "fillMode": "contour",
+      "stoneSizeMm": 1.5,
+      "gapMm": 0.3,
+      "color": "jet"
+    }
+  ]
+}

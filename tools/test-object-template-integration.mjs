@@ -1,0 +1,319 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// RS-1004 — verifies app.js/index.html are actually wired for multi-object templates: the Object
+// type control exists and is discoverable at the top of the sidebar (not buried below the fold,
+// matching tools/test-ui-discoverability.mjs's established measurable convention), switching it is
+// one discrete/undoable action that resets project.canvas/project.wrap to the new template's
+// defaults, an existing Mug Project JSON (no product field) imports/renders identically
+// (backward compatibility), product/canvas/wrap round-trip through Project JSON export/import,
+// undo/redo restores them together, the merged StoneLayout is deterministic and unaffected by
+// object type for unchanged layer inputs, every export button/filename is unchanged, and
+// GeometryEngine.js/StoneLayout.js are untouched. Structural checks against the live app.js/
+// index.html source (app.js is a browser entry point, not import()-able directly under plain
+// Node), matching the established convention in tools/test-curved-text-integration.mjs /
+// tools/test-undo-redo-integration.mjs.
+
+const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
+const indexHtml = await readFile(path.join(repoRoot, 'index.html'), 'utf8');
+
+const { getObjectTemplate, OBJECT_TEMPLATE_IDS, getPlateDefaults, normalizePlateParams } = await import('../src/products/index.js');
+const { GeometryEngine } = await import('../src/geometry/index.js');
+const { FontManager } = await import('../src/fonts/index.js');
+const { createDefaultFontProviderRegistry } = await import('../src/text/index.js');
+
+async function test(name, fn) {
+  try {
+    await fn();
+    console.log(`✓ ${name}`);
+  } catch (error) {
+    console.error(`✗ ${name}`);
+    console.error(error);
+    process.exitCode = 1;
+  }
+}
+
+// Extracts the real validateProject()/defaultProject() from app.js and executes them (not
+// reimplemented), matching the precedent in tools/test-examples-regression.mjs /
+// tools/test-svg-integration.mjs. getObjectTemplate is injected since the extracted source slice
+// does not include app.js's top-of-file import.
+async function extractProjectFunctions() {
+  const validateMatch = appJs.match(/function validateProject\(obj\)\{[\s\S]*?\n\}\n/);
+  assert.ok(validateMatch, 'expected to find validateProject() in app.js');
+  // RS-2010: defaultProject() now computes a `const vessel=...;` before its `return{...}` (the
+  // vessel-derived canvas) -- the pattern no longer requires "return{" immediately after "(){".
+  const defaultMatch = appJs.match(/function defaultProject\(\)\{[\s\S]*?\}\}\n/);
+  assert.ok(defaultMatch, 'expected to find defaultProject() in app.js');
+
+  // RS-2002: TEXT_ENGINE_FONT_IDS became a `let` (reassigned once fontManager loads) and moved
+  // after DEFAULT_TEXT_FONT_ID -- anchor on the latter instead, still the first real constant
+  // defaultProject()/validateProject() transitively depend on.
+  const constantsStart = appJs.indexOf("const DEFAULT_TEXT_FONT_ID=");
+  const source = `${appJs.slice(constantsStart, appJs.indexOf(defaultMatch[0]) + defaultMatch[0].length)}\n${appJs.slice(appJs.indexOf('const SUPPORTED_LAYER_TYPES=new Set'), appJs.indexOf(validateMatch[0]) + validateMatch[0].length)}`;
+  // S-110: this slice now includes app.js's own XYWH_SHAPE_TYPES/SHAPE_LAYER_TYPES/etc.
+  // declarations (they sit between DEFAULT_TEXT_FONT_ID and defaultProject()), which spread the
+  // imported SHAPE_LIBRARY_KINDS -- injected as a function parameter for the same reason
+  // getObjectTemplate is.
+  const { SHAPE_LIBRARY_KINDS } = await import('../src/geometry/index.js');
+  // S-112: defaultProject() calls getPlateDefaults() and validateProject() calls
+  // normalizePlateParams() -- both injected as function parameters for the same reason
+  // getObjectTemplate is.
+  // RS-2010: validateProject()/defaultProject() now also reference VESSEL_PRODUCT_IDS/
+  // getVesselDefaults/normalizeVesselParams/deriveLegacyVesselParams/computeCanvasFromVessel --
+  // injected as function parameters for the same reason getPlateDefaults/normalizePlateParams are.
+  const { VESSEL_PRODUCT_IDS, getVesselDefaults, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel } = await import('../src/products/index.js');
+  // eslint-disable-next-line no-new-func
+  return new Function(
+    'getObjectTemplate', 'SHAPE_LIBRARY_KINDS', 'getPlateDefaults', 'normalizePlateParams',
+    'VESSEL_PRODUCT_IDS', 'getVesselDefaults', 'normalizeVesselParams', 'deriveLegacyVesselParams', 'computeCanvasFromVessel',
+    `${source}\nreturn { validateProject, defaultProject };`
+  )(getObjectTemplate, SHAPE_LIBRARY_KINDS, getPlateDefaults, normalizePlateParams, VESSEL_PRODUCT_IDS, getVesselDefaults, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel);
+}
+
+const { validateProject, defaultProject } = await extractProjectFunctions();
+
+// FONT-002: defaultProject()'s text layer now uses the default Production Font (rs-block, provider
+// 'rhinestone') instead of an OpenType font, so this file's own minimal generation port needs to
+// resolve providerId the same way app.js's resolveFontProviderId() does -- shared across
+// buildPermanentEngine() and generateMergedLayout() so they always agree.
+const sharedManifest = JSON.parse(await readFile(path.join(repoRoot, 'assets/fonts/manifest.json'), 'utf8'));
+const sharedFontManager = new FontManager(sharedManifest);
+function resolveFontProviderId(fontId) {
+  return sharedFontManager.hasFont(fontId) ? sharedFontManager.getFont(fontId).providerId : 'opentype';
+}
+
+async function buildPermanentEngine() {
+  async function loadFontBufferFromRepoRoot(relativePath) {
+    const buffer = await readFile(path.join(repoRoot, relativePath));
+    return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+  }
+  const fontProviderRegistry = createDefaultFontProviderRegistry(sharedFontManager, { loadFontBuffer: loadFontBufferFromRepoRoot });
+  return new GeometryEngine({ fontProviderRegistry });
+}
+
+// A faithful, minimal port of app.js's own generate()/generateTextStonesLive() merge pipeline,
+// scoped to text layers only (matches the default project's single text layer) — enough to prove
+// object type never perturbs the generated StoneLayout for unchanged layer inputs, without
+// reimplementing app.js's full live-editor state machine.
+async function generateMergedLayout(project, engine) {
+  const layer = project.layers[0];
+  const base = {
+    text: layer.text, fontId: layer.font, providerId: resolveFontProviderId(layer.font), layerId: layer.id, heightMm: layer.height,
+    stoneSizeMm: layer.stoneSize, gapMm: layer.gap, mode: layer.textMode === 'fill' ? 'fill' : 'outline',
+    color: layer.color, curveEnabled: Boolean(layer.curveEnabled), curveRadiusMm: layer.curveRadiusMm,
+    curveDirection: layer.curveDirection, curveStartAngleDeg: layer.curveStartAngleDeg,
+    curveSweepAngleDeg: layer.curveSweepAngleDeg, curveAlignment: layer.curveAlignment
+  };
+  return engine.generateTextLayout(base);
+}
+
+// --- 1. Discoverability -----------------------------------------------------------------------
+
+await test('1. index.html exposes #objectType with mug/tumbler/bottle options', () => {
+  assert.match(indexHtml, /<select id="objectType">/);
+  for (const value of ['mug', 'tumbler', 'bottle']) {
+    assert.ok(indexHtml.includes(`value="${value}"`), `expected an option value="${value}" inside #objectType`);
+  }
+});
+
+// UI-001 (Complete Application Redesign) replaced the single long sidebar this test originally
+// measured with a top menu + Lightbox architecture: #objectType now lives inside the Shapes
+// Lightbox's "Object Templates" tab (Mug/Tumbler/Bottle are physical object/preview templates, not
+// design-shape layers — see docs/specifications/UI-001-CompleteRedesign.md), reachable from the
+// always-visible top menu in one click, not by raw scroll position in one long sidebar. This
+// extracts #shapesPanelTemplates's own inner HTML (tag-depth-aware, so it is not fooled by nested
+// <div>s) and checks #objectType lives there, rather than an index-ordering heuristic tied to the
+// old layout.
+function extractElementHtml(html, id) {
+  const openTagMatch = html.match(new RegExp(`<([a-zA-Z]+)[^>]*\\bid="${id}"[^>]*>`));
+  assert.ok(openTagMatch, `expected to find an element with id="${id}"`);
+  const tag = openTagMatch[1];
+  const start = openTagMatch.index + openTagMatch[0].length;
+  const openRe = new RegExp(`<${tag}\\b`, 'g');
+  const closeRe = new RegExp(`</${tag}>`, 'g');
+  let depth = 1;
+  let cursor = start;
+  while (depth > 0) {
+    openRe.lastIndex = cursor;
+    closeRe.lastIndex = cursor;
+    const nextOpen = openRe.exec(html);
+    const nextClose = closeRe.exec(html);
+    assert.ok(nextClose, `unbalanced <${tag}> for id="${id}"`);
+    if (nextOpen && nextOpen.index < nextClose.index) {
+      depth++;
+      cursor = nextOpen.index + nextOpen[0].length;
+    } else {
+      depth--;
+      cursor = nextClose.index + nextClose[0].length;
+      if (depth === 0) return html.slice(start, nextClose.index);
+    }
+  }
+  throw new Error(`unreachable: failed to extract #${id}`);
+}
+
+await test('2. #objectType lives inside the Shapes Lightbox\'s "Object Templates" tab, reachable from the always-visible top menu (not buried in a long sidebar)', () => {
+  const templatesTabBody = extractElementHtml(indexHtml, 'shapesPanelTemplates');
+  assert.ok(templatesTabBody.includes('id="objectType"'), 'expected #objectType inside #shapesPanelTemplates');
+  assert.ok(indexHtml.indexOf('id="menuShapes"') > 0, 'expected an always-visible #menuShapes top-menu button that opens the Shapes Lightbox');
+});
+
+await test('3. #objectType is not duplicated (exactly one element)', () => {
+  const matches = indexHtml.match(/id="objectType"/g) || [];
+  assert.equal(matches.length, 1);
+});
+
+// --- 2. Wiring ---------------------------------------------------------------------------------
+
+await test('4. app.js imports getObjectTemplate/getSafeAreaRectMm (plus S-112\'s plate helpers) from the products barrel', () => {
+  const importMatch = appJs.match(/import\s*\{([\s\S]*?)\}\s*from\s*['"]\.\/src\/products\/index\.js['"]/);
+  assert.ok(importMatch, 'expected an import from ./src/products/index.js');
+  for (const name of ['getObjectTemplate', 'getSafeAreaRectMm', 'getPlateDefaults', 'normalizePlateParams', 'getPlateDesignTargetGuide']) {
+    assert.ok(importMatch[1].includes(name), `expected the products barrel import to include ${name}`);
+  }
+});
+
+await test('5. switching #objectType commits history before mutating project.product/canvas/wrap', () => {
+  const handlerMatch = appJs.match(/el\('objectType'\)\.addEventListener\('change',\(\)=>\{([\s\S]*?)\}\);/);
+  assert.ok(handlerMatch, 'expected an #objectType change handler');
+  const body = handlerMatch[1];
+  assert.match(body, /^commitHistory\(\);/, 'expected commitHistory() to run before any mutation');
+  assert.match(body, /project\.product=template\.id/);
+  assert.match(body, /project\.canvas=\{width:template\.productionWidthMm,height:template\.productionHeightMm\}/);
+  assert.match(body, /project\.wrap=template\.wrap\.default/);
+  assert.match(body, /updateAll\(true\)/, 'expected updateAll(true) so writeSelectedControlsToLayer() does not overwrite the just-set project fields');
+});
+
+await test('6. syncSelectedControlsFromLayer() resyncs #objectType from project.product', () => {
+  assert.match(appJs, /el\('objectType'\)\.value=project\.product/);
+});
+
+await test('7. drawCup() forwards the active object template to the 3D preview (RS-1006: preview3D.update(), not renderCup())', () => {
+  assert.match(appJs, /preview3D\.update\(layout,\{[^}]*objectTemplate:currentObjectTemplate\(\)/);
+});
+
+await test('8. a safe-area guide is drawn as an app.js editor overlay (not inside CanvasRenderer2D.js)', () => {
+  assert.match(appJs, /function drawSafeAreaGuide\(/, 'expected an app.js-local drawSafeAreaGuide() helper');
+  assert.match(appJs, /drawSafeAreaGuide\(ctx,s,ox,oy,dpr,getSafeAreaRectMm\(currentObjectTemplate\(\),project\.canvas\.width,project\.canvas\.height\)\)/);
+});
+
+// --- 3. Backward compatibility ------------------------------------------------------------------
+
+await test('9. defaultProject() defaults to the mug template, canvas derived from the Standard Mug\'s physical dimensions (RS-2010: no longer the fixed 210x90mm preset)', () => {
+  const project = defaultProject();
+  assert.equal(project.product, 'mug');
+  // RS-2010: a fresh project's canvas is vessel-derived (circumference/printable height), not
+  // ObjectTemplate.js's own fixed productionWidthMm/productionHeightMm preset -- see
+  // docs/specifications/RS-2010-PhysicalProductDimensions.md. That fixed preset is still what a
+  // *legacy* project (loaded via validateProject(), no project.vessel) keeps untouched -- see
+  // test 10 below and tools/test-product-vessel-dimensions.mjs's own backward-compatibility cases.
+  assert.ok(Math.abs(project.canvas.width - Math.PI * project.vessel.bodyDiameterMm) < 1e-9);
+  assert.equal(project.canvas.height, project.vessel.printableHeightMm);
+});
+
+await test('10. a Project JSON with no product field at all validates and defaults to mug (pre-RS-1004 files)', () => {
+  const legacyProject = { version: 2, canvas: { width: 210, height: 90 }, layers: [{ id: 'text', type: 'text', text: 'Hi', font: 'courier-prime-regular', height: 25, stoneSize: 2, gap: 0.3, color: 'gold' }] };
+  const validated = validateProject(legacyProject);
+  assert.equal(validated.product, 'mug');
+});
+
+await test('11. an unrecognized product value falls back to mug instead of throwing', () => {
+  const project = { version: 2, product: 'spaceship', canvas: { width: 210, height: 90 }, layers: [{ id: 'text', type: 'text', text: 'Hi', font: 'courier-prime-regular', height: 25, stoneSize: 2, gap: 0.3, color: 'gold' }] };
+  const validated = validateProject(project);
+  assert.equal(validated.product, 'mug');
+});
+
+await test('12. the default project (mug) is byte-for-byte unchanged in shape (RS-1004 added no new default text-layer fields)', () => {
+  const project = defaultProject();
+  assert.equal(project.layers.length, 1);
+  assert.equal(project.layers[0].id, 'text');
+  assert.equal(project.layers[0].text, 'Vitalina Serbin');
+  assert.equal(project.wrap, 'front');
+  assert.equal(project.cupColor, '#1f3556');
+});
+
+// --- 4. Save/load round-trip + undo/redo ---------------------------------------------------------
+
+await test('13. product/canvas/wrap round-trip through validateProject() for every template', () => {
+  for (const id of OBJECT_TEMPLATE_IDS) {
+    const template = getObjectTemplate(id);
+    const project = { version: 2, product: id, canvas: { width: template.productionWidthMm, height: template.productionHeightMm }, wrap: template.wrap.default, cupColor: '#1f3556', layers: [{ id: 'text', type: 'text', text: 'Hi', font: 'courier-prime-regular', height: 25, stoneSize: 2, gap: 0.3, color: 'gold' }] };
+    const validated = validateProject(JSON.parse(JSON.stringify(project)));
+    assert.equal(validated.product, id, `${id}: product must round-trip exactly`);
+    assert.deepEqual(validated.canvas, project.canvas, `${id}: canvas must round-trip exactly`);
+    assert.equal(validated.wrap, project.wrap, `${id}: wrap must round-trip exactly`);
+  }
+});
+
+await test('14. applyHistorySnapshot() restores the whole project (including product/canvas/wrap) from one JSON snapshot, exactly like every other field', () => {
+  assert.match(appJs, /function applyHistorySnapshot\(snap\)\{project=snap\.project;selectedLayerId=snap\.selectedLayerId;syncSelectedControlsFromLayer\(\);updateAll\(true\)\}/);
+  const snapshotMatch = appJs.match(/function currentSnapshot\(\)\{([\s\S]*?)\}\n/);
+  assert.ok(snapshotMatch);
+  assert.match(snapshotMatch[1], /project:JSON\.parse\(JSON\.stringify\(project\)\)/, 'currentSnapshot() must deep-clone the whole project object, which already includes product/canvas/wrap -- no RS-1004-specific history code is needed');
+});
+
+// --- 5. Deterministic StoneLayout / unchanged geometry ---------------------------------------------
+
+await test('15. the merged StoneLayout for a fixed text layer is identical across all three object templates (object type never perturbs geometry)', async () => {
+  const engine = await buildPermanentEngine();
+  const project = defaultProject();
+  const results = {};
+  for (const id of OBJECT_TEMPLATE_IDS) {
+    const withTemplate = { ...project, product: id };
+    const layout = await generateMergedLayout(withTemplate, engine);
+    results[id] = layout.toJSON();
+  }
+  const [first, ...rest] = OBJECT_TEMPLATE_IDS;
+  for (const id of rest) {
+    assert.deepEqual(results[id].stones, results[first].stones, `${id}: stone positions must be identical to ${first}'s (StoneLayout is object-agnostic)`);
+    assert.equal(results[id].count, results[first].count);
+  }
+});
+
+await test('16. generation is deterministic across two independent runs for the same object template', async () => {
+  const engine = await buildPermanentEngine();
+  const project = defaultProject();
+  const a = await generateMergedLayout(project, engine);
+  const b = await generateMergedLayout(project, engine);
+  assert.deepEqual(a.toJSON(), b.toJSON());
+});
+
+await test('17. switching object type and back leaves layer geometry fields untouched (only project.canvas/wrap/product change)', () => {
+  const project = defaultProject();
+  const originalLayer = JSON.parse(JSON.stringify(project.layers[0]));
+  // Simulate the #objectType handler's own mutation exactly (product/canvas/wrap only).
+  const tumbler = getObjectTemplate('tumbler');
+  project.product = tumbler.id;
+  project.canvas = { width: tumbler.productionWidthMm, height: tumbler.productionHeightMm };
+  project.wrap = tumbler.wrap.default;
+  const mug = getObjectTemplate('mug');
+  project.product = mug.id;
+  project.canvas = { width: mug.productionWidthMm, height: mug.productionHeightMm };
+  project.wrap = mug.wrap.default;
+  assert.deepEqual(project.layers[0], originalLayer, 'layer fields must be untouched by an object-type round-trip');
+  assert.deepEqual(project.canvas, { width: 210, height: 90 }, 'canvas must return to the original mug default');
+});
+
+// --- 6. GeometryEngine/StoneLayout untouched, export compatibility --------------------------------
+await test('19. every export button id and downloaded filename is unchanged, including the Object Preview PNG (still exportCup / rhinestone-cup-preview.png)', () => {
+  assert.match(appJs, /el\('exportProject'\)\.onclick=/);
+  assert.match(appJs, /el\('exportLayout'\)\.onclick=/);
+  assert.match(appJs, /el\('exportSVG'\)\.onclick=/);
+  assert.match(appJs, /el\('exportPNG'\)\.onclick=/);
+  assert.match(appJs, /el\('exportCup'\)\.onclick=/);
+  assert.ok(appJs.includes("'rhinestone-project.json'"));
+  assert.ok(appJs.includes("'rhinestone-generated-layout.json'"));
+  assert.ok(appJs.includes("'rhinestone-layout.svg'"));
+  assert.ok(appJs.includes("'rhinestone-layout.png'"));
+  assert.ok(appJs.includes("'rhinestone-cup-preview.png'"), 'the Object Preview PNG export filename must stay byte-identical for export compatibility');
+});
+
+await test('20. the #cup canvas id and #cupColor control id are unchanged; only their human-facing labels were generalized', () => {
+  assert.match(indexHtml, /<canvas id="cup">/);
+  assert.match(indexHtml, /<select id="cupColor">/);
+  assert.ok(indexHtml.includes('Object Preview'), 'expected the panel header to be relabeled to object-generic wording');
+  assert.ok(indexHtml.includes('Preview background'), 'expected the cupColor label to be relabeled to object-generic wording');
+});
+console.log('Object template integration tests passed.');

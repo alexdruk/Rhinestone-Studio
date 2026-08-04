@@ -1,0 +1,563 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>RS-2013 — instanced faceted stone geometry test harness</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #e9eef5; overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; }
+  #info {
+    position: fixed; top: 8px; left: 8px; max-width: 62ch;
+    font-family: -apple-system, sans-serif; font-size: 12px; line-height: 1.4; color: #223;
+    background: rgba(255, 255, 255, 0.85); padding: 8px 12px; border-radius: 6px;
+  }
+  #info a { color: #1a4fb4; }
+  #error {
+    position: fixed; top: 8px; right: 8px; max-width: 60ch;
+    font-family: -apple-system, sans-serif; font-size: 12px; line-height: 1.4; color: #600;
+    background: rgba(255, 230, 230, 0.95); padding: 8px 12px; border-radius: 6px; display: none;
+    white-space: pre-wrap;
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "opentype.js": "../src/browser/OpenTypeBrowserAdapter.js",
+    "three": "../node_modules/three/build/three.module.js"
+  }
+}
+</script>
+</head>
+<body>
+<div id="info"></div>
+<div id="error"></div>
+<canvas id="canvas"></canvas>
+<script type="module">
+  import * as THREE from 'three';
+  import { OrbitControls } from '../node_modules/three/examples/jsm/controls/OrbitControls.js';
+  import { CRYSTAL_COLORS, getCrystalColor } from '../src/renderer/CrystalColors.js';
+  import { STONE_SIZES } from '../src/renderer/StoneSizes.js';
+  import { getCrystalAppearance } from '../src/renderer/CrystalAppearance.js';
+  import { buildObjectMesh, wallRadiusAt } from '../src/preview3d/ObjectGeometryBuilder.js';
+  import { computeObjectDimensionsMm, azimuthRadForCanvasXMm } from '../src/preview3d/ObjectDimensions.js';
+  import { getObjectTemplate, normalizePlateParams } from '../src/products/index.js';
+  import { FontManager } from '../src/fonts/index.js';
+  import { createDefaultFontProviderRegistry } from '../src/text/index.js';
+  import { GeometryEngine } from '../src/geometry/index.js';
+  import { validateRhsProject, generateProjectStoneLayout } from '../src/gallery/index.js';
+
+  const canvas = document.getElementById('canvas');
+  const infoEl = document.getElementById('info');
+  const errorEl = document.getElementById('error');
+  const params = new URLSearchParams(location.search);
+  const product = params.get('product'); // null => step-1 static grid mode (unchanged)
+  const lighting = params.get('lighting') === 'extended' ? 'extended' : 'default'; // RS-2013 step 3
+  // RS-2013 step 3b: candidates for step 3's finding that neither lighting angle nor intensity can
+  // redistribute which facet reads bright vs. dark on an 8-facet octahedron under a diffuse-dominant
+  // material -- see TASK_RESULT.md. `?facet=` selects the geometry primitive, `?material=` selects
+  // the MeshStandardMaterial roughness/metalness preset. Both default to the unchanged step-1/2/3
+  // baseline (plain octahedron, roughness=0.42/metalness=0.08) so this harness's default view is
+  // still exactly what steps 1-3 shipped.
+  const facetMode = params.get('facet') === 'bipyramid16' ? 'bipyramid16' : 'octahedron';
+  const materialMode = params.get('material') === 'specular' ? 'specular' : 'diffuse';
+  // Raw tuning overrides (not part of the two named presets above) -- lets the roughness/metalness
+  // sweep documented in TASK_RESULT.md be reproduced/extended without editing this file.
+  const roughnessOverride = params.has('roughness') ? parseFloat(params.get('roughness')) : null;
+  const metalnessOverride = params.has('metalness') ? parseFloat(params.get('metalness')) : null;
+  // RS-2013 step 3b verification: the step-3b `-crop.png`/`-facetdiff.png` evidence was a
+  // nearest-neighbor-upscaled crop of a wide ~20-stone shot -- at that source resolution individual
+  // facet edges are sub-pixel, not real detail. `?view=singlestone` renders exactly ONE real stone
+  // from the product's own StoneLayout, camera-close at render time (not post-hoc crop/upscale), so
+  // facet edges are real pixels. `?stoneIndex=N` picks which stone (default 0).
+  const viewMode = params.get('view') === 'singlestone' ? 'singlestone' : null;
+  const stoneIndexParam = params.has('stoneIndex') ? parseInt(params.get('stoneIndex'), 10) : 0;
+
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.NoToneMapping;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xe9eef5);
+
+  const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 1, 5000);
+
+  // RS-2013 step 3 (§3.4/§4 step 3): the harness now supports two lighting rigs, selectable via
+  // ?lighting=default|extended (default preserves the exact Preview3DRenderer.js init() rig
+  // unchanged, byte-for-byte the same ambient + two-directional setup PREVIEW-001 added -- this is
+  // the "before" for the step-3 visual comparison). "extended" is this milestone's own addition: two
+  // more directional lights from angles the original pair doesn't cover, staying within
+  // MeshStandardMaterial + ambient/directional lights only (no HDRI/PMREMGenerator -- §3.4 explicitly
+  // defers that). See TASK_RESULT.md for the reasoning behind the specific angles chosen and the
+  // honest visual assessment of whether this actually reads as "faceted gem" vs. the original rig.
+  const LIGHT_RIGS = {
+    default: [
+      { type: 'ambient', intensity: 0.75 },
+      { type: 'directional', intensity: 1.6, position: [60, 120, 90] },
+      { type: 'directional', intensity: 0.5, position: [-70, 40, -60] }
+    ],
+    extended: [
+      // Ambient lowered from 0.75 -- with more directional coverage below, a high ambient floor
+      // flattens exactly the per-facet contrast this step is trying to create.
+      { type: 'ambient', intensity: 0.4 },
+      { type: 'directional', intensity: 1.6, position: [60, 120, 90] },
+      { type: 'directional', intensity: 0.5, position: [-70, 40, -60] },
+      // Both original lights sit at azimuths that put the *other* one behind the object's front
+      // (the side facing the camera, where a design's stones actually are): the key light is the
+      // only one of the two actually in front of the object, so every front-facing stone was
+      // effectively lit by one directional source plus ambient. This adds a second front-hemisphere
+      // light from a distinctly different azimuth/elevation (front-left, low) so front-facing facets
+      // get two independent highlight sources instead of one dominant one, per §3.4's "cover more
+      // facet angles" recommendation.
+      { type: 'directional', intensity: 1.1, position: [-108, 51, 91] },
+      // New: a third front-hemisphere light from underneath, catching the downward-tilted facets
+      // that both other front lights (positive Y) leave to ambient only.
+      { type: 'directional', intensity: 0.7, position: [25, -39, 142] }
+    ]
+  };
+
+  function applyLightRig(mode) {
+    for (const spec of LIGHT_RIGS[mode]) {
+      if (spec.type === 'ambient') {
+        scene.add(new THREE.AmbientLight(0xffffff, spec.intensity));
+      } else {
+        const light = new THREE.DirectionalLight(0xffffff, spec.intensity);
+        light.position.set(...spec.position);
+        scene.add(light);
+      }
+    }
+  }
+  applyLightRig(lighting);
+
+  // RS-2013 step 3b, Candidate A: an "octagonal bipyramid" (two apex vertices + an 8-vertex
+  // equatorial ring = 16 triangular faces) -- the design doc's §3.1 "16-triangle double bipyramid"
+  // fallback. Built by hand (non-indexed, 3 unique vertices per triangle) rather than composing two
+  // THREE.OctahedronGeometry instances, so computeVertexNormals() yields flat per-facet normals for
+  // free (no vertex is shared between triangles, so each vertex's "averaged" normal is just its own
+  // face's normal) -- the same flat-shading property THREE.OctahedronGeometry(radius,0) already has.
+  // Bounding radius is 1 (apexes at |z|=1, equatorial ring at radius 1), matching
+  // THREE.OctahedronGeometry(1,0)'s own vertex distance from origin, so the existing
+  // `scaleV.setScalar(radiusMm)` call scales this geometry identically to the plain octahedron.
+  // Local +Z is the apex-to-apex axis (same convention the octahedron's own construction axes give
+  // it), so the existing outward-normal alignment (`qAlign.setFromUnitVectors(zAxis, normal)`) and
+  // facet-spin (`qSpin` around zAxis) logic in runStep2Placement() work unchanged for either shape.
+  function buildBipyramid16Geometry(radius) {
+    const sides = 8;
+    const equator = [];
+    for (let i = 0; i < sides; i++) {
+      const theta = (i / sides) * Math.PI * 2;
+      equator.push([radius * Math.cos(theta), radius * Math.sin(theta), 0]);
+    }
+    const topApex = [0, 0, radius];
+    const bottomApex = [0, 0, -radius];
+    const verts = [];
+    for (let i = 0; i < sides; i++) {
+      const a = equator[i];
+      const b = equator[(i + 1) % sides];
+      verts.push(topApex, a, b);
+      verts.push(bottomApex, b, a);
+    }
+    const array = new Float32Array(verts.length * 3);
+    verts.forEach((v, i) => { array[i * 3] = v[0]; array[i * 3 + 1] = v[1]; array[i * 3 + 2] = v[2]; });
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(array, 3));
+    geometry.computeVertexNormals();
+    return geometry;
+  }
+
+  function buildFacetGeometry(mode) {
+    return mode === 'bipyramid16' ? buildBipyramid16Geometry(1) : new THREE.OctahedronGeometry(1, 0);
+  }
+
+  // RS-2013 step 3b, Candidate B: a more specular-dominant MeshStandardMaterial response. `diffuse`
+  // is the unchanged step-1/2/3 baseline nudge (_applyCrystalMaterialResponse()'s own
+  // roughness=0.42/metalness=0.08). `specular` is the winning combination from the 3-combination
+  // sweep documented in TASK_RESULT.md -- sharp, position/angle-dependent highlights without
+  // crossing into a chrome/liquid-metal look.
+  const MATERIAL_PRESETS = {
+    diffuse: { roughness: 0.42, metalness: 0.08 },
+    specular: { roughness: 0.12, metalness: 0.55 }
+  };
+
+  function resolveMaterialParams(mode) {
+    const preset = MATERIAL_PRESETS[mode];
+    return {
+      roughness: roughnessOverride !== null && !Number.isNaN(roughnessOverride) ? roughnessOverride : preset.roughness,
+      metalness: metalnessOverride !== null && !Number.isNaN(metalnessOverride) ? metalnessOverride : preset.metalness
+    };
+  }
+
+  function buildFacetMaterial(mode) {
+    return new THREE.MeshStandardMaterial(resolveMaterialParams(mode));
+  }
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+
+  function resize() {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    renderer.setSize(width, height, false);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  function frameCamera(target, radiusMm) {
+    const verticalFovRad = (camera.fov * Math.PI) / 180;
+    const distance = (radiusMm / Math.sin(verticalFovRad / 2)) * 1.05;
+    const elevationRad = (28 * Math.PI) / 180;
+    controls.target.copy(target);
+    camera.position.set(target.x, target.y + distance * Math.sin(elevationRad), target.z + distance * Math.cos(elevationRad));
+    controls.update();
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Step 1 (unchanged): static instanced geometry on a flat test plane. See TASK_RESULT.md from
+  // the step-0/1 milestone for what this validates -- kept exactly as before, reachable with no
+  // `?product=` query param, so the original step-1 regression screenshot keeps working unchanged.
+  // ---------------------------------------------------------------------------------------------
+  function runStep1Grid() {
+    infoEl.innerHTML = 'RS-2013 &sect;4 step 1 &mdash; static <code>THREE.InstancedMesh</code> of octahedral-bipyramid ' +
+      'stones, one row per <code>CrystalColors.js</code> color &times; one column per <code>StoneSizes.js</code> catalog size. ' +
+      `Facet: <b>${facetMode}</b>, material: <b>${materialMode}</b>. ` +
+      'Trivial flat grid only. Drag to orbit. Add <code>?product=plate|mug|tumbler|bottle</code> for step 2.';
+
+    const UNIT_RADIUS = 1;
+    const geometry = buildFacetGeometry(facetMode);
+    const material = buildFacetMaterial(materialMode);
+
+    const rows = CRYSTAL_COLORS.length;
+    const cols = STONE_SIZES.length;
+    const count = rows * cols;
+    const mesh = new THREE.InstancedMesh(geometry, material, count);
+
+    const PITCH_MM = 12;
+    const matrix = new THREE.Matrix4();
+    const position = new THREE.Vector3();
+    const quaternion = new THREE.Quaternion();
+    const scale = new THREE.Vector3();
+
+    let index = 0;
+    for (let row = 0; row < rows; row++) {
+      const color = new THREE.Color(getCrystalColor(CRYSTAL_COLORS[row].id).fill);
+      for (let col = 0; col < cols; col++) {
+        const radiusMm = STONE_SIZES[col].diameterMm / 2;
+        position.set(col * PITCH_MM, 0, row * PITCH_MM);
+        quaternion.identity();
+        scale.setScalar(radiusMm / UNIT_RADIUS);
+        matrix.compose(position, quaternion, scale);
+        mesh.setMatrixAt(index, matrix);
+        mesh.setColorAt(index, color);
+        index++;
+      }
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    scene.add(mesh);
+
+    const centerX = ((cols - 1) * PITCH_MM) / 2;
+    const centerZ = ((rows - 1) * PITCH_MM) / 2;
+    const marginMm = STONE_SIZES[cols - 1].diameterMm;
+    const halfDiagonalMm = Math.sqrt((centerX + marginMm) ** 2 + (centerZ + marginMm) ** 2);
+    frameCamera(new THREE.Vector3(centerX, 0, centerZ), halfDiagonalMm);
+
+    window.__rs2013HarnessReady = true;
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Step 2 (RS-2013 §4 step 2): correct placement/orientation of real StoneLayout stones on a real
+  // object surface, on an undecorated body. See TASK.md/TASK_RESULT.md for the full rationale,
+  // including the plateTopY design-doc discrepancy resolution.
+  //
+  // RS-2013 step 7: this originally rendered the same StoneLayout twice, side by side -- left the
+  // old texture-baked reference (StoneLayoutTexture.js), right this instanced placement math --
+  // to visually validate the new path against the old one. That validation is done (the instanced
+  // path is now the sole renderer; the texture path and StoneLayoutTexture.js are gone), so the
+  // reference render was removed. This remains a real standalone tool for inspecting placement/
+  // lighting/facet/material combinations against real product StoneLayouts outside the full app.
+  // ---------------------------------------------------------------------------------------------
+
+  // No plate example project exists in examples/ (audited: every examples/*.rhs fixture is
+  // mug/tumbler/bottle) -- this inline object mirrors the same flat .rhs schema/style those files
+  // use, built via the identical generateProjectStoneLayout() entry point app.js's own Gallery
+  // feature uses for every other example. Two concentric outline rings sit inside the plate's own
+  // default innerWellDiameterMm (195mm, i.e. radius 97.5mm), so both are visually assignable to
+  // "inside the well" vs "on the rim" for the plateTopY verification below.
+  const PLATE_PROJECT = {
+    version: 1, product: 'plate', units: 'mm',
+    canvas: { width: 270, height: 270 },
+    cupColor: '#1f3556',
+    layers: [
+      { id: 'outer-ring', type: 'circle', name: 'Outer Ring', visible: true, cxMm: 135, cyMm: 135, radiusMm: 85, fillMode: 'outline', stoneSizeMm: 2.2, gapMm: 0.3, color: 'gold' },
+      { id: 'inner-ring', type: 'circle', name: 'Inner Ring', visible: true, cxMm: 135, cyMm: 135, radiusMm: 55, fillMode: 'outline', stoneSizeMm: 1.8, gapMm: 0.3, color: 'crystal' }
+    ]
+  };
+
+  const EXAMPLE_PATH_BY_PRODUCT = {
+    mug: '../examples/short-name-block.rhs',
+    tumbler: '../examples/tumbler-wrap-design.rhs',
+    bottle: '../examples/bottle-front-design.rhs'
+  };
+
+  async function loadRhsProject(productId) {
+    if (productId === 'plate') return validateRhsProject(PLATE_PROJECT, 'inline plate project');
+    const path = EXAMPLE_PATH_BY_PRODUCT[productId];
+    if (!path) throw new Error(`Unknown ?product= value "${productId}". Expected one of: plate, mug, tumbler, bottle.`);
+    const res = await fetch(path);
+    if (!res.ok) throw new Error(`Failed to fetch ${path}: ${res.status}`);
+    const raw = await res.json();
+    return validateRhsProject(raw, path);
+  }
+
+  // FontManager's manifest stores each font's `path` as a repo-root-relative string
+  // (e.g. "assets/fonts/CourierPrime-Regular.ttf") -- app.js resolves that correctly because
+  // index.html itself is served from the repo root. This harness is served from tools/, so the
+  // same relative path would resolve one directory too deep; loadFontBuffer resolves it against
+  // the repo root explicitly instead.
+  const REPO_ROOT_URL = new URL('../', location.href);
+
+  async function buildPermanentEngine() {
+    const fontManager = await FontManager.fromUrl(new URL('assets/fonts/manifest.json', REPO_ROOT_URL).href);
+    const fontProviderRegistry = createDefaultFontProviderRegistry(fontManager, {
+      loadFontBuffer: async (path) => {
+        const res = await fetch(new URL(path, REPO_ROOT_URL).href);
+        if (!res.ok) throw new Error(`Unable to load font file "${path}": ${res.status} ${res.statusText}`);
+        return res.arrayBuffer();
+      }
+    });
+    return new GeometryEngine({ fontProviderRegistry });
+  }
+
+  // RS-2013 step 2 finding: §3.3 describes the plate's printable face as "flat" and 2a's placement
+  // as a single-constant plateTopY, but the real plate mesh (buildPlateProfilePoints()) has genuine
+  // ~12-15mm vertical relief (a concave center well + a sloped rim) -- only its UV mapping is a
+  // flat orthographic projection, not the geometry itself. Raised with the human owner
+  // (AskUserQuestion) before implementing; approved resolution: plateTopY is the well/rim
+  // transition height, derived here by scanning the real built top-surface mesh for the vertex
+  // nearest r=innerWellRadiusMm and reading its actual Y -- reusing the real built geometry instead
+  // of duplicating ObjectGeometryBuilder.js's private profile constants a second time. See
+  // TASK.md/TASK_RESULT.md for the full discrepancy writeup.
+  function findRimPlaneY(topGeometry, dimensions) {
+    const position = topGeometry.attributes.position;
+    let bestIndex = -1, bestDiff = Infinity;
+    for (let i = 0; i < position.count; i++) {
+      const r = Math.hypot(position.getX(i), position.getZ(i));
+      const diff = Math.abs(r - dimensions.innerWellRadiusMm);
+      if (diff < bestDiff) { bestDiff = diff; bestIndex = i; }
+    }
+    return position.getY(bestIndex);
+  }
+
+  async function runStep2Placement(productId) {
+    const otherLighting = lighting === 'extended' ? 'default' : 'extended';
+    const otherFacet = facetMode === 'bipyramid16' ? 'octahedron' : 'bipyramid16';
+    const otherMaterial = materialMode === 'specular' ? 'diffuse' : 'specular';
+    const keep = `lighting=${lighting}&facet=${facetMode}&material=${materialMode}`;
+    infoEl.innerHTML = `RS-2013 &sect;4 step 2/3/3b &mdash; real <code>StoneLayout</code> placement for <b>${productId}</b>, ` +
+      `<b>${lighting}</b> lighting, <b>${facetMode}</b> facet, <b>${materialMode}</b> material. ` +
+      'Drag to orbit. Switch product: ' +
+      ['plate', 'mug', 'tumbler', 'bottle'].map((p) => `<a href="?product=${p}&${keep}">${p}</a>`).join(' &middot; ') +
+      `. <a href="?product=${productId}&lighting=${otherLighting}&facet=${facetMode}&material=${materialMode}">Switch to ${otherLighting} lighting</a>` +
+      ` &middot; <a href="?product=${productId}&lighting=${lighting}&facet=${otherFacet}&material=${materialMode}">Switch to ${otherFacet} facet</a>` +
+      ` &middot; <a href="?product=${productId}&lighting=${lighting}&facet=${facetMode}&material=${otherMaterial}">Switch to ${otherMaterial} material</a>.`;
+
+    const rhsProject = await loadRhsProject(productId);
+    const engine = await buildPermanentEngine();
+    const layout = await generateProjectStoneLayout(rhsProject, engine);
+
+    const template = getObjectTemplate(rhsProject.product);
+    const plateParams = rhsProject.product === 'plate' ? normalizePlateParams(null) : null;
+    const canvasWidthMm = rhsProject.canvas.width;
+    const canvasHeightMm = rhsProject.canvas.height;
+    const dimensions = computeObjectDimensionsMm(template, canvasWidthMm, canvasHeightMm, plateParams, null);
+    const cupColor = rhsProject.cupColor || '#ffffff';
+
+    // Undecorated body + real instanced-stone placement math.
+    const instBuilt = buildObjectMesh(template, canvasWidthMm, canvasHeightMm, plateParams, null);
+    instBuilt.bodyMesh.material.map = null;
+    instBuilt.bodyMesh.material.color.set(cupColor);
+    if (instBuilt.handleMesh) instBuilt.handleMesh.material.color.set(cupColor);
+    if (instBuilt.underMesh) instBuilt.underMesh.material.color.set(cupColor);
+
+    const stoneGeometry = buildFacetGeometry(facetMode);
+    const stoneMaterial = buildFacetMaterial(materialMode);
+    const stones = layout.stones;
+    const instancedMesh = new THREE.InstancedMesh(stoneGeometry, stoneMaterial, Math.max(1, stones.length));
+
+    let plateTopY = 0;
+    if (dimensions.kind === 'plate') {
+      plateTopY = findRimPlaneY(instBuilt.bodyMesh.geometry, dimensions);
+    }
+
+    const zAxis = new THREE.Vector3(0, 0, 1);
+    const matrix = new THREE.Matrix4();
+    const position = new THREE.Vector3();
+    const quaternion = new THREE.Quaternion();
+    const qAlign = new THREE.Quaternion();
+    const qSpin = new THREE.Quaternion();
+    const scaleV = new THREE.Vector3();
+    const normal = new THREE.Vector3();
+
+    for (let i = 0; i < stones.length; i++) {
+      const stone = stones[i];
+
+      if (dimensions.kind === 'plate') {
+        // §3.3 2a: position=(xMm-cw/2, plateTopY, -(yMm-ch/2)), normal=+Y, no per-stone spin (that
+        // choice is unchanged from step 2). Step 2 used quaternion.identity() here because an
+        // unrotated octahedron already has a vertex pointing along +Y by construction (its 6
+        // vertices sit on the +-X/+-Y/+-Z axes) -- but that is a coincidence of the octahedron's own
+        // axis-aligned construction, not a property of "no orientation needed for a flat surface".
+        // RS-2013 step 3b's bipyramid16 candidate has its apex axis on local Z, not Y, so identity
+        // would lay it on its side here. Aligning local Z to the plate's constant +Y normal (the
+        // same qAlign the curved-surface branch below already uses, just with a fixed normal instead
+        // of a per-stone one) is a strict generalization: for the octahedron it produces a
+        // spatially/visually identical result to identity() (a regular octahedron is symmetric under
+        // this exact rotation -- the same 6 vertex positions end up occupied, just by different
+        // original vertices), and it is now also correct for the new geometry. No behavior change
+        // for the shipped default (facet=octahedron) view.
+        position.set(stone.xMm - canvasWidthMm / 2, plateTopY, -(stone.yMm - canvasHeightMm / 2));
+        normal.set(0, 1, 0);
+        qAlign.setFromUnitVectors(zAxis, normal);
+        quaternion.copy(qAlign);
+      } else {
+        // §3.3 2b/2c: azimuth via the one shared, already-unit-tested function (never a fresh
+        // atan2 -- see that function's own header for the two real bugs this sidesteps); height
+        // clamped to [0, bodyHeightMm] so off-body content (e.g. a bottle's shoulder overflow)
+        // never places a stone outside the printable body.
+        //
+        // Y-axis finding (verified visually -- an early build placed "Emma" upside down on the
+        // mug): stone.yMm is Y-DOWN, the same production-canvas convention CanvasRenderer2D.js
+        // uses (design top = yMm=0). World Y here is Y-UP (mesh base = 0, mesh top = bodyHeightMm),
+        // so going from stone.yMm to a world Y position has to bake that inversion in manually, or
+        // the design renders upside down.
+        const azimuth = azimuthRadForCanvasXMm(stone.xMm, canvasWidthMm);
+        const clampedYMm = Math.max(0, Math.min(dimensions.bodyHeightMm, stone.yMm));
+        const y = dimensions.bodyHeightMm - clampedYMm;
+        // 2c (bottle): constant bodyRadiusMm, no interpolation. 2b (mug/tumbler): wallRadiusAt().
+        const radius = dimensions.kind === 'bottle' ? dimensions.bodyRadiusMm : wallRadiusAt(y, dimensions);
+        const sinAz = Math.sin(azimuth);
+        const cosAz = Math.cos(azimuth);
+        position.set(radius * sinAz, y, radius * cosAz);
+
+        // Pure radial-normal approximation (ignores the small taper-induced tilt) -- §3.3
+        // recommends trying this before the exact tangent-based normal.
+        normal.set(sinAz, 0, cosAz);
+        qAlign.setFromUnitVectors(zAxis, normal);
+        // Orientation refinement (2b/2c): per-instance spin around the outward-normal axis reuses
+        // CrystalAppearance.js's own facetAngleDeg -- spinning around the local Z axis *before*
+        // aligning it to the normal is equivalent to spinning around the final outward-normal axis
+        // after alignment (rotating a vector commutes with the subsequent rotation that carries it
+        // elsewhere), so this is the standard "local spin, then align" composition.
+        const appearance = getCrystalAppearance(stone);
+        qSpin.setFromAxisAngle(zAxis, (appearance.facetAngleDeg * Math.PI) / 180);
+        quaternion.copy(qAlign).multiply(qSpin);
+      }
+
+      const radiusMm = stone.sizeMm / 2;
+      scaleV.setScalar(radiusMm);
+      matrix.compose(position, quaternion, scaleV);
+      instancedMesh.setMatrixAt(i, matrix);
+      instancedMesh.setColorAt(i, new THREE.Color(getCrystalColor(stone.color).fill));
+    }
+    instancedMesh.instanceMatrix.needsUpdate = true;
+    if (instancedMesh.instanceColor) instancedMesh.instanceColor.needsUpdate = true;
+    instBuilt.group.add(instancedMesh);
+
+    scene.add(instBuilt.group);
+
+    const spanMm = dimensions.kind === 'plate' ? dimensions.outerRadiusMm * 2 : Math.max(dimensions.bodyRadiusMm, dimensions.topRadiusMm || 0) * 2;
+    const totalHeightMm = dimensions.totalHeightMm || dimensions.bodyHeightMm || spanMm;
+    const centerY = totalHeightMm / 2;
+    const framingRadiusMm = Math.sqrt((spanMm / 2) ** 2 + (totalHeightMm / 2) ** 2) * 1.15;
+    frameCamera(new THREE.Vector3(0, centerY, 0), framingRadiusMm);
+
+    window.__rs2013HarnessReady = true;
+    window.__rs2013StoneCount = stones.length;
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // RS-2013 step 3b verification: single-stone, camera-close render. Reuses the exact same
+  // StoneLayout generation (loadRhsProject/buildPermanentEngine/generateProjectStoneLayout) and the
+  // exact same buildFacetGeometry/buildFacetMaterial/applyLightRig this step's other candidates use
+  // -- only the placement (one stone, at the origin) and camera framing (radius derived from that
+  // one stone's own sizeMm, not the whole object) differ. No change to step 2/3/3b's real
+  // placement/orientation math for the render above.
+  // ---------------------------------------------------------------------------------------------
+  async function runSingleStoneCloseup(productId) {
+    const rhsProject = await loadRhsProject(productId);
+    const engine = await buildPermanentEngine();
+    const layout = await generateProjectStoneLayout(rhsProject, engine);
+    const stones = layout.stones;
+    if (!stones.length) throw new Error(`Product "${productId}" has no stones in its StoneLayout.`);
+    const stoneIndex = Number.isInteger(stoneIndexParam) && stoneIndexParam >= 0 && stoneIndexParam < stones.length ? stoneIndexParam : 0;
+    const stone = stones[stoneIndex];
+
+    const otherMaterial = materialMode === 'specular' ? 'diffuse' : 'specular';
+    const otherFacet = facetMode === 'bipyramid16' ? 'octahedron' : 'bipyramid16';
+    const keep = `view=singlestone&stoneIndex=${stoneIndex}&lighting=${lighting}`;
+    infoEl.innerHTML = `RS-2013 step 3b verification &mdash; single-stone close-up, <b>${productId}</b> stone #${stoneIndex} ` +
+      `(sizeMm=${stone.sizeMm}, color=${stone.color}), <b>${lighting}</b> lighting, <b>${facetMode}</b> facet, <b>${materialMode}</b> material. ` +
+      `Rendered close at full canvas resolution -- not a crop/upscale. Drag to orbit. ` +
+      `<a href="?product=${productId}&${keep}&facet=${facetMode}&material=${otherMaterial}">Switch to ${otherMaterial} material</a>` +
+      ` &middot; <a href="?product=${productId}&${keep}&facet=${otherFacet}&material=${materialMode}">Switch to ${otherFacet} facet</a>` +
+      ` &middot; <a href="?product=${productId}&view=singlestone&lighting=${lighting}&facet=${facetMode}&material=${materialMode}&stoneIndex=${stoneIndex + 1}">Next stone</a>.`;
+
+    const stoneGeometry = buildFacetGeometry(facetMode);
+    const stoneMaterial = buildFacetMaterial(materialMode);
+    stoneMaterial.color.set(getCrystalColor(stone.color).fill);
+    const mesh = new THREE.Mesh(stoneGeometry, stoneMaterial);
+
+    const radiusMm = stone.sizeMm / 2;
+    // Same "local spin around the apex axis" convention runStep2Placement uses for curved-surface
+    // stones -- the real per-stone facetAngleDeg, so this close-up shows that stone's actual
+    // authored facet rotation rather than an arbitrary fixed pose. No surface normal to align to
+    // here (this stone isn't sitting on an object), so local Z (the apex axis) simply faces world
+    // +Z, i.e. toward the camera's default azimuth -- frameCamera's own 28-degree elevation is what
+    // reveals more than one facet, exactly as it already does for runStep1Grid's flat instances.
+    const zAxis = new THREE.Vector3(0, 0, 1);
+    const appearance = getCrystalAppearance(stone);
+    const qSpin = new THREE.Quaternion().setFromAxisAngle(zAxis, (appearance.facetAngleDeg * Math.PI) / 180);
+    const matrix = new THREE.Matrix4().compose(new THREE.Vector3(0, 0, 0), qSpin, new THREE.Vector3(radiusMm, radiusMm, radiusMm));
+    mesh.matrixAutoUpdate = false;
+    mesh.matrix.copy(matrix);
+    scene.add(mesh);
+
+    // Fill most of the frame: frameCamera() already bakes in a 5% margin, so passing the stone's
+    // own radius (not the whole object's bounding radius, unlike every other view in this harness)
+    // is what makes this "camera-close" rather than a wide shot cropped after the fact.
+    frameCamera(new THREE.Vector3(0, 0, 0), radiusMm);
+
+    window.__rs2013HarnessReady = true;
+    window.__rs2013StoneCount = 1;
+  }
+
+  // Dispatch last, after every const/function declaration above -- calling this earlier hits a
+  // TDZ ReferenceError on PLATE_PROJECT/EXAMPLE_PATH_BY_PRODUCT (they run() synchronously up to
+  // their first await, before this module's later top-level const bindings evaluate).
+  if (!product) {
+    runStep1Grid();
+  } else if (viewMode === 'singlestone') {
+    runSingleStoneCloseup(product).catch((error) => {
+      console.error(error);
+      errorEl.textContent = String(error && error.stack || error);
+      errorEl.style.display = 'block';
+    });
+  } else {
+    runStep2Placement(product).catch((error) => {
+      console.error(error);
+      errorEl.textContent = String(error && error.stack || error);
+      errorEl.style.display = 'block';
+    });
+  }
+</script>
+</body>
+</html>

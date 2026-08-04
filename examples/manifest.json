@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "description": "Machine-readable manifest for the RS-0003.5E1 real-production regression suite. Every entry names one examples/*.rhs fixture and the reasons it exists. See examples/baselines.json for the committed geometry expectations this manifest's `file` values correspond to, and tools/test-examples-regression.mjs for the automated checks that consume both files.",
+  "examples": [
+    {
+      "file": "vitalina.rhs",
+      "description": "Original preserved fixture: single short text layer, default centerline/outline mode, no auto-fit.",
+      "purpose": ["preserved-legacy-fixture", "short-name", "block-font", "outline-mode"]
+    },
+    {
+      "file": "vitalina-serbin.rhs",
+      "description": "Original preserved fixture: longer two-word name with auto-fit enabled.",
+      "purpose": ["preserved-legacy-fixture", "long-name", "block-font", "outline-mode", "autofit"]
+    },
+    {
+      "file": "short-name-block.rhs",
+      "description": "Short first name in the block (Courier Prime) font, light cream cup, front wrap.",
+      "purpose": ["short-name", "block-font", "outline-mode", "light-cup", "front-wrap"]
+    },
+    {
+      "file": "long-name-autofit.rhs",
+      "description": "Long two-word name at a text height that exceeds the canvas, forcing the auto-fit rescale pass; dark navy cup, wide wrap.",
+      "purpose": ["long-name", "block-font", "outline-mode", "autofit", "dark-cup", "wide-wrap"]
+    },
+    {
+      "file": "script-name-great-vibes.rhs",
+      "description": "Script font (Great Vibes) name on a white cup.",
+      "purpose": ["script-font", "outline-mode", "light-cup", "front-wrap"]
+    },
+    {
+      "file": "monogram-outline.rhs",
+      "description": "Three-letter monogram in block font, outline (centerline) sampling, on a small square canvas, black cup.",
+      "purpose": ["monogram", "block-font", "outline-mode", "dark-cup"]
+    },
+    {
+      "file": "monogram-fill.rhs",
+      "description": "Two-letter monogram in block font, dense fill sampling, small square canvas, mint cup.",
+      "purpose": ["monogram", "block-font", "fill-mode", "light-cup"]
+    },
+    {
+      "file": "front-wrap-light-cup.rhs",
+      "description": "Dedicated front-wrap + light (white) cup coverage case.",
+      "purpose": ["short-name", "block-font", "outline-mode", "light-cup", "front-wrap"]
+    },
+    {
+      "file": "wide-wrap-dark-cup.rhs",
+      "description": "Dedicated wider-wrap + dark (black) cup coverage case.",
+      "purpose": ["short-name", "block-font", "outline-mode", "dark-cup", "wide-wrap"]
+    },
+    {
+      "file": "circle-only.rhs",
+      "description": "Single circle shape layer, no text, full wrap, navy cup.",
+      "purpose": ["circle-only", "shape-only", "outline-mode", "full-wrap"]
+    },
+    {
+      "file": "rectangle-only.rhs",
+      "description": "Single rectangle shape layer, no text, half wrap, gray cup.",
+      "purpose": ["rectangle-only", "shape-only", "outline-mode", "half-wrap"]
+    },
+    {
+      "file": "mixed-text-circle.rhs",
+      "description": "Text layer plus an overlapping circle frame layer, exercising cross-layer proximity dedupe.",
+      "purpose": ["mixed-layers", "text-and-circle", "outline-mode", "light-cup"]
+    },
+    {
+      "file": "mixed-text-rectangle.rhs",
+      "description": "Text layer plus a rectangle frame layer, wide wrap, pink cup.",
+      "purpose": ["mixed-layers", "text-and-rectangle", "outline-mode", "wide-wrap"]
+    },
+    {
+      "file": "mixed-all-layers.rhs",
+      "description": "Text, circle, and rectangle layers together; the rectangle layer is visible:false, so this fixture is the suite's dedicated total-layer-count vs visible-layer-count regression case.",
+      "purpose": ["mixed-layers", "text-circle-rectangle", "hidden-layer", "half-wrap"]
+    },
+    {
+      "file": "small-stones-tight-gap.rhs",
+      "description": "Small 0.8mm stones with a tight 0.1mm gap.",
+      "purpose": ["short-name", "small-stones", "tight-gap", "outline-mode"]
+    },
+    {
+      "file": "large-stones-wide-gap.rhs",
+      "description": "Large 3.0mm stones with a wide 1.5mm gap.",
+      "purpose": ["short-name", "large-stones", "wide-gap", "outline-mode"]
+    },
+    {
+      "file": "long-script-name.rhs",
+      "description": "Long three-word name in Great Vibes script at a height that forces auto-fit, wide wrap, cream cup.",
+      "purpose": ["long-name", "script-font", "outline-mode", "autofit", "light-cup", "wide-wrap"]
+    },
+    {
+      "file": "svg-logo-import.rhs",
+      "description": "RS-2000: SVG-imported badge logo (circle/star/ribbon) plus a text tagline layer, gold fill mode.",
+      "purpose": ["svg-import", "logo", "fill-mode", "mixed-layers", "text-and-svg", "front-wrap"]
+    },
+    {
+      "file": "image-trace-monogram.rhs",
+      "description": "RS-2000: Image Trace layer from a real traced PNG monogram, contour fill mode, white cup.",
+      "purpose": ["image-trace", "contour-mode", "light-cup", "front-wrap"]
+    },
+    {
+      "file": "boolean-union-badge.rhs",
+      "description": "RS-2000: a path layer holding a real Union Boolean Operation result (two overlapping circles), computed via src/geometry/PathBoolean.js.",
+      "purpose": ["boolean-operations", "path-layer", "fill-mode", "front-wrap"]
+    },
+    {
+      "file": "multi-color-mixed-layers.rhs",
+      "description": "RS-2000: five layers (rectangles/circles/text) each in a distinct crystal color, black cup.",
+      "purpose": ["multi-color", "mixed-layers", "text-and-shape", "dark-cup", "front-wrap"]
+    },
+    {
+      "file": "tumbler-wrap-design.rhs",
+      "description": "RS-2000: Straight Tumbler product (230x100mm canvas), half wrap, script name with an accent ring.",
+      "purpose": ["tumbler-product", "half-wrap", "script-font", "mixed-layers", "autofit"]
+    },
+    {
+      "file": "bottle-front-design.rhs",
+      "description": "RS-2000: Bottle product (180x90mm canvas), front wrap, label border with brand name and tagline.",
+      "purpose": ["bottle-product", "front-wrap", "mixed-layers", "block-font", "autofit"]
+    },
+    {
+      "file": "mixed-fill-styles-and-sizes.rhs",
+      "description": "RS-2000: five layers spanning every fill/text mode (outline/fill/staggered/radial/contour) and stone sizes from 1.0mm to 2.5mm.",
+      "purpose": ["mixed-fill-styles", "variable-stone-sizes", "mixed-layers", "front-wrap"]
+    },
+    {
+      "file": "wedding-bride-tribe-tumbler.rhs",
+      "description": "RS-2001: customer-scenario Wedding design -- script 'Bride Tribe' text framed by a full accent ring, blush cup, half-wrap tumbler.",
+      "purpose": ["wedding", "script-font", "mixed-layers", "half-wrap", "tumbler-product"]
+    },
+    {
+      "file": "team-jersey-name-number.rhs",
+      "description": "RS-2001: customer-scenario Sports design -- filled block-font team name/number nameplate with an underline bar accent, dark cup, front-wrap mug.",
+      "purpose": ["sports", "block-font", "fill-mode", "mixed-layers", "front-wrap"]
+    },
+    {
+      "file": "business-logo-monogram-bottle.rhs",
+      "description": "RS-2001: customer-scenario Business design -- company name framed by a rectangular label border, navy cup, front-wrap bottle.",
+      "purpose": ["business", "block-font", "mixed-layers", "front-wrap", "bottle-product"]
+    }
+  ]
+}

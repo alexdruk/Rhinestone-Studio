@@ -1,0 +1,15 @@
+{
+  "sizeId": "ss20",
+  "familyName": "Sacramento Rhinestone SS20",
+  "stoneDiameterMm": 4.7,
+  "gapMm": 0.3,
+  "supportedHeightRangeMm": [80, 110],
+  "minFeatureWidthMm": 7.35,
+  "minCounterOpeningMm": 12.05,
+  "minLoopOpeningMm": 15.7,
+  "cornerRoundMm": 2.8,
+  "terminalSimplifyMm": 2.1,
+  "sideBearingAdjustMm": 0.45,
+  "minAreaMm2": 1.99,
+  "calibrationNotes": "Initial pass, derived from stoneDiameterMm proportionally (see SS6.json for the formula). Stone diameter uses the shipped STONE_SIZE_BY_ID catalog value (4.7mm) rather than the brief's stated 4.8mm -- see FONT-GEN-001 report's discrepancy note."
+}

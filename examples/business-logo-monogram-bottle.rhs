@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "product": "bottle",
+  "units": "mm",
+  "canvas": {
+    "width": 180,
+    "height": 90
+  },
+  "cupColor": "#0d1b2a",
+  "wrap": "front",
+  "layers": [
+    {
+      "id": "label-border",
+      "type": "rectangle",
+      "name": "Label Border",
+      "visible": true,
+      "xMm": 15,
+      "yMm": 12,
+      "widthMm": 150,
+      "heightMm": 66,
+      "fillMode": "outline",
+      "stoneSizeMm": 1.6,
+      "gapMm": 0.3,
+      "color": "gold"
+    },
+    {
+      "type": "text",
+      "visible": true,
+      "font": "Courier Prime",
+      "mode": "centerline",
+      "autoFit": true,
+      "id": "brand-jrm",
+      "name": "JRM Consulting",
+      "text": "JRM CONSULTING",
+      "heightMm": 16,
+      "stoneSizeMm": 1.5,
+      "gapMm": 0.25,
+      "color": "silver"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "product": "mug",
+  "units": "mm",
+  "canvas": { "width": 210, "height": 90 },
+  "cupColor": "#1f3556",
+  "wrap": "front",
+  "layers": [
+    {
+      "id": "text-rex",
+      "type": "text",
+      "name": "Rex",
+      "visible": true,
+      "text": "Rex",
+      "font": "Courier Prime",
+      "mode": "centerline",
+      "heightMm": 22,
+      "stoneSizeMm": 3.0,
+      "gapMm": 1.5,
+      "color": "gold"
+    }
+  ]
+}

@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "id": "plate-round-dinner",
+  "name": "Round Dinner Plate",
+  "family": "plate",
+  "type": "dinner",
+  "shape": "round",
+  "materialPreset": "porcelain",
+  "status": "proposed",
+  "colors": {
+    "default": {
+      "id": "white",
+      "name": "White",
+      "hex": "#F7F7F3"
+    },
+    "alternatives": [
+      {
+        "id": "creme",
+        "name": "Creme",
+        "hex": "#E9E0CC"
+      }
+    ]
+  },
+  "dimensions": {
+    "outerDiameterMm": {
+      "description": "Complete outside diameter including the full rim.",
+      "min": 250,
+      "average": 270,
+      "max": 300
+    },
+    "innerWellDiameterMm": {
+      "description": "Diameter of the central well measured where the rim begins.",
+      "min": 175,
+      "average": 195,
+      "max": 215
+    },
+    "rimWidthMm": {
+      "description": "Radial rim width; derived from outer and inner diameters.",
+      "min": 25,
+      "average": 37.5,
+      "max": 55,
+      "derivedFormula": "(outerDiameterMm - innerWellDiameterMm) / 2"
+    },
+    "overallHeightMm": {
+      "description": "Maximum height from table surface to top of rim.",
+      "min": 18,
+      "average": 25,
+      "max": 32
+    },
+    "centerDepthMm": {
+      "description": "Vertical drop from rim plane to center well surface.",
+      "min": 7,
+      "average": 12,
+      "max": 18,
+      "confidence": "provisional"
+    },
+    "footRingOuterDiameterMm": {
+      "description": "Outside diameter of the supporting foot ring.",
+      "min": 135,
+      "average": 165,
+      "max": 195,
+      "confidence": "provisional"
+    },
+    "footRingHeightMm": {
+      "description": "Height of the foot ring above the table surface.",
+      "min": 3,
+      "average": 5,
+      "max": 8,
+      "confidence": "provisional"
+    }
+  },
+  "weightGrams": {
+    "description": "Approximate weight for a conventional porcelain or stoneware dinner plate.",
+    "min": 650,
+    "average": 800,
+    "max": 1050
+  },
+  "profile": {
+    "type": "radialPlateProfile",
+    "center": {
+      "surface": "slightlyConcave"
+    },
+    "rim": {
+      "style": "slopedWideRim",
+      "outerEdge": "rounded",
+      "transition": "smooth"
+    },
+    "footRing": {
+      "enabled": true,
+      "profile": "rounded"
+    }
+  },
+  "designTargets": {
+    "centerWell": {
+      "name": "Center Well",
+      "shape": "circle",
+      "diameterSource": "innerWellDiameterMm",
+      "enabled": true
+    },
+    "rimBand": {
+      "name": "Rim Band",
+      "shape": "annulus",
+      "outerDiameterSource": "outerDiameterMm",
+      "innerDiameterSource": "innerWellDiameterMm",
+      "enabled": true
+    },
+    "fullTopSurface": {
+      "name": "Full Top Surface",
+      "shape": "circle",
+      "diameterSource": "outerDiameterMm",
+      "enabled": true
+    }
+  },
+  "defaults": {
+    "outerDiameterMm": 270,
+    "innerWellDiameterMm": 195,
+    "overallHeightMm": 25,
+    "centerDepthMm": 12,
+    "footRingOuterDiameterMm": 165,
+    "footRingHeightMm": 5,
+    "weightGrams": 800,
+    "colorId": "white",
+    "designTarget": "centerWell"
+  },
+  "validation": {
+    "outerDiameterIncludesRim": true,
+    "requireInnerWellSmallerThanOuterDiameter": true,
+    "requireDerivedRimWidthConsistency": true,
+    "requirePositiveProfileDimensions": true,
+    "requireDesignTargetInsideOuterDiameter": true
+  },
+  "research": {
+    "scope": "Conventional round rimmed dinner plates; excludes pasta plates, chargers, coupe/rimless plates, square plates, and divided plates.",
+    "notes": [
+      "The ranges are a practical modeling envelope, not an industry standard.",
+      "Outer diameter always includes the complete rim.",
+      "Rim width is radial.",
+      "Center-depth and foot-ring ranges should be validated against manufacturer drawings or physical samples before production-grade modeling."
+    ]
+  }
+}

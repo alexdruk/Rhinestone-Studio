@@ -1,0 +1,176 @@
+{
+  "version": 2,
+  "fonts": [
+    {
+      "id": "courier-prime-regular",
+      "family": "Courier Prime",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/CourierPrime-Regular.ttf",
+      "role": "monospace",
+      "enabled": true,
+      "notes": "Typewriter-style monospace. Bundled since RS-0003.4; kept enabled as the project default font id (courier-prime-regular)."
+    },
+    {
+      "id": "great-vibes-regular",
+      "family": "Great Vibes",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/GreatVibes-Regular.ttf",
+      "role": "script",
+      "enabled": true,
+      "notes": "Flowing calligraphic script. Bundled since RS-0003.4."
+    },
+    {
+      "id": "pt-serif-regular",
+      "family": "PT Serif",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/PTSerif-Regular.ttf",
+      "role": "serif",
+      "enabled": true,
+      "notes": "RS-2002: classic, highly readable book-style serif. Static instance (no variable axes) -- 359 KB, deliberately chosen over the much larger variable-font Merriweather build for faster loading."
+    },
+    {
+      "id": "montserrat-regular",
+      "family": "Montserrat",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Montserrat-Regular.ttf",
+      "role": "sans-serif",
+      "enabled": true,
+      "notes": "RS-2002: clean geometric sans-serif with excellent readability at small stone sizes; one of the most recognized/requested Google Fonts sans-serifs."
+    },
+    {
+      "id": "playfair-display-regular",
+      "family": "Playfair Display",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/PlayfairDisplay-Regular.ttf",
+      "role": "display",
+      "enabled": true,
+      "notes": "RS-2002: high-contrast elegant display serif for headline-style text."
+    },
+    {
+      "id": "cinzel-regular",
+      "family": "Cinzel",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Cinzel-Regular.ttf",
+      "role": "monogram",
+      "enabled": true,
+      "notes": "RS-2002: classic Roman capitals styling, well suited to monogram/initial layouts and engraved-look designs."
+    },
+    {
+      "id": "lobster-regular",
+      "family": "Lobster",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Lobster-Regular.ttf",
+      "role": "decorative",
+      "enabled": true,
+      "notes": "RS-2002: bold decorative display face with a friendly, retro-signage character."
+    },
+    {
+      "id": "anton-regular",
+      "family": "Anton",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Anton-Regular.ttf",
+      "role": "block",
+      "enabled": true,
+      "rhinestoneValidated": true,
+      "unsupportedStoneSizes": ["ss30"],
+      "notes": "RS-2002: ultra-bold condensed block sans for maximum impact/legibility at a distance. FONT-PORTFOLIO-001: cleared this project's human rhinestone legibility bar (71% Readable overall across SS6/10/16/20/30) -- registered rhinestoneValidated:true alongside Baloo2Variable. SS30 disabled (unsupportedStoneSizes) -- human rating collapsed to 38% Readable at that size specifically; see docs/specifications/FONT-DIAG-001-StoneSamplerSensitivityInvestigation.md's still-unresolved FONT-POLICY-001 recommendation for the root cause (SS30's own narrow/tall height ceiling, not this font's outline).",
+      "capHeightRatio": 0.8594,
+      "xHeightRatio": 0.7329
+    },
+    {
+      "id": "caveat-regular",
+      "family": "Caveat",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Caveat-Regular.ttf",
+      "role": "handwritten",
+      "enabled": true,
+      "notes": "RS-2002: casual handwritten style with clean, simple outlines that hold up well as rhinestone outlines."
+    },
+    {
+      "id": "roboto-mono-regular",
+      "family": "Roboto Mono",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/RobotoMono-Regular.ttf",
+      "role": "monospace",
+      "enabled": false,
+      "notes": "Placeholder registry entry -- assets/fonts/RobotoMono-Regular.ttf is a 14-byte non-font stub, not a real font file. Left disabled and unused/untouched (see tools/test-opentype-provider.mjs's corrupt-font-file coverage, which depends on this file staying unparsable)."
+    },
+    {
+      "id": "rs-block",
+      "family": "RS Block",
+      "style": "Regular",
+      "weight": 400,
+      "path": "rhinestone:rs-block",
+      "role": "rhinestone",
+      "enabled": true,
+      "providerId": "rhinestone",
+      "notes": "FONT-002: the default Production Font (src/text/rhinestoneFont/families/rsBlock.js) -- every stone position is individually hand-authored, not sampled from a vector outline. `path` is a documentation-only identifier, not a real font file -- RhinestoneFontProvider generates glyph geometry from authored stone centers at runtime and never fetches/parses it (see injectFontFaceRules() in app.js, which only declares @font-face rules for providerId:'opentype' entries). The diagnostic-only RS Block Prototype (SS10) remains intentionally unregistered here."
+    },
+    {
+      "id": "rs-modern",
+      "family": "RS Modern",
+      "style": "Regular",
+      "weight": 400,
+      "path": "rhinestone:rs-modern",
+      "role": "rhinestone",
+      "enabled": true,
+      "providerId": "rhinestone",
+      "notes": "FONT-002: the second Production Font (src/text/rhinestoneFont/families/rsModern.js) -- a distinct geometric/grotesque style (no serifs, single-story a/g, round bowls) at the same authored pitch as RS Block. `path` is a documentation-only identifier, not a real font file -- see rs-block's own note above for why."
+    },
+    {
+      "id": "baloo2-variable-regular",
+      "family": "Baloo 2",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Baloo2-Regular.ttf",
+      "role": "rounded-sans",
+      "enabled": true,
+      "providerId": "opentype",
+      "rhinestoneValidated": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-DECISION-001: the first OpenType/StoneSampler font to clear this project's human-and-metric rhinestone legibility bar -- untransformed (baseline, not the rejected fatten/enlarge-generated variant), rated Readable/Not Sure with zero Unreadable across 48 human-rated items (85.4% Readable) spanning SS6/SS16/SS20 and 16 phrases (12 longform + 4 required), corroborated by 100% vision-transcription exact match and flat clusterCount/zero collisionCount at all 5 stone sizes. See docs/specifications/FONT-DECISION-001-VisionStandardLongformCorpusAndRaterTool.md Part E. FONT-PORTFOLIO-001: also rated at the two remaining sizes (SS10 94%, SS30 94% Readable) -- the only one of the 4-font portfolio with no size disabled (unsupportedStoneSizes: []).",
+      "capHeightRatio": 0.618,
+      "xHeightRatio": 0.475
+    },
+    {
+      "id": "sacramento-regular",
+      "family": "Sacramento",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Sacramento-Regular.ttf",
+      "role": "script",
+      "enabled": true,
+      "providerId": "opentype",
+      "rhinestoneValidated": true,
+      "unsupportedStoneSizes": ["ss30"],
+      "notes": "FONT-PORTFOLIO-001: monoline connected script, cleared this project's human rhinestone legibility bar at an overall 58% Readable across SS6/10/16/20/30 -- registered as a production font distinct from the earlier, since-rejected procedurally-transformed 'Sacramento Rhinestone' experiment (FONT-GEN-001/FONT-CAL-001/FONT-CAL-002/FONT-VIS-001, never manifest-registered). SS30 disabled (unsupportedStoneSizes) -- human rating collapsed to 13% Readable at that size specifically; see FONT-DIAG-001's still-open FONT-POLICY-001 recommendation (SS30's own height ceiling, not this font's outline).",
+      "capHeightRatio": 0.7783,
+      "xHeightRatio": 0.3291
+    },
+    {
+      "id": "dancing-script-regular",
+      "family": "Dancing Script",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/DancingScript-Regular.ttf",
+      "role": "script",
+      "enabled": true,
+      "providerId": "opentype",
+      "rhinestoneValidated": true,
+      "unsupportedStoneSizes": ["ss30"],
+      "notes": "FONT-PORTFOLIO-001: casual connected script, cleared this project's human rhinestone legibility bar at an overall 61% Readable across SS6/10/16/20/30. SS30 disabled (unsupportedStoneSizes) -- human rating collapsed to 6% Readable at that size specifically; see FONT-DIAG-001's still-open FONT-POLICY-001 recommendation (SS30's own height ceiling, not this font's outline). Raters also flagged one narrow, size-independent defect (\"8th\" misread as \"86h\") present at all 5 sizes -- tracked but not size-gated, since it does not correlate with stone size the way the SS30 collapse does.",
+      "capHeightRatio": 0.807,
+      "xHeightRatio": 0.391
+    }
+  ]
+}

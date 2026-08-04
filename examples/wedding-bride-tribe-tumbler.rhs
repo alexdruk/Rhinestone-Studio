@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "product": "tumbler",
+  "units": "mm",
+  "canvas": {
+    "width": 230,
+    "height": 100
+  },
+  "cupColor": "#f6dfe3",
+  "wrap": "half",
+  "layers": [
+    {
+      "id": "accent-ring",
+      "type": "circle",
+      "name": "Accent Ring",
+      "visible": true,
+      "cxMm": 115,
+      "cyMm": 50,
+      "radiusMm": 38,
+      "fillMode": "outline",
+      "stoneSizeMm": 1.6,
+      "gapMm": 0.3,
+      "color": "gold"
+    },
+    {
+      "type": "text",
+      "visible": true,
+      "font": "Great Vibes",
+      "mode": "centerline",
+      "autoFit": true,
+      "id": "name-bride-tribe",
+      "name": "Bride Tribe",
+      "text": "Bride Tribe",
+      "heightMm": 26,
+      "stoneSizeMm": 1.8,
+      "gapMm": 0.3,
+      "color": "rose"
+    }
+  ]
+}

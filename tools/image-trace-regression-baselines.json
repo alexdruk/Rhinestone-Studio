@@ -1,0 +1,9300 @@
+{
+  "halfSplit_default": {
+    "layerId": "image-1",
+    "sourceMode": "fill",
+    "count": 136,
+    "boundingBox": {
+      "minXmm": 0.1,
+      "minYmm": 0.1,
+      "maxXmm": 9.5,
+      "maxYmm": 20.3,
+      "widthMm": 9.4,
+      "heightMm": 20.2
+    },
+    "widthMm": 9.4,
+    "heightMm": 20.2,
+    "stones": [
+      {
+        "xMm": 0.6,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 0,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 1,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 2,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 3,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 4,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 5,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 6,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 7,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 8,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 9,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 10,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 11,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 12,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 13,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 14,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 15,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 16,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 17,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 18,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 19,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 20,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 21,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 22,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 23,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 24,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 25,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 26,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 27,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 28,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 29,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 30,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 31,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 32,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 33,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 34,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 35,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 36,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 37,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 38,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 39,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 40,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 41,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 42,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 43,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 44,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 45,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 46,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 47,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 48,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 49,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 50,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 51,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 52,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 53,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 54,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 55,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 56,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 57,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 58,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 59,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 60,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 61,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 62,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 63,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 64,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 65,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 66,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 67,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 68,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 69,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 70,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 71,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 72,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 73,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 74,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 75,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 76,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 77,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 78,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 79,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 80,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 81,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 82,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 83,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 84,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 85,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 86,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 87,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 88,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 89,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 90,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 91,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 92,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 93,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 94,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 95,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 96,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 97,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 98,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 99,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 100,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 101,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 102,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 103,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 104,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 105,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 106,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 107,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 108,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 109,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 110,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 111,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 112,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 113,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 114,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 115,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 116,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 117,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 118,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 119,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 120,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 121,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 122,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 123,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 124,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 125,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 126,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 127,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 128,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 129,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 130,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 131,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 132,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 133,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 134,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 135,
+        "metadata": {}
+      }
+    ]
+  },
+  "halfSplit_invert": {
+    "layerId": "image-1",
+    "sourceMode": "fill",
+    "count": 153,
+    "boundingBox": {
+      "minXmm": 9.7,
+      "minYmm": 0.1,
+      "maxXmm": 20.3,
+      "maxYmm": 20.3,
+      "widthMm": 10.6,
+      "heightMm": 20.2
+    },
+    "widthMm": 10.6,
+    "heightMm": 20.2,
+    "stones": [
+      {
+        "xMm": 10.2,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 0,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 1,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 2,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 3,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 4,
+        "metadata": {}
+      },
+      {
+        "xMm": 16.2,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 5,
+        "metadata": {}
+      },
+      {
+        "xMm": 17.4,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 6,
+        "metadata": {}
+      },
+      {
+        "xMm": 18.6,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 7,
+        "metadata": {}
+      },
+      {
+        "xMm": 19.8,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 8,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 9,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 10,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 11,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 12,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 13,
+        "metadata": {}
+      },
+      {
+        "xMm": 16.2,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 14,
+        "metadata": {}
+      },
+      {
+        "xMm": 17.4,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 15,
+        "metadata": {}
+      },
+      {
+        "xMm": 18.6,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 16,
+        "metadata": {}
+      },
+      {
+        "xMm": 19.8,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 17,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 18,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 19,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 20,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 21,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 22,
+        "metadata": {}
+      },
+      {
+        "xMm": 16.2,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 23,
+        "metadata": {}
+      },
+      {
+        "xMm": 17.4,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 24,
+        "metadata": {}
+      },
+      {
+        "xMm": 18.6,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 25,
+        "metadata": {}
+      },
+      {
+        "xMm": 19.8,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 26,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 27,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 28,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 29,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 30,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 31,
+        "metadata": {}
+      },
+      {
+        "xMm": 16.2,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 32,
+        "metadata": {}
+      },
+      {
+        "xMm": 17.4,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 33,
+        "metadata": {}
+      },
+      {
+        "xMm": 18.6,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 34,
+        "metadata": {}
+      },
+      {
+        "xMm": 19.8,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 35,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 36,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 37,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 38,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 39,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 40,
+        "metadata": {}
+      },
+      {
+        "xMm": 16.2,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 41,
+        "metadata": {}
+      },
+      {
+        "xMm": 17.4,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 42,
+        "metadata": {}
+      },
+      {
+        "xMm": 18.6,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 43,
+        "metadata": {}
+      },
+      {
+        "xMm": 19.8,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 44,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 45,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 46,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 47,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 48,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 49,
+        "metadata": {}
+      },
+      {
+        "xMm": 16.2,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 50,
+        "metadata": {}
+      },
+      {
+        "xMm": 17.4,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 51,
+        "metadata": {}
+      },
+      {
+        "xMm": 18.6,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 52,
+        "metadata": {}
+      },
+      {
+        "xMm": 19.8,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 53,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 54,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 55,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 56,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 57,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 58,
+        "metadata": {}
+      },
+      {
+        "xMm": 16.2,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 59,
+        "metadata": {}
+      },
+      {
+        "xMm": 17.4,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 60,
+        "metadata": {}
+      },
+      {
+        "xMm": 18.6,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 61,
+        "metadata": {}
+      },
+      {
+        "xMm": 19.8,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 62,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 63,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 64,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 65,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 66,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 67,
+        "metadata": {}
+      },
+      {
+        "xMm": 16.2,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 68,
+        "metadata": {}
+      },
+      {
+        "xMm": 17.4,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 69,
+        "metadata": {}
+      },
+      {
+        "xMm": 18.6,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 70,
+        "metadata": {}
+      },
+      {
+        "xMm": 19.8,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 71,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 72,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 73,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 74,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 75,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 76,
+        "metadata": {}
+      },
+      {
+        "xMm": 16.2,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 77,
+        "metadata": {}
+      },
+      {
+        "xMm": 17.4,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 78,
+        "metadata": {}
+      },
+      {
+        "xMm": 18.6,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 79,
+        "metadata": {}
+      },
+      {
+        "xMm": 19.8,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 80,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 81,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 82,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 83,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 84,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 85,
+        "metadata": {}
+      },
+      {
+        "xMm": 16.2,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 86,
+        "metadata": {}
+      },
+      {
+        "xMm": 17.4,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 87,
+        "metadata": {}
+      },
+      {
+        "xMm": 18.6,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 88,
+        "metadata": {}
+      },
+      {
+        "xMm": 19.8,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 89,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 90,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 91,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 92,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 93,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 94,
+        "metadata": {}
+      },
+      {
+        "xMm": 16.2,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 95,
+        "metadata": {}
+      },
+      {
+        "xMm": 17.4,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 96,
+        "metadata": {}
+      },
+      {
+        "xMm": 18.6,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 97,
+        "metadata": {}
+      },
+      {
+        "xMm": 19.8,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 98,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 99,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 100,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 101,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 102,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 103,
+        "metadata": {}
+      },
+      {
+        "xMm": 16.2,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 104,
+        "metadata": {}
+      },
+      {
+        "xMm": 17.4,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 105,
+        "metadata": {}
+      },
+      {
+        "xMm": 18.6,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 106,
+        "metadata": {}
+      },
+      {
+        "xMm": 19.8,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 107,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 108,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 109,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 110,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 111,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 112,
+        "metadata": {}
+      },
+      {
+        "xMm": 16.2,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 113,
+        "metadata": {}
+      },
+      {
+        "xMm": 17.4,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 114,
+        "metadata": {}
+      },
+      {
+        "xMm": 18.6,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 115,
+        "metadata": {}
+      },
+      {
+        "xMm": 19.8,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 116,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 117,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 118,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 119,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 120,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 121,
+        "metadata": {}
+      },
+      {
+        "xMm": 16.2,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 122,
+        "metadata": {}
+      },
+      {
+        "xMm": 17.4,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 123,
+        "metadata": {}
+      },
+      {
+        "xMm": 18.6,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 124,
+        "metadata": {}
+      },
+      {
+        "xMm": 19.8,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 125,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 126,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 127,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 128,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 129,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 130,
+        "metadata": {}
+      },
+      {
+        "xMm": 16.2,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 131,
+        "metadata": {}
+      },
+      {
+        "xMm": 17.4,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 132,
+        "metadata": {}
+      },
+      {
+        "xMm": 18.6,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 133,
+        "metadata": {}
+      },
+      {
+        "xMm": 19.8,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 134,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 135,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 136,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 137,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 138,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 139,
+        "metadata": {}
+      },
+      {
+        "xMm": 16.2,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 140,
+        "metadata": {}
+      },
+      {
+        "xMm": 17.4,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 141,
+        "metadata": {}
+      },
+      {
+        "xMm": 18.6,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 142,
+        "metadata": {}
+      },
+      {
+        "xMm": 19.8,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 143,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 144,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 145,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 146,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 147,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 148,
+        "metadata": {}
+      },
+      {
+        "xMm": 16.2,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 149,
+        "metadata": {}
+      },
+      {
+        "xMm": 17.4,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 150,
+        "metadata": {}
+      },
+      {
+        "xMm": 18.6,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 151,
+        "metadata": {}
+      },
+      {
+        "xMm": 19.8,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 152,
+        "metadata": {}
+      }
+    ]
+  },
+  "halfSplit_blur3": {
+    "layerId": "image-1",
+    "sourceMode": "fill",
+    "count": 136,
+    "boundingBox": {
+      "minXmm": 0.1,
+      "minYmm": 0.1,
+      "maxXmm": 9.5,
+      "maxYmm": 20.3,
+      "widthMm": 9.4,
+      "heightMm": 20.2
+    },
+    "widthMm": 9.4,
+    "heightMm": 20.2,
+    "stones": [
+      {
+        "xMm": 0.6,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 0,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 1,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 2,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 3,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 4,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 5,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 6,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 7,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 8,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 9,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 10,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 11,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 12,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 13,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 14,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 15,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 16,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 17,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 18,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 19,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 20,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 21,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 22,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 23,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 24,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 25,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 26,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 27,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 28,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 29,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 30,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 31,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 32,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 33,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 34,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 35,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 36,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 37,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 38,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 39,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 40,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 41,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 42,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 43,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 44,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 45,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 46,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 47,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 48,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 49,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 50,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 51,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 52,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 53,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 54,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 55,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 56,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 57,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 58,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 59,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 60,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 61,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 62,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 63,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 64,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 65,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 66,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 67,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 68,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 69,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 70,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 71,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 72,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 73,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 74,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 75,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 76,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 77,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 78,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 79,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 80,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 81,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 82,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 83,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 84,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 85,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 86,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 87,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 88,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 89,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 90,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 91,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 92,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 93,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 94,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 95,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 96,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 97,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 98,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 99,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 100,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 101,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 102,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 103,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 104,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 105,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 106,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 107,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 108,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 109,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 110,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 111,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 112,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 113,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 114,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 115,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 116,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 117,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 118,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 119,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 120,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 121,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 122,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 123,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 124,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 125,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 126,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 127,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 128,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 129,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 130,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 131,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 132,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 133,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 134,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 135,
+        "metadata": {}
+      }
+    ]
+  },
+  "gradient_threshold60": {
+    "layerId": "image-1",
+    "sourceMode": "fill",
+    "count": 68,
+    "boundingBox": {
+      "minXmm": 0.1,
+      "minYmm": 0.1,
+      "maxXmm": 4.7,
+      "maxYmm": 20.3,
+      "widthMm": 4.6,
+      "heightMm": 20.2
+    },
+    "widthMm": 4.6,
+    "heightMm": 20.2,
+    "stones": [
+      {
+        "xMm": 0.6,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 0,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 1,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 2,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 3,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 4,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 5,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 6,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 7,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 8,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 9,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 10,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 11,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 12,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 13,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 14,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 15,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 16,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 17,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 18,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 19,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 20,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 21,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 22,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 23,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 24,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 25,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 26,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 27,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 28,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 29,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 30,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 31,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 32,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 33,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 34,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 35,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 36,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 37,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 38,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 39,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 40,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 41,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 42,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 43,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 44,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 45,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 46,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 47,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 48,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 49,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 50,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 51,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 52,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 53,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 54,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 55,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 56,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 57,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 58,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 59,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 60,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 61,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 62,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 63,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 64,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 65,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 66,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 67,
+        "metadata": {}
+      }
+    ]
+  },
+  "gradient_threshold200": {
+    "layerId": "image-1",
+    "sourceMode": "fill",
+    "count": 221,
+    "boundingBox": {
+      "minXmm": 0.1,
+      "minYmm": 0.1,
+      "maxXmm": 15.5,
+      "maxYmm": 20.3,
+      "widthMm": 15.4,
+      "heightMm": 20.2
+    },
+    "widthMm": 15.4,
+    "heightMm": 20.2,
+    "stones": [
+      {
+        "xMm": 0.6,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 0,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 1,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 2,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 3,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 4,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 5,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 6,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 7,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 8,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 9,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 10,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 11,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 12,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 13,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 14,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 15,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 16,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 17,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 18,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 19,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 20,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 21,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 22,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 23,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 24,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 25,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 26,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 27,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 28,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 29,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 30,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 31,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 32,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 33,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 34,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 35,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 36,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 37,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 38,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 39,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 40,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 41,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 42,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 43,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 44,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 45,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 46,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 47,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 48,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 49,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 50,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 51,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 52,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 53,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 54,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 55,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 56,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 57,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 58,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 59,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 60,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 61,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 62,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 63,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 64,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 65,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 66,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 67,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 68,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 69,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 70,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 71,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 72,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 73,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 74,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 75,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 76,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 77,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 78,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 79,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 80,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 81,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 82,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 83,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 84,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 85,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 86,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 87,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 88,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 89,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 90,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 91,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 92,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 93,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 94,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 95,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 96,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 97,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 98,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 99,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 100,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 101,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 102,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 103,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 104,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 105,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 106,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 107,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 108,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 109,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 110,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 111,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 112,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 113,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 114,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 115,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 116,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 117,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 118,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 119,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 120,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 121,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 122,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 123,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 124,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 125,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 126,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 127,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 128,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 129,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 130,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 131,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 132,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 133,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 134,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 135,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 136,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 137,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 138,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 139,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 140,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 141,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 142,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 143,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 144,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 145,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 146,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 147,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 148,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 149,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 150,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 151,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 152,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 153,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 154,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 155,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 156,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 157,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 158,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 159,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 160,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 161,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 162,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 163,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 164,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 165,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 166,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 167,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 168,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 169,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 170,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 171,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 172,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 173,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 174,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 175,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 176,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 177,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 178,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 179,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 180,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 181,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 182,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 183,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 184,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 185,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 186,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 187,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 188,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 189,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 190,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 191,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 192,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 193,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 194,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 195,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 196,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 197,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 198,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 199,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 200,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 201,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 202,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 203,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 204,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 205,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 206,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 207,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 208,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 209,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 210,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 211,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 212,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 213,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 214,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 215,
+        "metadata": {}
+      },
+      {
+        "xMm": 10.2,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 216,
+        "metadata": {}
+      },
+      {
+        "xMm": 11.4,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 217,
+        "metadata": {}
+      },
+      {
+        "xMm": 12.6,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 218,
+        "metadata": {}
+      },
+      {
+        "xMm": 13.8,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 219,
+        "metadata": {}
+      },
+      {
+        "xMm": 15,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 220,
+        "metadata": {}
+      }
+    ]
+  },
+  "solidBlack_placed": {
+    "layerId": "image-1",
+    "sourceMode": "fill",
+    "count": 32,
+    "boundingBox": {
+      "minXmm": 50.1,
+      "minYmm": 30.1,
+      "maxXmm": 59.5,
+      "maxYmm": 34.7,
+      "widthMm": 9.4,
+      "heightMm": 4.6
+    },
+    "widthMm": 9.4,
+    "heightMm": 4.6,
+    "stones": [
+      {
+        "xMm": 50.6,
+        "yMm": 30.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 0,
+        "metadata": {}
+      },
+      {
+        "xMm": 51.8,
+        "yMm": 30.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 1,
+        "metadata": {}
+      },
+      {
+        "xMm": 53,
+        "yMm": 30.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 2,
+        "metadata": {}
+      },
+      {
+        "xMm": 54.2,
+        "yMm": 30.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 3,
+        "metadata": {}
+      },
+      {
+        "xMm": 55.4,
+        "yMm": 30.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 4,
+        "metadata": {}
+      },
+      {
+        "xMm": 56.6,
+        "yMm": 30.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 5,
+        "metadata": {}
+      },
+      {
+        "xMm": 57.8,
+        "yMm": 30.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 6,
+        "metadata": {}
+      },
+      {
+        "xMm": 59,
+        "yMm": 30.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 7,
+        "metadata": {}
+      },
+      {
+        "xMm": 50.6,
+        "yMm": 31.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 8,
+        "metadata": {}
+      },
+      {
+        "xMm": 51.8,
+        "yMm": 31.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 9,
+        "metadata": {}
+      },
+      {
+        "xMm": 53,
+        "yMm": 31.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 10,
+        "metadata": {}
+      },
+      {
+        "xMm": 54.2,
+        "yMm": 31.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 11,
+        "metadata": {}
+      },
+      {
+        "xMm": 55.4,
+        "yMm": 31.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 12,
+        "metadata": {}
+      },
+      {
+        "xMm": 56.6,
+        "yMm": 31.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 13,
+        "metadata": {}
+      },
+      {
+        "xMm": 57.8,
+        "yMm": 31.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 14,
+        "metadata": {}
+      },
+      {
+        "xMm": 59,
+        "yMm": 31.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 15,
+        "metadata": {}
+      },
+      {
+        "xMm": 50.6,
+        "yMm": 33,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 16,
+        "metadata": {}
+      },
+      {
+        "xMm": 51.8,
+        "yMm": 33,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 17,
+        "metadata": {}
+      },
+      {
+        "xMm": 53,
+        "yMm": 33,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 18,
+        "metadata": {}
+      },
+      {
+        "xMm": 54.2,
+        "yMm": 33,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 19,
+        "metadata": {}
+      },
+      {
+        "xMm": 55.4,
+        "yMm": 33,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 20,
+        "metadata": {}
+      },
+      {
+        "xMm": 56.6,
+        "yMm": 33,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 21,
+        "metadata": {}
+      },
+      {
+        "xMm": 57.8,
+        "yMm": 33,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 22,
+        "metadata": {}
+      },
+      {
+        "xMm": 59,
+        "yMm": 33,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 23,
+        "metadata": {}
+      },
+      {
+        "xMm": 50.6,
+        "yMm": 34.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 24,
+        "metadata": {}
+      },
+      {
+        "xMm": 51.8,
+        "yMm": 34.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 25,
+        "metadata": {}
+      },
+      {
+        "xMm": 53,
+        "yMm": 34.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 26,
+        "metadata": {}
+      },
+      {
+        "xMm": 54.2,
+        "yMm": 34.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 27,
+        "metadata": {}
+      },
+      {
+        "xMm": 55.4,
+        "yMm": 34.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 28,
+        "metadata": {}
+      },
+      {
+        "xMm": 56.6,
+        "yMm": 34.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 29,
+        "metadata": {}
+      },
+      {
+        "xMm": 57.8,
+        "yMm": 34.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 30,
+        "metadata": {}
+      },
+      {
+        "xMm": 59,
+        "yMm": 34.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 31,
+        "metadata": {}
+      }
+    ]
+  },
+  "largeWorkingRes_capped": {
+    "layerId": "image-1",
+    "sourceMode": "fill",
+    "count": 136,
+    "boundingBox": {
+      "minXmm": 0.1,
+      "minYmm": 0.1,
+      "maxXmm": 9.5,
+      "maxYmm": 20.3,
+      "widthMm": 9.4,
+      "heightMm": 20.2
+    },
+    "widthMm": 9.4,
+    "heightMm": 20.2,
+    "stones": [
+      {
+        "xMm": 0.6,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 0,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 1,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 2,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 3,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 4,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 5,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 6,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 7,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 8,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 9,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 10,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 11,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 12,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 13,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 14,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 15,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 16,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 17,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 18,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 19,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 20,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 21,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 22,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 23,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 24,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 25,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 26,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 27,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 28,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 29,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 30,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 31,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 32,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 33,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 34,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 35,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 36,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 37,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 38,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 39,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 40,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 41,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 42,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 43,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 44,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 45,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 46,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 47,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 48,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 49,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 50,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 51,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 52,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 53,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 54,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 55,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 56,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 57,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 58,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 59,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 60,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 61,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 62,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 63,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 64,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 65,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 66,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 67,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 68,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 69,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 70,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 71,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 72,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 73,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 74,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 75,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 76,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 77,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 78,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 79,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 80,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 81,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 82,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 83,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 84,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 85,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 86,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 87,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 88,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 89,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 90,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 91,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 92,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 93,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 94,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 95,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 96,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 97,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 98,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 99,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 100,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 101,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 102,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 103,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 104,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 105,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 106,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 107,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 108,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 109,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 110,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 111,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 112,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 113,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 114,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 115,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 116,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 117,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 118,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 119,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 120,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 121,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 122,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 123,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 124,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 125,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 126,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 127,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 128,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 129,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 130,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 131,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 132,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 133,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 134,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 135,
+        "metadata": {}
+      }
+    ]
+  },
+  "largeWorkingRes_uncapped": {
+    "layerId": "image-1",
+    "sourceMode": "fill",
+    "count": 136,
+    "boundingBox": {
+      "minXmm": 0.1,
+      "minYmm": 0.1,
+      "maxXmm": 9.5,
+      "maxYmm": 20.3,
+      "widthMm": 9.4,
+      "heightMm": 20.2
+    },
+    "widthMm": 9.4,
+    "heightMm": 20.2,
+    "stones": [
+      {
+        "xMm": 0.6,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 0,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 1,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 2,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 3,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 4,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 5,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 6,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 0.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 7,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 8,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 9,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 10,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 11,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 12,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 13,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 14,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 1.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 15,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 16,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 17,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 18,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 19,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 20,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 21,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 22,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 3,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 23,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 24,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 25,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 26,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 27,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 28,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 29,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 30,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 4.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 31,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 32,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 33,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 34,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 35,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 36,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 37,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 38,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 5.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 39,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 40,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 41,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 42,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 43,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 44,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 45,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 46,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 6.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 47,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 48,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 49,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 50,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 51,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 52,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 53,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 54,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 7.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 55,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 56,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 57,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 58,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 59,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 60,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 61,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 62,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 9,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 63,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 64,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 65,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 66,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 67,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 68,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 69,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 70,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 10.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 71,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 72,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 73,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 74,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 75,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 76,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 77,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 78,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 11.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 79,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 80,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 81,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 82,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 83,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 84,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 85,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 86,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 12.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 87,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 88,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 89,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 90,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 91,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 92,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 93,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 94,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 13.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 95,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 96,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 97,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 98,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 99,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 100,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 101,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 102,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 15,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 103,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 104,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 105,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 106,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 107,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 108,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 109,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 110,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 16.2,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 111,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 112,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 113,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 114,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 115,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 116,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 117,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 118,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 17.4,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 119,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 120,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 121,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 122,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 123,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 124,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 125,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 126,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 18.6,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 127,
+        "metadata": {}
+      },
+      {
+        "xMm": 0.6,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 128,
+        "metadata": {}
+      },
+      {
+        "xMm": 1.8,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 129,
+        "metadata": {}
+      },
+      {
+        "xMm": 3,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 130,
+        "metadata": {}
+      },
+      {
+        "xMm": 4.2,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 131,
+        "metadata": {}
+      },
+      {
+        "xMm": 5.4,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 132,
+        "metadata": {}
+      },
+      {
+        "xMm": 6.6,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 133,
+        "metadata": {}
+      },
+      {
+        "xMm": 7.8,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 134,
+        "metadata": {}
+      },
+      {
+        "xMm": 9,
+        "yMm": 19.8,
+        "sizeMm": 1,
+        "color": "gold",
+        "layerId": "image-1",
+        "index": 135,
+        "metadata": {}
+      }
+    ]
+  }
+}

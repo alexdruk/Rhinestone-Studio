@@ -1,0 +1,1253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Rhinestone Studio</title>
+<style>
+/* ============================== Design tokens (UI-001) ============================== */
+:root{
+  --color-primary:#1a56db;
+  --color-primary-hover:#1747b8;
+  --color-primary-active:#123a94;
+  --color-primary-tint:#eaf1fd;
+  --color-text:#12172b;
+  --color-text-muted:#6b7280;
+  --color-text-faint:#9aa2b1;
+  --color-surface:#ffffff;
+  --color-bg:#f4f5f8;
+  --color-canvas-bg:#fbfcfe;
+  --color-border:#e3e6ec;
+  --color-border-strong:#cfd4de;
+  --color-focus:#1a56db;
+  --color-danger:#b42318;
+  --color-danger-tint:#fdecea;
+  --color-success:#0b8b44;
+  --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;
+  --radius-sm:6px;--radius-md:8px;--radius-lg:12px;
+  --shadow-sm:0 1px 2px rgba(17,24,39,.05);
+  --shadow-md:0 6px 20px rgba(17,24,39,.10);
+  --control-height:34px;
+  --control-height-sm:28px;
+  --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif;
+  --font-size-xs:11px;--font-size-sm:12.5px;--font-size-md:13.5px;--font-size-lg:16px;
+  --topbar-height:52px;
+  --left-panel-width:268px;
+  --right-panel-width:252px;
+}
+
+/* ============================== Reset / base ============================== */
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font-family:var(--font-sans);background:var(--color-bg);color:var(--color-text);font-size:var(--font-size-md);-webkit-font-smoothing:antialiased}
+h1,h2,h3{margin:0}
+button{font:inherit}
+input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--color-focus);outline-offset:1px}
+button:focus-visible,a:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ============================== Shared controls ============================== */
+label{display:block;font-size:var(--font-size-xs);font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:.02em;margin:0 0 4px}
+input[type="text"],input[type="number"],input:not([type]),select{
+  width:100%;height:var(--control-height);padding:0 10px;border:1px solid var(--color-border-strong);
+  border-radius:var(--radius-sm);background:var(--color-surface);color:var(--color-text);font-size:var(--font-size-md);
+}
+textarea{
+  width:100%;padding:8px 10px;border:1px solid var(--color-border-strong);resize:vertical;min-height:calc(var(--control-height) * 2);
+  border-radius:var(--radius-sm);background:var(--color-surface);color:var(--color-text);font-size:var(--font-size-md);
+}
+input[type="range"]{width:100%}
+input:disabled,select:disabled,button:disabled{opacity:.45;cursor:not-allowed}
+.field{margin-bottom:var(--space-3)}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
+.field-row-3{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-2)}
+.hint{font-size:var(--font-size-xs);color:var(--color-text-muted);line-height:1.4;margin-top:var(--space-1)}
+.kbd{font-family:ui-monospace,Menlo,monospace;background:var(--color-bg);border:1px solid var(--color-border);border-radius:4px;padding:1px 5px;font-size:var(--font-size-xs)}
+
+button.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;height:var(--control-height);
+  padding:0 12px;border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);
+  background:var(--color-surface);color:var(--color-text);cursor:pointer;font-weight:600;font-size:var(--font-size-sm);
+  transition:background .12s,border-color .12s,color .12s;
+}
+button.btn:hover:not(:disabled){background:var(--color-bg);border-color:var(--color-border-strong)}
+button.btn.primary{background:var(--color-primary);border-color:var(--color-primary);color:#fff}
+button.btn.primary:hover:not(:disabled){background:var(--color-primary-hover)}
+button.btn.primary:active:not(:disabled){background:var(--color-primary-active)}
+button.btn.danger{background:var(--color-surface);color:var(--color-danger);border-color:#f3c6c1}
+button.btn.danger:hover:not(:disabled){background:var(--color-danger-tint)}
+button.btn.block{width:100%}
+button.btn.sm{height:var(--control-height-sm);padding:0 9px;font-size:var(--font-size-xs)}
+button.icon-btn{
+  display:inline-flex;align-items:center;justify-content:center;width:var(--control-height-sm);height:var(--control-height-sm);
+  border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);background:var(--color-surface);cursor:pointer;font-size:13px;
+}
+button.icon-btn:hover:not(:disabled){background:var(--color-bg)}
+button.icon-btn[aria-pressed="true"]{background:var(--color-primary-tint);border-color:var(--color-primary);color:var(--color-primary-active)}
+.align-icon{width:15px;height:15px;display:block;overflow:visible}
+.btnrow{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
+.color-pick-row{display:flex;align-items:center;gap:var(--space-2)}
+.color-pick-row select{flex:1}
+.color-swatch{width:var(--control-height);height:var(--control-height);flex:0 0 var(--control-height);border-radius:var(--radius-sm);border:1px solid var(--color-border-strong);box-shadow:inset 0 0 0 1px #fff}
+.status-message{font-size:var(--font-size-sm);color:var(--color-success);margin-top:var(--space-2)}
+
+/* ============================== Font library (RS-2002) ============================== */
+.font-pick-row{display:flex;align-items:center;gap:var(--space-2)}
+.font-pick-row select{flex:1}
+.font-library-panel{margin-top:var(--space-2);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-surface);padding:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)}
+.font-library-list{max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+.font-library-group{font-size:var(--font-size-xs);font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--color-text-muted);margin:var(--space-2) 4px 2px}
+.font-library-group:first-child{margin-top:0}
+.font-library-row{display:flex;align-items:center;gap:4px}
+.font-library-item{flex:1;display:flex;align-items:center;min-width:0;padding:8px 10px;border-radius:var(--radius-sm);cursor:pointer;border:1px solid transparent;background:transparent;text-align:left;font-size:16px}
+.font-library-item:hover{background:var(--color-bg)}
+.font-library-item[aria-selected="true"]{background:var(--color-primary-tint);border-color:var(--color-primary)}
+.font-library-item .font-preview{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.font-fav{flex:0 0 auto;width:28px;height:28px;border:none;background:none;cursor:pointer;font-size:15px;color:var(--color-text-faint);border-radius:var(--radius-sm)}
+.font-fav:hover{background:var(--color-bg)}
+.font-fav.active{color:#e3a008}
+.font-library-empty{font-size:var(--font-size-sm);color:var(--color-text-muted);padding:var(--space-3);text-align:center}
+.font-library-toolbar{display:flex;gap:var(--space-2);align-items:center}
+.font-library-toolbar input{flex:1;min-width:0}
+.font-library-toolbar select{flex:0 0 auto}
+.font-preview-canvas{display:block;width:160px;height:36px;flex:0 0 auto;background:#fbfdff;border-radius:var(--radius-sm);border:1px solid var(--color-border)}
+.font-library-item-meta{display:flex;flex-direction:column;min-width:0;margin-left:10px}
+.font-library-item-name{font-size:13px;font-weight:600;color:var(--color-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.font-library-item-category{font-size:11px;color:var(--color-text-muted)}
+
+/* ============================== Top menu ============================== */
+.topbar{
+  height:var(--topbar-height);background:var(--color-surface);border-bottom:1px solid var(--color-border);
+  display:flex;align-items:center;gap:var(--space-4);padding:0 var(--space-4);position:relative;z-index:5;
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:800;font-size:var(--font-size-lg);color:var(--color-primary-active);white-space:nowrap}
+.brand .mark{font-size:18px}
+nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-x:auto}
+.topmenu-btn{
+  display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border:1px solid transparent;border-radius:var(--radius-sm);
+  background:transparent;color:var(--color-text);cursor:pointer;font-weight:600;font-size:var(--font-size-sm);white-space:nowrap;
+}
+.topmenu-btn .glyph{font-size:14px;line-height:1}
+.topmenu-btn:hover{background:var(--color-bg)}
+.topmenu-btn[aria-pressed="true"],.topmenu-btn.active{background:var(--color-primary-tint);color:var(--color-primary-active)}
+/* ---- S-103 (Product Scope Freeze): disabled top-menu entries stay visible but inert -- no click,
+   no hover affordance, no keyboard focus (native [disabled] on a <button> already removes it from
+   the tab order and blocks click/Enter/Space activation, so no JS gating is needed here). ---- */
+.topmenu-btn:disabled{cursor:not-allowed;opacity:.5;color:var(--color-text-faint)}
+.topmenu-btn:disabled:hover{background:transparent}
+.topmenu-badge{margin-left:2px;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:1px 6px;border-radius:999px;background:var(--color-bg);color:var(--color-text-muted);border:1px solid var(--color-border-strong)}
+.topbar-actions{display:flex;align-items:center;gap:var(--space-2);flex:0 0 auto}
+.dirty-indicator{font-size:var(--font-size-xs);color:var(--color-text-muted);min-width:96px;text-align:right}
+
+/* ============================== App shell ============================== */
+.app-shell{display:grid;grid-template-columns:var(--left-panel-width) 1fr var(--right-panel-width);height:calc(100vh - var(--topbar-height));min-height:0}
+.left-panel,.right-inspector{background:var(--color-surface);overflow-y:auto;padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-5)}
+.left-panel{border-right:1px solid var(--color-border)}
+.right-inspector{border-left:1px solid var(--color-border)}
+.panel-section h2{font-size:var(--font-size-xs);font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--color-text-muted);margin-bottom:var(--space-3)}
+.meta-row{display:flex;align-items:center;justify-content:space-between;font-size:var(--font-size-sm);padding:6px 0;border-bottom:1px solid var(--color-border)}
+.meta-row:last-child{border-bottom:none}
+.meta-row .meta-label{color:var(--color-text-muted)}
+.meta-row .meta-value{font-weight:600}
+
+#layersList{display:flex;flex-direction:column;gap:6px;margin-bottom:var(--space-2)}
+.layer{
+  display:grid;grid-template-columns:20px 1fr 52px 24px 24px 24px;align-items:center;gap:5px;
+  background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:6px 7px;font-size:var(--font-size-xs);
+}
+.layer.selected{outline:2px solid var(--color-primary);outline-offset:-1px;background:var(--color-primary-tint)}
+.layer input{width:auto;height:auto}
+.layer button{padding:3px;border-radius:5px;font-size:11px;border:1px solid var(--color-border-strong);background:var(--color-surface);cursor:pointer}
+.layer button:disabled{opacity:.35;cursor:not-allowed}
+.layer .name{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.layer .type{font-size:9.5px;color:var(--color-text-faint);text-align:right}
+.ruleHint{font-size:var(--font-size-xs);color:var(--color-danger);margin-top:6px;line-height:1.4}
+#status{font-size:var(--font-size-sm);color:var(--color-text-muted)}
+
+/* ============================== Workspace ============================== */
+.workspace{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--color-bg)}
+.workspace-toolbar{display:flex;align-items:center;gap:var(--space-4);padding:var(--space-2) var(--space-4);border-bottom:1px solid var(--color-border);background:var(--color-surface);flex-wrap:wrap}
+.tabs{display:flex;gap:2px;background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:2px}
+.tabs .tab{height:28px;padding:0 12px;border:none;border-radius:5px;background:transparent;color:var(--color-text-muted);font-weight:700;font-size:var(--font-size-xs);cursor:pointer}
+.tabs .tab.active{background:var(--color-surface);color:var(--color-primary-active);box-shadow:var(--shadow-sm)}
+.toolbar-cluster{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}
+.toolbar-group{display:flex;align-items:center;gap:6px;padding-left:var(--space-3);border-left:1px solid var(--color-border)}
+.toolbar-group:first-child{border-left:none;padding-left:0}
+.toolbar-label{font-size:var(--font-size-xs);font-weight:700;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:.03em;margin-right:2px}
+#selectionSummary{font-size:var(--font-size-xs);color:var(--color-text-muted);white-space:nowrap}
+.align-icons{display:flex;gap:3px}
+.workspace-canvas-area{flex:1;min-height:0;position:relative}
+/* Both canvas panels stay mounted at real, non-zero pixel dimensions at all times (absolutely
+   stacked, filling the same inset), toggled by visibility/z-index rather than display:none -- a
+   canvas whose box collapses to 0x0 while "hidden" would size its 3D renderer to 0x0 too, silently
+   producing a blank Object Preview PNG export if a user never opened the 3D tab first. */
+.canvas-panel{position:absolute;inset:var(--space-4);background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);overflow:hidden}
+.canvas-panel.tab-hidden{visibility:hidden;pointer-events:none}
+.canvas-panel canvas{width:100%;height:100%;display:block;background:var(--color-canvas-bg)}
+/* Dual Workspace (UI-001B): the default desktop layout shows the 2D Canvas and Object Preview
+   side by side instead of one-at-a-time. Both panels switch from absolute stacking to a normal
+   flex row -- each still gets a real, non-zero pixel box at all times (same "never display:none"
+   rule the single-view tab modes rely on), so no canvas-sizing/export regression is reintroduced. */
+.workspace-canvas-area.dual{display:flex;gap:var(--space-3);padding:var(--space-4)}
+.workspace-canvas-area.dual .canvas-panel{position:relative;inset:auto;flex:1 1 0;min-width:0;height:100%}
+.fitNotice{position:absolute;left:var(--space-4);bottom:var(--space-4);color:var(--color-text-muted);font-size:var(--font-size-xs);background:#ffffffe6;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:4px 9px}
+.workspace-status{display:flex;align-items:center;gap:var(--space-4);padding:var(--space-2) var(--space-4);border-top:1px solid var(--color-border);background:var(--color-surface);font-size:var(--font-size-sm);white-space:nowrap;overflow-x:auto}
+.workspace-status b{font-weight:700}
+.workspace-status span{color:var(--color-text-muted)}
+.view3d-toolbar{display:flex;align-items:center;gap:var(--space-3)}
+.view-buttons{display:flex;gap:4px}
+.view-buttons button{height:var(--control-height-sm);padding:0 10px;border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);background:var(--color-surface);cursor:pointer;font-size:var(--font-size-xs);font-weight:700}
+.view-buttons button.primary{background:var(--color-primary);border-color:var(--color-primary);color:#fff}
+.slider-field{display:flex;align-items:center;gap:6px;font-size:var(--font-size-xs);color:var(--color-text-muted)}
+.slider-field input[type="range"]{width:100px}
+
+/* ============================== Right inspector ============================== */
+#inspectorEmpty{font-size:var(--font-size-sm);color:var(--color-text-muted)}
+.field-slot .field-row{margin-bottom:0}
+#moreOptionsBtn{margin-top:var(--space-2)}
+#workspaceCenterTextBtn{margin-top:var(--space-2)}
+
+/* ============================== Responsive ============================== */
+@media (max-width:1400px){:root{--left-panel-width:240px;--right-panel-width:224px}}
+@media (max-width:1500px){
+  .brand span:not(.mark){display:none}
+  .topmenu-btn{padding:0 8px;gap:4px}
+  .dirty-indicator{min-width:0}
+}
+@media (max-width:1300px){
+  .app-shell{grid-template-columns:220px 1fr 0}
+  .right-inspector{display:none}
+}
+
+/* ============================== Lightbox system ============================== */
+.lightbox-overlay{position:fixed;inset:0;background:rgba(17,23,43,.5);display:none;align-items:center;justify-content:center;z-index:100;padding:var(--space-5)}
+.lightbox-overlay.open{display:flex}
+/* S-101 (Shapes only), generalized to all 11 named Lightboxes by S-105: a regular lightbox-overlay's
+   full-viewport backdrop captures every pointer event (even over the always-visible sidebar/canvas),
+   which blocks continuing to work while the dialog is open. .non-modal keeps the same visual dialog
+   shell but lets clicks fall through the backdrop to whatever is behind it -- only the dialog card
+   itself stays interactive. lightboxLibraryConfirm/lightboxGalleryPreview intentionally keep the
+   plain, fully-modal backdrop -- see docs/specifications/S-105-PersistentMovableLightboxes.md,
+   "Out of Scope". */
+.lightbox-overlay.non-modal{background:transparent;pointer-events:none}
+.lightbox-overlay.non-modal .lightbox{pointer-events:auto}
+.lightbox{background:var(--color-surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);width:640px;max-width:100%;max-height:calc(100vh - 64px);display:flex;flex-direction:column;overflow:hidden}
+.lightbox.wide{width:760px}
+/* S-105: every Lightbox is movable by dragging its header (src/ui/Lightbox.js). cursor:grab signals
+   the affordance. touch-action:none stops the browser's own gesture handling (trackpad/touch pan
+   or scroll) from intercepting the pointer sequence before the header's own pointerdown/pointermove
+   listeners see it -- required for reliable custom pointer-drag on real hardware input, not just
+   synthetic mouse events. user-select:none is unconditional (not only while .dragging) so a fast
+   real mousedown-then-move can never start a native text-selection drag on the <h2> title in the
+   single frame before JS's classList.add('dragging') would otherwise apply it. */
+.lightbox-header{display:flex;align-items:center;justify-content:space-between;padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--color-border);cursor:grab;touch-action:none;user-select:none}
+.lightbox.dragging{cursor:grabbing}
+.lightbox.dragging .lightbox-header{cursor:grabbing}
+.lightbox-header h2{font-size:var(--font-size-lg);font-weight:700}
+.lightbox-close{width:30px;height:30px;border:none;background:transparent;border-radius:var(--radius-sm);cursor:pointer;font-size:16px;color:var(--color-text-muted)}
+.lightbox-close:hover{background:var(--color-bg)}
+.lightbox-body{padding:var(--space-5);overflow-y:auto;flex:1;min-height:0}
+.lightbox-footer{display:flex;align-items:center;justify-content:flex-end;gap:var(--space-2);padding:var(--space-3) var(--space-5);border-top:1px solid var(--color-border);background:var(--color-bg)}
+.lightbox-footer .footer-note{margin-right:auto;font-size:var(--font-size-xs);color:var(--color-text-muted)}
+.lightbox-tabs{display:flex;gap:2px;background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:2px;margin-bottom:var(--space-4);width:fit-content}
+.lightbox-tabs button{height:28px;padding:0 14px;border:none;border-radius:5px;background:transparent;color:var(--color-text-muted);font-weight:700;font-size:var(--font-size-xs);cursor:pointer}
+.lightbox-tabs button.active{background:var(--color-surface);color:var(--color-primary-active);box-shadow:var(--shadow-sm)}
+.lightbox-tab-panel[hidden]{display:none}
+.field-section{margin-bottom:var(--space-5)}
+.field-section:last-child{margin-bottom:0}
+.field-section h3{font-size:var(--font-size-sm);font-weight:700;margin-bottom:var(--space-3);color:var(--color-text)}
+.validation-message{font-size:var(--font-size-sm);color:var(--color-danger);background:var(--color-danger-tint);border:1px solid #f3c6c1;border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:var(--space-3);display:none}
+.validation-message.visible{display:block}
+.drop-zone{border:1.5px dashed var(--color-border-strong);border-radius:var(--radius-md);padding:var(--space-5);text-align:center;color:var(--color-text-muted);font-size:var(--font-size-sm);background:var(--color-bg)}
+.preview-box{background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:var(--space-3);text-align:center}
+.preview-box canvas{max-width:100%;max-height:220px;background:#fff;border:1px solid var(--color-border);border-radius:var(--radius-sm);image-rendering:pixelated}
+.stone-count{font-size:var(--font-size-xs);color:var(--color-text-muted);margin-top:6px}
+.checkbox-row{display:flex;align-items:center;gap:8px;font-size:var(--font-size-sm);font-weight:500;color:var(--color-text);text-transform:none;margin-top:var(--space-1)}
+.checkbox-row input{width:auto;height:auto}
+/* RS-2012: dims the label text of an Allowed Sizes row whose size is ineligible for gap-filling
+   (not smaller than the primary Stone size, or outside the Minimum/Maximum Size range) -- toggled
+   alongside the checkbox's own [disabled]. Only recolors text (doesn't add opacity on top of the
+   browser's native input:disabled dimming above) so a checked-but-now-ineligible box still reads
+   clearly as checked, not merely near-invisible from two compounding opacities. */
+.checkbox-row.ineligible{color:var(--color-text-muted)}
+/* RS-2012: "Advanced" collapsible (Mixed Stone Size's Minimum/Maximum Size + Conservative Detail).
+   Custom marker (default <details> triangle varies by browser/platform) so it reads consistently. */
+.advanced-section{margin-top:var(--space-3);padding-top:var(--space-2);border-top:1px solid var(--color-border)}
+.advanced-section summary{cursor:pointer;font-size:var(--font-size-sm);font-weight:700;color:var(--color-text-muted);list-style:none;user-select:none}
+.advanced-section summary::-webkit-details-marker{display:none}
+.advanced-section summary::before{content:'▸';display:inline-block;width:1em;transition:transform .15s}
+.advanced-section[open] summary::before{transform:rotate(90deg)}
+.advanced-section[open] summary{color:var(--color-text);margin-bottom:var(--space-2)}
+.template-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-3)}
+.template-card{border:1px solid var(--color-border-strong);border-radius:var(--radius-md);padding:var(--space-3);cursor:pointer;background:var(--color-surface)}
+.template-card.active{border-color:var(--color-primary);background:var(--color-primary-tint)}
+.template-card h4{font-size:var(--font-size-sm);margin:0 0 4px}
+.template-card p{font-size:var(--font-size-xs);color:var(--color-text-muted);margin:0}
+/* ---- Design Library (RS-1015) ---- */
+.library-toolbar{display:flex;flex-wrap:wrap;gap:var(--space-3);align-items:flex-end;margin-bottom:var(--space-4);padding-bottom:var(--space-4);border-bottom:1px solid var(--color-border)}
+.library-toolbar .field{margin-bottom:0;flex:1 1 220px}
+.library-toolbar .btnrow{display:flex;gap:var(--space-2);flex:0 0 auto}
+.library-controls{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:flex-end;margin-bottom:var(--space-4)}
+.library-controls .field{margin-bottom:0}
+.library-controls .field.grow{flex:1 1 200px}
+.library-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:var(--space-3)}
+/* S-110 (Expanded Shape Library): a compact auto-fill grid for the 11 Design Shapes buttons,
+   mirroring .library-grid's own auto-fill pattern above at a smaller minmax so it stays a clear,
+   organized grid (not a long unstructured list) down to the Shapes Lightbox's own min width. */
+.shape-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:var(--space-2)}
+.shape-grid-btn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:var(--space-2) 4px;font-size:20px;line-height:1}
+.shape-grid-btn span{font-size:var(--font-size-xs);line-height:1.2}
+.library-card{border:1px solid var(--color-border-strong);border-radius:var(--radius-md);background:var(--color-surface);overflow:hidden;display:flex;flex-direction:column}
+.library-card-thumb{aspect-ratio:3/2;background:#fbfdff;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--color-border);overflow:hidden}
+.library-card-thumb img{width:100%;height:100%;object-fit:contain}
+.library-card-thumb-empty{color:var(--color-text-muted);font-size:var(--font-size-xs)}
+.library-card-body{padding:var(--space-2) var(--space-3);flex:1}
+.library-card-body h4{margin:0 0 6px;font-size:var(--font-size-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.library-card-body input.library-rename-input{width:100%;height:26px;padding:0 6px;font-size:var(--font-size-sm)}
+.library-card-meta{display:flex;gap:6px;flex-wrap:wrap}
+.library-badge{display:inline-block;font-size:var(--font-size-xs);padding:1px 8px;border-radius:999px;background:var(--color-bg);color:var(--color-text-muted);border:1px solid var(--color-border);white-space:nowrap}
+.library-card-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:var(--space-2) var(--space-3);border-top:1px solid var(--color-border)}
+.library-card-actions button.btn{padding:0 4px;font-size:var(--font-size-xs)}
+.library-empty-state,.library-no-results{text-align:center;color:var(--color-text-muted);padding:var(--space-6) var(--space-3);font-size:var(--font-size-sm)}
+.help-section{margin-bottom:var(--space-4)}
+.help-section h3{font-size:var(--font-size-sm);font-weight:700;margin-bottom:6px}
+.help-section p,.help-section li{font-size:var(--font-size-sm);color:var(--color-text-muted);line-height:1.5}
+.shortcut-list{display:grid;grid-template-columns:120px 1fr;gap:4px 12px;font-size:var(--font-size-sm)}
+.export-group{border:1px solid var(--color-border);border-radius:var(--radius-md);padding:var(--space-3);margin-bottom:var(--space-3)}
+.export-group h3{font-size:var(--font-size-sm);font-weight:700;margin-bottom:2px}
+.export-group p{font-size:var(--font-size-xs);color:var(--color-text-muted);margin:0 0 var(--space-2)}
+/* ---- Gallery (RS-2001): additive only -- reuses .library-grid/.library-card/.library-badge
+   structure and behavior verbatim; these rules only add the read-only visual identity (deep-blue
+   accent, read-only ribbon, category pill) on top of it, matching --color-primary already used
+   for every other primary action in the app. ---- */
+.gallery-lightbox .lightbox-header{background:var(--color-primary);color:#fff}
+.gallery-lightbox .lightbox-header .lightbox-close{color:#fff}
+.gallery-readonly-hint{color:var(--color-primary);font-weight:600}
+.gallery-card{position:relative}
+.gallery-readonly-badge{position:absolute;top:6px;right:6px;z-index:1;font-size:var(--font-size-xs);font-weight:700;letter-spacing:.02em;text-transform:uppercase;padding:2px 8px;border-radius:999px;background:var(--color-primary);color:#fff;box-shadow:0 1px 4px #0003}
+.gallery-category-pill{background:var(--color-primary-tint);color:var(--color-primary-active);border-color:var(--color-primary-tint)}
+.gallery-preview-thumb{aspect-ratio:3/2;background:#fbfdff;display:flex;align-items:center;justify-content:center;border:1px solid var(--color-border);border-radius:var(--radius-md);overflow:hidden;margin:var(--space-2) 0}
+.gallery-preview-thumb img{width:100%;height:100%;object-fit:contain}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="mark">💎</span><span>Rhinestone Studio</span></div>
+  <nav class="topmenu" aria-label="Main menu">
+    <button class="topmenu-btn" id="menuText" title="Text (edit the selected text layer's content, font, and curve)"><span class="glyph">🅣</span>Text</button>
+    <button class="topmenu-btn" id="menuShapes" title="Shapes and object templates"><span class="glyph">◇</span>Shapes</button>
+    <button class="topmenu-btn" id="menuMonogram" title="Generate a monogram from a frame, layout, and letters"><span class="glyph">🄼</span>Monogram</button>
+    <button class="topmenu-btn" id="menuLibrary" title="Design Library is temporarily unavailable while Version 1.0 is under feature freeze (RC-006). All Design Library designs and code remain intact." disabled aria-disabled="true"><span class="glyph">📚</span>Design Library<span class="topmenu-badge">Coming Soon</span></button>
+    <button class="topmenu-btn" id="menuGallery" title="Gallery is temporarily unavailable while product scope is reduced (S-103). All Gallery designs and code remain intact." disabled aria-disabled="true"><span class="glyph">✨</span>Gallery<span class="topmenu-badge">Coming Soon</span></button>
+    <button class="topmenu-btn" id="menuImport" title="Import an SVG or a Project JSON file"><span class="glyph">⇪</span>Import</button>
+    <button class="topmenu-btn" id="menuImageTrace" title="Trace a PNG/JPG/WebP image into stones"><span class="glyph">🖼</span>Image Trace</button>
+    <button class="topmenu-btn" id="menuExport" title="Export project, layout, SVG, or PNG"><span class="glyph">⬇</span>Export</button>
+    <button class="topmenu-btn" id="menuProdSheet" title="Generate a manufacturing production sheet"><span class="glyph">🖨</span>Production Sheet</button>
+    <button class="topmenu-btn" id="menuShipping" title="Shipping and handling notes"><span class="glyph">📦</span>Shipping &amp; Handling</button>
+    <button class="topmenu-btn" id="menuSettings" title="Application settings"><span class="glyph">⚙</span>Settings</button>
+    <button class="topmenu-btn" id="menuHelp" title="Help and keyboard shortcuts"><span class="glyph">?</span>Help</button>
+  </nav>
+  <div class="topbar-actions">
+    <button id="undoBtn" class="icon-btn" title="Undo (Ctrl/Cmd+Z)" disabled>↶</button>
+    <button id="redoBtn" class="icon-btn" title="Redo (Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y)" disabled>↷</button>
+    <button class="btn" id="saveProject" title="Save project (downloads Project JSON)">Save</button>
+    <button class="btn primary" id="exportShortcut" title="Open the Export dialog">Export</button>
+    <span id="dirtyIndicator" class="dirty-indicator">Saved</span>
+  </div>
+</header>
+
+<div class="app-shell">
+
+  <!-- ===================== LEFT PANEL: Project / Layers / Actions only ===================== -->
+  <aside class="left-panel" aria-label="Project and layers">
+    <section class="panel-section">
+      <h2>Project</h2>
+      <div class="field"><label for="projectName">Project name</label><input id="projectName" value="Untitled Project"></div>
+      <div class="meta-row"><span class="meta-label">Units</span><span class="meta-value">mm</span></div>
+      <div class="meta-row"><span class="meta-label">Template</span><span class="meta-value" id="projectTemplateSummary">Mug · 210×90mm</span></div>
+    </section>
+
+    <section class="panel-section">
+      <h2>Layers</h2>
+      <select id="selectedLayer" class="visually-hidden" aria-label="Selected layer"></select>
+      <div id="layersList" role="list" aria-label="Layer list"></div>
+      <button id="deleteSelected" class="btn danger block" style="margin-top:var(--space-2)">Delete selected layer</button><div id="layerRuleHint" class="ruleHint" style="display:none">At least one layer is required — add another layer before you can delete this one.</div>
+    </section>
+
+    <section class="panel-section">
+      <h2>Actions</h2>
+      <div class="btnrow" style="margin-bottom:var(--space-2)">
+        <button class="btn sm" id="actionUndo" title="Undo" disabled>↶ Undo</button>
+        <button class="btn sm" id="actionRedo" title="Redo" disabled>↷ Redo</button>
+      </div>
+      <div class="btnrow" style="margin-bottom:var(--space-2)">
+        <button class="btn sm" id="actionDuplicate" title="Duplicate selected layer">⧉ Duplicate</button>
+        <button class="btn sm" id="actionDelete" title="Delete selected layer">🗑 Delete</button>
+      </div>
+      <button class="btn primary block" id="actionSave" title="Save project (downloads Project JSON)">Save Project</button>
+    </section>
+
+    <div id="status" class="status-message" style="color:var(--color-text-muted)">Ready</div>
+  </aside>
+
+  <!-- ===================== CENTRAL WORKSPACE ===================== -->
+  <main class="workspace" aria-label="Design workspace">
+    <div class="workspace-toolbar">
+      <div class="tabs" role="tablist" aria-label="Workspace view">
+        <button class="tab active" id="viewTabDual" role="tab" aria-selected="true" title="Show the 2D Canvas and Object Preview side by side">Dual Workspace</button>
+        <button class="tab" id="viewTab2D" role="tab" aria-selected="false" title="Show only the 2D Canvas">2D Canvas</button>
+        <button class="tab" id="viewTab3D" role="tab" aria-selected="false" title="Show only the Object Preview">Object Preview</button>
+      </div>
+
+      <div class="toolbar-cluster" id="toolbar2D">
+        <div class="toolbar-group">
+          <button class="icon-btn" id="safeAreaToggle" title="Toggle safe-area guide" aria-pressed="true">▢</button>
+          <span class="hint" title="The reference grid helps align stones to the canvas; it is drawn by the permanent 2D renderer and cannot be turned off in this milestone" style="cursor:help">⊞&nbsp;Grid: always on</span>
+        </div>
+        <div class="toolbar-group">
+          <span class="toolbar-label">Align &amp; Snap</span>
+          <div id="selectionSummary" style="display:inline">No layers selected</div>
+          <div class="align-icons">
+            <button id="alignLeft" class="icon-btn" title="Align Left — aligns selected layers to each other's left edges (2+ layers selected)" disabled><svg class="align-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="3" y="2" width="6" height="4" rx="1" fill="currentColor"/><rect x="3" y="10" width="10" height="4" rx="1" fill="currentColor"/></svg></button>
+            <button id="alignCenterH" class="icon-btn" title="Align Horizontal Centers — aligns selected layers to each other's horizontal centers (2+ layers selected)" disabled><svg class="align-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="7.4" y="1" width="1.2" height="14" rx="0.6" fill="currentColor" opacity="0.5"/><rect x="5" y="2" width="6" height="4" rx="1" fill="currentColor"/><rect x="3" y="10" width="10" height="4" rx="1" fill="currentColor"/></svg></button>
+            <button id="alignRight" class="icon-btn" title="Align Right — aligns selected layers to each other's right edges (2+ layers selected)" disabled><svg class="align-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="7" y="2" width="6" height="4" rx="1" fill="currentColor"/><rect x="3" y="10" width="10" height="4" rx="1" fill="currentColor"/></svg></button>
+            <button id="alignTop" class="icon-btn" title="Align Top — aligns selected layers to each other's top edges (2+ layers selected)" disabled><svg class="align-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="2" y="2" width="4" height="5" rx="1" fill="currentColor"/><rect x="9" y="2" width="5" height="9" rx="1" fill="currentColor"/></svg></button>
+            <button id="alignCenterV" class="icon-btn" title="Align Vertical Centers — aligns selected layers to each other's vertical centers (2+ layers selected)" disabled><svg class="align-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="1" y="7.4" width="14" height="1.2" rx="0.6" fill="currentColor" opacity="0.5"/><rect x="2" y="5" width="4" height="6" rx="1" fill="currentColor"/><rect x="9" y="3" width="5" height="10" rx="1" fill="currentColor"/></svg></button>
+            <button id="alignBottom" class="icon-btn" title="Align Bottom — aligns selected layers to each other's bottom edges (2+ layers selected)" disabled><svg class="align-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="2" y="9" width="4" height="5" rx="1" fill="currentColor"/><rect x="9" y="5" width="5" height="9" rx="1" fill="currentColor"/></svg></button>
+            <button id="distributeH" class="icon-btn" title="Distribute Horizontally — spaces selected layers evenly left-to-right, equal center spacing (3+ layers selected)" disabled><svg class="align-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="1" y="4" width="3" height="8" rx="1" fill="currentColor"/><rect x="6.5" y="4" width="3" height="8" rx="1" fill="currentColor"/><rect x="12" y="4" width="3" height="8" rx="1" fill="currentColor"/></svg></button>
+            <button id="distributeV" class="icon-btn" title="Distribute Vertically — spaces selected layers evenly top-to-bottom, equal center spacing (3+ layers selected)" disabled><svg class="align-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="4" y="1" width="8" height="3" rx="1" fill="currentColor"/><rect x="4" y="6.5" width="8" height="3" rx="1" fill="currentColor"/><rect x="4" y="12" width="8" height="3" rx="1" fill="currentColor"/></svg></button>
+          </div>
+          <select id="snapEnabled" title="Snap while dragging: canvas center/edges, the printable safe area, and other layers (does not affect Align/Distribute, keyboard nudge, or the configurable snap distance below)"><option value="on" selected>Snap: On</option><option value="off">Snap: Off</option></select>
+        </div>
+      </div>
+
+      <div class="toolbar-cluster view3d-toolbar" id="toolbar3D">
+        <div class="toolbar-group">
+          <div class="view-buttons">
+            <button data-view="0" class="viewBtn primary">Front</button><button data-view="-90" class="viewBtn">Left</button><button data-view="90" class="viewBtn">Right</button><button data-view="180" class="viewBtn">Back</button>
+          </div>
+        </div>
+        <!-- S-112A: hidden for the Round Dinner Plate (toggled by updateObjectTemplateDetail() in
+             app.js) -- wrap mode sizes the cylindrical Front View Frame band, a concept the plate has
+             none of (it draws its own circular/annular Design Target guide instead, see
+             drawPlateDesignTargetGuide()). Unchanged for every other template. -->
+        <div class="toolbar-group" id="wrapField">
+          <label for="wrap" style="margin:0 6px 0 0;display:inline" title="How wide a slice of the design's circumference is shown on the Object Preview, centered on the front -- also sizes the amber Front View Frame on the 2D Canvas">Wrap mode</label>
+          <select id="wrap"><option value="front" selected>Front only - readable</option><option value="wide">Wide front</option><option value="half">Half wrap</option><option value="full">Full wrap</option></select>
+        </div>
+        <div class="toolbar-group slider-field">
+          <span>Rotation</span><input id="rotation" type="range" min="-180" max="180" value="0">
+        </div>
+        <div class="toolbar-group slider-field">
+          <span>Zoom</span><input id="zoom" type="range" min="70" max="140" value="100">
+          <button class="btn sm" id="resetView">Reset view</button>
+        </div>
+        <div class="toolbar-group" id="cupColorField">
+          <label for="cupColor" style="margin:0 6px 0 0;display:inline">Preview background</label>
+          <select id="cupColor"><option value="#ffffff">White</option><option value="#0b0b0b">Black</option><option value="#1f3556" selected>Navy</option><option value="#bf1d1d">Red</option><option value="#f1d7a9">Cream</option><option value="#95d5b2">Mint</option><option value="#8f8f8f">Gray</option><option value="#e67aa0">Pink</option></select>
+        </div>
+        <!-- S-112: shown only for the Round Dinner Plate template (toggled by updateObjectTemplateDetail()
+             in app.js) in place of the generic #cupColor swatch above -- a real product's approved
+             colors, not a cosmetic preview backdrop. Writes project.cupColor via the plate's own
+             White/Creme hex values (src/products/PlateProductDefinition.js), so drawCup()/Object
+             Preview need no plate-specific color plumbing. -->
+        <div class="toolbar-group" id="plateColorField" style="display:none">
+          <label for="plateColor" style="margin:0 6px 0 0;display:inline">Plate color</label>
+          <select id="plateColor"><option value="white" selected>White</option><option value="creme">Creme</option></select>
+        </div>
+      </div>
+    </div>
+
+    <div class="workspace-canvas-area dual" id="workspaceCanvasArea">
+      <section class="canvas-panel" id="panel2D" aria-label="2D production canvas">
+        <canvas id="layout"></canvas>
+        <div class="fitNotice" id="fitNotice"></div>
+      </section>
+      <section class="canvas-panel" id="panel3D" aria-label="3D object preview">
+        <canvas id="cup"></canvas>
+      </section>
+    </div>
+
+    <div class="workspace-status" id="layoutStats"></div>
+    <div class="workspace-status" id="cupStats"></div>
+  </main>
+
+  <!-- ===================== RIGHT INSPECTOR (compact quick-edit) ===================== -->
+  <aside class="right-inspector" id="rightInspector" aria-label="Layer inspector">
+    <section class="panel-section">
+      <h2>Inspector — <span id="inspectorLayerName">Selected layer</span></h2>
+      <div class="validation-message" id="workspaceTextTooLongWarning" role="status">
+        <div>This text exceeds the object's printable circumference.</div>
+        <div class="hint" id="workspaceTextTooLongWarningDetail"></div>
+      </div>
+      <div class="validation-message" id="workspaceTextOutsideWarning" role="status">
+        <div>This text is outside the printable area.</div>
+        <button type="button" class="btn sm primary" id="workspaceCenterTextBtn" title="Reset only this text layer's position to the center of the printable area — font, size, rotation, spacing, fill, and stone size are left unchanged">↺ Center Text</button>
+      </div>
+      <div id="inspectorPositionSlot" class="field-slot"></div>
+      <div id="inspectorStoneSlot" class="field-slot"></div>
+      <div id="inspectorMixedSizeSlot" class="field-slot"></div>
+      <button class="btn block" id="moreOptionsBtn">More Options…</button>
+    </section>
+  </aside>
+
+</div>
+
+<!-- ============================================================================
+     LIGHTBOXES
+     ============================================================================ -->
+
+<!-- ---------- TEXT ---------- -->
+<div class="lightbox-overlay non-modal" id="lightboxText">
+  <div class="lightbox" role="dialog" aria-modal="false" aria-labelledby="lightboxTextTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxTextTitle">Text</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <div class="field-section">
+        <h3>Add text</h3>
+        <button class="btn" id="addTextBtn" title="Add a new text layer">+ Add Text</button>
+        <p class="hint">Adds a new text layer using the stone settings below. If exactly one compatible shape is also selected, the new text is automatically fit inside it. Existing text is edited by selecting it from the Layers list.</p>
+      </div>
+      <div id="textControls">
+        <div class="field-section">
+          <h3>Content</h3>
+          <div class="field"><label for="text">Text content</label><textarea id="text" rows="3" title="Press Enter to start a new line.">Vitalina Serbin</textarea></div>
+          <div class="field-row">
+            <div class="field"><label for="font">Font</label><div class="font-pick-row"><select id="font"><option value="courier-prime-regular" selected>Courier Prime (monospace)</option><option value="great-vibes-regular">Great Vibes (script)</option></select><button type="button" class="icon-btn" id="fontLibraryBtn" title="Browse the font library" aria-haspopup="true" aria-expanded="false" aria-controls="fontLibraryPanel">🔎</button></div>
+            <p class="hint" id="legacyFontHint" style="display:none">This text uses a legacy font. It still renders, edits, and exports correctly, but isn't offered for new picks — switch to a Production Font (RS Block / RS Modern) for the native rhinestone-dot workflow.</p>
+            <p class="validation-message" id="unknownFontHint" role="alert" style="display:none">This text uses a font that's not available. Its text and settings are preserved, but it won't render until a compatible font is restored.</p></div>
+            <div class="field" id="textModeField"><label for="textMode">Fill Style</label><select id="textMode" title="How rhinestones are arranged across this text.">
+              <option value="stroke" selected>Outline - stones follow the letters</option>
+              <option value="fill">Grid Fill - even rows and columns</option>
+              <option value="staggered">Staggered Fill - offset rows, tighter packing</option>
+              <option value="radial">Radial Fill - rings out from the center</option>
+              <option value="contour">Contour Fill - rings that follow the letters inward</option>
+            </select></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label for="textAlign">Alignment</label><select id="textAlign" title="How multiple lines align relative to each other. No effect on single-line text.">
+              <option value="left" selected>Left</option>
+              <option value="center">Center</option>
+              <option value="right">Right</option>
+            </select></div>
+            <div class="field"><label for="lineSpacing">Line spacing</label><input id="lineSpacing" type="number" min="0.5" max="3" step="0.1" value="1"></div>
+          </div>
+          <div id="fontLibraryPanel" class="font-library-panel" hidden>
+            <div class="font-library-toolbar">
+              <input type="text" id="fontSearch" placeholder="Search fonts by name or category…" aria-label="Search fonts">
+              <select id="fontCategoryFilter" aria-label="Filter fonts by category"><option value="">All categories</option></select>
+            </div>
+            <div id="fontLibraryList" class="font-library-list" role="listbox" aria-label="Font library"></div>
+          </div>
+          <div class="field-row">
+            <div class="field" id="heightField"><label for="height">Text height (mm)</label><input id="height" type="number" min="4" max="111" step="1" value="25"></div>
+            <div class="field" id="letterHeightField" style="display:none"><label for="letterHeight">Letter height (mm)</label><input id="letterHeight" type="number" step="0.1"></div>
+            <div class="field"><label for="autoFit">Auto fit</label><select id="autoFit"><option value="on">On</option><option value="off">Off</option></select></div>
+          </div>
+          <p class="hint" id="textSizeFixedHint" style="display:none">Production Fonts are a fixed size — pick a different font for a different scale.</p>
+          <p class="hint" id="heightAutoAdjustedHint" style="display:none"></p>
+          <p class="hint" id="autoFitOnHint" style="display:none">Auto Fit shrinks text to stay within the printable area, which can override the height needed for reliable readability at your selected stone size.</p>
+          <p class="hint" id="heightModeToggleHint" style="display:none"><button type="button" class="btn sm" id="heightModeToggleBtn"></button></p>
+        </div>
+        <div class="field-section">
+          <h3>Position</h3>
+          <div class="field-row">
+            <div class="field"><label for="textX">Position X (mm)</label><input id="textX" type="number" step="1" value="0"></div>
+            <div class="field"><label for="textY">Position Y (mm)</label><input id="textY" type="number" step="1" value="0"></div>
+          </div>
+          <p class="validation-message" id="textTooLongWarning" role="status">This text exceeds the object's printable circumference.</p>
+          <p class="hint" id="textTooLongWarningDetail"></p>
+          <p class="validation-message" id="textOutsidePrintableWarning" role="status">This text is outside the printable area.</p>
+          <button type="button" class="btn sm primary" id="centerTextOnObject" title="Reset only this text layer's position to the center of the printable area — font, size, rotation, spacing, fill, and stone size are left unchanged">↺ Center on Object</button>
+          <p class="hint">Text can also be moved by dragging on the 2D canvas, arrow-key nudging, or Align &amp; Snap. Dragged this text out of view? Click Center on Object above to bring it back. Long text that fits the object's printable circumference can be inspected by dragging the amber Front View Frame on the 2D canvas, or by rotating the Object Preview.</p>
+          <div class="field"><label for="rotationDeg">Rotation (deg)</label><input id="rotationDeg" type="number" min="0" max="360" step="1" value="0"></div>
+          <p class="hint">Drag the round handle above the selected text on the 2D canvas to rotate it freely, or type an exact angle here. Hold Shift while dragging the handle to snap to 15° steps.</p>
+        </div>
+        <div class="field-section">
+          <h3>Curve</h3>
+          <div class="field"><label for="curveEnabled">Curved text</label><select id="curveEnabled"><option value="off" selected>Off - straight</option><option value="on">On - curved</option></select></div>
+          <p class="hint" id="curveUnavailableHint" style="display:none">Curved text isn't available for Production Fonts yet — switch to a legacy font, or position this text manually.</p>
+          <div id="curveControls" style="display:none">
+            <div class="field-row">
+              <div class="field"><label for="curveRadiusMm">Curve radius (mm)</label><input id="curveRadiusMm" type="number" min="1" step="1" value="40"></div>
+              <div class="field"><label for="curveDirection">Curve direction</label><select id="curveDirection"><option value="outside" selected>Outside</option><option value="inside">Inside</option></select></div>
+            </div>
+            <div class="field-row">
+              <div class="field"><label for="curveStartAngleDeg">Start angle (deg)</label><input id="curveStartAngleDeg" type="number" step="1" value="0"></div>
+              <div class="field"><label for="curveSweepAngleDeg">Sweep angle (deg)</label><input id="curveSweepAngleDeg" type="number" step="1" value="180"></div>
+            </div>
+            <div class="field"><label for="curveAlignment">Curve alignment</label><select id="curveAlignment"><option value="start">Start</option><option value="center" selected>Center</option><option value="end">End</option></select></div>
+            <p class="hint">180° arcs the text halfway around the curve, like a banner. Raise it toward 360° to wrap text into a closed circle.</p>
+          </div>
+        </div>
+        <div class="field-section">
+          <h3>Stones</h3>
+          <div id="textStoneSlot" class="field-slot"></div>
+          <div id="textMixedSizeSlot" class="field-slot"></div>
+        </div>
+      </div>
+      <div class="validation-message" id="textValidation" role="alert"></div>
+    </div>
+    <footer class="lightbox-footer">
+      <span class="footer-note">Changes preview live and undo/redo normally.</span>
+      <button class="btn" data-lightbox-close>Close</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ---------- MONOGRAM ---------- -->
+<!-- MONO-006: UI integration only -- this lightbox is a plain front-end. It collects a request and
+     calls MonogramGenerator.generate() (app.js); it never computes layout, fitting, or collisions
+     itself. No live preview: generation only runs on the Generate button. Non-modal so it matches
+     every other primary Lightbox (see .lightbox-overlay.non-modal above). -->
+<div class="lightbox-overlay non-modal" id="lightboxMonogram">
+  <div class="lightbox" role="dialog" aria-modal="false" aria-labelledby="lightboxMonogramTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxMonogramTitle">Monogram</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <div class="field-section">
+        <h3>Frame &amp; Layout</h3>
+        <div class="field-row">
+          <div class="field"><label for="monogramFrame">Frame</label><select id="monogramFrame" title="The frame shape stones are generated around."></select></div>
+          <div class="field"><label for="monogramLayout">Layout</label><select id="monogramLayout" title="How the letters are arranged inside the frame."></select></div>
+        </div>
+      </div>
+      <div class="field-section">
+        <h3>Letters</h3>
+        <div class="field"><label for="monogramLetters">Letters</label><input id="monogramLetters" type="text" maxlength="3" title="One character per slot in the selected layout."></div>
+        <p class="hint" id="monogramLetterCountHint"></p>
+      </div>
+      <div class="field-section">
+        <h3>Font</h3>
+        <div class="field"><label for="monogramFont">Font</label><select id="monogramFont" title="Authored production fonts only."></select></div>
+      </div>
+      <div class="field-section">
+        <h3>Stones</h3>
+        <div class="field-row">
+          <div class="field"><label for="monogramStoneSize">Stone size</label><select id="monogramStoneSize" title="Standard rhinestone sizes (commercial name and actual diameter)."></select></div>
+          <div class="field"><label for="monogramColor">Stone color</label><div class="color-pick-row"><select id="monogramColor"></select><span id="monogramColorSwatch" class="color-swatch" title="Selected color preview"></span></div></div>
+        </div>
+      </div>
+      <div class="field-section">
+        <h3>Frame Size</h3>
+        <div class="field-row">
+          <div class="field"><label for="monogramWidth">Width (mm)</label><input id="monogramWidth" type="number" step="1"></div>
+          <div class="field"><label for="monogramHeight">Height (mm)</label><input id="monogramHeight" type="number" step="1"></div>
+        </div>
+        <p class="hint" id="monogramFrameSizeHint"></p>
+      </div>
+      <div class="validation-message" id="monogramValidation" role="alert"></div>
+    </div>
+    <footer class="lightbox-footer">
+      <button class="btn" data-lightbox-close>Close</button>
+      <button class="btn primary" id="monogramGenerate">Generate</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ---------- SHAPES ---------- -->
+<!-- S-101: non-modal so Shift-click layer selection on the canvas/Layers list works while this
+     dialog is open, per its own Boolean Ops hint text (see .lightbox-overlay.non-modal above). -->
+<div class="lightbox-overlay non-modal" id="lightboxShapes">
+  <div class="lightbox wide" role="dialog" aria-modal="false" aria-labelledby="lightboxShapesTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxShapesTitle">Shapes</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <div class="lightbox-tabs" role="tablist">
+        <button class="active" id="shapesTabDesign" role="tab" aria-selected="true">Design Shapes</button>
+        <button id="shapesTabTemplates" role="tab" aria-selected="false">Object Templates</button>
+      </div>
+
+      <div class="lightbox-tab-panel" id="shapesPanelDesign">
+        <div class="field-section">
+          <h3>Add a shape</h3>
+          <div class="shape-grid" id="shapeGrid">
+            <button class="btn shape-grid-btn" data-shape-kind="circle" title="Add a circle layer">◯<span>Circle</span></button>
+            <button class="btn shape-grid-btn" data-shape-kind="rectangle" title="Add a rectangle layer">▭<span>Rectangle</span></button>
+            <button class="btn shape-grid-btn" data-shape-kind="ellipse" title="Add an ellipse layer">⬭<span>Ellipse</span></button>
+            <button class="btn shape-grid-btn" data-shape-kind="capsule" title="Add a capsule/oblong layer">▢<span>Capsule</span></button>
+            <button class="btn shape-grid-btn" data-shape-kind="polygon" title="Add a regular polygon layer (configurable number of sides)">⬡<span>Polygon</span></button>
+            <button class="btn shape-grid-btn" data-shape-kind="star" title="Add a star layer (configurable points and inner radius)">★<span>Star</span></button>
+            <button class="btn shape-grid-btn" data-shape-kind="heart" title="Add a heart layer">♥<span>Heart</span></button>
+            <button class="btn shape-grid-btn" data-shape-kind="arrow" title="Add an arrow layer">➤<span>Arrow</span></button>
+            <button class="btn shape-grid-btn" data-shape-kind="cross" title="Add a cross layer">✚<span>Cross</span></button>
+            <button class="btn shape-grid-btn" data-shape-kind="crescent" title="Add a crescent layer">☾<span>Crescent</span></button>
+            <button class="btn shape-grid-btn" data-shape-kind="ring" title="Add a ring/donut layer (configurable inner opening)">◎<span>Ring</span></button>
+          </div>
+          <p class="hint">Adds a new layer using the stone settings below. If exactly one compatible text layer is also selected, it is automatically fit inside the new shape. Existing shapes are edited by selecting them from the Layers list.</p>
+        </div>
+        <div class="field-section" id="booleanOpsSection">
+          <h3>Boolean Operations</h3>
+          <p class="hint" id="booleanOpsHint">Select two or more layers (Shift-click on the canvas, or in the Layers list) to combine them. Works with any combination of shapes, text, curved text, imported SVG, and Image Trace layers.</p>
+          <div class="btnrow">
+            <button class="btn" id="boolUnion" disabled title="Merge the selected layers into one shape, keeping their combined outline.">⊕ Union</button>
+            <button class="btn" id="boolSubtract" disabled title="Cut the front layer(s) out of the back layer, like a cookie cutter.">⊖ Subtract</button>
+          </div>
+          <div class="btnrow">
+            <button class="btn" id="boolIntersect" disabled title="Keep only the area where every selected layer overlaps.">⊗ Intersect</button>
+            <button class="btn" id="boolExclude" disabled title="Keep the non-overlapping parts and remove the area where the layers overlap.">⊙ Exclude</button>
+          </div>
+          <p class="hint">The result becomes one new, fully editable shape layer — the original layers are removed. Undo restores them.</p>
+          <div class="validation-message" id="booleanOpsValidation" role="alert"></div>
+        </div>
+        <div class="field-section" id="fitTextToShapeSection">
+          <h3>Text Fitting</h3>
+          <p class="hint" id="fitTextToShapeHint">Select exactly one text layer and one compatible shape layer (Shift-click on the canvas, or in the Layers list) to fit the text inside the shape.</p>
+          <p class="hint" id="fitTextToShapeFixedSizeHint" style="display:none">The selected text uses a Production Font, which is a fixed size and can’t be automatically fit to a shape — position it manually, or switch to a different font.</p>
+          <button class="btn" id="fitTextToShapeBtn" disabled title="Resize and reposition the selected text to fit inside the selected shape, without changing stone size, gap, font, fill style, or color.">Fit Text to Shape</button>
+          <p class="hint">Adjusts only the text's position and height/scale. Text and shape stay separate, editable layers — this never merges them. Run again any time; it only overrides the position/height it itself last set, never a manual edit made afterward.</p>
+          <div class="validation-message" id="fitTextToShapeValidation" role="alert"></div>
+        </div>
+        <div id="shapeControls" style="display:none">
+          <div class="field-section">
+            <h3>Position &amp; size</h3>
+            <div id="shapesPositionSlot" class="field-slot"></div>
+            <p class="hint">Shapes can also be edited by mouse in the 2D canvas: drag to move, drag blue handles to resize, press <span class="kbd">Delete</span> to remove.</p>
+          </div>
+          <div class="field-section" id="shapeFillModeField">
+            <h3>Fill Style</h3>
+            <select id="shapeFillMode" title="How rhinestones are arranged across this shape.">
+              <option value="outline" selected>Outline - stones follow the edge</option>
+              <option value="fill">Grid Fill - even rows and columns</option>
+              <option value="staggered">Staggered Fill - offset rows, tighter packing</option>
+              <option value="radial">Radial Fill - rings out from the center</option>
+              <option value="contour">Contour Fill - rings that follow the edge inward</option>
+            </select>
+          </div>
+          <div class="field-section" id="shapeSidesField" style="display:none">
+            <h3>Shape options</h3>
+            <div class="field"><label for="shapeSides">Number of Sides</label><input id="shapeSides" type="number" min="3" max="12" step="1" value="6"></div>
+          </div>
+          <div class="field-section" id="shapeStarFields" style="display:none">
+            <h3>Shape options</h3>
+            <div class="field-row">
+              <div class="field"><label for="shapePoints">Number of Points</label><input id="shapePoints" type="number" min="3" max="12" step="1" value="5"></div>
+              <div class="field"><label for="shapeInnerRadius">Inner Radius</label><input id="shapeInnerRadius" type="number" min="0.1" max="0.9" step="0.05" value="0.5"></div>
+            </div>
+          </div>
+          <div class="field-section" id="shapeRingField" style="display:none">
+            <h3>Shape options</h3>
+            <div class="field"><label for="shapeRingInner">Inner Opening</label><input id="shapeRingInner" type="number" min="0.1" max="0.9" step="0.05" value="0.5"></div>
+          </div>
+          <div class="field-section">
+            <h3>Stones</h3>
+            <div id="shapesStoneSlot" class="field-slot"></div>
+            <div id="shapesMixedSizeSlot" class="field-slot"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="lightbox-tab-panel" id="shapesPanelTemplates" hidden>
+        <div class="field-section">
+          <h3>Object type</h3>
+          <select id="objectType"><option value="mug" selected>Mug</option><option value="tumbler">Straight Tumbler</option><option value="bottle">Bottle</option><option value="plate">Round Dinner Plate</option></select>
+          <p class="hint" id="objectTemplateDetail">Production 210×90mm · Safe area inset 14/10mm · Default wrap: Front only</p>
+        </div>
+        <p class="hint">Mug, Straight Tumbler, Bottle, and Round Dinner Plate are physical object/preview templates, not design shape layers — switching resets the production canvas size and wrap default for that object. Wrap mode moved to the Object Preview toolbar (Dual Workspace / Object Preview tab) — it only affects that view.</p>
+        <!-- S-112: shown only when Object type is Round Dinner Plate (toggled by
+             updateObjectTemplateDetail() in app.js). Outer/inner diameter, overall height, and
+             center depth are the plate's own user-adjustable mm parameters (project.plate); rim
+             width and weight are read-only/derived. Ranges (min/max/step) mirror
+             src/products/definitions/plate-round-dinner.json's dimensions -- the JSON stays the
+             single source of truth; these attributes are read from it, not invented here. -->
+        <div class="field-section" id="plateFields" style="display:none">
+          <h3>Plate dimensions</h3>
+          <div class="field-row">
+            <div class="field"><label for="plateOuterDiameter">Outer Diameter (mm)</label><input id="plateOuterDiameter" type="number" min="250" max="300" step="0.5" value="270"></div>
+            <div class="field"><label for="plateInnerWellDiameter">Inner Well Diameter (mm)</label><input id="plateInnerWellDiameter" type="number" min="175" max="215" step="0.5" value="195"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label for="plateOverallHeight">Overall Height (mm)</label><input id="plateOverallHeight" type="number" min="18" max="32" step="0.5" value="25"></div>
+            <div class="field"><label for="plateCenterDepth">Center Depth (mm)</label><input id="plateCenterDepth" type="number" min="7" max="18" step="0.5" value="12"></div>
+          </div>
+          <div class="field">
+            <label for="plateDesignTarget">Design Target</label>
+            <select id="plateDesignTarget">
+              <option value="centerWell" selected>Center Well</option>
+              <option value="rimBand">Rim Band</option>
+              <option value="fullTopSurface">Full Top Surface</option>
+            </select>
+          </div>
+          <p class="hint" id="plateDetail">Rim width 37.5mm (derived) · Approx. weight 800 g (product information, read-only)</p>
+        </div>
+        <!-- RS-2010: shown only when Object type is Mug/Straight Tumbler/Bottle (toggled by
+             updateObjectTemplateDetail() in app.js). Body Diameter/Body Height/Top Diameter are the
+             vessel's own user-adjustable mm parameters (project.vessel); Top Diameter is hidden for
+             the straight tumbler (forced equal to Body Diameter -- no independent taper). Printable
+             height and circumference are read-only/derived. Ranges (min/max/step) mirror
+             src/products/definitions/vessel-standard-*.json's dimensions and are re-applied per
+             product by updateObjectTemplateDetail() -- the JSON stays the single source of truth. -->
+        <div class="field-section" id="vesselFields" style="display:none">
+          <h3>Vessel dimensions</h3>
+          <div class="field-row">
+            <div class="field"><label for="vesselBodyDiameter">Body Diameter (mm)</label><input id="vesselBodyDiameter" type="number" step="0.5"></div>
+            <div class="field"><label for="vesselBodyHeight">Body Height (mm)</label><input id="vesselBodyHeight" type="number" step="0.5"></div>
+          </div>
+          <div class="field-row">
+            <div class="field" id="vesselTopDiameterField"><label for="vesselTopDiameter">Top Diameter (mm)</label><input id="vesselTopDiameter" type="number" step="0.5"></div>
+          </div>
+          <p class="hint" id="vesselDetail">Printable height 85.0mm (derived) · Circumference 257.6mm (product information, read-only)</p>
+        </div>
+      </div>
+    </div>
+    <footer class="lightbox-footer">
+      <button class="btn" data-lightbox-close>Close</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ---------- IMPORT ---------- -->
+<div class="lightbox-overlay non-modal" id="lightboxImport">
+  <div class="lightbox" role="dialog" aria-modal="false" aria-labelledby="lightboxImportTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxImportTitle">Import</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <div class="lightbox-tabs" role="tablist">
+        <button class="active" id="importTabSvg" role="tab" aria-selected="true">SVG Import</button>
+        <button id="importTabProject" role="tab" aria-selected="false">Project Import</button>
+      </div>
+
+      <div class="lightbox-tab-panel" id="importPanelSvg">
+        <div class="field-section">
+          <h3>SVG file</h3>
+          <div class="drop-zone">Choose an SVG file to import as a new layer.<br><button id="importSvg" class="btn sm" style="margin-top:8px">Choose SVG file…</button></div>
+          <input id="importSvgFile" type="file" accept="image/svg+xml,.svg" style="display:none">
+        </div>
+        <div id="svgControls" style="display:none">
+          <div class="field-section">
+            <h3>Position &amp; size</h3>
+            <div id="importPositionSlot" class="field-slot"></div>
+          </div>
+          <div class="field-section">
+            <h3>Fill Style</h3>
+            <select id="svgMode" title="How rhinestones are arranged across this SVG shape.">
+              <option value="outline" selected>Outline - stones follow the edge</option>
+              <option value="fill">Grid Fill - even rows and columns</option>
+              <option value="staggered">Staggered Fill - offset rows, tighter packing</option>
+              <option value="radial">Radial Fill - rings out from the center</option>
+              <option value="contour">Contour Fill - rings that follow the edge inward</option>
+            </select>
+          </div>
+          <div class="field-section">
+            <h3>Stones</h3>
+            <div id="importStoneSlot" class="field-slot"></div>
+            <div id="importMixedSizeSlot" class="field-slot"></div>
+          </div>
+        </div>
+        <p class="hint">Unsupported SVG elements are skipped and reported after import; scaling preserves proportions to fit the current canvas.</p>
+      </div>
+
+      <div class="lightbox-tab-panel" id="importPanelProject" hidden>
+        <div class="field-section">
+          <h3>Project JSON file</h3>
+          <p class="hint">Project Import replaces the entire open project with a previously exported Project JSON file. It is not the same as SVG Import, which adds one new layer to the current project.</p>
+          <div class="drop-zone"><button id="importProject" class="btn sm">Choose Project JSON file…</button></div>
+          <input id="importProjectFile" type="file" accept="application/json,.json" style="display:none">
+        </div>
+        <div class="validation-message" id="importProjectValidation" role="alert"></div>
+        <p class="hint">On failure, the current project is left untouched and a specific error is shown above.</p>
+      </div>
+    </div>
+    <footer class="lightbox-footer">
+      <button class="btn" data-lightbox-close>Close</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ---------- IMAGE TRACE ---------- -->
+<div class="lightbox-overlay non-modal" id="lightboxImageTrace">
+  <div class="lightbox" role="dialog" aria-modal="false" aria-labelledby="lightboxImageTraceTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxImageTraceTitle">Image Trace</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <div id="imageTraceNewSection">
+        <div class="field-section">
+          <h3>Source image</h3>
+          <div class="drop-zone">PNG, JPG/JPEG, or WebP.<br><button id="importImage" class="btn sm" style="margin-top:8px">Choose image file…</button></div>
+          <input id="importImageFile" type="file" accept="image/png,image/jpeg,image/webp" style="display:none">
+        </div>
+        <div id="imageImportPanel" style="display:none">
+          <div class="field-section">
+            <h3>Preview</h3>
+            <div class="preview-box"><canvas id="imageImportPreviewCanvas" width="1" height="1"></canvas><div id="imageImportStoneCount" class="stone-count">— stones (approx.)</div></div>
+          </div>
+          <div class="field-section">
+            <h3>Trace parameters</h3>
+            <div class="field"><label for="imgPreviewThreshold">Threshold (0-255)</label><input id="imgPreviewThreshold" type="range" min="0" max="255" step="1" value="128"></div>
+            <div class="field-row">
+              <div class="field"><label for="imgPreviewInvert">Invert</label><select id="imgPreviewInvert"><option value="off" selected>Off</option><option value="on">On</option></select></div>
+              <div class="field"><label for="imgPreviewBlur">Blur radius (px)</label><input id="imgPreviewBlur" type="number" min="0" max="50" step="1" value="0"></div>
+            </div>
+            <div class="field-row">
+              <div class="field"><label for="imgPreviewMaxWidth">Maximum width (px)</label><input id="imgPreviewMaxWidth" type="number" min="8" max="2000" step="1" value="400"></div>
+              <div class="field"><label for="imgPreviewMaxHeight">Maximum height (px)</label><input id="imgPreviewMaxHeight" type="number" min="8" max="2000" step="1" value="400"></div>
+            </div>
+          </div>
+          <footer class="lightbox-footer" style="margin:0 calc(-1 * var(--space-5)) calc(-1 * var(--space-5));">
+            <button class="btn" id="imageImportCancel">Cancel</button>
+            <button class="btn primary" id="imageImportCommit">Import</button>
+          </footer>
+        </div>
+      </div>
+      <div id="imageTraceEditSection" style="display:none">
+        <div class="field-section">
+          <h3>Edit selected image layer</h3>
+          <div id="imageControls">
+            <div class="field"><label for="imgThreshold">Threshold (0-255)</label><input id="imgThreshold" type="range" min="0" max="255" step="1" value="128"></div>
+            <div class="field-row">
+              <div class="field"><label for="imgInvert">Invert</label><select id="imgInvert"><option value="off" selected>Off</option><option value="on">On</option></select></div>
+              <div class="field"><label for="imgBlurRadius">Blur radius (px)</label><input id="imgBlurRadius" type="number" min="0" max="50" step="1" value="0"></div>
+            </div>
+            <div class="field-row">
+              <div class="field"><label for="imgMaxWidth">Maximum width (px)</label><input id="imgMaxWidth" type="number" min="8" max="2000" step="1" value="400"></div>
+              <div class="field"><label for="imgMaxHeight">Maximum height (px)</label><input id="imgMaxHeight" type="number" min="8" max="2000" step="1" value="400"></div>
+            </div>
+          </div>
+          <div class="field-section">
+            <h3>Fill Style</h3>
+            <select id="imageFillMode" title="How rhinestones are arranged across the traced image. Image Trace has no outline option -- it is built from a pixel pattern, not an edge.">
+              <option value="fill" selected>Grid Fill - even rows and columns</option>
+              <option value="staggered">Staggered Fill - offset rows, tighter packing</option>
+              <option value="radial">Radial Fill - rings out from the center</option>
+              <option value="contour">Contour Fill - rings that follow the traced shape inward</option>
+            </select>
+          </div>
+          <div class="field-section">
+            <h3>Position &amp; size</h3>
+            <div id="imageTracePositionSlot" class="field-slot"></div>
+          </div>
+          <div class="field-section">
+            <h3>Stones</h3>
+            <div id="imageTraceStoneSlot" class="field-slot"></div>
+            <div id="imageTraceMixedSizeSlot" class="field-slot"></div>
+          </div>
+          <p class="hint">Images can also be edited by mouse in the 2D canvas: drag to move, drag blue handles to resize, press <span class="kbd">Delete</span> to remove.</p>
+        </div>
+      </div>
+    </div>
+    <footer class="lightbox-footer">
+      <button class="btn" data-lightbox-close>Close</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ---------- EXPORT ---------- -->
+<div class="lightbox-overlay non-modal" id="lightboxExport">
+  <div class="lightbox" role="dialog" aria-modal="false" aria-labelledby="lightboxExportTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxExportTitle">Export</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <div class="export-group">
+        <h3>Project data</h3>
+        <p>The full editable project — reopen later with Import → Project Import.</p>
+        <button class="btn primary block" id="exportProject">Export Project JSON</button>
+      </div>
+      <div class="export-group">
+        <h3>Production geometry</h3>
+        <p>The generated StoneLayout (stone positions, sizes, colors) as machine-readable JSON.</p>
+        <button class="btn primary block" id="exportLayout">Export Generated Layout JSON</button>
+      </div>
+      <div class="export-group">
+        <h3>Visual previews</h3>
+        <p>Rendered snapshots — SVG is vector, PNG is raster, both at the current canvas view.</p>
+        <div class="btnrow" style="margin-bottom:8px"><button class="btn primary" id="exportSVG">2D SVG</button><button class="btn primary" id="exportPNG">2D PNG</button></div>
+        <button class="btn primary block" id="exportCup">3D / Object Preview PNG</button>
+        <button class="btn primary block" id="exportCombined" style="margin-top:8px">Export Combined Preview PNG</button>
+      </div>
+    </div>
+    <footer class="lightbox-footer"><button class="btn" data-lightbox-close>Close</button></footer>
+  </div>
+</div>
+
+<!-- ---------- PRODUCTION SHEET ---------- -->
+<div class="lightbox-overlay non-modal" id="lightboxProdSheet">
+  <div class="lightbox" role="dialog" aria-modal="false" aria-labelledby="lightboxProdSheetTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxProdSheetTitle">Production Sheet</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <div class="field-section">
+        <h3>Page setup</h3>
+        <div class="field-row">
+          <div class="field"><label for="prodSheetPageSize">Page size</label><select id="prodSheetPageSize"><option value="A4" selected>A4</option><option value="Letter">Letter</option><option value="A3">A3 (large format, e.g. Round Dinner Plate)</option></select></div>
+          <div class="field"><label for="prodSheetMargin">Margin (mm)</label><input id="prodSheetMargin" type="number" min="0" step="1" value="10"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label for="prodSheetMirror">Mirror</label><select id="prodSheetMirror"><option value="off" selected>Off</option><option value="on">On</option></select></div>
+          <div class="field"><label for="prodSheetRegMarks">Registration marks</label><select id="prodSheetRegMarks"><option value="on" selected>On</option><option value="off">Off</option></select></div>
+        </div>
+      </div>
+      <div class="field-section">
+        <h3>Included on the sheet</h3>
+        <p class="hint">Project name, object type, production dimensions, a labeled 50mm scale bar, stone count, and stone size/gap for every visible layer — generated from the same StoneLayout used everywhere else, at true 1:1 millimeter scale.</p>
+      </div>
+      <div class="validation-message" id="prodSheetValidation" role="alert"></div>
+    </div>
+    <footer class="lightbox-footer">
+      <button class="btn" data-lightbox-close>Close</button>
+      <button id="exportProdSheetSVG" class="btn primary">SVG</button>
+      <button id="exportProdSheetPNG" class="btn primary">PNG</button>
+      <button id="exportProdSheetPDF" class="btn primary">PDF</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ---------- SHIPPING & HANDLING ---------- -->
+<div class="lightbox-overlay non-modal" id="lightboxShipping">
+  <div class="lightbox" role="dialog" aria-modal="false" aria-labelledby="lightboxShippingTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxShippingTitle">Shipping &amp; Handling</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <p class="hint" style="margin-bottom:var(--space-4)">Local reference notes for packing this project's physical product. These values are kept for this browser session only — they are not yet saved with the project file, and there is no carrier, rate, label, or tracking integration.</p>
+      <div class="field-section">
+        <h3>Package</h3>
+        <div class="field"><label for="shipPackageType">Package type</label><select id="shipPackageType"><option value="box" selected>Box</option><option value="mailer">Padded mailer</option><option value="tube">Tube</option><option value="custom">Custom</option></select></div>
+        <div class="field-row-3">
+          <div class="field"><label for="shipLengthMm">Length (mm)</label><input id="shipLengthMm" type="number" min="0" step="1"></div>
+          <div class="field"><label for="shipWidthMm">Width (mm)</label><input id="shipWidthMm" type="number" min="0" step="1"></div>
+          <div class="field"><label for="shipHeightMm">Height (mm)</label><input id="shipHeightMm" type="number" min="0" step="1"></div>
+        </div>
+        <div class="field"><label for="shipWeightG">Weight (g)</label><input id="shipWeightG" type="number" min="0" step="1"></div>
+      </div>
+      <div class="field-section">
+        <h3>Handling</h3>
+        <div class="field"><label for="shipNotes">Handling notes</label><textarea id="shipNotes" rows="3" style="width:100%;padding:8px 10px;border:1px solid var(--color-border-strong);border-radius:var(--radius-sm)"></textarea></div>
+        <label class="checkbox-row"><input type="checkbox" id="shipFragile"> Fragile — mark package accordingly</label>
+      </div>
+    </div>
+    <footer class="lightbox-footer">
+      <span class="footer-note">Session-only — see note above.</span>
+      <button class="btn" data-lightbox-close>Close</button>
+      <button class="btn primary" id="shipApply" data-lightbox-close>Apply</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ---------- SETTINGS ---------- -->
+<div class="lightbox-overlay non-modal" id="lightboxSettings">
+  <div class="lightbox" role="dialog" aria-modal="false" aria-labelledby="lightboxSettingsTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxSettingsTitle">Settings</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <div class="field-section">
+        <h3>General</h3>
+        <div class="meta-row"><span class="meta-label">Units</span><span class="meta-value">mm (fixed)</span></div>
+        <div class="meta-row"><span class="meta-label">Theme</span><span class="meta-value">Light (fixed)</span></div>
+      </div>
+      <div class="field-section">
+        <h3>Canvas defaults</h3>
+        <label class="checkbox-row"><input type="checkbox" id="settingsGridDefault" checked disabled> Show grid by default (always on — not yet configurable)</label>
+        <label class="checkbox-row"><input type="checkbox" id="settingsSafeAreaDefault" checked> Show safe-area guide by default</label>
+      </div>
+      <div class="field-section">
+        <h3>Alignment &amp; Snapping</h3>
+        <label class="checkbox-row" title="Automatically aligns objects to the canvas, safe area, and other objects while dragging."><input type="checkbox" id="settingsSnapDefault" checked> Enable Snapping</label>
+        <div class="field-row">
+          <div class="field"><label for="settingsSnapDistance">Snap Distance</label><input id="settingsSnapDistance" type="number" min="0.5" max="5" step="0.1" value="1.5"></div>
+        </div>
+        <p class="hint">How close two elements need to be, in millimeters, before they snap together. Lower values require more precise alignment.</p>
+        <label class="checkbox-row" title="Shows temporary guide lines when objects snap into alignment while dragging."><input type="checkbox" id="settingsShowGuides" checked> Show Alignment Guides</label>
+      </div>
+      <div class="field-section">
+        <h3>New-layer defaults</h3>
+        <div class="field-row">
+          <div class="field"><label for="settingsDefaultStoneSize">Default stone size</label><select id="settingsDefaultStoneSize"><option value="0.8">0.8 mm</option><option value="1.0">1.0 mm</option><option value="1.2">1.2 mm</option><option value="1.5">1.5 mm</option><option value="1.8">1.8 mm</option><option value="2.0" selected>2.0 mm</option><option value="2.5">2.5 mm</option><option value="3.0">3.0 mm</option></select></div>
+          <div class="field"><label for="settingsDefaultGap">Default gap (mm)</label><input id="settingsDefaultGap" type="number" min="0" max="5" step="0.1" value="0.3"></div>
+        </div>
+      </div>
+      <div class="field-section">
+        <h3>Application</h3>
+        <div class="meta-row"><span class="meta-label">Version</span><span class="meta-value">0.1.0</span></div>
+      </div>
+    </div>
+    <footer class="lightbox-footer">
+      <button class="btn" data-lightbox-close>Close</button>
+      <button class="btn primary" id="settingsApply" data-lightbox-close>Apply</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ---------- HELP ---------- -->
+<div class="lightbox-overlay non-modal" id="lightboxHelp">
+  <div class="lightbox wide" role="dialog" aria-modal="false" aria-labelledby="lightboxHelpTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxHelpTitle">Help</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <div class="help-section">
+        <h3>Getting started</h3>
+        <p>Add a layer from the left panel or the Shapes/Text/Import menus, adjust its parameters in the matching Lightbox or the right-hand inspector, then use the Export or Production Sheet menus to produce output.</p>
+      </div>
+      <div class="help-section">
+        <h3>Keyboard shortcuts</h3>
+        <div class="shortcut-list">
+          <span class="kbd">Ctrl/Cmd+Z</span><span>Undo</span>
+          <span class="kbd">Ctrl/Cmd+Shift+Z</span><span>Redo</span>
+          <span class="kbd">Ctrl/Cmd+Y</span><span>Redo</span>
+          <span class="kbd">Delete / Backspace</span><span>Delete selected layer</span>
+          <span class="kbd">Arrow keys</span><span>Nudge selection</span>
+          <span class="kbd">Shift+Arrow</span><span>Nudge selection (larger step)</span>
+          <span class="kbd">Shift+Click</span><span>Add/remove a layer from the selection</span>
+          <span class="kbd">Shift+Drag</span><span>Constrain movement to horizontal or vertical</span>
+          <span class="kbd">Alt/Option+Drag</span><span>Duplicate the selection while dragging</span>
+          <span class="kbd">Esc</span><span>Close the open dialog</span>
+        </div>
+      </div>
+      <div class="help-section"><h3>Import</h3><p>SVG Import adds one new layer from an SVG file. Project Import replaces the entire open project with a previously exported Project JSON file — it does not merge.</p></div>
+      <div class="help-section"><h3>Export</h3><p>Project JSON is the full editable project. Generated Layout JSON is the production StoneLayout. SVG/PNG are visual snapshots.</p></div>
+      <div class="help-section"><h3>Production Sheet</h3><p>A millimeter-accurate, print-ready manufacturing document generated directly from the same StoneLayout as the 2D canvas — never a re-generated or approximated layout.</p></div>
+      <div class="help-section"><h3>About Rhinestone Studio</h3><p>Version 0.1.0. Professional software for designing and producing rhinestone artwork on physical products.</p></div>
+    </div>
+    <footer class="lightbox-footer"><button class="btn" data-lightbox-close>Close</button></footer>
+  </div>
+</div>
+
+<!-- ---------- DESIGN LIBRARY (RS-1015) ---------- -->
+<div class="lightbox-overlay non-modal" id="lightboxLibrary">
+  <div class="lightbox wide" role="dialog" aria-modal="false" aria-labelledby="lightboxLibraryTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxLibraryTitle">Design Library</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <div class="library-toolbar">
+        <div class="field"><label for="librarySaveName">Save to library as</label><input id="librarySaveName" type="text" placeholder="Design name" maxlength="80"></div>
+        <div class="btnrow">
+          <button class="btn primary" id="librarySaveProject" title="Save the entire current project as a new Design Library item">Save Whole Project</button>
+          <button class="btn" id="librarySaveSelection" title="Save only the selected layers as a new Design Library item" disabled>Save Selection</button>
+        </div>
+      </div>
+      <p class="hint" id="libraryDisabledHint" style="display:none">Select one or more layers on the canvas or in the Layers list to enable "Save Selection".</p>
+      <div class="library-controls">
+        <div class="field grow"><label for="librarySearch">Search</label><input id="librarySearch" type="search" placeholder="Search designs by name"></div>
+        <div class="field"><label for="libraryCategoryFilter">Category</label><select id="libraryCategoryFilter"><option value="All">All categories</option></select></div>
+        <div class="field"><label for="librarySort">Sort</label><select id="librarySort"><option value="asc">Name (A–Z)</option><option value="desc">Name (Z–A)</option></select></div>
+      </div>
+      <div class="library-empty-state" id="libraryEmptyState" style="display:none">Your Design Library is empty. Save your current project or a selection above to get started.</div>
+      <div class="library-no-results" id="libraryNoResults" style="display:none">No designs match your search or filter.</div>
+      <div class="library-grid" id="libraryGrid"></div>
+    </div>
+    <footer class="lightbox-footer"><span class="footer-note" id="libraryStatus"></span><button class="btn" data-lightbox-close>Close</button></footer>
+  </div>
+</div>
+
+<!-- ---------- DESIGN LIBRARY: DELETE CONFIRMATION (RS-1015) ---------- -->
+<div class="lightbox-overlay" id="lightboxLibraryConfirm">
+  <div class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxLibraryConfirmTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxLibraryConfirmTitle">Delete design?</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body"><p id="libraryConfirmMessage"></p></div>
+    <footer class="lightbox-footer">
+      <button class="btn" data-lightbox-close>Cancel</button>
+      <button class="btn danger" id="libraryConfirmDelete">Delete</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ---------- GALLERY (RS-2001): built-in, read-only example designs ---------- -->
+<div class="lightbox-overlay non-modal" id="lightboxGallery">
+  <div class="lightbox wide gallery-lightbox" role="dialog" aria-modal="false" aria-labelledby="lightboxGalleryTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxGalleryTitle">Gallery</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <p class="hint gallery-readonly-hint">Gallery designs are built-in examples and cannot be changed. Choose "Open Copy" to start editing your own version.</p>
+      <div class="library-controls">
+        <div class="field grow"><label for="gallerySearch">Search</label><input id="gallerySearch" type="search" placeholder="Search Gallery designs"></div>
+        <div class="field"><label for="galleryCategoryFilter">Category</label><select id="galleryCategoryFilter"><option value="All">All categories</option></select></div>
+      </div>
+      <div class="library-no-results" id="galleryNoResults" style="display:none">No Gallery designs match your search or filter.</div>
+      <div class="library-grid gallery-grid" id="galleryGrid"></div>
+    </div>
+    <footer class="lightbox-footer"><span class="footer-note" id="galleryStatus"></span><button class="btn" data-lightbox-close>Close</button></footer>
+  </div>
+</div>
+
+<!-- ---------- GALLERY: PREVIEW (RS-2001) ---------- -->
+<div class="lightbox-overlay" id="lightboxGalleryPreview">
+  <div class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxGalleryPreviewTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxGalleryPreviewTitle">Preview</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+    <div class="lightbox-body">
+      <span class="gallery-readonly-badge" title="Gallery designs are read-only">Read-only</span>
+      <div class="library-card-thumb gallery-preview-thumb" id="galleryPreviewThumb"></div>
+      <h3 id="galleryPreviewTitle"></h3>
+      <div class="library-card-meta" id="galleryPreviewMeta"></div>
+      <p id="galleryPreviewDescription"></p>
+      <p class="hint" id="galleryPreviewTags"></p>
+    </div>
+    <footer class="lightbox-footer">
+      <span class="footer-note" id="galleryPreviewStatus"></span>
+      <button class="btn" id="galleryPreviewSaveToLibrary" title="Save a copy of this design to your Design Library">Save to Design Library</button>
+      <button class="btn primary" id="galleryPreviewOpenCopy" title="Open an editable copy of this design">Open Copy</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ============================================================================
+     Shared, relocated field groups (single canonical DOM node per field; UI-001
+     moves these between an inspector "home" slot and the relevant open Lightbox's
+     slot via appendChild, never duplicating an id). Initial home = right inspector.
+     ============================================================================ -->
+<div id="sharedPositionFields">
+  <div class="field-row">
+    <div class="field"><label for="shapeX">X (mm)</label><input id="shapeX" type="number" step="1"></div>
+    <div class="field"><label for="shapeY">Y (mm)</label><input id="shapeY" type="number" step="1"></div>
+  </div>
+  <div class="field-row">
+    <div class="field"><label for="shapeW" id="shapeWLabel">Width (mm)</label><input id="shapeW" type="number" step="1"></div>
+    <div class="field" id="shapeHField"><label for="shapeH">Height (mm)</label><input id="shapeH" type="number" step="1"></div>
+  </div>
+</div>
+<div id="sharedStoneFields">
+  <div class="field-row">
+    <div class="field"><label for="stoneSize">Stone size</label><select id="stoneSize" title="Standard rhinestone sizes (commercial name and actual diameter). Populated from the stone size library."></select></div>
+    <div class="field"><label for="gap">Gap (mm)</label><input id="gap" type="number" min="0" max="5" step="0.1" value="0.3"></div>
+  </div>
+  <!-- RS-2012: shown instead of relying on #gap's disabled look alone -- an authored Rhinestone
+       font (RS Block/RS Modern) bakes spacing into its stone positions, so Gap has no effect for it
+       (see isAuthoredStoneFontId() in app.js). Mirrors #textSizeFixedHint/#curveUnavailableHint's
+       existing "disable the control + explain why right below it" convention. -->
+  <p class="hint" id="gapFixedHint" style="display:none">Character spacing is built into this font.</p>
+  <div class="field"><label for="stoneColor">Stone color</label><div class="color-pick-row"><select id="stoneColor"></select><span id="stoneColorSwatch" class="color-swatch" title="Selected color preview"></span></div></div>
+</div>
+<!-- S-200 (Mixed Stone-Size Layouts): shared, relocated field group (same relocateFieldGroups()
+     mechanism as sharedPositionFields/sharedStoneFields above) -- Mixed mode applies uniformly to
+     every layer type, exactly like Stone size/Gap/Color. Primary Size is deliberately not
+     duplicated here -- it is the existing #stoneSize field above (see docs/specifications/
+     S-200-MixedStoneSizeLayouts.md, "app.js / index.html"). Allowed Sizes checkboxes mirror
+     src/renderer/StoneSizes.js's shipped catalog (ids/values kept in sync by hand -- the same
+     convention VECTOR_FILL_MODES already uses for GeometryEngine's SAMPLE_MODES) since there are
+     only ever five of them and static markup avoids the DOM-creation-order hazard a dynamically
+     built checkbox list would have against HISTORY_TRACKED_CONTROL_IDS' wiring loop. Minimum/
+     Maximum Size stay dynamically populated <select>s (like #stoneSize itself) since a <select>'s
+     options can safely be filled in after that wiring loop runs. -->
+<div id="sharedMixedSizeFields">
+  <div class="field-section">
+    <h3>Mixed Stone Size</h3>
+    <div class="field"><label for="sizeMode">Generation mode</label><select id="sizeMode" title="Uniform: every stone in this layer is the same size. Mixed: the Geometry Engine may add smaller stones into gaps this layer's primary size can't reach."><option value="uniform" selected>Uniform</option><option value="mixed">Mixed</option></select></div>
+    <div id="mixedSizeDetailFields" style="display:none">
+      <div class="field">
+        <label>Allowed sizes</label>
+        <label class="checkbox-row"><input type="checkbox" id="mixedAllowedSs6" value="2.0"> SS6 (2.0 mm)</label>
+        <label class="checkbox-row"><input type="checkbox" id="mixedAllowedSs10" value="2.8"> SS10 (2.8 mm)</label>
+        <label class="checkbox-row"><input type="checkbox" id="mixedAllowedSs16" value="4.0"> SS16 (4.0 mm)</label>
+        <label class="checkbox-row"><input type="checkbox" id="mixedAllowedSs20" value="4.7"> SS20 (4.7 mm)</label>
+        <label class="checkbox-row"><input type="checkbox" id="mixedAllowedSs30" value="6.4"> SS30 (6.4 mm)</label>
+        <!-- RS-2012: actionable ("fix this") feedback -- shown only when Mixed mode can currently
+             generate zero infill stones; toggled via classList 'visible' like #textTooLongWarning. -->
+        <p class="validation-message" id="mixedNoEligibleHint" role="status"></p>
+        <p class="hint">Primary size is the Stone size field above. Only sizes smaller than the primary size are ever used to fill gaps; ineligible sizes above are dimmed and unselectable.</p>
+      </div>
+      <!-- RS-2012: Minimum/Maximum Size + Conservative Detail moved behind "Advanced" -- the primary
+           surface now exposes only Generation Mode + Allowed Sizes, per the milestone's "reduce
+           default cognitive load" goal. Native <details> needs no JS to expand/collapse; app.js only
+           sets its initial `open` state (auto-expanded when a layer already has non-default advanced
+           values, so returning to a tuned layer never hides that tuning silently). -->
+      <details class="advanced-section" id="mixedAdvancedSection">
+        <summary>Advanced</summary>
+        <div class="field-row">
+          <div class="field"><label for="mixedMinSize">Minimum size</label><select id="mixedMinSize" title="Smallest size the Geometry Engine may ever place, regardless of Allowed Sizes."></select></div>
+          <div class="field"><label for="mixedMaxSize">Maximum size</label><select id="mixedMaxSize" title="Largest size eligible for gap-filling (never larger than the primary size)."></select></div>
+        </div>
+        <div class="field"><label for="conservativeDetail">Conservative detail</label><input id="conservativeDetail" type="range" min="0" max="1" step="0.05" value="0.3"></div>
+      </details>
+      <p class="hint">Mixed mode never removes or resizes the primary stones above — it only adds smaller stones into gaps the primary size can't reach, always keeping full manufacturing spacing.</p>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "opentype.js": "./src/browser/OpenTypeBrowserAdapter.js",
+    "three": "./node_modules/three/build/three.module.js"
+  }
+}
+</script>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

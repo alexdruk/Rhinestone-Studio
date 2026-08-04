@@ -22,6 +22,11 @@ test(geometry): add stone spacing tests
 chore(repo): initialize repository structure
 ```
 
+For a milestone tracked under `docs/specifications/` (an `RS-xxxx`, `S-xxx`, `SEC-xxx`, `ARC-xxx`,
+or `CI-xxx` id) or a release-candidate fix (`RC-xxx`), prefix the subject with that id instead,
+e.g. `RC-005: add autosave & crash recovery` or `S-112: Round Dinner Plate real product template`.
+Both styles appear in this repository's history; use whichever id form applies to the change.
+
 ## Quality gate
 
 Do not merge a milestone if there are open critical or major regressions.

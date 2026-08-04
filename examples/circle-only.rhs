@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "product": "mug",
+  "units": "mm",
+  "canvas": { "width": 210, "height": 90 },
+  "cupColor": "#1f3556",
+  "wrap": "full",
+  "layers": [
+    {
+      "id": "circle-main",
+      "type": "circle",
+      "name": "Circle",
+      "visible": true,
+      "cxMm": 105,
+      "cyMm": 45,
+      "radiusMm": 30,
+      "stoneSizeMm": 2.0,
+      "gapMm": 0.3,
+      "color": "sapphire"
+    }
+  ]
+}
