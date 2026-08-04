@@ -84,7 +84,7 @@ added since (`tools/test-font-height-ratios.mjs`, `TXT-104` step 1; `tools/test-
 `RS-2013` step 4) minus one file removed, *tools/test-stone-layout-texture.mjs* (deleted by `RS-2013`
 step 7 along with the texture path it tested); `--all` discovers every `tools/test-*.mjs` file,
 including `test-documentation-consistency.mjs`, so doc-consistency is covered by this run and is
-not a separate check). `RC-009` (file-structure cleanup) and `RC-010` (`review/` regeneration
+not a separate check). `RC-009` (file-structure cleanup) and `RC-010` (review/ regeneration
 audit — concluded "gate not satisfied, no action taken") are confirmed non-blocking/cosmetic: both
 made zero `src/**`/`app.js`/`index.html` changes.
 

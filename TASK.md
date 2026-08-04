@@ -56,8 +56,8 @@ requiring a separate specification-review phase before implementation.
   regions, `src/fonts/FontManager.js`, and the relevant `app.js` sections (Auto Fit, Fit-to-Shape,
   the `#height` clamp, `updateStoneSizePrintableCapabilityUI()`) to re-verify every TXT-103A claim
   line by line.
-- Inspected `assets/fonts/manifest.json` and the actual shipped font files (`assets/fonts/**`,
-  `fonts/sources/**`) to confirm which fonts `productionFonts()` actually offers today.
+- Inspected `assets/fonts/manifest.json` and the actual shipped font files (`assets/fonts/**`)
+  to confirm which fonts `productionFonts()` actually offers today.
 - **Measured real font metrics** for the four shipped OpenType production fonts (Baloo2, Anton,
   Sacramento, Dancing Script) by parsing each `.ttf` with `opentype.js` (the same library
   `OpenTypeProvider.js` already uses) and reading both the OS/2 table's `sCapHeight`/`sxHeight`

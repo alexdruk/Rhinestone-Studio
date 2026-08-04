@@ -352,7 +352,7 @@ await test('20. FONT-DECISION-001: baloo2-variable-regular is registered, valida
   assert.equal(font.providerId, 'opentype');
   assert.equal(font.rhinestoneValidated, true);
   assert.equal(font.enabled, true);
-  assert.equal(font.path, 'fonts/sources/Baloo2/Baloo2-wght400.ttf');
+  assert.equal(font.path, 'assets/fonts/Baloo2-Regular.ttf');
   // isAuthoredStoneFontId (app.js) gates Fill Style/Text height/Curved text/Fit-to-Shape off only
   // for providerId:'rhinestone' -- this font must NOT trip that gate, since it's a real vector font
   // sampled by the existing StoneSampler, not the fixed-pitch authored dot-matrix DSL.
