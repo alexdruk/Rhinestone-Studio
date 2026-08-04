@@ -141,8 +141,9 @@ interaction: a small, unremarkable downward drag — well within the existing `O
 the camera's polar angle crosses ~90° (the horizon). Reproduced precisely via scripted
 `OrbitControls`-formula mouse drags rather than trial-and-error: polar 89° still renders correctly,
 90° is the first mirrored frame, and the mirroring persists through the full swept range up to 175°
-(`tools/rc011-plate-mirror-investigation.mjs`, screenshots in
-`tools/rc011-verification-screenshots/plate-mirror-sweep-polar*.png`). Root cause, found by reading
+(reproduced via a scripted camera sweep, a scratch investigation script deleted after use per this
+repo's convention of not committing ad hoc QA/investigation tooling — not a citable permanent
+artifact). Root cause, found by reading
 `_updateInstancedStones()`'s plate branch in `Preview3DRenderer.js`: every plate stone is placed at
 a fixed world height (`this._plateTopY`) with a hardcoded upward-facing normal (`normal.set(0, 1,
 0)`, `Preview3DRenderer.js:462-467`) and no check of the stone-plane orientation relative to the
@@ -203,3 +204,31 @@ failure — plate stones render mirrored past ~90° camera polar angle, reachabl
 interaction, not a documented limitation — and the version-bump/tag/main-merge decision should wait
 until it is fixed and re-verified live in a browser. Nothing else found in this audit should block
 that decision; this one item does.
+
+### RC-012 — RC-011-FIX addendum, 2026-08-04
+
+`RC-011` found one real defect: plate stones render mirrored once the camera's polar angle crosses
+~90° (the horizon). Root cause was a hardcoded upward-facing normal (`normal.set(0, 1, 0)`) in
+`_updateInstancedStones()`'s plate branch of `Preview3DRenderer.js`, applied with no check of the
+stone-plane orientation relative to the camera.
+
+**Fix (`RC-011-FIX`, `b149830`):** a new `PLATE_MAX_POLAR_RAD` constant caps
+`controls.maxPolarAngle` at `Math.PI / 2 - 0.05` (~87.14°) for `dimensions.kind === 'plate'` only,
+applied in `_rebuildMesh()`. Other product kinds are unaffected. This was chosen over two
+alternatives: hiding/fading stones past the horizon (would read as a bug — stones vanishing rather
+than the camera simply being restricted) and a full per-camera-relative re-orientation of the
+stone normals (would require building a new per-frame update path this codebase doesn't have, for
+a case — viewing a plate from underneath — with no legitimate production use). Capping the camera
+is the smallest correct fix: a plate has no legitimate view-from-underneath use case, so the
+constraint matches physical reality rather than working around it.
+
+**Verification:** a live-browser camera sweep (polar 45°–175°) confirmed no visual mirroring at any
+angle. A numeric readback of `controls.getPolarAngle()` after each requested angle confirmed the
+clamp fires exactly at 87.1352° for every requested angle ≥87° and passes through unclamped below
+that — ruling out a no-op sweep script as an alternative explanation for the screenshots looking
+unchanged. `node tools/run-tests.mjs --all` was 99 selected/98 passed/1 failed prior to this fix
+(`test-documentation-consistency.mjs`, flagging this doc's now-corrected stale reference to a
+deleted investigation script, fixed above in this same `RC-012` entry) and is 99/99 after.
+
+This closes the one real defect `RC-011` found. `docs/release-process/release-gate.md` is now
+self-contained ahead of the version-bump/tag/main-merge decision `RC-008` deferred.
