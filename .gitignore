@@ -65,3 +65,9 @@ tools/rc013-verification-screenshots/
 tools/rc-014-plate-flip-verification.mjs
 tools/rc-014-font-spotcheck.mjs
 tools/rc-014-verification-screenshots/
+
+# RS-3001: throwaway CSS-isolation spike prototypes (copied drawleather source slices +
+# harness/comparison scripts) -- findings are captured in
+# docs/specifications/RS-3001-css-isolation-addendum.md, the prototype code itself is never a
+# repo artifact, same category as the folders above
+tools/scratch/rs-3001-css-spike/

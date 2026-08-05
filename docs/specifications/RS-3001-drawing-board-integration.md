@@ -70,8 +70,13 @@ drawleather populates into. The following are open questions for this milestone,
   `:root` (`--bg`, `--panel`, `--border`, `--text`, `--accent`, etc.) plus a page-wide
   `box-sizing` reset. These generic names plausibly collide with Rhinestone Studio's own CSS if
   loaded as-is. Two candidate approaches were identified — Shadow DOM isolation, or a systematic
-  `--variable` rename pass — and no decision has been made. Flagged as an open question for Sasha
-  (see §6).
+  `--variable` rename pass — and a spike prototyping both against a real slice of drawleather
+  (see [RS-3001-css-isolation-addendum.md](./RS-3001-css-isolation-addendum.md)) found a genuine
+  tradeoff between them rather than a clear winner: Shadow DOM isolates the host page with zero
+  CSS edits but breaks canvas color theming until `src/colors.ts` is patched to stop hardcoding
+  `document.documentElement`; the variable-rename pass requires no JS changes and rendered
+  correctly, but its correctness depends on a mechanical process the addendum found two real ways
+  to under-cover on a careful first pass. **Still open — Sasha's call** (see §6).
 - **"Path data out" hook.** drawleather has no `mount(container)` API and no change-callback
   (e.g. `onPathsChanged(callback)`) today. Its own save/export flow is a full user-initiated
   action (download SVG/PDF/DXF) through its own Project/History state, not a library API. A new
