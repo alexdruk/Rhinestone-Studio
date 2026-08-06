@@ -70,6 +70,10 @@ tools/rc-014-verification-screenshots/
 # tool, same "never a repo artifact" category as the folders above
 tools/rs-3010-step1-verification-screenshots/
 
+# RS-3010 Step 2a: ad hoc live-browser verification screenshots for the multi-shape data model,
+# rectangle/ellipse presets, and select/move/delete -- same "never a repo artifact" category
+tools/rs-3010-step2a-verification-screenshots/
+
 # RS-3001: throwaway CSS-isolation spike prototypes (copied drawleather source slices +
 # harness/comparison scripts) -- findings are captured in
 # docs/specifications/RS-3001-css-isolation-addendum.md, the prototype code itself is never a
