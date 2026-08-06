@@ -48,6 +48,29 @@ export function createDrawingTool(canvasEl) {
     );
   }
 
+  /**
+   * Resync Paper's own View to canvasEl's *current* box size. Paper never learns about a resize
+   * on its own here: the `resize` attribute (which would make it listen to the window resize
+   * event itself) was never set on the canvas, and app.js can change canvasEl's CSS box for
+   * reasons Paper has no visibility into at all -- a browser window resize, or a workspace-tab
+   * switch (Dual Workspace/2D Canvas/Object Preview) reflowing the panel. Left stale, Paper keeps
+   * mapping Tool event points (and its own rendering) through the *old* box size, so the drawn
+   * stroke visibly drifts from the cursor and the canvas looks squished/stretched the instant the
+   * box actually changes -- a real, separate bug from the stomping fixed by drawLayout()'s own
+   * `drawingTool.isActive` guard below.
+   *
+   * Feeds `view.viewSize` the canvas's CSS-logical size (getBoundingClientRect), not
+   * canvasEl.width/height -- those are already devicePixelRatio-multiplied (this app's own
+   * resizeCanvas() convention), and CanvasView applies *its own* devicePixelRatio multiplication
+   * inside `_setElementSize()`; feeding it the already-scaled figure would double-scale the
+   * backing store. This also means drawingTool owns canvasEl's width/height attributes outright
+   * while active -- callers must not also call app.js's own resizeCanvas() in this window.
+   */
+  function resyncViewSize() {
+    const rect = canvasEl.getBoundingClientRect();
+    paper.view.viewSize = new paper.Size(rect.width, rect.height);
+  }
+
   function attachTool() {
     if (tool) tool.remove();
     tool = new paper.Tool();
@@ -102,9 +125,28 @@ export function createDrawingTool(canvasEl) {
         paper.project.activeLayer.removeChildren();
         paper.view.autoUpdate = true;
       }
+      // Always resync, even on first setup: paper.setup() sizes itself from canvasEl's box at
+      // that instant, but this app's own resizeCanvas() may have run against a *different* box
+      // moments earlier (or the canvas may simply not have been laid out yet) -- one explicit
+      // resync here means enter() never depends on setup()'s own guess being right.
+      resyncViewSize();
       baseScale = drawingBaseScale(canvasMm, canvasEl.width, canvasEl.height, paddingPx);
       applyViewport();
       attachTool();
+    },
+
+    /**
+     * Resync to canvasEl's current box size while staying in drawing mode -- call this (instead
+     * of the normal drawLayout() path, which is a no-op while active) whenever something resizes
+     * layoutCanvas: a window resize, or a workspace-tab switch. Preserves the user's current
+     * pan/zoom (DrawingBoard.panXmm/panYmm/zoom untouched) rather than re-fitting from scratch,
+     * so an in-progress drawing session isn't visually reset by an incidental resize.
+     */
+    resize(paddingPx) {
+      if (!board.active) return;
+      resyncViewSize();
+      baseScale = drawingBaseScale(canvasMm, canvasEl.width, canvasEl.height, paddingPx);
+      applyViewport();
     },
 
     exit() {

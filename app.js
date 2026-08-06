@@ -1171,7 +1171,12 @@ async function updateAll(skipWrite=false){if(!skipWrite)writeSelectedControlsToL
   // leaves this exact status message behind -- once generation succeeds again, it must not keep
   // reading as broken even though the canvas has already recovered.
   if(el('status').textContent.startsWith('Text generation failed'))el('status').textContent='Ready';
-  renderLayerUI();drawLayout();drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}// S-003: a project must always keep at least one layer (deleteLayer()'s guard below), so once
+  // RS-3010 Step 1: while drawing mode owns layoutCanvas, drawLayout() itself is a no-op (see its
+  // own guard below) -- calling it here would do nothing useful, and every real trigger that lands
+  // in updateAll() while active (a window resize, a workspace-tab switch reflowing the panel, or
+  // any other edit that happens to run updateAll() concurrently) still needs layoutCanvas's *size*
+  // kept in sync, just through drawingTool's own resync path instead of the normal renderer.
+  renderLayerUI();if(drawingTool.isActive){drawingTool.resize(38*Math.max(1,devicePixelRatio||1))}else{drawLayout()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}// S-003: a project must always keep at least one layer (deleteLayer()'s guard below), so once
 // only one layer remains, every delete affordance -- the per-row trash icon and the sidebar
 // "Delete selected layer" button -- is disabled here (not just left clickable-but-a-no-op) and
 // #layerRuleHint (sitting directly under the button, always in view) explains why. This runs on
@@ -1184,7 +1189,18 @@ function renderLayerUI(){const onlyOneLayer=project.layers.length<=1;el('selecte
 }function layerLabel(l){if(l.type==='text')return l.text||'Text';if(l.type==='svg')return l.svgName||'SVG';if(l.type==='image')return l.imageName||'Image';if(l.type==='path')return l.pathName||'Path';return SHAPE_DISPLAY_LABELS[l.type]||'Shape'}function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function resizeCanvas(c){const r=c.getBoundingClientRect(),dpr=Math.max(1,devicePixelRatio||1),w=Math.floor(r.width*dpr),h=Math.floor(r.height*dpr);if(c.width!==w||c.height!==h){c.width=w;c.height=h}return{w,h,dpr}}
 function layoutMmToPx(p){return{x:layoutTransform.ox+p.x*layoutTransform.s,y:layoutTransform.oy+p.y*layoutTransform.s}}function layoutPxToMm(x,y){return{x:(x-layoutTransform.ox)/layoutTransform.s,y:(y-layoutTransform.oy)/layoutTransform.s}}
-function drawLayout(){const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr});layoutTransform={s,ox,oy,dpr};
+function drawLayout(){
+  // RS-3010 Step 1: "canvas interaction owned by exactly one thing at a time" also covers who
+  // *draws* to layoutCanvas, not just pointer/keyboard input -- while drawingTool.isActive, Paper.js
+  // owns rendering (its own autoUpdate loop) and resizeCanvas() below would fight it: changing
+  // canvas.width/height resets the 2D context, wiping Paper's own devicePixelRatio ctx.scale() and
+  // corrupting whatever Paper draws next. A blanket guard here (rather than patching each call
+  // site -- the window resize listener, setWorkspaceMode(), safeAreaToggle, ...) means every
+  // existing and future drawLayout() caller is automatically safe; setDrawMode(false)'s own explicit
+  // drawLayout() call runs *after* drawingTool.exit() has already flipped isActive off, so it isn't
+  // blocked by this guard.
+  if(drawingTool.isActive)return;
+  const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr});layoutTransform={s,ox,oy,dpr};
   // S-112: the plate template draws its own circular/annular design-target guide instead of the
   // cylindrical Front View Frame + rectangular safe-area guide -- neither applies to a flat
   // top-down disc (see drawPlateDesignTargetGuide()'s own header comment).
@@ -3075,8 +3091,10 @@ el('safeAreaToggle').onclick=()=>{showSafeArea=!showSafeArea;el('safeAreaToggle'
 // dpr-aware sizing drawLayout() itself always uses. ----
 function setDrawMode(active){
   if(active){
-    const{dpr}=resizeCanvas(layoutCanvas);
-    drawingTool.enter({width:project.canvas.width,height:project.canvas.height},38*dpr);
+    // drawingTool.enter() resyncs layoutCanvas's size itself (see DrawingCanvasTool.js's
+    // resyncViewSize()) -- app.js must not also call resizeCanvas() here, or the two would fight
+    // over which one's dpr-scaled canvas.width/height sticks.
+    drawingTool.enter({width:project.canvas.width,height:project.canvas.height},38*Math.max(1,devicePixelRatio||1));
     el('drawModeToggle').setAttribute('aria-pressed','true');
     el('drawModeHint').style.display='';
     el('drawCommitBtn').style.display='';
