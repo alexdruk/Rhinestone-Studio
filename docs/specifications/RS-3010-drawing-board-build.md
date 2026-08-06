@@ -19,9 +19,28 @@ adds the slot preset; Step 2c adds the polygon preset). Slot and polygon, origin
 "Step 2b" scope, were split into their own steps after Step 2a's review: slot reuses rect/ellipse's
 drag-to-preview interaction shape (just new arc math), while polygon is a genuinely different
 click-to-add-vertex interaction model, and bundling them risked repeating Step 2a's experience of
-debugging two unrelated things at once. Step 2b covered slot only; Step 2c (this step) covers
-polygon, the last of the four v1 presets. Only snapping (Steps 2d/2e) remains before the RS-3010 v1
-scope described in this document is complete.
+debugging two unrelated things at once. Step 2b covered slot only; Step 2c covered polygon, the
+last of the four v1 presets. Only snapping (Steps 2d/2e) remained before the RS-3010 v1 scope
+described in this document would have been complete -- but after Step 2c, Sasha redirected the
+next work toward a "Design Step A"-"Design Step E" restructuring of how the whole feature is
+presented, described below, before returning to snapping.
+
+Design Steps A-E restructure the drawing board's UI shell -- a Photoshop-style vertical tool rail +
+canvas + contextual options panel, replacing the horizontal inline toolbar row Steps 1-2c built --
+without changing any of the underlying tool logic those steps already implemented and verified:
+
+- **Design Step A** (this step): layout shell. Adds the new tool rail, a contextual tool-options
+  panel, and a `'select'` tool-mode value, side by side with the existing horizontal toolbar row
+  (which stays fully functional). Layout only -- no new interaction behavior.
+- **Design Step B**: keyboard shortcuts, per-tool cursor styling, space-held pan.
+- **Design Step C**: marquee select, under the new explicit Select tool.
+- **Design Step D**: pre-commit resize handles on in-progress shapes, mirroring the existing
+  `project.layers` resize system.
+- **Design Step E**: consolidation -- removes the old horizontal toolbar row now that the rail/
+  panel fully replace it.
+
+Snapping (Steps 2d/2e) remains the only item left from the original four-preset v1 scope once
+Design Steps A-E land.
 
 ## Why this milestone / ID
 
