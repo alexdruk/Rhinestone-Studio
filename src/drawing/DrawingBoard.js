@@ -1,10 +1,12 @@
 /**
- * DrawingBoard — RS-3010 Step 1's path data model: viewport pan/zoom state plus a reference to
- * whatever Paper.js Path is currently mid-stroke. Mirrors StoneLayout.js's "state a shape, don't
- * own its editing history" compactness -- this holds plain data, not a scene graph, and knows
- * nothing about DOM events or Paper.js's Tool/View classes (that glue lives in
- * DrawingCanvasTool.js). commitHistory()/undo/redo are untouched by this module; a drawn shape
- * only enters that system once DrawingCanvasTool.js's commit() turns it into a real 'path' layer.
+ * DrawingBoard — RS-3010 Step 2a's path data model: viewport pan/zoom state, a reference to
+ * whatever Paper.js Item is currently mid-drag (`path`, freehand mid-stroke or a preset's live
+ * drag-preview), and a collection of already-finalized shapes (`shapes`, each a stable string id
+ * paired with its committed Paper.js Item). Mirrors StoneLayout.js's "state a shape, don't own its
+ * editing history" compactness -- this holds plain data, not a scene graph, and knows nothing
+ * about DOM events or Paper.js's Tool/View classes (that glue lives in DrawingCanvasTool.js).
+ * commitHistory()/undo/redo are untouched by this module; a drawn shape only enters that system
+ * once DrawingCanvasTool.js's commit() turns it into a real 'path' layer.
  *
  * Units: zoom is a unitless multiplier applied on top of a caller-supplied base px-per-mm scale
  * (see drawingBaseScale()); panXmm/panYmm are offsets, in the same Y-down millimeter space as the
@@ -21,6 +23,8 @@ export class DrawingBoard {
     this.panXmm = 0;
     this.panYmm = 0;
     this.path = null;
+    this.shapes = [];
+    this._counter = 0;
   }
 
   reset() {
@@ -28,6 +32,7 @@ export class DrawingBoard {
     this.panXmm = 0;
     this.panYmm = 0;
     this.path = null;
+    this.shapes = [];
   }
 
   zoomBy(factor) {
@@ -46,6 +51,50 @@ export class DrawingBoard {
   clearPath() {
     if (this.path) this.path.remove();
     this.path = null;
+  }
+
+  /**
+   * Move the in-progress item (`this.path`) into the finalized `shapes` collection, assigning it
+   * a stable id via an internal counter (not Date.now() -- multiple shapes, e.g. two quick preset
+   * drags, can finalize within the same millisecond). Stores the id on the Paper.js item itself
+   * (`item.data.shapeId`) so hit-testing can read it back. Returns the new id, or null if there is
+   * no in-progress item to finalize.
+   */
+  finalizeShape() {
+    if (!this.path) return null;
+    const id = 'shape' + (++this._counter);
+    this.path.data.shapeId = id;
+    this.shapes.push({ id, item: this.path });
+    this.path = null;
+    return id;
+  }
+
+  /** Removes the finalized shape with the given id from both the Paper.js scene and `shapes`. */
+  removeShape(id) {
+    const index = this.shapes.findIndex((s) => s.id === id);
+    if (index === -1) return;
+    this.shapes[index].item.remove();
+    this.shapes.splice(index, 1);
+  }
+
+  /** @returns {{id:string,item:paper.Item}|null} The finalized shape entry for `id`, or null. */
+  getShape(id) {
+    return this.shapes.find((s) => s.id === id) || null;
+  }
+
+  /** @returns {{id:string,item:paper.Item}[]} A shallow copy of the finalized shapes collection. */
+  listShapes() {
+    return this.shapes.slice();
+  }
+
+  /**
+   * Discards every in-progress and finalized item -- what exit() without committing should call,
+   * the same discard-on-exit behavior Step 1 had for its single path, now extended to every shape.
+   */
+  clearAll() {
+    this.clearPath();
+    for (const shape of this.shapes) shape.item.remove();
+    this.shapes = [];
   }
 }
 
