@@ -407,8 +407,10 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
              a shape, hands the canvas back to the normal renderer. -->
         <div class="toolbar-group" id="drawToolGroup">
           <button class="icon-btn" id="drawModeToggle" title="Draw a custom freehand shape directly on the canvas" aria-pressed="false">✏️ Draw</button>
+          <button class="icon-btn" id="drawRectToggle" title="Draw a rectangle (hold Shift for a square)" aria-pressed="false">▭ Rect</button>
+          <button class="icon-btn" id="drawEllipseToggle" title="Draw an ellipse (hold Shift for a circle)" aria-pressed="false">◯ Ellipse</button>
           <span id="drawModeHint" class="hint" style="display:none">Drag to draw · Scroll to pan · Ctrl/Cmd+scroll to zoom</span>
-          <button class="btn sm primary" id="drawCommitBtn" style="display:none" disabled title="Add the drawn shape as a new Path layer">Commit Shape</button>
+          <button class="btn sm primary" id="drawCommitBtn" style="display:none" disabled title="Add the drawn shapes as new Path layers">Commit Shape</button>
         </div>
         <div class="toolbar-group">
           <span class="toolbar-label">Align &amp; Snap</span>

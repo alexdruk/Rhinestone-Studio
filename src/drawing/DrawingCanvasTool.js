@@ -1,5 +1,5 @@
 /**
- * DrawingCanvasTool — the Paper.js-specific half of RS-3010 Step 1. All direct use of the `paper`
+ * DrawingCanvasTool — the Paper.js-specific half of RS-3010. All direct use of the `paper`
  * package is confined to this file (mirrors src/preview3d/** confining Three.js): app.js only ever
  * calls the facade createDrawingTool() returns, never `paper` itself.
  *
@@ -17,6 +17,14 @@
  * multiplies on top of it, so Tool event points (`event.point`) already arrive in mm, and
  * Path.simplify()/flatten() tolerances are plain mm values -- no manual px<->mm conversion
  * anywhere in this file.
+ *
+ * RS-3010 Step 2a adds a `mode` concept ('freehand' | 'rect' | 'ellipse') alongside the existing
+ * `isActive`, plus selection/move/delete of already-finalized shapes. Selection state (the set of
+ * selected shape ids) lives here, not in DrawingBoard.js -- per that module's own doc comment, it
+ * stays a plain data model with no interaction/event concerns. This file's one Paper.js Tool
+ * routes every pointer gesture through a single decision: hit an existing shape first (selection/
+ * move take priority over starting a new draw, regardless of which toolbar mode is active), else
+ * draw per the current mode.
  */
 import paper from 'paper';
 import {
@@ -25,12 +33,19 @@ import {
   flattenPathToContour,
   createPathLayerFromContour
 } from './DrawingBoard.js';
+import { resolveDragBox, constrainSquare } from './DrawingBoxGeometry.js';
+import { selectOnly, toggleSelection, clearSelection } from '../editing/Selection.js';
 
 const STROKE_COLOR = '#1a56d6';
+const SELECTED_STROKE_COLOR = '#5b9dff';
 const STROKE_WIDTH_PX = 2;
 const SIMPLIFY_TOLERANCE_MM = 0.35;
 const FLATTEN_TOLERANCE_MM = 0.25;
 const PAN_WHEEL_TO_MM = 1;
+// A completed rect/ellipse drag whose bounding box is at or below this size in either dimension
+// never produced a usable shape -- discarded, matching freehand's existing "no usable stroke"
+// degenerate-path rule (see onMouseUp's < 2 segments check).
+const MIN_BOX_DIM_MM = 1;
 
 export function createDrawingTool(canvasEl) {
   const board = new DrawingBoard();
@@ -39,6 +54,14 @@ export function createDrawingTool(canvasEl) {
   let canvasMm = { width: 100, height: 100 };
   let baseScale = 1;
   let dragging = false;
+  let mode = 'freehand';
+  let selectedIds = clearSelection();
+  // 'draw' while a new freehand/rect/ellipse shape is mid-drag; 'move' while dragging the current
+  // selection; null when idle. Set at pointerdown, read by pointerdrag/pointerup to decide which
+  // gesture is in progress -- hit-testing at pointerdown (not the current toolbar mode) is what
+  // decides between the two, per this file's header comment.
+  let interactionKind = null;
+  let dragStart = null;
 
   function applyViewport() {
     paper.view.zoom = baseScale * board.zoom;
@@ -68,32 +91,136 @@ export function createDrawingTool(canvasEl) {
    */
   function resyncViewSize() {
     const rect = canvasEl.getBoundingClientRect();
+    // Paper.js's own `view.viewSize` setter (paper-core.js `setViewSize`) no-ops whenever the new
+    // size's delta from its OWN cached _viewSize is zero -- it never actually looks at
+    // canvasEl.width/height. Between drawing-mode sessions, app.js's normal drawLayout() calls
+    // resizeCanvas() on this SAME shared canvas element while Paper is inactive, resizing it
+    // directly and bypassing Paper.js entirely; Paper's cache has no way to learn about that
+    // external change. If the box on a later enter() happens to numerically match whatever Paper
+    // still remembers from an earlier session, the setter's no-op guard skips
+    // `_setElementSize()`, leaving the actual backing store at drawLayout()'s (wrong) size for
+    // the rest of that session. Assigning a sentinel size first guarantees a nonzero delta, so
+    // the real assignment right after it always actually applies.
+    paper.view.viewSize = new paper.Size(1, 1);
     paper.view.viewSize = new paper.Size(rect.width, rect.height);
+  }
+
+  /** @returns {string|null} The shapeId of the finalized shape under `point`, or null. */
+  function hitTestShapeId(point) {
+    const hit = paper.project.hitTest(point, {
+      fill: true,
+      stroke: true,
+      tolerance: 4 / paper.view.zoom,
+      class: paper.Path
+    });
+    return (hit && hit.item.data.shapeId) || null;
+  }
+
+  /** Repaints every finalized shape's strokeColor to reflect the current selection. */
+  function applySelectionVisuals() {
+    for (const shape of board.listShapes()) {
+      shape.item.strokeColor = selectedIds.has(shape.id) ? SELECTED_STROKE_COLOR : STROKE_COLOR;
+    }
   }
 
   function attachTool() {
     if (tool) tool.remove();
     tool = new paper.Tool();
+
     tool.onMouseDown = (event) => {
-      const path = new paper.Path({
-        strokeColor: STROKE_COLOR,
-        strokeWidth: STROKE_WIDTH_PX / paper.view.zoom
-      });
-      path.add(event.point);
-      board.beginPath(path);
+      const hitId = hitTestShapeId(event.point);
+      if (hitId) {
+        // Same click/shift-click/drag-preserves-group convention as the existing project.layers
+        // pointerdown handler in app.js: a shift-click toggles membership and never starts a
+        // drag on its own (matches that handler's shift branch returning immediately); a plain
+        // click on a shape already part of the current multi-selection preserves the whole group
+        // (so a follow-up drag moves it together) instead of collapsing to just that one shape.
+        if (event.modifiers.shift) {
+          selectedIds = toggleSelection(selectedIds, hitId);
+          applySelectionVisuals();
+          interactionKind = null;
+          return;
+        }
+        if (!selectedIds.has(hitId)) {
+          selectedIds = selectOnly(hitId);
+          applySelectionVisuals();
+        }
+        interactionKind = 'move';
+        return;
+      }
+      // Empty canvas: clear any existing selection and start a new shape per the active mode.
+      if (selectedIds.size) {
+        selectedIds = clearSelection();
+        applySelectionVisuals();
+      }
+      interactionKind = 'draw';
+      dragStart = event.point;
       dragging = true;
+      if (mode === 'freehand') {
+        const path = new paper.Path({
+          strokeColor: STROKE_COLOR,
+          strokeWidth: STROKE_WIDTH_PX / paper.view.zoom
+        });
+        path.add(event.point);
+        board.beginPath(path);
+      }
+      // rect/ellipse: the live preview item is created lazily in onMouseDrag below -- a zero-size
+      // box at mousedown has nothing meaningful to show yet.
     };
+
     tool.onMouseDrag = (event) => {
-      if (!dragging || !board.path) return;
-      board.path.add(event.point);
+      if (interactionKind === 'move') {
+        for (const id of selectedIds) {
+          const shape = board.getShape(id);
+          if (shape) shape.item.translate(event.delta);
+        }
+        return;
+      }
+      if (interactionKind !== 'draw') return;
+      if (mode === 'freehand') {
+        if (!dragging || !board.path) return;
+        board.path.add(event.point);
+        return;
+      }
+      // rect/ellipse live preview: rebuilt from scratch every drag event from resolveDragBox(),
+      // optionally Shift-constrained to a square/circle. Cheap enough (a handful of segments) to
+      // just discard-and-recreate rather than resize the existing item in place.
+      const current = event.modifiers.shift ? constrainSquare(dragStart, event.point) : event.point;
+      const box = resolveDragBox(dragStart, current);
+      board.clearPath();
+      const rect = new paper.Rectangle(box.left, box.top, box.width, box.height);
+      const previewItem = mode === 'rect' ? new paper.Path.Rectangle(rect) : new paper.Path.Ellipse(rect);
+      previewItem.strokeColor = STROKE_COLOR;
+      previewItem.strokeWidth = STROKE_WIDTH_PX / paper.view.zoom;
+      board.beginPath(previewItem);
     };
+
     tool.onMouseUp = () => {
-      if (!dragging) return;
+      if (interactionKind === 'move') {
+        interactionKind = null;
+        return;
+      }
+      if (interactionKind !== 'draw') return;
       dragging = false;
-      // A pointerdown+up with no drag between them never produced a usable stroke (a single
-      // segment) -- discard it rather than leaving a degenerate path a later commit would reject.
-      if (board.path && board.path.segments.length >= 2) board.path.simplify(SIMPLIFY_TOLERANCE_MM);
-      else board.clearPath();
+      if (mode === 'freehand') {
+        // A pointerdown+up with no drag between them never produced a usable stroke (a single
+        // segment) -- discard it rather than leaving a degenerate path a later commit would reject.
+        if (board.path && board.path.segments.length >= 2) {
+          board.path.simplify(SIMPLIFY_TOLERANCE_MM);
+          board.finalizeShape();
+        } else {
+          board.clearPath();
+        }
+      } else if (
+        board.path &&
+        board.path.bounds.width > MIN_BOX_DIM_MM &&
+        board.path.bounds.height > MIN_BOX_DIM_MM
+      ) {
+        board.finalizeShape();
+      } else {
+        board.clearPath();
+      }
+      interactionKind = null;
     };
   }
 
@@ -101,8 +228,11 @@ export function createDrawingTool(canvasEl) {
     get isActive() {
       return board.active;
     },
-    get hasPath() {
-      return Boolean(board.path && board.path.segments.length >= 2);
+    get mode() {
+      return mode;
+    },
+    get hasCommittableShapes() {
+      return Boolean(board.shapes.length || (board.path && board.path.segments.length >= 2));
     },
     get zoom() {
       return board.zoom;
@@ -113,11 +243,16 @@ export function createDrawingTool(canvasEl) {
      *   mode was entered -- fixes the base fit scale for this drawing session (matches every other
      *   viewport transform in this app in treating project.canvas as the mm reference frame).
      * @param {number} paddingPx same padding convention drawLayout() already uses (38*dpr).
+     * @param {'freehand'|'rect'|'ellipse'} [initialMode]
      */
-    enter(projectCanvasMm, paddingPx) {
+    enter(projectCanvasMm, paddingPx, initialMode = 'freehand') {
       canvasMm = projectCanvasMm;
       board.reset();
       board.active = true;
+      mode = initialMode;
+      selectedIds = clearSelection();
+      interactionKind = null;
+      dragging = false;
       if (!isSetUp) {
         paper.setup(canvasEl);
         isSetUp = true;
@@ -136,6 +271,19 @@ export function createDrawingTool(canvasEl) {
     },
 
     /**
+     * Switch input mode without leaving drawing mode -- already-finalized shapes in board.shapes
+     * are untouched; only a drag-in-flight (if any) is discarded, since the box preview belongs
+     * to whichever mode was active when the drag started.
+     * @param {'freehand'|'rect'|'ellipse'} newMode
+     */
+    setMode(newMode) {
+      mode = newMode;
+      interactionKind = null;
+      dragging = false;
+      board.clearPath();
+    },
+
+    /**
      * Resync to canvasEl's current box size while staying in drawing mode -- call this (instead
      * of the normal drawLayout() path, which is a no-op while active) whenever something resizes
      * layoutCanvas: a window resize, or a workspace-tab switch. Preserves the user's current
@@ -150,7 +298,9 @@ export function createDrawingTool(canvasEl) {
     },
 
     exit() {
-      board.clearPath();
+      board.clearAll();
+      selectedIds = clearSelection();
+      interactionKind = null;
       if (tool) {
         tool.remove();
         tool = null;
@@ -184,19 +334,45 @@ export function createDrawingTool(canvasEl) {
      */
     cancelPath() {
       board.clearPath();
+      interactionKind = null;
+      dragging = false;
     },
 
     /**
-     * Flatten the in-progress path into a 'path' layer object (app.js pushes it into
-     * project.layers and runs updateAll() -- this module never touches project state) and clear
-     * it. Returns null if there is no committable path.
+     * Remove every currently-selected finalized shape and clear the selection. A no-op if nothing
+     * is selected.
+     */
+    deleteSelected() {
+      for (const id of selectedIds) board.removeShape(id);
+      selectedIds = clearSelection();
+    },
+
+    /**
+     * Flatten every finalized shape (board.shapes -- not just the current selection) into a
+     * 'path' layer object each (app.js pushes them into project.layers and runs updateAll() --
+     * this module never touches project state) and clear the board. Returns an empty array if
+     * there is nothing to commit. `pathName` is used as-is for a single shape, or suffixed
+     * " 1", " 2", ... when multiple shapes commit at once.
      */
     commit({ stoneSize, gap, color, pathName }) {
-      if (!board.path || board.path.segments.length < 2) return null;
-      const flattened = flattenPathToContour(board.path, FLATTEN_TOLERANCE_MM);
-      board.clearPath();
-      if (!flattened) return null;
-      return createPathLayerFromContour(flattened, { stoneSize, gap, color, pathName });
+      const shapes = board.listShapes();
+      const layers = [];
+      shapes.forEach((shape, index) => {
+        const flattened = flattenPathToContour(shape.item, FLATTEN_TOLERANCE_MM);
+        if (!flattened) return;
+        layers.push(
+          createPathLayerFromContour(flattened, {
+            stoneSize,
+            gap,
+            color,
+            pathName: shapes.length > 1 ? `${pathName} ${index + 1}` : pathName,
+            index
+          })
+        );
+      });
+      board.clearAll();
+      selectedIds = clearSelection();
+      return layers;
     }
   };
 }
