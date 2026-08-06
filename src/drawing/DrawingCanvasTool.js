@@ -19,7 +19,9 @@
  * anywhere in this file.
  *
  * RS-3010 Step 2a adds a `mode` concept ('freehand' | 'rect' | 'ellipse') alongside the existing
- * `isActive`, plus selection/move/delete of already-finalized shapes. Selection state (the set of
+ * `isActive`, plus selection/move/delete of already-finalized shapes. Step 2b extends `mode` with
+ * 'slot' (a drag-defined stadium/pill shape) using the same hit-test-first/drag-to-preview/
+ * finalize interaction shape rect/ellipse already use. Selection state (the set of
  * selected shape ids) lives here, not in DrawingBoard.js -- per that module's own doc comment, it
  * stays a plain data model with no interaction/event concerns. This file's one Paper.js Tool
  * routes every pointer gesture through a single decision: hit an existing shape first (selection/
@@ -33,7 +35,7 @@ import {
   flattenPathToContour,
   createPathLayerFromContour
 } from './DrawingBoard.js';
-import { resolveDragBox, constrainSquare } from './DrawingBoxGeometry.js';
+import { resolveDragBox, constrainSquare, resolveDragAxis } from './DrawingBoxGeometry.js';
 import { selectOnly, toggleSelection, clearSelection } from '../editing/Selection.js';
 
 const STROKE_COLOR = '#1a56d6';
@@ -46,6 +48,48 @@ const PAN_WHEEL_TO_MM = 1;
 // never produced a usable shape -- discarded, matching freehand's existing "no usable stroke"
 // degenerate-path rule (see onMouseUp's < 2 segments check).
 const MIN_BOX_DIM_MM = 1;
+// RS-3010 Step 2b: slot's own defaults, sized for this app's canvas/stone scale (not drawleather's
+// leather-craft constants) -- see the pill drawn with a plain click, width * length ratio = 18mm.
+const SLOT_DEFAULT_WIDTH_MM = 6;
+const SLOT_DEFAULT_LENGTH_RATIO = 3;
+
+/**
+ * Builds a stadium/pill Path: two straight sides parallel to the a-to-b axis, offset by
+ * +/-widthMm/2 perpendicular to it, capped by semicircles of radius widthMm/2 at `a` and `b`.
+ * Module-private, mirrors rect/ellipse's own construction not being exported. Degenerate case (`a`
+ * and `b` coincident) falls back to a plain circle rather than a zero-length/malformed path.
+ * @param {{x:number,y:number}} a
+ * @param {{x:number,y:number}} b
+ * @param {number} widthMm
+ * @returns {paper.Path}
+ */
+function buildSlotPreview(a, b, widthMm) {
+  const r = widthMm / 2;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const length = Math.hypot(dx, dy);
+  if (length < 1e-6) {
+    return new paper.Path.Circle(new paper.Point(a.x, a.y), r);
+  }
+  const ux = dx / length;
+  const uy = dy / length;
+  const px = -uy;
+  const py = ux;
+  const p1 = new paper.Point(a.x + px * r, a.y + py * r);
+  const p2 = new paper.Point(b.x + px * r, b.y + py * r);
+  const p3 = new paper.Point(b.x - px * r, b.y - py * r);
+  const p4 = new paper.Point(a.x - px * r, a.y - py * r);
+  const bThrough = new paper.Point(b.x + ux * r, b.y + uy * r);
+  const aThrough = new paper.Point(a.x - ux * r, a.y - uy * r);
+  const path = new paper.Path();
+  path.moveTo(p1);
+  path.lineTo(p2);
+  path.arcTo(bThrough, p3);
+  path.lineTo(p4);
+  path.arcTo(aThrough, p1);
+  path.closePath();
+  return path;
+}
 
 export function createDrawingTool(canvasEl) {
   const board = new DrawingBoard();
@@ -55,6 +99,7 @@ export function createDrawingTool(canvasEl) {
   let baseScale = 1;
   let dragging = false;
   let mode = 'freehand';
+  let slotWidthMm = SLOT_DEFAULT_WIDTH_MM;
   let selectedIds = clearSelection();
   // 'draw' while a new freehand/rect/ellipse shape is mid-drag; 'move' while dragging the current
   // selection; null when idle. Set at pointerdown, read by pointerdrag/pointerup to decide which
@@ -164,8 +209,9 @@ export function createDrawingTool(canvasEl) {
         path.add(event.point);
         board.beginPath(path);
       }
-      // rect/ellipse: the live preview item is created lazily in onMouseDrag below -- a zero-size
-      // box at mousedown has nothing meaningful to show yet.
+      // rect/ellipse/slot: the live preview item is created lazily in onMouseDrag below -- a
+      // zero-size box (or zero-length axis, for slot) at mousedown has nothing meaningful to show
+      // yet.
     };
 
     tool.onMouseDrag = (event) => {
@@ -180,6 +226,15 @@ export function createDrawingTool(canvasEl) {
       if (mode === 'freehand') {
         if (!dragging || !board.path) return;
         board.path.add(event.point);
+        return;
+      }
+      if (mode === 'slot') {
+        const { a, b } = resolveDragAxis(dragStart, event.point);
+        board.clearPath();
+        const previewItem = buildSlotPreview(a, b, slotWidthMm);
+        previewItem.strokeColor = STROKE_COLOR;
+        previewItem.strokeWidth = STROKE_WIDTH_PX / paper.view.zoom;
+        board.beginPath(previewItem);
         return;
       }
       // rect/ellipse live preview: rebuilt from scratch every drag event from resolveDragBox(),
@@ -210,6 +265,24 @@ export function createDrawingTool(canvasEl) {
           board.finalizeShape();
         } else {
           board.clearPath();
+        }
+      } else if (mode === 'slot') {
+        // A drag preview already exists (built in onMouseDrag) -- finalize it as-is. A plain
+        // click (no drag) is a deliberate default-pill placement, not a discard: build a
+        // default-length horizontal pill centered on the click point.
+        if (board.path) {
+          board.finalizeShape();
+        } else {
+          const halfLengthMm = (slotWidthMm * SLOT_DEFAULT_LENGTH_RATIO) / 2;
+          const previewItem = buildSlotPreview(
+            { x: dragStart.x - halfLengthMm, y: dragStart.y },
+            { x: dragStart.x + halfLengthMm, y: dragStart.y },
+            slotWidthMm
+          );
+          previewItem.strokeColor = STROKE_COLOR;
+          previewItem.strokeWidth = STROKE_WIDTH_PX / paper.view.zoom;
+          board.beginPath(previewItem);
+          board.finalizeShape();
         }
       } else if (
         board.path &&
@@ -243,7 +316,7 @@ export function createDrawingTool(canvasEl) {
      *   mode was entered -- fixes the base fit scale for this drawing session (matches every other
      *   viewport transform in this app in treating project.canvas as the mm reference frame).
      * @param {number} paddingPx same padding convention drawLayout() already uses (38*dpr).
-     * @param {'freehand'|'rect'|'ellipse'} [initialMode]
+     * @param {'freehand'|'rect'|'ellipse'|'slot'} [initialMode]
      */
     enter(projectCanvasMm, paddingPx, initialMode = 'freehand') {
       canvasMm = projectCanvasMm;
@@ -274,13 +347,25 @@ export function createDrawingTool(canvasEl) {
      * Switch input mode without leaving drawing mode -- already-finalized shapes in board.shapes
      * are untouched; only a drag-in-flight (if any) is discarded, since the box preview belongs
      * to whichever mode was active when the drag started.
-     * @param {'freehand'|'rect'|'ellipse'} newMode
+     * @param {'freehand'|'rect'|'ellipse'|'slot'} newMode
      */
     setMode(newMode) {
       mode = newMode;
       interactionKind = null;
       dragging = false;
       board.clearPath();
+    },
+
+    /**
+     * Sets the slot preset's width (mm), read at the moment a slot preview/default-pill is built
+     * (not baked in earlier). Invalid input (non-numeric or <= 0) is ignored, keeping the last
+     * valid value -- same guard convention as this app's other numeric inputs (e.g. the Gap (mm)
+     * field's handler).
+     * @param {number|string} value
+     */
+    setSlotWidthMm(value) {
+      const parsed = parseFloat(value);
+      if (Number.isFinite(parsed) && parsed > 0) slotWidthMm = parsed;
     },
 
     /**

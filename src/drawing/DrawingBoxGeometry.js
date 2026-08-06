@@ -40,3 +40,16 @@ export function constrainSquare(start, current) {
     y: start.y + Math.sign(dy || 1) * magnitude
   };
 }
+
+/**
+ * Resolves the slot preset's drag axis (RS-3010 Step 2b): `a` is always the press point, `b` is
+ * always the current/release point -- the pill's straight axis runs from `a` to `b` at any angle.
+ * Trimmed from drawleather's dragSnap.ts the same way resolveDragBox/constrainSquare above were --
+ * no from-center mode, not requested for this step.
+ * @param {{x:number,y:number}} start The drag's starting point (mm).
+ * @param {{x:number,y:number}} current The drag's current point (mm).
+ * @returns {{a:{x:number,y:number}, b:{x:number,y:number}}} The pill's axis endpoints.
+ */
+export function resolveDragAxis(start, current) {
+  return { a: { x: start.x, y: start.y }, b: { x: current.x, y: current.y } };
+}
