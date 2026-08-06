@@ -168,7 +168,7 @@ await test('a recovered record whose project fails validateProject() falls back 
 // reformatted across physical lines (a multi-line comment inserted mid-body is exactly what broke
 // the old sliceBetween(..., '\n', ...)-based version of this test under MONO-006A).
 
-function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', permanentEngineError = null } = {}) {
+function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', permanentEngineError = null, isDrawing = false } = {}) {
   const calls = [];
   const record = (name) => () => { calls.push(name); };
   const consoleErrors = [];
@@ -190,12 +190,13 @@ function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', 
   const updateViewButtons = record('updateViewButtons');
   const updateTextOutsidePrintableWarning = record('updateTextOutsidePrintableWarning');
   const scheduleAutosave = record('scheduleAutosave');
+  const drawingTool = { isActive: isDrawing, resize: record('drawingTool.resize') };
 
   const updateAllSrc = extractFunctionBody(appJs, 'async function updateAll(skipWrite=false){', 'updateAll()');
   const factory = new Function(
     'writeSelectedControlsToLayer', 'engine', 'project', 'el', 'permanentEngineError', 'console',
     'renderLayerUI', 'drawLayout', 'drawCup', 'updateStats', 'updateHistoryUI', 'updateEditingUI',
-    'updateViewButtons', 'updateTextOutsidePrintableWarning', 'scheduleAutosave',
+    'updateViewButtons', 'updateTextOutsidePrintableWarning', 'scheduleAutosave', 'drawingTool', 'devicePixelRatio',
     `
     let generationToken=0;
     let layout;
@@ -207,7 +208,7 @@ function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', 
   const { updateAll, bumpGenerationToken } = factory(
     writeSelectedControlsToLayer, engine, project, el, permanentEngineError, fakeConsole,
     renderLayerUI, drawLayout, drawCup, updateStats, updateHistoryUI, updateEditingUI,
-    updateViewButtons, updateTextOutsidePrintableWarning, scheduleAutosave
+    updateViewButtons, updateTextOutsidePrintableWarning, scheduleAutosave, drawingTool, 1
   );
   if (buildGenerate) engine.generate = buildGenerate(bumpGenerationToken);
   const tailCalls = () => calls.filter((c) => c !== 'writeSelectedControlsToLayer');
@@ -250,6 +251,13 @@ await test('a generation token superseded during the await also short-circuits t
   assert.deepEqual(tailCalls(), [], 'a stale/superseded pass must not run any of the successful-regeneration tail even on a failed generation');
   assert.equal(getStatus(), 'Ready', 'a discarded failing pass must not overwrite #status');
   assert.equal(consoleErrors.length, 0, 'a discarded failing pass must not log the error either');
+});
+
+await test('RS-3010: while drawing mode is active, updateAll() resyncs via drawingTool.resize() instead of drawLayout()', async () => {
+  const { run, calls } = runUpdateAll({ isDrawing: true, buildGenerate: () => async () => ({}) });
+  await run();
+  assert.deepEqual(calls, ['writeSelectedControlsToLayer', ...SUCCESS_TAIL_ORDER.map((c) => c === 'drawLayout' ? 'drawingTool.resize' : c)]);
+  assert.ok(!calls.includes('drawLayout'), 'drawLayout() must not run while drawingTool owns layoutCanvas');
 });
 
 await test('a lingering "Text generation failed" status is cleared back to Ready once generation succeeds again, and a font-manifest error still takes priority over it', async () => {
