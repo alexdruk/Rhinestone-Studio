@@ -13,8 +13,8 @@ in the canvas, replacing the retired RS-1015 Design Library (`src/library/**`, f
 
 ## Status
 
-Design proposal — not implemented, not approved for implementation. Sasha needs to answer the one
-open question in §5 before an implementation prompt is written.
+Design approved. Implementation in progress, broken into steps (Step 1 shipped freehand drawing;
+Step 2a adds the multi-shape data model, rectangle/ellipse presets, and select/move/delete).
 
 ## Why this milestone / ID
 
@@ -136,10 +136,11 @@ package before the implementation prompt is written, not assumed here).
   not touch the frozen code itself. Whether `src/library/**` is later deleted, kept dormant, or
   repurposed is a separate decision, not part of RS-3010.
 
-## Open question for Sasha
+## Decision (2026-08-06, Sasha)
 
-Do you want slot and/or polygon presets in v1, alongside rectangle and ellipse? RS-3001's audit
-didn't scope this either way — it's genuinely open, not a deferred/decided item like the two above.
+Slot and polygon presets are both in v1 scope, alongside rectangle and ellipse. They are deferred
+to RS-3010 Step 2b rather than built in Step 2a, which covers only the multi-shape data model plus
+rectangle/ellipse and select/move/delete.
 
 ## Next step
 
