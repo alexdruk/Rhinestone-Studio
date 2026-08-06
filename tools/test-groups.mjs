@@ -51,7 +51,6 @@ export const GROUPS = {
     'test-boolean-precision-validation.mjs',
     'test-stone-size-library.mjs',
     'test-fill-algorithms.mjs',
-    'test-design-library.mjs',
     'test-gallery.mjs',
     'test-shape-library.mjs',
     'test-shape-fit.mjs',
@@ -78,7 +77,6 @@ export const GROUPS = {
     'test-path-boolean-integration.mjs',
     'test-variable-stone-sizes.mjs',
     'test-fill-algorithms-integration.mjs',
-    'test-design-library-integration.mjs',
     'test-gallery-integration.mjs',
     'test-typography-font-library.mjs',
     'test-text-position-workflow.mjs',
@@ -90,7 +88,6 @@ export const GROUPS = {
     'test-lightbox-controller.mjs',
     'test-ui-shell-structure.mjs',
     'test-ui-import-autoswitch-regression.mjs',
-    'test-design-library-freeze-gate.mjs',
     'test-autosave-recovery-wiring.mjs',
     'test-font-decision-001-stone-size-ux.mjs',
     'test-font-portfolio-001-stone-size-gating.mjs',
@@ -130,7 +127,7 @@ export const GROUPS = {
 
   // --- MAINT-002 — Test Execution Tiers -------------------------------------------------------
   //
-  // The 12 groups below, together with architecture/gallery/security/documentation/autosave above,
+  // The 11 groups below, together with architecture/gallery/security/documentation/autosave above,
   // partition all `tools/test-*.mjs` files by subsystem with no gaps and no overlaps (every file
   // belongs to exactly one of these 16 groups) — Tier 2 of the tiered execution model. `core`/
   // `integration` above are unaffected: they remain their own, overlapping-with-everything,
@@ -224,11 +221,6 @@ export const GROUPS = {
     'test-font-portfolio-001-stone-size-gating.mjs',
     'test-auto-fit-default-toggle-warning.mjs',
   ],
-  'design-library': [
-    'test-design-library.mjs',
-    'test-design-library-integration.mjs',
-    'test-design-library-freeze-gate.mjs',
-  ],
   history: [
     'test-history-manager.mjs',
   ],
@@ -267,7 +259,6 @@ export const GROUPS = {
     'test-ui-shell-structure.mjs',
     'test-history-manager.mjs',
     'test-autosave-manager.mjs',
-    'test-design-library.mjs',
     'test-project-validation-security.mjs',
     'test-documentation-consistency.mjs',
   ],

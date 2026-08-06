@@ -22,8 +22,8 @@ import { fileURLToPath } from 'node:url';
 //  2. scheduleAutosave()/flushAutosaveNow() are wired into updateAll() and debounce-then-write
 //     only on an actual content change (not "every mouse move").
 //  3. Manual Save (#exportProject) clears the autosave slot.
-//  4. Every "loading a project is a fresh start" site (Import/Open, Design Library "New Project",
-//     Gallery "Open as copy") re-baselines the autosave slot to the newly loaded project.
+//  4. Every "loading a project is a fresh start" site (Import/Open, Gallery "Open as copy")
+//     re-baselines the autosave slot to the newly loaded project.
 //  5. A pagehide flush listener exists (mid-debounce refresh/crash must not lose the pending write).
 //  6. The recovery *notification* (#status line): shown immediately, auto-dismisses back to "Ready"
 //     after a few seconds unless a newer #status message has since been written, suppressed by a
@@ -293,9 +293,9 @@ await test('every "loading a project is a fresh start" site re-baselines the aut
     assert.match(after, /lastAutosavedProjectJson=null;flushAutosaveNow\(\);/, `expected the "fresh start" site at offset ${idx} (history.clear() + dirty-baseline-reset) to also re-baseline the autosave slot`);
     searchFrom = idx + freshStartMarker.length;
   }
-  // Import/Open, Design Library "New Project", and Gallery "Open as copy" -- see app.js's own
-  // repeated "Mirrors #importProjectFile's ... fresh start" comments at each site.
-  assert.equal(count, 3, 'expected exactly the three known "fresh start" sites (Import, Design Library New Project, Gallery Open as copy)');
+  // Import/Open and Gallery "Open as copy" -- see app.js's own repeated "Mirrors
+  // #importProjectFile's ... fresh start" comments at each site.
+  assert.equal(count, 2, 'expected exactly the two known "fresh start" sites (Import, Gallery Open as copy)');
 });
 
 // ---------- 5. pagehide flush listener exists ----------
@@ -306,10 +306,9 @@ await test("a 'pagehide' listener flushes any pending debounced autosave before 
 
 // ---------- Normal Save/Open/Export behavior is unchanged ----------
 
-await test('Export/Import/New-Project handlers still perform their original, pre-recovery-feature actions (download / validateProject+replace / buildProjectFromItem)', () => {
+await test('Export/Import handlers still perform their original, pre-recovery-feature actions (download / validateProject+replace)', () => {
   assert.match(appJs, /el\('exportProject'\)\.onclick=\(\)=>\{try\{download\('rhinestone-project\.json','application\/json',JSON\.stringify\(project,null,2\)\);cleanProjectJson=JSON\.stringify\(project\);updateHistoryUI\(\);/);
   assert.match(appJs, /validateProject\(JSON\.parse\(await file\.text\(\)\)\)/, 'Import must still validate the uploaded file exactly as before');
-  assert.match(appJs, /buildProjectFromItem\(item,LIBRARY_NEW_PROJECT_DEFAULTS\)/, 'Design Library "New Project" must still build from the library item exactly as before');
 });
 
 // ---------- 6. Recovery notification (#status), extracted and executed for real ----------
