@@ -2100,6 +2100,14 @@ window.addEventListener('keydown',e=>{
       e.preventDefault();
       drawingTool.deleteSelected();
     }
+    // RS-3010 Step 2c: Escape cancels whatever drag or in-progress polygon drawingTool.cancelPath()
+    // now covers (see DrawingCanvasTool.js's resetInProgressDrawing()) -- this block's own `return`
+    // below already keeps drawing mode from falling through to any other Escape handler while it
+    // owns the canvas.
+    if(e.key==='Escape'){
+      e.preventDefault();
+      drawingTool.cancelPath();
+    }
     return;
   }
   if(e.key==='Delete'||e.key==='Backspace'){const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;deleteLayer(selectedLayerId)}
@@ -3143,6 +3151,7 @@ function updateDrawToolButtons(){
   const showSlotWidth=active&&mode==='slot';
   el('drawSlotWidthField').style.display=showSlotWidth?'':'none';
   el('drawSlotWidthMm').style.display=showSlotWidth?'':'none';
+  el('drawPolygonToggle').setAttribute('aria-pressed',String(active&&mode==='polygon'));
 }
 function setDrawTool(mode){
   if(drawingTool.isActive){
@@ -3158,12 +3167,17 @@ el('drawRectToggle').onclick=()=>setDrawTool('rect');
 el('drawEllipseToggle').onclick=()=>setDrawTool('ellipse');
 el('drawSlotToggle').onclick=()=>setDrawTool('slot');
 el('drawSlotWidthMm').oninput=()=>drawingTool.setSlotWidthMm(el('drawSlotWidthMm').value);
+el('drawPolygonToggle').onclick=()=>setDrawTool('polygon');
 // Committing constructs a 'path' layer directly per drawn shape -- the same object shape app.js's
 // Boolean Operations code already produces (RS-1012) -- and hands each to the existing
 // project.layers/updateAll() pipeline completely unchanged; no new stone-computation logic here.
 // stoneSize/gap/color default from the currently-selected layer, the same convention
 // createShapeLayer()/the SVG-import handler above already use for a brand-new shape.
 el('drawCommitBtn').onclick=()=>{
+  // RS-3010 Step 2c: a polygon's vertices/preview live outside board.shapes until closed --
+  // committing now would silently finalize every OTHER already-drawn shape while leaving this one
+  // dangling on the canvas with no feedback.
+  if(drawingTool.hasInProgressPolygon){el('status').textContent='Finish the in-progress polygon first (click near its starting point), or press Escape to cancel it.';return}
   if(!drawingTool.hasCommittableShapes){el('status').textContent='Draw a shape first, then click Commit Shape.';return}
   const base=selectedLayer();
   const layers=drawingTool.commit({stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold',pathName:'Drawn Shape'});
