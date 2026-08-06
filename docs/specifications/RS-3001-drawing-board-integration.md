@@ -1,7 +1,11 @@
 # RS-3001 — Drawing Board Integration Design
 
-Status: decisions-and-scope document only. No implementation, pseudocode, or file-level diffs are
-proposed here. This doc captures the design decisions and open questions surfaced by
+Status: RETIRED — superseded by RS-3010 (build-it-ourselves). See
+"Final Decision" section below. Kept for historical record per this
+repo's convention of preserving negative/superseded findings (cf.
+RS-2013's lighting-rig negative result).
+
+This doc captures the design decisions and open questions surfaced by
 `DRAWLEATHER-AUDIT-001` (appended in full below) so implementation work can be scoped in a later
 milestone.
 
@@ -377,3 +381,81 @@ product, not a subset).
    69K LOC, but nowhere near all of it — worth sizing precisely before
    writing a design doc, since "extract subset X" vs. "vendor whole repo"
    are very different milestones in effort and in what CI has to track.
+
+---
+
+## Final Decision — Vendor Retired, Building Instead
+
+Following this design doc and the CSS isolation spike
+(`RS-3001-css-isolation-addendum.md`), a follow-up read-only audit
+directly compared "vendor drawleather" against "build a purpose-fit
+drawing board directly in Rhinestone Studio's own codebase — vanilla JS,
+no bundler, Paper.js used directly, informed by how drawleather solved
+the same problems but not by porting its code." Sasha decided to build.
+RS-3001 is retired; a new milestone (RS-3010) will scope the build.
+
+### Build-vs-vendor comparison
+
+- **LOC estimate:** building the direct-shape capability set (canvas/
+  rendering, freehand drawing, shape presets, snapping, selection, a
+  minimal data model, and SVG export) from scratch against Rhinestone
+  Studio's own conventions was estimated at **~1,300–3,400 LOC**,
+  against **22,488 LOC** to vendor the equivalent direct-shape-only
+  subset (the extraction boundary this doc had already scoped down to,
+  §2 above). Even at the high end, building comes in at roughly
+  6–15% of the vendor figure.
+
+- **Freehand-smoothing finding:** the freehand tool Rhinestone Studio
+  actually wants (drawleather's `FreePathTool.ts`, 97 LOC) turned out to
+  do no custom smoothing at all — it's a straight-line polyline built
+  from min-distance-decimated pointer samples. drawleather's real
+  bezier-fit smoothing lives elsewhere (wired to a different, already-
+  excluded tool) and even that is just one call to Paper.js's own
+  built-in `Path.simplify()`. There is no proprietary smoothing
+  algorithm to preserve by vendoring — usable curve smoothing is a
+  single Paper.js API call away either way.
+
+- **Point/handle editing finding — the decisive one.** The one
+  capability substantial enough to have justified vendoring at this
+  scale — letting a user edit an existing path's points and bezier
+  handles after creation — lives entirely inside `ConstructionTool.ts`
+  (13,355 LOC), which this doc's own extraction boundary (§2) had
+  already excluded from the vendor scope before this decision was made.
+  In other words: vendoring, as already scoped, would never have
+  delivered point/handle editing. That capability requires building it
+  either way, regardless of how the rest of the drawing board is
+  sourced — which removed the strongest remaining argument for
+  vendoring anything at all.
+
+- **Integration costs the build path avoids entirely:** a second
+  TypeScript + Vite toolchain dropped into a vanilla-JS, no-bundler
+  codebase; the CSS isolation problem this spike branch exists to solve
+  (see below); an unresolved and untimelined license dependency between
+  Sasha and Sergey that was already flagged (§ above) as blocking ship;
+  and Project-schema adapter/glue code to bridge drawleather's own
+  `Project`/`ConstructionLine` shape into Rhinestone Studio's data model
+  — none of which is counted in the 22,488 LOC vendor figure.
+
+### Provenance note
+
+The two supporting audits behind these numbers —
+`DRAWLEATHER-EXTRACTION-MANIFEST` (v1 and v2, which established the
+22,488 LOC / 44-file vendor scope) and the build-vs-vendor LOC estimate
+summarized above — were produced as read-only investigations and written
+to `/tmp` scratch files during the work. They were never committed to
+this repository. This section is therefore the durable record of their
+findings; the scratch files themselves should be assumed gone.
+
+### CSS isolation addendum — now moot for vendoring, possibly still useful
+
+`RS-3001-css-isolation-addendum.md` (this branch's other committed doc)
+found CSS isolation for an embedded drawleather bundle workable but
+non-trivial, and left the Shadow DOM vs. variable-rename choice open
+since neither was a clear winner. That question is moot now that
+vendoring is retired — there is no drawleather bundle to isolate. The
+addendum is being left in place rather than deleted: its Shadow-DOM-vs-
+rename analysis is generic to embedding any third-party styled widget,
+and may still be informative if the new build-it-ourselves work ever
+needs to embed a third-party styled component for some other reason. Its
+findings should just no longer be read as applying to *this* drawing-
+board effort specifically.
