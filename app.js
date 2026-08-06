@@ -130,6 +130,10 @@ import { MonogramGenerator, MONOGRAM_GENERATOR_FAILURE_REASONS, MONOGRAM_LAYOUTS
 // (via createAutosaveLocalStorageAdapter).
 import { AutosaveManager, createLocalStorageAdapter as createAutosaveLocalStorageAdapter, createMemoryStorageAdapter as createAutosaveMemoryStorageAdapter } from './src/persistence/index.js';
 import { validateRhsProject, toAppProjectShape, parseCatalog, search as searchGalleryCatalog, filterByCategory as filterGalleryCategory, categories as galleryCategories, featuredEntries as galleryFeaturedEntries, getEntry as getGalleryEntry } from './src/gallery/index.js';
+// RS-3010 Step 1 (Drawing Board): src/drawing/** confines all direct Paper.js usage the same way
+// src/preview3d/** confines Three.js -- app.js only ever calls the facade createDrawingTool()
+// returns, never `paper` itself.
+import { createDrawingTool } from './src/drawing/index.js';
 // RS-1012 (Vector Boolean Operations): Union/Subtract/Intersect/Exclude over the current
 // multi-selection (the same selectedLayerIds set RS-1009's Align/Snap already uses). No new
 // geometry algorithm lives in app.js: resolveLayerShapeSource() below only asks the permanent
@@ -845,6 +849,11 @@ const permanentEngine=new PermanentGeometryEngine({fontProviderRegistry});
 // below (which only exposes app.js's own live-regeneration helpers).
 const monogramGenerator=new MonogramGenerator({geometryEngine:permanentEngine});
 const engine=new GeometryEngine(permanentEngine);let project=defaultProject(),selectedLayerId='text',layout=null,rotation=0,zoom=1,layoutTransform=null,drag=null,generationToken=0;const layoutCanvas=el('layout'),cupCanvas=el('cup');
+// RS-3010 Step 1: one drawing tool bound to layoutCanvas for the app's lifetime -- it lazily calls
+// paper.setup() on first enter() and only pauses/resumes afterward (see DrawingCanvasTool.js's own
+// header comment for why), so constructing it eagerly here does not touch the canvas until the
+// user actually enables Draw mode.
+const drawingTool=createDrawingTool(layoutCanvas);
 // RS-1009: the one multi-selection model (src/editing/Selection.js is the only place that
 // computes a new Set from an old one). selectedLayerId (above, pre-existing) keeps driving the
 // single-layer property panel exactly as before -- it always points at the most recently
@@ -1924,6 +1933,10 @@ layoutCanvas.addEventListener('pointerdown',e=>{
   // the other half of "only one top-level tool is active": while Monogram is open, canvas selection
   // is inert.
   if(lightboxes.monogram.isOpen)return;
+  // RS-3010 Step 1: the same "only one top-level tool is active" rule -- while drawing mode owns
+  // layoutCanvas (its own Paper.js Tool, wired in toggleDrawMode() below), the normal hit-test/
+  // select/drag pointerdown flow below must not also fire on the same click.
+  if(drawingTool.isActive)return;
   const mm=pointerToLayout(e);const hit=hitTest(mm);
   // S-107: an empty-canvas click that lands inside the Front View Frame starts a frame drag
   // instead of clearing the selection -- a click on an actual layer/stone still takes priority
@@ -2061,6 +2074,9 @@ window.addEventListener('keydown',e=>{
   // Lightbox is open (see the matching pointerdown gate above for the full rationale). Undo/redo
   // above stay global -- they act on the whole project, not on canvas layer editing.
   if(lightboxes.monogram.isOpen)return;
+  // RS-3010 Step 1: same rule -- layer-editing shortcuts (delete, arrow-nudge) are inert while
+  // drawing mode owns the canvas, mirroring the pointerdown gate above.
+  if(drawingTool.isActive)return;
   if(e.key==='Delete'||e.key==='Backspace'){const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;deleteLayer(selectedLayerId)}
   // RS-1009: arrow keys nudge the current multi-selection by a named mm step (NUDGE_STEP_MM,
   // src/editing/EditingConstants.js); Shift+Arrow uses the larger step. Guarded exactly like
@@ -3051,6 +3067,53 @@ if(!window.matchMedia('(min-width: 900px)').matches)setWorkspaceMode('2d',true);
 // ---- Safe-area toggle (view-only editor state; see the showSafeArea declaration above and
 // drawLayout()). No grid toggle exists here -- see the showSafeArea declaration's comment above. ----
 el('safeAreaToggle').onclick=()=>{showSafeArea=!showSafeArea;el('safeAreaToggle').setAttribute('aria-pressed',String(showSafeArea));el('settingsSafeAreaDefault').checked=showSafeArea;drawLayout()};
+
+// ---- RS-3010 Step 1: drawing mode toggle. Entering hands layoutCanvas to drawingTool's own
+// Paper.js scene (drawingTool.enter()) exactly like the pointerdown/keydown gates above assume;
+// exiting hands it back to the normal renderer (drawLayout()). resizeCanvas() is called first so
+// drawingTool's base fit scale is computed against the canvas's *current* pixel size, the same
+// dpr-aware sizing drawLayout() itself always uses. ----
+function setDrawMode(active){
+  if(active){
+    const{dpr}=resizeCanvas(layoutCanvas);
+    drawingTool.enter({width:project.canvas.width,height:project.canvas.height},38*dpr);
+    el('drawModeToggle').setAttribute('aria-pressed','true');
+    el('drawModeHint').style.display='';
+    el('drawCommitBtn').style.display='';
+    el('drawCommitBtn').disabled=false;
+    el('status').textContent='Drawing mode: drag on the canvas to draw a freehand shape, then click Commit Shape.';
+  }else{
+    drawingTool.exit();
+    el('drawModeToggle').setAttribute('aria-pressed','false');
+    el('drawModeHint').style.display='none';
+    el('drawCommitBtn').style.display='none';
+    el('drawCommitBtn').disabled=true;
+    drawLayout();
+  }
+}
+el('drawModeToggle').onclick=()=>setDrawMode(!drawingTool.isActive);
+// Committing constructs a 'path' layer directly from the drawn contour -- the same object shape
+// app.js's Boolean Operations code already produces (RS-1012) -- and hands it to the existing
+// project.layers/updateAll() pipeline completely unchanged; no new stone-computation logic here.
+// stoneSize/gap/color default from the currently-selected layer, the same convention
+// createShapeLayer()/the SVG-import handler above already use for a brand-new shape.
+el('drawCommitBtn').onclick=()=>{
+  if(!drawingTool.hasPath){el('status').textContent='Draw a shape first, then click Commit Shape.';return}
+  const base=selectedLayer();
+  const layer=drawingTool.commit({stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold',pathName:'Freehand Shape'});
+  setDrawMode(false);
+  if(!layer)return;
+  commitHistory();
+  project.layers.push(layer);
+  selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);
+  syncSelectedControlsFromLayer();
+  updateAll(true);
+  el('status').textContent=`Added "${layer.pathName}" as a new Path layer (${layer.contours[0].length} contour points).`;
+};
+// Figma-style trackpad/mouse mapping, kept out of the normal pointerdown/move/up flow entirely so
+// a drag on the canvas always draws and never pans: plain scroll pans (deltaX/deltaY), Ctrl/Cmd+
+// scroll (or a trackpad pinch, which the browser reports as wheel+ctrlKey) zooms.
+layoutCanvas.addEventListener('wheel',e=>{if(!drawingTool.isActive)return;drawingTool.onWheel(e)},{passive:false});
 
 // ---- Left panel Actions shortcuts: each calls the exact same function as its top-bar/per-row
 // equivalent -- no new history, selection, or export logic. ----

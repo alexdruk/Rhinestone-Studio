@@ -402,6 +402,14 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <button class="icon-btn" id="safeAreaToggle" title="Toggle safe-area guide" aria-pressed="true">▢</button>
           <span class="hint" title="The reference grid helps align stones to the canvas; it is drawn by the permanent 2D renderer and cannot be turned off in this milestone" style="cursor:help">⊞&nbsp;Grid: always on</span>
         </div>
+        <!-- RS-3010 Step 1: drawing mode owns the 2D canvas exclusively while active (its own
+             Paper.js scene, not this toolbar's stone-layout view) -- toggling it off, or committing
+             a shape, hands the canvas back to the normal renderer. -->
+        <div class="toolbar-group" id="drawToolGroup">
+          <button class="icon-btn" id="drawModeToggle" title="Draw a custom freehand shape directly on the canvas" aria-pressed="false">✏️ Draw</button>
+          <span id="drawModeHint" class="hint" style="display:none">Drag to draw · Scroll to pan · Ctrl/Cmd+scroll to zoom</span>
+          <button class="btn sm primary" id="drawCommitBtn" style="display:none" disabled title="Add the drawn shape as a new Path layer">Commit Shape</button>
+        </div>
         <div class="toolbar-group">
           <span class="toolbar-label">Align &amp; Snap</span>
           <div id="selectionSummary" style="display:inline">No layers selected</div>
