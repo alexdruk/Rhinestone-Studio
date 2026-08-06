@@ -3104,7 +3104,8 @@ el('safeAreaToggle').onclick=()=>{showSafeArea=!showSafeArea;el('safeAreaToggle'
 // Step 1's single-button toggle-off behavior); clicking a different tool while already active
 // switches mode in place via drawingTool.setMode() without re-entering (so shapes already drawn
 // this session survive the switch -- only an in-progress drag-in-flight is discarded, see
-// DrawingCanvasTool.js's setMode()). ----
+// DrawingCanvasTool.js's setMode()). Step 2b adds Slot to the same toggle group, plus a width
+// (mm) input shown only while slot is the active mode (see updateDrawToolButtons()). ----
 function setDrawMode(active,mode){
   if(active){
     // Show the hint text and Commit Shape button -- letting the toolbar finish reflowing/
@@ -3138,6 +3139,10 @@ function updateDrawToolButtons(){
   el('drawModeToggle').setAttribute('aria-pressed',String(active&&mode==='freehand'));
   el('drawRectToggle').setAttribute('aria-pressed',String(active&&mode==='rect'));
   el('drawEllipseToggle').setAttribute('aria-pressed',String(active&&mode==='ellipse'));
+  el('drawSlotToggle').setAttribute('aria-pressed',String(active&&mode==='slot'));
+  const showSlotWidth=active&&mode==='slot';
+  el('drawSlotWidthField').style.display=showSlotWidth?'':'none';
+  el('drawSlotWidthMm').style.display=showSlotWidth?'':'none';
 }
 function setDrawTool(mode){
   if(drawingTool.isActive){
@@ -3151,6 +3156,8 @@ function setDrawTool(mode){
 el('drawModeToggle').onclick=()=>setDrawTool('freehand');
 el('drawRectToggle').onclick=()=>setDrawTool('rect');
 el('drawEllipseToggle').onclick=()=>setDrawTool('ellipse');
+el('drawSlotToggle').onclick=()=>setDrawTool('slot');
+el('drawSlotWidthMm').oninput=()=>drawingTool.setSlotWidthMm(el('drawSlotWidthMm').value);
 // Committing constructs a 'path' layer directly per drawn shape -- the same object shape app.js's
 // Boolean Operations code already produces (RS-1012) -- and hands each to the existing
 // project.layers/updateAll() pipeline completely unchanged; no new stone-computation logic here.
