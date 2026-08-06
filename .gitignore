@@ -66,6 +66,10 @@ tools/rc-014-plate-flip-verification.mjs
 tools/rc-014-font-spotcheck.mjs
 tools/rc-014-verification-screenshots/
 
+# RS-3010 Step 1: ad hoc live-browser verification screenshots for the drawing-board freehand
+# tool, same "never a repo artifact" category as the folders above
+tools/rs-3010-step1-verification-screenshots/
+
 # RS-3001: throwaway CSS-isolation spike prototypes (copied drawleather source slices +
 # harness/comparison scripts) -- findings are captured in
 # docs/specifications/RS-3001-css-isolation-addendum.md, the prototype code itself is never a
