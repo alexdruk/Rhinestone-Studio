@@ -91,6 +91,17 @@ export function createDrawingTool(canvasEl) {
    */
   function resyncViewSize() {
     const rect = canvasEl.getBoundingClientRect();
+    // Paper.js's own `view.viewSize` setter (paper-core.js `setViewSize`) no-ops whenever the new
+    // size's delta from its OWN cached _viewSize is zero -- it never actually looks at
+    // canvasEl.width/height. Between drawing-mode sessions, app.js's normal drawLayout() calls
+    // resizeCanvas() on this SAME shared canvas element while Paper is inactive, resizing it
+    // directly and bypassing Paper.js entirely; Paper's cache has no way to learn about that
+    // external change. If the box on a later enter() happens to numerically match whatever Paper
+    // still remembers from an earlier session, the setter's no-op guard skips
+    // `_setElementSize()`, leaving the actual backing store at drawLayout()'s (wrong) size for
+    // the rest of that session. Assigning a sentinel size first guarantees a nonzero delta, so
+    // the real assignment right after it always actually applies.
+    paper.view.viewSize = new paper.Size(1, 1);
     paper.view.viewSize = new paper.Size(rect.width, rect.height);
   }
 

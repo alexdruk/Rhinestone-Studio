@@ -3107,13 +3107,22 @@ el('safeAreaToggle').onclick=()=>{showSafeArea=!showSafeArea;el('safeAreaToggle'
 // DrawingCanvasTool.js's setMode()). ----
 function setDrawMode(active,mode){
   if(active){
+    // Show the hint text and Commit Shape button -- letting the toolbar finish reflowing/
+    // wrapping around them -- BEFORE calling drawingTool.enter(), which measures layoutCanvas's
+    // current box via resyncViewSize(). Doing this in the other order sizes Paper's viewport
+    // against the canvas's PRE-reflow box: if showing this UI causes the toolbar to wrap onto a
+    // second line (more likely now that Step 2a added Rect/Ellipse buttons alongside Draw), the
+    // canvas's available CSS height shrinks immediately afterward but its already-sized Paper.js
+    // backing store does not, leaving drawn content misaligned/squished for the rest of the
+    // session. Setting style.display here forces the browser to recompute layout by the time
+    // enter()'s getBoundingClientRect() call runs, since both happen in the same synchronous task.
+    el('drawModeHint').style.display='';
+    el('drawCommitBtn').style.display='';
+    el('drawCommitBtn').disabled=false;
     // drawingTool.enter() resyncs layoutCanvas's size itself (see DrawingCanvasTool.js's
     // resyncViewSize()) -- app.js must not also call resizeCanvas() here, or the two would fight
     // over which one's dpr-scaled canvas.width/height sticks.
     drawingTool.enter({width:project.canvas.width,height:project.canvas.height},38*Math.max(1,devicePixelRatio||1),mode);
-    el('drawModeHint').style.display='';
-    el('drawCommitBtn').style.display='';
-    el('drawCommitBtn').disabled=false;
     el('status').textContent='Drawing mode: drag on the canvas to draw a shape, then click Commit Shape.';
   }else{
     drawingTool.exit();
