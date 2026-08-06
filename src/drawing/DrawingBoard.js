@@ -146,11 +146,14 @@ export function flattenPathToContour(path, flattenToleranceMm) {
  * Build a 'path' layer object from a flattened contour -- the exact shape app.js's Boolean
  * Operations code already constructs for its own results (`newLayer`), so it can be pushed into
  * project.layers and run through GeometryEngine.generatePathLayout()/updateAll() completely
- * unchanged.
+ * unchanged. `index` disambiguates ids when several layers are built in the same synchronous loop
+ * (multiple shapes committed at once) and would otherwise collide on the same Date.now()
+ * millisecond -- the same `${type}${Date.now()}${i}` convention app.js's own Alt-drag-duplicate
+ * already uses for the identical reason.
  */
-export function createPathLayerFromContour(flattened, { stoneSize, gap, color, pathName }) {
+export function createPathLayerFromContour(flattened, { stoneSize, gap, color, pathName, index = 0 }) {
   return {
-    id: 'path' + Date.now(),
+    id: 'path' + Date.now() + index,
     type: 'path',
     visible: true,
     pathName,
