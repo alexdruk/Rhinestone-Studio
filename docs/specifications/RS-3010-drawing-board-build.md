@@ -14,7 +14,12 @@ in the canvas, replacing the retired RS-1015 Design Library (`src/library/**`, f
 ## Status
 
 Design approved. Implementation in progress, broken into steps (Step 1 shipped freehand drawing;
-Step 2a adds the multi-shape data model, rectangle/ellipse presets, and select/move/delete).
+Step 2a adds the multi-shape data model, rectangle/ellipse presets, and select/move/delete; Step 2b
+adds the slot preset). Slot and polygon, originally bundled as one "Step 2b" scope, were split into
+their own steps after Step 2a's review: slot reuses rect/ellipse's drag-to-preview interaction
+shape (just new arc math), while polygon is a genuinely different click-to-add-vertex interaction
+model, and bundling them risked repeating Step 2a's experience of debugging two unrelated things at
+once. Step 2b covers slot only; polygon is now Step 2c.
 
 ## Why this milestone / ID
 
