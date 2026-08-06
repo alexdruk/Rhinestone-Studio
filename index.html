@@ -192,6 +192,13 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .workspace-canvas-area.dual{display:flex;gap:var(--space-3);padding:var(--space-4)}
 .workspace-canvas-area.dual .canvas-panel{position:relative;inset:auto;flex:1 1 0;min-width:0;height:100%}
 .fitNotice{position:absolute;left:var(--space-4);bottom:var(--space-4);color:var(--color-text-muted);font-size:var(--font-size-xs);background:#ffffffe6;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:4px 9px}
+/* RS-3010 Design Step A: vertical tool rail + contextual options panel, positioned via CSS as
+   absolutely-positioned children of #panel2D (same technique .fitNotice above already uses) --
+   #layout itself never moves in the document. Coexists with the horizontal #drawToolGroup row
+   until Design Step E removes that row. */
+.design-tool-rail{position:absolute;top:var(--space-4);left:var(--space-4);z-index:5;width:112px;display:flex;flex-direction:column;gap:4px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:var(--shadow-md);padding:6px}
+.design-tool-rail button.icon-btn{width:100%;height:auto;justify-content:flex-start;gap:6px;padding:6px 8px;font-size:12px;white-space:nowrap}
+.design-tool-options-panel{position:absolute;top:var(--space-4);left:136px;right:var(--space-4);z-index:5;display:flex;align-items:center;gap:var(--space-2);min-height:28px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);padding:6px 10px;font-size:var(--font-size-xs)}
 .workspace-status{display:flex;align-items:center;gap:var(--space-4);padding:var(--space-2) var(--space-4);border-top:1px solid var(--color-border);background:var(--color-surface);font-size:var(--font-size-sm);white-space:nowrap;overflow-x:auto}
 .workspace-status b{font-weight:700}
 .workspace-status span{color:var(--color-text-muted)}
@@ -410,8 +417,6 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <button class="icon-btn" id="drawRectToggle" title="Draw a rectangle (hold Shift for a square)" aria-pressed="false">▭ Rect</button>
           <button class="icon-btn" id="drawEllipseToggle" title="Draw an ellipse (hold Shift for a circle)" aria-pressed="false">◯ Ellipse</button>
           <button class="icon-btn" id="drawSlotToggle" title="Draw a slot (drag to set length/angle, click for a default pill)" aria-pressed="false">⏢ Slot</button>
-          <label for="drawSlotWidthMm" id="drawSlotWidthField" style="display:none;margin:0 6px 0 0" title="Slot width (mm)">Width (mm)</label>
-          <input id="drawSlotWidthMm" type="number" min="0.1" step="0.5" value="6" style="display:none;width:70px">
           <button class="icon-btn" id="drawPolygonToggle" title="Draw a polygon (click to add vertices, click near the first vertex to close)" aria-pressed="false">⬠ Polygon</button>
           <span id="drawModeHint" class="hint" style="display:none">Drag to draw · Scroll to pan · Ctrl/Cmd+scroll to zoom</span>
           <button class="btn sm primary" id="drawCommitBtn" style="display:none" disabled title="Add the drawn shapes as new Path layers">Commit Shape</button>
@@ -474,6 +479,29 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
       <section class="canvas-panel" id="panel2D" aria-label="2D production canvas">
         <canvas id="layout"></canvas>
         <div class="fitNotice" id="fitNotice"></div>
+        <!-- RS-3010 Design Step A: new vertical tool rail, a second/parallel set of controls
+             alongside the existing #drawToolGroup row -- every button here calls the exact same
+             setDrawTool()/setDrawMode() functions the old row's buttons already call. Always
+             visible, matching #drawToolGroup's own actual (unchanged) always-on visibility -- both
+             need to stay clickable before drawing mode is entered, since either can be the one
+             that starts a session (the new rail's railSelectToggle is the only entry point into
+             'select' mode, so it can't be gated behind isActive without becoming unreachable). -->
+        <div class="design-tool-rail" id="designToolRail" aria-label="Design tools">
+          <button class="icon-btn" id="railSelectToggle" title="Select (click/shift-click to multi-select, drag to move)" aria-pressed="false">↖ Select</button>
+          <button class="icon-btn" id="railDrawToggle" title="Draw a custom freehand shape directly on the canvas" aria-pressed="false">✏️ Draw</button>
+          <button class="icon-btn" id="railRectToggle" title="Draw a rectangle (hold Shift for a square)" aria-pressed="false">▭ Rect</button>
+          <button class="icon-btn" id="railEllipseToggle" title="Draw an ellipse (hold Shift for a circle)" aria-pressed="false">◯ Ellipse</button>
+          <button class="icon-btn" id="railSlotToggle" title="Draw a slot (drag to set length/angle, click for a default pill)" aria-pressed="false">⏢ Slot</button>
+          <button class="icon-btn" id="railPolygonToggle" title="Draw a polygon (click to add vertices, click near the first vertex to close)" aria-pressed="false">⬠ Polygon</button>
+        </div>
+        <!-- RS-3010 Design Step A: contextual tool-options panel -- proves the new layout can host
+             per-tool controls. Currently holds only the relocated Slot width field (a DOM move, not
+             a duplicate -- same ids/wiring as before, see drawSlotWidthField/drawSlotWidthMm
+             below), same show/hide-only-while-slot-is-active logic. Future steps add more here. -->
+        <div class="design-tool-options-panel" id="designToolOptionsPanel" style="display:none" aria-label="Tool options">
+          <label for="drawSlotWidthMm" id="drawSlotWidthField" style="display:none;margin:0" title="Slot width (mm)">Width (mm)</label>
+          <input id="drawSlotWidthMm" type="number" min="0.1" step="0.5" value="6" style="display:none;width:70px">
+        </div>
       </section>
       <section class="canvas-panel" id="panel3D" aria-label="3D object preview">
         <canvas id="cup"></canvas>

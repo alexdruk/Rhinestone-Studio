@@ -3128,6 +3128,10 @@ function setDrawMode(active,mode){
     el('drawModeHint').style.display='';
     el('drawCommitBtn').style.display='';
     el('drawCommitBtn').disabled=false;
+    // RS-3010 Design Step A: the new options panel is shown/hidden on the same isActive
+    // transition as drawModeHint/drawCommitBtn above (designToolRail itself stays always-visible,
+    // like #drawToolGroup -- see its index.html comment).
+    el('designToolOptionsPanel').style.display='';
     // drawingTool.enter() resyncs layoutCanvas's size itself (see DrawingCanvasTool.js's
     // resyncViewSize()) -- app.js must not also call resizeCanvas() here, or the two would fight
     // over which one's dpr-scaled canvas.width/height sticks.
@@ -3138,6 +3142,7 @@ function setDrawMode(active,mode){
     el('drawModeHint').style.display='none';
     el('drawCommitBtn').style.display='none';
     el('drawCommitBtn').disabled=true;
+    el('designToolOptionsPanel').style.display='none';
     drawLayout();
   }
   updateDrawToolButtons();
@@ -3152,6 +3157,15 @@ function updateDrawToolButtons(){
   el('drawSlotWidthField').style.display=showSlotWidth?'':'none';
   el('drawSlotWidthMm').style.display=showSlotWidth?'':'none';
   el('drawPolygonToggle').setAttribute('aria-pressed',String(active&&mode==='polygon'));
+  // RS-3010 Design Step A: the new rail's six buttons mirror the old row's five (plus Select) --
+  // both sets must always agree on which mode is pressed, since either can be clicked during this
+  // coexistence period (removed in Design Step E).
+  el('railSelectToggle').setAttribute('aria-pressed',String(active&&mode==='select'));
+  el('railDrawToggle').setAttribute('aria-pressed',String(active&&mode==='freehand'));
+  el('railRectToggle').setAttribute('aria-pressed',String(active&&mode==='rect'));
+  el('railEllipseToggle').setAttribute('aria-pressed',String(active&&mode==='ellipse'));
+  el('railSlotToggle').setAttribute('aria-pressed',String(active&&mode==='slot'));
+  el('railPolygonToggle').setAttribute('aria-pressed',String(active&&mode==='polygon'));
 }
 function setDrawTool(mode){
   if(drawingTool.isActive){
@@ -3168,6 +3182,14 @@ el('drawEllipseToggle').onclick=()=>setDrawTool('ellipse');
 el('drawSlotToggle').onclick=()=>setDrawTool('slot');
 el('drawSlotWidthMm').oninput=()=>drawingTool.setSlotWidthMm(el('drawSlotWidthMm').value);
 el('drawPolygonToggle').onclick=()=>setDrawTool('polygon');
+// RS-3010 Design Step A: the new rail's buttons call the exact same setDrawTool() the old row's
+// buttons call above -- no new dispatch logic.
+el('railSelectToggle').onclick=()=>setDrawTool('select');
+el('railDrawToggle').onclick=()=>setDrawTool('freehand');
+el('railRectToggle').onclick=()=>setDrawTool('rect');
+el('railEllipseToggle').onclick=()=>setDrawTool('ellipse');
+el('railSlotToggle').onclick=()=>setDrawTool('slot');
+el('railPolygonToggle').onclick=()=>setDrawTool('polygon');
 // Committing constructs a 'path' layer directly per drawn shape -- the same object shape app.js's
 // Boolean Operations code already produces (RS-1012) -- and hands each to the existing
 // project.layers/updateAll() pipeline completely unchanged; no new stone-computation logic here.
