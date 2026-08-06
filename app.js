@@ -112,15 +112,6 @@ import { SNAP_TOLERANCE_MM, NUDGE_STEP_MM, NUDGE_STEP_LARGE_MM, alignLayers, dis
 // wires a Lightbox to a top-menu button or a layer-aware "which fields to show" decision. See
 // docs/specifications/UI-001-CompleteRedesign.md.
 import { Lightbox, el, parseIntOr, download, exportCanvas, syncShippingFieldsFromState, wireShippingApply } from './src/ui/index.js';
-// RS-1015 (Design Library): src/library/** is a new, pure, DOM-free module -- library item
-// creation/validation, category derivation, storage-adapter-injected CRUD/search/filter/sort, and
-// the pure clone/insert/new-project transforms over the existing ad hoc project/layer JSON. It has
-// no dependency on src/geometry/**/StoneLayout/Stone/Project/Layer and never generates stone
-// positions; app.js is the only caller, and is the only place that touches a browser-global
-// (localStorage, via createLocalStorageAdapter) or the existing engine.generate()/
-// renderProductionLayout() pipeline (reused, unmodified, for thumbnail generation). See
-// docs/specifications/RS-1015-DesignLibrary.md.
-import { DesignLibrary, createLocalStorageAdapter, createMemoryStorageAdapter, buildSelectionItemData, buildProjectItemData, buildProjectFromItem, prepareLayersForInsert, getInsertableLayers } from './src/library/index.js';
 // MONO-006 (Monogram Generator UI): the Monogram Lightbox is a plain front-end -- it never
 // generates geometry, computes layouts, fits, or detects collisions itself. All of that is
 // delegated to MonogramGenerator.generate() (MONO-005/MONO-005A), which returns ordinary project
@@ -136,8 +127,7 @@ import { MonogramGenerator, MONOGRAM_GENERATOR_FAILURE_REASONS, MONOGRAM_LAYOUTS
 // src/library/**'s exact "storage-adapter injected, browser-global only at app.js's edge" shape.
 // It knows nothing about Project/Layer/StoneLayout; app.js is the only caller, and is the only
 // place that decides *when* a meaningful edit happened (debounced below) or touches localStorage
-// (via createAutosaveLocalStorageAdapter). Aliased on import since createLocalStorageAdapter/
-// createMemoryStorageAdapter are already bound above to the Design Library's own adapters.
+// (via createAutosaveLocalStorageAdapter).
 import { AutosaveManager, createLocalStorageAdapter as createAutosaveLocalStorageAdapter, createMemoryStorageAdapter as createAutosaveMemoryStorageAdapter } from './src/persistence/index.js';
 import { validateRhsProject, toAppProjectShape, parseCatalog, search as searchGalleryCatalog, filterByCategory as filterGalleryCategory, categories as galleryCategories, featuredEntries as galleryFeaturedEntries, getEntry as getGalleryEntry } from './src/gallery/index.js';
 // RS-1012 (Vector Boolean Operations): Union/Subtract/Intersect/Exclude over the current
@@ -2722,8 +2712,6 @@ const lightboxes={
   shipping:new Lightbox('lightboxShipping',{primary:true,onOpen(){syncShippingFieldsFromState()}}),
   settings:new Lightbox('lightboxSettings',{primary:true,onOpen(){syncSettingsFieldsFromState()}}),
   help:new Lightbox('lightboxHelp',{primary:true}),
-  library:new Lightbox('lightboxLibrary',{primary:true,onOpen(){onLibraryOpen()}}),
-  libraryConfirm:new Lightbox('lightboxLibraryConfirm'),
   gallery:new Lightbox('lightboxGallery',{primary:true,onOpen(){onGalleryOpen()}}),
   galleryPreview:new Lightbox('lightboxGalleryPreview'),
   // MONO-006: no shared field group participates in this Lightbox (Frame/Layout/Letters/Font/Stone
@@ -2736,12 +2724,6 @@ const lightboxes={
 el('menuText').onclick=()=>lightboxes.text.open();
 el('menuShapes').onclick=()=>lightboxes.shapes.open();
 el('menuMonogram').onclick=()=>lightboxes.monogram.open();
-// RC-006 (Version 1.0 Feature Freeze): #menuLibrary carries the native `disabled` attribute (see
-// index.html), which makes the browser withhold click/Enter/Space activation and tab focus
-// entirely -- this handler is wired the same as every other menu item and is deliberately left
-// in place (Design Library code/tests/stored data stay intact), it is just unreachable via the UI
-// for now.
-el('menuLibrary').onclick=()=>lightboxes.library.open();
 // S-103 (Product Scope Freeze): #menuGallery carries the native `disabled` attribute (see
 // index.html), which makes the browser withhold click/Enter/Space activation and tab focus
 // entirely -- this handler is wired the same as every other menu item and is deliberately left
@@ -3080,33 +3062,13 @@ function saveProjectDownload(){el('exportProject').click()}
 el('actionSave').onclick=saveProjectDownload;
 el('saveProject').onclick=saveProjectDownload;
 
-// ---- Design Library (RS-1015): save/browse/reuse rhinestone designs. See
-// docs/specifications/RS-1015-DesignLibrary.md. A library item's `data` is never a new schema --
-// it is a verbatim, deep-cloned copy of the exact ad hoc project/layer JSON `#exportProject`/
-// `duplicateLayer()` already read and write (see `src/library/LibraryTransform.js`). Thumbnails
-// reuse the existing `engine.generate()` bridge + the permanent `renderProductionLayout()` against
-// an offscreen canvas -- the same generate-then-render call sequence `drawLayout()` already
-// performs against the live canvas, never a second rendering pipeline. Insertion/new-project reuse
-// the existing commitHistory()/updateAll()/history.clear() patterns every other layer-adding or
-// project-replacing action already uses, so undo/redo, Production Sheet, and every exporter work
-// against library-sourced layers with zero further changes. ----
-const LIBRARY_STORAGE_KEY='rhinestone-studio:design-library';
+// ---- Thumbnails (RS-2001): shared generate -> render -> capture sequence reused by the Gallery
+// for its own cards/previews -- the existing `engine.generate()` bridge + the permanent
+// `renderProductionLayout()` against an offscreen canvas, the same generate-then-render call
+// sequence `drawLayout()` already performs against the live canvas, never a second rendering
+// pipeline. ----
 const LIBRARY_THUMB_WIDTH_PX=260,LIBRARY_THUMB_HEIGHT_PX=170;
-const LIBRARY_NEW_PROJECT_DEFAULTS={defaultProduct:'mug',defaultCupColor:'#1f3556',defaultWrap:'front',projectVersion:2};
-let designLibrary;
-try{
-  designLibrary=new DesignLibrary({storageAdapter:createLocalStorageAdapter(LIBRARY_STORAGE_KEY)});
-}catch(error){
-  console.warn('Design Library: localStorage is unavailable in this environment; using in-memory storage for this session only.',error);
-  designLibrary=new DesignLibrary({storageAdapter:createMemoryStorageAdapter()});
-}
-let libraryQuery='',libraryCategory='All',librarySortDir='asc',pendingLibraryDeleteId=null;
 
-function currentSelectedLayers(){return project.layers.filter(l=>selectedLayerIds.has(l.id))}
-
-// RS-2001: generalized from the Design-Library-only generateLibraryThumbnail() so the Gallery
-// reuses the exact same generate -> render -> capture sequence for its own cards/previews, rather
-// than a second thumbnail renderer.
 async function generateProjectThumbnail(tempProject){
   try{
     const stoneLayout=await engine.generate(tempProject);
@@ -3120,159 +3082,13 @@ async function generateProjectThumbnail(tempProject){
   }
 }
 
-function updateLibrarySaveButtons(){
-  const hasSelection=selectedLayerIds.size>0;
-  el('librarySaveSelection').disabled=!hasSelection;
-  el('libraryDisabledHint').style.display=hasSelection?'none':'block';
-}
-
-function libraryFilteredSortedItems(){
-  const searched=designLibrary.search(libraryQuery);
-  const filtered=designLibrary.filterByCategory(searched,libraryCategory);
-  return designLibrary.sortByName(filtered,librarySortDir);
-}
-
-function renderLibraryGrid(){
-  const all=designLibrary.list();
-  const items=libraryFilteredSortedItems();
-  const categories=['All',...designLibrary.categories()];
-  el('libraryCategoryFilter').innerHTML=categories.map(c=>`<option value="${escapeHtml(c)}" ${c===libraryCategory?'selected':''}>${c==='All'?'All categories':escapeHtml(c)}</option>`).join('');
-  el('libraryEmptyState').style.display=all.length===0?'block':'none';
-  el('libraryNoResults').style.display=(all.length>0&&items.length===0)?'block':'none';
-  el('libraryGrid').innerHTML=items.map(item=>`<div class="library-card" data-item="${item.id}">
-      <div class="library-card-thumb">${item.thumbnail?`<img src="${item.thumbnail}" alt="Preview of ${escapeHtml(item.name)}">`:'<span class="library-card-thumb-empty">No preview</span>'}</div>
-      <div class="library-card-body">
-        <h4 data-role="name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</h4>
-        <div class="library-card-meta"><span class="library-badge">${item.kind==='project'?'Project':'Selection'}</span><span class="library-badge">${escapeHtml(item.category)}</span></div>
-      </div>
-      <div class="library-card-actions">
-        <button class="btn" data-action="insert" title="Insert into the current project">Insert</button>
-        <button class="btn" data-action="newProject" title="Start a new project from this design">New Project</button>
-        <button class="btn" data-action="rename" title="Rename this design">Rename</button>
-        <button class="btn" data-action="duplicate" title="Duplicate this design">Duplicate</button>
-        <button class="btn danger" data-action="delete" title="Delete this design">Delete</button>
-      </div>
-    </div>`).join('');
-}
-
-function onLibraryOpen(){
-  libraryQuery='';libraryCategory='All';librarySortDir='asc';
-  el('librarySearch').value='';el('librarySort').value='asc';el('libraryStatus').textContent='';
-  updateLibrarySaveButtons();
-  renderLibraryGrid();
-}
-
-async function saveProjectToLibrary(){
-  const name=el('librarySaveName').value.trim()||project.name||DEFAULT_PROJECT_NAME;
-  const data=buildProjectItemData(project);
-  const thumbnail=await generateProjectThumbnail(project);
-  designLibrary.add({kind:'project',name,data,thumbnail});
-  el('librarySaveName').value='';
-  renderLibraryGrid();
-  el('libraryStatus').textContent=`Saved "${name}" to the Design Library.`;
-}
-
-async function saveSelectionToLibrary(){
-  const layers=currentSelectedLayers();
-  if(layers.length===0)return;
-  const name=el('librarySaveName').value.trim()||'Untitled Selection';
-  const data=buildSelectionItemData(layers,project.canvas);
-  const thumbnail=await generateProjectThumbnail({...project,layers});
-  designLibrary.add({kind:'selection',name,data,thumbnail});
-  el('librarySaveName').value='';
-  renderLibraryGrid();
-  el('libraryStatus').textContent=`Saved "${name}" to the Design Library.`;
-}
-
-function insertLibraryItem(id){
-  const item=designLibrary.get(id);if(!item)return;
-  const newLayers=prepareLayersForInsert(getInsertableLayers(item));
-  commitHistory();
-  project.layers.push(...newLayers);
-  selectedLayerIds=selectMany(newLayers.map(l=>l.id));
-  selectedLayerId=newLayers[newLayers.length-1].id;
-  syncSelectedControlsFromLayer();
-  updateAll(true);
-  updateLibrarySaveButtons();
-  el('libraryStatus').textContent=`Inserted "${item.name}" (${newLayers.length} layer${newLayers.length===1?'':'s'}).`;
-}
-
-function createProjectFromLibraryItem(id){
-  const item=designLibrary.get(id);if(!item)return;
-  const built=buildProjectFromItem(item,LIBRARY_NEW_PROJECT_DEFAULTS);
-  project=validateProject(built);
-  selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);
-  // Mirrors #importProjectFile's exact "loading/replacing a project is a fresh start, not an
-  // undoable edit" history-clear + dirty-baseline-reset pattern.
-  history.clear();cleanProjectJson=JSON.stringify(project);
-  // RC-005: loading a project (Import/Open, Design Library "New Project", Gallery "Open as copy")
-  // is a fresh start -- immediately re-baseline the autosave slot to this project so a crash right
-  // after loading still recovers *this* project, not stale content from before it loaded. Also
-  // guards "never overwrite a manually saved/opened project": invalidating
-  // lastAutosavedProjectJson first forces flushAutosaveNow() to actually write (it no-ops when the
-  // live project already matches what's stored), so the old record is always replaced here, never
-  // left to linger and get offered as a stale "recovery" on some later boot.
-  lastAutosavedProjectJson=null;flushAutosaveNow();
-  syncSelectedControlsFromLayer();updateAll(true);
-  lightboxes.library.close();
-  el('status').textContent=`Started a new project from "${item.name}".`;
-}
-
-function beginRenameLibraryItem(card,id){
-  const item=designLibrary.get(id);if(!item)return;
-  const nameEl=card.querySelector('[data-role="name"]');
-  const input=document.createElement('input');
-  input.type='text';input.maxLength=80;input.value=item.name;input.className='library-rename-input';
-  nameEl.replaceWith(input);input.focus();input.select();
-  let settled=false;
-  const commit=()=>{
-    if(settled)return;settled=true;
-    const value=input.value.trim();
-    if(value&&value!==item.name){designLibrary.rename(id,value);el('libraryStatus').textContent='Renamed.'}
-    renderLibraryGrid();
-  };
-  input.addEventListener('keydown',e=>{
-    if(e.key==='Enter'){e.preventDefault();commit()}
-    else if(e.key==='Escape'){e.preventDefault();settled=true;renderLibraryGrid()}
-  });
-  input.addEventListener('blur',commit);
-}
-
-function requestDeleteLibraryItem(id){
-  const item=designLibrary.get(id);if(!item)return;
-  pendingLibraryDeleteId=id;
-  el('libraryConfirmMessage').textContent=`Delete "${item.name}" from the Design Library? This cannot be undone.`;
-  lightboxes.libraryConfirm.open();
-}
-
-el('librarySaveProject').onclick=()=>{saveProjectToLibrary()};
-el('librarySaveSelection').onclick=()=>{saveSelectionToLibrary()};
-el('librarySearch').addEventListener('input',()=>{libraryQuery=el('librarySearch').value;renderLibraryGrid()});
-el('libraryCategoryFilter').addEventListener('change',()=>{libraryCategory=el('libraryCategoryFilter').value;renderLibraryGrid()});
-el('librarySort').addEventListener('change',()=>{librarySortDir=el('librarySort').value;renderLibraryGrid()});
-el('libraryGrid').addEventListener('click',e=>{
-  const card=e.target.closest('.library-card');if(!card)return;
-  const id=card.dataset.item,action=e.target.dataset.action;
-  if(action==='insert')insertLibraryItem(id);
-  else if(action==='newProject')createProjectFromLibraryItem(id);
-  else if(action==='duplicate'){designLibrary.duplicate(id);renderLibraryGrid();el('libraryStatus').textContent='Duplicated.'}
-  else if(action==='delete')requestDeleteLibraryItem(id);
-  else if(action==='rename')beginRenameLibraryItem(card,id);
-});
-el('libraryConfirmDelete').onclick=()=>{
-  if(pendingLibraryDeleteId){designLibrary.remove(pendingLibraryDeleteId);pendingLibraryDeleteId=null;renderLibraryGrid();el('libraryStatus').textContent='Deleted.'}
-  lightboxes.libraryConfirm.close();
-};
-
 // ---- Gallery (RS-2001): a built-in, permanent, READ-ONLY set of example projects sourced from
 // examples/*.rhs + examples/manifest.json + examples/baselines.json + examples/gallery.json (the
-// curatorial metadata this milestone adds). Gallery is not the Design Library: items are never
-// renamed/duplicated/deleted, and nothing here is ever written back to examples/**. "Open Copy"
-// fetches a fixture, translates it through the existing toAppProjectShape()/validateProject()
-// bridge (src/gallery/index.js), and replaces the live project exactly like #importProjectFile
-// already does; "Save to Library" reuses buildProjectItemData()/designLibrary.add() without
-// touching the live project at all. Thumbnails reuse generateProjectThumbnail() above -- no second
-// thumbnail renderer, no second render pipeline. ----
+// curatorial metadata this milestone adds). Items are never renamed/duplicated/deleted, and
+// nothing here is ever written back to examples/**. "Open Copy" fetches a fixture, translates it
+// through the existing toAppProjectShape()/validateProject() bridge (src/gallery/index.js), and
+// replaces the live project exactly like #importProjectFile already does. Thumbnails reuse
+// generateProjectThumbnail() above -- no second thumbnail renderer, no second render pipeline. ----
 let galleryEntries=null,galleryFixtures=null,galleryLoadError=null;
 let galleryQuery='',galleryCategory='All',galleryPreviewFile=null;
 const galleryThumbnailCache=new Map();
@@ -3401,20 +3217,6 @@ async function openGalleryItemAsCopy(file){
   }
 }
 
-async function saveGalleryItemToLibrary(file){
-  const entry=getGalleryEntry(galleryEntries,file);if(!entry)return;
-  try{
-    const appProject=buildAppProjectFromGalleryFile(file,entry.title);
-    const data=buildProjectItemData(appProject);
-    const thumbnail=await generateGalleryThumbnail(file,entry.title);
-    designLibrary.add({kind:'project',name:entry.title,data,thumbnail});
-    el('galleryPreviewStatus').textContent=`Saved "${entry.title}" to the Design Library.`;
-  }catch(error){
-    console.error('Gallery: failed to save item to the Design Library',error);
-    el('galleryPreviewStatus').textContent=`Save failed: ${error.message}`;
-  }
-}
-
 el('gallerySearch').addEventListener('input',()=>{galleryQuery=el('gallerySearch').value;renderGalleryGrid()});
 el('galleryCategoryFilter').addEventListener('change',()=>{galleryCategory=el('galleryCategoryFilter').value;renderGalleryGrid()});
 el('galleryGrid').addEventListener('click',e=>{
@@ -3424,7 +3226,6 @@ el('galleryGrid').addEventListener('click',e=>{
   else if(action==='openCopy')openGalleryItemAsCopy(file);
 });
 el('galleryPreviewOpenCopy').onclick=()=>{if(galleryPreviewFile)openGalleryItemAsCopy(galleryPreviewFile)};
-el('galleryPreviewSaveToLibrary').onclick=()=>{if(galleryPreviewFile)saveGalleryItemToLibrary(galleryPreviewFile)};
 
 // ---- Shipping & Handling: local, session-scoped metadata only. Deliberately not part of
 // `project` / Project JSON / undo-redo this milestone -- see

@@ -4,8 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // RS-2001 — verifies app.js/index.html are actually wired for the Gallery, that it reuses
-// existing infrastructure (validateProject(), the Design Library's own save path, the thumbnail
-// pipeline) rather than duplicating it, and that the milestone did not touch any forbidden module.
+// existing infrastructure (validateProject(), the thumbnail pipeline) rather than duplicating it,
+// and that the milestone did not touch any forbidden module.
 // Unlike every prior milestone's own guard, `examples/` is legitimately touched here (new
 // fixtures + examples/gallery.json), so it is intentionally absent from this test's own forbidden
 // list -- see docs/specifications/RS-2001-GalleryAcceptanceSuite.md.
@@ -47,7 +47,7 @@ await test('3. the Gallery lightbox has search, category filter, and a grid cont
   assert.match(indexHtml, /gallery-readonly-hint/);
 });
 
-await test('4. the Gallery lightbox has no Save/Rename/Duplicate/Delete actions (read-only) and offers Open Copy + Save to Design Library', () => {
+await test('4. the Gallery lightbox has no Save/Rename/Duplicate/Delete actions (read-only) and offers Open Copy', () => {
   const galleryLightboxMatch = indexHtml.match(/<div class="lightbox-overlay non-modal" id="lightboxGallery">[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/);
   assert.ok(galleryLightboxMatch, 'expected to find the Gallery lightbox markup');
   const markup = galleryLightboxMatch[0];
@@ -55,7 +55,6 @@ await test('4. the Gallery lightbox has no Save/Rename/Duplicate/Delete actions 
   assert.ok(!/data-action="rename"/.test(markup), 'the Gallery grid must not offer a rename action');
   assert.ok(!/data-action="duplicate"/.test(markup), 'the Gallery grid must not offer a duplicate action');
   assert.match(indexHtml, /id="galleryPreviewOpenCopy"/);
-  assert.match(indexHtml, /id="galleryPreviewSaveToLibrary"/);
 });
 
 await test('5. app.js wires the top-menu button to open the Gallery lightbox', () => {
@@ -104,23 +103,18 @@ await test('9. "Open Copy" mirrors the existing Project-Import/Design-Library hi
   assert.match(fnMatch[0], /cleanProjectJson=JSON\.stringify\(project\)/);
 });
 
-await test('10. "Save to Design Library" reuses buildProjectItemData()/designLibrary.add(), a second storage/UI system is not introduced', () => {
-  const fnMatch = appJs.match(/async function saveGalleryItemToLibrary\(file\)\{[\s\S]*?\n\}/);
-  assert.ok(fnMatch, 'expected to find saveGalleryItemToLibrary() in app.js');
-  assert.match(fnMatch[0], /buildProjectItemData\(appProject\)/);
-  assert.match(fnMatch[0], /designLibrary\.add\(\{kind:'project'/);
-});
-
-await test('11. the Gallery source fixture is never mutated when opening a copy or saving to the Library (deep clone every time)', () => {
+await test('10. the Gallery source fixture is never mutated when opening a copy (deep clone every time)', () => {
   const fnMatch = appJs.match(/function buildAppProjectFromGalleryFile\(file,title\)\{[\s\S]*?\n\}/);
   assert.match(fnMatch[0], /const fixture=galleryFixtures\[file\]/);
   assert.match(fnMatch[0], /validateRhsProject\(fixture,file\)/, 'validateRhsProject() returns a normalized deep clone, never the input object');
 });
 
-// --- 4. No new runtime dependency ----------------------------------------------------------------
+// --- 4. No un-audited runtime dependency -------------------------------------------------------
 
-await test('12. no new npm dependency was introduced', () => {
-  assert.deepEqual(Object.keys(packageJson.dependencies).sort(), ['opentype.js', 'three']);
+await test('11. no npm dependency was introduced beyond the RS-2001/RS-3010-audited set', () => {
+  // RS-2001 introduced no new dependency. RS-3010 (drawing board build) added paper and
+  // @tarikjabiri/dxf, both exact-pinned and audited as part of that milestone's own Step 0.
+  assert.deepEqual(Object.keys(packageJson.dependencies).sort(), ['@tarikjabiri/dxf', 'opentype.js', 'paper', 'three']);
 });
 
 // --- 5. Forbidden-file guard (this milestone's own; examples/ is intentionally NOT forbidden) -----

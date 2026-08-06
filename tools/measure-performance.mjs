@@ -30,7 +30,6 @@ import { createDefaultFontProviderRegistry } from '../src/text/index.js';
 import { GeometryEngine, combineShapeSources } from '../src/geometry/index.js';
 import { stoneLayoutToSvg } from '../src/export/SvgExporter.js';
 import { productionSheetToPdf } from '../src/export/ProductionSheetExporter.js';
-import { DesignLibrary } from '../src/library/index.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
@@ -138,22 +137,6 @@ async function main() {
   report('SVG export (stoneLayoutToSvg)', svgMs, `(${exportLayout.count} stones)`);
   const pdfMs = timeMs(() => productionSheetToPdf(exportLayout, { productionWidthMm: 210, productionHeightMm: 90 }));
   report('Production Sheet PDF export', pdfMs, `(${exportLayout.count} stones)`);
-
-  console.log('\n-- Design Library at ~500 items --');
-  const lib = new DesignLibrary();
-  const addMs = timeMs(() => {
-    const kinds = ['text', 'circle', 'rectangle', 'svg', 'image', 'path'];
-    for (let i = 0; i < 500; i++) {
-      const type = kinds[i % kinds.length];
-      lib.add({ kind: 'selection', name: `Design ${i}`, data: { canvas: { width: 210, height: 90 }, layers: [{ id: `l${i}`, type, x: 0, y: 0 }] } });
-    }
-  });
-  report('add 500 items', addMs);
-  const queryMs = timeMs(() => {
-    const filtered = lib.filterByCategory(lib.search('Design 4'), 'All');
-    lib.sortByName(filtered, 'asc');
-  });
-  report('search+filter+sort over 500 items', queryMs);
 
   console.log('\n' + '='.repeat(70));
   console.log('Done. See docs/specifications/RS-2000-MVPStabilizationValidation.md for browser-measured startup/load/thumbnail timings and analysis.');

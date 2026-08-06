@@ -21,7 +21,6 @@
     "test:renderers": "node tools/run-tests.mjs --group renderers",
     "test:editing": "node tools/run-tests.mjs --group editing",
     "test:ui": "node tools/run-tests.mjs --group ui",
-    "test:design-library": "node tools/run-tests.mjs --group design-library",
     "test:history": "node tools/run-tests.mjs --group history",
     "test:release-smoke": "node tools/run-tests.mjs --group release-smoke",
     "test:documentation": "node tools/run-tests.mjs --group documentation",
@@ -31,7 +30,9 @@
     "doctor": "npm run test"
   },
   "dependencies": {
+    "@tarikjabiri/dxf": "2.8.9",
     "opentype.js": "^2.0.0",
+    "paper": "0.12.18",
     "three": "^0.169.0"
   }
 }
