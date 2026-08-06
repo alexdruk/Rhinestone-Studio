@@ -2090,9 +2090,18 @@ window.addEventListener('keydown',e=>{
   // Lightbox is open (see the matching pointerdown gate above for the full rationale). Undo/redo
   // above stay global -- they act on the whole project, not on canvas layer editing.
   if(lightboxes.monogram.isOpen)return;
-  // RS-3010 Step 1: same rule -- layer-editing shortcuts (delete, arrow-nudge) are inert while
-  // drawing mode owns the canvas, mirroring the pointerdown gate above.
-  if(drawingTool.isActive)return;
+  // RS-3010 Step 1/2a: layer-editing shortcuts (arrow-nudge) are inert while drawing mode owns
+  // the canvas, mirroring the pointerdown gate above -- but Step 2a's Delete/Backspace removes
+  // the current drawn-shape selection instead of just being blocked, so it must not fall through
+  // to the project.layers deleteLayer() path below.
+  if(drawingTool.isActive){
+    if(e.key==='Delete'||e.key==='Backspace'){
+      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;
+      e.preventDefault();
+      drawingTool.deleteSelected();
+    }
+    return;
+  }
   if(e.key==='Delete'||e.key==='Backspace'){const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;deleteLayer(selectedLayerId)}
   // RS-1009: arrow keys nudge the current multi-selection by a named mm step (NUDGE_STEP_MM,
   // src/editing/EditingConstants.js); Shift+Arrow uses the larger step. Guarded exactly like
@@ -3084,49 +3093,73 @@ if(!window.matchMedia('(min-width: 900px)').matches)setWorkspaceMode('2d',true);
 // drawLayout()). No grid toggle exists here -- see the showSafeArea declaration's comment above. ----
 el('safeAreaToggle').onclick=()=>{showSafeArea=!showSafeArea;el('safeAreaToggle').setAttribute('aria-pressed',String(showSafeArea));el('settingsSafeAreaDefault').checked=showSafeArea;drawLayout()};
 
-// ---- RS-3010 Step 1: drawing mode toggle. Entering hands layoutCanvas to drawingTool's own
-// Paper.js scene (drawingTool.enter()) exactly like the pointerdown/keydown gates above assume;
-// exiting hands it back to the normal renderer (drawLayout()). resizeCanvas() is called first so
-// drawingTool's base fit scale is computed against the canvas's *current* pixel size, the same
-// dpr-aware sizing drawLayout() itself always uses. ----
-function setDrawMode(active){
+// ---- RS-3010 Step 1/2a: drawing mode toggle group. Entering hands layoutCanvas to drawingTool's
+// own Paper.js scene (drawingTool.enter()) exactly like the pointerdown/keydown gates above
+// assume; exiting hands it back to the normal renderer (drawLayout()). resizeCanvas() is called
+// first so drawingTool's base fit scale is computed against the canvas's *current* pixel size,
+// the same dpr-aware sizing drawLayout() itself always uses.
+//
+// Step 2a: Draw/Rect/Ellipse act as one segmented toggle group -- exactly one is aria-pressed at
+// a time. Clicking the button for the tool that's already active exits drawing mode (preserves
+// Step 1's single-button toggle-off behavior); clicking a different tool while already active
+// switches mode in place via drawingTool.setMode() without re-entering (so shapes already drawn
+// this session survive the switch -- only an in-progress drag-in-flight is discarded, see
+// DrawingCanvasTool.js's setMode()). ----
+function setDrawMode(active,mode){
   if(active){
     // drawingTool.enter() resyncs layoutCanvas's size itself (see DrawingCanvasTool.js's
     // resyncViewSize()) -- app.js must not also call resizeCanvas() here, or the two would fight
     // over which one's dpr-scaled canvas.width/height sticks.
-    drawingTool.enter({width:project.canvas.width,height:project.canvas.height},38*Math.max(1,devicePixelRatio||1));
-    el('drawModeToggle').setAttribute('aria-pressed','true');
+    drawingTool.enter({width:project.canvas.width,height:project.canvas.height},38*Math.max(1,devicePixelRatio||1),mode);
     el('drawModeHint').style.display='';
     el('drawCommitBtn').style.display='';
     el('drawCommitBtn').disabled=false;
-    el('status').textContent='Drawing mode: drag on the canvas to draw a freehand shape, then click Commit Shape.';
+    el('status').textContent='Drawing mode: drag on the canvas to draw a shape, then click Commit Shape.';
   }else{
     drawingTool.exit();
-    el('drawModeToggle').setAttribute('aria-pressed','false');
     el('drawModeHint').style.display='none';
     el('drawCommitBtn').style.display='none';
     el('drawCommitBtn').disabled=true;
     drawLayout();
   }
+  updateDrawToolButtons();
 }
-el('drawModeToggle').onclick=()=>setDrawMode(!drawingTool.isActive);
-// Committing constructs a 'path' layer directly from the drawn contour -- the same object shape
-// app.js's Boolean Operations code already produces (RS-1012) -- and hands it to the existing
+function updateDrawToolButtons(){
+  const active=drawingTool.isActive,mode=drawingTool.mode;
+  el('drawModeToggle').setAttribute('aria-pressed',String(active&&mode==='freehand'));
+  el('drawRectToggle').setAttribute('aria-pressed',String(active&&mode==='rect'));
+  el('drawEllipseToggle').setAttribute('aria-pressed',String(active&&mode==='ellipse'));
+}
+function setDrawTool(mode){
+  if(drawingTool.isActive){
+    if(drawingTool.mode===mode){setDrawMode(false);return}
+    drawingTool.setMode(mode);
+    updateDrawToolButtons();
+    return;
+  }
+  setDrawMode(true,mode);
+}
+el('drawModeToggle').onclick=()=>setDrawTool('freehand');
+el('drawRectToggle').onclick=()=>setDrawTool('rect');
+el('drawEllipseToggle').onclick=()=>setDrawTool('ellipse');
+// Committing constructs a 'path' layer directly per drawn shape -- the same object shape app.js's
+// Boolean Operations code already produces (RS-1012) -- and hands each to the existing
 // project.layers/updateAll() pipeline completely unchanged; no new stone-computation logic here.
 // stoneSize/gap/color default from the currently-selected layer, the same convention
 // createShapeLayer()/the SVG-import handler above already use for a brand-new shape.
 el('drawCommitBtn').onclick=()=>{
-  if(!drawingTool.hasPath){el('status').textContent='Draw a shape first, then click Commit Shape.';return}
+  if(!drawingTool.hasCommittableShapes){el('status').textContent='Draw a shape first, then click Commit Shape.';return}
   const base=selectedLayer();
-  const layer=drawingTool.commit({stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold',pathName:'Freehand Shape'});
+  const layers=drawingTool.commit({stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold',pathName:'Drawn Shape'});
   setDrawMode(false);
-  if(!layer)return;
+  if(!layers.length)return;
   commitHistory();
-  project.layers.push(layer);
-  selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);
+  project.layers.push(...layers);
+  selectedLayerIds=selectMany(layers.map(l=>l.id));
+  selectedLayerId=layers[layers.length-1].id;
   syncSelectedControlsFromLayer();
   updateAll(true);
-  el('status').textContent=`Added "${layer.pathName}" as a new Path layer (${layer.contours[0].length} contour points).`;
+  el('status').textContent=`Added ${layers.length} shape${layers.length===1?'':'s'} as new Path layer${layers.length===1?'':'s'}.`;
 };
 // Figma-style trackpad/mouse mapping, kept out of the normal pointerdown/move/up flow entirely so
 // a drag on the canvas always draws and never pans: plain scroll pans (deltaX/deltaY), Ctrl/Cmd+
