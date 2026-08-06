@@ -21,7 +21,10 @@
  * RS-3010 Step 2a adds a `mode` concept ('freehand' | 'rect' | 'ellipse') alongside the existing
  * `isActive`, plus selection/move/delete of already-finalized shapes. Step 2b extends `mode` with
  * 'slot' (a drag-defined stadium/pill shape) using the same hit-test-first/drag-to-preview/
- * finalize interaction shape rect/ellipse already use. Selection state (the set of
+ * finalize interaction shape rect/ellipse already use. Step 2c adds 'polygon' (click-to-add-vertex,
+ * closed by clicking back near the first vertex) -- a genuinely different, multi-click interaction
+ * that takes over the pointer entirely once started, see the 'polygon' interactionKind value below.
+ * Selection state (the set of
  * selected shape ids) lives here, not in DrawingBoard.js -- per that module's own doc comment, it
  * stays a plain data model with no interaction/event concerns. This file's one Paper.js Tool
  * routes every pointer gesture through a single decision: hit an existing shape first (selection/
@@ -52,6 +55,11 @@ const MIN_BOX_DIM_MM = 1;
 // leather-craft constants) -- see the pill drawn with a plain click, width * length ratio = 18mm.
 const SLOT_DEFAULT_WIDTH_MM = 6;
 const SLOT_DEFAULT_LENGTH_RATIO = 3;
+// RS-3010 Step 2c: polygon's own click-to-add-vertex constants -- a polygon needs at least a
+// triangle before "close" is a meaningful action, and CLOSE_POLYGON_TOLERANCE_PX mirrors
+// hitTestShapeId's own screen-px-to-project-mm tolerance conversion pattern.
+const MIN_POLYGON_POINTS = 3;
+const CLOSE_POLYGON_TOLERANCE_PX = 6;
 
 /**
  * Builds a stadium/pill Path: two straight sides parallel to the a-to-b axis, offset by
@@ -100,11 +108,17 @@ export function createDrawingTool(canvasEl) {
   let dragging = false;
   let mode = 'freehand';
   let slotWidthMm = SLOT_DEFAULT_WIDTH_MM;
+  // RS-3010 Step 2c: vertices clicked so far for an in-progress polygon, project-mm paper.Points.
+  // Empty whenever interactionKind !== 'polygon'.
+  let polygonPoints = [];
   let selectedIds = clearSelection();
-  // 'draw' while a new freehand/rect/ellipse shape is mid-drag; 'move' while dragging the current
-  // selection; null when idle. Set at pointerdown, read by pointerdrag/pointerup to decide which
-  // gesture is in progress -- hit-testing at pointerdown (not the current toolbar mode) is what
-  // decides between the two, per this file's header comment.
+  // 'draw' while a new freehand/rect/ellipse/slot shape is mid-drag; 'move' while dragging the
+  // current selection; 'polygon' while a click-to-add-vertex polygon is accumulating points
+  // (RS-3010 Step 2c -- owns the pointer outright until closed or cancelled, unlike 'draw'/'move'
+  // which are re-decided fresh at every pointerdown); null when idle. Set at pointerdown, read by
+  // pointerdrag/pointerup/pointermove to decide which gesture is in progress -- hit-testing at
+  // pointerdown (not the current toolbar mode) is what decides among these, per this file's header
+  // comment.
   let interactionKind = null;
   let dragStart = null;
 
@@ -168,11 +182,50 @@ export function createDrawingTool(canvasEl) {
     }
   }
 
+  /**
+   * Discards whatever drawing gesture is currently in flight -- a rect/ellipse/slot/freehand drag
+   * preview (`board.path`) and/or an in-progress polygon's accumulated vertices. Every call site
+   * that used to just discard a drag (cancelPath(), setMode(), enter(), exit()) now routes through
+   * this so a mode switch, re-entry, or exit mid-polygon can't leave stale vertices behind.
+   */
+  function resetInProgressDrawing() {
+    board.clearPath();
+    interactionKind = null;
+    dragging = false;
+    polygonPoints = [];
+  }
+
   function attachTool() {
     if (tool) tool.remove();
     tool = new paper.Tool();
 
     tool.onMouseDown = (event) => {
+      // RS-3010 Step 2c: an in-progress polygon takes over the pointer entirely -- every click
+      // either adds a vertex or closes the shape, never falls through to hit-test/selection. Only
+      // the FIRST click of a new polygon goes through the normal dispatch below.
+      if (interactionKind === 'polygon') {
+        const closing =
+          polygonPoints.length >= MIN_POLYGON_POINTS &&
+          event.point.getDistance(polygonPoints[0]) <= CLOSE_POLYGON_TOLERANCE_PX / paper.view.zoom;
+        if (closing) {
+          board.clearPath();
+          const closedPath = new paper.Path({
+            strokeColor: STROKE_COLOR,
+            strokeWidth: STROKE_WIDTH_PX / paper.view.zoom
+          });
+          polygonPoints.forEach((point, index) => {
+            if (index === 0) closedPath.moveTo(point);
+            else closedPath.lineTo(point);
+          });
+          closedPath.closePath();
+          board.beginPath(closedPath);
+          board.finalizeShape();
+          resetInProgressDrawing();
+        } else {
+          polygonPoints.push(event.point);
+        }
+        return;
+      }
       const hitId = hitTestShapeId(event.point);
       if (hitId) {
         // Same click/shift-click/drag-preserves-group convention as the existing project.layers
@@ -197,6 +250,11 @@ export function createDrawingTool(canvasEl) {
       if (selectedIds.size) {
         selectedIds = clearSelection();
         applySelectionVisuals();
+      }
+      if (mode === 'polygon') {
+        interactionKind = 'polygon';
+        polygonPoints = [event.point];
+        return;
       }
       interactionKind = 'draw';
       dragStart = event.point;
@@ -295,6 +353,26 @@ export function createDrawingTool(canvasEl) {
       }
       interactionKind = null;
     };
+
+    // RS-3010 Step 2c: hover feedback between polygon clicks. Paper.js fires onMouseMove on
+    // button-up motion, separately from onMouseDrag (button down) -- rebuilt from scratch every
+    // move, same discard-and-recreate pattern rect/ellipse/slot's onMouseDrag preview already
+    // uses. No-op outside an in-progress polygon so it never interferes with a drag-based preset's
+    // own onMouseDrag-driven preview.
+    tool.onMouseMove = (event) => {
+      if (interactionKind !== 'polygon' || polygonPoints.length === 0) return;
+      board.clearPath();
+      const previewItem = new paper.Path({
+        strokeColor: STROKE_COLOR,
+        strokeWidth: STROKE_WIDTH_PX / paper.view.zoom
+      });
+      polygonPoints.forEach((point, index) => {
+        if (index === 0) previewItem.moveTo(point);
+        else previewItem.lineTo(point);
+      });
+      previewItem.lineTo(event.point);
+      board.beginPath(previewItem);
+    };
   }
 
   return {
@@ -307,6 +385,10 @@ export function createDrawingTool(canvasEl) {
     get hasCommittableShapes() {
       return Boolean(board.shapes.length || (board.path && board.path.segments.length >= 2));
     },
+    /** True while a polygon is mid-placement (at least one vertex clicked, not yet closed). */
+    get hasInProgressPolygon() {
+      return interactionKind === 'polygon';
+    },
     get zoom() {
       return board.zoom;
     },
@@ -316,7 +398,7 @@ export function createDrawingTool(canvasEl) {
      *   mode was entered -- fixes the base fit scale for this drawing session (matches every other
      *   viewport transform in this app in treating project.canvas as the mm reference frame).
      * @param {number} paddingPx same padding convention drawLayout() already uses (38*dpr).
-     * @param {'freehand'|'rect'|'ellipse'|'slot'} [initialMode]
+     * @param {'freehand'|'rect'|'ellipse'|'slot'|'polygon'} [initialMode]
      */
     enter(projectCanvasMm, paddingPx, initialMode = 'freehand') {
       canvasMm = projectCanvasMm;
@@ -324,8 +406,7 @@ export function createDrawingTool(canvasEl) {
       board.active = true;
       mode = initialMode;
       selectedIds = clearSelection();
-      interactionKind = null;
-      dragging = false;
+      resetInProgressDrawing();
       if (!isSetUp) {
         paper.setup(canvasEl);
         isSetUp = true;
@@ -347,13 +428,11 @@ export function createDrawingTool(canvasEl) {
      * Switch input mode without leaving drawing mode -- already-finalized shapes in board.shapes
      * are untouched; only a drag-in-flight (if any) is discarded, since the box preview belongs
      * to whichever mode was active when the drag started.
-     * @param {'freehand'|'rect'|'ellipse'|'slot'} newMode
+     * @param {'freehand'|'rect'|'ellipse'|'slot'|'polygon'} newMode
      */
     setMode(newMode) {
       mode = newMode;
-      interactionKind = null;
-      dragging = false;
-      board.clearPath();
+      resetInProgressDrawing();
     },
 
     /**
@@ -385,7 +464,7 @@ export function createDrawingTool(canvasEl) {
     exit() {
       board.clearAll();
       selectedIds = clearSelection();
-      interactionKind = null;
+      resetInProgressDrawing();
       if (tool) {
         tool.remove();
         tool = null;
@@ -418,9 +497,7 @@ export function createDrawingTool(canvasEl) {
      * Discard the in-progress stroke (if any) without leaving drawing mode.
      */
     cancelPath() {
-      board.clearPath();
-      interactionKind = null;
-      dragging = false;
+      resetInProgressDrawing();
     },
 
     /**

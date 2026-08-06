@@ -78,6 +78,10 @@ tools/rs-3010-step2a-verification-screenshots/
 # preset -- same "never a repo artifact" category
 tools/rs-3010-step2b-verification-screenshots/
 
+# RS-3010 Step 2c: ad hoc live-browser verification screenshots for the polygon
+# (click-to-add-vertex) preset -- same "never a repo artifact" category
+tools/rs-3010-step2c-verification-screenshots/
+
 # RS-3001: throwaway CSS-isolation spike prototypes (copied drawleather source slices +
 # harness/comparison scripts) -- findings are captured in
 # docs/specifications/RS-3001-css-isolation-addendum.md, the prototype code itself is never a
