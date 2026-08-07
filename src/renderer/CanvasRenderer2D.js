@@ -105,7 +105,7 @@ export function drawGrid(ctx, boundingBoxMm, transform) {
   for (let x = gx0; x <= gx1; x += 5) { ctx.beginPath(); ctx.moveTo(ox + x * s, oy + gy0 * s); ctx.lineTo(ox + x * s, oy + gy1 * s); ctx.stroke(); }
   for (let y = gy0; y <= gy1; y += 5) { ctx.beginPath(); ctx.moveTo(ox + gx0 * s, oy + y * s); ctx.lineTo(ox + gx1 * s, oy + y * s); ctx.stroke(); }
 
-  ctx.strokeStyle = '#d2dae8';
+  ctx.strokeStyle = '#bcd6ff';
   ctx.lineWidth = 1.5;
   for (let x = Math.floor(gx0 / 20) * 20; x <= gx1; x += 20) { ctx.beginPath(); ctx.moveTo(ox + x * s, oy + gy0 * s); ctx.lineTo(ox + x * s, oy + gy1 * s); ctx.stroke(); }
   for (let y = Math.floor(gy0 / 20) * 20; y <= gy1; y += 20) { ctx.beginPath(); ctx.moveTo(ox + gx0 * s, oy + y * s); ctx.lineTo(ox + gx1 * s, oy + y * s); ctx.stroke(); }
