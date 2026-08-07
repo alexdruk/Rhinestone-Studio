@@ -188,6 +188,12 @@ const HISTORY_MAX_SIZE=100;
 // RS-1009: arrow key -> unit direction vector (mm), scaled by NUDGE_STEP_MM/NUDGE_STEP_LARGE_MM
 // (src/editing/EditingConstants.js) at keydown time depending on Shift.
 const ARROW_KEY_DELTAS={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
+// RS-3010 Design Step B: single-letter drawing-tool shortcuts, matching the rail buttons'
+// setDrawTool() modes exactly -- V/R/E/S mirror this app's own tool labels; B=Draw follows
+// Photoshop's Brush convention (more recognizable than an arbitrary "D"); G=Polygon deliberately
+// reserves P for a future Bezier Pen tool (Illustrator/Figma's near-universal "Pen" binding), per
+// Sasha's own roadmap for this rail.
+const DRAW_TOOL_SHORTCUT_KEYS={v:'select',b:'freehand',r:'rect',e:'ellipse',s:'slot',g:'polygon'};
 // RS-1005: pixels-per-mm used only when rasterizing the Production Sheet SVG to PNG. Fixed and
 // documented (not derived from devicePixelRatio/viewport fit) so the PNG's pixel dimensions are
 // always a clean, undistorted multiple of the page's mm size -- never a fit-to-viewport scale.
@@ -2108,6 +2114,24 @@ window.addEventListener('keydown',e=>{
       e.preventDefault();
       drawingTool.cancelPath();
     }
+    // RS-3010 Design Step B: plain-keypress tool shortcuts (no Cmd/Ctrl/Alt/Shift) -- calls the
+    // exact same setDrawTool() the rail buttons use, no new dispatch path. Guarded like
+    // Delete/Backspace above so typing in the Slot width field never gets hijacked.
+    if(!mod&&!e.altKey&&!e.shiftKey&&DRAW_TOOL_SHORTCUT_KEYS[key]){
+      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;
+      e.preventDefault();
+      setDrawTool(DRAW_TOOL_SHORTCUT_KEYS[key]);
+    }
+    // RS-3010 Design Step B: space-held temporary pan. e.repeat filters OS key-repeat spam (so
+    // setSpaceHeld(true) fires once per physical press, not per repeat tick); same input-focus
+    // guard as the shortcuts/Delete above so a space typed into the Slot width field is never
+    // hijacked. Matching keyup listener (below, outside this isActive block since a key can be
+    // released after focus/mode changes) ends the hold.
+    if(e.code==='Space'&&!e.repeat){
+      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;
+      e.preventDefault();
+      drawingTool.setSpaceHeld(true);
+    }
     return;
   }
   if(e.key==='Delete'||e.key==='Backspace'){const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;deleteLayer(selectedLayerId)}
@@ -2115,6 +2139,14 @@ window.addEventListener('keydown',e=>{
   // src/editing/EditingConstants.js); Shift+Arrow uses the larger step. Guarded exactly like
   // Delete/Backspace above so typing in a text/number field or using a <select> is never hijacked.
   if(ARROW_KEY_DELTAS[e.key]){const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;e.preventDefault();const step=e.shiftKey?NUDGE_STEP_LARGE_MM:NUDGE_STEP_MM;const[ux,uy]=ARROW_KEY_DELTAS[e.key];nudgeSelection(ux*step,uy*step)}
+});
+// RS-3010 Design Step B: ends the spacebar-held temporary pan started by the keydown handler
+// above. Deliberately not gated on document.activeElement -- releasing a key while focus already
+// moved (e.g. tabbing away mid-hold) must still end the hold, unlike the keydown side which only
+// needs to avoid *starting* one from within an input.
+window.addEventListener('keyup',e=>{
+  if(!drawingTool.isActive)return;
+  if(e.code==='Space')drawingTool.setSpaceHeld(false);
 });
 // RS-1002: these controls edit `project` fields, so one undo step is committed per edit session
 // (opened on the first 'input' event, closed on 'change'). `rotation`/`zoom` are view-only (not
