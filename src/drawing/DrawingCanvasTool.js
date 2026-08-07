@@ -41,7 +41,13 @@ import {
   flattenPathToContour,
   createPathLayerFromContour
 } from './DrawingBoard.js';
-import { resolveDragBox, constrainSquare, resolveDragAxis, boxContainsBox } from './DrawingBoxGeometry.js';
+import {
+  resolveDragBox,
+  constrainSquare,
+  resolveDragAxis,
+  boxContainsBox,
+  snapToGrid
+} from './DrawingBoxGeometry.js';
 import { selectOnly, toggleSelection, clearSelection, selectMany } from '../editing/Selection.js';
 
 const STROKE_COLOR = '#1a56d6';
@@ -202,6 +208,16 @@ export function createDrawingTool(canvasEl) {
   let resizeHandle = null;
   let resizeShapeId = null;
   let resizeStartBounds = null;
+  // RS-3010 Step 2e: move's own grid-snap state -- event.delta (used by the translate() loop below)
+  // is incremental per-frame, too small to snap against a 5mm grid directly. Instead this tracks an
+  // absolute anchor (the specific shape clicked, moveAnchorShapeId) from its pre-drag bounds
+  // (moveAnchorStartBounds) and total raw offset since move-start (moveStartPoint), so each frame
+  // can snap the anchor's total offset and derive just the incremental delta still owed
+  // (moveAppliedOffset) -- see onMouseDrag's 'move' branch below.
+  let moveStartPoint = null;
+  let moveAnchorShapeId = null;
+  let moveAnchorStartBounds = null;
+  let moveAppliedOffset = null;
   // RS-3010 Design Step B: spacebar-held temporary pan, independent of `mode` -- `panning` is only
   // true while space is held AND the mouse is also down (an actual pan drag in progress).
   let spaceHeld = false;
@@ -402,6 +418,10 @@ export function createDrawingTool(canvasEl) {
     resizeHandle = null;
     resizeShapeId = null;
     resizeStartBounds = null;
+    moveStartPoint = null;
+    moveAnchorShapeId = null;
+    moveAnchorStartBounds = null;
+    moveAppliedOffset = null;
     interactionKind = null;
     dragging = false;
     polygonPoints = [];
@@ -444,7 +464,10 @@ export function createDrawingTool(canvasEl) {
           board.finalizeShape();
           resetInProgressDrawing();
         } else {
-          polygonPoints.push(event.point);
+          // RS-3010 Step 2e: the vertex itself snaps to the grid; the closing-distance check above
+          // deliberately used the raw event.point instead, since that's a proximity/intent
+          // heuristic, not a geometry placement.
+          polygonPoints.push(snapToGrid(event.point, GRID_MINOR_INTERVAL_MM));
         }
         return;
       }
@@ -480,6 +503,14 @@ export function createDrawingTool(canvasEl) {
           updateResizeHandles();
         }
         interactionKind = 'move';
+        // RS-3010 Step 2e: hitId (the specific shape actually clicked, even within a
+        // multi-selection) is the natural anchor for a group drag -- see the moveStartPoint
+        // cluster's own doc comment above for why this tracks an absolute anchor instead of
+        // snapping event.delta directly.
+        moveStartPoint = event.point;
+        moveAnchorShapeId = hitId;
+        moveAnchorStartBounds = board.getShape(hitId).item.bounds.clone();
+        moveAppliedOffset = { x: 0, y: 0 };
         return;
       }
       // Empty canvas: clear any existing selection and start a new shape per the active mode.
@@ -499,7 +530,7 @@ export function createDrawingTool(canvasEl) {
       }
       if (mode === 'polygon') {
         interactionKind = 'polygon';
-        polygonPoints = [event.point];
+        polygonPoints = [snapToGrid(event.point, GRID_MINOR_INTERVAL_MM)];
         return;
       }
       interactionKind = 'draw';
@@ -512,6 +543,10 @@ export function createDrawingTool(canvasEl) {
         });
         path.add(event.point);
         board.beginPath(path);
+      } else if (mode === 'rect' || mode === 'ellipse' || mode === 'slot') {
+        // RS-3010 Step 2e: snap the drag's start corner/axis-endpoint -- freehand deliberately
+        // excluded (snapping every point of a hand-drawn stroke would produce a jagged line).
+        dragStart = snapToGrid(dragStart, GRID_MINOR_INTERVAL_MM);
       }
       // rect/ellipse/slot: the live preview item is created lazily in onMouseDrag below -- a
       // zero-size box (or zero-length axis, for slot) at mousedown has nothing meaningful to show
@@ -551,24 +586,49 @@ export function createDrawingTool(canvasEl) {
         return;
       }
       if (interactionKind === 'move') {
+        // RS-3010 Step 2e: snap the anchor shape's total offset since move-start to the grid, then
+        // apply only the incremental delta still owed this frame -- every selected shape moves by
+        // that same delta, preserving their relative positions, while the anchor's own bounds land
+        // exactly on a grid multiple.
+        const totalOffset = {
+          x: event.point.x - moveStartPoint.x,
+          y: event.point.y - moveStartPoint.y
+        };
+        const rawAnchorPos = {
+          x: moveAnchorStartBounds.left + totalOffset.x,
+          y: moveAnchorStartBounds.top + totalOffset.y
+        };
+        const snappedAnchorPos = snapToGrid(rawAnchorPos, GRID_MINOR_INTERVAL_MM);
+        const snappedTotalOffset = {
+          x: snappedAnchorPos.x - moveAnchorStartBounds.left,
+          y: snappedAnchorPos.y - moveAnchorStartBounds.top
+        };
+        const incrementalDelta = new paper.Point(
+          snappedTotalOffset.x - moveAppliedOffset.x,
+          snappedTotalOffset.y - moveAppliedOffset.y
+        );
         for (const id of selectedIds) {
           const shape = board.getShape(id);
-          if (shape) shape.item.translate(event.delta);
+          if (shape) shape.item.translate(incrementalDelta);
         }
+        moveAppliedOffset = snappedTotalOffset;
         updateResizeHandles();
         return;
       }
       if (interactionKind === 'resize') {
         const shape = board.getShape(resizeShapeId);
         if (!shape) return;
+        // RS-3010 Step 2e: resize already uses absolute event.point (not a delta), so snapping it
+        // once up front is enough -- the assignments below just consume the snapped version.
+        const snappedPoint = snapToGrid(event.point, GRID_MINOR_INTERVAL_MM);
         let x0 = resizeStartBounds.left;
         let y0 = resizeStartBounds.top;
         let x1 = resizeStartBounds.right;
         let y1 = resizeStartBounds.bottom;
-        if (resizeHandle.includes('w')) x0 = event.point.x;
-        if (resizeHandle.includes('e')) x1 = event.point.x;
-        if (resizeHandle.includes('n')) y0 = event.point.y;
-        if (resizeHandle.includes('s')) y1 = event.point.y;
+        if (resizeHandle.includes('w')) x0 = snappedPoint.x;
+        if (resizeHandle.includes('e')) x1 = snappedPoint.x;
+        if (resizeHandle.includes('n')) y0 = snappedPoint.y;
+        if (resizeHandle.includes('s')) y1 = snappedPoint.y;
         const width = Math.max(RESIZE_MIN_DIM_MM, Math.abs(x1 - x0));
         const height = Math.max(RESIZE_MIN_DIM_MM, Math.abs(y1 - y0));
         shape.item.bounds = new paper.Rectangle(Math.min(x0, x1), Math.min(y0, y1), width, height);
@@ -594,7 +654,8 @@ export function createDrawingTool(canvasEl) {
         return;
       }
       if (mode === 'slot') {
-        const { a, b } = resolveDragAxis(dragStart, event.point);
+        const snappedPoint = snapToGrid(event.point, GRID_MINOR_INTERVAL_MM);
+        const { a, b } = resolveDragAxis(dragStart, snappedPoint);
         board.clearPath();
         const previewItem = buildSlotPreview(a, b, slotWidthMm);
         previewItem.strokeColor = STROKE_COLOR;
@@ -605,8 +666,12 @@ export function createDrawingTool(canvasEl) {
       // rect/ellipse live preview: rebuilt from scratch every drag event from resolveDragBox(),
       // optionally Shift-constrained to a square/circle. Cheap enough (a handful of segments) to
       // just discard-and-recreate rather than resize the existing item in place.
+      // RS-3010 Step 2e: snap AFTER Shift-constrain, not before -- constrainSquare must operate on
+      // the raw drag point to produce a mathematically exact square/circle; snapping first would
+      // let the two axes round to slightly different magnitudes before constraining.
       const current = event.modifiers.shift ? constrainSquare(dragStart, event.point) : event.point;
-      const box = resolveDragBox(dragStart, current);
+      const snappedCurrent = snapToGrid(current, GRID_MINOR_INTERVAL_MM);
+      const box = resolveDragBox(dragStart, snappedCurrent);
       board.clearPath();
       const rect = new paper.Rectangle(box.left, box.top, box.width, box.height);
       const previewItem = mode === 'rect' ? new paper.Path.Rectangle(rect) : new paper.Path.Ellipse(rect);
@@ -623,6 +688,10 @@ export function createDrawingTool(canvasEl) {
       }
       if (interactionKind === 'move') {
         interactionKind = null;
+        moveStartPoint = null;
+        moveAnchorShapeId = null;
+        moveAnchorStartBounds = null;
+        moveAppliedOffset = null;
         return;
       }
       if (interactionKind === 'resize') {
@@ -720,7 +789,7 @@ export function createDrawingTool(canvasEl) {
         if (index === 0) previewItem.moveTo(point);
         else previewItem.lineTo(point);
       });
-      previewItem.lineTo(event.point);
+      previewItem.lineTo(snapToGrid(event.point, GRID_MINOR_INTERVAL_MM));
       board.beginPath(previewItem);
     };
   }
@@ -950,6 +1019,41 @@ export function createDrawingTool(canvasEl) {
      */
     debugHitTestShapeId(xMm, yMm) {
       return hitTestShapeId(new paper.Point(xMm, yMm));
+    },
+
+    /**
+     * QA/verification-only, read-only -- same precedent as debugGrid/debugHitTestShapeId above.
+     * RS-3010 Step 2e: exposes every finalized shape's exact project-mm bounds and path segment
+     * points, so grid-snap verification can assert exact numeric coordinates instead of only
+     * inferring alignment from a screenshot.
+     */
+    get debugShapes() {
+      return board.listShapes().map((shape) => ({
+        id: shape.id,
+        bounds: {
+          left: shape.item.bounds.left,
+          top: shape.item.bounds.top,
+          width: shape.item.bounds.width,
+          height: shape.item.bounds.height
+        },
+        points: shape.item.segments
+          ? shape.item.segments.map((segment) => ({ x: segment.point.x, y: segment.point.y }))
+          : null
+      }));
+    },
+
+    /**
+     * QA/verification-only, read-only -- same precedent as debugGrid/debugHitTestShapeId/
+     * debugShapes above. RS-3010 Step 2e: exposes Paper.js's own project-mm-to-view-px transform so
+     * grid-snap verification can dispatch real mouse events at precise, deliberately off-grid mm
+     * targets instead of guessing pixel coordinates.
+     * @param {number} xMm
+     * @param {number} yMm
+     * @returns {{x:number,y:number}} CSS-pixel coordinates within canvasEl.
+     */
+    debugProjectToViewPx(xMm, yMm) {
+      const viewPoint = paper.view.projectToView(new paper.Point(xMm, yMm));
+      return { x: viewPoint.x, y: viewPoint.y };
     }
   };
 }
