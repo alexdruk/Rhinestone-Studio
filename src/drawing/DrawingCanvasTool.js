@@ -41,12 +41,18 @@ import {
   flattenPathToContour,
   createPathLayerFromContour
 } from './DrawingBoard.js';
-import { resolveDragBox, constrainSquare, resolveDragAxis } from './DrawingBoxGeometry.js';
-import { selectOnly, toggleSelection, clearSelection } from '../editing/Selection.js';
+import { resolveDragBox, constrainSquare, resolveDragAxis, boxContainsBox } from './DrawingBoxGeometry.js';
+import { selectOnly, toggleSelection, clearSelection, selectMany } from '../editing/Selection.js';
 
 const STROKE_COLOR = '#1a56d6';
 const SELECTED_STROKE_COLOR = '#5b9dff';
 const STROKE_WIDTH_PX = 2;
+// Design Step C: marquee's own visual, deliberately distinct from STROKE_COLOR/
+// SELECTED_STROKE_COLOR -- semi-transparent fill + border reads unambiguously as "a selection
+// box" rather than "a shape being drawn" (the standard Photoshop/Figma/Illustrator convention).
+const MARQUEE_FILL_COLOR = 'rgba(91, 157, 255, 0.15)';
+const MARQUEE_STROKE_COLOR = '#5b9dff';
+const MARQUEE_STROKE_WIDTH_PX = 1;
 const SIMPLIFY_TOLERANCE_MM = 0.35;
 const FLATTEN_TOLERANCE_MM = 0.25;
 const PAN_WHEEL_TO_MM = 1;
@@ -124,6 +130,12 @@ export function createDrawingTool(canvasEl) {
   // comment.
   let interactionKind = null;
   let dragStart = null;
+  // Design Step C: the live marquee-select rectangle, a throwaway Paper.js Item added directly to
+  // paper.project.activeLayer -- NEVER routed through board.beginPath()/clearPath()/
+  // finalizeShape(), since a selection rectangle must never become a committable shape. Rebuilt
+  // from scratch every drag frame (onMouseDrag), removed on mouseup/Escape/mode-switch. Non-null
+  // only while interactionKind === 'marquee'.
+  let marqueeItem = null;
   // RS-3010 Design Step B: spacebar-held temporary pan, independent of `mode` -- `panning` is only
   // true while space is held AND the mouse is also down (an actual pan drag in progress).
   let spaceHeld = false;
@@ -214,6 +226,10 @@ export function createDrawingTool(canvasEl) {
    */
   function resetInProgressDrawing() {
     board.clearPath();
+    if (marqueeItem) {
+      marqueeItem.remove();
+      marqueeItem = null;
+    }
     interactionKind = null;
     dragging = false;
     polygonPoints = [];
@@ -284,10 +300,13 @@ export function createDrawingTool(canvasEl) {
         selectedIds = clearSelection();
         applySelectionVisuals();
       }
-      // Design Step A: Select is a real, inert mode -- a drag on empty canvas does nothing yet
-      // (Design Step C adds marquee-select here). Must not fall through to the 'draw' branch
-      // below, which would start a freehand stroke.
+      // Design Step C: Select's empty-canvas drag starts a marquee. The marquee visual itself is
+      // built lazily in onMouseDrag (mirrors rect/ellipse/slot's own "nothing meaningful to show
+      // at a zero-size box" reasoning above). No Shift-to-add here -- the unconditional
+      // clear-selection above already covers every marquee drag, same as a plain click.
       if (mode === 'select') {
+        interactionKind = 'marquee';
+        dragStart = event.point;
         return;
       }
       if (mode === 'polygon') {
@@ -330,6 +349,18 @@ export function createDrawingTool(canvasEl) {
         }
         return;
       }
+      if (interactionKind === 'marquee') {
+        // Same discard-and-recreate pattern rect/ellipse/slot's preview already uses -- cheap
+        // enough to just rebuild every frame. Never touches board.path/board.shapes.
+        if (marqueeItem) marqueeItem.remove();
+        const box = resolveDragBox(dragStart, event.point);
+        const rect = new paper.Rectangle(box.left, box.top, box.width, box.height);
+        marqueeItem = new paper.Path.Rectangle(rect);
+        marqueeItem.fillColor = MARQUEE_FILL_COLOR;
+        marqueeItem.strokeColor = MARQUEE_STROKE_COLOR;
+        marqueeItem.strokeWidth = MARQUEE_STROKE_WIDTH_PX / paper.view.zoom;
+        return;
+      }
       if (interactionKind !== 'draw') return;
       if (mode === 'freehand') {
         if (!dragging || !board.path) return;
@@ -365,6 +396,36 @@ export function createDrawingTool(canvasEl) {
         return;
       }
       if (interactionKind === 'move') {
+        interactionKind = null;
+        return;
+      }
+      if (interactionKind === 'marquee') {
+        // A marquee below MIN_BOX_DIM_MM is just a click -- the existing clear-selection-on-
+        // empty-click behavior in onMouseDown already handled that, nothing further to apply here.
+        if (
+          marqueeItem &&
+          marqueeItem.bounds.width > MIN_BOX_DIM_MM &&
+          marqueeItem.bounds.height > MIN_BOX_DIM_MM
+        ) {
+          const marqueeBox = {
+            left: marqueeItem.bounds.left,
+            top: marqueeItem.bounds.top,
+            width: marqueeItem.bounds.width,
+            height: marqueeItem.bounds.height
+          };
+          const containedIds = board
+            .listShapes()
+            .filter((shape) => boxContainsBox(marqueeBox, shape.item.bounds))
+            .map((shape) => shape.id);
+          if (containedIds.length) {
+            selectedIds = selectMany(containedIds);
+            applySelectionVisuals();
+          }
+        }
+        if (marqueeItem) {
+          marqueeItem.remove();
+          marqueeItem = null;
+        }
         interactionKind = null;
         return;
       }
