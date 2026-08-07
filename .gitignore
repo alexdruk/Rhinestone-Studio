@@ -102,6 +102,10 @@ tools/rs-3010-design-step-d-verification-screenshots/
 # integration pass across Design Steps A-D -- same "never a repo artifact" category
 tools/rs-3010-design-step-e-verification-screenshots/
 
+# RS-3010 Step 2d: ad hoc live-browser verification screenshots for the Design canvas's own
+# background grid -- same "never a repo artifact" category
+tools/rs-3010-step2d-verification-screenshots/
+
 # RS-3001: throwaway CSS-isolation spike prototypes (copied drawleather source slices +
 # harness/comparison scripts) -- findings are captured in
 # docs/specifications/RS-3001-css-isolation-addendum.md, the prototype code itself is never a
