@@ -420,21 +420,42 @@ export function createDrawingTool(canvasEl) {
   }
 
   /**
+   * RS-3010 Step 2f correction: resolves an already angle-snapped point WITHOUT falling back to
+   * grid-snap. Grid-snap rounds x and y independently to the nearest GRID_MINOR_INTERVAL_MM, which
+   * does not preserve an arbitrary angle -- confirmed via live instrumentation: a point angle-
+   * snapped to exactly 15deg measured 17.1deg after the original (buggy) constrain-then-
+   * resolveSnappedPoint order ran grid-snap on top of it. Vertex-snap still applies here (its
+   * targets are sparse/specific, not a dense always-on rounding grid, so it only perturbs the angle
+   * when a real nearby vertex justifies it -- an accepted trade-off); when no vertex candidate is
+   * within tolerance, `angleSnappedPoint` is returned exactly as-is, preserving the exact
+   * constrained angle.
+   * @param {{x:number,y:number}} angleSnappedPoint
+   * @param {string|null} excludeShapeId
+   * @returns {{x:number,y:number}}
+   */
+  function resolveAngleSnappedPoint(angleSnappedPoint, excludeShapeId) {
+    return findNearestVertexSnap(angleSnappedPoint, excludeShapeId) || angleSnappedPoint;
+  }
+
+  /**
    * RS-3010 Step 2f: resolves a candidate polygon vertex position from the last-placed vertex
    * (`polygonPoints[polygonPoints.length - 1]`) -- shared by the vertex-placement branch
    * (onMouseDown) and the hover-preview branch (onMouseMove) so the two can never disagree for the
    * same cursor position and Shift state. Only ever called once polygonPoints has at least one
-   * point (the pending edge's anchor). Shift-gated angle-snap (constrain direction, keep distance)
-   * runs first, then position-snap (vertex-else-grid) resolves the result -- the same
-   * constrain-then-snap order Step 2e's rect/ellipse Shift-constrain already established.
+   * point (the pending edge's anchor). Step 2f correction: when Shift is held, angle-snap runs
+   * first and the result resolves through vertex-snap-or-as-is (resolveAngleSnappedPoint), NOT
+   * vertex-else-grid -- grid-snap would corrupt the constrained angle (see that function's own
+   * doc comment). Without Shift, behavior is unchanged: plain vertex-else-grid.
    * @param {paper.Point} rawPoint
    * @param {boolean} shiftHeld
    * @returns {{x:number,y:number}}
    */
   function resolvePolygonVertexPoint(rawPoint, shiftHeld) {
     const from = polygonPoints[polygonPoints.length - 1];
-    const target = shiftHeld ? snapAngle(from, rawPoint, ROTATION_SNAP_STEP_DEG) : rawPoint;
-    return resolveSnappedPoint(target, null);
+    if (shiftHeld) {
+      return resolveAngleSnappedPoint(snapAngle(from, rawPoint, ROTATION_SNAP_STEP_DEG), null);
+    }
+    return resolveSnappedPoint(rawPoint, null);
   }
 
   /** Repaints every finalized shape's strokeColor to reflect the current selection. */
@@ -730,13 +751,13 @@ export function createDrawingTool(canvasEl) {
       }
       if (mode === 'slot') {
         // Step 2f: Shift constrains the axis direction to a 15-degree multiple first (keeping
-        // distance from dragStart), then the result -- constrained or not -- resolves through
-        // vertex-else-grid same as every other draw-mode endpoint (constrain-then-snap order, per
-        // Step 2e's rect/ellipse Shift-constrain precedent).
-        const axisEndpoint = event.modifiers.shift
-          ? snapAngle(dragStart, event.point, ROTATION_SNAP_STEP_DEG)
-          : event.point;
-        const snappedPoint = resolveSnappedPoint(axisEndpoint, null);
+        // distance from dragStart). Step 2f correction: the constrained result then resolves
+        // through vertex-snap-or-as-is (resolveAngleSnappedPoint), NOT vertex-else-grid --
+        // grid-snap rounds x/y independently and does not preserve an arbitrary angle (see that
+        // function's own doc comment). Without Shift, behavior is unchanged: plain vertex-else-grid.
+        const snappedPoint = event.modifiers.shift
+          ? resolveAngleSnappedPoint(snapAngle(dragStart, event.point, ROTATION_SNAP_STEP_DEG), null)
+          : resolveSnappedPoint(event.point, null);
         const { a, b } = resolveDragAxis(dragStart, snappedPoint);
         board.clearPath();
         const previewItem = buildSlotPreview(a, b, slotWidthMm);
