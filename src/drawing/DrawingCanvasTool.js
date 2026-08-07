@@ -81,6 +81,22 @@ const RESIZE_HANDLE_STROKE_WIDTH_PX = 1.75;
 const RESIZE_HANDLE_FILL_COLOR = '#ffffff';
 const RESIZE_HANDLE_STROKE_COLOR = '#1478ff';
 const RESIZE_MIN_DIM_MM = 2;
+// RS-3010 Step 2d: Design's own background grid, reproducing CanvasRenderer2D.js's drawGrid()
+// colors/intervals exactly (same minor/major distinction, same #e9eef5/#bcd6ff palette) so the
+// grid looks identical whether or not Design is active. Built once, into a dedicated paper.Layer
+// kept behind the content layer -- see buildGrid() below for the layering/activeLayer discipline.
+const GRID_MINOR_INTERVAL_MM = 5;
+const GRID_MAJOR_INTERVAL_MM = 20;
+const GRID_MINOR_COLOR = '#e9eef5';
+const GRID_MAJOR_COLOR = '#bcd6ff';
+const GRID_MINOR_STROKE_WIDTH_PX = 1;
+const GRID_MAJOR_STROKE_WIDTH_PX = 1.5;
+// Fixed extent margin (project-mm) added around the first project.canvas the grid is built for.
+// Generous relative to every product's canvas (largest is the plate's ~270mm-diameter footprint,
+// the mug wrap referenced in this step's own prompt is 257x85mm) so ordinary panning never runs
+// off the edge, while staying a one-time, bounded number of Path items (not rebuilt per pan/zoom
+// tick -- see this file's header comment on Paper.js project units and drawing-mode performance).
+const GRID_EXTENT_MARGIN_MM = 2000;
 
 /**
  * The 8 handle positions (4 corners + 4 edge midpoints) for a bounds Rectangle, in the same
@@ -143,6 +159,12 @@ function buildSlotPreview(a, b, widthMm) {
 export function createDrawingTool(canvasEl) {
   const board = new DrawingBoard();
   let isSetUp = false;
+  // RS-3010 Step 2d: contentLayer is the original default paper.Layer paper.setup() itself
+  // creates -- captured once, right after setup, so every activeLayer-restoring call below
+  // references it directly rather than re-deriving "the content layer" from current state.
+  // gridLayer is the dedicated background-grid layer built once by buildGrid(); null until then.
+  let contentLayer = null;
+  let gridLayer = null;
   let tool = null;
   let canvasMm = { width: 100, height: 100 };
   let baseScale = 1;
@@ -246,6 +268,61 @@ export function createDrawingTool(canvasEl) {
     // the real assignment right after it always actually applies.
     paper.view.viewSize = new paper.Size(1, 1);
     paper.view.viewSize = new paper.Size(rect.width, rect.height);
+  }
+
+  /**
+   * Builds Design's own background grid once, into `gridLayer` -- a dedicated paper.Layer created
+   * fresh here (never reused across sessions, since this only ever runs once per page load, guarded
+   * by `!gridLayer` at the call site). `new paper.Layer()` both inserts on top AND activates itself
+   * (Paper.js's Project#_insertItem calls the new layer's own activate() when `_created` is true --
+   * confirmed by reading paper-full.js directly, not assumed), so every line built below lands in
+   * gridLayer purely because it's the active layer at the time, then `sendToBack()` moves the whole
+   * layer behind `contentLayer` in the project's layer stack, and `contentLayer.activate()`
+   * explicitly restores it as the active layer -- the exact discipline this step's prompt calls
+   * out as the risk to get right, verified directly (not just visually) in Verification item 2.
+   *
+   * Stroke widths are converted from screen-px via `/ paper.view.zoom` at build time (this file's
+   * established screen-px-to-mm pattern -- see hitTestShapeId/updateResizeHandles/marquee above),
+   * so this must run only after applyViewport() has set the real initial zoom for this project;
+   * building it earlier (e.g. immediately after paper.setup(), while zoom is still Paper's default
+   * of 1) would bake in a wildly wrong line width for every project whose fit scale differs from 1.
+   *
+   * Extent is a fixed area in project-mm, generously larger than canvasMm (GRID_EXTENT_MARGIN_MM),
+   * built once and never rebuilt on pan/zoom -- grid lines drawn in project-mm coordinates already
+   * render correctly through Paper.js's own view transform on every pan/zoom tick for free, the
+   * same reason panBy()/applyViewport() never touch individual shape items.
+   */
+  function buildGrid() {
+    gridLayer = new paper.Layer();
+    const gx0 = Math.floor(-GRID_EXTENT_MARGIN_MM / GRID_MINOR_INTERVAL_MM) * GRID_MINOR_INTERVAL_MM;
+    const gx1 = Math.ceil((canvasMm.width + GRID_EXTENT_MARGIN_MM) / GRID_MINOR_INTERVAL_MM) * GRID_MINOR_INTERVAL_MM;
+    const gy0 = Math.floor(-GRID_EXTENT_MARGIN_MM / GRID_MINOR_INTERVAL_MM) * GRID_MINOR_INTERVAL_MM;
+    const gy1 = Math.ceil((canvasMm.height + GRID_EXTENT_MARGIN_MM) / GRID_MINOR_INTERVAL_MM) * GRID_MINOR_INTERVAL_MM;
+    const minorWidthMm = GRID_MINOR_STROKE_WIDTH_PX / paper.view.zoom;
+    const majorWidthMm = GRID_MAJOR_STROKE_WIDTH_PX / paper.view.zoom;
+
+    const addLine = (from, to, color, widthMm) => {
+      const line = new paper.Path.Line(from, to);
+      line.strokeColor = color;
+      line.strokeWidth = widthMm;
+    };
+    for (let x = gx0; x <= gx1; x += GRID_MINOR_INTERVAL_MM) {
+      addLine(new paper.Point(x, gy0), new paper.Point(x, gy1), GRID_MINOR_COLOR, minorWidthMm);
+    }
+    for (let y = gy0; y <= gy1; y += GRID_MINOR_INTERVAL_MM) {
+      addLine(new paper.Point(gx0, y), new paper.Point(gx1, y), GRID_MINOR_COLOR, minorWidthMm);
+    }
+    const mx0 = Math.floor(gx0 / GRID_MAJOR_INTERVAL_MM) * GRID_MAJOR_INTERVAL_MM;
+    const my0 = Math.floor(gy0 / GRID_MAJOR_INTERVAL_MM) * GRID_MAJOR_INTERVAL_MM;
+    for (let x = mx0; x <= gx1; x += GRID_MAJOR_INTERVAL_MM) {
+      addLine(new paper.Point(x, gy0), new paper.Point(x, gy1), GRID_MAJOR_COLOR, majorWidthMm);
+    }
+    for (let y = my0; y <= gy1; y += GRID_MAJOR_INTERVAL_MM) {
+      addLine(new paper.Point(gx0, y), new paper.Point(gx1, y), GRID_MAJOR_COLOR, majorWidthMm);
+    }
+
+    gridLayer.sendToBack();
+    contentLayer.activate();
   }
 
   /** @returns {string|null} The shapeId of the finalized shape under `point`, or null. */
@@ -682,6 +759,11 @@ export function createDrawingTool(canvasEl) {
       resetInProgressDrawing();
       if (!isSetUp) {
         paper.setup(canvasEl);
+        // Capture the original default layer paper.setup() creates -- this IS the content layer
+        // for the lifetime of the page; buildGrid() below (and re-entry/exit's own
+        // activeLayer.removeChildren() calls) rely on it staying activeLayer except transiently
+        // while buildGrid() constructs the grid layer.
+        contentLayer = paper.project.activeLayer;
         isSetUp = true;
       } else {
         paper.project.activeLayer.removeChildren();
@@ -694,6 +776,11 @@ export function createDrawingTool(canvasEl) {
       resyncViewSize();
       baseScale = drawingBaseScale(canvasMm, canvasEl.width, canvasEl.height, paddingPx);
       applyViewport();
+      // RS-3010 Step 2d: built once, after applyViewport() has set the real initial zoom (see
+      // buildGrid()'s own doc comment for why -- its stroke widths are baked in screen-px-to-mm
+      // terms at build time). Guarded on gridLayer rather than isSetUp so it can only ever run on
+      // the same first-setup pass, staying entirely absent from every re-entry.
+      if (!gridLayer) buildGrid();
       attachTool();
       updateCursor();
     },
@@ -833,6 +920,36 @@ export function createDrawingTool(canvasEl) {
       board.clearAll();
       selectedIds = clearSelection();
       return layers;
+    },
+
+    /**
+     * QA/verification-only, read-only -- mirrors window.__preview3D's own established precedent
+     * (app.js) of exposing internal state for automated verification without driving any
+     * application logic. RS-3010 Step 2d: proves the grid layer's activeLayer discipline directly
+     * (which layer is active, that it's distinct from the grid layer, and the grid layer's own
+     * item count) instead of only inferring it from a screenshot.
+     */
+    get debugGrid() {
+      return {
+        activeLayerId: paper.project.activeLayer.id,
+        contentLayerId: contentLayer ? contentLayer.id : null,
+        gridLayerId: gridLayer ? gridLayer.id : null,
+        activeLayerIsContentLayer: paper.project.activeLayer === contentLayer,
+        gridItemCount: gridLayer ? gridLayer.children.length : 0,
+        shapeCount: board.listShapes().length
+      };
+    },
+
+    /**
+     * QA/verification-only, read-only -- calls the module-private hitTestShapeId() directly by
+     * project-mm point, same precedent as debugGrid above. Used to prove a click near a grid line
+     * (where no shape exists) does not register as a shape hit.
+     * @param {number} xMm
+     * @param {number} yMm
+     * @returns {string|null}
+     */
+    debugHitTestShapeId(xMm, yMm) {
+      return hitTestShapeId(new paper.Point(xMm, yMm));
     }
   };
 }
