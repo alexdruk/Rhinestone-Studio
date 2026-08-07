@@ -405,7 +405,10 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
   <!-- ===================== CENTRAL WORKSPACE ===================== -->
   <main class="workspace" aria-label="Design workspace">
     <div class="workspace-toolbar">
-      <div class="tabs" role="tablist" aria-label="Workspace view">
+      <!-- RS-3010 Design Step A correction #2: hidden while Design mode is active (setDrawMode() in
+           app.js) -- setDrawMode(true) already forces setWorkspaceMode('2d') underneath it, so
+           showing tab buttons for views Design doesn't allow switching to is dead/confusing UI. -->
+      <div class="tabs" role="tablist" aria-label="Workspace view" id="workspaceViewTabs">
         <button class="tab active" id="viewTabDual" role="tab" aria-selected="true" title="Show the 2D Canvas and Object Preview side by side">Dual Workspace</button>
         <button class="tab" id="viewTab2D" role="tab" aria-selected="false" title="Show only the 2D Canvas">2D Canvas</button>
         <button class="tab" id="viewTab3D" role="tab" aria-selected="false" title="Show only the Object Preview">Object Preview</button>
@@ -488,13 +491,14 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <button class="icon-btn" id="railSlotToggle" title="Draw a slot (drag to set length/angle, click for a default pill)" aria-pressed="false">⏢ Slot</button>
           <button class="icon-btn" id="railPolygonToggle" title="Draw a polygon (click to add vertices, click near the first vertex to close)" aria-pressed="false">⬠ Polygon</button>
         </div>
-        <!-- RS-3010 Design Step A correction: safeAreaToggle/Grid hint relocated out of the now-
-             gone #toolbar2D toolbar-group, but NOT isActive-gated -- they're a general 2D-canvas
-             display control used while editing Text/Shapes/Monogram layers too, not something
-             specific to drawing mode, so they keep their pre-existing always-visible-while-the-2D-
-             canvas-is-shown behavior (Sasha confirmed: no new gating). -->
+        <!-- RS-3010 Design Step A correction: Grid hint relocated out of the now-gone #toolbar2D
+             toolbar-group, but NOT isActive-gated -- it's a general 2D-canvas display note relevant
+             while editing Text/Shapes/Monogram layers too, not something specific to drawing mode,
+             so it keeps its pre-existing always-visible-while-the-2D-canvas-is-shown behavior.
+             Correction #2: the safe-area toggle button that used to sit here is removed -- showSafeArea
+             is now set purely from the Settings panel's settingsSafeAreaDefault checkbox, no
+             toolbar-level per-session override remains (see app.js). -->
         <div class="design-canvas-view-group" id="designCanvasViewGroup" aria-label="Canvas view">
-          <button class="icon-btn" id="safeAreaToggle" title="Toggle safe-area guide" aria-pressed="true">▢</button>
           <span class="hint" title="The reference grid helps align stones to the canvas; it is drawn by the permanent 2D renderer and cannot be turned off in this milestone" style="cursor:help">⊞&nbsp;Grid: always on</span>
         </div>
         <!-- RS-3010 Design Step A: contextual tool-options panel -- proves the new layout can host

@@ -1195,8 +1195,8 @@ function drawLayout(){
   // owns rendering (its own autoUpdate loop) and resizeCanvas() below would fight it: changing
   // canvas.width/height resets the 2D context, wiping Paper's own devicePixelRatio ctx.scale() and
   // corrupting whatever Paper draws next. A blanket guard here (rather than patching each call
-  // site -- the window resize listener, setWorkspaceMode(), safeAreaToggle, ...) means every
-  // existing and future drawLayout() caller is automatically safe; setDrawMode(false)'s own explicit
+  // site -- the window resize listener, setWorkspaceMode(), the Settings panel's Apply handler,
+  // ...) means every existing and future drawLayout() caller is automatically safe; setDrawMode(false)'s own explicit
   // drawLayout() call runs *after* drawingTool.exit() has already flipped isActive off, so it isn't
   // blocked by this guard.
   if(drawingTool.isActive)return;
@@ -3097,13 +3097,6 @@ el('viewTab3D').onclick=()=>setWorkspaceMode('preview');
 // bottom of this file, so there is no generated layout yet to redraw.
 if(!window.matchMedia('(min-width: 900px)').matches)setWorkspaceMode('2d',true);
 
-// ---- Safe-area toggle (view-only editor state; see the showSafeArea declaration above and
-// drawLayout()). No grid toggle exists here -- see the showSafeArea declaration's comment above.
-// RS-3010 Design Step A correction: relocated into #designCanvasViewGroup (a child of #panel2D),
-// out of the removed #toolbar2D toolbar-group -- id/wiring unchanged, still always visible
-// whenever the 2D canvas is shown (not isActive-gated; used outside drawing mode too). ----
-el('safeAreaToggle').onclick=()=>{showSafeArea=!showSafeArea;el('safeAreaToggle').setAttribute('aria-pressed',String(showSafeArea));el('settingsSafeAreaDefault').checked=showSafeArea;drawLayout()};
-
 // ---- RS-3010 Step 1/2a: drawing mode toggle group. Entering hands layoutCanvas to drawingTool's
 // own Paper.js scene (drawingTool.enter()) exactly like the pointerdown/keydown gates above
 // assume; exiting hands it back to the normal renderer (drawLayout()). resizeCanvas() is called
@@ -3140,6 +3133,10 @@ function setDrawMode(active,mode){
     el('designToolOptionsPanel').style.display='';
     el('designToolRailLeft').style.display='';
     el('designToolRailRight').style.display='';
+    // RS-3010 Design Step A correction #2: setWorkspaceMode('2d') above already forces the
+    // workspace to the 2D Canvas view -- the Dual Workspace/2D Canvas/Object Preview tab row is
+    // dead UI while Design can't switch away from it, so hide the whole tab row too.
+    el('workspaceViewTabs').style.display='none';
     // drawingTool.enter() resyncs layoutCanvas's size itself (see DrawingCanvasTool.js's
     // resyncViewSize()) -- app.js must not also call resizeCanvas() here, or the two would fight
     // over which one's dpr-scaled canvas.width/height sticks.
@@ -3153,11 +3150,16 @@ function setDrawMode(active,mode){
     el('designToolOptionsPanel').style.display='none';
     el('designToolRailLeft').style.display='none';
     el('designToolRailRight').style.display='none';
+    el('workspaceViewTabs').style.display='';
     // Restores whatever workspace mode was active before this session started (setWorkspaceMode()
     // already runs updateAll(true) internally, which covers the drawLayout()/drawCup()/stats
     // refresh this branch needed anyway -- no separate drawLayout() call required).
     setWorkspaceMode(workspaceModeBeforeDrawing);
     workspaceModeBeforeDrawing=null;
+    // RS-3010 Design Step A correction #2: setDrawMode(true) above sets a "Drawing mode: ..."
+    // status message that otherwise sticks around indefinitely after leaving Design -- reset to
+    // the app's neutral status (see the two other 'Ready' resets in this file).
+    el('status').textContent='Ready';
   }
   updateDrawToolButtons();
 }
@@ -3414,7 +3416,7 @@ function syncSettingsFieldsFromState(){
   el('settingsSnapDistance').value=snapToleranceMm;el('settingsShowGuides').checked=showSnapGuides;
 }
 el('settingsApply').onclick=()=>{
-  showSafeArea=el('settingsSafeAreaDefault').checked;el('safeAreaToggle').setAttribute('aria-pressed',String(showSafeArea));
+  showSafeArea=el('settingsSafeAreaDefault').checked;
   snapEnabled=el('settingsSnapDefault').checked;el('snapEnabled').value=snapEnabled?'on':'off';
   snapToleranceMm=Math.min(5,Math.max(0.5,parseFloat(el('settingsSnapDistance').value)||SNAP_TOLERANCE_MM));
   showSnapGuides=el('settingsShowGuides').checked;
