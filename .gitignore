@@ -90,6 +90,10 @@ tools/rs-3010-design-step-a-verification-screenshots/
 # same "never a repo artifact" category
 tools/rs-3010-design-step-b-verification-screenshots/
 
+# RS-3010 Design Step C: ad hoc live-browser verification screenshots for marquee-select --
+# same "never a repo artifact" category
+tools/rs-3010-design-step-c-verification-screenshots/
+
 # RS-3001: throwaway CSS-isolation spike prototypes (copied drawleather source slices +
 # harness/comparison scripts) -- findings are captured in
 # docs/specifications/RS-3001-css-isolation-addendum.md, the prototype code itself is never a
