@@ -71,6 +71,29 @@ export function snapToGrid(point, intervalMm) {
 }
 
 /**
+ * RS-3010 Step 2f: snaps the direction from `from` to `to` to the nearest multiple of `stepDeg`,
+ * preserving the original distance between the two points -- the Shift-gated angle-constrain
+ * helper for slot's drag axis and polygon's pending edge. Same style as its siblings above: no
+ * Paper.js dependency, accepts anything shaped `{x,y}`, returns a plain object.
+ * @param {{x:number,y:number}} from
+ * @param {{x:number,y:number}} to
+ * @param {number} stepDeg
+ * @returns {{x:number,y:number}}
+ */
+export function snapAngle(from, to, stepDeg) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const distance = Math.hypot(dx, dy);
+  const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const snappedAngleDeg = Math.round(angleDeg / stepDeg) * stepDeg;
+  const snappedAngleRad = (snappedAngleDeg * Math.PI) / 180;
+  return {
+    x: from.x + Math.cos(snappedAngleRad) * distance,
+    y: from.y + Math.sin(snappedAngleRad) * distance
+  };
+}
+
+/**
  * Design Step C: full-containment test for marquee-select -- true if `inner` (e.g. a shape's
  * bounds) lies entirely within `outer` (the marquee box). Not intersection -- a shape only
  * partially covered by the marquee is excluded, per this step's simpler containment-only rule.
