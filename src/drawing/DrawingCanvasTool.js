@@ -46,7 +46,8 @@ import {
   constrainSquare,
   resolveDragAxis,
   boxContainsBox,
-  snapToGrid
+  snapToGrid,
+  snapAngle
 } from './DrawingBoxGeometry.js';
 import { selectOnly, toggleSelection, clearSelection, selectMany } from '../editing/Selection.js';
 
@@ -103,6 +104,11 @@ const GRID_MAJOR_STROKE_WIDTH_PX = 1.5;
 // off the edge, while staying a one-time, bounded number of Path items (not rebuilt per pan/zoom
 // tick -- see this file's header comment on Paper.js project units and drawing-mode performance).
 const GRID_EXTENT_MARGIN_MM = 2000;
+// RS-3010 Step 2f: same increment and Shift-gated convention as app.js's own rotate-handle
+// (`ROTATION_SNAP_STEP_DEG`, `if(e.shiftKey)rotationDeg=Math.round(...)`) -- defined locally here
+// rather than imported, since app.js has no exports and already imports createDrawingTool from
+// this file (an app.js -> this file import would be circular).
+const ROTATION_SNAP_STEP_DEG = 15;
 
 /**
  * The 8 handle positions (4 corners + 4 edge midpoints) for a bounds Rectangle, in the same
@@ -371,6 +377,66 @@ export function createDrawingTool(canvasEl) {
     return hit ? hit.name : null;
   }
 
+  /**
+   * RS-3010 Step 2f: the closest segment point, among every OTHER finalized shape in
+   * `board.listShapes()`, within tolerance of `point` -- or null if none qualifies. `excludeShapeId`
+   * lets move/resize skip the shape actually being dragged (it should never snap to its own
+   * points); pass null when there's no such shape (drawing a brand-new rect/ellipse/slot, placing
+   * a polygon vertex). Tolerance matches hitTestShapeId/hitTestResizeHandle's own
+   * `4 / paper.view.zoom` screen-px-to-project-mm convention. Accepts anything shaped `{x,y}`, not
+   * just a paper.Point -- move's rawAnchorPos is a plain object, not a live Paper.js point.
+   * @param {{x:number,y:number}} point
+   * @param {string|null} excludeShapeId
+   * @returns {{x:number,y:number}|null}
+   */
+  function findNearestVertexSnap(point, excludeShapeId) {
+    const tolerance = 4 / paper.view.zoom;
+    let nearest = null;
+    let nearestDistance = tolerance;
+    for (const shape of board.listShapes()) {
+      if (shape.id === excludeShapeId || !shape.item.segments) continue;
+      for (const segment of shape.item.segments) {
+        const distance = Math.hypot(segment.point.x - point.x, segment.point.y - point.y);
+        if (distance <= nearestDistance) {
+          nearestDistance = distance;
+          nearest = { x: segment.point.x, y: segment.point.y };
+        }
+      }
+    }
+    return nearest;
+  }
+
+  /**
+   * RS-3010 Step 2f: the single composed point-snap every one of Step 2e's bare `snapToGrid(...)`
+   * call sites now goes through -- vertex-snap (other shapes' points) takes priority over grid-snap
+   * whenever a candidate is within tolerance, falling back to Step 2e's existing grid-snap
+   * unchanged otherwise. See findNearestVertexSnap's own doc comment for `excludeShapeId`.
+   * @param {{x:number,y:number}} point
+   * @param {string|null} excludeShapeId
+   * @returns {{x:number,y:number}}
+   */
+  function resolveSnappedPoint(point, excludeShapeId) {
+    return findNearestVertexSnap(point, excludeShapeId) || snapToGrid(point, GRID_MINOR_INTERVAL_MM);
+  }
+
+  /**
+   * RS-3010 Step 2f: resolves a candidate polygon vertex position from the last-placed vertex
+   * (`polygonPoints[polygonPoints.length - 1]`) -- shared by the vertex-placement branch
+   * (onMouseDown) and the hover-preview branch (onMouseMove) so the two can never disagree for the
+   * same cursor position and Shift state. Only ever called once polygonPoints has at least one
+   * point (the pending edge's anchor). Shift-gated angle-snap (constrain direction, keep distance)
+   * runs first, then position-snap (vertex-else-grid) resolves the result -- the same
+   * constrain-then-snap order Step 2e's rect/ellipse Shift-constrain already established.
+   * @param {paper.Point} rawPoint
+   * @param {boolean} shiftHeld
+   * @returns {{x:number,y:number}}
+   */
+  function resolvePolygonVertexPoint(rawPoint, shiftHeld) {
+    const from = polygonPoints[polygonPoints.length - 1];
+    const target = shiftHeld ? snapAngle(from, rawPoint, ROTATION_SNAP_STEP_DEG) : rawPoint;
+    return resolveSnappedPoint(target, null);
+  }
+
   /** Repaints every finalized shape's strokeColor to reflect the current selection. */
   function applySelectionVisuals() {
     for (const shape of board.listShapes()) {
@@ -464,10 +530,11 @@ export function createDrawingTool(canvasEl) {
           board.finalizeShape();
           resetInProgressDrawing();
         } else {
-          // RS-3010 Step 2e: the vertex itself snaps to the grid; the closing-distance check above
-          // deliberately used the raw event.point instead, since that's a proximity/intent
-          // heuristic, not a geometry placement.
-          polygonPoints.push(snapToGrid(event.point, GRID_MINOR_INTERVAL_MM));
+          // RS-3010 Step 2e: the vertex itself snaps (Step 2f: vertex-else-grid, optionally
+          // angle-constrained first); the closing-distance check above deliberately used the raw
+          // event.point instead, since that's a proximity/intent heuristic, not a geometry
+          // placement.
+          polygonPoints.push(resolvePolygonVertexPoint(event.point, event.modifiers.shift));
         }
         return;
       }
@@ -530,7 +597,10 @@ export function createDrawingTool(canvasEl) {
       }
       if (mode === 'polygon') {
         interactionKind = 'polygon';
-        polygonPoints = [snapToGrid(event.point, GRID_MINOR_INTERVAL_MM)];
+        // Step 2f: the first vertex of a brand-new polygon has no prior point to constrain a
+        // direction against, so it's vertex-else-grid only -- no angle-snap (see
+        // resolvePolygonVertexPoint's own doc comment for the shared logic used from here on).
+        polygonPoints = [resolveSnappedPoint(event.point, null)];
         return;
       }
       interactionKind = 'draw';
@@ -546,7 +616,9 @@ export function createDrawingTool(canvasEl) {
       } else if (mode === 'rect' || mode === 'ellipse' || mode === 'slot') {
         // RS-3010 Step 2e: snap the drag's start corner/axis-endpoint -- freehand deliberately
         // excluded (snapping every point of a hand-drawn stroke would produce a jagged line).
-        dragStart = snapToGrid(dragStart, GRID_MINOR_INTERVAL_MM);
+        // Step 2f: vertex-else-grid (excludeShapeId null -- a brand-new shape has no "own" points
+        // to exclude).
+        dragStart = resolveSnappedPoint(dragStart, null);
       }
       // rect/ellipse/slot: the live preview item is created lazily in onMouseDrag below -- a
       // zero-size box (or zero-length axis, for slot) at mousedown has nothing meaningful to show
@@ -598,7 +670,9 @@ export function createDrawingTool(canvasEl) {
           x: moveAnchorStartBounds.left + totalOffset.x,
           y: moveAnchorStartBounds.top + totalOffset.y
         };
-        const snappedAnchorPos = snapToGrid(rawAnchorPos, GRID_MINOR_INTERVAL_MM);
+        // Step 2f: vertex-else-grid, excluding the anchor shape's own points (it must not snap to
+        // itself).
+        const snappedAnchorPos = resolveSnappedPoint(rawAnchorPos, moveAnchorShapeId);
         const snappedTotalOffset = {
           x: snappedAnchorPos.x - moveAnchorStartBounds.left,
           y: snappedAnchorPos.y - moveAnchorStartBounds.top
@@ -620,7 +694,8 @@ export function createDrawingTool(canvasEl) {
         if (!shape) return;
         // RS-3010 Step 2e: resize already uses absolute event.point (not a delta), so snapping it
         // once up front is enough -- the assignments below just consume the snapped version.
-        const snappedPoint = snapToGrid(event.point, GRID_MINOR_INTERVAL_MM);
+        // Step 2f: vertex-else-grid, excluding the resized shape's own points.
+        const snappedPoint = resolveSnappedPoint(event.point, resizeShapeId);
         let x0 = resizeStartBounds.left;
         let y0 = resizeStartBounds.top;
         let x1 = resizeStartBounds.right;
@@ -654,7 +729,14 @@ export function createDrawingTool(canvasEl) {
         return;
       }
       if (mode === 'slot') {
-        const snappedPoint = snapToGrid(event.point, GRID_MINOR_INTERVAL_MM);
+        // Step 2f: Shift constrains the axis direction to a 15-degree multiple first (keeping
+        // distance from dragStart), then the result -- constrained or not -- resolves through
+        // vertex-else-grid same as every other draw-mode endpoint (constrain-then-snap order, per
+        // Step 2e's rect/ellipse Shift-constrain precedent).
+        const axisEndpoint = event.modifiers.shift
+          ? snapAngle(dragStart, event.point, ROTATION_SNAP_STEP_DEG)
+          : event.point;
+        const snappedPoint = resolveSnappedPoint(axisEndpoint, null);
         const { a, b } = resolveDragAxis(dragStart, snappedPoint);
         board.clearPath();
         const previewItem = buildSlotPreview(a, b, slotWidthMm);
@@ -670,7 +752,9 @@ export function createDrawingTool(canvasEl) {
       // the raw drag point to produce a mathematically exact square/circle; snapping first would
       // let the two axes round to slightly different magnitudes before constraining.
       const current = event.modifiers.shift ? constrainSquare(dragStart, event.point) : event.point;
-      const snappedCurrent = snapToGrid(current, GRID_MINOR_INTERVAL_MM);
+      // Step 2f: vertex-else-grid -- rect/ellipse have no "direction" concept, so no angle-snap
+      // here (Shift already means square/circle-constrain for this mode, per Context).
+      const snappedCurrent = resolveSnappedPoint(current, null);
       const box = resolveDragBox(dragStart, snappedCurrent);
       board.clearPath();
       const rect = new paper.Rectangle(box.left, box.top, box.width, box.height);
@@ -789,7 +873,9 @@ export function createDrawingTool(canvasEl) {
         if (index === 0) previewItem.moveTo(point);
         else previewItem.lineTo(point);
       });
-      previewItem.lineTo(snapToGrid(event.point, GRID_MINOR_INTERVAL_MM));
+      // Step 2f: same resolvePolygonVertexPoint the eventual click uses (below, in onMouseDown) --
+      // the preview and the placed vertex must never disagree for the same cursor/Shift state.
+      previewItem.lineTo(resolvePolygonVertexPoint(event.point, event.modifiers.shift));
       board.beginPath(previewItem);
     };
   }
