@@ -920,6 +920,36 @@ export function createDrawingTool(canvasEl) {
       board.clearAll();
       selectedIds = clearSelection();
       return layers;
+    },
+
+    /**
+     * QA/verification-only, read-only -- mirrors window.__preview3D's own established precedent
+     * (app.js) of exposing internal state for automated verification without driving any
+     * application logic. RS-3010 Step 2d: proves the grid layer's activeLayer discipline directly
+     * (which layer is active, that it's distinct from the grid layer, and the grid layer's own
+     * item count) instead of only inferring it from a screenshot.
+     */
+    get debugGrid() {
+      return {
+        activeLayerId: paper.project.activeLayer.id,
+        contentLayerId: contentLayer ? contentLayer.id : null,
+        gridLayerId: gridLayer ? gridLayer.id : null,
+        activeLayerIsContentLayer: paper.project.activeLayer === contentLayer,
+        gridItemCount: gridLayer ? gridLayer.children.length : 0,
+        shapeCount: board.listShapes().length
+      };
+    },
+
+    /**
+     * QA/verification-only, read-only -- calls the module-private hitTestShapeId() directly by
+     * project-mm point, same precedent as debugGrid above. Used to prove a click near a grid line
+     * (where no shape exists) does not register as a shape hit.
+     * @param {number} xMm
+     * @param {number} yMm
+     * @returns {string|null}
+     */
+    debugHitTestShapeId(xMm, yMm) {
+      return hitTestShapeId(new paper.Point(xMm, yMm));
     }
   };
 }

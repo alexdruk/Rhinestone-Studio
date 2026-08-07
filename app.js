@@ -860,6 +860,10 @@ const engine=new GeometryEngine(permanentEngine);let project=defaultProject(),se
 // header comment for why), so constructing it eagerly here does not touch the canvas until the
 // user actually enables Draw mode.
 const drawingTool=createDrawingTool(layoutCanvas);
+// RS-3010 Step 2d: exposes drawingTool's own debugGrid/debugHitTestShapeId QA-only surface for
+// automated verification of the Design canvas's background grid layering -- same "read-only,
+// never used to drive any application logic" precedent as window.__preview3D above.
+window.__drawingTool=drawingTool;
 // RS-1009: the one multi-selection model (src/editing/Selection.js is the only place that
 // computes a new Set from an old one). selectedLayerId (above, pre-existing) keeps driving the
 // single-layer property panel exactly as before -- it always points at the most recently
