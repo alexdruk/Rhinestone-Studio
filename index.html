@@ -482,14 +482,14 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
              drawingTool.isActive like drawModeHint/drawCommitBtn -- unlike the single-rail version,
              there's no chicken-and-egg problem anymore. -->
         <div class="design-tool-rail rail-left" id="designToolRailLeft" style="display:none" aria-label="Design tools (general)">
-          <button class="icon-btn" id="railSelectToggle" title="Select (click/shift-click to multi-select, drag to move)" aria-pressed="false">↖ Select</button>
-          <button class="icon-btn" id="railDrawToggle" title="Draw a custom freehand shape directly on the canvas" aria-pressed="false">✏️ Draw</button>
+          <button class="icon-btn" id="railSelectToggle" title="Select (click/shift-click to multi-select, drag to move) (V)" aria-pressed="false">↖ Select</button>
+          <button class="icon-btn" id="railDrawToggle" title="Draw a custom freehand shape directly on the canvas (B)" aria-pressed="false">✏️ Draw</button>
         </div>
         <div class="design-tool-rail rail-right" id="designToolRailRight" style="display:none" aria-label="Design tools (shape presets)">
-          <button class="icon-btn" id="railRectToggle" title="Draw a rectangle (hold Shift for a square)" aria-pressed="false">▭ Rect</button>
-          <button class="icon-btn" id="railEllipseToggle" title="Draw an ellipse (hold Shift for a circle)" aria-pressed="false">◯ Ellipse</button>
-          <button class="icon-btn" id="railSlotToggle" title="Draw a slot (drag to set length/angle, click for a default pill)" aria-pressed="false">⏢ Slot</button>
-          <button class="icon-btn" id="railPolygonToggle" title="Draw a polygon (click to add vertices, click near the first vertex to close)" aria-pressed="false">⬠ Polygon</button>
+          <button class="icon-btn" id="railRectToggle" title="Draw a rectangle (hold Shift for a square) (R)" aria-pressed="false">▭ Rect</button>
+          <button class="icon-btn" id="railEllipseToggle" title="Draw an ellipse (hold Shift for a circle) (E)" aria-pressed="false">◯ Ellipse</button>
+          <button class="icon-btn" id="railSlotToggle" title="Draw a slot (drag to set length/angle, click for a default pill) (S)" aria-pressed="false">⏢ Slot</button>
+          <button class="icon-btn" id="railPolygonToggle" title="Draw a polygon (click to add vertices, click near the first vertex to close) (G)" aria-pressed="false">⬠ Polygon</button>
         </div>
         <!-- RS-3010 Design Step A correction: Grid hint relocated out of the now-gone #toolbar2D
              toolbar-group, but NOT isActive-gated -- it's a general 2D-canvas display note relevant

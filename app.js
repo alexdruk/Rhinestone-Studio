@@ -188,6 +188,12 @@ const HISTORY_MAX_SIZE=100;
 // RS-1009: arrow key -> unit direction vector (mm), scaled by NUDGE_STEP_MM/NUDGE_STEP_LARGE_MM
 // (src/editing/EditingConstants.js) at keydown time depending on Shift.
 const ARROW_KEY_DELTAS={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
+// RS-3010 Design Step B: single-letter drawing-tool shortcuts, matching the rail buttons'
+// setDrawTool() modes exactly -- V/R/E/S mirror this app's own tool labels; B=Draw follows
+// Photoshop's Brush convention (more recognizable than an arbitrary "D"); G=Polygon deliberately
+// reserves P for a future Bezier Pen tool (Illustrator/Figma's near-universal "Pen" binding), per
+// Sasha's own roadmap for this rail.
+const DRAW_TOOL_SHORTCUT_KEYS={v:'select',b:'freehand',r:'rect',e:'ellipse',s:'slot',g:'polygon'};
 // RS-1005: pixels-per-mm used only when rasterizing the Production Sheet SVG to PNG. Fixed and
 // documented (not derived from devicePixelRatio/viewport fit) so the PNG's pixel dimensions are
 // always a clean, undistorted multiple of the page's mm size -- never a fit-to-viewport scale.
@@ -2107,6 +2113,14 @@ window.addEventListener('keydown',e=>{
     if(e.key==='Escape'){
       e.preventDefault();
       drawingTool.cancelPath();
+    }
+    // RS-3010 Design Step B: plain-keypress tool shortcuts (no Cmd/Ctrl/Alt/Shift) -- calls the
+    // exact same setDrawTool() the rail buttons use, no new dispatch path. Guarded like
+    // Delete/Backspace above so typing in the Slot width field never gets hijacked.
+    if(!mod&&!e.altKey&&!e.shiftKey&&DRAW_TOOL_SHORTCUT_KEYS[key]){
+      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;
+      e.preventDefault();
+      setDrawTool(DRAW_TOOL_SHORTCUT_KEYS[key]);
     }
     return;
   }
