@@ -53,3 +53,20 @@ export function constrainSquare(start, current) {
 export function resolveDragAxis(start, current) {
   return { a: { x: start.x, y: start.y }, b: { x: current.x, y: current.y } };
 }
+
+/**
+ * Design Step C: full-containment test for marquee-select -- true if `inner` (e.g. a shape's
+ * bounds) lies entirely within `outer` (the marquee box). Not intersection -- a shape only
+ * partially covered by the marquee is excluded, per this step's simpler containment-only rule.
+ * @param {{left:number,top:number,width:number,height:number}} outer
+ * @param {{left:number,top:number,width:number,height:number}} inner
+ * @returns {boolean}
+ */
+export function boxContainsBox(outer, inner) {
+  return (
+    inner.left >= outer.left &&
+    inner.top >= outer.top &&
+    inner.left + inner.width <= outer.left + outer.width &&
+    inner.top + inner.height <= outer.top + outer.height
+  );
+}

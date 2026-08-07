@@ -201,6 +201,17 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .design-tool-rail.rail-left{left:var(--space-4)}
 .design-tool-rail.rail-right{right:var(--space-4)}
 .design-tool-rail button.icon-btn{width:100%;height:auto;justify-content:flex-start;gap:6px;padding:6px 8px;font-size:12px;white-space:nowrap}
+/* RS-3010 Design Step C correction: the rails above overlay #panel2D rather than sitting beside
+   it, so without this #layout's own rendered box extends underneath them -- pointer events landing
+   in that region hit the rail buttons (document.elementFromPoint()), never Paper.js's Tool, and a
+   marquee (or any drag) starting/ending there is silently swallowed. Insets #panel2D's own content
+   box by each rail's full on-screen footprint (its 112px width + the var(--space-4) gap from the
+   panel edge, exactly matching .design-tool-rail/.rail-left/.rail-right above) only while drawing
+   mode is active (class toggled by app.js's setDrawMode(), same isActive gate the rails themselves
+   already use). #layout is never given its own margin -- `.canvas-panel canvas{width:100%}` already
+   sizes it against the parent's content box, so padding here shrinks the canvas by exactly this much
+   without a second place needing to know the number. */
+#panel2D.design-rails-inset{padding-left:calc(112px + var(--space-4));padding-right:calc(112px + var(--space-4))}
 .design-canvas-view-group{position:absolute;top:var(--space-4);left:50%;transform:translateX(-50%);z-index:4;display:flex;align-items:center;gap:8px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);padding:6px 10px;font-size:var(--font-size-xs)}
 .design-tool-options-panel{position:absolute;top:calc(var(--space-4) + 40px);left:50%;transform:translateX(-50%);z-index:4;display:flex;align-items:center;gap:var(--space-2);min-height:28px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);padding:6px 10px;font-size:var(--font-size-xs)}
 .workspace-status{display:flex;align-items:center;gap:var(--space-4);padding:var(--space-2) var(--space-4);border-top:1px solid var(--color-border);background:var(--color-surface);font-size:var(--font-size-sm);white-space:nowrap;overflow-x:auto}

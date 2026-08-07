@@ -3165,6 +3165,12 @@ function setDrawMode(active,mode){
     el('designToolOptionsPanel').style.display='';
     el('designToolRailLeft').style.display='';
     el('designToolRailRight').style.display='';
+    // RS-3010 Design Step C correction: reserve room for both rails so #layout's rendered box
+    // stops extending underneath them (see the #panel2D.design-rails-inset CSS rule) -- added here,
+    // alongside the style.display toggles above, for the exact same "same synchronous task forces
+    // the reflow enter()'s getBoundingClientRect() below reads" reason this block's own comment
+    // already documents for those.
+    el('panel2D').classList.add('design-rails-inset');
     // RS-3010 Design Step A correction #2: setWorkspaceMode('2d') above already forces the
     // workspace to the 2D Canvas view -- the Dual Workspace/2D Canvas/Object Preview tab row is
     // dead UI while Design can't switch away from it, so hide the whole tab row too.
@@ -3183,6 +3189,11 @@ function setDrawMode(active,mode){
     el('designToolRailLeft').style.display='none';
     el('designToolRailRight').style.display='none';
     el('workspaceViewTabs').style.display='';
+    // RS-3010 Design Step C correction: drop the rail inset before setWorkspaceMode() below reads
+    // #layout's box (via its own updateAll(true) -> resizeCanvas()) -- landing it here, alongside
+    // the other hide-toggles and before that read, keeps #layout at its normal full width the
+    // instant Design mode is no longer active, matching the isActive gate the rails themselves use.
+    el('panel2D').classList.remove('design-rails-inset');
     // Restores whatever workspace mode was active before this session started (setWorkspaceMode()
     // already runs updateAll(true) internally, which covers the drawLayout()/drawCup()/stats
     // refresh this branch needed anyway -- no separate drawLayout() call required).
