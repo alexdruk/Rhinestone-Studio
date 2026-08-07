@@ -1019,6 +1019,41 @@ export function createDrawingTool(canvasEl) {
      */
     debugHitTestShapeId(xMm, yMm) {
       return hitTestShapeId(new paper.Point(xMm, yMm));
+    },
+
+    /**
+     * QA/verification-only, read-only -- same precedent as debugGrid/debugHitTestShapeId above.
+     * RS-3010 Step 2e: exposes every finalized shape's exact project-mm bounds and path segment
+     * points, so grid-snap verification can assert exact numeric coordinates instead of only
+     * inferring alignment from a screenshot.
+     */
+    get debugShapes() {
+      return board.listShapes().map((shape) => ({
+        id: shape.id,
+        bounds: {
+          left: shape.item.bounds.left,
+          top: shape.item.bounds.top,
+          width: shape.item.bounds.width,
+          height: shape.item.bounds.height
+        },
+        points: shape.item.segments
+          ? shape.item.segments.map((segment) => ({ x: segment.point.x, y: segment.point.y }))
+          : null
+      }));
+    },
+
+    /**
+     * QA/verification-only, read-only -- same precedent as debugGrid/debugHitTestShapeId/
+     * debugShapes above. RS-3010 Step 2e: exposes Paper.js's own project-mm-to-view-px transform so
+     * grid-snap verification can dispatch real mouse events at precise, deliberately off-grid mm
+     * targets instead of guessing pixel coordinates.
+     * @param {number} xMm
+     * @param {number} yMm
+     * @returns {{x:number,y:number}} CSS-pixel coordinates within canvasEl.
+     */
+    debugProjectToViewPx(xMm, yMm) {
+      const viewPoint = paper.view.projectToView(new paper.Point(xMm, yMm));
+      return { x: viewPoint.x, y: viewPoint.y };
     }
   };
 }
