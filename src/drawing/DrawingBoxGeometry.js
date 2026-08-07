@@ -55,6 +55,22 @@ export function resolveDragAxis(start, current) {
 }
 
 /**
+ * RS-3010 Step 2e: quantizes `point` to the nearest multiple of `intervalMm` on each axis
+ * independently -- unconditional (not proximity-gated), since grid points are dense/regular enough
+ * that "nearest" is always well-defined. Same style as its siblings above: no Paper.js dependency,
+ * accepts anything shaped `{x,y}`, returns a plain object.
+ * @param {{x:number,y:number}} point
+ * @param {number} intervalMm
+ * @returns {{x:number,y:number}}
+ */
+export function snapToGrid(point, intervalMm) {
+  return {
+    x: Math.round(point.x / intervalMm) * intervalMm,
+    y: Math.round(point.y / intervalMm) * intervalMm
+  };
+}
+
+/**
  * Design Step C: full-containment test for marquee-select -- true if `inner` (e.g. a shape's
  * bounds) lies entirely within `outer` (the marquee box). Not intersection -- a shape only
  * partially covered by the marquee is excluded, per this step's simpler containment-only rule.
