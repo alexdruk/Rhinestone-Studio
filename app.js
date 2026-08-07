@@ -3098,7 +3098,10 @@ el('viewTab3D').onclick=()=>setWorkspaceMode('preview');
 if(!window.matchMedia('(min-width: 900px)').matches)setWorkspaceMode('2d',true);
 
 // ---- Safe-area toggle (view-only editor state; see the showSafeArea declaration above and
-// drawLayout()). No grid toggle exists here -- see the showSafeArea declaration's comment above. ----
+// drawLayout()). No grid toggle exists here -- see the showSafeArea declaration's comment above.
+// RS-3010 Design Step A correction: relocated into #designCanvasViewGroup (a child of #panel2D),
+// out of the removed #toolbar2D toolbar-group -- id/wiring unchanged, still always visible
+// whenever the 2D canvas is shown (not isActive-gated; used outside drawing mode too). ----
 el('safeAreaToggle').onclick=()=>{showSafeArea=!showSafeArea;el('safeAreaToggle').setAttribute('aria-pressed',String(showSafeArea));el('settingsSafeAreaDefault').checked=showSafeArea;drawLayout()};
 
 // ---- RS-3010 Step 1/2a: drawing mode toggle group. Entering hands layoutCanvas to drawingTool's
@@ -3107,15 +3110,21 @@ el('safeAreaToggle').onclick=()=>{showSafeArea=!showSafeArea;el('safeAreaToggle'
 // first so drawingTool's base fit scale is computed against the canvas's *current* pixel size,
 // the same dpr-aware sizing drawLayout() itself always uses.
 //
-// Step 2a: Draw/Rect/Ellipse act as one segmented toggle group -- exactly one is aria-pressed at
-// a time. Clicking the button for the tool that's already active exits drawing mode (preserves
-// Step 1's single-button toggle-off behavior); clicking a different tool while already active
-// switches mode in place via drawingTool.setMode() without re-entering (so shapes already drawn
-// this session survive the switch -- only an in-progress drag-in-flight is discarded, see
-// DrawingCanvasTool.js's setMode()). Step 2b adds Slot to the same toggle group, plus a width
-// (mm) input shown only while slot is the active mode (see updateDrawToolButtons()). ----
+// Design Step A correction: the two design rails plus #menuDesign are now the only entry points
+// (the old horizontal #drawToolGroup row is gone). Entering also forces the workspace into 2D-only
+// view (drawing mode's own Paper.js scene only ever owns the 2D canvas) -- workspaceModeBeforeDrawing
+// captures whatever mode was active so exiting can restore it, rather than always landing back on
+// '2d'. ----
+let workspaceModeBeforeDrawing=null;
 function setDrawMode(active,mode){
   if(active){
+    workspaceModeBeforeDrawing=workspaceMode;
+    // Force 2D-only view before drawingTool.enter() measures layoutCanvas's box below -- same
+    // "reflow before measuring" reasoning as the display toggles that follow: switching away from
+    // Dual Workspace changes #panel2D's own CSS layout (position:relative/flex sizing vs. the
+    // absolute/inset sizing single-view mode uses), so this must land before enter()'s
+    // getBoundingClientRect() call, not after.
+    setWorkspaceMode('2d');
     // Show the hint text and Commit Shape button -- letting the toolbar finish reflowing/
     // wrapping around them -- BEFORE calling drawingTool.enter(), which measures layoutCanvas's
     // current box via resyncViewSize(). Doing this in the other order sizes Paper's viewport
@@ -3128,10 +3137,9 @@ function setDrawMode(active,mode){
     el('drawModeHint').style.display='';
     el('drawCommitBtn').style.display='';
     el('drawCommitBtn').disabled=false;
-    // RS-3010 Design Step A: the new options panel is shown/hidden on the same isActive
-    // transition as drawModeHint/drawCommitBtn above (designToolRail itself stays always-visible,
-    // like #drawToolGroup -- see its index.html comment).
     el('designToolOptionsPanel').style.display='';
+    el('designToolRailLeft').style.display='';
+    el('designToolRailRight').style.display='';
     // drawingTool.enter() resyncs layoutCanvas's size itself (see DrawingCanvasTool.js's
     // resyncViewSize()) -- app.js must not also call resizeCanvas() here, or the two would fight
     // over which one's dpr-scaled canvas.width/height sticks.
@@ -3143,23 +3151,23 @@ function setDrawMode(active,mode){
     el('drawCommitBtn').style.display='none';
     el('drawCommitBtn').disabled=true;
     el('designToolOptionsPanel').style.display='none';
-    drawLayout();
+    el('designToolRailLeft').style.display='none';
+    el('designToolRailRight').style.display='none';
+    // Restores whatever workspace mode was active before this session started (setWorkspaceMode()
+    // already runs updateAll(true) internally, which covers the drawLayout()/drawCup()/stats
+    // refresh this branch needed anyway -- no separate drawLayout() call required).
+    setWorkspaceMode(workspaceModeBeforeDrawing);
+    workspaceModeBeforeDrawing=null;
   }
   updateDrawToolButtons();
 }
 function updateDrawToolButtons(){
   const active=drawingTool.isActive,mode=drawingTool.mode;
-  el('drawModeToggle').setAttribute('aria-pressed',String(active&&mode==='freehand'));
-  el('drawRectToggle').setAttribute('aria-pressed',String(active&&mode==='rect'));
-  el('drawEllipseToggle').setAttribute('aria-pressed',String(active&&mode==='ellipse'));
-  el('drawSlotToggle').setAttribute('aria-pressed',String(active&&mode==='slot'));
   const showSlotWidth=active&&mode==='slot';
   el('drawSlotWidthField').style.display=showSlotWidth?'':'none';
   el('drawSlotWidthMm').style.display=showSlotWidth?'':'none';
-  el('drawPolygonToggle').setAttribute('aria-pressed',String(active&&mode==='polygon'));
-  // RS-3010 Design Step A: the new rail's six buttons mirror the old row's five (plus Select) --
-  // both sets must always agree on which mode is pressed, since either can be clicked during this
-  // coexistence period (removed in Design Step E).
+  // RS-3010 Design Step A correction: the old horizontal row's five preset buttons are gone --
+  // these two rails (split left/right) are now the only aria-pressed sync targets.
   el('railSelectToggle').setAttribute('aria-pressed',String(active&&mode==='select'));
   el('railDrawToggle').setAttribute('aria-pressed',String(active&&mode==='freehand'));
   el('railRectToggle').setAttribute('aria-pressed',String(active&&mode==='rect'));
@@ -3176,20 +3184,16 @@ function setDrawTool(mode){
   }
   setDrawMode(true,mode);
 }
-el('drawModeToggle').onclick=()=>setDrawTool('freehand');
-el('drawRectToggle').onclick=()=>setDrawTool('rect');
-el('drawEllipseToggle').onclick=()=>setDrawTool('ellipse');
-el('drawSlotToggle').onclick=()=>setDrawTool('slot');
 el('drawSlotWidthMm').oninput=()=>drawingTool.setSlotWidthMm(el('drawSlotWidthMm').value);
-el('drawPolygonToggle').onclick=()=>setDrawTool('polygon');
-// RS-3010 Design Step A: the new rail's buttons call the exact same setDrawTool() the old row's
-// buttons call above -- no new dispatch logic.
 el('railSelectToggle').onclick=()=>setDrawTool('select');
 el('railDrawToggle').onclick=()=>setDrawTool('freehand');
 el('railRectToggle').onclick=()=>setDrawTool('rect');
 el('railEllipseToggle').onclick=()=>setDrawTool('ellipse');
 el('railSlotToggle').onclick=()=>setDrawTool('slot');
 el('railPolygonToggle').onclick=()=>setDrawTool('polygon');
+// RS-3010 Design Step A correction: #menuDesign is the new top-nav entry point -- calls the exact
+// same activation railSelectToggle already triggers, no parallel activation path.
+el('menuDesign').onclick=()=>setDrawTool('select');
 // Committing constructs a 'path' layer directly per drawn shape -- the same object shape app.js's
 // Boolean Operations code already produces (RS-1012) -- and hands each to the existing
 // project.layers/updateAll() pipeline completely unchanged; no new stone-computation logic here.
