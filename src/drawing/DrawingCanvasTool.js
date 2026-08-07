@@ -69,6 +69,38 @@ const SLOT_DEFAULT_LENGTH_RATIO = 3;
 // hitTestShapeId's own screen-px-to-project-mm tolerance conversion pattern.
 const MIN_POLYGON_POINTS = 3;
 const CLOSE_POLYGON_TOLERANCE_PX = 6;
+// RS-3010 Design Step D: resize handles' own constants. RESIZE_HANDLE_SIZE_PX/
+// RESIZE_HANDLE_STROKE_WIDTH_PX/colors match app.js's own SELECTION_HANDLE_SIZE_PX (11) and
+// drawSelectionBox()'s handle styling (white fill, #1478ff stroke, 1.75px width), for visual
+// consistency between Design's own shapes and the main app.js system's resize handles.
+// RESIZE_MIN_DIM_MM matches drag.kind==='resize''s own Math.max(2, ...) floor exactly -- deliberately
+// NOT reusing MIN_BOX_DIM_MM (1) above, which is a different concept (a create-vs-discard threshold
+// for a brand-new shape, not a resize-floor for an existing one).
+const RESIZE_HANDLE_SIZE_PX = 11;
+const RESIZE_HANDLE_STROKE_WIDTH_PX = 1.75;
+const RESIZE_HANDLE_FILL_COLOR = '#ffffff';
+const RESIZE_HANDLE_STROKE_COLOR = '#1478ff';
+const RESIZE_MIN_DIM_MM = 2;
+
+/**
+ * The 8 handle positions (4 corners + 4 edge midpoints) for a bounds Rectangle, in the same
+ * nw/ne/se/sw/n/e/s/w naming app.js's own handlesFor() uses. Paper.js Rectangle's own named
+ * corner/center points are used directly rather than reimplementing that point math by hand.
+ * @param {paper.Rectangle} bounds
+ * @returns {{name:string,point:paper.Point}[]}
+ */
+function handlePositionsFor(bounds) {
+  return [
+    { name: 'nw', point: bounds.topLeft },
+    { name: 'ne', point: bounds.topRight },
+    { name: 'se', point: bounds.bottomRight },
+    { name: 'sw', point: bounds.bottomLeft },
+    { name: 'n', point: bounds.topCenter },
+    { name: 'e', point: bounds.rightCenter },
+    { name: 's', point: bounds.bottomCenter },
+    { name: 'w', point: bounds.leftCenter }
+  ];
+}
 
 /**
  * Builds a stadium/pill Path: two straight sides parallel to the a-to-b axis, offset by
@@ -136,6 +168,18 @@ export function createDrawingTool(canvasEl) {
   // from scratch every drag frame (onMouseDrag), removed on mouseup/Escape/mode-switch. Non-null
   // only while interactionKind === 'marquee'.
   let marqueeItem = null;
+  // RS-3010 Design Step D: the live resize handles for the current single-shape selection, a
+  // small array of throwaway Paper.js Items (same "never routed through board.beginPath()/
+  // clearPath()/finalizeShape()" rule marqueeItem already established, since these are UI chrome,
+  // not shapes). Rebuilt from scratch by updateResizeHandles() below whenever selection or the
+  // selected shape's geometry can change; empty whenever mode !== 'select' or more/fewer than one
+  // shape is selected. resizeHandle/resizeShapeId/resizeStartBounds mirror app.js's own
+  // `drag={kind:'resize',handle,layerId,b0,...}` shape, adapted to this file's discrete closure
+  // variables -- non-null only while interactionKind === 'resize'.
+  let resizeHandleItems = [];
+  let resizeHandle = null;
+  let resizeShapeId = null;
+  let resizeStartBounds = null;
   // RS-3010 Design Step B: spacebar-held temporary pan, independent of `mode` -- `panning` is only
   // true while space is held AND the mouse is also down (an actual pan drag in progress).
   let spaceHeld = false;
@@ -211,10 +255,52 @@ export function createDrawingTool(canvasEl) {
     return (hit && hit.item.data.shapeId) || null;
   }
 
+  /**
+   * The handle name (e.g. 'nw', 'e') under `point` for the single currently-selected shape, or
+   * null -- only ever relevant in 'select' mode with exactly one shape selected (mirrors
+   * drawSelectionBox()'s own single-selection-only showHandles rule). Tolerance matches
+   * hitTestShapeId's own `4 / paper.view.zoom` screen-px-to-project-mm convention above, applied
+   * as a radial point-to-point distance -- the natural analog for point-vs-handle, unlike app.js's
+   * hitTest()'s own flat 3mm axis-aligned box check, which was tuned for a different zoom range.
+   * @param {paper.Point} point
+   * @returns {string|null}
+   */
+  function hitTestResizeHandle(point) {
+    if (mode !== 'select' || selectedIds.size !== 1) return null;
+    const shape = board.getShape([...selectedIds][0]);
+    if (!shape) return null;
+    const tolerance = 4 / paper.view.zoom;
+    const hit = handlePositionsFor(shape.item.bounds).find((h) => point.getDistance(h.point) <= tolerance);
+    return hit ? hit.name : null;
+  }
+
   /** Repaints every finalized shape's strokeColor to reflect the current selection. */
   function applySelectionVisuals() {
     for (const shape of board.listShapes()) {
       shape.item.strokeColor = selectedIds.has(shape.id) ? SELECTED_STROKE_COLOR : STROKE_COLOR;
+    }
+  }
+
+  /**
+   * Rebuilds `resizeHandleItems` from scratch: removes whatever handle Items currently exist,
+   * then -- only if `mode === 'select'` and exactly one shape is selected -- adds 8 small square
+   * Path.Rectangle Items at that shape's current bounds' handle positions (handlePositionsFor).
+   * Called wherever selection or the selected shape's geometry can change.
+   */
+  function updateResizeHandles() {
+    for (const item of resizeHandleItems) item.remove();
+    resizeHandleItems = [];
+    if (mode !== 'select' || selectedIds.size !== 1) return;
+    const shape = board.getShape([...selectedIds][0]);
+    if (!shape) return;
+    const sizeMm = RESIZE_HANDLE_SIZE_PX / paper.view.zoom;
+    for (const { point } of handlePositionsFor(shape.item.bounds)) {
+      const rect = new paper.Rectangle(point.x - sizeMm / 2, point.y - sizeMm / 2, sizeMm, sizeMm);
+      const handleItem = new paper.Path.Rectangle(rect);
+      handleItem.fillColor = RESIZE_HANDLE_FILL_COLOR;
+      handleItem.strokeColor = RESIZE_HANDLE_STROKE_COLOR;
+      handleItem.strokeWidth = RESIZE_HANDLE_STROKE_WIDTH_PX / paper.view.zoom;
+      resizeHandleItems.push(handleItem);
     }
   }
 
@@ -230,6 +316,11 @@ export function createDrawingTool(canvasEl) {
       marqueeItem.remove();
       marqueeItem = null;
     }
+    for (const item of resizeHandleItems) item.remove();
+    resizeHandleItems = [];
+    resizeHandle = null;
+    resizeShapeId = null;
+    resizeStartBounds = null;
     interactionKind = null;
     dragging = false;
     polygonPoints = [];
@@ -275,6 +366,18 @@ export function createDrawingTool(canvasEl) {
         }
         return;
       }
+      // Design Step D: a resize handle can sit right at a shape's edge, where both it and the
+      // shape's own hit-test could otherwise match -- the handle must win, so this is checked
+      // first (mirrors app.js's own hitTest(), which checks handlesFor() before the move branch).
+      const resizeHandleHit = hitTestResizeHandle(event.point);
+      if (resizeHandleHit) {
+        const shape = board.getShape([...selectedIds][0]);
+        interactionKind = 'resize';
+        resizeHandle = resizeHandleHit;
+        resizeShapeId = shape.id;
+        resizeStartBounds = shape.item.bounds.clone();
+        return;
+      }
       const hitId = hitTestShapeId(event.point);
       if (hitId) {
         // Same click/shift-click/drag-preserves-group convention as the existing project.layers
@@ -285,12 +388,14 @@ export function createDrawingTool(canvasEl) {
         if (event.modifiers.shift) {
           selectedIds = toggleSelection(selectedIds, hitId);
           applySelectionVisuals();
+          updateResizeHandles();
           interactionKind = null;
           return;
         }
         if (!selectedIds.has(hitId)) {
           selectedIds = selectOnly(hitId);
           applySelectionVisuals();
+          updateResizeHandles();
         }
         interactionKind = 'move';
         return;
@@ -299,6 +404,7 @@ export function createDrawingTool(canvasEl) {
       if (selectedIds.size) {
         selectedIds = clearSelection();
         applySelectionVisuals();
+        updateResizeHandles();
       }
       // Design Step C: Select's empty-canvas drag starts a marquee. The marquee visual itself is
       // built lazily in onMouseDrag (mirrors rect/ellipse/slot's own "nothing meaningful to show
@@ -347,6 +453,24 @@ export function createDrawingTool(canvasEl) {
           const shape = board.getShape(id);
           if (shape) shape.item.translate(event.delta);
         }
+        updateResizeHandles();
+        return;
+      }
+      if (interactionKind === 'resize') {
+        const shape = board.getShape(resizeShapeId);
+        if (!shape) return;
+        let x0 = resizeStartBounds.left;
+        let y0 = resizeStartBounds.top;
+        let x1 = resizeStartBounds.right;
+        let y1 = resizeStartBounds.bottom;
+        if (resizeHandle.includes('w')) x0 = event.point.x;
+        if (resizeHandle.includes('e')) x1 = event.point.x;
+        if (resizeHandle.includes('n')) y0 = event.point.y;
+        if (resizeHandle.includes('s')) y1 = event.point.y;
+        const width = Math.max(RESIZE_MIN_DIM_MM, Math.abs(x1 - x0));
+        const height = Math.max(RESIZE_MIN_DIM_MM, Math.abs(y1 - y0));
+        shape.item.bounds = new paper.Rectangle(Math.min(x0, x1), Math.min(y0, y1), width, height);
+        updateResizeHandles();
         return;
       }
       if (interactionKind === 'marquee') {
@@ -399,6 +523,13 @@ export function createDrawingTool(canvasEl) {
         interactionKind = null;
         return;
       }
+      if (interactionKind === 'resize') {
+        interactionKind = null;
+        resizeHandle = null;
+        resizeShapeId = null;
+        resizeStartBounds = null;
+        return;
+      }
       if (interactionKind === 'marquee') {
         // A marquee below MIN_BOX_DIM_MM is just a click -- the existing clear-selection-on-
         // empty-click behavior in onMouseDown already handled that, nothing further to apply here.
@@ -420,6 +551,7 @@ export function createDrawingTool(canvasEl) {
           if (containedIds.length) {
             selectedIds = selectMany(containedIds);
             applySelectionVisuals();
+            updateResizeHandles();
           }
         }
         if (marqueeItem) {
@@ -550,6 +682,10 @@ export function createDrawingTool(canvasEl) {
     setMode(newMode) {
       mode = newMode;
       resetInProgressDrawing();
+      // Design Step D: resetInProgressDrawing() above unconditionally clears resizeHandleItems --
+      // rebuild them here so switching back to 'select' with a shape still selected brings the
+      // handles back rather than leaving them cleared until the next selection change.
+      updateResizeHandles();
       updateCursor();
     },
 
@@ -643,6 +779,7 @@ export function createDrawingTool(canvasEl) {
     deleteSelected() {
       for (const id of selectedIds) board.removeShape(id);
       selectedIds = clearSelection();
+      updateResizeHandles();
     },
 
     /**
