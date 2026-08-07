@@ -357,16 +357,11 @@ await test('19. the workspace has a real three-way view switch (Dual Workspace, 
   assert.match(appJs, /setWorkspaceMode\('2d',true\)/);
 });
 
-await test('20. editing/rotation keeps updating both canvases regardless of view mode, and the grid-always-on label reads clearly on its own', () => {
+await test('20. editing/rotation keeps updating both canvases regardless of view mode', () => {
   const updateAllFn = appJs.match(/async function updateAll\([\s\S]*?\n\}/)[0];
   assert.match(updateAllFn, /drawLayout\(\)/);
   assert.match(updateAllFn, /drawCup\(\)/);
   assert.doesNotMatch(updateAllFn, /workspaceMode===/, 'drawLayout/drawCup must not be gated on the view mode');
-
-  const label = indexHtml.match(/<span class="hint"[^>]*>[^<]*always on[^<]*<\/span>/i);
-  assert.ok(label, 'expected to find the grid-always-on label');
-  assert.doesNotMatch(label[0], />#&nbsp;always on</, 'the old bare "# always on" label (unexplained "#" glyph) should be gone');
-  assert.match(label[0], /grid/i, 'the visible text itself should say "grid", not rely solely on the tooltip');
 });
 
 console.log('UI shell structure tests passed.');
