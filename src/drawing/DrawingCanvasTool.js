@@ -124,6 +124,27 @@ export function createDrawingTool(canvasEl) {
   // comment.
   let interactionKind = null;
   let dragStart = null;
+  // RS-3010 Design Step B: spacebar-held temporary pan, independent of `mode` -- `panning` is only
+  // true while space is held AND the mouse is also down (an actual pan drag in progress).
+  let spaceHeld = false;
+  let panning = false;
+
+  /**
+   * Reflects the current interaction state onto layoutCanvas's CSS cursor: 'grabbing' while
+   * actively panning, 'grab' while space is held (takes priority over the per-tool cursor below),
+   * else crosshair for every drawing mode or the default pointer for 'select'. Called wherever
+   * `mode`/`spaceHeld`/`panning` change; exit() clears the inline style entirely so the canvas
+   * falls back to whatever cursor it had outside drawing mode.
+   */
+  function updateCursor() {
+    if (panning) {
+      canvasEl.style.cursor = 'grabbing';
+    } else if (spaceHeld) {
+      canvasEl.style.cursor = 'grab';
+    } else {
+      canvasEl.style.cursor = mode === 'select' ? 'default' : 'crosshair';
+    }
+  }
 
   function applyViewport() {
     paper.view.zoom = baseScale * board.zoom;
@@ -203,6 +224,15 @@ export function createDrawingTool(canvasEl) {
     tool = new paper.Tool();
 
     tool.onMouseDown = (event) => {
+      // RS-3010 Design Step B: space-held pan takes priority over everything else -- checked
+      // before the polygon special case below so an in-progress polygon survives a pan
+      // interruption untouched (see resetInProgressDrawing()'s doc comment: this branch never
+      // calls it, so polygonPoints/board.path are left exactly as they were).
+      if (spaceHeld) {
+        panning = true;
+        updateCursor();
+        return;
+      }
       // RS-3010 Step 2c: an in-progress polygon takes over the pointer entirely -- every click
       // either adds a vertex or closes the shape, never falls through to hit-test/selection. Only
       // the FIRST click of a new polygon goes through the normal dispatch below.
@@ -282,6 +312,17 @@ export function createDrawingTool(canvasEl) {
     };
 
     tool.onMouseDrag = (event) => {
+      if (panning) {
+        // Grab-and-slide semantics: dragging right/down must move the visible content right/down,
+        // the opposite sign from onWheel()'s scroll-to-pan convention (scrolling right moves the
+        // viewport right / content left). event.delta already arrives in project mm (unlike
+        // onWheel's raw pixel deltaX/deltaY, Paper.js Tool events are pre-transformed through
+        // view.zoom/view.center -- see this file's header comment), so no baseScale/board.zoom
+        // division is needed here the way onWheel needs one; panBy() is the same call either way.
+        board.panBy(-event.delta.x, -event.delta.y);
+        applyViewport();
+        return;
+      }
       if (interactionKind === 'move') {
         for (const id of selectedIds) {
           const shape = board.getShape(id);
@@ -318,6 +359,11 @@ export function createDrawingTool(canvasEl) {
     };
 
     tool.onMouseUp = () => {
+      if (panning) {
+        panning = false;
+        updateCursor();
+        return;
+      }
       if (interactionKind === 'move') {
         interactionKind = null;
         return;
@@ -431,6 +477,7 @@ export function createDrawingTool(canvasEl) {
       baseScale = drawingBaseScale(canvasMm, canvasEl.width, canvasEl.height, paddingPx);
       applyViewport();
       attachTool();
+      updateCursor();
     },
 
     /**
@@ -442,6 +489,22 @@ export function createDrawingTool(canvasEl) {
     setMode(newMode) {
       mode = newMode;
       resetInProgressDrawing();
+      updateCursor();
+    },
+
+    /**
+     * RS-3010 Design Step B: called from app.js's spacebar keydown/keyup listeners (gated on
+     * `isActive`, same input-focus guard as the tool shortcuts). While held, a drag pans the view
+     * instead of whatever the active mode would otherwise do -- see onMouseDown/onMouseDrag/
+     * onMouseUp's `panning` checks above everything else. Releasing space mid-drag cleanly ends
+     * the pan (`panning` reset here) rather than leaving the next onMouseUp to act on it.
+     * @param {boolean} held
+     */
+    setSpaceHeld(held) {
+      if (spaceHeld === held) return;
+      spaceHeld = held;
+      if (!held) panning = false;
+      updateCursor();
     },
 
     /**
@@ -474,6 +537,9 @@ export function createDrawingTool(canvasEl) {
       board.clearAll();
       selectedIds = clearSelection();
       resetInProgressDrawing();
+      spaceHeld = false;
+      panning = false;
+      canvasEl.style.cursor = '';
       if (tool) {
         tool.remove();
         tool = null;
