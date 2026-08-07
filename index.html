@@ -192,6 +192,17 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .workspace-canvas-area.dual{display:flex;gap:var(--space-3);padding:var(--space-4)}
 .workspace-canvas-area.dual .canvas-panel{position:relative;inset:auto;flex:1 1 0;min-width:0;height:100%}
 .fitNotice{position:absolute;left:var(--space-4);bottom:var(--space-4);color:var(--color-text-muted);font-size:var(--font-size-xs);background:#ffffffe6;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:4px 9px}
+/* RS-3010 Design Step A: two vertical tool rails (general tools on the left, shape presets on the
+   right) + a contextual tool-options panel, positioned via CSS as absolutely-positioned children
+   of #panel2D (same technique .fitNotice above already uses) -- #layout itself never moves in the
+   document. Design Step A correction split the original single rail in two and removed the old
+   horizontal #drawToolGroup row entirely (superseded, not coexisting). */
+.design-tool-rail{position:absolute;top:var(--space-4);z-index:5;width:112px;display:flex;flex-direction:column;gap:4px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:var(--shadow-md);padding:6px}
+.design-tool-rail.rail-left{left:var(--space-4)}
+.design-tool-rail.rail-right{right:var(--space-4)}
+.design-tool-rail button.icon-btn{width:100%;height:auto;justify-content:flex-start;gap:6px;padding:6px 8px;font-size:12px;white-space:nowrap}
+.design-canvas-view-group{position:absolute;top:var(--space-4);left:50%;transform:translateX(-50%);z-index:4;display:flex;align-items:center;gap:8px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);padding:6px 10px;font-size:var(--font-size-xs)}
+.design-tool-options-panel{position:absolute;top:calc(var(--space-4) + 40px);left:50%;transform:translateX(-50%);z-index:4;display:flex;align-items:center;gap:var(--space-2);min-height:28px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);padding:6px 10px;font-size:var(--font-size-xs)}
 .workspace-status{display:flex;align-items:center;gap:var(--space-4);padding:var(--space-2) var(--space-4);border-top:1px solid var(--color-border);background:var(--color-surface);font-size:var(--font-size-sm);white-space:nowrap;overflow-x:auto}
 .workspace-status b{font-weight:700}
 .workspace-status span{color:var(--color-text-muted)}
@@ -333,6 +344,9 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 <header class="topbar">
   <div class="brand"><span class="mark">💎</span><span>Rhinestone Studio</span></div>
   <nav class="topmenu" aria-label="Main menu">
+    <!-- RS-3010 Design Step A correction: entry point into drawing mode, landing in 'select'
+         (the same activation railSelectToggle already triggers -- see app.js). -->
+    <button class="topmenu-btn" id="menuDesign" title="Design (draw custom shapes directly on the canvas)"><span class="glyph">✎</span>Design</button>
     <button class="topmenu-btn" id="menuText" title="Text (edit the selected text layer's content, font, and curve)"><span class="glyph">🅣</span>Text</button>
     <button class="topmenu-btn" id="menuShapes" title="Shapes and object templates"><span class="glyph">◇</span>Shapes</button>
     <button class="topmenu-btn" id="menuMonogram" title="Generate a monogram from a frame, layout, and letters"><span class="glyph">🄼</span>Monogram</button>
@@ -391,31 +405,16 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
   <!-- ===================== CENTRAL WORKSPACE ===================== -->
   <main class="workspace" aria-label="Design workspace">
     <div class="workspace-toolbar">
-      <div class="tabs" role="tablist" aria-label="Workspace view">
+      <!-- RS-3010 Design Step A correction #2: hidden while Design mode is active (setDrawMode() in
+           app.js) -- setDrawMode(true) already forces setWorkspaceMode('2d') underneath it, so
+           showing tab buttons for views Design doesn't allow switching to is dead/confusing UI. -->
+      <div class="tabs" role="tablist" aria-label="Workspace view" id="workspaceViewTabs">
         <button class="tab active" id="viewTabDual" role="tab" aria-selected="true" title="Show the 2D Canvas and Object Preview side by side">Dual Workspace</button>
         <button class="tab" id="viewTab2D" role="tab" aria-selected="false" title="Show only the 2D Canvas">2D Canvas</button>
         <button class="tab" id="viewTab3D" role="tab" aria-selected="false" title="Show only the Object Preview">Object Preview</button>
       </div>
 
       <div class="toolbar-cluster" id="toolbar2D">
-        <div class="toolbar-group">
-          <button class="icon-btn" id="safeAreaToggle" title="Toggle safe-area guide" aria-pressed="true">▢</button>
-          <span class="hint" title="The reference grid helps align stones to the canvas; it is drawn by the permanent 2D renderer and cannot be turned off in this milestone" style="cursor:help">⊞&nbsp;Grid: always on</span>
-        </div>
-        <!-- RS-3010 Step 1: drawing mode owns the 2D canvas exclusively while active (its own
-             Paper.js scene, not this toolbar's stone-layout view) -- toggling it off, or committing
-             a shape, hands the canvas back to the normal renderer. -->
-        <div class="toolbar-group" id="drawToolGroup">
-          <button class="icon-btn" id="drawModeToggle" title="Draw a custom freehand shape directly on the canvas" aria-pressed="false">✏️ Draw</button>
-          <button class="icon-btn" id="drawRectToggle" title="Draw a rectangle (hold Shift for a square)" aria-pressed="false">▭ Rect</button>
-          <button class="icon-btn" id="drawEllipseToggle" title="Draw an ellipse (hold Shift for a circle)" aria-pressed="false">◯ Ellipse</button>
-          <button class="icon-btn" id="drawSlotToggle" title="Draw a slot (drag to set length/angle, click for a default pill)" aria-pressed="false">⏢ Slot</button>
-          <label for="drawSlotWidthMm" id="drawSlotWidthField" style="display:none;margin:0 6px 0 0" title="Slot width (mm)">Width (mm)</label>
-          <input id="drawSlotWidthMm" type="number" min="0.1" step="0.5" value="6" style="display:none;width:70px">
-          <button class="icon-btn" id="drawPolygonToggle" title="Draw a polygon (click to add vertices, click near the first vertex to close)" aria-pressed="false">⬠ Polygon</button>
-          <span id="drawModeHint" class="hint" style="display:none">Drag to draw · Scroll to pan · Ctrl/Cmd+scroll to zoom</span>
-          <button class="btn sm primary" id="drawCommitBtn" style="display:none" disabled title="Add the drawn shapes as new Path layers">Commit Shape</button>
-        </div>
         <div class="toolbar-group">
           <span class="toolbar-label">Align &amp; Snap</span>
           <div id="selectionSummary" style="display:inline">No layers selected</div>
@@ -474,6 +473,46 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
       <section class="canvas-panel" id="panel2D" aria-label="2D production canvas">
         <canvas id="layout"></canvas>
         <div class="fitNotice" id="fitNotice"></div>
+        <!-- RS-3010 Design Step A correction: the single rail splits in two -- a left rail for
+             general/freeform tools (Select, Draw; future home for a Bezier Pen/Eraser, not built
+             yet) and a right rail for parametric shape presets (Rect/Ellipse/Slot/Polygon). Every
+             button keeps its exact id and setDrawTool() wiring from the single-rail version.
+             #menuDesign in the top nav is now the fixed entry point into drawing mode (it triggers
+             the exact same activation railSelectToggle does), so both rails can safely gate on
+             drawingTool.isActive like drawModeHint/drawCommitBtn -- unlike the single-rail version,
+             there's no chicken-and-egg problem anymore. -->
+        <div class="design-tool-rail rail-left" id="designToolRailLeft" style="display:none" aria-label="Design tools (general)">
+          <button class="icon-btn" id="railSelectToggle" title="Select (click/shift-click to multi-select, drag to move)" aria-pressed="false">↖ Select</button>
+          <button class="icon-btn" id="railDrawToggle" title="Draw a custom freehand shape directly on the canvas" aria-pressed="false">✏️ Draw</button>
+        </div>
+        <div class="design-tool-rail rail-right" id="designToolRailRight" style="display:none" aria-label="Design tools (shape presets)">
+          <button class="icon-btn" id="railRectToggle" title="Draw a rectangle (hold Shift for a square)" aria-pressed="false">▭ Rect</button>
+          <button class="icon-btn" id="railEllipseToggle" title="Draw an ellipse (hold Shift for a circle)" aria-pressed="false">◯ Ellipse</button>
+          <button class="icon-btn" id="railSlotToggle" title="Draw a slot (drag to set length/angle, click for a default pill)" aria-pressed="false">⏢ Slot</button>
+          <button class="icon-btn" id="railPolygonToggle" title="Draw a polygon (click to add vertices, click near the first vertex to close)" aria-pressed="false">⬠ Polygon</button>
+        </div>
+        <!-- RS-3010 Design Step A correction: Grid hint relocated out of the now-gone #toolbar2D
+             toolbar-group, but NOT isActive-gated -- it's a general 2D-canvas display note relevant
+             while editing Text/Shapes/Monogram layers too, not something specific to drawing mode,
+             so it keeps its pre-existing always-visible-while-the-2D-canvas-is-shown behavior.
+             Correction #2: the safe-area toggle button that used to sit here is removed -- showSafeArea
+             is now set purely from the Settings panel's settingsSafeAreaDefault checkbox, no
+             toolbar-level per-session override remains (see app.js). -->
+        <div class="design-canvas-view-group" id="designCanvasViewGroup" aria-label="Canvas view">
+          <span class="hint" title="The reference grid helps align stones to the canvas; it is drawn by the permanent 2D renderer and cannot be turned off in this milestone" style="cursor:help">⊞&nbsp;Grid: always on</span>
+        </div>
+        <!-- RS-3010 Design Step A: contextual tool-options panel -- proves the new layout can host
+             per-tool controls. Holds drawModeHint/drawCommitBtn (relocated from the removed
+             #drawToolGroup, same ids/wiring/isActive-gated visibility) and the relocated Slot width
+             field (a DOM move, not a duplicate -- same ids/wiring as before, see
+             drawSlotWidthField/drawSlotWidthMm below), same show/hide-only-while-slot-is-active
+             logic. Future steps add more here. -->
+        <div class="design-tool-options-panel" id="designToolOptionsPanel" style="display:none" aria-label="Tool options">
+          <span id="drawModeHint" class="hint" style="display:none">Drag to draw · Scroll to pan · Ctrl/Cmd+scroll to zoom</span>
+          <button class="btn sm primary" id="drawCommitBtn" style="display:none" disabled title="Add the drawn shapes as new Path layers">Commit Shape</button>
+          <label for="drawSlotWidthMm" id="drawSlotWidthField" style="display:none;margin:0" title="Slot width (mm)">Width (mm)</label>
+          <input id="drawSlotWidthMm" type="number" min="0.1" step="0.5" value="6" style="display:none;width:70px">
+        </div>
       </section>
       <section class="canvas-panel" id="panel3D" aria-label="3D object preview">
         <canvas id="cup"></canvas>

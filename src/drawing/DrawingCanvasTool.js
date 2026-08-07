@@ -24,7 +24,10 @@
  * finalize interaction shape rect/ellipse already use. Step 2c adds 'polygon' (click-to-add-vertex,
  * closed by clicking back near the first vertex) -- a genuinely different, multi-click interaction
  * that takes over the pointer entirely once started, see the 'polygon' interactionKind value below.
- * Selection state (the set of
+ * Design Step A adds 'select' -- a real but inert mode (an empty-canvas drag does nothing; the
+ * existing hit-test-an-existing-shape click/shift-click/drag-to-move behavior below is unaffected
+ * either way, since it never checks `mode`). Design Step C will add marquee-select on top of the
+ * same empty-canvas branch point. Selection state (the set of
  * selected shape ids) lives here, not in DrawingBoard.js -- per that module's own doc comment, it
  * stays a plain data model with no interaction/event concerns. This file's one Paper.js Tool
  * routes every pointer gesture through a single decision: hit an existing shape first (selection/
@@ -251,6 +254,12 @@ export function createDrawingTool(canvasEl) {
         selectedIds = clearSelection();
         applySelectionVisuals();
       }
+      // Design Step A: Select is a real, inert mode -- a drag on empty canvas does nothing yet
+      // (Design Step C adds marquee-select here). Must not fall through to the 'draw' branch
+      // below, which would start a freehand stroke.
+      if (mode === 'select') {
+        return;
+      }
       if (mode === 'polygon') {
         interactionKind = 'polygon';
         polygonPoints = [event.point];
@@ -398,9 +407,9 @@ export function createDrawingTool(canvasEl) {
      *   mode was entered -- fixes the base fit scale for this drawing session (matches every other
      *   viewport transform in this app in treating project.canvas as the mm reference frame).
      * @param {number} paddingPx same padding convention drawLayout() already uses (38*dpr).
-     * @param {'freehand'|'rect'|'ellipse'|'slot'|'polygon'} [initialMode]
+     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'} [initialMode]
      */
-    enter(projectCanvasMm, paddingPx, initialMode = 'freehand') {
+    enter(projectCanvasMm, paddingPx, initialMode = 'select') {
       canvasMm = projectCanvasMm;
       board.reset();
       board.active = true;
@@ -428,7 +437,7 @@ export function createDrawingTool(canvasEl) {
      * Switch input mode without leaving drawing mode -- already-finalized shapes in board.shapes
      * are untouched; only a drag-in-flight (if any) is discarded, since the box preview belongs
      * to whichever mode was active when the drag started.
-     * @param {'freehand'|'rect'|'ellipse'|'slot'|'polygon'} newMode
+     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'} newMode
      */
     setMode(newMode) {
       mode = newMode;
