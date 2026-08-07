@@ -184,6 +184,10 @@ export function createDrawingTool(canvasEl) {
   // true while space is held AND the mouse is also down (an actual pan drag in progress).
   let spaceHeld = false;
   let panning = false;
+  // Design Step E fix: the *raw, untransformed* client pixel position (event.event.clientX/Y, not
+  // Paper.js's own project-space event.point/event.delta) the pan was last computed from -- see
+  // the onMouseDrag panning branch below for why this has to bypass Paper.js's own point/delta.
+  let panLastClientPoint = null;
 
   /**
    * Reflects the current interaction state onto layoutCanvas's CSS cursor: 'grabbing' while
@@ -337,6 +341,7 @@ export function createDrawingTool(canvasEl) {
       // calls it, so polygonPoints/board.path are left exactly as they were).
       if (spaceHeld) {
         panning = true;
+        panLastClientPoint = { x: event.event.clientX, y: event.event.clientY };
         updateCursor();
         return;
       }
@@ -440,11 +445,31 @@ export function createDrawingTool(canvasEl) {
       if (panning) {
         // Grab-and-slide semantics: dragging right/down must move the visible content right/down,
         // the opposite sign from onWheel()'s scroll-to-pan convention (scrolling right moves the
-        // viewport right / content left). event.delta already arrives in project mm (unlike
-        // onWheel's raw pixel deltaX/deltaY, Paper.js Tool events are pre-transformed through
-        // view.zoom/view.center -- see this file's header comment), so no baseScale/board.zoom
-        // division is needed here the way onWheel needs one; panBy() is the same call either way.
-        board.panBy(-event.delta.x, -event.delta.y);
+        // viewport right / content left).
+        //
+        // Design Step E fix: computes its own delta from the *raw client pixel* position
+        // (event.event.clientX/Y) instead of Paper.js's project-space event.point/event.delta.
+        // End-to-end verification found that a real multi-tick drag (many native mousemove events
+        // between mousedown and mouseup -- the normal case for an actual mouse/trackpad pan, not
+        // just a synthetic one) loses roughly half its total distance. Root cause: Paper.js's
+        // event.point is computed each tick by inverse-transforming the raw client position
+        // through the view's *current* matrix (View.getEventPoint() -> viewToProject()) -- but
+        // this same handler just mutated that matrix on the *previous* tick via panBy()+
+        // applyViewport(). That makes each tick's event.point/event.delta partly reflect the pan
+        // this code itself already applied a moment ago, which cancels out roughly every other
+        // tick's contribution (confirmed by hooking view._handleMouseEvent directly: raw
+        // clientX/clientY genuinely advance by the full step on every single tick, but the
+        // resulting view.center shift alternates real/zero). Reading the untransformed native
+        // event's clientX/clientY instead -- always real screen pixels, never affected by our own
+        // mid-drag matrix mutation -- breaks that feedback loop. paper.view.zoom is safe to read
+        // here (unlike view.center, panning never changes it mid-drag).
+        const clientX = event.event.clientX;
+        const clientY = event.event.clientY;
+        const zoom = paper.view.zoom;
+        const dxMm = (clientX - panLastClientPoint.x) / zoom;
+        const dyMm = (clientY - panLastClientPoint.y) / zoom;
+        panLastClientPoint = { x: clientX, y: clientY };
+        board.panBy(-dxMm, -dyMm);
         applyViewport();
         return;
       }

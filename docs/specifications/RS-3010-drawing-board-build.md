@@ -29,15 +29,30 @@ Design Steps A-E restructure the drawing board's UI shell -- a Photoshop-style v
 canvas + contextual options panel, replacing the horizontal inline toolbar row Steps 1-2c built --
 without changing any of the underlying tool logic those steps already implemented and verified:
 
-- **Design Step A** (this step): layout shell. Adds the new tool rail, a contextual tool-options
-  panel, and a `'select'` tool-mode value, side by side with the existing horizontal toolbar row
-  (which stays fully functional). Layout only -- no new interaction behavior.
-- **Design Step B**: keyboard shortcuts, per-tool cursor styling, space-held pan.
-- **Design Step C**: marquee select, under the new explicit Select tool.
-- **Design Step D**: pre-commit resize handles on in-progress shapes, mirroring the existing
-  `project.layers` resize system.
-- **Design Step E**: consolidation -- removes the old horizontal toolbar row now that the rail/
-  panel fully replace it.
+- **Design Step A** (shipped): layout shell. Adds the new tool rail, a contextual tool-options
+  panel, and a `'select'` tool-mode value. The old horizontal `#drawToolGroup` toolbar row was
+  originally meant to stay side by side with the new rail/panel through Step E, but Step A's own
+  correction rounds removed it outright instead -- it does not exist in `index.html` at all
+  anymore, only explanatory comments mention it. Layout only -- no new interaction behavior beyond
+  that removal.
+- **Design Step B** (shipped): keyboard shortcuts, per-tool cursor styling, space-held pan.
+- **Design Step C** (shipped): marquee select, under the new explicit Select tool.
+- **Design Step D** (shipped): pre-commit resize handles on in-progress shapes, mirroring the
+  existing `project.layers` resize system.
+- **Design Step E** (this step): end-to-end verification. Because the old toolbar row was already
+  fully removed during Step A, there was no toolbar-removal work left for this step to do. Instead,
+  Step E is the integration pass that drives Design Steps A-D together in one continuous session --
+  all four presets, Select, marquee, resize, shortcuts, cursor, space-pan, and commit -- which no
+  prior step exercised together, and brings this Status section in line with what actually
+  happened. That continuous-session testing surfaced one real bug Step B's own (necessarily
+  narrower) verification hadn't: a real multi-tick space-held pan drag (many native mousemove
+  events between mousedown and mouseup, the normal case for actual mouse/trackpad input) lost
+  roughly half its distance, because the pan handler derived its per-tick delta from Paper.js's own
+  `event.point`/`event.delta`, which is computed each tick through the view matrix the *same*
+  handler had just mutated on the previous tick -- a feedback loop that cancels out about every
+  other tick's contribution. Fixed in `src/drawing/DrawingCanvasTool.js` by deriving the pan delta
+  from the raw native event's untransformed `clientX`/`clientY` instead, which the mid-drag matrix
+  mutation can't affect.
 
 Snapping (Steps 2d/2e) remains the only item left from the original four-preset v1 scope once
 Design Steps A-E land.
