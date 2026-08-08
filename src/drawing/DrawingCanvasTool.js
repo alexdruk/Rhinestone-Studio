@@ -186,8 +186,18 @@ function buildSlotPreview(a, b, widthMm) {
  * deleteSelected() below), keyed by the same `layer.id` commitFinalizedShape() now also stamps onto
  * `item.data.layerId` (alongside DrawingBoard's own pre-existing `item.data.shapeId`, a different,
  * board-local id -- see its own doc comment).
+ * RS-3011 Step 2: `onSelectionChanged(layerIds)` fires whenever this file's own `selectedIds` set
+ * is reassigned by a user gesture (plain click, shift-click, marquee release, empty-canvas clear)
+ * -- never on programmatic resets (enter()/exit()/deleteSelected()), which are lifecycle, not a
+ * selection the user made, and must not clobber whatever the app-level selection already is (e.g.
+ * a Text layer selected before Design mode was entered). `layerIds` is every currently-selected
+ * board.shapes item's `item.data.layerId` (the id commitFinalizedShape() stamped on, Step 1), in
+ * `selectedIds`' own iteration order (last id = most recently interacted-with, matching every other
+ * multi-select call site's own `ids[ids.length-1]` convention) -- any selected item without one
+ * (shouldn't happen post-Step-1, but mirrors this file's existing null-layerId guards) is skipped,
+ * never passed through as undefined.
  * @param {HTMLCanvasElement} canvasEl
- * @param {{getStoneDefaults?:()=>{stoneSize?:number,gap?:number,color?:string}, onShapeCommitted?:(layer:object)=>void, openHistorySession?:()=>void, closeHistorySession?:()=>void, onShapeMoved?:(layerId:string,dxMm:number,dyMm:number)=>void, onShapeResized?:(layerId:string,boundsMm:{left:number,top:number,width:number,height:number})=>void, onShapeDeleted?:(layerId:string)=>(boolean|void)}} [hooks] onShapeDeleted returning exactly `false` means the deletion was blocked (e.g. a last-layer guard) -- the shape stays in `board.shapes` too, everything else treats a non-`false` return as success.
+ * @param {{getStoneDefaults?:()=>{stoneSize?:number,gap?:number,color?:string}, onShapeCommitted?:(layer:object)=>void, openHistorySession?:()=>void, closeHistorySession?:()=>void, onShapeMoved?:(layerId:string,dxMm:number,dyMm:number)=>void, onShapeResized?:(layerId:string,boundsMm:{left:number,top:number,width:number,height:number})=>void, onShapeDeleted?:(layerId:string)=>(boolean|void), onSelectionChanged?:(layerIds:string[])=>void}} [hooks] onShapeDeleted returning exactly `false` means the deletion was blocked (e.g. a last-layer guard) -- the shape stays in `board.shapes` too, everything else treats a non-`false` return as success.
  */
 export function createDrawingTool(canvasEl, hooks = {}) {
   const {
@@ -197,7 +207,8 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     closeHistorySession = () => {},
     onShapeMoved = () => {},
     onShapeResized = () => {},
-    onShapeDeleted = () => {}
+    onShapeDeleted = () => {},
+    onSelectionChanged = () => {}
   } = hooks;
   const board = new DrawingBoard();
   let isSetUp = false;
@@ -496,6 +507,22 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   }
 
   /**
+   * RS-3011 Step 2: notifies `onSelectionChanged` with every currently-selected shape's
+   * `item.data.layerId` (skipping any without one). Called at every user-gesture site that
+   * reassigns `selectedIds` -- see this function's own hooks-param doc comment above for which
+   * sites those are and which are deliberately excluded.
+   */
+  function notifySelectionChanged() {
+    const layerIds = [];
+    for (const id of selectedIds) {
+      const shape = board.getShape(id);
+      const layerId = shape && shape.item.data.layerId;
+      if (layerId) layerIds.push(layerId);
+    }
+    onSelectionChanged(layerIds);
+  }
+
+  /**
    * Rebuilds `resizeHandleItems` from scratch: removes whatever handle Items currently exist,
    * then -- only if `mode === 'select'` and exactly one shape is selected -- adds 8 small square
    * Path.Rectangle Items at that shape's current bounds' handle positions (handlePositionsFor).
@@ -573,6 +600,20 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     onShapeCommitted(layer);
   }
 
+  /**
+   * RS-3011 Step 2 fix: the reverse lookup of board.getShape's own board-local id -- callers outside
+   * this file (Align/Distribute/Duplicate in app.js) only ever know a layer's project.layers id,
+   * never this file's own shapeId, so repositionShapeForLayer/duplicateShapeForLayer both key off
+   * `item.data.layerId` (the id commitFinalizedShape() stamped on) instead. Returns null if no
+   * board.shapes item matches -- every non-Design layer type, since only Design-drawn shapes ever
+   * get a layerId stamped on their item.
+   * @param {string} layerId
+   * @returns {{id:string,item:paper.Item}|null}
+   */
+  function findShapeByLayerId(layerId) {
+    return board.listShapes().find((shape) => shape.item.data.layerId === layerId) || null;
+  }
+
   function attachTool() {
     if (tool) tool.remove();
     tool = new paper.Tool();
@@ -645,6 +686,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           selectedIds = toggleSelection(selectedIds, hitId);
           applySelectionVisuals();
           updateResizeHandles();
+          notifySelectionChanged();
           interactionKind = null;
           return;
         }
@@ -652,6 +694,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           selectedIds = selectOnly(hitId);
           applySelectionVisuals();
           updateResizeHandles();
+          notifySelectionChanged();
         }
         interactionKind = 'move';
         // RS-3010 Step 2e: hitId (the specific shape actually clicked, even within a
@@ -669,6 +712,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         selectedIds = clearSelection();
         applySelectionVisuals();
         updateResizeHandles();
+        notifySelectionChanged();
       }
       // Design Step C: Select's empty-canvas drag starts a marquee. The marquee visual itself is
       // built lazily in onMouseDrag (mirrors rect/ellipse/slot's own "nothing meaningful to show
@@ -925,6 +969,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
             selectedIds = selectMany(containedIds);
             applySelectionVisuals();
             updateResizeHandles();
+            notifySelectionChanged();
           }
         }
         if (marqueeItem) {
@@ -1192,6 +1237,63 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         board.removeShape(id);
       }
       selectedIds = selectMany(stillSelected);
+      updateResizeHandles();
+    },
+
+    /**
+     * RS-3011 Step 2 fix: repositions an already-committed Design shape's Paper.js item so its
+     * bounds' top-left lands at (xMm,yMm) -- the same left/top a 'path' layer's own l.x/l.y always
+     * is (XYWH_SHAPE_TYPES convention). Keeps board.shapes in sync when app.js moves a layer through
+     * a path that doesn't go through this file's own onMouseUp move/resize write-through (Align/
+     * Distribute, which write project.layers x/y directly via applyPositionDeltas() -- see
+     * findShapeByLayerId's own doc comment). A no-op if no board.shapes item matches `layerId`
+     * (every non-Design layer type -- Align/Distribute call this for every layer they moved,
+     * Design-drawn or not). Refreshes resize handles afterward in case the repositioned shape is
+     * the one currently selected (its bounds just changed).
+     * @param {string} layerId
+     * @param {number} xMm
+     * @param {number} yMm
+     */
+    repositionShapeForLayer(layerId, xMm, yMm) {
+      const shape = findShapeByLayerId(layerId);
+      if (!shape) return;
+      const b = shape.item.bounds;
+      shape.item.translate(new paper.Point(xMm - b.left, yMm - b.top));
+      updateResizeHandles();
+    },
+
+    /**
+     * RS-3011 Step 2 fix: clones an already-committed Design shape's Paper.js item, offsets the
+     * clone by (dxMm,dyMm) -- the SAME offset app.js's duplicateLayer() already applied to the new
+     * layer's own x/y, passed through rather than re-derived here, so there is only ever one +8mm/
+     * +8mm convention -- and adds it to board.shapes with `newLayerId` stamped onto
+     * item.data.layerId, mirroring commitFinalizedShape()'s own stamp. A no-op if no board.shapes
+     * item matches `sourceLayerId` (every non-Design layer type). Also selects the clone in this
+     * file's own `selectedIds` (selectOnly(), the same helper the click-handler sites use) and
+     * rebuilds resize handles -- app.js's duplicateLayer() already points selectedLayerId/
+     * selectedLayerIds (and therefore the Inspector) at the new copy right after calling this, so
+     * the Design canvas's own selection outline/handles must land on the same shape or the two
+     * would visibly disagree about what's selected. Deliberately does NOT call onSelectionChanged/
+     * notifySelectionChanged() itself -- duplicateLayer() already sets the app-level selection
+     * directly, so firing the hook here would be redundant and could race that assignment.
+     * applySelectionVisuals() repaints every shape's stroke color from the new `selectedIds`
+     * (needed regardless of order: Paper.js's clone() copies the source item's current strokeColor
+     * verbatim, which would otherwise leave the clone wrongly painted to match whatever the source
+     * was).
+     * @param {string} sourceLayerId
+     * @param {string} newLayerId
+     * @param {number} dxMm
+     * @param {number} dyMm
+     */
+    duplicateShapeForLayer(sourceLayerId, newLayerId, dxMm, dyMm) {
+      const source = findShapeByLayerId(sourceLayerId);
+      if (!source) return;
+      const clone = source.item.clone({ insert: true });
+      clone.translate(new paper.Point(dxMm, dyMm));
+      clone.data.layerId = newLayerId;
+      const cloneId = board.addShape(clone);
+      selectedIds = selectOnly(cloneId);
+      applySelectionVisuals();
       updateResizeHandles();
     },
 

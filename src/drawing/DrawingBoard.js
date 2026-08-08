@@ -69,6 +69,22 @@ export class DrawingBoard {
     return id;
   }
 
+  /**
+   * RS-3011 Step 2 fix: adds an already-built Paper.js Item directly to the finalized `shapes`
+   * collection, assigning it a stable id the same way finalizeShape() does (an internal counter,
+   * not derived from the item itself) -- used when a shape is produced programmatically (Duplicate)
+   * rather than drawn through the normal path->finalizeShape() flow. Stamps `item.data.shapeId` the
+   * same way finalizeShape() does, for the same hit-testing reason.
+   * @param {paper.Item} item
+   * @returns {string} the new shape's id
+   */
+  addShape(item) {
+    const id = 'shape' + (++this._counter);
+    item.data.shapeId = id;
+    this.shapes.push({ id, item });
+    return id;
+  }
+
   /** Removes the finalized shape with the given id from both the Paper.js scene and `shapes`. */
   removeShape(id) {
     const index = this.shapes.findIndex((s) => s.id === id);
