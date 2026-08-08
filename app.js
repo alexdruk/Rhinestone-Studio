@@ -924,6 +924,26 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     // guard blocked this -- when it did, the shape must stay on the Design canvas too, or it would
     // vanish from Design while its project.layers entry (correctly) survives.
     return deleteLayer(l.id);
+  },
+  // RS-3011 Step 2: Design's own selection (click/shift-click/marquee/clear -- see
+  // DrawingCanvasTool.js's own onSelectionChanged doc comment for exactly which gestures fire this)
+  // feeds the same selectedLayerIds/selectedLayerId every other selection-driving code path in this
+  // file already sets, so the already-visible Align/Distribute/Duplicate/rotate-handle system stops
+  // being inert for Design shapes. layerIds' last entry (most-recently-interacted-with, per
+  // DrawingCanvasTool.js's own ordering) becomes selectedLayerId, matching every other multi-select
+  // site's own `ids[ids.length-1]` convention (e.g. the boolean-ops result-selection below).
+  onSelectionChanged:(layerIds)=>{
+    if(!layerIds.length){
+      // Same empty-selection handling as an empty-canvas click on the main layoutCanvas pointerdown
+      // handler above (S-003/RS-1009): selectedLayerId is left pointing at whatever it last did
+      // (still a valid layer -- selectedLayer() falls back to project.layers[0] regardless), only
+      // the multi-selection itself clears.
+      if(selectedLayerIds.size){selectedLayerIds=clearSelection();renderLayerUI();updateEditingUI();drawLayout()}
+      return;
+    }
+    selectedLayerIds=selectMany(layerIds);
+    selectedLayerId=layerIds[layerIds.length-1];
+    syncSelectedControlsFromLayer();renderLayerUI();updateEditingUI();updateAll(true);
   }
 });
 // RS-3010 Step 2d: exposes drawingTool's own debugGrid/debugHitTestShapeId QA-only surface for
@@ -1406,7 +1426,13 @@ function unionBBoxOfLayers(layers){let x=Infinity,y=Infinity,x2=-Infinity,y2=-In
 // RS-1009: adapts a live project layer into the plain {id,bbox:{xMm,yMm,widthMm,heightMm}} shape
 // src/editing/AlignmentEngine.js expects, for every currently multi-selected layer.
 function selectedItemsForEditing(){return[...selectedLayerIds].map(id=>project.layers.find(l=>l.id===id)).filter(Boolean).map(l=>{const b=getLayerBBox(l);return{id:l.id,bbox:{xMm:b.x,yMm:b.y,widthMm:b.width,heightMm:b.height}}})}
-function applyPositionDeltas(deltas){for(const[id,{dxMm,dyMm}]of deltas){const l=project.layers.find(x=>x.id===id);if(!l)continue;const p=getLayerPosition(l);setLayerPosition(l,p.xMm+dxMm,p.yMm+dyMm)}}
+// RS-3011 Step 2 fix: repositionShapeForLayer() keeps a Design-drawn shape's Paper.js item (in
+// drawingTool's own board.shapes) in sync with the project.layers x/y this loop just wrote --
+// Align/Distribute previously bypassed DrawingCanvasTool.js entirely (unlike the main-canvas drag
+// code, which already writes through via onShapeMoved/onShapeResized), leaving the two visibly out
+// of sync until Design was closed and reopened. A no-op for every non-Design layer type (its own
+// internal lookup finds no matching item.data.layerId).
+function applyPositionDeltas(deltas){for(const[id,{dxMm,dyMm}]of deltas){const l=project.layers.find(x=>x.id===id);if(!l)continue;const p=getLayerPosition(l);const xMm=p.xMm+dxMm,yMm=p.yMm+dyMm;setLayerPosition(l,xMm,yMm);drawingTool.repositionShapeForLayer(l.id,xMm,yMm)}}
 // UI-001B: align/distribute were the only two mutating editor actions with no #status confirmation
 // at all (every other action -- import/export/duplicate/delete/undo/redo -- already reports what it
 // did); a click that moves a layer by a subtle, easy-to-miss amount could look like nothing happened.
@@ -1981,7 +2007,12 @@ function composeCombinedPreviewCanvas(){
   ctx.drawImage(cupCanvas,margin+w1+gap,margin+(maxH-h2)/2);
   return c;
 }
-function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(XYWH_SHAPE_TYPES.has(copy.type)){copy.x+=8;copy.y+=8}if(copy.type==='text'){copy.text+=' copy';copy.x=(copy.x||0)+8;copy.y=(copy.y||0)+8}project.layers.push(copy);selectedLayerId=copy.id;selectedLayerIds=selectOnly(copy.id);syncSelectedControlsFromLayer();updateAll()}// RS-3011 Step 1 write-through fix: returns true/false so onShapeDeleted() (below) knows whether
+// RS-3011 Step 2 fix: for a Design-drawn 'path' layer, duplicateShapeForLayer() clones the matching
+// Paper.js item in drawingTool's own board.shapes too -- previously only project.layers gained a
+// new entry, leaving the copy invisible on the Design canvas until it was closed and reopened. Uses
+// the SAME dx/dy this function already applies to copy.x/copy.y (not a second offset convention);
+// a no-op for every non-'path' layer type via drawingTool's own internal lookup.
+function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(XYWH_SHAPE_TYPES.has(copy.type)){const dx=8,dy=8;copy.x+=dx;copy.y+=dy;drawingTool.duplicateShapeForLayer(l.id,copy.id,dx,dy)}if(copy.type==='text'){copy.text+=' copy';copy.x=(copy.x||0)+8;copy.y=(copy.y||0)+8}project.layers.push(copy);selectedLayerId=copy.id;selectedLayerIds=selectOnly(copy.id);syncSelectedControlsFromLayer();updateAll()}// RS-3011 Step 1 write-through fix: returns true/false so onShapeDeleted() (below) knows whether
 // the guard blocked the delete, without duplicating the project.layers.length<=1 check itself --
 // every pre-existing caller already discards the return value, so this stays backward-compatible.
 function deleteLayer(id){if(project.layers.length<=1){el('status').textContent='Cannot delete the last layer';const hint=el('layerRuleHint');hint.style.display='block';hint.scrollIntoView({block:'nearest'});return false}commitHistory();project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true);return true}
