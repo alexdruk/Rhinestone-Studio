@@ -118,6 +118,15 @@ tools/rs-3010-step2f-verification-screenshots/
 # (shapes now land in project.layers immediately) -- same "never a repo artifact" category
 tools/rs-3011-step1-verification-screenshots/
 
+# RS-3011 Step 3: ad hoc live-browser investigation screenshots for the live stone panel scoping
+# question (Inspector fields vs. Design canvas vs. #designToolOptionsPanel) -- same "never a repo
+# artifact" category
+tools/rs-3011-step3-investigation-screenshots/
+
+# RS-3011 Step 3a: ad hoc live-browser verification screenshots for mirroring stone fields into
+# Design's tool-options panel -- same "never a repo artifact" category
+tools/rs-3011-step3a-verification-screenshots/
+
 # RS-3001: throwaway CSS-isolation spike prototypes (copied drawleather source slices +
 # harness/comparison scripts) -- findings are captured in
 # docs/specifications/RS-3001-css-isolation-addendum.md, the prototype code itself is never a
