@@ -168,7 +168,37 @@ function buildSlotPreview(a, b, widthMm) {
   return path;
 }
 
-export function createDrawingTool(canvasEl) {
+/**
+ * RS-3011 Step 1: `hooks` lets app.js own project state while this module stays the "all direct
+ * Paper.js usage" facade its own header comment describes -- `getStoneDefaults()`/
+ * `onShapeCommitted(layer)` mirror the old commit()'s `{stoneSize,gap,color}` argument and
+ * project.layers.push() call site respectively, just invoked per-shape instead of per-batch.
+ * `openHistorySession`/`closeHistorySession` are passed straight through to freehand's own
+ * drag-start/drag-end (see onMouseDown/onMouseUp's 'freehand' branches) -- every other shape type
+ * still gets a single commitHistory()-before-push via onShapeCommitted() alone.
+ *
+ * RS-3011 Step 1 write-through fix: a committed shape stays live in `board.shapes` for Design's own
+ * select/move/resize/delete (unchanged from before this milestone), but those interactions used to
+ * only ever mutate the local Paper.js item -- never the project.layers entry commitFinalizedShape()
+ * already pushed at creation time, silently letting the two drift apart. `onShapeMoved`/
+ * `onShapeResized`/`onShapeDeleted` close that gap: called once each, when a move/resize/delete
+ * interaction on an already-committed shape finishes (see onMouseUp's 'move'/'resize' branches and
+ * deleteSelected() below), keyed by the same `layer.id` commitFinalizedShape() now also stamps onto
+ * `item.data.layerId` (alongside DrawingBoard's own pre-existing `item.data.shapeId`, a different,
+ * board-local id -- see its own doc comment).
+ * @param {HTMLCanvasElement} canvasEl
+ * @param {{getStoneDefaults?:()=>{stoneSize?:number,gap?:number,color?:string}, onShapeCommitted?:(layer:object)=>void, openHistorySession?:()=>void, closeHistorySession?:()=>void, onShapeMoved?:(layerId:string,dxMm:number,dyMm:number)=>void, onShapeResized?:(layerId:string,boundsMm:{left:number,top:number,width:number,height:number})=>void, onShapeDeleted?:(layerId:string)=>(boolean|void)}} [hooks] onShapeDeleted returning exactly `false` means the deletion was blocked (e.g. a last-layer guard) -- the shape stays in `board.shapes` too, everything else treats a non-`false` return as success.
+ */
+export function createDrawingTool(canvasEl, hooks = {}) {
+  const {
+    getStoneDefaults = () => ({}),
+    onShapeCommitted = () => {},
+    openHistorySession = () => {},
+    closeHistorySession = () => {},
+    onShapeMoved = () => {},
+    onShapeResized = () => {},
+    onShapeDeleted = () => {}
+  } = hooks;
   const board = new DrawingBoard();
   let isSetUp = false;
   // RS-3010 Step 2d: contentLayer is the original default paper.Layer paper.setup() itself
@@ -514,6 +544,35 @@ export function createDrawingTool(canvasEl) {
     polygonPoints = [];
   }
 
+  /**
+   * RS-3011 Step 1: called right after board.finalizeShape() at every finalize site (freehand
+   * stroke end, each preset's drag-end, polygon close) with the same Paper.js Item that was just
+   * finalized -- flattens it into a contour and hands the resulting 'path' layer to
+   * onShapeCommitted(), the same shape/data the old batch commit() built per shape, just invoked
+   * immediately instead of on a later explicit action. `item` stays alive in `board.shapes`
+   * regardless (finalizeShape() already added it there for select/move/resize) -- this only reads
+   * it, never removes it.
+   *
+   * Write-through fix: stamps the new layer's own id onto `item.data.layerId`, alongside
+   * DrawingBoard.finalizeShape()'s own `item.data.shapeId` (a separate, board-local id) -- this is
+   * what lets a later move/resize/delete on this same item look up which project.layers entry to
+   * keep in sync (onShapeMoved/onShapeResized/onShapeDeleted below).
+   * @param {paper.Item} item
+   */
+  function commitFinalizedShape(item) {
+    const flattened = flattenPathToContour(item, FLATTEN_TOLERANCE_MM);
+    if (!flattened) return;
+    const { stoneSize, gap, color } = getStoneDefaults();
+    const layer = createPathLayerFromContour(flattened, {
+      stoneSize,
+      gap,
+      color,
+      pathName: 'Drawn Shape'
+    });
+    item.data.layerId = layer.id;
+    onShapeCommitted(layer);
+  }
+
   function attachTool() {
     if (tool) tool.remove();
     tool = new paper.Tool();
@@ -549,6 +608,10 @@ export function createDrawingTool(canvasEl) {
           closedPath.closePath();
           board.beginPath(closedPath);
           board.finalizeShape();
+          // RS-3011 Step 1: commit before resetInProgressDrawing() below clears interactionKind/
+          // polygonPoints -- commitFinalizedShape() only reads `closedPath` itself, unaffected
+          // either order, but keeping this next to finalizeShape() matches every other site.
+          commitFinalizedShape(closedPath);
           resetInProgressDrawing();
         } else {
           // RS-3010 Step 2e: the vertex itself snaps (Step 2f: vertex-else-grid, optionally
@@ -628,6 +691,11 @@ export function createDrawingTool(canvasEl) {
       dragStart = event.point;
       dragging = true;
       if (mode === 'freehand') {
+        // RS-3011 Step 1: freehand is a continuous interaction (many pointermove samples before
+        // the stroke ends) -- opened here, at drag-start, and closed in onMouseUp's 'freehand'
+        // branch below (whether the stroke finalizes or gets discarded), so a single stroke is
+        // one undo step, not one per commitFinalizedShape() call some other site relies on.
+        openHistorySession();
         const path = new paper.Path({
           strokeColor: STROKE_COLOR,
           strokeWidth: STROKE_WIDTH_PX / paper.view.zoom
@@ -792,6 +860,19 @@ export function createDrawingTool(canvasEl) {
         return;
       }
       if (interactionKind === 'move') {
+        // RS-3011 Step 1 write-through fix: moveAppliedOffset is the total snapped delta every
+        // selected shape received this drag (onMouseDrag's 'move' branch applies the identical
+        // incrementalDelta to each id in `selectedIds` every frame, preserving relative positions)
+        // -- so the same (dx,dy) is correct for each already-committed shape in the group. Skipped
+        // entirely for a zero-offset mousedown+mouseup (a plain click with no drag), which must not
+        // manufacture an empty undo step.
+        if (moveAppliedOffset && (moveAppliedOffset.x !== 0 || moveAppliedOffset.y !== 0)) {
+          for (const id of selectedIds) {
+            const shape = board.getShape(id);
+            const layerId = shape && shape.item.data.layerId;
+            if (layerId) onShapeMoved(layerId, moveAppliedOffset.x, moveAppliedOffset.y);
+          }
+        }
         interactionKind = null;
         moveStartPoint = null;
         moveAnchorShapeId = null;
@@ -800,6 +881,22 @@ export function createDrawingTool(canvasEl) {
         return;
       }
       if (interactionKind === 'resize') {
+        // RS-3011 Step 1 write-through fix: read the resized item's final bounds before clearing
+        // resizeShapeId/resizeStartBounds below -- onMouseDrag's 'resize' branch already applied
+        // every intermediate bounds change directly to the Paper.js item, so this is simply its
+        // current state. Skipped if unchanged from resizeStartBounds (a handle click with no drag).
+        const shape = board.getShape(resizeShapeId);
+        const layerId = shape && shape.item.data.layerId;
+        if (layerId && shape) {
+          const b = shape.item.bounds;
+          const changed =
+            !resizeStartBounds ||
+            Math.abs(b.left - resizeStartBounds.left) > 1e-6 ||
+            Math.abs(b.top - resizeStartBounds.top) > 1e-6 ||
+            Math.abs(b.width - resizeStartBounds.width) > 1e-6 ||
+            Math.abs(b.height - resizeStartBounds.height) > 1e-6;
+          if (changed) onShapeResized(layerId, { left: b.left, top: b.top, width: b.width, height: b.height });
+        }
         interactionKind = null;
         resizeHandle = null;
         resizeShapeId = null;
@@ -841,19 +938,28 @@ export function createDrawingTool(canvasEl) {
       dragging = false;
       if (mode === 'freehand') {
         // A pointerdown+up with no drag between them never produced a usable stroke (a single
-        // segment) -- discard it rather than leaving a degenerate path a later commit would reject.
+        // segment) -- discard it rather than leaving a degenerate path commitFinalizedShape()
+        // would reject anyway (flattenPathToContour()'s own <3-point guard).
         if (board.path && board.path.segments.length >= 2) {
-          board.path.simplify(SIMPLIFY_TOLERANCE_MM);
+          const item = board.path;
+          item.simplify(SIMPLIFY_TOLERANCE_MM);
           board.finalizeShape();
+          commitFinalizedShape(item);
         } else {
           board.clearPath();
         }
+        // RS-3011 Step 1: closes the session openHistorySession() opened at drag-start (onMouseDown
+        // above) -- runs whether the stroke finalized or was discarded, so a degenerate stroke never
+        // leaves a stale open session for the next interaction to accidentally merge into.
+        closeHistorySession();
       } else if (mode === 'slot') {
         // A drag preview already exists (built in onMouseDrag) -- finalize it as-is. A plain
         // click (no drag) is a deliberate default-pill placement, not a discard: build a
         // default-length horizontal pill centered on the click point.
         if (board.path) {
+          const item = board.path;
           board.finalizeShape();
+          commitFinalizedShape(item);
         } else {
           const halfLengthMm = (slotWidthMm * SLOT_DEFAULT_LENGTH_RATIO) / 2;
           const previewItem = buildSlotPreview(
@@ -865,13 +971,16 @@ export function createDrawingTool(canvasEl) {
           previewItem.strokeWidth = STROKE_WIDTH_PX / paper.view.zoom;
           board.beginPath(previewItem);
           board.finalizeShape();
+          commitFinalizedShape(previewItem);
         }
       } else if (
         board.path &&
         board.path.bounds.width > MIN_BOX_DIM_MM &&
         board.path.bounds.height > MIN_BOX_DIM_MM
       ) {
+        const item = board.path;
         board.finalizeShape();
+        commitFinalizedShape(item);
       } else {
         board.clearPath();
       }
@@ -907,9 +1016,6 @@ export function createDrawingTool(canvasEl) {
     },
     get mode() {
       return mode;
-    },
-    get hasCommittableShapes() {
-      return Boolean(board.shapes.length || (board.path && board.path.segments.length >= 2));
     },
     /** True while a polygon is mid-placement (at least one vertex clicked, not yet closed). */
     get hasInProgressPolygon() {
@@ -1063,39 +1169,30 @@ export function createDrawingTool(canvasEl) {
     /**
      * Remove every currently-selected finalized shape and clear the selection. A no-op if nothing
      * is selected.
+     *
+     * RS-3011 Step 1 write-through fix: onShapeDeleted(layerId) fires once per already-committed
+     * shape being removed, read from item.data.layerId BEFORE board.removeShape() below (which
+     * discards the item, and its data, along with it) -- so the matching project.layers entry
+     * doesn't outlive the shape it belongs to on the Design canvas. An explicit `false` return means
+     * app.js's own last-layer guard (deleteLayer()) blocked it -- that shape must stay on the Design
+     * canvas too (board.removeShape() skipped, selection kept), or it would silently vanish from
+     * Design while its project.layers entry correctly survives. The default no-op hook returns
+     * undefined, which is not `=== false`, so callers with no `hooks` wired in keep today's
+     * unconditional local-only removal.
      */
     deleteSelected() {
-      for (const id of selectedIds) board.removeShape(id);
-      selectedIds = clearSelection();
+      const stillSelected = [];
+      for (const id of selectedIds) {
+        const shape = board.getShape(id);
+        const layerId = shape && shape.item.data.layerId;
+        if (layerId && onShapeDeleted(layerId) === false) {
+          stillSelected.push(id);
+          continue;
+        }
+        board.removeShape(id);
+      }
+      selectedIds = selectMany(stillSelected);
       updateResizeHandles();
-    },
-
-    /**
-     * Flatten every finalized shape (board.shapes -- not just the current selection) into a
-     * 'path' layer object each (app.js pushes them into project.layers and runs updateAll() --
-     * this module never touches project state) and clear the board. Returns an empty array if
-     * there is nothing to commit. `pathName` is used as-is for a single shape, or suffixed
-     * " 1", " 2", ... when multiple shapes commit at once.
-     */
-    commit({ stoneSize, gap, color, pathName }) {
-      const shapes = board.listShapes();
-      const layers = [];
-      shapes.forEach((shape, index) => {
-        const flattened = flattenPathToContour(shape.item, FLATTEN_TOLERANCE_MM);
-        if (!flattened) return;
-        layers.push(
-          createPathLayerFromContour(flattened, {
-            stoneSize,
-            gap,
-            color,
-            pathName: shapes.length > 1 ? `${pathName} ${index + 1}` : pathName,
-            index
-          })
-        );
-      });
-      board.clearAll();
-      selectedIds = clearSelection();
-      return layers;
     },
 
     /**

@@ -114,6 +114,10 @@ tools/rs-3010-step2e-verification-screenshots/
 # angle snapping -- same "never a repo artifact" category
 tools/rs-3010-step2f-verification-screenshots/
 
+# RS-3011 Step 1: ad hoc live-browser verification screenshots for the removed Commit Shape step
+# (shapes now land in project.layers immediately) -- same "never a repo artifact" category
+tools/rs-3011-step1-verification-screenshots/
+
 # RS-3001: throwaway CSS-isolation spike prototypes (copied drawleather source slices +
 # harness/comparison scripts) -- findings are captured in
 # docs/specifications/RS-3001-css-isolation-addendum.md, the prototype code itself is never a
