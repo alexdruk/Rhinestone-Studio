@@ -938,7 +938,12 @@ const drawingTool=createDrawingTool(layoutCanvas,{
       // handler above (S-003/RS-1009): selectedLayerId is left pointing at whatever it last did
       // (still a valid layer -- selectedLayer() falls back to project.layers[0] regardless), only
       // the multi-selection itself clears.
-      if(selectedLayerIds.size){selectedLayerIds=clearSelection();renderLayerUI();updateEditingUI();drawLayout()}
+      if(selectedLayerIds.size){selectedLayerIds=clearSelection();renderLayerUI();updateEditingUI();drawLayout()
+        // RS-3011 Step 3a: clearing the selection also drops it below designStoneTarget's
+        // size===1 requirement, so the stone fields must return to their Inspector home slot --
+        // this branch returns before reaching syncSelectedControlsFromLayer()'s own
+        // relocateFieldGroups() call below, so it needs its own.
+        relocateFieldGroups()}
       return;
     }
     selectedLayerIds=selectMany(layerIds);
@@ -1172,6 +1177,11 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
     const target=lightboxForLayerType(l.type);
     if(target&&!target.isOpen)target.open();
   }
+  // RS-3011 Step 3a: this function already runs on every selection change (canvas click, Layers
+  // list click, Design's own onSelectionChanged, undo/redo, etc.) -- reusing that as the one place
+  // that re-evaluates the stone group's designSlot target, rather than adding a relocateFieldGroups()
+  // call at each of those sites individually.
+  relocateFieldGroups();
 }
 function writeSelectedControlsToLayer(){const l=selectedLayer();
   // S-112A: detected here, before project.plate is overwritten further down in this same function
@@ -2866,15 +2876,22 @@ window.addEventListener('resize',()=>updateAll(true));
 // that could disagree with the first. ----
 const FIELD_GROUPS={
   position:{field:'sharedPositionFields',home:'inspectorPositionSlot',lightboxSlots:{shapes:'shapesPositionSlot',import:'importPositionSlot',imagetrace:'imageTracePositionSlot'}},
-  stone:{field:'sharedStoneFields',home:'inspectorStoneSlot',lightboxSlots:{text:'textStoneSlot',shapes:'shapesStoneSlot',import:'importStoneSlot',imagetrace:'imageTraceStoneSlot'}},
+  // RS-3011 Step 3a: designSlot is a second fallback destination, checked only for this group --
+  // Position/Mixed Size stay Inspector/Lightbox-only, matching the milestone's stated scope
+  // (stoneSize/gap/color only, "still whole-shape, not sub-region").
+  stone:{field:'sharedStoneFields',home:'inspectorStoneSlot',lightboxSlots:{text:'textStoneSlot',shapes:'shapesStoneSlot',import:'importStoneSlot',imagetrace:'imageTraceStoneSlot'},designSlot:'designStoneSlot'},
   // S-200: Mixed Stone Size -- same relocation shape as `stone` above (applies to every layer type).
   mixedSize:{field:'sharedMixedSizeFields',home:'inspectorMixedSizeSlot',lightboxSlots:{text:'textMixedSizeSlot',shapes:'shapesMixedSizeSlot',import:'importMixedSizeSlot',imagetrace:'imageTraceMixedSizeSlot'}}
 };
 let activeFieldLightbox=null;
 function relocateFieldGroups(){
+  // RS-3011 Step 3a: while Design is active with exactly one 'path' (Design-drawn) layer selected,
+  // the stone group's designSlot outranks its Inspector home -- but a Lightbox slot (if one happens
+  // to be open) still outranks both, unchanged from the pre-existing precedence.
+  const designStoneTarget=drawingTool.isActive&&selectedLayerIds.size===1&&selectedLayer().type==='path';
   for(const group of Object.values(FIELD_GROUPS)){
     const fieldEl=el(group.field);
-    const destId=(activeFieldLightbox&&group.lightboxSlots[activeFieldLightbox])||group.home;
+    const destId=(activeFieldLightbox&&group.lightboxSlots[activeFieldLightbox])||(designStoneTarget&&group.designSlot)||group.home;
     const dest=el(destId);
     if(fieldEl&&dest&&fieldEl.parentElement!==dest)dest.appendChild(fieldEl);
   }
@@ -3304,6 +3321,10 @@ function setDrawMode(active,mode){
     // the app's neutral status (see the two other 'Ready' resets in this file).
     el('status').textContent='Ready';
   }
+  // RS-3011 Step 3a: covers entering/exiting Design when the selection itself doesn't change (a
+  // shape already selected before this toggle) -- syncSelectedControlsFromLayer()'s own
+  // relocateFieldGroups() call only fires on an actual selection change, not on this toggle alone.
+  relocateFieldGroups();
   updateDrawToolButtons();
 }
 function updateDrawToolButtons(){
