@@ -132,3 +132,8 @@ tools/rs-3011-step3a-verification-screenshots/
 # docs/specifications/RS-3001-css-isolation-addendum.md, the prototype code itself is never a
 # repo artifact, same category as the folders above
 tools/scratch/rs-3001-css-spike/
+
+# RS-3011 Step 3b: throwaway native-Paper.js-stone-rendering feasibility spike (harness page +
+# measurement scripts + screenshots) -- findings reported directly to the user, the prototype
+# code itself is never a repo artifact, same category as the folder above
+tools/scratch/rs-3011-step3b-spike/
