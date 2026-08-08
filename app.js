@@ -859,7 +859,73 @@ const engine=new GeometryEngine(permanentEngine);let project=defaultProject(),se
 // paper.setup() on first enter() and only pauses/resumes afterward (see DrawingCanvasTool.js's own
 // header comment for why), so constructing it eagerly here does not touch the canvas until the
 // user actually enables Draw mode.
-const drawingTool=createDrawingTool(layoutCanvas);
+// RS-3011 Step 1: hooks let DrawingCanvasTool.js construct+push each shape's 'path' layer the
+// instant it finalizes (freehand stroke end, a preset's drag-end, polygon close) without touching
+// project state itself -- app.js stays the only owner of `project`, matching this file's own
+// "never touches project state" doc comment on the old commit()/DrawingBoard.js.
+const drawingTool=createDrawingTool(layoutCanvas,{
+  // stoneSize/gap/color default from the currently-selected layer, the same convention
+  // createShapeLayer()/the SVG-import handler elsewhere in this file already use for a brand-new
+  // shape.
+  getStoneDefaults:()=>{const base=selectedLayer();return{stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold'}},
+  // Hands the constructed layer (same object shape app.js's Boolean Operations code already
+  // produces, RS-1012) to the existing project.layers/updateAll() pipeline unchanged --
+  // commitHistory() before the push, exactly like every other single-shape creation path in this
+  // file (addRect, duplicateLayer, the SVG-import handler, ...).
+  onShapeCommitted:(layer)=>{
+    commitHistory();
+    project.layers.push(layer);
+    selectedLayerId=layer.id;
+    selectedLayerIds=selectOnly(layer.id);
+    syncSelectedControlsFromLayer();
+    updateAll(true);
+    el('status').textContent='Added shape as new Path layer.';
+  },
+  // Freehand is a continuous interaction (many pointermove samples before the stroke ends) --
+  // DrawingCanvasTool.js opens a session at drag-start and closes it at drag-end so one stroke is
+  // one undo step, the same session-coalescing convention HISTORY_TRACKED_CONTROL_IDS' input/change
+  // pair below already uses for continuous field edits.
+  openHistorySession,
+  closeHistorySession,
+  // RS-3011 Step 1 write-through fix: a shape already committed to project.layers (per
+  // onShapeCommitted above) can still be moved/resized/deleted afterward via Design's own Select
+  // tool -- these three keep that project.layers entry in sync, called once each when the
+  // interaction finishes (DrawingCanvasTool.js's onMouseUp/deleteSelected()), not per drag frame.
+  onShapeMoved:(layerId,dxMm,dyMm)=>{
+    const l=project.layers.find(x=>x.id===layerId);
+    if(!l)return;
+    // Same one-commitHistory()-call-per-drag convention as the main-canvas drag-move code above
+    // (see "starting its drag. Exactly one commitHistory() call happens per drag" ) and
+    // nudgeSelection()'s identical getLayerPosition()/setLayerPosition() delta-apply pattern --
+    // reused here rather than reimplemented, just scoped to the one shape id DrawingCanvasTool.js
+    // already resolved.
+    commitHistory();
+    const p=getLayerPosition(l);
+    setLayerPosition(l,p.xMm+dxMm,p.yMm+dyMm);
+    updateAll(true);
+  },
+  onShapeResized:(layerId,boundsMm)=>{
+    const l=project.layers.find(x=>x.id===layerId);
+    if(!l)return;
+    // Every Design-drawn layer is type 'path' (XYWH_SHAPE_TYPES, x/y/w/h fields) -- GeometryEngine's
+    // generatePathLayout()/_placeNaturalContours() re-scales the layer's stored (0,0)-rooted
+    // `contours` into this x/y/w/h box on every generate() call, so writing the new bounds here is
+    // sufficient; `contours` itself never needs touching.
+    commitHistory();
+    l.x=boundsMm.left;l.y=boundsMm.top;l.w=boundsMm.width;l.h=boundsMm.height;
+    updateAll(true);
+  },
+  onShapeDeleted:(layerId)=>{
+    const l=project.layers.find(x=>x.id===layerId);
+    if(!l)return true;
+    // Reuses deleteLayer() outright -- same commitHistory()-then-filter pattern, same "Cannot
+    // delete the last layer" guard, same selection/updateAll() follow-through, no second copy of
+    // any of that logic. Its return value tells deleteSelected() (DrawingCanvasTool.js) whether the
+    // guard blocked this -- when it did, the shape must stay on the Design canvas too, or it would
+    // vanish from Design while its project.layers entry (correctly) survives.
+    return deleteLayer(l.id);
+  }
+});
 // RS-3010 Step 2d: exposes drawingTool's own debugGrid/debugHitTestShapeId QA-only surface for
 // automated verification of the Design canvas's background grid layering -- same "read-only,
 // never used to drive any application logic" precedent as window.__preview3D above.
@@ -1915,7 +1981,10 @@ function composeCombinedPreviewCanvas(){
   ctx.drawImage(cupCanvas,margin+w1+gap,margin+(maxH-h2)/2);
   return c;
 }
-function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(XYWH_SHAPE_TYPES.has(copy.type)){copy.x+=8;copy.y+=8}if(copy.type==='text'){copy.text+=' copy';copy.x=(copy.x||0)+8;copy.y=(copy.y||0)+8}project.layers.push(copy);selectedLayerId=copy.id;selectedLayerIds=selectOnly(copy.id);syncSelectedControlsFromLayer();updateAll()}function deleteLayer(id){if(project.layers.length<=1){el('status').textContent='Cannot delete the last layer';const hint=el('layerRuleHint');hint.style.display='block';hint.scrollIntoView({block:'nearest'});return}commitHistory();project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true)}
+function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(XYWH_SHAPE_TYPES.has(copy.type)){copy.x+=8;copy.y+=8}if(copy.type==='text'){copy.text+=' copy';copy.x=(copy.x||0)+8;copy.y=(copy.y||0)+8}project.layers.push(copy);selectedLayerId=copy.id;selectedLayerIds=selectOnly(copy.id);syncSelectedControlsFromLayer();updateAll()}// RS-3011 Step 1 write-through fix: returns true/false so onShapeDeleted() (below) knows whether
+// the guard blocked the delete, without duplicating the project.layers.length<=1 check itself --
+// every pre-existing caller already discards the return value, so this stays backward-compatible.
+function deleteLayer(id){if(project.layers.length<=1){el('status').textContent='Cannot delete the last layer';const hint=el('layerRuleHint');hint.style.display='block';hint.scrollIntoView({block:'nearest'});return false}commitHistory();project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true);return true}
 function pointerToLayout(e){const r=layoutCanvas.getBoundingClientRect(),dpr=layoutTransform.dpr;return layoutPxToMm((e.clientX-r.left)*dpr,(e.clientY-r.top)*dpr)}
 // TXT-102: checked before the generic per-layer loop below -- the rotate handle only ever exists
 // for the single currently-selected text layer (matching drawRotateHandle()'s own single&&
@@ -3154,18 +3223,16 @@ function setDrawMode(active,mode){
     // absolute/inset sizing single-view mode uses), so this must land before enter()'s
     // getBoundingClientRect() call, not after.
     setWorkspaceMode('2d');
-    // Show the hint text and Commit Shape button -- letting the toolbar finish reflowing/
-    // wrapping around them -- BEFORE calling drawingTool.enter(), which measures layoutCanvas's
-    // current box via resyncViewSize(). Doing this in the other order sizes Paper's viewport
-    // against the canvas's PRE-reflow box: if showing this UI causes the toolbar to wrap onto a
-    // second line (more likely now that Step 2a added Rect/Ellipse buttons alongside Draw), the
-    // canvas's available CSS height shrinks immediately afterward but its already-sized Paper.js
-    // backing store does not, leaving drawn content misaligned/squished for the rest of the
-    // session. Setting style.display here forces the browser to recompute layout by the time
-    // enter()'s getBoundingClientRect() call runs, since both happen in the same synchronous task.
+    // Show the hint text -- letting the toolbar finish reflowing/wrapping around it -- BEFORE
+    // calling drawingTool.enter(), which measures layoutCanvas's current box via
+    // resyncViewSize(). Doing this in the other order sizes Paper's viewport against the
+    // canvas's PRE-reflow box: if showing this UI causes the toolbar to wrap onto a second line
+    // (more likely now that Step 2a added Rect/Ellipse buttons alongside Draw), the canvas's
+    // available CSS height shrinks immediately afterward but its already-sized Paper.js backing
+    // store does not, leaving drawn content misaligned/squished for the rest of the session.
+    // Setting style.display here forces the browser to recompute layout by the time enter()'s
+    // getBoundingClientRect() call runs, since both happen in the same synchronous task.
     el('drawModeHint').style.display='';
-    el('drawCommitBtn').style.display='';
-    el('drawCommitBtn').disabled=false;
     el('designToolOptionsPanel').style.display='';
     el('designToolRailLeft').style.display='';
     el('designToolRailRight').style.display='';
@@ -3183,12 +3250,10 @@ function setDrawMode(active,mode){
     // resyncViewSize()) -- app.js must not also call resizeCanvas() here, or the two would fight
     // over which one's dpr-scaled canvas.width/height sticks.
     drawingTool.enter({width:project.canvas.width,height:project.canvas.height},38*Math.max(1,devicePixelRatio||1),mode);
-    el('status').textContent='Drawing mode: drag on the canvas to draw a shape, then click Commit Shape.';
+    el('status').textContent='Drawing mode: drag on the canvas to draw a shape. It becomes a Path layer immediately.';
   }else{
     drawingTool.exit();
     el('drawModeHint').style.display='none';
-    el('drawCommitBtn').style.display='none';
-    el('drawCommitBtn').disabled=true;
     el('designToolOptionsPanel').style.display='none';
     el('designToolRailLeft').style.display='none';
     el('designToolRailRight').style.display='none';
@@ -3243,29 +3308,6 @@ el('railPolygonToggle').onclick=()=>setDrawTool('polygon');
 // RS-3010 Design Step A correction: #menuDesign is the new top-nav entry point -- calls the exact
 // same activation railSelectToggle already triggers, no parallel activation path.
 el('menuDesign').onclick=()=>setDrawTool('select');
-// Committing constructs a 'path' layer directly per drawn shape -- the same object shape app.js's
-// Boolean Operations code already produces (RS-1012) -- and hands each to the existing
-// project.layers/updateAll() pipeline completely unchanged; no new stone-computation logic here.
-// stoneSize/gap/color default from the currently-selected layer, the same convention
-// createShapeLayer()/the SVG-import handler above already use for a brand-new shape.
-el('drawCommitBtn').onclick=()=>{
-  // RS-3010 Step 2c: a polygon's vertices/preview live outside board.shapes until closed --
-  // committing now would silently finalize every OTHER already-drawn shape while leaving this one
-  // dangling on the canvas with no feedback.
-  if(drawingTool.hasInProgressPolygon){el('status').textContent='Finish the in-progress polygon first (click near its starting point), or press Escape to cancel it.';return}
-  if(!drawingTool.hasCommittableShapes){el('status').textContent='Draw a shape first, then click Commit Shape.';return}
-  const base=selectedLayer();
-  const layers=drawingTool.commit({stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold',pathName:'Drawn Shape'});
-  setDrawMode(false);
-  if(!layers.length)return;
-  commitHistory();
-  project.layers.push(...layers);
-  selectedLayerIds=selectMany(layers.map(l=>l.id));
-  selectedLayerId=layers[layers.length-1].id;
-  syncSelectedControlsFromLayer();
-  updateAll(true);
-  el('status').textContent=`Added ${layers.length} shape${layers.length===1?'':'s'} as new Path layer${layers.length===1?'':'s'}.`;
-};
 // Figma-style trackpad/mouse mapping, kept out of the normal pointerdown/move/up flow entirely so
 // a drag on the canvas always draws and never pans: plain scroll pans (deltaX/deltaY), Ctrl/Cmd+
 // scroll (or a trackpad pinch, which the browser reports as wheel+ctrlKey) zooms.
