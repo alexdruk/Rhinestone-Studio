@@ -152,7 +152,12 @@ await test('12. getLayerBBox()/drag-resize/duplicateLayer()/layerLabel()/moreOpt
   // XYWH_SHAPE_TYPES/SHAPE_LAYER_TYPES sets -- 'path' still behaves exactly like rectangle/svg/image.
   assert.match(appJs, /if\(l\.type==='circle'\)return\{[^}]*\};if\(XYWH_SHAPE_TYPES\.has\(l\.type\)\)return\{x:l\.x,y:l\.y,width:l\.w,height:l\.h,x2:l\.x\+l\.w,y2:l\.y\+l\.h\}/);
   assert.match(appJs, /XYWH_SHAPE_TYPES\.has\(l\.type\)\)\{let x0=drag\.b0\.x/);
-  assert.match(appJs, /if\(XYWH_SHAPE_TYPES\.has\(copy\.type\)\)\{copy\.x\+=8;copy\.y\+=8\}/);
+  // RS-3011 Step 2 added a drawingTool.duplicateShapeForLayer() call inside this same branch (so a
+  // Design-drawn 'path' shape's Paper.js item gets cloned alongside the layer) -- this checks the
+  // enduring invariant (XYWH_SHAPE_TYPES.has(copy.type) still gates an x/y offset assignment for
+  // copy) rather than the exact old one-liner, so it doesn't re-break on the next legitimate edit
+  // inside this block.
+  assert.match(appJs, /if\(XYWH_SHAPE_TYPES\.has\(copy\.type\)\)\{[^}]*copy\.x\s*\+=[^;]+;[^}]*copy\.y\s*\+=[^;]+;[^}]*\}/);
   assert.match(appJs, /if\(l\.type==='path'\)return l\.pathName\|\|'Path'/);
   // S-105 follow-up moved the type->Lightbox mapping (moreOptionsBtn's former inline branch) into
   // the shared lightboxForLayerType() helper -- see tools/test-lightbox-movable-persistent.mjs.
