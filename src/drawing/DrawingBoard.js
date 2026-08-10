@@ -136,11 +136,17 @@ export function drawingBaseScale(canvasMm, viewportWidthPx, viewportHeightPx, pa
  * (DrawingCanvasTool.js keeps Paper.js's own project units == mm); flattenToleranceMm controls how
  * closely the emitted straight segments approximate the drawn curve. Returns null for a
  * degenerate path (fewer than 3 resulting points).
+ *
+ * `closed` mirrors the source item's own `path.closed` (a freehand stroke that never looped back to
+ * its start is open; every other shape kind -- Rect/Ellipse/Slot/Polygon, and a freehand stroke the
+ * user did close -- is closed) -- see StoneSampler.js's outline sampler, which otherwise defaults to
+ * treating every contour as closed and would synthesize a spurious closing edge across an open one.
  */
 export function flattenPathToContour(path, flattenToleranceMm) {
   const flat = path.clone({ insert: false });
   flat.flatten(flattenToleranceMm);
   const points = flat.segments.map((seg) => ({ x: seg.point.x, y: seg.point.y }));
+  const closed = flat.closed;
   flat.remove();
   if (points.length < 3) return null;
 
@@ -154,7 +160,8 @@ export function flattenPathToContour(path, flattenToleranceMm) {
     xMm: minX,
     yMm: minY,
     widthMm: Math.max(2, maxX - minX),
-    heightMm: Math.max(2, maxY - minY)
+    heightMm: Math.max(2, maxY - minY),
+    closed
   };
 }
 
@@ -174,6 +181,7 @@ export function createPathLayerFromContour(flattened, { stoneSize, gap, color, p
     visible: true,
     pathName,
     contours: [flattened.contour],
+    closed: flattened.closed !== false,
     x: flattened.xMm,
     y: flattened.yMm,
     w: flattened.widthMm,

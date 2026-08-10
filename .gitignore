@@ -163,3 +163,7 @@ tools/scratch/rs-3011-resize-perf-spike/
 # artifact" category as the spike folder above.
 tools/scratch/rs-3011-fix-verify/
 
+#RS-3011 verification-artifact: open-contour stone-sampling fix
+tools/rs-3011-open-contour-verify.mjs
+tools/rs-3011-open-contour-verification-screenshots/
+

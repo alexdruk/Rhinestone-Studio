@@ -195,8 +195,10 @@ await test('12. HISTORY_TRACKED_CONTROL_IDS stays JSON-parseable as a flat strin
 await test('13. generateSvgStonesLive()/generatePathStonesLive() params objects still satisfy tools/test-fill-algorithms-integration.mjs\'s mode-resolution regexes with the S-200 mixedSizeParamsFor(layer) spread present', () => {
   // Guards against re-breaking those two pre-existing RS-1011 assertions the way the original
   // trailing `,...mixedSizeParamsFor(layer)}` placement did (see the "Results" section of the spec).
+  // RS-3011 (2026-08): tolerates the closed:layer.closed!==false field the open-contour fix added
+  // between color and the mixedSizeParamsFor spread.
   assert.match(appJs, /mode:resolveVectorFillMode\(layer\.mode\),color:layer\.color(?:,\.\.\.mixedSizeParamsFor\(layer\))?\};const result=this\.permanentEngine\.generateSvgLayout/);
-  assert.match(appJs, /gapMm:layer\.gap,mode:resolveVectorFillMode\(layer\.fillMode\),color:layer\.color(?:,\.\.\.mixedSizeParamsFor\(layer\))?\};const result=this\.permanentEngine\.generatePathLayout/);
+  assert.match(appJs, /gapMm:layer\.gap,mode:resolveVectorFillMode\(layer\.fillMode\),color:layer\.color(?:,closed:layer\.closed!==false)?(?:,\.\.\.mixedSizeParamsFor\(layer\))?\};const result=this\.permanentEngine\.generatePathLayout/);
 });
 
 console.log('S-200 app integration tests complete.');

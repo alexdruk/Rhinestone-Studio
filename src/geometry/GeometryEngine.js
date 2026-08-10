@@ -941,6 +941,10 @@ export class GeometryEngine {
    * @param {number} [params.gapMm]
    * @param {'outline'|'fill'} [params.mode]
    * @param {string} [params.color]
+   * @param {boolean} [params.closed] Whether `contours` form a closed loop (default true). Only
+   *   `mode: 'outline'` reads this; a freehand-drawn shape that never looped back to its start
+   *   passes `false` so it's outline-sampled as an open polyline instead of gaining a synthetic
+   *   closing edge across its two real endpoints (RS-3011).
    * @returns {StoneLayout}
    */
   generatePathLayout(params = {}) {
@@ -953,7 +957,7 @@ export class GeometryEngine {
 
     const placedBoundingBox = BoundingBox.fromPoints(polygons.flat());
     const spacingMm = options.stoneSizeMm + options.gapMm;
-    const points = sampleShapeFillPoints(options.mode, polygons, placedBoundingBox, spacingMm, options.stoneSizeMm);
+    const points = sampleShapeFillPoints(options.mode, polygons, placedBoundingBox, spacingMm, options.stoneSizeMm, options.closed);
 
     let stones = points.map((point, index) => new Stone({
       xMm: point.xMm,
@@ -1558,6 +1562,12 @@ function normalizePathParams(params) {
     gapMm,
     mode,
     color: params.color ?? null,
+    // RS-3011: defaults to closed (true) unless explicitly told otherwise -- every 'path' layer
+    // before freehand strokes existed was closed by construction (Boolean Operation results always
+    // are), so an absent/undefined `closed` must keep sampling as a closed contour, matching this
+    // layer type's pre-existing behavior exactly. Only an explicit `false` (a freehand stroke that
+    // never looped back to its start) opts into open-contour outline sampling.
+    closed: params.closed !== false,
     // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.
     ...normalizeMixedSizeParams(params, stoneSizeMm)
   };

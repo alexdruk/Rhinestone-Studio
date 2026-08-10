@@ -561,9 +561,13 @@ export function sampleContourFillPoints(polygons, boundingBox, spacingMm) {
  *   sampleMultiContourOutlinePoints()). Only 'outline' reads this; every other mode ignores it.
  *   Defaults to spacingMm (the pre-RC-002 floor) when omitted, so callers that only care about
  *   fill/staggered/radial/contour modes need not pass it.
+ * @param {boolean} [closed] RS-3011: whether `polygons` form closed loops. Only 'outline' reads
+ *   this; every other mode's contours are always closed by construction. Defaults to true, so
+ *   every pre-existing caller (Rect/Ellipse/Slot/Polygon, text, SVG's fill-mode branch) is
+ *   unaffected -- only generatePathLayout() passes an explicit value.
  * @returns {Point2D[]}
  */
-export function sampleShapeFillPoints(mode, polygons, boundingBox, spacingMm, stoneSizeMm = spacingMm) {
+export function sampleShapeFillPoints(mode, polygons, boundingBox, spacingMm, stoneSizeMm = spacingMm, closed = true) {
   switch (mode) {
     case 'fill': return sampleFillPoints(polygons, boundingBox, spacingMm);
     case 'staggered': return sampleStaggeredFillPoints(polygons, boundingBox, spacingMm);
@@ -571,7 +575,7 @@ export function sampleShapeFillPoints(mode, polygons, boundingBox, spacingMm, st
     case 'contour': return sampleContourFillPoints(polygons, boundingBox, spacingMm);
     case 'outline':
     default:
-      return sampleMultiContourOutlinePoints(polygons, spacingMm, { minSeparationMm: stoneSizeMm });
+      return sampleMultiContourOutlinePoints(polygons, spacingMm, { closed, minSeparationMm: stoneSizeMm });
   }
 }
 

@@ -717,7 +717,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // RS-1012: 'path' layers (Boolean Operation results) go through the permanent engine's
  // generatePathLayout(), mirroring generateSvgStonesLive()/generateShapeStonesLive() above --
  // layer.contours is already plain (0,0)-rooted polygon data (no parsing step, unlike SVG).
- async generatePathStonesLive(layer){if(!this.permanentEngine)return[];const params={contours:layer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.fillMode),color:layer.color,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generatePathLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
+ async generatePathStonesLive(layer){if(!this.permanentEngine)return[];const params={contours:layer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.fillMode),color:layer.color,closed:layer.closed!==false,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generatePathLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
  // RS-2000: the legacy bitmap text engine (FONT5 + generateText/sampleGlyphFill/
  // sampleGlyphStroke/line) and the legacy generateCircle/generateRect/bbox/layerBBox shape path
  // were deleted here -- unreachable since generateTextStonesLive/generateShapeStonesLive took over
@@ -787,6 +787,11 @@ function validateProject(obj){
     // RS-1012: a 'path' layer (a Boolean Operation result) stores its shape directly as contours --
     // an array of (0,0)-rooted polygons, each a numeric {x,y}[] with 3+ points.
     if(l.type==='path'&&!(Array.isArray(l.contours)&&l.contours.length>0&&l.contours.every(c=>Array.isArray(c)&&c.length>=3&&c.every(p=>p&&typeof p.x==='number'&&Number.isFinite(p.x)&&typeof p.y==='number'&&Number.isFinite(p.y)))))throw new Error(`Path layer "${l.id}" is missing a valid non-empty 'contours' array.`);
+    // RS-3011: 'closed' is a plain boolean, not strictly validated here, matching this function's
+    // existing permissive style for other boolean-ish fields (e.g. image.invert above,
+    // textMode/svgMode/curveEnabled elsewhere). Absent (every pre-freehand-stroke saved project) or
+    // any non-false value defaults to closed:true at the GeometryEngine layer -- see
+    // normalizePathParams()'s own doc comment.
     // S-110: Regular Polygon/Star/Ring's own configurable extra parameters, matching
     // GeometryEngine's own assertIntegerInRange()/assertNumberInRange() validation ranges (see
     // src/geometry/GeometryEngine.js's normalizeShapeParams()) so a malformed saved value is caught
