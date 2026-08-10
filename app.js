@@ -949,6 +949,27 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     selectedLayerIds=selectMany(layerIds);
     selectedLayerId=layerIds[layerIds.length-1];
     syncSelectedControlsFromLayer();renderLayerUI();updateEditingUI();updateAll(true);
+  },
+  // RS-3011 Step 3b: the two hooks the live Design-canvas stone preview needs. DrawingCanvasTool.js
+  // still never touches project.layers directly (unchanged rule from Step 1/2 above) -- it re-
+  // flattens its OWN live Paper.js item for the contour (already does this for commitFinalizedShape,
+  // see FLATTEN_TOLERANCE_MM there) and asks app.js only for the non-geometric "style" params a
+  // path layer carries (stoneSize/gap/color/fillMode/mixed-size), then asks app.js to run those
+  // params through the exact same GeometryEngine call generatePathStonesLive() above already makes
+  // -- the SAME permanentEngine instance, never a second GeometryEngine.
+  getLayerStoneParams:(layerId)=>{
+    const l=project.layers.find(x=>x.id===layerId);
+    if(!l||l.type!=='path')return null;
+    return{stoneSizeMm:l.stoneSize,gapMm:l.gap,mode:resolveVectorFillMode(l.fillMode),color:l.color,...mixedSizeParamsFor(l)};
+  },
+  // Mirrors generatePathStonesLive()'s own result mapping, plus resolving the stored color id
+  // (STONE_COLORS key, e.g. 'gold') to its previewColor -- the same flat swatch color
+  // updateStoneColorSwatch()/populateStoneColorOptions() already use, since the live Design dots are
+  // plain paper.Path.Circle fills, not CanvasRenderer2D.js's faceted drawCrystalStone() look.
+  generatePathLayout:(params)=>{
+    if(!permanentEngine)return[];
+    const result=permanentEngine.generatePathLayout(params);
+    return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:(STONE_COLORS[s.color]&&STONE_COLORS[s.color].previewColor)||s.color}));
   }
 });
 // RS-3010 Step 2d: exposes drawingTool's own debugGrid/debugHitTestShapeId QA-only surface for
@@ -1246,6 +1267,13 @@ function writeSelectedControlsToLayer(){const l=selectedLayer();
   l.minSizeMm=parseFloat(el('mixedMinSize').value)||null;
   l.maxSizeMm=parseFloat(el('mixedMaxSize').value)||null;
   l.conservativeDetail=Math.max(0,Math.min(1,parseFloat(el('conservativeDetail').value)||0));
+  // RS-3011 Step 3b: every field write above (stoneSize/gap/color/fillMode/mixed-size) can change
+  // a 'path' layer's live stone preview on the Design canvas -- rebuild it here, the one place all
+  // of those writes have already landed on `l`. A no-op for every other layer type, and a no-op for
+  // a 'path' layer with no matching board.shapes item (Design not active / a different shape
+  // selected), per drawingTool.refreshStoneGroupForLayer()'s own findShapeByLayerId() guard --
+  // same write-through convention as onShapeMoved/onShapeResized/onShapeDeleted above.
+  if(l.type==='path')drawingTool.refreshStoneGroupForLayer(l.id);
   project.cupColor=el('cupColor').value;project.wrap=el('wrap').value;
   // S-112: plate fields only read/written while the Round Dinner Plate template is active
   // (mirroring how e.g. bottle-only fields are template-gated) -- normalizePlateParams() clamps
@@ -2022,7 +2050,14 @@ function composeCombinedPreviewCanvas(){
 // new entry, leaving the copy invisible on the Design canvas until it was closed and reopened. Uses
 // the SAME dx/dy this function already applies to copy.x/copy.y (not a second offset convention);
 // a no-op for every non-'path' layer type via drawingTool's own internal lookup.
-function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(XYWH_SHAPE_TYPES.has(copy.type)){const dx=8,dy=8;copy.x+=dx;copy.y+=dy;drawingTool.duplicateShapeForLayer(l.id,copy.id,dx,dy)}if(copy.type==='text'){copy.text+=' copy';copy.x=(copy.x||0)+8;copy.y=(copy.y||0)+8}project.layers.push(copy);selectedLayerId=copy.id;selectedLayerIds=selectOnly(copy.id);syncSelectedControlsFromLayer();updateAll()}// RS-3011 Step 1 write-through fix: returns true/false so onShapeDeleted() (below) knows whether
+function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();
+  // RS-3011 Step 3b: pushed here, before drawingTool.duplicateShapeForLayer() below, instead of
+  // after every branch (as before this step) -- duplicateShapeForLayer() now builds the clone's own
+  // stone Group immediately via the getLayerStoneParams(newLayerId) hook, which reads project.layers,
+  // so `copy` must already be in the array by the time that call happens. `copy` is pushed by
+  // reference; the circle/text branches below still freely mutate it afterward, same as before.
+  project.layers.push(copy);
+  if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(XYWH_SHAPE_TYPES.has(copy.type)){const dx=8,dy=8;copy.x+=dx;copy.y+=dy;drawingTool.duplicateShapeForLayer(l.id,copy.id,dx,dy)}if(copy.type==='text'){copy.text+=' copy';copy.x=(copy.x||0)+8;copy.y=(copy.y||0)+8}selectedLayerId=copy.id;selectedLayerIds=selectOnly(copy.id);syncSelectedControlsFromLayer();updateAll()}// RS-3011 Step 1 write-through fix: returns true/false so onShapeDeleted() (below) knows whether
 // the guard blocked the delete, without duplicating the project.layers.length<=1 check itself --
 // every pre-existing caller already discards the return value, so this stays backward-compatible.
 function deleteLayer(id){if(project.layers.length<=1){el('status').textContent='Cannot delete the last layer';const hint=el('layerRuleHint');hint.style.display='block';hint.scrollIntoView({block:'nearest'});return false}commitHistory();project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true);return true}

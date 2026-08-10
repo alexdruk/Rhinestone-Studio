@@ -137,3 +137,8 @@ tools/scratch/rs-3001-css-spike/
 # measurement scripts + screenshots) -- findings reported directly to the user, the prototype
 # code itself is never a repo artifact, same category as the folder above
 tools/scratch/rs-3011-step3b-spike/
+
+# RS-3011 Step 3b: ad hoc live-browser verification script + screenshots for the live per-shape
+# stone preview on the Design canvas -- same "never a repo artifact" category as the folders above
+tools/rs-3011-step3b-verify.mjs
+tools/rs-3011-step3b-verification-screenshots/

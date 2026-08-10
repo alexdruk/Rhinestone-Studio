@@ -208,7 +208,17 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     onShapeMoved = () => {},
     onShapeResized = () => {},
     onShapeDeleted = () => {},
-    onSelectionChanged = () => {}
+    onSelectionChanged = () => {},
+    // RS-3011 Step 3b: the two hooks the live stone preview needs -- getLayerStoneParams(layerId)
+    // returns a 'path' layer's non-geometric stone settings (stoneSizeMm/gapMm/mode/color/mixed-size),
+    // or null if no matching layer exists (every non-Design layer type, or Design not active); this
+    // module still supplies the geometric half (contours/xMm/yMm/widthMm/heightMm) itself, re-
+    // flattened from its own live Paper.js item, the same way commitFinalizedShape() already does.
+    // generatePathLayout(params) runs those combined params through app.js's own permanentEngine --
+    // the SAME single GeometryEngine instance every other stone-generation path in this app uses,
+    // never a second one -- and returns plain {x,y,d,color} stones ready to paint.
+    getLayerStoneParams = () => null,
+    generatePathLayout = () => []
   } = hooks;
   const board = new DrawingBoard();
   let isSetUp = false;
@@ -598,6 +608,10 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     });
     item.data.layerId = layer.id;
     onShapeCommitted(layer);
+    // RS-3011 Step 3b: build the new shape's live stone Group immediately -- item.data.shapeId was
+    // already stamped by board.finalizeShape(), called by every one of this function's own call
+    // sites before commitFinalizedShape() itself runs.
+    rebuildStoneGroupForShape(item.data.shapeId);
   }
 
   /**
@@ -612,6 +626,97 @@ export function createDrawingTool(canvasEl, hooks = {}) {
    */
   function findShapeByLayerId(layerId) {
     return board.listShapes().find((shape) => shape.item.data.layerId === layerId) || null;
+  }
+
+  // RS-3011 Step 3b: shapeId -> paper.Group, one live stone-dot preview per finalized Design shape,
+  // keyed the same way board.shapes itself is (not layerId -- a shape can exist with no
+  // item.data.layerId only transiently, never once committed, so shapeId is the stable key
+  // throughout this file). Every shape's group renders simultaneously, independent of selection --
+  // see rebuildStoneGroupForShape()'s own doc comment for the render-order guarantee.
+  const stoneGroups = new Map();
+
+  /** Removes shapeId's stone Group (if any) from both the scene and `stoneGroups`. */
+  function removeStoneGroupForShape(shapeId) {
+    const group = stoneGroups.get(shapeId);
+    if (group) group.remove();
+    stoneGroups.delete(shapeId);
+  }
+
+  /**
+   * Full rebuild of a single shape's stone Group: re-flattens the shape's OWN current Paper.js item
+   * (never the stored layer's `contours` -- see this function's callers for why: a resize/param
+   * change/creation must always reflect the shape's live-drawn geometry, and re-flattening the item
+   * directly is the same "place a natural-size shape into a box" transform GeometryEngine's own
+   * _placeNaturalContours() would apply to layer.contours, just read straight off the item instead)
+   * plus the layer's own stoneSize/gap/color/fillMode (getLayerStoneParams hook), runs both through
+   * app.js's generatePathLayout hook (the same permanentEngine.generatePathLayout() call
+   * generatePathStonesLive() makes), and builds a fresh paper.Group of plain paper.Path.Circle items
+   * -- no facets/gradients, drawCrystalStone() stays Canvas2D-only (this file's own header comment).
+   * The new Group is inserted directly below the shape's own outline item (`group.insertBelow`,
+   * same layer, no second canvas/paper.Layer) before the old one (if any) is removed, so every other
+   * shape's own group/outline is untouched and z-order never has a frame without a group present.
+   * A no-op (existing group, if any, is torn down) if the shape no longer exists, has no layerId, or
+   * getLayerStoneParams returns null (not a 'path' layer, or the layer no longer exists) -- the same
+   * "no-op otherwise" write-through convention as this file's other project.layers-sync hooks.
+   * @param {string} shapeId
+   */
+  function rebuildStoneGroupForShape(shapeId) {
+    const shape = board.getShape(shapeId);
+    if (!shape) {
+      removeStoneGroupForShape(shapeId);
+      return;
+    }
+    const layerId = shape.item.data.layerId;
+    const styleParams = layerId ? getLayerStoneParams(layerId) : null;
+    if (!styleParams) {
+      removeStoneGroupForShape(shapeId);
+      return;
+    }
+    const flattened = flattenPathToContour(shape.item, FLATTEN_TOLERANCE_MM);
+    if (!flattened) return;
+    const params = {
+      contours: [flattened.contour.map((p) => ({ xMm: p.x, yMm: p.y }))],
+      layerId,
+      xMm: flattened.xMm,
+      yMm: flattened.yMm,
+      widthMm: flattened.widthMm,
+      heightMm: flattened.heightMm,
+      ...styleParams
+    };
+    const stones = generatePathLayout(params);
+    const group = new paper.Group();
+    group.data.isStoneGroup = true;
+    for (const stone of stones) {
+      const circle = new paper.Path.Circle({
+        center: [stone.x, stone.y],
+        radius: stone.d / 2,
+        fillColor: stone.color
+      });
+      circle.data.isStoneDot = true;
+      group.addChild(circle);
+    }
+    group.insertBelow(shape.item);
+    const old = stoneGroups.get(shapeId);
+    if (old) old.remove();
+    stoneGroups.set(shapeId, group);
+  }
+
+  // RS-3011 Step 3b: resize's own one-rebuild-per-animation-frame throttle, the same
+  // requestAnimationFrame + dedup-flag pattern as Preview3DRenderer.js's _requestRender()/
+  // _frameScheduled (see tools/test-preview3d-render-scheduling.mjs) -- not a second throttle
+  // mechanism, the identical shape applied here since a resize's contour genuinely changes every
+  // frame (unlike move, which only ever needs a cheap translate()). shapeId is captured as this
+  // function's own argument (not read from resizeShapeId at fire time), so a pending rebuild still
+  // targets the right shape even if onMouseUp has already cleared resizeShapeId by the time the
+  // frame fires.
+  let stoneRebuildFrameScheduled = false;
+  function scheduleStoneRebuildForShape(shapeId) {
+    if (stoneRebuildFrameScheduled) return;
+    stoneRebuildFrameScheduled = true;
+    requestAnimationFrame(() => {
+      stoneRebuildFrameScheduled = false;
+      rebuildStoneGroupForShape(shapeId);
+    });
   }
 
   function attachTool() {
@@ -817,6 +922,12 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         for (const id of selectedIds) {
           const shape = board.getShape(id);
           if (shape) shape.item.translate(incrementalDelta);
+          // RS-3011 Step 3b: a move never changes the shape's own contour, so its stone Group only
+          // ever needs the same cheap incremental translate() the shape's own item just got -- never
+          // a full rebuild (see rebuildStoneGroupForShape's own >10x cost difference, confirmed by
+          // the RS-3011 Step 3b spike). Applied live, every drag frame, not just at drag-end.
+          const stoneGroup = stoneGroups.get(id);
+          if (stoneGroup) stoneGroup.translate(incrementalDelta);
         }
         moveAppliedOffset = snappedTotalOffset;
         updateResizeHandles();
@@ -841,6 +952,11 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         const height = Math.max(RESIZE_MIN_DIM_MM, Math.abs(y1 - y0));
         shape.item.bounds = new paper.Rectangle(Math.min(x0, x1), Math.min(y0, y1), width, height);
         updateResizeHandles();
+        // RS-3011 Step 3b: a resize genuinely changes the contour, so (unlike move) this needs a
+        // full rebuild -- throttled to one per animation frame rather than once per mousemove event,
+        // via the same requestAnimationFrame + dedup-flag pattern as Preview3DRenderer.js's
+        // _requestRender() (see scheduleStoneRebuildForShape's own doc comment).
+        scheduleStoneRebuildForShape(resizeShapeId);
         return;
       }
       if (interactionKind === 'marquee') {
@@ -941,6 +1057,12 @@ export function createDrawingTool(canvasEl, hooks = {}) {
             Math.abs(b.height - resizeStartBounds.height) > 1e-6;
           if (changed) onShapeResized(layerId, { left: b.left, top: b.top, width: b.width, height: b.height });
         }
+        // RS-3011 Step 3b: an explicit, unthrottled final rebuild -- the last onMouseDrag frame's
+        // scheduleStoneRebuildForShape() call may still be a pending requestAnimationFrame callback
+        // at this point (still correctly targeted at this shapeId either way, see that function's
+        // own doc comment), but this guarantees the stone Group reflects the shape's exact final
+        // bounds immediately, rather than waiting for that frame to fire.
+        if (shape) rebuildStoneGroupForShape(resizeShapeId);
         interactionKind = null;
         resizeHandle = null;
         resizeShapeId = null;
@@ -1080,6 +1202,11 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     enter(projectCanvasMm, paddingPx, initialMode = 'select') {
       canvasMm = projectCanvasMm;
       board.reset();
+      // RS-3011 Step 3b: mirrors exit()'s own stoneGroups.clear() -- board.reset() above already
+      // discards every board.shapes entry a stale stoneGroups key could reference, same redundant
+      // belt-and-suspenders reset selectedIds/resetInProgressDrawing() below already get on both
+      // enter() and exit().
+      stoneGroups.clear();
       board.active = true;
       mode = initialMode;
       selectedIds = clearSelection();
@@ -1171,6 +1298,12 @@ export function createDrawingTool(canvasEl, hooks = {}) {
 
     exit() {
       board.clearAll();
+      // RS-3011 Step 3b: board.clearAll()/the removeChildren() call below already destroy every
+      // stone Group's own Paper.js items (children of the same content layer) -- this just drops
+      // the now-dangling references so they don't leak across repeated enter()/exit() cycles in the
+      // same page session (board's own shapeId counter never resets, see DrawingBoard.js, so stale
+      // keys here would otherwise just accumulate forever rather than colliding).
+      stoneGroups.clear();
       selectedIds = clearSelection();
       resetInProgressDrawing();
       spaceHeld = false;
@@ -1235,6 +1368,9 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           continue;
         }
         board.removeShape(id);
+        // RS-3011 Step 3b: the shape's own stone Group has no independent lifecycle -- it never
+        // outlives the shape it belongs to on the Design canvas.
+        removeStoneGroupForShape(id);
       }
       selectedIds = selectMany(stillSelected);
       updateResizeHandles();
@@ -1292,9 +1428,30 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       clone.translate(new paper.Point(dxMm, dyMm));
       clone.data.layerId = newLayerId;
       const cloneId = board.addShape(clone);
+      // RS-3011 Step 3b: the clone needs its own regenerated stone Group, not a reference to
+      // source's -- rebuildStoneGroupForShape() re-flattens the CLONE's own (already-translated)
+      // item and asks app.js for newLayerId's own params, so this is never a shared/aliased group.
+      // Requires app.js's duplicateLayer() to have already pushed the new layer into project.layers
+      // before calling this (see that function's own comment on why the push was reordered).
+      rebuildStoneGroupForShape(cloneId);
       selectedIds = selectOnly(cloneId);
       applySelectionVisuals();
       updateResizeHandles();
+    },
+
+    /**
+     * RS-3011 Step 3b: the write-through target for a 'path' layer's stoneSize/gap/color/fillMode
+     * edits (Step 3a's mirrored panel or the Inspector -- see app.js's writeSelectedControlsToLayer(),
+     * the single place both write to, since relocateFieldGroups() only ever moves the same DOM
+     * elements between panels, never clones them). A no-op if no board.shapes item matches `layerId`
+     * (every non-Design layer type, or Design not currently active) -- same "no-op otherwise"
+     * write-through convention as onShapeMoved/onShapeResized/onShapeDeleted's own hooks.
+     * @param {string} layerId
+     */
+    refreshStoneGroupForLayer(layerId) {
+      const shape = findShapeByLayerId(layerId);
+      if (!shape) return;
+      rebuildStoneGroupForShape(shape.id);
     },
 
     /**
