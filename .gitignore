@@ -158,3 +158,8 @@ tools/rs-3011-canvas-desync-verification-screenshots/
 # repo artifact, same "never a repo artifact" category as the folders above
 tools/scratch/rs-3011-resize-perf-spike/
 
+# RS-3011 fix-resize-perf-partial: throwaway verification scripts (behavioral + re-run of the
+# spike's own CDP-trace methodology) for confirming the hide-during-drag fix, same "never a repo
+# artifact" category as the spike folder above.
+tools/scratch/rs-3011-fix-verify/
+

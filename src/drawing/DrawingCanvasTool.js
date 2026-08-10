@@ -606,6 +606,14 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     }
     for (const item of resizeHandleItems) item.remove();
     resizeHandleItems = [];
+    // RS-3011 resize-perf fix: a resize can be interrupted here (Escape/mode-switch/exit) before
+    // onMouseUp's own restore ever runs -- without this, the Group hidden at resize-start (or by a
+    // rebuild while resizing) would stay permanently invisible. Mirrors onMouseUp's own restore,
+    // just with no final rebuild (nothing else about the shape's geometry changed on this path).
+    if (interactionKind === 'resize' && resizeShapeId) {
+      const stoneGroup = stoneGroups.get(resizeShapeId);
+      if (stoneGroup) stoneGroup.visible = true;
+    }
     resizeHandle = null;
     resizeShapeId = null;
     resizeStartBounds = null;
@@ -744,6 +752,12 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       circle.data.isStoneDot = true;
       group.addChild(circle);
     }
+    // RS-3011 resize-perf fix: this shape's resize is still in progress (mouse still down) -- keep
+    // the freshly rebuilt Group hidden too, since every rAF-throttled rebuild during a resize
+    // creates a brand-new Group (default visible=true) that would otherwise undo the hide applied
+    // at drag-start on the very next frame. Scoped to this specific shapeId so an unrelated
+    // rebuild (a different shape, or this same shape via syncFromProjectLayers) is never affected.
+    if (interactionKind === 'resize' && shapeId === resizeShapeId) group.visible = false;
     group.insertBelow(shape.item);
     const old = stoneGroups.get(shapeId);
     if (old) old.remove();
@@ -827,6 +841,14 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         resizeHandle = resizeHandleHit;
         resizeShapeId = shape.id;
         resizeStartBounds = shape.item.bounds.clone();
+        // RS-3011 resize-perf fix: hide the stone Group for the duration of the drag. CDP tracing
+        // (tools/scratch/rs-3011-resize-perf-spike/) found the dominant per-frame cost during a
+        // resize drag is Paper.js's own canvas redraw (handleCallbacks -> View.update(), ~7.2ms
+        // median/frame), not rebuildStoneGroupForShape() itself (~5.4ms median/frame) -- an
+        // invisible Group is skipped by that redraw pass. rebuildStoneGroupForShape() re-applies
+        // this on every rAF-throttled rebuild below for as long as this resize stays in progress.
+        const stoneGroup = stoneGroups.get(shape.id);
+        if (stoneGroup) stoneGroup.visible = false;
         return;
       }
       const hitId = hitTestShapeId(event.point);
@@ -1106,16 +1128,26 @@ export function createDrawingTool(canvasEl, hooks = {}) {
             Math.abs(b.height - resizeStartBounds.height) > 1e-6;
           if (changed) onShapeResized(layerId, { left: b.left, top: b.top, width: b.width, height: b.height });
         }
+        // RS-3011 resize-perf fix: clear interactionKind/resizeShapeId BEFORE the final rebuild
+        // below, so rebuildStoneGroupForShape()'s own hide-check (which re-hides the Group while
+        // this shape's resize is in progress) sees the drag as already over and leaves the final
+        // Group's default visible=true alone.
+        const finishedShapeId = resizeShapeId;
+        interactionKind = null;
+        resizeHandle = null;
+        resizeShapeId = null;
+        resizeStartBounds = null;
         // RS-3011 Step 3b: an explicit, unthrottled final rebuild -- the last onMouseDrag frame's
         // scheduleStoneRebuildForShape() call may still be a pending requestAnimationFrame callback
         // at this point (still correctly targeted at this shapeId either way, see that function's
         // own doc comment), but this guarantees the stone Group reflects the shape's exact final
         // bounds immediately, rather than waiting for that frame to fire.
-        if (shape) rebuildStoneGroupForShape(resizeShapeId);
-        interactionKind = null;
-        resizeHandle = null;
-        resizeShapeId = null;
-        resizeStartBounds = null;
+        if (shape) rebuildStoneGroupForShape(finishedShapeId);
+        // RS-3011 resize-perf fix: belt-and-suspenders restore in case `shape` was falsy above (the
+        // shape vanished mid-drag) and no rebuild ran -- a stale hidden Group from drag-start must
+        // never stay invisible.
+        const finalGroup = stoneGroups.get(finishedShapeId);
+        if (finalGroup) finalGroup.visible = true;
         return;
       }
       if (interactionKind === 'marquee') {
