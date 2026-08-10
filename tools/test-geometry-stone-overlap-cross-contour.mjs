@@ -191,9 +191,14 @@ await test('6. a normal Ring (wide annulus relative to stone pitch) has an unaff
   // this Ring's closing-seam remainder on both the outer and inner circle happened to land under
   // stoneSizeMm=1.5mm (confirmed: post-fix, every stone's own-circle angular neighbor is >=
   // 1.698mm apart, comfortably clear -- see tools/test-geometry-stone-overlap-same-contour.mjs for the
-  // dedicated closing-seam regression coverage), so one redundant stone is correctly dropped from
-  // each circle: 165, not 167.
-  assert.equal(layout.stones.length, 165, 'a wide annulus must sample exactly as many points as before this fix, minus the two same-circle closing-seam duplicates RC-004A now removes');
+  // dedicated closing-seam regression coverage), so one redundant stone is dropped from each circle:
+  // RC-004A left this at 165, not 167.
+  // RS-3011 corner-gap backfill: 165 -> 166. A circle's closing-seam gap (unlike a sharp corner) sits
+  // on smooth, gently-curving geometry, so there is real room to backfill -- but only for one of the
+  // two circles here: verified directly, the single new point lands at radius ~29.964mm (the outer
+  // circle, radius 30); the inner circle's own closing-seam gap has no legal position once checked
+  // against the full kept set, so it is left exactly as RC-004A produced it.
+  assert.equal(layout.stones.length, 166, 'a wide annulus must sample exactly as many points as before this fix, minus the one same-circle closing-seam duplicate RC-004A/RS-3011 together leave pruned');
 });
 
 // --- 7. General multi-contour fix, not Ring-specific: an SVG donut (two nested closed circles) --

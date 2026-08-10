@@ -6,7 +6,7 @@
       "file": "vitalina.rhs",
       "layerCount": 1,
       "visibleLayerCount": 1,
-      "stoneCount": 87,
+      "stoneCount": 89,
       "bounds": {
         "minXmm": 62.530447,
         "minYmm": 37.918558,
@@ -25,7 +25,7 @@
       "file": "vitalina-serbin.rhs",
       "layerCount": 1,
       "visibleLayerCount": 1,
-      "stoneCount": 157,
+      "stoneCount": 159,
       "bounds": {
         "minXmm": 24.491543,
         "minYmm": 37.914671,
@@ -44,7 +44,7 @@
       "file": "short-name-block.rhs",
       "layerCount": 1,
       "visibleLayerCount": 1,
-      "stoneCount": 63,
+      "stoneCount": 64,
       "bounds": {
         "minXmm": 81.716761,
         "minYmm": 38.113665,
@@ -63,12 +63,12 @@
       "file": "long-name-autofit.rhs",
       "layerCount": 1,
       "visibleLayerCount": 1,
-      "stoneCount": 215,
+      "stoneCount": 220,
       "bounds": {
-        "minXmm": 5.457818,
-        "minYmm": 39.398361,
-        "maxXmm": 204.542182,
-        "maxYmm": 50.601639
+        "minXmm": 5.504984,
+        "minYmm": 39.400962,
+        "maxXmm": 204.495016,
+        "maxYmm": 50.599038
       },
       "fontIds": [
         "courier-prime-regular"
@@ -82,7 +82,7 @@
       "file": "script-name-great-vibes.rhs",
       "layerCount": 1,
       "visibleLayerCount": 1,
-      "stoneCount": 142,
+      "stoneCount": 146,
       "bounds": {
         "minXmm": 71.282441,
         "minYmm": 32.921494,
@@ -101,7 +101,7 @@
       "file": "monogram-outline.rhs",
       "layerCount": 1,
       "visibleLayerCount": 1,
-      "stoneCount": 99,
+      "stoneCount": 101,
       "bounds": {
         "minXmm": 18.977536,
         "minYmm": 38.43239,
@@ -158,7 +158,7 @@
       "file": "wide-wrap-dark-cup.rhs",
       "layerCount": 1,
       "visibleLayerCount": 1,
-      "stoneCount": 123,
+      "stoneCount": 127,
       "bounds": {
         "minXmm": 51.660305,
         "minYmm": 37.25429,
@@ -194,7 +194,7 @@
       "file": "rectangle-only.rhs",
       "layerCount": 1,
       "visibleLayerCount": 1,
-      "stoneCount": 153,
+      "stoneCount": 154,
       "bounds": {
         "minXmm": 39,
         "minYmm": 19,
@@ -211,7 +211,7 @@
       "file": "mixed-text-circle.rhs",
       "layerCount": 2,
       "visibleLayerCount": 2,
-      "stoneCount": 136,
+      "stoneCount": 138,
       "bounds": {
         "minXmm": 69.023857,
         "minYmm": 9.035785,
@@ -231,7 +231,7 @@
       "file": "mixed-text-rectangle.rhs",
       "layerCount": 2,
       "visibleLayerCount": 2,
-      "stoneCount": 279,
+      "stoneCount": 282,
       "bounds": {
         "minXmm": 19,
         "minYmm": 14,
@@ -251,7 +251,7 @@
       "file": "mixed-all-layers.rhs",
       "layerCount": 3,
       "visibleLayerCount": 2,
-      "stoneCount": 203,
+      "stoneCount": 211,
       "bounds": {
         "minXmm": 14.256982,
         "minYmm": 29.283654,
@@ -271,7 +271,7 @@
       "file": "small-stones-tight-gap.rhs",
       "layerCount": 1,
       "visibleLayerCount": 1,
-      "stoneCount": 165,
+      "stoneCount": 169,
       "bounds": {
         "minXmm": 89.373388,
         "minYmm": 38.514069,
@@ -290,7 +290,7 @@
       "file": "large-stones-wide-gap.rhs",
       "layerCount": 1,
       "visibleLayerCount": 1,
-      "stoneCount": 28,
+      "stoneCount": 30,
       "bounds": {
         "minXmm": 84.736174,
         "minYmm": 37.124512,
@@ -309,7 +309,7 @@
       "file": "long-script-name.rhs",
       "layerCount": 1,
       "visibleLayerCount": 1,
-      "stoneCount": 364,
+      "stoneCount": 366,
       "bounds": {
         "minXmm": 4.770093,
         "minYmm": 34.648933,
@@ -328,7 +328,7 @@
       "file": "svg-logo-import.rhs",
       "layerCount": 2,
       "visibleLayerCount": 2,
-      "stoneCount": 808,
+      "stoneCount": 814,
       "bounds": {
         "minXmm": 21.95,
         "minYmm": 10.95,
@@ -382,7 +382,7 @@
       "file": "multi-color-mixed-layers.rhs",
       "layerCount": 5,
       "visibleLayerCount": 5,
-      "stoneCount": 1008,
+      "stoneCount": 1011,
       "bounds": {
         "minXmm": 19.3,
         "minYmm": 7.3,
@@ -405,7 +405,7 @@
       "file": "tumbler-wrap-design.rhs",
       "layerCount": 2,
       "visibleLayerCount": 2,
-      "stoneCount": 286,
+      "stoneCount": 288,
       "bounds": {
         "minXmm": 58.079001,
         "minYmm": 9.127929,
@@ -425,7 +425,7 @@
       "file": "bottle-front-design.rhs",
       "layerCount": 3,
       "visibleLayerCount": 3,
-      "stoneCount": 429,
+      "stoneCount": 434,
       "bounds": {
         "minXmm": 19.2,
         "minYmm": 14.2,
@@ -446,7 +446,7 @@
       "file": "mixed-fill-styles-and-sizes.rhs",
       "layerCount": 5,
       "visibleLayerCount": 5,
-      "stoneCount": 1161,
+      "stoneCount": 1166,
       "bounds": {
         "minXmm": 32.15,
         "minYmm": 37.954102,
@@ -470,7 +470,7 @@
       "file": "wedding-bride-tribe-tumbler.rhs",
       "layerCount": 2,
       "visibleLayerCount": 2,
-      "stoneCount": 320,
+      "stoneCount": 323,
       "bounds": {
         "minXmm": 58.543501,
         "minYmm": 11.221377,
@@ -510,7 +510,7 @@
       "file": "business-logo-monogram-bottle.rhs",
       "layerCount": 2,
       "visibleLayerCount": 2,
-      "stoneCount": 434,
+      "stoneCount": 439,
       "bounds": {
         "minXmm": 14.2,
         "minYmm": 11.2,
