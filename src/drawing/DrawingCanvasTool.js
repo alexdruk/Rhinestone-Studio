@@ -644,6 +644,18 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       pathName: 'Drawn Shape'
     });
     item.data.layerId = layer.id;
+    // RS-3011 issue #4a fix: a finalized shape stops being "still drawing" -- revert to select
+    // mode and select the shape just drawn, the same selectedIds/applySelectionVisuals/
+    // updateResizeHandles sequence a plain click-select already uses (see onMouseDown's hit-test
+    // branch above), so the canvas immediately shows it selected with resize handles instead of
+    // staying primed to place another shape on the next click. Landing this before
+    // onShapeCommitted() below means the `mode` getter already reports 'select' by the time that
+    // hook (app.js) reacts and syncs the rail buttons' aria-pressed state.
+    mode = 'select';
+    selectedIds = selectOnly(item.data.shapeId);
+    applySelectionVisuals();
+    updateResizeHandles();
+    updateCursor();
     onShapeCommitted(layer);
     // RS-3011 Step 3b: build the new shape's live stone Group immediately -- item.data.shapeId was
     // already stamped by board.finalizeShape(), called by every one of this function's own call

@@ -879,6 +879,11 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     selectedLayerIds=selectOnly(layer.id);
     syncSelectedControlsFromLayer();
     updateAll(true);
+    // RS-3011 issue #4a fix: DrawingCanvasTool.js already reverted its own internal mode to
+    // 'select' before calling this hook (see commitFinalizedShape()) -- sync the rail buttons'
+    // aria-pressed state to match, or Rect/Ellipse/Slot/Polygon would keep looking active after
+    // the shape that finalized them already returned Design to Select.
+    updateDrawToolButtons();
     el('status').textContent='Added shape as new Path layer.';
   },
   // Freehand is a continuous interaction (many pointermove samples before the stroke ends) --
@@ -3385,7 +3390,12 @@ function updateDrawToolButtons(){
 }
 function setDrawTool(mode){
   if(drawingTool.isActive){
-    if(drawingTool.mode===mode){setDrawMode(false);return}
+    // RS-3011 issue #3 fix: re-clicking the already-active tool's own rail button is a no-op --
+    // it must never exit Design. Select/Draw/Rect/Ellipse/Slot/Polygon are all persistent
+    // tool-rail buttons now (not just a single Draw toggle), so "click active tool again" no
+    // longer reads as "leave Design" the way it did when Draw was the only entry point. Design's
+    // own enter/exit toggle now lives on #menuDesign instead (below), independent of tool state.
+    if(drawingTool.mode===mode)return;
     drawingTool.setMode(mode);
     updateDrawToolButtons();
     return;
@@ -3399,9 +3409,13 @@ el('railRectToggle').onclick=()=>setDrawTool('rect');
 el('railEllipseToggle').onclick=()=>setDrawTool('ellipse');
 el('railSlotToggle').onclick=()=>setDrawTool('slot');
 el('railPolygonToggle').onclick=()=>setDrawTool('polygon');
-// RS-3010 Design Step A correction: #menuDesign is the new top-nav entry point -- calls the exact
-// same activation railSelectToggle already triggers, no parallel activation path.
-el('menuDesign').onclick=()=>setDrawTool('select');
+// RS-3011 issue #3 fix: #menuDesign is Design's own dedicated enter/exit toggle, independent of
+// which rail tool is active -- the same click that enters also exits, regardless of
+// drawingTool.mode. This is now the only way to leave Design (the rail buttons above never exit,
+// per setDrawTool()'s own comment), so it must not route through setDrawTool()'s same-mode check.
+el('menuDesign').onclick=()=>{
+  if(drawingTool.isActive){setDrawMode(false)}else{setDrawTool('select')}
+};
 // Figma-style trackpad/mouse mapping, kept out of the normal pointerdown/move/up flow entirely so
 // a drag on the canvas always draws and never pans: plain scroll pans (deltaX/deltaY), Ctrl/Cmd+
 // scroll (or a trackpad pinch, which the browser reports as wheel+ctrlKey) zooms.
