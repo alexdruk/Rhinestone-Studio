@@ -153,3 +153,8 @@ tools/rs-3011-step3b-verification-screenshots/
 tools/rs-3011-canvas-desync-verify.mjs
 tools/rs-3011-canvas-desync-verification-screenshots/
 
+# RS-3011 resize-perf-spike: profiling-only investigation of rebuildStoneGroupForShape()'s
+# ~35ms/step resize-drag cost -- throwaway instrumentation/prototype code + screenshots, never a
+# repo artifact, same "never a repo artifact" category as the folders above
+tools/scratch/rs-3011-resize-perf-spike/
+
