@@ -178,6 +178,11 @@ function buildSlotPreview(a, b, widthMm) {
  * imported from there (this file owns all direct Paper.js construction, per its own header
  * comment, and the placement math itself is a few lines), just the same formula. Returns null for
  * a layer with no usable contour (defensive -- every real 'path' layer has one).
+ *
+ * Only closes the reconstructed item when `layer.closed` isn't explicitly `false` (RS-3011 open-
+ * contour fix): an open freehand stroke reconciled here -- undo/redo, or the Layers-list trash-icon
+ * delete path this function guards against -- must stay open, or it would silently gain a closing
+ * edge it never had.
  * @param {object} layer a project.layers entry with type==='path'
  * @returns {paper.Path|null}
  */
@@ -201,7 +206,7 @@ function materializeShapeFromLayer(layer) {
     if (index === 0) item.moveTo(point);
     else item.lineTo(point);
   });
-  item.closePath();
+  if (layer.closed !== false) item.closePath();
   return item;
 }
 
@@ -738,6 +743,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       yMm: flattened.yMm,
       widthMm: flattened.widthMm,
       heightMm: flattened.heightMm,
+      closed: flattened.closed,
       ...styleParams
     };
     const stones = generatePathLayout(params);

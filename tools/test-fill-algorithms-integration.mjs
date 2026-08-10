@@ -98,7 +98,9 @@ await test('8. generateImageStonesLive forwards mode via resolveImageFillMode(la
 
 await test('9. generatePathStonesLive resolves mode via resolveVectorFillMode(layer.fillMode) -- previously hard-coded to \'outline\'', () => {
   // S-200 CI follow-up (2026-07): same tolerance as test 7 above, for the same reason.
-  assert.match(appJs, /gapMm:layer\.gap,mode:resolveVectorFillMode\(layer\.fillMode\),color:layer\.color(?:,\.\.\.mixedSizeParamsFor\(layer\))?\};const result=this\.permanentEngine\.generatePathLayout/);
+  // RS-3011 (2026-08): tolerates the closed:layer.closed!==false field the open-contour fix added
+  // between color and the mixedSizeParamsFor spread.
+  assert.match(appJs, /gapMm:layer\.gap,mode:resolveVectorFillMode\(layer\.fillMode\),color:layer\.color(?:,closed:layer\.closed!==false)?(?:,\.\.\.mixedSizeParamsFor\(layer\))?\};const result=this\.permanentEngine\.generatePathLayout/);
 });
 
 await test('10. the resolver helpers themselves default unknown/missing values to each layer type\'s pre-RS-1011 behavior (backward compatibility)', () => {
