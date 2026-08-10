@@ -169,6 +169,43 @@ function buildSlotPreview(a, b, widthMm) {
 }
 
 /**
+ * Canvas-desync fix: builds a Paper.js Path for a 'path'-type project.layers entry driven
+ * entirely from its own stored data (`contours`/x/y/w/h) -- the reconciliation counterpart of
+ * commitFinalizedShape(), which builds the same shape at draw-time from a freshly-drawn item
+ * instead of a stored layer. Places the natural, (0,0)-rooted contour into the layer's x/y/w/h box
+ * via the same independent-axis scale-then-translate GeometryEngine.js's own
+ * `_placeNaturalContours()` uses for identical "natural contour into a box" placement -- not
+ * imported from there (this file owns all direct Paper.js construction, per its own header
+ * comment, and the placement math itself is a few lines), just the same formula. Returns null for
+ * a layer with no usable contour (defensive -- every real 'path' layer has one).
+ * @param {object} layer a project.layers entry with type==='path'
+ * @returns {paper.Path|null}
+ */
+function materializeShapeFromLayer(layer) {
+  const contour = layer.contours && layer.contours[0];
+  if (!contour || contour.length < 3) return null;
+  const minX = Math.min(...contour.map((p) => p.x));
+  const minY = Math.min(...contour.map((p) => p.y));
+  const maxX = Math.max(...contour.map((p) => p.x));
+  const maxY = Math.max(...contour.map((p) => p.y));
+  const naturalWidth = maxX - minX;
+  const naturalHeight = maxY - minY;
+  const scaleX = naturalWidth > 0 ? layer.w / naturalWidth : 1;
+  const scaleY = naturalHeight > 0 ? layer.h / naturalHeight : 1;
+  const item = new paper.Path({
+    strokeColor: STROKE_COLOR,
+    strokeWidth: STROKE_WIDTH_PX / paper.view.zoom
+  });
+  contour.forEach((p, index) => {
+    const point = new paper.Point(layer.x + (p.x - minX) * scaleX, layer.y + (p.y - minY) * scaleY);
+    if (index === 0) item.moveTo(point);
+    else item.lineTo(point);
+  });
+  item.closePath();
+  return item;
+}
+
+/**
  * RS-3011 Step 1: `hooks` lets app.js own project state while this module stays the "all direct
  * Paper.js usage" facade its own header comment describes -- `getStoneDefaults()`/
  * `onShapeCommitted(layer)` mirror the old commit()'s `{stoneSize,gap,color}` argument and
@@ -1452,6 +1489,92 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       const shape = findShapeByLayerId(layerId);
       if (!shape) return;
       rebuildStoneGroupForShape(shape.id);
+    },
+
+    /**
+     * Canvas-desync fix: full reconciliation pass between `pathLayers` (every current
+     * project.layers entry with type==='path') and this file's own board.shapes, covering every
+     * way the two can drift when project.layers changes from OUTSIDE Design's own drag handlers --
+     * undo, redo, the Layers-list trash-icon delete (deleteLayer() there is called directly,
+     * bypassing deleteSelected()/onShapeDeleted entirely), and by the same mechanism any other
+     * external project.layers mutation while Design is active. Runs in three passes, in this
+     * order so an id can never be both stale-removed and freshly-materialized in the same call:
+     *
+     * 1. A board.shapes item whose `item.data.layerId` no longer matches any entry in `pathLayers`
+     *    is removed (undo-of-draw, redo-of-delete) -- run first so step 2's "no matching item"
+     *    check never counts an item that's about to be removed anyway.
+     * 2. A `pathLayers` entry with no matching board.shapes item is materialized fresh via
+     *    materializeShapeFromLayer() (undo-of-delete, redo-of-draw) -- the shape needs to reappear
+     *    on a canvas that never removed it, or that already discarded it.
+     * 3. A board.shapes item whose matching layer's x/y/w/h no longer matches the item's own
+     *    current bounds is snapped to match, the same `item.bounds =` assignment the live resize
+     *    handler already uses (onMouseDrag's 'resize' branch) -- composing that box-fit transform
+     *    a second time is mathematically exact (both are pure axis-aligned scale+translate), so
+     *    this reproduces the same geometry a fresh materializeShapeFromLayer() call would (undo/
+     *    redo of move/resize).
+     *
+     * Every step also rebuilds/removes the shape's stone Group so the live preview never lags the
+     * outline. Local `selectedIds` drops any id removed in step 1 silently (no
+     * notifySelectionChanged() -- this runs synchronously inside app.js's own updateAll(), which
+     * onSelectionChanged's own hook calls right back into, so notifying here would re-enter
+     * updateAll() from within itself; deleteSelected() already leaves the same call out for the
+     * same reason).
+     *
+     * A no-op whenever project.layers already matches board.shapes, which is true immediately
+     * after every ordinary Design-originated edit: commit/move/resize/delete all write project.layers
+     * (or remove the board.shapes item) BEFORE the updateAll() call that reaches this method, so
+     * this pass never fights with or duplicates that existing per-gesture write-through.
+     * @param {object[]} pathLayers
+     */
+    syncFromProjectLayers(pathLayers) {
+      const layerById = new Map(pathLayers.map((l) => [l.id, l]));
+
+      for (const shape of board.listShapes()) {
+        const layerId = shape.item.data.layerId;
+        if (!layerId || layerById.has(layerId)) continue;
+        board.removeShape(shape.id);
+        removeStoneGroupForShape(shape.id);
+        if (selectedIds.has(shape.id)) {
+          const next = new Set(selectedIds);
+          next.delete(shape.id);
+          selectedIds = next;
+        }
+      }
+
+      const matchedLayerIds = new Set(
+        board.listShapes().map((shape) => shape.item.data.layerId).filter(Boolean)
+      );
+      for (const layer of pathLayers) {
+        if (matchedLayerIds.has(layer.id)) continue;
+        const item = materializeShapeFromLayer(layer);
+        if (!item) continue;
+        const shapeId = board.addShape(item);
+        item.data.layerId = layer.id;
+        rebuildStoneGroupForShape(shapeId);
+      }
+
+      for (const shape of board.listShapes()) {
+        const layerId = shape.item.data.layerId;
+        const layer = layerId && layerById.get(layerId);
+        if (!layer) continue;
+        const b = shape.item.bounds;
+        const changed =
+          Math.abs(b.left - layer.x) > 1e-6 ||
+          Math.abs(b.top - layer.y) > 1e-6 ||
+          Math.abs(b.width - layer.w) > 1e-6 ||
+          Math.abs(b.height - layer.h) > 1e-6;
+        if (!changed) continue;
+        shape.item.bounds = new paper.Rectangle(
+          layer.x,
+          layer.y,
+          Math.max(RESIZE_MIN_DIM_MM, layer.w),
+          Math.max(RESIZE_MIN_DIM_MM, layer.h)
+        );
+        rebuildStoneGroupForShape(shape.id);
+      }
+
+      applySelectionVisuals();
+      updateResizeHandles();
     },
 
     /**

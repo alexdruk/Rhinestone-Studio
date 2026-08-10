@@ -168,7 +168,7 @@ await test('a recovered record whose project fails validateProject() falls back 
 // reformatted across physical lines (a multi-line comment inserted mid-body is exactly what broke
 // the old sliceBetween(..., '\n', ...)-based version of this test under MONO-006A).
 
-function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', permanentEngineError = null, isDrawing = false } = {}) {
+function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', permanentEngineError = null, isDrawing = false, projectLayers = [] } = {}) {
   const calls = [];
   const record = (name) => () => { calls.push(name); };
   const consoleErrors = [];
@@ -178,7 +178,7 @@ function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', 
     return { get textContent() { return statusValue; }, set textContent(v) { statusValue = v; } };
   };
   const engine = { generate: null };
-  const project = {};
+  const project = { layers: projectLayers };
   const fakeConsole = { error: (...args) => consoleErrors.push(args) };
   const writeSelectedControlsToLayer = record('writeSelectedControlsToLayer');
   const renderLayerUI = record('renderLayerUI');
@@ -190,7 +190,12 @@ function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', 
   const updateViewButtons = record('updateViewButtons');
   const updateTextOutsidePrintableWarning = record('updateTextOutsidePrintableWarning');
   const scheduleAutosave = record('scheduleAutosave');
-  const drawingTool = { isActive: isDrawing, resize: record('drawingTool.resize') };
+  let syncFromProjectLayersArg = null;
+  const drawingTool = {
+    isActive: isDrawing,
+    resize: record('drawingTool.resize'),
+    syncFromProjectLayers: (pathLayers) => { syncFromProjectLayersArg = pathLayers; calls.push('drawingTool.syncFromProjectLayers'); }
+  };
 
   const updateAllSrc = extractFunctionBody(appJs, 'async function updateAll(skipWrite=false){', 'updateAll()');
   const factory = new Function(
@@ -212,7 +217,7 @@ function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', 
   );
   if (buildGenerate) engine.generate = buildGenerate(bumpGenerationToken);
   const tailCalls = () => calls.filter((c) => c !== 'writeSelectedControlsToLayer');
-  return { run: () => updateAll(skipWrite), calls, tailCalls, getStatus: () => statusValue, consoleErrors };
+  return { run: () => updateAll(skipWrite), calls, tailCalls, getStatus: () => statusValue, consoleErrors, getSyncFromProjectLayersArg: () => syncFromProjectLayersArg };
 }
 
 const SUCCESS_TAIL_ORDER = ['renderLayerUI', 'drawLayout', 'drawCup', 'updateStats', 'updateHistoryUI', 'updateEditingUI', 'updateViewButtons', 'updateTextOutsidePrintableWarning', 'scheduleAutosave'];
@@ -256,8 +261,26 @@ await test('a generation token superseded during the await also short-circuits t
 await test('RS-3010: while drawing mode is active, updateAll() resyncs via drawingTool.resize() instead of drawLayout()', async () => {
   const { run, calls } = runUpdateAll({ isDrawing: true, buildGenerate: () => async () => ({}) });
   await run();
-  assert.deepEqual(calls, ['writeSelectedControlsToLayer', ...SUCCESS_TAIL_ORDER.map((c) => c === 'drawLayout' ? 'drawingTool.resize' : c)]);
+  assert.deepEqual(calls, ['writeSelectedControlsToLayer', ...SUCCESS_TAIL_ORDER.flatMap((c) => c === 'drawLayout' ? ['drawingTool.resize', 'drawingTool.syncFromProjectLayers'] : [c])]);
   assert.ok(!calls.includes('drawLayout'), 'drawLayout() must not run while drawingTool owns layoutCanvas');
+});
+
+await test('canvas-desync fix: while drawing mode is active, updateAll() reconciles Design shapes via drawingTool.syncFromProjectLayers(), passed only the current \'path\' layers', async () => {
+  const projectLayers = [
+    { id: 'p1', type: 'path' },
+    { id: 't1', type: 'text' },
+    { id: 'p2', type: 'path' },
+    { id: 'c1', type: 'circle' }
+  ];
+  const { run, getSyncFromProjectLayersArg } = runUpdateAll({ isDrawing: true, projectLayers, buildGenerate: () => async () => ({}) });
+  await run();
+  assert.deepEqual(getSyncFromProjectLayersArg(), [projectLayers[0], projectLayers[2]]);
+});
+
+await test('canvas-desync fix: while drawing mode is inactive, updateAll() never calls drawingTool.syncFromProjectLayers()', async () => {
+  const { run, calls } = runUpdateAll({ isDrawing: false, buildGenerate: () => async () => ({}) });
+  await run();
+  assert.ok(!calls.includes('drawingTool.syncFromProjectLayers'), 'sync must only run while Design actually owns the canvas');
 });
 
 await test('a lingering "Text generation failed" status is cleared back to Ready once generation succeeds again, and a font-manifest error still takes priority over it', async () => {

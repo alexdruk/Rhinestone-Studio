@@ -1310,7 +1310,14 @@ async function updateAll(skipWrite=false){if(!skipWrite)writeSelectedControlsToL
   // in updateAll() while active (a window resize, a workspace-tab switch reflowing the panel, or
   // any other edit that happens to run updateAll() concurrently) still needs layoutCanvas's *size*
   // kept in sync, just through drawingTool's own resync path instead of the normal renderer.
-  renderLayerUI();if(drawingTool.isActive){drawingTool.resize(38*Math.max(1,devicePixelRatio||1))}else{drawLayout()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}// S-003: a project must always keep at least one layer (deleteLayer()'s guard below), so once
+  renderLayerUI();if(drawingTool.isActive){drawingTool.resize(38*Math.max(1,devicePixelRatio||1));
+  // Canvas-desync fix: reconciles Design's live Paper.js shapes against project.layers on every
+  // updateAll() call while Design is active -- resize() above only keeps the viewport in sync, it
+  // never did this. Covers undo/redo (applyHistorySnapshot() swaps `project` wholesale) and the
+  // Layers-list trash-icon delete (deleteLayer() there is called directly, bypassing
+  // drawingTool.deleteSelected()/onShapeDeleted entirely) -- see syncFromProjectLayers()'s own doc
+  // comment for why this is a no-op after an ordinary Design-originated commit/move/resize/delete.
+  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'))}else{drawLayout()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}// S-003: a project must always keep at least one layer (deleteLayer()'s guard below), so once
 // only one layer remains, every delete affordance -- the per-row trash icon and the sidebar
 // "Delete selected layer" button -- is disabled here (not just left clickable-but-a-no-op) and
 // #layerRuleHint (sitting directly under the button, always in view) explains why. This runs on
