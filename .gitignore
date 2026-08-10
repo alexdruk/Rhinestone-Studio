@@ -142,3 +142,8 @@ tools/scratch/rs-3011-step3b-spike/
 # stone preview on the Design canvas -- same "never a repo artifact" category as the folders above
 tools/rs-3011-step3b-verify.mjs
 tools/rs-3011-step3b-verification-screenshots/
+
+#RS-3011 verification-artifact
+tools/rs-3011-canvas-desync-verify.mjs
+tools/rs-3011-canvas-desync-verification-screenshots/
+
