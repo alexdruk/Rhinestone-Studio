@@ -235,7 +235,14 @@ await test('9. geometry counts/bounds from the permanent GeometryEngine are unch
   // own title ("this milestone touches no geometry code") refers to whatever milestone is *current*
   // when a reader is auditing a future, unrelated change; RC-004A is exactly a geometry-code
   // milestone, so this count and the bounding box below are expected to move once more here.
-  assert.equal(result.count, 202, 'expected RC-004A\'s same-contour overlap guard to additionally prune physically overlapping stones within a single glyph contour');
+  //
+  // RS-3011 corner-gap backfill: 202 -> 212. A 15-character mixed-glyph phrase has many dropped
+  // corners/cusps across all its letters; verified directly (re-running this exact scaled layout and
+  // diffing its stones against the pre-backfill dedupe output) that 10 of them have genuine room for
+  // a legal replacement point and are backfilled, with zero physical overlap anywhere in the result
+  // (re-checked directly, not merely assumed from the count). widthMm is untouched -- backfilling
+  // adds stones inside the already-sampled glyph contours, it never changes their geometry.
+  assert.equal(result.count, 212, 'expected RS-3011\'s corner-gap backfill to additionally restore legally-placeable stones dropped by RC-004A\'s same-contour overlap guard');
   assert.ok(Math.abs(result.widthMm - 200.598759) < 0.001, `expected widthMm ~= 200.598759, got ${result.widthMm}`);
   assert.ok(Math.abs(result.heightMm - 17.097546) < 0.001, `expected heightMm ~= 17.097546, got ${result.heightMm}`);
 });

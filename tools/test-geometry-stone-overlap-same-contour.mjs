@@ -80,9 +80,12 @@ await test('1. long-script-name.rhs (the confirmed release-blocking script-font 
 
   assert.deepEqual(findOverlappingPairs(layout.stones), [], 'no two stones should physically overlap');
   // Before this fix: 690 stones, 556 overlapping pairs (min clearance 0.0119mm -- stones nearly
-  // stacked). After: 364 stones, 0 overlapping pairs -- more than half the design's intended
+  // stacked). After RC-004A: 364 stones, 0 overlapping pairs -- more than half the design's intended
   // coverage survives untouched; only samples that were literally colliding were ever removed.
-  assert.equal(layout.stones.length, 364, 'deterministic stone count for this fixture at its committed geometry');
+  // RS-3011 corner-gap backfill: 364 -> 366 (verified directly: sampleMultiContourOutlinePoints()
+  // finds exactly 2 of this fixture's many dropped corners/cusps have genuine room for a legal
+  // replacement point; the rest are left exactly as RC-004A produced them).
+  assert.equal(layout.stones.length, 366, 'deterministic stone count for this fixture at its committed geometry');
   assert.ok(layout.stones.length > 300, 'the fix must not collapse a script font down to a sparse skeleton');
 });
 
@@ -105,9 +108,18 @@ await test('2. a tight loop / doubled-back closed contour (a hairpin whose chann
   });
   assert.deepEqual(findOverlappingPairs(layout.stones), [], 'no two stones should physically overlap across the hairpin\'s channel');
   // Before this fix: 70 stones, 17 same-contour overlapping pairs (the two prongs collide along
-  // their whole facing length). After: 53 -- the outer legs and bottom bar (comfortably spaced)
-  // are untouched; only the colliding prong pairs are thinned.
-  assert.equal(layout.stones.length, 53, 'deterministic stone count for this reproducer');
+  // their whole facing length). After RC-004A: 53 -- the outer legs and bottom bar (comfortably
+  // spaced) are untouched; only the colliding prong pairs are thinned.
+  // RS-3011 corner-gap backfill: 53 -> 54. Of the 17 drops, 15 are one long run along the inner
+  // prong's own straight edge (raw samples 33-47, all dropped because they sit 1mm from the *other*
+  // prong, i.e. same-contour walk order but a cross-channel physical conflict) -- backfilling any of
+  // them would recreate exactly the channel overlap this fix exists to prevent, and the shared
+  // proximity index (checked against every kept point, not just each drop's own two walk-order
+  // neighbors) correctly rejects all 15 (verified directly: the shared candidate position for that
+  // run sits 1.005mm from a kept point on the other prong, under stoneSizeMm=1.2mm). One further drop
+  // (raw16) has no room on its own two-neighbor check either. Only one drop (raw50, near the open top
+  // of the hairpin) has genuine room and is legally backfilled.
+  assert.equal(layout.stones.length, 54, 'deterministic stone count for this reproducer');
   assert.ok(layout.stones.length > 35, 'the outer legs and bottom bar must survive -- only the colliding channel should be thinned');
 });
 
@@ -121,7 +133,10 @@ await test('2b. the same tight loop as an open contour (an SVG polyline, not a c
     stoneSizeMm: 1.2, gapMm: 0.2, mode: 'outline'
   });
   assert.deepEqual(findOverlappingPairs(layout.stones), [], 'no two stones should physically overlap across the open hairpin\'s channel');
-  assert.equal(layout.stones.length, 48, 'deterministic stone count for the open-contour reproducer');
+  // RS-3011 corner-gap backfill: 48 -> 49, the open-contour counterpart of test 2's 53 -> 54 (same
+  // channel-collision run correctly rejected by the full proximity-index check; one legitimate
+  // backfill elsewhere).
+  assert.equal(layout.stones.length, 49, 'deterministic stone count for the open-contour reproducer');
 });
 
 // --- 3. Ordinary broad contour: completely unaffected --------------------------------------------
@@ -171,7 +186,13 @@ await test('4a. a tight closing seam (perimeter remainder smaller than one stone
   // implicated (corner-adjacent chord at this pitch is ~4.9mm, comfortably clear of 2mm).
   const layout = engine.generateSvgLayout({ svgSource: seamSvg, layerId: 'seam', widthMm: 10, heightMm: 15, stoneSizeMm: 2, gapMm: 5, mode: 'outline' });
   assert.deepEqual(findOverlappingPairs(layout.stones), [], 'the closing seam must no longer physically overlap');
-  assert.equal(layout.stones.length, 7, 'exactly the redundant seam-closing stone (of 8 raw samples) should be dropped, nothing else');
+  // RS-3011 corner-gap backfill: 7 -> 8. This rectangle's closing seam has real room once RC-004A's
+  // drop is accounted for: the dropped raw[7] (0,1) leaves flanking survivors raw[6] (0,8) and raw[0]
+  // (0,0), an 8mm gap on a straight edge -- well past spacingMm=7mm. Hand-derived: parametrizing the
+  // straight segment as y=50-s for s in [42,50], distance-to-prev=|s-42| and distance-to-next=50-s
+  // cross at s=46 -> point (0,4), 4mm from each survivor, comfortably >= stoneSizeMm=2mm. Verified
+  // independently against a from-scratch reimplementation of the fix, which reproduces (0,4) exactly.
+  assert.equal(layout.stones.length, 8, 'the redundant seam-closing gap is backfilled with one legally-placed stone, nothing else');
 });
 
 await test('4b. a comfortably-spaced closing seam is not pruned unnecessarily', () => {
@@ -193,8 +214,18 @@ await test('5. a sharp-notched Star: genuine inner-notch overlap is resolved, bu
   });
   assert.deepEqual(findOverlappingPairs(layout.stones), [], 'no two stones on the star should physically overlap');
   // Before this fix: 91 stones, 12 same-contour overlapping pairs at the star's five inner notches.
-  // After: 81 -- an 11% reduction, not a collapse; the five outer points and ten edges are untouched.
-  assert.equal(layout.stones.length, 81, 'deterministic stone count for this Star configuration');
+  // After RC-004A: 81 -- an 11% reduction, not a collapse; the five outer points and ten edges are
+  // untouched.
+  // RS-3011 corner-gap backfill: 81 -> 86. Of the 10 drops, all 10 have a flanking gap worse than
+  // spacingMm, but only 5 have a legal replacement once checked against every kept point (not just
+  // each drop's own two walk-order neighbors): 2 candidates (raw[19], raw[90]) pass their own
+  // two-neighbor equidistant check but actually land within stoneSizeMm of an unrelated kept point
+  // elsewhere on the star and are correctly rejected; raw[73] and raw[74] are adjacent drops whose
+  // independently-computed candidates coincide at the same point, so the shared proximity index
+  // correctly inserts only one of them, not two. Verified directly: the production output's 5 new
+  // points match a from-scratch reimplementation's predictions at raw[10], raw[46], raw[64],
+  // raw[73]-or-raw[74] (once, not twice), and raw[82].
+  assert.equal(layout.stones.length, 86, 'deterministic stone count for this Star configuration');
   assert.ok(layout.stones.length > 70, 'the fix must not erase legitimate stones merely because the star\'s edges converge toward each notch');
 });
 

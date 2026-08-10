@@ -330,6 +330,119 @@ export function findCrossGroupCollisions(stones) {
 }
 
 /**
+ * RS-3011 (corner-gap backfill): build a grid-hash proximity index with the exact same bucket
+ * scheme dedupeStonePoints() uses internally (cell size == the caller's own minDistanceMm, 3x3
+ * neighborhood scan) but exposed as insert/hasConflict so a caller can incrementally add points
+ * and query for conflicts against everything inserted so far. dedupeStonePoints() itself builds and
+ * discards an identical structure on every call and is deliberately left untouched (see its own doc
+ * comment); this is that same bucket algorithm factored out for reuse, not a second/different check.
+ */
+function buildProximityIndex(points, minDistanceMm) {
+  const cellSizeMm = minDistanceMm;
+  const minDistanceSqMm = minDistanceMm * minDistanceMm;
+  const buckets = new Map();
+
+  function insert(point) {
+    const gx = Math.floor(point.xMm / cellSizeMm);
+    const gy = Math.floor(point.yMm / cellSizeMm);
+    const key = `${gx},${gy}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(point);
+  }
+
+  function hasConflict(point) {
+    const gx = Math.floor(point.xMm / cellSizeMm);
+    const gy = Math.floor(point.yMm / cellSizeMm);
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const bucket = buckets.get(`${gx + dx},${gy + dy}`);
+        if (!bucket) continue;
+        for (const other of bucket) {
+          const ddx = point.xMm - other.xMm;
+          const ddy = point.yMm - other.yMm;
+          if (ddx * ddx + ddy * ddy < minDistanceSqMm) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  for (const point of points) insert(point);
+  return { insert, hasConflict };
+}
+
+/** RS-3011: perimeter + per-segment lengths for a single contour, honoring the same open/closed
+ * convention sampleOutlinePoints() uses (an appended closing segment back to the first vertex only
+ * for closed contours). */
+function contourPerimeterAndSegments(polygon, closed) {
+  const pts = closed ? [...polygon, polygon[0]] : polygon;
+  const segLensMm = [];
+  let perimeterMm = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const lengthMm = pts[i].distanceTo(pts[i + 1]);
+    segLensMm.push(lengthMm);
+    perimeterMm += lengthMm;
+  }
+  return { pts, segLensMm, perimeterMm };
+}
+
+/** RS-3011: the point on a contour at a given arc-length position, wrapping modulo the perimeter
+ * for closed contours and clamping to the path's true endpoints for open ones. */
+function pointAtArcLength({ pts, segLensMm, perimeterMm }, sMmRaw, closed) {
+  const sMm = closed
+    ? ((sMmRaw % perimeterMm) + perimeterMm) % perimeterMm
+    : Math.min(Math.max(sMmRaw, 0), perimeterMm);
+  let segIndex = 0;
+  let segStartMm = 0;
+  while (segIndex < segLensMm.length - 1 && segStartMm + segLensMm[segIndex] < sMm) {
+    segStartMm += segLensMm[segIndex];
+    segIndex++;
+  }
+  const segLenMm = segLensMm[segIndex];
+  const t = segLenMm === 0 ? 0 : (sMm - segStartMm) / segLenMm;
+  const a = pts[segIndex];
+  const b = pts[segIndex + 1];
+  return { xMm: a.xMm + (b.xMm - a.xMm) * t, yMm: a.yMm + (b.yMm - a.yMm) * t };
+}
+
+/**
+ * RS-3011 (corner-gap backfill): given the two dedupe-surviving points that flank a dropped sample
+ * (in walk order, `spanMm` apart along the contour's own arc-length parameterization starting from
+ * `fromArcLengthMm`), find the single best replacement position between them -- the point on the
+ * true contour boundary where the straight-line (chord) distance to `prevPoint` first equals the
+ * distance to `nextPoint`. That crossing is the maximum-of-the-minimum-clearance position: as the
+ * search position sweeps from prevPoint to nextPoint, distance-to-prevPoint rises monotonically and
+ * distance-to-nextPoint falls monotonically, so their crossing point is provably the best any single
+ * inserted point can do (see the RS-3011 corner-gap investigation this implements). Returns `null`
+ * ("no legal position" -- the common case for a sharp 90-degree-class corner) when even that best
+ * position doesn't clear `minSeparationMm` from both sides; callers must fall back to leaving the
+ * gap exactly as today.
+ */
+function findEquidistantBackfillPoint(contourGeom, closed, prevPoint, nextPoint, fromArcLengthMm, spanMm, minSeparationMm) {
+  if (!(spanMm > 0) || !(contourGeom.perimeterMm > 0)) return null;
+
+  let loMm = fromArcLengthMm;
+  let hiMm = fromArcLengthMm + spanMm;
+
+  const distAt = (sMm, fromPoint) => {
+    const p = pointAtArcLength(contourGeom, sMm, closed);
+    return Math.hypot(p.xMm - fromPoint.xMm, p.yMm - fromPoint.yMm);
+  };
+
+  for (let iter = 0; iter < 60; iter++) {
+    const midMm = (loMm + hiMm) / 2;
+    if (distAt(midMm, prevPoint) < distAt(midMm, nextPoint)) loMm = midMm; else hiMm = midMm;
+  }
+
+  const eqMm = (loMm + hiMm) / 2;
+  const clearanceMm = distAt(eqMm, prevPoint);
+  if (clearanceMm < minSeparationMm - 1e-6) return null;
+
+  const eqPoint = pointAtArcLength(contourGeom, eqMm, closed);
+  return new Point2D(eqPoint.xMm, eqPoint.yMm);
+}
+
+/**
  * RC-002 / RC-004A: sample every contour's outline points independently (via sampleOutlinePoints(),
  * so each contour's own spacingMm arc-length walk is completely unchanged), then drop any point
  * that lands within `minSeparationMm` of an already-kept point -- from that *same* contour or a
@@ -373,14 +486,99 @@ export function findCrossGroupCollisions(stones) {
  * this fix's scope calls for. Flooring at stoneSizeMm is the minimal change that still strictly
  * guarantees no two stones -- from the same contour or different ones -- ever overlap.
  *
+ * RS-3011 (corner-gap backfill): dedupeStonePoints() drops a too-close sample but leaves nothing in
+ * its place, which can balloon the gap between its two surviving neighbors well past the intended
+ * pitch -- most visibly at a sharp corner, where curvature pulls the walk-order-adjacent chord below
+ * the physical threshold. After dedupeStonePoints() runs (unchanged, still the single source of
+ * truth for what survives), this function makes one additional pass *per contour* over the points
+ * that were dropped: if a dropped point's flanking survivors (found by walking outward along that
+ * same contour's own raw samples, wrapping at the seam for closed contours) are now more than
+ * spacingMm apart, it looks for the one legal position to backfill -- see
+ * findEquidistantBackfillPoint(). This is a deliberately partial fix: most sharp corners (e.g. a
+ * plain rectangle's 90-degree corners) have no geometric room for a legal replacement point at all,
+ * and are left exactly as before; only where genuine room exists does a point get inserted. Every
+ * candidate is checked against a proximity index seeded with the full dedupe-surviving set (and
+ * grown as earlier backfills succeed), not just its own two neighbors, so a backfill can never
+ * introduce a new overlap with some other nearby point -- from the same corner, a different corner,
+ * or a different contour entirely.
+ *
  * @param {Point2D[][]} polygons
  * @param {number} spacingMm
  * @param {{closed?: boolean, minSeparationMm?: number}} [options]
  * @returns {Point2D[]}
  */
 export function sampleMultiContourOutlinePoints(polygons, spacingMm, { closed = true, minSeparationMm = spacingMm } = {}) {
-  const points = polygons.flatMap((polygon) => sampleOutlinePoints(polygon, spacingMm, { closed }));
-  return dedupeStonePoints(points, minSeparationMm);
+  const contourRawPoints = polygons.map((polygon) => sampleOutlinePoints(polygon, spacingMm, { closed }));
+  const points = contourRawPoints.flat();
+  const kept = dedupeStonePoints(points, minSeparationMm);
+
+  if (kept.length === points.length) {
+    return kept;
+  }
+
+  const keptSet = new Set(kept);
+  const index = buildProximityIndex(kept, minSeparationMm);
+  let contourGeomCache = null;
+
+  const result = [];
+  for (let c = 0; c < polygons.length; c++) {
+    const rawPoints = contourRawPoints[c];
+    const n = rawPoints.length;
+    contourGeomCache = null;
+
+    for (let i = 0; i < n; i++) {
+      const point = rawPoints[i];
+      if (keptSet.has(point)) {
+        result.push(point);
+        continue;
+      }
+
+      // Dropped by dedupeStonePoints(). Walk outward in both directions along THIS contour's own
+      // raw samples only -- never across contours, since arc-length geometry is only meaningful
+      // within one contour -- to find the two genuine dedupe-surviving neighbors flanking the gap.
+      // Closed contours wrap at the seam: the closing seam is not geometrically distinct from any
+      // other corner (a closed contour has no true "start", only an arbitrary sampling origin), so
+      // it gets the same backfill treatment, not a special case. Open contours stop at the path's
+      // true endpoints -- there is no segment beyond them to backfill into.
+      let prevSteps = 0;
+      let nextSteps = 0;
+      for (let step = 1; step <= n; step++) {
+        const idx = closed ? ((i - step) % n + n) % n : i - step;
+        if (idx < 0) break;
+        if (keptSet.has(rawPoints[idx])) { prevSteps = step; break; }
+      }
+      for (let step = 1; step <= n; step++) {
+        const idx = closed ? (i + step) % n : i + step;
+        if (idx >= n) break;
+        if (keptSet.has(rawPoints[idx])) { nextSteps = step; break; }
+      }
+
+      if (prevSteps === 0 || nextSteps === 0) continue; // no two-sided gap: degenerate contour or open-path end
+
+      const prevIdx = closed ? ((i - prevSteps) % n + n) % n : i - prevSteps;
+      const nextIdx = closed ? (i + nextSteps) % n : i + nextSteps;
+      const prevPoint = rawPoints[prevIdx];
+      const nextPoint = rawPoints[nextIdx];
+
+      const flankGapMm = Math.hypot(prevPoint.xMm - nextPoint.xMm, prevPoint.yMm - nextPoint.yMm);
+      if (flankGapMm <= spacingMm) continue; // gap isn't worse than the intended pitch -- nothing to backfill
+
+      if (!contourGeomCache) contourGeomCache = contourPerimeterAndSegments(polygons[c], closed);
+      const fromArcLengthMm = (i - prevSteps) * spacingMm;
+      const spanMm = (prevSteps + nextSteps) * spacingMm;
+      const candidate = findEquidistantBackfillPoint(
+        contourGeomCache, closed, prevPoint, nextPoint, fromArcLengthMm, spanMm, minSeparationMm
+      );
+
+      if (!candidate) continue; // no legal position -- drop-fallback, matching current behavior exactly
+      if (index.hasConflict(candidate)) continue; // would overlap some other already-kept/backfilled point
+
+      index.insert(candidate);
+      result.push(candidate);
+    }
+  }
+
+  return result;
 }
 
 // RS-1011: dedupeStonePoints()'s minimum-distance floor for Contour/Radial Fill, as a fraction of
