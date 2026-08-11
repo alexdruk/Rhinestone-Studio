@@ -1055,57 +1055,65 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         rebuildPenHandleChromeItem();
         return;
       }
-      // Design Step D: a resize handle can sit right at a shape's edge, where both it and the
-      // shape's own hit-test could otherwise match -- the handle must win, so this is checked
-      // first (mirrors app.js's own hitTest(), which checks handlesFor() before the move branch).
-      const resizeHandleHit = hitTestResizeHandle(event.point);
-      if (resizeHandleHit) {
-        const shape = board.getShape([...selectedIds][0]);
-        interactionKind = 'resize';
-        resizeHandle = resizeHandleHit;
-        resizeShapeId = shape.id;
-        resizeStartBounds = shape.item.bounds.clone();
-        // RS-3011 resize-perf fix: hide the stone Group for the duration of the drag. CDP tracing
-        // (tools/scratch/rs-3011-resize-perf-spike/) found the dominant per-frame cost during a
-        // resize drag is Paper.js's own canvas redraw (handleCallbacks -> View.update(), ~7.2ms
-        // median/frame), not rebuildStoneGroupForShape() itself (~5.4ms median/frame) -- an
-        // invisible Group is skipped by that redraw pass. rebuildStoneGroupForShape() re-applies
-        // this on every rAF-throttled rebuild below for as long as this resize stays in progress.
-        const stoneGroup = stoneGroups.get(shape.id);
-        if (stoneGroup) stoneGroup.visible = false;
-        return;
-      }
-      const hitId = hitTestShapeId(event.point);
-      if (hitId) {
-        // Same click/shift-click/drag-preserves-group convention as the existing project.layers
-        // pointerdown handler in app.js: a shift-click toggles membership and never starts a
-        // drag on its own (matches that handler's shift branch returning immediately); a plain
-        // click on a shape already part of the current multi-selection preserves the whole group
-        // (so a follow-up drag moves it together) instead of collapsing to just that one shape.
-        if (event.modifiers.shift) {
-          selectedIds = toggleSelection(selectedIds, hitId);
-          applySelectionVisuals();
-          updateResizeHandles();
-          notifySelectionChanged();
-          interactionKind = null;
+      // RS-3011 pen-skip-move-hittest: Pen is the one exception to "click-and-drag on an existing
+      // shape moves it" -- a brand-new Pen click must always start a first anchor (below), never
+      // resize/move whatever it happens to land on. Both hit-tests are skipped for Pen. In
+      // practice hitTestResizeHandle() already returns null outside mode === 'select' (and
+      // updateResizeHandles() never populates handles outside 'select' either, so this is a no-op
+      // there already) -- the real gap this closes is hitTestShapeId's move branch below.
+      if (mode !== 'pen') {
+        // Design Step D: a resize handle can sit right at a shape's edge, where both it and the
+        // shape's own hit-test could otherwise match -- the handle must win, so this is checked
+        // first (mirrors app.js's own hitTest(), which checks handlesFor() before the move branch).
+        const resizeHandleHit = hitTestResizeHandle(event.point);
+        if (resizeHandleHit) {
+          const shape = board.getShape([...selectedIds][0]);
+          interactionKind = 'resize';
+          resizeHandle = resizeHandleHit;
+          resizeShapeId = shape.id;
+          resizeStartBounds = shape.item.bounds.clone();
+          // RS-3011 resize-perf fix: hide the stone Group for the duration of the drag. CDP tracing
+          // (tools/scratch/rs-3011-resize-perf-spike/) found the dominant per-frame cost during a
+          // resize drag is Paper.js's own canvas redraw (handleCallbacks -> View.update(), ~7.2ms
+          // median/frame), not rebuildStoneGroupForShape() itself (~5.4ms median/frame) -- an
+          // invisible Group is skipped by that redraw pass. rebuildStoneGroupForShape() re-applies
+          // this on every rAF-throttled rebuild below for as long as this resize stays in progress.
+          const stoneGroup = stoneGroups.get(shape.id);
+          if (stoneGroup) stoneGroup.visible = false;
           return;
         }
-        if (!selectedIds.has(hitId)) {
-          selectedIds = selectOnly(hitId);
-          applySelectionVisuals();
-          updateResizeHandles();
-          notifySelectionChanged();
+        const hitId = hitTestShapeId(event.point);
+        if (hitId) {
+          // Same click/shift-click/drag-preserves-group convention as the existing project.layers
+          // pointerdown handler in app.js: a shift-click toggles membership and never starts a
+          // drag on its own (matches that handler's shift branch returning immediately); a plain
+          // click on a shape already part of the current multi-selection preserves the whole group
+          // (so a follow-up drag moves it together) instead of collapsing to just that one shape.
+          if (event.modifiers.shift) {
+            selectedIds = toggleSelection(selectedIds, hitId);
+            applySelectionVisuals();
+            updateResizeHandles();
+            notifySelectionChanged();
+            interactionKind = null;
+            return;
+          }
+          if (!selectedIds.has(hitId)) {
+            selectedIds = selectOnly(hitId);
+            applySelectionVisuals();
+            updateResizeHandles();
+            notifySelectionChanged();
+          }
+          interactionKind = 'move';
+          // RS-3010 Step 2e: hitId (the specific shape actually clicked, even within a
+          // multi-selection) is the natural anchor for a group drag -- see the moveStartPoint
+          // cluster's own doc comment above for why this tracks an absolute anchor instead of
+          // snapping event.delta directly.
+          moveStartPoint = event.point;
+          moveAnchorShapeId = hitId;
+          moveAnchorStartBounds = board.getShape(hitId).item.bounds.clone();
+          moveAppliedOffset = { x: 0, y: 0 };
+          return;
         }
-        interactionKind = 'move';
-        // RS-3010 Step 2e: hitId (the specific shape actually clicked, even within a
-        // multi-selection) is the natural anchor for a group drag -- see the moveStartPoint
-        // cluster's own doc comment above for why this tracks an absolute anchor instead of
-        // snapping event.delta directly.
-        moveStartPoint = event.point;
-        moveAnchorShapeId = hitId;
-        moveAnchorStartBounds = board.getShape(hitId).item.bounds.clone();
-        moveAppliedOffset = { x: 0, y: 0 };
-        return;
       }
       // Empty canvas: clear any existing selection and start a new shape per the active mode.
       if (selectedIds.size) {
