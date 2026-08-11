@@ -201,3 +201,18 @@ tools/rs-3011-pen-anchor-handle-visuals-verification-screenshots/
 tools/rs-3011-pen-skip-move-hittest-verify.mjs
 tools/rs-3011-pen-skip-move-hittest-verification-screenshots/
 
+# RS-3011 Step 4: ad hoc live-browser Playwright verification script for the persisted-active-view
+# boot logic (scenarios a-g: fresh-boot default, tab-switch persistence, Design content+view
+# restore, narrow-viewport override without clobbering the saved preference, and a boot-time vs.
+# click-triggered Design entry canvas-sizing comparison) -- same "never a repo artifact" category
+# as the scripts above
+tools/rs-3011-step4-verify.mjs
+
+# RS-3011 Step 4: ad hoc CDP-screencast Playwright scripts that caught and then re-verified the
+# fix for a real ~25-30ms visible flash of Dual Workspace during the boot-time 'design' path's
+# settle-generation step (plain default-project case + a heavier 7-layer case), plus their captured
+# evidence frames -- same "never a repo artifact" category as the scripts above
+tools/rs-3011-step4-flash-check.mjs
+tools/rs-3011-step4-flash-check-heavy.mjs
+tools/rs-3011-step4-flash-check-screenshots/
+
