@@ -308,6 +308,11 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   let penDragOrigin = null;
   let penDragForceCorner = false;
   let penDragCrossedDeadZone = false;
+  // RS-3011 Step 9 revision: true when the current drag is closing the path onto the first anchor
+  // -- shapes that anchor's handleIn only (the incoming curve for the closing segment), never its
+  // handleOut (the outgoing curve for the ORIGINAL first segment, anchor 1->2, already set back
+  // when it was first placed and must survive a later closing drag untouched).
+  let penClosingDrag = false;
   let penPreviewItem = null;
   let selectedIds = clearSelection();
   // 'draw' while a new freehand/rect/ellipse/slot shape is mid-drag; 'move' while dragging the
@@ -675,6 +680,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     penDragOrigin = null;
     penDragForceCorner = false;
     penDragCrossedDeadZone = false;
+    penClosingDrag = false;
   }
 
   /**
@@ -893,11 +899,16 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           anchors.length >= PEN_MIN_CLOSE_ANCHORS &&
           event.point.getDistance(anchors[0].point) <= PEN_ANCHOR_HIT_TOLERANCE_PX / paper.view.zoom;
         if (closing) {
-          board.path.closed = true;
-          const item = board.path;
-          board.finalizeShape();
-          commitFinalizedShape(item);
-          resetInProgressDrawing();
+          // RS-3011 Step 9 revision: closing is now a drag-shapeable gesture too, matching every
+          // other anchor -- finalize in onMouseDrag's/onMouseUp's pen branches once the drag (if
+          // any) ends, not immediately here. penDraggingSegment is set to the FIRST anchor (not a
+          // new segment): a closing drag shapes the incoming curve for the closing segment itself.
+          removePenPreviewItem();
+          penDraggingSegment = anchors[0];
+          penDragOrigin = event.point.clone();
+          penDragForceCorner = event.modifiers.alt;
+          penDragCrossedDeadZone = false;
+          penClosingDrag = true;
           return;
         }
         const last = anchors[anchors.length - 1];
@@ -921,6 +932,8 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         // return-click on this same anchor afterward.
         penDragForceCorner = event.modifiers.alt;
         penDragCrossedDeadZone = false;
+        // An ordinary anchor placement must never be mistaken for a closing drag.
+        penClosingDrag = false;
         return;
       }
       // Design Step D: a resize handle can sit right at a shape's edge, where both it and the
@@ -1013,6 +1026,8 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         penDragOrigin = seg.point.clone();
         penDragForceCorner = event.modifiers.alt;
         penDragCrossedDeadZone = false;
+        // An ordinary anchor placement must never be mistaken for a closing drag.
+        penClosingDrag = false;
         return;
       }
       interactionKind = 'draw';
@@ -1155,8 +1170,16 @@ export function createDrawingTool(canvasEl, hooks = {}) {
             penDragCrossedDeadZone = true;
           }
           if (penDragCrossedDeadZone) {
-            penDraggingSegment.handleOut = delta;
-            penDraggingSegment.handleIn = delta.negate();
+            // RS-3011 Step 9 revision: a closing drag shapes only the closing segment's incoming
+            // curve (handleIn on the FIRST anchor) -- it must never touch that anchor's own
+            // handleOut, which already shapes the ORIGINAL first segment (anchor 1->2) and was set
+            // back when anchor 1 was first placed.
+            if (penClosingDrag) {
+              penDraggingSegment.handleIn = delta.negate();
+            } else {
+              penDraggingSegment.handleOut = delta;
+              penDraggingSegment.handleIn = delta.negate();
+            }
           }
         }
         return;
@@ -1282,13 +1305,24 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         return;
       }
       if (interactionKind === 'pen') {
-        // RS-3011 Step 9: unlike every other mode, mouseup never finalizes a Pen path -- it just
-        // ends this anchor's handle-drag. The path stays in progress until a qualifying closing
-        // click in onMouseDown (or Escape, via resetInProgressDrawing()).
+        // RS-3011 Step 9 revision: a closing drag finalizes HERE (once its handle-shaping drag
+        // ends), not in onMouseDown -- closing is now itself a drag-shapeable gesture like any
+        // other anchor. An ordinary (non-closing) drag still just ends this anchor's handle-drag;
+        // the path stays in progress until a qualifying closing click/drag in onMouseDown (or
+        // Escape, via resetInProgressDrawing()).
+        if (penClosingDrag) {
+          board.path.closed = true;
+          const item = board.path;
+          board.finalizeShape();
+          commitFinalizedShape(item);
+          resetInProgressDrawing();
+          return;
+        }
         penDraggingSegment = null;
         penDragOrigin = null;
         penDragForceCorner = false;
         penDragCrossedDeadZone = false;
+        penClosingDrag = false;
         return;
       }
       if (interactionKind === 'marquee') {
