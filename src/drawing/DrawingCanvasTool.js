@@ -86,6 +86,14 @@ const CLOSE_POLYGON_TOLERANCE_PX = 6;
 const PEN_MIN_CLOSE_ANCHORS = 3;
 const PEN_ANCHOR_HIT_TOLERANCE_PX = 6;
 const PEN_DRAG_DEAD_ZONE_MM = 0.5;
+// RS-3011 Step 9 follow-up (finishOpenPenPath): a genuine double-click's two click events land at
+// the same screen coordinate (no pointer movement between them), so the two anchors they place are
+// exactly coincident, not merely within click-proximity of each other -- an intentionally much
+// tighter check than PEN_ANCHOR_HIT_TOLERANCE_PX's 6px hit-test above, which exists to forgive
+// imprecise aim, not to dedup a double-click. Mirrors this file's own existing "exact coincidence"
+// convention for degenerate-input checks (buildSlotPreview's a-vs-b check, the resize-bounds-
+// unchanged checks below), not a proximity/intent heuristic like the others in this cluster.
+const PEN_COINCIDENT_ANCHOR_TOLERANCE_MM = 1e-6;
 // RS-3010 Design Step D: resize handles' own constants. RESIZE_HANDLE_SIZE_PX/
 // RESIZE_HANDLE_STROKE_WIDTH_PX/colors match app.js's own SELECTION_HANDLE_SIZE_PX (11) and
 // drawSelectionBox()'s handle styling (white fill, #1478ff stroke, 1.75px width), for visual
@@ -1622,6 +1630,34 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      * Discard the in-progress stroke (if any) without leaving drawing mode.
      */
     cancelPath() {
+      resetInProgressDrawing();
+    },
+
+    /**
+     * RS-3011 Step 9 follow-up: finish the in-progress Pen path as an OPEN shape via double-click,
+     * an alternative to clicking back on the first anchor (which closes it). A no-op below 2
+     * anchors (a single point has no segment to render/sample) -- the in-progress path stays alive
+     * untouched, exactly as today, since this is a way to END a path, not a discard path (see
+     * cancelPath() for that).
+     * `board.path.closed` is deliberately left untouched (Paper.js's own default, false) -- this
+     * never seals the path, unlike every closing-drag finalize site.
+     */
+    finishOpenPenPath() {
+      if (!board.path || board.path.segments.length < 2) return;
+      // A native double-click's two clicks land at the same point, so the anchor the second click
+      // of the dblclick placed is (near-)exactly coincident with the one placed just before it --
+      // dedup that trailing duplicate BEFORE finalizing. flattenPathToContour() has no dedup of its
+      // own (only a points.length < 3 guard), so an un-deduped trailing vertex would otherwise pass
+      // straight into the contour.
+      const segments = board.path.segments;
+      const last = segments[segments.length - 1];
+      const prev = segments[segments.length - 2];
+      if (last.point.getDistance(prev.point) <= PEN_COINCIDENT_ANCHOR_TOLERANCE_MM) {
+        board.path.removeSegment(segments.length - 1);
+      }
+      const item = board.path;
+      board.finalizeShape();
+      commitFinalizedShape(item);
       resetInProgressDrawing();
     },
 

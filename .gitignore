@@ -172,6 +172,12 @@ tools/rs-3011-open-contour-verification-screenshots/
 tools/rs-3011-step9-pen-tool-verify.mjs
 tools/rs-3011-step9-pen-tool-verification-screenshots/
 
+# RS-3011 Step 9 follow-up: ad hoc live-browser Playwright verification script + screenshots for
+# finishOpenPenPath() (double-click-to-finish an open Pen path), same "never a repo artifact"
+# category as the scripts above
+tools/rs-3011-pen-finish-open-path-verify.mjs
+tools/rs-3011-pen-finish-open-path-verification-screenshots/
+
 # RS-3011 corner-gap-spike: investigation-only repro/measurement scripts for the dedupeStonePoints()
 # corner-drop gap issue (issue #5 of the prior six-bug investigation) -- throwaway, never a repo
 # artifact, same "never a repo artifact" category as the spike folders above

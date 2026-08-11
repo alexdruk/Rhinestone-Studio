@@ -3427,6 +3427,13 @@ el('menuDesign').onclick=()=>{
 // a drag on the canvas always draws and never pans: plain scroll pans (deltaX/deltaY), Ctrl/Cmd+
 // scroll (or a trackpad pinch, which the browser reports as wheel+ctrlKey) zooms.
 layoutCanvas.addEventListener('wheel',e=>{if(!drawingTool.isActive)return;drawingTool.onWheel(e)},{passive:false});
+// RS-3011 Step 9 follow-up: double-click finishes an in-progress Pen path as an open shape, an
+// alternative to clicking back on the first anchor (which closes it). hasInProgressPen already
+// folds in the interactionKind==='pen' check, so this doesn't duplicate it.
+layoutCanvas.addEventListener('dblclick',e=>{
+  if(!drawingTool.isActive||!drawingTool.hasInProgressPen)return;
+  drawingTool.finishOpenPenPath();
+});
 
 // ---- Left panel Actions shortcuts: each calls the exact same function as its top-bar/per-row
 // equivalent -- no new history, selection, or export logic. ----
