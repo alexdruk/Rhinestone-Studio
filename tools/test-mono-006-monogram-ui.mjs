@@ -88,8 +88,13 @@ const performRedoSrc = sliceLine(appJs, 'function performRedo(){', 'performRedo(
 const lightboxesSrc = sliceBetween(appJs, 'const lightboxes={', "\nel('menuText')", 'the lightboxes construction')
   .replace(/\nel\('menuText'\)$/, '');
 const menuMonogramWiringSrc = (() => {
-  const line = "el('menuMonogram').onclick=()=>lightboxes.monogram.open();";
-  assert.ok(appJs.includes(line), 'expected #menuMonogram to be wired to lightboxes.monogram.open()');
+  // RS-3011 nav-toggle fix: #menuMonogram now also reveals Dual Workspace before opening (see
+  // tools/test-ui-shell-structure.mjs's own coverage of revealDualWorkspaceForLightbox()). The
+  // sandbox below stubs revealDualWorkspaceForLightbox as a no-op -- this test exercises Monogram
+  // generation/validation/insertion, not the workspace-view switch, and none of the scenarios here
+  // click #menuMonogram itself (they call s.lightboxes.monogram.open() directly).
+  const line = "el('menuMonogram').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.monogram.open()};";
+  assert.ok(appJs.includes(line), 'expected #menuMonogram to be wired to lightboxes.monogram.open(), revealing Dual Workspace first');
   return line;
 })();
 const lightboxForLayerTypeSrc = sliceBetween(appJs, 'function lightboxForLayerType(t){', '\n}', 'lightboxForLayerType()', { inclusive: true });

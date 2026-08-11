@@ -65,16 +65,20 @@ function section(html, heading) {
 
 // === Top menu ===================================================================================
 
+// RS-3011 nav-toggle fix: opening a Lightbox that shows/produces design content (Text, Shapes,
+// Import, Image Trace, Export, Production Sheet) now reveals Dual Workspace first, via
+// revealDualWorkspaceForLightbox() -- see test 3b below. Shipping/Settings/Help show no
+// design/geometry content and deliberately keep the old plain-open behavior.
 const MENU_ITEMS = [
-  { id: 'menuText', label: 'Text', lightbox: 'lightboxText' },
-  { id: 'menuShapes', label: 'Shapes', lightbox: 'lightboxShapes' },
-  { id: 'menuImport', label: 'Import', lightbox: 'lightboxImport' },
-  { id: 'menuImageTrace', label: 'Image Trace', lightbox: 'lightboxImageTrace' },
-  { id: 'menuExport', label: 'Export', lightbox: 'lightboxExport' },
-  { id: 'menuProdSheet', label: 'Production Sheet', lightbox: 'lightboxProdSheet' },
-  { id: 'menuShipping', label: 'Shipping', lightbox: 'lightboxShipping' },
-  { id: 'menuSettings', label: 'Settings', lightbox: 'lightboxSettings' },
-  { id: 'menuHelp', label: 'Help', lightbox: 'lightboxHelp' }
+  { id: 'menuText', label: 'Text', lightbox: 'lightboxText', revealsDualWorkspace: true },
+  { id: 'menuShapes', label: 'Shapes', lightbox: 'lightboxShapes', revealsDualWorkspace: true },
+  { id: 'menuImport', label: 'Import', lightbox: 'lightboxImport', revealsDualWorkspace: true },
+  { id: 'menuImageTrace', label: 'Image Trace', lightbox: 'lightboxImageTrace', revealsDualWorkspace: true },
+  { id: 'menuExport', label: 'Export', lightbox: 'lightboxExport', revealsDualWorkspace: true },
+  { id: 'menuProdSheet', label: 'Production Sheet', lightbox: 'lightboxProdSheet', revealsDualWorkspace: true },
+  { id: 'menuShipping', label: 'Shipping', lightbox: 'lightboxShipping', revealsDualWorkspace: false },
+  { id: 'menuSettings', label: 'Settings', lightbox: 'lightboxSettings', revealsDualWorkspace: false },
+  { id: 'menuHelp', label: 'Help', lightbox: 'lightboxHelp', revealsDualWorkspace: false }
 ];
 
 await test('1. all nine top-menu buttons exist, in the required order', () => {
@@ -98,20 +102,36 @@ await test('2. every top-menu button has an icon glyph, a visible text label, an
 });
 
 await test('3. every top-menu button opens exactly its documented Lightbox, and every Lightbox overlay exists exactly once', () => {
-  for (const { id, lightbox } of MENU_ITEMS) {
-    const re = new RegExp(`el\\('${id}'\\)\\.onclick=\\(\\)=>lightboxes\\.\\w+\\.open\\(\\)`);
-    assert.match(appJs, re, `expected #${id} to open a Lightbox`);
+  for (const { id, lightbox, revealsDualWorkspace } of MENU_ITEMS) {
+    const re = revealsDualWorkspace
+      ? new RegExp(`el\\('${id}'\\)\\.onclick=\\(\\)=>\\{revealDualWorkspaceForLightbox\\(\\);lightboxes\\.\\w+\\.open\\(\\)\\}`)
+      : new RegExp(`el\\('${id}'\\)\\.onclick=\\(\\)=>lightboxes\\.\\w+\\.open\\(\\)`);
+    assert.match(appJs, re, `expected #${id} to open a Lightbox${revealsDualWorkspace ? ', revealing Dual Workspace first' : ''}`);
     const matches = indexHtml.match(new RegExp(`id="${lightbox}"`, 'g')) || [];
     assert.equal(matches.length, 1, `expected exactly one #${lightbox}`);
     assert.match(indexHtml, new RegExp(`<div class="lightbox-overlay(?: [\\w-]+)?" id="${lightbox}">`), `expected #${lightbox} to be a lightbox-overlay`);
   }
 });
 
+await test('3b. revealDualWorkspaceForLightbox() actually exits Design (setDrawMode(false)) before reusing the exact setWorkspaceMode(\'dual\')+persistActiveView(\'dual\') pair the Dual Workspace tab itself uses, and is skipped entirely when Dual Workspace is already showing and Design is not active', () => {
+  const fnMatch = appJs.match(/function revealDualWorkspaceForLightbox\(\)\{[\s\S]*?\n\}/);
+  assert.ok(fnMatch, 'expected a revealDualWorkspaceForLightbox() function in app.js');
+  const body = fnMatch[0];
+  assert.match(body, /const exitingDesign=drawingTool\.isActive;/);
+  assert.match(body, /if\(exitingDesign\)setDrawMode\(false\);/);
+  assert.match(body, /if\(exitingDesign\|\|workspaceMode!=='dual'\)\{/);
+  assert.match(body, /if\(workspaceMode!=='dual'\)setWorkspaceMode\('dual'\);/);
+  assert.match(body, /persistActiveView\('dual'\);/);
+  // setDrawMode(false) must run before the setWorkspaceMode('dual') check, not after -- otherwise
+  // Design's own exit-restore (workspaceModeBeforeDrawing) would clobber the freshly-set 'dual'.
+  assert.ok(body.indexOf('setDrawMode(false)') < body.indexOf("setWorkspaceMode('dual')"), 'expected setDrawMode(false) to run before forcing workspaceMode to dual');
+});
+
 await test('4. the top bar also exposes Undo, Redo, Save, and an Export shortcut, each with a tooltip or visible label', () => {
   for (const id of ['undoBtn', 'redoBtn', 'saveProject', 'exportShortcut']) {
     assert.match(indexHtml, new RegExp(`id="${id}"`), `expected #${id} in the top bar`);
   }
-  assert.match(appJs, /el\('exportShortcut'\)\.onclick=\(\)=>lightboxes\.exportBox\.open\(\)/, 'expected the Export shortcut to open the Export Lightbox');
+  assert.match(appJs, /el\('exportShortcut'\)\.onclick=\(\)=>\{revealDualWorkspaceForLightbox\(\);lightboxes\.exportBox\.open\(\)\}/, 'expected the Export shortcut to reveal Dual Workspace and open the Export Lightbox');
 });
 
 // === Lightbox content ============================================================================
@@ -368,11 +388,12 @@ await test('19. the workspace has a real three-way view switch (Dual Workspace, 
   assert.match(appJs, /if\(!window\.matchMedia\('\(min-width: 900px\)'\)\.matches\)bootActiveView='2d';/);
   assert.match(appJs, /if\(bootActiveView!=='design'\)setWorkspaceMode\(bootActiveView,true\);/);
 
-  // Entering/exiting Design (the fourth persisted view, via #menuDesign) also persists: entering
-  // always records 'design'; exiting records whatever workspace view is now active underneath it,
-  // not a hardcoded default. A resolved 'design' boot view triggers the same setDrawMode(true, ...)
-  // call the click path uses, defaulting to Select.
-  assert.match(appJs, /if\(drawingTool\.isActive\)\{setDrawMode\(false\);persistActiveView\(workspaceMode\)\}else\{setDrawTool\('select'\);persistActiveView\('design'\)\}/);
+  // Entering Design (the fourth persisted view, via #menuDesign) persists 'design'. #menuDesign no
+  // longer toggles -- clicking it while Design is already active is a no-op (matching
+  // setDrawTool()'s own same-mode no-op convention), never an exit. There is no direct "exit
+  // Design" button; Dual Workspace is reached only by opening one of the Lightboxes above.
+  assert.match(appJs, /el\('menuDesign'\)\.onclick=\(\)=>\{\s*if\(drawingTool\.isActive\)return;\s*setDrawTool\('select'\);persistActiveView\('design'\);\s*\};/);
+  assert.doesNotMatch(appJs, /el\('menuDesign'\)\.onclick=\(\)=>\{\s*if\(drawingTool\.isActive\)\{setDrawMode\(false\)/, 'expected #menuDesign to no longer have an exit branch');
   // A resolved 'design' boot view settles one real generation cycle (so #layoutStats is already at
   // its final height) before calling setDrawMode -- otherwise Paper.js's canvas resync locks in a
   // pre-generation box that shrinks out from under it moments later, a real regression caught by

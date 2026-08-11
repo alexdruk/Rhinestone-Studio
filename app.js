@@ -2975,19 +2975,42 @@ const lightboxes={
   monogram:new Lightbox('lightboxMonogram',{primary:true,onOpen(){onMonogramOpen()}})
 };
 
-el('menuText').onclick=()=>lightboxes.text.open();
-el('menuShapes').onclick=()=>lightboxes.shapes.open();
-el('menuMonogram').onclick=()=>lightboxes.monogram.open();
+// RS-3011 nav-toggle fix: a Lightbox that opens over Design (or over a non-Dual workspace view)
+// left the underlying view untouched -- Design has no Object Preview of its own, so a user
+// opening Text/Shapes/Monogram/etc. from Design got no product preview behind the Lightbox at
+// all. Reveal Dual Workspace first, through the exact same setWorkspaceMode('dual')+
+// persistActiveView('dual') pair viewTabDual's own onclick below uses -- not a separate
+// mechanism -- so a reload afterward lands back in Dual Workspace too. When Design is active,
+// setDrawMode(false) (Design's own existing exit path, per DECISION 2 below -- opening one of
+// these Lightboxes is now the only way to leave Design) must run first: setWorkspaceMode('dual')
+// alone does not toggle drawingTool.isActive or hide Design's own rails, so skipping this would
+// leave Design's rails and the Dual Workspace panels both visible at once. Design's own exit
+// restores workspaceModeBeforeDrawing, not necessarily 'dual', so setWorkspaceMode('dual') still
+// runs afterward if that restore landed anywhere else. Skipped entirely when Dual Workspace is
+// already showing and Design isn't active (redundant no-op call).
+function revealDualWorkspaceForLightbox(){
+  const exitingDesign=drawingTool.isActive;
+  if(exitingDesign)setDrawMode(false);
+  if(exitingDesign||workspaceMode!=='dual'){
+    if(workspaceMode!=='dual')setWorkspaceMode('dual');
+    persistActiveView('dual');
+  }
+}
+el('menuText').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.text.open()};
+el('menuShapes').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.shapes.open()};
+el('menuMonogram').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.monogram.open()};
 // S-103 (Product Scope Freeze): #menuGallery carries the native `disabled` attribute (see
 // index.html), which makes the browser withhold click/Enter/Space activation and tab focus
 // entirely -- this handler is wired the same as every other menu item and is deliberately left
 // in place (Gallery code/tests/fixtures stay intact), it is just unreachable via the UI for now.
-el('menuGallery').onclick=()=>lightboxes.gallery.open();
-el('menuImport').onclick=()=>lightboxes.importBox.open();
-el('menuImageTrace').onclick=()=>lightboxes.imagetrace.open();
-el('menuExport').onclick=()=>lightboxes.exportBox.open();
-el('exportShortcut').onclick=()=>lightboxes.exportBox.open();
-el('menuProdSheet').onclick=()=>lightboxes.prodSheet.open();
+el('menuGallery').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.gallery.open()};
+el('menuImport').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.importBox.open()};
+el('menuImageTrace').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.imagetrace.open()};
+el('menuExport').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.exportBox.open()};
+el('exportShortcut').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.exportBox.open()};
+el('menuProdSheet').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.prodSheet.open()};
+// Shipping/Settings/Help show no design/geometry content -- nothing behind them for Dual
+// Workspace to usefully reveal, so these deliberately keep the old behavior.
 el('menuShipping').onclick=()=>lightboxes.shipping.open();
 el('menuSettings').onclick=()=>lightboxes.settings.open();
 el('menuHelp').onclick=()=>lightboxes.help.open();
@@ -3438,12 +3461,14 @@ el('railEllipseToggle').onclick=()=>setDrawTool('ellipse');
 el('railSlotToggle').onclick=()=>setDrawTool('slot');
 el('railPolygonToggle').onclick=()=>setDrawTool('polygon');
 el('railPenToggle').onclick=()=>setDrawTool('pen');
-// RS-3011 issue #3 fix: #menuDesign is Design's own dedicated enter/exit toggle, independent of
-// which rail tool is active -- the same click that enters also exits, regardless of
-// drawingTool.mode. This is now the only way to leave Design (the rail buttons above never exit,
-// per setDrawTool()'s own comment), so it must not route through setDrawTool()'s same-mode check.
+// RS-3011 nav-toggle fix: #menuDesign no longer toggles. It always means "go to Design" --
+// matching setDrawTool()'s own same-mode no-op convention above (fa80918): entering is
+// idempotent, clicking it while Design is already active does nothing. There is no longer a
+// direct "exit Design" button -- Dual Workspace is reached only by opening one of the Lightboxes
+// above, a deliberate tradeoff.
 el('menuDesign').onclick=()=>{
-  if(drawingTool.isActive){setDrawMode(false);persistActiveView(workspaceMode)}else{setDrawTool('select');persistActiveView('design')}
+  if(drawingTool.isActive)return;
+  setDrawTool('select');persistActiveView('design');
 };
 // RS-3011 Step 4: boot-time Design entry -- resolved above (bootActiveView==='design'), but
 // deferred until here because setDrawMode()/workspaceModeBeforeDrawing aren't declared until this
