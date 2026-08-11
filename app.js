@@ -3292,15 +3292,37 @@ function setWorkspaceMode(mode,skipUpdate){
   el('layoutStats').style.display=show2D?'flex':'none';el('cupStats').style.display=show3D?'flex':'none';
   if(!skipUpdate)updateAll(true);
 }
-el('viewTabDual').onclick=()=>setWorkspaceMode('dual');
-el('viewTab2D').onclick=()=>setWorkspaceMode('2d');
-el('viewTab3D').onclick=()=>setWorkspaceMode('preview');
-// Desktop always starts in Dual Workspace (matching the static HTML default); narrower/smaller
-// screens start collapsed to the 2D Canvas alone so neither panel is squeezed unusably thin. This
-// is only the *starting* mode -- the three tab buttons above let the user switch freely afterward
-// at any screen size. skipUpdate=true here: this runs before the boot-time updateAll(true) at the
-// bottom of this file, so there is no generated layout yet to redraw.
-if(!window.matchMedia('(min-width: 900px)').matches)setWorkspaceMode('2d',true);
+// RS-3011 Step 4: which of Design/Dual Workspace/2D Canvas/Object Preview was last active, so a
+// page reload lands back where the user left off -- a client-side UI preference, not project data,
+// same storage-only convention as FONT_FAVORITES_STORAGE_KEY above (see its own comment): a
+// dedicated localStorage key, read once at boot, degrading silently to a no-op on any storage
+// error, never routed through AutosaveManager (that class only ever persists
+// {project, selectedLayerId}).
+const ACTIVE_VIEW_STORAGE_KEY='rhinestoneStudio.activeView';
+const ACTIVE_VIEW_VALUES=new Set(['design','dual','2d','preview']);
+function loadActiveView(){try{const raw=localStorage.getItem(ACTIVE_VIEW_STORAGE_KEY);return ACTIVE_VIEW_VALUES.has(raw)?raw:null}catch{return null}}
+function persistActiveView(value){try{localStorage.setItem(ACTIVE_VIEW_STORAGE_KEY,value)}catch{}}
+el('viewTabDual').onclick=()=>{setWorkspaceMode('dual');persistActiveView('dual')};
+el('viewTab2D').onclick=()=>{setWorkspaceMode('2d');persistActiveView('2d')};
+el('viewTab3D').onclick=()=>{setWorkspaceMode('preview');persistActiveView('preview')};
+// RS-3011 Step 4: Design is the app's actual default view -- a browser with nothing yet in
+// ACTIVE_VIEW_STORAGE_KEY (first-ever visit) resolves to 'design', not 'dual'. A narrower/smaller
+// screen still always forces 2D-Canvas-only regardless of the resolved value (Sasha's explicit
+// decision: the narrow-viewport override wins even over a saved 'design'/'dual' preference) --
+// same narrow-viewport behavior this file has always had, just layered on top of the new
+// persisted-preference read instead of a hardcoded 'dual' start. The override is never written
+// back to storage: it's a viewport-driven display choice, not a new user preference, so the
+// original saved value survives for the next reload on a wider window. skipUpdate=true on the
+// non-Design branch below, same reasoning as before this change: this runs before the boot-time
+// updateAll(true) at the bottom of this file, so there is no generated layout yet to redraw.
+// bootActiveView is only *resolved* here -- the 'design' branch is *triggered* further down, right
+// after #menuDesign's own handler (see "RS-3011 Step 4: boot-time Design entry" there), because
+// setDrawMode()/workspaceModeBeforeDrawing aren't declared yet at this point in the file and this
+// must reuse the exact same call the click path uses, not a hand-rolled boot-only duplicate of it.
+let bootActiveView=loadActiveView();
+if(bootActiveView===null)bootActiveView='design';
+if(!window.matchMedia('(min-width: 900px)').matches)bootActiveView='2d';
+if(bootActiveView!=='design')setWorkspaceMode(bootActiveView,true);
 
 // ---- RS-3010 Step 1/2a: drawing mode toggle group. Entering hands layoutCanvas to drawingTool's
 // own Paper.js scene (drawingTool.enter()) exactly like the pointerdown/keydown gates above
@@ -3421,8 +3443,49 @@ el('railPenToggle').onclick=()=>setDrawTool('pen');
 // drawingTool.mode. This is now the only way to leave Design (the rail buttons above never exit,
 // per setDrawTool()'s own comment), so it must not route through setDrawTool()'s same-mode check.
 el('menuDesign').onclick=()=>{
-  if(drawingTool.isActive){setDrawMode(false)}else{setDrawTool('select')}
+  if(drawingTool.isActive){setDrawMode(false);persistActiveView(workspaceMode)}else{setDrawTool('select');persistActiveView('design')}
 };
+// RS-3011 Step 4: boot-time Design entry -- resolved above (bootActiveView==='design'), but
+// deferred until here because setDrawMode()/workspaceModeBeforeDrawing aren't declared until this
+// point in the file, and this reuses the exact same call the click-driven path above uses so the
+// "RS-3010 Design Step A correction #2" DOM-timing ordering (style.display toggles land before
+// drawingTool.enter()'s getBoundingClientRect() call, in the same synchronous task) applies
+// identically at boot, not a hand-rolled boot-only duplicate of it. Always starts in Select mode,
+// not the last-used tool -- simpler/safer to always start fresh here.
+//
+// A real boot-only race was found and fixed here during Playwright verification (comparing
+// boot-time vs. click-triggered Design entry, scenario (g) below): #layoutStats' own text is only
+// populated once updateAll()'s `await engine.generate(project)` resolves (see updateStats()), which
+// on the click path has always already happened at least once by the time a user can click
+// #menuDesign -- #layoutStats is already at its real, final height, so entering Design never
+// observes it change. At boot, #layoutStats has never been populated yet, so if setDrawMode(true,
+// ...) below ran immediately, drawingTool.enter()'s resyncViewSize() would measure the canvas
+// against #layoutStats' short placeholder height, and the real stats text landing moments later
+// (asynchronously, after generation resolves) would shrink #layoutStats -- and therefore #layout's
+// own box -- out from under an already-fixed Paper.js backing store, with nothing to resync it
+// afterward. Settling one real generation cycle first (in whatever mode the static HTML/`
+// workspaceMode` default already shows -- explicit here rather than assumed) means #layoutStats is
+// already at its final height before setDrawMode()'s own DOM-timing care runs.
+// RS-3011 Step 4 flash fix: setWorkspaceMode('dual',true) below applies Dual Workspace's full
+// visible DOM state (two-panel layout, workspace tabs, Align & Snap / Front-Left-Right-Back
+// toolbars) before the settle-generation await yields control back to the browser -- confirmed via
+// CDP screencast to produce a real, painted ~25-30ms flash of Dual Workspace before Design appears.
+// visibility:hidden (not display:none) keeps every element inside .workspace participating in
+// layout -- #layoutStats/#cupStats etc. still measure/settle against their real box, preserving the
+// scenario (g) canvas-sizing fix documented above -- while producing no visible paint for the
+// duration. Scoped to .workspace (the single ancestor of the two-panel canvas layout, the workspace
+// tabs, and the toolbar controls the flash screenshot showed -- everything Dual Workspace's
+// boot-time state paints, and also everything Design's own rails/panel end up in) rather than
+// <body>, so the top menu and left panel (already correct, unaffected by this gap) keep rendering
+// normally throughout.
+if(bootActiveView==='design'){
+  const workspaceEl=document.querySelector('.workspace');
+  if(workspaceEl)workspaceEl.style.visibility='hidden';
+  setWorkspaceMode('dual',true);
+  await updateAll(true);
+  setDrawMode(true,'select');
+  if(workspaceEl)workspaceEl.style.visibility='';
+}
 // Figma-style trackpad/mouse mapping, kept out of the normal pointerdown/move/up flow entirely so
 // a drag on the canvas always draws and never pans: plain scroll pans (deltaX/deltaY), Ctrl/Cmd+
 // scroll (or a trackpad pinch, which the browser reports as wheel+ctrlKey) zooms.

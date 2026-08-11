@@ -333,14 +333,14 @@ await test('18. runAlign/runDistribute report what they did via #status, only af
   assert.ok(distFn.indexOf('if(items.length<3)return;') < distFn.indexOf("el('status')"));
 });
 
-await test('19. the workspace has a real three-way view switch (Dual Workspace, 2D Canvas, Object Preview), defaulting to Dual on desktop and collapsing to single-view under 900px without overriding a later manual switch', () => {
+await test('19. the workspace has a real three-way view switch (Dual Workspace, 2D Canvas, Object Preview) that persists across a reload, Design is the true first-visit default (not Dual), and a narrow viewport (<900px) always overrides to 2D Canvas only without clobbering the saved preference', () => {
   assert.match(indexHtml, /id="viewTabDual"[^>]*class="tab active"|class="tab active"[^>]*id="viewTabDual"/);
   assert.match(indexHtml, /id="viewTab2D"/);
   assert.match(indexHtml, /id="viewTab3D"/);
   assert.match(appJs, /function setWorkspaceMode\(mode/);
-  assert.match(appJs, /el\('viewTabDual'\)\.onclick=\(\)=>setWorkspaceMode\('dual'\)/);
-  assert.match(appJs, /el\('viewTab2D'\)\.onclick=\(\)=>setWorkspaceMode\('2d'\)/);
-  assert.match(appJs, /el\('viewTab3D'\)\.onclick=\(\)=>setWorkspaceMode\('preview'\)/);
+  assert.match(appJs, /el\('viewTabDual'\)\.onclick=\(\)=>\{setWorkspaceMode\('dual'\);persistActiveView\('dual'\)\}/);
+  assert.match(appJs, /el\('viewTab2D'\)\.onclick=\(\)=>\{setWorkspaceMode\('2d'\);persistActiveView\('2d'\)\}/);
+  assert.match(appJs, /el\('viewTab3D'\)\.onclick=\(\)=>\{setWorkspaceMode\('preview'\);persistActiveView\('preview'\)\}/);
 
   const panel2D = indexHtml.match(/<section class="canvas-panel[^"]*" id="panel2D"/)[0];
   const panel3D = indexHtml.match(/<section class="canvas-panel[^"]*" id="panel3D"/)[0];
@@ -353,8 +353,34 @@ await test('19. the workspace has a real three-way view switch (Dual Workspace, 
   assert.match(indexHtml, /\.workspace-canvas-area\.dual \.canvas-panel\{position:relative/);
   assert.match(indexHtml, /\.canvas-panel\.tab-hidden\{visibility:hidden;pointer-events:none\}/);
 
+  // RS-3011 Step 4: active view is persisted to its own localStorage key -- not routed through
+  // AutosaveManager (project data only) -- and defaults to Design, not Dual, when nothing is
+  // stored yet (first-ever visit).
+  assert.match(appJs, /const ACTIVE_VIEW_STORAGE_KEY='rhinestoneStudio\.activeView'/);
+  assert.match(appJs, /function loadActiveView\(\)/);
+  assert.match(appJs, /function persistActiveView\(value\)/);
+  assert.match(appJs, /let bootActiveView=loadActiveView\(\);/);
+  assert.match(appJs, /if\(bootActiveView===null\)bootActiveView='design';/);
+
+  // A narrow viewport (<900px) always overrides the resolved view to 2D Canvas only, even over a
+  // saved 'design'/'dual' preference, and that override is never written back to storage.
   assert.match(appJs, /window\.matchMedia\('\(min-width: 900px\)'\)/);
-  assert.match(appJs, /setWorkspaceMode\('2d',true\)/);
+  assert.match(appJs, /if\(!window\.matchMedia\('\(min-width: 900px\)'\)\.matches\)bootActiveView='2d';/);
+  assert.match(appJs, /if\(bootActiveView!=='design'\)setWorkspaceMode\(bootActiveView,true\);/);
+
+  // Entering/exiting Design (the fourth persisted view, via #menuDesign) also persists: entering
+  // always records 'design'; exiting records whatever workspace view is now active underneath it,
+  // not a hardcoded default. A resolved 'design' boot view triggers the same setDrawMode(true, ...)
+  // call the click path uses, defaulting to Select.
+  assert.match(appJs, /if\(drawingTool\.isActive\)\{setDrawMode\(false\);persistActiveView\(workspaceMode\)\}else\{setDrawTool\('select'\);persistActiveView\('design'\)\}/);
+  // A resolved 'design' boot view settles one real generation cycle (so #layoutStats is already at
+  // its final height) before calling setDrawMode -- otherwise Paper.js's canvas resync locks in a
+  // pre-generation box that shrinks out from under it moments later, a real regression caught by
+  // comparing boot-time vs. click-triggered Design entry (RS-3011 Step 4 verification scenario g).
+  // The settle step also visually suppresses .workspace (visibility:hidden, not display:none, so
+  // #layoutStats etc. still measure/settle against their real box) for its duration -- CDP
+  // screencast verification caught a real ~25-30ms painted flash of Dual Workspace otherwise.
+  assert.match(appJs, /if\(bootActiveView==='design'\)\{\s*const workspaceEl=document\.querySelector\('\.workspace'\);\s*if\(workspaceEl\)workspaceEl\.style\.visibility='hidden';\s*setWorkspaceMode\('dual',true\);\s*await updateAll\(true\);\s*setDrawMode\(true,'select'\);\s*if\(workspaceEl\)workspaceEl\.style\.visibility='';\s*\}/);
 });
 
 await test('20. editing/rotation keeps updating both canvases regardless of view mode', () => {
