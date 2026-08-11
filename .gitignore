@@ -190,3 +190,10 @@ tools/scratch/rs-3011-corner-gap-spike/
 tools/rs-3011-pen-circle-verify.mjs
 tools/rs-3011-pen-circle-verification-screenshots/
 
+# RS-3011 pen-anchor-handle-visuals: ad hoc live-browser Playwright verification script +
+# screenshots for the new anchor-dot/handle-tangent/handle-tip chrome (visible-first-anchor,
+# mid-drag tangent+tip, multi-anchor simultaneous chrome, chrome removed on close, chrome removed on
+# Escape), same "never a repo artifact" category as the scripts above
+tools/rs-3011-pen-anchor-handle-visuals-verify.mjs
+tools/rs-3011-pen-anchor-handle-visuals-verification-screenshots/
+

@@ -94,6 +94,22 @@ const PEN_DRAG_DEAD_ZONE_MM = 0.5;
 // convention for degenerate-input checks (buildSlotPreview's a-vs-b check, the resize-bounds-
 // unchanged checks below), not a proximity/intent heuristic like the others in this cluster.
 const PEN_COINCIDENT_ANCHOR_TOLERANCE_MM = 1e-6;
+// RS-3011 Step 9 follow-up (anchor/handle chrome): sizes/colors for the always-on anchor dots and
+// the tangent-line-plus-tip-dot shown while a handle is being shaped, following the drawleather
+// Scene.ts three-phase handle render (appendBezierTangentLine/appendBezierTipDot) but simplified --
+// no lock-mode coloring and no attached-line square/circle distinction, since Pen has neither
+// concept. Reuses STROKE_COLOR (the same blue as the in-progress path itself) rather than
+// introducing a new hue, and sizes them off PEN_ANCHOR_HIT_TOLERANCE_PX's 6px so the dot roughly
+// matches its own click target. All *_PX constants are divided by paper.view.zoom at build time,
+// same convention as RESIZE_HANDLE_SIZE_PX below, so the chrome stays a constant apparent size on
+// screen regardless of zoom.
+const PEN_ANCHOR_DOT_RADIUS_PX = 3.5;
+const PEN_HANDLE_TIP_RADIUS_PX = 2.5;
+const PEN_HANDLE_LINE_WIDTH_PX = 1;
+// Trim distances so the tangent line visually starts at the anchor dot's edge and ends at the tip
+// dot's edge rather than passing through either center (mirrors ANCHOR_TRIM_MM/TIP_TRIM_MM).
+const PEN_ANCHOR_TRIM_PX = 5;
+const PEN_TIP_TRIM_PX = 3.5;
 // RS-3010 Design Step D: resize handles' own constants. RESIZE_HANDLE_SIZE_PX/
 // RESIZE_HANDLE_STROKE_WIDTH_PX/colors match app.js's own SELECTION_HANDLE_SIZE_PX (11) and
 // drawSelectionBox()'s handle styling (white fill, #1478ff stroke, 1.75px width), for visual
@@ -322,6 +338,14 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   // when it was first placed and must survive a later closing drag untouched).
   let penClosingDrag = false;
   let penPreviewItem = null;
+  // RS-3011 Step 9 follow-up (anchor/handle chrome): a single throwaway Paper.js Group covering the
+  // WHOLE in-progress path's anchor dots and, for every anchor whose handleIn/handleOut is already
+  // set (not just the one currently being dragged), its tangent line(s) + tip dot(s). Same "never
+  // routed through board.beginPath/clearPath/finalizeShape" rule as penPreviewItem/marqueeItem --
+  // this is pure UI chrome layered on top of board.path's real segments, never mutated itself.
+  // Rebuilt from scratch (rebuildPenHandleChromeItem) after every anchor placement/reset (onMouseDown)
+  // and every drag frame that shapes a handle (onMouseDrag); removed in resetInProgressDrawing().
+  let penHandleChromeItem = null;
   let selectedIds = clearSelection();
   // 'draw' while a new freehand/rect/ellipse/slot shape is mid-drag; 'move' while dragging the
   // current selection; 'polygon' while a click-to-add-vertex polygon is accumulating points
@@ -648,6 +672,90 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     }
   }
 
+  /** RS-3011 Step 9 follow-up: removes/nulls the anchor/handle chrome Group, if any. */
+  function removePenHandleChromeItem() {
+    if (penHandleChromeItem) {
+      penHandleChromeItem.remove();
+      penHandleChromeItem = null;
+    }
+  }
+
+  /**
+   * RS-3011 Step 9 follow-up: rebuilds the anchor/handle chrome Group from board.path's current
+   * segments -- a small filled dot at every placed anchor, plus (for any anchor whose handleIn/
+   * handleOut is non-zero) a trimmed tangent line and a hollow tip dot for that handle. Discard-and-
+   * recreate, same pattern rect/ellipse/slot/marquee's own drag previews already use.
+   *
+   * Three-phase render (mirrors drawleather Scene.ts's buildConstructionHandlesFromPath): tangent
+   * lines first, then anchor dots, then tip dots last -- tips on top so a short tangent's endpoint
+   * stays visible even when it lands inside the anchor's own dot. Simplified from that precedent:
+   * no lock-mode coloring, no attached-line square/circle distinction -- Pen has neither concept,
+   * so every anchor is the same filled circle and every tip is the same hollow circle.
+   *
+   * No-op (chrome cleared) if there's no in-progress Pen path -- callers don't need to guard.
+   */
+  function rebuildPenHandleChromeItem() {
+    removePenHandleChromeItem();
+    if (!board.path) return;
+    const segments = board.path.segments;
+    const anchorRadiusMm = PEN_ANCHOR_DOT_RADIUS_PX / paper.view.zoom;
+    const tipRadiusMm = PEN_HANDLE_TIP_RADIUS_PX / paper.view.zoom;
+    const anchorTrimMm = PEN_ANCHOR_TRIM_PX / paper.view.zoom;
+    const tipTrimMm = PEN_TIP_TRIM_PX / paper.view.zoom;
+    const lineWidthMm = PEN_HANDLE_LINE_WIDTH_PX / paper.view.zoom;
+    const group = new paper.Group();
+    group.data.isPenHandleChrome = true;
+
+    function appendTangentLine(anchorPoint, handlePoint) {
+      // Trim so the visible stroke starts at the anchor dot's edge and ends at the tip dot's edge
+      // rather than passing through either center -- falls back to the untrimmed segment when the
+      // handle is shorter than the combined trim, where trimming would otherwise reverse the line.
+      const direction = handlePoint.subtract(anchorPoint);
+      const distance = direction.length;
+      let lineStart = anchorPoint;
+      let lineEnd = handlePoint;
+      if (distance > anchorTrimMm + tipTrimMm) {
+        const unit = direction.divide(distance);
+        lineStart = anchorPoint.add(unit.multiply(anchorTrimMm));
+        lineEnd = handlePoint.subtract(unit.multiply(tipTrimMm));
+      }
+      const line = new paper.Path({ segments: [lineStart, lineEnd] });
+      line.strokeColor = new paper.Color(STROKE_COLOR);
+      line.strokeColor.alpha = 0.6;
+      line.strokeWidth = lineWidthMm;
+      group.addChild(line);
+    }
+
+    function appendTipDot(point) {
+      const dot = new paper.Path.Circle(point, tipRadiusMm);
+      dot.fillColor = null;
+      dot.strokeColor = STROKE_COLOR;
+      dot.strokeWidth = lineWidthMm;
+      group.addChild(dot);
+    }
+
+    // Phase 1: tangent lines (bottom).
+    for (const seg of segments) {
+      if (!seg.handleIn.isZero()) appendTangentLine(seg.point, seg.point.add(seg.handleIn));
+      if (!seg.handleOut.isZero()) appendTangentLine(seg.point, seg.point.add(seg.handleOut));
+    }
+    // Phase 2: anchor dots (middle) -- visible immediately on placement, including the very first
+    // anchor with no second point yet, since this Group renders independently of board.path itself.
+    for (const seg of segments) {
+      const dot = new paper.Path.Circle(seg.point, anchorRadiusMm);
+      dot.fillColor = STROKE_COLOR;
+      dot.strokeColor = null;
+      group.addChild(dot);
+    }
+    // Phase 3: tip dots (top) -- see appendTipDot's hollow styling, drawn last so a short tangent's
+    // endpoint stays visible even inside the anchor dot's own radius.
+    for (const seg of segments) {
+      if (!seg.handleIn.isZero()) appendTipDot(seg.point.add(seg.handleIn));
+      if (!seg.handleOut.isZero()) appendTipDot(seg.point.add(seg.handleOut));
+    }
+    penHandleChromeItem = group;
+  }
+
   /**
    * Discards whatever drawing gesture is currently in flight -- a rect/ellipse/slot/freehand drag
    * preview (`board.path`) and/or an in-progress polygon's accumulated vertices. Every call site
@@ -684,6 +792,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     // board.path (every anchor placed so far, since Pen's in-progress path IS the real item, not a
     // parallel array), this just clears the preview chrome and per-drag bookkeeping.
     removePenPreviewItem();
+    removePenHandleChromeItem();
     penDraggingSegment = null;
     penDragOrigin = null;
     penDragForceCorner = false;
@@ -928,6 +1037,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           // affects segments drawn from here forward, never retroactively straightens what's
           // already there.
           last.handleOut = new paper.Point(0, 0);
+          rebuildPenHandleChromeItem();
           return;
         }
         removePenPreviewItem();
@@ -942,6 +1052,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         penDragCrossedDeadZone = false;
         // An ordinary anchor placement must never be mistaken for a closing drag.
         penClosingDrag = false;
+        rebuildPenHandleChromeItem();
         return;
       }
       // Design Step D: a resize handle can sit right at a shape's edge, where both it and the
@@ -1036,6 +1147,10 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         penDragCrossedDeadZone = false;
         // An ordinary anchor placement must never be mistaken for a closing drag.
         penClosingDrag = false;
+        // RS-3011 Step 9 follow-up: renders the anchor dot for this very first anchor immediately --
+        // Paper.js needs 2+ points to show any stroke, so without this the starting point is
+        // otherwise invisible until a second anchor is placed.
+        rebuildPenHandleChromeItem();
         return;
       }
       interactionKind = 'draw';
@@ -1188,6 +1303,10 @@ export function createDrawingTool(canvasEl, hooks = {}) {
               penDraggingSegment.handleOut = delta;
               penDraggingSegment.handleIn = delta.negate();
             }
+            // RS-3011 Step 9 follow-up: rebuilt every frame while a handle is actively being pulled,
+            // same discard-and-recreate cost tradeoff rect/ellipse/slot/marquee's own drag previews
+            // below already accept.
+            rebuildPenHandleChromeItem();
           }
         }
         return;
