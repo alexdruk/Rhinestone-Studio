@@ -167,6 +167,11 @@ tools/scratch/rs-3011-fix-verify/
 tools/rs-3011-open-contour-verify.mjs
 tools/rs-3011-open-contour-verification-screenshots/
 
+# RS-3011 Step 9: ad hoc live-browser Playwright verification script + screenshots for the Pen
+# (Bezier) tool, same "never a repo artifact" category as the scripts above
+tools/rs-3011-step9-pen-tool-verify.mjs
+tools/rs-3011-step9-pen-tool-verification-screenshots/
+
 # RS-3011 corner-gap-spike: investigation-only repro/measurement scripts for the dedupeStonePoints()
 # corner-drop gap issue (issue #5 of the prior six-bug investigation) -- throwaway, never a repo
 # artifact, same "never a repo artifact" category as the spike folders above

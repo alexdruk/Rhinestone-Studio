@@ -190,10 +190,10 @@ const HISTORY_MAX_SIZE=100;
 const ARROW_KEY_DELTAS={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
 // RS-3010 Design Step B: single-letter drawing-tool shortcuts, matching the rail buttons'
 // setDrawTool() modes exactly -- V/R/E/S mirror this app's own tool labels; B=Draw follows
-// Photoshop's Brush convention (more recognizable than an arbitrary "D"); G=Polygon deliberately
-// reserves P for a future Bezier Pen tool (Illustrator/Figma's near-universal "Pen" binding), per
-// Sasha's own roadmap for this rail.
-const DRAW_TOOL_SHORTCUT_KEYS={v:'select',b:'freehand',r:'rect',e:'ellipse',s:'slot',g:'polygon'};
+// Photoshop's Brush convention (more recognizable than an arbitrary "D"); G=Polygon leaves P free
+// for RS-3011 Step 9's Pen tool (Illustrator/Figma's near-universal "Pen" binding), per Sasha's own
+// roadmap for this rail.
+const DRAW_TOOL_SHORTCUT_KEYS={v:'select',b:'freehand',r:'rect',e:'ellipse',s:'slot',g:'polygon',p:'pen'};
 // RS-1005: pixels-per-mm used only when rasterizing the Production Sheet SVG to PNG. Fixed and
 // documented (not derived from devicePixelRatio/viewport fit) so the PNG's pixel dimensions are
 // always a clean, undistorted multiple of the page's mm size -- never a fit-to-viewport scale.
@@ -3392,6 +3392,7 @@ function updateDrawToolButtons(){
   el('railEllipseToggle').setAttribute('aria-pressed',String(active&&mode==='ellipse'));
   el('railSlotToggle').setAttribute('aria-pressed',String(active&&mode==='slot'));
   el('railPolygonToggle').setAttribute('aria-pressed',String(active&&mode==='polygon'));
+  el('railPenToggle').setAttribute('aria-pressed',String(active&&mode==='pen'));
 }
 function setDrawTool(mode){
   if(drawingTool.isActive){
@@ -3414,6 +3415,7 @@ el('railRectToggle').onclick=()=>setDrawTool('rect');
 el('railEllipseToggle').onclick=()=>setDrawTool('ellipse');
 el('railSlotToggle').onclick=()=>setDrawTool('slot');
 el('railPolygonToggle').onclick=()=>setDrawTool('polygon');
+el('railPenToggle').onclick=()=>setDrawTool('pen');
 // RS-3011 issue #3 fix: #menuDesign is Design's own dedicated enter/exit toggle, independent of
 // which rail tool is active -- the same click that enters also exits, regardless of
 // drawingTool.mode. This is now the only way to leave Design (the rail buttons above never exit,

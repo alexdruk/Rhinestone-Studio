@@ -76,6 +76,16 @@ const SLOT_DEFAULT_LENGTH_RATIO = 3;
 // hitTestShapeId's own screen-px-to-project-mm tolerance conversion pattern.
 const MIN_POLYGON_POINTS = 3;
 const CLOSE_POLYGON_TOLERANCE_PX = 6;
+// RS-3011 Step 9: Pen's own constants -- same values as Polygon's above for the same underlying
+// reasons (need at least a triangle to close; hit tolerance mirrors hitTestShapeId's screen-px-to-
+// project-mm pattern), kept as independent named constants since Pen and Polygon are separate
+// features. PEN_DRAG_DEAD_ZONE_MM is the click-vs-drag threshold: a mousedown+mouseup with less
+// than this much movement places a plain corner anchor (no handles); crossing it while the button
+// is still down pulls a curve handle instead. 0.5mm mirrors the mouse-precision threshold cited in
+// this milestone's drawleather technique review (not ported code, just the same tuned value).
+const PEN_MIN_CLOSE_ANCHORS = 3;
+const PEN_ANCHOR_HIT_TOLERANCE_PX = 6;
+const PEN_DRAG_DEAD_ZONE_MM = 0.5;
 // RS-3010 Design Step D: resize handles' own constants. RESIZE_HANDLE_SIZE_PX/
 // RESIZE_HANDLE_STROKE_WIDTH_PX/colors match app.js's own SELECTION_HANDLE_SIZE_PX (11) and
 // drawSelectionBox()'s handle styling (white fill, #1478ff stroke, 1.75px width), for visual
@@ -279,6 +289,26 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   // RS-3010 Step 2c: vertices clicked so far for an in-progress polygon, project-mm paper.Points.
   // Empty whenever interactionKind !== 'polygon'.
   let polygonPoints = [];
+  // RS-3011 Step 9: Pen's own state. Unlike polygonPoints above, Pen's anchors are NOT duplicated
+  // into a parallel array -- board.path IS the real in-progress shape from the very first click
+  // onward (Paper.js Segments already carry point/handleIn/handleOut natively), so these only track
+  // the CURRENT drag's bookkeeping. penDraggingSegment is the paper.Segment being handle-shaped
+  // this drag (null once mouse is up or while idle between clicks); penDragOrigin is that segment's
+  // anchor point captured at mousedown (drag delta is measured from here, not from the previous
+  // frame, so the handle always reflects total distance from the anchor); penDragForceCorner is
+  // true when Alt/Option was held at the moment this anchor was placed (suppresses handle-pulling
+  // for this drag regardless of distance -- an alternate one-step way to force a corner, alongside
+  // clicking back on an already-placed anchor); penDragCrossedDeadZone latches true once this
+  // drag's distance from penDragOrigin first exceeds PEN_DRAG_DEAD_ZONE_MM, so dragging back toward
+  // the anchor mid-drag shrinks the handle back down instead of freezing it at its last-set value.
+  // penPreviewItem is the throwaway "next segment" preview shown between clicks (mirrors
+  // marqueeItem/resizeHandleItems' own "never routed through board.beginPath/clearPath/
+  // finalizeShape" convention -- it previews a segment that doesn't exist yet).
+  let penDraggingSegment = null;
+  let penDragOrigin = null;
+  let penDragForceCorner = false;
+  let penDragCrossedDeadZone = false;
+  let penPreviewItem = null;
   let selectedIds = clearSelection();
   // 'draw' while a new freehand/rect/ellipse/slot shape is mid-drag; 'move' while dragging the
   // current selection; 'polygon' while a click-to-add-vertex polygon is accumulating points
@@ -597,6 +627,14 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     }
   }
 
+  /** RS-3011 Step 9: removes/nulls the throwaway "next segment" pen preview, if any. */
+  function removePenPreviewItem() {
+    if (penPreviewItem) {
+      penPreviewItem.remove();
+      penPreviewItem = null;
+    }
+  }
+
   /**
    * Discards whatever drawing gesture is currently in flight -- a rect/ellipse/slot/freehand drag
    * preview (`board.path`) and/or an in-progress polygon's accumulated vertices. Every call site
@@ -629,6 +667,14 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     interactionKind = null;
     dragging = false;
     polygonPoints = [];
+    // RS-3011 Step 9: mirrors polygonPoints' own reset above -- board.clearPath() already discarded
+    // board.path (every anchor placed so far, since Pen's in-progress path IS the real item, not a
+    // parallel array), this just clears the preview chrome and per-drag bookkeeping.
+    removePenPreviewItem();
+    penDraggingSegment = null;
+    penDragOrigin = null;
+    penDragForceCorner = false;
+    penDragCrossedDeadZone = false;
   }
 
   /**
@@ -837,6 +883,46 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         }
         return;
       }
+      // RS-3011 Step 9: an in-progress Pen path takes over the pointer entirely, same "owns every
+      // click until closed or cancelled" rule as polygon above. Unlike polygon, board.path here IS
+      // the real shape already (see penDraggingSegment's own doc comment), so closing/resetting act
+      // on its live segments directly instead of rebuilding from a parallel point array.
+      if (interactionKind === 'pen') {
+        const anchors = board.path.segments;
+        const closing =
+          anchors.length >= PEN_MIN_CLOSE_ANCHORS &&
+          event.point.getDistance(anchors[0].point) <= PEN_ANCHOR_HIT_TOLERANCE_PX / paper.view.zoom;
+        if (closing) {
+          board.path.closed = true;
+          const item = board.path;
+          board.finalizeShape();
+          commitFinalizedShape(item);
+          resetInProgressDrawing();
+          return;
+        }
+        const last = anchors[anchors.length - 1];
+        const resetting =
+          event.point.getDistance(last.point) <= PEN_ANCHOR_HIT_TOLERANCE_PX / paper.view.zoom;
+        if (resetting) {
+          // Corner/Reset: only the outgoing handle is cleared -- the curve already rendered INTO
+          // this anchor (handleIn, from the previous segment) is left untouched, so this only
+          // affects segments drawn from here forward, never retroactively straightens what's
+          // already there.
+          last.handleOut = new paper.Point(0, 0);
+          return;
+        }
+        removePenPreviewItem();
+        const snapped = resolveSnappedPoint(event.point, null);
+        const seg = board.path.add(new paper.Point(snapped.x, snapped.y));
+        penDraggingSegment = seg;
+        penDragOrigin = seg.point.clone();
+        // Alt/Option held while PLACING this anchor forces it to stay a corner regardless of drag
+        // distance -- an alternate, one-step way to reach "sharp corner" without a separate
+        // return-click on this same anchor afterward.
+        penDragForceCorner = event.modifiers.alt;
+        penDragCrossedDeadZone = false;
+        return;
+      }
       // Design Step D: a resize handle can sit right at a shape's edge, where both it and the
       // shape's own hit-test could otherwise match -- the handle must win, so this is checked
       // first (mirrors app.js's own hitTest(), which checks handlesFor() before the move branch).
@@ -911,6 +997,22 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         // direction against, so it's vertex-else-grid only -- no angle-snap (see
         // resolvePolygonVertexPoint's own doc comment for the shared logic used from here on).
         polygonPoints = [resolveSnappedPoint(event.point, null)];
+        return;
+      }
+      if (mode === 'pen') {
+        // RS-3011 Step 9: the first anchor of a brand-new Pen path -- board.path becomes the real
+        // shape from this point on (see penDraggingSegment's own doc comment above), not a preview
+        // rebuilt from a parallel array the way polygon's first vertex is.
+        interactionKind = 'pen';
+        const snapped = resolveSnappedPoint(event.point, null);
+        board.beginPath(
+          new paper.Path({ strokeColor: STROKE_COLOR, strokeWidth: STROKE_WIDTH_PX / paper.view.zoom })
+        );
+        const seg = board.path.add(new paper.Point(snapped.x, snapped.y));
+        penDraggingSegment = seg;
+        penDragOrigin = seg.point.clone();
+        penDragForceCorner = event.modifiers.alt;
+        penDragCrossedDeadZone = false;
         return;
       }
       interactionKind = 'draw';
@@ -1036,6 +1138,29 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         scheduleStoneRebuildForShape(resizeShapeId);
         return;
       }
+      if (interactionKind === 'pen') {
+        // RS-3011 Step 9: pulls a symmetric curve handle on the anchor just placed at this drag's
+        // mousedown, by directly mutating that real Segment's handleOut/handleIn -- Paper.js
+        // redraws the live curve automatically (confirmed against paper-core.js: these are normal
+        // property setters that trigger the same change/redraw pipeline this file already relies on
+        // elsewhere, e.g. item.strokeColor =). No discard-and-recreate needed here, unlike rect/
+        // ellipse/slot/marquee below: those rebuild every frame because their entire shape changes
+        // frame to frame, not because mutating a live segment is unsafe.
+        if (penDraggingSegment && !penDragForceCorner) {
+          const delta = event.point.subtract(penDragOrigin);
+          // Latches once crossed rather than re-checking every frame: dragging back toward the
+          // anchor mid-drag (without releasing) must shrink the handle back down, not freeze it at
+          // whatever it last reached while still above the threshold.
+          if (!penDragCrossedDeadZone && delta.length >= PEN_DRAG_DEAD_ZONE_MM) {
+            penDragCrossedDeadZone = true;
+          }
+          if (penDragCrossedDeadZone) {
+            penDraggingSegment.handleOut = delta;
+            penDraggingSegment.handleIn = delta.negate();
+          }
+        }
+        return;
+      }
       if (interactionKind === 'marquee') {
         // Same discard-and-recreate pattern rect/ellipse/slot's preview already uses -- cheap
         // enough to just rebuild every frame. Never touches board.path/board.shapes.
@@ -1156,6 +1281,16 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         if (finalGroup) finalGroup.visible = true;
         return;
       }
+      if (interactionKind === 'pen') {
+        // RS-3011 Step 9: unlike every other mode, mouseup never finalizes a Pen path -- it just
+        // ends this anchor's handle-drag. The path stays in progress until a qualifying closing
+        // click in onMouseDown (or Escape, via resetInProgressDrawing()).
+        penDraggingSegment = null;
+        penDragOrigin = null;
+        penDragForceCorner = false;
+        penDragCrossedDeadZone = false;
+        return;
+      }
       if (interactionKind === 'marquee') {
         // A marquee below MIN_BOX_DIM_MM is just a click -- the existing clear-selection-on-
         // empty-click behavior in onMouseDown already handled that, nothing further to apply here.
@@ -1247,6 +1382,27 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     // uses. No-op outside an in-progress polygon so it never interferes with a drag-based preset's
     // own onMouseDrag-driven preview.
     tool.onMouseMove = (event) => {
+      // RS-3011 Step 9: hover preview of the tentative NEXT Pen segment, between clicks (Paper.js
+      // only fires onMouseMove on button-up motion, so penDraggingSegment is always null here --
+      // this can never race the drag-handle branch in onMouseDrag above). Unlike polygon below,
+      // board.path already holds real committed anchors, so the preview is a separate throwaway
+      // item (removePenPreviewItem()) rather than something rebuilt from board.path itself. Must
+      // start from the last anchor's OWN handleOut (not a plain line) -- if the user just pulled a
+      // curve handle on that anchor, the tentative next segment is already curved, and a straight
+      // rubber-band here would visibly snap into a curve the instant they click.
+      if (interactionKind === 'pen') {
+        removePenPreviewItem();
+        const last = board.path.lastSegment;
+        const snapped = resolveSnappedPoint(event.point, null);
+        penPreviewItem = new paper.Path({
+          strokeColor: STROKE_COLOR,
+          strokeWidth: STROKE_WIDTH_PX / paper.view.zoom
+        });
+        penPreviewItem.add(new paper.Segment(last.point, null, last.handleOut));
+        penPreviewItem.add(new paper.Segment(new paper.Point(snapped.x, snapped.y)));
+        penPreviewItem.data.isPenPreview = true;
+        return;
+      }
       if (interactionKind !== 'polygon' || polygonPoints.length === 0) return;
       board.clearPath();
       const previewItem = new paper.Path({
@@ -1275,6 +1431,10 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     get hasInProgressPolygon() {
       return interactionKind === 'polygon';
     },
+    /** True while a Pen path is mid-placement (at least one anchor placed, not yet closed). */
+    get hasInProgressPen() {
+      return interactionKind === 'pen';
+    },
     get zoom() {
       return board.zoom;
     },
@@ -1284,7 +1444,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      *   mode was entered -- fixes the base fit scale for this drawing session (matches every other
      *   viewport transform in this app in treating project.canvas as the mm reference frame).
      * @param {number} paddingPx same padding convention drawLayout() already uses (38*dpr).
-     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'} [initialMode]
+     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'|'pen'} [initialMode]
      */
     enter(projectCanvasMm, paddingPx, initialMode = 'select') {
       canvasMm = projectCanvasMm;
@@ -1330,7 +1490,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      * Switch input mode without leaving drawing mode -- already-finalized shapes in board.shapes
      * are untouched; only a drag-in-flight (if any) is discarded, since the box preview belongs
      * to whichever mode was active when the drag started.
-     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'} newMode
+     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'|'pen'} newMode
      */
     setMode(newMode) {
       mode = newMode;

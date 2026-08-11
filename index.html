@@ -485,8 +485,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <canvas id="layout"></canvas>
         <div class="fitNotice" id="fitNotice"></div>
         <!-- RS-3010 Design Step A correction: the single rail splits in two -- a left rail for
-             general/freeform tools (Select, Draw; future home for a Bezier Pen/Eraser, not built
-             yet) and a right rail for parametric shape presets (Rect/Ellipse/Slot/Polygon). Every
+             general/freeform tools (Select, Draw, Pen; future home for an Eraser, not built yet)
+             and a right rail for parametric shape presets (Rect/Ellipse/Slot/Polygon). Every
              button keeps its exact id and setDrawTool() wiring from the single-rail version.
              #menuDesign in the top nav is now the fixed entry point into drawing mode (it triggers
              the exact same activation railSelectToggle does), so both rails can safely gate on
@@ -495,6 +495,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <div class="design-tool-rail rail-left" id="designToolRailLeft" style="display:none" aria-label="Design tools (general)">
           <button class="icon-btn" id="railSelectToggle" title="Select (click/shift-click to multi-select, drag to move) (V)" aria-pressed="false">↖ Select</button>
           <button class="icon-btn" id="railDrawToggle" title="Draw a custom freehand shape directly on the canvas (B)" aria-pressed="false">✏️ Draw</button>
+          <button class="icon-btn" id="railPenToggle" title="Pen -- draw straight/curved paths (click for a straight anchor, drag to curve, click back on the last anchor to reset a corner, click back on the first anchor to close) (P)" aria-pressed="false">✒️ Pen</button>
         </div>
         <div class="design-tool-rail rail-right" id="designToolRailRight" style="display:none" aria-label="Design tools (shape presets)">
           <button class="icon-btn" id="railRectToggle" title="Draw a rectangle (hold Shift for a square) (R)" aria-pressed="false">▭ Rect</button>
