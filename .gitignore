@@ -197,3 +197,7 @@ tools/rs-3011-pen-circle-verification-screenshots/
 tools/rs-3011-pen-anchor-handle-visuals-verify.mjs
 tools/rs-3011-pen-anchor-handle-visuals-verification-screenshots/
 
+#RS-3011: gitignore ad hoc Pen skip-move-hittest verification script
+tools/rs-3011-pen-skip-move-hittest-verify.mjs
+tools/rs-3011-pen-skip-move-hittest-verification-screenshots/
+
