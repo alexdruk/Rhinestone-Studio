@@ -183,3 +183,10 @@ tools/rs-3011-pen-finish-open-path-verification-screenshots/
 # artifact, same "never a repo artifact" category as the spike folders above
 tools/scratch/rs-3011-corner-gap-spike/
 
+# RS-3011 pen-circle-verify: ad hoc live-browser Playwright verification script + screenshots for
+# manually reviewing a 4-anchor cubic-bezier circle built with the Pen tool's curved segments and
+# curved closing drag, step by step -- manual visual-review exercise, no application code changes,
+# same "never a repo artifact" category as the scripts above
+tools/rs-3011-pen-circle-verify.mjs
+tools/rs-3011-pen-circle-verification-screenshots/
+
