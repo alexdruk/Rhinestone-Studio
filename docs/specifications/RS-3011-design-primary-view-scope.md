@@ -260,13 +260,21 @@ live canvas" flow before designing this from scratch.
 directly on the Design canvas, selectable and showing stones like any other shape, with no need to
 leave Design or use the existing top-nav Import Lightbox.
 
-### Step 9 — Eyedropper (renumbered from 4)
+### Step 9 — Pen (Bezier) tool (revised from Eyedropper, this review)
 
-Click an existing stone or shape to pick up its size/color as the active spec for whatever tool runs
-next. **`drawleather` check: done** — no dedicated eyedropper tool exists in `drawleather` either;
-confirms this is genuinely simple with no hidden interaction pattern to copy.
-**Visual result:** a new Eyedropper icon in the tool rail; clicking a stone with it active sets the
-active stone size/color fields to match.
+Replaces Eyedropper in this slot (Sasha's decision) -- full v1 scope, not a phased build:
+- **Straight line**: click to place an anchor, click elsewhere to create a straight segment between anchors.
+- **Curved line**: click-and-drag to pull out a directional handle before releasing, shaping the arc of the next segment.
+- **Corner/Reset**: click back on the last anchor (or hold Alt/Option) to remove a handle and transition from a curve into a sharp corner.
+- **Closing a shape**: click back on the first anchor to seal the path into a closed vector shape.
+
+**`drawleather` check: done.** `src/tools/ConstructionTool.ts` (13,355 lines) is a full parametric pattern-construction system with constraint solving -- far beyond this tool's scope, not something to port. Two small, pure, already-unit-tested modules inside it are directly reusable technique, not the whole system:
+- `src/tools/bezierCycleLogic.ts` -- a clean state machine (`AnchorState 0-3`: no handles -> free handles -> angle-locked -> smooth-locked) cycling a single anchor between corner and curve behavior, with memory preserving handle shape across cycles -- maps directly onto Corner/Reset.
+- `src/tools/dragToCurveDeadZone.ts` -- the exact, hand-tuned threshold distinguishing "click to place a sharp corner" from "drag to pull a curve handle": 0.5mm for mouse, an adaptive pixel-based grace zone for touch/pen (28px / zoom, since touch jitter breaks the tight mouse threshold) -- tuned from real drawleather bug reports (#217/#395), directly reusable rather than re-derived from scratch.
+
+Also worth reusing: this app's own **Polygon preset already does click-to-place-vertex and close-by-clicking-the-first-point** (`DrawingCanvasTool.js`'s existing polygon mode) -- real, existing infrastructure for the straight-line-segment and closing-a-shape parts of this tool, not something to rebuild from zero.
+
+**Visual result:** a new Pen icon in the tool rail; clicking places anchor points connected by straight segments, click-dragging an anchor pulls out curve handles shaping the next segment, clicking back on the last anchor (or Alt/Option-click) resets it to a sharp corner, and clicking back on the first anchor closes the path into a filled shape.
 
 ### Step 10 — Paint tool (renumbered from 5)
 
@@ -332,6 +340,7 @@ eraser tool exists in `drawleather` at all; genuinely new UI, not a port of anyt
   points on an existing line."
 - **(2026-08-10)** Four new decisions from this review session — see "Decisions, this review
   session" above (Steps 4–8's product direction).
+- **(2026-08-10)** Step 9 revised: Pen (Bezier) tool replaces Eyedropper in this slot, full v1 scope (straight + curved + corner-reset + closing) rather than a phased build, per Sasha's decision after the `drawleather` check above.
 
 ## Out of scope for this document
 
@@ -345,7 +354,7 @@ eraser tool exists in `drawleather` at all; genuinely new UI, not a port of anyt
 Steps 4–8 (this review session's new scope) need implementation prompts, in an order to be decided —
 Step 4 (Design as default view) and Step 7 (button-gated generation) are the two most likely to
 interact with existing behavior in non-obvious ways and may deserve going first. Steps 9–13
-(Eyedropper/Paint/Trace/Stamp/Eraser) remain ready to start once Steps 4–8 are settled. Same
+(Pen/Paint/Trace/Stamp/Eraser) remain ready to start once Steps 4–8 are settled. Same
 conventions as always: self-verification blocks referencing actual commit hashes, diffs read in full
 before authorizing a commit (never from a summary), scoped git diffs, local commits with no push
 until review, `git merge --no-ff` with `-m`, `.gitignore` entries for any throwaway verification
