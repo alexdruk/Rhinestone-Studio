@@ -140,7 +140,10 @@ await test('12. every named Lightbox overlay id still appears exactly once in in
 
 await test('13. More Options and the top-menu buttons remain the reopen affordances -- unchanged by this milestone', () => {
   assert.match(appJs, /el\('moreOptionsBtn'\)\.onclick=\(\)=>\{/);
-  assert.match(appJs, /el\('menuText'\)\.onclick=\(\)=>lightboxes\.text\.open\(\)/);
+  // RS-3011 nav-toggle fix: #menuText now also reveals Dual Workspace before opening (see
+  // tools/test-ui-shell-structure.mjs's own coverage of revealDualWorkspaceForLightbox()) -- still
+  // the same reopen affordance, just no longer a bare open() call.
+  assert.match(appJs, /el\('menuText'\)\.onclick=\(\)=>\{revealDualWorkspaceForLightbox\(\);lightboxes\.text\.open\(\)\}/);
 });
 
 // ---------- 6. Gallery stays disabled from the menu (S-103, untouched) ----------

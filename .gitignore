@@ -216,3 +216,8 @@ tools/rs-3011-step4-flash-check.mjs
 tools/rs-3011-step4-flash-check-heavy.mjs
 tools/rs-3011-step4-flash-check-screenshots/
 
+# RS-3011 nav-toggle fix: ad hoc live-browser Playwright verification script for the
+# #menuDesign-no-longer-toggles + Lightbox-openers-reveal-Dual-Workspace change (scenarios a-f),
+# plus its captured screenshots -- same "never a repo artifact" category as the scripts above
+tools/scratch/rs-3011-fix-design-nav-toggle/
+
