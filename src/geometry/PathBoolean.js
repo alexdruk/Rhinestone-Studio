@@ -67,7 +67,10 @@ const FIELD_ON_THRESHOLD = 128;
 // sub-micron cell) nor a huge simple shape (which would otherwise allocate an enormous grid for no
 // accuracy benefit -- "avoid unnecessary computation on simple designs") can make this pathological.
 const TARGET_GRID_CELLS = 220;
-const MIN_CELL_SIZE_MM = 0.08;
+// Exported (RS-3011 Step 10b): PaintRegionSelection.js's own overlap-area epsilon is derived from
+// this same floor so a "no real overlap" reading isn't a bare `=== 0` against grid-tracing noise,
+// without independently guessing at this module's own resolution limit.
+export const MIN_CELL_SIZE_MM = 0.08;
 const MAX_CELL_SIZE_MM = 1;
 
 // RS-1012A: a shape's own bounding-box diagonal must span at least this many grid cells, even when
@@ -452,7 +455,10 @@ function simplifyContour(points, epsilonMm) {
   return kept.length >= 3 ? kept : deduped;
 }
 
-function contourAreaAbs(points) {
+// Exported (RS-3011 Step 10b): PaintRegionSelection.js reuses this exact shoelace implementation to
+// sum a combineShapeSources() intersection result's contour areas, rather than re-deriving the same
+// formula a second time.
+export function contourAreaAbs(points) {
   let area = 0;
   for (let i = 0; i < points.length; i++) {
     const p1 = points[i], p2 = points[(i + 1) % points.length];
