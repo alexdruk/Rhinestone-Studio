@@ -792,6 +792,12 @@ function validateProject(obj){
     // textMode/svgMode/curveEnabled elsewhere). Absent (every pre-freehand-stroke saved project) or
     // any non-false value defaults to closed:true at the GeometryEngine layer -- see
     // normalizePathParams()'s own doc comment.
+    // RS-3011 Step 10a: 'regions' (Paint) is a 'path' layer's own optional array of
+    // {id,contour,stoneSizeMm,gapMm,color,fill mode} sub-areas, not strictly validated here either --
+    // same permissive precedent as 'closed' above and curveEnabled elsewhere. Passed
+    // through untouched by the `{...l}` spread below either way; absent or empty on every layer
+    // predating this step, which GeometryEngine.normalizePathParams()'s own regions normalizer
+    // treats as a safe no-op (see its doc comment).
     // S-110: Regular Polygon/Star/Ring's own configurable extra parameters, matching
     // GeometryEngine's own assertIntegerInRange()/assertNumberInRange() validation ranges (see
     // src/geometry/GeometryEngine.js's normalizeShapeParams()) so a malformed saved value is caught

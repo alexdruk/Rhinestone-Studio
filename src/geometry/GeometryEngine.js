@@ -22,7 +22,7 @@
 
 import { BoundingBox, Point2D, createCircleVectorPath, createRectangleVectorPath } from '../text/VectorPath.js';
 import { flattenContourToPolygon, translateContour } from './ContourGeometry.js';
-import { sampleOutlinePoints, sampleMultiContourOutlinePoints, sampleShapeFillPoints, sampleFieldByMode } from './StoneSampler.js';
+import { sampleOutlinePoints, sampleMultiContourOutlinePoints, sampleShapeFillPoints, sampleFieldByMode, isPointInsidePolygons } from './StoneSampler.js';
 import { Stone } from './Stone.js';
 import { StoneLayout } from './StoneLayout.js';
 import { parseSvgDocument } from '../svg/index.js';
@@ -691,10 +691,30 @@ export class GeometryEngine {
    * @returns {{polygons: import('../text/VectorPath.js').Point2D[][], boundingBox: BoundingBox|null}}
    */
   _placeNaturalContours(contours, xMm, yMm, widthMm, heightMm) {
+    const transform = this._computeNaturalContourTransform(contours, xMm, yMm, widthMm, heightMm);
+    if (!transform) {
+      return { polygons: [], boundingBox: null };
+    }
+
+    const polygons = contours.map((contour) => this._applyNaturalContourTransform(contour, transform));
+    return { polygons, boundingBox: BoundingBox.fromPoints(polygons.flat()) };
+  }
+
+  /**
+   * The scale-then-translate transform _placeNaturalContours() derives from a shape's own natural
+   * contours -- split out so RS-3011 Step 10a (Paint regions) can apply the exact same transform
+   * (not an independently-recomputed one) to a region's own natural-space contour. A region's
+   * bounding box is almost always smaller than the parent shape's own natural box (that's the point
+   * of a sub-region), so recomputing scaleX/scaleY from the region's own points instead of reusing
+   * this one would silently distort it relative to the shape it's supposed to track.
+   *
+   * @returns {{xMm:number,yMm:number,scaleX:number,scaleY:number}|null} null when `contours` has no points.
+   */
+  _computeNaturalContourTransform(contours, xMm, yMm, widthMm, heightMm) {
     const naturalPoints = contours.flat();
     const naturalBox = BoundingBox.fromPoints(naturalPoints.map((p) => new Point2D(p.xMm, p.yMm)));
     if (!naturalBox) {
-      return { polygons: [], boundingBox: null };
+      return null;
     }
 
     const targetWidthMm = widthMm ?? naturalBox.widthMm;
@@ -702,12 +722,14 @@ export class GeometryEngine {
     const scaleX = naturalBox.widthMm > 0 ? targetWidthMm / naturalBox.widthMm : 1;
     const scaleY = naturalBox.heightMm > 0 ? targetHeightMm / naturalBox.heightMm : 1;
 
-    const polygons = contours.map((contour) => contour.map((p) => new Point2D(
-      xMm + p.xMm * scaleX,
-      yMm + p.yMm * scaleY
-    )));
+    return { xMm, yMm, scaleX, scaleY };
+  }
 
-    return { polygons, boundingBox: BoundingBox.fromPoints(polygons.flat()) };
+  _applyNaturalContourTransform(contour, transform) {
+    return contour.map((p) => new Point2D(
+      transform.xMm + p.xMm * transform.scaleX,
+      transform.yMm + p.yMm * transform.scaleY
+    ));
   }
 
   /**
@@ -983,7 +1005,108 @@ export class GeometryEngine {
       stones = stones.concat(infillStones);
     }
 
+    // RS-3011 Step 10a (Paint regions): additive, priority-ordered sub-areas that carve their own
+    // patch out of the fill computed above. No-op when `regions` is empty/absent -- every layer
+    // predating this step -- so this branch never changes existing output. See
+    // _applyPathRegions()'s own doc comment.
+    if (options.regions.length > 0) {
+      // Reuses the SAME transform options.contours was placed through above (not a fresh one
+      // derived from each region's own, usually-smaller, bounding box) -- see
+      // _computeNaturalContourTransform()'s own doc comment for why that distinction matters.
+      const transform = this._computeNaturalContourTransform(options.contours, options.xMm, options.yMm, options.widthMm, options.heightMm);
+      stones = this._applyPathRegions(stones, options, transform);
+    }
+
     return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
+  }
+
+  /**
+   * RS-3011 Step 10a: applies a 'path' layer's `regions` (Paint) on top of its already-generated
+   * `baseStones`. Each region, in array order, wins over everything computed before it -- the base
+   * fill AND every earlier region -- for its own footprint: any already-computed point that falls
+   * inside the region's own contour is dropped, then the region generates its own fill within that
+   * same contour using its own stoneSizeMm/gapMm/color/fillMode. `contour` is placed through the
+   * exact same (0,0)-rooted natural-space transform (`_placeNaturalContours()`) the layer's own
+   * `contours` field already uses, so a region tracks its parent shape's move/resize for free.
+   * Interior testing reuses `isPointInsidePolygons()` -- the same StoneSampler.js primitive
+   * MixedSizeGenerator.js's own infill pass relies on (via sampleShapeFillPoints()) -- rather than
+   * reimplementing point-in-polygon logic here. A region's own candidate points are then rejected
+   * if they land physically too close to anything already placed (survivors or an earlier region),
+   * so a region's independently-pitched grid never overlaps a stone just outside its own contour
+   * boundary.
+   *
+   * @param {Stone[]} baseStones
+   * @param {ReturnType<typeof normalizePathParams>} options
+   * @param {{xMm:number,yMm:number,scaleX:number,scaleY:number}|null} transform The SAME transform
+   *   the layer's own `contours` were placed through (see _computeNaturalContourTransform()) --
+   *   never an independently-derived one, or a region smaller than the shape's own natural box
+   *   would be scaled wrong relative to it.
+   * @returns {Stone[]}
+   */
+  _applyPathRegions(baseStones, options, transform) {
+    if (!transform) {
+      return baseStones;
+    }
+
+    let survivors = baseStones;
+    const regionStoneGroups = [];
+
+    for (const region of options.regions) {
+      const regionPolygons = [this._applyNaturalContourTransform(region.contour, transform)];
+      const regionBoundingBox = BoundingBox.fromPoints(regionPolygons.flat());
+
+      if (!regionBoundingBox) {
+        continue;
+      }
+
+      const insideRegion = (stone) => isPointInsidePolygons(new Point2D(stone.xMm, stone.yMm), regionPolygons);
+      survivors = survivors.filter((stone) => !insideRegion(stone));
+      for (const group of regionStoneGroups) {
+        group.stones = group.stones.filter((stone) => !insideRegion(stone));
+      }
+
+      const regionSpacingMm = region.stoneSizeMm + region.gapMm;
+      const regionCandidatePoints = sampleShapeFillPoints(
+        region.fillMode, regionPolygons, regionBoundingBox, regionSpacingMm, region.stoneSizeMm, options.closed
+      );
+      // Contour exclusion above only guarantees a region's own candidates aren't *inside* whatever
+      // it just claimed -- it says nothing about a candidate landing physically too close to a
+      // surviving base/earlier-region stone just outside the boundary (independent grids, no shared
+      // pitch). Rejects each candidate against the FIXED already-placed set only -- never against
+      // other candidates from this same region, which are already guaranteed non-overlapping by
+      // their own regular-grid construction (the same guarantee the base fill's own grid already
+      // relies on); letting them block each other too would re-check pairs whose separation is
+      // *exactly* their own threshold by construction ((s+s)/2+gapMm == s+gapMm == their own grid
+      // pitch), a floating-point boundary that makes acceptance order/position-dependent for no
+      // benefit.
+      const alreadyPlaced = survivors.concat(...regionStoneGroups.map((group) => group.stones));
+      const acceptedPoints = regionCandidatePoints.filter((point) => !alreadyPlaced.some((other) => {
+        const dx = point.xMm - other.xMm;
+        const dy = point.yMm - other.yMm;
+        const minSeparationMm = (region.stoneSizeMm + other.sizeMm) / 2 + region.gapMm;
+        return dx * dx + dy * dy < minSeparationMm * minSeparationMm;
+      }));
+      const regionStones = acceptedPoints.map((point) => new Stone({
+        xMm: point.xMm,
+        yMm: point.yMm,
+        sizeMm: region.stoneSizeMm,
+        color: region.color,
+        layerId: options.layerId,
+        index: 0 // reassigned below, once the final combined order is known
+      }));
+
+      regionStoneGroups.push({ stones: regionStones });
+    }
+
+    const combined = survivors.concat(...regionStoneGroups.map((group) => group.stones));
+    return combined.map((stone, index) => new Stone({
+      xMm: stone.xMm,
+      yMm: stone.yMm,
+      sizeMm: stone.sizeMm,
+      color: stone.color,
+      layerId: stone.layerId,
+      index
+    }));
   }
 
   /**
@@ -1569,7 +1692,66 @@ function normalizePathParams(params) {
     // never looped back to its start) opts into open-contour outline sampling.
     closed: params.closed !== false,
     // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.
-    ...normalizeMixedSizeParams(params, stoneSizeMm)
+    ...normalizeMixedSizeParams(params, stoneSizeMm),
+    // RS-3011 Step 10a: Paint regions -- see normalizePathRegions()'s own doc comment. Defaults to
+    // [] for every layer with no `regions` field at all (every layer predating this step), matching
+    // this file's existing "absent optional field -> safe no-op default" convention.
+    regions: normalizePathRegions(params.regions)
+  };
+}
+
+/**
+ * Normalizes a 'path' layer's optional `regions` field (RS-3011 Step 10a, Paint). Each region's
+ * `contour` uses the exact same (0,0)-rooted natural-space convention as the layer's own
+ * `contours` -- validated only as loosely as that field already is (a 3+-point array), per this
+ * file's existing permissive style. `fillMode` defaults to `'fill'` (not DEFAULT_MODE/'outline')
+ * because a region is inherently "these stones go in this patch," not an outline concept.
+ *
+ * @param {object[]} [regionsInput]
+ * @returns {{id: string|null, contour: {xMm:number,yMm:number}[], stoneSizeMm: number, gapMm: number, color: string|null, fillMode: string}[]}
+ */
+function normalizePathRegions(regionsInput) {
+  if (regionsInput === undefined || regionsInput === null) {
+    return [];
+  }
+  if (!Array.isArray(regionsInput)) {
+    throw new TypeError('GeometryEngine.generatePathLayout regions must be an array when provided.');
+  }
+  return regionsInput.map((region, index) => normalizePathRegion(region, index));
+}
+
+function normalizePathRegion(region, index) {
+  if (!region || typeof region !== 'object') {
+    throw new TypeError(`regions[${index}] must be an object.`);
+  }
+  if (!Array.isArray(region.contour) || region.contour.length < 3) {
+    throw new TypeError(`regions[${index}] requires a contour array with at least 3 points.`);
+  }
+
+  const stoneSizeMm = assertPositiveNumber(region.stoneSizeMm, `regions[${index}].stoneSizeMm`);
+
+  const gapMm = assertFiniteNumber(region.gapMm ?? 0, `regions[${index}].gapMm`);
+  if (gapMm < 0) {
+    throw new RangeError(`regions[${index}].gapMm must be zero or positive.`);
+  }
+
+  const fillMode = region.fillMode ?? 'fill';
+  if (!SAMPLE_MODES.has(fillMode)) {
+    throw new TypeError(`Unsupported regions[${index}].fillMode: ${fillMode}. Expected one of: ${[...SAMPLE_MODES].join(', ')}`);
+  }
+
+  if (region.color !== undefined && region.color !== null &&
+    (typeof region.color !== 'string' || region.color.length === 0)) {
+    throw new TypeError(`regions[${index}].color must be a non-empty string when provided.`);
+  }
+
+  return {
+    id: typeof region.id === 'string' && region.id.length > 0 ? region.id : null,
+    contour: region.contour,
+    stoneSizeMm,
+    gapMm,
+    color: region.color ?? null,
+    fillMode
   };
 }
 
