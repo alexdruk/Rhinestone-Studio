@@ -231,3 +231,8 @@ tools/scratch/rs-3011-step10b-paint-phaseb/
 # folders above
 tools/scratch/rs-3011-step10b-bug-investigation/
 
+# RS-3011 Step 5: ad hoc live-browser Playwright verification scripts for the empty-grid
+# investigation, objectTemplateDetail de-prominence and layoutStats de-confusion work, plus their
+# captured screenshots -- same "never a repo artifact" category as the scratch folders above
+tools/scratch/rs-3011-step5-verify/
+

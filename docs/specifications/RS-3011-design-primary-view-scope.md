@@ -217,13 +217,18 @@ drawing interaction).
 **Visual result:** opening the app lands directly in Design, not Dual Workspace. Reloading mid-Design
 session stays in Design instead of bouncing to Dual Workspace.
 
-### Step 5 — `defaultProject()` changes app-wide (new, this review)
+### Step 5 — Design's own view starts empty; de-prominence the Object Templates hint text (revised, this review)
 
-Remove the seed "Vitalina Serbin" text layer and reduce the prominence of the template/product
-description in a brand-new project — an app-wide default-content change, not scoped to Design (per
-Sasha's explicit decision). **`drawleather` check: not applicable.**
-**Visual result:** a brand-new project starts with no pre-existing text layer and a less prominent
-template description, everywhere in the app, not only in Design.
+`defaultProject()` itself is unchanged — the seed "Vitalina Serbin" text layer stays, since it's
+still needed for Dual Workspace/Text mode on a fresh project. This is narrower than originally
+scoped: **Design's own view of a brand-new project must show an empty grid**, with no seed content
+visible there, regardless of what `defaultProject()` still seeds for other views. Separately,
+reduce the prominence of `#objectTemplateDetail` — the "Production …mm · Safe area inset…" hint
+text inside Shapes > Object Templates — not `#projectTemplateSummary` (the left-panel "Template:
+Mug · 210×90mm" line), which stays as-is. **`drawleather` check: not applicable.**
+**Visual result:** a brand-new project shows an empty grid in Design (the seed text layer still
+exists and is visible in Dual Workspace/Text mode as before), and the Object Templates tab's
+production hint text is visually de-emphasized.
 
 ### Step 6 — Layer naming by shape type (new, this review)
 
@@ -341,6 +346,12 @@ eraser tool exists in `drawleather` at all; genuinely new UI, not a port of anyt
 - **(2026-08-10)** Four new decisions from this review session — see "Decisions, this review
   session" above (Steps 4–8's product direction).
 - **(2026-08-10)** Step 9 revised: Pen (Bezier) tool replaces Eyedropper in this slot, full v1 scope (straight + curved + corner-reset + closing) rather than a phased build, per Sasha's decision after the `drawleather` check above.
+- **(2026-08-12)** Step 5 refined: `defaultProject()` itself does **not** change — the seed
+  "Vitalina Serbin" text layer stays app-wide, still needed for Dual Workspace/Text mode on a fresh
+  project. The actual ask is narrower: Design's own view of a brand-new project shows an empty grid,
+  independent of what `defaultProject()` seeds elsewhere. The de-prominence half of Step 5 is
+  confirmed to mean `#objectTemplateDetail` (Shapes > Object Templates hint text), not
+  `#projectTemplateSummary` (left-panel template summary, unchanged).
 
 ## Out of scope for this document
 
