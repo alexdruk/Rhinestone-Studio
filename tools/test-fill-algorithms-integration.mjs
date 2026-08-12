@@ -100,7 +100,14 @@ await test('9. generatePathStonesLive resolves mode via resolveVectorFillMode(la
   // S-200 CI follow-up (2026-07): same tolerance as test 7 above, for the same reason.
   // RS-3011 (2026-08): tolerates the closed:layer.closed!==false field the open-contour fix added
   // between color and the mixedSizeParamsFor spread.
-  assert.match(appJs, /gapMm:layer\.gap,mode:resolveVectorFillMode\(layer\.fillMode\),color:layer\.color(?:,closed:layer\.closed!==false)?(?:,\.\.\.mixedSizeParamsFor\(layer\))?\};const result=this\.permanentEngine\.generatePathLayout/);
+  // RS-3011 Step 10b (2026-08): tolerates the regions:layer.regions||[] field (plus its own
+  // multi-line doc comment) the Paint regions-forwarding fix added between closed and
+  // mixedSizeParamsFor -- the [^;]*? connectors (rather than a fixed `,fieldName` literal like the
+  // closed/mixedSizeParamsFor groups use) skip over that comment/whitespace without being so loose
+  // they'd span into an unrelated generate*StonesLive() method: `;` only ever appears at a
+  // statement boundary, never inside this params object literal or its own comments, so a
+  // connector that excludes it can't cross into a neighboring method's own params object.
+  assert.match(appJs, /gapMm:layer\.gap,mode:resolveVectorFillMode\(layer\.fillMode\),color:layer\.color(?:,closed:layer\.closed!==false)?(?:[^;]*?regions:layer\.regions\|\|\[\],)?(?:[^;]*?\.\.\.mixedSizeParamsFor\(layer\))?\};const result=this\.permanentEngine\.generatePathLayout/);
 });
 
 await test('10. the resolver helpers themselves default unknown/missing values to each layer type\'s pre-RS-1011 behavior (backward compatibility)', () => {

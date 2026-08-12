@@ -85,7 +85,7 @@
 // pipeline stages re-run on every threshold/invert/blur/resize edit, but the (comparatively
 // expensive) browser image decode only ever runs once per distinct imageSrc value.
 import './src/browser/BrowserDependencyProbe.js';
-import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames } from './src/geometry/index.js';
+import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
 import { createDefaultFontProviderRegistry, createDefaultRhinestoneFontRegistry, BoundingBox } from './src/text/index.js';
 import { renderProductionLayout, renderStoneLayout, fitTransform } from './src/renderer/CanvasRenderer2D.js';
@@ -192,8 +192,10 @@ const ARROW_KEY_DELTAS={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDo
 // setDrawTool() modes exactly -- V/R/E/S mirror this app's own tool labels; B=Draw follows
 // Photoshop's Brush convention (more recognizable than an arbitrary "D"); G=Polygon leaves P free
 // for RS-3011 Step 9's Pen tool (Illustrator/Figma's near-universal "Pen" binding), per Sasha's own
-// roadmap for this rail.
-const DRAW_TOOL_SHORTCUT_KEYS={v:'select',b:'freehand',r:'rect',e:'ellipse',s:'slot',g:'polygon',p:'pen'};
+// roadmap for this rail. RS-3011 Step 10b: F=Paint (confirmed free elsewhere in the global keydown
+// handler below) -- Photoshop/GIMP's own Fill/Bucket-adjacent mnemonic, close enough to read
+// naturally alongside B=Draw/Brush.
+const DRAW_TOOL_SHORTCUT_KEYS={v:'select',b:'freehand',r:'rect',e:'ellipse',s:'slot',g:'polygon',p:'pen',f:'paint'};
 // RS-1005: pixels-per-mm used only when rasterizing the Production Sheet SVG to PNG. Fixed and
 // documented (not derived from devicePixelRatio/viewport fit) so the PNG's pixel dimensions are
 // always a clean, undistorted multiple of the page's mm size -- never a fit-to-viewport scale.
@@ -717,7 +719,15 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // RS-1012: 'path' layers (Boolean Operation results) go through the permanent engine's
  // generatePathLayout(), mirroring generateSvgStonesLive()/generateShapeStonesLive() above --
  // layer.contours is already plain (0,0)-rooted polygon data (no parsing step, unlike SVG).
- async generatePathStonesLive(layer){if(!this.permanentEngine)return[];const params={contours:layer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.fillMode),color:layer.color,closed:layer.closed!==false,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generatePathLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
+ async generatePathStonesLive(layer){if(!this.permanentEngine)return[];const params={contours:layer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.fillMode),color:layer.color,closed:layer.closed!==false,
+    // RS-3011 Step 10b: forwards a 'path' layer's Paint regions (Step 10a's own data model) into
+    // live/production generation -- Step 10a wired GeometryEngine's own support for `regions` and
+    // validateProject()'s pass-through, but never actually forwarded the field from a real layer
+    // into a generatePathLayout() call anywhere, so a painted region silently never generated a
+    // single stone until now. Defaults to [] for every layer predating this step, matching
+    // GeometryEngine.normalizePathParams()'s own regions normalizer.
+    regions:layer.regions||[],
+    ...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generatePathLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
  // RS-2000: the legacy bitmap text engine (FONT5 + generateText/sampleGlyphFill/
  // sampleGlyphStroke/line) and the legacy generateCircle/generateRect/bbox/layerBBox shape path
  // were deleted here -- unreachable since generateTextStonesLive/generateShapeStonesLive took over
@@ -897,6 +907,68 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     updateDrawToolButtons();
     el('status').textContent='Added shape as new Path layer.';
   },
+  // RS-3011 Step 10b: Paint's own finalize hook -- fires once per finished lasso stroke (see
+  // DrawingCanvasTool.js's own onPaintStroke doc comment for exactly when/what `lassoPolygons` is).
+  // Per this milestone's architecture split, this module owns every selectPaintTarget()/
+  // absolutePolygonsToNaturalSpace() call and every project.layers mutation; DrawingCanvasTool.js's
+  // own involvement ends at handing over the closed lasso polygon. RS-3011 issue #4a fix precedent
+  // applies here too: DrawingCanvasTool.js already reverted its own internal mode to 'select'
+  // before calling this hook (see its onMouseUp 'paint' branch) -- updateDrawToolButtons() below
+  // syncs the rail to match, unconditionally, even on the silent-discard path, for the same reason
+  // onShapeCommitted() above always calls it.
+  onPaintStroke:async(lassoPolygons)=>{
+    updateDrawToolButtons();
+    if(!permanentEngine)return;
+    const candidates=project.layers.filter(l=>l.type==='path'&&l.visible!==false).map(l=>({
+      layerId:l.id,
+      polygons:permanentEngine.resolvePathPolygons({
+        contours:l.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),
+        layerId:l.id,xMm:l.x,yMm:l.y,widthMm:l.w,heightMm:l.h
+      }).polygons
+    }));
+    // First pass: which candidate does the lasso overlap most? The exact grid resolution barely
+    // matters for THIS decision (only for the stored contour's precision, refined below once the
+    // target is known) -- the currently-selected layer's own stone spacing is a reasonable,
+    // already-established fallback (same convention getStoneDefaults() above uses for a brand-new
+    // shape).
+    const fallback=selectedLayer();
+    const firstPass=selectPaintTarget(lassoPolygons,candidates,{targetSpacingMm:(fallback.stoneSize||2)+(fallback.gap||.3)});
+    if(!firstPass){console.info('Paint: lasso overlaps no path layer, discarding stroke.');return;}
+    const targetLayer=project.layers.find(l=>l.id===firstPass.layerId);
+    const targetCandidate=candidates.find(c=>c.layerId===firstPass.layerId);
+    if(!targetLayer||!targetCandidate)return;
+    // Second pass, against ONLY the winning candidate, at ITS OWN stone spacing -- once a target is
+    // known, its own stoneSize+gap are authoritative for grid resolution (per this step's own
+    // prompt), not the fallback used to pick it above. One extra combineShapeSources() call per
+    // lasso release (not per frame) is an accepted cost -- see PaintRegionSelection.js's own
+    // targetSpacingMm doc comment.
+    const result=selectPaintTarget(lassoPolygons,[targetCandidate],{targetSpacingMm:targetLayer.stoneSize+targetLayer.gap});
+    if(!result)return;
+    // RS-3011 Step 10b DECISION (Sasha delegated, confirmed during scoping): a lasso crossing a
+    // concave notch or a hole can genuinely intersect its target in multiple disjoint pieces --
+    // create ONE region per disjoint contour rather than keeping only the largest piece or
+    // rejecting the whole stroke, so the result matches what the user actually painted. The
+    // region data model is already an array, so this is more of an existing capability, not a new
+    // one. All new regions share the same stone spec and land in the SAME commitHistory() below, so
+    // the whole stroke is one undo step. absolutePolygonsToNaturalSpace() is called once with every
+    // contour together (not once per contour) since it applies the identical transform to each ring
+    // regardless -- an efficiency choice, not a behavior difference from calling it per-contour.
+    const naturalContours=absolutePolygonsToNaturalSpace(result.contours,targetLayer);
+    const newRegions=naturalContours.map((contour,index)=>({
+      id:'region'+Date.now()+index,
+      contour,
+      stoneSizeMm:targetLayer.stoneSize,
+      gapMm:targetLayer.gap,
+      color:targetLayer.color,
+      fillMode:'fill'
+    }));
+    commitHistory();
+    if(!Array.isArray(targetLayer.regions))targetLayer.regions=[];
+    targetLayer.regions.push(...newRegions);
+    drawingTool.refreshStoneGroupForLayer(targetLayer.id);
+    await updateAll(true);
+    el('status').textContent=`Painted ${newRegions.length} region${newRegions.length===1?'':'s'} on ${layerLabel(targetLayer)}.`;
+  },
   // Freehand is a continuous interaction (many pointermove samples before the stroke ends) --
   // DrawingCanvasTool.js opens a session at drag-start and closes it at drag-end so one stroke is
   // one undo step, the same session-coalescing convention HISTORY_TRACKED_CONTROL_IDS' input/change
@@ -976,7 +1048,10 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   getLayerStoneParams:(layerId)=>{
     const l=project.layers.find(x=>x.id===layerId);
     if(!l||l.type!=='path')return null;
-    return{stoneSizeMm:l.stoneSize,gapMm:l.gap,mode:resolveVectorFillMode(l.fillMode),color:l.color,...mixedSizeParamsFor(l)};
+    // RS-3011 Step 10b: regions (Paint) joins the rest of a path layer's "style" params here so the
+    // live Design-canvas stone preview reflects a painted region immediately, the same wiring-gap
+    // fix as generatePathStonesLive()'s own new `regions` line above.
+    return{stoneSizeMm:l.stoneSize,gapMm:l.gap,mode:resolveVectorFillMode(l.fillMode),color:l.color,regions:l.regions||[],...mixedSizeParamsFor(l)};
   },
   // Mirrors generatePathStonesLive()'s own result mapping, plus resolving the stored color id
   // (STONE_COLORS key, e.g. 'gold') to its previewColor -- the same flat swatch color
@@ -3444,6 +3519,7 @@ function updateDrawToolButtons(){
   el('railSlotToggle').setAttribute('aria-pressed',String(active&&mode==='slot'));
   el('railPolygonToggle').setAttribute('aria-pressed',String(active&&mode==='polygon'));
   el('railPenToggle').setAttribute('aria-pressed',String(active&&mode==='pen'));
+  el('railPaintToggle').setAttribute('aria-pressed',String(active&&mode==='paint'));
 }
 function setDrawTool(mode){
   if(drawingTool.isActive){
@@ -3467,6 +3543,7 @@ el('railEllipseToggle').onclick=()=>setDrawTool('ellipse');
 el('railSlotToggle').onclick=()=>setDrawTool('slot');
 el('railPolygonToggle').onclick=()=>setDrawTool('polygon');
 el('railPenToggle').onclick=()=>setDrawTool('pen');
+el('railPaintToggle').onclick=()=>setDrawTool('paint');
 // RS-3011 nav-toggle fix: #menuDesign no longer toggles. It always means "go to Design" --
 // matching setDrawTool()'s own same-mode no-op convention above (fa80918): entering is
 // idempotent, clicking it while Design is already active does nothing. There is no longer a

@@ -2,7 +2,9 @@ export {
   GeometryEngine,
   createGeometryEngine,
   TEXT_SCALE_FAILURE_REASONS,
-  AUTHORED_FONT_FITTING_GAP_MM
+  AUTHORED_FONT_FITTING_GAP_MM,
+  computeNaturalContourTransform,
+  applyNaturalContourTransform
 } from './GeometryEngine.js';
 
 export {
@@ -54,7 +56,9 @@ export {
   combineShapeSources,
   combineManyShapeSources,
   BOOLEAN_OPERATIONS,
-  BooleanPrecisionError
+  BooleanPrecisionError,
+  MIN_CELL_SIZE_MM,
+  contourAreaAbs
 } from './PathBoolean.js';
 
 export {
@@ -77,3 +81,8 @@ export {
   computeFrameInterior,
   computeFrameFitRect
 } from './FrameLibrary.js';
+
+export {
+  selectPaintTarget,
+  absolutePolygonsToNaturalSpace
+} from './PaintRegionSelection.js';

@@ -27,7 +27,14 @@
  * Design Step A adds 'select' -- a real but inert mode (an empty-canvas drag does nothing; the
  * existing hit-test-an-existing-shape click/shift-click/drag-to-move behavior below is unaffected
  * either way, since it never checks `mode`). Design Step C will add marquee-select on top of the
- * same empty-canvas branch point. Selection state (the set of
+ * same empty-canvas branch point. RS-3011 Step 10b adds 'paint' -- a single click-drag-release
+ * lasso gesture (unlike polygon/pen's multi-click ownership, `interactionKind` is only ever
+ * 'paint' for the duration of one onMouseDown/onMouseDrag/onMouseUp cycle), opting out of the
+ * hit-test-move-first dispatch below the same way Pen does (see 'pen-skip-move-hittest'): a lasso
+ * must always start fresh on mousedown, even when that point lands on an existing shape, since
+ * painting over a shape is the entire point of the tool. The finished lasso polygon is handed to
+ * app.js via a new `onPaintStroke` hook -- this file never computes the target shape or a region
+ * itself, per this milestone's own architecture split (see PaintRegionSelection.js). Selection state (the set of
  * selected shape ids) lives here, not in DrawingBoard.js -- per that module's own doc comment, it
  * stays a plain data model with no interaction/event concerns. This file's one Paper.js Tool
  * routes every pointer gesture through a single decision: hit an existing shape first (selection/
@@ -76,6 +83,20 @@ const SLOT_DEFAULT_LENGTH_RATIO = 3;
 // hitTestShapeId's own screen-px-to-project-mm tolerance conversion pattern.
 const MIN_POLYGON_POINTS = 3;
 const CLOSE_POLYGON_TOLERANCE_PX = 6;
+// RS-3011 Step 10b: Paint's own lasso constants. PAINT_MIN_LASSO_POINTS mirrors
+// MIN_POLYGON_POINTS' own "need at least a triangle" reasoning -- a 2-point lasso has no interior
+// to intersect against a candidate shape. PAINT_MIN_SAMPLE_DISTANCE_PX is onMouseDrag's
+// point-sampling throttle (only push a new lasso point once the pointer has moved past this
+// distance since the last one, avoiding a point per pointermove sample): the same idea FillTool.ts
+// applies via its own onMove throttle, but that reference's literal "1.5" constant was
+// drawleather's own pointer-sample unit, not a screen-px value -- this instead follows
+// hitTestShapeId's own screen-px-to-project-mm conversion pattern (divided by paper.view.zoom at
+// the call site) for a comparable small threshold. PAINT_LASSO_DASH_PX sizes the live preview's
+// dash pattern, same "constant apparent size on screen regardless of zoom" convention as
+// RESIZE_HANDLE_SIZE_PX below (divided by zoom at build time).
+const PAINT_MIN_LASSO_POINTS = 3;
+const PAINT_MIN_SAMPLE_DISTANCE_PX = 3;
+const PAINT_LASSO_DASH_PX = 5;
 // RS-3011 Step 9: Pen's own constants -- same values as Polygon's above for the same underlying
 // reasons (need at least a triangle to close; hit tolerance mirrors hitTestShapeId's screen-px-to-
 // project-mm pattern), kept as independent named constants since Pen and Polygon are separate
@@ -273,7 +294,7 @@ function materializeShapeFromLayer(layer) {
  * (shouldn't happen post-Step-1, but mirrors this file's existing null-layerId guards) is skipped,
  * never passed through as undefined.
  * @param {HTMLCanvasElement} canvasEl
- * @param {{getStoneDefaults?:()=>{stoneSize?:number,gap?:number,color?:string}, onShapeCommitted?:(layer:object)=>void, openHistorySession?:()=>void, closeHistorySession?:()=>void, onShapeMoved?:(layerId:string,dxMm:number,dyMm:number)=>void, onShapeResized?:(layerId:string,boundsMm:{left:number,top:number,width:number,height:number})=>void, onShapeDeleted?:(layerId:string)=>(boolean|void), onSelectionChanged?:(layerIds:string[])=>void}} [hooks] onShapeDeleted returning exactly `false` means the deletion was blocked (e.g. a last-layer guard) -- the shape stays in `board.shapes` too, everything else treats a non-`false` return as success.
+ * @param {{getStoneDefaults?:()=>{stoneSize?:number,gap?:number,color?:string}, onShapeCommitted?:(layer:object)=>void, openHistorySession?:()=>void, closeHistorySession?:()=>void, onShapeMoved?:(layerId:string,dxMm:number,dyMm:number)=>void, onShapeResized?:(layerId:string,boundsMm:{left:number,top:number,width:number,height:number})=>void, onShapeDeleted?:(layerId:string)=>(boolean|void), onSelectionChanged?:(layerIds:string[])=>void, onPaintStroke?:(lassoPolygons:{xMm:number,yMm:number}[][])=>void}} [hooks] onShapeDeleted returning exactly `false` means the deletion was blocked (e.g. a last-layer guard) -- the shape stays in `board.shapes` too, everything else treats a non-`false` return as success. RS-3011 Step 10b: onPaintStroke(lassoPolygons) fires once a Paint lasso release produces a usable stroke (>= PAINT_MIN_LASSO_POINTS) -- lassoPolygons is exactly one closed ring, absolute project-mm, this module's own coordinate space (Paper.js project units already equal this app's millimeters, per this file's own header comment). Target selection, region creation, and every project.layers mutation happen entirely in app.js -- this hook is this module's only involvement in Paint beyond the pointer interaction and live preview.
  */
 export function createDrawingTool(canvasEl, hooks = {}) {
   const {
@@ -285,6 +306,9 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     onShapeResized = () => {},
     onShapeDeleted = () => {},
     onSelectionChanged = () => {},
+    // RS-3011 Step 10b: fires once per finalized Paint lasso -- see this function's own hooks-param
+    // doc comment above for the exact contract.
+    onPaintStroke = () => {},
     // RS-3011 Step 3b: the two hooks the live stone preview needs -- getLayerStoneParams(layerId)
     // returns a 'path' layer's non-geometric stone settings (stoneSizeMm/gapMm/mode/color/mixed-size),
     // or null if no matching layer exists (every non-Design layer type, or Design not active); this
@@ -313,6 +337,15 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   // RS-3010 Step 2c: vertices clicked so far for an in-progress polygon, project-mm paper.Points.
   // Empty whenever interactionKind !== 'polygon'.
   let polygonPoints = [];
+  // RS-3011 Step 10b: Paint's own state -- mirrors polygonPoints' own shape (accumulated project-mm
+  // paper.Points), but for a single click-drag-release gesture rather than polygon's multi-click
+  // one: paintLassoPoints only ever holds the CURRENT stroke's points, reset to empty at every
+  // mousedown and again once onMouseUp hands the finished stroke off to onPaintStroke().
+  // paintLassoItem is the live dashed preview, built directly (never routed through
+  // board.beginPath()/clearPath()/finalizeShape() -- same "never becomes a committable shape" rule
+  // marqueeItem's own doc comment establishes), null whenever interactionKind !== 'paint'.
+  let paintLassoPoints = [];
+  let paintLassoItem = null;
   // RS-3011 Step 9: Pen's own state. Unlike polygonPoints above, Pen's anchors are NOT duplicated
   // into a parallel array -- board.path IS the real in-progress shape from the very first click
   // onward (Paper.js Segments already carry point/handleIn/handleOut natively), so these only track
@@ -768,6 +801,14 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       marqueeItem.remove();
       marqueeItem = null;
     }
+    // RS-3011 Step 10b: mirrors marqueeItem's own reset just above -- a Paint lasso interrupted
+    // mid-drag (Escape/mode-switch/exit) must not leave a stale dashed preview or stale points
+    // behind for the next stroke.
+    if (paintLassoItem) {
+      paintLassoItem.remove();
+      paintLassoItem = null;
+    }
+    paintLassoPoints = [];
     for (const item of resizeHandleItems) item.remove();
     resizeHandleItems = [];
     // RS-3011 resize-perf fix: a resize can be interrupted here (Escape/mode-switch/exit) before
@@ -1061,7 +1102,10 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       // practice hitTestResizeHandle() already returns null outside mode === 'select' (and
       // updateResizeHandles() never populates handles outside 'select' either, so this is a no-op
       // there already) -- the real gap this closes is hitTestShapeId's move branch below.
-      if (mode !== 'pen') {
+      // RS-3011 Step 10b: Paint joins Pen in this exception for the identical reason -- a lasso
+      // stroke deliberately starts ON TOP of its intended target shape (that's the whole point of
+      // painting a sub-region into it), so it must never be hijacked into a move/resize instead.
+      if (mode !== 'pen' && mode !== 'paint') {
         // Design Step D: a resize handle can sit right at a shape's edge, where both it and the
         // shape's own hit-test could otherwise match -- the handle must win, so this is checked
         // first (mirrors app.js's own hitTest(), which checks handlesFor() before the move branch).
@@ -1159,6 +1203,23 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         // Paper.js needs 2+ points to show any stroke, so without this the starting point is
         // otherwise invisible until a second anchor is placed.
         rebuildPenHandleChromeItem();
+        return;
+      }
+      if (mode === 'paint') {
+        // RS-3011 Step 10b: the first point of a brand-new lasso stroke -- a single click-drag-
+        // release gesture, not a multi-click one like polygon/pen above, so there's no "resume an
+        // in-progress paintLassoPoints" branch at the top of this handler the way interactionKind
+        // === 'polygon'/'pen' have; paintLassoPoints only ever accumulates within one
+        // mousedown-to-mouseup cycle. Not routed through board.beginPath() -- see paintLassoItem's
+        // own doc comment for why (mirrors marqueeItem, never a committable shape).
+        interactionKind = 'paint';
+        paintLassoPoints = [event.point];
+        paintLassoItem = new paper.Path({
+          strokeColor: STROKE_COLOR,
+          strokeWidth: STROKE_WIDTH_PX / paper.view.zoom,
+          dashArray: [PAINT_LASSO_DASH_PX / paper.view.zoom, PAINT_LASSO_DASH_PX / paper.view.zoom]
+        });
+        paintLassoItem.add(event.point);
         return;
       }
       interactionKind = 'draw';
@@ -1331,6 +1392,21 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         marqueeItem.strokeWidth = MARQUEE_STROKE_WIDTH_PX / paper.view.zoom;
         return;
       }
+      if (interactionKind === 'paint') {
+        // RS-3011 Step 10b: only samples a new point once the pointer has moved past
+        // PAINT_MIN_SAMPLE_DISTANCE_PX since the last one, avoiding a point per pointermove event
+        // (see that constant's own doc comment). Rebuilds paintLassoItem's segments from the full
+        // accumulated point list every time a point is actually added -- adapted from
+        // marqueeItem's own discard-and-recreate-per-frame convention just above, but on the
+        // accumulated polyline rather than a fresh 2-point rectangle each frame.
+        const lastPoint = paintLassoPoints[paintLassoPoints.length - 1];
+        if (event.point.getDistance(lastPoint) >= PAINT_MIN_SAMPLE_DISTANCE_PX / paper.view.zoom) {
+          paintLassoPoints.push(event.point);
+          paintLassoItem.removeSegments();
+          paintLassoItem.addSegments(paintLassoPoints.map((p) => new paper.Segment(p)));
+        }
+        return;
+      }
       if (interactionKind !== 'draw') return;
       if (mode === 'freehand') {
         if (!dragging || !board.path) return;
@@ -1492,6 +1568,36 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         interactionKind = null;
         return;
       }
+      if (interactionKind === 'paint') {
+        if (paintLassoItem) {
+          paintLassoItem.remove();
+          paintLassoItem = null;
+        }
+        // A lasso below PAINT_MIN_LASSO_POINTS never produced a usable stroke (mirrors freehand's
+        // own < 2 segment discard just below) -- discarded with no hook call and no history entry,
+        // matching this file's existing "no usable stroke" precedent (see PAINT_MIN_LASSO_POINTS'
+        // own doc comment / src/drawing/DrawingCanvasTool.js:67's original citation of the same
+        // rule). `mode` is deliberately left as 'paint' here, same as freehand's own discard leaves
+        // `mode` at 'freehand' -- a degenerate gesture never counts as "a shape finalized."
+        if (paintLassoPoints.length < PAINT_MIN_LASSO_POINTS) {
+          paintLassoPoints = [];
+          interactionKind = null;
+          return;
+        }
+        const lassoPolygons = [paintLassoPoints.map((p) => ({ xMm: p.x, yMm: p.y }))];
+        paintLassoPoints = [];
+        // RS-3011 issue #4a precedent (commitFinalizedShape()), applied to Paint: a finalized lasso
+        // is no longer "still drawing" even though Paint never creates a board.shapes item of its
+        // own -- revert to select mode BEFORE calling the hook, so the mode getter already reports
+        // 'select' by the time app.js reacts and syncs the rail buttons' aria-pressed state (same
+        // ordering commitFinalizedShape() uses for every other tool).
+        mode = 'select';
+        interactionKind = null;
+        updateResizeHandles();
+        updateCursor();
+        onPaintStroke(lassoPolygons);
+        return;
+      }
       if (interactionKind !== 'draw') return;
       dragging = false;
       if (mode === 'freehand') {
@@ -1613,7 +1719,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      *   mode was entered -- fixes the base fit scale for this drawing session (matches every other
      *   viewport transform in this app in treating project.canvas as the mm reference frame).
      * @param {number} paddingPx same padding convention drawLayout() already uses (38*dpr).
-     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'|'pen'} [initialMode]
+     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'|'pen'|'paint'} [initialMode]
      */
     enter(projectCanvasMm, paddingPx, initialMode = 'select') {
       canvasMm = projectCanvasMm;
@@ -1659,7 +1765,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      * Switch input mode without leaving drawing mode -- already-finalized shapes in board.shapes
      * are untouched; only a drag-in-flight (if any) is discarded, since the box preview belongs
      * to whichever mode was active when the drag started.
-     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'|'pen'} newMode
+     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'|'pen'|'paint'} newMode
      */
     setMode(newMode) {
       mode = newMode;

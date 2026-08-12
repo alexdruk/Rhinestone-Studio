@@ -691,45 +691,13 @@ export class GeometryEngine {
    * @returns {{polygons: import('../text/VectorPath.js').Point2D[][], boundingBox: BoundingBox|null}}
    */
   _placeNaturalContours(contours, xMm, yMm, widthMm, heightMm) {
-    const transform = this._computeNaturalContourTransform(contours, xMm, yMm, widthMm, heightMm);
+    const transform = computeNaturalContourTransform(contours, xMm, yMm, widthMm, heightMm);
     if (!transform) {
       return { polygons: [], boundingBox: null };
     }
 
-    const polygons = contours.map((contour) => this._applyNaturalContourTransform(contour, transform));
+    const polygons = contours.map((contour) => applyNaturalContourTransform(contour, transform));
     return { polygons, boundingBox: BoundingBox.fromPoints(polygons.flat()) };
-  }
-
-  /**
-   * The scale-then-translate transform _placeNaturalContours() derives from a shape's own natural
-   * contours -- split out so RS-3011 Step 10a (Paint regions) can apply the exact same transform
-   * (not an independently-recomputed one) to a region's own natural-space contour. A region's
-   * bounding box is almost always smaller than the parent shape's own natural box (that's the point
-   * of a sub-region), so recomputing scaleX/scaleY from the region's own points instead of reusing
-   * this one would silently distort it relative to the shape it's supposed to track.
-   *
-   * @returns {{xMm:number,yMm:number,scaleX:number,scaleY:number}|null} null when `contours` has no points.
-   */
-  _computeNaturalContourTransform(contours, xMm, yMm, widthMm, heightMm) {
-    const naturalPoints = contours.flat();
-    const naturalBox = BoundingBox.fromPoints(naturalPoints.map((p) => new Point2D(p.xMm, p.yMm)));
-    if (!naturalBox) {
-      return null;
-    }
-
-    const targetWidthMm = widthMm ?? naturalBox.widthMm;
-    const targetHeightMm = heightMm ?? naturalBox.heightMm;
-    const scaleX = naturalBox.widthMm > 0 ? targetWidthMm / naturalBox.widthMm : 1;
-    const scaleY = naturalBox.heightMm > 0 ? targetHeightMm / naturalBox.heightMm : 1;
-
-    return { xMm, yMm, scaleX, scaleY };
-  }
-
-  _applyNaturalContourTransform(contour, transform) {
-    return contour.map((p) => new Point2D(
-      transform.xMm + p.xMm * transform.scaleX,
-      transform.yMm + p.yMm * transform.scaleY
-    ));
   }
 
   /**
@@ -1012,8 +980,8 @@ export class GeometryEngine {
     if (options.regions.length > 0) {
       // Reuses the SAME transform options.contours was placed through above (not a fresh one
       // derived from each region's own, usually-smaller, bounding box) -- see
-      // _computeNaturalContourTransform()'s own doc comment for why that distinction matters.
-      const transform = this._computeNaturalContourTransform(options.contours, options.xMm, options.yMm, options.widthMm, options.heightMm);
+      // computeNaturalContourTransform()'s own doc comment for why that distinction matters.
+      const transform = computeNaturalContourTransform(options.contours, options.xMm, options.yMm, options.widthMm, options.heightMm);
       stones = this._applyPathRegions(stones, options, transform);
     }
 
@@ -1038,7 +1006,7 @@ export class GeometryEngine {
    * @param {Stone[]} baseStones
    * @param {ReturnType<typeof normalizePathParams>} options
    * @param {{xMm:number,yMm:number,scaleX:number,scaleY:number}|null} transform The SAME transform
-   *   the layer's own `contours` were placed through (see _computeNaturalContourTransform()) --
+   *   the layer's own `contours` were placed through (see computeNaturalContourTransform()) --
    *   never an independently-derived one, or a region smaller than the shape's own natural box
    *   would be scaled wrong relative to it.
    * @returns {Stone[]}
@@ -1052,7 +1020,7 @@ export class GeometryEngine {
     const regionStoneGroups = [];
 
     for (const region of options.regions) {
-      const regionPolygons = [this._applyNaturalContourTransform(region.contour, transform)];
+      const regionPolygons = [applyNaturalContourTransform(region.contour, transform)];
       const regionBoundingBox = BoundingBox.fromPoints(regionPolygons.flat());
 
       if (!regionBoundingBox) {
@@ -1128,6 +1096,41 @@ export class GeometryEngine {
     // kind share one placement implementation instead of two copies of the same math.
     return this._placeNaturalContours(options.contours, options.xMm, options.yMm, options.widthMm, options.heightMm);
   }
+}
+
+/**
+ * The scale-then-translate transform GeometryEngine._placeNaturalContours() derives from a shape's
+ * own natural contours. A module-level export (not a private class method) since RS-3011 Step 10b
+ * (Paint target selection) needs to invert this exact transform to convert an absolute-mm lasso
+ * intersection back into a 'path' layer's own natural-space contour convention, from outside
+ * GeometryEngine's own generation pipeline -- see PaintRegionSelection.js's
+ * absolutePolygonsToNaturalSpace(). A region's bounding box is almost always smaller than the parent
+ * shape's own natural box (that's the point of a sub-region), so recomputing scaleX/scaleY from the
+ * region's own points instead of reusing this one would silently distort it relative to the shape it
+ * is supposed to track -- the same reasoning applies to Step 10b's inverse use.
+ *
+ * @returns {{xMm:number,yMm:number,scaleX:number,scaleY:number}|null} null when `contours` has no points.
+ */
+export function computeNaturalContourTransform(contours, xMm, yMm, widthMm, heightMm) {
+  const naturalPoints = contours.flat();
+  const naturalBox = BoundingBox.fromPoints(naturalPoints.map((p) => new Point2D(p.xMm, p.yMm)));
+  if (!naturalBox) {
+    return null;
+  }
+
+  const targetWidthMm = widthMm ?? naturalBox.widthMm;
+  const targetHeightMm = heightMm ?? naturalBox.heightMm;
+  const scaleX = naturalBox.widthMm > 0 ? targetWidthMm / naturalBox.widthMm : 1;
+  const scaleY = naturalBox.heightMm > 0 ? targetHeightMm / naturalBox.heightMm : 1;
+
+  return { xMm, yMm, scaleX, scaleY };
+}
+
+export function applyNaturalContourTransform(contour, transform) {
+  return contour.map((p) => new Point2D(
+    transform.xMm + p.xMm * transform.scaleX,
+    transform.yMm + p.yMm * transform.scaleY
+  ));
 }
 
 function normalizeTextParams(params) {

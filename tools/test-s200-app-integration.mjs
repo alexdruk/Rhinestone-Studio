@@ -197,8 +197,13 @@ await test('13. generateSvgStonesLive()/generatePathStonesLive() params objects 
   // trailing `,...mixedSizeParamsFor(layer)}` placement did (see the "Results" section of the spec).
   // RS-3011 (2026-08): tolerates the closed:layer.closed!==false field the open-contour fix added
   // between color and the mixedSizeParamsFor spread.
+  // RS-3011 Step 10b (2026-08): tolerates the regions:layer.regions||[] field (plus its own
+  // multi-line doc comment) the Paint regions-forwarding fix added between closed and
+  // mixedSizeParamsFor -- see tools/test-fill-algorithms-integration.mjs's own assertion 9 (the
+  // source of this regex) for why [^;]*? connectors are used instead of a fixed `,fieldName`
+  // literal here.
   assert.match(appJs, /mode:resolveVectorFillMode\(layer\.mode\),color:layer\.color(?:,\.\.\.mixedSizeParamsFor\(layer\))?\};const result=this\.permanentEngine\.generateSvgLayout/);
-  assert.match(appJs, /gapMm:layer\.gap,mode:resolveVectorFillMode\(layer\.fillMode\),color:layer\.color(?:,closed:layer\.closed!==false)?(?:,\.\.\.mixedSizeParamsFor\(layer\))?\};const result=this\.permanentEngine\.generatePathLayout/);
+  assert.match(appJs, /gapMm:layer\.gap,mode:resolveVectorFillMode\(layer\.fillMode\),color:layer\.color(?:,closed:layer\.closed!==false)?(?:[^;]*?regions:layer\.regions\|\|\[\],)?(?:[^;]*?\.\.\.mixedSizeParamsFor\(layer\))?\};const result=this\.permanentEngine\.generatePathLayout/);
 });
 
 console.log('S-200 app integration tests complete.');
