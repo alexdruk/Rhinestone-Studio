@@ -241,3 +241,8 @@ tools/scratch/rs-3011-step5-verify/
 # scratch folders above
 tools/scratch/rs-3011-step6-verify/
 
+# RS-3011 Step 7: ad hoc live-browser Playwright verification script for button-gated stone
+# generation on Design-drawn shapes, plus its captured screenshots -- same "never a repo artifact"
+# category as the scratch folders above
+tools/scratch/rs-3011-step7-verify/
+

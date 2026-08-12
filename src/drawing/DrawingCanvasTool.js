@@ -882,6 +882,11 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       color,
       pathName
     });
+    // RS-3011 Step 7: a freshly drawn shape shows its outline immediately (finalize above already
+    // did that) but defers stone generation until the operator presses "Generate Stones" -- every
+    // read site of this field treats it as missing/true for backward compatibility (Boolean Ops
+    // results, pre-Step-7 projects, anything not created via Design's draw tools).
+    layer.stonesGenerated = false;
     item.data.layerId = layer.id;
     // RS-3011 issue #4a fix: a finalized shape stops being "still drawing" -- revert to select
     // mode and select the shape just drawn, the same selectedIds/applySelectionVisuals/
