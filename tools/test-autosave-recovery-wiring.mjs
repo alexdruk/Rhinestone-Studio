@@ -197,7 +197,7 @@ function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', 
     syncFromProjectLayers: (pathLayers) => { syncFromProjectLayersArg = pathLayers; calls.push('drawingTool.syncFromProjectLayers'); }
   };
 
-  const updateAllSrc = extractFunctionBody(appJs, 'async function updateAll(skipWrite=false){', 'updateAll()');
+  const updateAllSrc = extractFunctionBody(appJs, 'async function updateAll(skipWrite=false,forceStoneRebuild=false){', 'updateAll()');
   const factory = new Function(
     'writeSelectedControlsToLayer', 'engine', 'project', 'el', 'permanentEngineError', 'console',
     'renderLayerUI', 'drawLayout', 'drawCup', 'updateStats', 'updateHistoryUI', 'updateEditingUI',

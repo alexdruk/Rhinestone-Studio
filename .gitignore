@@ -226,3 +226,8 @@ tools/scratch/rs-3011-fix-design-nav-toggle/
 # "never a repo artifact" category as the scratch folders above
 tools/scratch/rs-3011-step10b-paint-phaseb/
 
+# RS-3011 Step 10b bug investigation: ad hoc live-browser Playwright diagnostic script for the
+# reported undo/status/multi-region bugs, same "never a repo artifact" category as the scratch
+# folders above
+tools/scratch/rs-3011-step10b-bug-investigation/
+

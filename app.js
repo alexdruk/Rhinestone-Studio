@@ -1190,7 +1190,7 @@ function currentSnapshot(){return{project:JSON.parse(JSON.stringify(project)),se
 function commitHistory(){history.commit(currentSnapshot());updateHistoryUI()}
 function openHistorySession(){if(history.sessionOpen)return;history.beginSession(currentSnapshot());updateHistoryUI()}
 function closeHistorySession(){history.endSession()}
-function applyHistorySnapshot(snap){project=snap.project;selectedLayerId=snap.selectedLayerId;syncSelectedControlsFromLayer();updateAll(true)}
+function applyHistorySnapshot(snap){project=snap.project;selectedLayerId=snap.selectedLayerId;syncSelectedControlsFromLayer();updateAll(true,true)}
 function performUndo(){closeHistorySession();const snap=history.undo(currentSnapshot());if(!snap){el('status').textContent='Nothing to undo';updateHistoryUI();return}applyHistorySnapshot(snap);el('status').textContent='Undo'}
 function performRedo(){closeHistorySession();const snap=history.redo(currentSnapshot());if(!snap){el('status').textContent='Nothing to redo';updateHistoryUI();return}applyHistorySnapshot(snap);el('status').textContent='Redo'}
 function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dirtyEl=el('dirtyIndicator');if(undoBtn)undoBtn.disabled=!history.canUndo;if(redoBtn)redoBtn.disabled=!history.canRedo;if(dirtyEl)dirtyEl.textContent=JSON.stringify(project)!==cleanProjectJson?'Unsaved changes':'Saved';
@@ -1391,7 +1391,7 @@ function writeSelectedControlsToLayer(){const l=selectedLayer();
     project.canvas=computeCanvasFromVessel(project.vessel);
   }
   project.name=el('projectName').value||DEFAULT_PROJECT_NAME;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
-async function updateAll(skipWrite=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated;try{generated=await engine.generate(project)}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Text generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;
+async function updateAll(skipWrite=false,forceStoneRebuild=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated;try{generated=await engine.generate(project)}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Text generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;
   // MONO-006A: a prior failed generation (e.g. a stale authoredScale rejected by GeometryEngine)
   // leaves this exact status message behind -- once generation succeeds again, it must not keep
   // reading as broken even though the canvas has already recovered.
@@ -1407,8 +1407,9 @@ async function updateAll(skipWrite=false){if(!skipWrite)writeSelectedControlsToL
   // never did this. Covers undo/redo (applyHistorySnapshot() swaps `project` wholesale) and the
   // Layers-list trash-icon delete (deleteLayer() there is called directly, bypassing
   // drawingTool.deleteSelected()/onShapeDeleted entirely) -- see syncFromProjectLayers()'s own doc
-  // comment for why this is a no-op after an ordinary Design-originated commit/move/resize/delete.
-  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'))}else{drawLayout()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}// S-003: a project must always keep at least one layer (deleteLayer()'s guard below), so once
+  // comment for why this is a no-op after an ordinary Design-originated commit/move/resize/delete,
+  // and for why applyHistorySnapshot()/deleteLayer()'s trash-icon path pass forceStoneRebuild=true.
+  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'),forceStoneRebuild)}else{drawLayout()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}// S-003: a project must always keep at least one layer (deleteLayer()'s guard below), so once
 // only one layer remains, every delete affordance -- the per-row trash icon and the sidebar
 // "Delete selected layer" button -- is disabled here (not just left clickable-but-a-no-op) and
 // #layerRuleHint (sitting directly under the button, always in view) explains why. This runs on
@@ -2158,7 +2159,7 @@ function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)retu
   if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(XYWH_SHAPE_TYPES.has(copy.type)){const dx=8,dy=8;copy.x+=dx;copy.y+=dy;drawingTool.duplicateShapeForLayer(l.id,copy.id,dx,dy)}if(copy.type==='text'){copy.text+=' copy';copy.x=(copy.x||0)+8;copy.y=(copy.y||0)+8}selectedLayerId=copy.id;selectedLayerIds=selectOnly(copy.id);syncSelectedControlsFromLayer();updateAll()}// RS-3011 Step 1 write-through fix: returns true/false so onShapeDeleted() (below) knows whether
 // the guard blocked the delete, without duplicating the project.layers.length<=1 check itself --
 // every pre-existing caller already discards the return value, so this stays backward-compatible.
-function deleteLayer(id){if(project.layers.length<=1){el('status').textContent='Cannot delete the last layer';const hint=el('layerRuleHint');hint.style.display='block';hint.scrollIntoView({block:'nearest'});return false}commitHistory();project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true);return true}
+function deleteLayer(id){if(project.layers.length<=1){el('status').textContent='Cannot delete the last layer';const hint=el('layerRuleHint');hint.style.display='block';hint.scrollIntoView({block:'nearest'});return false}commitHistory();project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true,true);return true}
 function pointerToLayout(e){const r=layoutCanvas.getBoundingClientRect(),dpr=layoutTransform.dpr;return layoutPxToMm((e.clientX-r.left)*dpr,(e.clientY-r.top)*dpr)}
 // TXT-102: checked before the generic per-layer loop below -- the rotate handle only ever exists
 // for the single currently-selected text layer (matching drawRotateHandle()'s own single&&

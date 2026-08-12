@@ -2019,27 +2019,44 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      * 2. A `pathLayers` entry with no matching board.shapes item is materialized fresh via
      *    materializeShapeFromLayer() (undo-of-delete, redo-of-draw) -- the shape needs to reappear
      *    on a canvas that never removed it, or that already discarded it.
-     * 3. A board.shapes item whose matching layer's x/y/w/h no longer matches the item's own
-     *    current bounds is snapped to match, the same `item.bounds =` assignment the live resize
-     *    handler already uses (onMouseDrag's 'resize' branch) -- composing that box-fit transform
-     *    a second time is mathematically exact (both are pure axis-aligned scale+translate), so
-     *    this reproduces the same geometry a fresh materializeShapeFromLayer() call would (undo/
-     *    redo of move/resize).
+     * 3. Every board.shapes item with a matching layer has its Paper.js bounds snapped to the
+     *    layer's x/y/w/h -- the same `item.bounds =` assignment the live resize handler already
+     *    uses (onMouseDrag's 'resize' branch) -- when they've actually drifted. Its stone Group is
+     *    rebuilt whenever that snap happened, OR whenever the caller passes `forceStoneRebuild`
+     *    (see below for why).
      *
-     * Every step also rebuilds/removes the shape's stone Group so the live preview never lags the
+     * Steps 1-2 also rebuild/remove the shape's stone Group so the live preview never lags the
      * outline. Local `selectedIds` drops any id removed in step 1 silently (no
      * notifySelectionChanged() -- this runs synchronously inside app.js's own updateAll(), which
      * onSelectionChanged's own hook calls right back into, so notifying here would re-enter
      * updateAll() from within itself; deleteSelected() already leaves the same call out for the
      * same reason).
      *
-     * A no-op whenever project.layers already matches board.shapes, which is true immediately
-     * after every ordinary Design-originated edit: commit/move/resize/delete all write project.layers
-     * (or remove the board.shapes item) BEFORE the updateAll() call that reaches this method, so
-     * this pass never fights with or duplicates that existing per-gesture write-through.
+     * Step 3's rebuild can't rely on bounds-changed alone (RS-3011 Step 10b bug fix): bounds-changed
+     * only detects geometry (move/resize). A path layer also carries non-geometric fields --
+     * regions, stoneSize, gap, color, fillMode -- that undo, redo, or the trash-icon delete can just
+     * as easily swap in a different value for, with no x/y/w/h change at all. Gating step 3's
+     * rebuild on bounds-changed alone missed exactly that: painting a Paint region (or any other
+     * non-geometric edit), then undoing it, left the pre-undo stones on screen indefinitely, because
+     * nothing ever called rebuildStoneGroupForShape() for that layer again. Enumerating every
+     * non-geometric field individually here would be fragile and incomplete -- this bug is exactly
+     * that failure mode -- so callers that know project.layers may have changed from outside
+     * Design's own drag handlers (applyHistorySnapshot()'s undo/redo, deleteLayer()'s trash-icon
+     * path) pass `forceStoneRebuild=true` to unconditionally rebuild every matched layer's stone
+     * Group, rather than trying to enumerate which non-geometric field changed.
+     * This method runs on every updateAll() call while Design is active (see this method's own call
+     * site in app.js), including every ordinary edit tick (a continuous slider drag, a window
+     * resize) -- those calls leave `forceStoneRebuild` at its default `false`, so step 3's rebuild
+     * stays gated on boundsChanged exactly as it was before this fix, and this method remains a
+     * no-op on an ordinary tick where nothing moved. Measured cost of making the rebuild
+     * unconditional on every tick: ~8ms/tick with 25 path layers during a continuous field-edit
+     * drag, vs ~0.2-0.4ms baseline -- the reason this flag is opt-in rather than the default.
      * @param {object[]} pathLayers
+     * @param {boolean} [forceStoneRebuild=false] Rebuild every matched layer's stone Group even when
+     *   its bounds haven't changed -- for callers where project.layers may have changed a
+     *   non-geometric field from outside Design's own drag handlers (undo/redo, trash-icon delete).
      */
-    syncFromProjectLayers(pathLayers) {
+    syncFromProjectLayers(pathLayers, forceStoneRebuild = false) {
       const layerById = new Map(pathLayers.map((l) => [l.id, l]));
 
       for (const shape of board.listShapes()) {
@@ -2071,19 +2088,20 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         const layer = layerId && layerById.get(layerId);
         if (!layer) continue;
         const b = shape.item.bounds;
-        const changed =
+        const boundsChanged =
           Math.abs(b.left - layer.x) > 1e-6 ||
           Math.abs(b.top - layer.y) > 1e-6 ||
           Math.abs(b.width - layer.w) > 1e-6 ||
           Math.abs(b.height - layer.h) > 1e-6;
-        if (!changed) continue;
-        shape.item.bounds = new paper.Rectangle(
-          layer.x,
-          layer.y,
-          Math.max(RESIZE_MIN_DIM_MM, layer.w),
-          Math.max(RESIZE_MIN_DIM_MM, layer.h)
-        );
-        rebuildStoneGroupForShape(shape.id);
+        if (boundsChanged) {
+          shape.item.bounds = new paper.Rectangle(
+            layer.x,
+            layer.y,
+            Math.max(RESIZE_MIN_DIM_MM, layer.w),
+            Math.max(RESIZE_MIN_DIM_MM, layer.h)
+          );
+        }
+        if (boundsChanged || forceStoneRebuild) rebuildStoneGroupForShape(shape.id);
       }
 
       applySelectionVisuals();
