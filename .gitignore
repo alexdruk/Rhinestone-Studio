@@ -236,3 +236,8 @@ tools/scratch/rs-3011-step10b-bug-investigation/
 # captured screenshots -- same "never a repo artifact" category as the scratch folders above
 tools/scratch/rs-3011-step5-verify/
 
+# RS-3011 Step 6: ad hoc live-browser Playwright verification script for the layer-naming-by-
+# shape-type work, plus its captured screenshot -- same "never a repo artifact" category as the
+# scratch folders above
+tools/scratch/rs-3011-step6-verify/
+

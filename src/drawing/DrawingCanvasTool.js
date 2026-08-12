@@ -83,6 +83,18 @@ const SLOT_DEFAULT_LENGTH_RATIO = 3;
 // hitTestShapeId's own screen-px-to-project-mm tolerance conversion pattern.
 const MIN_POLYGON_POINTS = 3;
 const CLOSE_POLYGON_TOLERANCE_PX = 6;
+// RS-3011 Step 6: draw-tool mode -> layer name, read by commitFinalizedShape() so a drawn layer's
+// name reflects what it actually is instead of the old blanket 'Drawn Shape'. Freehand has no single
+// entry here -- an open stroke ('Line') and a closed blob ('Freehand') are different enough shapes
+// that one name for both would be less useful than this step's own goal, so commitFinalizedShape()
+// resolves freehand separately based on flattened.closed.
+const SHAPE_MODE_LAYER_NAMES = {
+  rect: 'Rect',
+  ellipse: 'Ellipse',
+  slot: 'Slot',
+  polygon: 'Polygon',
+  pen: 'Pen'
+};
 // RS-3011 Step 10b: Paint's own lasso constants. PAINT_MIN_LASSO_POINTS mirrors
 // MIN_POLYGON_POINTS' own "need at least a triangle" reasoning -- a 2-point lasso has no interior
 // to intersect against a candidate shape. PAINT_MIN_SAMPLE_DISTANCE_PX is onMouseDrag's
@@ -860,11 +872,15 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     const flattened = flattenPathToContour(item, FLATTEN_TOLERANCE_MM);
     if (!flattened) return;
     const { stoneSize, gap, color } = getStoneDefaults();
+    // RS-3011 Step 6: `mode` still holds the draw tool that created this shape here -- it's only
+    // reset to 'select' a few lines below, so the name must be resolved before that reassignment.
+    const pathName =
+      mode === 'freehand' ? (flattened.closed === false ? 'Line' : 'Freehand') : SHAPE_MODE_LAYER_NAMES[mode] || 'Drawn Shape';
     const layer = createPathLayerFromContour(flattened, {
       stoneSize,
       gap,
       color,
-      pathName: 'Drawn Shape'
+      pathName
     });
     item.data.layerId = layer.id;
     // RS-3011 issue #4a fix: a finalized shape stops being "still drawing" -- revert to select
