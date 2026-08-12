@@ -1221,6 +1221,10 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
        existing "disable the control + explain why right below it" convention. -->
   <p class="hint" id="gapFixedHint" style="display:none">Character spacing is built into this font.</p>
   <div class="field"><label for="stoneColor">Stone color</label><div class="color-pick-row"><select id="stoneColor"></select><span id="stoneColorSwatch" class="color-swatch" title="Selected color preview"></span></div></div>
+  <!-- RS-3011 Step 7: shown only for a Design-drawn 'path' layer whose stones are still deferred
+       (stonesGenerated===false, set at draw time by commitFinalizedShape()) -- toggled in
+       syncSelectedControlsFromLayer(), same style as #gapFixedHint's own per-layer-type gate above. -->
+  <div class="field" id="generateStonesField" style="display:none"><button class="btn primary block" id="generateStonesBtn" title="Generate this shape's stones using the current Stone size/Gap/Color">Generate Stones</button></div>
 </div>
 <!-- S-200 (Mixed Stone-Size Layouts): shared, relocated field group (same relocateFieldGroups()
      mechanism as sharedPositionFields/sharedStoneFields above) -- Mixed mode applies uniformly to

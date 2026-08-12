@@ -719,7 +719,10 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // RS-1012: 'path' layers (Boolean Operation results) go through the permanent engine's
  // generatePathLayout(), mirroring generateSvgStonesLive()/generateShapeStonesLive() above --
  // layer.contours is already plain (0,0)-rooted polygon data (no parsing step, unlike SVG).
- async generatePathStonesLive(layer){if(!this.permanentEngine)return[];const params={contours:layer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.fillMode),color:layer.color,closed:layer.closed!==false,
+ // RS-3011 Step 7: stonesGenerated===false gates a Design-drawn shape's entire stone output (base
+ // fill AND Paint regions alike) until "Generate Stones" is pressed -- missing on every layer
+ // predating this step (Boolean Ops results, etc.), so those keep generating live as before.
+ async generatePathStonesLive(layer){if(layer.stonesGenerated===false)return[];if(!this.permanentEngine)return[];const params={contours:layer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.fillMode),color:layer.color,closed:layer.closed!==false,
     // RS-3011 Step 10b: forwards a 'path' layer's Paint regions (Step 10a's own data model) into
     // live/production generation -- Step 10a wired GeometryEngine's own support for `regions` and
     // validateProject()'s pass-through, but never actually forwarded the field from a real layer
@@ -1048,6 +1051,10 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   getLayerStoneParams:(layerId)=>{
     const l=project.layers.find(x=>x.id===layerId);
     if(!l||l.type!=='path')return null;
+    // RS-3011 Step 7: same stonesGenerated===false gate as generatePathStonesLive() above -- null
+    // is already this hook's "no stones" return (see rebuildStoneGroupForShape()'s own null-check),
+    // so Design's live preview drops the shape's stone Group entirely until the button is pressed.
+    if(l.stonesGenerated===false)return null;
     // RS-3011 Step 10b: regions (Paint) joins the rest of a path layer's "style" params here so the
     // live Design-canvas stone preview reflects a painted region immediately, the same wiring-gap
     // fix as generatePathStonesLive()'s own new `regions` line above.
@@ -1901,6 +1908,10 @@ function updateTextFontCapabilityUI(){
   // control untouched with zero architectural changes.
   el('gap').disabled=authored;
   el('gapFixedHint').style.display=authored?'block':'none';
+  // RS-3011 Step 7: "Generate Stones" only for a Design-drawn 'path' layer whose stones are still
+  // deferred -- hidden for every other layer type/state (including a path layer that already has
+  // stones), matching #gapFixedHint's own per-layer-type/state visibility toggle just above.
+  el('generateStonesField').style.display=(l.type==='path'&&l.stonesGenerated===false)?'block':'none';
 }
 // RS-2012: mirrors MixedSizeGenerator.js's normalizeMixedSizeParams() eligibility rule exactly
 // (value < stoneSizeMm && value >= minSizeMm && value <= maxSizeMm), computed live from the
@@ -2523,6 +2534,19 @@ el('heightModeToggleBtn').addEventListener('click',()=>{
   commitHistory();
   l.heightMode=l.heightMode==='capHeight'?'raw':'capHeight';
   updateAll(true);
+});
+// RS-3011 Step 7: one-time gate release -- once pressed, stonesGenerated flips to true and this
+// layer regenerates live on every subsequent edit forever after, exactly like any other path layer
+// (no code re-suppresses it). Mirrors onPaintStroke()'s own commitHistory()/mutate/
+// refreshStoneGroupForLayer/updateAll(true) sequence so Design's live preview and the main layout/
+// stats both pick up the newly generated stones in the same call.
+el('generateStonesBtn').addEventListener('click',async()=>{
+  const l=selectedLayer();
+  if(!l||l.type!=='path'||l.stonesGenerated!==false)return;
+  commitHistory();
+  l.stonesGenerated=true;
+  drawingTool.refreshStoneGroupForLayer(l.id);
+  await updateAll(true);
 });
 // Auto Fit now defaults to Off for new layers (Text height reflects the actual rendered size), so
 // switching it back On is a deliberate, easy-to-miss trade-off -- Auto Fit can shrink text below the
