@@ -221,3 +221,8 @@ tools/rs-3011-step4-flash-check-screenshots/
 # plus its captured screenshots -- same "never a repo artifact" category as the scripts above
 tools/scratch/rs-3011-fix-design-nav-toggle/
 
+# RS-3011 Step 10b Phase B: ad hoc live-browser Playwright verification script for the Paint tool's
+# lasso interaction/target-selection/region-creation flow, plus its captured screenshots -- same
+# "never a repo artifact" category as the scratch folders above
+tools/scratch/rs-3011-step10b-paint-phaseb/
+

@@ -81,3 +81,8 @@ export {
   computeFrameInterior,
   computeFrameFitRect
 } from './FrameLibrary.js';
+
+export {
+  selectPaintTarget,
+  absolutePolygonsToNaturalSpace
+} from './PaintRegionSelection.js';
