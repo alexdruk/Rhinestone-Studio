@@ -501,6 +501,10 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
                on top of whatever the target shape already generates -- same rail-button/aria-pressed
                convention as every other persistent tool above. -->
           <button class="icon-btn" id="railStampToggle" title="Stamp -- click to place a single stone at true size on top of a shape (M)" aria-pressed="false">📍 Stamp</button>
+          <!-- RS-3011 Step 11: drag to draw a path, release to space stones evenly along it (Shift
+               held at release closes the path into a loop) -- same rail-button/aria-pressed
+               convention as Stamp/every other persistent tool above. -->
+          <button class="icon-btn" id="railTraceToggle" title="Trace -- drag to draw a path, stones are spaced evenly along it (hold Shift at release to close the loop) (T)" aria-pressed="false">〰️ Trace</button>
           <!-- RS-3011 Step 8 Phase B: a one-shot action, not a persistent tool -- deliberately no
                aria-pressed (never synced by updateDrawToolButtons()), unlike every button above it.
                Picking a file immediately produces a real, selected, fitted-and-centered shape (see

@@ -60,6 +60,7 @@ import {
   snapAngle
 } from './DrawingBoxGeometry.js';
 import { selectOnly, toggleSelection, clearSelection, selectMany } from '../editing/Selection.js';
+import { placeStonesAlongPath } from '../geometry/lineStampSpacing.js';
 
 const STROKE_COLOR = '#1a56d6';
 const SELECTED_STROKE_COLOR = '#5b9dff';
@@ -116,6 +117,18 @@ const SHAPE_MODE_LAYER_NAMES = {
 const PAINT_MIN_LASSO_POINTS = 3;
 const PAINT_MIN_SAMPLE_DISTANCE_PX = 3;
 const PAINT_LASSO_DASH_PX = 5;
+// RS-3011 Step 11: Trace's own point-sampling throttle, the same "only push a new point once the
+// pointer has moved far enough" idea as PAINT_MIN_SAMPLE_DISTANCE_PX above, but taken directly from
+// drawleather's LineStampTool.ts as a plain project-mm distance, NOT converted to a screen-px value
+// the way PAINT_MIN_SAMPLE_DISTANCE_PX deliberately was (see that constant's own doc comment) -- the
+// Step 11 prompt cites this threshold as LineStampTool.ts's own value verbatim, not as a value that
+// needed the same px-to-mm adaptation Paint's own FillTool.ts precedent did.
+const TRACE_MIN_SAMPLE_DISTANCE_MM = 1.0;
+// RS-3011 Step 11: click-to-place tools that stay active after each placement (no revert-to-Select
+// on commit, unlike every other draw preset) -- Escape's own idle-revert-to-Select (cancelPath()
+// below) keys off this shared set instead of forking per-tool logic, so Eraser (Step 13) can join
+// it later with a one-line change here.
+const CLICK_TO_PLACE_MODES = new Set(['stamp', 'trace']);
 // RS-3011 Step 9: Pen's own constants -- same values as Polygon's above for the same underlying
 // reasons (need at least a triangle to close; hit tolerance mirrors hitTestShapeId's screen-px-to-
 // project-mm pattern), kept as independent named constants since Pen and Polygon are separate
@@ -340,7 +353,7 @@ function materializeShapeFromLayer(layer) {
  * (shouldn't happen post-Step-1, but mirrors this file's existing null-layerId guards) is skipped,
  * never passed through as undefined.
  * @param {HTMLCanvasElement} canvasEl
- * @param {{getStoneDefaults?:()=>{stoneSize?:number,gap?:number,color?:string}, onShapeCommitted?:(layer:object)=>void, openHistorySession?:()=>void, closeHistorySession?:()=>void, onShapeMoved?:(layerId:string,dxMm:number,dyMm:number)=>void, onShapeResized?:(layerId:string,boundsMm:{left:number,top:number,width:number,height:number})=>void, onShapeDeleted?:(layerId:string)=>(boolean|void), onSelectionChanged?:(layerIds:string[])=>void, onPaintStroke?:(lassoPolygons:{xMm:number,yMm:number}[][])=>void, onStampPlace?:(placement:{xMm:number,yMm:number,layerId:string|null})=>void}} [hooks] onShapeDeleted returning exactly `false` means the deletion was blocked (e.g. a last-layer guard) -- the shape stays in `board.shapes` too, everything else treats a non-`false` return as success. RS-3011 Step 10b: onPaintStroke(lassoPolygons) fires once a Paint lasso release produces a usable stroke (>= PAINT_MIN_LASSO_POINTS) -- lassoPolygons is exactly one closed ring, absolute project-mm, this module's own coordinate space (Paper.js project units already equal this app's millimeters, per this file's own header comment). Target selection, region creation, and every project.layers mutation happen entirely in app.js -- this hook is this module's only involvement in Paint beyond the pointer interaction and live preview. RS-3011 Step 12: onStampPlace(placement) fires once per Stamp click -- xMm/yMm is the click point, absolute project-mm, this module's own coordinate space; layerId is the project.layers id resolved via resolveStampTargetLayerId() (the SAME hitTestShapeId() Select's own click-to-pick-a-shape branch uses), or null if the click hit no shape. Passing the already-resolved layerId (rather than a bare point, unlike onPaintStroke) avoids a second, duplicate hit-test implementation living in app.js -- app.js still owns the absolute-to-natural-space coordinate conversion and every project.layers mutation, discarding silently when layerId is null, mirroring Paint's own "no target -> discard" precedent.
+ * @param {{getStoneDefaults?:()=>{stoneSize?:number,gap?:number,color?:string}, onShapeCommitted?:(layer:object)=>void, openHistorySession?:()=>void, closeHistorySession?:()=>void, onShapeMoved?:(layerId:string,dxMm:number,dyMm:number)=>void, onShapeResized?:(layerId:string,boundsMm:{left:number,top:number,width:number,height:number})=>void, onShapeDeleted?:(layerId:string)=>(boolean|void), onSelectionChanged?:(layerIds:string[])=>void, onPaintStroke?:(lassoPolygons:{xMm:number,yMm:number}[][])=>void, onStampPlace?:(placement:{xMm:number,yMm:number,layerId:string|null})=>void, onTracePlace?:(placements:{xMm:number,yMm:number}[],layerId:string)=>void}} [hooks] onShapeDeleted returning exactly `false` means the deletion was blocked (e.g. a last-layer guard) -- the shape stays in `board.shapes` too, everything else treats a non-`false` return as success. RS-3011 Step 10b: onPaintStroke(lassoPolygons) fires once a Paint lasso release produces a usable stroke (>= PAINT_MIN_LASSO_POINTS) -- lassoPolygons is exactly one closed ring, absolute project-mm, this module's own coordinate space (Paper.js project units already equal this app's millimeters, per this file's own header comment). Target selection, region creation, and every project.layers mutation happen entirely in app.js -- this hook is this module's only involvement in Paint beyond the pointer interaction and live preview. RS-3011 Step 12: onStampPlace(placement) fires once per Stamp click -- xMm/yMm is the click point, absolute project-mm, this module's own coordinate space; layerId is the project.layers id resolved via resolveStampTargetLayerId() (the SAME hitTestShapeId() Select's own click-to-pick-a-shape branch uses), or null if the click hit no shape. Passing the already-resolved layerId (rather than a bare point, unlike onPaintStroke) avoids a second, duplicate hit-test implementation living in app.js -- app.js still owns the absolute-to-natural-space coordinate conversion and every project.layers mutation, discarding silently when layerId is null, mirroring Paint's own "no target -> discard" precedent. RS-3011 Step 11: onTracePlace(placements, layerId) fires once per committed Trace drag that resolved a real target AND produced at least one spaced point -- placements is the full list of stones to place, absolute project-mm, this module's own coordinate space, already spaced by src/geometry/lineStampSpacing.js's placeStonesAlongPath(); layerId is always a real project.layers id here (never null -- a null/no-target resolution discards the whole drag silently before this hook is ever called, unlike onStampPlace's own "always call, layerId may be null" contract, since there is no per-point ghost-preview equivalent for Trace that would need the null case). app.js still owns the absolute-to-natural-space conversion and every project.layers mutation, mirroring onStampPlace's own architecture split, just plural.
  */
 export function createDrawingTool(canvasEl, hooks = {}) {
   const {
@@ -358,6 +371,9 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     // RS-3011 Step 12: fires once per Stamp click -- see this function's own hooks-param doc comment
     // above for the exact contract.
     onStampPlace = () => {},
+    // RS-3011 Step 11: fires once per committed Trace drag with a resolved target -- see this
+    // function's own hooks-param doc comment above for the exact contract.
+    onTracePlace = () => {},
     // RS-3011 Step 3b: the two hooks the live stone preview needs -- getLayerStoneParams(layerId)
     // returns a 'path' layer's non-geometric stone settings (stoneSizeMm/gapMm/mode/color/mixed-size),
     // or null if no matching layer exists (every non-Design layer type, or Design not active); this
@@ -395,6 +411,12 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   // marqueeItem's own doc comment establishes), null whenever interactionKind !== 'paint'.
   let paintLassoPoints = [];
   let paintLassoItem = null;
+  // RS-3011 Step 11: Trace's own state -- same shape/lifecycle as paintLassoPoints/paintLassoItem
+  // just above (a single click-drag-release gesture, reset at mousedown and again once onMouseUp
+  // hands the finished path off to onTracePlace()), and the same dashed-preview styling (see
+  // onMouseDown's 'trace' branch, which reuses PAINT_LASSO_DASH_PX rather than a second constant).
+  let tracePoints = [];
+  let traceItem = null;
   // RS-3011 Step 9: Pen's own state. Unlike polygonPoints above, Pen's anchors are NOT duplicated
   // into a parallel array -- board.path IS the real in-progress shape from the very first click
   // onward (Paper.js Segments already carry point/handleIn/handleOut natively), so these only track
@@ -634,6 +656,24 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     const hitId = hitTestShapeId(point);
     const shape = hitId && board.getShape(hitId);
     return (shape && shape.item.data.layerId) || null;
+  }
+
+  /**
+   * RS-3011 Step 11: the project.layers id of whichever finalized shape a just-drawn Trace path's
+   * own bounding-box CENTER hit-tests against, or null -- resolved at release (not drag-start),
+   * mirroring drawleather's own LineStampTool.ts approach (build a temp path from the buffered
+   * points, hit-test its bounds.center, discard the temp path). Reuses resolveStampTargetLayerId()
+   * above (itself built on hitTestShapeId(), the same Paper.js item hit-test Select's own click-
+   * to-pick-a-shape branch uses) rather than a second hit-test implementation, same precedent Step
+   * 12's own resolveStampTargetLayerId() established.
+   * @param {paper.Point[]} points buffered project-mm points from the current Trace drag.
+   * @returns {string|null}
+   */
+  function resolveTraceTargetLayerId(points) {
+    const tempPath = new paper.Path({ segments: points });
+    const layerId = resolveStampTargetLayerId(tempPath.bounds.center);
+    tempPath.remove();
+    return layerId;
   }
 
   /**
@@ -926,6 +966,14 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       paintLassoItem = null;
     }
     paintLassoPoints = [];
+    // RS-3011 Step 11: mirrors paintLassoItem/paintLassoPoints' own reset just above -- a Trace drag
+    // interrupted mid-drag (Escape/mode-switch/exit) must not leave a stale dashed preview or stale
+    // points behind for the next line.
+    if (traceItem) {
+      traceItem.remove();
+      traceItem = null;
+    }
+    tracePoints = [];
     for (const item of resizeHandleItems) item.remove();
     resizeHandleItems = [];
     // RS-3011 resize-perf fix: a resize can be interrupted here (Escape/mode-switch/exit) before
@@ -1271,7 +1319,9 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       // RS-3011 Step 10b: Paint joins Pen in this exception for the identical reason -- a lasso
       // stroke deliberately starts ON TOP of its intended target shape (that's the whole point of
       // painting a sub-region into it), so it must never be hijacked into a move/resize instead.
-      if (mode !== 'pen' && mode !== 'paint') {
+      // RS-3011 Step 11: Trace joins them for the same reason -- a traced line deliberately starts
+      // ON TOP of its intended target shape too.
+      if (mode !== 'pen' && mode !== 'paint' && mode !== 'trace') {
         // Design Step D: a resize handle can sit right at a shape's edge, where both it and the
         // shape's own hit-test could otherwise match -- the handle must win, so this is checked
         // first (mirrors app.js's own hitTest(), which checks handlesFor() before the move branch).
@@ -1386,6 +1436,21 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           dashArray: [PAINT_LASSO_DASH_PX / paper.view.zoom, PAINT_LASSO_DASH_PX / paper.view.zoom]
         });
         paintLassoItem.add(event.point);
+        return;
+      }
+      if (mode === 'trace') {
+        // RS-3011 Step 11: the first point of a brand-new Trace drag -- same single click-drag-
+        // release shape as Paint's own branch just above (tracePoints only ever accumulates within
+        // one mousedown-to-mouseup cycle), and the same dashed-preview styling, reusing
+        // PAINT_LASSO_DASH_PX rather than a second dash-size constant.
+        interactionKind = 'trace';
+        tracePoints = [event.point];
+        traceItem = new paper.Path({
+          strokeColor: STROKE_COLOR,
+          strokeWidth: STROKE_WIDTH_PX / paper.view.zoom,
+          dashArray: [PAINT_LASSO_DASH_PX / paper.view.zoom, PAINT_LASSO_DASH_PX / paper.view.zoom]
+        });
+        traceItem.add(event.point);
         return;
       }
       interactionKind = 'draw';
@@ -1573,6 +1638,19 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         }
         return;
       }
+      if (interactionKind === 'trace') {
+        // RS-3011 Step 11: same discard-and-recreate-from-accumulated-points pattern as Paint's own
+        // branch just above, but thinned against TRACE_MIN_SAMPLE_DISTANCE_MM -- a plain project-mm
+        // distance, not divided by zoom (see that constant's own doc comment for why this
+        // deliberately doesn't follow PAINT_MIN_SAMPLE_DISTANCE_PX's own px-to-mm conversion).
+        const lastPoint = tracePoints[tracePoints.length - 1];
+        if (event.point.getDistance(lastPoint) >= TRACE_MIN_SAMPLE_DISTANCE_MM) {
+          tracePoints.push(event.point);
+          traceItem.removeSegments();
+          traceItem.addSegments(tracePoints.map((p) => new paper.Segment(p)));
+        }
+        return;
+      }
       if (interactionKind !== 'draw') return;
       if (mode === 'freehand') {
         if (!dragging || !board.path) return;
@@ -1615,7 +1693,11 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       board.beginPath(previewItem);
     };
 
-    tool.onMouseUp = () => {
+    // RS-3011 Step 11: gains an `event` parameter (Paper.js's Tool.onMouseUp always receives a
+    // ToolEvent; earlier steps just never declared it) so Trace's own branch below can read
+    // `event.modifiers.shift` at release, the same modifier-reading convention onMouseDown already
+    // uses throughout this file. Every other branch below still ignores it.
+    tool.onMouseUp = (event) => {
       if (panning) {
         panning = false;
         updateCursor();
@@ -1764,6 +1846,37 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         onPaintStroke(lassoPolygons);
         return;
       }
+      if (interactionKind === 'trace') {
+        // RS-3011 Step 11: mirrors Paint's own branch just above -- remove the dashed preview,
+        // discard a degenerate drag (fewer than 2 buffered points can't build a usable path), else
+        // resolve the target and hand the spaced points to onTracePlace(). Unlike Paint/every other
+        // draw preset, `mode` is deliberately left at 'trace' (decision 7: Trace stays active after
+        // each committed line), so there's no mode='select'/updateDrawToolButtons() dance here --
+        // matches Stamp's own onMouseDown 'stamp' branch precedent.
+        if (traceItem) {
+          traceItem.remove();
+          traceItem = null;
+        }
+        const points = tracePoints;
+        tracePoints = [];
+        interactionKind = null;
+        if (points.length < 2) return;
+        const closed = !!(event && event.modifiers && event.modifiers.shift);
+        const layerId = resolveTraceTargetLayerId(points);
+        const styleParams = layerId ? getLayerStoneParams(layerId) : null;
+        // No target, or the resolved layer isn't a stone-bearing 'path' layer (getLayerStoneParams's
+        // own null return already covers both "not type==='path'" and "stonesGenerated===false") --
+        // discard silently, matching Stamp/Paint's own "no target -> discard" precedent.
+        if (!layerId || !styleParams) return;
+        const stepMm = styleParams.stoneSizeMm + styleParams.gapMm;
+        const spacingPath = new paper.Path({ segments: points });
+        if (closed) spacingPath.closed = true;
+        const placements = placeStonesAlongPath(spacingPath, { stepMm, closed });
+        spacingPath.remove();
+        if (placements.length === 0) return;
+        onTracePlace(placements, layerId);
+        return;
+      }
       if (interactionKind !== 'draw') return;
       dragging = false;
       if (mode === 'freehand') {
@@ -1775,10 +1888,10 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           // RS-3011 freehand-close: ending the drag back near its own start point closes the
           // shape, the same "click near the first anchor closes" gesture Pen/Polygon already
           // have (see the CLOSE_POLYGON_TOLERANCE_PX / paper.view.zoom check above) -- reused
-          // verbatim rather than introducing a second tolerance constant. tool.onMouseUp takes no
-          // event parameter (unlike onMouseDown above), so the drag's ending point is read off the
-          // path's own last segment -- the exact point the final onMouseDrag frame added -- instead
-          // of a nonexistent `event.point`.
+          // verbatim rather than introducing a second tolerance constant. onMouseUp's own `event`
+          // parameter (added for Trace's Shift-at-release check, RS-3011 Step 11) is deliberately
+          // unused here -- the drag's ending point is read off the path's own last segment -- the
+          // exact point the final onMouseDrag frame added -- instead of `event.point`.
           const lastPoint = item.segments[item.segments.length - 1].point;
           if (lastPoint.getDistance(item.segments[0].point) <= CLOSE_POLYGON_TOLERANCE_PX / paper.view.zoom) {
             item.closed = true;
@@ -1904,7 +2017,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      *   mode was entered -- fixes the base fit scale for this drawing session (matches every other
      *   viewport transform in this app in treating project.canvas as the mm reference frame).
      * @param {number} paddingPx same padding convention drawLayout() already uses (38*dpr).
-     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'|'pen'|'paint'|'stamp'} [initialMode]
+     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'|'pen'|'paint'|'stamp'|'trace'} [initialMode]
      */
     enter(projectCanvasMm, paddingPx, initialMode = 'select') {
       canvasMm = projectCanvasMm;
@@ -1950,7 +2063,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      * Switch input mode without leaving drawing mode -- already-finalized shapes in board.shapes
      * are untouched; only a drag-in-flight (if any) is discarded, since the box preview belongs
      * to whichever mode was active when the drag started.
-     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'|'pen'|'paint'|'stamp'} newMode
+     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'|'pen'|'paint'|'stamp'|'trace'} newMode
      */
     setMode(newMode) {
       mode = newMode;
@@ -2046,9 +2159,25 @@ export function createDrawingTool(canvasEl, hooks = {}) {
 
     /**
      * Discard the in-progress stroke (if any) without leaving drawing mode.
+     *
+     * RS-3011 Step 11: also closes a real gap for the click-to-place tools (CLICK_TO_PLACE_MODES,
+     * currently Stamp and Trace) -- unlike every other draw preset, committing a placement never
+     * reverts `mode` back to 'select' (decision 7: they stay active so the next click/drag places
+     * another one), so Escape previously had no way to leave one of these tools at all short of
+     * clicking a different rail button. `wasIdle` is captured BEFORE resetInProgressDrawing() below
+     * (which unconditionally clears interactionKind back to null) -- while a gesture IS in progress
+     * (Trace mid-drag; Stamp has no in-progress gesture of its own, so this is always true for it),
+     * Escape only cancels that gesture, same as every other tool. Only when idle does Escape ALSO
+     * revert to Select, the same mode/updateResizeHandles/updateCursor tail setMode() itself uses.
      */
     cancelPath() {
+      const wasIdle = interactionKind === null;
       resetInProgressDrawing();
+      if (wasIdle && CLICK_TO_PLACE_MODES.has(mode)) {
+        mode = 'select';
+        updateResizeHandles();
+        updateCursor();
+      }
     },
 
     /**
