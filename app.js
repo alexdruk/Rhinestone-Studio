@@ -194,8 +194,10 @@ const ARROW_KEY_DELTAS={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDo
 // for RS-3011 Step 9's Pen tool (Illustrator/Figma's near-universal "Pen" binding), per Sasha's own
 // roadmap for this rail. RS-3011 Step 10b: F=Paint (confirmed free elsewhere in the global keydown
 // handler below) -- Photoshop/GIMP's own Fill/Bucket-adjacent mnemonic, close enough to read
-// naturally alongside B=Draw/Brush.
-const DRAW_TOOL_SHORTCUT_KEYS={v:'select',b:'freehand',r:'rect',e:'ellipse',s:'slot',g:'polygon',p:'pen',f:'paint'};
+// naturally alongside B=Draw/Brush. RS-3011 Step 12: M=Stamp (confirmed free elsewhere in the global
+// keydown handler below) -- every other single-letter mnemonic close to "stamp" (S) is already taken
+// by Slot, so M stands in for the tool's rubber-stamp "Mark a point" action instead.
+const DRAW_TOOL_SHORTCUT_KEYS={v:'select',b:'freehand',r:'rect',e:'ellipse',s:'slot',g:'polygon',p:'pen',f:'paint',m:'stamp'};
 // RS-1005: pixels-per-mm used only when rasterizing the Production Sheet SVG to PNG. Fixed and
 // documented (not derived from devicePixelRatio/viewport fit) so the PNG's pixel dimensions are
 // always a clean, undistorted multiple of the page's mm size -- never a fit-to-viewport scale.
@@ -730,6 +732,11 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
     // single stone until now. Defaults to [] for every layer predating this step, matching
     // GeometryEngine.normalizePathParams()'s own regions normalizer.
     regions:layer.regions||[],
+    // RS-3011 Step 12: forwards a 'path' layer's Stamp placements (Step 12's own data model) into
+    // live/production generation, the identical wiring-gap fix Step 10b's own `regions` line above
+    // made for Paint -- defaults to [] for every layer predating this step, matching
+    // GeometryEngine.normalizePathParams()'s own stampedStones normalizer.
+    stampedStones:layer.stampedStones||[],
     ...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generatePathLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
  // RS-2000: the legacy bitmap text engine (FONT5 + generateText/sampleGlyphFill/
  // sampleGlyphStroke/line) and the legacy generateCircle/generateRect/bbox/layerBBox shape path
@@ -811,6 +818,11 @@ function validateProject(obj){
     // through untouched by the `{...l}` spread below either way; absent or empty on every layer
     // predating this step, which GeometryEngine.normalizePathParams()'s own regions normalizer
     // treats as a safe no-op (see its doc comment).
+    // RS-3011 Step 12: 'stampedStones' (Stamp) is a 'path' layer's own optional array of
+    // {id,xMm,yMm,sizeMm,color} manually-placed stones, following the identical "not strictly
+    // validated here" convention as 'regions' immediately above -- absent/empty on every layer
+    // predating this step, a safe no-op per GeometryEngine.normalizePathParams()'s own
+    // stampedStones normalizer.
     // S-110: Regular Polygon/Star/Ring's own configurable extra parameters, matching
     // GeometryEngine's own assertIntegerInRange()/assertNumberInRange() validation ranges (see
     // src/geometry/GeometryEngine.js's normalizeShapeParams()) so a malformed saved value is caught
@@ -972,6 +984,46 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     await updateAll(true);
     el('status').textContent=`Painted ${newRegions.length} region${newRegions.length===1?'':'s'} on ${layerLabel(targetLayer)}.`;
   },
+  // RS-3011 Step 12: Stamp's own finalize hook -- fires once per click (see DrawingCanvasTool.js's
+  // own onStampPlace doc comment for the exact {xMm,yMm,layerId} contract; layerId is already
+  // resolved there via the same hitTestShapeId() Select's own click-to-pick-a-shape branch uses).
+  // Mirrors onPaintStroke's own architecture split immediately above: this module owns the
+  // absolute-to-natural-space absolutePolygonsToNaturalSpace() conversion and every project.layers
+  // mutation; DrawingCanvasTool.js's own involvement ends at resolving the target and handing over
+  // the click point. A null layerId (click hit no shape) discards silently, matching Paint's own "no
+  // target -> discard" precedent -- no history session opened, no status message. Unlike Paint/every
+  // draw preset, `mode` is deliberately left at 'stamp' either way: Stamp is a repeatable
+  // click-to-place action (like an image editor's own stamp tool), not a one-shot commit-then-
+  // revert-to-Select gesture, so there's no updateDrawToolButtons() call here either.
+  onStampPlace:async({xMm,yMm,layerId})=>{
+    if(!layerId)return;
+    const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
+    if(!targetLayer)return;
+    // Feeds absolutePolygonsToNaturalSpace() a single-point "polygon" ([[{xMm,yMm}]]) rather than
+    // duplicating computeNaturalContourTransform/applyNaturalContourTransform logic here -- same
+    // precedent as onPaintStroke's own call just above, just with a 1-point ring instead of a real
+    // lasso contour. Returns [] (not a per-point null) when targetLayer has no placeable transform
+    // (empty contours) -- guarded the same way a missing target is above.
+    const naturalPolygons=absolutePolygonsToNaturalSpace([[{xMm,yMm}]],targetLayer);
+    if(naturalPolygons.length===0)return;
+    const naturalPoint=naturalPolygons[0][0];
+    const stamp={
+      id:'stamp'+Date.now(),
+      xMm:naturalPoint.xMm,
+      yMm:naturalPoint.yMm,
+      // RS-3011 Step 12 decision 4: stoneSize/color come from the target layer's CURRENT fields at
+      // click time, not a separately editable Stamp tool-option -- same convention Paint uses for a
+      // new region above.
+      sizeMm:targetLayer.stoneSize,
+      color:targetLayer.color
+    };
+    commitHistory();
+    if(!Array.isArray(targetLayer.stampedStones))targetLayer.stampedStones=[];
+    targetLayer.stampedStones.push(stamp);
+    drawingTool.refreshStoneGroupForLayer(targetLayer.id);
+    await updateAll(true);
+    el('status').textContent=`Placed a stone on ${layerLabel(targetLayer)}.`;
+  },
   // Freehand is a continuous interaction (many pointermove samples before the stroke ends) --
   // DrawingCanvasTool.js opens a session at drag-start and closes it at drag-end so one stroke is
   // one undo step, the same session-coalescing convention HISTORY_TRACKED_CONTROL_IDS' input/change
@@ -1057,8 +1109,10 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     if(l.stonesGenerated===false)return null;
     // RS-3011 Step 10b: regions (Paint) joins the rest of a path layer's "style" params here so the
     // live Design-canvas stone preview reflects a painted region immediately, the same wiring-gap
-    // fix as generatePathStonesLive()'s own new `regions` line above.
-    return{stoneSizeMm:l.stoneSize,gapMm:l.gap,mode:resolveVectorFillMode(l.fillMode),color:l.color,regions:l.regions||[],...mixedSizeParamsFor(l)};
+    // fix as generatePathStonesLive()'s own new `regions` line above. RS-3011 Step 12: stampedStones
+    // (Stamp) joins it the same way, so a placed stamp shows up on the live canvas the instant it's
+    // clicked, not only once "Generate Stones"/an export re-runs generatePathStonesLive().
+    return{stoneSizeMm:l.stoneSize,gapMm:l.gap,mode:resolveVectorFillMode(l.fillMode),color:l.color,regions:l.regions||[],stampedStones:l.stampedStones||[],...mixedSizeParamsFor(l)};
   },
   // Mirrors generatePathStonesLive()'s own result mapping, plus resolving the stored color id
   // (STONE_COLORS key, e.g. 'gold') to its previewColor -- the same flat swatch color
@@ -3562,6 +3616,7 @@ function updateDrawToolButtons(){
   el('railPolygonToggle').setAttribute('aria-pressed',String(active&&mode==='polygon'));
   el('railPenToggle').setAttribute('aria-pressed',String(active&&mode==='pen'));
   el('railPaintToggle').setAttribute('aria-pressed',String(active&&mode==='paint'));
+  el('railStampToggle').setAttribute('aria-pressed',String(active&&mode==='stamp'));
 }
 function setDrawTool(mode){
   if(drawingTool.isActive){
@@ -3586,6 +3641,7 @@ el('railSlotToggle').onclick=()=>setDrawTool('slot');
 el('railPolygonToggle').onclick=()=>setDrawTool('polygon');
 el('railPenToggle').onclick=()=>setDrawTool('pen');
 el('railPaintToggle').onclick=()=>setDrawTool('paint');
+el('railStampToggle').onclick=()=>setDrawTool('stamp');
 // RS-3011 Step 8 Phase B: Import SVG is a one-shot action, not a draw-tool mode -- clicking it
 // never calls setDrawTool()/setMode(), it just opens its own hidden file input, matching the
 // existing top-nav Import Lightbox's own el('importSvg').onclick pattern below (a fully separate
