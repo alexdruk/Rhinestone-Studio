@@ -1,20 +1,25 @@
 import assert from 'node:assert/strict';
-import paperModule from 'paper';
 import { GeometryEngine } from '../src/geometry/index.js';
-import {
-  flattenPathToContour,
-  flattenPathToContours,
-  createPathLayerFromContours,
-  importSvgIntoItem
-} from '../src/drawing/DrawingBoard.js';
+import { loadPaperForNode } from './lib/paper-node-env.mjs';
 
 // RS-3011 Step 8 Phase A — real, numeric proof that flattenPathToContours() correctly generalizes
 // flattenPathToContour() to paper.CompoundPath (holes) and paper.Group (disjoint pieces), the two
 // shapes paper.project.importSVG(...,{expandShapes:true}) can hand back for real-world SVGs that a
 // single-contour flattenPathToContour() cannot walk. No DrawingCanvasTool/app.js wiring is exercised
 // here -- pure geometry/import-pipeline, per this milestone's own scope.
+//
+// 'paper' (and src/drawing/DrawingBoard.js, which itself imports 'paper') must be loaded via
+// dynamic import() only after loadPaperForNode()'s Node/jsdom shim is in place -- see
+// tools/lib/paper-node-env.mjs for why a static top-level `import ... from 'paper'` here would
+// hoist ahead of that setup and hit the browser-only APIs paper.project.importSVG() needs.
+const paper = await loadPaperForNode();
+const {
+  flattenPathToContour,
+  flattenPathToContours,
+  createPathLayerFromContours,
+  importSvgIntoItem
+} = await import('../src/drawing/DrawingBoard.js');
 
-const paper = paperModule.default || paperModule;
 paper.setup(new paper.Size(1000, 1000));
 
 let passed = 0;

@@ -95,8 +95,9 @@ export function resolveSelection({ group, all, filter }, toolsDir = TOOLS_DIR) {
 
 function runFile(name, toolsDir) {
   const fullPath = path.join(toolsDir, name);
+  const preloadPath = path.join(toolsDir, 'lib/paper-safe-self-preload.mjs');
   const start = Date.now();
-  const result = spawnSync(process.execPath, [fullPath], { stdio: 'inherit' });
+  const result = spawnSync(process.execPath, ['--import', `file://${preloadPath}`, fullPath], { stdio: 'inherit' });
   const elapsedMs = Date.now() - start;
 
   if (result.error) {

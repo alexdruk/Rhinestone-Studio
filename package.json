@@ -34,5 +34,8 @@
     "opentype.js": "^2.0.0",
     "paper": "0.12.18",
     "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
   }
 }
