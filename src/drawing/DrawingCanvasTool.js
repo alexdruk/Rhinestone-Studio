@@ -340,7 +340,7 @@ function materializeShapeFromLayer(layer) {
  * (shouldn't happen post-Step-1, but mirrors this file's existing null-layerId guards) is skipped,
  * never passed through as undefined.
  * @param {HTMLCanvasElement} canvasEl
- * @param {{getStoneDefaults?:()=>{stoneSize?:number,gap?:number,color?:string}, onShapeCommitted?:(layer:object)=>void, openHistorySession?:()=>void, closeHistorySession?:()=>void, onShapeMoved?:(layerId:string,dxMm:number,dyMm:number)=>void, onShapeResized?:(layerId:string,boundsMm:{left:number,top:number,width:number,height:number})=>void, onShapeDeleted?:(layerId:string)=>(boolean|void), onSelectionChanged?:(layerIds:string[])=>void, onPaintStroke?:(lassoPolygons:{xMm:number,yMm:number}[][])=>void}} [hooks] onShapeDeleted returning exactly `false` means the deletion was blocked (e.g. a last-layer guard) -- the shape stays in `board.shapes` too, everything else treats a non-`false` return as success. RS-3011 Step 10b: onPaintStroke(lassoPolygons) fires once a Paint lasso release produces a usable stroke (>= PAINT_MIN_LASSO_POINTS) -- lassoPolygons is exactly one closed ring, absolute project-mm, this module's own coordinate space (Paper.js project units already equal this app's millimeters, per this file's own header comment). Target selection, region creation, and every project.layers mutation happen entirely in app.js -- this hook is this module's only involvement in Paint beyond the pointer interaction and live preview.
+ * @param {{getStoneDefaults?:()=>{stoneSize?:number,gap?:number,color?:string}, onShapeCommitted?:(layer:object)=>void, openHistorySession?:()=>void, closeHistorySession?:()=>void, onShapeMoved?:(layerId:string,dxMm:number,dyMm:number)=>void, onShapeResized?:(layerId:string,boundsMm:{left:number,top:number,width:number,height:number})=>void, onShapeDeleted?:(layerId:string)=>(boolean|void), onSelectionChanged?:(layerIds:string[])=>void, onPaintStroke?:(lassoPolygons:{xMm:number,yMm:number}[][])=>void, onStampPlace?:(placement:{xMm:number,yMm:number,layerId:string|null})=>void}} [hooks] onShapeDeleted returning exactly `false` means the deletion was blocked (e.g. a last-layer guard) -- the shape stays in `board.shapes` too, everything else treats a non-`false` return as success. RS-3011 Step 10b: onPaintStroke(lassoPolygons) fires once a Paint lasso release produces a usable stroke (>= PAINT_MIN_LASSO_POINTS) -- lassoPolygons is exactly one closed ring, absolute project-mm, this module's own coordinate space (Paper.js project units already equal this app's millimeters, per this file's own header comment). Target selection, region creation, and every project.layers mutation happen entirely in app.js -- this hook is this module's only involvement in Paint beyond the pointer interaction and live preview. RS-3011 Step 12: onStampPlace(placement) fires once per Stamp click -- xMm/yMm is the click point, absolute project-mm, this module's own coordinate space; layerId is the project.layers id resolved via resolveStampTargetLayerId() (the SAME hitTestShapeId() Select's own click-to-pick-a-shape branch uses), or null if the click hit no shape. Passing the already-resolved layerId (rather than a bare point, unlike onPaintStroke) avoids a second, duplicate hit-test implementation living in app.js -- app.js still owns the absolute-to-natural-space coordinate conversion and every project.layers mutation, discarding silently when layerId is null, mirroring Paint's own "no target -> discard" precedent.
  */
 export function createDrawingTool(canvasEl, hooks = {}) {
   const {
@@ -355,6 +355,9 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     // RS-3011 Step 10b: fires once per finalized Paint lasso -- see this function's own hooks-param
     // doc comment above for the exact contract.
     onPaintStroke = () => {},
+    // RS-3011 Step 12: fires once per Stamp click -- see this function's own hooks-param doc comment
+    // above for the exact contract.
+    onStampPlace = () => {},
     // RS-3011 Step 3b: the two hooks the live stone preview needs -- getLayerStoneParams(layerId)
     // returns a 'path' layer's non-geometric stone settings (stoneSizeMm/gapMm/mode/color/mixed-size),
     // or null if no matching layer exists (every non-Design layer type, or Design not active); this
@@ -425,6 +428,12 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   // Rebuilt from scratch (rebuildPenHandleChromeItem) after every anchor placement/reset (onMouseDown)
   // and every drag frame that shapes a handle (onMouseDrag); removed in resetInProgressDrawing().
   let penHandleChromeItem = null;
+  // RS-3011 Step 12: Stamp's own preview -- a single throwaway paper.Path.Circle at the current
+  // stone size/color following the cursor at 50% opacity, mirroring penPreviewItem/marqueeItem's own
+  // "never routed through board.beginPath/clearPath/finalizeShape" rule. Rebuilt from scratch every
+  // onMouseMove frame while `mode === 'stamp'` (removeStampGhostItem() first); removed in
+  // resetInProgressDrawing() so a mode switch/Escape/exit never leaves it stranded.
+  let stampGhostItem = null;
   let selectedIds = clearSelection();
   // 'draw' while a new freehand/rect/ellipse/slot shape is mid-drag; 'move' while dragging the
   // current selection; 'polygon' while a click-to-add-vertex polygon is accumulating points
@@ -612,6 +621,22 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   }
 
   /**
+   * RS-3011 Step 12: the project.layers id of whichever finalized shape `point` hit-tests against,
+   * or null -- shared by the Stamp ghost preview (updateStampGhostItem) and the actual placement
+   * (onMouseDown's own 'stamp' branch) so both agree on exactly the same target for the exact same
+   * point. Reuses hitTestShapeId() above (the same Paper.js item hit-test Select's own
+   * click-to-pick-a-shape onMouseDown branch uses) rather than a second contour-containment
+   * implementation.
+   * @param {paper.Point} point
+   * @returns {string|null}
+   */
+  function resolveStampTargetLayerId(point) {
+    const hitId = hitTestShapeId(point);
+    const shape = hitId && board.getShape(hitId);
+    return (shape && shape.item.data.layerId) || null;
+  }
+
+  /**
    * The handle name (e.g. 'nw', 'e') under `point` for the single currently-selected shape, or
    * null -- only ever relevant in 'select' mode with exactly one shape selected (mirrors
    * drawSelectionBox()'s own single-selection-only showHandles rule). Tolerance matches
@@ -757,6 +782,38 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     }
   }
 
+  /** RS-3011 Step 12: removes/nulls the throwaway Stamp ghost preview circle, if any. */
+  function removeStampGhostItem() {
+    if (stampGhostItem) {
+      stampGhostItem.remove();
+      stampGhostItem = null;
+    }
+  }
+
+  /**
+   * RS-3011 Step 12: rebuilds the Stamp ghost preview at `point` -- hit-tests `point` against every
+   * finalized shape (same hitTestShapeId() a plain Select click already uses), and, only when it
+   * lands on a 'path' layer's shape, shows a 50%-opacity circle at that layer's OWN current
+   * stoneSize/color (getLayerStoneParams hook -- the exact style a click here would actually place,
+   * per this step's own "stoneSize/color come from the target layer at click time" decision). No
+   * target (empty canvas, or a non-'path' layer, or getLayerStoneParams returns null) means no ghost
+   * at all -- mirrors this tool's own "no target -> discard" precedent for the actual placement.
+   * @param {paper.Point} point
+   */
+  function updateStampGhostItem(point) {
+    removeStampGhostItem();
+    const layerId = resolveStampTargetLayerId(point);
+    const styleParams = layerId ? getLayerStoneParams(layerId) : null;
+    if (!styleParams) return;
+    stampGhostItem = new paper.Path.Circle({
+      center: point,
+      radius: styleParams.stoneSizeMm / 2,
+      fillColor: styleParams.color
+    });
+    stampGhostItem.opacity = 0.5;
+    stampGhostItem.data.isStampGhost = true;
+  }
+
   /** RS-3011 Step 9: removes/nulls the throwaway "next segment" pen preview, if any. */
   function removePenPreviewItem() {
     if (penPreviewItem) {
@@ -899,6 +956,9 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     penDragForceCorner = false;
     penDragCrossedDeadZone = false;
     penClosingDrag = false;
+    // RS-3011 Step 12: mirrors penPreviewItem's own reset just above -- a Stamp ghost interrupted by
+    // Escape/mode-switch/exit must not linger on the canvas.
+    removeStampGhostItem();
   }
 
   /**
@@ -1178,6 +1238,28 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         // An ordinary anchor placement must never be mistaken for a closing drag.
         penClosingDrag = false;
         rebuildPenHandleChromeItem();
+        return;
+      }
+      // RS-3011 Step 12: Stamp owns every click outright, exactly like Pen/Paint above -- a click
+      // always places a stone (or discards silently with no target), never resizes/moves/selects
+      // whatever it lands on. Skips the move/resize hit-test block below entirely (rather than
+      // joining its `mode !== 'pen' && mode !== 'paint'` exception), since unlike Paint, Stamp has
+      // nothing further to do with this event once it returns -- no in-progress gesture, no drag.
+      // Target selection + coordinate conversion + project.layers mutation all live in app.js's own
+      // onStampPlace hook, matching onPaintStroke's own architecture split (this file's own hooks-
+      // param doc comment).
+      if (mode === 'stamp') {
+        // The ghost preview circle built by the last onMouseMove (updateStampGhostItem) sits
+        // exactly at this same point and carries a real fillColor -- left in place, it would win
+        // hitTestShapeId's own fill hit-test against itself (it has no data.shapeId, so that hit
+        // would resolve to a null layerId, masking the actual shape underneath). Must be removed
+        // BEFORE resolving the target, not after.
+        removeStampGhostItem();
+        onStampPlace({
+          xMm: event.point.x,
+          yMm: event.point.y,
+          layerId: resolveStampTargetLayerId(event.point)
+        });
         return;
       }
       // RS-3011 pen-skip-move-hittest: Pen is the one exception to "click-and-drag on an existing
@@ -1752,6 +1834,14 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     // uses. No-op outside an in-progress polygon so it never interferes with a drag-based preset's
     // own onMouseDrag-driven preview.
     tool.onMouseMove = (event) => {
+      // RS-3011 Step 12: Stamp's own ghost preview, between clicks -- unlike Pen/Polygon above,
+      // Stamp has no in-progress gesture to gate this on (interactionKind is always null in this
+      // mode), so it's gated on `mode` directly instead. See updateStampGhostItem()'s own doc
+      // comment for the hit-test-and-hide-if-no-target behavior.
+      if (mode === 'stamp') {
+        updateStampGhostItem(event.point);
+        return;
+      }
       // RS-3011 Step 9: hover preview of the tentative NEXT Pen segment, between clicks (Paper.js
       // only fires onMouseMove on button-up motion, so penDraggingSegment is always null here --
       // this can never race the drag-handle branch in onMouseDrag above). Unlike polygon below,
@@ -1814,7 +1904,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      *   mode was entered -- fixes the base fit scale for this drawing session (matches every other
      *   viewport transform in this app in treating project.canvas as the mm reference frame).
      * @param {number} paddingPx same padding convention drawLayout() already uses (38*dpr).
-     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'|'pen'|'paint'} [initialMode]
+     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'|'pen'|'paint'|'stamp'} [initialMode]
      */
     enter(projectCanvasMm, paddingPx, initialMode = 'select') {
       canvasMm = projectCanvasMm;
@@ -1860,7 +1950,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      * Switch input mode without leaving drawing mode -- already-finalized shapes in board.shapes
      * are untouched; only a drag-in-flight (if any) is discarded, since the box preview belongs
      * to whichever mode was active when the drag started.
-     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'|'pen'|'paint'} newMode
+     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'|'pen'|'paint'|'stamp'} newMode
      */
     setMode(newMode) {
       mode = newMode;

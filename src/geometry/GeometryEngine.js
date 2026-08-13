@@ -973,16 +973,39 @@ export class GeometryEngine {
       stones = stones.concat(infillStones);
     }
 
-    // RS-3011 Step 10a (Paint regions): additive, priority-ordered sub-areas that carve their own
-    // patch out of the fill computed above. No-op when `regions` is empty/absent -- every layer
-    // predating this step -- so this branch never changes existing output. See
-    // _applyPathRegions()'s own doc comment.
-    if (options.regions.length > 0) {
-      // Reuses the SAME transform options.contours was placed through above (not a fresh one
-      // derived from each region's own, usually-smaller, bounding box) -- see
-      // computeNaturalContourTransform()'s own doc comment for why that distinction matters.
+    // RS-3011 Step 10a (Paint regions) / Step 12 (Stamp): both need the same natural-space ->
+    // absolute-space transform options.contours was itself placed through (not a fresh one derived
+    // from each region's/stamp's own, usually-smaller, extent) -- see computeNaturalContourTransform's
+    // own doc comment for why that distinction matters. Computed once, shared by both branches below.
+    if (options.regions.length > 0 || options.stampedStones.length > 0) {
       const transform = computeNaturalContourTransform(options.contours, options.xMm, options.yMm, options.widthMm, options.heightMm);
-      stones = this._applyPathRegions(stones, options, transform);
+      // RS-3011 Step 10a: additive, priority-ordered sub-areas that carve their own patch out of the
+      // fill computed above. No-op when `regions` is empty/absent -- every layer predating this step
+      // -- so this branch never changes existing output. See _applyPathRegions()'s own doc comment.
+      if (options.regions.length > 0) {
+        stones = this._applyPathRegions(stones, options, transform);
+      }
+      // RS-3011 Step 12 (Stamp): one manually-placed Stone per stampedStones entry, appended
+      // directly on top of everything computed above -- no interior-point test, no masking of nearby
+      // stones, unlike regions above (a stamp is a decoration, not a fill patch; drawleather's own
+      // StampTool.ts doesn't suppress/dedupe against underlying decorations either). `transform` is
+      // the same placement transform every other Stone on this layer went through, so a stamp tracks
+      // its parent shape's move/resize for free, exactly like a region's own contour does. A null
+      // transform (empty contours) leaves stampedStones un-placeable, same as regions above.
+      if (options.stampedStones.length > 0 && transform) {
+        const stampedStoneObjects = options.stampedStones.map((stamp, index) => {
+          const [placed] = applyNaturalContourTransform([{ xMm: stamp.xMm, yMm: stamp.yMm }], transform);
+          return new Stone({
+            xMm: placed.xMm,
+            yMm: placed.yMm,
+            sizeMm: stamp.sizeMm,
+            color: stamp.color,
+            layerId: options.layerId,
+            index: stones.length + index
+          });
+        });
+        stones = stones.concat(stampedStoneObjects);
+      }
     }
 
     return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
@@ -1699,7 +1722,10 @@ function normalizePathParams(params) {
     // RS-3011 Step 10a: Paint regions -- see normalizePathRegions()'s own doc comment. Defaults to
     // [] for every layer with no `regions` field at all (every layer predating this step), matching
     // this file's existing "absent optional field -> safe no-op default" convention.
-    regions: normalizePathRegions(params.regions)
+    regions: normalizePathRegions(params.regions),
+    // RS-3011 Step 12: Stamp's manually-placed stones -- see normalizePathStampedStones()'s own doc
+    // comment. Same "absent optional field -> safe no-op default" convention as `regions` above.
+    stampedStones: normalizePathStampedStones(params.stampedStones)
   };
 }
 
@@ -1755,6 +1781,48 @@ function normalizePathRegion(region, index) {
     gapMm,
     color: region.color ?? null,
     fillMode
+  };
+}
+
+/**
+ * Normalizes a 'path' layer's optional `stampedStones` field (RS-3011 Step 12, Stamp). Each entry's
+ * xMm/yMm uses the exact same (0,0)-rooted natural-space convention as the layer's own `contours` and
+ * a region's own `contour` field -- validated only as loosely as those fields already are, per this
+ * file's existing permissive style.
+ *
+ * @param {object[]} [stampedStonesInput]
+ * @returns {{id: string|null, xMm: number, yMm: number, sizeMm: number, color: string|null}[]}
+ */
+function normalizePathStampedStones(stampedStonesInput) {
+  if (stampedStonesInput === undefined || stampedStonesInput === null) {
+    return [];
+  }
+  if (!Array.isArray(stampedStonesInput)) {
+    throw new TypeError('GeometryEngine.generatePathLayout stampedStones must be an array when provided.');
+  }
+  return stampedStonesInput.map((stamp, index) => normalizePathStampedStone(stamp, index));
+}
+
+function normalizePathStampedStone(stamp, index) {
+  if (!stamp || typeof stamp !== 'object') {
+    throw new TypeError(`stampedStones[${index}] must be an object.`);
+  }
+
+  const xMm = assertFiniteNumber(stamp.xMm, `stampedStones[${index}].xMm`);
+  const yMm = assertFiniteNumber(stamp.yMm, `stampedStones[${index}].yMm`);
+  const sizeMm = assertPositiveNumber(stamp.sizeMm, `stampedStones[${index}].sizeMm`);
+
+  if (stamp.color !== undefined && stamp.color !== null &&
+    (typeof stamp.color !== 'string' || stamp.color.length === 0)) {
+    throw new TypeError(`stampedStones[${index}].color must be a non-empty string when provided.`);
+  }
+
+  return {
+    id: typeof stamp.id === 'string' && stamp.id.length > 0 ? stamp.id : null,
+    xMm,
+    yMm,
+    sizeMm,
+    color: stamp.color ?? null
   };
 }
 
