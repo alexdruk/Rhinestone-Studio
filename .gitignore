@@ -257,3 +257,7 @@ tools/scratch/rs-3011-step8-phaseb-verify/
 # blank-text-layer-on-last-delete behavior, same "never a repo artifact" category as the scratch
 # folders above
 tools/scratch/rs3011-freehand-close-clear-layers-verify/
+
+# RS-3011 Step 13: ad hoc live-browser Playwright verification script + screenshots for the Eraser
+# tool, same "never a repo artifact" category as the scratch folders above
+tools/scratch/rs3011-step13-eraser-verify/
