@@ -246,3 +246,8 @@ tools/scratch/rs-3011-step6-verify/
 # category as the scratch folders above
 tools/scratch/rs-3011-step7-verify/
 
+# RS-3011 Step 8 Phase B: ad hoc live-browser Playwright verification script + SVG fixtures +
+# screenshots for the Import SVG action inside Design (button-gated stone generation, multi-contour
+# CompoundPath rendering, mismatched open/closed warning surfaced in #status), same "never a repo
+# artifact" category as the scratch folders above
+tools/scratch/rs-3011-step8-phaseb-verify/

@@ -46,7 +46,10 @@ import {
   DrawingBoard,
   drawingBaseScale,
   flattenPathToContour,
-  createPathLayerFromContour
+  flattenPathToContours,
+  createPathLayerFromContour,
+  createPathLayerFromContours,
+  importSvgIntoItem
 } from './DrawingBoard.js';
 import {
   resolveDragBox,
@@ -68,7 +71,11 @@ const MARQUEE_FILL_COLOR = 'rgba(91, 157, 255, 0.15)';
 const MARQUEE_STROKE_COLOR = '#5b9dff';
 const MARQUEE_STROKE_WIDTH_PX = 1;
 const SIMPLIFY_TOLERANCE_MM = 0.35;
-const FLATTEN_TOLERANCE_MM = 0.25;
+// RS-3011 Step 8 Phase B: exported so app.js's own Design-native Import SVG handler (a one-shot
+// action outside this file's Paper.js-only boundary, not a draw tool -- see this milestone's own
+// architecture note) can flatten its imported item at the SAME tolerance every draw tool already
+// uses here, rather than hardcoding a second value.
+export const FLATTEN_TOLERANCE_MM = 0.25;
 const PAN_WHEEL_TO_MM = 1;
 // A completed rect/ellipse drag whose bounding box is at or below this size in either dimension
 // never produced a usable shape -- discarded, matching freehand's existing "no usable stroke"
@@ -250,31 +257,58 @@ function buildSlotPreview(a, b, widthMm) {
  * contour fix): an open freehand stroke reconciled here -- undo/redo, or the Layers-list trash-icon
  * delete path this function guards against -- must stay open, or it would silently gain a closing
  * edge it never had.
+ *
+ * RS-3011 Step 8 Phase B: a layer with more than one contour (a multi-contour SVG import -- a
+ * donut/ring with a hole, or a disjoint multi-piece shape -- see flattenPathToContours()) builds a
+ * paper.CompoundPath whose children are one paper.Path per contour, each built by the identical
+ * moveTo/lineTo/closePath loop below, instead of a single paper.Path -- a CompoundPath is what makes
+ * a hole actually render as a hole (a plain Path has no notion of "this loop cuts a hole in that
+ * one"). The single-contour branch is completely unchanged from before this Phase -- every existing
+ * hand-drawn shape (always exactly one contour) still takes it byte-for-byte as before.
  * @param {object} layer a project.layers entry with type==='path'
- * @returns {paper.Path|null}
+ * @returns {paper.Path|paper.CompoundPath|null}
  */
 function materializeShapeFromLayer(layer) {
-  const contour = layer.contours && layer.contours[0];
-  if (!contour || contour.length < 3) return null;
-  const minX = Math.min(...contour.map((p) => p.x));
-  const minY = Math.min(...contour.map((p) => p.y));
-  const maxX = Math.max(...contour.map((p) => p.x));
-  const maxY = Math.max(...contour.map((p) => p.y));
+  const contours = layer.contours;
+  if (!Array.isArray(contours) || contours.length === 0) return null;
+  for (const contour of contours) {
+    if (!contour || contour.length < 3) return null;
+  }
+
+  const allPoints = contours.flat();
+  const minX = Math.min(...allPoints.map((p) => p.x));
+  const minY = Math.min(...allPoints.map((p) => p.y));
+  const maxX = Math.max(...allPoints.map((p) => p.x));
+  const maxY = Math.max(...allPoints.map((p) => p.y));
   const naturalWidth = maxX - minX;
   const naturalHeight = maxY - minY;
   const scaleX = naturalWidth > 0 ? layer.w / naturalWidth : 1;
   const scaleY = naturalHeight > 0 ? layer.h / naturalHeight : 1;
-  const item = new paper.Path({
+
+  function buildContourPath(contour) {
+    const path = new paper.Path();
+    contour.forEach((p, index) => {
+      const point = new paper.Point(layer.x + (p.x - minX) * scaleX, layer.y + (p.y - minY) * scaleY);
+      if (index === 0) path.moveTo(point);
+      else path.lineTo(point);
+    });
+    if (layer.closed !== false) path.closePath();
+    return path;
+  }
+
+  if (contours.length === 1) {
+    const item = buildContourPath(contours[0]);
+    item.strokeColor = STROKE_COLOR;
+    item.strokeWidth = STROKE_WIDTH_PX / paper.view.zoom;
+    return item;
+  }
+
+  const compound = new paper.CompoundPath({
     strokeColor: STROKE_COLOR,
     strokeWidth: STROKE_WIDTH_PX / paper.view.zoom
   });
-  contour.forEach((p, index) => {
-    const point = new paper.Point(layer.x + (p.x - minX) * scaleX, layer.y + (p.y - minY) * scaleY);
-    if (index === 0) item.moveTo(point);
-    else item.lineTo(point);
-  });
-  if (layer.closed !== false) item.closePath();
-  return item;
+  for (const contour of contours) compound.addChild(buildContourPath(contour));
+  return compound;
 }
 
 /**
@@ -552,7 +586,18 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     contentLayer.activate();
   }
 
-  /** @returns {string|null} The shapeId of the finalized shape under `point`, or null. */
+  /**
+   * @returns {string|null} The shapeId of the finalized shape under `point`, or null.
+   *
+   * RS-3011 Step 8 Phase B fix: walks up from the hit item to find `.data.shapeId` rather than
+   * reading it off `hit.item` directly -- a stroke/fill hit against a paper.CompoundPath (a
+   * multi-contour SVG import) resolves to the CHILD paper.Path Paper.js actually hit, not the
+   * parent CompoundPath, and only the parent carries the shapeId board.addShape()/finalizeShape()
+   * stamped on it (confirmed directly against Paper.js: `hit.item.className==='Path'`,
+   * `hit.item.data` is `{}`). Without this, a plain click on an imported multi-contour shape's own
+   * outline could never select or move it -- every hand-drawn shape (always a single, non-nested
+   * Path) is unaffected: the loop body never runs for it, `hit.item` already carries the id.
+   */
   function hitTestShapeId(point) {
     const hit = paper.project.hitTest(point, {
       fill: true,
@@ -560,7 +605,10 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       tolerance: 4 / paper.view.zoom,
       class: paper.Path
     });
-    return (hit && hit.item.data.shapeId) || null;
+    if (!hit) return null;
+    let item = hit.item;
+    while (item && !item.data.shapeId) item = item.parent;
+    return (item && item.data.shapeId) || null;
   }
 
   /**
@@ -965,16 +1013,31 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       removeStoneGroupForShape(shapeId);
       return;
     }
-    const flattened = flattenPathToContour(shape.item, FLATTEN_TOLERANCE_MM);
-    if (!flattened) return;
+    // RS-3011 Step 8 Phase B: flattenPathToContours() (plural) rather than flattenPathToContour()
+    // -- shape.item can now be a paper.CompoundPath (a multi-contour SVG import), which has no
+    // `.segments` of its own (only its per-contour children do); flattenPathToContours() already
+    // walks a Group/CompoundPath/Path uniformly, and is a strict generalization of the singular
+    // function for the single-Path case every hand-drawn shape still produces (see its own doc
+    // comment), so this is a safe swap for every existing shape too, not just imports.
+    const flattened = flattenPathToContours(shape.item, FLATTEN_TOLERANCE_MM);
+    if (!flattened || flattened.contours.length === 0) return;
+    // Collapses per-contour closed flags into the one flag generatePathLayout() accepts, the same
+    // formula createPathLayerFromContours() applies at import time (see its own doc comment for why
+    // a mismatched open/closed import falls back to closed=true) -- kept as a local, duplicated
+    // formula rather than extracted into a shared helper, since this is a live re-derivation from
+    // the shape's current geometry, not the creation-time path that function owns.
+    const closedValues = flattened.contours.map((c) => c.closed !== false);
+    const allClosed = closedValues.every(Boolean);
+    const allOpen = closedValues.every((v) => !v);
+    const mismatched = flattened.contours.length > 1 && !allClosed && !allOpen;
     const params = {
-      contours: [flattened.contour.map((p) => ({ xMm: p.x, yMm: p.y }))],
+      contours: flattened.contours.map((c) => c.contour.map((p) => ({ xMm: p.x, yMm: p.y }))),
       layerId,
       xMm: flattened.xMm,
       yMm: flattened.yMm,
       widthMm: flattened.widthMm,
       heightMm: flattened.heightMm,
-      closed: flattened.closed,
+      closed: mismatched ? true : allClosed,
       ...styleParams
     };
     const stones = generatePathLayout(params);
@@ -1966,6 +2029,28 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       if (!shape) return;
       const b = shape.item.bounds;
       shape.item.translate(new paper.Point(xMm - b.left, yMm - b.top));
+      updateResizeHandles();
+    },
+
+    /**
+     * RS-3011 Step 8 Phase B: selects an already-committed Design shape by its project.layers id --
+     * the on-canvas counterpart of app.js setting selectedLayerId/selectedLayerIds after pushing a
+     * new layer directly into project.layers from outside this file's own draw-tool flow (Import
+     * SVG; Boolean Operations' own newLayer push follows the identical project.layers-push
+     * convention but is never reachable while Design is active, so it never needed this). A layer
+     * created via commitFinalizedShape() becomes selected in `selectedIds` automatically as part of
+     * finalizing the draw -- a layer pushed in from outside never goes through that path, so without
+     * this call the Inspector would show it selected while the Design canvas itself shows no
+     * selection outline/handles. A no-op if no board.shapes item matches `layerId` yet -- callers
+     * must invoke this AFTER whatever triggered syncFromProjectLayers()'s reconciliation (e.g.
+     * app.js's own updateAll()) has actually run, or the shape won't exist in board.shapes to find.
+     * @param {string} layerId
+     */
+    selectShapeForLayer(layerId) {
+      const shape = findShapeByLayerId(layerId);
+      if (!shape) return;
+      selectedIds = selectOnly(shape.id);
+      applySelectionVisuals();
       updateResizeHandles();
     },
 

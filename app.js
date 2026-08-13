@@ -133,7 +133,7 @@ import { validateRhsProject, toAppProjectShape, parseCatalog, search as searchGa
 // RS-3010 Step 1 (Drawing Board): src/drawing/** confines all direct Paper.js usage the same way
 // src/preview3d/** confines Three.js -- app.js only ever calls the facade createDrawingTool()
 // returns, never `paper` itself.
-import { createDrawingTool } from './src/drawing/index.js';
+import { createDrawingTool, FLATTEN_TOLERANCE_MM, flattenPathToContours, createPathLayerFromContours, importSvgIntoItem } from './src/drawing/index.js';
 // RS-1012 (Vector Boolean Operations): Union/Subtract/Intersect/Exclude over the current
 // multi-selection (the same selectedLayerIds set RS-1009's Align/Snap already uses). No new
 // geometry algorithm lives in app.js: resolveLayerShapeSource() below only asks the permanent
@@ -3575,6 +3575,41 @@ el('railSlotToggle').onclick=()=>setDrawTool('slot');
 el('railPolygonToggle').onclick=()=>setDrawTool('polygon');
 el('railPenToggle').onclick=()=>setDrawTool('pen');
 el('railPaintToggle').onclick=()=>setDrawTool('paint');
+// RS-3011 Step 8 Phase B: Import SVG is a one-shot action, not a draw-tool mode -- clicking it
+// never calls setDrawTool()/setMode(), it just opens its own hidden file input, matching the
+// existing top-nav Import Lightbox's own el('importSvg').onclick pattern below (a fully separate
+// input/handler -- that one's pipeline stores svgSource verbatim for an 'svg'-type layer; this one
+// runs the file through Phase A's Paper.js-native flatten pipeline into a real 'path' layer).
+el('railImportSvgToggle').onclick=()=>el('designImportSvgFile').click();
+el('designImportSvgFile').addEventListener('change',async e=>{
+  const file=e.target.files[0];e.target.value='';if(!file)return;
+  try{
+    const svgSource=await file.text();
+    const item=importSvgIntoItem(svgSource,project.canvas.width,project.canvas.height);
+    const flattened=flattenPathToContours(item,FLATTEN_TOLERANCE_MM);
+    if(!flattened.contours.length){el('status').textContent=`Import failed: "${file.name}" has no usable shape geometry.`;return}
+    const base=selectedLayer();
+    const{layer,warning}=createPathLayerFromContours(flattened,{stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold',pathName:file.name});
+    // RS-3011 Step 7: same gate every other Design-created shape gets -- the outline appears
+    // immediately, stones wait for the "Generate Stones" button.
+    layer.stonesGenerated=false;
+    commitHistory();
+    project.layers.push(layer);
+    selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);
+    syncSelectedControlsFromLayer();
+    await updateAll(true);
+    // Design's own on-canvas selection (`drawingTool`'s internal selectedIds) only exists once
+    // syncFromProjectLayers() (run synchronously inside updateAll() above, while Design is active)
+    // has materialized this brand-new layer into a real board.shapes item -- see
+    // selectShapeForLayer()'s own doc comment for why this call is needed at all.
+    drawingTool.selectShapeForLayer(layer.id);
+    const warningNote=warning?` — ${warning}`:'';
+    el('status').textContent=`Imported ${file.name}: ${flattened.contours.length} shape(s)${warningNote}`;
+  }catch(error){
+    console.error('Design SVG import failed',error);
+    el('status').textContent=`SVG import failed: ${error.message}`;
+  }
+});
 // RS-3011 nav-toggle fix: #menuDesign no longer toggles. It always means "go to Design" --
 // matching setDrawTool()'s own same-mode no-op convention above (fa80918): entering is
 // idempotent, clicking it while Design is already active does nothing. There is no longer a
