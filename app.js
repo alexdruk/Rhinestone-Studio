@@ -196,8 +196,10 @@ const ARROW_KEY_DELTAS={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDo
 // handler below) -- Photoshop/GIMP's own Fill/Bucket-adjacent mnemonic, close enough to read
 // naturally alongside B=Draw/Brush. RS-3011 Step 12: M=Stamp (confirmed free elsewhere in the global
 // keydown handler below) -- every other single-letter mnemonic close to "stamp" (S) is already taken
-// by Slot, so M stands in for the tool's rubber-stamp "Mark a point" action instead.
-const DRAW_TOOL_SHORTCUT_KEYS={v:'select',b:'freehand',r:'rect',e:'ellipse',s:'slot',g:'polygon',p:'pen',f:'paint',m:'stamp'};
+// by Slot, so M stands in for the tool's rubber-stamp "Mark a point" action instead. RS-3011 Step 11:
+// T=Trace (confirmed free elsewhere in the global keydown handler below) -- V/B/R/E/S/G/P/F/M are
+// all already taken, and T is the natural mnemonic for "Trace" itself.
+const DRAW_TOOL_SHORTCUT_KEYS={v:'select',b:'freehand',r:'rect',e:'ellipse',s:'slot',g:'polygon',p:'pen',f:'paint',m:'stamp',t:'trace'};
 // RS-1005: pixels-per-mm used only when rasterizing the Production Sheet SVG to PNG. Fixed and
 // documented (not derived from devicePixelRatio/viewport fit) so the PNG's pixel dimensions are
 // always a clean, undistorted multiple of the page's mm size -- never a fit-to-viewport scale.
@@ -1023,6 +1025,46 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     drawingTool.refreshStoneGroupForLayer(targetLayer.id);
     await updateAll(true);
     el('status').textContent=`Placed a stone on ${layerLabel(targetLayer)}.`;
+  },
+  // RS-3011 Step 11: Trace's own finalize hook -- fires once per committed drag (see
+  // DrawingCanvasTool.js's own onTracePlace doc comment for the exact (placements,layerId) contract;
+  // layerId is already resolved there via the same target-hit-test resolveStampTargetLayerId() uses).
+  // Mirrors onStampPlace's own architecture split immediately above, just plural: this module owns
+  // the absolute-to-natural-space absolutePolygonsToNaturalSpace() conversion and every project.layers
+  // mutation, DrawingCanvasTool.js's own involvement ends at computing the spaced points and
+  // resolving the target. A null layerId or empty placements list discards silently, matching Stamp's
+  // own "no target -> discard" precedent -- no history session opened, no status message. Every
+  // placement in `placements` becomes one src/geometry/lineStampSpacing.js-spaced stone, pushed into
+  // the SAME layer.stampedStones array Stamp itself uses (RS-3011 Step 11's own key simplification --
+  // no new layer field, no GeometryEngine.js changes), all in the ONE commitHistory() below so one
+  // drawn line is one undo step (mirrors Paint's own "one lasso -> N regions -> one commit"
+  // precedent). Like Stamp, `mode` is deliberately left at 'trace' either way -- Trace stays active
+  // after each committed line, so there's no updateDrawToolButtons() call here either.
+  onTracePlace:async(placements,layerId)=>{
+    if(!layerId||!placements.length)return;
+    const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
+    if(!targetLayer)return;
+    // Feeds absolutePolygonsToNaturalSpace() the whole placements array as one "polygon" -- it's
+    // purely a coordinate transform, so an open polyline in place of a closed ring is fine (same
+    // precedent as onStampPlace's own 1-point-ring call just above).
+    const naturalPolygons=absolutePolygonsToNaturalSpace([placements],targetLayer);
+    if(naturalPolygons.length===0)return;
+    const naturalPoints=naturalPolygons[0];
+    const stamps=naturalPoints.map((p,index)=>({
+      id:'stamp'+Date.now()+'-'+index,
+      xMm:p.xMm,
+      yMm:p.yMm,
+      // RS-3011 Step 11 decision 2 (mirrors Step 12 decision 4): stoneSize/color come from the
+      // target layer's CURRENT fields at release time, not a separately editable Trace tool-option.
+      sizeMm:targetLayer.stoneSize,
+      color:targetLayer.color
+    }));
+    commitHistory();
+    if(!Array.isArray(targetLayer.stampedStones))targetLayer.stampedStones=[];
+    targetLayer.stampedStones.push(...stamps);
+    drawingTool.refreshStoneGroupForLayer(targetLayer.id);
+    await updateAll(true);
+    el('status').textContent=`Traced ${stamps.length} stone${stamps.length===1?'':'s'} on ${layerLabel(targetLayer)}.`;
   },
   // Freehand is a continuous interaction (many pointermove samples before the stroke ends) --
   // DrawingCanvasTool.js opens a session at drag-start and closes it at drag-end so one stroke is
@@ -2439,10 +2481,14 @@ window.addEventListener('keydown',e=>{
     // RS-3010 Step 2c: Escape cancels whatever drag or in-progress polygon drawingTool.cancelPath()
     // now covers (see DrawingCanvasTool.js's resetInProgressDrawing()) -- this block's own `return`
     // below already keeps drawing mode from falling through to any other Escape handler while it
-    // owns the canvas.
+    // owns the canvas. RS-3011 Step 11: cancelPath() can now also revert mode to 'select' when
+    // Escape is pressed on an idle click-to-place tool (Stamp/Trace, see its own doc comment) --
+    // updateDrawToolButtons() syncs the rail's aria-pressed state to match, the same convention
+    // every other mode-reverting commit (onShapeCommitted, onPaintStroke) already follows.
     if(e.key==='Escape'){
       e.preventDefault();
       drawingTool.cancelPath();
+      updateDrawToolButtons();
     }
     // RS-3010 Design Step B: plain-keypress tool shortcuts (no Cmd/Ctrl/Alt/Shift) -- calls the
     // exact same setDrawTool() the rail buttons use, no new dispatch path. Guarded like
@@ -3617,6 +3663,7 @@ function updateDrawToolButtons(){
   el('railPenToggle').setAttribute('aria-pressed',String(active&&mode==='pen'));
   el('railPaintToggle').setAttribute('aria-pressed',String(active&&mode==='paint'));
   el('railStampToggle').setAttribute('aria-pressed',String(active&&mode==='stamp'));
+  el('railTraceToggle').setAttribute('aria-pressed',String(active&&mode==='trace'));
 }
 function setDrawTool(mode){
   if(drawingTool.isActive){
@@ -3642,6 +3689,7 @@ el('railPolygonToggle').onclick=()=>setDrawTool('polygon');
 el('railPenToggle').onclick=()=>setDrawTool('pen');
 el('railPaintToggle').onclick=()=>setDrawTool('paint');
 el('railStampToggle').onclick=()=>setDrawTool('stamp');
+el('railTraceToggle').onclick=()=>setDrawTool('trace');
 // RS-3011 Step 8 Phase B: Import SVG is a one-shot action, not a draw-tool mode -- clicking it
 // never calls setDrawTool()/setMode(), it just opens its own hidden file input, matching the
 // existing top-nav Import Lightbox's own el('importSvg').onclick pattern below (a fully separate
