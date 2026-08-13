@@ -251,3 +251,9 @@ tools/scratch/rs-3011-step7-verify/
 # CompoundPath rendering, mismatched open/closed warning surfaced in #status), same "never a repo
 # artifact" category as the scratch folders above
 tools/scratch/rs-3011-step8-phaseb-verify/
+
+# RS-3011 freehand-close-and-clear-all-layers fix: ad hoc live-browser Playwright verification
+# script + screenshots for freehand's new close-on-return-to-start gesture and deleteLayer()'s new
+# blank-text-layer-on-last-delete behavior, same "never a repo artifact" category as the scratch
+# folders above
+tools/scratch/rs3011-freehand-close-clear-layers-verify/

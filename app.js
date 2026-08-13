@@ -1416,13 +1416,11 @@ async function updateAll(skipWrite=false,forceStoneRebuild=false){if(!skipWrite)
   // drawingTool.deleteSelected()/onShapeDeleted entirely) -- see syncFromProjectLayers()'s own doc
   // comment for why this is a no-op after an ordinary Design-originated commit/move/resize/delete,
   // and for why applyHistorySnapshot()/deleteLayer()'s trash-icon path pass forceStoneRebuild=true.
-  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'),forceStoneRebuild)}else{drawLayout()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}// S-003: a project must always keep at least one layer (deleteLayer()'s guard below), so once
-// only one layer remains, every delete affordance -- the per-row trash icon and the sidebar
-// "Delete selected layer" button -- is disabled here (not just left clickable-but-a-no-op) and
-// #layerRuleHint (sitting directly under the button, always in view) explains why. This runs on
-// every renderLayerUI() call (i.e. after every add/delete/duplicate/undo/redo/import), so the
-// disabled state and hint never go stale relative to the current layer count.
-function renderLayerUI(){const onlyOneLayer=project.layers.length<=1;el('selectedLayer').innerHTML=project.layers.map(l=>`<option value="${escapeHtml(l.id)}">${escapeHtml(layerLabel(l))}</option>`).join('');el('selectedLayer').value=selectedLayerId;el('layersList').innerHTML=project.layers.map(l=>`<div class="layer ${selectedLayerIds.has(l.id)?'selected':''}" data-layer="${escapeHtml(l.id)}"><input type="checkbox" ${l.visible?'checked':''} data-action="visible"><div class="name" data-action="select" title="${escapeHtml(layerLabel(l))}">${escapeHtml(layerLabel(l))}</div><div class="type">${l.type.toUpperCase()}</div><button data-action="select">✎</button><button data-action="duplicate">⧉</button><button data-action="delete" ${onlyOneLayer?'disabled title="At least one layer is required"':''}>🗑</button></div>`).join('');el('deleteSelected').disabled=onlyOneLayer;el('deleteSelected').title=onlyOneLayer?'At least one layer is required':'';el('layerRuleHint').style.display=onlyOneLayer?'block':'none';
+  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'),forceStoneRebuild)}else{drawLayout()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}
+// RS-3011 freehand-close-and-clear-all-layers fix: deleting the last remaining layer no longer
+// blocks (see deleteLayer()) -- the per-row trash icon and the sidebar "Delete selected layer"
+// button are therefore never disabled for layer count anymore.
+function renderLayerUI(){el('selectedLayer').innerHTML=project.layers.map(l=>`<option value="${escapeHtml(l.id)}">${escapeHtml(layerLabel(l))}</option>`).join('');el('selectedLayer').value=selectedLayerId;el('layersList').innerHTML=project.layers.map(l=>`<div class="layer ${selectedLayerIds.has(l.id)?'selected':''}" data-layer="${escapeHtml(l.id)}"><input type="checkbox" ${l.visible?'checked':''} data-action="visible"><div class="name" data-action="select" title="${escapeHtml(layerLabel(l))}">${escapeHtml(layerLabel(l))}</div><div class="type">${l.type.toUpperCase()}</div><button data-action="select">✎</button><button data-action="duplicate">⧉</button><button data-action="delete">🗑</button></div>`).join('');
   // UI-001: keep the right inspector's layer name and the left panel's project/template summary
   // in sync on every render (add/delete/duplicate/undo/redo/import/selection change).
   el('inspectorLayerName').textContent=layerLabel(selectedLayer());updateObjectTemplateDetail();
@@ -2174,9 +2172,22 @@ function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)retu
   // reference; the circle/text branches below still freely mutate it afterward, same as before.
   project.layers.push(copy);
   if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(XYWH_SHAPE_TYPES.has(copy.type)){const dx=8,dy=8;copy.x+=dx;copy.y+=dy;drawingTool.duplicateShapeForLayer(l.id,copy.id,dx,dy)}if(copy.type==='text'){copy.text+=' copy';copy.x=(copy.x||0)+8;copy.y=(copy.y||0)+8}selectedLayerId=copy.id;selectedLayerIds=selectOnly(copy.id);syncSelectedControlsFromLayer();updateAll()}// RS-3011 Step 1 write-through fix: returns true/false so onShapeDeleted() (below) knows whether
-// the guard blocked the delete, without duplicating the project.layers.length<=1 check itself --
-// every pre-existing caller already discards the return value, so this stays backward-compatible.
-function deleteLayer(id){if(project.layers.length<=1){el('status').textContent='Cannot delete the last layer';const hint=el('layerRuleHint');hint.style.display='block';hint.scrollIntoView({block:'nearest'});return false}commitHistory();project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true,true);return true}
+// the guard blocked the delete, without duplicating any guard logic itself -- every pre-existing
+// caller already discards the return value, so this stays backward-compatible. RS-3011 freehand-
+// close-and-clear-all-layers fix: deleting the last remaining layer is no longer blocked -- it is
+// replaced in place with a fresh, blank text layer (same shape defaultProject()'s own seed text
+// layer uses, just with text:''), giving the user a genuinely blank project instead of a wall.
+// generateTextStonesLive() already guards `!layer.text` and returns zero stones for empty text --
+// the exact same thing that already happens today if a user manually clears the text field -- so
+// this is an already-proven-safe state, not a new code path.
+function deleteLayer(id){
+  commitHistory();
+  if(project.layers.length<=1){
+    const blank={id:'text'+Date.now(),type:'text',visible:true,text:'',font:DEFAULT_TEXT_FONT_ID,height:25,heightMode:'capHeight',textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0};
+    project.layers=[blank];
+    selectedLayerId=blank.id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true,true);return true
+  }
+  project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true,true);return true}
 function pointerToLayout(e){const r=layoutCanvas.getBoundingClientRect(),dpr=layoutTransform.dpr;return layoutPxToMm((e.clientX-r.left)*dpr,(e.clientY-r.top)*dpr)}
 // TXT-102: checked before the generic per-layer loop below -- the rotate handle only ever exists
 // for the single currently-selected text layer (matching drawRotateHandle()'s own single&&

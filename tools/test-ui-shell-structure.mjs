@@ -268,7 +268,7 @@ await test('12. Project section: name, rename input, units, template summary', (
 
 await test('13. Layers section: list, delete, no per-layer-type detail forms, no duplicate shape-creation controls', () => {
   const body = section(leftPanel, 'Layers');
-  for (const id of ['layersList', 'deleteSelected', 'layerRuleHint']) {
+  for (const id of ['layersList', 'deleteSelected']) {
     assert.ok(body.includes(`id="${id}"`), `expected #${id} in the Layers section`);
   }
   // S-110: Design Shapes is the one place to create a shape.
