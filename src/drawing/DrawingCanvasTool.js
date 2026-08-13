@@ -1690,6 +1690,17 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         // would reject anyway (flattenPathToContour()'s own <3-point guard).
         if (board.path && board.path.segments.length >= 2) {
           const item = board.path;
+          // RS-3011 freehand-close: ending the drag back near its own start point closes the
+          // shape, the same "click near the first anchor closes" gesture Pen/Polygon already
+          // have (see the CLOSE_POLYGON_TOLERANCE_PX / paper.view.zoom check above) -- reused
+          // verbatim rather than introducing a second tolerance constant. tool.onMouseUp takes no
+          // event parameter (unlike onMouseDown above), so the drag's ending point is read off the
+          // path's own last segment -- the exact point the final onMouseDrag frame added -- instead
+          // of a nonexistent `event.point`.
+          const lastPoint = item.segments[item.segments.length - 1].point;
+          if (lastPoint.getDistance(item.segments[0].point) <= CLOSE_POLYGON_TOLERANCE_PX / paper.view.zoom) {
+            item.closed = true;
+          }
           item.simplify(SIMPLIFY_TOLERANCE_MM);
           board.finalizeShape();
           commitFinalizedShape(item);

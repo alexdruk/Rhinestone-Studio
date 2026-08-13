@@ -163,7 +163,6 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .layer button:disabled{opacity:.35;cursor:not-allowed}
 .layer .name{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .layer .type{font-size:9.5px;color:var(--color-text-faint);text-align:right}
-.ruleHint{font-size:var(--font-size-xs);color:var(--color-danger);margin-top:6px;line-height:1.4}
 #status{font-size:var(--font-size-sm);color:var(--color-text-muted)}
 
 /* ============================== Workspace ============================== */
@@ -395,7 +394,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
       <h2>Layers</h2>
       <select id="selectedLayer" class="visually-hidden" aria-label="Selected layer"></select>
       <div id="layersList" role="list" aria-label="Layer list"></div>
-      <button id="deleteSelected" class="btn danger block" style="margin-top:var(--space-2)">Delete selected layer</button><div id="layerRuleHint" class="ruleHint" style="display:none">At least one layer is required — add another layer before you can delete this one.</div>
+      <button id="deleteSelected" class="btn danger block" style="margin-top:var(--space-2)">Delete selected layer</button>
     </section>
 
     <section class="panel-section">
