@@ -498,7 +498,20 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <button class="icon-btn" id="railDrawToggle" title="Draw a custom freehand shape directly on the canvas (B)" aria-pressed="false">✏️ Draw</button>
           <button class="icon-btn" id="railPenToggle" title="Pen -- draw straight/curved paths (click for a straight anchor, drag to curve, click back on the last anchor to reset a corner, click back on the first anchor to close) (P)" aria-pressed="false">✒️ Pen</button>
           <button class="icon-btn" id="railPaintToggle" title="Paint -- drag a lasso over part of a shape to give that area its own stone size/spacing/color (F)" aria-pressed="false">🪣 Paint</button>
+          <!-- RS-3011 Step 8 Phase B: a one-shot action, not a persistent tool -- deliberately no
+               aria-pressed (never synced by updateDrawToolButtons()), unlike every button above it.
+               Picking a file immediately produces a real, selected, fitted-and-centered shape (see
+               app.js's #designImportSvgFile change handler), the same "no interactive placement"
+               behavior the existing top-nav Import Lightbox already has. -->
+          <button class="icon-btn" id="railImportSvgToggle" title="Import SVG -- add a new shape from an SVG file, fitted and centered on the canvas">⇪ Import SVG</button>
         </div>
+        <input id="designImportSvgFile" type="file" accept="image/svg+xml,.svg" style="display:none">
+        <!-- RS-3011 Step 8 Phase B: Design's own SVG import, fully separate from the top-nav
+             #importSvgFile above -- that input's change handler is tied to the OLD 'svg'-layer-type
+             pipeline (svgSource stored verbatim, sampled live by StoneSampler); this one runs every
+             imported file through Phase A's Paper.js-native flatten pipeline into a real 'path'
+             layer instead. Two parallel pipelines is this milestone's own deliberate outcome (see
+             Phase A). -->
         <div class="design-tool-rail rail-right" id="designToolRailRight" style="display:none" aria-label="Design tools (shape presets)">
           <button class="icon-btn" id="railRectToggle" title="Draw a rectangle (hold Shift for a square) (R)" aria-pressed="false">▭ Rect</button>
           <button class="icon-btn" id="railEllipseToggle" title="Draw an ellipse (hold Shift for a circle) (E)" aria-pressed="false">◯ Ellipse</button>
