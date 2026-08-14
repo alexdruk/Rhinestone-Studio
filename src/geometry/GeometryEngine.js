@@ -973,11 +973,12 @@ export class GeometryEngine {
       stones = stones.concat(infillStones);
     }
 
-    // RS-3011 Step 10a (Paint regions) / Step 12 (Stamp): both need the same natural-space ->
-    // absolute-space transform options.contours was itself placed through (not a fresh one derived
-    // from each region's/stamp's own, usually-smaller, extent) -- see computeNaturalContourTransform's
-    // own doc comment for why that distinction matters. Computed once, shared by both branches below.
-    if (options.regions.length > 0 || options.stampedStones.length > 0) {
+    // RS-3011 Step 10a (Paint regions) / Step 12 (Stamp) / Step 13 (Eraser): all three need the
+    // same natural-space -> absolute-space transform options.contours was itself placed through
+    // (not a fresh one derived from each region's/stamp's/daub's own, usually-smaller, extent) --
+    // see computeNaturalContourTransform's own doc comment for why that distinction matters.
+    // Computed once, shared by every branch below.
+    if (options.regions.length > 0 || options.stampedStones.length > 0 || options.eraseDaubs.length > 0) {
       const transform = computeNaturalContourTransform(options.contours, options.xMm, options.yMm, options.widthMm, options.heightMm);
       // RS-3011 Step 10a: additive, priority-ordered sub-areas that carve their own patch out of the
       // fill computed above. No-op when `regions` is empty/absent -- every layer predating this step
@@ -1005,6 +1006,38 @@ export class GeometryEngine {
           });
         });
         stones = stones.concat(stampedStoneObjects);
+      }
+      // RS-3011 Step 13 (Eraser): brush-style removal, applied LAST -- strictly after base fill +
+      // regions + stampedStones above are all combined into one list, so a daub drops a Stone
+      // regardless of which of the three sources produced it. A daub is a point + radius, not a
+      // contour (no polygon/boolean geometry involved) -- drops any Stone whose center falls
+      // within radiusMm of ANY daub. Like a stamp's own xMm/yMm above, a daub's xMm/yMm is stored
+      // in the SAME (0,0)-rooted natural-space convention, so it needs the identical
+      // applyNaturalContourTransform() conversion before comparing against `stones`' own absolute
+      // coordinates -- radiusMm itself is deliberately left untransformed (a fixed physical brush
+      // size, exactly like a stamp's own sizeMm doesn't scale with the parent shape either). A null
+      // transform (empty contours) leaves eraseDaubs unable to erase anything, same as
+      // stampedStones above. No-op when eraseDaubs is empty, matching regions/stampedStones' own
+      // "absent field -> unchanged output" convention. Re-indexes survivors afterward, the same
+      // convention _applyPathRegions()'s own final `.map((stone,index)=>...)` already uses.
+      if (options.eraseDaubs.length > 0 && transform) {
+        const placedDaubs = options.eraseDaubs.map((daub) => {
+          const [placed] = applyNaturalContourTransform([{ xMm: daub.xMm, yMm: daub.yMm }], transform);
+          return { xMm: placed.xMm, yMm: placed.yMm, radiusMm: daub.radiusMm };
+        });
+        const survivors = stones.filter((stone) => !placedDaubs.some((daub) => {
+          const dx = stone.xMm - daub.xMm;
+          const dy = stone.yMm - daub.yMm;
+          return dx * dx + dy * dy <= daub.radiusMm * daub.radiusMm;
+        }));
+        stones = survivors.map((stone, index) => new Stone({
+          xMm: stone.xMm,
+          yMm: stone.yMm,
+          sizeMm: stone.sizeMm,
+          color: stone.color,
+          layerId: stone.layerId,
+          index
+        }));
       }
     }
 
@@ -1725,7 +1758,10 @@ function normalizePathParams(params) {
     regions: normalizePathRegions(params.regions),
     // RS-3011 Step 12: Stamp's manually-placed stones -- see normalizePathStampedStones()'s own doc
     // comment. Same "absent optional field -> safe no-op default" convention as `regions` above.
-    stampedStones: normalizePathStampedStones(params.stampedStones)
+    stampedStones: normalizePathStampedStones(params.stampedStones),
+    // RS-3011 Step 13: Eraser's brush daubs -- see normalizePathEraseDaubs()'s own doc comment.
+    // Same "absent optional field -> safe no-op default" convention as `regions`/`stampedStones`.
+    eraseDaubs: normalizePathEraseDaubs(params.eraseDaubs)
   };
 }
 
@@ -1823,6 +1859,43 @@ function normalizePathStampedStone(stamp, index) {
     yMm,
     sizeMm,
     color: stamp.color ?? null
+  };
+}
+
+/**
+ * Normalizes a 'path' layer's optional `eraseDaubs` field (RS-3011 Step 13, Eraser). Each entry's
+ * xMm/yMm uses the exact same (0,0)-rooted natural-space convention as `stampedStones`/a region's
+ * own `contour` field -- validated only as loosely as those fields already are, mirroring
+ * normalizePathStampedStones()'s own structure exactly (a daub is a point + radiusMm, not a
+ * contour, so there's no polygon/array-of-points field to validate here).
+ *
+ * @param {object[]} [eraseDaubsInput]
+ * @returns {{id: string|null, xMm: number, yMm: number, radiusMm: number}[]}
+ */
+function normalizePathEraseDaubs(eraseDaubsInput) {
+  if (eraseDaubsInput === undefined || eraseDaubsInput === null) {
+    return [];
+  }
+  if (!Array.isArray(eraseDaubsInput)) {
+    throw new TypeError('GeometryEngine.generatePathLayout eraseDaubs must be an array when provided.');
+  }
+  return eraseDaubsInput.map((daub, index) => normalizePathEraseDaub(daub, index));
+}
+
+function normalizePathEraseDaub(daub, index) {
+  if (!daub || typeof daub !== 'object') {
+    throw new TypeError(`eraseDaubs[${index}] must be an object.`);
+  }
+
+  const xMm = assertFiniteNumber(daub.xMm, `eraseDaubs[${index}].xMm`);
+  const yMm = assertFiniteNumber(daub.yMm, `eraseDaubs[${index}].yMm`);
+  const radiusMm = assertPositiveNumber(daub.radiusMm, `eraseDaubs[${index}].radiusMm`);
+
+  return {
+    id: typeof daub.id === 'string' && daub.id.length > 0 ? daub.id : null,
+    xMm,
+    yMm,
+    radiusMm
   };
 }
 

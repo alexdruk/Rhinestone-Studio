@@ -71,6 +71,12 @@ const STROKE_WIDTH_PX = 2;
 const MARQUEE_FILL_COLOR = 'rgba(91, 157, 255, 0.15)';
 const MARQUEE_STROKE_COLOR = '#5b9dff';
 const MARQUEE_STROKE_WIDTH_PX = 1;
+// RS-3011 Step 13: Eraser's own outline-only styling -- distinct from STROKE_COLOR/
+// SELECTED_STROKE_COLOR/MARQUEE_STROKE_COLOR (all blue, "drawing/selecting" hues) so both the
+// idle-hover ghost circle (updateEraserGhostItem) and the live drag-sweep preview read
+// unambiguously as a destructive/removal action, not another shape being drawn. No fillColor on
+// either item -- outline-only, per this milestone's own decision doc.
+const ERASER_STROKE_COLOR = '#d92b2b';
 const SIMPLIFY_TOLERANCE_MM = 0.35;
 // RS-3011 Step 8 Phase B: exported so app.js's own Design-native Import SVG handler (a one-shot
 // action outside this file's Paper.js-only boundary, not a draw tool -- see this milestone's own
@@ -126,9 +132,18 @@ const PAINT_LASSO_DASH_PX = 5;
 const TRACE_MIN_SAMPLE_DISTANCE_MM = 1.0;
 // RS-3011 Step 11: click-to-place tools that stay active after each placement (no revert-to-Select
 // on commit, unlike every other draw preset) -- Escape's own idle-revert-to-Select (cancelPath()
-// below) keys off this shared set instead of forking per-tool logic, so Eraser (Step 13) can join
-// it later with a one-line change here.
-const CLICK_TO_PLACE_MODES = new Set(['stamp', 'trace']);
+// below) keys off this shared set instead of forking per-tool logic. RS-3011 Step 13: Eraser joins
+// it here, the one-line change this doc comment already anticipated.
+const CLICK_TO_PLACE_MODES = new Set(['stamp', 'trace', 'eraser']);
+// RS-3011 Step 13: Eraser's own brush-radius floor (decision 4b: '[' / ']' nudge by 0.5mm, clamped
+// at this floor, no ceiling) -- also the floor setEraserRadiusMm() clamps any programmatic value
+// to, so the ghost preview/actual daubs can never collapse to a zero-or-negative radius.
+const ERASER_RADIUS_FLOOR_MM = 0.5;
+// RS-3011 Step 13: setEraserRadiusMm()'s own fallback before app.js's first real call (mirrors
+// SLOT_DEFAULT_WIDTH_MM's own role for slotWidthMm above) -- app.js seeds the real value from the
+// selected layer's stoneSize the first time Eraser mode is entered in a session, so this is only
+// ever visible for the eye-blink before that happens.
+const ERASER_DEFAULT_RADIUS_MM = 1;
 // RS-3011 Step 9: Pen's own constants -- same values as Polygon's above for the same underlying
 // reasons (need at least a triangle to close; hit tolerance mirrors hitTestShapeId's screen-px-to-
 // project-mm pattern), kept as independent named constants since Pen and Polygon are separate
@@ -353,7 +368,7 @@ function materializeShapeFromLayer(layer) {
  * (shouldn't happen post-Step-1, but mirrors this file's existing null-layerId guards) is skipped,
  * never passed through as undefined.
  * @param {HTMLCanvasElement} canvasEl
- * @param {{getStoneDefaults?:()=>{stoneSize?:number,gap?:number,color?:string}, onShapeCommitted?:(layer:object)=>void, openHistorySession?:()=>void, closeHistorySession?:()=>void, onShapeMoved?:(layerId:string,dxMm:number,dyMm:number)=>void, onShapeResized?:(layerId:string,boundsMm:{left:number,top:number,width:number,height:number})=>void, onShapeDeleted?:(layerId:string)=>(boolean|void), onSelectionChanged?:(layerIds:string[])=>void, onPaintStroke?:(lassoPolygons:{xMm:number,yMm:number}[][])=>void, onStampPlace?:(placement:{xMm:number,yMm:number,layerId:string|null})=>void, onTracePlace?:(placements:{xMm:number,yMm:number}[],layerId:string)=>void}} [hooks] onShapeDeleted returning exactly `false` means the deletion was blocked (e.g. a last-layer guard) -- the shape stays in `board.shapes` too, everything else treats a non-`false` return as success. RS-3011 Step 10b: onPaintStroke(lassoPolygons) fires once a Paint lasso release produces a usable stroke (>= PAINT_MIN_LASSO_POINTS) -- lassoPolygons is exactly one closed ring, absolute project-mm, this module's own coordinate space (Paper.js project units already equal this app's millimeters, per this file's own header comment). Target selection, region creation, and every project.layers mutation happen entirely in app.js -- this hook is this module's only involvement in Paint beyond the pointer interaction and live preview. RS-3011 Step 12: onStampPlace(placement) fires once per Stamp click -- xMm/yMm is the click point, absolute project-mm, this module's own coordinate space; layerId is the project.layers id resolved via resolveStampTargetLayerId() (the SAME hitTestShapeId() Select's own click-to-pick-a-shape branch uses), or null if the click hit no shape. Passing the already-resolved layerId (rather than a bare point, unlike onPaintStroke) avoids a second, duplicate hit-test implementation living in app.js -- app.js still owns the absolute-to-natural-space coordinate conversion and every project.layers mutation, discarding silently when layerId is null, mirroring Paint's own "no target -> discard" precedent. RS-3011 Step 11: onTracePlace(placements, layerId) fires once per committed Trace drag that resolved a real target AND produced at least one spaced point -- placements is the full list of stones to place, absolute project-mm, this module's own coordinate space, already spaced by src/geometry/lineStampSpacing.js's placeStonesAlongPath(); layerId is always a real project.layers id here (never null -- a null/no-target resolution discards the whole drag silently before this hook is ever called, unlike onStampPlace's own "always call, layerId may be null" contract, since there is no per-point ghost-preview equivalent for Trace that would need the null case). app.js still owns the absolute-to-natural-space conversion and every project.layers mutation, mirroring onStampPlace's own architecture split, just plural.
+ * @param {{getStoneDefaults?:()=>{stoneSize?:number,gap?:number,color?:string}, onShapeCommitted?:(layer:object)=>void, openHistorySession?:()=>void, closeHistorySession?:()=>void, onShapeMoved?:(layerId:string,dxMm:number,dyMm:number)=>void, onShapeResized?:(layerId:string,boundsMm:{left:number,top:number,width:number,height:number})=>void, onShapeDeleted?:(layerId:string)=>(boolean|void), onSelectionChanged?:(layerIds:string[])=>void, onPaintStroke?:(lassoPolygons:{xMm:number,yMm:number}[][])=>void, onStampPlace?:(placement:{xMm:number,yMm:number,layerId:string|null})=>void, onTracePlace?:(placements:{xMm:number,yMm:number}[],layerId:string)=>void, onEraseSweep?:(daubsAbsoluteMm:{xMm:number,yMm:number}[],layerId:string)=>void}} [hooks] onShapeDeleted returning exactly `false` means the deletion was blocked (e.g. a last-layer guard) -- the shape stays in `board.shapes` too, everything else treats a non-`false` return as success. RS-3011 Step 10b: onPaintStroke(lassoPolygons) fires once a Paint lasso release produces a usable stroke (>= PAINT_MIN_LASSO_POINTS) -- lassoPolygons is exactly one closed ring, absolute project-mm, this module's own coordinate space (Paper.js project units already equal this app's millimeters, per this file's own header comment). Target selection, region creation, and every project.layers mutation happen entirely in app.js -- this hook is this module's only involvement in Paint beyond the pointer interaction and live preview. RS-3011 Step 12: onStampPlace(placement) fires once per Stamp click -- xMm/yMm is the click point, absolute project-mm, this module's own coordinate space; layerId is the project.layers id resolved via resolveStampTargetLayerId() (the SAME hitTestShapeId() Select's own click-to-pick-a-shape branch uses), or null if the click hit no shape. Passing the already-resolved layerId (rather than a bare point, unlike onPaintStroke) avoids a second, duplicate hit-test implementation living in app.js -- app.js still owns the absolute-to-natural-space coordinate conversion and every project.layers mutation, discarding silently when layerId is null, mirroring Paint's own "no target -> discard" precedent. RS-3011 Step 11: onTracePlace(placements, layerId) fires once per committed Trace drag that resolved a real target AND produced at least one spaced point -- placements is the full list of stones to place, absolute project-mm, this module's own coordinate space, already spaced by src/geometry/lineStampSpacing.js's placeStonesAlongPath(); layerId is always a real project.layers id here (never null -- a null/no-target resolution discards the whole drag silently before this hook is ever called, unlike onStampPlace's own "always call, layerId may be null" contract, since there is no per-point ghost-preview equivalent for Trace that would need the null case). app.js still owns the absolute-to-natural-space conversion and every project.layers mutation, mirroring onStampPlace's own architecture split, just plural. RS-3011 Step 13: onEraseSweep(daubsAbsoluteMm, layerId) fires once per committed Eraser click/drag sweep that resolved a real target -- daubsAbsoluteMm is every buffered point from the gesture (one for a plain click, one per TRACE_MIN_SAMPLE_DISTANCE_MM-thinned sample along a drag, same thinning as Trace's own placements), absolute project-mm, this module's own coordinate space, NOT yet spaced/filtered in any way (a daub is a raw brush touch, not a stone placement); layerId is always a real project.layers id here, same "never null" contract as onTracePlace's own (resolved via resolveTraceTargetLayerId() against the sweep's own bounding-box center, which degenerates correctly to the click point itself for a single-point click). This module deliberately has no opinion on daub radius -- that's app.js's own eraserSettings.radiusMm (a tool setting, not read from any layer field), attached per point only once app.js owns the coordinate conversion, mirroring onTracePlace/onStampPlace's own architecture split.
  */
 export function createDrawingTool(canvasEl, hooks = {}) {
   const {
@@ -374,6 +389,9 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     // RS-3011 Step 11: fires once per committed Trace drag with a resolved target -- see this
     // function's own hooks-param doc comment above for the exact contract.
     onTracePlace = () => {},
+    // RS-3011 Step 13: fires once per committed Eraser click/drag sweep with a resolved target --
+    // see this function's own hooks-param doc comment above for the exact contract.
+    onEraseSweep = () => {},
     // RS-3011 Step 3b: the two hooks the live stone preview needs -- getLayerStoneParams(layerId)
     // returns a 'path' layer's non-geometric stone settings (stoneSizeMm/gapMm/mode/color/mixed-size),
     // or null if no matching layer exists (every non-Design layer type, or Design not active); this
@@ -417,6 +435,15 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   // onMouseDown's 'trace' branch, which reuses PAINT_LASSO_DASH_PX rather than a second constant).
   let tracePoints = [];
   let traceItem = null;
+  // RS-3011 Step 13: Eraser's own state -- same shape/lifecycle as tracePoints/traceItem just
+  // above (a single click-drag-release gesture, reset at mousedown and again once onMouseUp hands
+  // the finished sweep off to onEraseSweep()). eraserRadiusMm is NOT reset per-gesture -- it's the
+  // tool's current brush size, set from outside via setEraserRadiusMm() (app.js's own
+  // eraserSettings.radiusMm), read live by both the ghost preview and the drag-sweep preview so
+  // adjusting the brush (radius control / '[' / ']') is reflected immediately.
+  let erasePoints = [];
+  let eraseItem = null;
+  let eraserRadiusMm = ERASER_DEFAULT_RADIUS_MM;
   // RS-3011 Step 9: Pen's own state. Unlike polygonPoints above, Pen's anchors are NOT duplicated
   // into a parallel array -- board.path IS the real in-progress shape from the very first click
   // onward (Paper.js Segments already carry point/handleIn/handleOut natively), so these only track
@@ -456,6 +483,10 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   // onMouseMove frame while `mode === 'stamp'` (removeStampGhostItem() first); removed in
   // resetInProgressDrawing() so a mode switch/Escape/exit never leaves it stranded.
   let stampGhostItem = null;
+  // RS-3011 Step 13: Eraser's own hover preview -- an outline-only circle at eraserRadiusMm
+  // following the cursor, mirroring stampGhostItem's own lifecycle exactly (rebuilt from scratch
+  // every onMouseMove frame while `mode === 'eraser'`, removed in resetInProgressDrawing()).
+  let eraserGhostItem = null;
   let selectedIds = clearSelection();
   // 'draw' while a new freehand/rect/ellipse/slot shape is mid-drag; 'move' while dragging the
   // current selection; 'polygon' while a click-to-add-vertex polygon is accumulating points
@@ -854,6 +885,37 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     stampGhostItem.data.isStampGhost = true;
   }
 
+  /** RS-3011 Step 13: removes/nulls the throwaway Eraser ghost preview circle, if any. */
+  function removeEraserGhostItem() {
+    if (eraserGhostItem) {
+      eraserGhostItem.remove();
+      eraserGhostItem = null;
+    }
+  }
+
+  /**
+   * RS-3011 Step 13: rebuilds the Eraser ghost preview at `point` -- hit-tests `point` against
+   * every finalized shape (resolveStampTargetLayerId(), same hit-test Stamp's own ghost above
+   * uses), showing an outline-only circle at the CURRENT eraserRadiusMm only when it lands on a
+   * real shape. Unlike Stamp's own ghost, the circle's radius/style never depend on the target
+   * layer's fields (decision 4: brush radius is a tool setting, not a stone property) -- only
+   * whether a target exists at all decides visibility, mirroring Stamp's own "no target -> no
+   * ghost" precedent.
+   * @param {paper.Point} point
+   */
+  function updateEraserGhostItem(point) {
+    removeEraserGhostItem();
+    const layerId = resolveStampTargetLayerId(point);
+    if (!layerId) return;
+    eraserGhostItem = new paper.Path.Circle({
+      center: point,
+      radius: eraserRadiusMm,
+      strokeColor: ERASER_STROKE_COLOR,
+      strokeWidth: STROKE_WIDTH_PX / paper.view.zoom
+    });
+    eraserGhostItem.data.isEraserGhost = true;
+  }
+
   /** RS-3011 Step 9: removes/nulls the throwaway "next segment" pen preview, if any. */
   function removePenPreviewItem() {
     if (penPreviewItem) {
@@ -974,6 +1036,14 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       traceItem = null;
     }
     tracePoints = [];
+    // RS-3011 Step 13: mirrors traceItem/tracePoints' own reset just above -- an Eraser drag
+    // interrupted mid-drag (Escape/mode-switch/exit) must not leave a stale preview or stale
+    // points behind for the next sweep.
+    if (eraseItem) {
+      eraseItem.remove();
+      eraseItem = null;
+    }
+    erasePoints = [];
     for (const item of resizeHandleItems) item.remove();
     resizeHandleItems = [];
     // RS-3011 resize-perf fix: a resize can be interrupted here (Escape/mode-switch/exit) before
@@ -1007,6 +1077,9 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     // RS-3011 Step 12: mirrors penPreviewItem's own reset just above -- a Stamp ghost interrupted by
     // Escape/mode-switch/exit must not linger on the canvas.
     removeStampGhostItem();
+    // RS-3011 Step 13: mirrors removeStampGhostItem() just above -- an Eraser ghost interrupted by
+    // Escape/mode-switch/exit must not linger on the canvas either.
+    removeEraserGhostItem();
   }
 
   /**
@@ -1320,8 +1393,9 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       // stroke deliberately starts ON TOP of its intended target shape (that's the whole point of
       // painting a sub-region into it), so it must never be hijacked into a move/resize instead.
       // RS-3011 Step 11: Trace joins them for the same reason -- a traced line deliberately starts
-      // ON TOP of its intended target shape too.
-      if (mode !== 'pen' && mode !== 'paint' && mode !== 'trace') {
+      // ON TOP of its intended target shape too. RS-3011 Step 13: Eraser joins them for the same
+      // reason -- a click/drag sweep deliberately starts ON TOP of its intended target shape too.
+      if (mode !== 'pen' && mode !== 'paint' && mode !== 'trace' && mode !== 'eraser') {
         // Design Step D: a resize handle can sit right at a shape's edge, where both it and the
         // shape's own hit-test could otherwise match -- the handle must win, so this is checked
         // first (mirrors app.js's own hitTest(), which checks handlesFor() before the move branch).
@@ -1451,6 +1525,25 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           dashArray: [PAINT_LASSO_DASH_PX / paper.view.zoom, PAINT_LASSO_DASH_PX / paper.view.zoom]
         });
         traceItem.add(event.point);
+        return;
+      }
+      if (mode === 'eraser') {
+        // RS-3011 Step 13: the first point of a brand-new Eraser sweep -- same single click-drag-
+        // release shape as Trace's own branch just above (erasePoints only ever accumulates within
+        // one mousedown-to-mouseup cycle), same dashed-preview styling. The idle hover ghost sits
+        // exactly at this same point -- removed before the drag preview takes over, same
+        // "stale ghost must not linger" precedent Stamp's own onMouseDown branch established
+        // (harmless here either way, since the ghost is outline-only/no fillColor and this tool's
+        // own hit-test never depends on it, but kept for consistency).
+        removeEraserGhostItem();
+        interactionKind = 'eraser';
+        erasePoints = [event.point];
+        eraseItem = new paper.Path({
+          strokeColor: ERASER_STROKE_COLOR,
+          strokeWidth: STROKE_WIDTH_PX / paper.view.zoom,
+          dashArray: [PAINT_LASSO_DASH_PX / paper.view.zoom, PAINT_LASSO_DASH_PX / paper.view.zoom]
+        });
+        eraseItem.add(event.point);
         return;
       }
       interactionKind = 'draw';
@@ -1648,6 +1741,18 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           tracePoints.push(event.point);
           traceItem.removeSegments();
           traceItem.addSegments(tracePoints.map((p) => new paper.Segment(p)));
+        }
+        return;
+      }
+      if (interactionKind === 'eraser') {
+        // RS-3011 Step 13: same discard-and-recreate-from-accumulated-points pattern as Trace's own
+        // branch just above, thinned against the SAME TRACE_MIN_SAMPLE_DISTANCE_MM constant
+        // (decision 5: reuse verbatim, no second thinning constant).
+        const lastPoint = erasePoints[erasePoints.length - 1];
+        if (event.point.getDistance(lastPoint) >= TRACE_MIN_SAMPLE_DISTANCE_MM) {
+          erasePoints.push(event.point);
+          eraseItem.removeSegments();
+          eraseItem.addSegments(erasePoints.map((p) => new paper.Segment(p)));
         }
         return;
       }
@@ -1877,6 +1982,35 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         onTracePlace(placements, layerId);
         return;
       }
+      if (interactionKind === 'eraser') {
+        // RS-3011 Step 13: mirrors Trace's own branch just above, but a plain click IS a usable
+        // gesture here (decision 5: "click = one daub at the click point") -- unlike Trace, there's
+        // no placeStonesAlongPath() spacing pass; every buffered point becomes one daub verbatim,
+        // handed to app.js's onEraseSweep() as-is (this module has no opinion on daub radius, see
+        // the onEraseSweep hook's own doc comment). resolveTraceTargetLayerId() degenerates
+        // correctly for a single-point array (a 1-point path's own bounds.center is that point),
+        // so it's reused unconditionally rather than branching on points.length to pick between it
+        // and resolveStampTargetLayerId() -- decision 6's "do not add a third hit-test
+        // implementation" is satisfied either way, this just avoids a needless branch. Unlike
+        // Paint/every other draw preset, `mode` is deliberately left at 'eraser' (decision 7:
+        // Eraser stays active after each committed sweep), so there's no
+        // mode='select'/updateDrawToolButtons() dance here -- matches Stamp/Trace's own precedent.
+        if (eraseItem) {
+          eraseItem.remove();
+          eraseItem = null;
+        }
+        const points = erasePoints;
+        erasePoints = [];
+        interactionKind = null;
+        if (points.length === 0) return;
+        const layerId = resolveTraceTargetLayerId(points);
+        // No target -> discard the WHOLE gesture silently (decision 6), matching Stamp/Paint/
+        // Trace's own "no target -> discard" precedent.
+        if (!layerId) return;
+        const daubsAbsoluteMm = points.map((p) => ({ xMm: p.x, yMm: p.y }));
+        onEraseSweep(daubsAbsoluteMm, layerId);
+        return;
+      }
       if (interactionKind !== 'draw') return;
       dragging = false;
       if (mode === 'freehand') {
@@ -1955,6 +2089,12 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         updateStampGhostItem(event.point);
         return;
       }
+      // RS-3011 Step 13: Eraser's own ghost preview, between clicks -- mirrors Stamp's own branch
+      // just above exactly (interactionKind is always null in this mode too between gestures).
+      if (mode === 'eraser') {
+        updateEraserGhostItem(event.point);
+        return;
+      }
       // RS-3011 Step 9: hover preview of the tentative NEXT Pen segment, between clicks (Paper.js
       // only fires onMouseMove on button-up motion, so penDraggingSegment is always null here --
       // this can never race the drag-handle branch in onMouseDrag above). Unlike polygon below,
@@ -2017,7 +2157,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      *   mode was entered -- fixes the base fit scale for this drawing session (matches every other
      *   viewport transform in this app in treating project.canvas as the mm reference frame).
      * @param {number} paddingPx same padding convention drawLayout() already uses (38*dpr).
-     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'|'pen'|'paint'|'stamp'|'trace'} [initialMode]
+     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'|'pen'|'paint'|'stamp'|'trace'|'eraser'} [initialMode]
      */
     enter(projectCanvasMm, paddingPx, initialMode = 'select') {
       canvasMm = projectCanvasMm;
@@ -2063,7 +2203,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      * Switch input mode without leaving drawing mode -- already-finalized shapes in board.shapes
      * are untouched; only a drag-in-flight (if any) is discarded, since the box preview belongs
      * to whichever mode was active when the drag started.
-     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'|'pen'|'paint'|'stamp'|'trace'} newMode
+     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'|'pen'|'paint'|'stamp'|'trace'|'eraser'} newMode
      */
     setMode(newMode) {
       mode = newMode;
@@ -2100,6 +2240,19 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     setSlotWidthMm(value) {
       const parsed = parseFloat(value);
       if (Number.isFinite(parsed) && parsed > 0) slotWidthMm = parsed;
+    },
+
+    /**
+     * RS-3011 Step 13: sets Eraser's own brush radius (mm), read live by both the idle ghost
+     * preview and the drag-sweep preview -- app.js calls this whenever eraserSettings.radiusMm
+     * changes (session-first-entry seeding, the #eraserRadiusMm control, the '[' / ']' shortcuts).
+     * Clamped at ERASER_RADIUS_FLOOR_MM, no ceiling (decision 4b); invalid input (non-numeric) is
+     * ignored, keeping the last valid value -- same guard convention as setSlotWidthMm() above.
+     * @param {number|string} value
+     */
+    setEraserRadiusMm(value) {
+      const parsed = parseFloat(value);
+      if (Number.isFinite(parsed)) eraserRadiusMm = Math.max(ERASER_RADIUS_FLOOR_MM, parsed);
     },
 
     /**

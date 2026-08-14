@@ -505,6 +505,13 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
                held at release closes the path into a loop) -- same rail-button/aria-pressed
                convention as Stamp/every other persistent tool above. -->
           <button class="icon-btn" id="railTraceToggle" title="Trace -- drag to draw a path, stones are spaced evenly along it (hold Shift at release to close the loop) (T)" aria-pressed="false">〰️ Trace</button>
+          <!-- RS-3011 Step 13: click or drag to remove any stone (any of the three sources -- base
+               fill, Paint regions, Stamp/Trace stampedStones) within the brush radius -- same
+               rail-button/aria-pressed convention as Stamp/Trace above. Its own radius control
+               (#eraserRadiusField/#eraserRadiusMm) lives in #designToolOptionsPanel, same
+               "own-field-in-the-shared-panel" convention as Slot's own drawSlotWidthField/
+               drawSlotWidthMm -- see that panel's own markup below. -->
+          <button class="icon-btn" id="railEraserToggle" title="Eraser -- click or drag to remove any stone within the brush radius, regardless of source ([ / ] to resize) (X)" aria-pressed="false">🧽 Eraser</button>
           <!-- RS-3011 Step 8 Phase B: a one-shot action, not a persistent tool -- deliberately no
                aria-pressed (never synced by updateDrawToolButtons()), unlike every button above it.
                Picking a file immediately produces a real, selected, fitted-and-centered shape (see
@@ -545,6 +552,12 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <span id="drawModeHint" class="hint" style="display:none">Drag to draw · Scroll to pan · Ctrl/Cmd+scroll to zoom</span>
           <label for="drawSlotWidthMm" id="drawSlotWidthField" style="display:none;margin:0" title="Slot width (mm)">Width (mm)</label>
           <input id="drawSlotWidthMm" type="number" min="0.1" step="0.5" value="6" style="display:none;width:70px">
+          <!-- RS-3011 Step 13 follow-up: relocated from a standalone rail wrapper div into this
+               shared per-tool-options panel, as two sibling elements -- same
+               show/hide-only-while-eraser-is-active convention as drawSlotWidthField/
+               drawSlotWidthMm above, toggled individually in updateDrawToolButtons(). -->
+          <label for="eraserRadiusMm" id="eraserRadiusField" style="display:none;margin:0" title="Eraser brush radius (mm) -- also adjustable with [ / ] while Eraser is active">Radius (mm)</label>
+          <input id="eraserRadiusMm" type="number" min="0.5" step="0.5" value="1" style="display:none;width:70px">
           <!-- RS-3011 Step 3a: relocation target for #sharedStoneFields (stoneSize/gap/stoneColor) --
                same relocateFieldGroups() mechanism the Lightboxes already use (see FIELD_GROUPS.stone
                in app.js), never a second copy of those fields/ids. Populated only while Design is

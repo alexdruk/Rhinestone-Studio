@@ -198,8 +198,10 @@ const ARROW_KEY_DELTAS={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDo
 // keydown handler below) -- every other single-letter mnemonic close to "stamp" (S) is already taken
 // by Slot, so M stands in for the tool's rubber-stamp "Mark a point" action instead. RS-3011 Step 11:
 // T=Trace (confirmed free elsewhere in the global keydown handler below) -- V/B/R/E/S/G/P/F/M are
-// all already taken, and T is the natural mnemonic for "Trace" itself.
-const DRAW_TOOL_SHORTCUT_KEYS={v:'select',b:'freehand',r:'rect',e:'ellipse',s:'slot',g:'polygon',p:'pen',f:'paint',m:'stamp',t:'trace'};
+// all already taken, and T is the natural mnemonic for "Trace" itself. RS-3011 Step 13: X=Eraser
+// (confirmed free elsewhere in the global keydown handler below) -- V/B/R/E/S/G/P/F/M/T are all
+// already taken, X reads as a "cross out/remove" mnemonic.
+const DRAW_TOOL_SHORTCUT_KEYS={v:'select',b:'freehand',r:'rect',e:'ellipse',s:'slot',g:'polygon',p:'pen',f:'paint',m:'stamp',t:'trace',x:'eraser'};
 // RS-1005: pixels-per-mm used only when rasterizing the Production Sheet SVG to PNG. Fixed and
 // documented (not derived from devicePixelRatio/viewport fit) so the PNG's pixel dimensions are
 // always a clean, undistorted multiple of the page's mm size -- never a fit-to-viewport scale.
@@ -739,6 +741,11 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
     // made for Paint -- defaults to [] for every layer predating this step, matching
     // GeometryEngine.normalizePathParams()'s own stampedStones normalizer.
     stampedStones:layer.stampedStones||[],
+    // RS-3011 Step 13: forwards a 'path' layer's Eraser daubs (Step 13's own data model) into
+    // live/production generation, the identical wiring-gap fix Step 10b/Step 12's own `regions`/
+    // `stampedStones` lines above made for Paint/Stamp -- defaults to [] for every layer predating
+    // this step, matching GeometryEngine.normalizePathParams()'s own eraseDaubs normalizer.
+    eraseDaubs:layer.eraseDaubs||[],
     ...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generatePathLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
  // RS-2000: the legacy bitmap text engine (FONT5 + generateText/sampleGlyphFill/
  // sampleGlyphStroke/line) and the legacy generateCircle/generateRect/bbox/layerBBox shape path
@@ -893,6 +900,15 @@ const permanentEngine=new PermanentGeometryEngine({fontProviderRegistry});
 // below (which only exposes app.js's own live-regeneration helpers).
 const monogramGenerator=new MonogramGenerator({geometryEngine:permanentEngine});
 const engine=new GeometryEngine(permanentEngine);let project=defaultProject(),selectedLayerId='text',layout=null,rotation=0,zoom=1,layoutTransform=null,drag=null,generationToken=0;const layoutCanvas=el('layout'),cupCanvas=el('cup');
+// RS-3011 Step 13: Eraser's own brush-size preference -- NOT project data, NOT per-layer (a
+// brush-size preference persists across whatever the user erases next, the same way brush size
+// behaves in any raster tool). radiusMm is seeded from the selected layer's own stoneSize (mirrors
+// getStoneDefaults()'s own `base.stoneSize||2` convention below) the FIRST time Eraser mode is
+// entered in this session -- see seedEraserRadiusIfNeeded() below -- then left exactly as the user
+// sets it afterward via #eraserRadiusMm or the '['/']' shortcuts, regardless of which layer they
+// later erase on.
+const eraserSettings={radiusMm:1};
+let eraserRadiusSeeded=false;
 // RS-3010 Step 1: one drawing tool bound to layoutCanvas for the app's lifetime -- it lazily calls
 // paper.setup() on first enter() and only pauses/resumes afterward (see DrawingCanvasTool.js's own
 // header comment for why), so constructing it eagerly here does not touch the canvas until the
@@ -1066,6 +1082,41 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     await updateAll(true);
     el('status').textContent=`Traced ${stamps.length} stone${stamps.length===1?'':'s'} on ${layerLabel(targetLayer)}.`;
   },
+  // RS-3011 Step 13: Eraser's own finalize hook -- fires once per committed click/drag sweep (see
+  // DrawingCanvasTool.js's own onEraseSweep doc comment for the exact (daubsAbsoluteMm,layerId)
+  // contract; layerId is always a real project.layers id there -- a null/no-target resolution
+  // discards the whole gesture silently before this hook is ever called, same "always call with a
+  // real layerId" contract onTracePlace's own doc comment establishes). Mirrors onTracePlace's own
+  // architecture split immediately above: this module owns the absolute-to-natural-space
+  // absolutePolygonsToNaturalSpace() conversion and every project.layers mutation.
+  // DrawingCanvasTool.js deliberately has no opinion on daub radius -- decision 4: it's a TOOL
+  // setting (eraserSettings.radiusMm), not a stone property, so unlike onStampPlace/onTracePlace's
+  // own sizeMm/color (read from the target layer's CURRENT fields), it's attached here from this
+  // module's own runtime state instead. All new daubs land in the SAME layer.eraseDaubs array,
+  // pushed in the ONE commitHistory() below so one sweep is one undo step (mirrors Trace's own
+  // "one gesture, one undo step" precedent -- NOT Stamp's per-click commit). Unlike Paint/every
+  // draw preset, `mode` is deliberately left at 'eraser' either way (decision 7: Eraser stays
+  // active after each committed sweep), so there's no updateDrawToolButtons() call here either.
+  onEraseSweep:async(daubsAbsoluteMm,layerId)=>{
+    if(!layerId||!daubsAbsoluteMm.length)return;
+    const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
+    if(!targetLayer)return;
+    const naturalPolygons=absolutePolygonsToNaturalSpace([daubsAbsoluteMm],targetLayer);
+    if(naturalPolygons.length===0)return;
+    const naturalPoints=naturalPolygons[0];
+    const daubs=naturalPoints.map((p,index)=>({
+      id:'daub'+Date.now()+'-'+index,
+      xMm:p.xMm,
+      yMm:p.yMm,
+      radiusMm:eraserSettings.radiusMm
+    }));
+    commitHistory();
+    if(!Array.isArray(targetLayer.eraseDaubs))targetLayer.eraseDaubs=[];
+    targetLayer.eraseDaubs.push(...daubs);
+    drawingTool.refreshStoneGroupForLayer(targetLayer.id);
+    await updateAll(true);
+    el('status').textContent=`Erased on ${layerLabel(targetLayer)}.`;
+  },
   // Freehand is a continuous interaction (many pointermove samples before the stroke ends) --
   // DrawingCanvasTool.js opens a session at drag-start and closes it at drag-end so one stroke is
   // one undo step, the same session-coalescing convention HISTORY_TRACKED_CONTROL_IDS' input/change
@@ -1154,7 +1205,10 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     // fix as generatePathStonesLive()'s own new `regions` line above. RS-3011 Step 12: stampedStones
     // (Stamp) joins it the same way, so a placed stamp shows up on the live canvas the instant it's
     // clicked, not only once "Generate Stones"/an export re-runs generatePathStonesLive().
-    return{stoneSizeMm:l.stoneSize,gapMm:l.gap,mode:resolveVectorFillMode(l.fillMode),color:l.color,regions:l.regions||[],stampedStones:l.stampedStones||[],...mixedSizeParamsFor(l)};
+    // RS-3011 Step 13: eraseDaubs (Eraser) joins them the same way, so an erase sweep shows up on
+    // the live canvas the instant it's committed, not only once "Generate Stones"/an export
+    // re-runs generatePathStonesLive().
+    return{stoneSizeMm:l.stoneSize,gapMm:l.gap,mode:resolveVectorFillMode(l.fillMode),color:l.color,regions:l.regions||[],stampedStones:l.stampedStones||[],eraseDaubs:l.eraseDaubs||[],...mixedSizeParamsFor(l)};
   },
   // Mirrors generatePathStonesLive()'s own result mapping, plus resolving the stored color id
   // (STONE_COLORS key, e.g. 'gold') to its previewColor -- the same flat swatch color
@@ -2498,6 +2552,18 @@ window.addEventListener('keydown',e=>{
       e.preventDefault();
       setDrawTool(DRAW_TOOL_SHORTCUT_KEYS[key]);
     }
+    // RS-3011 Step 13 decision 4b: '[' / ']' nudge eraserSettings.radiusMm down/up by 0.5mm while
+    // Eraser is active (standard brush-size convention in Photoshop/Procreate/GIMP) -- clamped at
+    // a 0.5mm floor, no ceiling. Guarded like the shortcuts above so typing '[' or ']' into
+    // #eraserRadiusMm itself (or any other field) is never hijacked. The first of the two required
+    // radius-adjustment paths; #eraserRadiusMm's own oninput handler is the second.
+    if((e.key==='['||e.key===']')&&drawingTool.mode==='eraser'){
+      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;
+      e.preventDefault();
+      eraserSettings.radiusMm=Math.max(0.5,eraserSettings.radiusMm+(e.key===']'?0.5:-0.5));
+      drawingTool.setEraserRadiusMm(eraserSettings.radiusMm);
+      el('eraserRadiusMm').value=eraserSettings.radiusMm;
+    }
     // RS-3010 Design Step B: space-held temporary pan. e.repeat filters OS key-repeat spam (so
     // setSpaceHeld(true) fires once per physical press, not per repeat tick); same input-focus
     // guard as the shortcuts/Delete above so a space typed into the Slot width field is never
@@ -3664,8 +3730,31 @@ function updateDrawToolButtons(){
   el('railPaintToggle').setAttribute('aria-pressed',String(active&&mode==='paint'));
   el('railStampToggle').setAttribute('aria-pressed',String(active&&mode==='stamp'));
   el('railTraceToggle').setAttribute('aria-pressed',String(active&&mode==='trace'));
+  el('railEraserToggle').setAttribute('aria-pressed',String(active&&mode==='eraser'));
+  // RS-3011 Step 13 decision 4a: eraserRadiusField/eraserRadiusMm's own visibility toggle, same
+  // active-and-mode-matches idiom as drawSlotWidthField/drawSlotWidthMm above (two sibling
+  // elements in #designToolOptionsPanel, toggled individually) -- kept in sync with
+  // eraserSettings.radiusMm every time it's shown, so it always reflects the current brush size
+  // regardless of which entry point (rail click, 'x' shortcut, '[' / ']' nudge) last changed it.
+  const showEraserRadius=active&&mode==='eraser';
+  el('eraserRadiusField').style.display=showEraserRadius?'':'none';
+  el('eraserRadiusMm').style.display=showEraserRadius?'':'none';
+  if(showEraserRadius)el('eraserRadiusMm').value=eraserSettings.radiusMm;
+}
+// RS-3011 Step 13 decision 4: seeds eraserSettings.radiusMm from the currently selected layer's own
+// stoneSize (mirrors getStoneDefaults()'s own `base.stoneSize||2` convention above) the FIRST time
+// Eraser mode is entered in this session -- eraserRadiusSeeded latches true right after, so every
+// later entry leaves radiusMm exactly as the user last set it, regardless of which layer they next
+// erase on. Called from setDrawTool() below, before either of its own dispatch branches.
+function seedEraserRadiusIfNeeded(){
+  if(eraserRadiusSeeded)return;
+  eraserRadiusSeeded=true;
+  const base=selectedLayer();
+  eraserSettings.radiusMm=Math.max(0.5,base.stoneSize||2);
+  drawingTool.setEraserRadiusMm(eraserSettings.radiusMm);
 }
 function setDrawTool(mode){
+  if(mode==='eraser')seedEraserRadiusIfNeeded();
   if(drawingTool.isActive){
     // RS-3011 issue #3 fix: re-clicking the already-active tool's own rail button is a no-op --
     // it must never exit Design. Select/Draw/Rect/Ellipse/Slot/Polygon are all persistent
@@ -3690,6 +3779,18 @@ el('railPenToggle').onclick=()=>setDrawTool('pen');
 el('railPaintToggle').onclick=()=>setDrawTool('paint');
 el('railStampToggle').onclick=()=>setDrawTool('stamp');
 el('railTraceToggle').onclick=()=>setDrawTool('trace');
+el('railEraserToggle').onclick=()=>setDrawTool('eraser');
+// RS-3011 Step 13 decision 4a: the second of the two required radius-adjustment paths (the first
+// is the '[' / ']' keydown handling below) -- writes straight through to both eraserSettings (this
+// module's own runtime state) and drawingTool.setEraserRadiusMm() (its live ghost/drag-preview
+// radius), same "own state + tool's live value, both updated together" pattern the '[' / ']'
+// handler below follows.
+el('eraserRadiusMm').oninput=()=>{
+  const parsed=parseFloat(el('eraserRadiusMm').value);
+  if(!Number.isFinite(parsed))return;
+  eraserSettings.radiusMm=Math.max(0.5,parsed);
+  drawingTool.setEraserRadiusMm(eraserSettings.radiusMm);
+};
 // RS-3011 Step 8 Phase B: Import SVG is a one-shot action, not a draw-tool mode -- clicking it
 // never calls setDrawTool()/setMode(), it just opens its own hidden file input, matching the
 // existing top-nav Import Lightbox's own el('importSvg').onclick pattern below (a fully separate
