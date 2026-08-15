@@ -651,18 +651,38 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   /**
    * @returns {string|null} The shapeId of the finalized shape under `point`, or null.
    *
-   * RS-3011 Step 8 Phase B fix: walks up from the hit item to find `.data.shapeId` rather than
-   * reading it off `hit.item` directly -- a stroke/fill hit against a paper.CompoundPath (a
-   * multi-contour SVG import) resolves to the CHILD paper.Path Paper.js actually hit, not the
-   * parent CompoundPath, and only the parent carries the shapeId board.addShape()/finalizeShape()
-   * stamped on it (confirmed directly against Paper.js: `hit.item.className==='Path'`,
-   * `hit.item.data` is `{}`). Without this, a plain click on an imported multi-contour shape's own
-   * outline could never select or move it -- every hand-drawn shape (always a single, non-nested
-   * Path) is unaffected: the loop body never runs for it, `hit.item` already carries the id.
+   * RS-3011 hotfix: real geometric containment against each shape's own item, topmost-first
+   * (board.listShapes() is push-ordered oldest-first -- see DrawingBoard's own `this.shapes.push()`
+   * -- and every shape's own outline item is inserted directly into the active layer at creation
+   * time with no z-reordering among shapes afterward, other than rebuildStoneGroupForShape()'s
+   * `group.insertBelow(shape.item)`, which only ever repositions a shape's OWN stone group relative
+   * to that SAME shape's item, never one shape's item relative to another's -- so push order IS
+   * paint order bottom-to-top, and iterating in reverse visits the topmost shape first). This
+   * replaces the old paper.project.hitTest({fill:true,stroke:true,...}) approach, which could only
+   * ever match a shape's OWN outline stroke: this app's drawn shapes carry strokeColor but never
+   * fillColor (see STROKE_COLOR/materializeShapeFromLayer), so the fill-test never matched, leaving
+   * only a ~4px-of-the-actual-edge stroke-test window -- a click anywhere in a shape's true
+   * interior, including directly on one of its own rendered stone dots (real paper.Path.Circle
+   * items with genuine fillColor, but siblings of the shape's own item tagged data.isStoneDot/
+   * data.isStoneGroup, never data.shapeId, so the old parent-walk could never resolve one back to a
+   * shape id), resolved no target at all.
+   *
+   * `shape.item.contains(point)` is a true point-in-fill-area test (Paper.js's own Path/
+   * CompoundPath#_contains is pure winding-number geometry -- confirmed directly against
+   * paper-full.js -- independent of whether fillColor is actually set), so it works unchanged for
+   * both a single hand-drawn paper.Path and a multi-contour paper.CompoundPath (Step 8 SVG import,
+   * `evenodd`/winding-rule holes included) with no special-casing. The stroke-proximity fallback
+   * (paper.project.hitTest, stroke-only, same `4 / paper.view.zoom` tolerance as before) covers a
+   * click exactly on an edge that .contains() alone could miss/mis-hit around a hairline-thin
+   * shape, and still walks up to `.data.shapeId` for the same CompoundPath-child reason the old
+   * code did (see that hit's own Step 8 Phase B precedent, preserved here unchanged).
    */
   function hitTestShapeId(point) {
+    const shapes = board.listShapes();
+    for (let i = shapes.length - 1; i >= 0; i--) {
+      if (shapes[i].item.contains(point)) return shapes[i].id;
+    }
     const hit = paper.project.hitTest(point, {
-      fill: true,
       stroke: true,
       tolerance: 4 / paper.view.zoom,
       class: paper.Path
