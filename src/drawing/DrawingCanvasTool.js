@@ -1612,8 +1612,10 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         erasePoints = [event.point];
         eraseItem = new paper.Path({
           strokeColor: ERASER_STROKE_COLOR,
-          strokeWidth: STROKE_WIDTH_PX / paper.view.zoom,
-          dashArray: [PAINT_LASSO_DASH_PX / paper.view.zoom, PAINT_LASSO_DASH_PX / paper.view.zoom]
+          strokeWidth: eraserRadiusMm * 2,
+          strokeCap: 'round',
+          strokeJoin: 'round',
+          opacity: 0.35
         });
         eraseItem.add(event.point);
         return;
@@ -1825,6 +1827,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           erasePoints.push(event.point);
           eraseItem.removeSegments();
           eraseItem.addSegments(erasePoints.map((p) => new paper.Segment(p)));
+          eraseItem.strokeWidth = eraserRadiusMm * 2;
         }
         return;
       }
