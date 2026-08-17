@@ -275,3 +275,8 @@ tools/scratch/rs3014-step2-eraser-sweep-corridor-verify/
 # dual-mode (stones/outline) Eraser, same "never a repo artifact" category as the scratch folders
 # above
 tools/scratch/rs3014-step3-dual-mode-eraser-verify/
+
+# RS-3014 Step 4: ad hoc live-browser Playwright verification script + screenshots for the
+# region-leak-through-an-Outline-cut fix, the Stamp panel label fix, and the draw-inside-shape
+# hijack fix, same "never a repo artifact" category as the scratch folders above
+tools/scratch/rs3014-step4-eraser-followups-verify/

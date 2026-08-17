@@ -1599,19 +1599,16 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         });
         return;
       }
-      // RS-3011 pen-skip-move-hittest: Pen is the one exception to "click-and-drag on an existing
-      // shape moves it" -- a brand-new Pen click must always start a first anchor (below), never
-      // resize/move whatever it happens to land on. Both hit-tests are skipped for Pen. In
-      // practice hitTestResizeHandle() already returns null outside mode === 'select' (and
-      // updateResizeHandles() never populates handles outside 'select' either, so this is a no-op
-      // there already) -- the real gap this closes is hitTestShapeId's move branch below.
-      // RS-3011 Step 10b: Paint joins Pen in this exception for the identical reason -- a lasso
-      // stroke deliberately starts ON TOP of its intended target shape (that's the whole point of
-      // painting a sub-region into it), so it must never be hijacked into a move/resize instead.
-      // RS-3011 Step 11: Trace joins them for the same reason -- a traced line deliberately starts
-      // ON TOP of its intended target shape too. RS-3011 Step 13: Eraser joins them for the same
-      // reason -- a click/drag sweep deliberately starts ON TOP of its intended target shape too.
-      if (mode !== 'pen' && mode !== 'paint' && mode !== 'trace' && mode !== 'eraser') {
+      // RS-3014 Step 4: click-to-move/resize-by-clicking-inside-a-shape is fundamentally Select's
+      // own behavior, not a default every other tool opts out of. Every other tool -- Pen, Paint,
+      // Trace, Eraser, Stamp (already handled/returned above), and now Rect/Ellipse/Slot/Freehand/
+      // Polygon (below) -- deliberately starts ON TOP of its intended target (that's the whole point
+      // of painting a sub-region, tracing a line along a shape's edge, or drawing a new shape inside
+      // an existing one), so it must never be hijacked into moving/resizing whatever it lands on
+      // instead. Gating on `mode === 'select'` (positive check) rather than an exclusion list means
+      // a future new tool can't reintroduce this bug by omission -- it's opted out by default and
+      // must explicitly opt in.
+      if (mode === 'select') {
         // Design Step D: a resize handle can sit right at a shape's edge, where both it and the
         // shape's own hit-test could otherwise match -- the handle must win, so this is checked
         // first (mirrors app.js's own hitTest(), which checks handlesFor() before the move branch).
