@@ -266,3 +266,7 @@ tools/scratch/rs3011-step13-eraser-verify/
 # Trace/Paint's own independent tool-level style settings, same "never a repo artifact" category
 # as the scratch folders above
 tools/scratch/rs3014-step1-independent-styles-verify/
+
+# RS-3014 Step 2: ad hoc live-browser Playwright verification script + screenshots for Eraser's
+# drag-sweep corridor preview, same "never a repo artifact" category as the scratch folders above
+tools/scratch/rs3014-step2-eraser-sweep-corridor-verify/
