@@ -989,7 +989,7 @@ export class GeometryEngine {
       // fill computed above. No-op when `regions` is empty/absent -- every layer predating this step
       // -- so this branch never changes existing output. See _applyPathRegions()'s own doc comment.
       if (options.regions.length > 0) {
-        stones = this._applyPathRegions(stones, options, transform);
+        stones = this._applyPathRegions(stones, options, transform, polygons);
       }
       // RS-3011 Step 12 (Stamp): one manually-placed Stone per stampedStones entry, appended
       // directly on top of everything computed above -- no interior-point test, no masking of nearby
@@ -1064,15 +1064,27 @@ export class GeometryEngine {
    * so a region's independently-pitched grid never overlaps a stone just outside its own contour
    * boundary.
    *
+   * A region's own contour is fixed at paint-time and never re-validated afterward -- normally safe,
+   * since a region's polygon is always a subset of the shape's interior by construction. Outline-mode
+   * Eraser (RS-3014 Step 3) is the first thing that can shrink the shape's own placed base-contour
+   * AFTER a region already exists, with nothing else re-checking the region against it -- without
+   * `shapePolygons`, a region would keep filling a footprint that's since been cut away. Candidate
+   * points are additionally rejected if they fall outside `shapePolygons`, so a region's fill always
+   * tracks its parent shape's CURRENT contour, not just the contour at paint-time.
+   *
    * @param {Stone[]} baseStones
    * @param {ReturnType<typeof normalizePathParams>} options
    * @param {{xMm:number,yMm:number,scaleX:number,scaleY:number}|null} transform The SAME transform
    *   the layer's own `contours` were placed through (see computeNaturalContourTransform()) --
    *   never an independently-derived one, or a region smaller than the shape's own natural box
    *   would be scaled wrong relative to it.
+   * @param {import('../text/VectorPath.js').Point2D[][]} shapePolygons The shape's own current
+   *   placed base-contour polygons (generatePathLayout()'s own `polygons`, computed before the
+   *   regions/stamps/daubs branch runs) -- used to drop any region candidate point that no longer
+   *   falls inside the shape, e.g. after an Outline-mode Eraser cut.
    * @returns {Stone[]}
    */
-  _applyPathRegions(baseStones, options, transform) {
+  _applyPathRegions(baseStones, options, transform, shapePolygons) {
     if (!transform) {
       return baseStones;
     }
@@ -1097,7 +1109,7 @@ export class GeometryEngine {
       const regionSpacingMm = region.stoneSizeMm + region.gapMm;
       const regionCandidatePoints = sampleShapeFillPoints(
         region.fillMode, regionPolygons, regionBoundingBox, regionSpacingMm, region.stoneSizeMm, options.closed
-      );
+      ).filter((point) => isPointInsidePolygons(new Point2D(point.xMm, point.yMm), shapePolygons));
       // Contour exclusion above only guarantees a region's own candidates aren't *inside* whatever
       // it just claimed -- it says nothing about a candidate landing physically too close to a
       // surviving base/earlier-region stone just outside the boundary (independent grids, no shared
