@@ -280,3 +280,8 @@ tools/scratch/rs3014-step3-dual-mode-eraser-verify/
 # region-leak-through-an-Outline-cut fix, the Stamp panel label fix, and the draw-inside-shape
 # hijack fix, same "never a repo artifact" category as the scratch folders above
 tools/scratch/rs3014-step4-eraser-followups-verify/
+
+# RS-3014 Step 5: ad hoc live-browser Playwright verification script + screenshots for the
+# Eraser edge-hugging-drag target-resolution fix (resolveEraserTargetLayerId), same "never a repo
+# artifact" category as the scratch folders above
+tools/scratch/rs3014-step5-eraser-edge-target-fix-verify/
