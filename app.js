@@ -226,9 +226,10 @@ const imageBufferCache=new Map();
 function setNumericSelectValue(select,num){let best=null,bestDiff=Infinity;for(const opt of select.options){const v=parseFloat(opt.value);if(Number.isFinite(v)){const diff=Math.abs(v-num);if(diff<bestDiff){bestDiff=diff;best=opt.value}}}select.value=best!==null?best:String(num)}
 // RS-1007: builds the Stone color <optgroup>s from STONE_COLORS (17 entries) grouped by each
 // color's `group` field, in catalog order (Object.values() preserves insertion order for the
-// string keys STONE_COLORS is built from). Called once at startup -- index.html no longer
-// hardcodes any <option> for this select.
-function populateStoneColorOptions(){const groups=new Map();for(const c of Object.values(STONE_COLORS)){if(!groups.has(c.group))groups.set(c.group,[]);groups.get(c.group).push(c)}el('stoneColor').innerHTML=[...groups.entries()].map(([group,colors])=>`<optgroup label="${escapeHtml(group)}">${colors.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`).join('')}
+// string keys STONE_COLORS is built from). Called once at startup for #stoneColor, and again
+// (RS-3014 Step 1) for each of Stamp/Trace/Paint's own #stampColor/#traceColor/#paintColor selects
+// -- targetId defaults to 'stoneColor' so every pre-existing call site is unaffected.
+function populateStoneColorOptions(targetId='stoneColor'){const groups=new Map();for(const c of Object.values(STONE_COLORS)){if(!groups.has(c.group))groups.set(c.group,[]);groups.get(c.group).push(c)}el(targetId).innerHTML=[...groups.entries()].map(([group,colors])=>`<optgroup label="${escapeHtml(group)}">${colors.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`).join('')}
 // RS-1013: builds the #stoneSize <option> list from the Stone Library (src/renderer/StoneSizes.js)
 // -- each option's value is the size's plain millimeter diameter (the same raw number a layer's
 // stoneSize / a Stone's sizeMm has always been; see src/geometry/GeometryEngine.js's stoneSizeMm
@@ -909,6 +910,20 @@ const engine=new GeometryEngine(permanentEngine);let project=defaultProject(),se
 // later erase on.
 const eraserSettings={radiusMm:1};
 let eraserRadiusSeeded=false;
+// RS-3014 Step 1: Stamp/Trace/Paint's own independent tool-level style preferences -- same
+// "NOT project data, NOT per-layer" precedent as eraserSettings just above, mirrored three times.
+// Each is seeded from the selected layer's own stoneSize/gap/color (the same `base.stoneSize||2` /
+// `base.gap||.3` / `base.color||'gold'` convention getStoneDefaults() below uses) the FIRST time
+// its own tool is entered in this session -- see seedStampStyleIfNeeded()/seedTraceStyleIfNeeded()/
+// seedPaintStyleIfNeeded() below -- then left exactly as the user sets it afterward via its own
+// panel fields, regardless of which layer they next act on. The three are deliberately independent
+// of each other and of eraserSettings -- not a single shared "draw style" object.
+const stampSettings={sizeMm:2,color:'gold'};
+let stampStyleSeeded=false;
+const traceSettings={sizeMm:2,gapMm:0.3,color:'gold'};
+let traceStyleSeeded=false;
+const paintSettings={sizeMm:2,gapMm:0.3,color:'gold'};
+let paintStyleSeeded=false;
 // RS-3010 Step 1: one drawing tool bound to layoutCanvas for the app's lifetime -- it lazily calls
 // paper.setup() on first enter() and only pauses/resumes afterward (see DrawingCanvasTool.js's own
 // header comment for why), so constructing it eagerly here does not touch the canvas until the
@@ -987,12 +1002,17 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     // contour together (not once per contour) since it applies the identical transform to each ring
     // regardless -- an efficiency choice, not a behavior difference from calling it per-contour.
     const naturalContours=absolutePolygonsToNaturalSpace(result.contours,targetLayer);
+    // RS-3014 Step 1: the new region(s)' own decoration style now comes from Paint's own independent
+    // paintSettings, NOT targetLayer's current stoneSize/gap/color -- unlike the two
+    // targetSpacingMm calls above (selectPaintTarget()'s boolean-geometry grid resolution, a
+    // precision concern this milestone deliberately leaves reading the real target layer's live
+    // values).
     const newRegions=naturalContours.map((contour,index)=>({
       id:'region'+Date.now()+index,
       contour,
-      stoneSizeMm:targetLayer.stoneSize,
-      gapMm:targetLayer.gap,
-      color:targetLayer.color,
+      stoneSizeMm:paintSettings.sizeMm,
+      gapMm:paintSettings.gapMm,
+      color:paintSettings.color,
       fillMode:'fill'
     }));
     commitHistory();
@@ -1029,11 +1049,12 @@ const drawingTool=createDrawingTool(layoutCanvas,{
       id:'stamp'+Date.now(),
       xMm:naturalPoint.xMm,
       yMm:naturalPoint.yMm,
-      // RS-3011 Step 12 decision 4: stoneSize/color come from the target layer's CURRENT fields at
-      // click time, not a separately editable Stamp tool-option -- same convention Paint uses for a
-      // new region above.
-      sizeMm:targetLayer.stoneSize,
-      color:targetLayer.color
+      // RS-3014 Step 1: sizeMm/color now come from Stamp's own independent stampSettings, seeded
+      // from the target layer's stoneSize/color the first time Stamp is used this session (see
+      // seedStampStyleIfNeeded() below) and left alone afterward, superseding RS-3011 Step 12's
+      // "read the target layer's CURRENT fields at click time" convention.
+      sizeMm:stampSettings.sizeMm,
+      color:stampSettings.color
     };
     commitHistory();
     if(!Array.isArray(targetLayer.stampedStones))targetLayer.stampedStones=[];
@@ -1070,10 +1091,12 @@ const drawingTool=createDrawingTool(layoutCanvas,{
       id:'stamp'+Date.now()+'-'+index,
       xMm:p.xMm,
       yMm:p.yMm,
-      // RS-3011 Step 11 decision 2 (mirrors Step 12 decision 4): stoneSize/color come from the
-      // target layer's CURRENT fields at release time, not a separately editable Trace tool-option.
-      sizeMm:targetLayer.stoneSize,
-      color:targetLayer.color
+      // RS-3014 Step 1: sizeMm/color now come from Trace's own independent traceSettings, seeded
+      // from the target layer's stoneSize/color the first time Trace is used this session (see
+      // seedTraceStyleIfNeeded() below) and left alone afterward, superseding RS-3011 Step 11
+      // decision 2's "read the target layer's CURRENT fields at release time" convention.
+      sizeMm:traceSettings.sizeMm,
+      color:traceSettings.color
     }));
     commitHistory();
     if(!Array.isArray(targetLayer.stampedStones))targetLayer.stampedStones=[];
@@ -3748,6 +3771,32 @@ function updateDrawToolButtons(){
   el('eraserRadiusField').style.display=showEraserRadius?'':'none';
   el('eraserRadiusMm').style.display=showEraserRadius?'':'none';
   if(showEraserRadius)el('eraserRadiusMm').value=eraserSettings.radiusMm;
+  // RS-3014 Step 1: Stamp/Trace/Paint's own field-group visibility toggles, same
+  // active-and-mode-matches idiom as showEraserRadius just above, kept in sync with each tool's own
+  // settings object every time it's shown, so it always reflects the current style regardless of
+  // which entry point (rail click, panel field) last changed it.
+  const showStampStyle=active&&mode==='stamp';
+  el('stampSizeField').style.display=showStampStyle?'':'none';
+  el('stampSizeMm').style.display=showStampStyle?'':'none';
+  el('stampColorField').style.display=showStampStyle?'':'none';
+  el('stampColor').style.display=showStampStyle?'':'none';
+  if(showStampStyle){el('stampSizeMm').value=stampSettings.sizeMm;el('stampColor').value=stampSettings.color}
+  const showTraceStyle=active&&mode==='trace';
+  el('traceSizeField').style.display=showTraceStyle?'':'none';
+  el('traceSizeMm').style.display=showTraceStyle?'':'none';
+  el('traceGapField').style.display=showTraceStyle?'':'none';
+  el('traceGapMm').style.display=showTraceStyle?'':'none';
+  el('traceColorField').style.display=showTraceStyle?'':'none';
+  el('traceColor').style.display=showTraceStyle?'':'none';
+  if(showTraceStyle){el('traceSizeMm').value=traceSettings.sizeMm;el('traceGapMm').value=traceSettings.gapMm;el('traceColor').value=traceSettings.color}
+  const showPaintStyle=active&&mode==='paint';
+  el('paintSizeField').style.display=showPaintStyle?'':'none';
+  el('paintSizeMm').style.display=showPaintStyle?'':'none';
+  el('paintGapField').style.display=showPaintStyle?'':'none';
+  el('paintGapMm').style.display=showPaintStyle?'':'none';
+  el('paintColorField').style.display=showPaintStyle?'':'none';
+  el('paintColor').style.display=showPaintStyle?'':'none';
+  if(showPaintStyle){el('paintSizeMm').value=paintSettings.sizeMm;el('paintGapMm').value=paintSettings.gapMm;el('paintColor').value=paintSettings.color}
 }
 // RS-3011 Step 13 decision 4: seeds eraserSettings.radiusMm from the currently selected layer's own
 // stoneSize (mirrors getStoneDefaults()'s own `base.stoneSize||2` convention above) the FIRST time
@@ -3761,8 +3810,42 @@ function seedEraserRadiusIfNeeded(){
   eraserSettings.radiusMm=Math.max(0.5,base.stoneSize||2);
   drawingTool.setEraserRadiusMm(eraserSettings.radiusMm);
 }
+// RS-3014 Step 1: seeds stampSettings/traceSettings/paintSettings from the currently selected
+// layer's own stoneSize/gap/color (mirrors seedEraserRadiusIfNeeded()'s own convention exactly) the
+// FIRST time each tool is entered in this session -- each tool's own *StyleSeeded flag latches true
+// right after, so every later entry leaves that tool's settings exactly as the user last set them,
+// regardless of which layer they next act on. Called from setDrawTool() below, before either of its
+// own dispatch branches.
+function seedStampStyleIfNeeded(){
+  if(stampStyleSeeded)return;
+  stampStyleSeeded=true;
+  const base=selectedLayer();
+  stampSettings.sizeMm=base.stoneSize||2;
+  stampSettings.color=base.color||'gold';
+  drawingTool.setStampStyle(stampSettings);
+}
+function seedTraceStyleIfNeeded(){
+  if(traceStyleSeeded)return;
+  traceStyleSeeded=true;
+  const base=selectedLayer();
+  traceSettings.sizeMm=base.stoneSize||2;
+  traceSettings.gapMm=base.gap||.3;
+  traceSettings.color=base.color||'gold';
+  drawingTool.setTraceStyle(traceSettings);
+}
+function seedPaintStyleIfNeeded(){
+  if(paintStyleSeeded)return;
+  paintStyleSeeded=true;
+  const base=selectedLayer();
+  paintSettings.sizeMm=base.stoneSize||2;
+  paintSettings.gapMm=base.gap||.3;
+  paintSettings.color=base.color||'gold';
+}
 function setDrawTool(mode){
   if(mode==='eraser')seedEraserRadiusIfNeeded();
+  if(mode==='stamp')seedStampStyleIfNeeded();
+  if(mode==='trace')seedTraceStyleIfNeeded();
+  if(mode==='paint')seedPaintStyleIfNeeded();
   if(drawingTool.isActive){
     // RS-3011 issue #3 fix: re-clicking the already-active tool's own rail button is a no-op --
     // it must never exit Design. Select/Draw/Rect/Ellipse/Slot/Polygon are all persistent
@@ -3798,6 +3881,49 @@ el('eraserRadiusMm').oninput=()=>{
   if(!Number.isFinite(parsed))return;
   eraserSettings.radiusMm=Math.max(0.5,parsed);
   drawingTool.setEraserRadiusMm(eraserSettings.radiusMm);
+};
+// RS-3014 Step 1: Stamp/Trace/Paint's own panel field handlers, same "own state + tool's live
+// value, both updated together" pattern as #eraserRadiusMm's own handler just above. Paint has no
+// drawingTool-side setter to push into (its lasso preview doesn't render stone-colored geometry --
+// see onPaintStroke's own doc comment above), so its handlers only update paintSettings.
+el('stampSizeMm').oninput=()=>{
+  const parsed=parseFloat(el('stampSizeMm').value);
+  if(!Number.isFinite(parsed))return;
+  stampSettings.sizeMm=parsed;
+  drawingTool.setStampStyle(stampSettings);
+};
+el('stampColor').oninput=()=>{
+  stampSettings.color=el('stampColor').value;
+  drawingTool.setStampStyle(stampSettings);
+};
+el('traceSizeMm').oninput=()=>{
+  const parsed=parseFloat(el('traceSizeMm').value);
+  if(!Number.isFinite(parsed))return;
+  traceSettings.sizeMm=parsed;
+  drawingTool.setTraceStyle(traceSettings);
+};
+el('traceGapMm').oninput=()=>{
+  const parsed=parseFloat(el('traceGapMm').value);
+  if(!Number.isFinite(parsed))return;
+  traceSettings.gapMm=parsed;
+  drawingTool.setTraceStyle(traceSettings);
+};
+el('traceColor').oninput=()=>{
+  traceSettings.color=el('traceColor').value;
+  drawingTool.setTraceStyle(traceSettings);
+};
+el('paintSizeMm').oninput=()=>{
+  const parsed=parseFloat(el('paintSizeMm').value);
+  if(!Number.isFinite(parsed))return;
+  paintSettings.sizeMm=parsed;
+};
+el('paintGapMm').oninput=()=>{
+  const parsed=parseFloat(el('paintGapMm').value);
+  if(!Number.isFinite(parsed))return;
+  paintSettings.gapMm=parsed;
+};
+el('paintColor').oninput=()=>{
+  paintSettings.color=el('paintColor').value;
 };
 // RS-3011 Step 8 Phase B: Import SVG is a one-shot action, not a draw-tool mode -- clicking it
 // never calls setDrawTool()/setMode(), it just opens its own hidden file input, matching the
@@ -4095,7 +4221,7 @@ el('settingsApply').onclick=()=>{
   drawLayout();
 };
 
-populateStoneColorOptions();populateStoneSizeOptions();populateMixedSizeSelectOptions();
+populateStoneColorOptions();populateStoneColorOptions('stampColor');populateStoneColorOptions('traceColor');populateStoneColorOptions('paintColor');populateStoneSizeOptions();populateMixedSizeSelectOptions();
 // RS-2002: only populated when fontManager actually loaded -- if the manifest fetch failed,
 // index.html's static two-option #font markup (Courier Prime/Great Vibes) is left as the fallback,
 // and permanentEngineError's #status message (set inside updateAll(), see generate() above)
