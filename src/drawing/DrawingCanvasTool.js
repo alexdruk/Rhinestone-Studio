@@ -694,29 +694,52 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   }
 
   /**
-   * RS-3011 Step 12: the project.layers id of whichever finalized shape `point` hit-tests against,
-   * or null -- shared by the Stamp ghost preview (updateStampGhostItem) and the actual placement
-   * (onMouseDown's own 'stamp' branch) so both agree on exactly the same target for the exact same
-   * point. Reuses hitTestShapeId() above (the same Paper.js item hit-test Select's own
-   * click-to-pick-a-shape onMouseDown branch uses) rather than a second contour-containment
-   * implementation.
+   * RS-3011 Part B: the project.layers id of whichever finalized shape's BOUNDING BOX (not fill
+   * containment) `point` falls inside, topmost-first, or null -- the target-resolution hit-test for
+   * Stamp/Trace/Eraser (resolveStampTargetLayerId/resolveTraceTargetLayerId below), deliberately
+   * SEPARATE from hitTestShapeId() above. hitTestShapeId()'s strict fill-containment is the right
+   * test for Select's own click-to-pick (a click in genuinely empty space between two shapes must
+   * select neither) -- but Stamp/Trace/Eraser's job is different: deciding which existing layer a
+   * manually-placed mark should belong to, for move/resize/export tracking. A shape can have a
+   * genuinely hollow/empty interior (e.g. an imported SVG with an open center) where a user still
+   * reasonably wants to place a stamp that tracks that shape -- strict fill-containment would block
+   * that outright. `shape.item.bounds.contains(point)` is Paper.js's own axis-aligned
+   * Rectangle#contains, a plain bounding-box test. Same topmost-first iteration order/reasoning as
+   * hitTestShapeId()'s own hotfix (board.listShapes() is push-ordered oldest-first; reverse-
+   * iterating visits the topmost shape first -- see that function's own doc comment).
+   * @param {paper.Point} point
+   * @returns {string|null}
+   */
+  function resolveTargetLayerIdByBounds(point) {
+    const shapes = board.listShapes();
+    for (let i = shapes.length - 1; i >= 0; i--) {
+      if (shapes[i].item.bounds.contains(point)) return shapes[i].item.data.layerId || null;
+    }
+    return null;
+  }
+
+  /**
+   * RS-3011 Step 12: the project.layers id of whichever finalized shape `point` resolves against,
+   * or null -- shared by the Stamp ghost preview (updateStampGhostItem), the Eraser ghost preview
+   * (updateEraserGhostItem), and the actual placement (onMouseDown's own 'stamp' branch) so all
+   * three agree on exactly the same target for the exact same point. RS-3011 Part B: delegates to
+   * resolveTargetLayerIdByBounds() above (bounding-box containment) rather than hitTestShapeId()
+   * (strict fill containment) -- see that function's own doc comment for why target resolution
+   * needs the looser test.
    * @param {paper.Point} point
    * @returns {string|null}
    */
   function resolveStampTargetLayerId(point) {
-    const hitId = hitTestShapeId(point);
-    const shape = hitId && board.getShape(hitId);
-    return (shape && shape.item.data.layerId) || null;
+    return resolveTargetLayerIdByBounds(point);
   }
 
   /**
    * RS-3011 Step 11: the project.layers id of whichever finalized shape a just-drawn Trace path's
-   * own bounding-box CENTER hit-tests against, or null -- resolved at release (not drag-start),
+   * own bounding-box CENTER resolves against, or null -- resolved at release (not drag-start),
    * mirroring drawleather's own LineStampTool.ts approach (build a temp path from the buffered
    * points, hit-test its bounds.center, discard the temp path). Reuses resolveStampTargetLayerId()
-   * above (itself built on hitTestShapeId(), the same Paper.js item hit-test Select's own click-
-   * to-pick-a-shape branch uses) rather than a second hit-test implementation, same precedent Step
-   * 12's own resolveStampTargetLayerId() established.
+   * above (itself built on resolveTargetLayerIdByBounds() -- RS-3011 Part B) rather than a second
+   * hit-test implementation, same precedent Step 12's own resolveStampTargetLayerId() established.
    * @param {paper.Point[]} points buffered project-mm points from the current Trace drag.
    * @returns {string|null}
    */
@@ -882,9 +905,10 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   }
 
   /**
-   * RS-3011 Step 12: rebuilds the Stamp ghost preview at `point` -- hit-tests `point` against every
-   * finalized shape (same hitTestShapeId() a plain Select click already uses), and, only when it
-   * lands on a 'path' layer's shape, shows a 50%-opacity circle at that layer's OWN current
+   * RS-3011 Step 12: rebuilds the Stamp ghost preview at `point` -- resolves `point` against every
+   * finalized shape (resolveStampTargetLayerId() -- RS-3011 Part B: bounding-box containment, same
+   * resolution an actual Stamp click would use), and, only when it lands on a 'path' layer's shape,
+   * shows a 50%-opacity circle at that layer's OWN current
    * stoneSize/color (getLayerStoneParams hook -- the exact style a click here would actually place,
    * per this step's own "stoneSize/color come from the target layer at click time" decision). No
    * target (empty canvas, or a non-'path' layer, or getLayerStoneParams returns null) means no ghost
@@ -914,10 +938,11 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   }
 
   /**
-   * RS-3011 Step 13: rebuilds the Eraser ghost preview at `point` -- hit-tests `point` against
-   * every finalized shape (resolveStampTargetLayerId(), same hit-test Stamp's own ghost above
-   * uses), showing an outline-only circle at the CURRENT eraserRadiusMm only when it lands on a
-   * real shape. Unlike Stamp's own ghost, the circle's radius/style never depend on the target
+   * RS-3011 Step 13: rebuilds the Eraser ghost preview at `point` -- resolves `point` against
+   * every finalized shape (resolveStampTargetLayerId(), same bounding-box resolution -- RS-3011
+   * Part B -- Stamp's own ghost above uses), showing an outline-only circle at the CURRENT
+   * eraserRadiusMm only when it lands on a real shape. Unlike Stamp's own ghost, the circle's
+   * radius/style never depend on the target
    * layer's fields (decision 4: brush radius is a tool setting, not a stone property) -- only
    * whether a target exists at all decides visibility, mirroring Stamp's own "no target -> no
    * ghost" precedent.
@@ -1221,24 +1246,30 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     // function for the single-Path case every hand-drawn shape still produces (see its own doc
     // comment), so this is a safe swap for every existing shape too, not just imports.
     const flattened = flattenPathToContours(shape.item, FLATTEN_TOLERANCE_MM);
-    if (!flattened || flattened.contours.length === 0) return;
-    // Collapses per-contour closed flags into the one flag generatePathLayout() accepts, the same
-    // formula createPathLayerFromContours() applies at import time (see its own doc comment for why
-    // a mismatched open/closed import falls back to closed=true) -- kept as a local, duplicated
-    // formula rather than extracted into a shared helper, since this is a live re-derivation from
-    // the shape's current geometry, not the creation-time path that function owns.
-    const closedValues = flattened.contours.map((c) => c.closed !== false);
-    const allClosed = closedValues.every(Boolean);
-    const allOpen = closedValues.every((v) => !v);
-    const mismatched = flattened.contours.length > 1 && !allClosed && !allOpen;
+    if (flattened.contours.length === 0) return;
+    // RS-3011 resize-repositioning fix: xMm/yMm/widthMm/heightMm must track the shape's LIVE,
+    // currently-dragged Paper.js geometry (flattened, from shape.item) -- that's what makes a
+    // resize-in-progress preview live. `contours`/`closed` must NOT come from that same live
+    // re-flatten though: they need to stay the layer's own FIXED, author-time natural-space contour
+    // (styleParams.contours/closed, from getLayerStoneParams() -- ultimately project.layers[].contours,
+    // never touched by a resize, see onShapeResized's own doc comment), the SAME natural reference
+    // generatePathStonesLive() (the production pipeline) and absolutePolygonsToNaturalSpace()
+    // (Stamp/Trace/Eraser/Paint's own click-to-natural-space conversion) both already use. Feeding
+    // generatePathLayout() the LIVE re-flattened contour here (as this used to) made
+    // computeNaturalContourTransform() derive its scale from that SAME live geometry's own bounding
+    // box, which by construction always exactly equals the target xMm/widthMm -- forcing scale to
+    // ALWAYS be 1 regardless of any actual resize, silently breaking stampedStones/regions/
+    // eraseDaubs' own placement (which store points against the fixed natural contour) for any shape
+    // ever resized away from its original box. Confirmed via live instrumentation: this exact
+    // mismatch reproduced the reported "stamp appears near the OLD pre-resize position" bug.
     const params = {
-      contours: flattened.contours.map((c) => c.contour.map((p) => ({ xMm: p.x, yMm: p.y }))),
+      contours: styleParams.contours,
       layerId,
       xMm: flattened.xMm,
       yMm: flattened.yMm,
       widthMm: flattened.widthMm,
       heightMm: flattened.heightMm,
-      closed: mismatched ? true : allClosed,
+      closed: styleParams.closed,
       ...styleParams
     };
     const stones = generatePathLayout(params);

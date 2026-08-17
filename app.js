@@ -1208,7 +1208,15 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     // RS-3011 Step 13: eraseDaubs (Eraser) joins them the same way, so an erase sweep shows up on
     // the live canvas the instant it's committed, not only once "Generate Stones"/an export
     // re-runs generatePathStonesLive().
-    return{stoneSizeMm:l.stoneSize,gapMm:l.gap,mode:resolveVectorFillMode(l.fillMode),color:l.color,regions:l.regions||[],stampedStones:l.stampedStones||[],eraseDaubs:l.eraseDaubs||[],...mixedSizeParamsFor(l)};
+    // RS-3011 resize-repositioning fix: contours/closed are the layer's own FIXED, author-time
+    // natural-space contour ({x,y}->{xMm,yMm} remapped, same convention generatePathStonesLive()
+    // above already uses) -- the SAME natural reference absolutePolygonsToNaturalSpace() (Stamp/
+    // Trace/Eraser/Paint's own click-to-natural-space conversion) inverts to store a
+    // stampedStone/region/eraseDaub position in the first place. rebuildStoneGroupForShape()
+    // (DrawingCanvasTool.js) needs this exact reference now too -- see its own doc comment for why
+    // substituting the shape's LIVE re-flattened geometry here instead silently broke stamped/
+    // region/erase-daub placement after any resize.
+    return{stoneSizeMm:l.stoneSize,gapMm:l.gap,mode:resolveVectorFillMode(l.fillMode),color:l.color,regions:l.regions||[],stampedStones:l.stampedStones||[],eraseDaubs:l.eraseDaubs||[],contours:l.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),closed:l.closed!==false,...mixedSizeParamsFor(l)};
   },
   // Mirrors generatePathStonesLive()'s own result mapping, plus resolving the stored color id
   // (STONE_COLORS key, e.g. 'gold') to its previewColor -- the same flat swatch color
