@@ -144,6 +144,14 @@ const ERASER_RADIUS_FLOOR_MM = 0.5;
 // selected layer's stoneSize the first time Eraser mode is entered in a session, so this is only
 // ever visible for the eye-blink before that happens.
 const ERASER_DEFAULT_RADIUS_MM = 1;
+// RS-3014 Step 1: Stamp/Trace's own style fallbacks before app.js's first real setStampStyle()/
+// setTraceStyle() call -- same "only ever visible for the eye-blink before seeding happens" role as
+// ERASER_DEFAULT_RADIUS_MM above, matching app.js's own stampSettings/traceSettings defaults.
+const STAMP_DEFAULT_SIZE_MM = 2;
+const STAMP_DEFAULT_COLOR = 'gold';
+const TRACE_DEFAULT_SIZE_MM = 2;
+const TRACE_DEFAULT_GAP_MM = 0.3;
+const TRACE_DEFAULT_COLOR = 'gold';
 // RS-3011 Step 9: Pen's own constants -- same values as Polygon's above for the same underlying
 // reasons (need at least a triangle to close; hit tolerance mirrors hitTestShapeId's screen-px-to-
 // project-mm pattern), kept as independent named constants since Pen and Polygon are separate
@@ -444,6 +452,18 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   let erasePoints = [];
   let eraseItem = null;
   let eraserRadiusMm = ERASER_DEFAULT_RADIUS_MM;
+  // RS-3014 Step 1: Stamp/Trace's own independent tool-level style, mirroring eraserRadiusMm's own
+  // "set from outside, read live by the ghost/placement code" role -- app.js's stampSettings/
+  // traceSettings, pushed in via setStampStyle()/setTraceStyle() below (session-first-entry seeding,
+  // then the panel fields). Unlike eraserRadiusMm, getLayerStoneParams(layerId) is still called at
+  // both the ghost-preview and placement sites -- not for its stoneSizeMm/color anymore, but as the
+  // existence gate that a real stone-bearing target was hit (see updateStampGhostItem/onMouseUp's
+  // own 'trace' branch below).
+  let stampSizeMm = STAMP_DEFAULT_SIZE_MM;
+  let stampColor = STAMP_DEFAULT_COLOR;
+  let traceSizeMm = TRACE_DEFAULT_SIZE_MM;
+  let traceGapMm = TRACE_DEFAULT_GAP_MM;
+  let traceColor = TRACE_DEFAULT_COLOR;
   // RS-3011 Step 9: Pen's own state. Unlike polygonPoints above, Pen's anchors are NOT duplicated
   // into a parallel array -- board.path IS the real in-progress shape from the very first click
   // onward (Paper.js Segments already carry point/handleIn/handleOut natively), so these only track
@@ -908,9 +928,10 @@ export function createDrawingTool(canvasEl, hooks = {}) {
    * RS-3011 Step 12: rebuilds the Stamp ghost preview at `point` -- resolves `point` against every
    * finalized shape (resolveStampTargetLayerId() -- RS-3011 Part B: bounding-box containment, same
    * resolution an actual Stamp click would use), and, only when it lands on a 'path' layer's shape,
-   * shows a 50%-opacity circle at that layer's OWN current
-   * stoneSize/color (getLayerStoneParams hook -- the exact style a click here would actually place,
-   * per this step's own "stoneSize/color come from the target layer at click time" decision). No
+   * shows a 50%-opacity circle. RS-3014 Step 1: the circle's radius/fillColor now come from Stamp's
+   * OWN independent stampSizeMm/stampColor (set via setStampStyle()) rather than the target layer's
+   * current stoneSize/color -- getLayerStoneParams(layerId) is kept purely as the existence gate (a
+   * real stone-bearing 'path' layer was hit), matching what an actual Stamp click would place. No
    * target (empty canvas, or a non-'path' layer, or getLayerStoneParams returns null) means no ghost
    * at all -- mirrors this tool's own "no target -> discard" precedent for the actual placement.
    * @param {paper.Point} point
@@ -922,8 +943,8 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     if (!styleParams) return;
     stampGhostItem = new paper.Path.Circle({
       center: point,
-      radius: styleParams.stoneSizeMm / 2,
-      fillColor: styleParams.color
+      radius: stampSizeMm / 2,
+      fillColor: stampColor
     });
     stampGhostItem.opacity = 0.5;
     stampGhostItem.data.isStampGhost = true;
@@ -2022,9 +2043,12 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         const styleParams = layerId ? getLayerStoneParams(layerId) : null;
         // No target, or the resolved layer isn't a stone-bearing 'path' layer (getLayerStoneParams's
         // own null return already covers both "not type==='path'" and "stonesGenerated===false") --
-        // discard silently, matching Stamp/Paint's own "no target -> discard" precedent.
+        // discard silently, matching Stamp/Paint's own "no target -> discard" precedent. RS-3014
+        // Step 1: styleParams itself is now ONLY that existence gate -- the actual spacing comes
+        // from Trace's own independent traceSizeMm/traceGapMm (set via setTraceStyle()), not the
+        // target layer's current stoneSize/gap.
         if (!layerId || !styleParams) return;
-        const stepMm = styleParams.stoneSizeMm + styleParams.gapMm;
+        const stepMm = traceSizeMm + traceGapMm;
         const spacingPath = new paper.Path({ segments: points });
         if (closed) spacingPath.closed = true;
         const placements = placeStonesAlongPath(spacingPath, { stepMm, closed });
@@ -2304,6 +2328,36 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     setEraserRadiusMm(value) {
       const parsed = parseFloat(value);
       if (Number.isFinite(parsed)) eraserRadiusMm = Math.max(ERASER_RADIUS_FLOOR_MM, parsed);
+    },
+
+    /**
+     * RS-3014 Step 1: sets Stamp's own independent size/color (mm/STONE_COLORS id), read live by
+     * updateStampGhostItem()'s preview circle -- app.js calls this whenever stampSettings changes
+     * (session-first-entry seeding, the #stampSizeMm/#stampColor panel fields). Each field is
+     * updated independently and only when valid -- no floor/ceiling (decision: "ignore non-finite/
+     * falsy values" per this milestone's own prompt), same partial-update shape as setTraceStyle()
+     * below.
+     * @param {{sizeMm?:number|string, color?:string}} style
+     */
+    setStampStyle({ sizeMm, color } = {}) {
+      const parsedSize = parseFloat(sizeMm);
+      if (Number.isFinite(parsedSize) && parsedSize > 0) stampSizeMm = parsedSize;
+      if (color) stampColor = color;
+    },
+
+    /**
+     * RS-3014 Step 1: sets Trace's own independent size/gap/color, read live by onMouseUp's 'trace'
+     * branch (stepMm = traceSizeMm + traceGapMm) -- app.js calls this whenever traceSettings changes
+     * (session-first-entry seeding, the #traceSizeMm/#traceGapMm/#traceColor panel fields). Mirrors
+     * setStampStyle()'s own per-field partial-update shape.
+     * @param {{sizeMm?:number|string, gapMm?:number|string, color?:string}} style
+     */
+    setTraceStyle({ sizeMm, gapMm, color } = {}) {
+      const parsedSize = parseFloat(sizeMm);
+      if (Number.isFinite(parsedSize) && parsedSize > 0) traceSizeMm = parsedSize;
+      const parsedGap = parseFloat(gapMm);
+      if (Number.isFinite(parsedGap) && parsedGap >= 0) traceGapMm = parsedGap;
+      if (color) traceColor = color;
     },
 
     /**
