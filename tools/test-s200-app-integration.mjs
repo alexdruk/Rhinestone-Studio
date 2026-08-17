@@ -124,7 +124,10 @@ await test('9. FIELD_GROUPS includes a mixedSize relocation group covering every
 });
 
 await test('10. populateMixedSizeSelectOptions() is called once at startup, alongside populateStoneSizeOptions()', () => {
-  assert.match(appJs, /populateStoneColorOptions\(\);populateStoneSizeOptions\(\);populateMixedSizeSelectOptions\(\);/);
+  // RS-3014 Step 1 inserted three populateStoneColorOptions(id) calls (Stamp/Trace/Paint) between
+  // the initial call and populateStoneSizeOptions() -- matched loosely across that gap rather than
+  // requiring adjacency.
+  assert.match(appJs, /populateStoneColorOptions\(\);[\s\S]{0,300}?populateStoneSizeOptions\(\);populateMixedSizeSelectOptions\(\);/);
 });
 
 // --- 3. Legacy / backward-compatibility ---------------------------------------------------------

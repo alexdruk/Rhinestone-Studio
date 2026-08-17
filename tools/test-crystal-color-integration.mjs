@@ -75,7 +75,9 @@ await test('1. index.html no longer hardcodes <option>s for #stoneColor, and exp
 });
 
 await test('2. app.js populates #stoneColor from STONE_COLORS grouped into <optgroup>s, and updates a live swatch', () => {
-  assert.match(appJs, /function populateStoneColorOptions\(\)\{/, 'expected populateStoneColorOptions() to be defined');
+  // RS-3014 Step 1 gave this an optional targetId param (default 'stoneColor') so Stamp/Trace/
+  // Paint's own color selects reuse it -- matched loosely rather than requiring empty parens.
+  assert.match(appJs, /function populateStoneColorOptions\([^)]*\)\{/, 'expected populateStoneColorOptions() to be defined');
   assert.match(appJs, /<optgroup label=/, 'expected <optgroup> markup to be generated');
   assert.match(appJs, /function updateStoneColorSwatch\(\)\{/, 'expected updateStoneColorSwatch() to be defined');
   assert.match(appJs, /populateStoneColorOptions\(\)/, 'expected populateStoneColorOptions() to actually be called');

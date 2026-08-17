@@ -166,8 +166,10 @@ await test('6. app.js imports the Stone Library and populates #stoneSize from it
   assert.match(appJs, /function populateStoneSizeOptions\(\)\{/, 'expected a populateStoneSizeOptions helper');
   // RS-2002 inserted its own conditional font-population startup call between
   // populateStoneSizeOptions() and syncSelectedControlsFromLayer() (see app.js) -- match loosely
-  // across that gap rather than requiring the two calls immediately adjacent.
-  assert.match(appJs, /populateStoneColorOptions\(\);populateStoneSizeOptions\(\);[\s\S]{0,600}?syncSelectedControlsFromLayer\(\)/, 'expected populateStoneSizeOptions to run once at startup, alongside populateStoneColorOptions');
+  // across that gap rather than requiring the two calls immediately adjacent. RS-3014 Step 1
+  // inserted three populateStoneColorOptions(id) calls (Stamp/Trace/Paint) between the initial call
+  // and populateStoneSizeOptions() -- matched loosely across that gap too, same reasoning.
+  assert.match(appJs, /populateStoneColorOptions\(\);[\s\S]{0,300}?populateStoneSizeOptions\(\);[\s\S]{0,600}?syncSelectedControlsFromLayer\(\)/, 'expected populateStoneSizeOptions to run once at startup, alongside populateStoneColorOptions');
   const stoneSizeSelectHtml = indexHtml.match(/<select id="stoneSize"[^>]*>([\s\S]*?)<\/select>/);
   assert.ok(stoneSizeSelectHtml, 'expected a #stoneSize select in index.html');
   assert.equal(stoneSizeSelectHtml[1].trim(), '', 'expected #stoneSize to start empty and be populated by populateStoneSizeOptions(), like #stoneColor');
