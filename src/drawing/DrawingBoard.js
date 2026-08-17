@@ -99,6 +99,31 @@ export class DrawingBoard {
     this.shapes.splice(index, 1);
   }
 
+  /**
+   * RS-3014 Step 3: swaps an already-finalized shape's Paper.js Item for a freshly-built one,
+   * keeping the SAME shape id (so selectedIds/stoneGroups, both keyed by this id elsewhere in
+   * DrawingCanvasTool.js, stay valid) and the same z-order slot among its layer's other children
+   * (`newItem.insertAbove(oldItem)` before removing `oldItem` leaves newItem exactly where oldItem
+   * was, relative to whatever sat above/below it). Needed the first time anything re-materializes a
+   * LIVE shape's own outline geometry from its stored layer data after commit (see
+   * DrawingCanvasTool.js's refreshShapeGeometryForLayer()) -- every prior caller either builds a
+   * shape once at draw-time (finalizeShape/addShape) or discards it outright (removeShape), never
+   * swaps its geometry in place.
+   * @param {string} id
+   * @param {paper.Item} newItem
+   * @returns {boolean} false if no shape matches `id` (newItem is left untouched, not inserted).
+   */
+  replaceShapeItem(id, newItem) {
+    const index = this.shapes.findIndex((s) => s.id === id);
+    if (index === -1) return false;
+    const oldItem = this.shapes[index].item;
+    newItem.data.shapeId = id;
+    newItem.insertAbove(oldItem);
+    oldItem.remove();
+    this.shapes[index] = { id, item: newItem };
+    return true;
+  }
+
   /** @returns {{id:string,item:paper.Item}|null} The finalized shape entry for `id`, or null. */
   getShape(id) {
     return this.shapes.find((s) => s.id === id) || null;

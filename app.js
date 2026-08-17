@@ -85,7 +85,7 @@
 // pipeline stages re-run on every threshold/invert/blur/resize edit, but the (comparatively
 // expensive) browser image decode only ever runs once per distinct imageSrc value.
 import './src/browser/BrowserDependencyProbe.js';
-import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace } from './src/geometry/index.js';
+import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
 import { createDefaultFontProviderRegistry, createDefaultRhinestoneFontRegistry, BoundingBox } from './src/text/index.js';
 import { renderProductionLayout, renderStoneLayout, fitTransform } from './src/renderer/CanvasRenderer2D.js';
@@ -747,6 +747,13 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
     // `stampedStones` lines above made for Paint/Stamp -- defaults to [] for every layer predating
     // this step, matching GeometryEngine.normalizePathParams()'s own eraseDaubs normalizer.
     eraseDaubs:layer.eraseDaubs||[],
+    // RS-3014 Step 3: forwards a 'path' layer's frozen natural-space reference box (set once an
+    // Outline-mode Eraser cut first mutates `contours` -- see onEraseSweep()'s own doc comment)
+    // into live/production generation, the identical wiring-gap fix Step 10b/12/13's own `regions`/
+    // `stampedStones`/`eraseDaubs` lines above made for their own data models -- undefined for
+    // every layer never cut, matching GeometryEngine.normalizePathParams()'s own
+    // naturalBoundingBoxMm normalizer's safe-no-op default.
+    naturalBoundingBoxMm:layer.naturalBoundingBoxMm,
     ...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generatePathLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
  // RS-2000: the legacy bitmap text engine (FONT5 + generateText/sampleGlyphFill/
  // sampleGlyphStroke/line) and the legacy generateCircle/generateRect/bbox/layerBBox shape path
@@ -908,7 +915,7 @@ const engine=new GeometryEngine(permanentEngine);let project=defaultProject(),se
 // entered in this session -- see seedEraserRadiusIfNeeded() below -- then left exactly as the user
 // sets it afterward via #eraserRadiusMm or the '['/']' shortcuts, regardless of which layer they
 // later erase on.
-const eraserSettings={radiusMm:1};
+const eraserSettings={radiusMm:1,mode:'stones'};
 let eraserRadiusSeeded=false;
 // RS-3014 Step 1: Stamp/Trace/Paint's own independent tool-level style preferences -- same
 // "NOT project data, NOT per-layer" precedent as eraserSettings just above, mirrored three times.
@@ -969,9 +976,14 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     if(!permanentEngine)return;
     const candidates=project.layers.filter(l=>l.type==='path'&&l.visible!==false).map(l=>({
       layerId:l.id,
+      // RS-3014 Step 3: naturalBoundingBoxMm forwarded so a previously-cut layer's candidate
+      // polygon reflects its true (frozen-box-anchored) visible shape, not one stretched back to
+      // its unchanged x/y/w/h -- without this, selectPaintTarget()'s own intersection below would
+      // compute against a shape wider than what's actually on screen, letting a region extend past
+      // the shape's real (cut) boundary even after absolutePolygonsToNaturalSpace()'s own fix.
       polygons:permanentEngine.resolvePathPolygons({
         contours:l.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),
-        layerId:l.id,xMm:l.x,yMm:l.y,widthMm:l.w,heightMm:l.h
+        layerId:l.id,xMm:l.x,yMm:l.y,widthMm:l.w,heightMm:l.h,naturalBoundingBoxMm:l.naturalBoundingBoxMm
       }).polygons
     }));
     // First pass: which candidate does the lasso overlap most? The exact grid resolution barely
@@ -1120,10 +1132,85 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // "one gesture, one undo step" precedent -- NOT Stamp's per-click commit). Unlike Paint/every
   // draw preset, `mode` is deliberately left at 'eraser' either way (decision 7: Eraser stays
   // active after each committed sweep), so there's no updateDrawToolButtons() call here either.
-  onEraseSweep:async(daubsAbsoluteMm,layerId)=>{
+  // RS-3014 Step 3 (Dual-mode Eraser): `mode` is DrawingCanvasTool.js's own per-gesture snapshot
+  // (its onEraseSweep hooks-param doc comment above explains why it's captured at gesture-start
+  // rather than read live from eraserSettings.mode here) -- branches into either this same
+  // 'stones' path (byte-for-byte unchanged below) or the new 'outline' path, which cuts
+  // `corridorPolygonsAbsoluteMm` into the layer's own `contours` via the raster boolean-subtraction
+  // engine (src/geometry/PathBoolean.js's combineShapeSources()) instead of pushing eraseDaubs.
+  onEraseSweep:async(daubsAbsoluteMm,layerId,corridorPolygonsAbsoluteMm,mode)=>{
     if(!layerId||!daubsAbsoluteMm.length)return;
     const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
     if(!targetLayer)return;
+    if(mode==='outline'){
+      // An open Pen/freehand path has no interior to cut -- same graceful-failure precedent
+      // RS-1012's own resolveLayerShapeSource()/runBooleanOp() already establish for a shape with
+      // no closed outline (there: "no closed shape to combine"; here: nothing to cut into).
+      if(targetLayer.closed===false){
+        el('status').textContent=`${layerLabel(targetLayer)} has no closed outline to cut.`;
+        return;
+      }
+      // RS-3011 Step 10a/10b's own absolutePolygonsToNaturalSpace() (PaintRegionSelection.js) --
+      // reused unchanged, not a second coordinate-conversion implementation. It already honors
+      // pathLayer.naturalBoundingBoxMm when present (its own fix, RS-3014 Step 3 follow-up), so a
+      // SECOND+ outline cut on the same layer stays anchored to the frozen box too, not just the
+      // first.
+      const naturalCorridorPolygons=absolutePolygonsToNaturalSpace(corridorPolygonsAbsoluteMm,targetLayer);
+      if(naturalCorridorPolygons.length===0)return;
+      // RS-3014 Step 3 freeze point (see Part 1 / computeNaturalContourTransform()'s own doc
+      // comment): set exactly once, from the contours as they exist right before this, the FIRST
+      // cut, ever mutates them. Every later cut leaves this untouched, so every existing region/
+      // stamp/daub stays anchored to the shape's original extent regardless of how much further
+      // cutting shrinks `contours` itself.
+      if(!targetLayer.naturalBoundingBoxMm){
+        const allPoints=targetLayer.contours.flat();
+        targetLayer.naturalBoundingBoxMm={
+          minXmm:Math.min(...allPoints.map(p=>p.x)),
+          minYmm:Math.min(...allPoints.map(p=>p.y)),
+          maxXmm:Math.max(...allPoints.map(p=>p.x)),
+          maxYmm:Math.max(...allPoints.map(p=>p.y))
+        };
+      }
+      const subjectPolygons=targetLayer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y})));
+      let combined;
+      try{
+        combined=combineShapeSources(
+          {kind:'polygons',polygons:subjectPolygons},
+          {kind:'polygons',polygons:naturalCorridorPolygons},
+          'subtract',
+          {targetSpacingMm:targetLayer.stoneSize+targetLayer.gap}
+        );
+      }catch(error){
+        if(!(error instanceof BooleanPrecisionError))throw error;
+        // Leaves targetLayer.contours untouched -- error.message is already a clear, user-facing
+        // explanation (RS-1012's own runBooleanOp() precedent), not rewritten here.
+        el('status').textContent=error.message;
+        return;
+      }
+      // Mirrors PaintRegionSelection.js's own OVERLAP_AREA_EPSILON_MM2: combineShapeSources()'s
+      // marching-squares tracer already discards any contour below (cellSize**2)/4 as tracing
+      // noise, and actualCellSizeMm is always >= MIN_CELL_SIZE_MM, so a total result area at or
+      // below this floor is indistinguishable from "nothing left," not a bare `=== 0` check.
+      const resultAreaMm2=combined.contours.reduce((sum,c)=>sum+contourAreaAbs(c),0);
+      const areaEpsilonMm2=(MIN_CELL_SIZE_MM*MIN_CELL_SIZE_MM)/4;
+      if(combined.contours.length===0||resultAreaMm2<=areaEpsilonMm2){
+        el('status').textContent='That would erase the entire shape — nothing changed.';
+        return;
+      }
+      commitHistory();
+      targetLayer.contours=combined.contours.map(c=>c.map(p=>({x:p.xMm,y:p.yMm})));
+      // RS-3014 Step 3: unlike every other project.layers write that reaches Design's live canvas
+      // (stoneSize/gap/color/regions/stampedStones/eraseDaubs, a resize), this one changes the
+      // shape's own outline SEGMENTS, not just its placement box or a non-geometric style field --
+      // refreshStoneGroupForLayer() alone only rebuilds the stone dots against whatever outline
+      // Item is already on the canvas, which would keep showing the PRE-cut boundary forever (see
+      // refreshShapeGeometryForLayer()'s own doc comment). This re-materializes the outline Item
+      // from the layer's own new `contours` too, then rebuilds the stone Group against it.
+      drawingTool.refreshShapeGeometryForLayer(targetLayer);
+      await updateAll(true);
+      el('status').textContent=`Cut into ${layerLabel(targetLayer)}'s outline.`;
+      return;
+    }
     const naturalPolygons=absolutePolygonsToNaturalSpace([daubsAbsoluteMm],targetLayer);
     if(naturalPolygons.length===0)return;
     const naturalPoints=naturalPolygons[0];
@@ -1239,7 +1326,20 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     // (DrawingCanvasTool.js) needs this exact reference now too -- see its own doc comment for why
     // substituting the shape's LIVE re-flattened geometry here instead silently broke stamped/
     // region/erase-daub placement after any resize.
-    return{stoneSizeMm:l.stoneSize,gapMm:l.gap,mode:resolveVectorFillMode(l.fillMode),color:l.color,regions:l.regions||[],stampedStones:l.stampedStones||[],eraseDaubs:l.eraseDaubs||[],contours:l.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),closed:l.closed!==false,...mixedSizeParamsFor(l)};
+    // RS-3014 Step 3: naturalBoundingBoxMm joins them the same way, the identical wiring-gap fix
+    // generatePathStonesLive()'s own new line makes for the production pipeline. staticXMm/
+    // staticYMm/staticWidthMm/staticHeightMm (the layer's own x/y/w/h, distinct from
+    // rebuildStoneGroupForShape()'s own `flattened.xMm` etc. -- see its own doc comment) ride
+    // alongside: once a layer has been cut, that call site must use THESE, not the shape's live
+    // re-flattened Paper.js item, when computing its natural-space transform -- combining the
+    // frozen (pre-cut) box with the live item's own ALREADY-shrunk width would shrink the base
+    // fill a second time, and marching squares re-traces the WHOLE boundary (not just the cut
+    // edge) at finite grid resolution, so even the live item's untouched edges carry a little
+    // sub-mm quantization noise that would otherwise very slightly reposition stamps/regions/
+    // daubs on the Design canvas -- exactly what the frozen box exists to prevent. Named
+    // differently from xMm/yMm/widthMm/heightMm (which this object does NOT otherwise define) so
+    // there's no ambiguity about which one a naive `...styleParams` spread would pick up.
+    return{stoneSizeMm:l.stoneSize,gapMm:l.gap,mode:resolveVectorFillMode(l.fillMode),color:l.color,regions:l.regions||[],stampedStones:l.stampedStones||[],eraseDaubs:l.eraseDaubs||[],naturalBoundingBoxMm:l.naturalBoundingBoxMm,staticXMm:l.x,staticYMm:l.y,staticWidthMm:l.w,staticHeightMm:l.h,contours:l.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),closed:l.closed!==false,...mixedSizeParamsFor(l)};
   },
   // Mirrors generatePathStonesLive()'s own result mapping, plus resolving the stored color id
   // (STONE_COLORS key, e.g. 'gold') to its previewColor -- the same flat swatch color
@@ -1894,7 +1994,11 @@ async function resolveLayerShapeSource(layer){
     return boundingBox?{kind:'polygons',polygons}:null;
   }
   if(layer.type==='path'){
-    const{polygons,boundingBox}=permanentEngine.resolvePathPolygons({contours:layer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h});
+    // RS-3014 Step 3: naturalBoundingBoxMm forwarded so a Boolean Operation combining a
+    // previously-cut layer resolves its TRUE (frozen-box-anchored) visible shape, not one
+    // stretched back to its unchanged x/y/w/h -- same wiring-gap fix as onPaintStroke()'s own
+    // candidate-resolution call above.
+    const{polygons,boundingBox}=permanentEngine.resolvePathPolygons({contours:layer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,naturalBoundingBoxMm:layer.naturalBoundingBoxMm});
     return boundingBox?{kind:'polygons',polygons}:null;
   }
   if(layer.type==='text'){
@@ -3771,6 +3875,12 @@ function updateDrawToolButtons(){
   el('eraserRadiusField').style.display=showEraserRadius?'':'none';
   el('eraserRadiusMm').style.display=showEraserRadius?'':'none';
   if(showEraserRadius)el('eraserRadiusMm').value=eraserSettings.radiusMm;
+  // RS-3014 Step 3: eraserModeField/eraserMode's own visibility toggle, same convention as
+  // eraserRadiusField/eraserRadiusMm just above -- kept in sync with eraserSettings.mode every
+  // time it's shown.
+  el('eraserModeField').style.display=showEraserRadius?'':'none';
+  el('eraserMode').style.display=showEraserRadius?'':'none';
+  if(showEraserRadius)el('eraserMode').value=eraserSettings.mode;
   // RS-3014 Step 1: Stamp/Trace/Paint's own field-group visibility toggles, same
   // active-and-mode-matches idiom as showEraserRadius just above, kept in sync with each tool's own
   // settings object every time it's shown, so it always reflects the current style regardless of
@@ -3881,6 +3991,12 @@ el('eraserRadiusMm').oninput=()=>{
   if(!Number.isFinite(parsed))return;
   eraserSettings.radiusMm=Math.max(0.5,parsed);
   drawingTool.setEraserRadiusMm(eraserSettings.radiusMm);
+};
+// RS-3014 Step 3: Eraser's own mode toggle, same "own state + tool's live value, both updated
+// together" pattern as #eraserRadiusMm's own handler just above.
+el('eraserMode').onchange=()=>{
+  eraserSettings.mode=el('eraserMode').value;
+  drawingTool.setEraserMode(eraserSettings.mode);
 };
 // RS-3014 Step 1: Stamp/Trace/Paint's own panel field handlers, same "own state + tool's live
 // value, both updated together" pattern as #eraserRadiusMm's own handler just above. Paint has no

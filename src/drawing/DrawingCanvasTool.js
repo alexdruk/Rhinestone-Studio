@@ -279,6 +279,122 @@ function buildSlotPreview(a, b, widthMm) {
 }
 
 /**
+ * RS-3014 Step 3: builds the actual swept-area polygon(s) for an Eraser gesture -- the drag
+ * preview (`eraseItem`) is a STROKED path, visual only, so it can't be handed to
+ * src/geometry/PathBoolean.js's combineShapeSources() directly for Outline-mode cutting. One
+ * capsule per consecutive point pair, built via buildSlotPreview() itself (widthMm =
+ * eraserRadiusMm*2 makes it exactly a radius-eraserRadiusMm capsule around that segment,
+ * including buildSlotPreview()'s own length<1e-6 circle fallback -- reused unchanged rather than
+ * duplicated, so a single-point gesture degenerates to a circle the same way a zero-length slot
+ * drag already does), unioned together with Paper.js's own PathItem#unite() (an analytic boolean
+ * local to this module, distinct from and NOT a substitute for PathBoolean.js's raster subtract
+ * engine, which does the actual shape-cutting math once app.js hands this polygon off to it) so a
+ * multi-segment drag produces one clean input polygon instead of several overlapping ones.
+ *
+ * Point extraction reuses flattenPathToContours() (DrawingBoard.js) rather than a second
+ * flatten-and-read-segments implementation -- that function roots its output against its own
+ * computed (xMm, yMm) box, so those are added back to every point to recover this module's usual
+ * absolute-mm convention. Every intermediate Paper.js item this function creates is removed from
+ * the project before returning -- this is a pure point-list computation, not something meant to
+ * leave any trace on the canvas.
+ *
+ * @param {{x:number,y:number}[]} points buffered drag points, absolute project-mm (same
+ *   convention as erasePoints/daubsAbsoluteMm) -- one point is a valid, expected input (a plain
+ *   click), matching Eraser's own "click = one daub" precedent.
+ * @param {number} eraserRadiusMm
+ * @returns {{xMm:number,yMm:number}[][]} one or more closed rings, absolute project-mm. Empty
+ *   when `points` is empty.
+ */
+function buildEraserCorridorPolygons(points, eraserRadiusMm) {
+  if (points.length === 0) return [];
+
+  const widthMm = eraserRadiusMm * 2;
+  let unioned = null;
+  const segmentCount = Math.max(1, points.length - 1);
+  for (let i = 0; i < segmentCount; i++) {
+    const a = points[i];
+    const b = points.length === 1 ? points[0] : points[i + 1];
+    const segment = buildSlotPreview(a, b, widthMm);
+    if (!unioned) {
+      unioned = segment;
+    } else {
+      const next = unioned.unite(segment);
+      unioned.remove();
+      segment.remove();
+      unioned = next;
+    }
+  }
+
+  const flattened = flattenPathToContours(unioned, FLATTEN_TOLERANCE_MM);
+  unioned.remove();
+  return flattened.contours.map(({ contour }) => contour.map((p) => ({
+    xMm: p.x + flattened.xMm,
+    yMm: p.y + flattened.yMm
+  })));
+}
+
+/**
+ * RS-3014 Step 3: the natural-space-box-selection half of materializeShapeFromLayer()'s own
+ * placement formula, split out so expectedShapeBoundsMm() below (syncFromProjectLayers()'s bounds-
+ * reconciliation check) can compute the SAME scale/offset without also building any Paper.js
+ * segments -- same "compute the cheap half without paying for the expensive half" split
+ * rebuildStoneGroupForShape() already relies on for styleParams vs. live-flattened geometry.
+ * @param {object} layer
+ * @param {{x:number,y:number}[]} allPoints layer.contours.flat() -- passed in so callers that
+ *   already have it (materializeShapeFromLayer()) don't flatten `contours` twice.
+ */
+function computeLayerNaturalPlacement(layer, allPoints) {
+  const frozenBox = layer.naturalBoundingBoxMm;
+  const minX = frozenBox ? frozenBox.minXmm : Math.min(...allPoints.map((p) => p.x));
+  const minY = frozenBox ? frozenBox.minYmm : Math.min(...allPoints.map((p) => p.y));
+  const maxX = frozenBox ? frozenBox.maxXmm : Math.max(...allPoints.map((p) => p.x));
+  const maxY = frozenBox ? frozenBox.maxYmm : Math.max(...allPoints.map((p) => p.y));
+  const naturalWidth = maxX - minX;
+  const naturalHeight = maxY - minY;
+  return {
+    minX,
+    minY,
+    scaleX: naturalWidth > 0 ? layer.w / naturalWidth : 1,
+    scaleY: naturalHeight > 0 ? layer.h / naturalHeight : 1
+  };
+}
+
+/**
+ * RS-3014 Step 3: the bounds a materializeShapeFromLayer() item WOULD have for `layer`, computed
+ * analytically (no Paper.js items built) -- syncFromProjectLayers()'s own bounds-reconciliation
+ * check (see its own doc comment) needs this instead of the raw `(layer.x, layer.y, layer.w,
+ * layer.h)` box it used before this step: for every layer predating naturalBoundingBoxMm, this
+ * always returns exactly that same box (materializeShapeFromLayer() by construction scales the
+ * live natural contour to exactly fill it), so the comparison is byte-identical to before. For a
+ * layer an Outline-mode Eraser cut has shrunk, the frozen box is now LARGER than the current
+ * contour's own extent, so the placed shape's real bounds are legitimately smaller than
+ * `layer.w`/`layer.h` -- comparing against the raw box would treat "this cut shape correctly
+ * reflects its own contours" as "still needs reconciling" on EVERY tick forever, re-triggering an
+ * unnecessary re-materialize each time (the exact per-tick cost syncFromProjectLayers()'s own
+ * forceStoneRebuild doc comment already flags as worth avoiding).
+ * @param {object} layer
+ * @returns {{left:number,top:number,width:number,height:number}|null} null for a layer with no
+ *   usable contour (mirrors materializeShapeFromLayer()'s own early-return).
+ */
+function expectedShapeBoundsMm(layer) {
+  const contours = layer.contours;
+  if (!Array.isArray(contours) || contours.length === 0) return null;
+  const allPoints = contours.flat();
+  if (allPoints.length === 0) return null;
+  const { minX, minY, scaleX, scaleY } = computeLayerNaturalPlacement(layer, allPoints);
+  let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+  for (const p of allPoints) {
+    const x = layer.x + (p.x - minX) * scaleX;
+    const y = layer.y + (p.y - minY) * scaleY;
+    if (x < left) left = x;
+    if (x > right) right = x;
+    if (y < top) top = y;
+    if (y > bottom) bottom = y;
+  }
+  return { left, top, width: right - left, height: bottom - top };
+}
+
+/**
  * Canvas-desync fix: builds a Paper.js Path for a 'path'-type project.layers entry driven
  * entirely from its own stored data (`contours`/x/y/w/h) -- the reconciliation counterpart of
  * commitFinalizedShape(), which builds the same shape at draw-time from a freshly-drawn item
@@ -301,6 +417,16 @@ function buildSlotPreview(a, b, widthMm) {
  * a hole actually render as a hole (a plain Path has no notion of "this loop cuts a hole in that
  * one"). The single-contour branch is completely unchanged from before this Phase -- every existing
  * hand-drawn shape (always exactly one contour) still takes it byte-for-byte as before.
+ *
+ * RS-3014 Step 3: honors `layer.naturalBoundingBoxMm` when present, in place of a fresh min/max
+ * recomputed from `contours` -- the SAME override GeometryEngine's own computeNaturalContourTransform()
+ * accepts (see that function's own doc comment for why: recomputing fresh from `contours` on every
+ * call is exactly what makes an Outline-mode Eraser cut rescale/reposition everything relative to
+ * the shape once `contours` itself shrinks). Without this, this function's own independent copy of
+ * the same placement formula would silently stretch a cut shape's now-smaller contour back up to
+ * fill `layer.w`/`layer.h` unchanged, visually erasing the cut on Design's own canvas even though
+ * GeometryEngine's stone generation (which does honor the freeze) renders it correctly -- a real
+ * defect caught during this step's own browser verification, not a hypothetical.
  * @param {object} layer a project.layers entry with type==='path'
  * @returns {paper.Path|paper.CompoundPath|null}
  */
@@ -312,14 +438,7 @@ function materializeShapeFromLayer(layer) {
   }
 
   const allPoints = contours.flat();
-  const minX = Math.min(...allPoints.map((p) => p.x));
-  const minY = Math.min(...allPoints.map((p) => p.y));
-  const maxX = Math.max(...allPoints.map((p) => p.x));
-  const maxY = Math.max(...allPoints.map((p) => p.y));
-  const naturalWidth = maxX - minX;
-  const naturalHeight = maxY - minY;
-  const scaleX = naturalWidth > 0 ? layer.w / naturalWidth : 1;
-  const scaleY = naturalHeight > 0 ? layer.h / naturalHeight : 1;
+  const { minX, minY, scaleX, scaleY } = computeLayerNaturalPlacement(layer, allPoints);
 
   function buildContourPath(contour) {
     const path = new paper.Path();
@@ -376,7 +495,7 @@ function materializeShapeFromLayer(layer) {
  * (shouldn't happen post-Step-1, but mirrors this file's existing null-layerId guards) is skipped,
  * never passed through as undefined.
  * @param {HTMLCanvasElement} canvasEl
- * @param {{getStoneDefaults?:()=>{stoneSize?:number,gap?:number,color?:string}, onShapeCommitted?:(layer:object)=>void, openHistorySession?:()=>void, closeHistorySession?:()=>void, onShapeMoved?:(layerId:string,dxMm:number,dyMm:number)=>void, onShapeResized?:(layerId:string,boundsMm:{left:number,top:number,width:number,height:number})=>void, onShapeDeleted?:(layerId:string)=>(boolean|void), onSelectionChanged?:(layerIds:string[])=>void, onPaintStroke?:(lassoPolygons:{xMm:number,yMm:number}[][])=>void, onStampPlace?:(placement:{xMm:number,yMm:number,layerId:string|null})=>void, onTracePlace?:(placements:{xMm:number,yMm:number}[],layerId:string)=>void, onEraseSweep?:(daubsAbsoluteMm:{xMm:number,yMm:number}[],layerId:string)=>void}} [hooks] onShapeDeleted returning exactly `false` means the deletion was blocked (e.g. a last-layer guard) -- the shape stays in `board.shapes` too, everything else treats a non-`false` return as success. RS-3011 Step 10b: onPaintStroke(lassoPolygons) fires once a Paint lasso release produces a usable stroke (>= PAINT_MIN_LASSO_POINTS) -- lassoPolygons is exactly one closed ring, absolute project-mm, this module's own coordinate space (Paper.js project units already equal this app's millimeters, per this file's own header comment). Target selection, region creation, and every project.layers mutation happen entirely in app.js -- this hook is this module's only involvement in Paint beyond the pointer interaction and live preview. RS-3011 Step 12: onStampPlace(placement) fires once per Stamp click -- xMm/yMm is the click point, absolute project-mm, this module's own coordinate space; layerId is the project.layers id resolved via resolveStampTargetLayerId() (the SAME hitTestShapeId() Select's own click-to-pick-a-shape branch uses), or null if the click hit no shape. Passing the already-resolved layerId (rather than a bare point, unlike onPaintStroke) avoids a second, duplicate hit-test implementation living in app.js -- app.js still owns the absolute-to-natural-space coordinate conversion and every project.layers mutation, discarding silently when layerId is null, mirroring Paint's own "no target -> discard" precedent. RS-3011 Step 11: onTracePlace(placements, layerId) fires once per committed Trace drag that resolved a real target AND produced at least one spaced point -- placements is the full list of stones to place, absolute project-mm, this module's own coordinate space, already spaced by src/geometry/lineStampSpacing.js's placeStonesAlongPath(); layerId is always a real project.layers id here (never null -- a null/no-target resolution discards the whole drag silently before this hook is ever called, unlike onStampPlace's own "always call, layerId may be null" contract, since there is no per-point ghost-preview equivalent for Trace that would need the null case). app.js still owns the absolute-to-natural-space conversion and every project.layers mutation, mirroring onStampPlace's own architecture split, just plural. RS-3011 Step 13: onEraseSweep(daubsAbsoluteMm, layerId) fires once per committed Eraser click/drag sweep that resolved a real target -- daubsAbsoluteMm is every buffered point from the gesture (one for a plain click, one per TRACE_MIN_SAMPLE_DISTANCE_MM-thinned sample along a drag, same thinning as Trace's own placements), absolute project-mm, this module's own coordinate space, NOT yet spaced/filtered in any way (a daub is a raw brush touch, not a stone placement); layerId is always a real project.layers id here, same "never null" contract as onTracePlace's own (resolved via resolveTraceTargetLayerId() against the sweep's own bounding-box center, which degenerates correctly to the click point itself for a single-point click). This module deliberately has no opinion on daub radius -- that's app.js's own eraserSettings.radiusMm (a tool setting, not read from any layer field), attached per point only once app.js owns the coordinate conversion, mirroring onTracePlace/onStampPlace's own architecture split.
+ * @param {{getStoneDefaults?:()=>{stoneSize?:number,gap?:number,color?:string}, onShapeCommitted?:(layer:object)=>void, openHistorySession?:()=>void, closeHistorySession?:()=>void, onShapeMoved?:(layerId:string,dxMm:number,dyMm:number)=>void, onShapeResized?:(layerId:string,boundsMm:{left:number,top:number,width:number,height:number})=>void, onShapeDeleted?:(layerId:string)=>(boolean|void), onSelectionChanged?:(layerIds:string[])=>void, onPaintStroke?:(lassoPolygons:{xMm:number,yMm:number}[][])=>void, onStampPlace?:(placement:{xMm:number,yMm:number,layerId:string|null})=>void, onTracePlace?:(placements:{xMm:number,yMm:number}[],layerId:string)=>void, onEraseSweep?:(daubsAbsoluteMm:{xMm:number,yMm:number}[],layerId:string,corridorPolygonsAbsoluteMm:{xMm:number,yMm:number}[][],mode:('stones'|'outline'))=>void}} [hooks] onShapeDeleted returning exactly `false` means the deletion was blocked (e.g. a last-layer guard) -- the shape stays in `board.shapes` too, everything else treats a non-`false` return as success. RS-3011 Step 10b: onPaintStroke(lassoPolygons) fires once a Paint lasso release produces a usable stroke (>= PAINT_MIN_LASSO_POINTS) -- lassoPolygons is exactly one closed ring, absolute project-mm, this module's own coordinate space (Paper.js project units already equal this app's millimeters, per this file's own header comment). Target selection, region creation, and every project.layers mutation happen entirely in app.js -- this hook is this module's only involvement in Paint beyond the pointer interaction and live preview. RS-3011 Step 12: onStampPlace(placement) fires once per Stamp click -- xMm/yMm is the click point, absolute project-mm, this module's own coordinate space; layerId is the project.layers id resolved via resolveStampTargetLayerId() (the SAME hitTestShapeId() Select's own click-to-pick-a-shape branch uses), or null if the click hit no shape. Passing the already-resolved layerId (rather than a bare point, unlike onPaintStroke) avoids a second, duplicate hit-test implementation living in app.js -- app.js still owns the absolute-to-natural-space coordinate conversion and every project.layers mutation, discarding silently when layerId is null, mirroring Paint's own "no target -> discard" precedent. RS-3011 Step 11: onTracePlace(placements, layerId) fires once per committed Trace drag that resolved a real target AND produced at least one spaced point -- placements is the full list of stones to place, absolute project-mm, this module's own coordinate space, already spaced by src/geometry/lineStampSpacing.js's placeStonesAlongPath(); layerId is always a real project.layers id here (never null -- a null/no-target resolution discards the whole drag silently before this hook is ever called, unlike onStampPlace's own "always call, layerId may be null" contract, since there is no per-point ghost-preview equivalent for Trace that would need the null case). app.js still owns the absolute-to-natural-space conversion and every project.layers mutation, mirroring onStampPlace's own architecture split, just plural. RS-3011 Step 13: onEraseSweep(daubsAbsoluteMm, layerId) fires once per committed Eraser click/drag sweep that resolved a real target -- daubsAbsoluteMm is every buffered point from the gesture (one for a plain click, one per TRACE_MIN_SAMPLE_DISTANCE_MM-thinned sample along a drag, same thinning as Trace's own placements), absolute project-mm, this module's own coordinate space, NOT yet spaced/filtered in any way (a daub is a raw brush touch, not a stone placement); layerId is always a real project.layers id here, same "never null" contract as onTracePlace's own (resolved via resolveTraceTargetLayerId() against the sweep's own bounding-box center, which degenerates correctly to the click point itself for a single-point click). This module deliberately has no opinion on daub radius -- that's app.js's own eraserSettings.radiusMm (a tool setting, not read from any layer field), attached per point only once app.js owns the coordinate conversion, mirroring onTracePlace/onStampPlace's own architecture split. RS-3014 Step 3 (Dual-mode Eraser): corridorPolygonsAbsoluteMm is the SAME sweep's buffered points already turned into one or more closed, filled rings via buildEraserCorridorPolygons() (capsule-per-segment, unioned with Paper.js's own PathItem#unite()) -- absolute project-mm, this module's own coordinate space, same convention as daubsAbsoluteMm itself; only meaningful to Outline mode (app.js's own combineShapeSources() cut), a 'stones' gesture ignores it and keeps using daubsAbsoluteMm exactly as before. `mode` is this module's own eraserMode value (see setEraserMode()) captured at the START of this gesture (onMouseDown), NOT read live from app.js's eraserSettings.mode at the moment this hook fires -- a mode switch mid-drag must not retroactively change what an already-in-flight sweep does, so app.js must branch on the mode this parameter reports, never its own live eraserSettings.mode, when deciding how to apply a given sweep.
  */
 export function createDrawingTool(canvasEl, hooks = {}) {
   const {
@@ -452,6 +571,14 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   let erasePoints = [];
   let eraseItem = null;
   let eraserRadiusMm = ERASER_DEFAULT_RADIUS_MM;
+  // RS-3014 Step 3: Eraser's own mode ('stones' | 'outline'), same "set from outside, read live"
+  // role as eraserRadiusMm just above -- app.js calls setEraserMode() whenever eraserSettings.mode
+  // changes (session-first-entry seeding, the panel toggle). UNLIKE eraserRadiusMm though,
+  // activeEraserMode below snapshots this at gesture-start (onMouseDown) rather than letting it
+  // stay live through the gesture -- see onEraseSweep's own hooks-param doc comment for why a mode
+  // switch mid-drag must not retroactively change an already-in-flight sweep.
+  let eraserMode = 'stones';
+  let activeEraserMode = 'stones';
   // RS-3014 Step 1: Stamp/Trace's own independent tool-level style, mirroring eraserRadiusMm's own
   // "set from outside, read live by the ghost/placement code" role -- app.js's stampSettings/
   // traceSettings, pushed in via setStampStyle()/setTraceStyle() below (session-first-entry seeding,
@@ -1283,13 +1410,30 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     // eraseDaubs' own placement (which store points against the fixed natural contour) for any shape
     // ever resized away from its original box. Confirmed via live instrumentation: this exact
     // mismatch reproduced the reported "stamp appears near the OLD pre-resize position" bug.
+    // RS-3014 Step 3: a layer with a frozen naturalBoundingBoxMm (an Outline-mode Eraser cut has
+    // run on it) is the one exception to "always use the live re-flattened geometry" above -- it
+    // uses the layer's own STATIC x/y/w/h (styleParams.staticXMm etc.) instead, the same values
+    // generatePathStonesLive() (the production pipeline) already uses for such a layer. Reusing
+    // `flattened.xMm/widthMm` here instead would combine the frozen (pre-cut) box with the LIVE
+    // item's own ALREADY-shrunk width -- shrinking the base fill a second time -- and, separately,
+    // marching-squares re-traces the WHOLE boundary (not just the cut edge) at finite grid
+    // resolution, so even the live item's untouched edges carry a little sub-mm quantization noise
+    // relative to the layer's exact static box; feeding that noisy live geometry back through the
+    // (already frozen-box-anchored) region/stampedStones/eraseDaubs transform very slightly
+    // repositions them on THIS canvas even though the frozen box's whole purpose is to prevent
+    // exactly that. Matching the production pipeline's own static-box math avoids both.
+    // Trade-off, deliberate: using the STATIC box means a previously-cut shape's own stone-dot
+    // preview no longer tracks a live in-progress resize drag frame-by-frame (it lags until the
+    // drag commits and layer.w/h actually update) -- accepted rather than "fixed" back to live
+    // tracking, since that's exactly what reintroduces the double-shrink/repositioning bug above.
+    const useStaticBox = Boolean(styleParams.naturalBoundingBoxMm);
     const params = {
       contours: styleParams.contours,
       layerId,
-      xMm: flattened.xMm,
-      yMm: flattened.yMm,
-      widthMm: flattened.widthMm,
-      heightMm: flattened.heightMm,
+      xMm: useStaticBox ? styleParams.staticXMm : flattened.xMm,
+      yMm: useStaticBox ? styleParams.staticYMm : flattened.yMm,
+      widthMm: useStaticBox ? styleParams.staticWidthMm : flattened.widthMm,
+      heightMm: useStaticBox ? styleParams.staticHeightMm : flattened.heightMm,
       closed: styleParams.closed,
       ...styleParams
     };
@@ -1609,6 +1753,9 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         // own hit-test never depends on it, but kept for consistency).
         removeEraserGhostItem();
         interactionKind = 'eraser';
+        // RS-3014 Step 3: snapshot the mode for THIS gesture -- see eraserMode's own state-block
+        // doc comment above for why this must not track a live mid-drag toggle change.
+        activeEraserMode = eraserMode;
         erasePoints = [event.point];
         eraseItem = new paper.Path({
           strokeColor: ERASER_STROKE_COLOR,
@@ -2086,7 +2233,12 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         // Trace's own "no target -> discard" precedent.
         if (!layerId) return;
         const daubsAbsoluteMm = points.map((p) => ({ xMm: p.x, yMm: p.y }));
-        onEraseSweep(daubsAbsoluteMm, layerId);
+        // RS-3014 Step 3: corridor polygon(s) for Outline mode -- see buildEraserCorridorPolygons()'s
+        // own doc comment. Built unconditionally (cheap, and 'stones' gestures simply ignore it) so
+        // app.js never needs a second code path to request it after the fact.
+        const corridorPolygonsAbsoluteMm = buildEraserCorridorPolygons(points, eraserRadiusMm);
+        const gestureMode = activeEraserMode;
+        onEraseSweep(daubsAbsoluteMm, layerId, corridorPolygonsAbsoluteMm, gestureMode);
         return;
       }
       if (interactionKind !== 'draw') return;
@@ -2331,6 +2483,19 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     setEraserRadiusMm(value) {
       const parsed = parseFloat(value);
       if (Number.isFinite(parsed)) eraserRadiusMm = Math.max(ERASER_RADIUS_FLOOR_MM, parsed);
+    },
+
+    /**
+     * RS-3014 Step 3: sets Eraser's own mode ('stones' | 'outline') -- app.js calls this whenever
+     * eraserSettings.mode changes (session-first-entry seeding, the panel toggle). Session-scoped
+     * tool state, same category as eraserRadiusMm just above, not project data. Any value other
+     * than the two literal strings is ignored, keeping the last valid value -- same guard
+     * convention as setSlotWidthMm()/setEraserRadiusMm() above. See eraserMode's own state-block
+     * doc comment for why a live gesture snapshots this at mousedown instead of tracking it live.
+     * @param {'stones'|'outline'} value
+     */
+    setEraserMode(value) {
+      if (value === 'stones' || value === 'outline') eraserMode = value;
     },
 
     /**
@@ -2602,6 +2767,45 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     },
 
     /**
+     * RS-3014 Step 3: the write-through target for an Outline-mode Eraser cut -- the first thing to
+     * ever mutate a LIVE 'path' layer's own `contours` after commit (see app.js's onEraseSweep()).
+     * Every other project.layers write that reaches this file (stoneSize/gap/color/fillMode via
+     * refreshStoneGroupForLayer() above, a resize via onShapeResized) either changes non-geometric
+     * style or the x/y/w/h placement box alone -- syncFromProjectLayers()'s own step 3 already
+     * reconciles a bounds change by re-stretching the EXISTING Paper.js item (`shape.item.bounds =`),
+     * which is correct there because the item's own segment geometry doesn't need to change, only
+     * its placement. A contour cut is different: the segments themselves must change, which
+     * `.bounds =` cannot do -- so this re-materializes a fresh Item from `layer`'s own updated
+     * contours/x/y/w/h/closed (materializeShapeFromLayer(), the same reconciliation builder
+     * syncFromProjectLayers() itself uses for a brand-new/undone-back shape) and swaps it in via
+     * DrawingBoard's own replaceShapeItem() (same shape id, same z-order slot). Re-applies selection
+     * styling/resize handles (the fresh item starts out with default, unselected styling) and
+     * rebuilds the stone Group against the NEW item's geometry -- same three steps
+     * syncFromProjectLayers() itself runs after a bounds change, just via this one shape's own
+     * update path instead of the whole-board reconciliation pass (an Outline-mode cut is a single,
+     * explicit, already-know-which-shape action, not a "something changed somewhere" pass over every
+     * layer -- so this stays out of syncFromProjectLayers()'s own per-tick loop rather than adding a
+     * contour-diff check there, matching that method's own doc comment on why forceStoneRebuild is
+     * opt-in rather than unconditional: unnecessary per-tick cost for every OTHER path layer that
+     * never gets cut). A no-op if no board.shapes item matches `layer.id`, or if `layer` has no
+     * usable contour (materializeShapeFromLayer() returns null) -- same "no-op otherwise" write-
+     * through convention as refreshStoneGroupForLayer() above.
+     * @param {object} layer A raw project.layers 'path' layer (same shape materializeShapeFromLayer()
+     *   already expects: contours/x/y/w/h/closed), with its `contours` already updated.
+     */
+    refreshShapeGeometryForLayer(layer) {
+      const shape = findShapeByLayerId(layer.id);
+      if (!shape) return;
+      const newItem = materializeShapeFromLayer(layer);
+      if (!newItem) return;
+      if (!board.replaceShapeItem(shape.id, newItem)) return;
+      newItem.data.layerId = layer.id;
+      applySelectionVisuals();
+      updateResizeHandles();
+      rebuildStoneGroupForShape(shape.id);
+    },
+
+    /**
      * Canvas-desync fix: full reconciliation pass between `pathLayers` (every current
      * project.layers entry with type==='path') and this file's own board.shapes, covering every
      * way the two can drift when project.layers changes from OUTSIDE Design's own drag handlers --
@@ -2685,6 +2889,35 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         const layer = layerId && layerById.get(layerId);
         if (!layer) continue;
         const b = shape.item.bounds;
+        // RS-3014 Step 3: a layer with a frozen naturalBoundingBoxMm (an Outline-mode Eraser cut
+        // has run on it at least once) takes a separate, more expensive path -- see
+        // expectedShapeBoundsMm()'s own doc comment for why its bounds can legitimately be smaller
+        // than layer.x/y/w/h, and why comparing straight against layer.x/y/w/h (the cheap check
+        // every OTHER layer keeps, unchanged, below) would treat that as "always changed" forever.
+        // Deliberately gated on this rare case, not applied unconditionally to every layer here --
+        // this loop runs on every updateAll() tick (see this method's own doc comment on
+        // forceStoneRebuild's opt-in cost), and expectedShapeBoundsMm() is an O(points) scan the
+        // vast majority of (never-cut) layers have no reason to pay every tick.
+        if (layer.naturalBoundingBoxMm) {
+          const expected = expectedShapeBoundsMm(layer);
+          const boundsChanged = !expected ||
+            Math.abs(b.left - expected.left) > 1e-6 ||
+            Math.abs(b.top - expected.top) > 1e-6 ||
+            Math.abs(b.width - expected.width) > 1e-6 ||
+            Math.abs(b.height - expected.height) > 1e-6;
+          if (boundsChanged) {
+            // A cut shape's bounds don't simply stretch to fill layer.x/y/w/h -- re-materialize
+            // from the layer's own contours/frozen box instead of a raw bounds transform, the same
+            // reconciliation refreshShapeGeometryForLayer() itself uses.
+            const newItem = materializeShapeFromLayer(layer);
+            if (newItem) {
+              board.replaceShapeItem(shape.id, newItem);
+              newItem.data.layerId = layerId;
+            }
+          }
+          if (boundsChanged || forceStoneRebuild) rebuildStoneGroupForShape(shape.id);
+          continue;
+        }
         const boundsChanged =
           Math.abs(b.left - layer.x) > 1e-6 ||
           Math.abs(b.top - layer.y) > 1e-6 ||

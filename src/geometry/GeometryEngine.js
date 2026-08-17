@@ -688,10 +688,15 @@ export class GeometryEngine {
    * @param {number} yMm
    * @param {number|null} widthMm
    * @param {number|null} heightMm
+   * @param {{minXmm:number,minYmm:number,maxXmm:number,maxYmm:number}} [naturalBoundingBoxMm]
+   *   RS-3014 Step 3: forwarded straight through to computeNaturalContourTransform() -- see that
+   *   function's own doc comment. undefined for every caller but _pathPolygons() (the only 'path'-
+   *   layer-specific caller of this shared helper), a safe no-op there exactly like every other
+   *   omitted-optional-param call site.
    * @returns {{polygons: import('../text/VectorPath.js').Point2D[][], boundingBox: BoundingBox|null}}
    */
-  _placeNaturalContours(contours, xMm, yMm, widthMm, heightMm) {
-    const transform = computeNaturalContourTransform(contours, xMm, yMm, widthMm, heightMm);
+  _placeNaturalContours(contours, xMm, yMm, widthMm, heightMm, naturalBoundingBoxMm) {
+    const transform = computeNaturalContourTransform(contours, xMm, yMm, widthMm, heightMm, naturalBoundingBoxMm);
     if (!transform) {
       return { polygons: [], boundingBox: null };
     }
@@ -979,7 +984,7 @@ export class GeometryEngine {
     // see computeNaturalContourTransform's own doc comment for why that distinction matters.
     // Computed once, shared by every branch below.
     if (options.regions.length > 0 || options.stampedStones.length > 0 || options.eraseDaubs.length > 0) {
-      const transform = computeNaturalContourTransform(options.contours, options.xMm, options.yMm, options.widthMm, options.heightMm);
+      const transform = computeNaturalContourTransform(options.contours, options.xMm, options.yMm, options.widthMm, options.heightMm, options.naturalBoundingBoxMm);
       // RS-3011 Step 10a: additive, priority-ordered sub-areas that carve their own patch out of the
       // fill computed above. No-op when `regions` is empty/absent -- every layer predating this step
       // -- so this branch never changes existing output. See _applyPathRegions()'s own doc comment.
@@ -1150,7 +1155,16 @@ export class GeometryEngine {
     // S-110: delegates to the shared _placeNaturalContours() helper -- see its doc comment. Behavior
     // is unchanged; this is a pure extraction so Boolean Operation results and every S-110 shape
     // kind share one placement implementation instead of two copies of the same math.
-    return this._placeNaturalContours(options.contours, options.xMm, options.yMm, options.widthMm, options.heightMm);
+    // RS-3014 Step 3: options.naturalBoundingBoxMm (a 'path'-layer-only field -- see
+    // normalizePathParams()'s own doc comment -- undefined for every other shape kind's own
+    // _shapePolygons() call to this same shared helper) keeps the BASE FILL sampled below anchored
+    // to the shape's pre-cut extent too, not just regions/stampedStones/eraseDaubs (see the
+    // generatePathLayout() call below): without this, an Outline-mode cut would leave the visible
+    // outline correctly shrunk while the actual sampled fill stones stayed stretched to the
+    // layer's unchanged widthMm/heightMm box -- stones rendering past the shape's own visible
+    // boundary, a production-correctness defect (base fill IS the product), caught during this
+    // step's own browser verification.
+    return this._placeNaturalContours(options.contours, options.xMm, options.yMm, options.widthMm, options.heightMm, options.naturalBoundingBoxMm);
   }
 }
 
@@ -1165,11 +1179,32 @@ export class GeometryEngine {
  * region's own points instead of reusing this one would silently distort it relative to the shape it
  * is supposed to track -- the same reasoning applies to Step 10b's inverse use.
  *
+ * RS-3014 Step 3 (Eraser outline-cut mode): a live 'path' layer's own `contours` can now be
+ * mutated in place after commit (a boolean subtraction shrinking the shape). Recomputing the
+ * natural box fresh from `contours` on every call is exactly what makes that safe UNTIL a cut
+ * changes `contours`' own extent -- at that point every region/stamp/daub on the layer, even ones
+ * nowhere near the cut, would silently rescale/reposition relative to the shape. The optional
+ * `naturalBoundingBoxMm` param lets a caller freeze that box at the moment a layer first becomes
+ * cuttable (see app.js's outline-cut handling) so later cuts no longer move it.
+ *
+ * @param {{minXmm:number,minYmm:number,maxXmm:number,maxYmm:number}|null} [naturalBoundingBoxMm]
+ *   When present and valid, used in place of the live-recomputed box below. Absent/null/undefined
+ *   (every existing call site, every layer predating this step) reproduces prior behavior exactly.
  * @returns {{xMm:number,yMm:number,scaleX:number,scaleY:number}|null} null when `contours` has no points.
  */
-export function computeNaturalContourTransform(contours, xMm, yMm, widthMm, heightMm) {
-  const naturalPoints = contours.flat();
-  const naturalBox = BoundingBox.fromPoints(naturalPoints.map((p) => new Point2D(p.xMm, p.yMm)));
+export function computeNaturalContourTransform(contours, xMm, yMm, widthMm, heightMm, naturalBoundingBoxMm) {
+  let naturalBox;
+  if (naturalBoundingBoxMm && Number.isFinite(naturalBoundingBoxMm.minXmm) &&
+    Number.isFinite(naturalBoundingBoxMm.minYmm) && Number.isFinite(naturalBoundingBoxMm.maxXmm) &&
+    Number.isFinite(naturalBoundingBoxMm.maxYmm)) {
+    naturalBox = new BoundingBox(
+      naturalBoundingBoxMm.minXmm, naturalBoundingBoxMm.minYmm,
+      naturalBoundingBoxMm.maxXmm, naturalBoundingBoxMm.maxYmm
+    );
+  } else {
+    const naturalPoints = contours.flat();
+    naturalBox = BoundingBox.fromPoints(naturalPoints.map((p) => new Point2D(p.xMm, p.yMm)));
+  }
   if (!naturalBox) {
     return null;
   }
@@ -1750,6 +1785,11 @@ function normalizePathParams(params) {
     // layer type's pre-existing behavior exactly. Only an explicit `false` (a freehand stroke that
     // never looped back to its start) opts into open-contour outline sampling.
     closed: params.closed !== false,
+    // RS-3014 Step 3: optional frozen natural-space reference box -- see
+    // computeNaturalContourTransform()'s own doc comment for why this exists. Absent/null/undefined
+    // (every layer predating this step, and every 'path' layer that has never had its contours cut)
+    // is a safe no-op: the transform recomputes the box from `contours` exactly as it always has.
+    naturalBoundingBoxMm: normalizeNaturalBoundingBoxMm(params.naturalBoundingBoxMm),
     // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.
     ...normalizeMixedSizeParams(params, stoneSizeMm),
     // RS-3011 Step 10a: Paint regions -- see normalizePathRegions()'s own doc comment. Defaults to
@@ -1763,6 +1803,34 @@ function normalizePathParams(params) {
     // Same "absent optional field -> safe no-op default" convention as `regions`/`stampedStones`.
     eraseDaubs: normalizePathEraseDaubs(params.eraseDaubs)
   };
+}
+
+/**
+ * Normalizes a 'path' layer's optional `naturalBoundingBoxMm` field (RS-3014 Step 3, Eraser
+ * outline-cut). See computeNaturalContourTransform()'s own doc comment for what this freezes and
+ * why. Absent/null -- every layer predating this step -- returns undefined so the field is
+ * omitted from the normalized options entirely, matching this file's existing convention.
+ *
+ * @param {{minXmm:number,minYmm:number,maxXmm:number,maxYmm:number}} [input]
+ * @returns {{minXmm:number,minYmm:number,maxXmm:number,maxYmm:number}|undefined}
+ */
+function normalizeNaturalBoundingBoxMm(input) {
+  if (input === undefined || input === null) {
+    return undefined;
+  }
+  if (typeof input !== 'object') {
+    throw new TypeError('GeometryEngine.generatePathLayout naturalBoundingBoxMm must be an object when provided.');
+  }
+
+  const minXmm = assertFiniteNumber(input.minXmm, 'naturalBoundingBoxMm.minXmm');
+  const minYmm = assertFiniteNumber(input.minYmm, 'naturalBoundingBoxMm.minYmm');
+  const maxXmm = assertFiniteNumber(input.maxXmm, 'naturalBoundingBoxMm.maxXmm');
+  const maxYmm = assertFiniteNumber(input.maxYmm, 'naturalBoundingBoxMm.maxYmm');
+  if (maxXmm < minXmm || maxYmm < minYmm) {
+    throw new RangeError('naturalBoundingBoxMm max values must be greater than or equal to min values.');
+  }
+
+  return { minXmm, minYmm, maxXmm, maxYmm };
 }
 
 /**
