@@ -558,6 +558,12 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
                drawSlotWidthMm above, toggled individually in updateDrawToolButtons(). -->
           <label for="eraserRadiusMm" id="eraserRadiusField" style="display:none;margin:0" title="Eraser brush radius (mm) -- also adjustable with [ / ] while Eraser is active">Radius (mm)</label>
           <input id="eraserRadiusMm" type="number" min="0.5" step="0.5" value="1" style="display:none;width:70px">
+          <!-- RS-3014 Step 3: Eraser's own mode toggle -- same "sibling elements toggled individually
+               in updateDrawToolButtons()" convention as eraserRadiusField/eraserRadiusMm just above,
+               and the same two-state <select> pattern #snapEnabled already uses for an on/off toggle
+               (rather than a checkbox/radio pair, which nothing else in this panel uses). -->
+          <label for="eraserMode" id="eraserModeField" style="display:none;margin:0" title="Eraser mode: remove stones, or cut into the shape's own outline">Mode</label>
+          <select id="eraserMode" style="display:none"><option value="stones" selected>Stones</option><option value="outline">Outline</option></select>
           <!-- RS-3014 Step 1: Stamp's own independent style fields -- same "sibling elements toggled
                individually in updateDrawToolButtons()" convention as eraserRadiusField/eraserRadiusMm
                just above. #stampColor is populated by populateStoneColorOptions() at startup, same

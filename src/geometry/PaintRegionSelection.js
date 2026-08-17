@@ -89,15 +89,24 @@ export function selectPaintTarget(lassoPolygons, candidates, options = {}) {
  * `region.contour` onto the canvas; this converts a canvas-space (absolute mm) selection back into
  * that same stored form before it is ever saved.
  *
+ * RS-3014 Step 3: this is the ONE shared natural-space conversion every one of Paint/Stamp/Trace/
+ * Eraser(stones) goes through in app.js -- so it, too, must honor `pathLayer.naturalBoundingBoxMm`
+ * once an Outline-mode Eraser cut has frozen it (see computeNaturalContourTransform()'s own doc
+ * comment for why), not just GeometryEngine.generatePathLayout()'s own internal region/stamp/daub
+ * transform. Missing this here meant every tool's placement on a previously-cut layer kept
+ * re-deriving its transform from the live (shrinking, marching-squares-noisy) `contours` instead of
+ * the frozen box, permanently writing subtly-wrong coordinates into regions/stampedStones/
+ * eraseDaubs on every later interaction with that layer, not just a cosmetic live-preview wobble.
  * @param {{xMm:number,yMm:number}[][]} polygonsAbsoluteMm
  * @param {object} pathLayer A raw project.layers 'path' layer: `contours` ({x,y}[][], the project's
  *   own on-disk point-field convention -- see app.js's generatePathStonesLive() for the same
- *   {x,y}->{xMm,yMm} remap this function performs), plus `x`/`y`/`w`/`h` placement fields.
+ *   {x,y}->{xMm,yMm} remap this function performs), plus `x`/`y`/`w`/`h` placement fields, plus the
+ *   optional `naturalBoundingBoxMm` an Outline-mode Eraser cut may have frozen (see above).
  * @returns {{xMm:number,yMm:number}[][]} Empty when the layer's own `contours` has no points.
  */
 export function absolutePolygonsToNaturalSpace(polygonsAbsoluteMm, pathLayer) {
   const naturalContours = pathLayer.contours.map((contour) => contour.map((p) => ({ xMm: p.x, yMm: p.y })));
-  const transform = computeNaturalContourTransform(naturalContours, pathLayer.x, pathLayer.y, pathLayer.w, pathLayer.h);
+  const transform = computeNaturalContourTransform(naturalContours, pathLayer.x, pathLayer.y, pathLayer.w, pathLayer.h, pathLayer.naturalBoundingBoxMm);
   if (!transform) {
     return [];
   }
