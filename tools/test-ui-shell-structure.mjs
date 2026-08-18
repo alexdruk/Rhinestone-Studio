@@ -292,7 +292,37 @@ await test('14. Actions section: Undo, Redo, Duplicate selected, Delete selected
   }
   assert.match(appJs, /el\('actionUndo'\)\.onclick=\(\)=>performUndo\(\)/);
   assert.match(appJs, /el\('actionRedo'\)\.onclick=\(\)=>performRedo\(\)/);
-  assert.match(appJs, /el\('actionDuplicate'\)\.onclick=\(\)=>duplicateLayer\(selectedLayerId\)/);
+  // RS-3013 Step 3: actionDuplicate's handler is no longer a single-expression arrow -- it branches
+  // on drawingTool.activeSelection.kind==='region' to duplicate just that region, falling through to
+  // the ORIGINAL whole-layer duplicateLayer(selectedLayerId) call otherwise. Rather than pinning the
+  // entire handler body verbatim (which broke the instant Step 3 added the region branch) or slicing
+  // up to the next el(...) wiring line as a fixed end-marker (the same fragile-to-reformatting/
+  // false-positive-via-intervening-comment trap MONO-006A's own extractFunctionBody() doc comment
+  // warns about -- see tools/test-autosave-recovery-wiring.mjs), extract the handler's own `{...}`
+  // block by brace depth, so the captured text is exactly this handler's real code, nothing
+  // adjacent, regardless of comments or reordering around it -- then assert the fallthrough call
+  // still appears inside it, the real invariant this test cares about (Duplicate is wired to a
+  // handler that still knows how to duplicateLayer(selectedLayerId)), not the literal shape of that
+  // handler.
+  const actionDuplicateMarker = "el('actionDuplicate').onclick=";
+  const actionDuplicateStart = appJs.indexOf(actionDuplicateMarker);
+  assert.ok(actionDuplicateStart !== -1, "expected to find \"el('actionDuplicate').onclick=\" in app.js");
+  const actionDuplicateBraceStart = appJs.indexOf('{', actionDuplicateStart);
+  assert.ok(actionDuplicateBraceStart !== -1, "expected to find the opening \"{\" of actionDuplicate's onclick handler in app.js");
+  let braceDepth = 0;
+  let actionDuplicateBody = null;
+  for (let i = actionDuplicateBraceStart; i < appJs.length; i++) {
+    if (appJs[i] === '{') braceDepth++;
+    else if (appJs[i] === '}') {
+      braceDepth--;
+      if (braceDepth === 0) {
+        actionDuplicateBody = appJs.slice(actionDuplicateBraceStart + 1, i);
+        break;
+      }
+    }
+  }
+  assert.ok(actionDuplicateBody !== null, "expected to find the matching closing \"}\" of actionDuplicate's onclick handler in app.js");
+  assert.match(actionDuplicateBody, /duplicateLayer\(selectedLayerId\)/, 'expected the actionDuplicate handler to still fall through to duplicateLayer(selectedLayerId)');
   assert.match(appJs, /el\('actionDelete'\)\.onclick=\(\)=>deleteLayer\(selectedLayerId\)/);
   assert.match(appJs, /el\('actionSave'\)\.onclick=saveProjectDownload/);
   const historyUi = appJs.match(/function updateHistoryUI\(\)\{([\s\S]*?)\n\}/);
