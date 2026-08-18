@@ -308,3 +308,8 @@ tools/scratch/rs3013-step4-region-delete-verify/
 # stone-spec editing (Inspector stoneSize/gap/color/fillMode), same "never a repo artifact"
 # category as the scratch folders above
 tools/scratch/rs3013-step5-region-spec-editing-verify/
+
+# RS-3012 Step 1: ad hoc geometry-level + live-browser Playwright verification scripts/screenshots
+# for Stamp/Trace respecting the active selection boundary, same "never a repo artifact" category
+# as the scratch folders above
+tools/scratch/rs3012-step1-selection-bounds-verify/
