@@ -290,3 +290,8 @@ tools/scratch/rs3014-step5-eraser-edge-target-fix-verify/
 # Select/Lasso as twin selection tools, same "never a repo artifact" category as the scratch
 # folders above
 tools/scratch/rs3013-step1-select-lasso-verify/
+
+# RS-3013 Step 2: ad hoc geometry + live-browser Playwright verification scripts/screenshots for
+# region-level move (drag-to-translate a selected region), same "never a repo artifact" category
+# as the scratch folders above
+tools/scratch/rs3013-step2-region-move-verify/

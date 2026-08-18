@@ -503,7 +503,7 @@ function materializeShapeFromLayer(layer) {
  * (shouldn't happen post-Step-1, but mirrors this file's existing null-layerId guards) is skipped,
  * never passed through as undefined.
  * @param {HTMLCanvasElement} canvasEl
- * @param {{getStoneDefaults?:()=>{stoneSize?:number,gap?:number,color?:string}, onShapeCommitted?:(layer:object)=>void, openHistorySession?:()=>void, closeHistorySession?:()=>void, onShapeMoved?:(layerId:string,dxMm:number,dyMm:number)=>void, onShapeResized?:(layerId:string,boundsMm:{left:number,top:number,width:number,height:number})=>void, onShapeDeleted?:(layerId:string)=>(boolean|void), onSelectionChanged?:(layerIds:string[])=>void, onPaintStroke?:(lassoPolygons:{xMm:number,yMm:number}[][])=>void, onStampPlace?:(placement:{xMm:number,yMm:number,layerId:string|null})=>void, onTracePlace?:(placements:{xMm:number,yMm:number}[],layerId:string)=>void, onEraseSweep?:(daubsAbsoluteMm:{xMm:number,yMm:number}[],layerId:string,corridorPolygonsAbsoluteMm:{xMm:number,yMm:number}[][],mode:('stones'|'outline'))=>void, resolveSelectionTarget?:(polygonAbsoluteMm:{xMm:number,yMm:number}[][])=>({layerId:string,contours:{xMm:number,yMm:number}[][]}|null), hitTestRegion?:(pointAbsoluteMm:{xMm:number,yMm:number},marginMm:number)=>({layerId:string,regionId:string,polygon:{xMm:number,yMm:number}[]}|null)}} [hooks] onShapeDeleted returning exactly `false` means the deletion was blocked (e.g. a last-layer guard) -- the shape stays in `board.shapes` too, everything else treats a non-`false` return as success. RS-3011 Step 10b: onPaintStroke(lassoPolygons) fires once a Paint lasso release produces a usable stroke (>= PAINT_MIN_LASSO_POINTS) -- lassoPolygons is exactly one closed ring, absolute project-mm, this module's own coordinate space (Paper.js project units already equal this app's millimeters, per this file's own header comment). Target selection, region creation, and every project.layers mutation happen entirely in app.js -- this hook is this module's only involvement in Paint beyond the pointer interaction and live preview. RS-3011 Step 12: onStampPlace(placement) fires once per Stamp click -- xMm/yMm is the click point, absolute project-mm, this module's own coordinate space; layerId is the project.layers id resolved via resolveStampTargetLayerId() (the SAME hitTestShapeId() Select's own click-to-pick-a-shape branch uses), or null if the click hit no shape. Passing the already-resolved layerId (rather than a bare point, unlike onPaintStroke) avoids a second, duplicate hit-test implementation living in app.js -- app.js still owns the absolute-to-natural-space coordinate conversion and every project.layers mutation, discarding silently when layerId is null, mirroring Paint's own "no target -> discard" precedent. RS-3011 Step 11: onTracePlace(placements, layerId) fires once per committed Trace drag that resolved a real target AND produced at least one spaced point -- placements is the full list of stones to place, absolute project-mm, this module's own coordinate space, already spaced by src/geometry/lineStampSpacing.js's placeStonesAlongPath(); layerId is always a real project.layers id here (never null -- a null/no-target resolution discards the whole drag silently before this hook is ever called, unlike onStampPlace's own "always call, layerId may be null" contract, since there is no per-point ghost-preview equivalent for Trace that would need the null case). app.js still owns the absolute-to-natural-space conversion and every project.layers mutation, mirroring onStampPlace's own architecture split, just plural. RS-3011 Step 13: onEraseSweep(daubsAbsoluteMm, layerId) fires once per committed Eraser click/drag sweep that resolved a real target -- daubsAbsoluteMm is every buffered point from the gesture (one for a plain click, one per TRACE_MIN_SAMPLE_DISTANCE_MM-thinned sample along a drag, same thinning as Trace's own placements), absolute project-mm, this module's own coordinate space, NOT yet spaced/filtered in any way (a daub is a raw brush touch, not a stone placement); layerId is always a real project.layers id here, same "never null" contract as onTracePlace's own (resolved via resolveEraserTargetLayerId() -- RS-3014 Step 5: per-point resolution against every buffered point in drag order, first real match wins, NOT Trace's own single-aggregate-bounding-box-center approach, since an edge-hugging Eraser drag's own aggregate center too easily sits outside the target shape even when the sweep itself clearly touches it; degenerates correctly to the click point itself for a single-point click). This module deliberately has no opinion on daub radius -- that's app.js's own eraserSettings.radiusMm (a tool setting, not read from any layer field), attached per point only once app.js owns the coordinate conversion, mirroring onTracePlace/onStampPlace's own architecture split. RS-3014 Step 3 (Dual-mode Eraser): corridorPolygonsAbsoluteMm is the SAME sweep's buffered points already turned into one or more closed, filled rings via buildEraserCorridorPolygons() (capsule-per-segment, unioned with Paper.js's own PathItem#unite()) -- absolute project-mm, this module's own coordinate space, same convention as daubsAbsoluteMm itself; only meaningful to Outline mode (app.js's own combineShapeSources() cut), a 'stones' gesture ignores it and keeps using daubsAbsoluteMm exactly as before. `mode` is this module's own eraserMode value (see setEraserMode()) captured at the START of this gesture (onMouseDown), NOT read live from app.js's eraserSettings.mode at the moment this hook fires -- a mode switch mid-drag must not retroactively change what an already-in-flight sweep does, so app.js must branch on the mode this parameter reports, never its own live eraserSettings.mode, when deciding how to apply a given sweep. RS-3013 Step 1: resolveSelectionTarget(polygonAbsoluteMm) is Select's rectangle-drag/Lasso's own drag calling app.js's shared resolvePaintTargetTwoPass() (the same selectPaintTarget() choreography onPaintStroke's own architecture already runs) to find which 'path' layer, if any, the drawn rectangle/lasso overlaps most -- returns {layerId, contours} or null, mirroring onPaintStroke's own "no target -> discard" contract; this module stores the result as an in-memory activeSelection draft, never a real region (that stays Paint's job alone). hitTestRegion(pointAbsoluteMm, marginMm) is Select/Lasso's own click-to-select-an-existing-region hit-test -- app.js delegates to hitTestPathLayerRegion() (src/geometry/PaintRegionSelection.js) since a region lives in project.layers[].regions, data this module never touches directly; marginMm is already converted from screen-px by this module's own REGION_HIT_MARGIN_PX / paper.view.zoom.
+ * @param {{getStoneDefaults?:()=>{stoneSize?:number,gap?:number,color?:string}, onShapeCommitted?:(layer:object)=>void, openHistorySession?:()=>void, closeHistorySession?:()=>void, onShapeMoved?:(layerId:string,dxMm:number,dyMm:number)=>void, onShapeResized?:(layerId:string,boundsMm:{left:number,top:number,width:number,height:number})=>void, onShapeDeleted?:(layerId:string)=>(boolean|void), onSelectionChanged?:(layerIds:string[])=>void, onPaintStroke?:(lassoPolygons:{xMm:number,yMm:number}[][])=>void, onStampPlace?:(placement:{xMm:number,yMm:number,layerId:string|null})=>void, onTracePlace?:(placements:{xMm:number,yMm:number}[],layerId:string)=>void, onEraseSweep?:(daubsAbsoluteMm:{xMm:number,yMm:number}[],layerId:string,corridorPolygonsAbsoluteMm:{xMm:number,yMm:number}[][],mode:('stones'|'outline'))=>void, resolveSelectionTarget?:(polygonAbsoluteMm:{xMm:number,yMm:number}[][])=>({layerId:string,contours:{xMm:number,yMm:number}[][]}|null), hitTestRegion?:(pointAbsoluteMm:{xMm:number,yMm:number},marginMm:number)=>({layerId:string,regionId:string,polygon:{xMm:number,yMm:number}[]}|null)}} [hooks] onShapeDeleted returning exactly `false` means the deletion was blocked (e.g. a last-layer guard) -- the shape stays in `board.shapes` too, everything else treats a non-`false` return as success. RS-3011 Step 10b: onPaintStroke(lassoPolygons) fires once a Paint lasso release produces a usable stroke (>= PAINT_MIN_LASSO_POINTS) -- lassoPolygons is exactly one closed ring, absolute project-mm, this module's own coordinate space (Paper.js project units already equal this app's millimeters, per this file's own header comment). Target selection, region creation, and every project.layers mutation happen entirely in app.js -- this hook is this module's only involvement in Paint beyond the pointer interaction and live preview. RS-3011 Step 12: onStampPlace(placement) fires once per Stamp click -- xMm/yMm is the click point, absolute project-mm, this module's own coordinate space; layerId is the project.layers id resolved via resolveStampTargetLayerId() (the SAME hitTestShapeId() Select's own click-to-pick-a-shape branch uses), or null if the click hit no shape. Passing the already-resolved layerId (rather than a bare point, unlike onPaintStroke) avoids a second, duplicate hit-test implementation living in app.js -- app.js still owns the absolute-to-natural-space coordinate conversion and every project.layers mutation, discarding silently when layerId is null, mirroring Paint's own "no target -> discard" precedent. RS-3011 Step 11: onTracePlace(placements, layerId) fires once per committed Trace drag that resolved a real target AND produced at least one spaced point -- placements is the full list of stones to place, absolute project-mm, this module's own coordinate space, already spaced by src/geometry/lineStampSpacing.js's placeStonesAlongPath(); layerId is always a real project.layers id here (never null -- a null/no-target resolution discards the whole drag silently before this hook is ever called, unlike onStampPlace's own "always call, layerId may be null" contract, since there is no per-point ghost-preview equivalent for Trace that would need the null case). app.js still owns the absolute-to-natural-space conversion and every project.layers mutation, mirroring onStampPlace's own architecture split, just plural. RS-3011 Step 13: onEraseSweep(daubsAbsoluteMm, layerId) fires once per committed Eraser click/drag sweep that resolved a real target -- daubsAbsoluteMm is every buffered point from the gesture (one for a plain click, one per TRACE_MIN_SAMPLE_DISTANCE_MM-thinned sample along a drag, same thinning as Trace's own placements), absolute project-mm, this module's own coordinate space, NOT yet spaced/filtered in any way (a daub is a raw brush touch, not a stone placement); layerId is always a real project.layers id here, same "never null" contract as onTracePlace's own (resolved via resolveEraserTargetLayerId() -- RS-3014 Step 5: per-point resolution against every buffered point in drag order, first real match wins, NOT Trace's own single-aggregate-bounding-box-center approach, since an edge-hugging Eraser drag's own aggregate center too easily sits outside the target shape even when the sweep itself clearly touches it; degenerates correctly to the click point itself for a single-point click). This module deliberately has no opinion on daub radius -- that's app.js's own eraserSettings.radiusMm (a tool setting, not read from any layer field), attached per point only once app.js owns the coordinate conversion, mirroring onTracePlace/onStampPlace's own architecture split. RS-3014 Step 3 (Dual-mode Eraser): corridorPolygonsAbsoluteMm is the SAME sweep's buffered points already turned into one or more closed, filled rings via buildEraserCorridorPolygons() (capsule-per-segment, unioned with Paper.js's own PathItem#unite()) -- absolute project-mm, this module's own coordinate space, same convention as daubsAbsoluteMm itself; only meaningful to Outline mode (app.js's own combineShapeSources() cut), a 'stones' gesture ignores it and keeps using daubsAbsoluteMm exactly as before. `mode` is this module's own eraserMode value (see setEraserMode()) captured at the START of this gesture (onMouseDown), NOT read live from app.js's eraserSettings.mode at the moment this hook fires -- a mode switch mid-drag must not retroactively change what an already-in-flight sweep does, so app.js must branch on the mode this parameter reports, never its own live eraserSettings.mode, when deciding how to apply a given sweep. RS-3013 Step 1: resolveSelectionTarget(polygonAbsoluteMm) is Select's rectangle-drag/Lasso's own drag calling app.js's shared resolvePaintTargetTwoPass() (the same selectPaintTarget() choreography onPaintStroke's own architecture already runs) to find which 'path' layer, if any, the drawn rectangle/lasso overlaps most -- returns {layerId, contours} or null, mirroring onPaintStroke's own "no target -> discard" contract; this module stores the result as an in-memory activeSelection draft, never a real region (that stays Paint's job alone). hitTestRegion(pointAbsoluteMm, marginMm) is Select/Lasso's own click-to-select-an-existing-region hit-test -- app.js delegates to hitTestPathLayerRegion() (src/geometry/PaintRegionSelection.js) since a region lives in project.layers[].regions, data this module never touches directly; marginMm is already converted from screen-px by this module's own REGION_HIT_MARGIN_PX / paper.view.zoom. RS-3013 Step 2: onRegionMoved(layerId, regionId, dxMm, dyMm) fires once, at mouseup only, when a real (non-zero-offset) drag on a selected region's own footprint commits -- dxMm/dyMm is the drag's total offset, absolute project-mm; app.js translates the region's current polygon by that offset and writes it back through the SAME absolutePolygonsToNaturalSpace() (src/geometry/PaintRegionSelection.js) onPaintStroke's own region creation already uses. Returns the region's updated absolute-mm polygon on success (this module rebuilds activeSelectionItem's outline from that returned polygon, never from wherever the live per-frame preview translation left it, so the two can't drift), or null if the region/layer no longer exists.
  */
 export function createDrawingTool(canvasEl, hooks = {}) {
   const {
@@ -542,6 +542,9 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     // own data, never touched directly here -- same architecture split as resolveSelectionTarget
     // above.
     hitTestRegion = () => null,
+    // RS-3013 Step 2: fires once, at mouseup only, when a region-move drag commits -- see this
+    // function's own hooks-param doc comment above for the exact contract.
+    onRegionMoved = () => null,
     // RS-3011 Step 3b: the two hooks the live stone preview needs -- getLayerStoneParams(layerId)
     // returns a 'path' layer's non-geometric stone settings (stoneSizeMm/gapMm/mode/color/mixed-size),
     // or null if no matching layer exists (every non-Design layer type, or Design not active); this
@@ -1792,6 +1795,32 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       // instead. Gating on `mode === 'select'` (positive check) rather than an exclusion list means
       // a future new tool can't reintroduce this bug by omission -- it's opted out by default and
       // must explicitly opt in.
+      // RS-3013 Step 2: a drag starting on an existing region's own footprint must move the region,
+      // not fall through to the parent shape (Select mode's own hitTestShapeId/'move' branch below)
+      // or start a fresh lasso stroke over it (Lasso mode's own branch further below) -- mirrors
+      // performClickDispatch()'s own region-first precedent, checked before either mode's existing
+      // hit-test/gesture-start logic. Scoped to Select/Lasso only, same "twin selection tools" pairing
+      // this file already treats identically elsewhere.
+      if (mode === 'select' || mode === 'lasso') {
+        const regionHit = hitTestRegion(
+          { xMm: event.point.x, yMm: event.point.y },
+          REGION_HIT_MARGIN_PX / paper.view.zoom
+        );
+        if (regionHit) {
+          if (selectedIds.size) {
+            selectedIds = clearSelection();
+            applySelectionVisuals();
+            updateResizeHandles();
+            notifySelectionChanged();
+          }
+          setActiveSelection({ kind: 'region', layerId: regionHit.layerId, regionId: regionHit.regionId }, [
+            regionHit.polygon
+          ]);
+          interactionKind = 'moveRegion';
+          dragStart = event.point;
+          return;
+        }
+      }
       if (mode === 'select') {
         // Design Step D: a resize handle can sit right at a shape's edge, where both it and the
         // shape's own hit-test could otherwise match -- the handle must win, so this is checked
@@ -2079,6 +2108,14 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         updateResizeHandles();
         return;
       }
+      if (interactionKind === 'moveRegion') {
+        // RS-3013 Step 2: live preview only -- translates the persistent selection-outline overlay
+        // directly by this frame's own incremental delta, same "translate the live Paper.js item,
+        // don't rebuild geometry every frame" pattern the 'move' branch above uses for a shape drag.
+        // No hit-test, no snapping, no project.layers read -- those only happen once, at mouseup.
+        if (activeSelectionItem) activeSelectionItem.translate(event.delta);
+        return;
+      }
       if (interactionKind === 'resize') {
         const shape = board.getShape(resizeShapeId);
         if (!shape) return;
@@ -2297,6 +2334,36 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         moveAnchorShapeId = null;
         moveAnchorStartBounds = null;
         moveAppliedOffset = null;
+        return;
+      }
+      if (interactionKind === 'moveRegion') {
+        // RS-3013 Step 2: total offset since mousedown -- exact-zero check (not a MIN_BOX_DIM_MM-style
+        // tolerance) mirrors the 'move' branch's own moveAppliedOffset.x/y !== 0 check above: Paper.js
+        // never fires onMouseDrag at all for a true click (zero net pointer movement), so event.point
+        // still equals dragStart exactly in that case.
+        const dxMm = event.point.x - dragStart.x;
+        const dyMm = event.point.y - dragStart.y;
+        const layerId = activeSelection && activeSelection.layerId;
+        const regionId = activeSelection && activeSelection.regionId;
+        interactionKind = null;
+        if (dxMm === 0 && dyMm === 0) {
+          // A genuine zero-offset click -- re-resolve through the SAME click-decision function
+          // Select/Lasso's own plain clicks use, mirroring the 'move' branch's own zero-offset
+          // handling just above.
+          performClickDispatch(event.point, false);
+          return;
+        }
+        openHistorySession();
+        const updatedPolygon = onRegionMoved(layerId, regionId, dxMm, dyMm);
+        closeHistorySession();
+        if (updatedPolygon) {
+          // Authoritative rebuild from the freshly-committed natural-space contour -- never from
+          // wherever onMouseDrag's own live per-frame translate left activeSelectionItem, so the two
+          // can never drift apart, even by float error (this function's own hooks-param doc comment).
+          setActiveSelection({ kind: 'region', layerId, regionId }, [updatedPolygon]);
+        } else {
+          setActiveSelection(null);
+        }
         return;
       }
       if (interactionKind === 'resize') {
@@ -3359,6 +3426,23 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           ? shape.item.segments.map((segment) => ({ x: segment.point.x, y: segment.point.y }))
           : null
       }));
+    },
+
+    /**
+     * RS-3013 Step 2: QA/verification-only, read-only -- same precedent as debugGrid/
+     * debugHitTestShapeId/debugShapes above. Reads activeSelectionItem's own live outline
+     * (absolute project-mm), one ring per array entry -- lets a region-move drag's verification read
+     * back the SELECTION OUTLINE'S current position directly, distinct from `activeSelection` itself
+     * (which only ever carries {kind,layerId,regionId}, never geometry). Null when there is no active
+     * selection.
+     * @returns {{xMm:number,yMm:number}[][]|null}
+     */
+    get debugActiveSelectionOutline() {
+      if (!activeSelectionItem) return null;
+      const paths = activeSelectionItem.children && activeSelectionItem.children.length
+        ? activeSelectionItem.children
+        : [activeSelectionItem];
+      return paths.map((path) => path.segments.map((segment) => ({ xMm: segment.point.x, yMm: segment.point.y })));
     },
 
     /**

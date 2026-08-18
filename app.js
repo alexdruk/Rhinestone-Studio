@@ -85,7 +85,7 @@
 // pipeline stages re-run on every threshold/invert/blur/resize edit, but the (comparatively
 // expensive) browser image decode only ever runs once per distinct imageSrc value.
 import './src/browser/BrowserDependencyProbe.js';
-import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace, hitTestPathLayerRegion } from './src/geometry/index.js';
+import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace, hitTestPathLayerRegion, computeNaturalContourTransform, applyNaturalContourTransform } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
 import { createDefaultFontProviderRegistry, createDefaultRhinestoneFontRegistry, BoundingBox } from './src/text/index.js';
 import { renderProductionLayout, renderStoneLayout, fitTransform } from './src/renderer/CanvasRenderer2D.js';
@@ -1070,6 +1070,41 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // generation. marginMm arrives already converted from screen-px by the caller (DrawingCanvasTool.js's
   // own screen-px-to-project-mm convention, see that file's REGION_HIT_MARGIN_PX).
   hitTestRegion:(pointAbsoluteMm,marginMm)=>hitTestPathLayerRegion(pointAbsoluteMm,project.layers.filter(l=>l.type==='path'&&l.visible!==false),marginMm),
+  // RS-3013 Step 2: region-drag's own commit hook -- fires once, at mouseup only, on a real
+  // (non-zero-offset) region-move drag. Synchronous and returns the region's updated absolute-mm
+  // polygon (or null), NOT async/awaited like onPaintStroke/onStampPlace/onTracePlace/onEraseSweep
+  // above -- DrawingCanvasTool.js's own onMouseUp reads this return value immediately to rebuild
+  // activeSelectionItem's outline, so it can't be a Promise (updateAll(true) below is fired the same
+  // "call, don't await" way nudgeSelection()/runAlign()/runDistribute() already do elsewhere in this
+  // file). Derives the region's CURRENT absolute polygon via the SAME computeNaturalContourTransform()/
+  // applyNaturalContourTransform() pair hitTestPathLayerRegion() itself uses internally (never an
+  // independently-recomputed transform), translates it by (dxMm,dyMm), then writes it back through
+  // the EXISTING absolutePolygonsToNaturalSpace() -- the same inverse-transform path onPaintStroke's
+  // own region creation above already relies on, just run once more on an existing region's contour.
+  // DECIDED (this milestone's own scoping): no clipping/rejection against the parent shape's current
+  // outline here -- GeometryEngine's own _applyPathRegions() already filters every region's stone
+  // candidates against the shape's live outline at every regen, so a region moved partly or fully
+  // outside its shape simply renders fewer/zero stones there, self-correcting the moment it's moved
+  // back, with zero new boundary code needed.
+  onRegionMoved:(layerId,regionId,dxMm,dyMm)=>{
+    const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
+    if(!targetLayer)return null;
+    const region=(targetLayer.regions||[]).find(r=>r.id===regionId);
+    if(!region)return null;
+    const naturalContours=targetLayer.contours.map(contour=>contour.map(p=>({xMm:p.x,yMm:p.y})));
+    const transform=computeNaturalContourTransform(naturalContours,targetLayer.x,targetLayer.y,targetLayer.w,targetLayer.h,targetLayer.naturalBoundingBoxMm);
+    if(!transform)return null;
+    const currentPolygon=applyNaturalContourTransform(region.contour,transform);
+    const translatedPolygon=currentPolygon.map(p=>({xMm:p.xMm+dxMm,yMm:p.yMm+dyMm}));
+    const [naturalContour]=absolutePolygonsToNaturalSpace([translatedPolygon],targetLayer);
+    if(!naturalContour)return null;
+    commitHistory();
+    region.contour=naturalContour;
+    drawingTool.refreshStoneGroupForLayer(targetLayer.id);
+    updateAll(true);
+    el('status').textContent=`Moved region on ${layerLabel(targetLayer)}.`;
+    return translatedPolygon;
+  },
   // RS-3011 Step 12: Stamp's own finalize hook -- fires once per click (see DrawingCanvasTool.js's
   // own onStampPlace doc comment for the exact {xMm,yMm,layerId} contract; layerId is already
   // resolved there via the same hitTestShapeId() Select's own click-to-pick-a-shape branch uses).
@@ -1391,6 +1426,15 @@ const drawingTool=createDrawingTool(layoutCanvas,{
 // automated verification of the Design canvas's background grid layering -- same "read-only,
 // never used to drive any application logic" precedent as window.__preview3D above.
 window.__drawingTool=drawingTool;
+// RS-3013 Step 2: exposes the live `project` reference itself, read-only, so automated verification
+// can read project.layers[...].regions[...].contour (natural-space, on-disk data) after a region-move
+// commit -- same "QA-only, never drives app logic" precedent as window.__drawingTool/window.__preview3D
+// above; DrawingCanvasTool.js's own activeSelection getter only exposes the transient absolute-mm
+// selection outline, not the committed natural-space storage this verifies. A getter (not a static
+// assignment) since `project` itself is reassigned wholesale on undo/redo/import/autosave-recovery
+// (applyHistorySnapshot() etc.) -- a plain assignment here would silently go stale the first time any
+// of those ran.
+Object.defineProperty(window,'__project',{get:()=>project,configurable:true});
 // RS-1009: the one multi-selection model (src/editing/Selection.js is the only place that
 // computes a new Set from an old one). selectedLayerId (above, pre-existing) keeps driving the
 // single-layer property panel exactly as before -- it always points at the most recently
