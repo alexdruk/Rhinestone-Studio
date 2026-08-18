@@ -1105,6 +1105,20 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     el('status').textContent=`Moved region on ${layerLabel(targetLayer)}.`;
     return translatedPolygon;
   },
+  // RS-3013 Step 5: fires whenever DrawingCanvasTool.js settles on a new activeSelection (a region
+  // click, a region losing selection, a draft rect/lasso selection, or a clear) -- the one place the
+  // Inspector panel needs to resync for a region-vs-shape selection change, since neither gesture
+  // routes through onSelectionChanged above (that hook only ever reports shape/multi-selection
+  // changes via selectedIds, never activeSelection). syncSelectedControlsFromLayer() reads
+  // drawingTool.activeSelection itself (not a parameter here) to decide whether to show the region
+  // branch or fall through to today's layer-based population, same live-read convention
+  // writeSelectedControlsToLayer()'s own new region branch uses. Mirrors the exact
+  // sync+render+editingUI+regen sequence onSelectionChanged already runs for a shape selection
+  // change (line ~1368) -- updateAll(true) is a no-op regen (skipWrite) here since nothing in
+  // project.layers changed, only the display.
+  onActiveSelectionChanged:()=>{
+    syncSelectedControlsFromLayer();renderLayerUI();updateEditingUI();updateAll(true);
+  },
   // RS-3011 Step 12: Stamp's own finalize hook -- fires once per click (see DrawingCanvasTool.js's
   // own onStampPlace doc comment for the exact {xMm,yMm,layerId} contract; layerId is already
   // resolved there via the same hitTestShapeId() Select's own click-to-pick-a-shape branch uses).
@@ -1565,7 +1579,32 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
   // UI-001: the left panel's Actions-section Undo/Redo buttons mirror the top bar's undoBtn/redoBtn
   // disabled state exactly -- both call the same performUndo()/performRedo(), never a second history.
   const actionUndoBtn=el('actionUndo'),actionRedoBtn=el('actionRedo');if(actionUndoBtn)actionUndoBtn.disabled=!history.canUndo;if(actionRedoBtn)actionRedoBtn.disabled=!history.canRedo;
-}function syncSelectedControlsFromLayer(){const l=selectedLayer();el('selectedLayer').value=l.id;const isText=l.type==='text';el('textControls').style.display=isText?'block':'none';el('shapeControls').style.display=isText?'none':'block';
+}
+// RS-3013 Step 5: a selected REGION (drawingTool.activeSelection.kind==='region') branches first,
+// populating #stoneSize/#gap/#stoneColor/#regionFillMode from the REGION's own fields (not the
+// parent layer's) and hiding the shape-geometry (#sharedPositionFields) / #shapeFillMode fields a
+// region has no independent version of -- same "region wins" precedent performClickDispatch()
+// (DrawingCanvasTool.js) already established for click-selection itself. Falls through to today's
+// selectedLayer()-based behavior below when activeSelection isn't a region, or is a stale one whose
+// layer/region no longer exist (e.g. after an undo past the region's own creation).
+function syncSelectedControlsFromLayer(){
+  const regionSelection=drawingTool.activeSelection;
+  if(regionSelection&&regionSelection.kind==='region'){
+    const regionLayer=project.layers.find(x=>x.id===regionSelection.layerId&&x.type==='path');
+    const region=regionLayer&&(regionLayer.regions||[]).find(r=>r.id===regionSelection.regionId);
+    if(regionLayer&&region){
+      el('sharedPositionFields').style.display='none';
+      el('shapeFillModeField').style.display='none';
+      el('regionFillModeField').style.display='block';
+      ensureStoneSizeOption(el('stoneSize'),region.stoneSizeMm);
+      setNumericSelectValue(el('stoneSize'),region.stoneSizeMm);
+      el('gap').value=region.gapMm;
+      el('stoneColor').value=region.color;
+      el('regionFillMode').value=region.fillMode==='outline'?'outline':'fill';
+      return;
+    }
+  }
+  const l=selectedLayer();el('selectedLayer').value=l.id;const isText=l.type==='text';el('textControls').style.display=isText?'block':'none';el('shapeControls').style.display=isText?'none':'block';
   // UI-001: sharedPositionFields (shapeX/Y/W/H) is relocated between the inspector and a Lightbox
   // slot (see relocateFieldGroups()) and is no longer always a child of #shapeControls, so it needs
   // its own visibility toggle mirroring the exact same isText condition #shapeControls already uses.
@@ -1578,6 +1617,9 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
   const isShapeFillType=VECTOR_FILL_MODE_TYPES.has(l.type);
   el('shapeFillModeField').style.display=isShapeFillType?'block':'none';
   if(isShapeFillType)el('shapeFillMode').value=resolveVectorFillMode(l.fillMode);
+  // RS-3013 Step 5: mutually exclusive with #shapeFillMode above, same as sharedPositionFields'
+  // region-vs-layer split -- only shown by the region branch at this function's own top.
+  el('regionFillModeField').style.display='none';
   // S-110: per-shape "Shape options" -- only the fields relevant to the selected shape kind are
   // shown (Regular Polygon's side count; Star's point count + inner radius; Ring's inner opening),
   // matching this function's existing shapeHField (Circle vs. everything else) visibility pattern.
@@ -1663,7 +1705,31 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
   // call at each of those sites individually.
   relocateFieldGroups();
 }
-function writeSelectedControlsToLayer(){const l=selectedLayer();
+// RS-3013 Step 5: same "region-first, early return" structure as syncSelectedControlsFromLayer()
+// above -- a selected REGION writes #stoneSize/#gap/#stoneColor/#regionFillMode straight onto the
+// region object (region.stoneSizeMm/gapMm/color/fillMode), not the parent layer. commitHistory()/
+// session-open semantics are already handled by the caller (HISTORY_TRACKED_CONTROL_IDS' own
+// 'input'->openHistorySession()+updateAll() wiring, which is what invokes this function in the
+// first place) -- no separate history call needed here, same as the unbranched function below never
+// calling commitHistory() itself either. drawingTool.refreshStoneGroupForLayer(regionLayer.id) is
+// the EXACT post-write regen call the existing 'path'-layer branch below already uses (see
+// `if(l.type==='path')drawingTool.refreshStoneGroupForLayer(l.id)` further down) -- no updateAll()
+// call here, since this function is itself already running from inside one.
+function writeSelectedControlsToLayer(){
+  const regionSelection=drawingTool.activeSelection;
+  if(regionSelection&&regionSelection.kind==='region'){
+    const regionLayer=project.layers.find(x=>x.id===regionSelection.layerId&&x.type==='path');
+    const region=regionLayer&&(regionLayer.regions||[]).find(r=>r.id===regionSelection.regionId);
+    if(regionLayer&&region){
+      region.stoneSizeMm=parseFloat(el('stoneSize').value)||2;
+      region.gapMm=parseFloat(el('gap').value)||.3;
+      region.color=el('stoneColor').value;
+      region.fillMode=el('regionFillMode').value==='outline'?'outline':'fill';
+      drawingTool.refreshStoneGroupForLayer(regionLayer.id);
+      return;
+    }
+  }
+  const l=selectedLayer();
   // S-112A: detected here, before project.plate is overwritten further down in this same function
   // (project.plate.designTarget still holds the *previous* target, el('plateDesignTarget').value the
   // one the user just picked) -- true exactly once, on the edit that switches Design Target to Rim
@@ -1784,7 +1850,12 @@ async function updateAll(skipWrite=false,forceStoneRebuild=false){if(!skipWrite)
 function renderLayerUI(){el('selectedLayer').innerHTML=project.layers.map(l=>`<option value="${escapeHtml(l.id)}">${escapeHtml(layerLabel(l))}</option>`).join('');el('selectedLayer').value=selectedLayerId;el('layersList').innerHTML=project.layers.map(l=>`<div class="layer ${selectedLayerIds.has(l.id)?'selected':''}" data-layer="${escapeHtml(l.id)}"><input type="checkbox" ${l.visible?'checked':''} data-action="visible"><div class="name" data-action="select" title="${escapeHtml(layerLabel(l))}">${escapeHtml(layerLabel(l))}</div><div class="type">${l.type.toUpperCase()}</div><button data-action="select">✎</button><button data-action="duplicate">⧉</button><button data-action="delete">🗑</button></div>`).join('');
   // UI-001: keep the right inspector's layer name and the left panel's project/template summary
   // in sync on every render (add/delete/duplicate/undo/redo/import/selection change).
-  el('inspectorLayerName').textContent=layerLabel(selectedLayer());updateObjectTemplateDetail();
+  // RS-3013 Step 5: a selected REGION outranks the underlying layer's own label here, same
+  // "region wins" precedent syncSelectedControlsFromLayer()'s own new branch follows -- checked live
+  // against drawingTool.activeSelection (not cached) since renderLayerUI() re-runs on every
+  // updateAll(), including every keystroke while editing a region's own fields, and must not let the
+  // header flicker back to the parent layer's label mid-edit.
+  el('inspectorLayerName').textContent=drawingTool.activeSelection?.kind==='region'?'Region':layerLabel(selectedLayer());updateObjectTemplateDetail();
 }function layerLabel(l){if(l.type==='text')return l.text||'Text';if(l.type==='svg')return l.svgName||'SVG';if(l.type==='image')return l.imageName||'Image';if(l.type==='path')return l.pathName||'Path';return SHAPE_DISPLAY_LABELS[l.type]||'Shape'}function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function resizeCanvas(c){const r=c.getBoundingClientRect(),dpr=Math.max(1,devicePixelRatio||1),w=Math.floor(r.width*dpr),h=Math.floor(r.height*dpr);if(c.width!==w||c.height!==h){c.width=w;c.height=h}return{w,h,dpr}}
 function layoutMmToPx(p){return{x:layoutTransform.ox+p.x*layoutTransform.s,y:layoutTransform.oy+p.y*layoutTransform.s}}function layoutPxToMm(x,y){return{x:(x-layoutTransform.ox)/layoutTransform.s,y:(y-layoutTransform.oy)/layoutTransform.s}}
@@ -3022,7 +3093,7 @@ el('autoFit').addEventListener('input',()=>{
   const turningOn=el('autoFit').value==='on';
   el('autoFitOnHint').style.display=(l&&l.type==='text'&&!l.autoFit&&turningOn)?'block':'none';
 });
-const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','textAlign','lineSpacing','rotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail'];
+const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','textAlign','lineSpacing','rotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
 // RS-2002: Browse Fonts panel wiring. Toggling/closing never touches history (it only decides
@@ -3052,7 +3123,32 @@ el('objectType').addEventListener('change',()=>{commitHistory();const template=g
   // project.cupColor from the plate's default color id so the Object Preview immediately shows
   // the approved White, not whatever cupColor the previous template left behind.
   if(template.id==='plate'){project.plate=getPlateDefaults();project.cupColor=getPlateColor(project.plate.colorId).hex}
-  syncSelectedControlsFromLayer();updateAll(true)});el('layersList').addEventListener('click',e=>{const row=e.target.closest('.layer');if(!row)return;const id=row.dataset.layer,action=e.target.dataset.action;if(action==='visible'){const l=project.layers.find(x=>x.id===id);commitHistory();l.visible=e.target.checked;updateAll(true);return}if(action==='duplicate'){duplicateLayer(id);return}if(action==='delete'){deleteLayer(id);return}
+  syncSelectedControlsFromLayer();updateAll(true)});el('layersList').addEventListener('click',e=>{const row=e.target.closest('.layer');if(!row)return;const id=row.dataset.layer,action=e.target.dataset.action;
+  // RS-3013 Step 5 follow-up: a selected REGION (drawingTool.activeSelection) is Design-canvas-local
+  // state that must be cleared here too whenever this row click actually MOVES the selection --
+  // matching performClickDispatch()'s own `if(activeSelection) setActiveSelection(null);` precedent
+  // for a canvas shape-click -- but NOT on every row click regardless of what it does; scoped per
+  // action below rather than once at the top, since the four actions differ in whether they touch
+  // selection at all:
+  // - 'visible': never reassigns selectedLayerId/selectedLayerIds (a checkbox toggle on ANY row,
+  //   related or not, is orthogonal to what's selected) -- no clear.
+  // - 'duplicate': duplicateLayer(id) always reassigns selectedLayerId to the new copy, regardless of
+  //   which row's icon was clicked -- clear unconditionally, mirroring that unconditional reassign.
+  // - 'delete': deleteLayer(id) actually reassigns selectedLayerId unconditionally on every call
+  //   (to project.layers[0].id, regardless of which id was removed) -- but that reassignment is an
+  //   orthogonal, pre-existing quirk of deleteLayer() itself (unrelated to regions, unchanged by this
+  //   fix) and never overrides an active region selection anyway, since the region branch at the top
+  //   of syncSelectedControlsFromLayer()/writeSelectedControlsToLayer() always outranks
+  //   selectedLayerId when drawingTool.activeSelection is still set. What actually matters here is
+  //   only the REGION's own layer identity: clear only when the deleted id is the SAME layer the
+  //   active region belongs to (drawingTool.activeSelection?.layerId===id) -- deleting a truly
+  //   unrelated row leaves that region's own layer, and therefore its selection, untouched.
+  // - plain click / Shift-click (the fallthrough below): always reassigns selectedLayerId/
+  //   selectedLayerIds to the clicked row -- clear unconditionally, the original reported gap.
+  if(action==='visible'){const l=project.layers.find(x=>x.id===id);commitHistory();l.visible=e.target.checked;updateAll(true);return}
+  if(action==='duplicate'){if(drawingTool.activeSelection)drawingTool.clearActiveSelection();duplicateLayer(id);return}
+  if(action==='delete'){if(drawingTool.activeSelection&&drawingTool.activeSelection.layerId===id)drawingTool.clearActiveSelection();deleteLayer(id);return}
+  if(drawingTool.activeSelection)drawingTool.clearActiveSelection();
   // RS-1009: Shift-click toggles a layer row in the multi-selection, the same shared toggle a
   // canvas Shift-click uses (src/editing/Selection.js) -- a plain click still selects only that
   // one layer, preserving pre-existing single-selection behavior.

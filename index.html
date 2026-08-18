@@ -1289,6 +1289,15 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
        existing "disable the control + explain why right below it" convention. -->
   <p class="hint" id="gapFixedHint" style="display:none">Character spacing is built into this font.</p>
   <div class="field"><label for="stoneColor">Stone color</label><div class="color-pick-row"><select id="stoneColor"></select><span id="stoneColorSwatch" class="color-swatch" title="Selected color preview"></span></div></div>
+  <!-- RS-3013 Step 5: region-only Fill Style, shown instead of the whole-shape #shapeFillMode
+       (5 options) while a region is selected -- deliberately scoped to just fill/outline for this
+       milestone (see the milestone's own DECIDED item 2: staggered/radial/contour against an
+       arbitrary clipped region contour is unproven and left to a future step). Toggled in
+       syncSelectedControlsFromLayer(), same per-selection-type gate #shapeFillModeField already
+       uses. Lives inside #sharedStoneFields (not #shapeControls, where #shapeFillMode lives) so it
+       follows #stoneSize/#gap/#stoneColor through the exact same relocateFieldGroups() home, since a
+       region only ever exists while Design owns the canvas -- never inside a Lightbox. -->
+  <div class="field" id="regionFillModeField" style="display:none"><label for="regionFillMode">Fill style</label><select id="regionFillMode" title="How rhinestones are arranged across this region."><option value="fill">Fill</option><option value="outline">Outline</option></select></div>
   <!-- RS-3011 Step 7: shown only for a Design-drawn 'path' layer whose stones are still deferred
        (stonesGenerated===false, set at draw time by commitFinalizedShape()) -- toggled in
        syncSelectedControlsFromLayer(), same style as #gapFixedHint's own per-layer-type gate above. -->
