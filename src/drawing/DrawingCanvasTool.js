@@ -3232,6 +3232,25 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     },
 
     /**
+     * RS-3013 Step 3: the write-through target for app.js's own duplicateRegionInPathLayer() --
+     * region duplication is a direct app.js-initiated action (a button click), not a canvas
+     * gesture, so unlike onRegionMoved() (a hook this module calls INTO app.js from a drag) this is
+     * a plain method app.js calls directly, since app.js already owns project.layers/regions and
+     * needs no hit-test help to know which region it just created. Reassigns activeSelection to the
+     * new copy and rebuilds activeSelectionItem's outline from the ALREADY-KNOWN polygon
+     * duplicateRegionInPathLayer() returned -- same "trust the caller's own return value over a
+     * fresh hit-test" precedent onRegionMoved()'s own onMouseUp caller already established -- so the
+     * new copy reads as selected immediately, with the source region's own selection state
+     * untouched (setActiveSelection() below fully replaces it, it never merges).
+     * @param {string} layerId
+     * @param {string} regionId
+     * @param {{xMm:number,yMm:number}[]} polygon absolute-mm outline of the new region.
+     */
+    setActiveSelectionToRegion(layerId, regionId, polygon) {
+      setActiveSelection({ kind: 'region', layerId, regionId }, [polygon]);
+    },
+
+    /**
      * RS-3014 Step 3: the write-through target for an Outline-mode Eraser cut -- the first thing to
      * ever mutate a LIVE 'path' layer's own `contours` after commit (see app.js's onEraseSweep()).
      * Every other project.layers write that reaches this file (stoneSize/gap/color/fillMode via

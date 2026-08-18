@@ -2524,6 +2524,55 @@ function composeCombinedPreviewCanvas(){
   ctx.drawImage(cupCanvas,margin+w1+gap,margin+(maxH-h2)/2);
   return c;
 }
+// RS-3013 Step 3: region-level duplicate, a plain app.js-owned function (not a DrawingCanvasTool.js
+// hook) since project.layers/regions data already lives here -- called directly from
+// el('actionDuplicate').onclick below, matching duplicateLayer() immediately below in spirit
+// (commitHistory() first, cloned geometry, a fixed 8mm/8mm offset, new copy becomes the selection)
+// but scoped to one region on the SAME layer rather than a whole layer. Mirrors onRegionMoved()'s
+// own computeNaturalContourTransform()/applyNaturalContourTransform()/absolutePolygonsToNaturalSpace()
+// chain exactly -- region.contour is stored in NATURAL space, a different scale per layer (per
+// computeNaturalContourTransform()'s own scaleX/scaleY), so the 8mm/8mm offset must be applied in
+// ABSOLUTE space via this chain, not added directly to the natural contour's own coordinates.
+// applyNaturalContourTransform()/absolutePolygonsToNaturalSpace() both already return fresh Point2D
+// objects (see GeometryEngine.js), never references into region.contour's own array, so the chain's
+// own output is already an independent clone -- no separate JSON.parse(JSON.stringify()) step is
+// needed on top of it, same as onRegionMoved() itself never adding one before writing its own
+// translated polygon back. Copies stoneSizeMm/gapMm/color/fillMode verbatim from the source region
+// (this milestone's own decided rule: a region copy is a duplicate, not a new paint stroke routed
+// through paintSettings). New id is `'region'+Date.now()+'copy'` -- a non-numeric suffix, so it can
+// never collide with onPaintStroke's own `'region'+Date.now()+index` scheme (index is always a plain
+// integer there, never the string 'copy'), even for a copy and a fresh paint stroke landing in the
+// same millisecond. Returns {newRegionId, polygon} (polygon: the new region's absolute-mm outline,
+// for DrawingCanvasTool.js's own setActiveSelectionToRegion() to draw immediately without a second
+// hit-test round-trip), or null if the layer/region no longer exists -- same defensive no-op
+// precedent onRegionMoved() already established.
+function duplicateRegionInPathLayer(layerId,regionId){
+  const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
+  if(!targetLayer)return null;
+  const region=(targetLayer.regions||[]).find(r=>r.id===regionId);
+  if(!region)return null;
+  const naturalContours=targetLayer.contours.map(contour=>contour.map(p=>({xMm:p.x,yMm:p.y})));
+  const transform=computeNaturalContourTransform(naturalContours,targetLayer.x,targetLayer.y,targetLayer.w,targetLayer.h,targetLayer.naturalBoundingBoxMm);
+  if(!transform)return null;
+  const currentPolygon=applyNaturalContourTransform(region.contour,transform);
+  const translatedPolygon=currentPolygon.map(p=>({xMm:p.xMm+8,yMm:p.yMm+8}));
+  const [naturalContour]=absolutePolygonsToNaturalSpace([translatedPolygon],targetLayer);
+  if(!naturalContour)return null;
+  commitHistory();
+  const newRegion={
+    id:'region'+Date.now()+'copy',
+    contour:naturalContour,
+    stoneSizeMm:region.stoneSizeMm,
+    gapMm:region.gapMm,
+    color:region.color,
+    fillMode:region.fillMode
+  };
+  targetLayer.regions.push(newRegion);
+  drawingTool.refreshStoneGroupForLayer(targetLayer.id);
+  updateAll(true);
+  el('status').textContent=`Duplicated region on ${layerLabel(targetLayer)}.`;
+  return{newRegionId:newRegion.id,polygon:translatedPolygon};
+}
 // RS-3011 Step 2 fix: for a Design-drawn 'path' layer, duplicateShapeForLayer() clones the matching
 // Paper.js item in drawingTool's own board.shapes too -- previously only project.layers gained a
 // new entry, leaving the copy invisible on the Design canvas until it was closed and reopened. Uses
@@ -4224,7 +4273,22 @@ layoutCanvas.addEventListener('dblclick',e=>{
 // equivalent -- no new history, selection, or export logic. ----
 el('actionUndo').onclick=()=>performUndo();
 el('actionRedo').onclick=()=>performRedo();
-el('actionDuplicate').onclick=()=>duplicateLayer(selectedLayerId);
+// RS-3013 Step 3: a selected REGION (drawingTool.activeSelection.kind==='region') duplicates just
+// that region via duplicateRegionInPathLayer() above, then hands the new copy's id/polygon to
+// drawingTool.setActiveSelectionToRegion() so its outline renders as the current selection
+// immediately, without a second hit-test round-trip. A null/undefined activeSelection or a 'draft'
+// kind (an in-progress rect/lasso selection with no committed region behind it yet) falls through
+// unchanged to today's whole-layer duplicateLayer(selectedLayerId) -- same "leave drafts alone
+// entirely" rule Step 2's region-move already followed.
+el('actionDuplicate').onclick=()=>{
+  const selection=drawingTool.activeSelection;
+  if(selection&&selection.kind==='region'){
+    const result=duplicateRegionInPathLayer(selection.layerId,selection.regionId);
+    if(result)drawingTool.setActiveSelectionToRegion(selection.layerId,result.newRegionId,result.polygon);
+    return;
+  }
+  duplicateLayer(selectedLayerId);
+};
 el('actionDelete').onclick=()=>deleteLayer(selectedLayerId);
 function saveProjectDownload(){el('exportProject').click()}
 el('actionSave').onclick=saveProjectDownload;
