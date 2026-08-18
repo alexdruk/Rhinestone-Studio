@@ -123,6 +123,12 @@ const SHAPE_MODE_LAYER_NAMES = {
 const PAINT_MIN_LASSO_POINTS = 3;
 const PAINT_MIN_SAMPLE_DISTANCE_PX = 3;
 const PAINT_LASSO_DASH_PX = 5;
+// RS-3013 Step 1: Select/Lasso's own click-to-select-an-existing-region hit-test tolerance --
+// mirrors hitTestShapeId's own `4 / paper.view.zoom` screen-px-to-project-mm stroke-tolerance
+// convention exactly (same forgiving-click-near-an-edge reasoning), rather than a second tuned
+// value, since a region lives inside a shape and should feel exactly as forgiving to click as the
+// shape's own edge already does.
+const REGION_HIT_MARGIN_PX = 4;
 // RS-3011 Step 11: Trace's own point-sampling throttle, the same "only push a new point once the
 // pointer has moved far enough" idea as PAINT_MIN_SAMPLE_DISTANCE_PX above, but taken directly from
 // drawleather's LineStampTool.ts as a plain project-mm distance, NOT converted to a screen-px value
@@ -133,8 +139,10 @@ const TRACE_MIN_SAMPLE_DISTANCE_MM = 1.0;
 // RS-3011 Step 11: click-to-place tools that stay active after each placement (no revert-to-Select
 // on commit, unlike every other draw preset) -- Escape's own idle-revert-to-Select (cancelPath()
 // below) keys off this shared set instead of forking per-tool logic. RS-3011 Step 13: Eraser joins
-// it here, the one-line change this doc comment already anticipated.
-const CLICK_TO_PLACE_MODES = new Set(['stamp', 'trace', 'eraser']);
+// it here, the one-line change this doc comment already anticipated. RS-3013 Step 1: Lasso joins it
+// too -- same "never auto-reverts to Select on its own" rule (it's a repeated tool, not a one-shot
+// creation preset), same resulting Escape gap this set exists to close.
+const CLICK_TO_PLACE_MODES = new Set(['stamp', 'trace', 'eraser', 'lasso']);
 // RS-3011 Step 13: Eraser's own brush-radius floor (decision 4b: '[' / ']' nudge by 0.5mm, clamped
 // at this floor, no ceiling) -- also the floor setEraserRadiusMm() clamps any programmatic value
 // to, so the ghost preview/actual daubs can never collapse to a zero-or-negative radius.
@@ -495,7 +503,7 @@ function materializeShapeFromLayer(layer) {
  * (shouldn't happen post-Step-1, but mirrors this file's existing null-layerId guards) is skipped,
  * never passed through as undefined.
  * @param {HTMLCanvasElement} canvasEl
- * @param {{getStoneDefaults?:()=>{stoneSize?:number,gap?:number,color?:string}, onShapeCommitted?:(layer:object)=>void, openHistorySession?:()=>void, closeHistorySession?:()=>void, onShapeMoved?:(layerId:string,dxMm:number,dyMm:number)=>void, onShapeResized?:(layerId:string,boundsMm:{left:number,top:number,width:number,height:number})=>void, onShapeDeleted?:(layerId:string)=>(boolean|void), onSelectionChanged?:(layerIds:string[])=>void, onPaintStroke?:(lassoPolygons:{xMm:number,yMm:number}[][])=>void, onStampPlace?:(placement:{xMm:number,yMm:number,layerId:string|null})=>void, onTracePlace?:(placements:{xMm:number,yMm:number}[],layerId:string)=>void, onEraseSweep?:(daubsAbsoluteMm:{xMm:number,yMm:number}[],layerId:string,corridorPolygonsAbsoluteMm:{xMm:number,yMm:number}[][],mode:('stones'|'outline'))=>void}} [hooks] onShapeDeleted returning exactly `false` means the deletion was blocked (e.g. a last-layer guard) -- the shape stays in `board.shapes` too, everything else treats a non-`false` return as success. RS-3011 Step 10b: onPaintStroke(lassoPolygons) fires once a Paint lasso release produces a usable stroke (>= PAINT_MIN_LASSO_POINTS) -- lassoPolygons is exactly one closed ring, absolute project-mm, this module's own coordinate space (Paper.js project units already equal this app's millimeters, per this file's own header comment). Target selection, region creation, and every project.layers mutation happen entirely in app.js -- this hook is this module's only involvement in Paint beyond the pointer interaction and live preview. RS-3011 Step 12: onStampPlace(placement) fires once per Stamp click -- xMm/yMm is the click point, absolute project-mm, this module's own coordinate space; layerId is the project.layers id resolved via resolveStampTargetLayerId() (the SAME hitTestShapeId() Select's own click-to-pick-a-shape branch uses), or null if the click hit no shape. Passing the already-resolved layerId (rather than a bare point, unlike onPaintStroke) avoids a second, duplicate hit-test implementation living in app.js -- app.js still owns the absolute-to-natural-space coordinate conversion and every project.layers mutation, discarding silently when layerId is null, mirroring Paint's own "no target -> discard" precedent. RS-3011 Step 11: onTracePlace(placements, layerId) fires once per committed Trace drag that resolved a real target AND produced at least one spaced point -- placements is the full list of stones to place, absolute project-mm, this module's own coordinate space, already spaced by src/geometry/lineStampSpacing.js's placeStonesAlongPath(); layerId is always a real project.layers id here (never null -- a null/no-target resolution discards the whole drag silently before this hook is ever called, unlike onStampPlace's own "always call, layerId may be null" contract, since there is no per-point ghost-preview equivalent for Trace that would need the null case). app.js still owns the absolute-to-natural-space conversion and every project.layers mutation, mirroring onStampPlace's own architecture split, just plural. RS-3011 Step 13: onEraseSweep(daubsAbsoluteMm, layerId) fires once per committed Eraser click/drag sweep that resolved a real target -- daubsAbsoluteMm is every buffered point from the gesture (one for a plain click, one per TRACE_MIN_SAMPLE_DISTANCE_MM-thinned sample along a drag, same thinning as Trace's own placements), absolute project-mm, this module's own coordinate space, NOT yet spaced/filtered in any way (a daub is a raw brush touch, not a stone placement); layerId is always a real project.layers id here, same "never null" contract as onTracePlace's own (resolved via resolveEraserTargetLayerId() -- RS-3014 Step 5: per-point resolution against every buffered point in drag order, first real match wins, NOT Trace's own single-aggregate-bounding-box-center approach, since an edge-hugging Eraser drag's own aggregate center too easily sits outside the target shape even when the sweep itself clearly touches it; degenerates correctly to the click point itself for a single-point click). This module deliberately has no opinion on daub radius -- that's app.js's own eraserSettings.radiusMm (a tool setting, not read from any layer field), attached per point only once app.js owns the coordinate conversion, mirroring onTracePlace/onStampPlace's own architecture split. RS-3014 Step 3 (Dual-mode Eraser): corridorPolygonsAbsoluteMm is the SAME sweep's buffered points already turned into one or more closed, filled rings via buildEraserCorridorPolygons() (capsule-per-segment, unioned with Paper.js's own PathItem#unite()) -- absolute project-mm, this module's own coordinate space, same convention as daubsAbsoluteMm itself; only meaningful to Outline mode (app.js's own combineShapeSources() cut), a 'stones' gesture ignores it and keeps using daubsAbsoluteMm exactly as before. `mode` is this module's own eraserMode value (see setEraserMode()) captured at the START of this gesture (onMouseDown), NOT read live from app.js's eraserSettings.mode at the moment this hook fires -- a mode switch mid-drag must not retroactively change what an already-in-flight sweep does, so app.js must branch on the mode this parameter reports, never its own live eraserSettings.mode, when deciding how to apply a given sweep.
+ * @param {{getStoneDefaults?:()=>{stoneSize?:number,gap?:number,color?:string}, onShapeCommitted?:(layer:object)=>void, openHistorySession?:()=>void, closeHistorySession?:()=>void, onShapeMoved?:(layerId:string,dxMm:number,dyMm:number)=>void, onShapeResized?:(layerId:string,boundsMm:{left:number,top:number,width:number,height:number})=>void, onShapeDeleted?:(layerId:string)=>(boolean|void), onSelectionChanged?:(layerIds:string[])=>void, onPaintStroke?:(lassoPolygons:{xMm:number,yMm:number}[][])=>void, onStampPlace?:(placement:{xMm:number,yMm:number,layerId:string|null})=>void, onTracePlace?:(placements:{xMm:number,yMm:number}[],layerId:string)=>void, onEraseSweep?:(daubsAbsoluteMm:{xMm:number,yMm:number}[],layerId:string,corridorPolygonsAbsoluteMm:{xMm:number,yMm:number}[][],mode:('stones'|'outline'))=>void, resolveSelectionTarget?:(polygonAbsoluteMm:{xMm:number,yMm:number}[][])=>({layerId:string,contours:{xMm:number,yMm:number}[][]}|null), hitTestRegion?:(pointAbsoluteMm:{xMm:number,yMm:number},marginMm:number)=>({layerId:string,regionId:string,polygon:{xMm:number,yMm:number}[]}|null)}} [hooks] onShapeDeleted returning exactly `false` means the deletion was blocked (e.g. a last-layer guard) -- the shape stays in `board.shapes` too, everything else treats a non-`false` return as success. RS-3011 Step 10b: onPaintStroke(lassoPolygons) fires once a Paint lasso release produces a usable stroke (>= PAINT_MIN_LASSO_POINTS) -- lassoPolygons is exactly one closed ring, absolute project-mm, this module's own coordinate space (Paper.js project units already equal this app's millimeters, per this file's own header comment). Target selection, region creation, and every project.layers mutation happen entirely in app.js -- this hook is this module's only involvement in Paint beyond the pointer interaction and live preview. RS-3011 Step 12: onStampPlace(placement) fires once per Stamp click -- xMm/yMm is the click point, absolute project-mm, this module's own coordinate space; layerId is the project.layers id resolved via resolveStampTargetLayerId() (the SAME hitTestShapeId() Select's own click-to-pick-a-shape branch uses), or null if the click hit no shape. Passing the already-resolved layerId (rather than a bare point, unlike onPaintStroke) avoids a second, duplicate hit-test implementation living in app.js -- app.js still owns the absolute-to-natural-space coordinate conversion and every project.layers mutation, discarding silently when layerId is null, mirroring Paint's own "no target -> discard" precedent. RS-3011 Step 11: onTracePlace(placements, layerId) fires once per committed Trace drag that resolved a real target AND produced at least one spaced point -- placements is the full list of stones to place, absolute project-mm, this module's own coordinate space, already spaced by src/geometry/lineStampSpacing.js's placeStonesAlongPath(); layerId is always a real project.layers id here (never null -- a null/no-target resolution discards the whole drag silently before this hook is ever called, unlike onStampPlace's own "always call, layerId may be null" contract, since there is no per-point ghost-preview equivalent for Trace that would need the null case). app.js still owns the absolute-to-natural-space conversion and every project.layers mutation, mirroring onStampPlace's own architecture split, just plural. RS-3011 Step 13: onEraseSweep(daubsAbsoluteMm, layerId) fires once per committed Eraser click/drag sweep that resolved a real target -- daubsAbsoluteMm is every buffered point from the gesture (one for a plain click, one per TRACE_MIN_SAMPLE_DISTANCE_MM-thinned sample along a drag, same thinning as Trace's own placements), absolute project-mm, this module's own coordinate space, NOT yet spaced/filtered in any way (a daub is a raw brush touch, not a stone placement); layerId is always a real project.layers id here, same "never null" contract as onTracePlace's own (resolved via resolveEraserTargetLayerId() -- RS-3014 Step 5: per-point resolution against every buffered point in drag order, first real match wins, NOT Trace's own single-aggregate-bounding-box-center approach, since an edge-hugging Eraser drag's own aggregate center too easily sits outside the target shape even when the sweep itself clearly touches it; degenerates correctly to the click point itself for a single-point click). This module deliberately has no opinion on daub radius -- that's app.js's own eraserSettings.radiusMm (a tool setting, not read from any layer field), attached per point only once app.js owns the coordinate conversion, mirroring onTracePlace/onStampPlace's own architecture split. RS-3014 Step 3 (Dual-mode Eraser): corridorPolygonsAbsoluteMm is the SAME sweep's buffered points already turned into one or more closed, filled rings via buildEraserCorridorPolygons() (capsule-per-segment, unioned with Paper.js's own PathItem#unite()) -- absolute project-mm, this module's own coordinate space, same convention as daubsAbsoluteMm itself; only meaningful to Outline mode (app.js's own combineShapeSources() cut), a 'stones' gesture ignores it and keeps using daubsAbsoluteMm exactly as before. `mode` is this module's own eraserMode value (see setEraserMode()) captured at the START of this gesture (onMouseDown), NOT read live from app.js's eraserSettings.mode at the moment this hook fires -- a mode switch mid-drag must not retroactively change what an already-in-flight sweep does, so app.js must branch on the mode this parameter reports, never its own live eraserSettings.mode, when deciding how to apply a given sweep. RS-3013 Step 1: resolveSelectionTarget(polygonAbsoluteMm) is Select's rectangle-drag/Lasso's own drag calling app.js's shared resolvePaintTargetTwoPass() (the same selectPaintTarget() choreography onPaintStroke's own architecture already runs) to find which 'path' layer, if any, the drawn rectangle/lasso overlaps most -- returns {layerId, contours} or null, mirroring onPaintStroke's own "no target -> discard" contract; this module stores the result as an in-memory activeSelection draft, never a real region (that stays Paint's job alone). hitTestRegion(pointAbsoluteMm, marginMm) is Select/Lasso's own click-to-select-an-existing-region hit-test -- app.js delegates to hitTestPathLayerRegion() (src/geometry/PaintRegionSelection.js) since a region lives in project.layers[].regions, data this module never touches directly; marginMm is already converted from screen-px by this module's own REGION_HIT_MARGIN_PX / paper.view.zoom.
  */
 export function createDrawingTool(canvasEl, hooks = {}) {
   const {
@@ -519,6 +527,21 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     // RS-3011 Step 13: fires once per committed Eraser click/drag sweep with a resolved target --
     // see this function's own hooks-param doc comment above for the exact contract.
     onEraseSweep = () => {},
+    // RS-3013 Step 1: Select's rectangle-drag and Lasso's own drag both call this once per release,
+    // with a single closed polygon ring (absolute project-mm, this module's own coordinate space --
+    // the drawn rectangle's 4 corners, or the accumulated lasso points) -- returns
+    // {layerId, contours} (contours: the same absolute-mm intersection shape onPaintStroke's own
+    // `result.contours` already is) or null when nothing overlaps, mirroring onPaintStroke's own
+    // "no target -> discard" contract exactly (this hook IS Paint's own selectPaintTarget()
+    // resolution, reused, not a second implementation -- see app.js's own resolvePaintTargetTwoPass()).
+    resolveSelectionTarget = () => null,
+    // RS-3013 Step 1: Select/Lasso's own click-to-select-an-existing-region hit-test -- called with
+    // an absolute-mm point and a tolerance already converted from screen-px by this module
+    // (REGION_HIT_MARGIN_PX / paper.view.zoom), returns {layerId, regionId, polygon} (polygon:
+    // absolute-mm, used to draw the selection outline) or null. project.layers regions are app.js's
+    // own data, never touched directly here -- same architecture split as resolveSelectionTarget
+    // above.
+    hitTestRegion = () => null,
     // RS-3011 Step 3b: the two hooks the live stone preview needs -- getLayerStoneParams(layerId)
     // returns a 'path' layer's non-geometric stone settings (stoneSizeMm/gapMm/mode/color/mixed-size),
     // or null if no matching layer exists (every non-Design layer type, or Design not active); this
@@ -650,6 +673,29 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   // from scratch every drag frame (onMouseDrag), removed on mouseup/Escape/mode-switch. Non-null
   // only while interactionKind === 'marquee'.
   let marqueeItem = null;
+  // RS-3013 Step 1: Select's own twin of marqueeItem above -- the live rectangle preview for a
+  // plain (no-Shift) empty-canvas drag, dashed rather than filled (STROKE_COLOR/PAINT_LASSO_DASH_PX,
+  // matching Lasso's own dashed preview below) so it never reads as the marquee's own solid
+  // multi-select box. Same "never routed through board.beginPath()/clearPath()/finalizeShape()"
+  // rule; non-null only while interactionKind === 'selectRect'.
+  let selectRectItem = null;
+  // RS-3013 Step 1: Lasso's own twin of paintLassoPoints/paintLassoItem above -- identical shape and
+  // lifecycle (a single click-drag-release gesture, reset at mousedown and again once onMouseUp
+  // resolves it), but the finished stroke becomes a SELECTION (activeSelection below), never a real
+  // region -- region creation stays Paint's own job alone.
+  let lassoPoints = [];
+  let lassoItem = null;
+  // RS-3013 Step 1: the one selection state distinct from selectedIds above -- a region (resolved by
+  // a click, via hitTestRegion) or an in-progress rect/lasso draft (resolved by a drag, via
+  // resolveSelectionTarget), never both a shape multi-selection AND this at once (see
+  // performClickDispatch()/setActiveSelection() below for how the two stay mutually exclusive).
+  // null | {kind:'region', layerId, regionId} | {kind:'draft', layerId, shapeKind:('rect'|'lasso'),
+  // boundsOrContour}. No operations read/act on this yet in this step -- later RS-3013 steps only.
+  // activeSelectionItem is its own persistent outline overlay (SELECTED_STROKE_COLOR, solid, never
+  // routed through board.beginPath()/clearPath()/finalizeShape()), rebuilt by setActiveSelection()
+  // whenever activeSelection itself changes; null whenever activeSelection is null.
+  let activeSelection = null;
+  let activeSelectionItem = null;
   // RS-3010 Design Step D: the live resize handles for the current single-shape selection, a
   // small array of throwaway Paper.js Items (same "never routed through board.beginPath()/
   // clearPath()/finalizeShape()" rule marqueeItem already established, since these are UI chrome,
@@ -1045,6 +1091,104 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   }
 
   /**
+   * RS-3013 Step 1: builds activeSelectionItem's own Paper.js outline from a set of absolute-mm
+   * polygon rings -- a paper.CompoundPath so a multi-contour Lasso draft (a stroke that clipped into
+   * several disjoint pieces, same possibility onPaintStroke's own region creation already handles)
+   * renders as one item, same "solid SELECTED_STROKE_COLOR outline" visual a selected shape's own
+   * strokeColor already uses (applySelectionVisuals()), so a region/draft selection reads as
+   * unambiguously "selected" using this file's existing color language rather than inventing a new
+   * one. Outline-only (no fillColor) -- this is UI chrome, never a shape a hit-test could match.
+   * @param {{xMm:number,yMm:number}[][]} polygons
+   * @returns {paper.CompoundPath}
+   */
+  function buildActiveSelectionOutlineItem(polygons) {
+    const compound = new paper.CompoundPath({
+      children: polygons.map(
+        (ring) => new paper.Path({ segments: ring.map((p) => new paper.Point(p.xMm, p.yMm)), closed: true })
+      )
+    });
+    compound.strokeColor = SELECTED_STROKE_COLOR;
+    compound.strokeWidth = STROKE_WIDTH_PX / paper.view.zoom;
+    compound.fillColor = null;
+    return compound;
+  }
+
+  /**
+   * RS-3013 Step 1: the one place `activeSelection` is ever reassigned -- always rebuilds
+   * activeSelectionItem to match (removing the old one first), so the two can never drift apart.
+   * `polygons` is only read when `selection` is non-null (the outline to draw); pass null/omit to
+   * clear. Never touches selectedIds/onSelectionChanged itself -- callers that need the two selection
+   * modes kept mutually exclusive (see performClickDispatch() below) clear the other one alongside
+   * this, at the call site, same as this file's existing applySelectionVisuals()/notifySelectionChanged()
+   * pairing never being fused into one function either.
+   * @param {null|{kind:'region',layerId:string,regionId:string}|{kind:'draft',layerId:string,shapeKind:('rect'|'lasso'),boundsOrContour:*}} selection
+   * @param {{xMm:number,yMm:number}[][]} [polygons]
+   */
+  function setActiveSelection(selection, polygons) {
+    if (activeSelectionItem) {
+      activeSelectionItem.remove();
+      activeSelectionItem = null;
+    }
+    activeSelection = selection;
+    if (selection && polygons && polygons.length) {
+      activeSelectionItem = buildActiveSelectionOutlineItem(polygons);
+    }
+  }
+
+  /**
+   * RS-3013 Step 1: the ONE click-decision function both Select and Lasso resolve a plain click
+   * (not a drag) through, so the two tools are guaranteed to agree on exactly what a click selects
+   * (per this step's own decision: "Lasso and Select must have IDENTICAL click behavior"). Tries, in
+   * order: (1) an existing region under `point` (hitTestRegion, forgiving margin) -- selects it as
+   * activeSelection and clears any shape multi-selection; (2) an existing shape under `point`
+   * (hitTestShapeId, same test Select's own pre-existing click-to-pick-a-shape branch already used)
+   * -- shiftHeld toggles it into/out of the multi-selection, otherwise selects it alone unless it's
+   * already part of the current multi-selection (preserving the group, same precedent the old inline
+   * code documented), and clears any region/draft selection; (3) neither -- empty canvas, clears
+   * both. Never touches interactionKind -- purely a selection-state decision, called both from a
+   * context where no drag will follow (Lasso's own too-short-to-be-a-stroke release, Select's own
+   * Shift-click) and from one where mousedown already speculatively selected a shape for a possible
+   * group-drag that turned out to be a zero-offset click instead (Select's own onMouseUp 'move'
+   * branch) -- see that branch's own comment for why re-running this there is safe (idempotent for
+   * the shape it already picked, and is what lets a region under that same click override it).
+   * @param {paper.Point} point
+   * @param {boolean} shiftHeld
+   */
+  function performClickDispatch(point, shiftHeld) {
+    const regionHit = hitTestRegion({ xMm: point.x, yMm: point.y }, REGION_HIT_MARGIN_PX / paper.view.zoom);
+    if (regionHit) {
+      if (selectedIds.size) {
+        selectedIds = clearSelection();
+        applySelectionVisuals();
+        updateResizeHandles();
+        notifySelectionChanged();
+      }
+      setActiveSelection({ kind: 'region', layerId: regionHit.layerId, regionId: regionHit.regionId }, [regionHit.polygon]);
+      return;
+    }
+    const hitId = hitTestShapeId(point);
+    if (hitId) {
+      if (activeSelection) setActiveSelection(null);
+      if (shiftHeld) {
+        selectedIds = toggleSelection(selectedIds, hitId);
+      } else if (!selectedIds.has(hitId)) {
+        selectedIds = selectOnly(hitId);
+      }
+      applySelectionVisuals();
+      updateResizeHandles();
+      notifySelectionChanged();
+      return;
+    }
+    if (selectedIds.size) {
+      selectedIds = clearSelection();
+      applySelectionVisuals();
+      updateResizeHandles();
+    }
+    if (activeSelection) setActiveSelection(null);
+    notifySelectionChanged();
+  }
+
+  /**
    * Rebuilds `resizeHandleItems` from scratch: removes whatever handle Items currently exist,
    * then -- only if `mode === 'select'` and exactly one shape is selected -- adds 8 small square
    * Path.Rectangle Items at that shape's current bounds' handle positions (handlePositionsFor).
@@ -1237,6 +1381,12 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       marqueeItem.remove();
       marqueeItem = null;
     }
+    // RS-3013 Step 1: mirrors marqueeItem's own reset just above -- a Select rectangle-drag
+    // interrupted mid-drag (Escape/mode-switch/exit) must not leave a stale dashed preview behind.
+    if (selectRectItem) {
+      selectRectItem.remove();
+      selectRectItem = null;
+    }
     // RS-3011 Step 10b: mirrors marqueeItem's own reset just above -- a Paint lasso interrupted
     // mid-drag (Escape/mode-switch/exit) must not leave a stale dashed preview or stale points
     // behind for the next stroke.
@@ -1245,6 +1395,16 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       paintLassoItem = null;
     }
     paintLassoPoints = [];
+    // RS-3013 Step 1: mirrors paintLassoItem/paintLassoPoints' own reset just above -- a Lasso drag
+    // interrupted mid-drag (Escape/mode-switch/exit) must not leave a stale dashed preview or stale
+    // points behind for the next stroke. Deliberately does NOT touch activeSelection/
+    // activeSelectionItem -- an already-committed region/draft selection must survive an unrelated
+    // gesture interruption (e.g. Escape while idle), the same way selectedIds survives it too.
+    if (lassoItem) {
+      lassoItem.remove();
+      lassoItem = null;
+    }
+    lassoPoints = [];
     // RS-3011 Step 11: mirrors paintLassoItem/paintLassoPoints' own reset just above -- a Trace drag
     // interrupted mid-drag (Escape/mode-switch/exit) must not leave a stale dashed preview or stale
     // points behind for the next line.
@@ -1655,25 +1815,34 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         }
         const hitId = hitTestShapeId(event.point);
         if (hitId) {
-          // Same click/shift-click/drag-preserves-group convention as the existing project.layers
-          // pointerdown handler in app.js: a shift-click toggles membership and never starts a
-          // drag on its own (matches that handler's shift branch returning immediately); a plain
-          // click on a shape already part of the current multi-selection preserves the whole group
-          // (so a follow-up drag moves it together) instead of collapsing to just that one shape.
+          // RS-3013 Step 1: a shift-click's own click-vs-drag question is never ambiguous (it never
+          // starts a drag on its own, see below) -- resolved right here via performClickDispatch(),
+          // the SAME click-decision function Lasso's own click path uses, rather than the hand-rolled
+          // toggle this branch used to do inline, so a region under this exact point (checked FIRST
+          // by that function) can win over the shape-toggle below, same as an unshifted click can
+          // (see this branch's own 'move' mouseup counterpart for that case).
           if (event.modifiers.shift) {
-            selectedIds = toggleSelection(selectedIds, hitId);
-            applySelectionVisuals();
-            updateResizeHandles();
-            notifySelectionChanged();
+            performClickDispatch(event.point, true);
             interactionKind = null;
             return;
           }
+          // Same click/drag-preserves-group convention as the existing project.layers pointerdown
+          // handler in app.js: a plain click on a shape already part of the current multi-selection
+          // preserves the whole group (so a follow-up drag moves it together) instead of collapsing
+          // to just that one shape. Selected here (not deferred to performClickDispatch()) because a
+          // group-drag needs selectedIds to already reflect this shape the instant onMouseDrag's own
+          // 'move' branch can start reading it -- see that branch's own comment for why the possible
+          // "this was actually a region click" override has to happen at mouseup instead.
           if (!selectedIds.has(hitId)) {
             selectedIds = selectOnly(hitId);
             applySelectionVisuals();
             updateResizeHandles();
             notifySelectionChanged();
           }
+          // RS-3013 Step 1: mutual exclusivity -- picking a shape (even just speculatively, pending
+          // the click-vs-drag decision below) means any existing region/draft selection no longer
+          // applies.
+          if (activeSelection) setActiveSelection(null);
           interactionKind = 'move';
           // RS-3010 Step 2e: hitId (the specific shape actually clicked, even within a
           // multi-selection) is the natural anchor for a group drag -- see the moveStartPoint
@@ -1686,19 +1855,25 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           return;
         }
       }
-      // Empty canvas: clear any existing selection and start a new shape per the active mode.
+      // Empty canvas (or any other mode reaching this point, e.g. Lasso/Paint/Trace/Eraser's own
+      // mousedown below): clear any existing shape multi-selection AND any existing region/draft
+      // selection (RS-3013 Step 1: the two selection modes are mutually exclusive, so starting fresh
+      // clears both), then start a new shape/gesture per the active mode.
       if (selectedIds.size) {
         selectedIds = clearSelection();
         applySelectionVisuals();
         updateResizeHandles();
         notifySelectionChanged();
       }
-      // Design Step C: Select's empty-canvas drag starts a marquee. The marquee visual itself is
-      // built lazily in onMouseDrag (mirrors rect/ellipse/slot's own "nothing meaningful to show
-      // at a zero-size box" reasoning above). No Shift-to-add here -- the unconditional
-      // clear-selection above already covers every marquee drag, same as a plain click.
+      if (activeSelection) setActiveSelection(null);
+      // Design Step C: Select's empty-canvas drag starts a marquee -- RS-3013 Step 1: now gated
+      // behind Shift (previously unconditional); an unshifted drag instead starts 'selectRect', the
+      // twin gesture that resolves a target shape the same way Lasso's own drag does but stores the
+      // drawn rectangle unclipped (see that branch's own onMouseUp handling). Both preview items are
+      // built lazily in onMouseDrag (mirrors rect/ellipse/slot's own "nothing meaningful to show at a
+      // zero-size box" reasoning above).
       if (mode === 'select') {
-        interactionKind = 'marquee';
+        interactionKind = event.modifiers.shift ? 'marquee' : 'selectRect';
         dragStart = event.point;
         return;
       }
@@ -1747,6 +1922,25 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           dashArray: [PAINT_LASSO_DASH_PX / paper.view.zoom, PAINT_LASSO_DASH_PX / paper.view.zoom]
         });
         paintLassoItem.add(event.point);
+        return;
+      }
+      if (mode === 'lasso') {
+        // RS-3013 Step 1: Select's twin selection tool -- same single click-drag-release gesture
+        // shape as Paint's own branch just above (lassoPoints only ever accumulates within one
+        // mousedown-to-mouseup cycle), same dashed-preview styling. Deliberately skips the
+        // hit-test-move-first dispatch above (mode !== 'select', so that block never runs) --
+        // exactly like Paint, a lasso must always start fresh on mousedown, even directly on top of
+        // an existing shape, since selecting PART of a shape is the entire point of the tool. The
+        // click-vs-drag decision (was this basically a click, or a real stroke?) is deferred to
+        // onMouseUp -- see that branch's own comment.
+        interactionKind = 'lasso';
+        lassoPoints = [event.point];
+        lassoItem = new paper.Path({
+          strokeColor: STROKE_COLOR,
+          strokeWidth: STROKE_WIDTH_PX / paper.view.zoom,
+          dashArray: [PAINT_LASSO_DASH_PX / paper.view.zoom, PAINT_LASSO_DASH_PX / paper.view.zoom]
+        });
+        lassoItem.add(event.point);
         return;
       }
       if (mode === 'trace') {
@@ -1958,6 +2152,20 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         marqueeItem.strokeWidth = MARQUEE_STROKE_WIDTH_PX / paper.view.zoom;
         return;
       }
+      if (interactionKind === 'selectRect') {
+        // RS-3013 Step 1: marqueeItem's own twin, same discard-and-recreate-per-frame pattern, but
+        // dashed/unfilled (STROKE_COLOR/PAINT_LASSO_DASH_PX, matching Lasso's own dashed preview
+        // below) rather than marquee's solid semi-transparent fill -- this gesture resolves to a
+        // region-style selection, not a multi-select box, and must not read as one.
+        if (selectRectItem) selectRectItem.remove();
+        const box = resolveDragBox(dragStart, event.point);
+        const rect = new paper.Rectangle(box.left, box.top, box.width, box.height);
+        selectRectItem = new paper.Path.Rectangle(rect);
+        selectRectItem.strokeColor = STROKE_COLOR;
+        selectRectItem.strokeWidth = STROKE_WIDTH_PX / paper.view.zoom;
+        selectRectItem.dashArray = [PAINT_LASSO_DASH_PX / paper.view.zoom, PAINT_LASSO_DASH_PX / paper.view.zoom];
+        return;
+      }
       if (interactionKind === 'paint') {
         // RS-3011 Step 10b: only samples a new point once the pointer has moved past
         // PAINT_MIN_SAMPLE_DISTANCE_PX since the last one, avoiding a point per pointermove event
@@ -1970,6 +2178,17 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           paintLassoPoints.push(event.point);
           paintLassoItem.removeSegments();
           paintLassoItem.addSegments(paintLassoPoints.map((p) => new paper.Segment(p)));
+        }
+        return;
+      }
+      if (interactionKind === 'lasso') {
+        // RS-3013 Step 1: same point-sampling/rebuild pattern as Paint's own branch just above,
+        // reusing the identical PAINT_MIN_SAMPLE_DISTANCE_PX throttle (not a second constant).
+        const lastPoint = lassoPoints[lassoPoints.length - 1];
+        if (event.point.getDistance(lastPoint) >= PAINT_MIN_SAMPLE_DISTANCE_PX / paper.view.zoom) {
+          lassoPoints.push(event.point);
+          lassoItem.removeSegments();
+          lassoItem.addSegments(lassoPoints.map((p) => new paper.Segment(p)));
         }
         return;
       }
@@ -2064,6 +2283,14 @@ export function createDrawingTool(canvasEl, hooks = {}) {
             const layerId = shape && shape.item.data.layerId;
             if (layerId) onShapeMoved(layerId, moveAppliedOffset.x, moveAppliedOffset.y);
           }
+        } else {
+          // RS-3013 Step 1: a genuine zero-offset click on a shape -- re-resolve it through the SAME
+          // click-decision function Lasso's own click path uses (performClickDispatch), so a region
+          // under this exact point (checked FIRST by that function) can override the shape-selection
+          // mousedown already applied speculatively above. Idempotent for the shape case itself
+          // (mousedown already selected/preserved-the-group; `!selectedIds.has(hitId)` is now false,
+          // so this just re-notifies) -- the only NEW outcome here is the region override.
+          performClickDispatch(event.point, false);
         }
         interactionKind = null;
         moveStartPoint = null;
@@ -2164,6 +2391,55 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         interactionKind = null;
         return;
       }
+      if (interactionKind === 'selectRect') {
+        // RS-3013 Step 1: marqueeItem's own twin mouseup, same "below MIN_BOX_DIM_MM is just a
+        // click, already handled by onMouseDown's own empty-canvas clear" precedent. A real
+        // rectangle resolves its target shape via resolveSelectionTarget() -- the SAME
+        // selectPaintTarget() two-pass resolution Lasso's own drag uses (app.js's shared
+        // resolvePaintTargetTwoPass()) -- but, unlike Lasso, stores the RECTANGLE exactly as drawn
+        // (this milestone's own decided asymmetry: Lasso always clips at creation, Select's
+        // rectangle never does; GeometryEngine's own _applyPathRegions() shapePolygons filter
+        // already keeps any future stone generation from a stored region inside its shape's current
+        // outline regardless, so this is safe without new clipping code here). No target -> discard
+        // silently, matching Paint/Lasso's own "no target -> discard" precedent.
+        if (
+          selectRectItem &&
+          selectRectItem.bounds.width > MIN_BOX_DIM_MM &&
+          selectRectItem.bounds.height > MIN_BOX_DIM_MM
+        ) {
+          const b = selectRectItem.bounds;
+          const rectPolygon = [
+            { xMm: b.left, yMm: b.top },
+            { xMm: b.right, yMm: b.top },
+            { xMm: b.right, yMm: b.bottom },
+            { xMm: b.left, yMm: b.bottom }
+          ];
+          const resolved = resolveSelectionTarget([rectPolygon]);
+          if (resolved) {
+            if (selectedIds.size) {
+              selectedIds = clearSelection();
+              applySelectionVisuals();
+              updateResizeHandles();
+              notifySelectionChanged();
+            }
+            setActiveSelection(
+              {
+                kind: 'draft',
+                layerId: resolved.layerId,
+                shapeKind: 'rect',
+                boundsOrContour: { left: b.left, top: b.top, width: b.width, height: b.height }
+              },
+              [rectPolygon]
+            );
+          }
+        }
+        if (selectRectItem) {
+          selectRectItem.remove();
+          selectRectItem = null;
+        }
+        interactionKind = null;
+        return;
+      }
       if (interactionKind === 'paint') {
         if (paintLassoItem) {
           paintLassoItem.remove();
@@ -2192,6 +2468,49 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         updateResizeHandles();
         updateCursor();
         onPaintStroke(lassoPolygons);
+        return;
+      }
+      if (interactionKind === 'lasso') {
+        if (lassoItem) {
+          lassoItem.remove();
+          lassoItem = null;
+        }
+        // RS-3013 Step 1: a lasso below PAINT_MIN_LASSO_POINTS is NOT "no usable stroke" the way
+        // Paint's own identical check discards it -- it's basically a click, so it resolves through
+        // the SAME click-decision function Select's own click path uses (performClickDispatch), on
+        // the release point (mousedown never hit-tested anything for Lasso, unlike Select -- see
+        // this file's own onMouseDown 'lasso' branch comment). `mode` is deliberately left at
+        // 'lasso' either way (both the click case and the real-stroke case below) -- it's a repeated
+        // tool, same "stays active" precedent as Stamp/Trace/Eraser (CLICK_TO_PLACE_MODES), not a
+        // one-shot preset that reverts to Select on commit.
+        if (lassoPoints.length < PAINT_MIN_LASSO_POINTS) {
+          lassoPoints = [];
+          interactionKind = null;
+          performClickDispatch(event.point, false);
+          return;
+        }
+        const lassoPolygons = [lassoPoints.map((p) => ({ xMm: p.x, yMm: p.y }))];
+        lassoPoints = [];
+        interactionKind = null;
+        // RS-3013 Step 1: the EXACT SAME selectPaintTarget() two-pass resolution Paint's own
+        // onPaintStroke uses (app.js's shared resolvePaintTargetTwoPass()) -- but unlike Paint, the
+        // result becomes a transient activeSelection draft, never a real region (see this
+        // milestone's own architecture note: region creation stays Paint's job alone). No target ->
+        // discard silently, matching Paint's own "no target -> discard" precedent -- any shape
+        // multi-selection cleared at mousedown stays cleared either way.
+        const resolved = resolveSelectionTarget(lassoPolygons);
+        if (resolved) {
+          if (selectedIds.size) {
+            selectedIds = clearSelection();
+            applySelectionVisuals();
+            updateResizeHandles();
+            notifySelectionChanged();
+          }
+          setActiveSelection(
+            { kind: 'draft', layerId: resolved.layerId, shapeKind: 'lasso', boundsOrContour: resolved.contours },
+            resolved.contours
+          );
+        }
         return;
       }
       if (interactionKind === 'trace') {
@@ -2398,6 +2717,18 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     get hasInProgressPen() {
       return interactionKind === 'pen';
     },
+    /**
+     * RS-3013 Step 1: read-only surface of the current region/draft selection (see this module's
+     * own `activeSelection` state-block doc comment for its exact shape) -- QA/automated
+     * verification only, same "never used to drive any application logic" role as this file's
+     * existing debugGrid/debugHitTestShapeId surface (see app.js's own window.__drawingTool
+     * comment). No app.js hook exists for this yet -- nothing outside this module needs to react to
+     * it in this step (no operations act on a selection yet); a later RS-3013 step adds one once
+     * something does.
+     */
+    get activeSelection() {
+      return activeSelection;
+    },
     get zoom() {
       return board.zoom;
     },
@@ -2407,7 +2738,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      *   mode was entered -- fixes the base fit scale for this drawing session (matches every other
      *   viewport transform in this app in treating project.canvas as the mm reference frame).
      * @param {number} paddingPx same padding convention drawLayout() already uses (38*dpr).
-     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'|'pen'|'paint'|'stamp'|'trace'|'eraser'} [initialMode]
+     * @param {'select'|'lasso'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'|'pen'|'paint'|'stamp'|'trace'|'eraser'} [initialMode]
      */
     enter(projectCanvasMm, paddingPx, initialMode = 'select') {
       canvasMm = projectCanvasMm;
@@ -2420,6 +2751,13 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       board.active = true;
       mode = initialMode;
       selectedIds = clearSelection();
+      // RS-3013 Step 1: mirrors selectedIds' own reset just above -- the same belt-and-suspenders
+      // reset (a stale activeSelection from a prior session must never survive into a new one).
+      // Assigned directly rather than through setActiveSelection(): activeLayer.removeChildren()
+      // above (re-entry) / paper.setup() (first entry) already discard any stale
+      // activeSelectionItem, so there is nothing for that function's own `.remove()` to double-remove.
+      activeSelection = null;
+      activeSelectionItem = null;
       resetInProgressDrawing();
       if (!isSetUp) {
         paper.setup(canvasEl);
@@ -2453,11 +2791,21 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      * Switch input mode without leaving drawing mode -- already-finalized shapes in board.shapes
      * are untouched; only a drag-in-flight (if any) is discarded, since the box preview belongs
      * to whichever mode was active when the drag started.
-     * @param {'select'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'|'pen'|'paint'|'stamp'|'trace'|'eraser'} newMode
+     *
+     * RS-3013 Step 1: also clears activeSelection, but ONLY when leaving BOTH Select and Lasso for
+     * some other tool -- switching between the two (they're "twin selection tools", per this step's
+     * own decision) leaves a region/draft selection alone, matching how selectedIds already survives
+     * a Select<->Lasso switch untouched.
+     * @param {'select'|'lasso'|'freehand'|'rect'|'ellipse'|'slot'|'polygon'|'pen'|'paint'|'stamp'|'trace'|'eraser'} newMode
      */
     setMode(newMode) {
+      const wasSelectionTool = mode === 'select' || mode === 'lasso';
+      const isSelectionTool = newMode === 'select' || newMode === 'lasso';
       mode = newMode;
       resetInProgressDrawing();
+      if (wasSelectionTool && !isSelectionTool && activeSelection) {
+        setActiveSelection(null);
+      }
       // Design Step D: resetInProgressDrawing() above unconditionally clears resizeHandleItems --
       // rebuild them here so switching back to 'select' with a shape still selected brings the
       // handles back rather than leaving them cleared until the next selection change.
@@ -2571,6 +2919,10 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       // keys here would otherwise just accumulate forever rather than colliding).
       stoneGroups.clear();
       selectedIds = clearSelection();
+      // RS-3013 Step 1: mirrors selectedIds' own reset just above -- resetInProgressDrawing() below
+      // deliberately leaves activeSelection/activeSelectionItem alone (see its own doc comment), so
+      // exiting Design must clear them explicitly, same as it already does for selectedIds.
+      if (activeSelection) setActiveSelection(null);
       resetInProgressDrawing();
       spaceHeld = false;
       panning = false;

@@ -29,6 +29,7 @@
 
 import { combineShapeSources, contourAreaAbs, MIN_CELL_SIZE_MM } from './PathBoolean.js';
 import { computeNaturalContourTransform, applyNaturalContourTransform } from './GeometryEngine.js';
+import { isPointInsidePolygons } from './StoneSampler.js';
 
 // combineShapeSources()'s own marching-squares tracer already discards any contour whose area
 // doesn't clear (actualCellSizeMm**2)/4 as tracing noise (see PathBoolean.js's traceCombinedMask()),
@@ -123,4 +124,91 @@ export function absolutePolygonsToNaturalSpace(polygonsAbsoluteMm, pathLayer) {
   };
 
   return polygonsAbsoluteMm.map((polygon) => applyNaturalContourTransform(polygon, inverseTransform));
+}
+
+function distanceToSegmentMm(point, a, b) {
+  const dx = b.xMm - a.xMm;
+  const dy = b.yMm - a.yMm;
+  const lengthSq = dx * dx + dy * dy;
+  if (lengthSq === 0) {
+    return Math.hypot(point.xMm - a.xMm, point.yMm - a.yMm);
+  }
+  const t = Math.max(0, Math.min(1, ((point.xMm - a.xMm) * dx + (point.yMm - a.yMm) * dy) / lengthSq));
+  return Math.hypot(point.xMm - (a.xMm + t * dx), point.yMm - (a.yMm + t * dy));
+}
+
+/**
+ * True when `point` lands inside `polygon` (isPointInsidePolygons(), even-odd) OR within
+ * `marginMm` of any of its edges -- the same two-phase "exact test, then a forgiving
+ * proximity fallback" shape DrawingCanvasTool.js's own hitTestShapeId() already uses for finalized
+ * shapes (fill-contains first, stroke-tolerance fallback second), applied here to a region's own
+ * polygon instead of a Paper.js item. The fallback exists because a painted region's footprint can
+ * be a thin sliver (a lasso stroke clipped hard against its target shape's own edge) -- without it,
+ * a click landing a couple of screen-px outside that sliver's true interior would never register.
+ */
+function isPointNearPolygon(point, polygon, marginMm) {
+  if (isPointInsidePolygons(point, [polygon])) {
+    return true;
+  }
+  if (marginMm <= 0) {
+    return false;
+  }
+  for (let i = 0; i < polygon.length; i++) {
+    const a = polygon[i];
+    const b = polygon[(i + 1) % polygon.length];
+    if (distanceToSegmentMm(point, a, b) <= marginMm) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * RS-3013 Step 1: Select/Lasso's own click-to-select-an-existing-region hit-test. DrawingCanvasTool.js
+ * is Paper.js-only and never touches project.layers directly (this module's own header comment) --
+ * this is the one place that resolves "which region (if any) does this absolute-mm point land on,"
+ * called from app.js's own `hitTestRegion` hook (DrawingCanvasTool.js supplies the point + an
+ * already screen-px-to-mm-converted margin; app.js supplies the layers).
+ *
+ * Reuses the SAME natural-space placement transform GeometryEngine's own _applyPathRegions() places
+ * a region through (computeNaturalContourTransform() derived from the layer's own natural contours/
+ * x/y/w/h/naturalBoundingBoxMm, applyNaturalContourTransform() applied to `region.contour`) --
+ * never an independently-derived transform, for the same reason absolutePolygonsToNaturalSpace()
+ * above insists on it (a region's natural bounding box is almost always smaller than its parent
+ * shape's own, so re-deriving scale from the region's own points would distort it relative to the
+ * shape it must track).
+ *
+ * Topmost-first, both across layers and across a single layer's own regions (`pathLayers` and each
+ * layer's `regions` are iterated in reverse) -- mirrors hitTestShapeId()'s own "push order is paint
+ * order bottom-to-top" precedent (project.layers/layer.regions are both append-only arrays here
+ * too), so an overlapping region painted more recently wins over one painted earlier at the same
+ * point.
+ *
+ * @param {{xMm:number,yMm:number}} pointAbsoluteMm
+ * @param {object[]} pathLayers Every candidate 'path' layer (already filtered to type/visibility by
+ *   the caller), each carrying `regions`, `contours`, `x`, `y`, `w`, `h`, `naturalBoundingBoxMm`.
+ * @param {number} [marginMm] Forgiving hit tolerance, already converted from screen-px by the caller.
+ * @returns {{layerId:string, regionId:string, polygon:{xMm:number,yMm:number}[]}|null}
+ */
+export function hitTestPathLayerRegion(pointAbsoluteMm, pathLayers, marginMm = 0) {
+  for (let i = pathLayers.length - 1; i >= 0; i--) {
+    const layer = pathLayers[i];
+    const regions = layer.regions;
+    if (!regions || !regions.length || !layer.contours || !layer.contours.length) {
+      continue;
+    }
+    const naturalContours = layer.contours.map((contour) => contour.map((p) => ({ xMm: p.x, yMm: p.y })));
+    const transform = computeNaturalContourTransform(naturalContours, layer.x, layer.y, layer.w, layer.h, layer.naturalBoundingBoxMm);
+    if (!transform) {
+      continue;
+    }
+    for (let r = regions.length - 1; r >= 0; r--) {
+      const region = regions[r];
+      const polygon = applyNaturalContourTransform(region.contour, transform);
+      if (isPointNearPolygon(pointAbsoluteMm, polygon, marginMm)) {
+        return { layerId: layer.id, regionId: region.id, polygon: polygon.map((p) => ({ xMm: p.xMm, yMm: p.yMm })) };
+      }
+    }
+  }
+  return null;
 }
