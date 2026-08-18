@@ -2573,6 +2573,27 @@ function duplicateRegionInPathLayer(layerId,regionId){
   el('status').textContent=`Duplicated region on ${layerLabel(targetLayer)}.`;
   return{newRegionId:newRegion.id,polygon:translatedPolygon};
 }
+// RS-3013 Step 4: region-level delete, a plain app.js-owned function (not a DrawingCanvasTool.js
+// hook) since project.layers/regions data already lives here -- mirrors duplicateRegionInPathLayer()
+// immediately above in structure (same layer/region lookup, same defensive no-op if either is
+// missing, commitHistory() first) but removes the region entirely instead of cloning it. Unlike
+// deleteLayer()'s own "last remaining layer" guard (which replaces the last layer with a blank text
+// layer rather than truly deleting it), no analogous guard is needed here: a layer with zero regions
+// is already the normal, default state before any region is ever painted (onPaintStroke's own
+// `if(!Array.isArray(targetLayer.regions))targetLayer.regions=[]` already handles this), so deleting
+// the last region on a layer just leaves it with an empty regions array. No return value -- unlike
+// move/duplicate, there's no new geometry for the caller to use afterward.
+function deleteRegionFromPathLayer(layerId,regionId){
+  const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
+  if(!targetLayer)return;
+  const region=(targetLayer.regions||[]).find(r=>r.id===regionId);
+  if(!region)return;
+  commitHistory();
+  targetLayer.regions=targetLayer.regions.filter(r=>r.id!==regionId);
+  drawingTool.refreshStoneGroupForLayer(targetLayer.id);
+  updateAll(true);
+  el('status').textContent=`Deleted region on ${layerLabel(targetLayer)}.`;
+}
 // RS-3011 Step 2 fix: for a Design-drawn 'path' layer, duplicateShapeForLayer() clones the matching
 // Paper.js item in drawingTool's own board.shapes too -- previously only project.layers gained a
 // new entry, leaving the copy invisible on the Design canvas until it was closed and reopened. Uses
@@ -2794,7 +2815,7 @@ window.addEventListener('keydown',e=>{
     if(e.key==='Delete'||e.key==='Backspace'){
       const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;
       e.preventDefault();
-      drawingTool.deleteSelected();
+      deleteCurrentSelection();
     }
     // RS-3010 Step 2c: Escape cancels whatever drag or in-progress polygon drawingTool.cancelPath()
     // now covers (see DrawingCanvasTool.js's resetInProgressDrawing()) -- this block's own `return`
@@ -4289,7 +4310,27 @@ el('actionDuplicate').onclick=()=>{
   }
   duplicateLayer(selectedLayerId);
 };
-el('actionDelete').onclick=()=>deleteLayer(selectedLayerId);
+// RS-3013 Step 4: shared by both Delete entry points -- this button's own onclick immediately below,
+// and the global keydown handler's Delete/Backspace branch inside `if(drawingTool.isActive){...}` --
+// same "factor the shared logic once" precedent Step 2's own tryStartRegionMove() fix already set,
+// so neither entry point carries its own duplicated region-vs-fallthrough branch. A selected REGION
+// (drawingTool.activeSelection.kind==='region') deletes just that region via
+// deleteRegionFromPathLayer(), then clears the selection via drawingTool.clearActiveSelection() --
+// unlike Step 3's duplicate, delete leaves NOTHING selected afterward; it does not fall back to
+// selecting the parent shape, matching deleteSelected()'s own existing behavior for a whole shape. A
+// null/undefined activeSelection or a 'draft' kind (an in-progress rect/lasso selection with no
+// committed region behind it yet) falls through unchanged to the existing drawingTool.deleteSelected()
+// -- same "leave drafts alone" rule Step 3's duplicate branch already established.
+function deleteCurrentSelection(){
+  const selection=drawingTool.activeSelection;
+  if(selection&&selection.kind==='region'){
+    deleteRegionFromPathLayer(selection.layerId,selection.regionId);
+    drawingTool.clearActiveSelection();
+    return;
+  }
+  drawingTool.deleteSelected();
+}
+el('actionDelete').onclick=()=>deleteCurrentSelection();
 function saveProjectDownload(){el('exportProject').click()}
 el('actionSave').onclick=saveProjectDownload;
 el('saveProject').onclick=saveProjectDownload;

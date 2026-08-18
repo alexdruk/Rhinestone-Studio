@@ -323,7 +323,35 @@ await test('14. Actions section: Undo, Redo, Duplicate selected, Delete selected
   }
   assert.ok(actionDuplicateBody !== null, "expected to find the matching closing \"}\" of actionDuplicate's onclick handler in app.js");
   assert.match(actionDuplicateBody, /duplicateLayer\(selectedLayerId\)/, 'expected the actionDuplicate handler to still fall through to duplicateLayer(selectedLayerId)');
-  assert.match(appJs, /el\('actionDelete'\)\.onclick=\(\)=>deleteLayer\(selectedLayerId\)/);
+  // RS-3013 Step 4: actionDelete's handler is now a one-line dispatch to the shared
+  // deleteCurrentSelection() helper (also used by the Design keydown Delete/Backspace branch), which
+  // itself branches on drawingTool.activeSelection.kind==='region' to delete just that region via
+  // deleteRegionFromPathLayer(), falling through to the ORIGINAL drawingTool.deleteSelected() call
+  // otherwise. Same brace-balanced extraction pattern as actionDuplicateBody immediately above (not a
+  // literal-onclick pin, not a fixed-end-marker slice) so this survives reformatting/reordering
+  // around it; the real invariant is that the shared helper still knows how to delete a region AND
+  // still falls through to drawingTool.deleteSelected() for everything else.
+  assert.match(appJs, /el\('actionDelete'\)\.onclick=\(\)=>deleteCurrentSelection\(\)/, 'expected actionDelete to dispatch through the shared deleteCurrentSelection() helper');
+  const deleteCurrentSelectionMarker = 'function deleteCurrentSelection(){';
+  const deleteCurrentSelectionStart = appJs.indexOf(deleteCurrentSelectionMarker);
+  assert.ok(deleteCurrentSelectionStart !== -1, 'expected to find "function deleteCurrentSelection(){" in app.js');
+  const deleteCurrentSelectionBraceStart = appJs.indexOf('{', deleteCurrentSelectionStart);
+  let deleteBraceDepth = 0;
+  let deleteCurrentSelectionBody = null;
+  for (let i = deleteCurrentSelectionBraceStart; i < appJs.length; i++) {
+    if (appJs[i] === '{') deleteBraceDepth++;
+    else if (appJs[i] === '}') {
+      deleteBraceDepth--;
+      if (deleteBraceDepth === 0) {
+        deleteCurrentSelectionBody = appJs.slice(deleteCurrentSelectionBraceStart + 1, i);
+        break;
+      }
+    }
+  }
+  assert.ok(deleteCurrentSelectionBody !== null, 'expected to find the matching closing "}" of deleteCurrentSelection() in app.js');
+  assert.match(deleteCurrentSelectionBody, /deleteRegionFromPathLayer\(/, 'expected deleteCurrentSelection() to delete just the region when one is selected');
+  assert.match(deleteCurrentSelectionBody, /drawingTool\.clearActiveSelection\(\)/, 'expected deleteCurrentSelection() to clear selection after a region delete');
+  assert.match(deleteCurrentSelectionBody, /drawingTool\.deleteSelected\(\)/, 'expected deleteCurrentSelection() to still fall through to drawingTool.deleteSelected()');
   assert.match(appJs, /el\('actionSave'\)\.onclick=saveProjectDownload/);
   const historyUi = appJs.match(/function updateHistoryUI\(\)\{([\s\S]*?)\n\}/);
   assert.ok(historyUi, 'expected updateHistoryUI()');
