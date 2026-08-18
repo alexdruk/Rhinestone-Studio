@@ -84,5 +84,6 @@ export {
 
 export {
   selectPaintTarget,
-  absolutePolygonsToNaturalSpace
+  absolutePolygonsToNaturalSpace,
+  hitTestPathLayerRegion
 } from './PaintRegionSelection.js';

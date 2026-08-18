@@ -85,7 +85,7 @@
 // pipeline stages re-run on every threshold/invert/blur/resize edit, but the (comparatively
 // expensive) browser image decode only ever runs once per distinct imageSrc value.
 import './src/browser/BrowserDependencyProbe.js';
-import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace } from './src/geometry/index.js';
+import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace, hitTestPathLayerRegion } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
 import { createDefaultFontProviderRegistry, createDefaultRhinestoneFontRegistry, BoundingBox } from './src/text/index.js';
 import { renderProductionLayout, renderStoneLayout, fitTransform } from './src/renderer/CanvasRenderer2D.js';
@@ -201,7 +201,9 @@ const ARROW_KEY_DELTAS={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDo
 // all already taken, and T is the natural mnemonic for "Trace" itself. RS-3011 Step 13: X=Eraser
 // (confirmed free elsewhere in the global keydown handler below) -- V/B/R/E/S/G/P/F/M/T are all
 // already taken, X reads as a "cross out/remove" mnemonic.
-const DRAW_TOOL_SHORTCUT_KEYS={v:'select',b:'freehand',r:'rect',e:'ellipse',s:'slot',g:'polygon',p:'pen',f:'paint',m:'stamp',t:'trace',x:'eraser'};
+// RS-3013 Step 1: L=Lasso (confirmed free elsewhere in the global keydown handler below) --
+// V/B/R/E/S/G/P/F/M/T/X are all already taken, L is the natural mnemonic for "Lasso" itself.
+const DRAW_TOOL_SHORTCUT_KEYS={v:'select',l:'lasso',b:'freehand',r:'rect',e:'ellipse',s:'slot',g:'polygon',p:'pen',f:'paint',m:'stamp',t:'trace',x:'eraser'};
 // RS-1005: pixels-per-mm used only when rasterizing the Production Sheet SVG to PNG. Fixed and
 // documented (not derived from devicePixelRatio/viewport fit) so the PNG's pixel dimensions are
 // always a clean, undistorted multiple of the page's mm size -- never a fit-to-viewport scale.
@@ -931,6 +933,48 @@ const traceSettings={sizeMm:2,gapMm:0.3,color:'gold'};
 let traceStyleSeeded=false;
 const paintSettings={sizeMm:2,gapMm:0.3,color:'gold'};
 let paintStyleSeeded=false;
+// RS-3013 Step 1: the target-shape resolution Paint's own onPaintStroke below needs (best-overlap-
+// by-area, two-pass: a fallback-spacing pass to pick a winner, then that winner's own stoneSize+gap
+// for a precise intersection) is the EXACT SAME resolution Select's rectangle-drag and Lasso's own
+// drag need too (see the new resolveSelectionTarget hook below) -- extracted here so both go
+// through one implementation rather than two copies of the same selectPaintTarget() choreography.
+// Returns null wherever either pass would have (no candidate overlaps at all, or the second pass's
+// own intersection comes back empty) -- callers that want a console message for the common "lasso
+// touched nothing" case (onPaintStroke) log it themselves.
+function resolvePaintTargetTwoPass(polygonsAbsoluteMm){
+  if(!permanentEngine)return null;
+  const candidates=project.layers.filter(l=>l.type==='path'&&l.visible!==false).map(l=>({
+    layerId:l.id,
+    // RS-3014 Step 3: naturalBoundingBoxMm forwarded so a previously-cut layer's candidate
+    // polygon reflects its true (frozen-box-anchored) visible shape, not one stretched back to
+    // its unchanged x/y/w/h -- without this, selectPaintTarget()'s own intersection below would
+    // compute against a shape wider than what's actually on screen, letting a region extend past
+    // the shape's real (cut) boundary even after absolutePolygonsToNaturalSpace()'s own fix.
+    polygons:permanentEngine.resolvePathPolygons({
+      contours:l.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),
+      layerId:l.id,xMm:l.x,yMm:l.y,widthMm:l.w,heightMm:l.h,naturalBoundingBoxMm:l.naturalBoundingBoxMm
+    }).polygons
+  }));
+  // First pass: which candidate does the stroke/rectangle overlap most? The exact grid resolution
+  // barely matters for THIS decision (only for the stored contour's precision, refined below once
+  // the target is known) -- the currently-selected layer's own stone spacing is a reasonable,
+  // already-established fallback (same convention getStoneDefaults() above uses for a brand-new
+  // shape).
+  const fallback=selectedLayer();
+  const firstPass=selectPaintTarget(polygonsAbsoluteMm,candidates,{targetSpacingMm:(fallback.stoneSize||2)+(fallback.gap||.3)});
+  if(!firstPass)return null;
+  const targetLayer=project.layers.find(l=>l.id===firstPass.layerId);
+  const targetCandidate=candidates.find(c=>c.layerId===firstPass.layerId);
+  if(!targetLayer||!targetCandidate)return null;
+  // Second pass, against ONLY the winning candidate, at ITS OWN stone spacing -- once a target is
+  // known, its own stoneSize+gap are authoritative for grid resolution (per Paint's own original
+  // step prompt), not the fallback used to pick it above. One extra combineShapeSources() call per
+  // gesture (not per frame) is an accepted cost -- see PaintRegionSelection.js's own targetSpacingMm
+  // doc comment.
+  const result=selectPaintTarget(polygonsAbsoluteMm,[targetCandidate],{targetSpacingMm:targetLayer.stoneSize+targetLayer.gap});
+  if(!result)return null;
+  return{layerId:targetLayer.id,contours:result.contours};
+}
 // RS-3010 Step 1: one drawing tool bound to layoutCanvas for the app's lifetime -- it lazily calls
 // paper.setup() on first enter() and only pauses/resumes afterward (see DrawingCanvasTool.js's own
 // header comment for why), so constructing it eagerly here does not touch the canvas until the
@@ -973,37 +1017,10 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // onShapeCommitted() above always calls it.
   onPaintStroke:async(lassoPolygons)=>{
     updateDrawToolButtons();
-    if(!permanentEngine)return;
-    const candidates=project.layers.filter(l=>l.type==='path'&&l.visible!==false).map(l=>({
-      layerId:l.id,
-      // RS-3014 Step 3: naturalBoundingBoxMm forwarded so a previously-cut layer's candidate
-      // polygon reflects its true (frozen-box-anchored) visible shape, not one stretched back to
-      // its unchanged x/y/w/h -- without this, selectPaintTarget()'s own intersection below would
-      // compute against a shape wider than what's actually on screen, letting a region extend past
-      // the shape's real (cut) boundary even after absolutePolygonsToNaturalSpace()'s own fix.
-      polygons:permanentEngine.resolvePathPolygons({
-        contours:l.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),
-        layerId:l.id,xMm:l.x,yMm:l.y,widthMm:l.w,heightMm:l.h,naturalBoundingBoxMm:l.naturalBoundingBoxMm
-      }).polygons
-    }));
-    // First pass: which candidate does the lasso overlap most? The exact grid resolution barely
-    // matters for THIS decision (only for the stored contour's precision, refined below once the
-    // target is known) -- the currently-selected layer's own stone spacing is a reasonable,
-    // already-established fallback (same convention getStoneDefaults() above uses for a brand-new
-    // shape).
-    const fallback=selectedLayer();
-    const firstPass=selectPaintTarget(lassoPolygons,candidates,{targetSpacingMm:(fallback.stoneSize||2)+(fallback.gap||.3)});
-    if(!firstPass){console.info('Paint: lasso overlaps no path layer, discarding stroke.');return;}
-    const targetLayer=project.layers.find(l=>l.id===firstPass.layerId);
-    const targetCandidate=candidates.find(c=>c.layerId===firstPass.layerId);
-    if(!targetLayer||!targetCandidate)return;
-    // Second pass, against ONLY the winning candidate, at ITS OWN stone spacing -- once a target is
-    // known, its own stoneSize+gap are authoritative for grid resolution (per this step's own
-    // prompt), not the fallback used to pick it above. One extra combineShapeSources() call per
-    // lasso release (not per frame) is an accepted cost -- see PaintRegionSelection.js's own
-    // targetSpacingMm doc comment.
-    const result=selectPaintTarget(lassoPolygons,[targetCandidate],{targetSpacingMm:targetLayer.stoneSize+targetLayer.gap});
-    if(!result)return;
+    const resolved=resolvePaintTargetTwoPass(lassoPolygons);
+    if(!resolved){console.info('Paint: lasso overlaps no path layer, discarding stroke.');return;}
+    const targetLayer=project.layers.find(l=>l.id===resolved.layerId);
+    if(!targetLayer)return;
     // RS-3011 Step 10b DECISION (Sasha delegated, confirmed during scoping): a lasso crossing a
     // concave notch or a hole can genuinely intersect its target in multiple disjoint pieces --
     // create ONE region per disjoint contour rather than keeping only the largest piece or
@@ -1013,7 +1030,7 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     // the whole stroke is one undo step. absolutePolygonsToNaturalSpace() is called once with every
     // contour together (not once per contour) since it applies the identical transform to each ring
     // regardless -- an efficiency choice, not a behavior difference from calling it per-contour.
-    const naturalContours=absolutePolygonsToNaturalSpace(result.contours,targetLayer);
+    const naturalContours=absolutePolygonsToNaturalSpace(resolved.contours,targetLayer);
     // RS-3014 Step 1: the new region(s)' own decoration style now comes from Paint's own independent
     // paintSettings, NOT targetLayer's current stoneSize/gap/color -- unlike the two
     // targetSpacingMm calls above (selectPaintTarget()'s boolean-geometry grid resolution, a
@@ -1034,6 +1051,25 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     await updateAll(true);
     el('status').textContent=`Painted ${newRegions.length} region${newRegions.length===1?'':'s'} on ${layerLabel(targetLayer)}.`;
   },
+  // RS-3013 Step 1: Select's rectangle-drag and Lasso's own drag both resolve their target shape
+  // through this hook -- the EXACT SAME selectPaintTarget() two-pass resolution onPaintStroke()
+  // above uses (resolvePaintTargetTwoPass(), shared rather than duplicated), just returning the
+  // result instead of ever touching project.layers: this milestone's drag gestures only produce a
+  // transient in-memory selection (activeSelection, DrawingCanvasTool.js's own state), never a real
+  // region -- that stays Paint's job alone. DrawingCanvasTool.js clips the returned `contours` to
+  // build Lasso's own draft polygon (this milestone's clip-at-creation decision for Lasso); Select's
+  // own rectangle-drag reuses only `.layerId` and stores the drawn rectangle unclipped -- see that
+  // file's own onMouseUp 'lasso'/'selectRect' branches for exactly how each consumes this result.
+  resolveSelectionTarget:(polygonsAbsoluteMm)=>resolvePaintTargetTwoPass(polygonsAbsoluteMm),
+  // RS-3013 Step 1: region click-select's own hit-test. DrawingCanvasTool.js never touches
+  // project.layers directly (this milestone's own architecture split, same rule Paint's
+  // onPaintStroke above already follows) -- a region lives entirely in project.layers[].regions, so
+  // resolving "which region does this point land on" has to happen here, delegated in one line to
+  // hitTestPathLayerRegion() (src/geometry/PaintRegionSelection.js), the same natural-to-absolute
+  // placement transform GeometryEngine's own _applyPathRegions() uses to place a region for stone
+  // generation. marginMm arrives already converted from screen-px by the caller (DrawingCanvasTool.js's
+  // own screen-px-to-project-mm convention, see that file's REGION_HIT_MARGIN_PX).
+  hitTestRegion:(pointAbsoluteMm,marginMm)=>hitTestPathLayerRegion(pointAbsoluteMm,project.layers.filter(l=>l.type==='path'&&l.visible!==false),marginMm),
   // RS-3011 Step 12: Stamp's own finalize hook -- fires once per click (see DrawingCanvasTool.js's
   // own onStampPlace doc comment for the exact {xMm,yMm,layerId} contract; layerId is already
   // resolved there via the same hitTestShapeId() Select's own click-to-pick-a-shape branch uses).
@@ -3856,6 +3892,7 @@ function updateDrawToolButtons(){
   // RS-3010 Design Step A correction: the old horizontal row's five preset buttons are gone --
   // these two rails (split left/right) are now the only aria-pressed sync targets.
   el('railSelectToggle').setAttribute('aria-pressed',String(active&&mode==='select'));
+  el('railLassoToggle').setAttribute('aria-pressed',String(active&&mode==='lasso'));
   el('railDrawToggle').setAttribute('aria-pressed',String(active&&mode==='freehand'));
   el('railRectToggle').setAttribute('aria-pressed',String(active&&mode==='rect'));
   el('railEllipseToggle').setAttribute('aria-pressed',String(active&&mode==='ellipse'));
@@ -3971,6 +4008,7 @@ function setDrawTool(mode){
 }
 el('drawSlotWidthMm').oninput=()=>drawingTool.setSlotWidthMm(el('drawSlotWidthMm').value);
 el('railSelectToggle').onclick=()=>setDrawTool('select');
+el('railLassoToggle').onclick=()=>setDrawTool('lasso');
 el('railDrawToggle').onclick=()=>setDrawTool('freehand');
 el('railRectToggle').onclick=()=>setDrawTool('rect');
 el('railEllipseToggle').onclick=()=>setDrawTool('ellipse');

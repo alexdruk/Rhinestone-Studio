@@ -285,3 +285,8 @@ tools/scratch/rs3014-step4-eraser-followups-verify/
 # Eraser edge-hugging-drag target-resolution fix (resolveEraserTargetLayerId), same "never a repo
 # artifact" category as the scratch folders above
 tools/scratch/rs3014-step5-eraser-edge-target-fix-verify/
+
+# RS-3013 Step 1: ad hoc geometry + live-browser Playwright verification scripts/screenshots for
+# Select/Lasso as twin selection tools, same "never a repo artifact" category as the scratch
+# folders above
+tools/scratch/rs3013-step1-select-lasso-verify/

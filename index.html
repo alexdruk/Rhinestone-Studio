@@ -493,7 +493,12 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
              drawingTool.isActive like drawModeHint -- unlike the single-rail version,
              there's no chicken-and-egg problem anymore. -->
         <div class="design-tool-rail rail-left" id="designToolRailLeft" style="display:none" aria-label="Design tools (general)">
-          <button class="icon-btn" id="railSelectToggle" title="Select (click/shift-click to multi-select, drag to move) (V)" aria-pressed="false">↖ Select</button>
+          <button class="icon-btn" id="railSelectToggle" title="Select (click/shift-click to multi-select, drag to move; drag empty canvas to select a region, Shift+drag to marquee-select layers) (V)" aria-pressed="false">↖ Select</button>
+          <!-- RS-3013 Step 1: Select's twin selection tool -- same click-to-select-a-region/shape
+               behavior as Select above, but a drag draws a lasso (clipped to its target shape) instead
+               of a rectangle. Stays active after each action, same rail-button/aria-pressed convention
+               as Paint/Stamp/Trace/Eraser below, not a one-shot creation tool. -->
+          <button class="icon-btn" id="railLassoToggle" title="Lasso (click to select a region/shape, same as Select; drag a lasso to select part of a shape) (L)" aria-pressed="false">➰ Lasso</button>
           <button class="icon-btn" id="railDrawToggle" title="Draw a custom freehand shape directly on the canvas (B)" aria-pressed="false">✏️ Draw</button>
           <button class="icon-btn" id="railPenToggle" title="Pen -- draw straight/curved paths (click for a straight anchor, drag to curve, click back on the last anchor to reset a corner, click back on the first anchor to close) (P)" aria-pressed="false">✒️ Pen</button>
           <button class="icon-btn" id="railPaintToggle" title="Paint -- drag a lasso over part of a shape to give that area its own stone size/spacing/color (F)" aria-pressed="false">🪣 Paint</button>
