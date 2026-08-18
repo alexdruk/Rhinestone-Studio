@@ -3251,6 +3251,17 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     },
 
     /**
+     * RS-3013 Step 4: the write-through target for app.js's own deleteCurrentSelection() -- a public
+     * wrapper around setActiveSelection(null), mirroring setActiveSelectionToRegion() immediately
+     * above in spirit (a small public surface for an app.js-initiated action to reach in and update
+     * selection state directly), just for the "clear" case (a deleted region leaves nothing selected)
+     * instead of the "select the new copy" case.
+     */
+    clearActiveSelection() {
+      setActiveSelection(null);
+    },
+
+    /**
      * RS-3014 Step 3: the write-through target for an Outline-mode Eraser cut -- the first thing to
      * ever mutate a LIVE 'path' layer's own `contours` after commit (see app.js's onEraseSweep()).
      * Every other project.layers write that reaches this file (stoneSize/gap/color/fillMode via
