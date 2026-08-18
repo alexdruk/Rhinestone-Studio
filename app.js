@@ -85,7 +85,7 @@
 // pipeline stages re-run on every threshold/invert/blur/resize edit, but the (comparatively
 // expensive) browser image decode only ever runs once per distinct imageSrc value.
 import './src/browser/BrowserDependencyProbe.js';
-import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace, hitTestPathLayerRegion, computeNaturalContourTransform, applyNaturalContourTransform } from './src/geometry/index.js';
+import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace, hitTestPathLayerRegion, computeNaturalContourTransform, applyNaturalContourTransform, isPointInsidePolygons } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
 import { createDefaultFontProviderRegistry, createDefaultRhinestoneFontRegistry, BoundingBox } from './src/text/index.js';
 import { renderProductionLayout, renderStoneLayout, fitTransform } from './src/renderer/CanvasRenderer2D.js';
@@ -1130,6 +1130,63 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // draw preset, `mode` is deliberately left at 'stamp' either way: Stamp is a repeatable
   // click-to-place action (like an image editor's own stamp tool), not a one-shot commit-then-
   // revert-to-Select gesture, so there's no updateDrawToolButtons() call here either.
+  // RS-3012 Step 1: Stamp/Trace's own selection-boundary test -- called with the raw click/drag
+  // point (absolute project-mm) and DrawingCanvasTool.js's own live `activeSelection` value (passed
+  // straight through, not re-read via drawingTool.activeSelection, since the caller already has it
+  // in scope the same way onStampPlace/onTracePlace's own layerId is already resolved by the time
+  // they're called). Mirrors hitTestRegion's own architecture split immediately above: a region's
+  // geometry lives in project.layers[].regions, so 'region'-kind selections resolve through the SAME
+  // layer/region lookup + computeNaturalContourTransform()/applyNaturalContourTransform() chain
+  // onRegionMoved above already uses, deriving the region's CURRENT absolute polygon (a region's own
+  // contour is natural-space and can shift with its parent shape) before testing with
+  // isPointInsidePolygons() (single ring, wrapped as [polygon], same convention
+  // hitTestPathLayerRegion() itself uses internally via isPointNearPolygon()). 'draft'-kind
+  // selections carry their own already-absolute-mm geometry directly on boundsOrContour -- no
+  // project.layers lookup needed -- so a rect draft gets a plain axis-aligned bounds test and a
+  // lasso draft's boundsOrContour (already the clipped {xMm,yMm}[][] contours
+  // resolveSelectionTarget's own selectPaintTarget() resolution produced at creation time) goes
+  // straight into isPointInsidePolygons() unwrapped, preserving any holes exactly like the region
+  // case. No margin/tolerance anywhere here (unlike REGION_HIT_MARGIN_PX's own click-forgiveness) --
+  // a hard interior test, since this gates whether a stone gets placed at all, not whether a click
+  // located something to select.
+  isPointInActiveSelection:(pointAbsoluteMm,selection)=>{
+    if(!selection)return true;
+    if(selection.kind==='region'){
+      const targetLayer=project.layers.find(l=>l.id===selection.layerId&&l.type==='path');
+      if(!targetLayer)return false;
+      const region=(targetLayer.regions||[]).find(r=>r.id===selection.regionId);
+      if(!region)return false;
+      const naturalContours=targetLayer.contours.map(contour=>contour.map(p=>({xMm:p.x,yMm:p.y})));
+      const transform=computeNaturalContourTransform(naturalContours,targetLayer.x,targetLayer.y,targetLayer.w,targetLayer.h,targetLayer.naturalBoundingBoxMm);
+      if(!transform)return false;
+      const polygon=applyNaturalContourTransform(region.contour,transform);
+      return isPointInsidePolygons(pointAbsoluteMm,[polygon]);
+    }
+    if(selection.kind==='draft'){
+      if(selection.shapeKind==='rect'){
+        const b=selection.boundsOrContour;
+        return pointAbsoluteMm.xMm>=b.left&&pointAbsoluteMm.xMm<=b.left+b.width&&pointAbsoluteMm.yMm>=b.top&&pointAbsoluteMm.yMm<=b.top+b.height;
+      }
+      if(selection.shapeKind==='lasso'){
+        return isPointInsidePolygons(pointAbsoluteMm,selection.boundsOrContour);
+      }
+    }
+    return true;
+  },
+  // RS-3012 Step 1: fires instead of onStampPlace when a click resolves outside the active
+  // selection's own boundary -- no history session, no stone placed, matching decided item 2's
+  // "reject with feedback" contract (never silent, never "allow anyway").
+  onStampRejected:()=>{
+    el('status').textContent='Stamp: click is outside the current selection.';
+  },
+  // RS-3012 Step 1: fires instead of onTracePlace when EVERY point of a committed Trace drag falls
+  // outside the active selection's own boundary (the filtered placements list is empty) -- no
+  // history session, no stones placed. Deliberately distinct from today's pre-existing "fewer than 2
+  // buffered points" silent discard (DrawingCanvasTool.js's own trace mouseup branch) -- that discard
+  // has no message; a selection-caused empty result must not be silent, per decided item 2.
+  onTraceRejected:()=>{
+    el('status').textContent='Trace: entire stroke was outside the selection.';
+  },
   onStampPlace:async({xMm,yMm,layerId})=>{
     if(!layerId)return;
     const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
@@ -1174,7 +1231,12 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // drawn line is one undo step (mirrors Paint's own "one lasso -> N regions -> one commit"
   // precedent). Like Stamp, `mode` is deliberately left at 'trace' either way -- Trace stays active
   // after each committed line, so there's no updateDrawToolButtons() call here either.
-  onTracePlace:async(placements,layerId)=>{
+  // RS-3012 Step 1: droppedCount is a new, optional 3rd argument -- how many of the drag's own
+  // originally-spaced points DrawingCanvasTool.js filtered out for landing outside an active
+  // selection, before this hook ever saw them (0/undefined when no selection was active, the
+  // byte-identical-to-before case). Only changes the status message below; every mutation/placement
+  // path is otherwise untouched from RS-3011 Step 11.
+  onTracePlace:async(placements,layerId,droppedCount=0)=>{
     if(!layerId||!placements.length)return;
     const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
     if(!targetLayer)return;
@@ -1200,7 +1262,9 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     targetLayer.stampedStones.push(...stamps);
     drawingTool.refreshStoneGroupForLayer(targetLayer.id);
     await updateAll(true);
-    el('status').textContent=`Traced ${stamps.length} stone${stamps.length===1?'':'s'} on ${layerLabel(targetLayer)}.`;
+    el('status').textContent=droppedCount>0
+      ?`Traced ${stamps.length} stone${stamps.length===1?'':'s'} (${droppedCount} outside selection, skipped).`
+      :`Traced ${stamps.length} stone${stamps.length===1?'':'s'} on ${layerLabel(targetLayer)}.`;
   },
   // RS-3011 Step 13: Eraser's own finalize hook -- fires once per committed click/drag sweep (see
   // DrawingCanvasTool.js's own onEraseSweep doc comment for the exact (daubsAbsoluteMm,layerId)
