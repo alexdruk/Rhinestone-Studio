@@ -303,3 +303,8 @@ tools/scratch/rs3013-step3-region-copy-verify/
 # RS-3013 Step 4: ad hoc live-browser Playwright verification scripts/screenshots for region-level
 # delete, same "never a repo artifact" category as the scratch folders above
 tools/scratch/rs3013-step4-region-delete-verify/
+
+# RS-3013 Step 5: ad hoc live-browser Playwright verification scripts/screenshots for per-region
+# stone-spec editing (Inspector stoneSize/gap/color/fillMode), same "never a repo artifact"
+# category as the scratch folders above
+tools/scratch/rs3013-step5-region-spec-editing-verify/
