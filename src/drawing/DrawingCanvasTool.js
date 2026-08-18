@@ -1666,6 +1666,34 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     });
   }
 
+  /**
+   * RS-3013 Step 2 fix: the shared region-first drag-start check, called from Select's own
+   * onMouseDown branch (AFTER its resize-handle check -- see that call site's own comment for why)
+   * and from Lasso's own branch (which has no resize-handle concept, so this runs unconditionally
+   * there). Factored out rather than duplicated inline at both call sites. On a hit: clears any
+   * shape multi-selection, sets activeSelection to the region, starts a 'moveRegion' drag, and
+   * returns true so the caller can return immediately without falling through to its own next
+   * hit-test. Returns false (no state touched) when `point` hits no region.
+   * @param {paper.Point} point
+   * @returns {boolean}
+   */
+  function tryStartRegionMove(point) {
+    const regionHit = hitTestRegion({ xMm: point.x, yMm: point.y }, REGION_HIT_MARGIN_PX / paper.view.zoom);
+    if (!regionHit) return false;
+    if (selectedIds.size) {
+      selectedIds = clearSelection();
+      applySelectionVisuals();
+      updateResizeHandles();
+      notifySelectionChanged();
+    }
+    setActiveSelection({ kind: 'region', layerId: regionHit.layerId, regionId: regionHit.regionId }, [
+      regionHit.polygon
+    ]);
+    interactionKind = 'moveRegion';
+    dragStart = point;
+    return true;
+  }
+
   function attachTool() {
     if (tool) tool.remove();
     tool = new paper.Tool();
@@ -1795,31 +1823,15 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       // instead. Gating on `mode === 'select'` (positive check) rather than an exclusion list means
       // a future new tool can't reintroduce this bug by omission -- it's opted out by default and
       // must explicitly opt in.
-      // RS-3013 Step 2: a drag starting on an existing region's own footprint must move the region,
-      // not fall through to the parent shape (Select mode's own hitTestShapeId/'move' branch below)
-      // or start a fresh lasso stroke over it (Lasso mode's own branch further below) -- mirrors
-      // performClickDispatch()'s own region-first precedent, checked before either mode's existing
-      // hit-test/gesture-start logic. Scoped to Select/Lasso only, same "twin selection tools" pairing
-      // this file already treats identically elsewhere.
-      if (mode === 'select' || mode === 'lasso') {
-        const regionHit = hitTestRegion(
-          { xMm: event.point.x, yMm: event.point.y },
-          REGION_HIT_MARGIN_PX / paper.view.zoom
-        );
-        if (regionHit) {
-          if (selectedIds.size) {
-            selectedIds = clearSelection();
-            applySelectionVisuals();
-            updateResizeHandles();
-            notifySelectionChanged();
-          }
-          setActiveSelection({ kind: 'region', layerId: regionHit.layerId, regionId: regionHit.regionId }, [
-            regionHit.polygon
-          ]);
-          interactionKind = 'moveRegion';
-          dragStart = event.point;
-          return;
-        }
+      // RS-3013 Step 2: Lasso's own region-first drag-start check -- a drag starting on an existing
+      // region's own footprint must move the region, not start a fresh lasso stroke over it (mirrors
+      // performClickDispatch()'s own region-first precedent). Lasso has no resize-handle concept at
+      // all, so this runs unconditionally, before any of Lasso's own gesture-start logic further
+      // below. Select's own version of this same check lives INSIDE the mode === 'select' branch
+      // just below, AFTER its resize-handle check -- see that call site's own comment for why the
+      // ordering there differs (RS-3013 Step 2 fix: Design Step D's "handle must win" invariant).
+      if (mode === 'lasso' && tryStartRegionMove(event.point)) {
+        return;
       }
       if (mode === 'select') {
         // Design Step D: a resize handle can sit right at a shape's edge, where both it and the
@@ -1840,6 +1852,20 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           // this on every rAF-throttled rebuild below for as long as this resize stays in progress.
           const stoneGroup = stoneGroups.get(shape.id);
           if (stoneGroup) stoneGroup.visible = false;
+          return;
+        }
+        // RS-3013 Step 2 fix: region-first check runs HERE, after the resize-handle check above --
+        // both hit-tests use the numerically identical 4/paper.view.zoom tolerance
+        // (REGION_HIT_MARGIN_PX above; hitTestResizeHandle()'s own `tolerance` constant), and a
+        // region painted flush against its parent shape's own edge (a documented, ordinary case --
+        // see PaintRegionSelection.js's own "thin sliver clipped hard against the shape's edge" doc
+        // comment) can sit within that tolerance of a handle position, at a corner/edge-midpoint
+        // where a flush-clipped region is most likely to land a contour point. Checking the handle
+        // first restores Design Step D's own "handle must win" invariant, which this step's original
+        // region-first-of-everything ordering broke. Still runs BEFORE hitTestShapeId()/'move' below,
+        // so a region still wins over dragging the shape body underneath it -- that ordering is
+        // unchanged and correct, this step's own actual goal.
+        if (tryStartRegionMove(event.point)) {
           return;
         }
         const hitId = hitTestShapeId(event.point);
@@ -3443,6 +3469,18 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         ? activeSelectionItem.children
         : [activeSelectionItem];
       return paths.map((path) => path.segments.map((segment) => ({ xMm: segment.point.x, yMm: segment.point.y })));
+    },
+
+    /**
+     * RS-3013 Step 2 fix: QA/verification-only, read-only -- same precedent as debugGrid/
+     * debugHitTestShapeId/debugShapes/debugActiveSelectionOutline above. Reads the module-private
+     * `interactionKind` directly (raw string, e.g. 'move'/'resize'/'moveRegion', or null when idle) --
+     * lets a mousedown-ordering verification (resize-handle vs. region-first) confirm exactly which
+     * drag was actually started, not just infer it from side effects.
+     * @returns {string|null}
+     */
+    get debugInteractionKind() {
+      return interactionKind;
     },
 
     /**
