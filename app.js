@@ -933,6 +933,15 @@ const traceSettings={sizeMm:2,gapMm:0.3,color:'gold'};
 let traceStyleSeeded=false;
 const paintSettings={sizeMm:2,gapMm:0.3,color:'gold'};
 let paintStyleSeeded=false;
+// Bugfix (BooleanPrecisionError at the gesture boundary): the sentinel resolvePaintTargetTwoPass()
+// returns when a selectPaintTarget() call below throws BooleanPrecisionError (a small/precise
+// stroke against a much larger candidate shape -- see PathBoolean.js's own computeAdaptiveCellSizeMm()
+// doc comment) instead of resolving normally. Deliberately NOT null: null already means "genuinely
+// overlaps nothing," a different case that must keep its own existing (silent/no-status-change)
+// handling -- callers duck-type on `.precisionError` (a plain object, not a class/Symbol, so
+// DrawingCanvasTool.js can recognize it without importing anything from this module, matching this
+// codebase's existing resolveSelectionTarget/hitTestRegion plain-object-contract convention).
+const PAINT_TARGET_PRECISION_ERROR=Object.freeze({precisionError:true});
 // RS-3013 Step 1: the target-shape resolution Paint's own onPaintStroke below needs (best-overlap-
 // by-area, two-pass: a fallback-spacing pass to pick a winner, then that winner's own stoneSize+gap
 // for a precise intersection) is the EXACT SAME resolution Select's rectangle-drag and Lasso's own
@@ -940,7 +949,10 @@ let paintStyleSeeded=false;
 // through one implementation rather than two copies of the same selectPaintTarget() choreography.
 // Returns null wherever either pass would have (no candidate overlaps at all, or the second pass's
 // own intersection comes back empty) -- callers that want a console message for the common "lasso
-// touched nothing" case (onPaintStroke) log it themselves.
+// touched nothing" case (onPaintStroke) log it themselves. Bugfix: returns the distinct
+// PAINT_TARGET_PRECISION_ERROR sentinel above instead of null when either selectPaintTarget() call
+// throws BooleanPrecisionError -- any other error type is rethrown unchanged, this function only
+// ever absorbs this one specific, known error class.
 function resolvePaintTargetTwoPass(polygonsAbsoluteMm){
   if(!permanentEngine)return null;
   const candidates=project.layers.filter(l=>l.type==='path'&&l.visible!==false).map(l=>({
@@ -961,7 +973,13 @@ function resolvePaintTargetTwoPass(polygonsAbsoluteMm){
   // already-established fallback (same convention getStoneDefaults() above uses for a brand-new
   // shape).
   const fallback=selectedLayer();
-  const firstPass=selectPaintTarget(polygonsAbsoluteMm,candidates,{targetSpacingMm:(fallback.stoneSize||2)+(fallback.gap||.3)});
+  let firstPass;
+  try{
+    firstPass=selectPaintTarget(polygonsAbsoluteMm,candidates,{targetSpacingMm:(fallback.stoneSize||2)+(fallback.gap||.3)});
+  }catch(error){
+    if(!(error instanceof BooleanPrecisionError))throw error;
+    return PAINT_TARGET_PRECISION_ERROR;
+  }
   if(!firstPass)return null;
   const targetLayer=project.layers.find(l=>l.id===firstPass.layerId);
   const targetCandidate=candidates.find(c=>c.layerId===firstPass.layerId);
@@ -971,7 +989,13 @@ function resolvePaintTargetTwoPass(polygonsAbsoluteMm){
   // step prompt), not the fallback used to pick it above. One extra combineShapeSources() call per
   // gesture (not per frame) is an accepted cost -- see PaintRegionSelection.js's own targetSpacingMm
   // doc comment.
-  const result=selectPaintTarget(polygonsAbsoluteMm,[targetCandidate],{targetSpacingMm:targetLayer.stoneSize+targetLayer.gap});
+  let result;
+  try{
+    result=selectPaintTarget(polygonsAbsoluteMm,[targetCandidate],{targetSpacingMm:targetLayer.stoneSize+targetLayer.gap});
+  }catch(error){
+    if(!(error instanceof BooleanPrecisionError))throw error;
+    return PAINT_TARGET_PRECISION_ERROR;
+  }
   if(!result)return null;
   return{layerId:targetLayer.id,contours:result.contours};
 }
@@ -1018,6 +1042,15 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   onPaintStroke:async(lassoPolygons)=>{
     updateDrawToolButtons();
     const resolved=resolvePaintTargetTwoPass(lassoPolygons);
+    // Bugfix: distinct from the "genuinely overlaps nothing" case right below -- this stroke DID
+    // overlap a candidate, but the intersection couldn't be computed at a safe precision (see
+    // PAINT_TARGET_PRECISION_ERROR's own doc comment). No region created, no history entry, same
+    // "no mutation happened" behavior as the null case, just a status message that tells the user
+    // WHY instead of leaving Paint looking unresponsive.
+    if(resolved===PAINT_TARGET_PRECISION_ERROR){
+      el('status').textContent='Paint: this stroke is too small/precise for a shape this large — try a bigger area.';
+      return;
+    }
     if(!resolved){console.info('Paint: lasso overlaps no path layer, discarding stroke.');return;}
     const targetLayer=project.layers.find(l=>l.id===resolved.layerId);
     if(!targetLayer)return;
@@ -1060,7 +1093,20 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // build Lasso's own draft polygon (this milestone's clip-at-creation decision for Lasso); Select's
   // own rectangle-drag reuses only `.layerId` and stores the drawn rectangle unclipped -- see that
   // file's own onMouseUp 'lasso'/'selectRect' branches for exactly how each consumes this result.
+  // Bugfix: a straight passthrough of resolvePaintTargetTwoPass()'s own return value, so the
+  // PAINT_TARGET_PRECISION_ERROR sentinel (see that function's own doc comment) reaches
+  // DrawingCanvasTool.js unchanged, never collapsed into null here -- that file's own onMouseUp
+  // 'lasso'/'selectRect' branches duck-type on `.precisionError` to call the new
+  // onSelectionTargetPrecisionError hook below instead of silently discarding.
   resolveSelectionTarget:(polygonsAbsoluteMm)=>resolvePaintTargetTwoPass(polygonsAbsoluteMm),
+  // Bugfix: mirrors onStampRejected/onTraceRejected below -- fires instead of resolveSelectionTarget's
+  // own {layerId,contours}/null outcomes when that call hit the PAINT_TARGET_PRECISION_ERROR sentinel
+  // (a small/precise Select-rectangle-drag or Lasso stroke against a much larger candidate shape). No
+  // draft selection created, no history entry -- same "no mutation happened" behavior as a genuine
+  // no-overlap result, just a status message distinct from both that one and each other.
+  onSelectionTargetPrecisionError:()=>{
+    el('status').textContent='Select/Lasso: this selection is too small/precise for a shape this large — try a larger area.';
+  },
   // RS-3013 Step 1: region click-select's own hit-test. DrawingCanvasTool.js never touches
   // project.layers directly (this milestone's own architecture split, same rule Paint's
   // onPaintStroke above already follows) -- a region lives entirely in project.layers[].regions, so
