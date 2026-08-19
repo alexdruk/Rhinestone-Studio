@@ -983,13 +983,45 @@ export class GeometryEngine {
     // (not a fresh one derived from each region's/stamp's/daub's own, usually-smaller, extent) --
     // see computeNaturalContourTransform's own doc comment for why that distinction matters.
     // Computed once, shared by every branch below.
-    if (options.regions.length > 0 || options.stampedStones.length > 0 || options.eraseDaubs.length > 0) {
+    if (options.regions.length > 0 || options.stampedStones.length > 0 || options.eraseDaubs.length > 0 || options.erasedGridPositions.length > 0) {
       const transform = computeNaturalContourTransform(options.contours, options.xMm, options.yMm, options.widthMm, options.heightMm, options.naturalBoundingBoxMm);
       // RS-3011 Step 10a: additive, priority-ordered sub-areas that carve their own patch out of the
       // fill computed above. No-op when `regions` is empty/absent -- every layer predating this step
       // -- so this branch never changes existing output. See _applyPathRegions()'s own doc comment.
       if (options.regions.length > 0) {
         stones = this._applyPathRegions(stones, options, transform, polygons);
+      }
+      // Bugfix (permanent dead zone): `erasedGridPositions` is the persistent-snapshot replacement
+      // for eraseDaubs' own live radius test (see that field's own doc comment below for why the two
+      // now coexist) -- applied here, strictly BEFORE stampedStones are appended, so it only ever
+      // suppresses base-fill/region-patch stones, never a Stamp/Trace placement (those have their own
+      // independent identity and are removed, if erased, directly from stampedStones itself by the
+      // caller instead). Each entry is a snapshotted stone position, not a brush touch -- point-radius
+      // matching against ERASED_POSITION_EPSILON_MM (a tolerance for transform round-trip float noise
+      // only, several orders of magnitude below any real stone pitch) rather than eraseDaubs' own
+      // brush-sized radiusMm. A daub's/entry's xMm/yMm is natural-space, same convention as
+      // stampedStones/eraseDaubs above, so it needs the same applyNaturalContourTransform() conversion
+      // before comparing against `stones`' own absolute coordinates. A null transform (empty contours)
+      // leaves erasedGridPositions unable to suppress anything, same as regions/stampedStones above.
+      // Re-indexes survivors afterward, the same convention eraseDaubs' own final `.map()` below uses.
+      if (options.erasedGridPositions.length > 0 && transform) {
+        const placedErasedPositions = options.erasedGridPositions.map((pos) => {
+          const [placed] = applyNaturalContourTransform([{ xMm: pos.xMm, yMm: pos.yMm }], transform);
+          return placed;
+        });
+        const survivors = stones.filter((stone) => !placedErasedPositions.some((pos) => {
+          const dx = stone.xMm - pos.xMm;
+          const dy = stone.yMm - pos.yMm;
+          return dx * dx + dy * dy <= ERASED_POSITION_EPSILON_MM * ERASED_POSITION_EPSILON_MM;
+        }));
+        stones = survivors.map((stone, index) => new Stone({
+          xMm: stone.xMm,
+          yMm: stone.yMm,
+          sizeMm: stone.sizeMm,
+          color: stone.color,
+          layerId: stone.layerId,
+          index
+        }));
       }
       // RS-3011 Step 12 (Stamp): one manually-placed Stone per stampedStones entry, appended
       // directly on top of everything computed above -- no interior-point test, no masking of nearby
@@ -1013,11 +1045,11 @@ export class GeometryEngine {
         stones = stones.concat(stampedStoneObjects);
       }
       // RS-3011 Step 13 (Eraser): brush-style removal, applied LAST -- strictly after base fill +
-      // regions + stampedStones above are all combined into one list, so a daub drops a Stone
-      // regardless of which of the three sources produced it. A daub is a point + radius, not a
-      // contour (no polygon/boolean geometry involved) -- drops any Stone whose center falls
-      // within radiusMm of ANY daub. Like a stamp's own xMm/yMm above, a daub's xMm/yMm is stored
-      // in the SAME (0,0)-rooted natural-space convention, so it needs the identical
+      // regions + stampedStones (+ erasedGridPositions above) are all combined into one list, so a
+      // daub drops a Stone regardless of which source produced it, stampedStones included. A daub is
+      // a point + radius, not a contour (no polygon/boolean geometry involved) -- drops any Stone
+      // whose center falls within radiusMm of ANY daub. Like a stamp's own xMm/yMm above, a daub's
+      // xMm/yMm is stored in the SAME (0,0)-rooted natural-space convention, so it needs the identical
       // applyNaturalContourTransform() conversion before comparing against `stones`' own absolute
       // coordinates -- radiusMm itself is deliberately left untransformed (a fixed physical brush
       // size, exactly like a stamp's own sizeMm doesn't scale with the parent shape either). A null
@@ -1025,6 +1057,14 @@ export class GeometryEngine {
       // stampedStones above. No-op when eraseDaubs is empty, matching regions/stampedStones' own
       // "absent field -> unchanged output" convention. Re-indexes survivors afterward, the same
       // convention _applyPathRegions()'s own final `.map((stone,index)=>...)` already uses.
+      // Bugfix (permanent dead zone): this is now a LEGACY path only -- kept running, unmodified, so
+      // a project saved before this fix keeps behaving byte-for-byte the same (a live radius test that
+      // also masks future Stamp/Trace placements, exactly as it always has). A NEW Stones-mode erase
+      // never appends to eraseDaubs anymore (see onEraseSweep()'s own doc comment in app.js); it only
+      // grows erasedGridPositions/splices stampedStones above. The two mechanisms are independent and
+      // additive -- either dropping a given Stone is enough -- so an old project with existing
+      // eraseDaubs and a brand-new erasedGridPositions-based erase on the same layer coexist correctly
+      // with no special-case code.
       if (options.eraseDaubs.length > 0 && transform) {
         const placedDaubs = options.eraseDaubs.map((daub) => {
           const [placed] = applyNaturalContourTransform([{ xMm: daub.xMm, yMm: daub.yMm }], transform);
@@ -1434,6 +1474,15 @@ export const AUTHORED_FONT_FITTING_GAP_MM = 0.3;
 // magnitude below any real requested-scale difference this milestone cares about.
 const RELATIVE_SCALE_EPSILON = 1e-9;
 
+// Bugfix (permanent dead zone): match tolerance for erasedGridPositions against a freshly-generated
+// stone's own position (see the erasedGridPositions exclusion block above). A stored natural-space
+// position, re-transformed through the SAME forward transform that produced the original stone,
+// reproduces it up to double-precision round-trip noise only (~1e-9mm at this coordinate scale) --
+// 0.001mm is generous headroom above that noise floor while staying far below any real stone pitch
+// (stoneSizeMm + gapMm is never anywhere close to this small), so it can never accidentally match a
+// neighboring, un-erased stone.
+const ERASED_POSITION_EPSILON_MM = 0.001;
+
 // MONO-002: the true nearest-neighbor center-to-center distance across every stone in `stones`, or
 // null if fewer than two stones exist (no pairwise constraint to measure). Reuses the exact
 // grid-hash bucket shape StoneSampler.dedupeStonesByRadius()/MixedSizeGenerator.
@@ -1813,7 +1862,11 @@ function normalizePathParams(params) {
     stampedStones: normalizePathStampedStones(params.stampedStones),
     // RS-3011 Step 13: Eraser's brush daubs -- see normalizePathEraseDaubs()'s own doc comment.
     // Same "absent optional field -> safe no-op default" convention as `regions`/`stampedStones`.
-    eraseDaubs: normalizePathEraseDaubs(params.eraseDaubs)
+    eraseDaubs: normalizePathEraseDaubs(params.eraseDaubs),
+    // Bugfix (permanent dead zone): Eraser's persistent stone-position snapshots -- see
+    // normalizePathErasedGridPositions()'s own doc comment. Same "absent optional field -> safe
+    // no-op default" convention as `regions`/`stampedStones`/`eraseDaubs` above.
+    erasedGridPositions: normalizePathErasedGridPositions(params.erasedGridPositions)
   };
 }
 
@@ -1977,6 +2030,37 @@ function normalizePathEraseDaub(daub, index) {
     yMm,
     radiusMm
   };
+}
+
+/**
+ * Normalizes a 'path' layer's optional `erasedGridPositions` field (bugfix: permanent dead zone).
+ * Each entry is a snapshotted base-fill/region-patch stone position -- NOT a brush touch like
+ * eraseDaubs (no radiusMm), just a point -- using the exact same (0,0)-rooted natural-space
+ * convention as `stampedStones`/`eraseDaubs` above, validated only as loosely as those fields
+ * already are, mirroring normalizePathEraseDaubs()'s own structure minus radiusMm.
+ *
+ * @param {object[]} [erasedGridPositionsInput]
+ * @returns {{xMm: number, yMm: number}[]}
+ */
+function normalizePathErasedGridPositions(erasedGridPositionsInput) {
+  if (erasedGridPositionsInput === undefined || erasedGridPositionsInput === null) {
+    return [];
+  }
+  if (!Array.isArray(erasedGridPositionsInput)) {
+    throw new TypeError('GeometryEngine.generatePathLayout erasedGridPositions must be an array when provided.');
+  }
+  return erasedGridPositionsInput.map((pos, index) => normalizePathErasedGridPosition(pos, index));
+}
+
+function normalizePathErasedGridPosition(pos, index) {
+  if (!pos || typeof pos !== 'object') {
+    throw new TypeError(`erasedGridPositions[${index}] must be an object.`);
+  }
+
+  const xMm = assertFiniteNumber(pos.xMm, `erasedGridPositions[${index}].xMm`);
+  const yMm = assertFiniteNumber(pos.yMm, `erasedGridPositions[${index}].yMm`);
+
+  return { xMm, yMm };
 }
 
 function assertFiniteNumber(value, name) {

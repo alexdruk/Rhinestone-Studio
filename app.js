@@ -749,6 +749,12 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
     // `stampedStones` lines above made for Paint/Stamp -- defaults to [] for every layer predating
     // this step, matching GeometryEngine.normalizePathParams()'s own eraseDaubs normalizer.
     eraseDaubs:layer.eraseDaubs||[],
+    // Bugfix (permanent dead zone): forwards a 'path' layer's persistent erased-stone-position
+    // snapshots (see onEraseSweep()'s own doc comment) into live/production generation, the
+    // identical wiring-gap fix Step 10b/12/13's own `regions`/`stampedStones`/`eraseDaubs` lines
+    // above made for their own data models -- defaults to [] for every layer predating this fix,
+    // matching GeometryEngine.normalizePathParams()'s own erasedGridPositions normalizer.
+    erasedGridPositions:layer.erasedGridPositions||[],
     // RS-3014 Step 3: forwards a 'path' layer's frozen natural-space reference box (set once an
     // Outline-mode Eraser cut first mutates `contours` -- see onEraseSweep()'s own doc comment)
     // into live/production generation, the identical wiring-gap fix Step 10b/12/13's own `regions`/
@@ -1322,17 +1328,35 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // DrawingCanvasTool.js deliberately has no opinion on daub radius -- decision 4: it's a TOOL
   // setting (eraserSettings.radiusMm), not a stone property, so unlike onStampPlace/onTracePlace's
   // own sizeMm/color (read from the target layer's CURRENT fields), it's attached here from this
-  // module's own runtime state instead. All new daubs land in the SAME layer.eraseDaubs array,
-  // pushed in the ONE commitHistory() below so one sweep is one undo step (mirrors Trace's own
-  // "one gesture, one undo step" precedent -- NOT Stamp's per-click commit). Unlike Paint/every
-  // draw preset, `mode` is deliberately left at 'eraser' either way (decision 7: Eraser stays
-  // active after each committed sweep), so there's no updateDrawToolButtons() call here either.
+  // module's own runtime state instead. Everything the 'stones' branch below mutates lands inside
+  // the ONE commitHistory() there, so one sweep is one undo step (mirrors Trace's own "one gesture,
+  // one undo step" precedent -- NOT Stamp's per-click commit). Unlike Paint/every draw preset,
+  // `mode` is deliberately left at 'eraser' either way (decision 7: Eraser stays active after each
+  // committed sweep), so there's no updateDrawToolButtons() call here either.
   // RS-3014 Step 3 (Dual-mode Eraser): `mode` is DrawingCanvasTool.js's own per-gesture snapshot
   // (its onEraseSweep hooks-param doc comment above explains why it's captured at gesture-start
-  // rather than read live from eraserSettings.mode here) -- branches into either this same
-  // 'stones' path (byte-for-byte unchanged below) or the new 'outline' path, which cuts
-  // `corridorPolygonsAbsoluteMm` into the layer's own `contours` via the raster boolean-subtraction
-  // engine (src/geometry/PathBoolean.js's combineShapeSources()) instead of pushing eraseDaubs.
+  // rather than read live from eraserSettings.mode here) -- branches into either this same 'stones'
+  // path or the 'outline' path, which cuts `corridorPolygonsAbsoluteMm` into the layer's own
+  // `contours` via the raster boolean-subtraction engine (src/geometry/PathBoolean.js's
+  // combineShapeSources()) instead.
+  // Bugfix (permanent dead zone): the 'stones' branch below no longer pushes a live-forever radius
+  // exclusion into layer.eraseDaubs -- that turned every erase into a permanent dead zone that
+  // silently swallowed any LATER Stamp/Trace placed in the same spot, since eraseDaubs was applied
+  // as a geometric test on every regeneration, over whatever stone list existed AT THAT TIME, not
+  // scoped to what existed when the daub was drawn. Two mechanisms now replace it, matching the two
+  // stone categories GeometryEngine.js's own generatePathLayout() already treats differently:
+  // stampedStones entries under the sweep are spliced out of targetLayer.stampedStones directly (a
+  // real removal -- a later Stamp/Trace at the same spot is a structurally different array entry
+  // with a new id, nothing here ever touches it again); base-fill/region-patch stones have no
+  // individual identity (recomputed fresh every regen), so their OWN current positions are
+  // snapshotted into targetLayer.erasedGridPositions, an accumulating list GeometryEngine.js
+  // excludes by position match on every future regen (see its own doc comment above the
+  // erasedGridPositions exclusion block for the tolerance/healing-on-regrid rationale). A project
+  // saved before this fix keeps any existing layer.eraseDaubs entries applying exactly as before
+  // (GeometryEngine.js's own eraseDaubs block is intentionally left running, unmodified) -- this
+  // hook simply never adds to that array anymore. The two mechanisms are independent and additive,
+  // so an old project's eraseDaubs and a brand-new erasedGridPositions-based erase on the same layer
+  // coexist correctly with no special-case code.
   onEraseSweep:async(daubsAbsoluteMm,layerId,corridorPolygonsAbsoluteMm,mode)=>{
     if(!layerId||!daubsAbsoluteMm.length)return;
     const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
@@ -1406,18 +1430,62 @@ const drawingTool=createDrawingTool(layoutCanvas,{
       el('status').textContent=`Cut into ${layerLabel(targetLayer)}'s outline.`;
       return;
     }
-    const naturalPolygons=absolutePolygonsToNaturalSpace([daubsAbsoluteMm],targetLayer);
-    if(naturalPolygons.length===0)return;
-    const naturalPoints=naturalPolygons[0];
-    const daubs=naturalPoints.map((p,index)=>({
-      id:'daub'+Date.now()+'-'+index,
-      xMm:p.xMm,
-      yMm:p.yMm,
-      radiusMm:eraserSettings.radiusMm
-    }));
+    // Absolute-space circle test, identical shape to the legacy eraseDaubs test this replaces (same
+    // eraserSettings.radiusMm brush, same "within radius of ANY daub point" rule) -- stones-mode
+    // deliberately keeps testing against daubsAbsoluteMm's own points rather than switching to
+    // corridorPolygonsAbsoluteMm (that field is only meaningful to Outline mode's own boolean cut,
+    // per DrawingCanvasTool.js's own onEraseSweep doc comment).
+    const daubRadiusMm=eraserSettings.radiusMm;
+    const withinSweep=(xMm,yMm)=>daubsAbsoluteMm.some(d=>{
+      const dx=xMm-d.xMm;const dy=yMm-d.yMm;
+      return dx*dx+dy*dy<=daubRadiusMm*daubRadiusMm;
+    });
+    // Item 1 (stampedStones): a stamp's xMm/yMm is natural-space (same convention as a region's own
+    // contour), so it needs the SAME computeNaturalContourTransform()/applyNaturalContourTransform()
+    // pair onRegionMoved()/onStampPlace() above already use to get its CURRENT absolute position
+    // before testing it against the sweep.
+    const naturalContours=targetLayer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y})));
+    const transform=computeNaturalContourTransform(naturalContours,targetLayer.x,targetLayer.y,targetLayer.w,targetLayer.h,targetLayer.naturalBoundingBoxMm);
+    const existingStampedStones=targetLayer.stampedStones||[];
+    const survivingStampedStones=existingStampedStones.filter(stamp=>{
+      if(!transform)return true;
+      const[placed]=applyNaturalContourTransform([{xMm:stamp.xMm,yMm:stamp.yMm}],transform);
+      return!withinSweep(placed.xMm,placed.yMm);
+    });
+    // Item 2 (base fill + region patches): the CURRENT generated stone list for this layer, AT THE
+    // MOMENT OF ERASING -- stampedStones/eraseDaubs deliberately omitted from these params (stamps
+    // are handled above and must never be double-counted here; eraseDaubs is folded in so this
+    // reflects exactly what's actually rendered right now, matching the "AT THE MOMENT OF ERASING"
+    // contract even on a legacy project that still has a live eraseDaubs dead zone of its own).
+    const currentResult=permanentEngine.generatePathLayout({
+      contours:naturalContours,
+      layerId:targetLayer.id,
+      xMm:targetLayer.x,yMm:targetLayer.y,widthMm:targetLayer.w,heightMm:targetLayer.h,
+      stoneSizeMm:targetLayer.stoneSize,gapMm:targetLayer.gap,
+      mode:resolveVectorFillMode(targetLayer.fillMode),color:targetLayer.color,
+      closed:targetLayer.closed!==false,
+      regions:targetLayer.regions||[],
+      naturalBoundingBoxMm:targetLayer.naturalBoundingBoxMm,
+      erasedGridPositions:targetLayer.erasedGridPositions||[],
+      eraseDaubs:targetLayer.eraseDaubs||[],
+      ...mixedSizeParamsFor(targetLayer)
+    });
+    const newlyErasedAbsolutePoints=currentResult.stones
+      .filter(stone=>withinSweep(stone.xMm,stone.yMm))
+      .map(stone=>({xMm:stone.xMm,yMm:stone.yMm}));
+    if(newlyErasedAbsolutePoints.length===0&&survivingStampedStones.length===existingStampedStones.length){
+      el('status').textContent=`Nothing to erase on ${layerLabel(targetLayer)}.`;
+      return;
+    }
     commitHistory();
-    if(!Array.isArray(targetLayer.eraseDaubs))targetLayer.eraseDaubs=[];
-    targetLayer.eraseDaubs.push(...daubs);
+    targetLayer.stampedStones=survivingStampedStones;
+    if(newlyErasedAbsolutePoints.length>0){
+      const[naturalPoints]=absolutePolygonsToNaturalSpace([newlyErasedAbsolutePoints],targetLayer);
+      if(naturalPoints){
+        if(!Array.isArray(targetLayer.erasedGridPositions))targetLayer.erasedGridPositions=[];
+        targetLayer.erasedGridPositions.push(...naturalPoints.map(p=>({xMm:p.xMm,yMm:p.yMm})));
+      }
+    }
     drawingTool.refreshStoneGroupForLayer(targetLayer.id);
     await updateAll(true);
     el('status').textContent=`Erased on ${layerLabel(targetLayer)}.`;
@@ -1534,7 +1602,12 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     // daubs on the Design canvas -- exactly what the frozen box exists to prevent. Named
     // differently from xMm/yMm/widthMm/heightMm (which this object does NOT otherwise define) so
     // there's no ambiguity about which one a naive `...styleParams` spread would pick up.
-    return{stoneSizeMm:l.stoneSize,gapMm:l.gap,mode:resolveVectorFillMode(l.fillMode),color:l.color,regions:l.regions||[],stampedStones:l.stampedStones||[],eraseDaubs:l.eraseDaubs||[],naturalBoundingBoxMm:l.naturalBoundingBoxMm,staticXMm:l.x,staticYMm:l.y,staticWidthMm:l.w,staticHeightMm:l.h,contours:l.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),closed:l.closed!==false,...mixedSizeParamsFor(l)};
+    return{stoneSizeMm:l.stoneSize,gapMm:l.gap,mode:resolveVectorFillMode(l.fillMode),color:l.color,regions:l.regions||[],stampedStones:l.stampedStones||[],eraseDaubs:l.eraseDaubs||[],
+    // Bugfix (permanent dead zone): erasedGridPositions joins the rest of a path layer's "style"
+    // params here so a Stones-mode erase reflects on the live Design-canvas preview immediately,
+    // the same wiring-gap fix generatePathStonesLive()'s own new line makes for the production
+    // pipeline.
+    erasedGridPositions:l.erasedGridPositions||[],naturalBoundingBoxMm:l.naturalBoundingBoxMm,staticXMm:l.x,staticYMm:l.y,staticWidthMm:l.w,staticHeightMm:l.h,contours:l.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),closed:l.closed!==false,...mixedSizeParamsFor(l)};
   },
   // Mirrors generatePathStonesLive()'s own result mapping, plus resolving the stored color id
   // (STONE_COLORS key, e.g. 'gold') to its previewColor -- the same flat swatch color
