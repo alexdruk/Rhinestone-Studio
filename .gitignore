@@ -316,3 +316,6 @@ tools/scratch/rs3012-step1-selection-bounds-verify/
 # bugfix-lasso-click-vs-drag-distance: ad hoc verification scripts, same "never a repo artifact"
 # category as the scratch folders above
 tools/scratch/bugfix-lasso-click-vs-drag-verify/
+# bugfix-boolean-precision-error-uncaught: ad hoc live-browser Playwright verification script, same
+# "never a repo artifact" category as the scratch folders above
+tools/scratch/bugfix-boolean-precision-error-uncaught-verify/
