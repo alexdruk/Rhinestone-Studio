@@ -313,3 +313,6 @@ tools/scratch/rs3013-step5-region-spec-editing-verify/
 # for Stamp/Trace respecting the active selection boundary, same "never a repo artifact" category
 # as the scratch folders above
 tools/scratch/rs3012-step1-selection-bounds-verify/
+# bugfix-lasso-click-vs-drag-distance: ad hoc verification scripts, same "never a repo artifact"
+# category as the scratch folders above
+tools/scratch/bugfix-lasso-click-vs-drag-verify/
