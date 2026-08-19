@@ -319,3 +319,6 @@ tools/scratch/bugfix-lasso-click-vs-drag-verify/
 # bugfix-boolean-precision-error-uncaught: ad hoc live-browser Playwright verification script, same
 # "never a repo artifact" category as the scratch folders above
 tools/scratch/bugfix-boolean-precision-error-uncaught-verify/
+# bugfix-eraser-stones-mode-permanent-dead-zone: ad hoc geometry-level + live-browser Playwright
+# verification scripts, same "never a repo artifact" category as the scratch folders above
+tools/scratch/bugfix-eraser-stones-mode-permanent-dead-zone-verify/
