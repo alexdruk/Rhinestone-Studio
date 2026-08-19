@@ -13,7 +13,8 @@ export {
 } from './Stone.js';
 
 export {
-  StoneLayout
+  StoneLayout,
+  findOverlappingStonePairs
 } from './StoneLayout.js';
 
 export {

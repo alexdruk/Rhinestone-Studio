@@ -84,3 +84,25 @@ export class StoneLayout {
     });
   }
 }
+
+/**
+ * Every pair of stones whose center-to-center distance is less than the sum of their radii --
+ * i.e. genuinely overlapping physical footprints, not just close placement. Accepts Stone
+ * instances or plain {xMm,yMm,sizeMm} objects. The single definition of "overlap" shared by the
+ * stone-overlap regression suite (tools/test-geometry-stone-overlap-same-contour.mjs) and the
+ * Stone Size picker's overlap guard (app.js), so the two can never silently disagree.
+ */
+export function findOverlappingStonePairs(stones) {
+  const pairs = [];
+  for (let i = 0; i < stones.length; i++) {
+    for (let j = i + 1; j < stones.length; j++) {
+      const a = stones[i], b = stones[j];
+      const distanceMm = Math.hypot(a.xMm - b.xMm, a.yMm - b.yMm);
+      const minSeparationMm = (a.sizeMm + b.sizeMm) / 2;
+      if (distanceMm < minSeparationMm - 1e-9) {
+        pairs.push([a, b]);
+      }
+    }
+  }
+  return pairs;
+}
