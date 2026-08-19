@@ -293,6 +293,11 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
    browser's native input:disabled dimming above) so a checked-but-now-ineligible box still reads
    clearly as checked, not merely near-invisible from two compounding opacities. */
 .checkbox-row.ineligible{color:var(--color-text-muted)}
+/* Stone Size overlap guard: #stoneSize's own currently-selected option is never disabled (a
+   disabled selected <option> traps keyboard navigation in real browsers -- confirmed live, see
+   updateStoneSizeOverlapCapabilityUI()'s doc comment in app.js), so this border is the closed-
+   control's own visible flag, paired with #stoneSizeOverlapWarning's message just below it. */
+#stoneSize.overlap-invalid{border-color:var(--color-danger)}
 /* RS-2012: "Advanced" collapsible (Mixed Stone Size's Minimum/Maximum Size + Conservative Detail).
    Custom marker (default <details> triangle varies by browser/platform) so it reads consistently. */
 .advanced-section{margin-top:var(--space-3);padding-top:var(--space-2);border-top:1px solid var(--color-border)}
@@ -1283,6 +1288,12 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
     <div class="field"><label for="stoneSize">Stone size</label><select id="stoneSize" title="Standard rhinestone sizes (commercial name and actual diameter). Populated from the stone size library."></select></div>
     <div class="field"><label for="gap">Gap (mm)</label><input id="gap" type="number" min="0" max="5" step="0.1" value="0.3"></div>
   </div>
+  <!-- Stone Size overlap guard: shown when the currently-selected Stone size would produce genuine
+       physical overlap for this shape's real dimensions/gap/fill mode (updateStoneSizeOverlapCapabilityUI()
+       in app.js) -- the currently-selected size is deliberately never disabled itself (see that
+       function's own doc comment for why), so this is the visible flag it gets instead, the same
+       "separate warning paragraph" idiom #mixedNoEligibleHint already uses. -->
+  <p class="validation-message" id="stoneSizeOverlapWarning" role="alert"></p>
   <!-- RS-2012: shown instead of relying on #gap's disabled look alone -- an authored Rhinestone
        font (RS Block/RS Modern) bakes spacing into its stone positions, so Gap has no effect for it
        (see isAuthoredStoneFontId() in app.js). Mirrors #textSizeFixedHint/#curveUnavailableHint's

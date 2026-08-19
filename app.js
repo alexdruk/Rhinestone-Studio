@@ -85,7 +85,7 @@
 // pipeline stages re-run on every threshold/invert/blur/resize edit, but the (comparatively
 // expensive) browser image decode only ever runs once per distinct imageSrc value.
 import './src/browser/BrowserDependencyProbe.js';
-import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace, hitTestPathLayerRegion, computeNaturalContourTransform, applyNaturalContourTransform, isPointInsidePolygons } from './src/geometry/index.js';
+import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace, hitTestPathLayerRegion, computeNaturalContourTransform, applyNaturalContourTransform, isPointInsidePolygons, findOverlappingStonePairs } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
 import { createDefaultFontProviderRegistry, createDefaultRhinestoneFontRegistry, BoundingBox } from './src/text/index.js';
 import { renderProductionLayout, renderStoneLayout, fitTransform } from './src/renderer/CanvasRenderer2D.js';
@@ -697,6 +697,12 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
   }
  }
  async generate(project){await this.recoverStaleAuthoredScales(project);let raw=[];for(const l of project.layers){if(!l.visible)continue;if(l.type==='text')raw.push(...await this.generateTextStonesLive(l,project));if(SHAPE_LAYER_TYPES.has(l.type))raw.push(...await this.generateShapeStonesLive(l));if(l.type==='svg')raw.push(...await this.generateSvgStonesLive(l));if(l.type==='image')raw.push(...await this.generateImageStonesLive(l));if(l.type==='path')raw.push(...await this.generatePathStonesLive(l));}const stones=dedupeStonesByRadius(raw).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId}));return new StoneLayout({layerId:'project',stones})}
+ // Stone Size overlap guard: the same per-type Live dispatch generate() uses just above, factored
+ // out (not shared with generate() itself, to avoid touching that method's tested source shape) so
+ // updateStoneSizeOverlapCapabilityUI() below can generate one layer's real stones for a *candidate*
+ // stoneSize without touching the rest of the project. No new generation logic -- every branch calls
+ // the exact same generateXStonesLive() method generate() already calls.
+ async generateLiveStonesForCandidateLayer(layer,project){if(layer.type==='text')return this.generateTextStonesLive(layer,project);if(SHAPE_LAYER_TYPES.has(layer.type))return this.generateShapeStonesLive(layer);if(layer.type==='svg')return this.generateSvgStonesLive(layer);if(layer.type==='image')return this.generateImageStonesLive(layer);if(layer.type==='path')return this.generatePathStonesLive(layer);return[]}
  // FONT-002: an unknown font id (not just one hidden from the picker -- see isFontKnown()) is never
  // silently substituted for DEFAULT_TEXT_FONT_ID; that layer's stones are skipped (same shape as an
  // empty-text layer already returning []), and updateTextFontCapabilityUI() surfaces why while it's
@@ -2441,6 +2447,7 @@ function updateEditingUI(){const n=selectedLayerIds.size;el('selectionSummary').
   updateTextFontCapabilityUI();
   updateMixedSizeCapabilityUI();
   updateStoneSizePrintableCapabilityUI();
+  updateStoneSizeOverlapCapabilityUI();
 }
 // FONT-002: keeps every Text Lightbox control that doesn't apply to the selected layer's font
 // (Fill Style, Text height/Auto fit, Curved text) in a disabled/hidden + explained state, and shows
@@ -2635,6 +2642,101 @@ function updateStoneSizePrintableCapabilityUI(){
         ?`${size.name} isn't recommended with ${font.family} — readability testing showed poor results at this size (pending a height-calibration fix).`
         :'';
   }
+}
+// Stone Size overlap guard: greys out any #stoneSize <option> that would produce genuine physical
+// overlap (findOverlappingStonePairs(), the same check tools/test-geometry-stone-overlap-same-
+// contour.mjs's regression suite runs) for the CURRENT layer's real dimensions/gap/fillMode, by
+// actually generating that candidate size's real layout and checking it -- no heuristic, no
+// shape-kind branching, works identically for every layer type and both Outline/Fill mode.
+//
+// Composes with updateStoneSizePrintableCapabilityUI() just above rather than fighting it: an
+// option already disabled for that function's own (shape/font) reason is left exactly as-is here
+// (its title kept, this function only adds overlap-disabling on top for options still enabled).
+//
+// The currently-selected size is deliberately never disabled here even when it overlaps (see
+// currentStoneSizeTarget()'s caller below) -- confirmed live in Chrome (tools/scratch/
+// feature-stone-size-overlap-guard-verify/select-disabled-check.mjs) that disabling a <select>'s
+// own currently-selected <option> blocks ArrowDown/ArrowUp keyboard navigation off it entirely,
+// while still displaying as selected -- a real trap, not a hypothetical. Instead, an invalid
+// current selection is left alone but flagged: #stoneSize gets an .overlap-invalid border and
+// #stoneSizeOverlapWarning becomes visible, the same "disabled/dimmed control + separate hint
+// paragraph" idiom #gapFixedHint/#mixedNoEligibleHint already use.
+//
+// RS-3013 Step 5: a selected Paint region has its own stoneSizeMm (see syncSelectedControlsFromLayer()'s
+// "region wins" branch) -- resolved here the same way, so the guard checks the region's own real
+// generated stones, not the parent layer's.
+function currentStoneSizeTarget(){
+  const regionSelection=drawingTool.activeSelection;
+  if(regionSelection&&regionSelection.kind==='region'){
+    const regionLayer=project.layers.find(x=>x.id===regionSelection.layerId&&x.type==='path');
+    const region=regionLayer&&(regionLayer.regions||[]).find(r=>r.id===regionSelection.regionId);
+    if(regionLayer&&region)return{layer:regionLayer,region};
+  }
+  const l=selectedLayer();
+  return l?{layer:l,region:null}:null;
+}
+// Builds the one changed field (stoneSize on a plain layer clone, or stoneSizeMm on a cloned
+// region within a cloned layer's regions[]) and runs it through the exact same Live generation
+// generate() itself uses (via engine.generateLiveStonesForCandidateLayer() above). For a text
+// layer, strips a stale authoredScale when the candidate size differs from the layer's real
+// current stoneSize -- mirrors invalidateAuthoredScaleForGeometryChange()'s own rule (authoredScale
+// is a MONO-005A fit computed for one specific stoneSize; reusing it for a different candidate size
+// would silently mis-scale the candidate layout, corrupting the very check this function exists to run).
+async function stonesForCandidateStoneSize(target,sizeMm,project){
+  const{layer,region}=target;
+  let candidateLayer;
+  if(region){
+    candidateLayer={...layer,regions:(layer.regions||[]).map(r=>r.id===region.id?{...r,stoneSizeMm:sizeMm}:r)};
+  }else{
+    candidateLayer={...layer,stoneSize:sizeMm};
+    if(sizeMm!==layer.stoneSize)delete candidateLayer.authoredScale;
+  }
+  return engine.generateLiveStonesForCandidateLayer(candidateLayer,project);
+}
+// Only reachable when there's no layer to check at all (currentStoneSizeTarget() found neither a
+// selected region nor a selected layer) -- updateStoneSizePrintableCapabilityUI() already leaves
+// every option enabled in that same state (isText false, font null), so there is nothing to undo
+// on the options themselves, only this function's own warning/border to clear.
+function clearStoneSizeOverlapUI(){
+  el('stoneSize').classList.remove('overlap-invalid');
+  el('stoneSizeOverlapWarning').classList.remove('visible');el('stoneSizeOverlapWarning').textContent='';
+}
+// Guarded by a monotonic token (same convention updateAll()'s own generationToken uses) since this
+// runs the real Live generation pipeline (async for text) -- a fast keystroke-to-keystroke edit must
+// never let a stale, slower-to-resolve check overwrite a newer one's result.
+let stoneSizeOverlapCheckToken=0;
+async function updateStoneSizeOverlapCapabilityUI(){
+  const target=currentStoneSizeTarget();
+  if(!target){clearStoneSizeOverlapUI();return}
+  const token=++stoneSizeOverlapCheckToken;
+  const select=el('stoneSize'),warning=el('stoneSizeOverlapWarning');
+  const currentSizeMm=target.region?target.region.stoneSizeMm:target.layer.stoneSize;
+  const diametersToCheck=new Set(listStoneSizes().map(s=>s.diameterMm));
+  diametersToCheck.add(currentSizeMm);
+  const overlapBySize=new Map();
+  for(const diameterMm of diametersToCheck){
+    const stones=await stonesForCandidateStoneSize(target,diameterMm,project);
+    if(token!==stoneSizeOverlapCheckToken)return;
+    overlapBySize.set(diameterMm,findOverlappingStonePairs(stones.map(s=>({xMm:s.x,yMm:s.y,sizeMm:s.d}))).length>0);
+  }
+  for(const size of listStoneSizes()){
+    const option=select.querySelector(`option[value="${size.diameterMm}"]`);
+    if(!option)continue;
+    const isCurrent=size.diameterMm===currentSizeMm;
+    if(isCurrent)continue;
+    // updateStoneSizePrintableCapabilityUI() (called just before this function, see
+    // updateEditingUI()) always runs first and unconditionally resets every option's .disabled --
+    // so option.disabled read here is exactly that gate's own fresh verdict, not a stale leftover
+    // from this function's own previous pass. Only add overlap-disabling on top of it.
+    const otherGateDisabled=option.disabled;
+    const overlaps=overlapBySize.get(size.diameterMm);
+    option.disabled=otherGateDisabled||overlaps;
+    if(!otherGateDisabled)option.title=overlaps?`${size.name} would overlap on the current shape.`:'';
+  }
+  const currentOverlaps=overlapBySize.get(currentSizeMm)||false;
+  select.classList.toggle('overlap-invalid',currentOverlaps);
+  warning.textContent=currentOverlaps?"This stone size isn't suitable for this shape — it won't form a uniform figure.":'';
+  warning.classList.toggle('visible',currentOverlaps);
 }
 // RS-0003.5D2: SELECTION_HANDLE_SIZE_PX enlarges the resize handles slightly (was a bare 10px
 // square) and a white halo is stroked behind the dashed outline so the selection reads clearly

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FontManager } from '../src/fonts/index.js';
 import { createDefaultFontProviderRegistry } from '../src/text/index.js';
-import { GeometryEngine, sampleOutlinePoints } from '../src/geometry/index.js';
+import { GeometryEngine, sampleOutlinePoints, findOverlappingStonePairs } from '../src/geometry/index.js';
 import { validateRhsProject, generateProjectStoneLayout } from './lib/rhsProject.mjs';
 
 // RC-004A — regression coverage for the same-contour stone self-overlap Release Candidate blocker.
@@ -41,21 +41,10 @@ async function test(name, fn) {
   }
 }
 
-/** Every pair of stones whose center-to-center distance is less than the sum of their radii. */
-function findOverlappingPairs(stones) {
-  const pairs = [];
-  for (let i = 0; i < stones.length; i++) {
-    for (let j = i + 1; j < stones.length; j++) {
-      const a = stones[i], b = stones[j];
-      const distanceMm = Math.hypot(a.xMm - b.xMm, a.yMm - b.yMm);
-      const minSeparationMm = (a.sizeMm + b.sizeMm) / 2;
-      if (distanceMm < minSeparationMm - 1e-9) {
-        pairs.push([a, b]);
-      }
-    }
-  }
-  return pairs;
-}
+// findOverlappingPairs() now lives in src/geometry/StoneLayout.js as findOverlappingStonePairs()
+// -- promoted out of this file so the Stone Size picker's overlap guard (app.js) can share the
+// exact same "genuine overlap" definition instead of re-deriving it.
+const findOverlappingPairs = findOverlappingStonePairs;
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 

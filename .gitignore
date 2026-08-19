@@ -328,3 +328,7 @@ tools/scratch/feature-bulk-delete-by-area-verify/
 # feature-outline-uniform-perimeter-spacing: ad hoc geometry-level verification scripts, same
 # "never a repo artifact" category as the scratch folders above
 tools/scratch/feature-outline-uniform-perimeter-spacing-verify/
+# feature-stone-size-overlap-guard: performance benchmarks, overlap-repro sweeps, a real-Chrome
+# disabled-<option>-keyboard-nav investigation, and browser-verification screenshots, same "never a
+# repo artifact" category as the scratch folders above
+tools/scratch/feature-stone-size-overlap-guard-verify/
