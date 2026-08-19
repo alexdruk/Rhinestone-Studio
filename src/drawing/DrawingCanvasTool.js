@@ -2607,19 +2607,38 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         return;
       }
       if (interactionKind === 'lasso') {
+        // Bugfix (click-vs-drag distance): captured BEFORE lassoItem.remove() below, since
+        // paper.Path#bounds stops being readable once the item is removed. lassoItem's segments are
+        // kept in sync with lassoPoints on every sampled onMouseDrag point (see that handler above),
+        // so its own bounds is already the buffered points' bounding box with no separate pairwise-
+        // distance computation needed -- same source datapoints, just read via the Path that already
+        // tracks them, rather than reimplementing a second bbox walk over lassoPoints by hand.
+        const lassoBounds = lassoItem ? lassoItem.bounds : null;
         if (lassoItem) {
           lassoItem.remove();
           lassoItem = null;
         }
-        // RS-3013 Step 1: a lasso below PAINT_MIN_LASSO_POINTS is NOT "no usable stroke" the way
-        // Paint's own identical check discards it -- it's basically a click, so it resolves through
-        // the SAME click-decision function Select's own click path uses (performClickDispatch), on
-        // the release point (mousedown never hit-tested anything for Lasso, unlike Select -- see
-        // this file's own onMouseDown 'lasso' branch comment). `mode` is deliberately left at
-        // 'lasso' either way (both the click case and the real-stroke case below) -- it's a repeated
-        // tool, same "stays active" precedent as Stamp/Trace/Eraser (CLICK_TO_PLACE_MODES), not a
-        // one-shot preset that reverts to Select on commit.
-        if (lassoPoints.length < PAINT_MIN_LASSO_POINTS) {
+        // RS-3013 Step 1 / Bugfix: a lasso whose buffered points' bounding box is at or below
+        // MIN_BOX_DIM_MM in either dimension is NOT "no usable stroke" the way Paint's own
+        // PAINT_MIN_LASSO_POINTS point-count check discards it -- it's basically a click, so it
+        // resolves through the SAME click-decision function Select's own click path uses
+        // (performClickDispatch), on the release point (mousedown never hit-tested anything for
+        // Lasso, unlike Select -- see this file's own onMouseDown 'lasso' branch comment). `mode` is
+        // deliberately left at 'lasso' either way (both the click case and the real-stroke case
+        // below) -- it's a repeated tool, same "stays active" precedent as Stamp/Trace/Eraser
+        // (CLICK_TO_PLACE_MODES), not a one-shot preset that reverts to Select on commit.
+        //
+        // Bugfix: this used to be `lassoPoints.length < PAINT_MIN_LASSO_POINTS`, the same point-count
+        // check Paint's own branch still uses. Point count is the wrong signal here: onMouseDrag only
+        // pushes a new point once the pointer has moved PAINT_MIN_SAMPLE_DISTANCE_PX since the last
+        // one, so a fast/short drag can legitimately cover real screen distance while buffering fewer
+        // than PAINT_MIN_LASSO_POINTS points (silently falling through to performClickDispatch()
+        // instead of ever creating a draft selection), while a slow tiny wobble can rack up 3+ points
+        // while barely moving at all. A bounding-box distance check on the buffered points themselves
+        // (reusing MIN_BOX_DIM_MM, the same threshold/comparison style Select's own selectRectItem
+        // check above already uses) reflects actual gesture distance instead. Scoped to Lasso only --
+        // Paint's own identical-looking check just above is deliberately left untouched.
+        if (!lassoBounds || lassoBounds.width <= MIN_BOX_DIM_MM || lassoBounds.height <= MIN_BOX_DIM_MM) {
           lassoPoints = [];
           interactionKind = null;
           performClickDispatch(event.point, false);
