@@ -1005,6 +1005,54 @@ function resolvePaintTargetTwoPass(polygonsAbsoluteMm){
   if(!result)return null;
   return{layerId:targetLayer.id,contours:result.contours};
 }
+// RS-3012 Step 1: Stamp/Trace's own selection-boundary test -- called with the raw click/drag
+// point (absolute project-mm) and DrawingCanvasTool.js's own live `activeSelection` value (passed
+// straight through, not re-read via drawingTool.activeSelection, since the caller already has it
+// in scope the same way onStampPlace/onTracePlace's own layerId is already resolved by the time
+// they're called). Mirrors hitTestRegion's own architecture split immediately above: a region's
+// geometry lives in project.layers[].regions, so 'region'-kind selections resolve through the SAME
+// layer/region lookup + computeNaturalContourTransform()/applyNaturalContourTransform() chain
+// onRegionMoved above already uses, deriving the region's CURRENT absolute polygon (a region's own
+// contour is natural-space and can shift with its parent shape) before testing with
+// isPointInsidePolygons() (single ring, wrapped as [polygon], same convention
+// hitTestPathLayerRegion() itself uses internally via isPointNearPolygon()). 'draft'-kind
+// selections carry their own already-absolute-mm geometry directly on boundsOrContour -- no
+// project.layers lookup needed -- so a rect draft gets a plain axis-aligned bounds test and a
+// lasso draft's boundsOrContour (already the clipped {xMm,yMm}[][] contours
+// resolveSelectionTarget's own selectPaintTarget() resolution produced at creation time) goes
+// straight into isPointInsidePolygons() unwrapped, preserving any holes exactly like the region
+// case. No margin/tolerance anywhere here (unlike REGION_HIT_MARGIN_PX's own click-forgiveness) --
+// a hard interior test, since this gates whether a stone gets placed at all, not whether a click
+// located something to select.
+// Bulk-delete-by-area: pulled out to a standalone top-level function (was previously only an inline
+// arrow function inside the drawingTool hooks object below) so deleteCurrentSelection()'s new
+// 'draft' branch can call the exact same test app.js already hands to DrawingCanvasTool.js as its
+// isPointInActiveSelection hook, instead of a second reimplementation. The hooks object below now
+// just references this by shorthand.
+function isPointInActiveSelection(pointAbsoluteMm,selection){
+  if(!selection)return true;
+  if(selection.kind==='region'){
+    const targetLayer=project.layers.find(l=>l.id===selection.layerId&&l.type==='path');
+    if(!targetLayer)return false;
+    const region=(targetLayer.regions||[]).find(r=>r.id===selection.regionId);
+    if(!region)return false;
+    const naturalContours=targetLayer.contours.map(contour=>contour.map(p=>({xMm:p.x,yMm:p.y})));
+    const transform=computeNaturalContourTransform(naturalContours,targetLayer.x,targetLayer.y,targetLayer.w,targetLayer.h,targetLayer.naturalBoundingBoxMm);
+    if(!transform)return false;
+    const polygon=applyNaturalContourTransform(region.contour,transform);
+    return isPointInsidePolygons(pointAbsoluteMm,[polygon]);
+  }
+  if(selection.kind==='draft'){
+    if(selection.shapeKind==='rect'){
+      const b=selection.boundsOrContour;
+      return pointAbsoluteMm.xMm>=b.left&&pointAbsoluteMm.xMm<=b.left+b.width&&pointAbsoluteMm.yMm>=b.top&&pointAbsoluteMm.yMm<=b.top+b.height;
+    }
+    if(selection.shapeKind==='lasso'){
+      return isPointInsidePolygons(pointAbsoluteMm,selection.boundsOrContour);
+    }
+  }
+  return true;
+}
 // RS-3010 Step 1: one drawing tool bound to layoutCanvas for the app's lifetime -- it lazily calls
 // paper.setup() on first enter() and only pauses/resumes afterward (see DrawingCanvasTool.js's own
 // header comment for why), so constructing it eagerly here does not touch the canvas until the
@@ -1182,49 +1230,10 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // draw preset, `mode` is deliberately left at 'stamp' either way: Stamp is a repeatable
   // click-to-place action (like an image editor's own stamp tool), not a one-shot commit-then-
   // revert-to-Select gesture, so there's no updateDrawToolButtons() call here either.
-  // RS-3012 Step 1: Stamp/Trace's own selection-boundary test -- called with the raw click/drag
-  // point (absolute project-mm) and DrawingCanvasTool.js's own live `activeSelection` value (passed
-  // straight through, not re-read via drawingTool.activeSelection, since the caller already has it
-  // in scope the same way onStampPlace/onTracePlace's own layerId is already resolved by the time
-  // they're called). Mirrors hitTestRegion's own architecture split immediately above: a region's
-  // geometry lives in project.layers[].regions, so 'region'-kind selections resolve through the SAME
-  // layer/region lookup + computeNaturalContourTransform()/applyNaturalContourTransform() chain
-  // onRegionMoved above already uses, deriving the region's CURRENT absolute polygon (a region's own
-  // contour is natural-space and can shift with its parent shape) before testing with
-  // isPointInsidePolygons() (single ring, wrapped as [polygon], same convention
-  // hitTestPathLayerRegion() itself uses internally via isPointNearPolygon()). 'draft'-kind
-  // selections carry their own already-absolute-mm geometry directly on boundsOrContour -- no
-  // project.layers lookup needed -- so a rect draft gets a plain axis-aligned bounds test and a
-  // lasso draft's boundsOrContour (already the clipped {xMm,yMm}[][] contours
-  // resolveSelectionTarget's own selectPaintTarget() resolution produced at creation time) goes
-  // straight into isPointInsidePolygons() unwrapped, preserving any holes exactly like the region
-  // case. No margin/tolerance anywhere here (unlike REGION_HIT_MARGIN_PX's own click-forgiveness) --
-  // a hard interior test, since this gates whether a stone gets placed at all, not whether a click
-  // located something to select.
-  isPointInActiveSelection:(pointAbsoluteMm,selection)=>{
-    if(!selection)return true;
-    if(selection.kind==='region'){
-      const targetLayer=project.layers.find(l=>l.id===selection.layerId&&l.type==='path');
-      if(!targetLayer)return false;
-      const region=(targetLayer.regions||[]).find(r=>r.id===selection.regionId);
-      if(!region)return false;
-      const naturalContours=targetLayer.contours.map(contour=>contour.map(p=>({xMm:p.x,yMm:p.y})));
-      const transform=computeNaturalContourTransform(naturalContours,targetLayer.x,targetLayer.y,targetLayer.w,targetLayer.h,targetLayer.naturalBoundingBoxMm);
-      if(!transform)return false;
-      const polygon=applyNaturalContourTransform(region.contour,transform);
-      return isPointInsidePolygons(pointAbsoluteMm,[polygon]);
-    }
-    if(selection.kind==='draft'){
-      if(selection.shapeKind==='rect'){
-        const b=selection.boundsOrContour;
-        return pointAbsoluteMm.xMm>=b.left&&pointAbsoluteMm.xMm<=b.left+b.width&&pointAbsoluteMm.yMm>=b.top&&pointAbsoluteMm.yMm<=b.top+b.height;
-      }
-      if(selection.shapeKind==='lasso'){
-        return isPointInsidePolygons(pointAbsoluteMm,selection.boundsOrContour);
-      }
-    }
-    return true;
-  },
+  // RS-3012 Step 1 / bulk-delete-by-area: now a standalone top-level function (see its own doc
+  // comment above, near resolvePaintTargetTwoPass) referenced here by shorthand so
+  // deleteCurrentSelection()'s new 'draft' branch can call the exact same test.
+  isPointInActiveSelection,
   // RS-3012 Step 1: fires instead of onStampPlace when a click resolves outside the active
   // selection's own boundary -- no history session, no stone placed, matching decided item 2's
   // "reject with feedback" contract (never silent, never "allow anyway").
@@ -1440,54 +1449,16 @@ const drawingTool=createDrawingTool(layoutCanvas,{
       const dx=xMm-d.xMm;const dy=yMm-d.yMm;
       return dx*dx+dy*dy<=daubRadiusMm*daubRadiusMm;
     });
-    // Item 1 (stampedStones): a stamp's xMm/yMm is natural-space (same convention as a region's own
-    // contour), so it needs the SAME computeNaturalContourTransform()/applyNaturalContourTransform()
-    // pair onRegionMoved()/onStampPlace() above already use to get its CURRENT absolute position
-    // before testing it against the sweep.
-    const naturalContours=targetLayer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y})));
-    const transform=computeNaturalContourTransform(naturalContours,targetLayer.x,targetLayer.y,targetLayer.w,targetLayer.h,targetLayer.naturalBoundingBoxMm);
-    const existingStampedStones=targetLayer.stampedStones||[];
-    const survivingStampedStones=existingStampedStones.filter(stamp=>{
-      if(!transform)return true;
-      const[placed]=applyNaturalContourTransform([{xMm:stamp.xMm,yMm:stamp.yMm}],transform);
-      return!withinSweep(placed.xMm,placed.yMm);
-    });
-    // Item 2 (base fill + region patches): the CURRENT generated stone list for this layer, AT THE
-    // MOMENT OF ERASING -- stampedStones/eraseDaubs deliberately omitted from these params (stamps
-    // are handled above and must never be double-counted here; eraseDaubs is folded in so this
-    // reflects exactly what's actually rendered right now, matching the "AT THE MOMENT OF ERASING"
-    // contract even on a legacy project that still has a live eraseDaubs dead zone of its own).
-    const currentResult=permanentEngine.generatePathLayout({
-      contours:naturalContours,
-      layerId:targetLayer.id,
-      xMm:targetLayer.x,yMm:targetLayer.y,widthMm:targetLayer.w,heightMm:targetLayer.h,
-      stoneSizeMm:targetLayer.stoneSize,gapMm:targetLayer.gap,
-      mode:resolveVectorFillMode(targetLayer.fillMode),color:targetLayer.color,
-      closed:targetLayer.closed!==false,
-      regions:targetLayer.regions||[],
-      naturalBoundingBoxMm:targetLayer.naturalBoundingBoxMm,
-      erasedGridPositions:targetLayer.erasedGridPositions||[],
-      eraseDaubs:targetLayer.eraseDaubs||[],
-      ...mixedSizeParamsFor(targetLayer)
-    });
-    const newlyErasedAbsolutePoints=currentResult.stones
-      .filter(stone=>withinSweep(stone.xMm,stone.yMm))
-      .map(stone=>({xMm:stone.xMm,yMm:stone.yMm}));
-    if(newlyErasedAbsolutePoints.length===0&&survivingStampedStones.length===existingStampedStones.length){
+    // Bulk-delete-by-area: the splice-stampedStones/snapshot-erasedGridPositions/commitHistory body
+    // that used to live inline here is now the shared eraseStonesWithinTest() (see its own doc
+    // comment near deleteRegionFromPathLayer/deleteCurrentSelection below) -- this call is
+    // behavior-identical to the old inline body, just passing withinSweep as the interior test
+    // instead of it being hardcoded.
+    const result=await eraseStonesWithinTest(targetLayer,withinSweep);
+    if(!result){
       el('status').textContent=`Nothing to erase on ${layerLabel(targetLayer)}.`;
       return;
     }
-    commitHistory();
-    targetLayer.stampedStones=survivingStampedStones;
-    if(newlyErasedAbsolutePoints.length>0){
-      const[naturalPoints]=absolutePolygonsToNaturalSpace([newlyErasedAbsolutePoints],targetLayer);
-      if(naturalPoints){
-        if(!Array.isArray(targetLayer.erasedGridPositions))targetLayer.erasedGridPositions=[];
-        targetLayer.erasedGridPositions.push(...naturalPoints.map(p=>({xMm:p.xMm,yMm:p.yMm})));
-      }
-    }
-    drawingTool.refreshStoneGroupForLayer(targetLayer.id);
-    await updateAll(true);
     el('status').textContent=`Erased on ${layerLabel(targetLayer)}.`;
   },
   // Freehand is a continuous interaction (many pointermove samples before the stroke ends) --
@@ -2847,6 +2818,56 @@ function deleteRegionFromPathLayer(layerId,regionId){
   drawingTool.refreshStoneGroupForLayer(targetLayer.id);
   updateAll(true);
   el('status').textContent=`Deleted region on ${layerLabel(targetLayer)}.`;
+}
+// Bulk-delete-by-area: extracted out of onEraseSweep's own 'stones' branch below -- that branch's
+// entire body (Item 1/Item 2 splice+snapshot, single commitHistory()) is now this shared function,
+// parameterized by an arbitrary (xMm,yMm)=>boolean interior test instead of the circle-radius test
+// hardcoded there before. onEraseSweep passes its own daub-radius test; deleteCurrentSelection's new
+// 'draft' branch below passes isPointInActiveSelection's own rect-bounds/lasso-polygon test instead --
+// same two mechanisms (stampedStones splice for stamps, erasedGridPositions snapshot for everything
+// else), same regeneration-time exclusion contract, just a different shape of "is this point inside."
+// Returns null and mutates nothing when withinTest matches no stone at all (the no-op guard the
+// original branch already had); otherwise commits history, mutates targetLayer, refreshes the canvas,
+// and returns {removedCount} so each caller can word its own status message.
+async function eraseStonesWithinTest(targetLayer,withinTest){
+  const naturalContours=targetLayer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y})));
+  const transform=computeNaturalContourTransform(naturalContours,targetLayer.x,targetLayer.y,targetLayer.w,targetLayer.h,targetLayer.naturalBoundingBoxMm);
+  const existingStampedStones=targetLayer.stampedStones||[];
+  const survivingStampedStones=existingStampedStones.filter(stamp=>{
+    if(!transform)return true;
+    const[placed]=applyNaturalContourTransform([{xMm:stamp.xMm,yMm:stamp.yMm}],transform);
+    return!withinTest(placed.xMm,placed.yMm);
+  });
+  const currentResult=permanentEngine.generatePathLayout({
+    contours:naturalContours,
+    layerId:targetLayer.id,
+    xMm:targetLayer.x,yMm:targetLayer.y,widthMm:targetLayer.w,heightMm:targetLayer.h,
+    stoneSizeMm:targetLayer.stoneSize,gapMm:targetLayer.gap,
+    mode:resolveVectorFillMode(targetLayer.fillMode),color:targetLayer.color,
+    closed:targetLayer.closed!==false,
+    regions:targetLayer.regions||[],
+    naturalBoundingBoxMm:targetLayer.naturalBoundingBoxMm,
+    erasedGridPositions:targetLayer.erasedGridPositions||[],
+    eraseDaubs:targetLayer.eraseDaubs||[],
+    ...mixedSizeParamsFor(targetLayer)
+  });
+  const newlyErasedAbsolutePoints=currentResult.stones
+    .filter(stone=>withinTest(stone.xMm,stone.yMm))
+    .map(stone=>({xMm:stone.xMm,yMm:stone.yMm}));
+  const removedCount=(existingStampedStones.length-survivingStampedStones.length)+newlyErasedAbsolutePoints.length;
+  if(removedCount===0)return null;
+  commitHistory();
+  targetLayer.stampedStones=survivingStampedStones;
+  if(newlyErasedAbsolutePoints.length>0){
+    const[naturalPoints]=absolutePolygonsToNaturalSpace([newlyErasedAbsolutePoints],targetLayer);
+    if(naturalPoints){
+      if(!Array.isArray(targetLayer.erasedGridPositions))targetLayer.erasedGridPositions=[];
+      targetLayer.erasedGridPositions.push(...naturalPoints.map(p=>({xMm:p.xMm,yMm:p.yMm})));
+    }
+  }
+  drawingTool.refreshStoneGroupForLayer(targetLayer.id);
+  await updateAll(true);
+  return{removedCount};
 }
 // RS-3011 Step 2 fix: for a Design-drawn 'path' layer, duplicateShapeForLayer() clones the matching
 // Paper.js item in drawingTool's own board.shapes too -- previously only project.layers gained a
@@ -4597,13 +4618,38 @@ el('actionDuplicate').onclick=()=>{
 // deleteRegionFromPathLayer(), then clears the selection via drawingTool.clearActiveSelection() --
 // unlike Step 3's duplicate, delete leaves NOTHING selected afterward; it does not fall back to
 // selecting the parent shape, matching deleteSelected()'s own existing behavior for a whole shape. A
-// null/undefined activeSelection or a 'draft' kind (an in-progress rect/lasso selection with no
-// committed region behind it yet) falls through unchanged to the existing drawingTool.deleteSelected()
-// -- same "leave drafts alone" rule Step 3's duplicate branch already established.
-function deleteCurrentSelection(){
+// null/undefined activeSelection falls through unchanged to the existing drawingTool.deleteSelected().
+// Bulk-delete-by-area: a 'draft' kind (an in-progress rect/lasso area from Select/Lasso, not yet a
+// committed region) USED to fall through to deleteSelected() too, but Step 4's own diagnosis already
+// established that fallback is a no-op here -- the draft's own commit clears selectedIds before
+// Delete can act, so nothing was ever actually working in this case. This branch replaces that dead
+// fallback: it erases every stone (base-fill, region-patch, and stamped alike) whose position falls
+// inside the draft's own area, via the shared eraseStonesWithinTest() (see its own doc comment near
+// deleteRegionFromPathLayer above) -- passing isPointInActiveSelection (this file's own standalone
+// function, the exact same test already wired into drawingTool's own hooks for Stamp/Trace, see its
+// doc comment near resolvePaintTargetTwoPass) as the withinTest, rather than reimplementing a second
+// rect-bounds/lasso-polygon test here. Region OBJECTS are never touched -- only their rendered stones
+// within the area disappear, exactly like ordinary Eraser use already does; a region left fully
+// hollowed out stays present in layer.regions as an empty-output object, no new behavior needed. Per
+// Step 1's own resolveSelectionTarget() contract, a draft always resolves to exactly one layer, so
+// this never needs to reason about multiple targets. Clears the selection afterward either way --
+// nothing is left "selected" once its contents are gone, same as the region branch above.
+async function deleteCurrentSelection(){
   const selection=drawingTool.activeSelection;
   if(selection&&selection.kind==='region'){
     deleteRegionFromPathLayer(selection.layerId,selection.regionId);
+    drawingTool.clearActiveSelection();
+    return;
+  }
+  if(selection&&selection.kind==='draft'){
+    const targetLayer=project.layers.find(l=>l.id===selection.layerId&&l.type==='path');
+    if(targetLayer){
+      const withinTest=(xMm,yMm)=>isPointInActiveSelection({xMm,yMm},selection);
+      const result=await eraseStonesWithinTest(targetLayer,withinTest);
+      el('status').textContent=result
+        ?`Erased ${result.removedCount} stone${result.removedCount===1?'':'s'} within the selected area.`
+        :'Nothing to erase within the selected area.';
+    }
     drawingTool.clearActiveSelection();
     return;
   }
