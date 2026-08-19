@@ -322,3 +322,6 @@ tools/scratch/bugfix-boolean-precision-error-uncaught-verify/
 # bugfix-eraser-stones-mode-permanent-dead-zone: ad hoc geometry-level + live-browser Playwright
 # verification scripts, same "never a repo artifact" category as the scratch folders above
 tools/scratch/bugfix-eraser-stones-mode-permanent-dead-zone-verify/
+# feature-bulk-delete-by-area: ad hoc regression-capture + live-browser Playwright verification
+# scripts, same "never a repo artifact" category as the scratch folders above
+tools/scratch/feature-bulk-delete-by-area-verify/
