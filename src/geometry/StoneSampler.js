@@ -9,6 +9,19 @@
 import { Point2D } from '../text/VectorPath.js';
 import { computeInwardRingPolygons } from './ContourRingSampler.js';
 
+// Outline-mode uniform-perimeter spacing: the actual per-contour walk step that makes
+// n = round(perimeterMm / spacingMm) equal-length hops close the loop exactly, so every gap around
+// the ring -- including the wrap-around seam -- ends up mathematically identical instead of
+// concentrating a leftover remainder in one spot. Floors at one step (n=1) when perimeterMm is too
+// small to fit even one nominal step -- round() would otherwise yield 0 and divide by zero -- which
+// reproduces the single-point result the fixed-increment walk below already produces for such a
+// shape today (its loop condition `targetMm < perimeterMm` naturally stops after one iteration
+// whenever spacingMm > perimeterMm), not a new behavior.
+function uniformStepMm(perimeterMm, spacingMm) {
+  const stepCount = Math.max(1, Math.round(perimeterMm / spacingMm));
+  return perimeterMm / stepCount;
+}
+
 /**
  * Walk a polygon's perimeter and return points spaced spacingMm apart along the outline, starting
  * at the polygon's first vertex. By default the polygon is treated as closed (a final segment
@@ -16,12 +29,20 @@ import { computeInwardRingPolygons } from './ContourRingSampler.js';
  * `{ closed: false }` to walk an open path instead (e.g. an SVG `<line>`/`<polyline>` or an
  * unclosed `<path>` subpath), which omits that wrap-around segment.
  *
+ * `{ uniform: true }` (outline-uniform-perimeter-spacing fix, used only by
+ * sampleMultiContourOutlinePoints() i.e. real Outline mode) normalizes the step to
+ * uniformStepMm(perimeterMm, spacingMm) instead of the raw spacingMm, so consecutive gaps around
+ * the whole contour are all identical -- no leftover seam gap. Off by default: Contour Fill mode
+ * (sampleContourFillPoints()/sampleContourFieldFillPoints()) calls this function directly and must
+ * keep today's fixed-increment behavior unchanged, since that's a different mode with a separate,
+ * unrequested spacing problem.
+ *
  * @param {Point2D[]} polygon
  * @param {number} spacingMm
- * @param {{closed?: boolean}} [options]
+ * @param {{closed?: boolean, uniform?: boolean}} [options]
  * @returns {Point2D[]}
  */
-export function sampleOutlinePoints(polygon, spacingMm, { closed = true } = {}) {
+export function sampleOutlinePoints(polygon, spacingMm, { closed = true, uniform = false } = {}) {
   if (spacingMm <= 0) {
     throw new RangeError('sampleOutlinePoints requires a positive spacingMm.');
   }
@@ -47,7 +68,7 @@ export function sampleOutlinePoints(polygon, spacingMm, { closed = true } = {}) 
   let segmentIndex = 0;
   let segmentStartMm = 0;
 
-  for (let targetMm = 0; targetMm < perimeterMm; targetMm += spacingMm) {
+  const pushSampleAt = (targetMm) => {
     while (
       segmentIndex < segmentLengthsMm.length - 1 &&
       segmentStartMm + segmentLengthsMm[segmentIndex] < targetMm
@@ -65,6 +86,21 @@ export function sampleOutlinePoints(polygon, spacingMm, { closed = true } = {}) 
       start.xMm + (end.xMm - start.xMm) * t,
       start.yMm + (end.yMm - start.yMm) * t
     ));
+  };
+
+  if (uniform) {
+    // Indexed as i * stepMm (multiplication), not accumulated via `targetMm += stepMm`, so
+    // floating-point drift can never accumulate across many hops into a spurious extra sample
+    // right at the seam.
+    const stepCount = Math.max(1, Math.round(perimeterMm / spacingMm));
+    const stepMm = perimeterMm / stepCount;
+    for (let i = 0; i < stepCount; i++) {
+      pushSampleAt(i * stepMm);
+    }
+  } else {
+    for (let targetMm = 0; targetMm < perimeterMm; targetMm += spacingMm) {
+      pushSampleAt(targetMm);
+    }
   }
 
   return samples;
@@ -443,10 +479,11 @@ function findEquidistantBackfillPoint(contourGeom, closed, prevPoint, nextPoint,
 }
 
 /**
- * RC-002 / RC-004A: sample every contour's outline points independently (via sampleOutlinePoints(),
- * so each contour's own spacingMm arc-length walk is completely unchanged), then drop any point
- * that lands within `minSeparationMm` of an already-kept point -- from that *same* contour or a
- * *different* one alike.
+ * RC-002 / RC-004A: sample every contour's outline points independently (via sampleOutlinePoints()
+ * with `{ uniform: true }` -- outline-uniform-perimeter-spacing -- so each contour's own arc-length
+ * walk stays completely self-contained, just normalized to close the loop with zero leftover seam
+ * gap instead of the raw spacingMm), then drop any point that lands within `minSeparationMm` of an
+ * already-kept point -- from that *same* contour or a *different* one alike.
  *
  * RC-002 (cross-contour): outline mode samples stone centers directly on each contour's boundary
  * curve. For a multi-contour shape (Ring's outer+inner circle; a glyph's outer contour and an
@@ -457,15 +494,18 @@ function findEquidistantBackfillPoint(contourGeom, closed, prevPoint, nextPoint,
  * nothing previously related one contour's points to another's.
  *
  * RC-004A (same-contour): a single contour's arc-length walk only guarantees consecutive samples
- * are spacingMm apart *along the perimeter* -- the straight-line (chord) distance between them is
- * always <= that, and sharp curvature (a cursive font's tight loop or cusp, a sharp corner) or a
- * short closing-seam remainder (the walk's last sample back to its first) can pull that chord below
- * the physically-correct touching distance, even between *immediately adjacent* samples. This is
- * confirmed directly against `long-script-name.rhs`'s own contours: 132 adjacent-sample pairs and
- * all 48 closing seams landed under the physical threshold before this fix (see
- * tools/test-rc-004a-same-contour-overlap.mjs). An "arc-length-adjacent samples are always fine"
- * exemption was considered and rejected: it left exactly these worst overlaps (near-zero clearance)
- * in place, because that is precisely where the defect lives.
+ * are (uniform-)spacingMm apart *along the perimeter* -- the straight-line (chord) distance between
+ * them is always <= that, and sharp curvature (a cursive font's tight loop or cusp, a sharp corner)
+ * can pull that chord below the physically-correct touching distance, even between *immediately
+ * adjacent* samples. This is confirmed directly against `long-script-name.rhs`'s own contours: 132
+ * adjacent-sample pairs and all 48 closing seams landed under the physical threshold before this fix
+ * (see tools/test-rc-004a-same-contour-overlap.mjs). An "arc-length-adjacent samples are always
+ * fine" exemption was considered and rejected: it left exactly these worst overlaps (near-zero
+ * clearance) in place, because that is precisely where the defect lives. (The 48 closing-seam
+ * overlaps specifically were also a symptom of the fixed-increment walk's leftover-remainder gap,
+ * separately fixed by outline-uniform-perimeter-spacing's `{ uniform: true }` above; sharp-corner
+ * curvature is a distinct, still-live geometric cause this pass keeps guarding against regardless of
+ * how uniform the arc-length spacing is.)
  *
  * Both cases use the exact same rule, so there is only one to state: nothing is ever pruned merely
  * for being *close*. A tight-but-non-overlapping notch or cusp (e.g. Star's inner notches) never
@@ -508,7 +548,7 @@ function findEquidistantBackfillPoint(contourGeom, closed, prevPoint, nextPoint,
  * @returns {Point2D[]}
  */
 export function sampleMultiContourOutlinePoints(polygons, spacingMm, { closed = true, minSeparationMm = spacingMm } = {}) {
-  const contourRawPoints = polygons.map((polygon) => sampleOutlinePoints(polygon, spacingMm, { closed }));
+  const contourRawPoints = polygons.map((polygon) => sampleOutlinePoints(polygon, spacingMm, { closed, uniform: true }));
   const points = contourRawPoints.flat();
   const kept = dedupeStonePoints(points, minSeparationMm);
 
@@ -519,12 +559,14 @@ export function sampleMultiContourOutlinePoints(polygons, spacingMm, { closed = 
   const keptSet = new Set(kept);
   const index = buildProximityIndex(kept, minSeparationMm);
   let contourGeomCache = null;
+  let contourStepMmCache = null;
 
   const result = [];
   for (let c = 0; c < polygons.length; c++) {
     const rawPoints = contourRawPoints[c];
     const n = rawPoints.length;
     contourGeomCache = null;
+    contourStepMmCache = null;
 
     for (let i = 0; i < n; i++) {
       const point = rawPoints[i];
@@ -563,9 +605,16 @@ export function sampleMultiContourOutlinePoints(polygons, spacingMm, { closed = 
       const flankGapMm = Math.hypot(prevPoint.xMm - nextPoint.xMm, prevPoint.yMm - nextPoint.yMm);
       if (flankGapMm <= spacingMm) continue; // gap isn't worse than the intended pitch -- nothing to backfill
 
-      if (!contourGeomCache) contourGeomCache = contourPerimeterAndSegments(polygons[c], closed);
-      const fromArcLengthMm = (i - prevSteps) * spacingMm;
-      const spanMm = (prevSteps + nextSteps) * spacingMm;
+      if (!contourGeomCache) {
+        contourGeomCache = contourPerimeterAndSegments(polygons[c], closed);
+        // The raw samples above were walked at this contour's own uniformStepMm(), not the nominal
+        // spacingMm -- step-count-to-arc-length conversion below must use that same actual step, or
+        // fromArcLengthMm/spanMm would point at the wrong stretch of the contour whenever the
+        // uniform-spacing fix nudged this contour's effective step away from the nominal pitch.
+        contourStepMmCache = uniformStepMm(contourGeomCache.perimeterMm, spacingMm);
+      }
+      const fromArcLengthMm = (i - prevSteps) * contourStepMmCache;
+      const spanMm = (prevSteps + nextSteps) * contourStepMmCache;
       const candidate = findEquidistantBackfillPoint(
         contourGeomCache, closed, prevPoint, nextPoint, fromArcLengthMm, spanMm, minSeparationMm
       );

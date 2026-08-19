@@ -85,7 +85,13 @@ await test('1. long-script-name.rhs (the confirmed release-blocking script-font 
   // RS-3011 corner-gap backfill: 364 -> 366 (verified directly: sampleMultiContourOutlinePoints()
   // finds exactly 2 of this fixture's many dropped corners/cusps have genuine room for a legal
   // replacement point; the rest are left exactly as RC-004A produced them).
-  assert.equal(layout.stones.length, 366, 'deterministic stone count for this fixture at its committed geometry');
+  // outline-uniform-perimeter-spacing: 366 -> 363. Each contour's raw arc-length walk now steps by
+  // perimeterMm/round(perimeterMm/spacingMm) instead of the raw spacingMm, so every contour's exact
+  // raw sample positions shift slightly -- which corner/cusp-adjacent chords fall under the physical
+  // dedupe threshold, and which dropped points have legal RS-3011 backfill room, both shift with
+  // them across this fixture's many contours. Re-verified at current committed geometry; still 0
+  // overlapping pairs and still comfortably above the "not a collapsed skeleton" floor below.
+  assert.equal(layout.stones.length, 363, 'deterministic stone count for this fixture at its committed geometry');
   assert.ok(layout.stones.length > 300, 'the fix must not collapse a script font down to a sparse skeleton');
 });
 
@@ -178,30 +184,53 @@ const seamSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="15">
   + '</svg>';
 // 10x15mm rectangle, perimeter 50mm.
 
-await test('4a. a tight closing seam (perimeter remainder smaller than one stone diameter): the first and last samples no longer overlap', () => {
+await test('4a. a tight closing seam (perimeter remainder smaller than one stone diameter against the OLD fixed-pitch walk): the first and last samples no longer overlap', () => {
   const engine = new GeometryEngine();
-  // spacingMm=7 -> perimeter 50mm leaves a 1mm remainder between the last sample and the seam back
-  // to the first -- well under stoneSizeMm=2mm, and (verified directly) the *only* overlapping pair
-  // in this shape's raw sampling is that literal seam pair; its four 90-degree corners are not
-  // implicated (corner-adjacent chord at this pitch is ~4.9mm, comfortably clear of 2mm).
+  // Historical premise (pre outline-uniform-perimeter-spacing): spacingMm=7 -> perimeter 50mm left a
+  // 1mm remainder between the last fixed-pitch sample and the seam back to the first -- well under
+  // stoneSizeMm=2mm, and (verified directly) the *only* overlapping pair in this shape's raw sampling
+  // was that literal seam pair; its four 90-degree corners were not implicated (corner-adjacent chord
+  // at that pitch was ~4.9mm, comfortably clear of 2mm). outline-uniform-perimeter-spacing removes
+  // this remainder entirely (see below) -- the test name/shape/params are kept unchanged so this
+  // stays the same regression fixture, just re-verified under the new walk.
   const layout = engine.generateSvgLayout({ svgSource: seamSvg, layerId: 'seam', widthMm: 10, heightMm: 15, stoneSizeMm: 2, gapMm: 5, mode: 'outline' });
   assert.deepEqual(findOverlappingPairs(layout.stones), [], 'the closing seam must no longer physically overlap');
-  // RS-3011 corner-gap backfill: 7 -> 8. This rectangle's closing seam has real room once RC-004A's
-  // drop is accounted for: the dropped raw[7] (0,1) leaves flanking survivors raw[6] (0,8) and raw[0]
-  // (0,0), an 8mm gap on a straight edge -- well past spacingMm=7mm. Hand-derived: parametrizing the
-  // straight segment as y=50-s for s in [42,50], distance-to-prev=|s-42| and distance-to-next=50-s
-  // cross at s=46 -> point (0,4), 4mm from each survivor, comfortably >= stoneSizeMm=2mm. Verified
-  // independently against a from-scratch reimplementation of the fix, which reproduces (0,4) exactly.
-  assert.equal(layout.stones.length, 8, 'the redundant seam-closing gap is backfilled with one legally-placed stone, nothing else');
+  // RS-3011 corner-gap backfill (pre outline-uniform-perimeter-spacing): 7 -> 8. This rectangle's
+  // closing seam had real backfill room once RC-004A's drop was accounted for: the dropped raw[7]
+  // (0,1) left flanking survivors raw[6] (0,8) and raw[0] (0,0), an 8mm gap on a straight edge --
+  // well past the old fixed spacingMm=7mm. Hand-derived: parametrizing the straight segment as
+  // y=50-s for s in [42,50], distance-to-prev=|s-42| and distance-to-next=50-s crossed at s=46 ->
+  // point (0,4), 4mm from each survivor, comfortably >= stoneSizeMm=2mm.
+  //
+  // outline-uniform-perimeter-spacing: 8 -> 7. This test's whole premise -- "perimeter 50mm leaves a
+  // 1mm remainder against the fixed 7mm pitch" -- is exactly the leftover-seam defect this fix
+  // removes. n = round(50/7) = 7, effectiveSpacingMm = 50/7 ≈ 7.142857mm: the walk now takes exactly
+  // 7 raw samples with a uniform ~7.14mm gap *every* step, including the former seam -- comfortably
+  // clear of stoneSizeMm=2mm, so RC-004A's dedupe never drops anything and RS-3011's backfill never
+  // fires. Verified directly (see tools/scratch/feature-outline-uniform-perimeter-spacing-verify/):
+  // all 7 raw samples survive unmodified, at (0,0), (7.142857,0), (10,4.285714), (10,11.428571),
+  // (6.428571,15), (0,14.285714), (0,7.142857).
+  assert.equal(layout.stones.length, 7, 'the leftover-seam defect this fix removes means no drop/backfill is needed at all -- all 7 uniformly-spaced raw samples survive');
 });
 
 await test('4b. a comfortably-spaced closing seam is not pruned unnecessarily', () => {
   const engine = new GeometryEngine();
-  // spacingMm=6 -> perimeter 50mm leaves a 2mm remainder -- comfortably >= stoneSizeMm=1.5mm, so
-  // the seam is not a defect here and must survive exactly as sampleOutlinePoints() produces it.
+  // Historical premise (pre outline-uniform-perimeter-spacing): spacingMm=6 -> perimeter 50mm left a
+  // 2mm remainder -- comfortably >= stoneSizeMm=1.5mm, so the seam was never a dedupe/backfill defect
+  // here; the old fixed-pitch walk produced 9 raw samples (0,6,...,48; 48<50 still true) and kept
+  // all 9 untouched.
+  //
+  // outline-uniform-perimeter-spacing: 9 -> 8. n = round(50/6) = round(8.333) = 8 (rounds down),
+  // effectiveSpacingMm = 50/8 = 6.25mm -- one fewer raw sample than the old fixed-pitch walk's 9,
+  // because that walk's own leftover-remainder behavior always keeps a final partial-pitch sample
+  // whenever any remainder exists (biasing the raw count up by one relative to the nearest whole
+  // number of true pitches), which round() does not. All 8 uniform-step samples still comfortably
+  // clear stoneSizeMm=1.5mm at every gap including the seam (~6.25mm each) -- verified directly: no
+  // dedupe drop, no backfill, just 8 raw samples at (0,0), (6.25,0), (10,2.5), (10,8.75), (10,15),
+  // (3.75,15), (0,12.5), (0,6.25).
   const layout = engine.generateSvgLayout({ svgSource: seamSvg, layerId: 'seam', widthMm: 10, heightMm: 15, stoneSizeMm: 1.5, gapMm: 4.5, mode: 'outline' });
   assert.deepEqual(findOverlappingPairs(layout.stones), [], 'a comfortable seam should never have overlapped in the first place');
-  assert.equal(layout.stones.length, 9, 'a correctly-spaced seam must not lose a valid stone');
+  assert.equal(layout.stones.length, 8, 'a correctly-spaced seam must not lose a valid stone beyond the uniform-spacing walk\'s own nearest-integer step count');
 });
 
 // --- 5. Sharp notch / star-like contour: real overlaps fixed, RC-002's own leave-alone case protected -
@@ -225,7 +254,14 @@ await test('5. a sharp-notched Star: genuine inner-notch overlap is resolved, bu
   // correctly inserts only one of them, not two. Verified directly: the production output's 5 new
   // points match a from-scratch reimplementation's predictions at raw[10], raw[46], raw[64],
   // raw[73]-or-raw[74] (once, not twice), and raw[82].
-  assert.equal(layout.stones.length, 86, 'deterministic stone count for this Star configuration');
+  //
+  // outline-uniform-perimeter-spacing: 86 -> 85. The star's single closed contour now walks at
+  // perimeterMm/round(perimeterMm/spacingMm) instead of the raw spacingMm, shifting every raw
+  // sample's exact position by a small, uniform amount -- which in turn shifts which inner-notch
+  // chords land under the stoneSizeMm=1.5mm dedupe threshold and which dropped points still find
+  // legal RS-3011 backfill room. Re-verified at current committed geometry: still 0 overlapping
+  // pairs and still comfortably above the "not erased" floor below.
+  assert.equal(layout.stones.length, 85, 'deterministic stone count for this Star configuration');
   assert.ok(layout.stones.length > 70, 'the fix must not erase legitimate stones merely because the star\'s edges converge toward each notch');
 });
 
