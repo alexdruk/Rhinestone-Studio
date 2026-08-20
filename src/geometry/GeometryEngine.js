@@ -21,7 +21,7 @@
  */
 
 import { BoundingBox, Point2D, createCircleVectorPath, createRectangleVectorPath } from '../text/VectorPath.js';
-import { flattenContourToPolygon, translateContour } from './ContourGeometry.js';
+import { flattenContourToPolygon, flattenContourToPolygonWithCornerFlags, translateContour } from './ContourGeometry.js';
 import { sampleOutlinePoints, sampleMultiContourOutlinePoints, sampleShapeFillPoints, sampleFieldByMode, isPointInsidePolygons } from './StoneSampler.js';
 import { Stone } from './Stone.js';
 import { StoneLayout } from './StoneLayout.js';
@@ -54,6 +54,14 @@ const DEFAULT_MODE = 'outline';
 // join Circle/Rectangle here -- every one of them is a generateShapeLayout()/resolveShapePolygons()
 // shape, not a new engine method.
 const SHAPE_TYPES = new Set(['circle', 'rectangle', ...SHAPE_LIBRARY_KINDS]);
+// Corner-anchored per-side Outline spacing (StoneSampler.js's sampleCornerAnchoredOutlinePoints()):
+// safe only for shape kinds where every contour vertex is confirmed to be a genuine corner with no
+// smooth-curve tessellation in between -- Rect (flattenContourToPolygonWithCornerFlags() recovers
+// real moveTo/lineTo corner data) and these four ShapeLibrary kinds (every point is trivially a
+// real vertex by construction, per a prior diagnosis). Circle/Ellipse/Ring/Heart/Capsule/Slot have
+// no usable corners and Crescent/Pen-drawn polygons are separate, deferred future work -- none of
+// those kinds appear here, so they keep the existing whole-loop uniform walk unchanged.
+const CORNER_ANCHORED_SHAPE_LIBRARY_KINDS = new Set(['polygon', 'star', 'arrow', 'cross']);
 
 // TXT-102: paragraph-style alignment of each line within its own multi-line text block. 'left'
 // (default) reproduces every pre-TXT-102 layout exactly (each line already starts its own pen walk
@@ -608,11 +616,11 @@ export class GeometryEngine {
    */
   generateShapeLayout(params = {}) {
     const options = normalizeShapeParams(params);
-    const { polygons } = this._shapePolygons(options);
+    const { polygons, cornerFlagsByContour } = this._shapePolygons(options);
     const boundingBox = BoundingBox.fromPoints(polygons.flat());
     const spacingMm = options.stoneSizeMm + options.gapMm;
 
-    const points = sampleShapeFillPoints(options.mode, polygons, boundingBox, spacingMm, options.stoneSizeMm);
+    const points = sampleShapeFillPoints(options.mode, polygons, boundingBox, spacingMm, options.stoneSizeMm, true, cornerFlagsByContour);
 
     let stones = points.map((point, index) => new Stone({
       xMm: point.xMm,
@@ -650,7 +658,7 @@ export class GeometryEngine {
    * outline and its stone-sampled outline are always the same geometry.
    *
    * @param {object} params Same shape as generateShapeLayout()'s params, minus stoneSizeMm/gapMm/mode/color.
-   * @returns {{polygons: import('../text/VectorPath.js').Point2D[][], boundingBox: BoundingBox|null}}
+   * @returns {{polygons: import('../text/VectorPath.js').Point2D[][], boundingBox: BoundingBox|null, cornerFlagsByContour: (boolean[]|null)[]|null}}
    */
   resolveShapePolygons(params = {}) {
     const options = normalizeShapeParams({ ...params, stoneSizeMm: 1, mode: DEFAULT_MODE });
@@ -663,8 +671,19 @@ export class GeometryEngine {
         ? createCircleVectorPath({ cxMm: options.cxMm, cyMm: options.cyMm, radiusMm: options.radiusMm, id: options.layerId })
         : createRectangleVectorPath({ xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm, id: options.layerId });
 
+      // Rect's own contour is built from moveTo/lineTo only (see createRectangleVectorPath()) --
+      // every flattened point is a genuine corner -- so it's the one circle/rectangle case that
+      // feeds corner-anchored Outline spacing (see CORNER_ANCHORED_SHAPE_LIBRARY_KINDS above).
+      // Circle has no usable corners and keeps flattenContourToPolygon()'s plain, unaffected path.
+      if (options.shape === 'rectangle') {
+        const flattened = path.contours.map((contour) => flattenContourToPolygonWithCornerFlags(contour));
+        const polygons = flattened.map((f) => f.points);
+        const cornerFlagsByContour = flattened.map((f) => f.cornerFlags);
+        return { polygons, boundingBox: BoundingBox.fromPoints(polygons.flat()), cornerFlagsByContour };
+      }
+
       const polygons = path.contours.map((contour) => flattenContourToPolygon(contour));
-      return { polygons, boundingBox: BoundingBox.fromPoints(polygons.flat()) };
+      return { polygons, boundingBox: BoundingBox.fromPoints(polygons.flat()), cornerFlagsByContour: null };
     }
 
     // S-110: every other shape kind (Ellipse/Capsule/Regular Polygon/Star/Heart/Arrow/Cross/
@@ -672,7 +691,16 @@ export class GeometryEngine {
     // layer's x/y/w/h box via the exact same mechanism _pathPolygons() uses for Boolean Operation
     // results -- see _placeNaturalContours() below.
     const naturalContours = createShapeNaturalContours(options.shape, options);
-    return this._placeNaturalContours(naturalContours, options.xMm, options.yMm, options.widthMm, options.heightMm);
+    const placed = this._placeNaturalContours(naturalContours, options.xMm, options.yMm, options.widthMm, options.heightMm);
+
+    // ShapeLibrary.js stays a pure natural-coordinate generator with no downstream-concern coupling
+    // -- corner tagging for its four known-safe kinds (every point is trivially a real vertex by
+    // construction) is built here instead, never inside ShapeLibrary.js itself.
+    if (!placed.boundingBox || !CORNER_ANCHORED_SHAPE_LIBRARY_KINDS.has(options.shape)) {
+      return { ...placed, cornerFlagsByContour: null };
+    }
+    const cornerFlagsByContour = placed.polygons.map((polygon) => Array(polygon.length).fill(true));
+    return { ...placed, cornerFlagsByContour };
   }
 
   /**

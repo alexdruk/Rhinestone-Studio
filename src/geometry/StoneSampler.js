@@ -442,6 +442,99 @@ function pointAtArcLength({ pts, segLensMm, perimeterMm }, sMmRaw, closed) {
 }
 
 /**
+ * Corner-anchored per-side outline spacing: a second Outline-mode raw-sampling strategy, alongside
+ * sampleOutlinePoints()'s whole-loop `{ uniform: true }` walk above (this function is a new path,
+ * not a replacement -- see sampleMultiContourOutlinePoints()'s `cornerFlagsByContour` option). Used
+ * only for shape kinds where every contour vertex is confirmed to be a genuine corner with no
+ * smooth-curve tessellation in between (Rect, Regular Polygon, Star, Arrow, Cross -- wired in
+ * GeometryEngine.js); every other shape kind keeps sampleOutlinePoints()'s whole-loop walk exactly
+ * as before.
+ *
+ * Implemented generically against `cornerFlags` (walking from one flagged corner to the next,
+ * wrapping at the seam for closed contours) rather than hard-coding "every vertex is a corner", so
+ * this same mechanism is reusable later for a genuinely mixed case (e.g. Crescent's 2 real corners
+ * among ~80 curve points) without a rewrite -- even though for today's five wired shape kinds every
+ * vertex is flagged, so in practice this walks each edge between adjacent vertices.
+ *
+ * For each side (the path between one flagged corner and the next): a stone is placed AT the
+ * starting corner (guaranteed -- every corner is the *starting* corner of exactly one side, so it
+ * is placed exactly once, never by the side that ends there), then
+ * n_side = Math.max(1, Math.round(sideLengthMm / spacingMm)) stones are placed evenly at
+ * sideLengthMm / n_side apart, from the starting corner up to (not including) the next corner --
+ * the same Math.max(1, round(...)) degenerate-short-side floor uniformStepMm() already uses above.
+ *
+ * @param {Point2D[]} polygon
+ * @param {boolean[]} cornerFlags Parallel to `polygon`; true marks a genuine corner vertex. Must
+ *   contain at least one true entry.
+ * @param {number} spacingMm
+ * @param {{closed?: boolean}} [options]
+ * @returns {{points: Point2D[], arcLengthsMm: number[], perimeterMm: number}} `arcLengthsMm` is
+ *   each returned point's true arc-length position along the contour (parallel to `points`), used
+ *   by sampleMultiContourOutlinePoints()'s corner-gap backfill in place of the whole-loop walk's
+ *   `index * uniformStepMm(...)` shortcut, which does not hold once side spacing varies per side.
+ */
+function sampleCornerAnchoredOutlinePoints(polygon, cornerFlags, spacingMm, { closed = true } = {}) {
+  if (spacingMm <= 0) {
+    throw new RangeError('sampleCornerAnchoredOutlinePoints requires a positive spacingMm.');
+  }
+  if (polygon.length < 2) {
+    return { points: [], arcLengthsMm: [], perimeterMm: 0 };
+  }
+
+  const contourGeom = contourPerimeterAndSegments(polygon, closed);
+  const { perimeterMm } = contourGeom;
+  if (perimeterMm <= 0) {
+    return { points: [], arcLengthsMm: [], perimeterMm };
+  }
+
+  const vertexArcLengthMm = [0];
+  for (let i = 0; i < polygon.length - 1; i++) {
+    vertexArcLengthMm.push(vertexArcLengthMm[i] + contourGeom.segLensMm[i]);
+  }
+
+  const cornerVertexIndices = [];
+  for (let i = 0; i < polygon.length; i++) {
+    if (cornerFlags[i]) cornerVertexIndices.push(i);
+  }
+  if (cornerVertexIndices.length === 0) {
+    throw new RangeError('sampleCornerAnchoredOutlinePoints requires at least one true entry in cornerFlags.');
+  }
+
+  const points = [];
+  const arcLengthsMm = [];
+  const cornerCount = cornerVertexIndices.length;
+  const pairCount = closed ? cornerCount : cornerCount - 1;
+
+  for (let k = 0; k < pairCount; k++) {
+    const startVertexIdx = cornerVertexIndices[k];
+    const startArcLengthMm = vertexArcLengthMm[startVertexIdx];
+    const endArcLengthMm = k + 1 < cornerCount
+      ? vertexArcLengthMm[cornerVertexIndices[k + 1]]
+      : vertexArcLengthMm[cornerVertexIndices[0]] + perimeterMm;
+
+    const sideLengthMm = endArcLengthMm - startArcLengthMm;
+    const nSide = Math.max(1, Math.round(sideLengthMm / spacingMm));
+    const effectiveSideSpacingMm = sideLengthMm / nSide;
+
+    for (let step = 0; step < nSide; step++) {
+      const arcLengthMm = startArcLengthMm + step * effectiveSideSpacingMm;
+      const raw = pointAtArcLength(contourGeom, arcLengthMm, closed);
+      points.push(new Point2D(raw.xMm, raw.yMm));
+      arcLengthsMm.push(closed ? ((arcLengthMm % perimeterMm) + perimeterMm) % perimeterMm : arcLengthMm);
+    }
+  }
+
+  if (!closed) {
+    // Open contours have no wraparound side to place the final corner implicitly.
+    const lastVertexIdx = cornerVertexIndices[cornerCount - 1];
+    points.push(polygon[lastVertexIdx]);
+    arcLengthsMm.push(vertexArcLengthMm[lastVertexIdx]);
+  }
+
+  return { points, arcLengthsMm, perimeterMm };
+}
+
+/**
  * RS-3011 (corner-gap backfill): given the two dedupe-surviving points that flank a dropped sample
  * (in walk order, `spanMm` apart along the contour's own arc-length parameterization starting from
  * `fromArcLengthMm`), find the single best replacement position between them -- the point on the
@@ -542,13 +635,28 @@ function findEquidistantBackfillPoint(contourGeom, closed, prevPoint, nextPoint,
  * introduce a new overlap with some other nearby point -- from the same corner, a different corner,
  * or a different contour entirely.
  *
+ * Corner-anchored per-side spacing (see sampleCornerAnchoredOutlinePoints() above): pass
+ * `cornerFlagsByContour` -- an array parallel to `polygons`, each entry either a per-point
+ * boolean[] (parallel to that contour's own polygon) or null/undefined -- to sample that
+ * particular contour with corner-anchored per-side spacing instead of the whole-loop uniform walk.
+ * Every contour with no entry (or a null/undefined one) is completely unaffected, still sampled by
+ * sampleOutlinePoints()'s existing `{ uniform: true }` walk exactly as before this option existed.
+ *
  * @param {Point2D[][]} polygons
  * @param {number} spacingMm
- * @param {{closed?: boolean, minSeparationMm?: number}} [options]
+ * @param {{closed?: boolean, minSeparationMm?: number, cornerFlagsByContour?: (boolean[]|null)[]}} [options]
  * @returns {Point2D[]}
  */
-export function sampleMultiContourOutlinePoints(polygons, spacingMm, { closed = true, minSeparationMm = spacingMm } = {}) {
-  const contourRawPoints = polygons.map((polygon) => sampleOutlinePoints(polygon, spacingMm, { closed, uniform: true }));
+export function sampleMultiContourOutlinePoints(polygons, spacingMm, { closed = true, minSeparationMm = spacingMm, cornerFlagsByContour = null } = {}) {
+  const contourSamples = polygons.map((polygon, c) => {
+    const cornerFlags = cornerFlagsByContour ? cornerFlagsByContour[c] : null;
+    if (cornerFlags) {
+      const sampled = sampleCornerAnchoredOutlinePoints(polygon, cornerFlags, spacingMm, { closed });
+      return { points: sampled.points, arcLengthsMm: sampled.arcLengthsMm };
+    }
+    return { points: sampleOutlinePoints(polygon, spacingMm, { closed, uniform: true }), arcLengthsMm: null };
+  });
+  const contourRawPoints = contourSamples.map((sample) => sample.points);
   const points = contourRawPoints.flat();
   const kept = dedupeStonePoints(points, minSeparationMm);
 
@@ -559,14 +667,14 @@ export function sampleMultiContourOutlinePoints(polygons, spacingMm, { closed = 
   const keptSet = new Set(kept);
   const index = buildProximityIndex(kept, minSeparationMm);
   let contourGeomCache = null;
-  let contourStepMmCache = null;
+  let contourArcLengthsCache = null;
 
   const result = [];
   for (let c = 0; c < polygons.length; c++) {
     const rawPoints = contourRawPoints[c];
     const n = rawPoints.length;
     contourGeomCache = null;
-    contourStepMmCache = null;
+    contourArcLengthsCache = null;
 
     for (let i = 0; i < n; i++) {
       const point = rawPoints[i];
@@ -607,14 +715,19 @@ export function sampleMultiContourOutlinePoints(polygons, spacingMm, { closed = 
 
       if (!contourGeomCache) {
         contourGeomCache = contourPerimeterAndSegments(polygons[c], closed);
-        // The raw samples above were walked at this contour's own uniformStepMm(), not the nominal
-        // spacingMm -- step-count-to-arc-length conversion below must use that same actual step, or
-        // fromArcLengthMm/spanMm would point at the wrong stretch of the contour whenever the
-        // uniform-spacing fix nudged this contour's effective step away from the nominal pitch.
-        contourStepMmCache = uniformStepMm(contourGeomCache.perimeterMm, spacingMm);
+        // The raw samples above were walked at this contour's own per-point arc length -- for a
+        // whole-loop-uniform contour that's `index * uniformStepMm(...)` (a fixed step, computed
+        // here); for a corner-anchored contour it's sampleCornerAnchoredOutlinePoints()'s own
+        // per-side arc lengths, already computed once above and reused as-is, since per-side
+        // spacing varies and there is no single fixed step to multiply by.
+        contourArcLengthsCache = contourSamples[c].arcLengthsMm
+          ?? rawPoints.map((_, idx) => idx * uniformStepMm(contourGeomCache.perimeterMm, spacingMm));
       }
-      const fromArcLengthMm = (i - prevSteps) * contourStepMmCache;
-      const spanMm = (prevSteps + nextSteps) * contourStepMmCache;
+      const { perimeterMm } = contourGeomCache;
+      const fromArcLengthMm = contourArcLengthsCache[prevIdx];
+      const spanMm = closed
+        ? (((contourArcLengthsCache[nextIdx] - contourArcLengthsCache[prevIdx]) % perimeterMm) + perimeterMm) % perimeterMm
+        : contourArcLengthsCache[nextIdx] - contourArcLengthsCache[prevIdx];
       const candidate = findEquidistantBackfillPoint(
         contourGeomCache, closed, prevPoint, nextPoint, fromArcLengthMm, spanMm, minSeparationMm
       );
@@ -812,9 +925,14 @@ export function sampleContourFillPoints(polygons, boundingBox, spacingMm) {
  *   this; every other mode's contours are always closed by construction. Defaults to true, so
  *   every pre-existing caller (Rect/Ellipse/Slot/Polygon, text, SVG's fill-mode branch) is
  *   unaffected -- only generatePathLayout() passes an explicit value.
+ * @param {(boolean[]|null)[]} [cornerFlagsByContour] Corner-anchored per-side spacing (see
+ *   sampleMultiContourOutlinePoints()). Only 'outline' reads this; every other mode ignores it.
+ *   Defaults to null (every contour uses the existing whole-loop uniform walk), so every
+ *   pre-existing caller is unaffected -- only generateShapeLayout()'s Rect/Regular
+ *   Polygon/Star/Arrow/Cross path passes an explicit value.
  * @returns {Point2D[]}
  */
-export function sampleShapeFillPoints(mode, polygons, boundingBox, spacingMm, stoneSizeMm = spacingMm, closed = true) {
+export function sampleShapeFillPoints(mode, polygons, boundingBox, spacingMm, stoneSizeMm = spacingMm, closed = true, cornerFlagsByContour = null) {
   switch (mode) {
     case 'fill': return sampleFillPoints(polygons, boundingBox, spacingMm);
     case 'staggered': return sampleStaggeredFillPoints(polygons, boundingBox, spacingMm);
@@ -822,7 +940,7 @@ export function sampleShapeFillPoints(mode, polygons, boundingBox, spacingMm, st
     case 'contour': return sampleContourFillPoints(polygons, boundingBox, spacingMm);
     case 'outline':
     default:
-      return sampleMultiContourOutlinePoints(polygons, spacingMm, { closed, minSeparationMm: stoneSizeMm });
+      return sampleMultiContourOutlinePoints(polygons, spacingMm, { closed, minSeparationMm: stoneSizeMm, cornerFlagsByContour });
   }
 }
 

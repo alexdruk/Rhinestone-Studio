@@ -194,7 +194,7 @@
       "file": "rectangle-only.rhs",
       "layerCount": 1,
       "visibleLayerCount": 1,
-      "stoneCount": 155,
+      "stoneCount": 158,
       "bounds": {
         "minXmm": 39,
         "minYmm": 19,
@@ -382,7 +382,7 @@
       "file": "multi-color-mixed-layers.rhs",
       "layerCount": 5,
       "visibleLayerCount": 5,
-      "stoneCount": 1008,
+      "stoneCount": 1010,
       "bounds": {
         "minXmm": 19.3,
         "minYmm": 7.3,
@@ -425,7 +425,7 @@
       "file": "bottle-front-design.rhs",
       "layerCount": 3,
       "visibleLayerCount": 3,
-      "stoneCount": 431,
+      "stoneCount": 432,
       "bounds": {
         "minXmm": 19.2,
         "minYmm": 14.2,
@@ -510,7 +510,7 @@
       "file": "business-logo-monogram-bottle.rhs",
       "layerCount": 2,
       "visibleLayerCount": 2,
-      "stoneCount": 450,
+      "stoneCount": 452,
       "bounds": {
         "minXmm": 14.2,
         "minYmm": 11.2,

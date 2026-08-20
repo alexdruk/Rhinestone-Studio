@@ -28,6 +28,26 @@ export const CURVE_FLATTEN_SEGMENTS = 16;
  * @returns {Point2D[]}
  */
 export function flattenContourToPolygon(contour, segmentsPerCurve = CURVE_FLATTEN_SEGMENTS) {
+  return flattenContourWithCornerFlags(contour, segmentsPerCurve).points;
+}
+
+/**
+ * Same output as flattenContourToPolygon(), plus a parallel cornerFlags[] (same length/order as
+ * the returned points) marking which points are genuine contour corners -- i.e. came from a
+ * moveTo/lineTo command -- versus a curve-flattening sample point (quadraticTo/cubicTo), which
+ * is never a real corner. Used by outline-mode corner-anchored spacing (StoneSampler.js) for shape
+ * kinds where every vertex is known to be a real corner (Rect); kept as a separate export so every
+ * pre-existing flattenContourToPolygon() caller is completely unaffected.
+ *
+ * @param {Contour} contour
+ * @param {number} [segmentsPerCurve]
+ * @returns {{points: Point2D[], cornerFlags: boolean[]}}
+ */
+export function flattenContourToPolygonWithCornerFlags(contour, segmentsPerCurve = CURVE_FLATTEN_SEGMENTS) {
+  return flattenContourWithCornerFlags(contour, segmentsPerCurve);
+}
+
+function flattenContourWithCornerFlags(contour, segmentsPerCurve) {
   if (!(contour instanceof Contour)) {
     throw new TypeError('flattenContourToPolygon requires a Contour.');
   }
@@ -36,6 +56,7 @@ export function flattenContourToPolygon(contour, segmentsPerCurve = CURVE_FLATTE
   }
 
   const points = [];
+  const cornerFlags = [];
   let current = null;
 
   for (const command of contour.commands) {
@@ -44,12 +65,14 @@ export function flattenContourToPolygon(contour, segmentsPerCurve = CURVE_FLATTE
       case 'lineTo': {
         current = command.points[0];
         points.push(current);
+        cornerFlags.push(true);
         break;
       }
       case 'quadraticTo': {
         const [control, end] = command.points;
         for (let step = 1; step <= segmentsPerCurve; step++) {
           points.push(quadraticPointAt(current, control, end, step / segmentsPerCurve));
+          cornerFlags.push(false);
         }
         current = end;
         break;
@@ -58,6 +81,7 @@ export function flattenContourToPolygon(contour, segmentsPerCurve = CURVE_FLATTE
         const [control1, control2, end] = command.points;
         for (let step = 1; step <= segmentsPerCurve; step++) {
           points.push(cubicPointAt(current, control1, control2, end, step / segmentsPerCurve));
+          cornerFlags.push(false);
         }
         current = end;
         break;
@@ -69,7 +93,7 @@ export function flattenContourToPolygon(contour, segmentsPerCurve = CURVE_FLATTE
     }
   }
 
-  return points;
+  return { points, cornerFlags };
 }
 
 /**
