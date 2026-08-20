@@ -339,3 +339,4 @@ tools/scratch/feature-outline-corner-anchoring-verify/
 # corner-vs-dedup protection/merge fix, same "never a repo artifact" category as the scratch
 # folders above
 tools/scratch/bugfix-corner-anchoring-dedup-protection-verify/
+tools/scratch/ # only if not already present — check first
