@@ -21,7 +21,7 @@
  */
 
 import { BoundingBox, Point2D, createCircleVectorPath, createRectangleVectorPath } from '../text/VectorPath.js';
-import { flattenContourToPolygon, flattenContourToPolygonWithCornerFlags, translateContour } from './ContourGeometry.js';
+import { flattenContourToPolygon, flattenContourToPolygonWithCornerFlags, translateContour, detectPolygonCornerFlags } from './ContourGeometry.js';
 import { sampleOutlinePoints, sampleMultiContourOutlinePoints, sampleShapeFillPoints, sampleFieldByMode, isPointInsidePolygons } from './StoneSampler.js';
 import { Stone } from './Stone.js';
 import { StoneLayout } from './StoneLayout.js';
@@ -980,7 +980,18 @@ export class GeometryEngine {
 
     const placedBoundingBox = BoundingBox.fromPoints(polygons.flat());
     const spacingMm = options.stoneSizeMm + options.gapMm;
-    const points = sampleShapeFillPoints(options.mode, polygons, placedBoundingBox, spacingMm, options.stoneSizeMm, options.closed);
+    // Corner-anchored per-side Outline spacing for drawn 'path' layers (Rect/Polygon/Pen/Freehand
+    // tools, Boolean-op results) -- the CORNER_ANCHORED_SHAPE_LIBRARY_KINDS mechanism above only
+    // covers ShapeLibrary-generated kinds with known-safe-by-construction corners; drawn contours
+    // reach here as plain flattened points with no such provenance, so detection happens on the
+    // placed polygons instead (must be parallel to the exact vertex arrays being sampled below).
+    // Scoped to closed Outline mode only -- fill/staggered/radial/contour ignore corner flags
+    // entirely (see sampleShapeFillPoints()'s own doc comment) and an open path has no sides to
+    // anchor between (RS-3011 endpoint anchoring is separate, deferred, future work).
+    const cornerFlagsByContour = options.mode === 'outline' && options.closed
+      ? polygons.map((polygon) => detectPolygonCornerFlags(polygon, { closed: true }))
+      : null;
+    const points = sampleShapeFillPoints(options.mode, polygons, placedBoundingBox, spacingMm, options.stoneSizeMm, options.closed, cornerFlagsByContour);
 
     let stones = points.map((point, index) => new Stone({
       xMm: point.xMm,
