@@ -1294,6 +1294,12 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
        function's own doc comment for why), so this is the visible flag it gets instead, the same
        "separate warning paragraph" idiom #mixedNoEligibleHint already uses. -->
   <p class="validation-message" id="stoneSizeOverlapWarning" role="alert"></p>
+  <!-- Crowding/attrition warning: informational only (measureStoneCrowding()/StoneLayout.outlineStats
+       in updateStoneSizeOverlapCapabilityUI()) -- dense packing is sometimes exactly what the user
+       wants (pave), so this never disables an option, and is mutually exclusive with the overlap
+       warning above (genuine overlap is the more severe, actionable problem). Uses the .hint idiom,
+       not .validation-message -- this is a suggestion, not an error. -->
+  <p class="hint" id="stoneSizeCrowdingHint" style="display:none"></p>
   <!-- RS-2012: shown instead of relying on #gap's disabled look alone -- an authored Rhinestone
        font (RS Block/RS Modern) bakes spacing into its stone positions, so Gap has no effect for it
        (see isAuthoredStoneFontId() in app.js). Mirrors #textSizeFixedHint/#curveUnavailableHint's

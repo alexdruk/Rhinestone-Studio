@@ -344,3 +344,7 @@ tools/scratch/bugfix-corner-anchoring-dedup-protection-verify/
 # review, never itself a repo artifact, same "never a repo artifact" category as the scratch
 # folders above
 tools/scratch/layout-quality-calibration/
+# feature-stone-size-crowding-warning: ad hoc Playwright browser-verification script + screenshot
+# proving the new #stoneSizeCrowdingHint fires for a crowded-not-overlapping Stone Size selection,
+# same "never a repo artifact" category as the scratch folders above
+tools/scratch/feature-stone-size-crowding-warning-verify/

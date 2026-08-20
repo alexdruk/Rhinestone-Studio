@@ -85,7 +85,7 @@
 // pipeline stages re-run on every threshold/invert/blur/resize edit, but the (comparatively
 // expensive) browser image decode only ever runs once per distinct imageSrc value.
 import './src/browser/BrowserDependencyProbe.js';
-import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace, hitTestPathLayerRegion, computeNaturalContourTransform, applyNaturalContourTransform, isPointInsidePolygons, findOverlappingStonePairs } from './src/geometry/index.js';
+import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace, hitTestPathLayerRegion, computeNaturalContourTransform, applyNaturalContourTransform, isPointInsidePolygons, findOverlappingStonePairs, measureStoneCrowding } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
 import { createDefaultFontProviderRegistry, createDefaultRhinestoneFontRegistry, BoundingBox } from './src/text/index.js';
 import { renderProductionLayout, renderStoneLayout, fitTransform } from './src/renderer/CanvasRenderer2D.js';
@@ -702,12 +702,16 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // updateStoneSizeOverlapCapabilityUI() below can generate one layer's real stones for a *candidate*
  // stoneSize without touching the rest of the project. No new generation logic -- every branch calls
  // the exact same generateXStonesLive() method generate() already calls.
- async generateLiveStonesForCandidateLayer(layer,project){if(layer.type==='text')return this.generateTextStonesLive(layer,project);if(SHAPE_LAYER_TYPES.has(layer.type))return this.generateShapeStonesLive(layer);if(layer.type==='svg')return this.generateSvgStonesLive(layer);if(layer.type==='image')return this.generateImageStonesLive(layer);if(layer.type==='path')return this.generatePathStonesLive(layer);return[]}
+ // {includeStats=false}: when true, each branch below returns {stones,outlineStats} instead of a
+ // bare array -- outlineStats is that candidate's own StoneLayout.outlineStats (null for non-outline
+ // modes/layer types with no outline concept, e.g. text/image/svg-in-fill-mode). Every existing call
+ // site omits this option, so its behavior/return shape is byte-for-byte unchanged.
+ async generateLiveStonesForCandidateLayer(layer,project,{includeStats=false}={}){if(layer.type==='text')return this.generateTextStonesLive(layer,project,{includeStats});if(SHAPE_LAYER_TYPES.has(layer.type))return this.generateShapeStonesLive(layer,{includeStats});if(layer.type==='svg')return this.generateSvgStonesLive(layer,{includeStats});if(layer.type==='image')return this.generateImageStonesLive(layer,{includeStats});if(layer.type==='path')return this.generatePathStonesLive(layer,{includeStats});return includeStats?{stones:[],outlineStats:null}:[]}
  // FONT-002: an unknown font id (not just one hidden from the picker -- see isFontKnown()) is never
  // silently substituted for DEFAULT_TEXT_FONT_ID; that layer's stones are skipped (same shape as an
  // empty-text layer already returning []), and updateTextFontCapabilityUI() surfaces why while it's
  // selected. layer.font itself is left untouched in `project`.
- async generateTextStonesLive(layer,project){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text||!isFontKnown(layer.font))return[];const base={...buildTextLayoutBaseParams(layer),
+ async generateTextStonesLive(layer,project,{includeStats=false}={}){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text||!isFontKnown(layer.font))return includeStats?{stones:[],outlineStats:null}:[];const base={...buildTextLayoutBaseParams(layer),
   // MONO-005A: see resolveAuthoredScale()'s own doc comment. No effect on sampled/OpenType text --
   // GeometryEngine only ever reads authoredScale inside its authored-stone-center branch.
   authoredScale:resolveAuthoredScale(layer)};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const{scale}=computeAutoFitScale(layer,project,result.widthMm);if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
@@ -715,29 +719,29 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
   // canvas. layer.x/layer.y (mm, default 0) are a further offset applied on top of that same
   // auto-centered base position, so pre-RS-1009 Project JSON (no x/y on its text layers) renders
   // byte-identical to before, and dragging/nudging/aligning a text layer just moves this offset.
-  const{offsetX,offsetY}=computeTextPlacementOffset(bb,layer,project);return result.stones.map(s=>({x:s.xMm+offsetX,y:s.yMm+offsetY,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
+  const{offsetX,offsetY}=computeTextPlacementOffset(bb,layer,project);const stones=result.stones.map(s=>({x:s.xMm+offsetX,y:s.yMm+offsetY,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null}:stones}
  // RS-0003.5C1: circle/rectangle layers are generated by the same permanent engine's
  // generateShapeLayout(), mirroring generateTextStonesLive() above. S-110: every new shape kind
  // (Ellipse/Capsule/Regular Polygon/Star/Heart/Arrow/Cross/Crescent/Ring) goes through this exact
  // same call, via shapeLayerResolveParams()'s shared layer->params mapping (module scope, above).
- async generateShapeStonesLive(layer){if(!this.permanentEngine)return[];const params={...shapeLayerResolveParams(layer),stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.fillMode),color:layer.color,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateShapeLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
+ async generateShapeStonesLive(layer,{includeStats=false}={}){if(!this.permanentEngine)return includeStats?{stones:[],outlineStats:null}:[];const params={...shapeLayerResolveParams(layer),stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.fillMode),color:layer.color,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateShapeLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null}:stones}
  // RS-1001: svg layers reuse the same x/y/w/h placement box rectangle layers use; src/svg/**
  // (not app.js) does the actual SVG parsing, inside generateSvgLayout().
- async generateSvgStonesLive(layer){if(!this.permanentEngine)return[];const params={svgSource:layer.svgSource,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.mode),color:layer.color,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateSvgLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
+ async generateSvgStonesLive(layer,{includeStats=false}={}){if(!this.permanentEngine)return includeStats?{stones:[],outlineStats:null}:[];const params={svgSource:layer.svgSource,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.mode),color:layer.color,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateSvgLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null}:stones}
  // RS-1008A: image layers go through the permanent engine's generateImageLayout(), mirroring
  // generateSvgStonesLive()/generateShapeStonesLive() above -- src/image/** only prepares the
  // decoded pixel buffer (decode/cache happens here since that's the one async, DOM-only step;
  // generateImageLayout() itself is synchronous, like generateShapeLayout()). imageBufferCache means
  // the (comparatively expensive) browser image decode only re-runs the first time a given imageSrc
  // is seen; every subsequent call here only re-runs the permanent engine's pure/fast pipeline.
- async generateImageStonesLive(layer){if(!this.permanentEngine||!layer.imageSrc)return[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveImageFillMode(layer.fillMode),color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
+ async generateImageStonesLive(layer,{includeStats=false}={}){if(!this.permanentEngine||!layer.imageSrc)return includeStats?{stones:[],outlineStats:null}:[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveImageFillMode(layer.fillMode),color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null}:stones}
  // RS-1012: 'path' layers (Boolean Operation results) go through the permanent engine's
  // generatePathLayout(), mirroring generateSvgStonesLive()/generateShapeStonesLive() above --
  // layer.contours is already plain (0,0)-rooted polygon data (no parsing step, unlike SVG).
  // RS-3011 Step 7: stonesGenerated===false gates a Design-drawn shape's entire stone output (base
  // fill AND Paint regions alike) until "Generate Stones" is pressed -- missing on every layer
  // predating this step (Boolean Ops results, etc.), so those keep generating live as before.
- async generatePathStonesLive(layer){if(layer.stonesGenerated===false)return[];if(!this.permanentEngine)return[];const params={contours:layer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.fillMode),color:layer.color,closed:layer.closed!==false,
+ async generatePathStonesLive(layer,{includeStats=false}={}){if(layer.stonesGenerated===false)return includeStats?{stones:[],outlineStats:null}:[];if(!this.permanentEngine)return includeStats?{stones:[],outlineStats:null}:[];const params={contours:layer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.fillMode),color:layer.color,closed:layer.closed!==false,
     // RS-3011 Step 10b: forwards a 'path' layer's Paint regions (Step 10a's own data model) into
     // live/production generation -- Step 10a wired GeometryEngine's own support for `regions` and
     // validateProject()'s pass-through, but never actually forwarded the field from a real layer
@@ -768,7 +772,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
     // every layer never cut, matching GeometryEngine.normalizePathParams()'s own
     // naturalBoundingBoxMm normalizer's safe-no-op default.
     naturalBoundingBoxMm:layer.naturalBoundingBoxMm,
-    ...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generatePathLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
+    ...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generatePathLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null}:stones}
  // RS-2000: the legacy bitmap text engine (FONT5 + generateText/sampleGlyphFill/
  // sampleGlyphStroke/line) and the legacy generateCircle/generateRect/bbox/layerBBox shape path
  // were deleted here -- unreachable since generateTextStonesLive/generateShapeStonesLive took over
@@ -2691,7 +2695,7 @@ async function stonesForCandidateStoneSize(target,sizeMm,project){
     candidateLayer={...layer,stoneSize:sizeMm};
     if(sizeMm!==layer.stoneSize)delete candidateLayer.authoredScale;
   }
-  return engine.generateLiveStonesForCandidateLayer(candidateLayer,project);
+  return engine.generateLiveStonesForCandidateLayer(candidateLayer,project,{includeStats:true});
 }
 // Only reachable when there's no layer to check at all (currentStoneSizeTarget() found neither a
 // selected region nor a selected layer) -- updateStoneSizePrintableCapabilityUI() already leaves
@@ -2700,11 +2704,18 @@ async function stonesForCandidateStoneSize(target,sizeMm,project){
 function clearStoneSizeOverlapUI(){
   el('stoneSize').classList.remove('overlap-invalid');
   el('stoneSizeOverlapWarning').classList.remove('visible');el('stoneSizeOverlapWarning').textContent='';
+  el('stoneSizeCrowdingHint').style.display='none';el('stoneSizeCrowdingHint').textContent='';
 }
 // Guarded by a monotonic token (same convention updateAll()'s own generationToken uses) since this
 // runs the real Live generation pipeline (async for text) -- a fast keystroke-to-keystroke edit must
 // never let a stale, slower-to-resolve check overwrite a newer one's result.
 let stoneSizeOverlapCheckToken=0;
+// Crowding/attrition warning thresholds (Prompt 4), calibrated against Prompt 3's measureStoneCrowding()
+// sweep and the three screenshot regimes (healthy / crowded-not-overlapping / genuinely-overlapping)
+// reviewed in chat. Deliberately looser than "any measurable crowding" -- pavé-style intentional tight
+// packing is legitimate, so this only fires for the denser end of the sweep's observed range.
+const STONE_SIZE_CROWDING_FRACTION_THRESHOLD=0.25;
+const STONE_SIZE_ATTRITION_RATIO_THRESHOLD=0.75;
 async function updateStoneSizeOverlapCapabilityUI(){
   const target=currentStoneSizeTarget();
   if(!target){clearStoneSizeOverlapUI();return}
@@ -2714,10 +2725,14 @@ async function updateStoneSizeOverlapCapabilityUI(){
   const diametersToCheck=new Set(listStoneSizes().map(s=>s.diameterMm));
   diametersToCheck.add(currentSizeMm);
   const overlapBySize=new Map();
+  // Captured only for currentSizeMm's own iteration -- the crowding/attrition warning below is about
+  // the user's actual current selection, not a per-option gate like the disable loop just below.
+  let currentStones=null,currentOutlineStats=null;
   for(const diameterMm of diametersToCheck){
-    const stones=await stonesForCandidateStoneSize(target,diameterMm,project);
+    const{stones,outlineStats}=await stonesForCandidateStoneSize(target,diameterMm,project);
     if(token!==stoneSizeOverlapCheckToken)return;
     overlapBySize.set(diameterMm,findOverlappingStonePairs(stones.map(s=>({xMm:s.x,yMm:s.y,sizeMm:s.d}))).length>0);
+    if(diameterMm===currentSizeMm){currentStones=stones;currentOutlineStats=outlineStats}
   }
   for(const size of listStoneSizes()){
     const option=select.querySelector(`option[value="${size.diameterMm}"]`);
@@ -2737,6 +2752,21 @@ async function updateStoneSizeOverlapCapabilityUI(){
   select.classList.toggle('overlap-invalid',currentOverlaps);
   warning.textContent=currentOverlaps?"This stone size isn't suitable for this shape — it won't form a uniform figure.":'';
   warning.classList.toggle('visible',currentOverlaps);
+  // Crowding/attrition warning: informational only, for the CURRENT size only (not a per-option gate
+  // like the disable loop above) -- dense packing is sometimes exactly what the user wants (pavé), so
+  // this never disables an option. Skipped entirely whenever currentOverlaps is already true: genuine
+  // overlap is the more severe, actionable problem, and showing both at once is noise, not more
+  // information.
+  const crowdingHint=el('stoneSizeCrowdingHint');
+  let crowded=false;
+  if(!currentOverlaps){
+    const gapMm=target.region?target.region.gapMm:target.layer.gap;
+    const crowding=measureStoneCrowding(currentStones.map(s=>({xMm:s.x,yMm:s.y,sizeMm:s.d})),{gapMm});
+    const attritionRatio=currentOutlineStats?currentOutlineStats.keptCount/currentOutlineStats.rawSampleCount:1;
+    crowded=crowding.fractionBelowHalfGap>STONE_SIZE_CROWDING_FRACTION_THRESHOLD||attritionRatio<STONE_SIZE_ATTRITION_RATIO_THRESHOLD;
+  }
+  crowdingHint.textContent=crowded?'This stone size may pack tightly on this shape — try a smaller size for more even spacing.':'';
+  crowdingHint.style.display=crowded?'block':'none';
 }
 // RS-0003.5D2: SELECTION_HANDLE_SIZE_PX enlarges the resize handles slightly (was a bare 10px
 // square) and a white halo is stroked behind the dashed outline so the selection reads clearly
