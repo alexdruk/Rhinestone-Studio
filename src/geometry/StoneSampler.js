@@ -468,23 +468,28 @@ function pointAtArcLength({ pts, segLensMm, perimeterMm }, sMmRaw, closed) {
  *   contain at least one true entry.
  * @param {number} spacingMm
  * @param {{closed?: boolean}} [options]
- * @returns {{points: Point2D[], arcLengthsMm: number[], perimeterMm: number}} `arcLengthsMm` is
- *   each returned point's true arc-length position along the contour (parallel to `points`), used
- *   by sampleMultiContourOutlinePoints()'s corner-gap backfill in place of the whole-loop walk's
- *   `index * uniformStepMm(...)` shortcut, which does not hold once side spacing varies per side.
+ * @returns {{points: Point2D[], arcLengthsMm: number[], isCorner: boolean[], perimeterMm: number}}
+ *   `arcLengthsMm` is each returned point's true arc-length position along the contour (parallel to
+ *   `points`), used by sampleMultiContourOutlinePoints()'s corner-gap backfill in place of the
+ *   whole-loop walk's `index * uniformStepMm(...)` shortcut, which does not hold once side spacing
+ *   varies per side. `isCorner` (bugfix: corner-anchoring dedup protection) flags which returned
+ *   points are the corner-vertex-anchored ones (always the `step === 0` sample of a side, plus the
+ *   final wrap-implicit corner on an open contour) versus ordinary in-between side samples -- used
+ *   by sampleMultiContourOutlinePointsWithCornerProtection() to protect corners from the general
+ *   dedup pass.
  */
 function sampleCornerAnchoredOutlinePoints(polygon, cornerFlags, spacingMm, { closed = true } = {}) {
   if (spacingMm <= 0) {
     throw new RangeError('sampleCornerAnchoredOutlinePoints requires a positive spacingMm.');
   }
   if (polygon.length < 2) {
-    return { points: [], arcLengthsMm: [], perimeterMm: 0 };
+    return { points: [], arcLengthsMm: [], isCorner: [], perimeterMm: 0 };
   }
 
   const contourGeom = contourPerimeterAndSegments(polygon, closed);
   const { perimeterMm } = contourGeom;
   if (perimeterMm <= 0) {
-    return { points: [], arcLengthsMm: [], perimeterMm };
+    return { points: [], arcLengthsMm: [], isCorner: [], perimeterMm };
   }
 
   const vertexArcLengthMm = [0];
@@ -502,6 +507,7 @@ function sampleCornerAnchoredOutlinePoints(polygon, cornerFlags, spacingMm, { cl
 
   const points = [];
   const arcLengthsMm = [];
+  const isCorner = [];
   const cornerCount = cornerVertexIndices.length;
   const pairCount = closed ? cornerCount : cornerCount - 1;
 
@@ -521,6 +527,7 @@ function sampleCornerAnchoredOutlinePoints(polygon, cornerFlags, spacingMm, { cl
       const raw = pointAtArcLength(contourGeom, arcLengthMm, closed);
       points.push(new Point2D(raw.xMm, raw.yMm));
       arcLengthsMm.push(closed ? ((arcLengthMm % perimeterMm) + perimeterMm) % perimeterMm : arcLengthMm);
+      isCorner.push(step === 0);
     }
   }
 
@@ -529,9 +536,10 @@ function sampleCornerAnchoredOutlinePoints(polygon, cornerFlags, spacingMm, { cl
     const lastVertexIdx = cornerVertexIndices[cornerCount - 1];
     points.push(polygon[lastVertexIdx]);
     arcLengthsMm.push(vertexArcLengthMm[lastVertexIdx]);
+    isCorner.push(true);
   }
 
-  return { points, arcLengthsMm, perimeterMm };
+  return { points, arcLengthsMm, isCorner, perimeterMm };
 }
 
 /**
@@ -642,6 +650,11 @@ function findEquidistantBackfillPoint(contourGeom, closed, prevPoint, nextPoint,
  * Every contour with no entry (or a null/undefined one) is completely unaffected, still sampled by
  * sampleOutlinePoints()'s existing `{ uniform: true }` walk exactly as before this option existed.
  *
+ * Bugfix (corner-anchoring dedup protection): when at least one contour is corner-anchored, this
+ * dispatches to sampleMultiContourOutlinePointsWithCornerProtection() instead of running the plain
+ * dedup below directly -- see that function's own doc comment. A shape with no corner-anchored
+ * contour at all takes the exact code path below, completely unchanged.
+ *
  * @param {Point2D[][]} polygons
  * @param {number} spacingMm
  * @param {{closed?: boolean, minSeparationMm?: number, cornerFlagsByContour?: (boolean[]|null)[]}} [options]
@@ -652,10 +665,15 @@ export function sampleMultiContourOutlinePoints(polygons, spacingMm, { closed = 
     const cornerFlags = cornerFlagsByContour ? cornerFlagsByContour[c] : null;
     if (cornerFlags) {
       const sampled = sampleCornerAnchoredOutlinePoints(polygon, cornerFlags, spacingMm, { closed });
-      return { points: sampled.points, arcLengthsMm: sampled.arcLengthsMm };
+      return { points: sampled.points, arcLengthsMm: sampled.arcLengthsMm, isCorner: sampled.isCorner, perimeterMm: sampled.perimeterMm };
     }
-    return { points: sampleOutlinePoints(polygon, spacingMm, { closed, uniform: true }), arcLengthsMm: null };
+    return { points: sampleOutlinePoints(polygon, spacingMm, { closed, uniform: true }), arcLengthsMm: null, isCorner: null, perimeterMm: null };
   });
+
+  if (contourSamples.some((sample) => sample.isCorner !== null)) {
+    return sampleMultiContourOutlinePointsWithCornerProtection(polygons, contourSamples, spacingMm, closed, minSeparationMm);
+  }
+
   const contourRawPoints = contourSamples.map((sample) => sample.points);
   const points = contourRawPoints.flat();
   const kept = dedupeStonePoints(points, minSeparationMm);
@@ -734,6 +752,266 @@ export function sampleMultiContourOutlinePoints(polygons, spacingMm, { closed = 
 
       if (!candidate) continue; // no legal position -- drop-fallback, matching current behavior exactly
       if (index.hasConflict(candidate)) continue; // would overlap some other already-kept/backfilled point
+
+      index.insert(candidate);
+      result.push(candidate);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Bugfix (corner-anchoring dedup protection): union-find clustering of a single contour's own
+ * corner points by straight-line distance, so two (or more) corners sitting closer to each other
+ * than `minSeparationMm` -- most commonly two corners flanking a side shorter than one stone's own
+ * diameter -- resolve into ONE connected group instead of being left for the general dedup pass to
+ * silently drop one of them. Deliberately scoped to one contour's own corner records: "two corners
+ * flanking a short side" is inherently a same-contour concept (a side only exists within one
+ * contour), and every shape kind that currently carries cornerFlags (Rect, Regular Polygon, Star,
+ * Arrow, Cross) is a single, hole-free contour, so no cross-contour corner conflict is reachable
+ * through today's wiring.
+ *
+ * @param {{point: Point2D}[]} cornerRecords
+ * @param {number} minSeparationMm
+ * @returns {number[][]} Groups of indices into `cornerRecords`, each group one connected component
+ *   (a lone, non-conflicting corner is its own group of size 1).
+ */
+function clusterCornersByProximity(cornerRecords, minSeparationMm) {
+  const n = cornerRecords.length;
+  const parent = Array.from({ length: n }, (_, i) => i);
+  const find = (x) => {
+    while (parent[x] !== x) {
+      parent[x] = parent[parent[x]];
+      x = parent[x];
+    }
+    return x;
+  };
+  const union = (a, b) => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent[ra] = rb;
+  };
+
+  const minSeparationSqMm = minSeparationMm * minSeparationMm;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const dx = cornerRecords[i].point.xMm - cornerRecords[j].point.xMm;
+      const dy = cornerRecords[i].point.yMm - cornerRecords[j].point.yMm;
+      if (dx * dx + dy * dy < minSeparationSqMm) union(i, j);
+    }
+  }
+
+  const groups = new Map();
+  for (let i = 0; i < n; i++) {
+    const root = find(i);
+    if (!groups.has(root)) groups.set(root, []);
+    groups.get(root).push(i);
+  }
+  return [...groups.values()];
+}
+
+/**
+ * Bugfix (corner-anchoring dedup protection): the arc-length position recorded for a merged group
+ * of 2+ corners, so contourArcLengthsCache-style backfill span math downstream stays internally
+ * consistent even though a merged corner is no longer a single walk-order sample. Uses a circular
+ * (unit-vector) mean rather than a plain arithmetic mean so a group straddling the seam of a closed
+ * contour (one corner just before arc-length 0 merging with one just after it wraps) doesn't average
+ * to the wrong side of the loop.
+ */
+function circularMeanArcLengthMm(arcLengthsMm, perimeterMm, closed) {
+  if (arcLengthsMm.length === 1) return arcLengthsMm[0];
+  if (!closed || !(perimeterMm > 0)) {
+    return arcLengthsMm.reduce((sum, sMm) => sum + sMm, 0) / arcLengthsMm.length;
+  }
+  let sumX = 0;
+  let sumY = 0;
+  for (const sMm of arcLengthsMm) {
+    const thetaRad = (sMm / perimeterMm) * 2 * Math.PI;
+    sumX += Math.cos(thetaRad);
+    sumY += Math.sin(thetaRad);
+  }
+  const meanThetaRad = Math.atan2(sumY, sumX);
+  const meanMm = (meanThetaRad / (2 * Math.PI)) * perimeterMm;
+  return ((meanMm % perimeterMm) + perimeterMm) % perimeterMm;
+}
+
+/**
+ * Bugfix (corner-anchoring dedup protection): sampleMultiContourOutlinePoints()'s plain dedup path
+ * above treats every raw sample as equally disposable, including points anchored exactly on a
+ * corner-anchored contour's own corners -- so a sufficiently tight shape (e.g. a rectangle shorter
+ * than one stone's diameter) could lose genuine corners outright, breaking
+ * sampleCornerAnchoredOutlinePoints()'s own "a stone at every corner" guarantee. Two real user
+ * reports plus direct tracing confirmed this: a 20x5mm Rect at SS30/6.4mm lost its entire bottom
+ * edge, including 2 of its 4 corners, because the short 5mm dimension is itself under one stone's
+ * diameter.
+ *
+ * Runs whenever at least one contour is corner-anchored:
+ *
+ *  1. Per corner-anchored contour, cluster its own corner points by proximity
+ *     (clusterCornersByProximity()) and resolve each cluster into one "resolved corner" -- the
+ *     original point unchanged for a lone corner, or the cluster's centroid (with a circular-mean
+ *     arc length, circularMeanArcLengthMm()) for two or more corners too close to coexist as
+ *     separate stones.
+ *  2. Seed a proximity index (buildProximityIndex(), the same structure the corner-gap backfill
+ *     below already uses) with every resolved corner, THEN test/insert non-corner points one at a
+ *     time. Corners are therefore never at risk of being evicted by a non-corner point -- they are
+ *     always inserted first and never re-tested -- which is what makes "a corner is never silently
+ *     dropped by ordinary dedup" an actual invariant here rather than an incidental side effect of
+ *     scan order.
+ *  3. Reconstruct the result in original per-contour walk order: each corner cluster contributes its
+ *     resolved point exactly once (at its first member's raw position); each surviving non-corner
+ *     point is emitted as sampled; each dropped non-corner point goes through the same corner-gap
+ *     backfill as the plain path above, with corner neighbors and arc lengths resolved to their
+ *     (possibly merged) values.
+ *
+ * Known, accepted limitation: a resolved-corner centroid can in principle land within
+ * `minSeparationMm` of some other untouched corner that neither original member was close enough to
+ * individually. Step 2 never re-tests corners against each other once seeded, so such a pair would
+ * both survive as two very-close (rather than merged, or one dropped) stones. This is the same
+ * "deliberate compromise" tradeoff the corner-merge design already accepts for a genuinely
+ * degenerate shape, just one union-find pass short of perfect -- not iterated further here.
+ *
+ * @param {Point2D[][]} polygons
+ * @param {{points: Point2D[], arcLengthsMm: number[]|null, isCorner: boolean[]|null, perimeterMm: number|null}[]} contourSamples
+ *   Parallel to `polygons`; `sampleMultiContourOutlinePoints()`'s own already-sampled raw points per
+ *   contour, corner-anchored or not.
+ * @param {number} spacingMm
+ * @param {boolean} closed
+ * @param {number} minSeparationMm
+ * @returns {Point2D[]}
+ */
+function sampleMultiContourOutlinePointsWithCornerProtection(polygons, contourSamples, spacingMm, closed, minSeparationMm) {
+  // Step 1: resolve each corner-anchored contour's own corner conflicts independently.
+  const perContourCornerInfo = contourSamples.map((sample) => {
+    if (!sample.isCorner) return null;
+
+    const cornerRecords = [];
+    for (let i = 0; i < sample.points.length; i++) {
+      if (sample.isCorner[i]) cornerRecords.push({ rawIndex: i, point: sample.points[i], arcLengthMm: sample.arcLengthsMm[i] });
+    }
+
+    const clusters = clusterCornersByProximity(cornerRecords, minSeparationMm);
+    const resolvedByRawIndex = new Map();
+    for (const memberIndices of clusters) {
+      const members = memberIndices.map((idx) => cornerRecords[idx]);
+      const canonicalRawIndex = Math.min(...members.map((m) => m.rawIndex));
+      const resolvedPoint = members.length === 1
+        ? members[0].point
+        : new Point2D(
+          members.reduce((sum, m) => sum + m.point.xMm, 0) / members.length,
+          members.reduce((sum, m) => sum + m.point.yMm, 0) / members.length
+        );
+      const resolvedArcLengthMm = members.length === 1
+        ? members[0].arcLengthMm
+        : circularMeanArcLengthMm(members.map((m) => m.arcLengthMm), sample.perimeterMm, closed);
+
+      for (const member of members) {
+        resolvedByRawIndex.set(member.rawIndex, { point: resolvedPoint, arcLengthMm: resolvedArcLengthMm, canonicalRawIndex });
+      }
+    }
+    return resolvedByRawIndex;
+  });
+
+  // Step 2: corners-first proximity seeding -- see this function's own doc comment for why this
+  // makes corner protection an invariant rather than an incidental scan-order outcome.
+  const resolvedCornerPoints = [];
+  for (let c = 0; c < contourSamples.length; c++) {
+    const sample = contourSamples[c];
+    if (!sample.isCorner) continue;
+    const cornerInfo = perContourCornerInfo[c];
+    const emitted = new Set();
+    for (let i = 0; i < sample.points.length; i++) {
+      if (!sample.isCorner[i]) continue;
+      const info = cornerInfo.get(i);
+      if (emitted.has(info.canonicalRawIndex)) continue;
+      emitted.add(info.canonicalRawIndex);
+      resolvedCornerPoints.push(info.point);
+    }
+  }
+
+  const index = buildProximityIndex(resolvedCornerPoints, minSeparationMm);
+  const keptNonCorners = [];
+  for (let c = 0; c < contourSamples.length; c++) {
+    const sample = contourSamples[c];
+    for (let i = 0; i < sample.points.length; i++) {
+      if (sample.isCorner && sample.isCorner[i]) continue;
+      const point = sample.points[i];
+      if (index.hasConflict(point)) continue;
+      index.insert(point);
+      keptNonCorners.push(point);
+    }
+  }
+  const keptSet = new Set([...resolvedCornerPoints, ...keptNonCorners]);
+
+  // Step 3: reconstruct in original per-contour walk order, backfilling dropped non-corner gaps
+  // exactly as the plain path above does.
+  const result = [];
+  for (let c = 0; c < polygons.length; c++) {
+    const sample = contourSamples[c];
+    const cornerInfo = perContourCornerInfo[c];
+    const rawPoints = sample.points;
+    const n = rawPoints.length;
+    const contourGeomCache = contourPerimeterAndSegments(polygons[c], closed);
+    const emitted = new Set();
+
+    const isRawIndexCorner = (idx) => Boolean(sample.isCorner && sample.isCorner[idx]);
+    const isRawIndexKept = (idx) => isRawIndexCorner(idx) || keptSet.has(rawPoints[idx]);
+    const rawIndexPoint = (idx) => isRawIndexCorner(idx) ? cornerInfo.get(idx).point : rawPoints[idx];
+    const rawIndexArcLengthMm = (idx) => isRawIndexCorner(idx)
+      ? cornerInfo.get(idx).arcLengthMm
+      : (sample.arcLengthsMm ? sample.arcLengthsMm[idx] : idx * uniformStepMm(contourGeomCache.perimeterMm, spacingMm));
+
+    for (let i = 0; i < n; i++) {
+      if (isRawIndexCorner(i)) {
+        const info = cornerInfo.get(i);
+        if (emitted.has(info.canonicalRawIndex)) continue;
+        emitted.add(info.canonicalRawIndex);
+        result.push(info.point);
+        continue;
+      }
+
+      const point = rawPoints[i];
+      if (keptSet.has(point)) {
+        result.push(point);
+        continue;
+      }
+
+      let prevSteps = 0;
+      let nextSteps = 0;
+      for (let step = 1; step <= n; step++) {
+        const idx = closed ? ((i - step) % n + n) % n : i - step;
+        if (idx < 0) break;
+        if (isRawIndexKept(idx)) { prevSteps = step; break; }
+      }
+      for (let step = 1; step <= n; step++) {
+        const idx = closed ? (i + step) % n : i + step;
+        if (idx >= n) break;
+        if (isRawIndexKept(idx)) { nextSteps = step; break; }
+      }
+
+      if (prevSteps === 0 || nextSteps === 0) continue;
+
+      const prevIdx = closed ? ((i - prevSteps) % n + n) % n : i - prevSteps;
+      const nextIdx = closed ? (i + nextSteps) % n : i + nextSteps;
+      const prevPoint = rawIndexPoint(prevIdx);
+      const nextPoint = rawIndexPoint(nextIdx);
+
+      const flankGapMm = Math.hypot(prevPoint.xMm - nextPoint.xMm, prevPoint.yMm - nextPoint.yMm);
+      if (flankGapMm <= spacingMm) continue;
+
+      const { perimeterMm } = contourGeomCache;
+      const fromArcLengthMm = rawIndexArcLengthMm(prevIdx);
+      const toArcLengthMm = rawIndexArcLengthMm(nextIdx);
+      const spanMm = closed
+        ? (((toArcLengthMm - fromArcLengthMm) % perimeterMm) + perimeterMm) % perimeterMm
+        : toArcLengthMm - fromArcLengthMm;
+      const candidate = findEquidistantBackfillPoint(
+        contourGeomCache, closed, prevPoint, nextPoint, fromArcLengthMm, spanMm, minSeparationMm
+      );
+
+      if (!candidate) continue;
+      if (index.hasConflict(candidate)) continue;
 
       index.insert(candidate);
       result.push(candidate);
