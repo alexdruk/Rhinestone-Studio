@@ -335,3 +335,7 @@ tools/scratch/feature-stone-size-overlap-guard-verify/
 # feature-outline-corner-anchoring: ad hoc geometry-level verification scripts for corner-anchored
 # per-side Outline spacing, same "never a repo artifact" category as the scratch folders above
 tools/scratch/feature-outline-corner-anchoring-verify/
+# bugfix-corner-anchoring-dedup-protection: ad hoc geometry-level verification scripts for the
+# corner-vs-dedup protection/merge fix, same "never a repo artifact" category as the scratch
+# folders above
+tools/scratch/bugfix-corner-anchoring-dedup-protection-verify/
