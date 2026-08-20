@@ -14,7 +14,8 @@ export {
 
 export {
   StoneLayout,
-  findOverlappingStonePairs
+  findOverlappingStonePairs,
+  measureStoneCrowding
 } from './StoneLayout.js';
 
 export {

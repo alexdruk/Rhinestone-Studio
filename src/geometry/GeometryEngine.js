@@ -620,7 +620,10 @@ export class GeometryEngine {
     const boundingBox = BoundingBox.fromPoints(polygons.flat());
     const spacingMm = options.stoneSizeMm + options.gapMm;
 
-    const points = sampleShapeFillPoints(options.mode, polygons, boundingBox, spacingMm, options.stoneSizeMm, true, cornerFlagsByContour);
+    // Layout-quality metrics (Prompt 3): outline-mode sample attrition, see StoneLayout's own
+    // outlineStats doc comment. null for every other mode, so this is a no-op there.
+    const outlineStats = options.mode === 'outline' ? { rawSampleCount: 0, keptCount: 0 } : null;
+    const points = sampleShapeFillPoints(options.mode, polygons, boundingBox, spacingMm, options.stoneSizeMm, true, cornerFlagsByContour, outlineStats);
 
     let stones = points.map((point, index) => new Stone({
       xMm: point.xMm,
@@ -647,7 +650,7 @@ export class GeometryEngine {
       stones = stones.concat(infillStones);
     }
 
-    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
+    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones, outlineStats });
   }
 
   /**
@@ -769,6 +772,12 @@ export class GeometryEngine {
     const spacingMm = options.stoneSizeMm + options.gapMm;
     const points = [];
 
+    // Layout-quality metrics (Prompt 3): outline-mode sample attrition, see StoneLayout's own
+    // outlineStats doc comment. Accumulated across the closed-contour pass below AND every open
+    // contour's own pass (an SVG document can mix both) -- null, and never touched, for every other
+    // mode, so this is a no-op there.
+    const outlineStats = options.mode === 'outline' ? { rawSampleCount: 0, keptCount: 0 } : null;
+
     // Appended one-by-one (not `points.push(...bigArray)`): spreading a very large sample array
     // as call arguments overflows the JS call stack, which is reachable here (unlike
     // generateShapeLayout()/generateTextLayout()'s flatMap-based accumulation) because an SVG
@@ -779,7 +788,10 @@ export class GeometryEngine {
       // different contours pass closer together than one stone pitch -- see that function's doc
       // comment. Still appended one-by-one, not spread, for the same large-point-set stack-safety
       // reason as before.
-      for (const point of sampleMultiContourOutlinePoints(closedPolygons, spacingMm, { closed: true, minSeparationMm: options.stoneSizeMm })) points.push(point);
+      const closedStats = { rawSampleCount: 0, keptCount: 0 };
+      for (const point of sampleMultiContourOutlinePoints(closedPolygons, spacingMm, { closed: true, minSeparationMm: options.stoneSizeMm }, closedStats)) points.push(point);
+      outlineStats.rawSampleCount += closedStats.rawSampleCount;
+      outlineStats.keptCount += closedStats.keptCount;
     } else {
       for (const point of sampleShapeFillPoints(options.mode, closedPolygons, BoundingBox.fromPoints(closedPolygons.flat()), spacingMm)) {
         points.push(point);
@@ -792,7 +804,12 @@ export class GeometryEngine {
     // cross-contour branch, so this is a pure self-check; open polygons are still never compared
     // against each other, matching this function's pre-existing (out of RC-004A's scope) behavior.
     for (const polygon of openPolygons) {
-      for (const point of sampleMultiContourOutlinePoints([polygon], spacingMm, { closed: false, minSeparationMm: options.stoneSizeMm })) points.push(point);
+      const openStats = outlineStats ? { rawSampleCount: 0, keptCount: 0 } : null;
+      for (const point of sampleMultiContourOutlinePoints([polygon], spacingMm, { closed: false, minSeparationMm: options.stoneSizeMm }, openStats)) points.push(point);
+      if (outlineStats) {
+        outlineStats.rawSampleCount += openStats.rawSampleCount;
+        outlineStats.keptCount += openStats.keptCount;
+      }
     }
 
     let stones = points.map((point, index) => new Stone({
@@ -822,7 +839,7 @@ export class GeometryEngine {
       stones = stones.concat(infillStones);
     }
 
-    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
+    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones, outlineStats });
   }
 
   /**
@@ -991,7 +1008,10 @@ export class GeometryEngine {
     const cornerFlagsByContour = options.mode === 'outline' && options.closed
       ? polygons.map((polygon) => detectPolygonCornerFlags(polygon, { closed: true }))
       : null;
-    const points = sampleShapeFillPoints(options.mode, polygons, placedBoundingBox, spacingMm, options.stoneSizeMm, options.closed, cornerFlagsByContour);
+    // Layout-quality metrics (Prompt 3): outline-mode sample attrition, see StoneLayout's own
+    // outlineStats doc comment. null for every other mode, so this is a no-op there.
+    const outlineStats = options.mode === 'outline' ? { rawSampleCount: 0, keptCount: 0 } : null;
+    const points = sampleShapeFillPoints(options.mode, polygons, placedBoundingBox, spacingMm, options.stoneSizeMm, options.closed, cornerFlagsByContour, outlineStats);
 
     let stones = points.map((point, index) => new Stone({
       xMm: point.xMm,
@@ -1125,7 +1145,7 @@ export class GeometryEngine {
       }
     }
 
-    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
+    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones, outlineStats });
   }
 
   /**

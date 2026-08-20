@@ -339,4 +339,8 @@ tools/scratch/feature-outline-corner-anchoring-verify/
 # corner-vs-dedup protection/merge fix, same "never a repo artifact" category as the scratch
 # folders above
 tools/scratch/bugfix-corner-anchoring-dedup-protection-verify/
-tools/scratch/ # only if not already present — check first
+# feature-layout-quality-metrics: ad hoc threshold-calibration sweep harness (crowding/attrition
+# TSV dump across synthetic shapes/sizes/gaps) -- informs the warn-threshold constants chosen in
+# review, never itself a repo artifact, same "never a repo artifact" category as the scratch
+# folders above
+tools/scratch/layout-quality-calibration/
