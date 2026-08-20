@@ -144,7 +144,7 @@ await test('10. SUPPORTED_LAYER_TYPES includes \'path\', and validateProject() h
 
 await test('11. GeometryEngine.generate() routes \'path\' layers through generatePathStonesLive() -> permanentEngine.generatePathLayout()', () => {
   assert.match(appJs, /if\(l\.type==='path'\)raw\.push\(\.\.\.await this\.generatePathStonesLive\(l\)\)/);
-  assert.match(appJs, /async generatePathStonesLive\(layer\)\{[\s\S]*?this\.permanentEngine\.generatePathLayout\(params\)/);
+  assert.match(appJs, /async generatePathStonesLive\(layer,\{includeStats=false\}=\{\}\)\{[\s\S]*?this\.permanentEngine\.generatePathLayout\(params\)/);
 });
 
 await test('12. getLayerBBox()/drag-resize/duplicateLayer()/layerLabel()/moreOptionsBtn each have a \'path\' case (shared with rectangle/svg/image)', () => {
