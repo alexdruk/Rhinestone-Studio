@@ -658,9 +658,13 @@ function findEquidistantBackfillPoint(contourGeom, closed, prevPoint, nextPoint,
  * @param {Point2D[][]} polygons
  * @param {number} spacingMm
  * @param {{closed?: boolean, minSeparationMm?: number, cornerFlagsByContour?: (boolean[]|null)[]}} [options]
+ * @param {{rawSampleCount: number, keptCount: number}} [stats] Layout-quality metrics (Prompt 3):
+ *   when provided, filled in-place with the total raw sample count across every contour (before any
+ *   dedup/backfill) and the final returned point count. Omitted by every pre-existing call site, so
+ *   behavior is unchanged when absent.
  * @returns {Point2D[]}
  */
-export function sampleMultiContourOutlinePoints(polygons, spacingMm, { closed = true, minSeparationMm = spacingMm, cornerFlagsByContour = null } = {}) {
+export function sampleMultiContourOutlinePoints(polygons, spacingMm, { closed = true, minSeparationMm = spacingMm, cornerFlagsByContour = null } = {}, stats = null) {
   const contourSamples = polygons.map((polygon, c) => {
     const cornerFlags = cornerFlagsByContour ? cornerFlagsByContour[c] : null;
     if (cornerFlags) {
@@ -670,8 +674,14 @@ export function sampleMultiContourOutlinePoints(polygons, spacingMm, { closed = 
     return { points: sampleOutlinePoints(polygon, spacingMm, { closed, uniform: true }), arcLengthsMm: null, isCorner: null, perimeterMm: null };
   });
 
+  if (stats) {
+    stats.rawSampleCount = contourSamples.reduce((sum, sample) => sum + sample.points.length, 0);
+  }
+
   if (contourSamples.some((sample) => sample.isCorner !== null)) {
-    return sampleMultiContourOutlinePointsWithCornerProtection(polygons, contourSamples, spacingMm, closed, minSeparationMm);
+    const result = sampleMultiContourOutlinePointsWithCornerProtection(polygons, contourSamples, spacingMm, closed, minSeparationMm);
+    if (stats) stats.keptCount = result.length;
+    return result;
   }
 
   const contourRawPoints = contourSamples.map((sample) => sample.points);
@@ -679,6 +689,7 @@ export function sampleMultiContourOutlinePoints(polygons, spacingMm, { closed = 
   const kept = dedupeStonePoints(points, minSeparationMm);
 
   if (kept.length === points.length) {
+    if (stats) stats.keptCount = kept.length;
     return kept;
   }
 
@@ -758,6 +769,7 @@ export function sampleMultiContourOutlinePoints(polygons, spacingMm, { closed = 
     }
   }
 
+  if (stats) stats.keptCount = result.length;
   return result;
 }
 
@@ -1208,9 +1220,13 @@ export function sampleContourFillPoints(polygons, boundingBox, spacingMm) {
  *   Defaults to null (every contour uses the existing whole-loop uniform walk), so every
  *   pre-existing caller is unaffected -- only generateShapeLayout()'s Rect/Regular
  *   Polygon/Star/Arrow/Cross path passes an explicit value.
+ * @param {{rawSampleCount: number, keptCount: number}} [stats] Layout-quality metrics (Prompt 3):
+ *   forwarded to sampleMultiContourOutlinePoints() for 'outline' mode only -- every other mode
+ *   ignores it, since attrition is specifically an outline-sampling concept (dedup/backfill over a
+ *   contour walk).
  * @returns {Point2D[]}
  */
-export function sampleShapeFillPoints(mode, polygons, boundingBox, spacingMm, stoneSizeMm = spacingMm, closed = true, cornerFlagsByContour = null) {
+export function sampleShapeFillPoints(mode, polygons, boundingBox, spacingMm, stoneSizeMm = spacingMm, closed = true, cornerFlagsByContour = null, stats = null) {
   switch (mode) {
     case 'fill': return sampleFillPoints(polygons, boundingBox, spacingMm);
     case 'staggered': return sampleStaggeredFillPoints(polygons, boundingBox, spacingMm);
@@ -1218,7 +1234,7 @@ export function sampleShapeFillPoints(mode, polygons, boundingBox, spacingMm, st
     case 'contour': return sampleContourFillPoints(polygons, boundingBox, spacingMm);
     case 'outline':
     default:
-      return sampleMultiContourOutlinePoints(polygons, spacingMm, { closed, minSeparationMm: stoneSizeMm, cornerFlagsByContour });
+      return sampleMultiContourOutlinePoints(polygons, spacingMm, { closed, minSeparationMm: stoneSizeMm, cornerFlagsByContour }, stats);
   }
 }
 
