@@ -332,3 +332,6 @@ tools/scratch/feature-outline-uniform-perimeter-spacing-verify/
 # disabled-<option>-keyboard-nav investigation, and browser-verification screenshots, same "never a
 # repo artifact" category as the scratch folders above
 tools/scratch/feature-stone-size-overlap-guard-verify/
+# feature-outline-corner-anchoring: ad hoc geometry-level verification scripts for corner-anchored
+# per-side Outline spacing, same "never a repo artifact" category as the scratch folders above
+tools/scratch/feature-outline-corner-anchoring-verify/
