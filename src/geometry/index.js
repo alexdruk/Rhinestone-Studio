@@ -21,6 +21,7 @@ export {
   flattenContourToPolygon,
   flattenContourToPolygonWithCornerFlags,
   translateContour,
+  detectPolygonCornerFlags,
   CURVE_FLATTEN_SEGMENTS
 } from './ContourGeometry.js';
 
