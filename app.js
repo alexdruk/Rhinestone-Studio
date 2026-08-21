@@ -2040,10 +2040,10 @@ function layoutMmToPx(p){return{x:layoutTransform.ox+p.x*layoutTransform.s,y:lay
 // DOM element widths are CSS px, so dividing by dpr here is required to avoid a dpr-x-too-wide bar
 // on high-DPI screens.
 function updateScaleBar(s,dpr){
-  const stepMm=chooseNiceStepMm(s/dpr,SCALE_BAR_TARGET_PX,'atMost');
+  const stepMm=chooseNiceStepMm(s/dpr,SCALE_BAR_TARGET_PX,'atMost',project.units);
   const barPx=stepMm*s/dpr;
   el('scaleBarTrack').style.width=barPx+'px';
-  el('scaleBarLabel').textContent=`${stepMm} mm`;
+  el('scaleBarLabel').textContent=`${formatLengthDisplay(stepMm,project.units)} ${unitSuffix(project.units)}`;
 }
 function drawLayout(){
   // RS-3010 Step 1: "canvas interaction owned by exactly one thing at a time" also covers who
@@ -2056,7 +2056,7 @@ function drawLayout(){
   // drawLayout() call runs *after* drawingTool.exit() has already flipped isActive off, so it isn't
   // blocked by this guard.
   if(drawingTool.isActive)return;
-  const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr});layoutTransform={s,ox,oy,dpr};
+  const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr,units:project.units});layoutTransform={s,ox,oy,dpr};
   updateScaleBar(s,dpr);el('scaleBar').style.display=drawingTool.isActive?'none':'flex';
   // S-112: the plate template draws its own circular/annular design-target guide instead of the
   // cylindrical Front View Frame + rectangular safe-area guide -- neither applies to a flat
@@ -4856,7 +4856,7 @@ async function generateProjectThumbnail(tempProject){
     const stoneLayout=await engine.generate(tempProject);
     const canvas=document.createElement('canvas');
     canvas.width=LIBRARY_THUMB_WIDTH_PX;canvas.height=LIBRARY_THUMB_HEIGHT_PX;
-    renderProductionLayout(canvas.getContext('2d'),stoneLayout,{widthPx:canvas.width,heightPx:canvas.height,paddingPx:12});
+    renderProductionLayout(canvas.getContext('2d'),stoneLayout,{widthPx:canvas.width,heightPx:canvas.height,paddingPx:12,units:tempProject.units||'mm'});
     return canvas.toDataURL('image/png');
   }catch(error){
     console.error('Thumbnail generation failed',error);

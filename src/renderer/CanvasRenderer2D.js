@@ -13,6 +13,7 @@
 import { STONE_COLORS } from './StoneColors.js';
 import { drawCrystalStone } from './CrystalStoneRenderer.js';
 import { getCrystalAppearance } from './CrystalAppearance.js';
+import { MM_PER_INCH } from '../units/index.js';
 
 /**
  * Draw a single stone at an already-transformed pixel position.
@@ -86,12 +87,21 @@ export function fitTransform(boundingBoxMm, viewportWidthPx, viewportHeightPx, p
 }
 
 export const GRID_NICE_STEPS_MM = [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000];
+// A pure doubling sequence (1/16" up to 128"), unlike GRID_NICE_STEPS_MM's roughly-4x-5x
+// irregular spacing -- chosen so the existing "major = 2 positions ahead of minor" convention
+// (see drawGrid() below) produces an EXACT 4x ratio at every tier, matching common CAD/drawing
+// tool imperial-unit snap conventions (binary fraction subdivision below 1", whole-inch doubling
+// above it).
+const GRID_NICE_STEPS_IN = [1/16, 1/8, 1/4, 1/2, 1, 2, 4, 8, 16, 32, 64, 128];
+export const GRID_NICE_STEPS_IN_MM = GRID_NICE_STEPS_IN.map(inches => inches * MM_PER_INCH);
+function stepsForUnits(units) { return units === 'in' ? GRID_NICE_STEPS_IN_MM : GRID_NICE_STEPS_MM; }
 // 8px, not the rounder 20px, so that today's real default project (boot zoom, s ~= 1.79px/mm)
 // still resolves to minorStep=5/majorStep=20 -- an exact no-op vs. develop's hardcoded grid.
 const GRID_TARGET_MINOR_PX = 8;
 
 /**
- * Pick a "nice" step (mm, from GRID_NICE_STEPS_MM) relative to an on-screen pixel target.
+ * Pick a "nice" step (mm, from GRID_NICE_STEPS_MM or, when `units` is `'in'`, GRID_NICE_STEPS_IN_MM)
+ * relative to an on-screen pixel target.
  *
  * `'atLeast'`: smallest step whose on-screen spacing at px-per-mm `pxPerMm` is still
  * >= targetPx (falls back to the largest step). Used by the grid.
@@ -103,20 +113,22 @@ const GRID_TARGET_MINOR_PX = 8;
  * @param {number} pxPerMm
  * @param {number} targetPx
  * @param {'atLeast'|'atMost'} mode
+ * @param {'mm'|'in'} [units]
  * @returns {number}
  */
-export function chooseNiceStepMm(pxPerMm, targetPx, mode) {
+export function chooseNiceStepMm(pxPerMm, targetPx, mode, units = 'mm') {
+  const steps = stepsForUnits(units);
   if (mode === 'atMost') {
-    for (let i = GRID_NICE_STEPS_MM.length - 1; i >= 0; i--) {
-      const step = GRID_NICE_STEPS_MM[i];
+    for (let i = steps.length - 1; i >= 0; i--) {
+      const step = steps[i];
       if (step * pxPerMm <= targetPx) return step;
     }
-    return GRID_NICE_STEPS_MM[0];
+    return steps[0];
   }
-  for (const step of GRID_NICE_STEPS_MM) {
+  for (const step of steps) {
     if (step * pxPerMm >= targetPx) return step;
   }
-  return GRID_NICE_STEPS_MM[GRID_NICE_STEPS_MM.length - 1];
+  return steps[steps.length - 1];
 }
 
 /**
@@ -125,15 +137,17 @@ export function chooseNiceStepMm(pxPerMm, targetPx, mode) {
  * @param {CanvasRenderingContext2D} ctx
  * @param {{minXmm:number,minYmm:number,widthMm:number,heightMm:number}|null} boundingBoxMm
  * @param {{s:number,ox:number,oy:number}} transform
+ * @param {'mm'|'in'} [units]
  */
-export function drawGrid(ctx, boundingBoxMm, transform) {
+export function drawGrid(ctx, boundingBoxMm, transform, units = 'mm') {
   const b = boundingBoxMm
     ? { x: boundingBoxMm.minXmm, y: boundingBoxMm.minYmm, width: boundingBoxMm.widthMm, height: boundingBoxMm.heightMm }
     : { x: 0, y: 0, width: 0, height: 0 };
   const { s, ox, oy } = transform;
-  const minorIdx = GRID_NICE_STEPS_MM.indexOf(chooseNiceStepMm(s, GRID_TARGET_MINOR_PX, 'atLeast'));
-  const minorStep = GRID_NICE_STEPS_MM[minorIdx];
-  const majorStep = GRID_NICE_STEPS_MM[Math.min(minorIdx + 2, GRID_NICE_STEPS_MM.length - 1)];
+  const steps = stepsForUnits(units);
+  const minorIdx = steps.indexOf(chooseNiceStepMm(s, GRID_TARGET_MINOR_PX, 'atLeast', units));
+  const minorStep = steps[minorIdx];
+  const majorStep = steps[Math.min(minorIdx + 2, steps.length - 1)];
   const gx0 = Math.floor((b.x - 15) / minorStep) * minorStep, gx1 = Math.ceil((b.x + b.width + 15) / minorStep) * minorStep;
   const gy0 = Math.floor((b.y - 15) / minorStep) * minorStep, gy1 = Math.ceil((b.y + b.height + 15) / minorStep) * minorStep;
 
@@ -184,10 +198,10 @@ export function renderStoneLayout(ctx, stoneLayout, transform, style = 'layout')
  *
  * @param {CanvasRenderingContext2D} ctx
  * @param {import('../geometry/StoneLayout.js').StoneLayout} stoneLayout
- * @param {{widthPx:number,heightPx:number,paddingPx:number}} viewport
+ * @param {{widthPx:number,heightPx:number,paddingPx:number,units?:'mm'|'in'}} viewport
  * @returns {{s:number,ox:number,oy:number}}
  */
-export function renderProductionLayout(ctx, stoneLayout, { widthPx, heightPx, paddingPx }) {
+export function renderProductionLayout(ctx, stoneLayout, { widthPx, heightPx, paddingPx, units = 'mm' }) {
   ctx.clearRect(0, 0, widthPx, heightPx);
   ctx.fillStyle = '#fbfdff';
   ctx.fillRect(0, 0, widthPx, heightPx);
@@ -195,7 +209,7 @@ export function renderProductionLayout(ctx, stoneLayout, { widthPx, heightPx, pa
   const boundingBoxMm = stoneLayout.getBoundingBox();
   const transform = fitTransform(boundingBoxMm, widthPx, heightPx, paddingPx);
 
-  drawGrid(ctx, boundingBoxMm, transform);
+  drawGrid(ctx, boundingBoxMm, transform, units);
   renderStoneLayout(ctx, stoneLayout, transform, 'layout');
 
   return transform;
