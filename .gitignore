@@ -348,3 +348,7 @@ tools/scratch/layout-quality-calibration/
 # proving the new #stoneSizeCrowdingHint fires for a crowded-not-overlapping Stone Size selection,
 # same "never a repo artifact" category as the scratch folders above
 tools/scratch/feature-stone-size-crowding-warning-verify/
+# rs-3016-grid-autoscale: ad hoc Playwright harness capturing real drawGrid()/fitTransform()
+# output (default/zoomed-out/zoomed-in step selection + screenshots), same "never a repo artifact"
+# category as the scratch folders above
+tools/scratch/rs-3016-grid-verify/
