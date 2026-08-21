@@ -154,6 +154,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .meta-row:last-child{border-bottom:none}
 .meta-row .meta-label{color:var(--color-text-muted)}
 .meta-row .meta-value{font-weight:600}
+.meta-row .meta-select{font:inherit;font-weight:600;color:inherit;background:var(--color-surface);border:1px solid var(--color-border);border-radius:4px;padding:2px 4px}
 
 #layersList{display:flex;flex-direction:column;gap:6px;margin-bottom:var(--space-2)}
 .layer{
@@ -397,7 +398,9 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
     <section class="panel-section">
       <h2>Project</h2>
       <div class="field"><label for="projectName">Project name</label><input id="projectName" value="Untitled Project"></div>
-      <div class="meta-row"><span class="meta-label">Units</span><span class="meta-value" id="projectUnitsSummary">mm</span></div>
+      <div class="meta-row"><span class="meta-label">Units</span>
+        <select id="projectUnitsQuick" class="meta-select"><option value="mm" selected>Millimeters (mm)</option>
+        <option value="in">Inches (in)</option></select></div>
       <div class="meta-row"><span class="meta-label">Template</span><span class="meta-value" id="projectTemplateSummary">Mug · 210×90mm</span></div>
     </section>
 
@@ -1296,7 +1299,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 </div>
 <div id="sharedStoneFields">
   <div class="field-row">
-    <div class="field"><label for="stoneSize">Stone size</label><select id="stoneSize" title="Standard rhinestone sizes (commercial name and actual diameter). Populated from the stone size library."></select></div>
+    <div class="field"><label for="stoneSize">Stone size (mm)</label><select id="stoneSize" title="Standard rhinestone sizes (commercial name and actual diameter). Populated from the stone size library."></select></div>
     <div class="field"><label for="gap" data-unit-label="Gap">Gap (mm)</label><input id="gap" type="number" min="0" max="5" step="0.1" value="0.3"></div>
   </div>
   <!-- Stone Size overlap guard: shown when the currently-selected Stone size would produce genuine
