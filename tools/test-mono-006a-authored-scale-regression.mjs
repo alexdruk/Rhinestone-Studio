@@ -34,6 +34,7 @@ import { FontManager } from '../src/fonts/index.js';
 import { createDefaultFontProviderRegistry } from '../src/text/index.js';
 import { GeometryEngine, listFrames } from '../src/geometry/index.js';
 import { MonogramGenerator } from '../src/monogram/index.js';
+import { displayValueToMm } from '../src/units/index.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
@@ -129,13 +130,19 @@ const stoneSizeLineSrc = extractStatement(
   'stoneSize write-back'
 );
 const gapLineSrc = extractStatement(
-  "const nextGap=parseFloat(el('gap').value)||.3;if(nextGap!==l.gap)invalidateAuthoredScaleForGeometryChange(l,'gap');l.gap=nextGap;",
+  "const nextGap=readLengthField('gap')||.3;if(nextGap!==l.gap)invalidateAuthoredScaleForGeometryChange(l,'gap');l.gap=nextGap;",
   'gap write-back'
 );
 
 function runWriteBackLine(lineSrc, el, l) {
-  const run = new Function('el', 'l', 'invalidateAuthoredScaleForGeometryChange', `${lineSrc}\n return l;`);
-  return run(el, l, makeInvalidate);
+  // RS-3020: the gap write-back line now calls readLengthField('gap') instead of raw
+  // parseFloat(el('gap').value) -- inject a local wrapper (matching app.js's own readLengthField()
+  // formula) closed over the same `el` stub, fixed at 'mm' units so rawValue is interpreted as a
+  // plain mm digit, exactly like this test's pre-RS-3020 parseFloat behavior. Unused by the
+  // text/font/stoneSize lines, which are untouched by this milestone.
+  function readLengthField(id) { return displayValueToMm(el(id).value, 'mm'); }
+  const run = new Function('el', 'l', 'invalidateAuthoredScaleForGeometryChange', 'readLengthField', `${lineSrc}\n return l;`);
+  return run(el, l, makeInvalidate, readLengthField);
 }
 
 await test('4. writeSelectedControlsToLayer() invalidates authoredScale when #text differs from the stored text', () => {

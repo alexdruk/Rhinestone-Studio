@@ -1774,7 +1774,7 @@ function syncSelectedControlsFromLayer(){
       el('regionFillModeField').style.display='block';
       ensureStoneSizeOption(el('stoneSize'),region.stoneSizeMm);
       setNumericSelectValue(el('stoneSize'),region.stoneSizeMm);
-      el('gap').value=region.gapMm;
+      setLengthField('gap',region.gapMm);
       el('stoneColor').value=region.color;
       el('regionFillMode').value=region.fillMode==='outline'?'outline':'fill';
       return;
@@ -1810,7 +1810,7 @@ function syncSelectedControlsFromLayer(){
   if(isText){el('text').value=l.text;ensureFontOptionForLayer(l.font);el('font').value=l.font;setLengthField('height',l.height);el('heightAutoAdjustedHint').style.display='none';el('autoFit').value=l.autoFit?'on':'off';el('autoFitOnHint').style.display='none';el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';setLengthField('curveRadiusMm',l.curveRadiusMm??40);el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??180;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';setLengthField('textX',l.x||0);setLengthField('textY',l.y||0);
   // TXT-102: '??'/'||' fallbacks so a pre-TXT-102 project (no align/lineSpacing/rotationDeg stored)
   // displays GeometryEngine's own defaults, matching this line's existing curve-field convention.
-  el('textAlign').value=l.align||'left';el('lineSpacing').value=l.lineSpacing??1;el('rotationDeg').value=l.rotationDeg??0}else{setLengthField('shapeX',l.type==='circle'?l.cx:l.x);setLengthField('shapeY',l.type==='circle'?l.cy:l.y);setLengthField('shapeW',l.type==='circle'?l.r:l.w);setLengthField('shapeH',l.type==='circle'?'':l.h);el('shapeWLabel').textContent=(l.type==='circle'?'Radius':'Width')+' ('+unitSuffix(project.units)+')';el('shapeHField').style.display=l.type==='circle'?'none':'';if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);el('gap').value=l.gap;el('stoneColor').value=l.color;
+  el('textAlign').value=l.align||'left';el('lineSpacing').value=l.lineSpacing??1;el('rotationDeg').value=l.rotationDeg??0}else{setLengthField('shapeX',l.type==='circle'?l.cx:l.x);setLengthField('shapeY',l.type==='circle'?l.cy:l.y);setLengthField('shapeW',l.type==='circle'?l.r:l.w);setLengthField('shapeH',l.type==='circle'?'':l.h);el('shapeWLabel').textContent=(l.type==='circle'?'Radius':'Width')+' ('+unitSuffix(project.units)+')';el('shapeHField').style.display=l.type==='circle'?'none':'';if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);setLengthField('gap',l.gap);el('stoneColor').value=l.color;
   // S-200: Mixed Stone Size -- applies uniformly to every layer type, same as stoneSize/gap/color
   // just above. allowedSizesMm is only ever catalog values (see MIXED_ALLOWED_SIZE_CHECKBOXES'
   // doc comment), so each checkbox is simply checked when its own diameter is present in the
@@ -1898,7 +1898,7 @@ function writeSelectedControlsToLayer(){
     const region=regionLayer&&(regionLayer.regions||[]).find(r=>r.id===regionSelection.regionId);
     if(regionLayer&&region){
       region.stoneSizeMm=parseFloat(el('stoneSize').value)||2;
-      region.gapMm=parseFloat(el('gap').value)||.3;
+      region.gapMm=readLengthField('gap')||.3;
       region.color=el('stoneColor').value;
       region.fillMode=el('regionFillMode').value==='outline'?'outline':'fill';
       drawingTool.refreshStoneGroupForLayer(regionLayer.id);
@@ -1953,7 +1953,7 @@ function writeSelectedControlsToLayer(){
   if(l.type==='ring')l.innerRatio=Math.max(0.1,Math.min(0.9,parseFloat(el('shapeRingInner').value)||0.5));
 }else if(l.type==='svg'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||10);l.h=Math.max(1,readLengthField('shapeH')||10);l.mode=resolveVectorFillMode(el('svgMode').value)}else if(l.type==='image'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||10);l.h=Math.max(1,readLengthField('shapeH')||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.fillMode=resolveImageFillMode(el('imageFillMode').value)}else if(l.type==='path'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(2,readLengthField('shapeW')||10);l.h=Math.max(2,readLengthField('shapeH')||10);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}
   const nextStoneSize=parseFloat(el('stoneSize').value)||2;if(nextStoneSize!==l.stoneSize)invalidateAuthoredScaleForGeometryChange(l,'stoneSize');l.stoneSize=nextStoneSize;
-  const nextGap=parseFloat(el('gap').value)||.3;if(nextGap!==l.gap)invalidateAuthoredScaleForGeometryChange(l,'gap');l.gap=nextGap;
+  const nextGap=readLengthField('gap')||.3;if(nextGap!==l.gap)invalidateAuthoredScaleForGeometryChange(l,'gap');l.gap=nextGap;
   l.color=el('stoneColor').value;
   // S-200: Mixed Stone Size -- read back exactly like stoneSize/gap/color just above, applying to
   // every layer type uniformly. allowedSizesMm is rebuilt from the checkbox states on every write
@@ -3278,7 +3278,7 @@ window.addEventListener('keydown',e=>{
       e.preventDefault();
       eraserSettings.radiusMm=Math.max(0.5,eraserSettings.radiusMm+(e.key===']'?0.5:-0.5));
       drawingTool.setEraserRadiusMm(eraserSettings.radiusMm);
-      el('eraserRadiusMm').value=eraserSettings.radiusMm;
+      setLengthField('eraserRadiusMm',eraserSettings.radiusMm);
     }
     // RS-3010 Design Step B: space-held temporary pan. e.repeat filters OS key-repeat spam (so
     // setSpaceHeld(true) fires once per physical press, not per repeat tick); same input-focus
@@ -4486,8 +4486,9 @@ function updateDrawToolButtons(){
   // regardless of which entry point (rail click, 'x' shortcut, '[' / ']' nudge) last changed it.
   const showEraserRadius=active&&mode==='eraser';
   el('eraserRadiusField').style.display=showEraserRadius?'':'none';
+  el('eraserRadiusField').title=`Eraser brush radius (${unitSuffix(project.units)}) -- also adjustable with [ / ] while Eraser is active`;
   el('eraserRadiusMm').style.display=showEraserRadius?'':'none';
-  if(showEraserRadius)el('eraserRadiusMm').value=eraserSettings.radiusMm;
+  if(showEraserRadius)setLengthField('eraserRadiusMm',eraserSettings.radiusMm);
   // RS-3014 Step 3: eraserModeField/eraserMode's own visibility toggle, same convention as
   // eraserRadiusField/eraserRadiusMm just above -- kept in sync with eraserSettings.mode every
   // time it's shown.
@@ -4500,26 +4501,31 @@ function updateDrawToolButtons(){
   // which entry point (rail click, panel field) last changed it.
   const showStampStyle=active&&mode==='stamp';
   el('stampSizeField').style.display=showStampStyle?'':'none';
+  el('stampSizeField').title=`Stamp stone size (${unitSuffix(project.units)})`;
   el('stampSizeMm').style.display=showStampStyle?'':'none';
   el('stampColorField').style.display=showStampStyle?'':'none';
   el('stampColor').style.display=showStampStyle?'':'none';
-  if(showStampStyle){el('stampSizeMm').value=stampSettings.sizeMm;el('stampColor').value=stampSettings.color}
+  if(showStampStyle){setLengthField('stampSizeMm',stampSettings.sizeMm);el('stampColor').value=stampSettings.color}
   const showTraceStyle=active&&mode==='trace';
   el('traceSizeField').style.display=showTraceStyle?'':'none';
+  el('traceSizeField').title=`Trace stone size (${unitSuffix(project.units)})`;
   el('traceSizeMm').style.display=showTraceStyle?'':'none';
   el('traceGapField').style.display=showTraceStyle?'':'none';
+  el('traceGapField').title=`Trace stone gap (${unitSuffix(project.units)})`;
   el('traceGapMm').style.display=showTraceStyle?'':'none';
   el('traceColorField').style.display=showTraceStyle?'':'none';
   el('traceColor').style.display=showTraceStyle?'':'none';
-  if(showTraceStyle){el('traceSizeMm').value=traceSettings.sizeMm;el('traceGapMm').value=traceSettings.gapMm;el('traceColor').value=traceSettings.color}
+  if(showTraceStyle){setLengthField('traceSizeMm',traceSettings.sizeMm);setLengthField('traceGapMm',traceSettings.gapMm);el('traceColor').value=traceSettings.color}
   const showPaintStyle=active&&mode==='paint';
   el('paintSizeField').style.display=showPaintStyle?'':'none';
+  el('paintSizeField').title=`Paint stone size (${unitSuffix(project.units)})`;
   el('paintSizeMm').style.display=showPaintStyle?'':'none';
   el('paintGapField').style.display=showPaintStyle?'':'none';
+  el('paintGapField').title=`Paint stone gap (${unitSuffix(project.units)})`;
   el('paintGapMm').style.display=showPaintStyle?'':'none';
   el('paintColorField').style.display=showPaintStyle?'':'none';
   el('paintColor').style.display=showPaintStyle?'':'none';
-  if(showPaintStyle){el('paintSizeMm').value=paintSettings.sizeMm;el('paintGapMm').value=paintSettings.gapMm;el('paintColor').value=paintSettings.color}
+  if(showPaintStyle){setLengthField('paintSizeMm',paintSettings.sizeMm);setLengthField('paintGapMm',paintSettings.gapMm);el('paintColor').value=paintSettings.color}
 }
 // RS-3011 Step 13 decision 4: seeds eraserSettings.radiusMm from the currently selected layer's own
 // stoneSize (mirrors getStoneDefaults()'s own `base.stoneSize||2` convention above) the FIRST time
@@ -4617,7 +4623,7 @@ initDrawToolShortcutBadges();
 // radius), same "own state + tool's live value, both updated together" pattern the '[' / ']'
 // handler below follows.
 el('eraserRadiusMm').oninput=()=>{
-  const parsed=parseFloat(el('eraserRadiusMm').value);
+  const parsed=readLengthField('eraserRadiusMm');
   if(!Number.isFinite(parsed))return;
   eraserSettings.radiusMm=Math.max(0.5,parsed);
   drawingTool.setEraserRadiusMm(eraserSettings.radiusMm);
@@ -4633,7 +4639,7 @@ el('eraserMode').onchange=()=>{
 // drawingTool-side setter to push into (its lasso preview doesn't render stone-colored geometry --
 // see onPaintStroke's own doc comment above), so its handlers only update paintSettings.
 el('stampSizeMm').oninput=()=>{
-  const parsed=parseFloat(el('stampSizeMm').value);
+  const parsed=readLengthField('stampSizeMm');
   if(!Number.isFinite(parsed))return;
   stampSettings.sizeMm=parsed;
   drawingTool.setStampStyle(stampSettings);
@@ -4643,13 +4649,13 @@ el('stampColor').oninput=()=>{
   drawingTool.setStampStyle(stampSettings);
 };
 el('traceSizeMm').oninput=()=>{
-  const parsed=parseFloat(el('traceSizeMm').value);
+  const parsed=readLengthField('traceSizeMm');
   if(!Number.isFinite(parsed))return;
   traceSettings.sizeMm=parsed;
   drawingTool.setTraceStyle(traceSettings);
 };
 el('traceGapMm').oninput=()=>{
-  const parsed=parseFloat(el('traceGapMm').value);
+  const parsed=readLengthField('traceGapMm');
   if(!Number.isFinite(parsed))return;
   traceSettings.gapMm=parsed;
   drawingTool.setTraceStyle(traceSettings);
@@ -4659,12 +4665,12 @@ el('traceColor').oninput=()=>{
   drawingTool.setTraceStyle(traceSettings);
 };
 el('paintSizeMm').oninput=()=>{
-  const parsed=parseFloat(el('paintSizeMm').value);
+  const parsed=readLengthField('paintSizeMm');
   if(!Number.isFinite(parsed))return;
   paintSettings.sizeMm=parsed;
 };
 el('paintGapMm').oninput=()=>{
-  const parsed=parseFloat(el('paintGapMm').value);
+  const parsed=readLengthField('paintGapMm');
   if(!Number.isFinite(parsed))return;
   paintSettings.gapMm=parsed;
 };
@@ -5019,13 +5025,20 @@ wireShippingApply(()=>project.units);
 function syncSettingsFieldsFromState(){
   el('settingsGridDefault').checked=true;el('settingsGridDefault').disabled=true;
   el('settingsSafeAreaDefault').checked=showSafeArea;el('settingsSnapDefault').checked=snapEnabled;
-  el('settingsSnapDistance').value=snapToleranceMm;el('settingsShowGuides').checked=showSnapGuides;
+  setLengthField('settingsSnapDistance',snapToleranceMm);el('settingsShowGuides').checked=showSnapGuides;
   el('settingsUnits').value=project.units;
+}
+// RS-3020 Part D: #settingsSnapDistance's HTML min/max are static mm literals (index.html), same
+// situation RS-3019 solved for #height with refreshHeightFieldBounds() -- its display value is
+// now unit-converted, so its bounds must be too.
+function refreshSnapDistanceFieldBounds(){
+  el('settingsSnapDistance').min=mmToDisplayValue(0.5,project.units);
+  el('settingsSnapDistance').max=mmToDisplayValue(5,project.units);
 }
 el('settingsApply').onclick=()=>{
   showSafeArea=el('settingsSafeAreaDefault').checked;
   snapEnabled=el('settingsSnapDefault').checked;el('snapEnabled').value=snapEnabled?'on':'off';
-  snapToleranceMm=Math.min(5,Math.max(0.5,parseFloat(el('settingsSnapDistance').value)||SNAP_TOLERANCE_MM));
+  snapToleranceMm=Math.min(5,Math.max(0.5,readLengthField('settingsSnapDistance')||SNAP_TOLERANCE_MM));
   showSnapGuides=el('settingsShowGuides').checked;
   drawLayout();
 };
@@ -5073,6 +5086,13 @@ el('settingsUnits').addEventListener('change',async()=>{
   // .value, just refreshed above) are otherwise only ever refreshed by #monogramFrame's own
   // 'change' listener or the one-time boot call -- both blind to a later Units switch.
   updateMonogramFrameSizeBounds();
+  // RS-3020 Part E: updateDrawToolButtons() (Eraser/Stamp/Trace/Paint tool-session-state fields)
+  // and syncSettingsFieldsFromState()/refreshSnapDistanceFieldBounds() (Snap Distance) are, like
+  // updateMonogramFrameSizeBounds() above, outside updateAll()'s own refresh chain -- a Units
+  // switch would otherwise leave their displayed values in the old unit until next touched.
+  updateDrawToolButtons();
+  syncSettingsFieldsFromState();
+  refreshSnapDistanceFieldBounds();
   syncSelectedControlsFromLayer();
   await updateAll(true);
 });

@@ -356,3 +356,7 @@ tools/scratch/rs-3016-grid-verify/
 # display/width/label across zoom levels, a non-1 devicePixelRatio, and Design-mode hide/show,
 # same "never a repo artifact" category as the scratch folders above
 tools/scratch/rs-3017-scalebar-verify/
+# rs-3020-gap-precision-units: ad hoc Playwright harness against the real app, verifying
+# Gap/Eraser/Stamp/Trace/Paint/Snap-distance mm<->inch round-trips, same "never a repo artifact"
+# category as the scratch folders above
+tools/scratch/rs-3020-gap-precision-units-verify/
