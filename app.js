@@ -2073,7 +2073,7 @@ function drawLayout(){
   // top-down disc (see drawPlateDesignTargetGuide()'s own header comment).
   const isPlate=currentObjectTemplate().preview.kind==='plate';
   if(isPlate){drawPlateDesignTargetGuide(ctx,s,ox,oy,dpr)}else{drawFrontViewFrame(ctx,s,ox,oy,dpr);if(showSafeArea)drawSafeAreaGuide(ctx,s,ox,oy,dpr,getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height))}
-  drawSelection(ctx,s,ox,oy,dpr);drawGuides(ctx,s,ox,oy,dpr);ctx.fillStyle='#516071';ctx.font=`${12*dpr}px Arial`;ctx.fillText(`${layout.count} stones · ${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm · ${selectedLayer().textMode||''}`,20*dpr,h-18*dpr);el('fitNotice').textContent=isPlate?'Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step) · Blue guide shows the selected Design Target’s printable boundary.':'Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step) · Drag the amber Front View Frame to rotate the Object Preview.'}
+  drawSelection(ctx,s,ox,oy,dpr);drawGuides(ctx,s,ox,oy,dpr);ctx.fillStyle='#516071';ctx.font=`${12*dpr}px Arial`;ctx.fillText(`${layout.count} stones · ${formatLengthDisplay(layout.widthMm,project.units,1)}×${formatLengthDisplay(layout.heightMm,project.units,1)} ${unitSuffix(project.units)} · ${selectedLayer().textMode||''}`,20*dpr,h-18*dpr);el('fitNotice').textContent=isPlate?'Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step) · Blue guide shows the selected Design Target’s printable boundary.':'Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step) · Drag the amber Front View Frame to rotate the Object Preview.'}
 // RS-1004: a dashed guide rectangle for the active object template's safe design area, derived from
 // the current project.canvas size. This is a layer-agnostic editor overlay (like drawSelection()
 // below), not a CanvasRenderer2D.js change -- it reuses the exact mm->px transform
@@ -2161,7 +2161,7 @@ function drawFrontViewFrame(ctx,s,ox,oy,dpr){
     ctx.fillRect(rx,ry,rw,rh);
     ctx.strokeRect(rx,ry,rw,rh);
   }
-  const label=`Front View · ${frameWidthMm.toFixed(1)} mm`;
+  const label=`Front View · ${formatLengthDisplay(frameWidthMm,project.units,1)} ${unitSuffix(project.units)}`;
   const labelSeg=segments[0];
   const labelY=oy>16*dpr?oy-8*dpr:oy+16*dpr;
   ctx.font=`bold ${12*dpr}px Arial`;
@@ -2875,7 +2875,7 @@ function updateViewButtons(){document.querySelectorAll('.viewBtn').forEach(b=>b.
 // UI-001: workspace status strip now also reports canvas size, units, safe-area size, and (when
 // any layers are selected) the current selection's bounding box -- purely additional display text,
 // computed from data updateAll() already has (project.canvas, getSafeAreaRectMm(), unionBBoxOfLayers()).
-function selectionBoundsText(){if(!selectedLayerIds.size)return'';const sel=[...selectedLayerIds].map(id=>project.layers.find(x=>x.id===id)).filter(Boolean);if(!sel.length)return'';const b=unionBBoxOfLayers(sel);return`<span>selection: ${b.width.toFixed(1)}×${b.height.toFixed(1)} mm</span>`}
+function selectionBoundsText(){if(!selectedLayerIds.size)return'';const sel=[...selectedLayerIds].map(id=>project.layers.find(x=>x.id===id)).filter(Boolean);if(!sel.length)return'';const b=unionBBoxOfLayers(sel);return`<span>selection: ${formatLengthDisplay(b.width,project.units,1)}×${formatLengthDisplay(b.height,project.units,1)} ${unitSuffix(project.units)}</span>`}
 // S-107 (requirement 6, "Show useful information associated with the Front View Frame"): reuses
 // the existing #cupStats workspace-status bar (already showing per-object/preview info) rather
 // than adding new markup -- Front View width and printable circumference come straight from
@@ -2886,15 +2886,15 @@ function selectionBoundsText(){if(!selectedLayerIds.size)return'';const sel=[...
 // isPointerOnFrontViewFrame()/isTextTooLongForObject()'s own S-112 guards) -- its cupStats line
 // instead reports the plate's own physical metadata: design target, outer/inner diameter, rim
 // width, and approximate weight.
-function plateCupStatsHtml(t){const rimWidthMm=computeRimWidthMm(project.plate.outerDiameterMm,project.plate.innerWellDiameterMm);return`<span>${escapeHtml(t.displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span><span>design target: ${escapeHtml(getPlateDesignTargetMeta(project.plate.designTarget).name)}</span><span>outer diameter: ${project.plate.outerDiameterMm.toFixed(1)} mm</span><span>inner well diameter: ${project.plate.innerWellDiameterMm.toFixed(1)} mm</span><span>rim width: ${rimWidthMm.toFixed(1)} mm</span><span>approx. weight: ${PLATE_ROUND_DINNER_DEFINITION.weightGrams.average} g</span>`}
-function cylindricalCupStatsHtml(t){const{frameWidthMm}=frontViewFrameGeometry();return`<span>${escapeHtml(t.displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span><span>Front View width: ${frameWidthMm.toFixed(1)} mm</span><span>printable circumference: ${printableCircumferenceMm().toFixed(1)} mm</span><span>viewing position: ${Math.round(rotation)}°</span>`}
+function plateCupStatsHtml(t){const rimWidthMm=computeRimWidthMm(project.plate.outerDiameterMm,project.plate.innerWellDiameterMm);return`<span>${escapeHtml(t.displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span><span>design target: ${escapeHtml(getPlateDesignTargetMeta(project.plate.designTarget).name)}</span><span>outer diameter: ${formatLengthDisplay(project.plate.outerDiameterMm,project.units,1)} ${unitSuffix(project.units)}</span><span>inner well diameter: ${formatLengthDisplay(project.plate.innerWellDiameterMm,project.units,1)} ${unitSuffix(project.units)}</span><span>rim width: ${formatLengthDisplay(rimWidthMm,project.units,1)} ${unitSuffix(project.units)}</span><span>approx. weight: ${PLATE_ROUND_DINNER_DEFINITION.weightGrams.average} g</span>`}
+function cylindricalCupStatsHtml(t){const{frameWidthMm}=frontViewFrameGeometry();return`<span>${escapeHtml(t.displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span><span>Front View width: ${formatLengthDisplay(frameWidthMm,project.units,1)} ${unitSuffix(project.units)}</span><span>printable circumference: ${formatLengthDisplay(printableCircumferenceMm(),project.units,1)} ${unitSuffix(project.units)}</span><span>viewing position: ${Math.round(rotation)}°</span>`}
 // RS-3011 Step 5: #layoutStats is the 2D-Canvas-view status bar, but it's shared/always-wired
 // regardless of the active view (see the Step 4 investigation) -- while Design is active, showing a
 // non-'path' selected layer's stats (e.g. the seed text layer) is confusing, since that layer has no
 // presence on Design's own canvas (drawingTool only draws/tracks 'path' layers). Falls back to a
 // neutral canvas/safe-area-only summary in that one case; every other view+selection combination,
 // including a 'path' layer selected and visible while Design is active, keeps the full stats.
-function updateStats(){const t=currentObjectTemplate(),isPlate=t.preview.kind==='plate';const safe=getSafeAreaRectMm(t,project.canvas.width,project.canvas.height);const sel=selectedLayer();if(drawingTool.isActive&&sel.type!=='path'){el('layoutStats').innerHTML=`<span>canvas: ${project.canvas.width}×${project.canvas.height} mm</span><span>safe area: ${safe.widthMm.toFixed(1)}×${safe.heightMm.toFixed(1)} mm</span><span>units: mm</span>`}else{el('layoutStats').innerHTML=`<b>${layout.count}</b> stones <span>${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm</span><span>canvas: ${project.canvas.width}×${project.canvas.height} mm</span><span>safe area: ${safe.widthMm.toFixed(1)}×${safe.heightMm.toFixed(1)} mm</span><span>units: mm</span>${selectionBoundsText()}<span>selected: ${escapeHtml(layerLabel(sel))}</span>`}el('cupStats').innerHTML=isPlate?plateCupStatsHtml(t):cylindricalCupStatsHtml(t);updateStoneColorSwatch()}
+function updateStats(){const t=currentObjectTemplate(),isPlate=t.preview.kind==='plate';const safe=getSafeAreaRectMm(t,project.canvas.width,project.canvas.height);const sel=selectedLayer();const u=unitSuffix(project.units);if(drawingTool.isActive&&sel.type!=='path'){el('layoutStats').innerHTML=`<span>canvas: ${formatLengthDisplay(project.canvas.width,project.units,1)}×${formatLengthDisplay(project.canvas.height,project.units,1)} ${u}</span><span>safe area: ${formatLengthDisplay(safe.widthMm,project.units,1)}×${formatLengthDisplay(safe.heightMm,project.units,1)} ${u}</span><span>units: ${u}</span>`}else{el('layoutStats').innerHTML=`<b>${layout.count}</b> stones <span>${formatLengthDisplay(layout.widthMm,project.units,1)}×${formatLengthDisplay(layout.heightMm,project.units,1)} ${u}</span><span>canvas: ${formatLengthDisplay(project.canvas.width,project.units,1)}×${formatLengthDisplay(project.canvas.height,project.units,1)} ${u}</span><span>safe area: ${formatLengthDisplay(safe.widthMm,project.units,1)}×${formatLengthDisplay(safe.heightMm,project.units,1)} ${u}</span><span>units: ${u}</span>${selectionBoundsText()}<span>selected: ${escapeHtml(layerLabel(sel))}</span>`}el('cupStats').innerHTML=isPlate?plateCupStatsHtml(t):cylindricalCupStatsHtml(t);updateStoneColorSwatch()}
 // S-106: Combined Visual Preview PNG. Composites the two already-rendered, always-mounted canvas
 // elements (layoutCanvas/cupCanvas -- both keep a real, non-zero pixel backing store at all times
 // regardless of the active workspace tab, per the .tab-hidden/dual-mode invariant documented at
@@ -4276,9 +4276,10 @@ function updateObjectTemplateDetail(){
   const isPlate=t.preview.kind==='plate';
   const isVessel=VESSEL_PRODUCT_IDS.includes(t.id);
   const detailEl=el('objectTemplateDetail');
-  if(detailEl)detailEl.textContent=`Production ${t.productionWidthMm}×${t.productionHeightMm}mm · Safe area inset ${s.top}/${s.right}/${s.bottom}/${s.left}mm · Default wrap: ${t.wrap.default}`;
+  const u=unitSuffix(project.units);
+  if(detailEl)detailEl.textContent=`Production ${formatLengthDisplay(t.productionWidthMm,project.units,1)}×${formatLengthDisplay(t.productionHeightMm,project.units,1)}${u} · Safe area inset ${formatLengthDisplay(s.top,project.units,1)}/${formatLengthDisplay(s.right,project.units,1)}/${formatLengthDisplay(s.bottom,project.units,1)}/${formatLengthDisplay(s.left,project.units,1)}${u} · Default wrap: ${t.wrap.default}`;
   const summaryEl=el('projectTemplateSummary');
-  if(summaryEl)summaryEl.textContent=`${t.displayName} · ${project.canvas.width}×${project.canvas.height}mm`;
+  if(summaryEl)summaryEl.textContent=`${t.displayName} · ${formatLengthDisplay(project.canvas.width,project.units,1)}×${formatLengthDisplay(project.canvas.height,project.units,1)}${u}`;
   // S-112: the plate-only dimension/design-target field group and the plate-only color swatch
   // (in place of the generic #cupColor preview-background swatch) are shown only while the Round
   // Dinner Plate template is active -- every other template's fields are unaffected.
