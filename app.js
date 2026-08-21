@@ -1105,6 +1105,16 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     updateDrawToolButtons();
     el('status').textContent='Added shape as new Path layer.';
   },
+  // RS-3026: fires every time DrawingCanvasTool.js's applyViewport() runs (zoom change, pan,
+  // initial Design-mode entry, resize) -- keeps the scale bar live while Design mode is active.
+  // drawingTool.pxPerMm (Paper's own view.zoom) is already CSS-px-per-mm, unlike the plain
+  // canvas's device-px-per-mm layoutTransform.s, so this passes 1 in place of dpr -- passing the
+  // real devicePixelRatio here would make the bar render dpr× too narrow.
+  onViewportChanged:()=>{
+    if(!drawingTool.isActive)return;
+    updateScaleBar(drawingTool.pxPerMm,1);
+    el('scaleBar').style.display='flex';
+  },
   // RS-3011 Step 10b: Paint's own finalize hook -- fires once per finished lasso stroke (see
   // DrawingCanvasTool.js's own onPaintStroke doc comment for exactly when/what `lassoPolygons` is).
   // Per this milestone's architecture split, this module owns every selectPaintTarget()/
@@ -4422,10 +4432,6 @@ function setDrawMode(active,mode){
     // workspace to the 2D Canvas view -- the Dual Workspace/2D Canvas/Object Preview tab row is
     // dead UI while Design can't switch away from it, so hide the whole tab row too.
     el('workspaceViewTabs').style.display='none';
-    // RS-3017: drawLayout() returns early and stops updating once drawingTool.isActive is true, so
-    // the scale bar must be hidden explicitly here rather than relying on drawLayout()'s own
-    // visibility line -- otherwise it would linger on screen showing a stale mm value.
-    el('scaleBar').style.display='none';
     // drawingTool.enter() resyncs layoutCanvas's size itself (see DrawingCanvasTool.js's
     // resyncViewSize()) -- app.js must not also call resizeCanvas() here, or the two would fight
     // over which one's dpr-scaled canvas.width/height sticks.
