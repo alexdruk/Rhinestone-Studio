@@ -38,6 +38,7 @@ import { stoneLayoutToSvg } from '../src/export/SvgExporter.js';
 import { FontManager } from '../src/fonts/index.js';
 import { createDefaultFontProviderRegistry } from '../src/text/index.js';
 import { MonogramGenerator, MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS, MONOGRAM_GENERATOR_FAILURE_REASONS } from '../src/monogram/index.js';
+import { displayValueToMm, formatLengthDisplay, mmToDisplayValue, unitSuffix } from '../src/units/index.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
@@ -153,6 +154,7 @@ const sandboxFactory = new Function(
   // tools/test-ui-import-autoswitch-regression.mjs's own stub list).
   'relocateFieldGroups', 'updateObjectTemplateDetail', 'updateImageTraceSections',
   'syncShippingFieldsFromState', 'syncSettingsFieldsFromState', 'onLibraryOpen', 'onGalleryOpen',
+  'readLengthField', 'setLengthField', 'mmToDisplayValue', 'unitSuffix',
   `
   ${shapeLayerTypesSrc}
   ${resolveFontProviderIdSrc}
@@ -216,13 +218,21 @@ function makeStubMonogramGenerator(nextResult) {
 
 function buildScenario({ project, monogramGenerator, fontManager = makeFakeFontManager() } = {}) {
   installFakeDom();
+  const resolvedProject = project || { canvas: { width: 200, height: 200 }, layers: [{ id: 'initial-layer', type: 'text' }], units: 'mm' };
+  // RS-3019: local wrappers matching app.js's own readLengthField()/setLengthField() exactly --
+  // the sliced Monogram section below now calls these instead of raw parseFloat(el(id).value)/
+  // el(id).value=. Closes over resolvedProject (the same object the sandbox's inner `project` is
+  // initialized from) rather than a module-level project, since each scenario builds its own.
+  function readLengthField(id) { return displayValueToMm(el(id).value, resolvedProject.units); }
+  function setLengthField(id, mm) { el(id).value = formatLengthDisplay(mm, resolvedProject.units); }
   const sandbox = sandboxFactory(
     Lightbox, HistoryManager, SHAPE_LIBRARY_KINDS, el, listFrames, listStoneSizes, findStoneSizeByDiameterMm, STONE_COLORS,
     MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS, MONOGRAM_GENERATOR_FAILURE_REASONS,
-    fontManager, project || { canvas: { width: 200, height: 200 }, layers: [{ id: 'initial-layer', type: 'text' }] },
+    fontManager, resolvedProject,
     selectMany, () => {}, () => {}, () => {},
     monogramGenerator,
-    () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {}
+    () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {},
+    readLengthField, setLengthField, mmToDisplayValue, unitSuffix
   );
   return sandbox;
 }
