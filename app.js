@@ -88,7 +88,7 @@ import './src/browser/BrowserDependencyProbe.js';
 import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace, hitTestPathLayerRegion, computeNaturalContourTransform, applyNaturalContourTransform, isPointInsidePolygons, findOverlappingStonePairs, measureStoneCrowding } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
 import { createDefaultFontProviderRegistry, createDefaultRhinestoneFontRegistry, BoundingBox } from './src/text/index.js';
-import { renderProductionLayout, renderStoneLayout, fitTransform } from './src/renderer/CanvasRenderer2D.js';
+import { renderProductionLayout, renderStoneLayout, fitTransform, chooseNiceStepMm } from './src/renderer/CanvasRenderer2D.js';
 import { createPreview3D } from './src/preview3d/index.js';
 import { circumferenceMm, frontViewFrameWidthMm, canvasXMmForRotationDeg, rotationDegForCanvasXMm, azimuthRadForCanvasXMm, wrapAngleRad } from './src/preview3d/ObjectDimensions.js';
 import { STONE_COLORS } from './src/renderer/StoneColors.js';
@@ -179,6 +179,9 @@ let TEXT_ENGINE_FONT_IDS=new Set([DEFAULT_TEXT_FONT_ID]);
 // CUP_ROTATION_SENSITIVITY constant along with the custom pointer-drag-to-rotate handler it drove —
 // OrbitControls (src/preview3d/**) now owns pointer interaction on the cup canvas natively.
 const ZOOM_MIN=0.7,ZOOM_MAX=1.4;
+// RS-3017: target on-screen width (CSS px) for the scale bar's reference length -- fed into
+// chooseNiceStepMm's 'atMost' mode so the bar picks the largest nice mm step that still fits.
+const SCALE_BAR_TARGET_PX=100;
 // S-001: how close `rotation` must be to a .viewBtn's data-view (in degrees, mod 360, so -180 and
 // 180 both match Back) for that button to show as the active/highlighted view.
 const VIEW_ANGLE_EPSILON_DEG=0.5;
@@ -2023,6 +2026,16 @@ function renderLayerUI(){el('selectedLayer').innerHTML=project.layers.map(l=>`<o
 }function layerLabel(l){if(l.type==='text')return l.text||'Text';if(l.type==='svg')return l.svgName||'SVG';if(l.type==='image')return l.imageName||'Image';if(l.type==='path')return l.pathName||'Path';return SHAPE_DISPLAY_LABELS[l.type]||'Shape'}function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function resizeCanvas(c){const r=c.getBoundingClientRect(),dpr=Math.max(1,devicePixelRatio||1),w=Math.floor(r.width*dpr),h=Math.floor(r.height*dpr);if(c.width!==w||c.height!==h){c.width=w;c.height=h}return{w,h,dpr}}
 function layoutMmToPx(p){return{x:layoutTransform.ox+p.x*layoutTransform.s,y:layoutTransform.oy+p.y*layoutTransform.s}}function layoutPxToMm(x,y){return{x:(x-layoutTransform.ox)/layoutTransform.s,y:(y-layoutTransform.oy)/layoutTransform.s}}
+// RS-3017: on-canvas scale bar, bottom-right of #panel2D. `s` (from layoutTransform) is device-px
+// per mm -- resizeCanvas() sizes the canvas backing store by devicePixelRatio, but the scale bar's
+// DOM element widths are CSS px, so dividing by dpr here is required to avoid a dpr-x-too-wide bar
+// on high-DPI screens.
+function updateScaleBar(s,dpr){
+  const stepMm=chooseNiceStepMm(s/dpr,SCALE_BAR_TARGET_PX,'atMost');
+  const barPx=stepMm*s/dpr;
+  el('scaleBarTrack').style.width=barPx+'px';
+  el('scaleBarLabel').textContent=`${stepMm} mm`;
+}
 function drawLayout(){
   // RS-3010 Step 1: "canvas interaction owned by exactly one thing at a time" also covers who
   // *draws* to layoutCanvas, not just pointer/keyboard input -- while drawingTool.isActive, Paper.js
@@ -2035,6 +2048,7 @@ function drawLayout(){
   // blocked by this guard.
   if(drawingTool.isActive)return;
   const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr});layoutTransform={s,ox,oy,dpr};
+  updateScaleBar(s,dpr);el('scaleBar').style.display=drawingTool.isActive?'none':'flex';
   // S-112: the plate template draws its own circular/annular design-target guide instead of the
   // cylindrical Front View Frame + rectangular safe-area guide -- neither applies to a flat
   // top-down disc (see drawPlateDesignTargetGuide()'s own header comment).
@@ -4397,6 +4411,10 @@ function setDrawMode(active,mode){
     // workspace to the 2D Canvas view -- the Dual Workspace/2D Canvas/Object Preview tab row is
     // dead UI while Design can't switch away from it, so hide the whole tab row too.
     el('workspaceViewTabs').style.display='none';
+    // RS-3017: drawLayout() returns early and stops updating once drawingTool.isActive is true, so
+    // the scale bar must be hidden explicitly here rather than relying on drawLayout()'s own
+    // visibility line -- otherwise it would linger on screen showing a stale mm value.
+    el('scaleBar').style.display='none';
     // drawingTool.enter() resyncs layoutCanvas's size itself (see DrawingCanvasTool.js's
     // resyncViewSize()) -- app.js must not also call resizeCanvas() here, or the two would fight
     // over which one's dpr-scaled canvas.width/height sticks.

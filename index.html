@@ -195,6 +195,9 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .workspace-canvas-area.dual{display:flex;gap:var(--space-3);padding:var(--space-4)}
 .workspace-canvas-area.dual .canvas-panel{position:relative;inset:auto;flex:1 1 0;min-width:0;height:100%}
 .fitNotice{position:absolute;left:var(--space-4);bottom:var(--space-4);color:var(--color-text-muted);font-size:var(--font-size-xs);background:#ffffffe6;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:4px 9px}
+/* RS-3017: on-canvas scale bar, mirroring .fitNotice's positioning convention but bottom-right. */
+.scaleBar{position:absolute;right:var(--space-4);bottom:var(--space-4);display:flex;align-items:center;gap:6px;background:#ffffffe6;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:4px 9px;font-size:var(--font-size-xs);color:var(--color-text-muted)}
+.scaleBar-track{display:block;height:3px;border-radius:1px;background:var(--color-text-muted)}
 /* RS-3010 Design Step A: two vertical tool rails (general tools on the left, shape presets on the
    right) + a contextual tool-options panel, positioned via CSS as absolutely-positioned children
    of #panel2D (same technique .fitNotice above already uses) -- #layout itself never moves in the
@@ -492,6 +495,10 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
       <section class="canvas-panel" id="panel2D" aria-label="2D production canvas">
         <canvas id="layout"></canvas>
         <div class="fitNotice" id="fitNotice"></div>
+        <div class="scaleBar" id="scaleBar" aria-hidden="true">
+          <span class="scaleBar-track" id="scaleBarTrack"></span>
+          <span class="scaleBar-label" id="scaleBarLabel"></span>
+        </div>
         <!-- RS-3010 Design Step A correction: the single rail splits in two -- a left rail for
              general/freeform tools (Select, Draw, Pen; future home for an Eraser, not built yet)
              and a right rail for parametric shape presets (Rect/Ellipse/Slot/Polygon). Every
