@@ -4565,6 +4565,22 @@ el('railPaintToggle').onclick=()=>setDrawTool('paint');
 el('railStampToggle').onclick=()=>setDrawTool('stamp');
 el('railTraceToggle').onclick=()=>setDrawTool('trace');
 el('railEraserToggle').onclick=()=>setDrawTool('eraser');
+// RS-3015: visible shortcut-key badges on the rail buttons above -- reads DRAW_TOOL_SHORTCUT_KEYS
+// (rather than hardcoding letters here) so the badge can never drift out of sync with the actual
+// keybinding.
+function initDrawToolShortcutBadges(){
+  const modeToKey={};
+  for(const key in DRAW_TOOL_SHORTCUT_KEYS)modeToKey[DRAW_TOOL_SHORTCUT_KEYS[key]]=key;
+  const idsByMode={railSelectToggle:'select',railLassoToggle:'lasso',railDrawToggle:'freehand',
+    railRectToggle:'rect',railEllipseToggle:'ellipse',railSlotToggle:'slot',railPolygonToggle:'polygon',
+    railPenToggle:'pen',railPaintToggle:'paint',railStampToggle:'stamp',railTraceToggle:'trace',
+    railEraserToggle:'eraser'};
+  for(const id in idsByMode){
+    const key=modeToKey[idsByMode[id]];
+    if(key)el(id).setAttribute('data-shortcut',key.toUpperCase());
+  }
+}
+initDrawToolShortcutBadges();
 // RS-3011 Step 13 decision 4a: the second of the two required radius-adjustment paths (the first
 // is the '[' / ']' keydown handling below) -- writes straight through to both eraserSettings (this
 // module's own runtime state) and drawingTool.setEraserRadiusMm() (its live ghost/drag-preview

@@ -81,11 +81,14 @@ button.btn.danger:hover:not(:disabled){background:var(--color-danger-tint)}
 button.btn.block{width:100%}
 button.btn.sm{height:var(--control-height-sm);padding:0 9px;font-size:var(--font-size-xs)}
 button.icon-btn{
-  display:inline-flex;align-items:center;justify-content:center;width:var(--control-height-sm);height:var(--control-height-sm);
+  position:relative;display:inline-flex;align-items:center;justify-content:center;width:var(--control-height-sm);height:var(--control-height-sm);
   border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);background:var(--color-surface);cursor:pointer;font-size:13px;
 }
 button.icon-btn:hover:not(:disabled){background:var(--color-bg)}
 button.icon-btn[aria-pressed="true"]{background:var(--color-primary-tint);border-color:var(--color-primary);color:var(--color-primary-active)}
+/* RS-3015: visible shortcut-key badge, mirrors the letter already shown in each button's title */
+button.icon-btn[data-shortcut]::after{content:attr(data-shortcut);position:absolute;top:2px;right:3px;font-size:9px;line-height:1;font-weight:600;padding:1px 3px;border-radius:3px;background:var(--color-primary-tint);color:var(--color-primary-active);pointer-events:none}
+button.icon-btn[aria-pressed="true"][data-shortcut]::after{background:var(--color-primary);color:#fff}
 .align-icon{width:15px;height:15px;display:block;overflow:visible}
 .btnrow{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
 .color-pick-row{display:flex;align-items:center;gap:var(--space-2)}
