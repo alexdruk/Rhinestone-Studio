@@ -193,13 +193,16 @@ await test('13. the Align & Snap sidebar section exists with labeled/tooltipped 
 await test('14. the Settings Lightbox exposes plain-language snapping controls (Enable Snapping, Snap Distance, Show Alignment Guides), each writable/readable from live state and clamped to a sane range', () => {
   const body = indexHtml.slice(indexHtml.indexOf('id="lightboxSettings"'), indexHtml.indexOf('id="lightboxHelp"'));
   assert.match(body, /<label class="checkbox-row" title="[^"]+"><input type="checkbox" id="settingsSnapDefault" checked> Enable Snapping<\/label>/, 'expected a tooltip explaining what Enable Snapping snaps to');
-  assert.match(body, /<label for="settingsSnapDistance">Snap Distance<\/label>/, 'expected the label to read "Snap Distance", not "Snap Distance (mm)"');
+  // RS-3020: Snap Distance is now a unit-converting length field (data-unit-label, same convention
+  // as every other freely-typed length field) -- its static markup carries the "(mm)" suffix as the
+  // default-units display text, same as e.g. #drawSlotWidthField's own "Width (mm)".
+  assert.match(body, /<label for="settingsSnapDistance" data-unit-label="Snap Distance">Snap Distance \(mm\)<\/label>/, 'expected a unit-converting label carrying data-unit-label, same convention as every other length field');
   assert.match(body, /<input id="settingsSnapDistance" type="number" min="0\.5" max="5" step="0\.1" value="1\.5">/);
   assert.match(body, /<p class="hint">How close two elements need to be, in millimeters, before they snap together\.[^<]*<\/p>/, 'expected a visible, plain-language mm explanation (not hover-only)');
   assert.match(body, /<label class="checkbox-row" title="[^"]+"><input type="checkbox" id="settingsShowGuides" checked> Show Alignment Guides<\/label>/, 'expected a tooltip explaining what Show Alignment Guides shows');
   assert.ok(!/technical|tolerance/i.test(body), 'expected friendly labels, not raw technical terms like "tolerance"');
-  assert.match(appJs, /el\('settingsSnapDistance'\)\.value=snapToleranceMm;el\('settingsShowGuides'\)\.checked=showSnapGuides;/);
-  assert.match(appJs, /snapToleranceMm=Math\.min\(5,Math\.max\(0\.5,parseFloat\(el\('settingsSnapDistance'\)\.value\)\|\|SNAP_TOLERANCE_MM\)\);/);
+  assert.match(appJs, /setLengthField\('settingsSnapDistance',snapToleranceMm\);el\('settingsShowGuides'\)\.checked=showSnapGuides;/);
+  assert.match(appJs, /snapToleranceMm=Math\.min\(5,Math\.max\(0\.5,readLengthField\('settingsSnapDistance'\)\|\|SNAP_TOLERANCE_MM\)\);/);
   assert.match(appJs, /showSnapGuides=el\('settingsShowGuides'\)\.checked;/);
 
   const helpBody = indexHtml.slice(indexHtml.indexOf('Keyboard shortcuts'), indexHtml.indexOf('</div>', indexHtml.indexOf('Keyboard shortcuts')));
