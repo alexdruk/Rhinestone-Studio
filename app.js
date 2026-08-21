@@ -112,7 +112,7 @@ import { SNAP_TOLERANCE_MM, NUDGE_STEP_MM, NUDGE_STEP_LARGE_MM, alignLayers, dis
 // wires a Lightbox to a top-menu button or a layer-aware "which fields to show" decision. See
 // docs/specifications/UI-001-CompleteRedesign.md.
 import { Lightbox, el, parseIntOr, download, exportCanvas, syncShippingFieldsFromState, wireShippingApply } from './src/ui/index.js';
-import { mmToDisplayValue, displayValueToMm, unitSuffix, formatLengthDisplay } from './src/units/LengthUnits.js';
+import { mmToDisplayValue, displayValueToMm, unitSuffix, formatLengthDisplay } from './src/units/index.js';
 // MONO-006 (Monogram Generator UI): the Monogram Lightbox is a plain front-end -- it never
 // generates geometry, computes layouts, fits, or detects collisions itself. All of that is
 // delegated to MonogramGenerator.generate() (MONO-005/MONO-005A), which returns ordinary project
@@ -1705,7 +1705,6 @@ try{
     project=validateProject(recovered.project);
     selectedLayerId=project.layers.some(l=>l.id===recovered.selectedLayerId)?recovered.selectedLayerId:project.layers[0].id;
     selectedLayerIds=selectOnly(selectedLayerId);
-    refreshUnitLabels();
     bootStatusMessage='Restored unsaved changes from autosave (crash/refresh recovery).';
   }
 }catch(error){
@@ -1713,6 +1712,7 @@ try{
   try{autosave.clear()}catch{}
 }
 let cleanProjectJson=JSON.stringify(project);
+refreshUnitLabels();
 // lastAutosavedProjectJson tracks what's actually in the autosave slot right now -- starts equal to
 // the just-decided boot project (restored or default) so nothing is redundantly re-written on the
 // very first updateAll(). scheduleAutosave() (called from updateAll(), so it runs after every

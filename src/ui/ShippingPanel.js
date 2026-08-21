@@ -9,7 +9,7 @@
  * its own, so the caller (app.js) supplies it. '' is preserved verbatim as "not yet entered".
  */
 import { el } from './DomUtils.js';
-import { displayValueToMm, formatLengthDisplay } from '../units/LengthUnits.js';
+import { displayValueToMm, formatLengthDisplay } from '../units/index.js';
 
 export const shippingInfo = { packageType: 'box', lengthMm: '', widthMm: '', heightMm: '', weightG: '', notes: '', fragile: false };
 
