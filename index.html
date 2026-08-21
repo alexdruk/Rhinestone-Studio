@@ -574,13 +574,13 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <div class="design-tool-options-panel" id="designToolOptionsPanel" style="display:none" aria-label="Tool options">
           <span id="drawModeHint" class="hint" style="display:none">Drag to draw · Scroll to pan · Ctrl/Cmd+scroll to zoom</span>
           <label for="drawSlotWidthMm" id="drawSlotWidthField" data-unit-label="Width" style="display:none;margin:0" title="Slot width (mm)">Width (mm)</label>
-          <input id="drawSlotWidthMm" type="number" min="0.1" step="0.5" value="6" style="display:none;width:70px">
+          <input id="drawSlotWidthMm" type="number" min="0.1" step="0.5" data-mm-step="0.5" value="6" style="display:none;width:70px">
           <!-- RS-3011 Step 13 follow-up: relocated from a standalone rail wrapper div into this
                shared per-tool-options panel, as two sibling elements -- same
                show/hide-only-while-eraser-is-active convention as drawSlotWidthField/
                drawSlotWidthMm above, toggled individually in updateDrawToolButtons(). -->
           <label for="eraserRadiusMm" id="eraserRadiusField" data-unit-label="Radius" style="display:none;margin:0" title="Eraser brush radius (mm) -- also adjustable with [ / ] while Eraser is active">Radius (mm)</label>
-          <input id="eraserRadiusMm" type="number" min="0.5" step="0.5" value="1" style="display:none;width:70px">
+          <input id="eraserRadiusMm" type="number" min="0.5" step="0.5" data-mm-step="0.5" value="1" style="display:none;width:70px">
           <!-- RS-3014 Step 3: Eraser's own mode toggle -- same "sibling elements toggled individually
                in updateDrawToolButtons()" convention as eraserRadiusField/eraserRadiusMm just above,
                and the same two-state <select> pattern #snapEnabled already uses for an on/off toggle
@@ -592,23 +592,23 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
                just above. #stampColor is populated by populateStoneColorOptions() at startup, same
                optgroup markup #stoneColor gets. -->
           <label for="stampSizeMm" id="stampSizeField" data-unit-label="Stamp Size" style="display:none;margin:0" title="Stamp stone size (mm)">Stamp Size (mm)</label>
-          <input id="stampSizeMm" type="number" min="0.1" step="0.5" value="2" style="display:none;width:70px">
+          <input id="stampSizeMm" type="number" min="0.1" step="0.5" data-mm-step="0.5" value="2" style="display:none;width:70px">
           <label for="stampColor" id="stampColorField" style="display:none;margin:0" title="Stamp stone color">Stamp Color</label>
           <select id="stampColor" style="display:none"></select>
           <!-- RS-3014 Step 1: Trace's own independent style fields, same convention as Stamp's just
                above. -->
           <label for="traceSizeMm" id="traceSizeField" data-unit-label="Size" style="display:none;margin:0" title="Trace stone size (mm)">Size (mm)</label>
-          <input id="traceSizeMm" type="number" min="0.1" step="0.5" value="2" style="display:none;width:70px">
+          <input id="traceSizeMm" type="number" min="0.1" step="0.5" data-mm-step="0.5" value="2" style="display:none;width:70px">
           <label for="traceGapMm" id="traceGapField" data-unit-label="Gap" style="display:none;margin:0" title="Trace stone gap (mm)">Gap (mm)</label>
-          <input id="traceGapMm" type="number" min="0" step="0.1" value="0.3" style="display:none;width:70px">
+          <input id="traceGapMm" type="number" min="0" step="0.1" data-mm-step="0.1" value="0.3" style="display:none;width:70px">
           <label for="traceColor" id="traceColorField" style="display:none;margin:0" title="Trace stone color">Color</label>
           <select id="traceColor" style="display:none"></select>
           <!-- RS-3014 Step 1: Paint's own independent style fields, same convention as Stamp/Trace
                just above. -->
           <label for="paintSizeMm" id="paintSizeField" data-unit-label="Size" style="display:none;margin:0" title="Paint stone size (mm)">Size (mm)</label>
-          <input id="paintSizeMm" type="number" min="0.1" step="0.5" value="2" style="display:none;width:70px">
+          <input id="paintSizeMm" type="number" min="0.1" step="0.5" data-mm-step="0.5" value="2" style="display:none;width:70px">
           <label for="paintGapMm" id="paintGapField" data-unit-label="Gap" style="display:none;margin:0" title="Paint stone gap (mm)">Gap (mm)</label>
-          <input id="paintGapMm" type="number" min="0" step="0.1" value="0.3" style="display:none;width:70px">
+          <input id="paintGapMm" type="number" min="0" step="0.1" data-mm-step="0.1" value="0.3" style="display:none;width:70px">
           <label for="paintColor" id="paintColorField" style="display:none;margin:0" title="Paint stone color">Color</label>
           <select id="paintColor" style="display:none"></select>
           <!-- RS-3011 Step 3a: relocation target for #sharedStoneFields (stoneSize/gap/stoneColor) --
@@ -694,8 +694,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
             <div id="fontLibraryList" class="font-library-list" role="listbox" aria-label="Font library"></div>
           </div>
           <div class="field-row">
-            <div class="field" id="heightField"><label for="height" data-unit-label="Text height">Text height (mm)</label><input id="height" type="number" min="4" max="111" step="1" value="25"></div>
-            <div class="field" id="letterHeightField" style="display:none"><label for="letterHeight" data-unit-label="Letter height">Letter height (mm)</label><input id="letterHeight" type="number" step="0.1"></div>
+            <div class="field" id="heightField"><label for="height" data-unit-label="Text height">Text height (mm)</label><input id="height" type="number" min="4" max="111" step="1" data-mm-step="1" value="25"></div>
+            <div class="field" id="letterHeightField" style="display:none"><label for="letterHeight" data-unit-label="Letter height">Letter height (mm)</label><input id="letterHeight" type="number" step="0.1" data-mm-step="0.1"></div>
             <div class="field"><label for="autoFit">Auto fit</label><select id="autoFit"><option value="on">On</option><option value="off">Off</option></select></div>
           </div>
           <p class="hint" id="textSizeFixedHint" style="display:none">Production Fonts are a fixed size — pick a different font for a different scale.</p>
@@ -706,8 +706,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <div class="field-section">
           <h3>Position</h3>
           <div class="field-row">
-            <div class="field"><label for="textX" data-unit-label="Position X">Position X (mm)</label><input id="textX" type="number" step="1" value="0"></div>
-            <div class="field"><label for="textY" data-unit-label="Position Y">Position Y (mm)</label><input id="textY" type="number" step="1" value="0"></div>
+            <div class="field"><label for="textX" data-unit-label="Position X">Position X (mm)</label><input id="textX" type="number" step="1" data-mm-step="1" value="0"></div>
+            <div class="field"><label for="textY" data-unit-label="Position Y">Position Y (mm)</label><input id="textY" type="number" step="1" data-mm-step="1" value="0"></div>
           </div>
           <p class="validation-message" id="textTooLongWarning" role="status">This text exceeds the object's printable circumference.</p>
           <p class="hint" id="textTooLongWarningDetail"></p>
@@ -723,7 +723,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <p class="hint" id="curveUnavailableHint" style="display:none">Curved text isn't available for Production Fonts yet — switch to a legacy font, or position this text manually.</p>
           <div id="curveControls" style="display:none">
             <div class="field-row">
-              <div class="field"><label for="curveRadiusMm" data-unit-label="Curve radius">Curve radius (mm)</label><input id="curveRadiusMm" type="number" min="1" step="1" value="40"></div>
+              <div class="field"><label for="curveRadiusMm" data-unit-label="Curve radius">Curve radius (mm)</label><input id="curveRadiusMm" type="number" min="1" step="1" data-mm-step="1" value="40"></div>
               <div class="field"><label for="curveDirection">Curve direction</label><select id="curveDirection"><option value="outside" selected>Outside</option><option value="inside">Inside</option></select></div>
             </div>
             <div class="field-row">
@@ -784,8 +784,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
       <div class="field-section">
         <h3>Frame Size</h3>
         <div class="field-row">
-          <div class="field"><label for="monogramWidth" data-unit-label="Width">Width (mm)</label><input id="monogramWidth" type="number" step="1"></div>
-          <div class="field"><label for="monogramHeight" data-unit-label="Height">Height (mm)</label><input id="monogramHeight" type="number" step="1"></div>
+          <div class="field"><label for="monogramWidth" data-unit-label="Width">Width (mm)</label><input id="monogramWidth" type="number" step="1" data-mm-step="1"></div>
+          <div class="field"><label for="monogramHeight" data-unit-label="Height">Height (mm)</label><input id="monogramHeight" type="number" step="1" data-mm-step="1"></div>
         </div>
         <p class="hint" id="monogramFrameSizeHint"></p>
       </div>
@@ -905,12 +905,12 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <div class="field-section" id="plateFields" style="display:none">
           <h3>Plate dimensions</h3>
           <div class="field-row">
-            <div class="field"><label for="plateOuterDiameter" data-unit-label="Outer Diameter">Outer Diameter (mm)</label><input id="plateOuterDiameter" type="number" min="250" max="300" step="0.5" value="270"></div>
-            <div class="field"><label for="plateInnerWellDiameter" data-unit-label="Inner Well Diameter">Inner Well Diameter (mm)</label><input id="plateInnerWellDiameter" type="number" min="175" max="215" step="0.5" value="195"></div>
+            <div class="field"><label for="plateOuterDiameter" data-unit-label="Outer Diameter">Outer Diameter (mm)</label><input id="plateOuterDiameter" type="number" min="250" max="300" step="0.5" data-mm-step="0.5" value="270"></div>
+            <div class="field"><label for="plateInnerWellDiameter" data-unit-label="Inner Well Diameter">Inner Well Diameter (mm)</label><input id="plateInnerWellDiameter" type="number" min="175" max="215" step="0.5" data-mm-step="0.5" value="195"></div>
           </div>
           <div class="field-row">
-            <div class="field"><label for="plateOverallHeight" data-unit-label="Overall Height">Overall Height (mm)</label><input id="plateOverallHeight" type="number" min="18" max="32" step="0.5" value="25"></div>
-            <div class="field"><label for="plateCenterDepth" data-unit-label="Center Depth">Center Depth (mm)</label><input id="plateCenterDepth" type="number" min="7" max="18" step="0.5" value="12"></div>
+            <div class="field"><label for="plateOverallHeight" data-unit-label="Overall Height">Overall Height (mm)</label><input id="plateOverallHeight" type="number" min="18" max="32" step="0.5" data-mm-step="0.5" value="25"></div>
+            <div class="field"><label for="plateCenterDepth" data-unit-label="Center Depth">Center Depth (mm)</label><input id="plateCenterDepth" type="number" min="7" max="18" step="0.5" data-mm-step="0.5" value="12"></div>
           </div>
           <div class="field">
             <label for="plateDesignTarget">Design Target</label>
@@ -932,11 +932,11 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <div class="field-section" id="vesselFields" style="display:none">
           <h3>Vessel dimensions</h3>
           <div class="field-row">
-            <div class="field"><label for="vesselBodyDiameter" data-unit-label="Body Diameter">Body Diameter (mm)</label><input id="vesselBodyDiameter" type="number" step="0.5"></div>
-            <div class="field"><label for="vesselBodyHeight" data-unit-label="Body Height">Body Height (mm)</label><input id="vesselBodyHeight" type="number" step="0.5"></div>
+            <div class="field"><label for="vesselBodyDiameter" data-unit-label="Body Diameter">Body Diameter (mm)</label><input id="vesselBodyDiameter" type="number" step="0.5" data-mm-step="0.5"></div>
+            <div class="field"><label for="vesselBodyHeight" data-unit-label="Body Height">Body Height (mm)</label><input id="vesselBodyHeight" type="number" step="0.5" data-mm-step="0.5"></div>
           </div>
           <div class="field-row">
-            <div class="field" id="vesselTopDiameterField"><label for="vesselTopDiameter" data-unit-label="Top Diameter">Top Diameter (mm)</label><input id="vesselTopDiameter" type="number" step="0.5"></div>
+            <div class="field" id="vesselTopDiameterField"><label for="vesselTopDiameter" data-unit-label="Top Diameter">Top Diameter (mm)</label><input id="vesselTopDiameter" type="number" step="0.5" data-mm-step="0.5"></div>
           </div>
           <p class="hint" id="vesselDetail">Printable height 85.0mm (derived) · Circumference 257.6mm (product information, read-only)</p>
         </div>
@@ -1117,7 +1117,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <h3>Page setup</h3>
         <div class="field-row">
           <div class="field"><label for="prodSheetPageSize">Page size</label><select id="prodSheetPageSize"><option value="A4" selected>A4</option><option value="Letter">Letter</option><option value="A3">A3 (large format, e.g. Round Dinner Plate)</option></select></div>
-          <div class="field"><label for="prodSheetMargin" data-unit-label="Margin">Margin (mm)</label><input id="prodSheetMargin" type="number" min="0" step="1" value="10"></div>
+          <div class="field"><label for="prodSheetMargin" data-unit-label="Margin">Margin (mm)</label><input id="prodSheetMargin" type="number" min="0" step="1" data-mm-step="1" value="10"></div>
         </div>
         <div class="field-row">
           <div class="field"><label for="prodSheetMirror">Mirror</label><select id="prodSheetMirror"><option value="off" selected>Off</option><option value="on">On</option></select></div>
@@ -1149,9 +1149,9 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <h3>Package</h3>
         <div class="field"><label for="shipPackageType">Package type</label><select id="shipPackageType"><option value="box" selected>Box</option><option value="mailer">Padded mailer</option><option value="tube">Tube</option><option value="custom">Custom</option></select></div>
         <div class="field-row-3">
-          <div class="field"><label for="shipLengthMm" data-unit-label="Length">Length (mm)</label><input id="shipLengthMm" type="number" min="0" step="1"></div>
-          <div class="field"><label for="shipWidthMm" data-unit-label="Width">Width (mm)</label><input id="shipWidthMm" type="number" min="0" step="1"></div>
-          <div class="field"><label for="shipHeightMm" data-unit-label="Height">Height (mm)</label><input id="shipHeightMm" type="number" min="0" step="1"></div>
+          <div class="field"><label for="shipLengthMm" data-unit-label="Length">Length (mm)</label><input id="shipLengthMm" type="number" min="0" step="1" data-mm-step="1"></div>
+          <div class="field"><label for="shipWidthMm" data-unit-label="Width">Width (mm)</label><input id="shipWidthMm" type="number" min="0" step="1" data-mm-step="1"></div>
+          <div class="field"><label for="shipHeightMm" data-unit-label="Height">Height (mm)</label><input id="shipHeightMm" type="number" min="0" step="1" data-mm-step="1"></div>
         </div>
         <div class="field"><label for="shipWeightG">Weight (g)</label><input id="shipWeightG" type="number" min="0" step="1"></div>
       </div>
@@ -1189,7 +1189,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <h3>Alignment &amp; Snapping</h3>
         <label class="checkbox-row" title="Automatically aligns objects to the canvas, safe area, and other objects while dragging."><input type="checkbox" id="settingsSnapDefault" checked> Enable Snapping</label>
         <div class="field-row">
-          <div class="field"><label for="settingsSnapDistance" data-unit-label="Snap Distance">Snap Distance (mm)</label><input id="settingsSnapDistance" type="number" min="0.5" max="5" step="0.1" value="1.5"></div>
+          <div class="field"><label for="settingsSnapDistance" data-unit-label="Snap Distance">Snap Distance (mm)</label><input id="settingsSnapDistance" type="number" min="0.5" max="5" step="0.1" data-mm-step="0.1" value="1.5"></div>
         </div>
         <p class="hint">How close two elements need to be, in millimeters, before they snap together. Lower values require more precise alignment.</p>
         <label class="checkbox-row" title="Shows temporary guide lines when objects snap into alignment while dragging."><input type="checkbox" id="settingsShowGuides" checked> Show Alignment Guides</label>
@@ -1289,18 +1289,18 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
      ============================================================================ -->
 <div id="sharedPositionFields">
   <div class="field-row">
-    <div class="field"><label for="shapeX" data-unit-label="X">X (mm)</label><input id="shapeX" type="number" step="1"></div>
-    <div class="field"><label for="shapeY" data-unit-label="Y">Y (mm)</label><input id="shapeY" type="number" step="1"></div>
+    <div class="field"><label for="shapeX" data-unit-label="X">X (mm)</label><input id="shapeX" type="number" step="1" data-mm-step="1"></div>
+    <div class="field"><label for="shapeY" data-unit-label="Y">Y (mm)</label><input id="shapeY" type="number" step="1" data-mm-step="1"></div>
   </div>
   <div class="field-row">
-    <div class="field"><label for="shapeW" id="shapeWLabel">Width (mm)</label><input id="shapeW" type="number" step="1"></div>
-    <div class="field" id="shapeHField"><label for="shapeH" data-unit-label="Height">Height (mm)</label><input id="shapeH" type="number" step="1"></div>
+    <div class="field"><label for="shapeW" id="shapeWLabel">Width (mm)</label><input id="shapeW" type="number" step="1" data-mm-step="1"></div>
+    <div class="field" id="shapeHField"><label for="shapeH" data-unit-label="Height">Height (mm)</label><input id="shapeH" type="number" step="1" data-mm-step="1"></div>
   </div>
 </div>
 <div id="sharedStoneFields">
   <div class="field-row">
     <div class="field"><label for="stoneSize">Stone size (mm)</label><select id="stoneSize" title="Standard rhinestone sizes (commercial name and actual diameter). Populated from the stone size library."></select></div>
-    <div class="field"><label for="gap" data-unit-label="Gap">Gap (mm)</label><input id="gap" type="number" min="0" max="5" step="0.1" value="0.3"></div>
+    <div class="field"><label for="gap" data-unit-label="Gap">Gap (mm)</label><input id="gap" type="number" min="0" max="5" step="0.1" data-mm-step="0.1" value="0.3"></div>
   </div>
   <!-- Stone Size overlap guard: shown when the currently-selected Stone size would produce genuine
        physical overlap for this shape's real dimensions/gap/fill mode (updateStoneSizeOverlapCapabilityUI()

@@ -1730,6 +1730,7 @@ try{
 }
 let cleanProjectJson=JSON.stringify(project);
 refreshUnitLabels();
+refreshAllFieldSteps();
 // lastAutosavedProjectJson tracks what's actually in the autosave slot right now -- starts equal to
 // the just-decided boot project (restored or default) so nothing is redundantly re-written on the
 // very first updateAll(). scheduleAutosave() (called from updateAll(), so it runs after every
@@ -3819,7 +3820,7 @@ el('importProjectFile').addEventListener('change',async e=>{const file=e.target.
   // is mid-edit with a type-specific Lightbox open", and a fresh whole-project replacement is not that. Closing
   // first clears activeFieldLightbox so the auto-switch is a no-op here, regardless of the imported first layer's type.
   lightboxes.importBox.close();
-  refreshUnitLabels();syncSelectedControlsFromLayer();await updateAll(true);el('status').textContent=`Imported ${file.name}: ${project.layers.length} layer(s)`}catch(error){console.error('Project import failed',error);el('status').textContent=`Import failed: ${error.message}`;validationEl.textContent=`Import failed: ${error.message} The current project was left untouched.`;validationEl.style.display='block'}});
+  refreshUnitLabels();refreshAllFieldSteps();syncSelectedControlsFromLayer();await updateAll(true);el('status').textContent=`Imported ${file.name}: ${project.layers.length} layer(s)`}catch(error){console.error('Project import failed',error);el('status').textContent=`Import failed: ${error.message}`;validationEl.textContent=`Import failed: ${error.message} The current project was left untouched.`;validationEl.style.display='block'}});
 el('importSvg').onclick=()=>el('importSvgFile').click();
 // RS-1001: parseSvgDocument() here only validates/measures the file (naturalWidthMm/heightMm,
 // shape count, warnings) — it invents no stone positions, so this direct src/svg call does not
@@ -4997,7 +4998,7 @@ async function openGalleryItemAsCopy(file){
     // the live project already matches what's stored), so the old record is always replaced here,
     // never left to linger and get offered as a stale "recovery" on some later boot.
     lastAutosavedProjectJson=null;flushAutosaveNow();
-    refreshUnitLabels();syncSelectedControlsFromLayer();await updateAll(true);
+    refreshUnitLabels();refreshAllFieldSteps();syncSelectedControlsFromLayer();await updateAll(true);
     lightboxes.galleryPreview.close();lightboxes.gallery.close();
     el('status').textContent=`Opened an editable copy of "${entry.title}" from the Gallery.`;
   }catch(error){
@@ -5084,6 +5085,17 @@ function refreshAllLengthFieldDisplays(previousUnits=project.units){
     el(id).value=formatLengthDisplay(mm,project.units);
   }
 }
+// RS-3024: every convertible numeric field's HTML `step` attribute is mm-tuned and, unlike its
+// `value`, was never made unit-aware -- in inches mode the spinner-arrow/Up-Down-key increment
+// still applied the raw mm step unconverted. Proposed inch steps are clean round decimals (not a
+// literal mm->in conversion of the step, which would produce ugly non-round increments).
+const MM_STEP_TO_IN_STEP={0.1:0.01,0.5:0.02,1:0.05};
+function refreshAllFieldSteps(){
+  document.querySelectorAll('[data-mm-step]').forEach(inputEl=>{
+    const mmStep=parseFloat(inputEl.dataset.mmStep);
+    inputEl.step=project.units==='in'?(MM_STEP_TO_IN_STEP[mmStep]??mmStep):mmStep;
+  });
+}
 async function applyUnitsChange(newUnits){
   const previousUnits=project.units;
   project.units=newUnits;
@@ -5100,6 +5112,7 @@ async function applyUnitsChange(newUnits){
   updateDrawToolButtons();
   syncSettingsFieldsFromState();
   refreshSnapDistanceFieldBounds();
+  refreshAllFieldSteps();
   syncSelectedControlsFromLayer();
   await updateAll(true);
 }

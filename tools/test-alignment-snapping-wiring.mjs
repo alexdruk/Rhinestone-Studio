@@ -197,7 +197,7 @@ await test('14. the Settings Lightbox exposes plain-language snapping controls (
   // as every other freely-typed length field) -- its static markup carries the "(mm)" suffix as the
   // default-units display text, same as e.g. #drawSlotWidthField's own "Width (mm)".
   assert.match(body, /<label for="settingsSnapDistance" data-unit-label="Snap Distance">Snap Distance \(mm\)<\/label>/, 'expected a unit-converting label carrying data-unit-label, same convention as every other length field');
-  assert.match(body, /<input id="settingsSnapDistance" type="number" min="0\.5" max="5" step="0\.1" value="1\.5">/);
+  assert.match(body, /<input id="settingsSnapDistance" type="number" min="0\.5" max="5" step="0\.1" data-mm-step="0\.1" value="1\.5">/);
   assert.match(body, /<p class="hint">How close two elements need to be, in millimeters, before they snap together\.[^<]*<\/p>/, 'expected a visible, plain-language mm explanation (not hover-only)');
   assert.match(body, /<label class="checkbox-row" title="[^"]+"><input type="checkbox" id="settingsShowGuides" checked> Show Alignment Guides<\/label>/, 'expected a tooltip explaining what Show Alignment Guides shows');
   assert.ok(!/technical|tolerance/i.test(body), 'expected friendly labels, not raw technical terms like "tolerance"');
