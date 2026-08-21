@@ -194,7 +194,7 @@ await test('12. writeSelectedControlsToLayer() never calls invalidateAuthoredSca
   assert.match(appJs, /l\.color=el\('stoneColor'\)\.value;/, 'expected the plain, unconditional color write-back to remain unconditional');
   assert.match(
     appJs,
-    /l\.x=parseFloat\(el\('textX'\)\.value\)\|\|0;l\.y=parseFloat\(el\('textY'\)\.value\)\|\|0;/,
+    /l\.x=readLengthField\('textX'\)\|\|0;l\.y=readLengthField\('textY'\)\|\|0;/,
     'expected the plain, unconditional text x/y write-back to remain unconditional'
   );
 });

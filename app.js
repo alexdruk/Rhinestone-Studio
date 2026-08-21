@@ -493,15 +493,22 @@ function computeLetterHeightBoundsMm(fontId){
     maxMm:solveDesiredCapHeightMm({fontId,engineHeightMm:RAW_ENGINE_HEIGHT_MM_MAX})
   };
 }
+// RS-3019: #height's HTML min/max are static mm literals (index.html) and were never previously
+// updated by JS -- now that #height's displayed value is unit-converted (setLengthField/
+// readLengthField), its bounds must be too, mirroring #letterHeight's own dynamic bounds just below.
+function refreshHeightFieldBounds(){
+  el('height').min=mmToDisplayValue(RAW_ENGINE_HEIGHT_MM_MIN,project.units);
+  el('height').max=mmToDisplayValue(RAW_ENGINE_HEIGHT_MM_MAX,project.units);
+}
 // TXT-104 step 4b: the read/display half of #letterHeight's bidirectional sync with #height -- called
 // from updateTextFontCapabilityUI() (the one place guaranteed to run after every source of a #height
 // value change: a direct edit, the stone-size auto-set snap, or a fresh layer selection) whenever
 // #letterHeightField is shown. Pure DOM read -> solveDesiredCapHeightMm() -> DOM write; never itself
 // dispatches an event, so it can never trigger #letterHeight's own write-direction listener below.
 function syncLetterHeightFromHeight(fontId){
-  const engineHeightMm=parseFloat(el('height').value);
+  const engineHeightMm=readLengthField('height');
   if(!Number.isFinite(engineHeightMm))return;
-  el('letterHeight').value=solveDesiredCapHeightMm({fontId,engineHeightMm}).toFixed(2);
+  el('letterHeight').value=formatLengthDisplay(solveDesiredCapHeightMm({fontId,engineHeightMm}),project.units);
 }
 // MONO-005A: delegates to src/editing/TextPlacement.js's own computeTextPlacementOffsetMm() -- the
 // single shared source of truth for this formula, now also used by MonogramGenerator to compute a
@@ -1800,10 +1807,10 @@ function syncSelectedControlsFromLayer(){
   if(showStarFields){el('shapePoints').value=l.points??5;el('shapeInnerRadius').value=l.innerRadiusRatio??0.5}
   if(showRingField)el('shapeRingInner').value=l.innerRatio??0.5;
   if(l.type==='image')el('imageFillMode').value=resolveImageFillMode(l.fillMode);
-  if(isText){el('text').value=l.text;ensureFontOptionForLayer(l.font);el('font').value=l.font;el('height').value=l.height;el('heightAutoAdjustedHint').style.display='none';el('autoFit').value=l.autoFit?'on':'off';el('autoFitOnHint').style.display='none';el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';el('curveRadiusMm').value=l.curveRadiusMm??40;el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??180;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';el('textX').value=l.x||0;el('textY').value=l.y||0;
+  if(isText){el('text').value=l.text;ensureFontOptionForLayer(l.font);el('font').value=l.font;setLengthField('height',l.height);el('heightAutoAdjustedHint').style.display='none';el('autoFit').value=l.autoFit?'on':'off';el('autoFitOnHint').style.display='none';el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';setLengthField('curveRadiusMm',l.curveRadiusMm??40);el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??180;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';setLengthField('textX',l.x||0);setLengthField('textY',l.y||0);
   // TXT-102: '??'/'||' fallbacks so a pre-TXT-102 project (no align/lineSpacing/rotationDeg stored)
   // displays GeometryEngine's own defaults, matching this line's existing curve-field convention.
-  el('textAlign').value=l.align||'left';el('lineSpacing').value=l.lineSpacing??1;el('rotationDeg').value=l.rotationDeg??0}else{el('shapeX').value=l.type==='circle'?l.cx:l.x;el('shapeY').value=l.type==='circle'?l.cy:l.y;el('shapeW').value=l.type==='circle'?l.r:l.w;el('shapeH').value=l.type==='circle'?'':l.h;el('shapeWLabel').textContent=l.type==='circle'?'Radius (mm)':'Width (mm)';el('shapeHField').style.display=l.type==='circle'?'none':'';if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);el('gap').value=l.gap;el('stoneColor').value=l.color;
+  el('textAlign').value=l.align||'left';el('lineSpacing').value=l.lineSpacing??1;el('rotationDeg').value=l.rotationDeg??0}else{setLengthField('shapeX',l.type==='circle'?l.cx:l.x);setLengthField('shapeY',l.type==='circle'?l.cy:l.y);setLengthField('shapeW',l.type==='circle'?l.r:l.w);setLengthField('shapeH',l.type==='circle'?'':l.h);el('shapeWLabel').textContent=(l.type==='circle'?'Radius':'Width')+' ('+unitSuffix(project.units)+')';el('shapeHField').style.display=l.type==='circle'?'none':'';if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);el('gap').value=l.gap;el('stoneColor').value=l.color;
   // S-200: Mixed Stone Size -- applies uniformly to every layer type, same as stoneSize/gap/color
   // just above. allowedSizesMm is only ever catalog values (see MIXED_ALLOWED_SIZE_CHECKBOXES'
   // doc comment), so each checkbox is simply checked when its own diameter is present in the
@@ -1911,7 +1918,7 @@ function writeSelectedControlsToLayer(){
     // el('curveDirection') reads below pick them up, exactly as if the operator had set them by hand.
     // Center Well/Full Top Surface never run this block, so their text behavior is untouched, and the
     // operator can still freely edit every curve field afterward -- this only seeds a default.
-    if(enteringRimBand){el('curveEnabled').value='on';el('curveRadiusMm').value=rimBandCurveRadiusMm().toFixed(2);el('curveDirection').value='outside';el('curveControls').style.display='block'}
+    if(enteringRimBand){el('curveEnabled').value='on';setLengthField('curveRadiusMm',rimBandCurveRadiusMm());el('curveDirection').value='outside';el('curveControls').style.display='block'}
     // FONT-002: '||l.font' guards against a select somehow reporting '' (should not happen now that
     // ensureFontOptionForLayer() always gives it a matching option, but this is the one write site
     // that could otherwise silently corrupt layer.font to an empty string on the next edit).
@@ -1925,26 +1932,26 @@ function writeSelectedControlsToLayer(){
     // 111 -- the true max across every catalog size's supportedHeightRangeMm (StoneSizes.js's SS30
     // entry, [106,111]) -- so the largest validated stone sizes' own auto-set midpoints (see
     // #stoneSize's 'input' listener below) are never clamped back down below their own valid range.
-    l.height=Math.max(RAW_ENGINE_HEIGHT_MM_MIN,Math.min(RAW_ENGINE_HEIGHT_MM_MAX,parseFloat(el('height').value)||25));l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;
+    l.height=Math.max(RAW_ENGINE_HEIGHT_MM_MIN,Math.min(RAW_ENGINE_HEIGHT_MM_MAX,readLengthField('height')||25));l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;
     // FONT-002: a Production Font has no curve support (GeometryEngine.generateTextLayout() throws
     // for authored-stone-center fonts with curveEnabled) -- force it off in the stored layer data too
     // (not just the disabled control) so switching *to* an authored font from a curved legacy layer
     // can never leave curveEnabled:true sitting in the data.
-    l.curveEnabled=isAuthoredStoneFontId(l.font)?false:el('curveEnabled').value==='on';l.curveRadiusMm=Math.max(0.1,parseFloat(el('curveRadiusMm').value)||40);l.curveDirection=el('curveDirection').value==='inside'?'inside':'outside';l.curveStartAngleDeg=parseFloat(el('curveStartAngleDeg').value)||0;l.curveSweepAngleDeg=parseFloat(el('curveSweepAngleDeg').value)||180;l.curveAlignment=el('curveAlignment').value;el('curveControls').style.display=l.curveEnabled?'block':'none';
+    l.curveEnabled=isAuthoredStoneFontId(l.font)?false:el('curveEnabled').value==='on';l.curveRadiusMm=Math.max(0.1,readLengthField('curveRadiusMm')||40);l.curveDirection=el('curveDirection').value==='inside'?'inside':'outside';l.curveStartAngleDeg=parseFloat(el('curveStartAngleDeg').value)||0;l.curveSweepAngleDeg=parseFloat(el('curveSweepAngleDeg').value)||180;l.curveAlignment=el('curveAlignment').value;el('curveControls').style.display=l.curveEnabled?'block':'none';
   // UI-001: manual X/Y mm fields for the Text Lightbox, writing to the same layer.x/layer.y fields
   // RS-1009 already added (previously settable only by drag/nudge/align/distribute).
-  l.x=parseFloat(el('textX').value)||0;l.y=parseFloat(el('textY').value)||0;
+  l.x=readLengthField('textX')||0;l.y=readLengthField('textY')||0;
   // TXT-102: align/lineSpacing mirror curveAlignment/curveRadiusMm's own clamp-on-write convention
   // just above -- lineSpacing clamped to the same [0.5,3] range the #lineSpacing input itself allows,
   // rotationDeg normalized into [0,360) exactly like GeometryEngine's own normalizeRotationDeg().
-  l.align=el('textAlign').value;l.lineSpacing=Math.max(0.5,Math.min(3,parseFloat(el('lineSpacing').value)||1));l.rotationDeg=(((parseFloat(el('rotationDeg').value)||0)%360)+360)%360}else if(l.type==='circle'){l.cx=parseFloat(el('shapeX').value)||105;l.cy=parseFloat(el('shapeY').value)||45;l.r=Math.max(1,parseFloat(el('shapeW').value)||18);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(l.type==='rectangle'){l.x=parseFloat(el('shapeX').value)||65;l.y=parseFloat(el('shapeY').value)||30;l.w=Math.max(1,parseFloat(el('shapeW').value)||80);l.h=Math.max(1,parseFloat(el('shapeH').value)||30);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(SHAPE_LIBRARY_KINDS.has(l.type)){
+  l.align=el('textAlign').value;l.lineSpacing=Math.max(0.5,Math.min(3,parseFloat(el('lineSpacing').value)||1));l.rotationDeg=(((parseFloat(el('rotationDeg').value)||0)%360)+360)%360}else if(l.type==='circle'){l.cx=readLengthField('shapeX')||105;l.cy=readLengthField('shapeY')||45;l.r=Math.max(1,readLengthField('shapeW')||18);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(l.type==='rectangle'){l.x=readLengthField('shapeX')||65;l.y=readLengthField('shapeY')||30;l.w=Math.max(1,readLengthField('shapeW')||80);l.h=Math.max(1,readLengthField('shapeH')||30);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(SHAPE_LIBRARY_KINDS.has(l.type)){
   // S-110: every new shape kind shares Rectangle's x/y/w/h + Fill Style write-back, plus its own
   // configurable extra fields (Regular Polygon/Star/Ring only).
-  l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||60);l.h=Math.max(1,parseFloat(el('shapeH').value)||60);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value);
+  l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||60);l.h=Math.max(1,readLengthField('shapeH')||60);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value);
   if(l.type==='polygon')l.sides=Math.max(3,Math.min(12,parseIntOr(el('shapeSides').value,6)));
   if(l.type==='star'){l.points=Math.max(3,Math.min(12,parseIntOr(el('shapePoints').value,5)));l.innerRadiusRatio=Math.max(0.1,Math.min(0.9,parseFloat(el('shapeInnerRadius').value)||0.5))}
   if(l.type==='ring')l.innerRatio=Math.max(0.1,Math.min(0.9,parseFloat(el('shapeRingInner').value)||0.5));
-}else if(l.type==='svg'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.mode=resolveVectorFillMode(el('svgMode').value)}else if(l.type==='image'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.fillMode=resolveImageFillMode(el('imageFillMode').value)}else if(l.type==='path'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(2,parseFloat(el('shapeW').value)||10);l.h=Math.max(2,parseFloat(el('shapeH').value)||10);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}
+}else if(l.type==='svg'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||10);l.h=Math.max(1,readLengthField('shapeH')||10);l.mode=resolveVectorFillMode(el('svgMode').value)}else if(l.type==='image'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||10);l.h=Math.max(1,readLengthField('shapeH')||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.fillMode=resolveImageFillMode(el('imageFillMode').value)}else if(l.type==='path'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(2,readLengthField('shapeW')||10);l.h=Math.max(2,readLengthField('shapeH')||10);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}
   const nextStoneSize=parseFloat(el('stoneSize').value)||2;if(nextStoneSize!==l.stoneSize)invalidateAuthoredScaleForGeometryChange(l,'stoneSize');l.stoneSize=nextStoneSize;
   const nextGap=parseFloat(el('gap').value)||.3;if(nextGap!==l.gap)invalidateAuthoredScaleForGeometryChange(l,'gap');l.gap=nextGap;
   l.color=el('stoneColor').value;
@@ -2496,9 +2503,10 @@ function updateTextFontCapabilityUI(){
   const showLetterHeight=validated&&capHeightMode;
   el('heightField').style.display=showLetterHeight?'none':'block';
   el('letterHeightField').style.display=showLetterHeight?'block':'none';
+  refreshHeightFieldBounds();
   if(showLetterHeight){
     const bounds=computeLetterHeightBoundsMm(fontId);
-    el('letterHeight').min=bounds.minMm;el('letterHeight').max=bounds.maxMm;
+    el('letterHeight').min=mmToDisplayValue(bounds.minMm,project.units);el('letterHeight').max=mmToDisplayValue(bounds.maxMm,project.units);
     syncLetterHeightFromHeight(fontId);
   }
   // Mode-switch affordance (design doc section 3.3): only offered for a validated font, since a
@@ -3351,11 +3359,11 @@ el('mixedMaxSize').addEventListener('input',()=>{
 // about it, and auto-setting a value the operator can neither see take effect nor override would be
 // pure noise.
 function applyStoneSizeHeightAutoSet(l,size){
-  const currentHeight=parseFloat(el('height').value);
+  const currentHeight=readLengthField('height');
   const staysValid=l.heightManuallyEdited&&Number.isFinite(currentHeight)&&isHeightWithinStoneSizeRange(size,currentHeight);
   el('heightAutoAdjustedHint').style.display='none';
   if(staysValid)return;
-  el('height').value=stoneSizeHeightMidpointMm(size);
+  setLengthField('height',stoneSizeHeightMidpointMm(size));
   // Only surface the note when this overrides an existing manual choice -- the very first auto-set
   // on a fresh/never-edited layer is expected, unannounced behavior (matching #height's own
   // un-explained "25" default), not a correction that needs calling out.
@@ -3397,10 +3405,10 @@ el('height').addEventListener('input',()=>{
 el('letterHeight').addEventListener('input',()=>{
   const l=selectedLayer();
   if(!l||l.type!=='text')return;
-  const desiredCapHeightMm=parseFloat(el('letterHeight').value);
+  const desiredCapHeightMm=readLengthField('letterHeight');
   if(!Number.isFinite(desiredCapHeightMm))return;
   const engineHeightMm=solveEngineHeightMm({fontId:l.font,desiredCapHeightMm});
-  el('height').value=Math.max(RAW_ENGINE_HEIGHT_MM_MIN,Math.min(RAW_ENGINE_HEIGHT_MM_MAX,engineHeightMm));
+  setLengthField('height',Math.max(RAW_ENGINE_HEIGHT_MM_MIN,Math.min(RAW_ENGINE_HEIGHT_MM_MAX,engineHeightMm)));
   el('height').dispatchEvent(new Event('input'));
 });
 el('letterHeight').addEventListener('change',()=>{
@@ -4139,12 +4147,13 @@ function updateMonogramFrameSizeBounds(){
   if(!frame)return;
   const limits=frame.scalingLimitsMm;
   const widthInput=el('monogramWidth'),heightInput=el('monogramHeight');
-  widthInput.min=String(limits.minWidthMm);widthInput.max=String(limits.maxWidthMm);
-  heightInput.min=String(limits.minHeightMm);heightInput.max=String(limits.maxHeightMm);
-  const currentW=parseFloat(widthInput.value),currentH=parseFloat(heightInput.value);
-  if(!Number.isFinite(currentW)||currentW<limits.minWidthMm||currentW>limits.maxWidthMm)widthInput.value=String(Math.round((limits.minWidthMm+limits.maxWidthMm)/2));
-  if(!Number.isFinite(currentH)||currentH<limits.minHeightMm||currentH>limits.maxHeightMm)heightInput.value=String(Math.round((limits.minHeightMm+limits.maxHeightMm)/2));
-  el('monogramFrameSizeHint').textContent=`${frame.label}: width ${limits.minWidthMm}-${limits.maxWidthMm}mm, height ${limits.minHeightMm}-${limits.maxHeightMm}mm.`;
+  widthInput.min=String(mmToDisplayValue(limits.minWidthMm,project.units));widthInput.max=String(mmToDisplayValue(limits.maxWidthMm,project.units));
+  heightInput.min=String(mmToDisplayValue(limits.minHeightMm,project.units));heightInput.max=String(mmToDisplayValue(limits.maxHeightMm,project.units));
+  const currentW=readLengthField('monogramWidth'),currentH=readLengthField('monogramHeight');
+  if(!Number.isFinite(currentW)||currentW<limits.minWidthMm||currentW>limits.maxWidthMm)setLengthField('monogramWidth',Math.round((limits.minWidthMm+limits.maxWidthMm)/2));
+  if(!Number.isFinite(currentH)||currentH<limits.minHeightMm||currentH>limits.maxHeightMm)setLengthField('monogramHeight',Math.round((limits.minHeightMm+limits.maxHeightMm)/2));
+  const suffix=unitSuffix(project.units);
+  el('monogramFrameSizeHint').textContent=`${frame.label}: width ${mmToDisplayValue(limits.minWidthMm,project.units)}-${mmToDisplayValue(limits.maxWidthMm,project.units)}${suffix}, height ${mmToDisplayValue(limits.minHeightMm,project.units)}-${mmToDisplayValue(limits.maxHeightMm,project.units)}${suffix}.`;
 }
 // MONOGRAM_LAYOUT_LETTER_COUNTS is authoritative (MonogramLayouts.js) -- this only mirrors it into
 // a visible hint and the input's maxlength; the same count is re-checked in
@@ -4165,8 +4174,8 @@ function validateMonogramControls(){
   const layoutId=el('monogramLayout').value;
   const fontId=el('monogramFont').value;
   const lettersRaw=el('monogramLetters').value.trim();
-  const widthMm=parseFloat(el('monogramWidth').value);
-  const heightMm=parseFloat(el('monogramHeight').value);
+  const widthMm=readLengthField('monogramWidth');
+  const heightMm=readLengthField('monogramHeight');
   if(!frameId)return{ok:false,message:'Choose a frame.'};
   if(!layoutId)return{ok:false,message:'Choose a layout.'};
   if(!fontId)return{ok:false,message:'Choose a font. Only production fonts are offered here.'};
@@ -4454,6 +4463,7 @@ function updateDrawToolButtons(){
   const active=drawingTool.isActive,mode=drawingTool.mode;
   const showSlotWidth=active&&mode==='slot';
   el('drawSlotWidthField').style.display=showSlotWidth?'':'none';
+  el('drawSlotWidthField').title=`Slot width (${unitSuffix(project.units)})`;
   el('drawSlotWidthMm').style.display=showSlotWidth?'':'none';
   // RS-3010 Design Step A correction: the old horizontal row's five preset buttons are gone --
   // these two rails (split left/right) are now the only aria-pressed sync targets.
@@ -4572,7 +4582,7 @@ function setDrawTool(mode){
   }
   setDrawMode(true,mode);
 }
-el('drawSlotWidthMm').oninput=()=>drawingTool.setSlotWidthMm(el('drawSlotWidthMm').value);
+el('drawSlotWidthMm').oninput=()=>drawingTool.setSlotWidthMm(readLengthField('drawSlotWidthMm'));
 el('railSelectToggle').onclick=()=>setDrawTool('select');
 el('railLassoToggle').onclick=()=>setDrawTool('lasso');
 el('railDrawToggle').onclick=()=>setDrawTool('freehand');
@@ -5046,7 +5056,7 @@ function refreshAllLengthFieldDisplays(previousUnits=project.units){
   setLengthField('vesselBodyDiameter',project.vessel.bodyDiameterMm);
   setLengthField('vesselBodyHeight',project.vessel.bodyHeightMm);
   setLengthField('vesselTopDiameter',project.vessel.topDiameterMm);
-  for(const id of['prodSheetMargin','shipLengthMm','shipWidthMm','shipHeightMm']){
+  for(const id of['prodSheetMargin','shipLengthMm','shipWidthMm','shipHeightMm','monogramWidth','monogramHeight','drawSlotWidthMm']){
     const raw=el(id).value;
     if(raw==='')continue;
     const mm=displayValueToMm(raw,previousUnits);
@@ -5054,11 +5064,17 @@ function refreshAllLengthFieldDisplays(previousUnits=project.units){
     el(id).value=formatLengthDisplay(mm,project.units);
   }
 }
-el('settingsUnits').addEventListener('change',()=>{
+el('settingsUnits').addEventListener('change',async()=>{
   const previousUnits=project.units;
   project.units=el('settingsUnits').value;
   refreshUnitLabels();
   refreshAllLengthFieldDisplays(previousUnits);
+  // RS-3019: monogramWidth/Height's min/max bounds and #monogramFrameSizeHint (unlike their own
+  // .value, just refreshed above) are otherwise only ever refreshed by #monogramFrame's own
+  // 'change' listener or the one-time boot call -- both blind to a later Units switch.
+  updateMonogramFrameSizeBounds();
+  syncSelectedControlsFromLayer();
+  await updateAll(true);
 });
 
 populateStoneColorOptions();populateStoneColorOptions('stampColor');populateStoneColorOptions('traceColor');populateStoneColorOptions('paintColor');populateStoneSizeOptions();populateMixedSizeSelectOptions();

@@ -125,8 +125,8 @@ await test('11. syncSelectedControlsFromLayer() reads #shapeFillMode/#imageFillM
 });
 
 await test('12. writeSelectedControlsToLayer() writes fillMode back for circle/rectangle/path/image (editing regenerates geometry through the normal updateAll() path, like every other tracked field)', () => {
-  assert.match(appJs, /l\.r=Math\.max\(1,parseFloat\(el\('shapeW'\)\.value\)\|\|18\);l\.fillMode=resolveVectorFillMode\(el\('shapeFillMode'\)\.value\)/, 'circle');
-  assert.match(appJs, /l\.h=Math\.max\(1,parseFloat\(el\('shapeH'\)\.value\)\|\|30\);l\.fillMode=resolveVectorFillMode\(el\('shapeFillMode'\)\.value\)/, 'rectangle');
+  assert.match(appJs, /l\.r=Math\.max\(1,readLengthField\('shapeW'\)\|\|18\);l\.fillMode=resolveVectorFillMode\(el\('shapeFillMode'\)\.value\)/, 'circle');
+  assert.match(appJs, /l\.h=Math\.max\(1,readLengthField\('shapeH'\)\|\|30\);l\.fillMode=resolveVectorFillMode\(el\('shapeFillMode'\)\.value\)/, 'rectangle');
   assert.match(appJs, /l\.mode=resolveVectorFillMode\(el\('svgMode'\)\.value\)/, 'svg');
   assert.match(appJs, /l\.fillMode=resolveImageFillMode\(el\('imageFillMode'\)\.value\)\}else if\(l\.type==='path'\)/, 'image');
 });
