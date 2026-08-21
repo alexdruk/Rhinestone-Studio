@@ -85,21 +85,36 @@ export function fitTransform(boundingBoxMm, viewportWidthPx, viewportHeightPx, p
   return { s, ox, oy };
 }
 
-const GRID_NICE_STEPS_MM = [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000];
+export const GRID_NICE_STEPS_MM = [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000];
 // 8px, not the rounder 20px, so that today's real default project (boot zoom, s ~= 1.79px/mm)
 // still resolves to minorStep=5/majorStep=20 -- an exact no-op vs. develop's hardcoded grid.
 const GRID_TARGET_MINOR_PX = 8;
 
 /**
- * Pick the minor grid step (mm) whose on-screen spacing at px-per-mm `s` is the smallest
- * step in GRID_NICE_STEPS_MM that is still >= GRID_TARGET_MINOR_PX apart.
+ * Pick a "nice" step (mm, from GRID_NICE_STEPS_MM) relative to an on-screen pixel target.
  *
- * @param {number} s px-per-mm
+ * `'atLeast'`: smallest step whose on-screen spacing at px-per-mm `pxPerMm` is still
+ * >= targetPx (falls back to the largest step). Used by the grid.
+ *
+ * `'atMost'`: largest step whose on-screen spacing at px-per-mm `pxPerMm` is still
+ * <= targetPx (falls back to the smallest step, even if that step's spacing exceeds
+ * targetPx -- an accepted degenerate case at extreme zoom-in). Used by the scale bar.
+ *
+ * @param {number} pxPerMm
+ * @param {number} targetPx
+ * @param {'atLeast'|'atMost'} mode
  * @returns {number}
  */
-function chooseGridMinorStepMm(s) {
+export function chooseNiceStepMm(pxPerMm, targetPx, mode) {
+  if (mode === 'atMost') {
+    for (let i = GRID_NICE_STEPS_MM.length - 1; i >= 0; i--) {
+      const step = GRID_NICE_STEPS_MM[i];
+      if (step * pxPerMm <= targetPx) return step;
+    }
+    return GRID_NICE_STEPS_MM[0];
+  }
   for (const step of GRID_NICE_STEPS_MM) {
-    if (step * s >= GRID_TARGET_MINOR_PX) return step;
+    if (step * pxPerMm >= targetPx) return step;
   }
   return GRID_NICE_STEPS_MM[GRID_NICE_STEPS_MM.length - 1];
 }
@@ -116,7 +131,7 @@ export function drawGrid(ctx, boundingBoxMm, transform) {
     ? { x: boundingBoxMm.minXmm, y: boundingBoxMm.minYmm, width: boundingBoxMm.widthMm, height: boundingBoxMm.heightMm }
     : { x: 0, y: 0, width: 0, height: 0 };
   const { s, ox, oy } = transform;
-  const minorIdx = GRID_NICE_STEPS_MM.indexOf(chooseGridMinorStepMm(s));
+  const minorIdx = GRID_NICE_STEPS_MM.indexOf(chooseNiceStepMm(s, GRID_TARGET_MINOR_PX, 'atLeast'));
   const minorStep = GRID_NICE_STEPS_MM[minorIdx];
   const majorStep = GRID_NICE_STEPS_MM[Math.min(minorIdx + 2, GRID_NICE_STEPS_MM.length - 1)];
   const gx0 = Math.floor((b.x - 15) / minorStep) * minorStep, gx1 = Math.ceil((b.x + b.width + 15) / minorStep) * minorStep;

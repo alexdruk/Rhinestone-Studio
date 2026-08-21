@@ -161,7 +161,9 @@ await test('8. neither renderer nor the SVG exporter references a layer type or 
 await test('9. app.js imports the renderer/exporter modules and no longer contains the inline stone-drawing/SVG logic they replace', () => {
   // TXT-101A also imports renderStoneLayout/fitTransform from the same module, for the Browse
   // Fonts panel's live rhinestone-layout previews (reusing the renderer, not duplicating it).
-  assert.match(appJs, /import\s*\{\s*renderProductionLayout\s*,\s*renderStoneLayout\s*,\s*fitTransform\s*\}\s*from\s*['"]\.\/src\/renderer\/CanvasRenderer2D\.js['"]/);
+  // RS-3017 also imports chooseNiceStepMm, for the on-canvas scale bar (reusing the grid's own
+  // nice-numbers step picker, not a second implementation of it).
+  assert.match(appJs, /import\s*\{\s*renderProductionLayout\s*,\s*renderStoneLayout\s*,\s*fitTransform\s*,\s*chooseNiceStepMm\s*\}\s*from\s*['"]\.\/src\/renderer\/CanvasRenderer2D\.js['"]/);
   // RS-1006: app.js no longer imports renderCup/CupRenderer.js for its live Object Preview panel --
   // it was replaced by the real 3D preview (src/preview3d/**, imported via its own barrel module).
   // CupRenderer.js itself is untouched and still covered by its own dedicated test suites (see

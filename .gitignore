@@ -352,3 +352,7 @@ tools/scratch/feature-stone-size-crowding-warning-verify/
 # output (default/zoomed-out/zoomed-in step selection + screenshots), same "never a repo artifact"
 # category as the scratch folders above
 tools/scratch/rs-3016-grid-verify/
+# rs-3017-scale-bar: ad hoc Playwright harness against the real app, capturing the scale bar's
+# display/width/label across zoom levels, a non-1 devicePixelRatio, and Design-mode hide/show,
+# same "never a repo artifact" category as the scratch folders above
+tools/scratch/rs-3017-scalebar-verify/
