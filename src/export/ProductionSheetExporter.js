@@ -23,6 +23,7 @@ import { STONE_COLORS } from '../renderer/StoneColors.js';
 import { formatStoneSizeLabel } from '../renderer/StoneSizes.js';
 import { stoneCircleSvg } from './SvgExporter.js';
 import { PdfDocument, PT_PER_MM } from './PdfDocument.js';
+import { formatLengthDisplay, unitSuffix } from '../units/index.js';
 
 // S-112: A3 joins A4/Letter -- the Round Dinner Plate's production rect (up to 300mm square, per
 // the JSON's outerDiameterMm range) plus header/footer does not fit A4 or Letter at any margin in
@@ -81,9 +82,9 @@ function roundMm(value) {
   return Math.round(value * 100) / 100;
 }
 
-function formatMmList(values) {
+function formatMmList(values, units) {
   if (!values.length) return '—';
-  return values.map((v) => `${roundMm(v)}`).join(', ') + ' mm';
+  return values.map((v) => formatLengthDisplay(v, units)).join(', ') + ` ${unitSuffix(units)}`;
 }
 
 // RS-1013: stone sizes get their own formatter (unlike formatMmList(), used unchanged for Gap,
@@ -168,14 +169,15 @@ function normalizeGapMm(gapMm) {
 // missing while plateOuterDiameterMm (the field that gates whether these lines appear at all) is
 // present.
 function computePlateHeaderLineTexts(options) {
-  const { plateDesignTarget, plateOuterDiameterMm, plateInnerWellDiameterMm, plateRimWidthMm, plateOverallHeightMm, plateWeightGrams, plateColorName } = options;
+  const { plateDesignTarget, plateOuterDiameterMm, plateInnerWellDiameterMm, plateRimWidthMm, plateOverallHeightMm, plateWeightGrams, plateColorName, units } = options;
   if (plateOuterDiameterMm == null) return [];
+  const suffix = unitSuffix(units);
   return [
     `Design target: ${plateDesignTarget || '—'}`,
-    `Outer diameter (incl. rim): ${roundMm(plateOuterDiameterMm)} mm`,
-    `Inner well diameter: ${plateInnerWellDiameterMm != null ? `${roundMm(plateInnerWellDiameterMm)} mm` : '—'}`,
-    `Rim width: ${plateRimWidthMm != null ? `${roundMm(plateRimWidthMm)} mm` : '—'}`,
-    `Overall height: ${plateOverallHeightMm != null ? `${roundMm(plateOverallHeightMm)} mm` : '—'}`,
+    `Outer diameter (incl. rim): ${formatLengthDisplay(plateOuterDiameterMm, units)} ${suffix}`,
+    `Inner well diameter: ${plateInnerWellDiameterMm != null ? `${formatLengthDisplay(plateInnerWellDiameterMm, units)} ${suffix}` : '—'}`,
+    `Rim width: ${plateRimWidthMm != null ? `${formatLengthDisplay(plateRimWidthMm, units)} ${suffix}` : '—'}`,
+    `Overall height: ${plateOverallHeightMm != null ? `${formatLengthDisplay(plateOverallHeightMm, units)} ${suffix}` : '—'}`,
     `Plate color: ${plateColorName || '—'} · Approx. weight: ${plateWeightGrams != null ? `${roundMm(plateWeightGrams)} g` : '—'}`
   ];
 }
@@ -224,6 +226,8 @@ function resolvePageOrientation({ pageSize, marginMm, neededWidthMm, neededHeigh
  * @param {number} [options.marginMm]
  * @param {boolean} [options.mirror]
  * @param {boolean} [options.registrationMarks]
+ * @param {'mm'|'in'} [options.units] Display unit for header text only -- geometry and the
+ *   scale-reference bar are always real millimeters regardless of this option.
  * @param {string} [options.plateDesignTarget] S-112: Round Dinner Plate only -- see
  *   computePlateHeaderLineTexts(). Omitted (or options.plateOuterDiameterMm omitted) for every
  *   other object template, which adds zero extra header lines.
@@ -249,7 +253,8 @@ export function computeProductionSheetLayout(stoneLayout, options = {}) {
     pageSize = 'A4',
     marginMm = 10,
     mirror = false,
-    registrationMarks = true
+    registrationMarks = true,
+    units = 'mm'
   } = options;
 
   assertPositiveFiniteNumber(productionWidthMm, 'productionWidthMm');
@@ -265,7 +270,7 @@ export function computeProductionSheetLayout(stoneLayout, options = {}) {
     throw new TypeError('computeProductionSheetLayout: registrationMarks must be a boolean.');
   }
 
-  const plateHeaderLineTexts = computePlateHeaderLineTexts(options);
+  const plateHeaderLineTexts = computePlateHeaderLineTexts({ ...options, units });
   const sizeBreakdown = computeSizeBreakdown(stoneLayout.stones);
   const sizeBreakdownLines = computeSizeBreakdownLineTexts(sizeBreakdown);
   const headerHeightMm = computeHeaderHeightMm(plateHeaderLineTexts.length + sizeBreakdownLines.length);
@@ -294,13 +299,13 @@ export function computeProductionSheetLayout(stoneLayout, options = {}) {
   const headerLines = [
     { text: projectName || 'Untitled Project', sizeMm: HEADER_TITLE_SIZE_MM, bold: true, slotHeightMm: HEADER_TITLE_SLOT_HEIGHT_MM },
     { text: `Object: ${objectType || '—'}`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
-    { text: `Production size: ${roundMm(productionWidthMm)} × ${roundMm(productionHeightMm)} mm`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
+    { text: `Production size: ${formatLengthDisplay(productionWidthMm, units)} × ${formatLengthDisplay(productionHeightMm, units)} ${unitSuffix(units)}`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
     { text: `Stone count: ${stoneCount}`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
     { text: `Stone size: ${formatStoneSizeList(distinctSizesMm)}`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
-    { text: `Gap: ${formatMmList(distinctGapsMm)}`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
+    { text: `Gap: ${formatMmList(distinctGapsMm, units)}`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
     { text: `Crystal color: ${distinctColors.length ? distinctColors.join(', ') : '—'}`, sizeMm: HEADER_LINE_SIZE_MM, slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM },
     {
-      text: `Page: ${pageSize} (${orientation}) · Margin: ${roundMm(marginMm)} mm · Mirror: ${mirror ? 'On' : 'Off'} · Registration marks: ${registrationMarks ? 'On' : 'Off'}`,
+      text: `Page: ${pageSize} (${orientation}) · Margin: ${formatLengthDisplay(marginMm, units)} ${unitSuffix(units)} · Mirror: ${mirror ? 'On' : 'Off'} · Registration marks: ${registrationMarks ? 'On' : 'Off'}`,
       sizeMm: HEADER_LINE_SIZE_MM,
       slotHeightMm: HEADER_LINE_SLOT_HEIGHT_MM
     },
