@@ -36,7 +36,7 @@ async function test(name, fn) {
 }
 
 await test('1. index.html declares #height min="4" max="111"', () => {
-  assert.match(indexHtml, /<input id="height" type="number" min="4" max="111" step="1" value="25">/);
+  assert.match(indexHtml, /<input id="height" type="number" min="4" max="111" step="1" data-mm-step="1" value="25">/);
 });
 
 await test('2. writeSelectedControlsToLayer() clamps l.height to [4,111], matching #height\'s declared bounds', () => {
