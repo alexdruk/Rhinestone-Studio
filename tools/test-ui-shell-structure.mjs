@@ -227,7 +227,9 @@ await test('9. Image Trace, Export, Production Sheet, Shipping, Settings, and He
   for (const id of ['settingsSafeAreaDefault', 'settingsSnapDefault', 'settingsDefaultStoneSize', 'settingsDefaultGap']) {
     assert.ok(settingsBody.includes(`id="${id}"`), `expected the Settings Lightbox to contain #${id}`);
   }
-  assert.ok(/mm \(fixed\)/.test(settingsBody));
+  // RS-3018: Units is now a real control (Millimeters/Inches), not static "mm (fixed)" text.
+  assert.ok(settingsBody.includes('id="settingsUnits"'), 'expected the Settings Lightbox to contain #settingsUnits');
+  assert.ok(/Millimeters \(mm\)/.test(settingsBody) && /Inches \(in\)/.test(settingsBody));
   assert.ok(/Light \(fixed\)/.test(settingsBody));
 
   const helpBody = extractElementHtml(indexHtml, 'lightboxHelp');
