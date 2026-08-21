@@ -5061,7 +5061,7 @@ function refreshUnitLabels(){
   document.querySelectorAll('[data-unit-label]').forEach(labelEl=>{
     labelEl.textContent=`${labelEl.dataset.unitLabel} (${unitSuffix(project.units)})`;
   });
-  const summaryEl=el('projectUnitsSummary');if(summaryEl)summaryEl.textContent=unitSuffix(project.units);
+  const quickEl=el('projectUnitsQuick');if(quickEl)quickEl.value=project.units;
 }
 // Plate/Vessel fields mirror canonical project.plate/vessel mm state, so they can always be
 // re-derived from `project` regardless of what units were previously displayed. prodSheetMargin
@@ -5084,9 +5084,9 @@ function refreshAllLengthFieldDisplays(previousUnits=project.units){
     el(id).value=formatLengthDisplay(mm,project.units);
   }
 }
-el('settingsUnits').addEventListener('change',async()=>{
+async function applyUnitsChange(newUnits){
   const previousUnits=project.units;
-  project.units=el('settingsUnits').value;
+  project.units=newUnits;
   refreshUnitLabels();
   refreshAllLengthFieldDisplays(previousUnits);
   // RS-3019: monogramWidth/Height's min/max bounds and #monogramFrameSizeHint (unlike their own
@@ -5102,7 +5102,9 @@ el('settingsUnits').addEventListener('change',async()=>{
   refreshSnapDistanceFieldBounds();
   syncSelectedControlsFromLayer();
   await updateAll(true);
-});
+}
+el('settingsUnits').addEventListener('change',()=>applyUnitsChange(el('settingsUnits').value));
+el('projectUnitsQuick').addEventListener('change',()=>applyUnitsChange(el('projectUnitsQuick').value));
 
 populateStoneColorOptions();populateStoneColorOptions('stampColor');populateStoneColorOptions('traceColor');populateStoneColorOptions('paintColor');populateStoneSizeOptions();populateMixedSizeSelectOptions();
 // RS-2002: only populated when fontManager actually loaded -- if the manifest fetch failed,
