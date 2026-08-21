@@ -283,7 +283,7 @@ await test('B11. the frame is visually distinct from the safe-area guide: a diff
   assert.match(safeAreaFn, /rgba\(20,120,255/); // blue, dashed
   assert.match(frameFn, /#ff8c00/); // amber/orange, distinct color
   assert.ok(!frameFn.includes('setLineDash([5'), 'expected a solid (not dashed) frame border, visually distinct from the safe-area guide');
-  assert.match(frameFn, /frameWidthMm\.toFixed\(1\)\} mm/, 'expected the frame\'s width to be displayed in millimeters');
+  assert.match(frameFn, /formatLengthDisplay\(frameWidthMm,project\.units,1\)/, 'expected the frame\'s width to be displayed via the unit-aware formatter (RS-3022)');
 });
 
 await test('B12. dragging the Front View Frame rotates the Object Preview (requirement 2), cheaply -- no engine.generate()/updateAll() on every pointermove tick', () => {
