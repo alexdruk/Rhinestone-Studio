@@ -112,6 +112,7 @@ import { SNAP_TOLERANCE_MM, NUDGE_STEP_MM, NUDGE_STEP_LARGE_MM, alignLayers, dis
 // wires a Lightbox to a top-menu button or a layer-aware "which fields to show" decision. See
 // docs/specifications/UI-001-CompleteRedesign.md.
 import { Lightbox, el, parseIntOr, download, exportCanvas, syncShippingFieldsFromState, wireShippingApply } from './src/ui/index.js';
+import { mmToDisplayValue, displayValueToMm, unitSuffix, formatLengthDisplay } from './src/units/LengthUnits.js';
 // MONO-006 (Monogram Generator UI): the Monogram Lightbox is a plain front-end -- it never
 // generates geometry, computes layouts, fits, or detects collisions itself. All of that is
 // delegated to MonogramGenerator.generate() (MONO-005/MONO-005A), which returns ordinary project
@@ -899,7 +900,7 @@ function validateProject(obj){
   const vessel=VESSEL_PRODUCT_IDS.includes(productId)
     ?(hasExplicitVessel?normalizeVesselParams(productId,obj.vessel):deriveLegacyVesselParams(productId,getObjectTemplate(productId),canvas.width,canvas.height))
     :(hasExplicitVessel?normalizeVesselParams('mug',obj.vessel):getVesselDefaults('mug'));
-  return{version:Number(obj.version)||2,units:'mm',name:typeof obj.name==='string'&&obj.name.length>0?obj.name:DEFAULT_PROJECT_NAME,product:productId,canvas:{width:canvas.width,height:canvas.height},cupColor:typeof obj.cupColor==='string'?obj.cupColor:'#1f3556',wrap:typeof obj.wrap==='string'?obj.wrap:'front',plate:normalizePlateParams(obj.plate),vessel,layers:obj.layers.map(l=>({...l,visible:l.visible!==false}))}
+  return{version:Number(obj.version)||2,units:obj.units==='in'?'in':'mm',name:typeof obj.name==='string'&&obj.name.length>0?obj.name:DEFAULT_PROJECT_NAME,product:productId,canvas:{width:canvas.width,height:canvas.height},cupColor:typeof obj.cupColor==='string'?obj.cupColor:'#1f3556',wrap:typeof obj.wrap==='string'?obj.wrap:'front',plate:normalizePlateParams(obj.plate),vessel,layers:obj.layers.map(l=>({...l,visible:l.visible!==false}))}
 }
 // TXT-101A: pure construction data (no fetch), so it's always available even if the desktop-font
 // manifest fetch below fails -- the Browse Fonts panel's category/metadata lookups for RS Block/RS
@@ -1704,6 +1705,7 @@ try{
     project=validateProject(recovered.project);
     selectedLayerId=project.layers.some(l=>l.id===recovered.selectedLayerId)?recovered.selectedLayerId:project.layers[0].id;
     selectedLayerIds=selectOnly(selectedLayerId);
+    refreshUnitLabels();
     bootStatusMessage='Restored unsaved changes from autosave (crash/refresh recovery).';
   }
 }catch(error){
@@ -1834,10 +1836,10 @@ function syncSelectedControlsFromLayer(){
   // S-112: project.plate is likewise project-level -- resync every plate field for the same reason
   // (undo/redo restore, Project JSON import, or a template switch away-and-back must never leave
   // these inputs showing a stale value that a later edit would silently write back).
-  el('plateOuterDiameter').value=project.plate.outerDiameterMm;el('plateInnerWellDiameter').value=project.plate.innerWellDiameterMm;el('plateOverallHeight').value=project.plate.overallHeightMm;el('plateCenterDepth').value=project.plate.centerDepthMm;el('plateColor').value=project.plate.colorId;el('plateDesignTarget').value=project.plate.designTarget;
+  setLengthField('plateOuterDiameter',project.plate.outerDiameterMm);setLengthField('plateInnerWellDiameter',project.plate.innerWellDiameterMm);setLengthField('plateOverallHeight',project.plate.overallHeightMm);setLengthField('plateCenterDepth',project.plate.centerDepthMm);el('plateColor').value=project.plate.colorId;el('plateDesignTarget').value=project.plate.designTarget;
   // RS-2010: project.vessel is likewise project-level -- resync for the same reason as project.plate
   // just above.
-  el('vesselBodyDiameter').value=project.vessel.bodyDiameterMm;el('vesselBodyHeight').value=project.vessel.bodyHeightMm;el('vesselTopDiameter').value=project.vessel.topDiameterMm;
+  setLengthField('vesselBodyDiameter',project.vessel.bodyDiameterMm);setLengthField('vesselBodyHeight',project.vessel.bodyHeightMm);setLengthField('vesselTopDiameter',project.vessel.topDiameterMm);
   // RS-1005: project.name is likewise project-level -- resync for the same reason.
   el('projectName').value=project.name;
   // S-105 follow-up: a type-specific Lightbox (Text/Import/Image Trace) that stays open (non-modal
@@ -1976,7 +1978,7 @@ function writeSelectedControlsToLayer(){
   // wall), and project.cupColor is kept resolved from the selected plate color id so drawCup()/the
   // Object Preview need no plate-specific color plumbing.
   if(currentObjectTemplate().preview.kind==='plate'){
-    project.plate=normalizePlateParams({outerDiameterMm:parseFloat(el('plateOuterDiameter').value),innerWellDiameterMm:parseFloat(el('plateInnerWellDiameter').value),overallHeightMm:parseFloat(el('plateOverallHeight').value),centerDepthMm:parseFloat(el('plateCenterDepth').value),footRingOuterDiameterMm:project.plate.footRingOuterDiameterMm,footRingHeightMm:project.plate.footRingHeightMm,colorId:el('plateColor').value,designTarget:el('plateDesignTarget').value});
+    project.plate=normalizePlateParams({outerDiameterMm:readLengthField('plateOuterDiameter'),innerWellDiameterMm:readLengthField('plateInnerWellDiameter'),overallHeightMm:readLengthField('plateOverallHeight'),centerDepthMm:readLengthField('plateCenterDepth'),footRingOuterDiameterMm:project.plate.footRingOuterDiameterMm,footRingHeightMm:project.plate.footRingHeightMm,colorId:el('plateColor').value,designTarget:el('plateDesignTarget').value});
     project.canvas={width:project.plate.outerDiameterMm,height:project.plate.outerDiameterMm};
     project.cupColor=getPlateColor(project.plate.colorId).hex;
   }
@@ -1988,7 +1990,7 @@ function writeSelectedControlsToLayer(){
   // height), the vessel counterpart of the plate's own canvas-follows-outer-diameter line above.
   if(VESSEL_PRODUCT_IDS.includes(currentObjectTemplate().id)){
     const vesselProductId=currentObjectTemplate().id;
-    project.vessel=normalizeVesselParams(vesselProductId,{bodyDiameterMm:parseFloat(el('vesselBodyDiameter').value),topDiameterMm:parseFloat(el('vesselTopDiameter').value),bodyHeightMm:parseFloat(el('vesselBodyHeight').value)});
+    project.vessel=normalizeVesselParams(vesselProductId,{bodyDiameterMm:readLengthField('vesselBodyDiameter'),topDiameterMm:readLengthField('vesselTopDiameter'),bodyHeightMm:readLengthField('vesselBodyHeight')});
     project.canvas=computeCanvasFromVessel(project.vessel);
   }
   project.name=el('projectName').value||DEFAULT_PROJECT_NAME;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
@@ -3799,7 +3801,7 @@ el('importProjectFile').addEventListener('change',async e=>{const file=e.target.
   // is mid-edit with a type-specific Lightbox open", and a fresh whole-project replacement is not that. Closing
   // first clears activeFieldLightbox so the auto-switch is a no-op here, regardless of the imported first layer's type.
   lightboxes.importBox.close();
-  syncSelectedControlsFromLayer();await updateAll(true);el('status').textContent=`Imported ${file.name}: ${project.layers.length} layer(s)`}catch(error){console.error('Project import failed',error);el('status').textContent=`Import failed: ${error.message}`;validationEl.textContent=`Import failed: ${error.message} The current project was left untouched.`;validationEl.style.display='block'}});
+  refreshUnitLabels();syncSelectedControlsFromLayer();await updateAll(true);el('status').textContent=`Imported ${file.name}: ${project.layers.length} layer(s)`}catch(error){console.error('Project import failed',error);el('status').textContent=`Import failed: ${error.message}`;validationEl.textContent=`Import failed: ${error.message} The current project was left untouched.`;validationEl.style.display='block'}});
 el('importSvg').onclick=()=>el('importSvgFile').click();
 // RS-1001: parseSvgDocument() here only validates/measures the file (naturalWidthMm/heightMm,
 // shape count, warnings) — it invents no stone positions, so this direct src/svg call does not
@@ -3906,7 +3908,7 @@ el('exportCombined').onclick=()=>{if(!layout){el('status').textContent='Export f
 // pattern for Gap/Crystal color) -- see docs/specifications/RS-1005-ProductionSheetGenerator.md for
 // this function's pre-existing fields and docs/specifications/S-112-RoundDinnerPlate.md for the
 // plate-specific additions.
-function currentProductionSheetOptions(){const t=currentObjectTemplate(),isPlate=t.preview.kind==='plate';const plateFields=isPlate?{plateDesignTarget:getPlateDesignTargetMeta(project.plate.designTarget).name,plateOuterDiameterMm:project.plate.outerDiameterMm,plateInnerWellDiameterMm:project.plate.innerWellDiameterMm,plateRimWidthMm:computeRimWidthMm(project.plate.outerDiameterMm,project.plate.innerWellDiameterMm),plateOverallHeightMm:project.plate.overallHeightMm,plateWeightGrams:PLATE_ROUND_DINNER_DEFINITION.weightGrams.average,plateColorName:getPlateColor(project.plate.colorId).name}:{};return{projectName:project.name,objectType:t.displayName,productionWidthMm:project.canvas.width,productionHeightMm:project.canvas.height,gapMm:[...new Set(project.layers.filter(l=>l.visible).map(l=>l.gap))],pageSize:el('prodSheetPageSize').value,marginMm:parseFloat(el('prodSheetMargin').value)||0,mirror:el('prodSheetMirror').value==='on',registrationMarks:el('prodSheetRegMarks').value==='on',...plateFields}}
+function currentProductionSheetOptions(){const t=currentObjectTemplate(),isPlate=t.preview.kind==='plate';const plateFields=isPlate?{plateDesignTarget:getPlateDesignTargetMeta(project.plate.designTarget).name,plateOuterDiameterMm:project.plate.outerDiameterMm,plateInnerWellDiameterMm:project.plate.innerWellDiameterMm,plateRimWidthMm:computeRimWidthMm(project.plate.outerDiameterMm,project.plate.innerWellDiameterMm),plateOverallHeightMm:project.plate.overallHeightMm,plateWeightGrams:PLATE_ROUND_DINNER_DEFINITION.weightGrams.average,plateColorName:getPlateColor(project.plate.colorId).name}:{};return{projectName:project.name,objectType:t.displayName,productionWidthMm:project.canvas.width,productionHeightMm:project.canvas.height,gapMm:[...new Set(project.layers.filter(l=>l.visible).map(l=>l.gap))],pageSize:el('prodSheetPageSize').value,marginMm:readLengthField('prodSheetMargin')||0,mirror:el('prodSheetMirror').value==='on',registrationMarks:el('prodSheetRegMarks').value==='on',...plateFields}}
 el('exportProdSheetSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-production-sheet.svg','image/svg+xml',productionSheetToSvg(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportProdSheetPDF').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-production-sheet.pdf','application/pdf',productionSheetToPdf(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 // PNG has no dedicated src/export/** module (matching #exportPNG/#exportCup's existing "capture,
@@ -3983,7 +3985,7 @@ const lightboxes={
   imagetrace:new Lightbox('lightboxImageTrace',{primary:true,onOpen(){activeFieldLightbox='imagetrace';relocateFieldGroups();updateImageTraceSections()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
   exportBox:new Lightbox('lightboxExport',{primary:true}),
   prodSheet:new Lightbox('lightboxProdSheet',{primary:true}),
-  shipping:new Lightbox('lightboxShipping',{primary:true,onOpen(){syncShippingFieldsFromState()}}),
+  shipping:new Lightbox('lightboxShipping',{primary:true,onOpen(){syncShippingFieldsFromState(project.units)}}),
   settings:new Lightbox('lightboxSettings',{primary:true,onOpen(){syncSettingsFieldsFromState()}}),
   help:new Lightbox('lightboxHelp',{primary:true}),
   gallery:new Lightbox('lightboxGallery',{primary:true,onOpen(){onGalleryOpen()}}),
@@ -4972,7 +4974,7 @@ async function openGalleryItemAsCopy(file){
     // the live project already matches what's stored), so the old record is always replaced here,
     // never left to linger and get offered as a stale "recovery" on some later boot.
     lastAutosavedProjectJson=null;flushAutosaveNow();
-    syncSelectedControlsFromLayer();await updateAll(true);
+    refreshUnitLabels();syncSelectedControlsFromLayer();await updateAll(true);
     lightboxes.galleryPreview.close();lightboxes.gallery.close();
     el('status').textContent=`Opened an editable copy of "${entry.title}" from the Gallery.`;
   }catch(error){
@@ -4996,7 +4998,9 @@ el('galleryPreviewOpenCopy').onclick=()=>{if(galleryPreviewFile)openGalleryItemA
 // docs/specifications/UI-001-CompleteRedesign.md, "Shipping & Handling". ----
 // ARC-001: shippingInfo state, syncShippingFieldsFromState(), and the #shipApply wiring moved to
 // src/ui/ShippingPanel.js (imported above); wireShippingApply() is called once at startup, below.
-wireShippingApply();
+// RS-3018: units passed as a live getter (not a snapshot) so Apply always reads the operator's
+// current Units setting, not whatever it was when the app booted.
+wireShippingApply(()=>project.units);
 
 // ---- Settings: mirrors the live grid/safe-area/snap toggle state (one boolean each, never a
 // second independent copy). Default stone size/gap are session-local preference fields not yet
@@ -5006,6 +5010,7 @@ function syncSettingsFieldsFromState(){
   el('settingsGridDefault').checked=true;el('settingsGridDefault').disabled=true;
   el('settingsSafeAreaDefault').checked=showSafeArea;el('settingsSnapDefault').checked=snapEnabled;
   el('settingsSnapDistance').value=snapToleranceMm;el('settingsShowGuides').checked=showSnapGuides;
+  el('settingsUnits').value=project.units;
 }
 el('settingsApply').onclick=()=>{
   showSafeArea=el('settingsSafeAreaDefault').checked;
@@ -5014,6 +5019,47 @@ el('settingsApply').onclick=()=>{
   showSnapGuides=el('settingsShowGuides').checked;
   drawLayout();
 };
+
+// RS-3018: project.units is a display preference (which unit a freely-typed length field shows/
+// accepts), never a project-content edit -- deliberately not run through commitHistory()/undo-redo
+// and deliberately not in HISTORY_TRACKED_CONTROL_IDS, same category as settingsSnapDefault/
+// settingsShowGuides above. Storage stays mm everywhere, forever; only display/input formatting
+// changes. #stoneSize (fixed named sizes, not a free-typed length) is permanently excluded.
+function setLengthField(id,mm){el(id).value=formatLengthDisplay(mm,project.units)}
+function readLengthField(id){return displayValueToMm(el(id).value,project.units)}
+function refreshUnitLabels(){
+  document.querySelectorAll('[data-unit-label]').forEach(labelEl=>{
+    labelEl.textContent=`${labelEl.dataset.unitLabel} (${unitSuffix(project.units)})`;
+  });
+  const summaryEl=el('projectUnitsSummary');if(summaryEl)summaryEl.textContent=unitSuffix(project.units);
+}
+// Plate/Vessel fields mirror canonical project.plate/vessel mm state, so they can always be
+// re-derived from `project` regardless of what units were previously displayed. prodSheetMargin
+// and the Shipping length fields have no such canonical store on `project` (prodSheetMargin is a
+// bare DOM field; Shipping's shippingInfo is session-only and only written on #shipApply) -- for
+// those, convert the field's own current display value from `previousUnits` in place.
+function refreshAllLengthFieldDisplays(previousUnits=project.units){
+  setLengthField('plateOuterDiameter',project.plate.outerDiameterMm);
+  setLengthField('plateInnerWellDiameter',project.plate.innerWellDiameterMm);
+  setLengthField('plateOverallHeight',project.plate.overallHeightMm);
+  setLengthField('plateCenterDepth',project.plate.centerDepthMm);
+  setLengthField('vesselBodyDiameter',project.vessel.bodyDiameterMm);
+  setLengthField('vesselBodyHeight',project.vessel.bodyHeightMm);
+  setLengthField('vesselTopDiameter',project.vessel.topDiameterMm);
+  for(const id of['prodSheetMargin','shipLengthMm','shipWidthMm','shipHeightMm']){
+    const raw=el(id).value;
+    if(raw==='')continue;
+    const mm=displayValueToMm(raw,previousUnits);
+    if(!Number.isFinite(mm))continue;
+    el(id).value=formatLengthDisplay(mm,project.units);
+  }
+}
+el('settingsUnits').addEventListener('change',()=>{
+  const previousUnits=project.units;
+  project.units=el('settingsUnits').value;
+  refreshUnitLabels();
+  refreshAllLengthFieldDisplays(previousUnits);
+});
 
 populateStoneColorOptions();populateStoneColorOptions('stampColor');populateStoneColorOptions('traceColor');populateStoneColorOptions('paintColor');populateStoneSizeOptions();populateMixedSizeSelectOptions();
 // RS-2002: only populated when fontManager actually loaded -- if the manifest fetch failed,

@@ -397,7 +397,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
     <section class="panel-section">
       <h2>Project</h2>
       <div class="field"><label for="projectName">Project name</label><input id="projectName" value="Untitled Project"></div>
-      <div class="meta-row"><span class="meta-label">Units</span><span class="meta-value">mm</span></div>
+      <div class="meta-row"><span class="meta-label">Units</span><span class="meta-value" id="projectUnitsSummary">mm</span></div>
       <div class="meta-row"><span class="meta-label">Template</span><span class="meta-value" id="projectTemplateSummary">Mug · 210×90mm</span></div>
     </section>
 
@@ -902,12 +902,12 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <div class="field-section" id="plateFields" style="display:none">
           <h3>Plate dimensions</h3>
           <div class="field-row">
-            <div class="field"><label for="plateOuterDiameter">Outer Diameter (mm)</label><input id="plateOuterDiameter" type="number" min="250" max="300" step="0.5" value="270"></div>
-            <div class="field"><label for="plateInnerWellDiameter">Inner Well Diameter (mm)</label><input id="plateInnerWellDiameter" type="number" min="175" max="215" step="0.5" value="195"></div>
+            <div class="field"><label for="plateOuterDiameter" data-unit-label="Outer Diameter">Outer Diameter (mm)</label><input id="plateOuterDiameter" type="number" min="250" max="300" step="0.5" value="270"></div>
+            <div class="field"><label for="plateInnerWellDiameter" data-unit-label="Inner Well Diameter">Inner Well Diameter (mm)</label><input id="plateInnerWellDiameter" type="number" min="175" max="215" step="0.5" value="195"></div>
           </div>
           <div class="field-row">
-            <div class="field"><label for="plateOverallHeight">Overall Height (mm)</label><input id="plateOverallHeight" type="number" min="18" max="32" step="0.5" value="25"></div>
-            <div class="field"><label for="plateCenterDepth">Center Depth (mm)</label><input id="plateCenterDepth" type="number" min="7" max="18" step="0.5" value="12"></div>
+            <div class="field"><label for="plateOverallHeight" data-unit-label="Overall Height">Overall Height (mm)</label><input id="plateOverallHeight" type="number" min="18" max="32" step="0.5" value="25"></div>
+            <div class="field"><label for="plateCenterDepth" data-unit-label="Center Depth">Center Depth (mm)</label><input id="plateCenterDepth" type="number" min="7" max="18" step="0.5" value="12"></div>
           </div>
           <div class="field">
             <label for="plateDesignTarget">Design Target</label>
@@ -929,11 +929,11 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <div class="field-section" id="vesselFields" style="display:none">
           <h3>Vessel dimensions</h3>
           <div class="field-row">
-            <div class="field"><label for="vesselBodyDiameter">Body Diameter (mm)</label><input id="vesselBodyDiameter" type="number" step="0.5"></div>
-            <div class="field"><label for="vesselBodyHeight">Body Height (mm)</label><input id="vesselBodyHeight" type="number" step="0.5"></div>
+            <div class="field"><label for="vesselBodyDiameter" data-unit-label="Body Diameter">Body Diameter (mm)</label><input id="vesselBodyDiameter" type="number" step="0.5"></div>
+            <div class="field"><label for="vesselBodyHeight" data-unit-label="Body Height">Body Height (mm)</label><input id="vesselBodyHeight" type="number" step="0.5"></div>
           </div>
           <div class="field-row">
-            <div class="field" id="vesselTopDiameterField"><label for="vesselTopDiameter">Top Diameter (mm)</label><input id="vesselTopDiameter" type="number" step="0.5"></div>
+            <div class="field" id="vesselTopDiameterField"><label for="vesselTopDiameter" data-unit-label="Top Diameter">Top Diameter (mm)</label><input id="vesselTopDiameter" type="number" step="0.5"></div>
           </div>
           <p class="hint" id="vesselDetail">Printable height 85.0mm (derived) · Circumference 257.6mm (product information, read-only)</p>
         </div>
@@ -1114,7 +1114,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <h3>Page setup</h3>
         <div class="field-row">
           <div class="field"><label for="prodSheetPageSize">Page size</label><select id="prodSheetPageSize"><option value="A4" selected>A4</option><option value="Letter">Letter</option><option value="A3">A3 (large format, e.g. Round Dinner Plate)</option></select></div>
-          <div class="field"><label for="prodSheetMargin">Margin (mm)</label><input id="prodSheetMargin" type="number" min="0" step="1" value="10"></div>
+          <div class="field"><label for="prodSheetMargin" data-unit-label="Margin">Margin (mm)</label><input id="prodSheetMargin" type="number" min="0" step="1" value="10"></div>
         </div>
         <div class="field-row">
           <div class="field"><label for="prodSheetMirror">Mirror</label><select id="prodSheetMirror"><option value="off" selected>Off</option><option value="on">On</option></select></div>
@@ -1146,9 +1146,9 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <h3>Package</h3>
         <div class="field"><label for="shipPackageType">Package type</label><select id="shipPackageType"><option value="box" selected>Box</option><option value="mailer">Padded mailer</option><option value="tube">Tube</option><option value="custom">Custom</option></select></div>
         <div class="field-row-3">
-          <div class="field"><label for="shipLengthMm">Length (mm)</label><input id="shipLengthMm" type="number" min="0" step="1"></div>
-          <div class="field"><label for="shipWidthMm">Width (mm)</label><input id="shipWidthMm" type="number" min="0" step="1"></div>
-          <div class="field"><label for="shipHeightMm">Height (mm)</label><input id="shipHeightMm" type="number" min="0" step="1"></div>
+          <div class="field"><label for="shipLengthMm" data-unit-label="Length">Length (mm)</label><input id="shipLengthMm" type="number" min="0" step="1"></div>
+          <div class="field"><label for="shipWidthMm" data-unit-label="Width">Width (mm)</label><input id="shipWidthMm" type="number" min="0" step="1"></div>
+          <div class="field"><label for="shipHeightMm" data-unit-label="Height">Height (mm)</label><input id="shipHeightMm" type="number" min="0" step="1"></div>
         </div>
         <div class="field"><label for="shipWeightG">Weight (g)</label><input id="shipWeightG" type="number" min="0" step="1"></div>
       </div>
@@ -1173,7 +1173,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
     <div class="lightbox-body">
       <div class="field-section">
         <h3>General</h3>
-        <div class="meta-row"><span class="meta-label">Units</span><span class="meta-value">mm (fixed)</span></div>
+        <div class="field"><label for="settingsUnits">Units</label>
+          <select id="settingsUnits"><option value="mm" selected>Millimeters (mm)</option><option value="in">Inches (in)</option></select></div>
         <div class="meta-row"><span class="meta-label">Theme</span><span class="meta-value">Light (fixed)</span></div>
       </div>
       <div class="field-section">
