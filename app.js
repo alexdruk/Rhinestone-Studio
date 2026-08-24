@@ -2817,8 +2817,12 @@ const SELECTION_HANDLE_SIZE_PX=11;
 // RS-1009: draws one selection box (+ optional resize handles); drawSelection() below calls this
 // once per multi-selected layer. Handles only ever draw when exactly one layer is selected
 // (multi-layer resize is out of scope for this milestone) -- unchanged single-selection visuals.
-function drawSelectionBox(ctx,s,ox,oy,dpr,b,showHandles){const rx=ox+b.x*s,ry=oy+b.y*s,rw=b.width*s,rh=b.height*s;ctx.save();ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=4*dpr;ctx.setLineDash([]);ctx.strokeRect(rx,ry,rw,rh);ctx.strokeStyle='#1478ff';ctx.lineWidth=1.75*dpr;ctx.setLineDash([6*dpr,3*dpr]);ctx.strokeRect(rx,ry,rw,rh);ctx.setLineDash([]);if(showHandles){for(const h of handlesFor(b)){const hs=SELECTION_HANDLE_SIZE_PX*dpr;ctx.shadowColor='rgba(20,30,50,.35)';ctx.shadowBlur=3*dpr;ctx.fillStyle='white';ctx.strokeStyle='#1478ff';ctx.lineWidth=1.75*dpr;ctx.beginPath();ctx.rect(ox+h.x*s-hs/2,oy+h.y*s-hs/2,hs,hs);ctx.fill();ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.stroke()}}ctx.restore()}
-function drawSelection(ctx,s,ox,oy,dpr){const selected=project.layers.filter(l=>selectedLayerIds.has(l.id));const single=selected.length===1;for(const l of selected){const b=getLayerBBox(l);drawSelectionBox(ctx,s,ox,oy,dpr,b,single&&l.type!=='text');
+// RS-3030: rotationDeg (default 0, so every pre-existing call site/project renders byte-identical)
+// makes the dashed outline itself a rotated quadrilateral through the box's TRUE rotated corners
+// (via rotatedHandlesFor()) instead of the axis-aligned strokeRect, and draws handles at their
+// rotated positions -- otherwise handles would visually float away from a still-axis-aligned box.
+function drawSelectionBox(ctx,s,ox,oy,dpr,b,showHandles,rotationDeg=0){const rx=ox+b.x*s,ry=oy+b.y*s,rw=b.width*s,rh=b.height*s;ctx.save();if(!rotationDeg){ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=4*dpr;ctx.setLineDash([]);ctx.strokeRect(rx,ry,rw,rh);ctx.strokeStyle='#1478ff';ctx.lineWidth=1.75*dpr;ctx.setLineDash([6*dpr,3*dpr]);ctx.strokeRect(rx,ry,rw,rh);ctx.setLineDash([]);}else{const corners=['nw','ne','se','sw'].map(name=>rotatedHandlesFor(b,rotationDeg).find(h=>h.name===name));const strokeQuad=()=>{ctx.beginPath();ctx.moveTo(ox+corners[0].x*s,oy+corners[0].y*s);for(let i=1;i<corners.length;i++)ctx.lineTo(ox+corners[i].x*s,oy+corners[i].y*s);ctx.closePath()};ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=4*dpr;ctx.setLineDash([]);strokeQuad();ctx.stroke();ctx.strokeStyle='#1478ff';ctx.lineWidth=1.75*dpr;ctx.setLineDash([6*dpr,3*dpr]);strokeQuad();ctx.stroke();ctx.setLineDash([]);}if(showHandles){for(const h of rotatedHandlesFor(b,rotationDeg)){const hs=SELECTION_HANDLE_SIZE_PX*dpr;ctx.shadowColor='rgba(20,30,50,.35)';ctx.shadowBlur=3*dpr;ctx.fillStyle='white';ctx.strokeStyle='#1478ff';ctx.lineWidth=1.75*dpr;ctx.beginPath();ctx.rect(ox+h.x*s-hs/2,oy+h.y*s-hs/2,hs,hs);ctx.fill();ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.stroke()}}ctx.restore()}
+function drawSelection(ctx,s,ox,oy,dpr){const selected=project.layers.filter(l=>selectedLayerIds.has(l.id));const single=selected.length===1;for(const l of selected){const b=getLayerBBox(l);drawSelectionBox(ctx,s,ox,oy,dpr,b,single&&l.type!=='text',l.rotationDeg||0);
   // TXT-102: text has no resize handles (see drawSelectionBox's showHandles above), but gets its own
   // single rotate handle instead, only while it is the sole selection -- matching the existing
   // single-selection-only precedent resize handles already set.
@@ -2842,6 +2846,17 @@ const ROTATE_HANDLE_HIT_TOLERANCE_MM=4;
 // TXT-102: Shift-drag snap step for the rotate handle -- 15° divides evenly into every angle named
 // in the spec (0/15/30/45/60/90/...), matching Illustrator/Figma's own default rotation snap.
 const ROTATION_SNAP_STEP_DEG=15;
+// RS-3030: replicates GeometryEngine.js's rotatePointsAroundCenter() formula verbatim -- clockwise,
+// since this engine's mm space is Y-down (see that function's own comment for why). A local copy
+// rather than an import because that function is module-private and app.js is the UI/interaction
+// layer, a separate concern from GeometryEngine by this codebase's own convention. Used by every
+// resize-handle/selection-outline/resize-drag computation below so they all rotate identically to
+// the actual stone geometry.
+function rotatePointDeg(x,y,cx,cy,rotationDeg){
+  const radians=rotationDeg*(Math.PI/180),cos=Math.cos(radians),sin=Math.sin(radians);
+  const dx=x-cx,dy=y-cy;
+  return{x:cx+dx*cos-dy*sin,y:cy+dx*sin+dy*cos};
+}
 function rotateHandlePositionMm(b){
   if(b.width<=0&&b.height<=0)return null;
   const topCenterX=b.x+b.width/2;
@@ -2864,6 +2879,23 @@ function drawRotateHandle(ctx,s,ox,oy,dpr,b){
 // guide (out of scope).
 function drawGuides(ctx,s,ox,oy,dpr){if(!activeGuides.length)return;ctx.save();ctx.strokeStyle='#ff3b8d';ctx.lineWidth=1.25*dpr;ctx.setLineDash([4*dpr,3*dpr]);for(const g of activeGuides){ctx.beginPath();if(g.axis==='vertical'){const x=ox+g.valueMm*s;ctx.moveTo(x,oy);ctx.lineTo(x,oy+project.canvas.height*s)}else{const y=oy+g.valueMm*s;ctx.moveTo(ox,y);ctx.lineTo(ox+project.canvas.width*s,y)}ctx.stroke()}ctx.restore()}
 function handlesFor(b){return[{name:'nw',x:b.x,y:b.y},{name:'ne',x:b.x2,y:b.y},{name:'se',x:b.x2,y:b.y2},{name:'sw',x:b.x,y:b.y2},{name:'n',x:b.x+b.width/2,y:b.y},{name:'e',x:b.x2,y:b.y+b.height/2},{name:'s',x:b.x+b.width/2,y:b.y2},{name:'w',x:b.x,y:b.y+b.height/2}]}
+// RS-3030: each handle's unit offset from the box's own center (nw=(-1,-1), n=(0,-1), etc.), implicit
+// in handlesFor() above -- used by the resize-drag algorithm to find a handle's ANCHOR (the opposite
+// corner/edge, i.e. this offset negated) without per-handle-name branching.
+const HANDLE_UNIT_OFFSET={nw:{x:-1,y:-1},ne:{x:1,y:-1},se:{x:1,y:1},sw:{x:-1,y:1},n:{x:0,y:-1},e:{x:1,y:0},s:{x:0,y:1},w:{x:-1,y:0}};
+// RS-3030: handlesFor(b)'s 8 positions rotated around the box's own center by rotationDeg, via
+// rotatePointDeg() above -- so a rotated shape's resize handles (and, via drawSelectionBox(), its
+// selection outline) track its TRUE rotated corners instead of floating on the unrotated axis-
+// aligned box (Step 2's known, explicitly-scoped-out limitation). handlesFor() itself is untouched
+// (other callers, e.g. getLayerBBox()-derived tooling, still want the plain axis-aligned version).
+// A 0 rotation returns handlesFor(b) itself unchanged, guaranteeing byte-identical output for every
+// project saved before this milestone.
+function rotatedHandlesFor(b,rotationDeg){
+  const handles=handlesFor(b);
+  if(!rotationDeg)return handles;
+  const cx=(b.x+b.x2)/2,cy=(b.y+b.y2)/2;
+  return handles.map(h=>{const p=rotatePointDeg(h.x,h.y,cx,cy,rotationDeg);return{name:h.name,x:p.x,y:p.y}});
+}
 // RS-1006: the 3D preview manages its own canvas sizing (a ResizeObserver inside
 // Preview3DRenderer.js), so unlike drawLayout() there is no resizeCanvas()/2D-context call here.
 // update() only rebuilds the mesh/texture when the StoneLayout or display options actually
@@ -3093,7 +3125,7 @@ function rotateHandleHitTest(mm){
   }
   return null;
 }
-function hitTest(mm){const rotateHit=rotateHandleHitTest(mm);if(rotateHit)return rotateHit;const layers=[...project.layers].reverse();for(const l of layers){const b=getLayerBBox(l);for(const h of handlesFor(b)){if(Math.abs(mm.x-h.x)<3&&Math.abs(mm.y-h.y)<3&&l.type!=='text')return{layer:l,kind:'resize',handle:h.name,b0:b}}if(mm.x>=b.x&&mm.x<=b.x2&&mm.y>=b.y&&mm.y<=b.y2)return{layer:l,kind:'move',b0:b}}return null}
+function hitTest(mm){const rotateHit=rotateHandleHitTest(mm);if(rotateHit)return rotateHit;const layers=[...project.layers].reverse();for(const l of layers){const b=getLayerBBox(l);for(const h of rotatedHandlesFor(b,l.rotationDeg||0)){if(Math.abs(mm.x-h.x)<3&&Math.abs(mm.y-h.y)<3&&l.type!=='text')return{layer:l,kind:'resize',handle:h.name,b0:b}}if(mm.x>=b.x&&mm.x<=b.x2&&mm.y>=b.y&&mm.y<=b.y2)return{layer:l,kind:'move',b0:b}}return null}
 // S-104: a move-drag previously mapped pointer movement to mm 1:1 (rawDx/rawDy applied verbatim),
 // which made small, precise placements -- text in particular, since it has no resize handles to
 // fall back on -- hard to land exactly. LAYER_MOVE_DRAG_SENSITIVITY scales the pointer's
@@ -3137,7 +3169,17 @@ layoutCanvas.addEventListener('pointerdown',e=>{
     selectedLayerIds=selectOnly(hit.layer.id);selectedLayerId=hit.layer.id;
     syncSelectedControlsFromLayer();renderLayerUI();updateEditingUI();
     commitHistory();
-    drag={kind:'resize',handle:hit.handle,layerId:hit.layer.id,start:mm,b0:hit.b0,l0:JSON.parse(JSON.stringify(hit.layer))};
+    // RS-3030: rotationDeg + anchorAbs snapshotted once at drag-start, alongside b0/handle/layerId --
+    // resize math needs both on every subsequent pointermove (recomputing anchorAbs live would let
+    // it drift as l.rotationDeg/l.x/l.y/l.w/l.h change mid-drag, when it must stay fixed in place).
+    // anchorAbs is the handle's own ANCHOR (opposite corner/edge, via HANDLE_UNIT_OFFSET negated) at
+    // its true rotated position -- the point that must stay visually fixed while resizing.
+    const rotationDeg0=hit.layer.rotationDeg||0;
+    const cx0=(hit.b0.x+hit.b0.x2)/2,cy0=(hit.b0.y+hit.b0.y2)/2;
+    const off=HANDLE_UNIT_OFFSET[hit.handle];
+    const anchorLocal={x:cx0-off.x*(hit.b0.width/2),y:cy0-off.y*(hit.b0.height/2)};
+    const anchorAbs=rotationDeg0?rotatePointDeg(anchorLocal.x,anchorLocal.y,cx0,cy0,rotationDeg0):anchorLocal;
+    drag={kind:'resize',handle:hit.handle,layerId:hit.layer.id,start:mm,b0:hit.b0,l0:JSON.parse(JSON.stringify(hit.layer)),rotationDeg:rotationDeg0,anchorAbs,handleOffset:off};
     layoutCanvas.setPointerCapture(e.pointerId);updateAll(true);return;
   }
   if(hit.kind==='rotate'){
@@ -3236,7 +3278,25 @@ layoutCanvas.addEventListener('pointermove',e=>{
   }else if(drag.kind==='resize'){
     const l=project.layers.find(x=>x.id===drag.layerId);if(!l)return;
     if(l.type==='circle'){l.r=Math.max(2,Math.hypot(mm.x-drag.l0.cx,mm.y-drag.l0.cy))}
-    else if(XYWH_SHAPE_TYPES.has(l.type)){let x0=drag.b0.x,y0=drag.b0.y,x1=drag.b0.x2,y1=drag.b0.y2;if(drag.handle.includes('w'))x0=mm.x;if(drag.handle.includes('e'))x1=mm.x;if(drag.handle.includes('n'))y0=mm.y;if(drag.handle.includes('s'))y1=mm.y;l.x=Math.min(x0,x1);l.y=Math.min(y0,y1);l.w=Math.max(2,Math.abs(x1-x0));l.h=Math.max(2,Math.abs(y1-y0))}
+    else if(XYWH_SHAPE_TYPES.has(l.type)&&!drag.rotationDeg){let x0=drag.b0.x,y0=drag.b0.y,x1=drag.b0.x2,y1=drag.b0.y2;if(drag.handle.includes('w'))x0=mm.x;if(drag.handle.includes('e'))x1=mm.x;if(drag.handle.includes('n'))y0=mm.y;if(drag.handle.includes('s'))y1=mm.y;l.x=Math.min(x0,x1);l.y=Math.min(y0,y1);l.w=Math.max(2,Math.abs(x1-x0));l.h=Math.max(2,Math.abs(y1-y0))}
+    else if(XYWH_SHAPE_TYPES.has(l.type)){
+      // RS-3030: rotated resize -- drag the handle along the shape's own LOCAL (rotated) axes, per
+      // the Illustrator/Figma convention, keeping the opposite corner/edge (anchorAbs, fixed at
+      // drag-start) visually pinned in place. See this milestone's own doc for the full derivation.
+      const rotationDeg=drag.rotationDeg,anchor=drag.anchorAbs,off=drag.handleOffset;
+      // Inverse-rotate the pointer's offset from the anchor into the shape's local, unrotated axes
+      // -- the same space l.w/l.h are already defined in.
+      const local=rotatePointDeg(mm.x-anchor.x,mm.y-anchor.y,0,0,-rotationDeg);
+      let newW=drag.b0.width,newH=drag.b0.height;
+      if(off.x!==0)newW=Math.max(2,Math.abs(local.x));
+      if(off.y!==0)newH=Math.max(2,Math.abs(local.y));
+      // New center sits newW/2,newH/2 (signed by the dragged handle's own unit offset) away from the
+      // anchor in local space; rotate that offset forward back into absolute space and add to the
+      // anchor's fixed absolute position to get the new absolute center.
+      const centerAbsOffset=rotatePointDeg(off.x*newW/2,off.y*newH/2,0,0,rotationDeg);
+      const newCx=anchor.x+centerAbsOffset.x,newCy=anchor.y+centerAbsOffset.y;
+      l.x=newCx-newW/2;l.y=newCy-newH/2;l.w=newW;l.h=newH;
+    }
   }else if(drag.kind==='rotate'){
     const l=project.layers.find(x=>x.id===drag.layerId);if(!l)return;
     const dxMm=mm.x-drag.center.x,dyMm=mm.y-drag.center.y;

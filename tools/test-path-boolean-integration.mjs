@@ -151,7 +151,10 @@ await test('12. getLayerBBox()/drag-resize/duplicateLayer()/layerLabel()/moreOpt
   // S-110 generalized every one of these per-type unions (plus nine new shape kinds) into shared
   // XYWH_SHAPE_TYPES/SHAPE_LAYER_TYPES sets -- 'path' still behaves exactly like rectangle/svg/image.
   assert.match(appJs, /if\(l\.type==='circle'\)return\{[^}]*\};if\(XYWH_SHAPE_TYPES\.has\(l\.type\)\)return\{x:l\.x,y:l\.y,width:l\.w,height:l\.h,x2:l\.x\+l\.w,y2:l\.y\+l\.h\}/);
-  assert.match(appJs, /XYWH_SHAPE_TYPES\.has\(l\.type\)\)\{let x0=drag\.b0\.x/);
+  // RS-3030: the unrotated fast path picked up an `&&!drag.rotationDeg` guard (the rotated case
+  // now branches to its own local-axis resize algorithm, see the milestone doc) -- 'path' still
+  // isn't special-cased, it's still gated purely by XYWH_SHAPE_TYPES membership like rectangle/svg/image.
+  assert.match(appJs, /XYWH_SHAPE_TYPES\.has\(l\.type\)(?:&&[^)]*)?\)\{let x0=drag\.b0\.x/);
   // RS-3011 Step 2 added a drawingTool.duplicateShapeForLayer() call inside this same branch (so a
   // Design-drawn 'path' shape's Paper.js item gets cloned alongside the layer) -- this checks the
   // enduring invariant (XYWH_SHAPE_TYPES.has(copy.type) still gates an x/y offset assignment for
