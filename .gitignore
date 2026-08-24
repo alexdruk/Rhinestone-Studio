@@ -374,3 +374,10 @@ tools/scratch/rs-3030-resize-handles-verify/
 # (move/resize/undo/redo, rotation carried through on first materialization, 'path'/circle
 # unaffected), same "never a repo artifact" category as the scratch folders above
 tools/scratch/rs-3032-step-a-verify/
+# rs-3033-rotate-verify: ad hoc Playwright harness against the real app, verifying Design's own new
+# rotate handle/interaction for both 'path' and SHAPE_LIBRARY_KINDS shapes (drag direction/sign,
+# Shift-snap, pivot preservation across a second rotate-drag on an already-rotated asymmetric shape,
+# undo/redo, Project JSON export persistence, main-canvas rotation match after exiting Design, move/
+# resize on an already-rotated shape unaffected), same "never a repo artifact" category as the
+# scratch folders above
+tools/scratch/rs-3033-rotate-verify/
