@@ -365,3 +365,7 @@ tools/scratch/rs-3020-gap-precision-units-verify/
 # round-trip, Project JSON export persistence), same "never a repo artifact" category as the
 # scratch folders above
 tools/scratch/rs-3029-shape-rotation-verify/
+# rs-3030-resize-handles: ad hoc Playwright harness against the real app, verifying the anchor-
+# corner-stays-fixed invariant, edge-only-resizes-one-dimension, and a compound rotate->resize->
+# rotate sequence, same "never a repo artifact" category as the scratch folders above
+tools/scratch/rs-3030-resize-handles-verify/
