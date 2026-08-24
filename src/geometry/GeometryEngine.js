@@ -1019,6 +1019,17 @@ export class GeometryEngine {
    *   `mode: 'outline'` reads this; a freehand-drawn shape that never looped back to its start
    *   passes `false` so it's outline-sampled as an open polyline instead of gaining a synthetic
    *   closing edge across its two real endpoints (RS-3011).
+   * @param {number} [params.rotationDeg] RS-3033: whole-shape rotation in degrees, clockwise,
+   *   applied inside _pathPolygons() around the PLACED (post-xMm/yMm/widthMm/heightMm) contours'
+   *   own bounding-box center -- the same insertion point/pivot convention _shapePolygons() already
+   *   established for generateShapeLayout() (RS-3028). Default 0 (no rotation, byte-identical to
+   *   before this milestone). Normalized into [0, 360). Affects stone sampling here and, identically,
+   *   the raw polygons resolvePathPolygons() returns, since both share this same rotation step.
+   *   Does NOT rotate `regions`/`stampedStones`/`eraseDaubs`/`erasedGridPositions` -- those are placed
+   *   through their own independent computeNaturalContourTransform() call further below, unaffected
+   *   by this rotation step, matching the pre-existing "each is its own overlay" architecture; a
+   *   rotated path layer with existing Paint/Stamp/Eraser data will visibly desync until a future
+   *   milestone addresses it.
    * @returns {StoneLayout}
    */
   generatePathLayout(params = {}) {
@@ -1309,7 +1320,21 @@ export class GeometryEngine {
     // layer's unchanged widthMm/heightMm box -- stones rendering past the shape's own visible
     // boundary, a production-correctness defect (base fill IS the product), caught during this
     // step's own browser verification.
-    return this._placeNaturalContours(options.contours, options.xMm, options.yMm, options.widthMm, options.heightMm, options.naturalBoundingBoxMm);
+    const result = this._placeNaturalContours(options.contours, options.xMm, options.yMm, options.widthMm, options.heightMm, options.naturalBoundingBoxMm);
+
+    // RS-3033: shared rotation step, mirroring _shapePolygons()'s own RS-3028 rotation insertion
+    // point exactly -- rotate the already-PLACED polygons around their own bounding-box center, so
+    // this is unaffected by whichever xMm/yMm/widthMm/heightMm/naturalBoundingBoxMm branch produced
+    // them above. A 0 rotation or a null boundingBox (empty result) leaves `result` untouched.
+    if (options.rotationDeg === 0 || !result.boundingBox) {
+      return result;
+    }
+    const center = result.boundingBox.center;
+    const pivot = { cxMm: center.xMm, cyMm: center.yMm };
+    const polygons = result.polygons.map((polygon) =>
+      rotatePointsAroundCenter(polygon, options.rotationDeg, pivot).map((p) => new Point2D(p.xMm, p.yMm))
+    );
+    return { ...result, polygons, boundingBox: BoundingBox.fromPoints(polygons.flat()) };
   }
 }
 
@@ -1942,6 +1967,10 @@ function normalizePathParams(params) {
     // layer type's pre-existing behavior exactly. Only an explicit `false` (a freehand stroke that
     // never looped back to its start) opts into open-contour outline sampling.
     closed: params.closed !== false,
+    // RS-3033: rotation, applied once inside _pathPolygons() to the shape's already-placed contours
+    // -- see that method's own comment for why this is the single correct insertion point. Same
+    // normalizeRotationDeg()/assertFiniteNumber() convention normalizeShapeParams() already uses.
+    rotationDeg: normalizeRotationDeg(assertFiniteNumber(params.rotationDeg ?? 0, 'rotationDeg')),
     // RS-3014 Step 3: optional frozen natural-space reference box -- see
     // computeNaturalContourTransform()'s own doc comment for why this exists. Absent/null/undefined
     // (every layer predating this step, and every 'path' layer that has never had its contours cut)

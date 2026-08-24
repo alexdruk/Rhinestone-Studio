@@ -786,6 +786,14 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
     // every layer never cut, matching GeometryEngine.normalizePathParams()'s own
     // naturalBoundingBoxMm normalizer's safe-no-op default.
     naturalBoundingBoxMm:layer.naturalBoundingBoxMm,
+    // RS-3033: forwards a 'path' layer's rotationDeg into live/production generation -- a
+    // pre-existing wiring gap identical in shape to the regions/stampedStones/eraseDaubs ones above
+    // (l.rotationDeg was already writable via the main canvas's own rotate handle/numeric field for
+    // EVERY XYWH_SHAPE_TYPES layer including 'path', but generatePathLayout() never received it, so
+    // it was stored and drawn in the selection UI yet never actually rotated a 'path' layer's own
+    // stones). '??' fallback so a pre-RS-3033 saved project (no rotationDeg on its path layers)
+    // resolves to 0, byte-identical to before this milestone.
+    rotationDeg:layer.rotationDeg??0,
     ...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generatePathLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null}:stones}
  // RS-2000: the legacy bitmap text engine (FONT5 + generateText/sampleGlyphFill/
  // sampleGlyphStroke/line) and the legacy generateCircle/generateRect/bbox/layerBBox shape path
@@ -1529,6 +1537,19 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     l.x=boundsMm.left;l.y=boundsMm.top;l.w=boundsMm.width;l.h=boundsMm.height;
     updateAll(true);
   },
+  // RS-3033: mirrors onShapeMoved/onShapeResized's own body shape exactly -- fires once, at mouseup
+  // only, when a rotate-handle drag on Design's own Select tool completes with a non-zero net
+  // rotation (see DrawingCanvasTool.js's own onShapeRotated hooks-param doc comment for the exact
+  // contract). rotationDeg arrives already normalized into [0,360) (see that file's own onMouseUp
+  // 'rotate' branch), the same convention #rotationDeg/#shapeRotationDeg's own writeSelectedControlsToLayer()
+  // normalization already establishes for the main canvas's rotate handle.
+  onShapeRotated:(layerId,rotationDeg)=>{
+    const l=project.layers.find(x=>x.id===layerId);
+    if(!l)return;
+    commitHistory();
+    l.rotationDeg=rotationDeg;
+    updateAll(true);
+  },
   onShapeDeleted:(layerId)=>{
     const l=project.layers.find(x=>x.id===layerId);
     if(!l)return true;
@@ -1612,7 +1633,17 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     // params here so a Stones-mode erase reflects on the live Design-canvas preview immediately,
     // the same wiring-gap fix generatePathStonesLive()'s own new line makes for the production
     // pipeline.
-    erasedGridPositions:l.erasedGridPositions||[],naturalBoundingBoxMm:l.naturalBoundingBoxMm,staticXMm:l.x,staticYMm:l.y,staticWidthMm:l.w,staticHeightMm:l.h,contours:l.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),closed:l.closed!==false,...mixedSizeParamsFor(l)};
+    erasedGridPositions:l.erasedGridPositions||[],naturalBoundingBoxMm:l.naturalBoundingBoxMm,staticXMm:l.x,staticYMm:l.y,staticWidthMm:l.w,staticHeightMm:l.h,
+    // RS-3033: joins the rest of a path layer's "style" params here, the same wiring-gap fix
+    // generatePathStonesLive()'s own new `rotationDeg` line makes for the production pipeline --
+    // rebuildStoneGroupForShape() (DrawingCanvasTool.js) forwards this straight through to its own
+    // generatePathLayout() call, and (like naturalBoundingBoxMm above) also uses its mere presence
+    // to decide when the shape's STATIC box (staticXMm etc., not the shape's own live re-flattened
+    // Paper.js item bounds) must be used instead -- a rotated item's own AABB is generally NOT the
+    // unrotated placement box GeometryEngine's rotation step itself expects to rotate around (see
+    // that call site's own doc comment).
+    rotationDeg:l.rotationDeg??0,
+    contours:l.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),closed:l.closed!==false,...mixedSizeParamsFor(l)};
   },
   // Mirrors generatePathStonesLive()'s own result mapping, plus resolving the stored color id
   // (STONE_COLORS key, e.g. 'gold') to its previewColor -- the same flat swatch color

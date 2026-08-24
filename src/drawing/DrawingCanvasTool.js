@@ -206,6 +206,20 @@ const RESIZE_HANDLE_STROKE_WIDTH_PX = 1.75;
 const RESIZE_HANDLE_FILL_COLOR = '#ffffff';
 const RESIZE_HANDLE_STROKE_COLOR = '#1478ff';
 const RESIZE_MIN_DIM_MM = 2;
+// RS-3033: rotate handle's own constants, mirroring app.js's own ROTATE_HANDLE_GAP_MM/
+// ROTATE_HANDLE_RADIUS_PX/drawRotateHandle() styling exactly, for visual consistency between
+// Design's own rotate handle and the main app.js system's -- ROTATE_HANDLE_GAP_MM is a genuine mm
+// quantity (like app.js's own), used as-is; the dot's radius and hit-test tolerance follow this
+// file's own RESIZE_HANDLE_SIZE_PX/hitTestResizeHandle() convention instead (a *_PX value divided
+// by paper.view.zoom at use, so the chrome/hit target stay a constant apparent size on screen
+// regardless of zoom) -- app.js's own ROTATE_HANDLE_HIT_TOLERANCE_MM is a flat, non-zoom-adjusted
+// mm tolerance, "tuned for a different zoom range" per hitTestResizeHandle()'s own doc comment, so
+// it is deliberately not reused verbatim here, only its numeric value (4).
+const ROTATE_HANDLE_GAP_MM = 10;
+const ROTATE_HANDLE_RADIUS_PX = 7;
+const ROTATE_HANDLE_HIT_TOLERANCE_PX = 4;
+const ROTATE_HANDLE_LINE_COLOR = 'rgba(20,120,255,.55)';
+const ROTATE_HANDLE_LINE_WIDTH_PX = 1.25;
 // RS-3010 Step 2d: Design's own background grid, reproducing CanvasRenderer2D.js's drawGrid()
 // colors/intervals exactly (same minor/major distinction, same #e9eef5/#bcd6ff palette) so the
 // grid looks identical whether or not Design is active. Built once, into a dedicated paper.Layer
@@ -246,6 +260,25 @@ function handlePositionsFor(bounds) {
     { name: 's', point: bounds.bottomCenter },
     { name: 'w', point: bounds.leftCenter }
   ];
+}
+
+/**
+ * RS-3033: the rotate handle's own VISUAL position for a bounds Rectangle -- a fixed mm gap
+ * (ROTATE_HANDLE_GAP_MM) directly above its top-center, mirroring app.js's own
+ * rotateHandlePositionMm() exactly (RS-3029's own accepted simplification: the handle does NOT
+ * orbit with the shape's current rotation, it always sits above the shape's CURRENT axis-aligned
+ * bounds' top edge -- unaffected by Step C's own deferred "resize handles becoming rotation-aware"
+ * scope, since this handle was never rotation-tracking to begin with). `anchor` is the connecting
+ * line's other end (the bounds' own top-center). Position only -- NOT the rotation pivot: that is
+ * the shape's own STAMPED item.data.pivotXMm/pivotYMm (see materializeShapeFromLayer()'s own
+ * comment for why `bounds.center` cannot substitute for it once a shape is actually rotated).
+ * @param {paper.Rectangle} bounds
+ * @returns {{point:paper.Point,anchor:paper.Point}}
+ */
+function rotateHandlePositionFor(bounds) {
+  const anchor = bounds.topCenter;
+  const point = new paper.Point(anchor.x, anchor.y - ROTATE_HANDLE_GAP_MM);
+  return { point, anchor };
 }
 
 /**
@@ -435,6 +468,18 @@ function expectedShapeBoundsMm(layer) {
  * fill `layer.w`/`layer.h` unchanged, visually erasing the cut on Design's own canvas even though
  * GeometryEngine's stone generation (which does honor the freeze) renders it correctly -- a real
  * defect caught during this step's own browser verification, not a hypothetical.
+ *
+ * RS-3033: applies `layer.rotationDeg` (default 0) as a final whole-item rotation, via Paper.js's
+ * own `item.rotate(angle, center)` -- verified (see this milestone's own doc) to share this app's
+ * established clockwise/Y-down convention (GeometryEngine.js's rotatePointsAroundCenter(), app.js's
+ * rotatePointDeg()) with no sign flip needed. Pivots around the layer's own PLACED bounding-box
+ * center (layer.x + layer.w/2, layer.y + layer.h/2) -- by construction, exactly where
+ * GeometryEngine._pathPolygons()'s own new rotation step pivots too (computeLayerNaturalPlacement()
+ * above scales the natural/frozen box to exactly fill layer.x/y/w/h, the identical guarantee
+ * _placeNaturalContours() makes engine-side), so this outline chrome and the real generated stones
+ * always rotate around the same point. Always stamps `item.data.rotationDeg` with the rotation
+ * actually applied (0 for an unrotated item) -- syncFromProjectLayers()'s own reconciliation reads
+ * this back to detect a rotation-only change a plain AABB comparison could miss.
  * @param {object} layer a project.layers entry with type==='path'
  * @returns {paper.Path|paper.CompoundPath|null}
  */
@@ -459,19 +504,37 @@ function materializeShapeFromLayer(layer) {
     return path;
   }
 
+  let item;
   if (contours.length === 1) {
-    const item = buildContourPath(contours[0]);
+    item = buildContourPath(contours[0]);
     item.strokeColor = STROKE_COLOR;
     item.strokeWidth = STROKE_WIDTH_PX / paper.view.zoom;
-    return item;
+  } else {
+    const compound = new paper.CompoundPath({
+      strokeColor: STROKE_COLOR,
+      strokeWidth: STROKE_WIDTH_PX / paper.view.zoom
+    });
+    for (const contour of contours) compound.addChild(buildContourPath(contour));
+    item = compound;
   }
 
-  const compound = new paper.CompoundPath({
-    strokeColor: STROKE_COLOR,
-    strokeWidth: STROKE_WIDTH_PX / paper.view.zoom
-  });
-  for (const contour of contours) compound.addChild(buildContourPath(contour));
-  return compound;
+  const rotationDeg = layer.rotationDeg || 0;
+  const pivot = new paper.Point(layer.x + layer.w / 2, layer.y + layer.h / 2);
+  if (rotationDeg) {
+    item.rotate(rotationDeg, pivot);
+  }
+  item.data.rotationDeg = rotationDeg;
+  // RS-3033: the TRUE rotation pivot (this layer's own placement-box center), stamped separately
+  // from rotationDeg -- Select's own rotate-drag (onMouseDown) needs this to correctly pivot a
+  // SECOND rotate-drag on an already-rotated, non-symmetric shape. shape.item.bounds' own center
+  // cannot substitute for this once a shape is rotated: an axis-aligned bounding box's center
+  // generally drifts away from the true rotation pivot for any non-point-symmetric contour (a
+  // circle/square is point-symmetric and would happen to still agree, but an arrow, an L-shape, or
+  // any off-center natural contour would not) -- only a MOVE or RESIZE (which re-materializes
+  // through here again) ever changes this value; rotation itself never does.
+  item.data.pivotXMm = pivot.x;
+  item.data.pivotYMm = pivot.y;
+  return item;
 }
 
 /**
@@ -520,19 +583,33 @@ function materializeShapeLibraryItemFromLayer(layer, resolvePolygons) {
     return path;
   }
 
+  let item;
   if (polygons.length === 1) {
-    const item = buildContourPath(polygons[0]);
+    item = buildContourPath(polygons[0]);
     item.strokeColor = STROKE_COLOR;
     item.strokeWidth = STROKE_WIDTH_PX / paper.view.zoom;
-    return item;
+  } else {
+    const compound = new paper.CompoundPath({
+      strokeColor: STROKE_COLOR,
+      strokeWidth: STROKE_WIDTH_PX / paper.view.zoom
+    });
+    for (const polygon of polygons) compound.addChild(buildContourPath(polygon));
+    item = compound;
   }
-
-  const compound = new paper.CompoundPath({
-    strokeColor: STROKE_COLOR,
-    strokeWidth: STROKE_WIDTH_PX / paper.view.zoom
-  });
-  for (const polygon of polygons) compound.addChild(buildContourPath(polygon));
-  return compound;
+  // RS-3033: unlike materializeShapeFromLayer()'s own rotation step, this shape's rotation is
+  // already baked directly into `polygons`' own point positions (resolvePolygons() -- app.js's
+  // resolveShapeLibraryPolygons hook -- calls GeometryEngine.resolveShapePolygons(), whose own
+  // RS-3028 rotation step runs before this function ever sees the points), so no separate
+  // item.rotate() call is needed here. Still stamps item.data.rotationDeg/pivotXMm/pivotYMm, the
+  // same bookkeeping materializeShapeFromLayer() now does (see that function's own comment for why
+  // the pivot -- this layer's own placement-box center, distinct from the item's own live,
+  // rotation-drifted AABB center -- must be tracked explicitly), so Select's own rotate-drag
+  // (onMouseDown) can read a SHAPE_LIBRARY_KINDS shape's starting rotation/pivot the identical way
+  // it does for a 'path' shape, rather than wrongly assuming every drag starts from 0/the wrong point.
+  item.data.rotationDeg = layer.rotationDeg || 0;
+  item.data.pivotXMm = layer.x + layer.w / 2;
+  item.data.pivotYMm = layer.y + layer.h / 2;
+  return item;
 }
 
 /**
@@ -564,7 +641,7 @@ function materializeShapeLibraryItemFromLayer(layer, resolvePolygons) {
  * (shouldn't happen post-Step-1, but mirrors this file's existing null-layerId guards) is skipped,
  * never passed through as undefined.
  * @param {HTMLCanvasElement} canvasEl
- * @param {{getStoneDefaults?:()=>{stoneSize?:number,gap?:number,color?:string}, onShapeCommitted?:(layer:object)=>void, openHistorySession?:()=>void, closeHistorySession?:()=>void, onShapeMoved?:(layerId:string,dxMm:number,dyMm:number)=>void, onShapeResized?:(layerId:string,boundsMm:{left:number,top:number,width:number,height:number})=>void, onShapeDeleted?:(layerId:string)=>(boolean|void), onSelectionChanged?:(layerIds:string[])=>void, onViewportChanged?:()=>void, onPaintStroke?:(lassoPolygons:{xMm:number,yMm:number}[][])=>void, onStampPlace?:(placement:{xMm:number,yMm:number,layerId:string|null})=>void, onTracePlace?:(placements:{xMm:number,yMm:number}[],layerId:string,droppedCount?:number)=>void, onEraseSweep?:(daubsAbsoluteMm:{xMm:number,yMm:number}[],layerId:string,corridorPolygonsAbsoluteMm:{xMm:number,yMm:number}[][],mode:('stones'|'outline'))=>void, resolveSelectionTarget?:(polygonAbsoluteMm:{xMm:number,yMm:number}[][])=>({layerId:string,contours:{xMm:number,yMm:number}[][]}|{precisionError:true}|null), hitTestRegion?:(pointAbsoluteMm:{xMm:number,yMm:number},marginMm:number)=>({layerId:string,regionId:string,polygon:{xMm:number,yMm:number}[]}|null), onActiveSelectionChanged?:()=>void, isPointInActiveSelection?:(pointAbsoluteMm:{xMm:number,yMm:number},selection:*)=>boolean, onStampRejected?:()=>void, onTraceRejected?:()=>void, onSelectionTargetPrecisionError?:()=>void}} [hooks] onShapeDeleted returning exactly `false` means the deletion was blocked (e.g. a last-layer guard) -- the shape stays in `board.shapes` too, everything else treats a non-`false` return as success. RS-3011 Step 10b: onPaintStroke(lassoPolygons) fires once a Paint lasso release produces a usable stroke (>= PAINT_MIN_LASSO_POINTS) -- lassoPolygons is exactly one closed ring, absolute project-mm, this module's own coordinate space (Paper.js project units already equal this app's millimeters, per this file's own header comment). Target selection, region creation, and every project.layers mutation happen entirely in app.js -- this hook is this module's only involvement in Paint beyond the pointer interaction and live preview. RS-3011 Step 12: onStampPlace(placement) fires once per Stamp click -- xMm/yMm is the click point, absolute project-mm, this module's own coordinate space; layerId is the project.layers id resolved via resolveStampTargetLayerId() (the SAME hitTestShapeId() Select's own click-to-pick-a-shape branch uses), or null if the click hit no shape. Passing the already-resolved layerId (rather than a bare point, unlike onPaintStroke) avoids a second, duplicate hit-test implementation living in app.js -- app.js still owns the absolute-to-natural-space coordinate conversion and every project.layers mutation, discarding silently when layerId is null, mirroring Paint's own "no target -> discard" precedent. RS-3011 Step 11: onTracePlace(placements, layerId) fires once per committed Trace drag that resolved a real target AND produced at least one spaced point -- placements is the full list of stones to place, absolute project-mm, this module's own coordinate space, already spaced by src/geometry/lineStampSpacing.js's placeStonesAlongPath(); layerId is always a real project.layers id here (never null -- a null/no-target resolution discards the whole drag silently before this hook is ever called, unlike onStampPlace's own "always call, layerId may be null" contract, since there is no per-point ghost-preview equivalent for Trace that would need the null case). app.js still owns the absolute-to-natural-space conversion and every project.layers mutation, mirroring onStampPlace's own architecture split, just plural. RS-3011 Step 13: onEraseSweep(daubsAbsoluteMm, layerId) fires once per committed Eraser click/drag sweep that resolved a real target -- daubsAbsoluteMm is every buffered point from the gesture (one for a plain click, one per TRACE_MIN_SAMPLE_DISTANCE_MM-thinned sample along a drag, same thinning as Trace's own placements), absolute project-mm, this module's own coordinate space, NOT yet spaced/filtered in any way (a daub is a raw brush touch, not a stone placement); layerId is always a real project.layers id here, same "never null" contract as onTracePlace's own (resolved via resolveEraserTargetLayerId() -- RS-3014 Step 5: per-point resolution against every buffered point in drag order, first real match wins, NOT Trace's own single-aggregate-bounding-box-center approach, since an edge-hugging Eraser drag's own aggregate center too easily sits outside the target shape even when the sweep itself clearly touches it; degenerates correctly to the click point itself for a single-point click). This module deliberately has no opinion on daub radius -- that's app.js's own eraserSettings.radiusMm (a tool setting, not read from any layer field), attached per point only once app.js owns the coordinate conversion, mirroring onTracePlace/onStampPlace's own architecture split. RS-3014 Step 3 (Dual-mode Eraser): corridorPolygonsAbsoluteMm is the SAME sweep's buffered points already turned into one or more closed, filled rings via buildEraserCorridorPolygons() (capsule-per-segment, unioned with Paper.js's own PathItem#unite()) -- absolute project-mm, this module's own coordinate space, same convention as daubsAbsoluteMm itself; only meaningful to Outline mode (app.js's own combineShapeSources() cut), a 'stones' gesture ignores it and keeps using daubsAbsoluteMm exactly as before. `mode` is this module's own eraserMode value (see setEraserMode()) captured at the START of this gesture (onMouseDown), NOT read live from app.js's eraserSettings.mode at the moment this hook fires -- a mode switch mid-drag must not retroactively change what an already-in-flight sweep does, so app.js must branch on the mode this parameter reports, never its own live eraserSettings.mode, when deciding how to apply a given sweep. RS-3013 Step 1: resolveSelectionTarget(polygonAbsoluteMm) is Select's rectangle-drag/Lasso's own drag calling app.js's shared resolvePaintTargetTwoPass() (the same selectPaintTarget() choreography onPaintStroke's own architecture already runs) to find which 'path' layer, if any, the drawn rectangle/lasso overlaps most -- returns {layerId, contours} or null, mirroring onPaintStroke's own "no target -> discard" contract; this module stores the result as an in-memory activeSelection draft, never a real region (that stays Paint's job alone). Bugfix: a third possible return shape, {precisionError:true} (app.js's own PAINT_TARGET_PRECISION_ERROR sentinel), fires when the stroke/rectangle DID overlap a candidate but selectPaintTarget()'s own boolean intersection couldn't be computed at a safe precision -- this module's own onMouseUp 'selectRect'/'lasso' branches duck-type on `.precisionError` and call the new onSelectionTargetPrecisionError() hook instead of treating it as either a real target or a genuine no-overlap null. hitTestRegion(pointAbsoluteMm, marginMm) is Select/Lasso's own click-to-select-an-existing-region hit-test -- app.js delegates to hitTestPathLayerRegion() (src/geometry/PaintRegionSelection.js) since a region lives in project.layers[].regions, data this module never touches directly; marginMm is already converted from screen-px by this module's own REGION_HIT_MARGIN_PX / paper.view.zoom. RS-3013 Step 2: onRegionMoved(layerId, regionId, dxMm, dyMm) fires once, at mouseup only, when a real (non-zero-offset) drag on a selected region's own footprint commits -- dxMm/dyMm is the drag's total offset, absolute project-mm; app.js translates the region's current polygon by that offset and writes it back through the SAME absolutePolygonsToNaturalSpace() (src/geometry/PaintRegionSelection.js) onPaintStroke's own region creation already uses. Returns the region's updated absolute-mm polygon on success (this module rebuilds activeSelectionItem's outline from that returned polygon, never from wherever the live per-frame preview translation left it, so the two can't drift), or null if the region/layer no longer exists. RS-3013 Step 5: onActiveSelectionChanged() fires with no arguments every time setActiveSelection() (the one place `activeSelection` is ever reassigned) settles on a new value -- a region click, a region losing selection, a draft rect/lasso selection, or a clear. Not fired during a live region-move drag's own per-frame preview (that path mutates activeSelectionItem directly via Paper.js translate(), bypassing setActiveSelection() entirely, per that function's own doc comment) -- app.js's Inspector-resync handler can treat every firing as a discrete, settled change worth reacting to. RS-3012 Step 1: isPointInActiveSelection(pointAbsoluteMm, selection) is Stamp/Trace's own selection-boundary test, called with the click/drag point (absolute project-mm, this module's own coordinate space) and this module's own live `activeSelection` value (passed through explicitly rather than re-read by app.js, since the caller -- this module -- already has it in scope); returns true (no constraint) for a null selection, and for a real one resolves EITHER a 'region' selection's current absolute polygon (project.layers[].regions data, resolved app.js-side the same way hitTestRegion/onRegionMoved above already do) OR a 'draft' selection's own boundsOrContour directly (already absolute-mm, no project.layers lookup needed) -- a hard interior test, no margin/tolerance, unlike hitTestRegion's own forgiving click-tolerance. onStampRejected() fires in place of onStampPlace when a Stamp click resolves outside the active selection's own boundary -- no history entry, no stone placed; app.js turns this into a status message. onTraceRejected() fires in place of onTracePlace when EVERY point of a committed Trace drag's own spaced placements list falls outside the active selection's own boundary (this module filters placements itself before calling onTracePlace, so a PARTIAL rejection instead reaches onTracePlace as a shorter placements list plus the new droppedCount 3rd argument above) -- no history entry, no stones placed; app.js turns this into a status message distinct from today's pre-existing, message-less "fewer than 2 buffered points" discard. Bugfix: onSelectionTargetPrecisionError() fires in place of resolveSelectionTarget()'s own normal result-handling in the 'selectRect'/'lasso' onMouseUp branches when that call returns the {precisionError:true} sentinel described above -- no draft selection created, no history entry; app.js turns this into a status message distinct from both onStampRejected/onTraceRejected's own and the existing "no target -> discard" case.
+ * @param {{getStoneDefaults?:()=>{stoneSize?:number,gap?:number,color?:string}, onShapeCommitted?:(layer:object)=>void, openHistorySession?:()=>void, closeHistorySession?:()=>void, onShapeMoved?:(layerId:string,dxMm:number,dyMm:number)=>void, onShapeResized?:(layerId:string,boundsMm:{left:number,top:number,width:number,height:number})=>void, onShapeRotated?:(layerId:string,rotationDeg:number)=>void, onShapeDeleted?:(layerId:string)=>(boolean|void), onSelectionChanged?:(layerIds:string[])=>void, onViewportChanged?:()=>void, onPaintStroke?:(lassoPolygons:{xMm:number,yMm:number}[][])=>void, onStampPlace?:(placement:{xMm:number,yMm:number,layerId:string|null})=>void, onTracePlace?:(placements:{xMm:number,yMm:number}[],layerId:string,droppedCount?:number)=>void, onEraseSweep?:(daubsAbsoluteMm:{xMm:number,yMm:number}[],layerId:string,corridorPolygonsAbsoluteMm:{xMm:number,yMm:number}[][],mode:('stones'|'outline'))=>void, resolveSelectionTarget?:(polygonAbsoluteMm:{xMm:number,yMm:number}[][])=>({layerId:string,contours:{xMm:number,yMm:number}[][]}|{precisionError:true}|null), hitTestRegion?:(pointAbsoluteMm:{xMm:number,yMm:number},marginMm:number)=>({layerId:string,regionId:string,polygon:{xMm:number,yMm:number}[]}|null), onActiveSelectionChanged?:()=>void, isPointInActiveSelection?:(pointAbsoluteMm:{xMm:number,yMm:number},selection:*)=>boolean, onStampRejected?:()=>void, onTraceRejected?:()=>void, onSelectionTargetPrecisionError?:()=>void}} [hooks] onShapeDeleted returning exactly `false` means the deletion was blocked (e.g. a last-layer guard) -- the shape stays in `board.shapes` too, everything else treats a non-`false` return as success. RS-3011 Step 10b: onPaintStroke(lassoPolygons) fires once a Paint lasso release produces a usable stroke (>= PAINT_MIN_LASSO_POINTS) -- lassoPolygons is exactly one closed ring, absolute project-mm, this module's own coordinate space (Paper.js project units already equal this app's millimeters, per this file's own header comment). Target selection, region creation, and every project.layers mutation happen entirely in app.js -- this hook is this module's only involvement in Paint beyond the pointer interaction and live preview. RS-3011 Step 12: onStampPlace(placement) fires once per Stamp click -- xMm/yMm is the click point, absolute project-mm, this module's own coordinate space; layerId is the project.layers id resolved via resolveStampTargetLayerId() (the SAME hitTestShapeId() Select's own click-to-pick-a-shape branch uses), or null if the click hit no shape. Passing the already-resolved layerId (rather than a bare point, unlike onPaintStroke) avoids a second, duplicate hit-test implementation living in app.js -- app.js still owns the absolute-to-natural-space coordinate conversion and every project.layers mutation, discarding silently when layerId is null, mirroring Paint's own "no target -> discard" precedent. RS-3011 Step 11: onTracePlace(placements, layerId) fires once per committed Trace drag that resolved a real target AND produced at least one spaced point -- placements is the full list of stones to place, absolute project-mm, this module's own coordinate space, already spaced by src/geometry/lineStampSpacing.js's placeStonesAlongPath(); layerId is always a real project.layers id here (never null -- a null/no-target resolution discards the whole drag silently before this hook is ever called, unlike onStampPlace's own "always call, layerId may be null" contract, since there is no per-point ghost-preview equivalent for Trace that would need the null case). app.js still owns the absolute-to-natural-space conversion and every project.layers mutation, mirroring onStampPlace's own architecture split, just plural. RS-3011 Step 13: onEraseSweep(daubsAbsoluteMm, layerId) fires once per committed Eraser click/drag sweep that resolved a real target -- daubsAbsoluteMm is every buffered point from the gesture (one for a plain click, one per TRACE_MIN_SAMPLE_DISTANCE_MM-thinned sample along a drag, same thinning as Trace's own placements), absolute project-mm, this module's own coordinate space, NOT yet spaced/filtered in any way (a daub is a raw brush touch, not a stone placement); layerId is always a real project.layers id here, same "never null" contract as onTracePlace's own (resolved via resolveEraserTargetLayerId() -- RS-3014 Step 5: per-point resolution against every buffered point in drag order, first real match wins, NOT Trace's own single-aggregate-bounding-box-center approach, since an edge-hugging Eraser drag's own aggregate center too easily sits outside the target shape even when the sweep itself clearly touches it; degenerates correctly to the click point itself for a single-point click). This module deliberately has no opinion on daub radius -- that's app.js's own eraserSettings.radiusMm (a tool setting, not read from any layer field), attached per point only once app.js owns the coordinate conversion, mirroring onTracePlace/onStampPlace's own architecture split. RS-3014 Step 3 (Dual-mode Eraser): corridorPolygonsAbsoluteMm is the SAME sweep's buffered points already turned into one or more closed, filled rings via buildEraserCorridorPolygons() (capsule-per-segment, unioned with Paper.js's own PathItem#unite()) -- absolute project-mm, this module's own coordinate space, same convention as daubsAbsoluteMm itself; only meaningful to Outline mode (app.js's own combineShapeSources() cut), a 'stones' gesture ignores it and keeps using daubsAbsoluteMm exactly as before. `mode` is this module's own eraserMode value (see setEraserMode()) captured at the START of this gesture (onMouseDown), NOT read live from app.js's eraserSettings.mode at the moment this hook fires -- a mode switch mid-drag must not retroactively change what an already-in-flight sweep does, so app.js must branch on the mode this parameter reports, never its own live eraserSettings.mode, when deciding how to apply a given sweep. RS-3013 Step 1: resolveSelectionTarget(polygonAbsoluteMm) is Select's rectangle-drag/Lasso's own drag calling app.js's shared resolvePaintTargetTwoPass() (the same selectPaintTarget() choreography onPaintStroke's own architecture already runs) to find which 'path' layer, if any, the drawn rectangle/lasso overlaps most -- returns {layerId, contours} or null, mirroring onPaintStroke's own "no target -> discard" contract; this module stores the result as an in-memory activeSelection draft, never a real region (that stays Paint's job alone). Bugfix: a third possible return shape, {precisionError:true} (app.js's own PAINT_TARGET_PRECISION_ERROR sentinel), fires when the stroke/rectangle DID overlap a candidate but selectPaintTarget()'s own boolean intersection couldn't be computed at a safe precision -- this module's own onMouseUp 'selectRect'/'lasso' branches duck-type on `.precisionError` and call the new onSelectionTargetPrecisionError() hook instead of treating it as either a real target or a genuine no-overlap null. hitTestRegion(pointAbsoluteMm, marginMm) is Select/Lasso's own click-to-select-an-existing-region hit-test -- app.js delegates to hitTestPathLayerRegion() (src/geometry/PaintRegionSelection.js) since a region lives in project.layers[].regions, data this module never touches directly; marginMm is already converted from screen-px by this module's own REGION_HIT_MARGIN_PX / paper.view.zoom. RS-3013 Step 2: onRegionMoved(layerId, regionId, dxMm, dyMm) fires once, at mouseup only, when a real (non-zero-offset) drag on a selected region's own footprint commits -- dxMm/dyMm is the drag's total offset, absolute project-mm; app.js translates the region's current polygon by that offset and writes it back through the SAME absolutePolygonsToNaturalSpace() (src/geometry/PaintRegionSelection.js) onPaintStroke's own region creation already uses. Returns the region's updated absolute-mm polygon on success (this module rebuilds activeSelectionItem's outline from that returned polygon, never from wherever the live per-frame preview translation left it, so the two can't drift), or null if the region/layer no longer exists. RS-3013 Step 5: onActiveSelectionChanged() fires with no arguments every time setActiveSelection() (the one place `activeSelection` is ever reassigned) settles on a new value -- a region click, a region losing selection, a draft rect/lasso selection, or a clear. Not fired during a live region-move drag's own per-frame preview (that path mutates activeSelectionItem directly via Paper.js translate(), bypassing setActiveSelection() entirely, per that function's own doc comment) -- app.js's Inspector-resync handler can treat every firing as a discrete, settled change worth reacting to. RS-3012 Step 1: isPointInActiveSelection(pointAbsoluteMm, selection) is Stamp/Trace's own selection-boundary test, called with the click/drag point (absolute project-mm, this module's own coordinate space) and this module's own live `activeSelection` value (passed through explicitly rather than re-read by app.js, since the caller -- this module -- already has it in scope); returns true (no constraint) for a null selection, and for a real one resolves EITHER a 'region' selection's current absolute polygon (project.layers[].regions data, resolved app.js-side the same way hitTestRegion/onRegionMoved above already do) OR a 'draft' selection's own boundsOrContour directly (already absolute-mm, no project.layers lookup needed) -- a hard interior test, no margin/tolerance, unlike hitTestRegion's own forgiving click-tolerance. onStampRejected() fires in place of onStampPlace when a Stamp click resolves outside the active selection's own boundary -- no history entry, no stone placed; app.js turns this into a status message. onTraceRejected() fires in place of onTracePlace when EVERY point of a committed Trace drag's own spaced placements list falls outside the active selection's own boundary (this module filters placements itself before calling onTracePlace, so a PARTIAL rejection instead reaches onTracePlace as a shorter placements list plus the new droppedCount 3rd argument above) -- no history entry, no stones placed; app.js turns this into a status message distinct from today's pre-existing, message-less "fewer than 2 buffered points" discard. Bugfix: onSelectionTargetPrecisionError() fires in place of resolveSelectionTarget()'s own normal result-handling in the 'selectRect'/'lasso' onMouseUp branches when that call returns the {precisionError:true} sentinel described above -- no draft selection created, no history entry; app.js turns this into a status message distinct from both onStampRejected/onTraceRejected's own and the existing "no target -> discard" case.
  */
 export function createDrawingTool(canvasEl, hooks = {}) {
   const {
@@ -574,6 +651,11 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     closeHistorySession = () => {},
     onShapeMoved = () => {},
     onShapeResized = () => {},
+    // RS-3033: fires once, at mouseup only, when a rotate-handle drag on Design's own Select tool
+    // completes with a non-zero net rotation -- see this function's own hooks-param doc comment
+    // above for the exact contract. Mirrors onShapeMoved/onShapeResized's own one-hook-call-per-
+    // completed-drag convention exactly.
+    onShapeRotated = () => {},
     onShapeDeleted = () => {},
     onSelectionChanged = () => {},
     // RS-3026: fires every time applyViewport() runs (zoom change, pan, initial entry, resize) --
@@ -817,6 +899,21 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   let resizeHandle = null;
   let resizeShapeId = null;
   let resizeStartBounds = null;
+  // RS-3033: the live rotate handle chrome (a dashed connecting line + a dot, mirroring app.js's own
+  // drawRotateHandle() pair) -- rebuilt by updateRotateHandleItem() under the exact same
+  // mode==='select'/single-selection gate resizeHandleItems above uses, called from inside
+  // updateResizeHandles() itself (see that function's own comment) so the two chrome sets can never
+  // drift out of sync. rotateShapeId/rotateCenter/rotateStartPointerAngleDeg/rotateStartRotationDeg/
+  // rotateAppliedDeg mirror resizeHandle/resizeShapeId/resizeStartBounds's own role -- non-null only
+  // while interactionKind === 'rotate'. rotateAppliedDeg tracks the TOTAL angle already applied to
+  // the live Paper.js item via item.rotate() so far this drag (that method takes an INCREMENTAL
+  // angle, not an absolute one -- see onMouseDrag's own 'rotate' branch for why this is needed).
+  let rotateHandleItems = [];
+  let rotateShapeId = null;
+  let rotateCenter = null;
+  let rotateStartPointerAngleDeg = 0;
+  let rotateStartRotationDeg = 0;
+  let rotateAppliedDeg = 0;
   // RS-3010 Step 2e: move's own grid-snap state -- event.delta (used by the translate() loop below)
   // is incremental per-frame, too small to snap against a 5mm grid directly. Instead this tracks an
   // absolute anchor (the specific shape clicked, moveAnchorShapeId) from its pre-drag bounds
@@ -1078,6 +1175,24 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   }
 
   /**
+   * Whether `point` lands on the rotate handle for the single currently-selected shape -- same
+   * single-selection-only gate/radial-distance pattern as hitTestResizeHandle() just below, checked
+   * FIRST in onMouseDown (before both hitTestResizeHandle() and the plain shape hit-test), mirroring
+   * app.js's own rotateHandleHitTest()-checked-first ordering in its hitTest(), so a rotate-drag is
+   * never misinterpreted as a resize or move.
+   * @param {paper.Point} point
+   * @returns {boolean}
+   */
+  function hitTestRotateHandle(point) {
+    if (mode !== 'select' || selectedIds.size !== 1) return false;
+    const shape = board.getShape([...selectedIds][0]);
+    if (!shape) return false;
+    const tolerance = ROTATE_HANDLE_HIT_TOLERANCE_PX / paper.view.zoom;
+    const { point: handlePoint } = rotateHandlePositionFor(shape.item.bounds);
+    return point.getDistance(handlePoint) <= tolerance;
+  }
+
+  /**
    * The handle name (e.g. 'nw', 'e') under `point` for the single currently-selected shape, or
    * null -- only ever relevant in 'select' mode with exactly one shape selected (mirrors
    * drawSelectionBox()'s own single-selection-only showHandles rule). Tolerance matches
@@ -1300,12 +1415,46 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   }
 
   /**
+   * Rebuilds `rotateHandleItems` from scratch: removes whatever chrome currently exists, then --
+   * only if `mode === 'select'` and exactly one shape is selected -- adds a dashed connecting line
+   * plus a dot at the shape's current rotateHandlePositionFor() position, mirroring app.js's own
+   * drawRotateHandle() pair exactly. Self-contained (clears, gates, and rebuilds independently) so
+   * it is safe to call unconditionally from updateResizeHandles() below regardless of that
+   * function's own early returns -- see that function's own comment for why the two are linked.
+   */
+  function updateRotateHandleItem() {
+    for (const item of rotateHandleItems) item.remove();
+    rotateHandleItems = [];
+    if (mode !== 'select' || selectedIds.size !== 1) return;
+    const shape = board.getShape([...selectedIds][0]);
+    if (!shape) return;
+    const { point, anchor } = rotateHandlePositionFor(shape.item.bounds);
+    const line = new paper.Path.Line(anchor, point);
+    line.strokeColor = ROTATE_HANDLE_LINE_COLOR;
+    line.strokeWidth = ROTATE_HANDLE_LINE_WIDTH_PX / paper.view.zoom;
+    line.dashArray = [3 / paper.view.zoom, 3 / paper.view.zoom];
+    const dot = new paper.Path.Circle(point, ROTATE_HANDLE_RADIUS_PX / paper.view.zoom);
+    dot.fillColor = RESIZE_HANDLE_FILL_COLOR;
+    dot.strokeColor = RESIZE_HANDLE_STROKE_COLOR;
+    dot.strokeWidth = RESIZE_HANDLE_STROKE_WIDTH_PX / paper.view.zoom;
+    rotateHandleItems = [line, dot];
+  }
+
+  /**
    * Rebuilds `resizeHandleItems` from scratch: removes whatever handle Items currently exist,
    * then -- only if `mode === 'select'` and exactly one shape is selected -- adds 8 small square
    * Path.Rectangle Items at that shape's current bounds' handle positions (handlePositionsFor).
    * Called wherever selection or the selected shape's geometry can change.
+   *
+   * RS-3033: also rebuilds the rotate handle (updateRotateHandleItem()) on every call, rather than
+   * duplicating a second call at each of this function's own ~20 call sites -- the two chrome sets
+   * (resize handles, rotate handle) must always be shown/hidden/repositioned together (identical
+   * mode==='select'/single-selection gate, identical "selection or the selected shape's geometry
+   * changed" trigger), so folding the rotate rebuild in here is the only way to guarantee they can
+   * never drift out of sync one call site at a time.
    */
   function updateResizeHandles() {
+    updateRotateHandleItem();
     for (const item of resizeHandleItems) item.remove();
     resizeHandleItems = [];
     if (mode !== 'select' || selectedIds.size !== 1) return;
@@ -1534,6 +1683,8 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     erasePoints = [];
     for (const item of resizeHandleItems) item.remove();
     resizeHandleItems = [];
+    for (const item of rotateHandleItems) item.remove();
+    rotateHandleItems = [];
     // RS-3011 resize-perf fix: a resize can be interrupted here (Escape/mode-switch/exit) before
     // onMouseUp's own restore ever runs -- without this, the Group hidden at resize-start (or by a
     // rebuild while resizing) would stay permanently invisible. Mirrors onMouseUp's own restore,
@@ -1542,9 +1693,26 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       const stoneGroup = stoneGroups.get(resizeShapeId);
       if (stoneGroup) stoneGroup.visible = true;
     }
+    // RS-3033: mirrors the resize restore just above -- a rotate can be interrupted here too, before
+    // onMouseUp's own restore ever runs. Deliberately does NOT try to revert shape.item's own
+    // partial live rotation back to rotateStartRotationDeg (the resize precedent above doesn't
+    // revert its own in-progress bounds change either) -- the item is left wherever the interrupted
+    // drag last rotated it, visually out of sync with the still-unchanged project.layers value,
+    // until the next external syncFromProjectLayers() reconciliation tick corrects it (same accepted
+    // "next tick fixes any drift" pattern the resize case already relies on -- see that branch's own
+    // comment two lines up).
+    if (interactionKind === 'rotate' && rotateShapeId) {
+      const stoneGroup = stoneGroups.get(rotateShapeId);
+      if (stoneGroup) stoneGroup.visible = true;
+    }
     resizeHandle = null;
     resizeShapeId = null;
     resizeStartBounds = null;
+    rotateShapeId = null;
+    rotateCenter = null;
+    rotateStartPointerAngleDeg = 0;
+    rotateStartRotationDeg = 0;
+    rotateAppliedDeg = 0;
     moveStartPoint = null;
     moveAnchorShapeId = null;
     moveAnchorStartBounds = null;
@@ -1721,7 +1889,20 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     // preview no longer tracks a live in-progress resize drag frame-by-frame (it lags until the
     // drag commits and layer.w/h actually update) -- accepted rather than "fixed" back to live
     // tracking, since that's exactly what reintroduces the double-shrink/repositioning bug above.
-    const useStaticBox = Boolean(styleParams.naturalBoundingBoxMm);
+    // RS-3033: a rotated layer (styleParams.rotationDeg truthy) is the second reason to prefer the
+    // static box -- `flattened.xMm/widthMm` etc. is the LIVE item's own AXIS-ALIGNED bounding box,
+    // which for a rotated item is generally NOT the same box GeometryEngine's own rotation step
+    // pivots around (it rotates the UNROTATED placed contours around THEIR OWN center -- see
+    // GeometryEngine._pathPolygons()'s own rotation-step comment); feeding it the rotated AABB
+    // instead would scale the unrotated natural contour to fill that larger/differently-shaped box,
+    // shearing it into the wrong shape, the identical failure mode RS-3032 Step A already
+    // identified for a naive `.bounds =` stretch of an already-rotated SHAPE_LIBRARY_KINDS item.
+    // This module never live-rotates the stone Group frame-by-frame during an in-progress rotate
+    // drag (it stays hidden instead -- see onMouseDown's own 'rotate' branch comment for why), so
+    // there is no live-tracking benefit being traded away here, unlike the resize case above: by
+    // the time this function is ever called for a rotated shape, `shape.item` is always either
+    // freshly re-materialized (already correctly rotated) or about to be, never mid-rotate-drag.
+    const useStaticBox = Boolean(styleParams.naturalBoundingBoxMm) || Boolean(styleParams.rotationDeg);
     const params = {
       contours: styleParams.contours,
       layerId,
@@ -1951,6 +2132,54 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         return;
       }
       if (mode === 'select') {
+        // RS-3033: the rotate handle must win over BOTH the resize-handle check just below AND the
+        // plain shape hit-test further down, mirroring app.js's own rotateHandleHitTest()-checked-
+        // first ordering in its hitTest() -- so a rotate-drag is never misinterpreted as a resize or
+        // move. rotateStartRotationDeg reads shape.item.data.rotationDeg (stamped by
+        // materializeShapeFromLayer() and kept in sync by syncFromProjectLayers()' own reconciliation
+        // -- see those functions' own comments) rather than reading project.layers directly, since
+        // this file never touches project state itself (this module's own architecture, per its
+        // header comment) -- app.js is the one place rotationDeg is ever written.
+        if (hitTestRotateHandle(event.point)) {
+          const shape = board.getShape([...selectedIds][0]);
+          interactionKind = 'rotate';
+          rotateShapeId = shape.id;
+          // RS-3033: pivots around the shape's own STAMPED placement-box center (item.data.pivotXMm/
+          // pivotYMm -- see materializeShapeFromLayer()/materializeShapeLibraryItemFromLayer()'s own
+          // comments for why), NOT rotateHandlePositionFor(shape.item.bounds)'s own `center` -- that
+          // is the shape's CURRENT (possibly already-rotated) axis-aligned bounding box's center,
+          // correct only for a shape's FIRST rotate-drag. Rotating a second time from an already-
+          // rotated, non-symmetric shape would otherwise pivot around the wrong point (the rotated
+          // AABB's center generally drifts away from the true placement-box center), producing a
+          // live preview that visibly snaps to a different position the instant onShapeRotated()'s
+          // own re-materialize commits the CORRECT pivot. Falls back to the current bounds' center
+          // for an item never materialized through either of those two functions (a shape drawn via
+          // Rect/Ellipse/Slot/Polygon that has never yet been rotated, moved, or resized -- always
+          // still axis-aligned/unrotated at that point, so its current bounds' center IS correct).
+          const shapeBounds = shape.item.bounds;
+          rotateCenter = (shape.item.data.pivotXMm !== undefined && shape.item.data.pivotYMm !== undefined)
+            ? new paper.Point(shape.item.data.pivotXMm, shape.item.data.pivotYMm)
+            : shapeBounds.center;
+          // Same clockwise-from-up atan2(dx,-dy) convention app.js's own rotate-drag-start uses --
+          // pointermove/onMouseDrag below only ever needs the *change* in pointer angle from this
+          // reference, added to the shape's own starting rotationDeg, so the handle tracks the
+          // pointer exactly with no jump at drag-start.
+          const startVector = event.point.subtract(rotateCenter);
+          rotateStartPointerAngleDeg = Math.atan2(startVector.x, -startVector.y) * 180 / Math.PI;
+          rotateStartRotationDeg = shape.item.data.rotationDeg || 0;
+          rotateAppliedDeg = 0;
+          // Same resize-perf precedent as the 'resize' branch just below: hide the stone Group for
+          // the duration of the drag rather than attempting a live, per-frame-accurate rebuild --
+          // unlike a resize, a live rotate cannot cheaply approximate the real GeometryEngine output
+          // via a rigid transform of the EXISTING stone dots either (fill-mode sampling is grid-based,
+          // not rotation-equivariant -- rotating the already-sampled dots would not match what
+          // GeometryEngine actually produces for the rotated contour), so a hidden Group for the
+          // drag's duration, restored + fully rebuilt once at mouseup, is the only cheap AND correct
+          // option, exactly like resize's own choice below (just for a different reason).
+          const stoneGroup = stoneGroups.get(shape.id);
+          if (stoneGroup) stoneGroup.visible = false;
+          return;
+        }
         // Design Step D: a resize handle can sit right at a shape's edge, where both it and the
         // shape's own hit-test could otherwise match -- the handle must win, so this is checked
         // first (mirrors app.js's own hitTest(), which checks handlesFor() before the move branch).
@@ -2293,6 +2522,28 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         scheduleStoneRebuildForShape(resizeShapeId);
         return;
       }
+      if (interactionKind === 'rotate') {
+        const shape = board.getShape(rotateShapeId);
+        if (!shape) return;
+        // Same clockwise-from-up atan2(dx,-dy) convention/formula as app.js's own rotate-drag,
+        // applied to THIS pointer position relative to the same rotateCenter captured at drag-start.
+        const vector = event.point.subtract(rotateCenter);
+        const pointerAngleDeg = Math.atan2(vector.x, -vector.y) * 180 / Math.PI;
+        let rotationDeg = rotateStartRotationDeg + (pointerAngleDeg - rotateStartPointerAngleDeg);
+        // Shift snaps to 15deg steps, same ROTATION_SNAP_STEP_DEG/Math.round convention app.js's own
+        // rotate-drag uses.
+        if (event.modifiers.shift) rotationDeg = Math.round(rotationDeg / ROTATION_SNAP_STEP_DEG) * ROTATION_SNAP_STEP_DEG;
+        // item.rotate() takes an INCREMENTAL angle (verified: repeated small calls around the SAME
+        // fixed center sum exactly to one equivalent large call, see this milestone's own doc) --
+        // rotateAppliedDeg tracks the total already applied to the live item so far this drag, so
+        // only the DIFFERENCE still owed this frame is applied, never the full absolute angle twice.
+        const desiredAppliedDeg = rotationDeg - rotateStartRotationDeg;
+        const incrementDeg = desiredAppliedDeg - rotateAppliedDeg;
+        shape.item.rotate(incrementDeg, rotateCenter);
+        rotateAppliedDeg = desiredAppliedDeg;
+        updateResizeHandles();
+        return;
+      }
       if (interactionKind === 'pen') {
         // RS-3011 Step 9: pulls a symmetric curve handle on the anchor just placed at this drag's
         // mousedown, by directly mutating that real Segment's handleOut/handleIn -- Paper.js
@@ -2552,6 +2803,38 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         // RS-3011 resize-perf fix: belt-and-suspenders restore in case `shape` was falsy above (the
         // shape vanished mid-drag) and no rebuild ran -- a stale hidden Group from drag-start must
         // never stay invisible.
+        const finalGroup = stoneGroups.get(finishedShapeId);
+        if (finalGroup) finalGroup.visible = true;
+        return;
+      }
+      if (interactionKind === 'rotate') {
+        // RS-3033: mirrors the 'resize' branch's own write-through convention exactly -- read the
+        // final applied rotation before clearing rotate state, fire the ONE onShapeRotated() hook
+        // call for this completed drag (skipped for a zero-delta click, mirroring onShapeMoved's own
+        // "don't manufacture an empty undo step" guard), then restore the stone Group's visibility
+        // and force one final, authoritative rebuild.
+        const shape = board.getShape(rotateShapeId);
+        const layerId = shape && shape.item.data.layerId;
+        if (layerId && shape && Math.abs(rotateAppliedDeg) > 1e-6) {
+          const finalRotationDeg = ((rotateStartRotationDeg + rotateAppliedDeg) % 360 + 360) % 360;
+          onShapeRotated(layerId, finalRotationDeg);
+        }
+        // Same ordering rationale as the 'resize' branch above: clear interactionKind/rotateShapeId
+        // BEFORE the final rebuild, so rebuildStoneGroupForShape() sees the drag as already over.
+        const finishedShapeId = rotateShapeId;
+        interactionKind = null;
+        rotateShapeId = null;
+        rotateCenter = null;
+        rotateStartPointerAngleDeg = 0;
+        rotateStartRotationDeg = 0;
+        rotateAppliedDeg = 0;
+        // RS-3033: safe to call unconditionally, even for a rotated shape -- rebuildStoneGroupForShape()
+        // now uses the layer's own STATIC box (not this possibly-still-mid-rotation live item's own
+        // AABB) whenever rotationDeg is nonzero (see that function's own comment), so this always
+        // produces the correct, fully-rotated stone Group regardless of exactly when it runs relative
+        // to onShapeRotated()'s own async updateAll()/syncFromProjectLayers() reconciliation.
+        if (shape) rebuildStoneGroupForShape(finishedShapeId);
+        // Belt-and-suspenders restore, same as the 'resize' branch above.
         const finalGroup = stoneGroups.get(finishedShapeId);
         if (finalGroup) finalGroup.visible = true;
         return;
@@ -3589,6 +3872,17 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         const layer = layerId && layerById.get(layerId);
         if (!layer) continue;
         const b = shape.item.bounds;
+        // RS-3033: whether `layer`'s own rotationDeg differs from what `shape.item` currently
+        // reflects (item.data.rotationDeg, stamped by materializeShapeFromLayer() every time it
+        // builds/rebuilds an item -- see that function's own rotation-step comment; 0 for any item
+        // built before this milestone, or never rotated). A plain AABB comparison alone (boundsChanged
+        // below) cannot be trusted to catch every rotation change on its own -- a rotated item's own
+        // AABB can, for specific width/height/angle combinations, coincidentally still match its
+        // pre-rotation box (most simply: a perfectly square layer rotated a multiple of 90deg) -- so
+        // this is tracked explicitly rather than inferred from bounds.
+        const currentRotationDeg = shape.item.data.rotationDeg || 0;
+        const targetRotationDeg = layer.rotationDeg || 0;
+        const rotationChanged = Math.abs(currentRotationDeg - targetRotationDeg) > 1e-6;
         // RS-3014 Step 3: a 'path' layer with a frozen naturalBoundingBoxMm (an Outline-mode Eraser
         // cut has run on it at least once) takes a separate, more expensive path -- see
         // expectedShapeBoundsMm()'s own doc comment for why its bounds can legitimately be smaller
@@ -3607,17 +3901,20 @@ export function createDrawingTool(canvasEl, hooks = {}) {
             Math.abs(b.top - expected.top) > 1e-6 ||
             Math.abs(b.width - expected.width) > 1e-6 ||
             Math.abs(b.height - expected.height) > 1e-6;
-          if (boundsChanged) {
+          if (boundsChanged || rotationChanged) {
             // A cut shape's bounds don't simply stretch to fill layer.x/y/w/h -- re-materialize
             // from the layer's own contours/frozen box instead of a raw bounds transform, the same
-            // reconciliation refreshShapeGeometryForLayer() itself uses.
+            // reconciliation refreshShapeGeometryForLayer() itself uses. Also covers a rotation-only
+            // change (bounds unaffected -- expectedShapeBoundsMm() is deliberately unrotated, see
+            // materializeShapeFromLayer()'s own rotation-step comment), same rotationChanged OR as
+            // the plain (non-frozen) branch below.
             const newItem = materializeShapeFromLayer(layer);
             if (newItem) {
               board.replaceShapeItem(shape.id, newItem);
               newItem.data.layerId = layerId;
             }
           }
-          if (boundsChanged || forceStoneRebuild) rebuildStoneGroupForShape(shape.id);
+          if (boundsChanged || rotationChanged || forceStoneRebuild) rebuildStoneGroupForShape(shape.id);
           continue;
         }
         const boundsChanged =
@@ -3625,18 +3922,32 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           Math.abs(b.top - layer.y) > 1e-6 ||
           Math.abs(b.width - layer.w) > 1e-6 ||
           Math.abs(b.height - layer.h) > 1e-6;
-        if (boundsChanged) {
+        if (boundsChanged || rotationChanged) {
           if (layer.type === 'path') {
-            // A plain (never-cut) 'path' layer's own contours are, by construction, always the
-            // natural shape scaled to exactly fill layer.x/y/w/h -- stretching the existing item's
-            // bounds in place is mathematically identical to re-materializing, at a fraction of the
-            // cost, so this keeps doing that unchanged from before RS-3032 Step A.
-            shape.item.bounds = new paper.Rectangle(
-              layer.x,
-              layer.y,
-              Math.max(RESIZE_MIN_DIM_MM, layer.w),
-              Math.max(RESIZE_MIN_DIM_MM, layer.h)
-            );
+            // RS-3033: a rotated (or rotation-changing) 'path' layer must go through the same
+            // rotation-aware re-materialize path a SHAPE_LIBRARY_KINDS layer already does below --
+            // the fast bounds-stretch this branch otherwise uses is only mathematically valid for an
+            // UNROTATED item (see materializeShapeFromLayer()'s own rotation-step comment for why
+            // stretching an already-rotated item's bounds is wrong, the identical reasoning
+            // RS-3032 Step A already established for SHAPE_LIBRARY_KINDS just below).
+            if (targetRotationDeg !== 0 || rotationChanged) {
+              const newItem = materializeShapeFromLayer(layer);
+              if (newItem) {
+                board.replaceShapeItem(shape.id, newItem);
+                newItem.data.layerId = layerId;
+              }
+            } else {
+              // A plain (never-cut, never-rotated) 'path' layer's own contours are, by construction,
+              // always the natural shape scaled to exactly fill layer.x/y/w/h -- stretching the
+              // existing item's bounds in place is mathematically identical to re-materializing, at
+              // a fraction of the cost, so this keeps doing that unchanged from before RS-3032 Step A.
+              shape.item.bounds = new paper.Rectangle(
+                layer.x,
+                layer.y,
+                Math.max(RESIZE_MIN_DIM_MM, layer.w),
+                Math.max(RESIZE_MIN_DIM_MM, layer.h)
+              );
+            }
           } else {
             // RS-3032 Step A: a SHAPE_LIBRARY_KINDS layer's geometry is NOT simply its natural shape
             // stretched into the box -- GeometryEngine resolves it at the new width/height and THEN
@@ -3653,7 +3964,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
             }
           }
         }
-        if (boundsChanged || forceStoneRebuild) rebuildStoneGroupForShape(shape.id);
+        if (boundsChanged || rotationChanged || forceStoneRebuild) rebuildStoneGroupForShape(shape.id);
       }
 
       applySelectionVisuals();
@@ -3694,11 +4005,18 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      * QA/verification-only, read-only -- same precedent as debugGrid/debugHitTestShapeId above.
      * RS-3010 Step 2e: exposes every finalized shape's exact project-mm bounds and path segment
      * points, so grid-snap verification can assert exact numeric coordinates instead of only
-     * inferring alignment from a screenshot.
+     * inferring alignment from a screenshot. RS-3033: also exposes rotationDeg/pivotXMm/pivotYMm
+     * (item.data, stamped by materializeShapeFromLayer()/materializeShapeLibraryItemFromLayer() --
+     * see those functions' own comments) so rotate-drag verification can assert the exact numeric
+     * rotation/pivot a drag produced, the same "assert numbers, not just a screenshot" precedent.
      */
     get debugShapes() {
       return board.listShapes().map((shape) => ({
         id: shape.id,
+        layerId: shape.item.data.layerId || null,
+        rotationDeg: shape.item.data.rotationDeg || 0,
+        pivotXMm: shape.item.data.pivotXMm,
+        pivotYMm: shape.item.data.pivotYMm,
         bounds: {
           left: shape.item.bounds.left,
           top: shape.item.bounds.top,
