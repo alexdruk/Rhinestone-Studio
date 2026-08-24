@@ -369,3 +369,8 @@ tools/scratch/rs-3029-shape-rotation-verify/
 # corner-stays-fixed invariant, edge-only-resizes-one-dimension, and a compound rotate->resize->
 # rotate sequence, same "never a repo artifact" category as the scratch folders above
 tools/scratch/rs-3030-resize-handles-verify/
+# rs-3032-step-a: ad hoc Playwright harnesses against the real app, verifying SHAPE_LIBRARY_KINDS
+# layers (Star/Ring/Heart/...) are visible/trackable inside Design mode without Design mode exiting
+# (move/resize/undo/redo, rotation carried through on first materialization, 'path'/circle
+# unaffected), same "never a repo artifact" category as the scratch folders above
+tools/scratch/rs-3032-step-a-verify/
