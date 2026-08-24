@@ -360,3 +360,8 @@ tools/scratch/rs-3017-scalebar-verify/
 # Gap/Eraser/Stamp/Trace/Paint/Snap-distance mm<->inch round-trips, same "never a repo artifact"
 # category as the scratch folders above
 tools/scratch/rs-3020-gap-precision-units-verify/
+# rs-3029-shape-rotation: ad hoc Playwright harness against the real app, verifying the rotate
+# handle/field generalized from text-only to every shape type (drag, Shift-snap, typed field,
+# round-trip, Project JSON export persistence), same "never a repo artifact" category as the
+# scratch folders above
+tools/scratch/rs-3029-shape-rotation-verify/
