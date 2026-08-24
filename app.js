@@ -3885,6 +3885,11 @@ el('moreShapesPopover').addEventListener('click',e=>{
   if(!btn)return;
   const extraFields=btn.dataset.shapeSides?{sides:parseInt(btn.dataset.shapeSides,10)}:{};
   createShapeLayer(btn.dataset.shapeKind,extraFields,btn.dataset.shapeLabel||null);
+  // RS-3031: Design's own canvas only ever renders type==='path' layers, so a shape created here
+  // stays invisible until Design is exited -- the same reveal every Lightbox-based shape-creation
+  // path already runs (see revealDualWorkspaceForLightbox()'s own doc comment) to land on a view
+  // where the new shape actually renders. No-ops when Design isn't active.
+  revealDualWorkspaceForLightbox();
   closeMoreShapesPopover();
 });
 document.addEventListener('mousedown',e=>{
