@@ -351,7 +351,8 @@ export function createPathLayerFromContours(flattened, { stoneSize, gap, color, 
     h: flattened.heightMm,
     stoneSize,
     gap,
-    color
+    color,
+    rotationDeg: 0
   };
 
   const warning = mismatched

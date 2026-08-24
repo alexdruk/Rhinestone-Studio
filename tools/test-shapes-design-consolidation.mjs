@@ -160,15 +160,20 @@ await test('9. shapeLayerResolveParams() builds Circle\'s cx/cy/r vs. every othe
 
   assert.deepEqual(
     shapeLayerResolveParams({ type: 'circle', id: 'c1', cx: 10, cy: 20, r: 5 }),
-    { shape: 'circle', layerId: 'c1', cxMm: 10, cyMm: 20, radiusMm: 5 }
+    { shape: 'circle', layerId: 'c1', cxMm: 10, cyMm: 20, radiusMm: 5, rotationDeg: 0 }
   );
   assert.deepEqual(
     shapeLayerResolveParams({ type: 'ellipse', id: 'e1', x: 1, y: 2, w: 30, h: 40 }),
-    { shape: 'ellipse', layerId: 'e1', xMm: 1, yMm: 2, widthMm: 30, heightMm: 40 }
+    { shape: 'ellipse', layerId: 'e1', xMm: 1, yMm: 2, widthMm: 30, heightMm: 40, rotationDeg: 0 }
   );
   assert.deepEqual(
     shapeLayerResolveParams({ type: 'star', id: 's1', x: 0, y: 0, w: 50, h: 50, points: 6, innerRadiusRatio: 0.6 }),
-    { shape: 'star', layerId: 's1', xMm: 0, yMm: 0, widthMm: 50, heightMm: 50, points: 6, innerRadiusRatio: 0.6 }
+    { shape: 'star', layerId: 's1', xMm: 0, yMm: 0, widthMm: 50, heightMm: 50, points: 6, innerRadiusRatio: 0.6, rotationDeg: 0 }
+  );
+  // RS-3028: a stored non-zero rotationDeg threads through unchanged (no '??0' masking it).
+  assert.deepEqual(
+    shapeLayerResolveParams({ type: 'rectangle', id: 'r1', x: 0, y: 0, w: 20, h: 10, rotationDeg: 90 }),
+    { shape: 'rectangle', layerId: 'r1', xMm: 0, yMm: 0, widthMm: 20, heightMm: 10, rotationDeg: 90 }
   );
 });
 
