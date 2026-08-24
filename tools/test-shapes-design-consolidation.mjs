@@ -52,12 +52,12 @@ await test('2. the old proxy #addCircleLightbox/#addRectLightbox buttons no long
 });
 
 await test('3. Circle and Rectangle are created only via the unified Design Shapes grid (one creation function, one set of buttons)', () => {
-  assert.match(appJs, /async function createShapeLayer\(kind\)\{/, 'expected one unified createShapeLayer(kind) function');
+  assert.match(appJs, /async function createShapeLayer\(kind,extraFieldsOverride=\{\},displayLabelOverride=null\)\{/, 'expected one unified createShapeLayer(kind) function');
   // S-110A: every 'circle' layer-object literal must live inside createShapeLayer() itself (its two
   // size branches -- sized-around-text vs. default) or referenceShapeLayer() (a measurement-only
   // object, never pushed to project.layers, used to size a shape around existing text) -- never a
   // second, independent circle-creation code path anywhere else in app.js.
-  const createShapeLayerFn = appJs.match(/async function createShapeLayer\(kind\)\{[\s\S]*?\n\}/);
+  const createShapeLayerFn = appJs.match(/async function createShapeLayer\(kind,extraFieldsOverride=\{\},displayLabelOverride=null\)\{[\s\S]*?\n\}/);
   const referenceShapeLayerFn = appJs.match(/function referenceShapeLayer\(kind\)\{[\s\S]*?\n\}/);
   assert.ok(createShapeLayerFn, 'expected to find createShapeLayer()');
   assert.ok(referenceShapeLayerFn, 'expected to find referenceShapeLayer()');
@@ -206,7 +206,7 @@ await test('12. Ring\'s fitting region is its inner opening alone (not the true 
 });
 
 await test('13. createShapeLayer()/addText() each auto-fit only when exactly one OTHER layer is selected, and never persist a link between the two layers', () => {
-  const createShapeSrc = extractBlock(appJs, /async function createShapeLayer\(kind\)\{[\s\S]*?\n\}/, 'function createShapeLayer()');
+  const createShapeSrc = extractBlock(appJs, /async function createShapeLayer\(kind,extraFieldsOverride=\{\},displayLabelOverride=null\)\{[\s\S]*?\n\}/, 'function createShapeLayer()');
   assert.match(createShapeSrc, /singleOtherSelectedLayer\(\)/);
   assert.match(createShapeSrc, /other\.type==='text'/);
   assert.match(createShapeSrc, /FITTABLE_SHAPE_TYPES\.has\(kind\)/);
