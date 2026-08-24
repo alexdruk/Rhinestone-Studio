@@ -475,6 +475,67 @@ function materializeShapeFromLayer(layer) {
 }
 
 /**
+ * RS-3032 Step A: builds a Paper.js item for a SHAPE_LIBRARY_KINDS project.layers entry (Star/
+ * Ring/Heart/Arrow/Cross/Crescent/Pentagon/Hexagon/Octagon/Shield/Ellipse/Capsule/Regular Polygon
+ * -- exactly what the "More Shapes" popover and the Shapes panel's non-circle buttons create) --
+ * the counterpart of materializeShapeFromLayer() above for a layer with no STORED `contours` to
+ * read. A shape-library layer's true outline only exists as a formula inside GeometryEngine (plus
+ * RS-3028's rotationDeg step), so `resolvePolygons(layer)` -- app.js's own
+ * resolveShapeLibraryPolygons hook -- resolves it via the SAME permanentEngine.resolveShapePolygons()
+ * call every other consumer (Boolean Operations, Fit Text to Shape) already uses, rather than this
+ * file growing a second contour-generation implementation. The returned polygons are already
+ * absolute project-mm (the same coordinate space layer.x/y/materializeShapeFromLayer()'s own placed
+ * points use, and already correctly rotated per the layer's own rotationDeg -- see
+ * GeometryEngine.resolveShapePolygons()'s own doc comment), so unlike materializeShapeFromLayer()
+ * above, no natural-space min/max/scale placement math is needed here at all -- points are used
+ * as-is. Follows materializeShapeFromLayer()'s own single-contour-Path vs. multi-contour-
+ * CompoundPath construction/styling exactly, so a shape-library shape reads identically on Design's
+ * own canvas. Every SHAPE_LIBRARY_KINDS shape is a closed outline (never an open freehand stroke
+ * like a 'path' layer can be), so this always closes each contour -- no `layer.closed` check.
+ *
+ * Deliberately does NOT handle 'circle' (a different data model -- cx/cy/r, not x/y/w/h --
+ * shapeLayerResolveParams() branches on it, and this step's own onShapeResized write-back does not)
+ * or 'svg'/'image' (their real raster/vector content, not just an outline, would need rendering) --
+ * both stay out of Design's own canvas for now, unchanged from before this step.
+ * @param {object} layer a project.layers entry with type in SHAPE_LIBRARY_KINDS
+ * @param {(layer:object)=>({polygons:{xMm:number,yMm:number}[][],boundingBox:*}|null)} resolvePolygons
+ * @returns {paper.Path|paper.CompoundPath|null}
+ */
+function materializeShapeLibraryItemFromLayer(layer, resolvePolygons) {
+  const resolved = resolvePolygons(layer);
+  const polygons = resolved && resolved.polygons;
+  if (!Array.isArray(polygons) || polygons.length === 0) return null;
+  for (const polygon of polygons) {
+    if (!polygon || polygon.length < 3) return null;
+  }
+
+  function buildContourPath(polygon) {
+    const path = new paper.Path();
+    polygon.forEach((p, index) => {
+      const point = new paper.Point(p.xMm, p.yMm);
+      if (index === 0) path.moveTo(point);
+      else path.lineTo(point);
+    });
+    path.closePath();
+    return path;
+  }
+
+  if (polygons.length === 1) {
+    const item = buildContourPath(polygons[0]);
+    item.strokeColor = STROKE_COLOR;
+    item.strokeWidth = STROKE_WIDTH_PX / paper.view.zoom;
+    return item;
+  }
+
+  const compound = new paper.CompoundPath({
+    strokeColor: STROKE_COLOR,
+    strokeWidth: STROKE_WIDTH_PX / paper.view.zoom
+  });
+  for (const polygon of polygons) compound.addChild(buildContourPath(polygon));
+  return compound;
+}
+
+/**
  * RS-3011 Step 1: `hooks` lets app.js own project state while this module stays the "all direct
  * Paper.js usage" facade its own header comment describes -- `getStoneDefaults()`/
  * `onShapeCommitted(layer)` mirror the old commit()'s `{stoneSize,gap,color}` argument and
@@ -592,7 +653,14 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     // the SAME single GeometryEngine instance every other stone-generation path in this app uses,
     // never a second one -- and returns plain {x,y,d,color} stones ready to paint.
     getLayerStoneParams = () => null,
-    generatePathLayout = () => []
+    generatePathLayout = () => [],
+    // RS-3032 Step A: app.js's own permanentEngine.resolveShapePolygons() call, for materializing a
+    // SHAPE_LIBRARY_KINDS layer (Star/Ring/Heart/... -- see materializeShapeLibraryItemFromLayer()'s
+    // own doc comment) as a real Paper.js item -- these layers have no stored `contours` of their
+    // own, unlike 'path' layers, so this file needs a way to ask the permanent engine for their true
+    // outline instead. Returns {polygons, boundingBox} (same shape resolveLayerShapeSource() already
+    // gets back from the same engine call) or null.
+    resolveShapeLibraryPolygons = () => null
   } = hooks;
   const board = new DrawingBoard();
   let isSetUp = false;
@@ -3413,25 +3481,29 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     },
 
     /**
-     * Canvas-desync fix: full reconciliation pass between `pathLayers` (every current
-     * project.layers entry with type==='path') and this file's own board.shapes, covering every
-     * way the two can drift when project.layers changes from OUTSIDE Design's own drag handlers --
-     * undo, redo, the Layers-list trash-icon delete (deleteLayer() there is called directly,
-     * bypassing deleteSelected()/onShapeDeleted entirely), and by the same mechanism any other
-     * external project.layers mutation while Design is active. Runs in three passes, in this
-     * order so an id can never be both stale-removed and freshly-materialized in the same call:
+     * Canvas-desync fix: full reconciliation pass between `layers` (every current project.layers
+     * entry with type==='path', plus, since RS-3032 Step A, every SHAPE_LIBRARY_KINDS entry --
+     * Star/Ring/Heart/... -- see this method's own RS-3032 note below) and this file's own
+     * board.shapes, covering every way the two can drift when project.layers changes from OUTSIDE
+     * Design's own drag handlers -- undo, redo, the Layers-list trash-icon delete (deleteLayer()
+     * there is called directly, bypassing deleteSelected()/onShapeDeleted entirely), and by the same
+     * mechanism any other external project.layers mutation while Design is active. Runs in three
+     * passes, in this order so an id can never be both stale-removed and freshly-materialized in the
+     * same call:
      *
-     * 1. A board.shapes item whose `item.data.layerId` no longer matches any entry in `pathLayers`
-     *    is removed (undo-of-draw, redo-of-delete) -- run first so step 2's "no matching item"
-     *    check never counts an item that's about to be removed anyway.
-     * 2. A `pathLayers` entry with no matching board.shapes item is materialized fresh via
-     *    materializeShapeFromLayer() (undo-of-delete, redo-of-draw) -- the shape needs to reappear
-     *    on a canvas that never removed it, or that already discarded it.
-     * 3. Every board.shapes item with a matching layer has its Paper.js bounds snapped to the
-     *    layer's x/y/w/h -- the same `item.bounds =` assignment the live resize handler already
-     *    uses (onMouseDrag's 'resize' branch) -- when they've actually drifted. Its stone Group is
-     *    rebuilt whenever that snap happened, OR whenever the caller passes `forceStoneRebuild`
-     *    (see below for why).
+     * 1. A board.shapes item whose `item.data.layerId` no longer matches any entry in `layers` is
+     *    removed (undo-of-draw, redo-of-delete) -- run first so step 2's "no matching item" check
+     *    never counts an item that's about to be removed anyway.
+     * 2. A `layers` entry with no matching board.shapes item is materialized fresh -- via
+     *    materializeShapeFromLayer() for a 'path' layer, or materializeShapeLibraryItemFromLayer()
+     *    for a SHAPE_LIBRARY_KINDS one (see materializeForLayer() just below) -- covering both
+     *    undo-of-delete/redo-of-draw AND, since RS-3032 Step A, a SHAPE_LIBRARY_KINDS layer that
+     *    simply never had a Design-canvas item at all yet (freshly created while Design is active).
+     * 3. Every board.shapes item with a matching layer has its geometry reconciled to the layer's
+     *    current x/y/w/h -- see the loop's own per-category comments below for exactly how (a
+     *    'path' layer's bounds are stretched in place; a SHAPE_LIBRARY_KINDS layer is re-
+     *    materialized). Its stone Group is rebuilt whenever that reconciliation happened, OR
+     *    whenever the caller passes `forceStoneRebuild` (see below for why).
      *
      * Steps 1-2 also rebuild/remove the shape's stone Group so the live preview never lags the
      * outline. Local `selectedIds` drops any id removed in step 1 silently (no
@@ -3459,13 +3531,34 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      * no-op on an ordinary tick where nothing moved. Measured cost of making the rebuild
      * unconditional on every tick: ~8ms/tick with 25 path layers during a continuous field-edit
      * drag, vs ~0.2-0.4ms baseline -- the reason this flag is opt-in rather than the default.
-     * @param {object[]} pathLayers
+     *
+     * RS-3032 Step A: `layers` widened from 'path'-only to also carry every SHAPE_LIBRARY_KINDS
+     * layer (see app.js's own call site). The two categories are handled by clearly separate code
+     * paths throughout this method (never intermixed) since their bounds-comparison logic
+     * genuinely differs: a 'path' layer can carry a frozen `naturalBoundingBoxMm` from an Outline-
+     * mode Eraser cut (see expectedShapeBoundsMm()'s own doc comment) -- a concept that does not
+     * exist for a SHAPE_LIBRARY_KINDS layer at all, which always uses the plain x/y/w/h comparison
+     * every un-cut 'path' layer already used. Circle/SVG/Image stay out of scope entirely (see
+     * materializeShapeLibraryItemFromLayer()'s own doc comment for why) -- app.js's own filter never
+     * passes them into `layers` here, so this method has no branch for them.
+     * @param {object[]} layers Every current 'path' or SHAPE_LIBRARY_KINDS project.layers entry.
      * @param {boolean} [forceStoneRebuild=false] Rebuild every matched layer's stone Group even when
      *   its bounds haven't changed -- for callers where project.layers may have changed a
      *   non-geometric field from outside Design's own drag handlers (undo/redo, trash-icon delete).
      */
-    syncFromProjectLayers(pathLayers, forceStoneRebuild = false) {
-      const layerById = new Map(pathLayers.map((l) => [l.id, l]));
+    syncFromProjectLayers(layers, forceStoneRebuild = false) {
+      // RS-3032 Step A: the one place this method decides which materialization builder a layer
+      // uses -- 'path' layers keep using the existing contours-based builder unchanged; everything
+      // else reaching this method is a SHAPE_LIBRARY_KINDS layer (app.js's own call-site filter
+      // guarantees no other type ever arrives here), which has no stored contours at all and must
+      // ask GeometryEngine for its outline via the injected resolveShapeLibraryPolygons hook.
+      function materializeForLayer(layer) {
+        return layer.type === 'path'
+          ? materializeShapeFromLayer(layer)
+          : materializeShapeLibraryItemFromLayer(layer, resolveShapeLibraryPolygons);
+      }
+
+      const layerById = new Map(layers.map((l) => [l.id, l]));
 
       for (const shape of board.listShapes()) {
         const layerId = shape.item.data.layerId;
@@ -3482,9 +3575,9 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       const matchedLayerIds = new Set(
         board.listShapes().map((shape) => shape.item.data.layerId).filter(Boolean)
       );
-      for (const layer of pathLayers) {
+      for (const layer of layers) {
         if (matchedLayerIds.has(layer.id)) continue;
-        const item = materializeShapeFromLayer(layer);
+        const item = materializeForLayer(layer);
         if (!item) continue;
         const shapeId = board.addShape(item);
         item.data.layerId = layer.id;
@@ -3496,16 +3589,18 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         const layer = layerId && layerById.get(layerId);
         if (!layer) continue;
         const b = shape.item.bounds;
-        // RS-3014 Step 3: a layer with a frozen naturalBoundingBoxMm (an Outline-mode Eraser cut
-        // has run on it at least once) takes a separate, more expensive path -- see
+        // RS-3014 Step 3: a 'path' layer with a frozen naturalBoundingBoxMm (an Outline-mode Eraser
+        // cut has run on it at least once) takes a separate, more expensive path -- see
         // expectedShapeBoundsMm()'s own doc comment for why its bounds can legitimately be smaller
         // than layer.x/y/w/h, and why comparing straight against layer.x/y/w/h (the cheap check
         // every OTHER layer keeps, unchanged, below) would treat that as "always changed" forever.
-        // Deliberately gated on this rare case, not applied unconditionally to every layer here --
-        // this loop runs on every updateAll() tick (see this method's own doc comment on
-        // forceStoneRebuild's opt-in cost), and expectedShapeBoundsMm() is an O(points) scan the
-        // vast majority of (never-cut) layers have no reason to pay every tick.
-        if (layer.naturalBoundingBoxMm) {
+        // Deliberately gated on this rare, 'path'-only case, not applied unconditionally to every
+        // layer here -- this loop runs on every updateAll() tick (see this method's own doc comment
+        // on forceStoneRebuild's opt-in cost), and expectedShapeBoundsMm() is an O(points) scan the
+        // vast majority of (never-cut) layers have no reason to pay every tick. A SHAPE_LIBRARY_KINDS
+        // layer never has this field at all (RS-3032 Step A) and always falls through to the plain
+        // comparison below.
+        if (layer.type === 'path' && layer.naturalBoundingBoxMm) {
           const expected = expectedShapeBoundsMm(layer);
           const boundsChanged = !expected ||
             Math.abs(b.left - expected.left) > 1e-6 ||
@@ -3531,12 +3626,32 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           Math.abs(b.width - layer.w) > 1e-6 ||
           Math.abs(b.height - layer.h) > 1e-6;
         if (boundsChanged) {
-          shape.item.bounds = new paper.Rectangle(
-            layer.x,
-            layer.y,
-            Math.max(RESIZE_MIN_DIM_MM, layer.w),
-            Math.max(RESIZE_MIN_DIM_MM, layer.h)
-          );
+          if (layer.type === 'path') {
+            // A plain (never-cut) 'path' layer's own contours are, by construction, always the
+            // natural shape scaled to exactly fill layer.x/y/w/h -- stretching the existing item's
+            // bounds in place is mathematically identical to re-materializing, at a fraction of the
+            // cost, so this keeps doing that unchanged from before RS-3032 Step A.
+            shape.item.bounds = new paper.Rectangle(
+              layer.x,
+              layer.y,
+              Math.max(RESIZE_MIN_DIM_MM, layer.w),
+              Math.max(RESIZE_MIN_DIM_MM, layer.h)
+            );
+          } else {
+            // RS-3032 Step A: a SHAPE_LIBRARY_KINDS layer's geometry is NOT simply its natural shape
+            // stretched into the box -- GeometryEngine resolves it at the new width/height and THEN
+            // rotates the result around the new center (RS-3028's rotationDeg step). A naive
+            // `.bounds =` stretch of an already-rotated item would shear it into the wrong shape the
+            // instant the box's aspect ratio changes, so this re-materializes from the engine
+            // instead, the same "geometry itself must change, not just placement" reasoning
+            // materializeShapeFromLayer()'s own frozen-box branch above already uses for a cut
+            // 'path' layer, just via the shape-library builder.
+            const newItem = materializeShapeLibraryItemFromLayer(layer, resolveShapeLibraryPolygons);
+            if (newItem) {
+              board.replaceShapeItem(shape.id, newItem);
+              newItem.data.layerId = layerId;
+            }
+          }
         }
         if (boundsChanged || forceStoneRebuild) rebuildStoneGroupForShape(shape.id);
       }

@@ -1622,6 +1622,16 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     if(!permanentEngine)return[];
     const result=permanentEngine.generatePathLayout(params);
     return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:(STONE_COLORS[s.color]&&STONE_COLORS[s.color].previewColor)||s.color}));
+  },
+  // RS-3032 Step A: the one new dependency DrawingCanvasTool.js needs to materialize a
+  // SHAPE_LIBRARY_KINDS layer (Star/Ring/Heart/...) as a real Paper.js item -- unlike a 'path'
+  // layer, these have no stored `contours` to read, only a shape formula that lives inside
+  // GeometryEngine. Reuses the SAME permanentEngine.resolveShapePolygons() call/params
+  // (shapeLayerResolveParams()) every other consumer (Boolean Operations, Fit Text to Shape)
+  // already goes through, so this never becomes a second contour-generation implementation.
+  resolveShapeLibraryPolygons:(layer)=>{
+    if(!permanentEngine)return null;
+    return permanentEngine.resolveShapePolygons(shapeLayerResolveParams(layer));
   }
 });
 // RS-3010 Step 2d: exposes drawingTool's own debugGrid/debugHitTestShapeId QA-only surface for
@@ -2037,7 +2047,12 @@ async function updateAll(skipWrite=false,forceStoneRebuild=false){if(!skipWrite)
   // drawingTool.deleteSelected()/onShapeDeleted entirely) -- see syncFromProjectLayers()'s own doc
   // comment for why this is a no-op after an ordinary Design-originated commit/move/resize/delete,
   // and for why applyHistorySnapshot()/deleteLayer()'s trash-icon path pass forceStoneRebuild=true.
-  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'),forceStoneRebuild)}else{drawLayout()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}
+  // RS-3032 Step A: widened from 'path'-only to also include every SHAPE_LIBRARY_KINDS layer (Star/
+  // Ring/Heart/... from the "More Shapes" popover/Shapes panel) -- syncFromProjectLayers() itself
+  // branches on layer.type internally to materialize/track the two categories separately. Circle/
+  // SVG/Image stay out of scope (see DrawingCanvasTool.js's own materializeShapeLibraryItemFromLayer()
+  // doc comment for why).
+  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'||SHAPE_LIBRARY_KINDS.has(l.type)),forceStoneRebuild)}else{drawLayout()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}
 // RS-3011 freehand-close-and-clear-all-layers fix: deleting the last remaining layer no longer
 // blocks (see deleteLayer()) -- the per-row trash icon and the sidebar "Delete selected layer"
 // button are therefore never disabled for layer count anymore.
@@ -3885,11 +3900,13 @@ el('moreShapesPopover').addEventListener('click',e=>{
   if(!btn)return;
   const extraFields=btn.dataset.shapeSides?{sides:parseInt(btn.dataset.shapeSides,10)}:{};
   createShapeLayer(btn.dataset.shapeKind,extraFields,btn.dataset.shapeLabel||null);
-  // RS-3031: Design's own canvas only ever renders type==='path' layers, so a shape created here
-  // stays invisible until Design is exited -- the same reveal every Lightbox-based shape-creation
-  // path already runs (see revealDualWorkspaceForLightbox()'s own doc comment) to land on a view
-  // where the new shape actually renders. No-ops when Design isn't active.
-  revealDualWorkspaceForLightbox();
+  // RS-3032 Step A supersedes the RS-3031 workaround here: Design's own canvas now tracks/renders
+  // every SHAPE_LIBRARY_KINDS layer directly (see syncFromProjectLayers()'s widened call site
+  // above), so a shape created via this popover -- itself only ever reachable while Design is
+  // active, since #designToolRailRight is hidden otherwise -- is already visible on Design's own
+  // canvas without leaving it. Forcing revealDualWorkspaceForLightbox()'s exit-to-Dual-Workspace
+  // here would just needlessly kick the operator out of Design mode for a shape that no longer
+  // needs it.
   closeMoreShapesPopover();
 });
 document.addEventListener('mousedown',e=>{

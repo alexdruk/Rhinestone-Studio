@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SHAPE_LIBRARY_KINDS } from '../src/geometry/index.js';
 
 // Autosave & Recovery — app.js wiring.
 //
@@ -202,6 +203,10 @@ function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', 
     'writeSelectedControlsToLayer', 'engine', 'project', 'el', 'permanentEngineError', 'console',
     'renderLayerUI', 'drawLayout', 'drawCup', 'updateStats', 'updateHistoryUI', 'updateEditingUI',
     'updateViewButtons', 'updateTextOutsidePrintableWarning', 'scheduleAutosave', 'drawingTool', 'devicePixelRatio',
+    // RS-3032 Step A: updateAll()'s own body now references the real, module-level SHAPE_LIBRARY_KINDS
+    // (its Design-canvas sync call site is widened to also cover shape-library layers) -- injected
+    // here as the same real Set app.js imports, not a fake, so this stays a real-behavior extraction.
+    'SHAPE_LIBRARY_KINDS',
     `
     let generationToken=0;
     let layout;
@@ -213,7 +218,8 @@ function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', 
   const { updateAll, bumpGenerationToken } = factory(
     writeSelectedControlsToLayer, engine, project, el, permanentEngineError, fakeConsole,
     renderLayerUI, drawLayout, drawCup, updateStats, updateHistoryUI, updateEditingUI,
-    updateViewButtons, updateTextOutsidePrintableWarning, scheduleAutosave, drawingTool, 1
+    updateViewButtons, updateTextOutsidePrintableWarning, scheduleAutosave, drawingTool, 1,
+    SHAPE_LIBRARY_KINDS
   );
   if (buildGenerate) engine.generate = buildGenerate(bumpGenerationToken);
   const tailCalls = () => calls.filter((c) => c !== 'writeSelectedControlsToLayer');
@@ -265,16 +271,19 @@ await test('RS-3010: while drawing mode is active, updateAll() resyncs via drawi
   assert.ok(!calls.includes('drawLayout'), 'drawLayout() must not run while drawingTool owns layoutCanvas');
 });
 
-await test('canvas-desync fix: while drawing mode is active, updateAll() reconciles Design shapes via drawingTool.syncFromProjectLayers(), passed only the current \'path\' layers', async () => {
+await test('canvas-desync fix: while drawing mode is active, updateAll() reconciles Design shapes via drawingTool.syncFromProjectLayers(), passed the current \'path\' layers plus every SHAPE_LIBRARY_KINDS layer (RS-3032 Step A) but no others', async () => {
   const projectLayers = [
     { id: 'p1', type: 'path' },
     { id: 't1', type: 'text' },
     { id: 'p2', type: 'path' },
-    { id: 'c1', type: 'circle' }
+    { id: 'c1', type: 'circle' },
+    { id: 's1', type: 'star' },
+    { id: 'svg1', type: 'svg' },
+    { id: 'img1', type: 'image' }
   ];
   const { run, getSyncFromProjectLayersArg } = runUpdateAll({ isDrawing: true, projectLayers, buildGenerate: () => async () => ({}) });
   await run();
-  assert.deepEqual(getSyncFromProjectLayersArg(), [projectLayers[0], projectLayers[2]]);
+  assert.deepEqual(getSyncFromProjectLayersArg(), [projectLayers[0], projectLayers[2], projectLayers[4]], 'expected path + shape-library layers only -- text/circle/svg/image must stay excluded');
 });
 
 await test('canvas-desync fix: while drawing mode is inactive, updateAll() never calls drawingTool.syncFromProjectLayers()', async () => {
