@@ -612,6 +612,11 @@ export class GeometryEngine {
    * @param {number} [params.yMm] Rectangle top-left Y, required when shape is 'rectangle'.
    * @param {number} [params.widthMm] Rectangle width, required when shape is 'rectangle'.
    * @param {number} [params.heightMm] Rectangle height, required when shape is 'rectangle'.
+   * @param {number} [params.rotationDeg] RS-3028: whole-shape rotation in degrees, clockwise,
+   *   applied to the shape's own contours inside _shapePolygons() around the shape's own
+   *   (pre-rotation) bounding-box center. Default 0 (no rotation, byte-identical to before this
+   *   milestone). Normalized into [0, 360). Affects stone sampling here and, identically, the raw
+   *   polygons resolveShapePolygons() returns, since both share this same rotation step.
    * @returns {StoneLayout}
    */
   generateShapeLayout(params = {}) {
@@ -661,6 +666,9 @@ export class GeometryEngine {
    * outline and its stone-sampled outline are always the same geometry.
    *
    * @param {object} params Same shape as generateShapeLayout()'s params, minus stoneSizeMm/gapMm/mode/color.
+   * @param {number} [params.rotationDeg] RS-3028: see generateShapeLayout()'s own doc comment --
+   *   the returned polygons/boundingBox are rotated identically, since both entry points share the
+   *   same _shapePolygons() rotation step.
    * @returns {{polygons: import('../text/VectorPath.js').Point2D[][], boundingBox: BoundingBox|null, cornerFlagsByContour: (boolean[]|null)[]|null}}
    */
   resolveShapePolygons(params = {}) {
@@ -669,6 +677,32 @@ export class GeometryEngine {
   }
 
   _shapePolygons(options) {
+    const result = this._unrotatedShapePolygons(options);
+
+    // RS-3028: shared rotation step, applied once here regardless of which branch above produced
+    // `result` -- this is the single correct insertion point (see this method's own JSDoc/the
+    // milestone doc for why): every consumer of _shapePolygons() (stone sampling, Boolean
+    // Operations, Fit Text to Shape) sees identically-rotated contours. cornerFlagsByContour is
+    // unaffected by rotation (same points, same corner-ness, just moved), so it passes through
+    // unchanged. A 0 rotation or a null boundingBox (empty result) leaves `result` untouched.
+    if (options.rotationDeg === 0 || !result.boundingBox) {
+      return result;
+    }
+
+    const center = result.boundingBox.center;
+    const pivot = { cxMm: center.xMm, cyMm: center.yMm };
+    // rotatePointsAroundCenter() returns plain {xMm,yMm}-shaped objects (see its own doc comment),
+    // but contour points must stay real Point2D instances -- corner-anchored Outline spacing
+    // (StoneSampler.js's sampleCornerAnchoredOutlinePoints(), fed by Rectangle's cornerFlagsByContour
+    // above) calls .distanceTo() on them. Re-wrap here so every _shapePolygons() caller keeps
+    // receiving genuine Point2D points, rotated or not.
+    const polygons = result.polygons.map((polygon) =>
+      rotatePointsAroundCenter(polygon, options.rotationDeg, pivot).map((p) => new Point2D(p.xMm, p.yMm))
+    );
+    return { ...result, polygons, boundingBox: BoundingBox.fromPoints(polygons.flat()) };
+  }
+
+  _unrotatedShapePolygons(options) {
     if (options.shape === 'circle' || options.shape === 'rectangle') {
       const path = options.shape === 'circle'
         ? createCircleVectorPath({ cxMm: options.cxMm, cyMm: options.cyMm, radiusMm: options.radiusMm, id: options.layerId })
@@ -1678,6 +1712,9 @@ function normalizeShapeParams(params) {
     gapMm,
     mode,
     color: params.color ?? null,
+    // RS-3028: rotation, applied once inside _shapePolygons() to the shape's own contours -- see
+    // that method's own comment for why this is the single correct insertion point.
+    rotationDeg: normalizeRotationDeg(assertFiniteNumber(params.rotationDeg ?? 0, 'rotationDeg')),
     // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.
     ...normalizeMixedSizeParams(params, stoneSizeMm)
   };

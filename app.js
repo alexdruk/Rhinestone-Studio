@@ -643,6 +643,9 @@ function shapeLayerResolveParams(layer){
   return{
     shape:layer.type,layerId:layer.id,
     ...(isCircle?{cxMm:layer.cx,cyMm:layer.cy,radiusMm:layer.r}:{xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h}),
+    // RS-3028: '??' fallback so a pre-RS-3028 saved project (no rotationDeg on its shape layers)
+    // resolves to 0, byte-identical to before this milestone.
+    rotationDeg:layer.rotationDeg??0,
     ...shapeExtraParams(layer)
   };
 }
@@ -3626,12 +3629,12 @@ async function createShapeLayer(kind,extraFieldsOverride={},displayLabelOverride
   let layer;
   if(kind==='circle'){
     layer=shapeAroundText
-      ?{id:'circle'+Date.now(),type:'circle',visible:true,cx:shapeAroundText.cxMm,cy:shapeAroundText.cyMm,r:shapeAroundText.radiusMm,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'}
-      :{id:'circle'+Date.now(),type:'circle',visible:true,cx:105,cy:45,r:DEFAULT_CIRCLE_RADIUS_MM,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};
+      ?{id:'circle'+Date.now(),type:'circle',visible:true,cx:shapeAroundText.cxMm,cy:shapeAroundText.cyMm,r:shapeAroundText.radiusMm,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold',rotationDeg:0}
+      :{id:'circle'+Date.now(),type:'circle',visible:true,cx:105,cy:45,r:DEFAULT_CIRCLE_RADIUS_MM,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold',rotationDeg:0};
   }else{
     const{w,h}=shapeAroundText?{w:shapeAroundText.widthMm,h:shapeAroundText.heightMm}:(SHAPE_DEFAULT_SIZES_MM[kind]||{w:60,h:60});
     const x=shapeAroundText?shapeAroundText.xMm:105-w/2,y=shapeAroundText?shapeAroundText.yMm:45-h/2;
-    layer={id:kind+Date.now(),type:kind,visible:true,x,y,w,h,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold',...defaultShapeExtraFields(kind),...extraFieldsOverride};
+    layer={id:kind+Date.now(),type:kind,visible:true,x,y,w,h,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold',rotationDeg:0,...defaultShapeExtraFields(kind),...extraFieldsOverride};
   }
   project.layers.push(layer);
   selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);
@@ -3856,7 +3859,7 @@ el('importSvg').onclick=()=>el('importSvgFile').click();
 // shape count, warnings) — it invents no stone positions, so this direct src/svg call does not
 // violate "only the Geometry Engine generates stone positions". Actual stone generation for the
 // new layer still runs through generate() -> generateSvgStonesLive() -> permanentEngine.generateSvgLayout().
-el('importSvgFile').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{const svgSource=await file.text();const parsed=parseSvgDocument(svgSource);const maxW=project.canvas.width-20,maxH=project.canvas.height-20;let w=parsed.naturalWidthMm,h=parsed.naturalHeightMm;if(w>maxW||h>maxH){const s=Math.min(maxW/w,maxH/h);w*=s;h*=s}const x=(project.canvas.width-w)/2,y=(project.canvas.height-h)/2;const base=selectedLayer();const layer={id:'svg'+Date.now(),type:'svg',visible:true,svgSource,svgName:file.name,x,y,w,h,mode:'outline',stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold'};commitHistory();project.layers.push(layer);selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);syncSelectedControlsFromLayer();await updateAll(true);const warningNote=parsed.warnings.length?` (${parsed.warnings.length} element(s) skipped, see console)`:'';if(parsed.warnings.length)console.warn('SVG import warnings for',file.name,parsed.warnings);el('status').textContent=`Imported ${file.name}: ${parsed.shapes.length} shape(s)${warningNote}`}catch(error){console.error('SVG import failed',error);el('status').textContent=`SVG import failed: ${error.message}`}});
+el('importSvgFile').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{const svgSource=await file.text();const parsed=parseSvgDocument(svgSource);const maxW=project.canvas.width-20,maxH=project.canvas.height-20;let w=parsed.naturalWidthMm,h=parsed.naturalHeightMm;if(w>maxW||h>maxH){const s=Math.min(maxW/w,maxH/h);w*=s;h*=s}const x=(project.canvas.width-w)/2,y=(project.canvas.height-h)/2;const base=selectedLayer();const layer={id:'svg'+Date.now(),type:'svg',visible:true,svgSource,svgName:file.name,x,y,w,h,mode:'outline',stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold',rotationDeg:0};commitHistory();project.layers.push(layer);selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);syncSelectedControlsFromLayer();await updateAll(true);const warningNote=parsed.warnings.length?` (${parsed.warnings.length} element(s) skipped, see console)`:'';if(parsed.warnings.length)console.warn('SVG import warnings for',file.name,parsed.warnings);el('status').textContent=`Imported ${file.name}: ${parsed.shapes.length} shape(s)${warningNote}`}catch(error){console.error('SVG import failed',error);el('status').textContent=`SVG import failed: ${error.message}`}});
 // RS-1008: Image Trace import. Unlike SVG import (which commits a layer directly on file select),
 // this opens a "preview before commit" panel first -- the milestone brief's own required control --
 // since threshold/invert/blur/resize meaningfully change the traced result and are worth seeing
@@ -3921,7 +3924,7 @@ el('imageImportCommit').onclick=async()=>{
   const{threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx}=currentImagePreviewParams();
   const base=selectedLayer();
   const{x,y,w,h}=pendingImageImport.placement;
-  const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:pendingImageImport.dataUrl,imageName:pendingImageImport.fileName,naturalWidthPx:pendingImageImport.naturalWidthPx,naturalHeightPx:pendingImageImport.naturalHeightPx,x,y,w,h,threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx,stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold'};
+  const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:pendingImageImport.dataUrl,imageName:pendingImageImport.fileName,naturalWidthPx:pendingImageImport.naturalWidthPx,naturalHeightPx:pendingImageImport.naturalHeightPx,x,y,w,h,threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx,stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold',rotationDeg:0};
   const importedName=layer.imageName;
   commitHistory();
   project.layers.push(layer);
