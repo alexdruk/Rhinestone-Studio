@@ -603,7 +603,7 @@ const XYWH_SHAPE_TYPES=new Set(['rectangle','svg','image','path',...SHAPE_LIBRAR
 const VECTOR_FILL_MODE_TYPES=new Set(['circle','rectangle','path',...SHAPE_LIBRARY_KINDS]);
 const SHAPE_DISPLAY_LABELS={
   circle:'Circle',rectangle:'Rectangle',ellipse:'Ellipse',capsule:'Capsule',polygon:'Regular Polygon',
-  star:'Star',heart:'Heart',arrow:'Arrow',cross:'Cross',crescent:'Crescent',ring:'Ring'
+  star:'Star',heart:'Heart',arrow:'Arrow',cross:'Cross',crescent:'Crescent',ring:'Ring',shield:'Shield'
 };
 // Default creation size (mm) for each non-circle shape kind, centered on the same (105,45) point
 // the original circle/rectangle defaults already used (a 210x90mm default canvas's own center).
@@ -613,7 +613,7 @@ const SHAPE_DISPLAY_LABELS={
 // deliberately non-square since a stretched-to-square pill/arrow would no longer read as one.
 const SHAPE_DEFAULT_SIZES_MM={
   rectangle:{w:80,h:30},ellipse:{w:70,h:45},capsule:{w:80,h:40},polygon:{w:60,h:60},star:{w:60,h:60},
-  heart:{w:55,h:50},arrow:{w:70,h:42},cross:{w:55,h:55},crescent:{w:50,h:62},ring:{w:60,h:60}
+  heart:{w:55,h:50},arrow:{w:70,h:42},cross:{w:55,h:55},crescent:{w:50,h:62},ring:{w:60,h:60},shield:{w:55,h:60}
 };
 // Each configurable shape kind's own extra creation-time fields (Regular Polygon's side count,
 // Star's point count + inner radius, Ring's inner opening) -- everything else needs none.
@@ -3612,7 +3612,7 @@ function shapeAroundTextFitsPrintableArea(sized){
 // case. Only when the required shape would spill outside the printable area does this fall back to
 // S-110's original behavior: a normal/default-size shape with the text fitted into it via
 // fitTextToShape(), so the legibility floor and every other S-110 guarantee still apply unchanged.
-async function createShapeLayer(kind){
+async function createShapeLayer(kind,extraFieldsOverride={},displayLabelOverride=null){
   const l=selectedLayer();
   const other=singleOtherSelectedLayer();
   const fitPartnerText=(other&&other.type==='text'&&!other.curveEnabled&&FITTABLE_SHAPE_TYPES.has(kind))?other:null;
@@ -3631,11 +3631,11 @@ async function createShapeLayer(kind){
   }else{
     const{w,h}=shapeAroundText?{w:shapeAroundText.widthMm,h:shapeAroundText.heightMm}:(SHAPE_DEFAULT_SIZES_MM[kind]||{w:60,h:60});
     const x=shapeAroundText?shapeAroundText.xMm:105-w/2,y=shapeAroundText?shapeAroundText.yMm:45-h/2;
-    layer={id:kind+Date.now(),type:kind,visible:true,x,y,w,h,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold',...defaultShapeExtraFields(kind)};
+    layer={id:kind+Date.now(),type:kind,visible:true,x,y,w,h,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold',...defaultShapeExtraFields(kind),...extraFieldsOverride};
   }
   project.layers.push(layer);
   selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);
-  let statusText=`Added ${SHAPE_DISPLAY_LABELS[kind]||kind}`;
+  let statusText=`Added ${displayLabelOverride||SHAPE_DISPLAY_LABELS[kind]||kind}`;
   if(shapeAroundText){
     statusText+=` sized around "${layerLabel(fitPartnerText)}" (text unchanged)`;
   }else if(fitPartnerText){
@@ -3794,6 +3794,36 @@ el('fitTextToShapeBtn').onclick=async()=>{
   el('status').textContent=`Fit "${layerLabel(pair.text)}" to "${layerLabel(pair.shape)}"`;
 };
 el('shapeGrid').addEventListener('click',e=>{const btn=e.target.closest('[data-shape-kind]');if(!btn)return;createShapeLayer(btn.dataset.shapeKind)});
+// RS-3027: "More shapes" popover on the Design toolbar's right rail -- a second, faster entry point
+// to 10 of #shapeGrid's own shapes, via the exact same createShapeLayer(). Pentagon/Hexagon/Octagon
+// share data-shape-kind="polygon" with a data-shape-sides preset + a data-shape-label status-text
+// override, read generically here rather than three hardcoded id branches.
+function closeMoreShapesPopover(){el('moreShapesPopover').hidden=true;el('railMoreShapesToggle').setAttribute('aria-expanded','false')}
+function openMoreShapesPopover(){
+  const rail=el('designToolRailRight');
+  el('moreShapesPopover').hidden=false;
+  el('railMoreShapesToggle').setAttribute('aria-expanded','true');
+  el('moreShapesPopover').style.top=`${rail.offsetTop+rail.offsetHeight+8}px`;
+}
+el('railMoreShapesToggle').addEventListener('click',e=>{
+  e.stopPropagation();
+  if(el('moreShapesPopover').hidden)openMoreShapesPopover();else closeMoreShapesPopover();
+});
+el('moreShapesPopover').addEventListener('click',e=>{
+  const btn=e.target.closest('[data-shape-kind]');
+  if(!btn)return;
+  const extraFields=btn.dataset.shapeSides?{sides:parseInt(btn.dataset.shapeSides,10)}:{};
+  createShapeLayer(btn.dataset.shapeKind,extraFields,btn.dataset.shapeLabel||null);
+  closeMoreShapesPopover();
+});
+document.addEventListener('mousedown',e=>{
+  if(el('moreShapesPopover').hidden)return;
+  if(e.target.closest('#moreShapesPopover, #railMoreShapesToggle'))return;
+  closeMoreShapesPopover();
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&!el('moreShapesPopover').hidden)closeMoreShapesPopover();
+});
 el('addTextBtn').onclick=()=>addText();
 el('importProject').onclick=()=>el('importProjectFile').click();
 el('importProjectFile').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;

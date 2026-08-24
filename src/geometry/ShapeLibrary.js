@@ -224,9 +224,26 @@ export function createRingNaturalContours(innerRatio) {
   return rootAtOrigin([outer, inner]);
 }
 
+/**
+ * A heraldic-badge shield: flat top edge, shoulders at the same width as the top corners, tapering
+ * to a point at the bottom.
+ */
+export function createShieldNaturalContours() {
+  const contour = [
+    point(-1, -1),     // top-left
+    point(1, -1),      // top-right
+    point(1, -0.2),    // right shoulder (widest point, same x as top-right)
+    point(0.55, 0.9),  // right taper toward the point
+    point(0, 1.3),      // bottom point
+    point(-0.55, 0.9), // left taper
+    point(-1, -0.2)    // left shoulder
+  ];
+  return rootAtOrigin([contour]);
+}
+
 /** Shape kinds this module can generate, keyed exactly like GeometryEngine's shape param. */
 export const SHAPE_LIBRARY_KINDS = new Set([
-  'ellipse', 'capsule', 'polygon', 'star', 'heart', 'arrow', 'cross', 'crescent', 'ring'
+  'ellipse', 'capsule', 'polygon', 'star', 'heart', 'arrow', 'cross', 'crescent', 'ring', 'shield'
 ]);
 
 /**
@@ -252,6 +269,7 @@ export function createShapeNaturalContours(kind, params = {}) {
     case 'cross': return createCrossNaturalContours();
     case 'crescent': return createCrescentNaturalContours();
     case 'ring': return createRingNaturalContours(params.innerRatio);
+    case 'shield': return createShieldNaturalContours();
     default:
       throw new TypeError(`createShapeNaturalContours: unknown shape kind "${kind}". Expected one of: ${[...SHAPE_LIBRARY_KINDS].join(', ')}`);
   }
