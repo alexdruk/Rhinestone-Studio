@@ -85,6 +85,13 @@ const EXTRA_LIGHTS = [
 // visibly moving during a drag (not frozen the way AUTOSAVE_DEBOUNCE_MS's 1200ms would read).
 const INSTANCED_STONES_REBUILD_THROTTLE_MS = 100;
 
+// RS-3D stone orientation: flattens the octahedron along its local-Z (normal) axis so it reads as
+// a faceted stone glued to the wall rather than a free-floating full octahedron. 1.0 restores the
+// original full (undepressed) octahedron; _updateInstancedStones()'s non-plate branch applies this
+// only to the local Z scale (matrix.compose() applies scale in local space, and local Z is the axis
+// the basis quaternion maps to the outward normal -- see that function's own comment).
+export const STONE_DEPTH_RATIO = 0.6;
+
 function nowMs() {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
@@ -469,9 +476,18 @@ export class Preview3DRenderer {
     const position = new THREE.Vector3();
     const quaternion = new THREE.Quaternion();
     const qAlign = new THREE.Quaternion();
-    const qSpin = new THREE.Quaternion();
     const scaleV = new THREE.Vector3();
     const normal = new THREE.Vector3();
+    // RS-3D stone orientation (non-plate branch only): explicit tangent-frame basis instead of a
+    // random spin around the normal -- forward is the outward normal, up is world +Y (already
+    // tangent to the wall for every revolved-vessel kind: mug/tumbler/bottle), right completes a
+    // right-handed frame. This keeps every stone's "up" edge pointing at the vessel's true top
+    // instead of a random facet orientation, which is what read as chaotic before.
+    const worldUp = new THREE.Vector3(0, 1, 0);
+    const forwardV = new THREE.Vector3();
+    const rightV = new THREE.Vector3();
+    const basisMatrix = new THREE.Matrix4();
+    const qJitter = new THREE.Quaternion();
 
     for (let i = 0; i < stones.length; i++) {
       const stone = stones[i];
@@ -504,16 +520,41 @@ export class Preview3DRenderer {
         // Pure radial-normal approximation (ignores the small taper-induced tilt) -- §3.3's own
         // recommended cheap-first approximation, unchanged from the harness.
         normal.set(sinAz, 0, cosAz);
-        qAlign.setFromUnitVectors(zAxis, normal);
-        // Per-instance spin around the outward-normal axis reuses CrystalAppearance.js's own
-        // seeded facetAngleDeg, exactly as the harness does.
+
+        // Explicit tangent-frame basis: forward = outward normal, up = world +Y (already exactly
+        // perpendicular to forward here, since forward.y is always 0 for this pure radial-normal
+        // approximation -- no re-orthogonalization needed), right completes the right-handed frame.
+        // makeBasis()'s columns map local +X/+Y/+Z to right/up/forward, so the octahedron's own
+        // local Z (its apex-to-apex axis) lands on the outward normal, exactly as
+        // qAlign.setFromUnitVectors(zAxis, normal) did before -- but now local X/Y are pinned to a
+        // consistent world-relative orientation instead of an arbitrary one setFromUnitVectors()
+        // happens to pick.
+        forwardV.copy(normal);
+        rightV.crossVectors(worldUp, forwardV).normalize();
+        basisMatrix.makeBasis(rightV, worldUp, forwardV);
+        qAlign.setFromRotationMatrix(basisMatrix);
+
+        // Small deterministic jitter around the normal (local +Z) so stones aren't perfectly
+        // identical -- reuses CrystalAppearance.js's own seeded facetAngleDeg (still [0,180), still
+        // no Math.random) but maps it into a narrow +-8deg band instead of using it as a full
+        // [0,180) spin.
         const appearance = getCrystalAppearance(stone);
-        qSpin.setFromAxisAngle(zAxis, (appearance.facetAngleDeg * Math.PI) / 180);
-        quaternion.copy(qAlign).multiply(qSpin);
+        const jitterRad = ((appearance.facetAngleDeg / 180) - 0.5) * ((16 * Math.PI) / 180);
+        qJitter.setFromAxisAngle(zAxis, jitterRad);
+        quaternion.copy(qAlign).multiply(qJitter);
       }
 
       const radiusMm = stone.sizeMm / 2;
-      scaleV.setScalar(radiusMm);
+      if (dimensions.kind === 'plate') {
+        scaleV.setScalar(radiusMm);
+      } else {
+        // matrix.compose() applies scale in local space, and local Z is the axis the basis
+        // quaternion above maps to the outward normal -- so scaling local Z flattens the stone's
+        // depth along the wall's normal, giving it a flat-back "glued to the surface" silhouette
+        // instead of a free-floating full octahedron. STONE_DEPTH_RATIO === 1.0 restores that
+        // original full octahedron.
+        scaleV.set(radiusMm, radiusMm, radiusMm * STONE_DEPTH_RATIO);
+      }
       matrix.compose(position, quaternion, scaleV);
       this._stoneMesh.setMatrixAt(i, matrix);
       this._stoneMesh.setColorAt(i, new THREE.Color(getCrystalColor(stone.color).fill));
