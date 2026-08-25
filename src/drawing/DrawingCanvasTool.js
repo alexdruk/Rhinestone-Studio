@@ -61,6 +61,8 @@ import {
 } from './DrawingBoxGeometry.js';
 import { selectOnly, toggleSelection, clearSelection, selectMany } from '../editing/Selection.js';
 import { placeStonesAlongPath } from '../geometry/lineStampSpacing.js';
+import { getCrystalAppearance } from '../renderer/CrystalAppearance.js';
+import { getStoneSprite, clearStoneSpriteCache, quantizeRadiusPx, VARIANT_COUNT as STONE_SPRITE_VARIANT_COUNT } from './StoneSpriteCache.js';
 
 const STROKE_COLOR = '#1a56d6';
 const SELECTED_STROKE_COLOR = '#5b9dff';
@@ -83,6 +85,11 @@ const SIMPLIFY_TOLERANCE_MM = 0.35;
 // architecture note) can flatten its imported item at the SAME tolerance every draw tool already
 // uses here, rather than hardcoding a second value.
 export const FLATTEN_TOLERANCE_MM = 0.25;
+// rs-design-crystal-dots: stone sprites are baked at this many px per project-mm, clamped so a
+// sprite never bakes absurdly small (illegible facets) or absurdly large (wasted canvas/memory) at
+// extreme zoom -- see rebuildStoneGroupForShape()'s own use of these below.
+const STONE_SPRITE_PX_PER_MM_MIN = 4;
+const STONE_SPRITE_PX_PER_MM_MAX = 64;
 const PAN_WHEEL_TO_MM = 1;
 // A completed rect/ellipse drag whose bounding box is at or below this size in either dimension
 // never produced a usable shape -- discarded, matching freehand's existing "no usable stroke"
@@ -1054,6 +1061,17 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       canvasMm.width / 2 + board.panXmm,
       canvasMm.height / 2 + board.panYmm
     );
+    // rs-design-crystal-dots: a zoom that crossed into a new sqrt(2) bucket means every existing
+    // stone sprite/symbol definition was baked at a resolution far enough from the new on-screen
+    // size to be worth re-baking -- clear both caches and rebuild every shape's stone Group so the
+    // next per-stone sprite lookup rebuilds at the new resolution instead of reusing a stale one.
+    const zoomBucket = stoneSpriteZoomBucketFor(paper.view.zoom);
+    if (zoomBucket !== stoneSpriteZoomBucket) {
+      stoneSpriteZoomBucket = zoomBucket;
+      clearStoneSpriteCache();
+      stoneSymbolDefs.clear();
+      rebuildAllStoneGroups();
+    }
     onViewportChanged();
   }
 
@@ -1160,8 +1178,9 @@ export function createDrawingTool(canvasEl, hooks = {}) {
    * ever match a shape's OWN outline stroke: this app's drawn shapes carry strokeColor but never
    * fillColor (see STROKE_COLOR/materializeShapeFromLayer), so the fill-test never matched, leaving
    * only a ~4px-of-the-actual-edge stroke-test window -- a click anywhere in a shape's true
-   * interior, including directly on one of its own rendered stone dots (real paper.Path.Circle
-   * items with genuine fillColor, but siblings of the shape's own item tagged data.isStoneDot/
+   * interior, including directly on one of its own rendered stone dots (real rendered items --
+   * originally paper.Path.Circle with genuine fillColor, now paper.SymbolItem sprites per
+   * rs-design-crystal-dots -- but siblings of the shape's own item tagged data.isStoneDot/
    * data.isStoneGroup, never data.shapeId, so the old parent-walk could never resolve one back to a
    * shape id), resolved no target at all.
    *
@@ -1917,11 +1936,40 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   // see rebuildStoneGroupForShape()'s own doc comment for the render-order guarantee.
   const stoneGroups = new Map();
 
+  // rs-design-crystal-dots: shapeId -> paper.Group Map above holds finished dot previews; these two
+  // hold the sprite-rendering assets that build them. stoneSymbolDefs is keyed identically to
+  // StoneSpriteCache's own cache (`${colorKey}|${radiusBucket}|${variantIndex}`, radiusBucket via
+  // quantizeRadiusPx()) so a symbol definition and its underlying sprite always invalidate together.
+  const stoneSymbolDefs = new Map();
+  let stoneSpriteZoomBucket = null;
+
+  /**
+   * Quantizes `zoom` into a sqrt(2)-ratio bucket id -- two zoom levels within a factor of sqrt(2)
+   * of each other land in the same bucket. Used by applyViewport() below to decide when the sprite
+   * cache is stale enough (an actual visible-resolution mismatch, not just float noise from a pan/
+   * sub-pixel zoom tick) to justify the cost of re-baking every stone sprite + symbol definition and
+   * rebuilding every shape's stone Group.
+   * @param {number} zoom
+   * @returns {number}
+   */
+  function stoneSpriteZoomBucketFor(zoom) {
+    return Math.round(2 * Math.log2(zoom));
+  }
+
   /** Removes shapeId's stone Group (if any) from both the scene and `stoneGroups`. */
   function removeStoneGroupForShape(shapeId) {
     const group = stoneGroups.get(shapeId);
     if (group) group.remove();
     stoneGroups.delete(shapeId);
+  }
+
+  /**
+   * Re-runs rebuildStoneGroupForShape() for every currently-finalized shape -- the "rebuild all
+   * stone groups" side of a zoom-bucket change (applyViewport() below), reusing this file's one
+   * existing rebuild entry point rather than a second mechanism.
+   */
+  function rebuildAllStoneGroups() {
+    for (const shape of board.listShapes()) rebuildStoneGroupForShape(shape.id);
   }
 
   /**
@@ -1932,9 +1980,12 @@ export function createDrawingTool(canvasEl, hooks = {}) {
    * _placeNaturalContours() would apply to layer.contours, just read straight off the item instead)
    * plus the layer's own stoneSize/gap/color/fillMode (getLayerStoneParams hook), runs both through
    * app.js's generatePathLayout hook (the same permanentEngine.generatePathLayout() call
-   * generatePathStonesLive() makes), and builds a fresh paper.Group of plain paper.Path.Circle items
-   * -- no facets/gradients, drawCrystalStone() stays Canvas2D-only (this file's own header comment).
-   * The new Group is inserted directly below the shape's own outline item (`group.insertBelow`,
+   * generatePathStonesLive() makes), and builds a fresh paper.Group of paper.SymbolItem sprites
+   * (rs-design-crystal-dots) -- each one a cached offscreen bake of CrystalStoneRenderer.js's
+   * faceted-crystal drawCrystalStone(), via StoneSpriteCache.js, so Design's own preview matches the
+   * 2D Canvas view's look. drawCrystalStone() itself is still Canvas2D-only (its own header
+   * comment); only its baked *output* reaches Paper.js, as a paper.Raster wrapped in a
+   * paper.SymbolDefinition. The new Group is inserted directly below the shape's own outline item (`group.insertBelow`,
    * same layer, no second canvas/paper.Layer) before the old one (if any) is removed, so every other
    * shape's own group/outline is untouched and z-order never has a frame without a group present.
    * A no-op (existing group, if any, is torn down) if the shape no longer exists, has no layerId, or
@@ -2020,14 +2071,32 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     const stones = generatePathLayout(params);
     const group = new paper.Group();
     group.data.isStoneGroup = true;
-    for (const stone of stones) {
-      const circle = new paper.Path.Circle({
-        center: [stone.x, stone.y],
-        radius: stone.d / 2,
-        fillColor: stone.color
-      });
-      circle.data.isStoneDot = true;
-      group.addChild(circle);
+    // rs-design-crystal-dots: px-per-project-mm the sprites below bake at, clamped so a sprite never
+    // bakes illegibly small (deep zoom-out) or wastefully large (deep zoom-in) -- see this file's
+    // header comment for the paper project-unit-equals-mm convention `paper.view.zoom` reads here.
+    const spritePxPerMm = Math.min(STONE_SPRITE_PX_PER_MM_MAX, Math.max(STONE_SPRITE_PX_PER_MM_MIN, paper.view.zoom));
+    for (let i = 0; i < stones.length; i++) {
+      const stone = stones[i];
+      const radiusPxBucket = quantizeRadiusPx((stone.d / 2) * spritePxPerMm);
+      const variantIndex = getCrystalAppearance({
+        xMm: stone.x,
+        yMm: stone.y,
+        sizeMm: stone.d,
+        color: stone.color,
+        layerId,
+        index: i
+      }).seed % STONE_SPRITE_VARIANT_COUNT;
+      const symbolDefKey = `${stone.color}|${radiusPxBucket}|${variantIndex}`;
+      let symbolDef = stoneSymbolDefs.get(symbolDefKey);
+      if (!symbolDef) {
+        const spriteCanvas = getStoneSprite(stone.color, radiusPxBucket, variantIndex);
+        symbolDef = new paper.SymbolDefinition(new paper.Raster(spriteCanvas));
+        stoneSymbolDefs.set(symbolDefKey, symbolDef);
+      }
+      const symbolItem = new paper.SymbolItem(symbolDef, new paper.Point(stone.x, stone.y));
+      symbolItem.scale(1 / spritePxPerMm);
+      symbolItem.data.isStoneDot = true;
+      group.addChild(symbolItem);
     }
     // RS-3011 resize-perf fix: this shape's resize is still in progress (mouse still down) -- keep
     // the freshly rebuilt Group hidden too, since every rAF-throttled rebuild during a resize

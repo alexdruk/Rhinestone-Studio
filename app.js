@@ -1645,14 +1645,15 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     rotationDeg:l.rotationDeg??0,
     contours:l.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),closed:l.closed!==false,...mixedSizeParamsFor(l)};
   },
-  // Mirrors generatePathStonesLive()'s own result mapping, plus resolving the stored color id
-  // (STONE_COLORS key, e.g. 'gold') to its previewColor -- the same flat swatch color
-  // updateStoneColorSwatch()/populateStoneColorOptions() already use, since the live Design dots are
-  // plain paper.Path.Circle fills, not CanvasRenderer2D.js's faceted drawCrystalStone() look.
+  // Mirrors generatePathStonesLive()'s own result mapping exactly (color:s.color, the raw
+  // STONE_COLORS key, e.g. 'gold') -- rs-design-crystal-dots: DrawingCanvasTool.js's stone dots now
+  // go through the same faceted drawCrystalStone() look CanvasRenderer2D.js uses, which resolves a
+  // stone's color key itself (STONE_COLORS[colorKey]) and needs that raw key, not a pre-resolved
+  // previewColor hex.
   generatePathLayout:(params)=>{
     if(!permanentEngine)return[];
     const result=permanentEngine.generatePathLayout(params);
-    return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:(STONE_COLORS[s.color]&&STONE_COLORS[s.color].previewColor)||s.color}));
+    return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color}));
   },
   // RS-3032 Step A: the one new dependency DrawingCanvasTool.js needs to materialize a
   // SHAPE_LIBRARY_KINDS layer (Star/Ring/Heart/...) as a real Paper.js item -- unlike a 'path'
