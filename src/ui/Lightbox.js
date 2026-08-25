@@ -46,8 +46,6 @@ function focusableElements(root) {
  *   navigation away without a close.
  * @param {boolean} [options.primary] When true, opening this Lightbox closes any other currently
  *   open `primary` Lightbox first (S-105 single-active-primary policy).
- * @param {string} [options.menuButtonId] The id of the top-menu button that opens this Lightbox.
- *   When given, open()/close() keep that button's aria-pressed in sync (RS-topmenu-active-state).
  */
 export class Lightbox {
   constructor(overlayId, options = {}) {
@@ -58,7 +56,6 @@ export class Lightbox {
     this.onOpen = options.onOpen || null;
     this.onClose = options.onClose || null;
     this.primary = !!options.primary;
-    this.menuButton = options.menuButtonId ? document.getElementById(options.menuButtonId) : null;
     this._previouslyFocused = null;
     this._handleKeydown = this._handleKeydown.bind(this);
     this._dragPointerId = null;
@@ -101,7 +98,6 @@ export class Lightbox {
     this._previouslyFocused = document.activeElement;
     this.overlay.style.display = 'flex';
     this.overlay.classList.add('open');
-    if (this.menuButton) this.menuButton.setAttribute('aria-pressed', 'true');
     document.addEventListener('keydown', this._handleKeydown, true);
     openLightboxes.push(this);
     this._reclampToViewport();
@@ -114,7 +110,6 @@ export class Lightbox {
     if (!this.isOpen) return;
     this.overlay.style.display = 'none';
     this.overlay.classList.remove('open');
-    if (this.menuButton) this.menuButton.setAttribute('aria-pressed', 'false');
     document.removeEventListener('keydown', this._handleKeydown, true);
     openLightboxes = openLightboxes.filter((l) => l !== this);
     if (this.onClose) this.onClose();
