@@ -119,7 +119,7 @@ await test('11. field-relocation moves the shared position/stone field groups on
   assert.match(appJs, /function relocateFieldGroups\(\)\{/);
   const closers = ['text', 'shapes', 'importBox', 'imagetrace'];
   for (const key of closers) {
-    const re = new RegExp(`${key}:new Lightbox\\('\\w+',\\{primary:true,onOpen\\(\\)\\{[^}]*relocateFieldGroups\\(\\)[\\s\\S]*?onClose\\(\\)\\{[^}]*relocateFieldGroups\\(\\)`);
+    const re = new RegExp(`${key}:new Lightbox\\('\\w+',\\{primary:true,(?:menuButtonId:'\\w+',)?onOpen\\(\\)\\{[^}]*relocateFieldGroups\\(\\)[\\s\\S]*?onClose\\(\\)\\{[^}]*relocateFieldGroups\\(\\)`);
     assert.match(appJs, re, `expected the ${key} Lightbox to relocate field groups on both open and close`);
   }
 });

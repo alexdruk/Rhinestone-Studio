@@ -86,6 +86,7 @@ export const GROUPS = {
     'test-shapes-around-text-creation.mjs',
     'test-alignment-snapping-wiring.mjs',
     'test-lightbox-controller.mjs',
+    'test-topmenu-active-state.mjs',
     'test-ui-shell-structure.mjs',
     'test-ui-import-autoswitch-regression.mjs',
     'test-autosave-recovery-wiring.mjs',
@@ -213,6 +214,7 @@ export const GROUPS = {
   ui: [
     'test-ui-shell-structure.mjs',
     'test-lightbox-controller.mjs',
+    'test-topmenu-active-state.mjs',
     'test-lightbox-movable-persistent.mjs',
     'test-ui-import-autoswitch-regression.mjs',
     'test-text-position-workflow.mjs',

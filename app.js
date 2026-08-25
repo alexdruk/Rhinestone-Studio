@@ -4153,22 +4153,22 @@ relocateFieldGroups();
 // launched from within an already-open primary Lightbox and are deliberately left non-primary so
 // they keep stacking on top of it exactly as before.
 const lightboxes={
-  text:new Lightbox('lightboxText',{primary:true,onOpen(){activeFieldLightbox='text';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
-  shapes:new Lightbox('lightboxShapes',{primary:true,onOpen(){activeFieldLightbox='shapes';relocateFieldGroups();updateObjectTemplateDetail()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
-  importBox:new Lightbox('lightboxImport',{primary:true,onOpen(){activeFieldLightbox='import';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
-  imagetrace:new Lightbox('lightboxImageTrace',{primary:true,onOpen(){activeFieldLightbox='imagetrace';relocateFieldGroups();updateImageTraceSections()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
-  exportBox:new Lightbox('lightboxExport',{primary:true}),
-  prodSheet:new Lightbox('lightboxProdSheet',{primary:true}),
-  shipping:new Lightbox('lightboxShipping',{primary:true,onOpen(){syncShippingFieldsFromState(project.units)}}),
-  settings:new Lightbox('lightboxSettings',{primary:true,onOpen(){syncSettingsFieldsFromState()}}),
-  help:new Lightbox('lightboxHelp',{primary:true}),
-  gallery:new Lightbox('lightboxGallery',{primary:true,onOpen(){onGalleryOpen()}}),
+  text:new Lightbox('lightboxText',{primary:true,menuButtonId:'menuText',onOpen(){activeFieldLightbox='text';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  shapes:new Lightbox('lightboxShapes',{primary:true,menuButtonId:'menuShapes',onOpen(){activeFieldLightbox='shapes';relocateFieldGroups();updateObjectTemplateDetail()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  importBox:new Lightbox('lightboxImport',{primary:true,menuButtonId:'menuImport',onOpen(){activeFieldLightbox='import';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  imagetrace:new Lightbox('lightboxImageTrace',{primary:true,menuButtonId:'menuImageTrace',onOpen(){activeFieldLightbox='imagetrace';relocateFieldGroups();updateImageTraceSections()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  exportBox:new Lightbox('lightboxExport',{primary:true,menuButtonId:'menuExport'}),
+  prodSheet:new Lightbox('lightboxProdSheet',{primary:true,menuButtonId:'menuProdSheet'}),
+  shipping:new Lightbox('lightboxShipping',{primary:true,menuButtonId:'menuShipping',onOpen(){syncShippingFieldsFromState(project.units)}}),
+  settings:new Lightbox('lightboxSettings',{primary:true,menuButtonId:'menuSettings',onOpen(){syncSettingsFieldsFromState()}}),
+  help:new Lightbox('lightboxHelp',{primary:true,menuButtonId:'menuHelp'}),
+  gallery:new Lightbox('lightboxGallery',{primary:true,menuButtonId:'menuGallery',onOpen(){onGalleryOpen()}}),
   galleryPreview:new Lightbox('lightboxGalleryPreview'),
   // MONO-006: no shared field group participates in this Lightbox (Frame/Layout/Letters/Font/Stone
   // Size/Color/Frame Size all live in dedicated #monogram* controls, never the relocated
   // #stoneSize/#stoneColor/#font shared elements above), so it needs no relocateFieldGroups()
   // onOpen/onClose pair -- onOpen only needs to (re)populate its own option lists.
-  monogram:new Lightbox('lightboxMonogram',{primary:true,onOpen(){onMonogramOpen()}})
+  monogram:new Lightbox('lightboxMonogram',{primary:true,menuButtonId:'menuMonogram',onOpen(){onMonogramOpen()}})
 };
 
 // RS-3011 nav-toggle fix: a Lightbox that opens over Design (or over a non-Dual workspace view)
@@ -4628,6 +4628,9 @@ function updateDrawToolButtons(){
   el('drawSlotWidthField').style.display=showSlotWidth?'':'none';
   el('drawSlotWidthField').title=`Slot width (${unitSuffix(project.units)})`;
   el('drawSlotWidthMm').style.display=showSlotWidth?'':'none';
+  // RS-topmenu-active-state: #menuDesign has no rail/mode of its own -- it reflects Design mode
+  // as a whole (entering Design via any rail tool, or the Design menu button itself, all count).
+  el('menuDesign').setAttribute('aria-pressed',String(active));
   // RS-3010 Design Step A correction: the old horizontal row's five preset buttons are gone --
   // these two rails (split left/right) are now the only aria-pressed sync targets.
   el('railSelectToggle').setAttribute('aria-pressed',String(active&&mode==='select'));
