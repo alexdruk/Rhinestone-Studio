@@ -282,6 +282,94 @@ function rotateHandlePositionFor(bounds) {
 }
 
 /**
+ * RS-3034: each handle's unit offset from the box's own center (nw=(-1,-1), n=(0,-1), etc.),
+ * implicit in handlePositionsFor() above -- mirrors app.js's own HANDLE_UNIT_OFFSET verbatim, used
+ * by the resize-drag algorithm to find a handle's ANCHOR (the opposite corner/edge, i.e. this
+ * offset negated) without per-handle-name branching.
+ */
+const HANDLE_UNIT_OFFSET = {
+  nw: { x: -1, y: -1 }, ne: { x: 1, y: -1 }, se: { x: 1, y: 1 }, sw: { x: -1, y: 1 },
+  n: { x: 0, y: -1 }, e: { x: 1, y: 0 }, s: { x: 0, y: 1 }, w: { x: -1, y: 0 }
+};
+
+/**
+ * RS-3034: rotates point (x,y) about (cx,cy) by rotationDeg -- mirrors app.js's own rotatePointDeg()
+ * (itself a verbatim copy of GeometryEngine.js's rotatePointsAroundCenter() formula: clockwise,
+ * this app's Y-down mm-space convention) verbatim. A local copy rather than an import for the same
+ * reason app.js's own comment gives for not importing GeometryEngine's module-private version --
+ * this file owns all direct Paper.js/point-math construction, per its own header comment. Distinct
+ * from `item.rotate(angle, center)` (which rotates a whole Paper.js Item): the resize-drag algorithm
+ * below needs to rotate individual points/vectors, not whole Items.
+ * @param {number} x
+ * @param {number} y
+ * @param {number} cx
+ * @param {number} cy
+ * @param {number} rotationDeg
+ * @returns {{x:number,y:number}}
+ */
+function rotatePointDeg(x, y, cx, cy, rotationDeg) {
+  const radians = rotationDeg * (Math.PI / 180);
+  const cos = Math.cos(radians), sin = Math.sin(radians);
+  const dx = x - cx, dy = y - cy;
+  return { x: cx + dx * cos - dy * sin, y: cy + dx * sin + dy * cos };
+}
+
+/**
+ * RS-3034: `item`'s own LOCAL (pre-rotation) axis-aligned bounds. For an unrotated item (the
+ * overwhelming majority case) this is simply a clone of its current `.bounds` -- byte-identical to
+ * what every pre-existing call site already read directly, and cloned (not returned live) to match
+ * the existing `shape.item.bounds.clone()` snapshot convention resize-drag-start already used.
+ *
+ * For a rotated item, `.bounds` is the enclosing AABB of the TILTED shape -- generally larger than,
+ * and offset from, the true local box (layer.x/y/w/h) -- not usable directly, the same reason
+ * app.js's own rotatedHandlesFor() rotates handlesFor(b)'s positions FORWARD from the known local
+ * box rather than trying to derive them from an already-rotated box. This file has no stored local
+ * box to start from (materializeShapeFromLayer()/materializeShapeLibraryItemFromLayer() build the
+ * item and immediately bake the rotation in, keeping only rotationDeg/pivotXMm/pivotYMm as
+ * bookkeeping -- see those functions' own comments), so the local box is instead recovered exactly
+ * via a detached clone (`insert:false`, never added to the board/project) inverse-rotated by
+ * -rotationDeg around the item's own stamped pivot -- exact, since item.rotate() is a rigid
+ * transform and this is its precise inverse, unlike assuming the local box always touches all 4 of
+ * the natural contour's own edges.
+ * @param {paper.Item} item
+ * @returns {paper.Rectangle}
+ */
+function unrotatedLocalBoundsFor(item) {
+  const rotationDeg = item.data.rotationDeg || 0;
+  if (!rotationDeg) return item.bounds.clone();
+  const pivot = new paper.Point(item.data.pivotXMm, item.data.pivotYMm);
+  const clone = item.clone({ insert: false });
+  clone.rotate(-rotationDeg, pivot);
+  const bounds = clone.bounds.clone();
+  clone.remove();
+  return bounds;
+}
+
+/**
+ * RS-3034: handlePositionsFor(bounds)'s 8 positions, but for the shape's own TRUE rotated corners
+ * instead of its plain axis-aligned local box -- mirrors app.js's own rotatedHandlesFor(b,
+ * rotationDeg) exactly: rotate the local box's handle positions around the shape's own TRUE pivot
+ * (item.data.pivotXMm/pivotYMm, NOT localBounds.center -- see materializeShapeFromLayer()'s own
+ * comment for why the two drift apart once a shape has actually been resized/rotated) by the
+ * shape's current rotationDeg. At rotationDeg === 0, unrotatedLocalBoundsFor()'s own fast path
+ * makes this produce byte-identical output to handlePositionsFor(item.bounds) directly -- a true
+ * no-op for every unrotated shape, matching this milestone's own most important invariant.
+ * @param {paper.Item} item
+ * @returns {{name:string,point:paper.Point}[]}
+ */
+function rotatedHandlePositionsFor(item) {
+  const rotationDeg = item.data.rotationDeg || 0;
+  const localBounds = unrotatedLocalBoundsFor(item);
+  const handles = handlePositionsFor(localBounds);
+  if (!rotationDeg) return handles;
+  const pivot = { x: item.data.pivotXMm, y: item.data.pivotYMm };
+  return handles.map(({ name, point }) => {
+    const rotated = rotatePointDeg(point.x, point.y, pivot.x, pivot.y, rotationDeg);
+    return { name, point: new paper.Point(rotated.x, rotated.y) };
+  });
+}
+
+/**
  * Builds a stadium/pill Path: two straight sides parallel to the a-to-b axis, offset by
  * +/-widthMm/2 perpendicular to it, capped by semicircles of radius widthMm/2 at `a` and `b`.
  * Module-private, mirrors rect/ellipse's own construction not being exported. Degenerate case (`a`
@@ -894,11 +982,21 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   // selected shape's geometry can change; empty whenever mode !== 'select' or more/fewer than one
   // shape is selected. resizeHandle/resizeShapeId/resizeStartBounds mirror app.js's own
   // `drag={kind:'resize',handle,layerId,b0,...}` shape, adapted to this file's discrete closure
-  // variables -- non-null only while interactionKind === 'resize'.
+  // variables -- non-null only while interactionKind === 'resize'. RS-3034: resizeStartBounds is
+  // now the shape's LOCAL unrotated box (unrotatedLocalBoundsFor()), not necessarily its live
+  // item.bounds -- byte-identical to before for an unrotated shape (unrotatedLocalBoundsFor()'s own
+  // fast path). resizeRotationDeg0/resizeAnchorAbs/resizeHandleOffset mirror app.js's own
+  // rotationDeg0/anchorAbs/handleOffset, snapshotted once at drag-start the same way; resizePivot is
+  // this file's own addition, tracking the live item's current rotation pivot frame-to-frame during
+  // an active rotated resize-drag (see onMouseDrag's 'resize' branch for why).
   let resizeHandleItems = [];
   let resizeHandle = null;
   let resizeShapeId = null;
   let resizeStartBounds = null;
+  let resizeRotationDeg0 = 0;
+  let resizeAnchorAbs = null;
+  let resizeHandleOffset = null;
+  let resizePivot = null;
   // RS-3033: the live rotate handle chrome (a dashed connecting line + a dot, mirroring app.js's own
   // drawRotateHandle() pair) -- rebuilt by updateRotateHandleItem() under the exact same
   // mode==='select'/single-selection gate resizeHandleItems above uses, called from inside
@@ -1207,7 +1305,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     const shape = board.getShape([...selectedIds][0]);
     if (!shape) return null;
     const tolerance = 4 / paper.view.zoom;
-    const hit = handlePositionsFor(shape.item.bounds).find((h) => point.getDistance(h.point) <= tolerance);
+    const hit = rotatedHandlePositionsFor(shape.item).find((h) => point.getDistance(h.point) <= tolerance);
     return hit ? hit.name : null;
   }
 
@@ -1443,8 +1541,10 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   /**
    * Rebuilds `resizeHandleItems` from scratch: removes whatever handle Items currently exist,
    * then -- only if `mode === 'select'` and exactly one shape is selected -- adds 8 small square
-   * Path.Rectangle Items at that shape's current bounds' handle positions (handlePositionsFor).
-   * Called wherever selection or the selected shape's geometry can change.
+   * Path.Rectangle Items at that shape's current TRUE rotated corners/edge-midpoints
+   * (rotatedHandlePositionsFor(), RS-3034 -- byte-identical to the plain handlePositionsFor(bounds)
+   * this used before that milestone for every unrotated shape). Called wherever selection or the
+   * selected shape's geometry can change.
    *
    * RS-3033: also rebuilds the rotate handle (updateRotateHandleItem()) on every call, rather than
    * duplicating a second call at each of this function's own ~20 call sites -- the two chrome sets
@@ -1461,7 +1561,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     const shape = board.getShape([...selectedIds][0]);
     if (!shape) return;
     const sizeMm = RESIZE_HANDLE_SIZE_PX / paper.view.zoom;
-    for (const { point } of handlePositionsFor(shape.item.bounds)) {
+    for (const { point } of rotatedHandlePositionsFor(shape.item)) {
       const rect = new paper.Rectangle(point.x - sizeMm / 2, point.y - sizeMm / 2, sizeMm, sizeMm);
       const handleItem = new paper.Path.Rectangle(rect);
       handleItem.fillColor = RESIZE_HANDLE_FILL_COLOR;
@@ -1708,6 +1808,10 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     resizeHandle = null;
     resizeShapeId = null;
     resizeStartBounds = null;
+    resizeRotationDeg0 = 0;
+    resizeAnchorAbs = null;
+    resizeHandleOffset = null;
+    resizePivot = null;
     rotateShapeId = null;
     rotateCenter = null;
     rotateStartPointerAngleDeg = 0;
@@ -2189,7 +2293,26 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           interactionKind = 'resize';
           resizeHandle = resizeHandleHit;
           resizeShapeId = shape.id;
-          resizeStartBounds = shape.item.bounds.clone();
+          // RS-3034: local unrotated box b0 (not shape.item.bounds directly -- see
+          // unrotatedLocalBoundsFor()'s own comment), rotationDeg0 (fixed for the whole drag), and
+          // the dragged handle's ANCHOR (opposite corner/edge) at its true absolute rotated
+          // position -- snapshotted once here exactly like app.js's own RS-3030 resize-drag-start
+          // (rotationDeg0/cx0/cy0/anchorLocal/anchorAbs), so the anchor stays visually fixed for the
+          // whole drag regardless of how the live item gets mutated frame to frame.
+          resizeStartBounds = unrotatedLocalBoundsFor(shape.item);
+          resizeRotationDeg0 = shape.item.data.rotationDeg || 0;
+          resizeHandleOffset = HANDLE_UNIT_OFFSET[resizeHandle];
+          const cx0 = resizeStartBounds.left + resizeStartBounds.width / 2;
+          const cy0 = resizeStartBounds.top + resizeStartBounds.height / 2;
+          const anchorLocal = {
+            x: cx0 - resizeHandleOffset.x * (resizeStartBounds.width / 2),
+            y: cy0 - resizeHandleOffset.y * (resizeStartBounds.height / 2)
+          };
+          const anchorAbs = resizeRotationDeg0
+            ? rotatePointDeg(anchorLocal.x, anchorLocal.y, cx0, cy0, resizeRotationDeg0)
+            : anchorLocal;
+          resizeAnchorAbs = new paper.Point(anchorAbs.x, anchorAbs.y);
+          resizePivot = new paper.Point(cx0, cy0);
           // RS-3011 resize-perf fix: hide the stone Group for the duration of the drag. CDP tracing
           // (tools/scratch/rs-3011-resize-perf-spike/) found the dominant per-frame cost during a
           // resize drag is Paper.js's own canvas redraw (handleCallbacks -> View.update(), ~7.2ms
@@ -2503,17 +2626,55 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         // once up front is enough -- the assignments below just consume the snapped version.
         // Step 2f: vertex-else-grid, excluding the resized shape's own points.
         const snappedPoint = resolveSnappedPoint(event.point, resizeShapeId);
-        let x0 = resizeStartBounds.left;
-        let y0 = resizeStartBounds.top;
-        let x1 = resizeStartBounds.right;
-        let y1 = resizeStartBounds.bottom;
-        if (resizeHandle.includes('w')) x0 = snappedPoint.x;
-        if (resizeHandle.includes('e')) x1 = snappedPoint.x;
-        if (resizeHandle.includes('n')) y0 = snappedPoint.y;
-        if (resizeHandle.includes('s')) y1 = snappedPoint.y;
-        const width = Math.max(RESIZE_MIN_DIM_MM, Math.abs(x1 - x0));
-        const height = Math.max(RESIZE_MIN_DIM_MM, Math.abs(y1 - y0));
-        shape.item.bounds = new paper.Rectangle(Math.min(x0, x1), Math.min(y0, y1), width, height);
+        if (!resizeRotationDeg0) {
+          // Byte-identical to before RS-3034 for every unrotated shape -- the overwhelming majority
+          // case (see this milestone's own most important invariant).
+          let x0 = resizeStartBounds.left;
+          let y0 = resizeStartBounds.top;
+          let x1 = resizeStartBounds.right;
+          let y1 = resizeStartBounds.bottom;
+          if (resizeHandle.includes('w')) x0 = snappedPoint.x;
+          if (resizeHandle.includes('e')) x1 = snappedPoint.x;
+          if (resizeHandle.includes('n')) y0 = snappedPoint.y;
+          if (resizeHandle.includes('s')) y1 = snappedPoint.y;
+          const width = Math.max(RESIZE_MIN_DIM_MM, Math.abs(x1 - x0));
+          const height = Math.max(RESIZE_MIN_DIM_MM, Math.abs(y1 - y0));
+          shape.item.bounds = new paper.Rectangle(Math.min(x0, x1), Math.min(y0, y1), width, height);
+        } else {
+          // RS-3034: rotated resize -- local-axis math ported from app.js's own RS-3030 algorithm
+          // (see this milestone's own doc for the full derivation). Inverse-rotates the snapped
+          // pointer's offset from the fixed anchor (resizeAnchorAbs) into the shape's local,
+          // unrotated axes; a corner handle resizes both dimensions from that local delta, an edge
+          // handle only its one relevant dimension (resizeHandleOffset); the new center sits the new
+          // local half-extent (signed by the dragged handle's own unit offset) away from the anchor,
+          // rotated forward back into absolute space.
+          const local = rotatePointDeg(
+            snappedPoint.x - resizeAnchorAbs.x, snappedPoint.y - resizeAnchorAbs.y,
+            0, 0, -resizeRotationDeg0
+          );
+          let newW = resizeStartBounds.width;
+          let newH = resizeStartBounds.height;
+          if (resizeHandleOffset.x !== 0) newW = Math.max(RESIZE_MIN_DIM_MM, Math.abs(local.x));
+          if (resizeHandleOffset.y !== 0) newH = Math.max(RESIZE_MIN_DIM_MM, Math.abs(local.y));
+          const centerOffset = rotatePointDeg(
+            resizeHandleOffset.x * newW / 2, resizeHandleOffset.y * newH / 2,
+            0, 0, resizeRotationDeg0
+          );
+          const newCx = resizeAnchorAbs.x + centerOffset.x;
+          const newCy = resizeAnchorAbs.y + centerOffset.y;
+          // Un-rotate the live item back to its current local box -- the exact inverse of the
+          // rotate it was last placed with, around the SAME pivot (resizePivot, tracked frame to
+          // frame below) -- then rescale in local axes via the ordinary axis-aligned bounds=
+          // assignment (safe now that the item is momentarily unrotated), then rotate back into
+          // place around the new pivot. This is what makes the shape visibly grow along its own
+          // tilted axes every frame, unlike the naive axis-aligned stretch the branch above uses.
+          shape.item.rotate(-resizeRotationDeg0, resizePivot);
+          shape.item.bounds = new paper.Rectangle(newCx - newW / 2, newCy - newH / 2, newW, newH);
+          resizePivot = new paper.Point(newCx, newCy);
+          shape.item.rotate(resizeRotationDeg0, resizePivot);
+          shape.item.data.pivotXMm = newCx;
+          shape.item.data.pivotYMm = newCy;
+        }
         updateResizeHandles();
         // RS-3011 Step 3b: a resize genuinely changes the contour, so (unlike move) this needs a
         // full rebuild -- throttled to one per animation frame rather than once per mousemove event,
@@ -2776,7 +2937,14 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         const shape = board.getShape(resizeShapeId);
         const layerId = shape && shape.item.data.layerId;
         if (layerId && shape) {
-          const b = shape.item.bounds;
+          // RS-3034: the LOCAL unrotated box (not shape.item.bounds directly, which for a rotated
+          // shape is the enclosing AABB of the tilted outline, not the box onShapeResized's own
+          // contract expects) -- app.js writes this straight into l.x/y/w/h, the SAME unrotated
+          // local box materializeShapeFromLayer()/GeometryEngine's own rotation step both pivot
+          // around. resizeStartBounds is the same kind of box (see its own snapshot comment above),
+          // so this stays an apples-to-apples comparison, byte-identical to before for an unrotated
+          // shape (unrotatedLocalBoundsFor()'s own fast path).
+          const b = unrotatedLocalBoundsFor(shape.item);
           const changed =
             !resizeStartBounds ||
             Math.abs(b.left - resizeStartBounds.left) > 1e-6 ||
@@ -2794,6 +2962,10 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         resizeHandle = null;
         resizeShapeId = null;
         resizeStartBounds = null;
+        resizeRotationDeg0 = 0;
+        resizeAnchorAbs = null;
+        resizeHandleOffset = null;
+        resizePivot = null;
         // RS-3011 Step 3b: an explicit, unthrottled final rebuild -- the last onMouseDrag frame's
         // scheduleStoneRebuildForShape() call may still be a pending requestAnimationFrame callback
         // at this point (still correctly targeted at this shapeId either way, see that function's

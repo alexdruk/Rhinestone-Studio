@@ -381,3 +381,10 @@ tools/scratch/rs-3032-step-a-verify/
 # resize on an already-rotated shape unaffected), same "never a repo artifact" category as the
 # scratch folders above
 tools/scratch/rs-3033-rotate-verify/
+
+# RS-3034: Playwright verification script + screenshots for resize handles that rotate with the
+# shape inside Design's own Select tool (anchor-corner-fixed invariant for both 'path' and
+# SHAPE_LIBRARY_KINDS shapes, rotationDeg===0 no-op, edge-handle single-dimension resize, main-
+# canvas consistency after exiting Design), same "never a repo artifact" category as the scratch
+# folders above
+tools/scratch/rs-3034-resize-verify/
