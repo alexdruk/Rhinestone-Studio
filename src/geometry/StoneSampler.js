@@ -8,6 +8,7 @@
 
 import { Point2D } from '../text/VectorPath.js';
 import { computeInwardRingPolygons } from './ContourRingSampler.js';
+import { groupCongruentContours, applyRigidTransform } from './CongruentContours.js';
 
 // Outline-mode uniform-perimeter spacing: the actual per-contour walk step that makes
 // n = round(perimeterMm / spacingMm) equal-length hops close the loop exactly, so every gap around
@@ -655,6 +656,20 @@ function findEquidistantBackfillPoint(contourGeom, closed, prevPoint, nextPoint,
  * dedup below directly -- see that function's own doc comment. A shape with no corner-anchored
  * contour at all takes the exact code path below, completely unchanged.
  *
+ * RS-congruent-outline (congruent-contour replication): before any per-contour sampling, geometrically
+ * identical closed contours (CongruentContours.js's groupCongruentContours() -- translated, rotated,
+ * or mirrored copies of one shape, e.g. an imported SVG's ring of ~5mm octagons) are grouped. Only
+ * each group's own representative is actually sampled (through whichever path it would normally take,
+ * corner-anchored or uniform); every other member's raw sample is produced by applying the recovered
+ * rigid transform to the representative's already-sampled points, with arcLengthsMm/isCorner copied
+ * unchanged (arc length is invariant under a rigid transform). This is what makes stone count and
+ * phase identical across congruent copies -- they are, after this point, literally the same sampling
+ * result restated in each copy's own frame, rather than N independent samplings each exposed to their
+ * own sub-mm float noise. Everything below this point (cross-contour dedupe, corner protection,
+ * backfill) runs completely unchanged on the resulting per-contour sample list; a layer where every
+ * contour is unique (no group of size 2+) never enters this branch at all and takes the exact
+ * pre-existing per-contour independent-sampling path.
+ *
  * @param {Point2D[][]} polygons
  * @param {number} spacingMm
  * @param {{closed?: boolean, minSeparationMm?: number, cornerFlagsByContour?: (boolean[]|null)[]}} [options]
@@ -665,14 +680,39 @@ function findEquidistantBackfillPoint(contourGeom, closed, prevPoint, nextPoint,
  * @returns {Point2D[]}
  */
 export function sampleMultiContourOutlinePoints(polygons, spacingMm, { closed = true, minSeparationMm = spacingMm, cornerFlagsByContour = null } = {}, stats = null) {
-  const contourSamples = polygons.map((polygon, c) => {
+  const sampleContourIndependently = (polygon, c) => {
     const cornerFlags = cornerFlagsByContour ? cornerFlagsByContour[c] : null;
     if (cornerFlags) {
       const sampled = sampleCornerAnchoredOutlinePoints(polygon, cornerFlags, spacingMm, { closed });
       return { points: sampled.points, arcLengthsMm: sampled.arcLengthsMm, isCorner: sampled.isCorner, perimeterMm: sampled.perimeterMm };
     }
     return { points: sampleOutlinePoints(polygon, spacingMm, { closed, uniform: true }), arcLengthsMm: null, isCorner: null, perimeterMm: null };
-  });
+  };
+
+  const congruentGroups = closed && polygons.length >= 2 ? groupCongruentContours(polygons, { closed }) : null;
+  const hasCongruentGroups = Boolean(congruentGroups) && congruentGroups.some((group) => group.indices.length >= 2);
+
+  let contourSamples;
+  if (hasCongruentGroups) {
+    contourSamples = new Array(polygons.length);
+    for (const group of congruentGroups) {
+      const repIndex = group.representativeIndex;
+      const repSample = sampleContourIndependently(polygons[repIndex], repIndex);
+      contourSamples[repIndex] = repSample;
+      for (const memberIndex of group.indices) {
+        if (memberIndex === repIndex) continue;
+        const transform = group.transforms[memberIndex];
+        contourSamples[memberIndex] = {
+          points: repSample.points.map((point) => applyRigidTransform(transform, point)),
+          arcLengthsMm: repSample.arcLengthsMm,
+          isCorner: repSample.isCorner,
+          perimeterMm: repSample.perimeterMm
+        };
+      }
+    }
+  } else {
+    contourSamples = polygons.map(sampleContourIndependently);
+  }
 
   if (stats) {
     stats.rawSampleCount = contourSamples.reduce((sum, sample) => sum + sample.points.length, 0);

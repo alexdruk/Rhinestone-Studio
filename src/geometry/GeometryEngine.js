@@ -1051,7 +1051,28 @@ export class GeometryEngine {
     // entirely (see sampleShapeFillPoints()'s own doc comment) and an open path has no sides to
     // anchor between (RS-3011 endpoint anchoring is separate, deferred, future work).
     const cornerFlagsByContour = options.mode === 'outline' && options.closed
-      ? polygons.map((polygon) => detectPolygonCornerFlags(polygon, { closed: true }))
+      ? polygons.map((polygon) => {
+        const flags = detectPolygonCornerFlags(polygon, { closed: true });
+        if (!flags) return flags;
+        // RS-congruent-outline (tiny-contour corner-anchor guard): a contour whose flagged corners
+        // cannot geometrically coexist as separate stones -- its own perimeter divided by its own
+        // corner count is already below one stone's pitch, before any dedup/clustering runs -- must
+        // not be anchored at all. Left corner-anchored, clusterCornersByProximity() (StoneSampler.js)
+        // chains every corner into one float-sensitive centroid resolution, which is exactly the
+        // count/position instability this milestone fixes for small near-identical polygons (e.g. a
+        // ring of ~5mm octagons). Falling back to the whole-loop uniform walk here is deterministic
+        // and, for a shape this small relative to spacing, no less faithful a placement.
+        const n = flags.reduce((count, isCorner) => count + (isCorner ? 1 : 0), 0);
+        if (n === 0) return flags;
+        let perimeterMm = 0;
+        const polygonLength = polygon.length;
+        for (let v = 0; v < polygonLength; v++) {
+          const a = polygon[v];
+          const b = polygon[(v + 1) % polygonLength];
+          perimeterMm += Math.hypot(b.xMm - a.xMm, b.yMm - a.yMm);
+        }
+        return perimeterMm / n < spacingMm ? null : flags;
+      })
       : null;
     // Layout-quality metrics (Prompt 3): outline-mode sample attrition, see StoneLayout's own
     // outlineStats doc comment. null for every other mode, so this is a no-op there.

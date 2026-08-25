@@ -50,6 +50,11 @@ export {
 } from './ContourRingSampler.js';
 
 export {
+  groupCongruentContours,
+  applyRigidTransform
+} from './CongruentContours.js';
+
+export {
   projectPointToArc,
   projectPolygonToArc,
   CURVE_DIRECTIONS,
