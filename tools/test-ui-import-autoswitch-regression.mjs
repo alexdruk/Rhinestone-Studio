@@ -114,16 +114,9 @@ const autoSwitchSrc = sliceBetween(
 
 function makeFakeElement() {
   const classSet = new Set();
-  const attrs = {};
   return {
     style: {},
     classList: { add: (c) => classSet.add(c), remove: (c) => classSet.delete(c), contains: (c) => classSet.has(c) },
-    // RS-topmenu-active-state: the real `lightboxes` construction sliced below now includes
-    // `menuButtonId:'...'`, so Lightbox.open()/close() call setAttribute('aria-pressed', ...) on
-    // whatever document.getElementById(menuButtonId) resolves to -- this fake element needs the
-    // same `_attrs` convention tools/test-typography-font-library.mjs already uses.
-    setAttribute(k, v) { attrs[k] = String(v); },
-    getAttribute(k) { return Object.prototype.hasOwnProperty.call(attrs, k) ? attrs[k] : null; },
     addEventListener() {}, removeEventListener() {},
     querySelector() { return makeFakeElement(); },
     querySelectorAll() { return []; },

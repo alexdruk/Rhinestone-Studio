@@ -4153,23 +4153,36 @@ relocateFieldGroups();
 // launched from within an already-open primary Lightbox and are deliberately left non-primary so
 // they keep stacking on top of it exactly as before.
 const lightboxes={
-  text:new Lightbox('lightboxText',{primary:true,menuButtonId:'menuText',onOpen(){activeFieldLightbox='text';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
-  shapes:new Lightbox('lightboxShapes',{primary:true,menuButtonId:'menuShapes',onOpen(){activeFieldLightbox='shapes';relocateFieldGroups();updateObjectTemplateDetail()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
-  importBox:new Lightbox('lightboxImport',{primary:true,menuButtonId:'menuImport',onOpen(){activeFieldLightbox='import';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
-  imagetrace:new Lightbox('lightboxImageTrace',{primary:true,menuButtonId:'menuImageTrace',onOpen(){activeFieldLightbox='imagetrace';relocateFieldGroups();updateImageTraceSections()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
-  exportBox:new Lightbox('lightboxExport',{primary:true,menuButtonId:'menuExport'}),
-  prodSheet:new Lightbox('lightboxProdSheet',{primary:true,menuButtonId:'menuProdSheet'}),
-  shipping:new Lightbox('lightboxShipping',{primary:true,menuButtonId:'menuShipping',onOpen(){syncShippingFieldsFromState(project.units)}}),
-  settings:new Lightbox('lightboxSettings',{primary:true,menuButtonId:'menuSettings',onOpen(){syncSettingsFieldsFromState()}}),
-  help:new Lightbox('lightboxHelp',{primary:true,menuButtonId:'menuHelp'}),
-  gallery:new Lightbox('lightboxGallery',{primary:true,menuButtonId:'menuGallery',onOpen(){onGalleryOpen()}}),
+  text:new Lightbox('lightboxText',{primary:true,onOpen(){activeFieldLightbox='text';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  shapes:new Lightbox('lightboxShapes',{primary:true,onOpen(){activeFieldLightbox='shapes';relocateFieldGroups();updateObjectTemplateDetail()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  importBox:new Lightbox('lightboxImport',{primary:true,onOpen(){activeFieldLightbox='import';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  imagetrace:new Lightbox('lightboxImageTrace',{primary:true,onOpen(){activeFieldLightbox='imagetrace';relocateFieldGroups();updateImageTraceSections()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  exportBox:new Lightbox('lightboxExport',{primary:true}),
+  prodSheet:new Lightbox('lightboxProdSheet',{primary:true}),
+  shipping:new Lightbox('lightboxShipping',{primary:true,onOpen(){syncShippingFieldsFromState(project.units)}}),
+  settings:new Lightbox('lightboxSettings',{primary:true,onOpen(){syncSettingsFieldsFromState()}}),
+  help:new Lightbox('lightboxHelp',{primary:true}),
+  gallery:new Lightbox('lightboxGallery',{primary:true,onOpen(){onGalleryOpen()}}),
   galleryPreview:new Lightbox('lightboxGalleryPreview'),
   // MONO-006: no shared field group participates in this Lightbox (Frame/Layout/Letters/Font/Stone
   // Size/Color/Frame Size all live in dedicated #monogram* controls, never the relocated
   // #stoneSize/#stoneColor/#font shared elements above), so it needs no relocateFieldGroups()
   // onOpen/onClose pair -- onOpen only needs to (re)populate its own option lists.
-  monogram:new Lightbox('lightboxMonogram',{primary:true,menuButtonId:'menuMonogram',onOpen(){onMonogramOpen()}})
+  monogram:new Lightbox('lightboxMonogram',{primary:true,onOpen(){onMonogramOpen()}})
 };
+
+// RS-topmenu-active-persist: highlighting the active top-menu section is a navigation-level
+// concept owned by app.js, not a per-dialog open/close concern -- a Lightbox closing (X, Escape,
+// backdrop, or a programmatic close after a successful action) does not mean the user has left
+// that section, so Lightbox.js itself has no involvement in this at all (see src/ui/Lightbox.js).
+const TOP_MENU_BUTTON_IDS=['menuText','menuShapes','menuMonogram','menuGallery','menuImport','menuImageTrace','menuExport','menuProdSheet','menuShipping','menuSettings','menuHelp'];
+let activeTopMenuButtonId=null;
+function setActiveTopMenuButton(id){
+  if(activeTopMenuButtonId===id)return;
+  if(activeTopMenuButtonId)el(activeTopMenuButtonId).setAttribute('aria-pressed','false');
+  activeTopMenuButtonId=id;
+  if(id)el(id).setAttribute('aria-pressed','true');
+}
 
 // RS-3011 nav-toggle fix: a Lightbox that opens over Design (or over a non-Dual workspace view)
 // left the underlying view untouched -- Design has no Object Preview of its own, so a user
@@ -4192,24 +4205,24 @@ function revealDualWorkspaceForLightbox(){
     persistActiveView('dual');
   }
 }
-el('menuText').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.text.open()};
-el('menuShapes').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.shapes.open()};
-el('menuMonogram').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.monogram.open()};
+el('menuText').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.text.open();setActiveTopMenuButton('menuText')};
+el('menuShapes').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.shapes.open();setActiveTopMenuButton('menuShapes')};
+el('menuMonogram').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.monogram.open();setActiveTopMenuButton('menuMonogram')};
 // S-103 (Product Scope Freeze): #menuGallery carries the native `disabled` attribute (see
 // index.html), which makes the browser withhold click/Enter/Space activation and tab focus
 // entirely -- this handler is wired the same as every other menu item and is deliberately left
 // in place (Gallery code/tests/fixtures stay intact), it is just unreachable via the UI for now.
-el('menuGallery').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.gallery.open()};
-el('menuImport').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.importBox.open()};
-el('menuImageTrace').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.imagetrace.open()};
-el('menuExport').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.exportBox.open()};
-el('exportShortcut').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.exportBox.open()};
-el('menuProdSheet').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.prodSheet.open()};
+el('menuGallery').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.gallery.open();setActiveTopMenuButton('menuGallery')};
+el('menuImport').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.importBox.open();setActiveTopMenuButton('menuImport')};
+el('menuImageTrace').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.imagetrace.open();setActiveTopMenuButton('menuImageTrace')};
+el('menuExport').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.exportBox.open();setActiveTopMenuButton('menuExport')};
+el('exportShortcut').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.exportBox.open();setActiveTopMenuButton('menuExport')};
+el('menuProdSheet').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.prodSheet.open();setActiveTopMenuButton('menuProdSheet')};
 // Shipping/Settings/Help show no design/geometry content -- nothing behind them for Dual
 // Workspace to usefully reveal, so these deliberately keep the old behavior.
-el('menuShipping').onclick=()=>lightboxes.shipping.open();
-el('menuSettings').onclick=()=>lightboxes.settings.open();
-el('menuHelp').onclick=()=>lightboxes.help.open();
+el('menuShipping').onclick=()=>{lightboxes.shipping.open();setActiveTopMenuButton('menuShipping')};
+el('menuSettings').onclick=()=>{lightboxes.settings.open();setActiveTopMenuButton('menuSettings')};
+el('menuHelp').onclick=()=>{lightboxes.help.open();setActiveTopMenuButton('menuHelp')};
 
 // S-105 follow-up: the layer-type -> Lightbox mapping used by both "More Options" (below) and
 // syncSelectedControlsFromLayer()'s auto-switch (so a type-specific Lightbox left open across a
@@ -4631,6 +4644,11 @@ function updateDrawToolButtons(){
   // RS-topmenu-active-state: #menuDesign has no rail/mode of its own -- it reflects Design mode
   // as a whole (entering Design via any rail tool, or the Design menu button itself, all count).
   el('menuDesign').setAttribute('aria-pressed',String(active));
+  // RS-topmenu-active-persist: entering Design mode is the moment the user has actually left
+  // whichever Lightbox section was highlighted -- clear it here rather than on every rail-tool
+  // switch within Design (setActiveTopMenuButton()'s no-op-if-same-id guard makes repeated calls
+  // while active stays true harmless, so this needs no separate edge-transition tracking).
+  if(active)setActiveTopMenuButton(null);
   // RS-3010 Design Step A correction: the old horizontal row's five preset buttons are gone --
   // these two rails (split left/right) are now the only aria-pressed sync targets.
   el('railSelectToggle').setAttribute('aria-pressed',String(active&&mode==='select'));

@@ -104,8 +104,8 @@ await test('2. every top-menu button has an icon glyph, a visible text label, an
 await test('3. every top-menu button opens exactly its documented Lightbox, and every Lightbox overlay exists exactly once', () => {
   for (const { id, lightbox, revealsDualWorkspace } of MENU_ITEMS) {
     const re = revealsDualWorkspace
-      ? new RegExp(`el\\('${id}'\\)\\.onclick=\\(\\)=>\\{revealDualWorkspaceForLightbox\\(\\);lightboxes\\.\\w+\\.open\\(\\)\\}`)
-      : new RegExp(`el\\('${id}'\\)\\.onclick=\\(\\)=>lightboxes\\.\\w+\\.open\\(\\)`);
+      ? new RegExp(`el\\('${id}'\\)\\.onclick=\\(\\)=>\\{revealDualWorkspaceForLightbox\\(\\);lightboxes\\.\\w+\\.open\\(\\);setActiveTopMenuButton\\('${id}'\\)\\}`)
+      : new RegExp(`el\\('${id}'\\)\\.onclick=\\(\\)=>\\{lightboxes\\.\\w+\\.open\\(\\);setActiveTopMenuButton\\('${id}'\\)\\}`);
     assert.match(appJs, re, `expected #${id} to open a Lightbox${revealsDualWorkspace ? ', revealing Dual Workspace first' : ''}`);
     const matches = indexHtml.match(new RegExp(`id="${lightbox}"`, 'g')) || [];
     assert.equal(matches.length, 1, `expected exactly one #${lightbox}`);
@@ -131,7 +131,7 @@ await test('4. the top bar also exposes Undo, Redo, Save, and an Export shortcut
   for (const id of ['undoBtn', 'redoBtn', 'saveProject', 'exportShortcut']) {
     assert.match(indexHtml, new RegExp(`id="${id}"`), `expected #${id} in the top bar`);
   }
-  assert.match(appJs, /el\('exportShortcut'\)\.onclick=\(\)=>\{revealDualWorkspaceForLightbox\(\);lightboxes\.exportBox\.open\(\)\}/, 'expected the Export shortcut to reveal Dual Workspace and open the Export Lightbox');
+  assert.match(appJs, /el\('exportShortcut'\)\.onclick=\(\)=>\{revealDualWorkspaceForLightbox\(\);lightboxes\.exportBox\.open\(\);setActiveTopMenuButton\('menuExport'\)\}/, 'expected the Export shortcut to reveal Dual Workspace and open the Export Lightbox');
 });
 
 // === Lightbox content ============================================================================

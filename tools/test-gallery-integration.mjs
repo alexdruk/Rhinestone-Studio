@@ -61,7 +61,7 @@ await test('5. app.js wires the top-menu button to open the Gallery lightbox', (
   // RS-3011 nav-toggle fix: #menuGallery now also reveals Dual Workspace before opening, same as
   // every other content-bearing Lightbox opener (see tools/test-ui-shell-structure.mjs) -- still
   // unreachable via the UI (S-103's disabled attribute), unaffected by this.
-  assert.match(appJs, /el\('menuGallery'\)\.onclick=\(\)=>\{revealDualWorkspaceForLightbox\(\);lightboxes\.gallery\.open\(\)\}/);
+  assert.match(appJs, /el\('menuGallery'\)\.onclick=\(\)=>\{revealDualWorkspaceForLightbox\(\);lightboxes\.gallery\.open\(\);setActiveTopMenuButton\('menuGallery'\)\}/);
   assert.match(appJs, /gallery:new Lightbox\('lightboxGallery'/);
   assert.match(appJs, /galleryPreview:new Lightbox\('lightboxGalleryPreview'\)/);
 });
