@@ -4320,6 +4320,12 @@ function populateMonogramFontOptions(){if(!fontManager)return;el('monogramFont')
 function populateMonogramStoneSizeOptions(){el('monogramStoneSize').innerHTML=listStoneSizes().map(s=>`<option value="${s.diameterMm}">${escapeHtml(s.name)} — ${s.diameterMm.toFixed(1)} mm</option>`).join('')}
 function populateMonogramColorOptions(){const groups=new Map();for(const c of Object.values(STONE_COLORS)){if(!groups.has(c.group))groups.set(c.group,[]);groups.get(c.group).push(c)}el('monogramColor').innerHTML=[...groups.entries()].map(([group,colors])=>`<optgroup label="${escapeHtml(group)}">${colors.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`).join('')}
 function updateMonogramColorSwatch(){const c=STONE_COLORS[el('monogramColor').value];el('monogramColorSwatch').style.background=c?c.previewColor:'transparent'}
+// MONO-010: mirrors populateMonogramStoneSizeOptions()/populateMonogramColorOptions()/
+// updateMonogramColorSwatch() above verbatim, retargeted at the frame-specific selects.
+function populateMonogramFrameStoneSizeOptions(){el('monogramFrameStoneSize').innerHTML=listStoneSizes().map(s=>`<option value="${s.diameterMm}">${escapeHtml(s.name)} — ${s.diameterMm.toFixed(1)} mm</option>`).join('')}
+function populateMonogramFrameColorOptions(){const groups=new Map();for(const c of Object.values(STONE_COLORS)){if(!groups.has(c.group))groups.set(c.group,[]);groups.get(c.group).push(c)}el('monogramFrameColor').innerHTML=[...groups.entries()].map(([group,colors])=>`<optgroup label="${escapeHtml(group)}">${colors.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`).join('')}
+function updateMonogramFrameColorSwatch(){const c=STONE_COLORS[el('monogramFrameColor').value];el('monogramFrameColorSwatch').style.background=c?c.previewColor:'transparent'}
+function updateMonogramFrameStoneControlsVisibility(){el('monogramFrameStoneFields').style.display=el('monogramFrameStoneToggle').checked?'':'none'}
 // MONO-009: the frame's own generic scalingLimitsMm midpoint is a size that only ever coincidentally
 // fits the current product's real printable area. For every product except Plate, default instead to
 // that product's safe area (getSafeAreaRectMm) shrunk by the operator-configurable #monogramSizeMarginMm,
@@ -4440,6 +4446,15 @@ function buildMonogramRequest(validated){
   const frameOptions=frameStyle==='outline-1'?{mode:'outline',stoneWidth:1}
     :frameStyle==='outline-2'?{mode:'outline',stoneWidth:2}
     :{};
+  // MONO-010: only set when the toggle is checked -- unchecked must leave frameOptions exactly as
+  // it was before this milestone (no stoneSizeMm/color keys at all), so the generator's own
+  // frameOptions.stoneSizeMm ?? stoneSizeMm / frameOptions.color ?? resolvedColor fallbacks still
+  // apply unchanged. This is the one place that makes "toggle off" byte-identical to pre-milestone
+  // behavior.
+  if(el('monogramFrameStoneToggle').checked){
+    frameOptions.stoneSizeMm=parseFloat(el('monogramFrameStoneSize').value);
+    frameOptions.color=el('monogramFrameColor').value;
+  }
   return{frameId:validated.frameId,layoutId:validated.layoutId,letters:validated.letters,fontId:validated.fontId,providerId:resolveFontProviderId(validated.fontId),stoneSizeMm,color,frameRect,canvasMm,frameOptions};
 }
 // MONO-009: also refreshes frame-size bounds/default on open (out-of-range-only, same as a frame
@@ -4479,7 +4494,15 @@ async function generateMonogram(){
   el('status').textContent=`Generated monogram (${result.layers.length} layer${result.layers.length===1?'':'s'}).`;
 }
 populateMonogramFrameOptions();populateMonogramLayoutOptions();populateMonogramStoneSizeOptions();populateMonogramColorOptions();
-updateMonogramColorSwatch();updateMonogramFrameSizeBounds();updateMonogramLetterCountHint();
+populateMonogramFrameStoneSizeOptions();populateMonogramFrameColorOptions();
+// MONO-010: one-time initial sync only, mirroring updateMonogramFrameSizeBounds()'s (MONO-009)
+// "never fight a value already set" precedent -- set the frame-specific selects to match the
+// shared ones once at boot so first-time toggle-on doesn't jump to an arbitrary first-in-list
+// default, then never resync automatically again (toggling off/on preserves whatever was set).
+el('monogramFrameStoneSize').value=el('monogramStoneSize').value;
+el('monogramFrameColor').value=el('monogramColor').value;
+updateMonogramColorSwatch();updateMonogramFrameColorSwatch();updateMonogramFrameSizeBounds();updateMonogramLetterCountHint();
+updateMonogramFrameStoneControlsVisibility();
 if(fontManager)populateMonogramFontOptions();
 el('monogramFrame').addEventListener('change',()=>{updateMonogramFrameSizeBounds();updateMonogramGenerateButtonState()});
 el('monogramLayout').addEventListener('change',()=>{updateMonogramLetterCountHint();updateMonogramGenerateButtonState()});
@@ -4489,6 +4512,8 @@ el('monogramColor').addEventListener('change',()=>{updateMonogramColorSwatch();u
 el('monogramWidth').addEventListener('input',()=>updateMonogramGenerateButtonState());
 el('monogramHeight').addEventListener('input',()=>updateMonogramGenerateButtonState());
 el('monogramSizeMarginMm').addEventListener('input',()=>applyMonogramSizeMargin());
+el('monogramFrameStoneToggle').addEventListener('change',()=>{updateMonogramFrameStoneControlsVisibility();updateMonogramGenerateButtonState()});
+el('monogramFrameColor').addEventListener('change',()=>updateMonogramFrameColorSwatch());
 el('monogramGenerate').onclick=()=>generateMonogram();
 
 // ---- Shapes Lightbox: Design Shapes / Object Templates tabs ----
