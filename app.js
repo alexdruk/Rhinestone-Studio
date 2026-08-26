@@ -4320,10 +4320,35 @@ function populateMonogramFontOptions(){if(!fontManager)return;el('monogramFont')
 function populateMonogramStoneSizeOptions(){el('monogramStoneSize').innerHTML=listStoneSizes().map(s=>`<option value="${s.diameterMm}">${escapeHtml(s.name)} — ${s.diameterMm.toFixed(1)} mm</option>`).join('')}
 function populateMonogramColorOptions(){const groups=new Map();for(const c of Object.values(STONE_COLORS)){if(!groups.has(c.group))groups.set(c.group,[]);groups.get(c.group).push(c)}el('monogramColor').innerHTML=[...groups.entries()].map(([group,colors])=>`<optgroup label="${escapeHtml(group)}">${colors.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`).join('')}
 function updateMonogramColorSwatch(){const c=STONE_COLORS[el('monogramColor').value];el('monogramColorSwatch').style.background=c?c.previewColor:'transparent'}
+// MONO-009: the frame's own generic scalingLimitsMm midpoint is a size that only ever coincidentally
+// fits the current product's real printable area. For every product except Plate, default instead to
+// that product's safe area (getSafeAreaRectMm) shrunk by the operator-configurable #monogramSizeMarginMm,
+// clamped into the frame's hard scalingLimitsMm range. Plate is excluded: its safeAreaInsetMm is all-zero
+// (safe area === the full square canvas), while Plate's true printable region is circular, not the
+// square/rect this function reasons about -- a rect-based auto-fit would overshoot the real usable area
+// and place a frame that overlaps the plate's edge, so Plate deliberately keeps the old generic-midpoint
+// default rather than being given a wrong one.
+function computeMonogramDefaultSizeMm(frame){
+  const template=currentObjectTemplate();
+  const limits=frame.scalingLimitsMm;
+  if(template.preview.kind==='plate'){
+    return{
+      widthMm:Math.round((limits.minWidthMm+limits.maxWidthMm)/2),
+      heightMm:Math.round((limits.minHeightMm+limits.maxHeightMm)/2)
+    };
+  }
+  const marginMm=readLengthField('monogramSizeMarginMm')||0;
+  const safe=getSafeAreaRectMm(template,project.canvas.width,project.canvas.height);
+  const widthMm=Math.max(limits.minWidthMm,Math.min(limits.maxWidthMm,safe.widthMm-2*marginMm));
+  const heightMm=Math.max(limits.minHeightMm,Math.min(limits.maxHeightMm,safe.heightMm-2*marginMm));
+  return{widthMm,heightMm};
+}
 // Frame Size Width/Height bounds come from FrameLibrary's own scalingLimitsMm for the selected
 // frame -- the same field this app already uses to bound vessel/plate dimensions. Only resets the
 // current value when it falls outside the new frame's range, so switching frames back and forth
-// never fights a value the user just typed.
+// never fights a value the user just typed. MONO-009: this conservative reuse-if-valid behavior is
+// deliberately different from applyMonogramSizeMargin() below, which always reapplies the computed
+// default -- see that function's own comment for why.
 function updateMonogramFrameSizeBounds(){
   const frame=listFrames().find(f=>f.id===el('monogramFrame').value);
   if(!frame)return;
@@ -4332,10 +4357,31 @@ function updateMonogramFrameSizeBounds(){
   widthInput.min=String(mmToDisplayValue(limits.minWidthMm,project.units));widthInput.max=String(mmToDisplayValue(limits.maxWidthMm,project.units));
   heightInput.min=String(mmToDisplayValue(limits.minHeightMm,project.units));heightInput.max=String(mmToDisplayValue(limits.maxHeightMm,project.units));
   const currentW=readLengthField('monogramWidth'),currentH=readLengthField('monogramHeight');
-  if(!Number.isFinite(currentW)||currentW<limits.minWidthMm||currentW>limits.maxWidthMm)setLengthField('monogramWidth',Math.round((limits.minWidthMm+limits.maxWidthMm)/2));
-  if(!Number.isFinite(currentH)||currentH<limits.minHeightMm||currentH>limits.maxHeightMm)setLengthField('monogramHeight',Math.round((limits.minHeightMm+limits.maxHeightMm)/2));
+  const defaultSize=computeMonogramDefaultSizeMm(frame);
+  if(!Number.isFinite(currentW)||currentW<limits.minWidthMm||currentW>limits.maxWidthMm)setLengthField('monogramWidth',defaultSize.widthMm);
+  if(!Number.isFinite(currentH)||currentH<limits.minHeightMm||currentH>limits.maxHeightMm)setLengthField('monogramHeight',defaultSize.heightMm);
   const suffix=unitSuffix(project.units);
-  el('monogramFrameSizeHint').textContent=`${frame.label}: width ${mmToDisplayValue(limits.minWidthMm,project.units)}-${mmToDisplayValue(limits.maxWidthMm,project.units)}${suffix}, height ${mmToDisplayValue(limits.minHeightMm,project.units)}-${mmToDisplayValue(limits.maxHeightMm,project.units)}${suffix}.`;
+  let hint=`${frame.label}: width ${mmToDisplayValue(limits.minWidthMm,project.units)}-${mmToDisplayValue(limits.maxWidthMm,project.units)}${suffix}, height ${mmToDisplayValue(limits.minHeightMm,project.units)}-${mmToDisplayValue(limits.maxHeightMm,project.units)}${suffix}.`;
+  // MONO-009: Plate has no auto-fit default (see computeMonogramDefaultSizeMm()'s own comment for
+  // why) -- the margin field is disabled and a note is appended here rather than shown via a
+  // separate hint element, since this is the one place both the range text and this note are
+  // already refreshed together (frame change, units change, boot, monogram open).
+  const isPlate=currentObjectTemplate().preview.kind==='plate';
+  el('monogramSizeMarginMm').disabled=isPlate;
+  if(isPlate)hint+=' Auto-fit isn\'t available for Plate yet -- frame size defaults to this frame\'s own generic range.';
+  el('monogramFrameSizeHint').textContent=hint;
+}
+// MONO-009: unlike updateMonogramFrameSizeBounds()'s conservative reuse-if-valid behavior on frame
+// switch, editing the margin field always reapplies the computed size -- the margin field's entire
+// purpose is "resize the frame," so silently doing nothing because a width was already typed would
+// make the field appear broken.
+function applyMonogramSizeMargin(){
+  const frame=listFrames().find(f=>f.id===el('monogramFrame').value);
+  if(!frame)return;
+  const{widthMm,heightMm}=computeMonogramDefaultSizeMm(frame);
+  setLengthField('monogramWidth',widthMm);
+  setLengthField('monogramHeight',heightMm);
+  updateMonogramGenerateButtonState();
 }
 // MONOGRAM_LAYOUT_LETTER_COUNTS is authoritative (MonogramLayouts.js) -- this only mirrors it into
 // a visible hint and the input's maxlength; the same count is re-checked in
@@ -4396,7 +4442,10 @@ function buildMonogramRequest(validated){
     :{};
   return{frameId:validated.frameId,layoutId:validated.layoutId,letters:validated.letters,fontId:validated.fontId,providerId:resolveFontProviderId(validated.fontId),stoneSizeMm,color,frameRect,canvasMm,frameOptions};
 }
-function onMonogramOpen(){clearMonogramValidation();updateMonogramGenerateButtonState()}
+// MONO-009: also refreshes frame-size bounds/default on open (out-of-range-only, same as a frame
+// switch) so a product switched while the lightbox was closed gets a chance to apply its own
+// safe-area default on next open, rather than only on frame-change/units-change/boot.
+function onMonogramOpen(){clearMonogramValidation();updateMonogramFrameSizeBounds();updateMonogramGenerateButtonState()}
 async function generateMonogram(){
   const validation=validateMonogramControls();
   if(!validation.ok){showMonogramValidation(validation.message);return}
@@ -4439,6 +4488,7 @@ el('monogramFont').addEventListener('change',()=>updateMonogramGenerateButtonSta
 el('monogramColor').addEventListener('change',()=>{updateMonogramColorSwatch();updateMonogramGenerateButtonState()});
 el('monogramWidth').addEventListener('input',()=>updateMonogramGenerateButtonState());
 el('monogramHeight').addEventListener('input',()=>updateMonogramGenerateButtonState());
+el('monogramSizeMarginMm').addEventListener('input',()=>applyMonogramSizeMargin());
 el('monogramGenerate').onclick=()=>generateMonogram();
 
 // ---- Shapes Lightbox: Design Shapes / Object Templates tabs ----
@@ -5263,7 +5313,7 @@ function refreshAllLengthFieldDisplays(previousUnits=project.units){
   setLengthField('vesselBodyDiameter',project.vessel.bodyDiameterMm);
   setLengthField('vesselBodyHeight',project.vessel.bodyHeightMm);
   setLengthField('vesselTopDiameter',project.vessel.topDiameterMm);
-  for(const id of['prodSheetMargin','shipLengthMm','shipWidthMm','shipHeightMm','monogramWidth','monogramHeight','drawSlotWidthMm']){
+  for(const id of['prodSheetMargin','shipLengthMm','shipWidthMm','shipHeightMm','monogramWidth','monogramHeight','monogramSizeMarginMm','drawSlotWidthMm']){
     const raw=el(id).value;
     if(raw==='')continue;
     const mm=displayValueToMm(raw,previousUnits);
