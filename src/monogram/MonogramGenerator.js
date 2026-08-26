@@ -352,6 +352,28 @@ export class MonogramGenerator {
     // the collision check for why the formula is exactly stoneSizeMm+gapMm).
     const requiredSpacingMm = stoneSizeMm + gapMm;
 
+    // MONO-010: independent frame stone size. stoneSizeMm drives three things in this module: the
+    // frame's interior erosion (computeFrameInterior/computeFrameFitRect below, via
+    // requiredSpacingMm -- how much room is cleared inside the frame for letters), the letter<->frame
+    // collision threshold, and the frame's own stone pitch. Once frame and letters can differ in
+    // size, only the latter two switch to the frame's own size -- interior erosion deliberately stays
+    // keyed to requiredSpacingMm (the letters' own stoneSizeMm+gapMm, computed above and left
+    // untouched), because that value determines how much room the *letters* physically need to be
+    // placed and fitted legally -- the frame's own stone size has no bearing on that. Collision
+    // safety is still fully guaranteed independent of this choice: findCrossGroupCollisions() (used
+    // below) computes each colliding pair's own touching threshold as (stoneA.d + stoneB.d) / 2, so a
+    // large-stone frame around small-stone letters (or vice versa) is still correctly flagged if they
+    // would actually touch, even though the erosion step above never considered the frame's size.
+    //
+    // Computed here, before resolveFrameForStoneWidth() below, because that call's own row-offset
+    // spacing must match the frame's own pitch (frameRequiredSpacingMm), not the letters' -- a larger
+    // frame stone size than requiredSpacingMm would otherwise offset the outline's two rows too
+    // closely, and cross-contour stone dedup would silently delete the entire second row.
+    const frameStoneSizeMm = (typeof frameOptions.stoneSizeMm === 'number' && Number.isFinite(frameOptions.stoneSizeMm) && frameOptions.stoneSizeMm > 0)
+      ? frameOptions.stoneSizeMm
+      : stoneSizeMm;
+    const frameRequiredSpacingMm = frameStoneSizeMm + gapMm;
+
     // MONO-008: when the caller requests a specific outline stone-width for the frame's own border
     // (1 or 2 rows at real production spacing, instead of the fixed DEFAULT_INNER_RATIO band),
     // resolve that geometry now, before any frame-interior/fitting computation below, so every
@@ -362,7 +384,9 @@ export class MonogramGenerator {
     // uses instead.
     let effectiveFrame = frame;
     if (frameOptions.stoneWidth === 1 || frameOptions.stoneWidth === 2) {
-      const stoneWidthResult = resolveFrameForStoneWidth(frame, frameOptions.stoneWidth, requiredSpacingMm, normalizedFrameRect.widthMm, normalizedFrameRect.heightMm);
+      // The row offset must match the frame's own pitch, not the letters' -- a larger frame stone
+      // size dedupes the second row away if offset by the (smaller) letters' requiredSpacingMm.
+      const stoneWidthResult = resolveFrameForStoneWidth(frame, frameOptions.stoneWidth, frameRequiredSpacingMm, normalizedFrameRect.widthMm, normalizedFrameRect.heightMm);
       if (!stoneWidthResult.ok) {
         return failure(R.STONE_WIDTH_UNAVAILABLE, stoneWidthResult.message);
       }
@@ -476,23 +500,6 @@ export class MonogramGenerator {
     const frameColor = (typeof frameOptions.color === 'string' && frameOptions.color.length > 0)
       ? frameOptions.color
       : resolvedColor;
-
-    // MONO-010: independent frame stone size. stoneSizeMm drives three things in this module: the
-    // frame's interior erosion (computeFrameInterior/computeFrameFitRect above, via
-    // requiredSpacingMm -- how much room is cleared inside the frame for letters), the letter<->frame
-    // collision threshold, and the frame's own stone pitch. Once frame and letters can differ in
-    // size, only the latter two switch to the frame's own size -- interior erosion deliberately stays
-    // keyed to requiredSpacingMm (the letters' own stoneSizeMm+gapMm, computed above and left
-    // untouched), because that value determines how much room the *letters* physically need to be
-    // placed and fitted legally -- the frame's own stone size has no bearing on that. Collision
-    // safety is still fully guaranteed independent of this choice: findCrossGroupCollisions() (used
-    // below) computes each colliding pair's own touching threshold as (stoneA.d + stoneB.d) / 2, so a
-    // large-stone frame around small-stone letters (or vice versa) is still correctly flagged if they
-    // would actually touch, even though the erosion step above never considered the frame's size.
-    const frameStoneSizeMm = (typeof frameOptions.stoneSizeMm === 'number' && Number.isFinite(frameOptions.stoneSizeMm) && frameOptions.stoneSizeMm > 0)
-      ? frameOptions.stoneSizeMm
-      : stoneSizeMm;
-    const frameRequiredSpacingMm = frameStoneSizeMm + gapMm;
 
     // 6. + 7. Fit every letter into its assigned slot, then verify it round-trips.
     const letterResults = [];
