@@ -2238,10 +2238,38 @@ function isPointerOnFrontViewFrame(mm){
   const deltaRad=normalizeAngleDeltaRad(pointerAzimuthRad-rotationRad);
   return Math.abs(deltaRad)<=wrapAngleRad(project.wrap)/2;
 }
+// fix/rotated-layer-bbox-hittest: rotates a box's four corners clockwise around the box's own
+// center by rotationDeg, via rotatePointDeg() below (module-private verbatim replica of
+// GeometryEngine's rotatePointsAroundCenter() -- reused here rather than re-derived, exactly like
+// every other rotation-aware computation in this file), and returns the corners' axis-aligned
+// bounding box. A 0/360 rotation returns the input box unchanged (byte-identical output for every
+// unrotated layer, matching this file's existing 0-rotation-is-a-no-op convention).
+function rotatedCornersAABB(x,y,w,h,rotationDeg){
+  if(((rotationDeg||0)%360+360)%360===0)return{x,y,width:w,height:h,x2:x+w,y2:y+h};
+  const cx=x+w/2,cy=y+h/2;
+  const corners=[[x,y],[x+w,y],[x+w,y+h],[x,y+h]].map(([px,py])=>rotatePointDeg(px,py,cx,cy,rotationDeg));
+  const xs=corners.map(c=>c.x),ys=corners.map(c=>c.y);
+  const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+  return{x:x0,y:y0,x2:x1,y2:y1,width:x1-x0,height:y1-y0};
+}
 // Text layers have no plain layer fields to compute a bbox from directly (unlike circle/
 // rectangle), so their selection bbox is derived from the already-generated StoneLayout, filtered
 // to this layer's stones and wrapped in a fresh StoneLayout to reuse its getBoundingBox() math.
-function getLayerBBox(l){if(l.type==='circle')return{x:l.cx-l.r,y:l.cy-l.r,width:l.r*2,height:l.r*2,x2:l.cx+l.r,y2:l.cy+l.r};if(XYWH_SHAPE_TYPES.has(l.type))return{x:l.x,y:l.y,width:l.w,height:l.h,x2:l.x+l.w,y2:l.y+l.h};const stones=layout.stones.filter(s=>s.layerId===l.id);if(!stones.length)return{x:0,y:0,x2:0,y2:0,width:0,height:0};const b=new StoneLayout({layerId:l.id,stones}).getBoundingBox();return{x:b.minXmm,y:b.minYmm,x2:b.maxXmm,y2:b.maxYmm,width:b.widthMm,height:b.heightMm}}
+// fix/rotated-layer-bbox-hittest: the XYWH branch now returns the TRUE rotated-corners AABB
+// (rotatedCornersAABB() above) instead of the raw unrotated x/y/w/h box, so every caller that wants
+// a layer's actual visible/production footprint (hitTest's move-containment check, align/snap,
+// marquee-adjacent tooling, the rotate handle's own AABB-top-edge placement, etc.) gets it correctly
+// for a rotated shape. The one caller that must NOT get the rotated AABB is any call feeding this
+// box into rotatedHandlesFor() (which itself rotates whatever box it's given around that box's own
+// center) -- doing so would rotate an already-rotated box a second time. hitTest() below captures
+// its own raw box explicitly for that reason; drawSelection() does the same for its
+// drawSelectionBox() call (see that function's own comment) while still using this AABB, unchanged,
+// for its rotate-handle placement. Audited every other getLayerBBox( call site in this file
+// (unionBBoxOfLayers/selectionBoundsText/groupBBox0, selectedItemsForEditing's align/distribute,
+// the drag-move snap-target list, computeShapeAroundText, rotateHandlePositionMm) -- all either
+// operate on text layers only (untouched by this branch) or genuinely want the visible AABB, which
+// is the point of this fix.
+function getLayerBBox(l){if(l.type==='circle')return{x:l.cx-l.r,y:l.cy-l.r,width:l.r*2,height:l.r*2,x2:l.cx+l.r,y2:l.cy+l.r};if(XYWH_SHAPE_TYPES.has(l.type))return rotatedCornersAABB(l.x,l.y,l.w,l.h,l.rotationDeg||0);const stones=layout.stones.filter(s=>s.layerId===l.id);if(!stones.length)return{x:0,y:0,x2:0,y2:0,width:0,height:0};const b=new StoneLayout({layerId:l.id,stones}).getBoundingBox();return{x:b.minXmm,y:b.minYmm,x2:b.maxXmm,y2:b.maxYmm,width:b.widthMm,height:b.heightMm}}
 // RS-1009: the one pair of functions that know a layer's position field names (cx/cy for circle,
 // x/y for everything else, including the new text-layer offset fields) -- src/editing/** never
 // sees a layer `type`, it only ever returns a translation delta; these two functions turn that
@@ -2869,7 +2897,14 @@ const SELECTION_HANDLE_SIZE_PX=11;
 // (via rotatedHandlesFor()) instead of the axis-aligned strokeRect, and draws handles at their
 // rotated positions -- otherwise handles would visually float away from a still-axis-aligned box.
 function drawSelectionBox(ctx,s,ox,oy,dpr,b,showHandles,rotationDeg=0){const rx=ox+b.x*s,ry=oy+b.y*s,rw=b.width*s,rh=b.height*s;ctx.save();if(!rotationDeg){ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=4*dpr;ctx.setLineDash([]);ctx.strokeRect(rx,ry,rw,rh);ctx.strokeStyle='#1478ff';ctx.lineWidth=1.75*dpr;ctx.setLineDash([6*dpr,3*dpr]);ctx.strokeRect(rx,ry,rw,rh);ctx.setLineDash([]);}else{const corners=['nw','ne','se','sw'].map(name=>rotatedHandlesFor(b,rotationDeg).find(h=>h.name===name));const strokeQuad=()=>{ctx.beginPath();ctx.moveTo(ox+corners[0].x*s,oy+corners[0].y*s);for(let i=1;i<corners.length;i++)ctx.lineTo(ox+corners[i].x*s,oy+corners[i].y*s);ctx.closePath()};ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=4*dpr;ctx.setLineDash([]);strokeQuad();ctx.stroke();ctx.strokeStyle='#1478ff';ctx.lineWidth=1.75*dpr;ctx.setLineDash([6*dpr,3*dpr]);strokeQuad();ctx.stroke();ctx.setLineDash([]);}if(showHandles){for(const h of rotatedHandlesFor(b,rotationDeg)){const hs=SELECTION_HANDLE_SIZE_PX*dpr;ctx.shadowColor='rgba(20,30,50,.35)';ctx.shadowBlur=3*dpr;ctx.fillStyle='white';ctx.strokeStyle='#1478ff';ctx.lineWidth=1.75*dpr;ctx.beginPath();ctx.rect(ox+h.x*s-hs/2,oy+h.y*s-hs/2,hs,hs);ctx.fill();ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.stroke()}}ctx.restore()}
-function drawSelection(ctx,s,ox,oy,dpr){const selected=project.layers.filter(l=>selectedLayerIds.has(l.id));const single=selected.length===1;for(const l of selected){const b=getLayerBBox(l);drawSelectionBox(ctx,s,ox,oy,dpr,b,single&&l.type!=='text',l.rotationDeg||0);
+// fix/rotated-layer-bbox-hittest: drawSelectionBox()'s rotated-outline branch calls
+// rotatedHandlesFor(b,rotationDeg) itself, which rotates whatever box it is given a second time --
+// so it needs the raw unrotated x/y/w/h box for XYWH layers, not getLayerBBox()'s now-rotated AABB
+// (see that function's own comment), exactly like hitTest() below. drawRotateHandle() is the
+// opposite: it wants the AABB unchanged, since its handle sits a fixed gap above the AABB's own top
+// edge (rotateHandlePositionMm()'s header comment) -- so only the drawSelectionBox() call below is
+// adjusted, drawRotateHandle() keeps using `b`.
+function drawSelection(ctx,s,ox,oy,dpr){const selected=project.layers.filter(l=>selectedLayerIds.has(l.id));const single=selected.length===1;for(const l of selected){const b=getLayerBBox(l);const outlineBox=XYWH_SHAPE_TYPES.has(l.type)?{x:l.x,y:l.y,width:l.w,height:l.h,x2:l.x+l.w,y2:l.y+l.h}:b;drawSelectionBox(ctx,s,ox,oy,dpr,outlineBox,single&&l.type!=='text',l.rotationDeg||0);
   // TXT-102: text has no resize handles (see drawSelectionBox's showHandles above), but gets its own
   // single rotate handle instead, only while it is the sole selection -- matching the existing
   // single-selection-only precedent resize handles already set.
@@ -3172,7 +3207,38 @@ function rotateHandleHitTest(mm){
   }
   return null;
 }
-function hitTest(mm){const rotateHit=rotateHandleHitTest(mm);if(rotateHit)return rotateHit;const layers=[...project.layers].reverse();for(const l of layers){const b=getLayerBBox(l);for(const h of rotatedHandlesFor(b,l.rotationDeg||0)){if(Math.abs(mm.x-h.x)<3&&Math.abs(mm.y-h.y)<3&&l.type!=='text')return{layer:l,kind:'resize',handle:h.name,b0:b}}if(mm.x>=b.x&&mm.x<=b.x2&&mm.y>=b.y&&mm.y<=b.y2)return{layer:l,kind:'move',b0:b}}return null}
+// fix/rotated-layer-bbox-hittest: for XYWH layers, `b` is now the raw stored x/y/w/h box, not
+// getLayerBBox()'s rotated-corners AABB -- rotatedHandlesFor(b,rotationDeg) rotates whatever box
+// it's given around that box's own center, so feeding it the already-rotated AABB would rotate a
+// rotated shape's handles a second time. b0 (captured on both the 'resize' and 'move' return paths)
+// must stay this same raw box: the resize-drag code in pointermove reads drag.b0.x/y/x2/y2 (axis-
+// aligned case) and drag.b0.width/height (rotated-local-axis case), both of which assume an
+// unrotated box. The move-containment check below is the one place that needs the TRUE rotated
+// footprint, so it does its own inverse-rotation test against the raw box instead of using an AABB
+// derived from `b`. Circle/text layers are untouched: `b` for those is still getLayerBBox(l)
+// unchanged, exactly as before this fix.
+function hitTest(mm){
+  const rotateHit=rotateHandleHitTest(mm);if(rotateHit)return rotateHit;
+  const layers=[...project.layers].reverse();
+  for(const l of layers){
+    const rotationDeg=l.rotationDeg||0;
+    const isXywh=XYWH_SHAPE_TYPES.has(l.type);
+    const b=isXywh?{x:l.x,y:l.y,width:l.w,height:l.h,x2:l.x+l.w,y2:l.y+l.h}:getLayerBBox(l);
+    for(const h of rotatedHandlesFor(b,rotationDeg)){
+      if(Math.abs(mm.x-h.x)<3&&Math.abs(mm.y-h.y)<3&&l.type!=='text')return{layer:l,kind:'resize',handle:h.name,b0:b}
+    }
+    let inside;
+    if(isXywh&&(rotationDeg%360+360)%360!==0){
+      const cx=l.x+l.w/2,cy=l.y+l.h/2;
+      const p=rotatePointDeg(mm.x,mm.y,cx,cy,-rotationDeg);
+      inside=p.x>=l.x&&p.x<=l.x+l.w&&p.y>=l.y&&p.y<=l.y+l.h;
+    }else{
+      inside=mm.x>=b.x&&mm.x<=b.x2&&mm.y>=b.y&&mm.y<=b.y2;
+    }
+    if(inside)return{layer:l,kind:'move',b0:b}
+  }
+  return null;
+}
 // S-104: a move-drag previously mapped pointer movement to mm 1:1 (rawDx/rawDy applied verbatim),
 // which made small, precise placements -- text in particular, since it has no resize handles to
 // fall back on -- hard to land exactly. LAYER_MOVE_DRAG_SENSITIVITY scales the pointer's

@@ -123,7 +123,10 @@ await test('7. getLayerBBox()/drag-move/drag-resize/duplicateLayer() each have a
   // expressed via that set's membership test instead of an inline `||` chain. See
   // tools/test-image-integration.mjs for the RS-1008-specific assertions and
   // tools/test-path-boolean-integration.mjs for the RS-1012-specific assertions against the same lines.
-  assert.match(appJs, /if\(XYWH_SHAPE_TYPES\.has\(l\.type\)\)return\{x:l\.x,y:l\.y,width:l\.w,height:l\.h,x2:l\.x\+l\.w,y2:l\.y\+l\.h\}/, 'expected getLayerBBox to treat svg like rectangle');
+  // fix/rotated-layer-bbox-hittest extended this same branch again, to route it through
+  // rotatedCornersAABB() so a rotated shape's bbox reflects its true rotated footprint -- a no-op at
+  // 0deg, so svg's own unrotated bbox is unchanged.
+  assert.match(appJs, /if\(XYWH_SHAPE_TYPES\.has\(l\.type\)\)return rotatedCornersAABB\(l\.x,l\.y,l\.w,l\.h,l\.rotationDeg\|\|0\);/, 'expected getLayerBBox to route svg through rotatedCornersAABB like every other XYWH type');
   // RS-1009 narrow carve-out: the per-type drag-move branch was replaced by a single
   // getLayerPosition()/setLayerPosition() pair used uniformly for every layer type (circle, text,
   // and rectangle/svg/image alike) -- see docs/specifications/RS-1009-AlignmentSnapping.md. svg

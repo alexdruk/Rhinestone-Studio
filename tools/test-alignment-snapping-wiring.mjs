@@ -366,6 +366,58 @@ await test('21. snapping-disabled drag falls back to the (sensitivity-scaled) po
   assert.match(moveBranch[1], /if\(snapEnabled\)\{/, 'expected the snap computation to be fully gated behind snapEnabled, so dx/dy stay unsnapped when disabled');
 });
 
+await test('22. rotatedCornersAABB() returns the exact pure corner AABB for a 90-degree rotation, and is a byte-identical no-op at 0/360 degrees', () => {
+  assert.match(appJs, /function rotatedCornersAABB\(x,y,w,h,rotationDeg\)\{/, 'expected a rotatedCornersAABB() helper in app.js');
+  assert.match(appJs, /if\(XYWH_SHAPE_TYPES\.has\(l\.type\)\)return rotatedCornersAABB\(l\.x,l\.y,l\.w,l\.h,l\.rotationDeg\|\|0\);/, 'expected getLayerBBox()\'s XYWH branch to delegate to rotatedCornersAABB()');
+
+  // rotatedCornersAABB()/rotatePointDeg() can't be extracted/executed standalone under plain Node
+  // the way getLayerPosition/setLayerPosition are above (app.js is a browser entry point, not
+  // import()-able directly) -- hand-copied verbatim from app.js here instead, matching this file's
+  // established pattern for math that can't be import()ed.
+  function rotatePointDeg(x, y, cx, cy, rotationDeg) {
+    const radians = rotationDeg * (Math.PI / 180), cos = Math.cos(radians), sin = Math.sin(radians);
+    const dx = x - cx, dy = y - cy;
+    return { x: cx + dx * cos - dy * sin, y: cy + dx * sin + dy * cos };
+  }
+  function rotatedCornersAABB(x, y, w, h, rotationDeg) {
+    if (((rotationDeg || 0) % 360 + 360) % 360 === 0) return { x, y, width: w, height: h, x2: x + w, y2: y + h };
+    const cx = x + w / 2, cy = y + h / 2;
+    const corners = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]].map(([px, py]) => rotatePointDeg(px, py, cx, cy, rotationDeg));
+    const xs = corners.map((c) => c.x), ys = corners.map((c) => c.y);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    return { x: x0, y: y0, x2: x1, y2: y1, width: x1 - x0, height: y1 - y0 };
+  }
+
+  // A 40x10 rectangle at x=0,y=0 rotated 90 degrees clockwise about its own center (20,5) becomes a
+  // 10x40 box centered on that same point. At exactly 90 degrees, Math.cos's tiny (~1e-17) error term
+  // is swallowed by float64 rounding at this magnitude, so the result lands on exact integers -- an
+  // exact equality check, not a tolerance-based one, is the honest assertion here.
+  const b = rotatedCornersAABB(0, 0, 40, 10, 90);
+  assert.equal(b.x, 15);
+  assert.equal(b.y, -15);
+  assert.equal(b.x2, 25);
+  assert.equal(b.y2, 25);
+  assert.equal(b.width, 10);
+  assert.equal(b.height, 40);
+
+  // 0 rotation must be a byte-identical no-op, so every project saved before this fix renders the
+  // same bbox it always did.
+  const unrotated = rotatedCornersAABB(5, 5, 40, 10, 0);
+  assert.deepEqual(unrotated, { x: 5, y: 5, width: 40, height: 10, x2: 45, y2: 15 });
+});
+
+await test('23. hitTest() builds b0 from the raw unrotated l.x/l.y/l.w/l.h fields for XYWH layers on both the resize and move hit paths, never from getLayerBBox()\'s rotated AABB -- resize-drag math in pointermove (drag.b0.x/y/x2/y2, drag.b0.width/height) assumes an unrotated box, so feeding it the rotated AABB would break resize for every shape, not just rotated ones', () => {
+  const hitTestFn = appJs.match(/function hitTest\(mm\)\{([\s\S]*?)\n\}/);
+  assert.ok(hitTestFn, 'expected to find hitTest() in app.js');
+  const body = hitTestFn[1];
+  // (a) the XYWH box fed to rotatedHandlesFor()/used as b0 is built directly from raw l.x/l.y/l.w/l.h,
+  // not from a call to getLayerBBox(l) (which would hand it the rotated AABB and double-rotate).
+  assert.match(body, /const b=isXywh\?\{x:l\.x,y:l\.y,width:l\.w,height:l\.h,x2:l\.x\+l\.w,y2:l\.y\+l\.h\}:getLayerBBox\(l\);/, 'expected hitTest() to build the raw stored box directly for XYWH layers instead of calling getLayerBBox(l)');
+  // (b) that same raw box `b` is what both the resize-handle-hit and the containment-hit return as b0.
+  assert.match(body, /return\{layer:l,kind:'resize',handle:h\.name,b0:b\}/, 'expected the resize hit to capture b0 from that same raw box');
+  assert.match(body, /return\{layer:l,kind:'move',b0:b\}/, 'expected the move hit to capture b0 from that same raw box');
+});
+
 if (failureCount === 0) {
   console.log('Alignment & snapping wiring tests passed.');
 } else {

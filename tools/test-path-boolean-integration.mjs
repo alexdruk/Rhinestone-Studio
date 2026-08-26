@@ -150,7 +150,10 @@ await test('11. GeometryEngine.generate() routes \'path\' layers through generat
 await test('12. getLayerBBox()/drag-resize/duplicateLayer()/layerLabel()/moreOptionsBtn each have a \'path\' case (shared with rectangle/svg/image)', () => {
   // S-110 generalized every one of these per-type unions (plus nine new shape kinds) into shared
   // XYWH_SHAPE_TYPES/SHAPE_LAYER_TYPES sets -- 'path' still behaves exactly like rectangle/svg/image.
-  assert.match(appJs, /if\(l\.type==='circle'\)return\{[^}]*\};if\(XYWH_SHAPE_TYPES\.has\(l\.type\)\)return\{x:l\.x,y:l\.y,width:l\.w,height:l\.h,x2:l\.x\+l\.w,y2:l\.y\+l\.h\}/);
+  // fix/rotated-layer-bbox-hittest extended this same branch again, to route it through
+  // rotatedCornersAABB() so a rotated shape's bbox reflects its true rotated footprint -- a no-op at
+  // 0deg, so path's own unrotated bbox is unchanged.
+  assert.match(appJs, /if\(l\.type==='circle'\)return\{[^}]*\};if\(XYWH_SHAPE_TYPES\.has\(l\.type\)\)return rotatedCornersAABB\(l\.x,l\.y,l\.w,l\.h,l\.rotationDeg\|\|0\);/);
   // RS-3030: the unrotated fast path picked up an `&&!drag.rotationDeg` guard (the rotated case
   // now branches to its own local-axis resize algorithm, see the milestone doc) -- 'path' still
   // isn't special-cased, it's still gated purely by XYWH_SHAPE_TYPES membership like rectangle/svg/image.
