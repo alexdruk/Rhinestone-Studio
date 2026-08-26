@@ -1158,6 +1158,169 @@ They do not replace it.
 
 ---
 
+# Design Mode / Drawing Board
+
+Design is a Paper.js-backed drawing board (`src/drawing/DrawingCanvasTool.js`,
+`src/drawing/DrawingBoard.js`) layered onto the same `layoutCanvas` the 2D Production canvas already
+uses — Paper.js's own Project/View is set up lazily on first entry and then only paused/resumed on
+exit/re-entry (`view.autoUpdate`), never torn down, so "canvas interaction owned by exactly one thing
+at a time" holds: while Design is paused, `renderProductionLayout()`/`drawLayout()` own the canvas
+exclusively. All direct use of the `paper` package is confined to `DrawingCanvasTool.js`, mirroring
+how `src/preview3d/**` confines Three.js — `app.js` only ever calls the facade
+`createDrawingTool()` returns.
+
+**Implementation status:** RS-3010 built Design as a self-contained authoring tool; RS-3011 made it
+the app's primary view and folded its shapes directly into `project.layers` (removing the earlier
+explicit Commit Shape step); RS-3013 added independent selection/editing for Paint-created regions.
+See `docs/specifications/RS-3011-design-primary-view-scope.md` and
+`docs/specifications/RS-3013-region-selection-editing-scope.md` for full step-by-step scope and
+decision history — this section summarizes the shipped result, not the process.
+
+**Tool-mode convention.** Design's single Paper.js `Tool` routes every pointer gesture through one
+decision: hit an existing shape first (selection/move takes priority over starting a new draw), else
+draw per the current `mode`. Most tool-rail presets (Rect/Ellipse/Slot/Polygon/Pen/freehand, etc.)
+are one-shot: finishing a shape reverts `mode` back to `'select'` automatically, the same
+`mode`/`updateResizeHandles()`/`updateCursor()` tail `setMode()` itself uses. A fixed set,
+`CLICK_TO_PLACE_MODES = new Set(['stamp', 'trace', 'eraser', 'lasso'])`
+(`src/drawing/DrawingCanvasTool.js`), is the deliberate exception — these tools stay active after
+each placement so the operator can place several in a row, and Escape's idle-revert-to-Select keys
+off this same shared set rather than forking per-tool logic.
+
+**Paint-created regions.** Painting a lasso stroke onto an existing shape (RS-3011 Steps 10a/10b)
+commits a `region` object into that shape's `path` layer — its own `id`, its own natural-space
+`contour`, and its own independent `stoneSizeMm`/`gapMm`/`color`/`fillMode`, layered as a
+priority-ordered patch on top of the parent shape's base fill by
+`GeometryEngine._applyPathRegions()`. RS-3013 made a committed region independently:
+- **selectable** — click-to-select works identically whether Select or the dedicated Lasso rail tool
+  (shortcut `L`) is active, via `hitTestPathLayerRegion()` (`src/geometry/PaintRegionSelection.js`);
+- **movable** — dragging a selected region translates only its own polygon, never the parent shape;
+- **copyable** — duplicates offset by the same fixed 8mm `duplicateLayer()` already uses, copying its
+  stone spec verbatim (no picker on copy — a copy is a duplicate, not a new paint stroke);
+- **deletable** — independently of the parent shape, with no last-region guard (an empty `regions`
+  array is a path layer's normal default state);
+- **stone-spec editable** — `#stoneSize`/`#gap`/`#stoneColor` and a region-only `#regionFillMode`
+  (fill/outline only) read from and write to the selected region's own fields instead of the parent
+  layer's, once a region is the active selection.
+
+A region dragged or copied partly outside its parent shape's outline is not explicitly clipped —
+`_applyPathRegions()` already filters region stones against the shape's live outline on every
+regeneration, so it simply renders fewer stones there, self-correcting if dragged back in.
+
+**Deliberate gap: no pre-paint stone-spec picker.** A new region still has no UI moment between
+"lasso released" and "region committed" — the paint-stroke handler reads the target layer's current
+`stoneSize`/`gap`/`color` at commit time, silently inherited, exactly as before RS-3013. This was
+explicitly scoped and deferred, not overlooked — see RS-3013's "Deferred" section for the open
+questions (where such a picker would live, what it would default to) that were never resolved.
+
+---
+
+# Monogram Generation
+
+The Monogram Generator (`src/monogram/MonogramGenerator.js`) is a headless pipeline that produces a
+complete monogram — a frame layer plus one letter layer per character — as ordinary `project.layers`
+entries, reusing the normal production path (`GeometryEngine.generateTextLayout()` /
+`generatePathLayout()` → `StoneLayout` → renderer/exporter) rather than holding a parallel,
+ephemeral result. It owns no geometry math of its own: it sequences `FrameLibrary.js` (frame
+contours + fitting interior), `MonogramLayouts.js` (slot geometry inside that interior), and the
+injected `GeometryEngine` (letter generation + `scaleAuthoredTextLayout()` persistent resizing),
+then validates letter/frame collisions using real production spacing (`stoneSizeMm + gapMm`) before
+returning.
+
+**Frame catalog.** `src/geometry/FrameLibrary.js` defines eight hollow frames: Circle, Oval, Square,
+Rounded Square, Diamond, Octagon, Pentagon, and Shield. Every frame is a stone border with an outer
+and inner contour pair; `computeFrameInterior()`/`computeFrameFitRect()` compute the clearance-eroded
+region a letter is fitted inside, kept separate from the frame's own stone-generation geometry
+(`resolveGenerationContours()`) — fitting against the full ring would center a candidate rectangle on
+the ring's own bounding box rather than the hole it actually occupies.
+
+**Stone-wide outline-border option.** A frame can be generated as a solid stone fill (default) or
+traced as an outline exactly 1 or 2 stones wide, via `resolveFrameForStoneWidth()`
+(`FrameLibrary.js`) and the Monogram Lightbox's "Frame style" select (`fill` / `outline-1` /
+`outline-2`, wired in `app.js`'s `buildMonogramRequest()`).
+
+**Product-aware default sizing.** Opening the Monogram Lightbox (or switching frame/product while it
+is open) defaults the frame size to the current product's safe area, shrunk by an operator-editable
+margin and clamped into the frame's own hard `scalingLimitsMm` range — not an arbitrary generic
+midpoint. The Round Dinner Plate is excluded from this auto-fit: its safe-area inset is all-zero
+(safe area is the full square canvas) while its true printable region is circular, so a rect-based
+auto-fit would overshoot the real usable area; Plate keeps the generic-midpoint default instead.
+
+**Independent frame and letter stone size/color.** The Monogram Lightbox has two separate stone-spec
+control groups: the shared `#monogramStoneSize`/`#monogramColor` fields apply to the letters, and a
+toggle-gated `#monogramFrameStoneToggle` reveals `#monogramFrameStoneSize`/`#monogramFrameColor` for
+the frame specifically. Leaving the toggle off omits `frameOptions.stoneSizeMm`/`color` entirely, so
+the generator's own fallback (frame inherits the letters' spec) applies unchanged — toggling off is
+byte-identical to the pre-feature behavior.
+
+**"Never auto-corrects" doctrine.** `MonogramGenerator.generate()`'s own doc comment states it
+directly: *"Never auto-corrects: a letter/frame that does not fit is a structured failure, not a
+silently adjusted result."* A failure to fit returns one of the structured
+`MONOGRAM_GENERATOR_FAILURE_REASONS` (e.g. `FRAME_COLLISION`, `STONE_WIDTH_UNAVAILABLE`,
+`BELOW_MINIMUM_SCALE`) rather than silently shrinking or repositioning anything.
+
+A caller-side auto-shrink wrapper does exist: `app.js`'s `generateMonogramWithFrameAutoShrink()`
+(MONO-011). It sits entirely outside the generator and does not weaken its doctrine — the generator
+itself still never adjusts anything on its own. The wrapper calls `generate()` once, and only on a
+`FRAME_COLLISION` or `STONE_WIDTH_UNAVAILABLE` failure retries with progressively smaller catalog
+stone sizes for `frameOptions.stoneSizeMm` alone (never the letters' shared stone size, never gap,
+never the frame rect) until one succeeds or the candidates are exhausted. Each retry is an ordinary,
+independent `generate()` call — the wrapper decides *to* retry; the generator never decides *for*
+itself. A successful auto-shrink is always surfaced to the user in the status bar ("Frame stones
+reduced to … to fit"), never applied silently.
+
+---
+
+# Units
+
+Internal unit:
+
+millimeters
+
+Rendering may convert to pixels.
+
+Manufacturing always remains millimeters.
+
+**Implementation status:** true everywhere in `src/geometry/**`, `src/text/**`, and
+`src/renderer/**`/`src/export/**` — all internal fields are named with an explicit `Mm` suffix
+(`xMm`, `heightMm`, `stoneSizeMm`, ...), and pixel conversion happens only inside
+`CanvasRenderer2D.fitTransform()` / `CupRenderer`'s local transform math.
+
+**RS-3018+ display-unit system.** As of RS-3018, `project.units` (`'mm'` or `'in'`, default `'mm'`,
+validated in `validateProject()`) is a display preference — which unit a freely-typed length field
+shows and accepts — never a project-content edit. It is deliberately excluded from
+`HISTORY_TRACKED_CONTROL_IDS` and never runs through `commitHistory()`/undo-redo, the same category
+as other view-only editor state like `snapToleranceMm`. Storage stays millimeters everywhere,
+forever; only display/input formatting changes. The conversion math itself is a small,
+dependency-free module, `src/units/LengthUnits.js` (`mmToDisplayValue()`, `displayValueToMm()`,
+`unitSuffix()`, `formatLengthDisplay()`) — `'in'` converts mm↔inches at `MM_PER_INCH = 25.4`,
+anything else (including `'mm'`) passes through unchanged.
+
+`app.js`'s `setLengthField(id, mm)` / `readLengthField(id)` are the shared read/write pair every
+unit-aware `<input>` goes through. `#stoneSize` is permanently excluded (it selects a fixed named
+commercial size, not a free-typed length).
+
+**Canonical-store vs. bare-DOM fields.** A Units switch (`applyUnitsChange()`) must redisplay every
+visible length field in the new unit without drifting the underlying mm value. Two different field
+categories exist:
+
+- **Canonical-store fields** (e.g. the Plate/Vessel dimension inputs) mirror a real mm value already
+  held on `project` (`project.plate.*Mm`, `project.vessel.*Mm`). These are always re-derived directly
+  from `project` on a units switch, so they can never drift regardless of prior display formatting.
+- **Bare-DOM fields** (e.g. `prodSheetMargin`, the Shipping dimension fields, `drawSlotWidthMm`) have
+  no such canonical mm value on `project` — Shipping's own state is session-only, and fields like
+  `prodSheetMargin` are written only by the operator typing into them. For these, RS-3025 added a
+  `dataset.mmValue` stash: every `setLengthField()` write and every tracked field's own `'input'`
+  listener (via `stashTypedLengthField()`) records the exact mm value on `el(id).dataset.mmValue`,
+  computed before any display-side rounding. `refreshAllLengthFieldDisplays()` prefers this stash when
+  present, reading it directly rather than re-deriving mm from an already-rounded display string — the
+  fallback (converting the field's current display value from the previous unit in place) is only used
+  for a field that was never stashed (e.g. before RS-3025, or a value the stash was explicitly cleared
+  for as unparseable). This closes a real round-trip drift bug: converting from an already-rounded
+  2-decimal display value on every unit switch accumulated a few hundredths of a millimeter of error
+  per round trip for fields with no canonical store to fall back on.
+
+---
+
 # Final Rule
 
 If there is ever a choice between
