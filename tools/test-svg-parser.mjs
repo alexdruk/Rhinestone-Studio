@@ -75,6 +75,57 @@ await test('3. <path> parses M L H V C S Q T Z (absolute/relative); multiple M s
   );
 });
 
+await test('3a. a drawing command after Z with no new M implicitly starts a new subpath at the closed subpath\'s start point', () => {
+  const contours = pathDataToContours('M 0 0 L 10 0 L 10 10 Z L 5 -5');
+  assert.equal(contours.length, 2, 'expected the Z-then-L to split into two subpaths');
+  assert.equal(contours[0].closed, true);
+  const firstPoints = contours[0].contour.getPointsUsedByCommands();
+  assert.deepEqual(
+    firstPoints.map((p) => [p.xMm, p.yMm]),
+    [[0, 0], [10, 0], [10, 10]],
+    'the first (closed) subpath must not include the L after Z'
+  );
+  assert.equal(contours[1].closed, false);
+  const secondPoints = contours[1].contour.getPointsUsedByCommands();
+  assert.deepEqual(
+    secondPoints.map((p) => [p.xMm, p.yMm]),
+    [[0, 0], [5, -5]],
+    'the second subpath must start (moveTo) at the closed subpath\'s start point, then draw to (5,-5)'
+  );
+});
+
+await test('3b. the same implicit-new-subpath split works with relative commands', () => {
+  const contours = pathDataToContours('M 0 0 l 10 0 l 0 10 z l 5 -5');
+  assert.equal(contours.length, 2);
+  assert.equal(contours[0].closed, true);
+  const firstPoints = contours[0].contour.getPointsUsedByCommands();
+  assert.deepEqual(
+    firstPoints.map((p) => [p.xMm, p.yMm]),
+    [[0, 0], [10, 0], [10, 10]]
+  );
+  assert.equal(contours[1].closed, false);
+  const secondPoints = contours[1].contour.getPointsUsedByCommands();
+  assert.deepEqual(
+    secondPoints.map((p) => [p.xMm, p.yMm]),
+    [[0, 0], [5, -5]],
+    'relative l after z must resolve against the reset current point (the reopened subpath start)'
+  );
+});
+
+await test('3c. a repeated Z closes the same point again without starting a degenerate new subpath', () => {
+  const contours = pathDataToContours('M0 0 L10 0 Z Z');
+  assert.equal(contours.length, 1, 'a second Z with nothing in between must not create an extra subpath');
+  assert.equal(contours[0].closed, true);
+});
+
+await test('3d. bare coordinates after Z with no following command letter throw a close-path-specific error, not the move-command error', () => {
+  assert.throws(
+    () => pathDataToContours('M0 0 L1 1 Z 5 5'),
+    /close-path/,
+    'expected the error to mention close-path, not "must start with a move command"'
+  );
+});
+
 await test('4. elliptical arc endpoint is correct; degenerate arcs fall back to a line without throwing', () => {
   const segments = arcToBezierSegments(1, 0, 1, 1, 0, false, true, 0, 1);
   const last = segments[segments.length - 1];
