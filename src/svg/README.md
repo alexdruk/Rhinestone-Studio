@@ -16,9 +16,14 @@ const { naturalWidthMm, naturalHeightMm, shapes, warnings } = parseSvgDocument(s
   resolved from `width`/`height` (units `mm`/`cm`/`in`/`pt`/`pc`/`px`, or unitless treated as `px`
   at 96 CSS px/inch) or, if those are absent, from `viewBox` at the same 96 px/inch fallback.
 * `shapes` — one `{ contour, closed }` entry per supported subpath, already resolved through any
-  `viewBox` mapping and `transform` composition (`translate`/`scale`/`rotate`/`skewX`/`skewY`/
-  `matrix`, including nested `<g>`/`<a>`/`<switch>` groups) into one consistent coordinate space
-  whose origin is the SVG's own top-left corner.
+  `viewBox` mapping (honoring the root `preserveAspectRatio`, full grammar: all nine `x{Min|Mid|Max}
+  Y{Min|Mid|Max}` alignments plus `none`, and `meet`/`slice`; unrecognized/missing input falls back
+  to the spec default `xMidYMid meet`) and `transform` composition (`translate`/`scale`/`rotate`/
+  `skewX`/`skewY`/`matrix`, including nested `<g>`/`<a>`/`<switch>` groups) into one consistent
+  coordinate space whose origin is the SVG's own top-left corner. When the declared width/height
+  aspect ratio matches the viewBox's (the common case), the alignment is a no-op and shapes land
+  exactly where they would have without `preserveAspectRatio` support. `slice` overflow is not
+  clipped: this module produces geometry, not a viewport.
 * `warnings` — human-readable strings describing anything skipped (an unsupported element, rounded
   rectangle corners, an empty `<path d="">`) without failing the whole import.
 

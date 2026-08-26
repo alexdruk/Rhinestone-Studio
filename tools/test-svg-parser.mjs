@@ -271,9 +271,71 @@ await test('RS-2000: a non-mm unit with NO viewBox also produces shape coordinat
 });
 
 await test('RS-2000: the "mm" unit case is unchanged (byte-identical scale factor of 1, matching every pre-existing test in this file)', () => {
-  const result = parseSvgDocument(svg('<rect x="0" y="0" width="10" height="10"/>', { width: '50mm', height: '20mm', viewBox: '0 0 10 10' }));
+  // viewBox aspect (25:10 = 2.5) matches the declared width/height aspect (50mm:20mm = 2.5), so
+  // preserveAspectRatio alignment is a no-op here regardless of align/meetOrSlice -- see the M5
+  // matched-aspect regression test below for that property itself.
+  const result = parseSvgDocument(svg('<rect x="0" y="0" width="25" height="10"/>', { width: '50mm', height: '20mm', viewBox: '0 0 25 10' }));
   const xs = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.xMm);
-  assert.equal(Math.max(...xs), 50, 'viewBox case: 10 user-units -> 50mm declared width, unaffected by this fix');
+  assert.equal(Math.max(...xs), 50, 'viewBox case: 25 user-units -> 50mm declared width, unaffected by this fix');
+});
+
+await test('M5: matched-aspect viewBox is unaffected by preserveAspectRatio support (pinned regression)', () => {
+  const result = parseSvgDocument(svg('<rect x="0" y="0" width="25" height="10"/>', { width: '50mm', height: '20mm', viewBox: '0 0 25 10' }));
+  const xs = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.xMm);
+  const ys = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.yMm);
+  assert.deepEqual([Math.min(...xs), Math.max(...xs)], [0, 50], 'matched-aspect x-extent must equal today\'s output exactly');
+  assert.deepEqual([Math.min(...ys), Math.max(...ys)], [0, 20], 'matched-aspect y-extent must equal today\'s output exactly');
+});
+
+await test('M5: default (xMidYMid meet) letterboxes a mismatched-aspect viewBox, centering on the narrower axis', () => {
+  const result = parseSvgDocument(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="50mm" viewBox="0 0 100 100">' +
+    '<rect x="0" y="0" width="100" height="100"/></svg>'
+  );
+  const xs = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.xMm);
+  const ys = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.yMm);
+  assert.deepEqual([Math.min(...xs), Math.max(...xs)], [25, 75], 'expected uniform scale 0.5 centered horizontally: [25,75]');
+  assert.deepEqual([Math.min(...ys), Math.max(...ys)], [0, 50], 'expected the full height axis, no letterboxing vertically');
+});
+
+await test('M5: preserveAspectRatio="none" on a mismatched-aspect viewBox restores independent-axis stretching', () => {
+  const result = parseSvgDocument(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="50mm" viewBox="0 0 100 100" preserveAspectRatio="none">' +
+    '<rect x="0" y="0" width="100" height="100"/></svg>'
+  );
+  const xs = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.xMm);
+  const ys = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.yMm);
+  assert.deepEqual([Math.min(...xs), Math.max(...xs)], [0, 100], 'none must stretch x independently to the full declared width');
+  assert.deepEqual([Math.min(...ys), Math.max(...ys)], [0, 50], 'none must stretch y independently to the full declared height');
+});
+
+await test('M5: "xMinYMin meet" aligns the letterboxed content to the top-left instead of centering', () => {
+  const result = parseSvgDocument(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="50mm" viewBox="0 0 100 100" preserveAspectRatio="xMinYMin meet">' +
+    '<rect x="0" y="0" width="100" height="100"/></svg>'
+  );
+  const xs = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.xMm);
+  assert.deepEqual([Math.min(...xs), Math.max(...xs)], [0, 50], 'xMin must pin the scaled content to x=0, not center it');
+});
+
+await test('M5: "xMidYMid slice" scales up to cover, overflowing (not clipping) the shorter axis', () => {
+  const result = parseSvgDocument(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="50mm" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">' +
+    '<rect x="0" y="0" width="100" height="100"/></svg>'
+  );
+  const xs = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.xMm);
+  const ys = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.yMm);
+  assert.deepEqual([Math.min(...xs), Math.max(...xs)], [0, 100], 'slice must scale to cover: full width, scale factor 1.0');
+  assert.deepEqual([Math.min(...ys), Math.max(...ys)], [-25, 75], 'slice must overflow vertically, centered and unclipped');
+});
+
+await test('M5: an unrecognized preserveAspectRatio value falls back to the spec default (xMidYMid meet)', () => {
+  const result = parseSvgDocument(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="50mm" viewBox="0 0 100 100" preserveAspectRatio="banana">' +
+    '<rect x="0" y="0" width="100" height="100"/></svg>'
+  );
+  const xs = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.xMm);
+  assert.deepEqual([Math.min(...xs), Math.max(...xs)], [25, 75], 'garbage input must behave exactly like the default xMidYMid meet');
 });
 
 console.log('SVG parser tests passed.');
