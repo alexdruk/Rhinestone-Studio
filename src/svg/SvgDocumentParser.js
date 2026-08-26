@@ -56,6 +56,34 @@ function parseViewBox(raw) {
   return { minX, minY, width, height };
 }
 
+const PRESERVE_ASPECT_RATIO_DEFAULT = { align: 'xMidYMid', meetOrSlice: 'meet' };
+const VALID_ALIGN_VALUES = new Set([
+  'none',
+  'xMinYMin', 'xMinYMid', 'xMinYMax',
+  'xMidYMin', 'xMidYMid', 'xMidYMax',
+  'xMaxYMin', 'xMaxYMid', 'xMaxYMax'
+]);
+
+/**
+ * Parse a `preserveAspectRatio` attribute value (SVG 1.1 section 7.8: [defer] <align> [meet|slice]).
+ * `defer` only matters for <image> and is accepted-but-ignored here. Never throws -- missing or
+ * unrecognizable input falls back to the spec default, matching parseTransformList()'s
+ * ignore-don't-throw posture for presentation detail.
+ *
+ * @param {string|null|undefined} raw
+ * @returns {{align:string, meetOrSlice:'meet'|'slice'}}
+ */
+function parsePreserveAspectRatio(raw) {
+  if (typeof raw !== 'string') return PRESERVE_ASPECT_RATIO_DEFAULT;
+  const tokens = raw.trim().split(/\s+/).filter((token) => token.length > 0);
+  let i = 0;
+  if (tokens[i] === 'defer') i++;
+  const align = tokens[i];
+  if (!VALID_ALIGN_VALUES.has(align)) return PRESERVE_ASPECT_RATIO_DEFAULT;
+  const meetOrSlice = tokens[i + 1] === 'slice' ? 'slice' : 'meet';
+  return { align, meetOrSlice };
+}
+
 function optionalNumAttr(attrs, name, fallback = 0) {
   const raw = attrs[name];
   if (raw === undefined) return fallback;
@@ -273,7 +301,37 @@ export function parseSvgDocument(svgSource) {
   if (viewBox) {
     const scaleX = naturalWidthMm / viewBox.width;
     const scaleY = naturalHeightMm / viewBox.height;
-    viewBoxMatrix = { a: scaleX, b: 0, c: 0, d: scaleY, e: -viewBox.minX * scaleX, f: -viewBox.minY * scaleY };
+    const { align, meetOrSlice } = parsePreserveAspectRatio(svgRoot.attrs.preserveAspectRatio);
+    if (align === 'none') {
+      // Independent axis scaling -- this IS spec behavior for align="none", and (since it's also
+      // what every other align value produces when width/height's aspect ratio already matches the
+      // viewBox's) byte-identical to the matrix this branch always produced before preserveAspectRatio
+      // support existed.
+      viewBoxMatrix = { a: scaleX, b: 0, c: 0, d: scaleY, e: -viewBox.minX * scaleX, f: -viewBox.minY * scaleY };
+    } else {
+      // meet (the default) scales down to fit the whole viewBox inside naturalWidth/HeightMm,
+      // letterboxing the shorter axis; slice scales up to cover it entirely, overflowing the longer
+      // axis. Overflow is intentionally left unclipped: this module produces geometry, not a
+      // viewport, matching how out-of-bounds content is already treated elsewhere in the import
+      // pipeline. fx/fy distribute the leftover (meet) or overflow (slice) slack along each axis
+      // per the align token's Min/Mid/Max half.
+      const uniformScale = meetOrSlice === 'slice' ? Math.max(scaleX, scaleY) : Math.min(scaleX, scaleY);
+      const extraXMm = naturalWidthMm - viewBox.width * uniformScale;
+      const extraYMm = naturalHeightMm - viewBox.height * uniformScale;
+      const [, xHalf, yHalf] = /^x(Min|Mid|Max)Y(Min|Mid|Max)$/.exec(align);
+      const alignFactor = (half) => (half === 'Min' ? 0 : half === 'Mid' ? 0.5 : 1);
+      const fx = alignFactor(xHalf);
+      const fy = alignFactor(yHalf);
+      // Compatibility property: when the declared width/height aspect already matches the
+      // viewBox's, scaleX === scaleY === uniformScale, so extraXMm/extraYMm are both 0 regardless
+      // of align/meetOrSlice -- e/f reduce to exactly the old -viewBox.minX*scaleX /
+      // -viewBox.minY*scaleY, so matched-aspect output is unchanged by this milestone.
+      viewBoxMatrix = {
+        a: uniformScale, b: 0, c: 0, d: uniformScale,
+        e: -viewBox.minX * uniformScale + fx * extraXMm,
+        f: -viewBox.minY * uniformScale + fy * extraYMm
+      };
+    }
   } else {
     viewBoxMatrix = { a: widthMmPerUnit, b: 0, c: 0, d: heightMmPerUnit, e: 0, f: 0 };
   }
