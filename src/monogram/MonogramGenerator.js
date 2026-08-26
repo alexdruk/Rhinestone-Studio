@@ -239,7 +239,10 @@ export class MonogramGenerator {
    * contract, and verify both round-trip through the normal GeometryEngine.generateTextLayout()
    * path -> generate the frame layer -> validate collisions (letter vs letter, letter vs frame)
    * using real production spacing (stoneSizeMm + gapMm). Never auto-corrects: a letter/frame that
-   * does not fit is a structured failure, not a silently adjusted result.
+   * does not fit is a structured failure, not a silently adjusted result. (MONO-011: a caller's UI
+   * layer may itself retry generate() with an adjusted request.frameOptions.stoneSizeMm after a
+   * FRAME_COLLISION/STONE_WIDTH_UNAVAILABLE failure -- this generator still never adjusts anything
+   * on its own; each retry is an ordinary, independent call.)
    *
    * MONO-005A text x/y contract (see src/editing/TextPlacement.js for the full derivation and
    * source-of-truth): a text layer has no stored absolute position of its own -- it is always

@@ -92,7 +92,7 @@ import { renderProductionLayout, renderStoneLayout, fitTransform, chooseNiceStep
 import { createPreview3D } from './src/preview3d/index.js';
 import { circumferenceMm, frontViewFrameWidthMm, canvasXMmForRotationDeg, rotationDegForCanvasXMm, azimuthRadForCanvasXMm, wrapAngleRad } from './src/preview3d/ObjectDimensions.js';
 import { STONE_COLORS } from './src/renderer/StoneColors.js';
-import { listStoneSizes, findStoneSizeByDiameterMm, stoneSizeHeightMidpointMm, isHeightWithinStoneSizeRange, stoneSizeEntirelyExceedsPrintableHeight } from './src/renderer/StoneSizes.js';
+import { listStoneSizes, findStoneSizeByDiameterMm, formatStoneSizeLabel, stoneSizeHeightMidpointMm, isHeightWithinStoneSizeRange, stoneSizeEntirelyExceedsPrintableHeight } from './src/renderer/StoneSizes.js';
 import { stoneLayoutToSvg } from './src/export/SvgExporter.js';
 import { computeProductionSheetLayout, productionSheetToSvg, productionSheetToPdf } from './src/export/ProductionSheetExporter.js';
 import { parseSvgDocument } from './src/svg/index.js';
@@ -4527,15 +4527,42 @@ function buildMonogramRequest(validated){
 // switch) so a product switched while the lightbox was closed gets a chance to apply its own
 // safe-area default on next open, rather than only on frame-change/units-change/boot.
 function onMonogramOpen(){clearMonogramValidation();updateMonogramFrameSizeBounds();updateMonogramGenerateButtonState()}
+// MONO-011: UI-layer-only auto-shrink retry loop. MonogramGenerator.generate() keeps its "never
+// auto-corrects" doctrine (see its own doc comment) -- this wrapper is the thing that decides to
+// retry, and it only ever adjusts frameOptions.stoneSizeMm (never the shared letters' stoneSizeMm,
+// never gap, never the frame rect). Only FRAME_COLLISION and STONE_WIDTH_UNAVAILABLE are frame-
+// stone-pitch problems this can plausibly fix; every other failure reason (letter fitting/collision,
+// bad input) is returned unchanged, exactly like calling generate() directly.
+async function generateMonogramWithFrameAutoShrink(request){
+  const R=MONOGRAM_GENERATOR_FAILURE_REASONS;
+  const firstResult=await monogramGenerator.generate(request);
+  if(firstResult.ok||(firstResult.reason!==R.FRAME_COLLISION&&firstResult.reason!==R.STONE_WIDTH_UNAVAILABLE)){
+    return{result:firstResult,appliedFrameStoneSizeMm:null};
+  }
+  const requestedFrameStoneSizeMm=request.frameOptions&&request.frameOptions.stoneSizeMm;
+  if(!Number.isFinite(requestedFrameStoneSizeMm))return{result:firstResult,appliedFrameStoneSizeMm:null};
+  const candidates=listStoneSizes().map(s=>s.diameterMm).filter(d=>d<requestedFrameStoneSizeMm).sort((a,b)=>b-a);
+  for(const candidate of candidates){
+    const retryResult=await monogramGenerator.generate({...request,frameOptions:{...request.frameOptions,stoneSizeMm:candidate}});
+    if(retryResult.ok)return{result:retryResult,appliedFrameStoneSizeMm:candidate};
+    if(retryResult.reason!==R.FRAME_COLLISION&&retryResult.reason!==R.STONE_WIDTH_UNAVAILABLE){
+      // A smaller frame stone introduced a different failure -- stop immediately rather than keep
+      // shrinking, and report the ORIGINAL failure (its message names the size the user actually
+      // chose, not an intermediate candidate they never asked for).
+      return{result:firstResult,appliedFrameStoneSizeMm:null};
+    }
+  }
+  return{result:firstResult,appliedFrameStoneSizeMm:null};
+}
 async function generateMonogram(){
   const validation=validateMonogramControls();
   if(!validation.ok){showMonogramValidation(validation.message);return}
   clearMonogramValidation();
   const request=buildMonogramRequest(validation);
   el('monogramGenerate').disabled=true;
-  let result;
+  let result,appliedFrameStoneSizeMm;
   try{
-    result=await monogramGenerator.generate(request);
+    ({result,appliedFrameStoneSizeMm}=await generateMonogramWithFrameAutoShrink(request));
   }catch(error){
     console.error('Monogram generation failed',error);
     showMonogramValidation('Monogram generation failed. Please check your settings and try again.');
@@ -4557,7 +4584,16 @@ async function generateMonogram(){
   syncSelectedControlsFromLayer();
   updateAll(true);
   lightboxes.monogram.close();
-  el('status').textContent=`Generated monogram (${result.layers.length} layer${result.layers.length===1?'':'s'}).`;
+  if(appliedFrameStoneSizeMm!=null){
+    // MONO-010's boot-sync block (`el('monogramFrameStoneSize').value=el('monogramStoneSize').value`)
+    // establishes the convention that this control reflects the frame stone size actually in use --
+    // keep that true after an auto-shrink too, and always surface the adjustment to the user rather
+    // than letting it happen silently (per MONO-011's own scope: never silent).
+    el('monogramFrameStoneSize').value=String(appliedFrameStoneSizeMm);
+    el('status').textContent=`Generated monogram (${result.layers.length} layer${result.layers.length===1?'':'s'}). Frame stones reduced to ${formatStoneSizeLabel(appliedFrameStoneSizeMm)} to fit.`;
+  }else{
+    el('status').textContent=`Generated monogram (${result.layers.length} layer${result.layers.length===1?'':'s'}).`;
+  }
 }
 populateMonogramFrameOptions();populateMonogramLayoutOptions();populateMonogramStoneSizeOptions();populateMonogramColorOptions();
 populateMonogramFrameStoneSizeOptions();populateMonogramFrameColorOptions();
