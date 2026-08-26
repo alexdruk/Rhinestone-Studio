@@ -708,6 +708,99 @@ function materializeShapeLibraryItemFromLayer(layer, resolvePolygons) {
 }
 
 /**
+ * RS-3012 Step 2: builds a Paper.js proxy item for an 'svg' or 'image' project.layers entry --
+ * closes the gap left by materializeShapeFromLayer()/materializeShapeLibraryItemFromLayer() above,
+ * which deliberately never handled these two types (see the latter's own doc comment). Both types
+ * already use the same x/y/w/h/rotationDeg box model as every other XYWH_SHAPE_TYPES layer
+ * (app.js), so click-to-select/drag/resize/rotate all reuse the identical hitTestShapeId()/
+ * rotatedHandlePositionsFor()/onShapeMoved/onShapeResized/onShapeRotated machinery those other
+ * layer types already go through -- this function's only job is producing an item for that
+ * machinery to operate on.
+ *
+ * 'svg': resolves the SVG's own real vector outline via `resolveSvgPolygons(layer)` -- app.js's own
+ * hook onto permanentEngine.resolveSvgPolygons(), the SAME "get this SVG's fillable outline" call
+ * Boolean Operations already uses (see app.js's resolveLayerShapeSource()) -- rather than a second,
+ * from-scratch SVG-markup parser living in this file. Builds a Path/CompoundPath from the returned
+ * polygons using the identical single-vs-multi-contour construction/styling
+ * materializeShapeLibraryItemFromLayer() above already uses, so an imported SVG reads identically to
+ * every other outline on Design's own canvas. Unlike that function's own polygons (already rotated
+ * by GeometryEngine's own RS-3028 step), resolveSvgPolygons() has no rotationDeg parameter at all --
+ * SVG layers never got that production-pipeline wiring (generateSvgStonesLive() doesn't forward
+ * rotationDeg either, a pre-existing gap outside this milestone's scope) -- so this function rotates
+ * the built item itself, the same explicit item.rotate() step materializeShapeFromLayer() above
+ * takes for a 'path' layer's own unrotated contours.
+ *
+ * 'image' has no vector outline at all (its stones come from a raster threshold trace, not a
+ * fillable contour), and the main canvas itself never draws the source bitmap on layoutCanvas
+ * outside Design either -- only the layer's own selection box and its generated stone dots ever
+ * appear there. A plain rectangle (same outline styling as every other shape here) is therefore
+ * already a faithful proxy, not a compromise: it reads exactly as this layer already reads
+ * everywhere else in the app. Deliberately no on-canvas text label: an early version of this
+ * function wrapped the rectangle and a PointText in a paper.Group so a user could tell what it was
+ * without opening the Inspector, but a Group's own bounds are the union of ALL its children's, so
+ * any label wide enough to overflow a narrow/short box (near-guaranteed for a real file name at
+ * this app's typical Design zoom) silently inflated the shape's hit-test/resize-handle bounds past
+ * its true x/y/w/h -- a real bug caught by this milestone's own browser verification, not a
+ * hypothetical. The Layers list/Inspector already label this shape (layerLabel()'s own
+ * imageName/svgName fallback), so no on-canvas label was ever required by this milestone's brief.
+ *
+ * The same rectangle fallback also covers an 'svg' layer whose outline can't be resolved (missing/
+ * unparseable svgSource) -- same "always give this layer SOME on-canvas presence" goal as the
+ * real-outline case above, so a broken SVG import doesn't just silently vanish from Design.
+ * @param {object} layer a project.layers entry with type 'svg' or 'image'
+ * @param {(layer:object)=>({polygons:{xMm:number,yMm:number}[][],boundingBox:*}|null)} resolveSvgPolygons
+ * @returns {paper.Path|paper.CompoundPath}
+ */
+function materializeSvgImageItemFromLayer(layer, resolveSvgPolygons) {
+  let item = null;
+
+  if (layer.type === 'svg') {
+    const resolved = resolveSvgPolygons(layer);
+    const polygons = resolved && resolved.polygons;
+    if (Array.isArray(polygons) && polygons.length > 0 && polygons.every((p) => p && p.length >= 3)) {
+      function buildContourPath(polygon) {
+        const path = new paper.Path();
+        polygon.forEach((p, index) => {
+          const point = new paper.Point(p.xMm, p.yMm);
+          if (index === 0) path.moveTo(point);
+          else path.lineTo(point);
+        });
+        path.closePath();
+        return path;
+      }
+      if (polygons.length === 1) {
+        item = buildContourPath(polygons[0]);
+        item.strokeColor = STROKE_COLOR;
+        item.strokeWidth = STROKE_WIDTH_PX / paper.view.zoom;
+      } else {
+        const compound = new paper.CompoundPath({
+          strokeColor: STROKE_COLOR,
+          strokeWidth: STROKE_WIDTH_PX / paper.view.zoom
+        });
+        for (const polygon of polygons) compound.addChild(buildContourPath(polygon));
+        item = compound;
+      }
+    }
+  }
+
+  if (!item) {
+    const w = Math.max(RESIZE_MIN_DIM_MM, layer.w);
+    const h = Math.max(RESIZE_MIN_DIM_MM, layer.h);
+    item = new paper.Path.Rectangle(new paper.Rectangle(layer.x, layer.y, w, h));
+    item.strokeColor = STROKE_COLOR;
+    item.strokeWidth = STROKE_WIDTH_PX / paper.view.zoom;
+  }
+
+  const rotationDeg = layer.rotationDeg || 0;
+  const pivot = new paper.Point(layer.x + layer.w / 2, layer.y + layer.h / 2);
+  if (rotationDeg) item.rotate(rotationDeg, pivot);
+  item.data.rotationDeg = rotationDeg;
+  item.data.pivotXMm = pivot.x;
+  item.data.pivotYMm = pivot.y;
+  return item;
+}
+
+/**
  * RS-3011 Step 1: `hooks` lets app.js own project state while this module stays the "all direct
  * Paper.js usage" facade its own header comment describes -- `getStoneDefaults()`/
  * `onShapeCommitted(layer)` mirror the old commit()'s `{stoneSize,gap,color}` argument and
@@ -837,7 +930,13 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     // own, unlike 'path' layers, so this file needs a way to ask the permanent engine for their true
     // outline instead. Returns {polygons, boundingBox} (same shape resolveLayerShapeSource() already
     // gets back from the same engine call) or null.
-    resolveShapeLibraryPolygons = () => null
+    resolveShapeLibraryPolygons = () => null,
+    // RS-3012 Step 2: the 'svg'-layer counterpart of resolveShapeLibraryPolygons above -- app.js's
+    // own permanentEngine.resolveSvgPolygons() call, the SAME "get this SVG's fillable outline" hook
+    // Boolean Operations already uses (see app.js's resolveLayerShapeSource()), for materializing an
+    // 'svg' layer's real vector outline as a Paper.js item (see
+    // materializeSvgImageItemFromLayer()'s own doc comment). Returns {polygons, boundingBox} or null.
+    resolveSvgPolygons = () => null
   } = hooks;
   const board = new DrawingBoard();
   let isSetUp = false;
@@ -4062,24 +4161,33 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      * genuinely differs: a 'path' layer can carry a frozen `naturalBoundingBoxMm` from an Outline-
      * mode Eraser cut (see expectedShapeBoundsMm()'s own doc comment) -- a concept that does not
      * exist for a SHAPE_LIBRARY_KINDS layer at all, which always uses the plain x/y/w/h comparison
-     * every un-cut 'path' layer already used. Circle/SVG/Image stay out of scope entirely (see
-     * materializeShapeLibraryItemFromLayer()'s own doc comment for why) -- app.js's own filter never
-     * passes them into `layers` here, so this method has no branch for them.
-     * @param {object[]} layers Every current 'path' or SHAPE_LIBRARY_KINDS project.layers entry.
+     * every un-cut 'path' layer already used. RS-3012 Step 2: `layers` widened again to also carry
+     * every 'svg'/'image' layer -- these have no `naturalBoundingBoxMm` concept either (same as
+     * SHAPE_LIBRARY_KINDS), so they share that same plain x/y/w/h comparison branch, just
+     * materializing via materializeSvgImageItemFromLayer() instead (see its own doc comment). Circle
+     * stays out of scope entirely (see materializeShapeLibraryItemFromLayer()'s own doc comment for
+     * why) -- app.js's own filter never passes it into `layers` here, so this method has no branch
+     * for it.
+     * @param {object[]} layers Every current 'path', SHAPE_LIBRARY_KINDS, 'svg' or 'image'
+     *   project.layers entry.
      * @param {boolean} [forceStoneRebuild=false] Rebuild every matched layer's stone Group even when
      *   its bounds haven't changed -- for callers where project.layers may have changed a
      *   non-geometric field from outside Design's own drag handlers (undo/redo, trash-icon delete).
      */
     syncFromProjectLayers(layers, forceStoneRebuild = false) {
       // RS-3032 Step A: the one place this method decides which materialization builder a layer
-      // uses -- 'path' layers keep using the existing contours-based builder unchanged; everything
-      // else reaching this method is a SHAPE_LIBRARY_KINDS layer (app.js's own call-site filter
-      // guarantees no other type ever arrives here), which has no stored contours at all and must
-      // ask GeometryEngine for its outline via the injected resolveShapeLibraryPolygons hook.
+      // uses -- 'path' layers keep using the existing contours-based builder unchanged. RS-3012
+      // Step 2: 'svg'/'image' layers use their own builder (no stored contours, no GeometryEngine
+      // shape formula either). Everything else reaching this method is a SHAPE_LIBRARY_KINDS layer
+      // (app.js's own call-site filter guarantees no other type ever arrives here), which has no
+      // stored contours at all and must ask GeometryEngine for its outline via the injected
+      // resolveShapeLibraryPolygons hook.
       function materializeForLayer(layer) {
-        return layer.type === 'path'
-          ? materializeShapeFromLayer(layer)
-          : materializeShapeLibraryItemFromLayer(layer, resolveShapeLibraryPolygons);
+        if (layer.type === 'path') return materializeShapeFromLayer(layer);
+        if (layer.type === 'svg' || layer.type === 'image') {
+          return materializeSvgImageItemFromLayer(layer, resolveSvgPolygons);
+        }
+        return materializeShapeLibraryItemFromLayer(layer, resolveShapeLibraryPolygons);
       }
 
       const layerById = new Map(layers.map((l) => [l.id, l]));
@@ -4188,6 +4296,18 @@ export function createDrawingTool(canvasEl, hooks = {}) {
                 Math.max(RESIZE_MIN_DIM_MM, layer.w),
                 Math.max(RESIZE_MIN_DIM_MM, layer.h)
               );
+            }
+          } else if (layer.type === 'svg' || layer.type === 'image') {
+            // RS-3012 Step 2: neither type can take the 'path' branch's cheap bounds-stretch
+            // shortcut above -- 'svg''s outline must be re-resolved at the new width/height (like a
+            // SHAPE_LIBRARY_KINDS layer just below), and 'image''s placeholder rectangle is cheap
+            // enough to just rebuild outright rather than special-casing a stretch for it alone. Both
+            // just re-materialize, the same "geometry itself must change, not just placement"
+            // reasoning as the SHAPE_LIBRARY_KINDS branch below.
+            const newItem = materializeSvgImageItemFromLayer(layer, resolveSvgPolygons);
+            if (newItem) {
+              board.replaceShapeItem(shape.id, newItem);
+              newItem.data.layerId = layerId;
             }
           } else {
             // RS-3032 Step A: a SHAPE_LIBRARY_KINDS layer's geometry is NOT simply its natural shape

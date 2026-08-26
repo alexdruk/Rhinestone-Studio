@@ -1664,6 +1664,15 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   resolveShapeLibraryPolygons:(layer)=>{
     if(!permanentEngine)return null;
     return permanentEngine.resolveShapePolygons(shapeLayerResolveParams(layer));
+  },
+  // RS-3012 Step 2: the 'svg'-layer counterpart of resolveShapeLibraryPolygons above, so
+  // DrawingCanvasTool.js can materialize an 'svg' layer's real vector outline as a Paper.js item
+  // (see its own materializeSvgImageItemFromLayer() doc comment) -- the SAME permanentEngine.
+  // resolveSvgPolygons() call resolveLayerShapeSource() already uses for Boolean Operations, never
+  // a second SVG-parsing implementation.
+  resolveSvgPolygons:(layer)=>{
+    if(!permanentEngine||!layer.svgSource)return null;
+    return permanentEngine.resolveSvgPolygons({svgSource:layer.svgSource,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h});
   }
 });
 // RS-3010 Step 2d: exposes drawingTool's own debugGrid/debugHitTestShapeId QA-only surface for
@@ -2081,10 +2090,13 @@ async function updateAll(skipWrite=false,forceStoneRebuild=false){if(!skipWrite)
   // and for why applyHistorySnapshot()/deleteLayer()'s trash-icon path pass forceStoneRebuild=true.
   // RS-3032 Step A: widened from 'path'-only to also include every SHAPE_LIBRARY_KINDS layer (Star/
   // Ring/Heart/... from the "More Shapes" popover/Shapes panel) -- syncFromProjectLayers() itself
-  // branches on layer.type internally to materialize/track the two categories separately. Circle/
-  // SVG/Image stay out of scope (see DrawingCanvasTool.js's own materializeShapeLibraryItemFromLayer()
-  // doc comment for why).
-  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'||SHAPE_LIBRARY_KINDS.has(l.type)),forceStoneRebuild)}else{drawLayout()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}
+  // branches on layer.type internally to materialize/track the two categories separately. RS-3012
+  // Step 2: widened again to include 'svg'/'image' -- both already use the same x/y/w/h/rotationDeg
+  // box model as every other XYWH_SHAPE_TYPES layer, so they get the same on-canvas click-to-select/
+  // drag/resize/rotate presence in Design that 'path'/SHAPE_LIBRARY_KINDS layers already have. Circle
+  // stays out of scope (see DrawingCanvasTool.js's own materializeShapeLibraryItemFromLayer() doc
+  // comment for why).
+  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'||SHAPE_LIBRARY_KINDS.has(l.type)||l.type==='svg'||l.type==='image'),forceStoneRebuild)}else{drawLayout()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}
 // RS-3011 freehand-close-and-clear-all-layers fix: deleting the last remaining layer no longer
 // blocks (see deleteLayer()) -- the per-row trash icon and the sidebar "Delete selected layer"
 // button are therefore never disabled for layer count anymore.
