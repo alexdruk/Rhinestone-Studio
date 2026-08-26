@@ -459,7 +459,13 @@ for (const reason of Object.values(MONOGRAM_GENERATOR_FAILURE_REASONS)) {
     // exactly what generateMonogram() itself passes (including layoutId), built from the same
     // control values set above.
     const message = s.monogramFailureMessage(
-      { reason },
+      // message matches fakeFailureResult()'s own `stub failure: ${reason}` text exactly -- the
+      // generated result below (the actual generateMonogram() flow, via the stub generator) uses
+      // that same fixture, and MONO-008's stone-width-unavailable reason returns result.message
+      // directly (see app.js's own doc comment: the generator's own message already names the
+      // frame/stone-width context), so this manually-built result must carry the identical text for
+      // the two to match.
+      { reason, message: `stub failure: ${reason}` },
       { frameId: 'circle', layoutId: MONOGRAM_LAYOUTS.SINGLE, stoneSizeMm: 2.8, frameRect: { widthMm: 80, heightMm: 80 } }
     );
     assert.ok(message.length > 0);

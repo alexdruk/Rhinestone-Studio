@@ -388,3 +388,8 @@ tools/scratch/rs-3033-rotate-verify/
 # canvas consistency after exiting Design), same "never a repo artifact" category as the scratch
 # folders above
 tools/scratch/rs-3034-resize-verify/
+
+# MONO-007/MONO-008: visual-QA harness + screenshots for the new Octagon/Pentagon/Shield frames
+# (bbox-center bugfix) and per-generation frame stone-width (1/2-row outline tracing), same "never
+# a repo artifact" category as the scratch folders above
+tools/scratch/rs-monogram-frames/

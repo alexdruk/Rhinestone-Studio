@@ -88,7 +88,8 @@ export {
   resolveGenerationContours,
   resolveInnerFittingContours,
   computeFrameInterior,
-  computeFrameFitRect
+  computeFrameFitRect,
+  resolveFrameForStoneWidth
 } from './FrameLibrary.js';
 
 export {
