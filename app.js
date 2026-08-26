@@ -4609,9 +4609,9 @@ el('monogramLayout').addEventListener('change',()=>{updateMonogramLetterCountHin
 el('monogramLetters').addEventListener('input',()=>updateMonogramGenerateButtonState());
 el('monogramFont').addEventListener('change',()=>updateMonogramGenerateButtonState());
 el('monogramColor').addEventListener('change',()=>{updateMonogramColorSwatch();updateMonogramGenerateButtonState()});
-el('monogramWidth').addEventListener('input',()=>updateMonogramGenerateButtonState());
-el('monogramHeight').addEventListener('input',()=>updateMonogramGenerateButtonState());
-el('monogramSizeMarginMm').addEventListener('input',()=>applyMonogramSizeMargin());
+el('monogramWidth').addEventListener('input',()=>{stashTypedLengthField('monogramWidth');updateMonogramGenerateButtonState()});
+el('monogramHeight').addEventListener('input',()=>{stashTypedLengthField('monogramHeight');updateMonogramGenerateButtonState()});
+el('monogramSizeMarginMm').addEventListener('input',()=>{stashTypedLengthField('monogramSizeMarginMm');applyMonogramSizeMargin()});
 el('monogramFrameStoneToggle').addEventListener('change',()=>{updateMonogramFrameStoneControlsVisibility();updateMonogramGenerateButtonState()});
 el('monogramFrameColor').addEventListener('change',()=>updateMonogramFrameColorSwatch());
 el('monogramGenerate').onclick=()=>generateMonogram();
@@ -4957,7 +4957,7 @@ function setDrawTool(mode){
   }
   setDrawMode(true,mode);
 }
-el('drawSlotWidthMm').oninput=()=>drawingTool.setSlotWidthMm(readLengthField('drawSlotWidthMm'));
+el('drawSlotWidthMm').oninput=()=>{stashTypedLengthField('drawSlotWidthMm');drawingTool.setSlotWidthMm(readLengthField('drawSlotWidthMm'))};
 el('railSelectToggle').onclick=()=>setDrawTool('select');
 el('railLassoToggle').onclick=()=>setDrawTool('lasso');
 el('railDrawToggle').onclick=()=>setDrawTool('freehand');
@@ -5417,8 +5417,19 @@ el('settingsApply').onclick=()=>{
 // and deliberately not in HISTORY_TRACKED_CONTROL_IDS, same category as settingsSnapDefault/
 // settingsShowGuides above. Storage stays mm everywhere, forever; only display/input formatting
 // changes. #stoneSize (fixed named sizes, not a free-typed length) is permanently excluded.
-function setLengthField(id,mm){el(id).value=formatLengthDisplay(mm,project.units)}
+function setLengthField(id,mm){el(id).value=formatLengthDisplay(mm,project.units);el(id).dataset.mmValue=String(mm)}
 function readLengthField(id){return displayValueToMm(el(id).value,project.units)}
+// RS-3025: called from each of the eight length fields' own 'input' listeners so a value the
+// operator just typed also gets an exact-mm stash, computed from the raw typed value in the
+// current display unit -- before any display-side rounding -- so it survives later Units round
+// trips losslessly, same as a programmatic setLengthField() write. Without this, hand-typed values
+// in prodSheetMargin/shipLengthMm/shipWidthMm/shipHeightMm/drawSlotWidthMm (which have no other
+// writer besides direct typing) would never get a usable stash at all, leaving the original drift
+// bug unfixed for exactly the fields an operator is most likely to type into.
+function stashTypedLengthField(id){
+  const mm=displayValueToMm(el(id).value,project.units);
+  if(Number.isFinite(mm))el(id).dataset.mmValue=String(mm);else delete el(id).dataset.mmValue;
+}
 function refreshUnitLabels(){
   document.querySelectorAll('[data-unit-label]').forEach(labelEl=>{
     labelEl.textContent=`${labelEl.dataset.unitLabel} (${unitSuffix(project.units)})`;
@@ -5430,6 +5441,14 @@ function refreshUnitLabels(){
 // and the Shipping length fields have no such canonical store on `project` (prodSheetMargin is a
 // bare DOM field; Shipping's shippingInfo is session-only and only written on #shipApply) -- for
 // those, convert the field's own current display value from `previousUnits` in place.
+// RS-3025: that display-value-conversion path re-derives mm from an already-2-decimal-rounded
+// display string, which drifts a few hundredths of a mm on every unit round trip. setLengthField()
+// now stashes the exact mm it was last given in dataset.mmValue, and each field's own 'input'
+// listener (via stashTypedLengthField()) re-stashes the exact mm computed from what was just typed
+// -- so here, a stash is present and used directly whether the value came from a programmatic write
+// or a hand-typed one; only a field with genuinely no parseable value (dataset.mmValue never set,
+// or explicitly deleted for an unparseable typed value) falls back to the old convert-from-display
+// path.
 function refreshAllLengthFieldDisplays(previousUnits=project.units){
   setLengthField('plateOuterDiameter',project.plate.outerDiameterMm);
   setLengthField('plateInnerWellDiameter',project.plate.innerWellDiameterMm);
@@ -5439,12 +5458,26 @@ function refreshAllLengthFieldDisplays(previousUnits=project.units){
   setLengthField('vesselBodyHeight',project.vessel.bodyHeightMm);
   setLengthField('vesselTopDiameter',project.vessel.topDiameterMm);
   for(const id of['prodSheetMargin','shipLengthMm','shipWidthMm','shipHeightMm','monogramWidth','monogramHeight','monogramSizeMarginMm','drawSlotWidthMm']){
+    const stashedMm=parseFloat(el(id).dataset.mmValue);
+    if(Number.isFinite(stashedMm)){
+      el(id).value=formatLengthDisplay(stashedMm,project.units);
+      el(id).dataset.mmValue=String(stashedMm);
+      continue;
+    }
     const raw=el(id).value;
     if(raw==='')continue;
     const mm=displayValueToMm(raw,previousUnits);
     if(!Number.isFinite(mm))continue;
     el(id).value=formatLengthDisplay(mm,project.units);
   }
+}
+// RS-3025: prodSheetMargin and the three Shipping fields never go through setLengthField() today
+// (prodSheetMargin has no writer at all besides the operator; Shipping's own
+// syncShippingFieldsFromState() in ShippingPanel.js formats directly) -- typing is their ONLY
+// source of a value, so stashTypedLengthField() here is what actually fixes the drift for these
+// four fields, not just parity with the setLengthField()-backed ones above.
+for(const id of['prodSheetMargin','shipLengthMm','shipWidthMm','shipHeightMm']){
+  el(id).addEventListener('input',()=>stashTypedLengthField(id));
 }
 // RS-3024: every convertible numeric field's HTML `step` attribute is mm-tuned and, unlike its
 // `value`, was never made unit-aware -- in inches mode the spinner-arrow/Up-Down-key increment
