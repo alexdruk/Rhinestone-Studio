@@ -100,9 +100,10 @@ export function parsePathData(d) {
     if (next) {
       currentLetter = tokenizer.consumeCommand();
     } else if (currentLetter === null) {
-      throw new Error('SVG path data must start with a move command (M/m).');
-    } else if (currentLetter === 'Z' || currentLetter === 'z') {
-      throw new Error('SVG path data has trailing coordinates after a close-path command with no following command letter.');
+      if (first) {
+        throw new Error('SVG path data must start with a move command (M/m).');
+      }
+      throw new Error('SVG path data has coordinates after a close-path command with no following command letter.');
     }
     if (first) {
       if (currentLetter !== 'M' && currentLetter !== 'm') {
@@ -289,6 +290,7 @@ export function commandsToContours(commands) {
   let active = null;
   let prevControl = null;
   let prevType = null;
+  let pendingImplicitSubpath = false;
 
   function startSubpath(x, y) {
     if (active) results.push(active);
@@ -300,6 +302,18 @@ export function commandsToContours(commands) {
   }
 
   for (const cmd of commands) {
+    if (pendingImplicitSubpath) {
+      if (cmd.type === 'M') {
+        pendingImplicitSubpath = false;
+      } else if (cmd.type !== 'Z') {
+        // SVG spec §9.3.4: a drawing command following a closepath, with no new moveto in
+        // between, implicitly starts a new subpath at the same initial point as the subpath
+        // that was just closed.
+        startSubpath(subpathStart.x, subpathStart.y);
+        pendingImplicitSubpath = false;
+      }
+    }
+
     switch (cmd.type) {
       case 'M': {
         const x = cmd.rel && current ? current.x + cmd.x : cmd.x;
@@ -394,6 +408,7 @@ export function commandsToContours(commands) {
         current = { ...subpathStart };
         prevControl = null;
         prevType = 'Z';
+        pendingImplicitSubpath = true;
         break;
       }
       default:
