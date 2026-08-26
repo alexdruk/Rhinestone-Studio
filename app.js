@@ -4384,12 +4384,10 @@ function populateMonogramLayoutOptions(){el('monogramLayout').innerHTML=Object.v
 function authoredProductionFonts(){return fontManager?fontManager.listFonts().filter(f=>f.providerId==='rhinestone'):[]}
 function populateMonogramFontOptions(){if(!fontManager)return;el('monogramFont').innerHTML=groupFontsByCategory(authoredProductionFonts()).map(([role,fonts])=>`<optgroup label="${escapeHtml(fontCategoryLabel(role))}">${fonts.map(f=>`<option value="${f.id}">${escapeHtml(f.family)}</option>`).join('')}</optgroup>`).join('')}
 function populateMonogramStoneSizeOptions(){el('monogramStoneSize').innerHTML=listStoneSizes().map(s=>`<option value="${s.diameterMm}">${escapeHtml(s.name)} — ${s.diameterMm.toFixed(1)} mm</option>`).join('')}
-function populateMonogramColorOptions(){const groups=new Map();for(const c of Object.values(STONE_COLORS)){if(!groups.has(c.group))groups.set(c.group,[]);groups.get(c.group).push(c)}el('monogramColor').innerHTML=[...groups.entries()].map(([group,colors])=>`<optgroup label="${escapeHtml(group)}">${colors.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`).join('')}
 function updateMonogramColorSwatch(){const c=STONE_COLORS[el('monogramColor').value];el('monogramColorSwatch').style.background=c?c.previewColor:'transparent'}
-// MONO-010: mirrors populateMonogramStoneSizeOptions()/populateMonogramColorOptions()/
+// MONO-010: mirrors populateMonogramStoneSizeOptions()/populateStoneColorOptions()/
 // updateMonogramColorSwatch() above verbatim, retargeted at the frame-specific selects.
 function populateMonogramFrameStoneSizeOptions(){el('monogramFrameStoneSize').innerHTML=listStoneSizes().map(s=>`<option value="${s.diameterMm}">${escapeHtml(s.name)} — ${s.diameterMm.toFixed(1)} mm</option>`).join('')}
-function populateMonogramFrameColorOptions(){const groups=new Map();for(const c of Object.values(STONE_COLORS)){if(!groups.has(c.group))groups.set(c.group,[]);groups.get(c.group).push(c)}el('monogramFrameColor').innerHTML=[...groups.entries()].map(([group,colors])=>`<optgroup label="${escapeHtml(group)}">${colors.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`).join('')}
 function updateMonogramFrameColorSwatch(){const c=STONE_COLORS[el('monogramFrameColor').value];el('monogramFrameColorSwatch').style.background=c?c.previewColor:'transparent'}
 function updateMonogramFrameStoneControlsVisibility(){el('monogramFrameStoneFields').style.display=el('monogramFrameStoneToggle').checked?'':'none'}
 // MONO-009: the frame's own generic scalingLimitsMm midpoint is a size that only ever coincidentally
@@ -4595,8 +4593,8 @@ async function generateMonogram(){
     el('status').textContent=`Generated monogram (${result.layers.length} layer${result.layers.length===1?'':'s'}).`;
   }
 }
-populateMonogramFrameOptions();populateMonogramLayoutOptions();populateMonogramStoneSizeOptions();populateMonogramColorOptions();
-populateMonogramFrameStoneSizeOptions();populateMonogramFrameColorOptions();
+populateMonogramFrameOptions();populateMonogramLayoutOptions();populateMonogramStoneSizeOptions();populateStoneColorOptions('monogramColor');
+populateMonogramFrameStoneSizeOptions();populateStoneColorOptions('monogramFrameColor');
 // MONO-010: one-time initial sync only, mirroring updateMonogramFrameSizeBounds()'s (MONO-009)
 // "never fight a value already set" precedent -- set the frame-specific selects to match the
 // shared ones once at boot so first-time toggle-on doesn't jump to an arbitrary first-in-list

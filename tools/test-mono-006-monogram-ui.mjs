@@ -79,6 +79,7 @@ const fontCategoryLabelFnSrc = sliceLine(appJs, 'function fontCategoryLabel(role
 const groupFontsByCategorySrc = sliceLine(appJs, 'function groupFontsByCategory(fonts){', 'groupFontsByCategory()');
 const productionFontsSrc = sliceLine(appJs, 'function productionFonts(){', 'productionFonts()');
 const escapeHtmlSrc = sliceLine(appJs, 'function escapeHtml(s){', 'escapeHtml()');
+const populateStoneColorOptionsSrc = sliceLine(appJs, "function populateStoneColorOptions(targetId='stoneColor'){", 'populateStoneColorOptions()');
 const currentSnapshotSrc = sliceLine(appJs, 'function currentSnapshot(){', 'currentSnapshot()');
 const commitHistorySrc = sliceLine(appJs, 'function commitHistory(){', 'commitHistory()');
 const closeHistorySessionSrc = sliceLine(appJs, 'function closeHistorySession(){', 'closeHistorySession()');
@@ -163,6 +164,7 @@ const sandboxFactory = new Function(
   ${groupFontsByCategorySrc}
   ${productionFontsSrc}
   ${escapeHtmlSrc}
+  ${populateStoneColorOptionsSrc}
   const history=new HistoryManager({maxSize:100});
   let project=initialProject;
   let selectedLayerId='initial-layer';
@@ -181,7 +183,7 @@ const sandboxFactory = new Function(
     lightboxes, lightboxForLayerType, generateMonogram, validateMonogramControls,
     updateMonogramGenerateButtonState, monogramFailureMessage,
     populateMonogramFrameOptions, populateMonogramLayoutOptions, populateMonogramFontOptions,
-    populateMonogramStoneSizeOptions, populateMonogramColorOptions, updateMonogramFrameSizeBounds,
+    populateMonogramStoneSizeOptions, populateStoneColorOptions, updateMonogramFrameSizeBounds,
     updateMonogramLetterCountHint,
     performUndo, performRedo,
     getProject: () => project,
@@ -315,7 +317,7 @@ await test('2d. Stone size options match the real Stone Library (listStoneSizes(
 
 await test('2e. Color options match the real crystal color catalog (STONE_COLORS)', () => {
   const s = buildScenario({ monogramGenerator: makeStubMonogramGenerator(fakeSuccessResult([])) });
-  s.populateMonogramColorOptions();
+  s.populateStoneColorOptions('monogramColor');
   const html = el('monogramColor').innerHTML;
   for (const c of Object.values(STONE_COLORS)) {
     assert.ok(html.includes(`value="${c.id}"`), `expected a <option> for color "${c.id}"`);
