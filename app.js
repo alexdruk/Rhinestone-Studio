@@ -4298,6 +4298,9 @@ function monogramFailureMessage(result,request){
   if(reason===R.BELOW_MINIMUM_SCALE)return `${designText} cannot fit using ${stoneSizeText} stones inside a ${frameSizeText} ${frameLabel} frame${limitingFactorText}. Increase the frame size, or choose a smaller stone size.`;
   if(reason===R.LETTER_COLLISION)return `Two or more letters in this${layoutLabel?` ${layoutLabel}`:''} monogram would touch at ${stoneSizeText} spacing in a ${frameSizeText} ${frameLabel} frame. Increase the frame size, choose a different layout, or choose a smaller stone size.`;
   if(reason===R.FRAME_COLLISION)return `A letter would touch the frame in this${layoutLabel?` ${layoutLabel}`:''} monogram at ${stoneSizeText} spacing in a ${frameSizeText} ${frameLabel} frame. Increase the frame size, or choose a smaller stone size.`;
+  // MONO-008: the generator's own message already names the frame/stone-width context -- no
+  // request-specific data to add here, unlike the reasons above.
+  if(reason===R.STONE_WIDTH_UNAVAILABLE)return result.message;
   return MONOGRAM_FAILURE_MESSAGES[reason]||'Monogram generation failed. Please check your settings and try again.';
 }
 // Frame choices come straight from FrameLibrary.listFrames() -- adding a frame there needs no
@@ -4384,7 +4387,14 @@ function buildMonogramRequest(validated){
   // resolveFontProviderId() -- same call generateTextStonesLive() already makes for every ordinary
   // text layer -- so an authored font resolves through the real Rhinestone font provider, not the
   // OpenType one; omitting this made the real GeometryEngine mis-resolve authored fonts entirely.
-  return{frameId:validated.frameId,layoutId:validated.layoutId,letters:validated.letters,fontId:validated.fontId,providerId:resolveFontProviderId(validated.fontId),stoneSizeMm,color,frameRect,canvasMm};
+  // MONO-008: #monogramFrameStyle is a UI-level concept (static options, not FrameLibrary-catalog-
+  // driven), mapped here to the frameOptions MonogramGenerator actually understands. 'fill' maps to
+  // {} -- zero behavior change from before this field existed.
+  const frameStyle=el('monogramFrameStyle').value;
+  const frameOptions=frameStyle==='outline-1'?{mode:'outline',stoneWidth:1}
+    :frameStyle==='outline-2'?{mode:'outline',stoneWidth:2}
+    :{};
+  return{frameId:validated.frameId,layoutId:validated.layoutId,letters:validated.letters,fontId:validated.fontId,providerId:resolveFontProviderId(validated.fontId),stoneSizeMm,color,frameRect,canvasMm,frameOptions};
 }
 function onMonogramOpen(){clearMonogramValidation();updateMonogramGenerateButtonState()}
 async function generateMonogram(){

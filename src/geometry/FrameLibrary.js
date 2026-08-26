@@ -27,7 +27,7 @@
  */
 
 import { Point2D, BoundingBox } from '../text/VectorPath.js';
-import { createRingNaturalContours, createRegularPolygonNaturalContours } from './ShapeLibrary.js';
+import { createRingNaturalContours, createRegularPolygonNaturalContours, createShieldNaturalContours } from './ShapeLibrary.js';
 import { computeInscribedRect } from './ShapeFit.js';
 
 function point(xMm, yMm) {
@@ -110,9 +110,17 @@ function createRoundedSquareNaturalContours(cornerRadiusRatio) {
  * (outer + inner, the stone-generation band) and fittingNaturalContours (inner alone, the future
  * monogram-fitting region) — computed once, from the same inner contour, never re-derived per call
  * (MONO-003's "do not derive one from the other every call" instruction).
+ *
+ * MONO-007 bugfix: the inner contour scales toward `outerContour`'s own bounding-box center, not the
+ * hardcoded NATURAL_CENTER_MM (1,1). That coincided with the true center for every pre-MONO-007 frame
+ * (Circle/Square/Rounded Square/Diamond are all symmetric around the origin before ShapeLibrary's own
+ * rootAtOrigin() shifts them, so their bbox center lands at exactly (1,1)) — but Shield is not
+ * vertically symmetric, so assuming (1,1) here would scale its inner opening toward the wrong point
+ * and leave it visibly lopsided.
  */
 function buildHollowFrameNaturalContours(outerContour, innerRatio) {
-  const innerContour = scaleContourTowardCenter(outerContour, NATURAL_CENTER_MM, NATURAL_CENTER_MM, innerRatio);
+  const box = BoundingBox.fromPoints(outerContour.map((p) => new Point2D(p.xMm, p.yMm)));
+  const innerContour = scaleContourTowardCenter(outerContour, box.center.xMm, box.center.yMm, innerRatio);
   return {
     generationNaturalContours: [outerContour, innerContour],
     fittingNaturalContours: [innerContour]
@@ -127,6 +135,9 @@ const ovalRing = circleRing;
 const squareFrame = buildHollowFrameNaturalContours(createRoundedSquareNaturalContours(0), DEFAULT_INNER_RATIO);
 const roundedSquareFrame = buildHollowFrameNaturalContours(createRoundedSquareNaturalContours(ROUNDED_SQUARE_CORNER_RATIO), DEFAULT_INNER_RATIO);
 const diamondFrame = buildHollowFrameNaturalContours(createRegularPolygonNaturalContours(4)[0], DEFAULT_INNER_RATIO);
+const octagonFrame = buildHollowFrameNaturalContours(createRegularPolygonNaturalContours(8)[0], DEFAULT_INNER_RATIO);
+const pentagonFrame = buildHollowFrameNaturalContours(createRegularPolygonNaturalContours(5)[0], DEFAULT_INNER_RATIO);
+const shieldFrame = buildHollowFrameNaturalContours(createShieldNaturalContours()[0], DEFAULT_INNER_RATIO);
 
 const COMMON_SCALING_LIMITS_MM = { minWidthMm: 20, maxWidthMm: 150, minHeightMm: 20, maxHeightMm: 150 };
 const NO_OPTICAL_OFFSET = { xMm: 0, yMm: 0 };
@@ -198,6 +209,42 @@ const FRAME_DEFINITIONS = Object.freeze([
     scalingLimitsMm: COMMON_SCALING_LIMITS_MM,
     generationNaturalContours: diamondFrame.generationNaturalContours,
     fittingNaturalContours: diamondFrame.fittingNaturalContours
+  },
+  {
+    id: 'octagon',
+    label: 'Octagon',
+    category: 'geometric',
+    source: 'shapeLibrary',
+    hollow: true,
+    clearanceMm: 1.5,
+    opticalCenterOffset: NO_OPTICAL_OFFSET,
+    scalingLimitsMm: COMMON_SCALING_LIMITS_MM,
+    generationNaturalContours: octagonFrame.generationNaturalContours,
+    fittingNaturalContours: octagonFrame.fittingNaturalContours
+  },
+  {
+    id: 'pentagon',
+    label: 'Pentagon',
+    category: 'geometric',
+    source: 'shapeLibrary',
+    hollow: true,
+    clearanceMm: 1.5,
+    opticalCenterOffset: NO_OPTICAL_OFFSET,
+    scalingLimitsMm: COMMON_SCALING_LIMITS_MM,
+    generationNaturalContours: pentagonFrame.generationNaturalContours,
+    fittingNaturalContours: pentagonFrame.fittingNaturalContours
+  },
+  {
+    id: 'shield',
+    label: 'Shield',
+    category: 'geometric',
+    source: 'shapeLibrary',
+    hollow: true,
+    clearanceMm: 1.5,
+    opticalCenterOffset: NO_OPTICAL_OFFSET,
+    scalingLimitsMm: COMMON_SCALING_LIMITS_MM,
+    generationNaturalContours: shieldFrame.generationNaturalContours,
+    fittingNaturalContours: shieldFrame.fittingNaturalContours
   }
 ]);
 
@@ -386,4 +433,95 @@ export function computeFrameInterior(frameOrId, box, minClearanceMm = 0) {
 export function computeFrameFitRect(frameOrId, box, aspectRatio, minClearanceMm = 0) {
   const { polygons, boundingBox } = computeFrameInterior(frameOrId, box, minClearanceMm);
   return computeInscribedRect(polygons, boundingBox, aspectRatio);
+}
+
+// MONO-008: a lower bound only -- below this, the inner/mid radius has collapsed toward (or past)
+// the center, i.e. the frame is genuinely too small for the requested row(s) at this spacing. There
+// is deliberately no upper bound: a ratio close to 1 just means a thin border relative to a large
+// frame (a real, legible single/double row, not a degenerate case) -- unlike
+// createRingNaturalContours()'s own [0.1, 0.9] domain, which additionally caps the ratio because an
+// imperceptibly thin *decorative* ring is undesirable there; that aesthetic concern doesn't apply to
+// a production stone-width border, whose whole point is to trace at exactly the requested spacing
+// regardless of how thin that makes it look relative to the frame.
+const MIN_STONE_WIDTH_RATIO = 0.1;
+
+/**
+ * MONO-008: resolves a hollow frame's own border to trace as exactly 1 or 2 rows of stones at real
+ * production spacing (spacingMm = stoneSizeMm + gapMm) for outline-mode generation -- a per-generation
+ * replacement for the fixed DEFAULT_INNER_RATIO band, which does not track stoneSizeMm/gapMm at all.
+ * Only ever meaningful for hollow frames (frame.hollow === true).
+ *
+ * Natural half-extent is always 1 (rootAtOrigin's own convention -- see NATURAL_CENTER_MM's doc
+ * comment), so once placed into a boxWidthMm x boxHeightMm box, mm-per-natural-unit is
+ * boxWidthMm/2 in X and boxHeightMm/2 in Y. For a non-square box these differ; this function
+ * deliberately averages them into one representative scale (avgScaleMmPerUnit) rather than
+ * attempting true per-axis anisotropic band math -- the same class of accepted approximation
+ * insetPointTowardCenterByMm() already documents elsewhere in this file.
+ *
+ * stoneWidthCount 2 places outer + inner rows exactly spacingMm apart (one production pitch -- a
+ * tight double row, no gap, no overlap). stoneWidthCount 1 traces a single row at the midline of a
+ * notional one-stone-wide band, so exactly one contour is returned (outline mode traces one ring per
+ * contour; a pair of contours would trace two rows, not one).
+ *
+ * Never silently clamps an out-of-domain ratio -- a caller asking for a 2-stone-wide border that
+ * cannot be placed spacingMm apart deserves a structured failure, not a border that silently isn't
+ * spacingMm apart.
+ *
+ * @param {string|object} frameOrId A known hollow frame id, or a frame-definition-shaped object.
+ * @param {number} stoneWidthCount 1 or 2.
+ * @param {number} spacingMm Real production center-to-center spacing (stoneSizeMm + gapMm).
+ * @param {number} boxWidthMm
+ * @param {number} boxHeightMm
+ * @returns {{ok:true, frame:object}|{ok:false, reason:string, message:string}}
+ */
+export function resolveFrameForStoneWidth(frameOrId, stoneWidthCount, spacingMm, boxWidthMm, boxHeightMm) {
+  const frame = resolveFrame(frameOrId);
+  const outerContour = frame.generationNaturalContours[0];
+  const box = BoundingBox.fromPoints(outerContour.map((p) => new Point2D(p.xMm, p.yMm)));
+  const centerXMm = box.center.xMm;
+  const centerYMm = box.center.yMm;
+
+  const avgScaleMmPerUnit = (boxWidthMm / 2 + boxHeightMm / 2) / 2;
+  const outerRadiusMm = avgScaleMmPerUnit;
+
+  function tooSmall() {
+    return {
+      ok: false,
+      reason: 'frame-too-small',
+      message: `The ${frame.label} frame cannot trace a ${stoneWidthCount}-stone-wide border at this frame size and stone spacing -- the frame/stone-size combination leaves no room for a legible border.`
+    };
+  }
+
+  let generationNaturalContours;
+  let fittingNaturalContours;
+
+  if (stoneWidthCount === 2) {
+    const innerRadiusMm = outerRadiusMm - spacingMm;
+    const innerRatio = innerRadiusMm / outerRadiusMm;
+    if (!(innerRatio >= MIN_STONE_WIDTH_RATIO)) {
+      return tooSmall();
+    }
+    const innerContour = scaleContourTowardCenter(outerContour, centerXMm, centerYMm, innerRatio);
+    generationNaturalContours = [outerContour, innerContour];
+    fittingNaturalContours = [innerContour];
+  } else {
+    const midRadiusMm = outerRadiusMm - spacingMm / 2;
+    const midRatio = midRadiusMm / outerRadiusMm;
+    if (!(midRatio >= MIN_STONE_WIDTH_RATIO)) {
+      return tooSmall();
+    }
+    const midContour = scaleContourTowardCenter(outerContour, centerXMm, centerYMm, midRatio);
+    generationNaturalContours = [midContour];
+    fittingNaturalContours = [midContour];
+  }
+
+  return {
+    ok: true,
+    frame: {
+      ...frame,
+      hollow: true,
+      generationNaturalContours,
+      fittingNaturalContours
+    }
+  };
 }

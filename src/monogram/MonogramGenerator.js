@@ -27,7 +27,7 @@
  * use for their own storage adapters.
  */
 
-import { getFrameDefinition, computeFrameInterior, computeFrameFitRect } from '../geometry/FrameLibrary.js';
+import { getFrameDefinition, computeFrameInterior, computeFrameFitRect, resolveFrameForStoneWidth } from '../geometry/FrameLibrary.js';
 import { computeMonogramLayout, MONOGRAM_LAYOUT_FAILURE_REASONS } from './MonogramLayouts.js';
 import {
   Stone,
@@ -51,6 +51,9 @@ export const MONOGRAM_GENERATOR_FAILURE_REASONS = Object.freeze({
   BELOW_MINIMUM_SCALE: 'below-minimum-scale',
   LETTER_COLLISION: 'letter-collision',
   FRAME_COLLISION: 'frame-collision',
+  // MONO-008: frameOptions.stoneWidth (1 or 2) could not be honored at this frame size/stone
+  // spacing -- see FrameLibrary.resolveFrameForStoneWidth()'s own 'frame-too-small' reason.
+  STONE_WIDTH_UNAVAILABLE: 'stone-width-unavailable',
   // MONO-005A: the generated layer's own data, regenerated through the real, unmodified
   // GeometryEngine.generateTextLayout() path, did not reproduce the fitted geometry used for
   // validation. Should never happen in practice (see generate()'s round-trip check below) -- this
@@ -338,11 +341,28 @@ export class MonogramGenerator {
     // the collision check for why the formula is exactly stoneSizeMm+gapMm).
     const requiredSpacingMm = stoneSizeMm + gapMm;
 
+    // MONO-008: when the caller requests a specific outline stone-width for the frame's own border
+    // (1 or 2 rows at real production spacing, instead of the fixed DEFAULT_INNER_RATIO band),
+    // resolve that geometry now, before any frame-interior/fitting computation below, so every
+    // remaining use of the frame's geometry -- the interior erosion just below, the fit-rect
+    // inscribing in step 4, and the final frame generation at the bottom of this method -- is
+    // consistent with the border actually traced. `frame` itself is left untouched (its label/
+    // category/etc. are still the catalog entry); `effectiveFrame` is what every geometry call below
+    // uses instead.
+    let effectiveFrame = frame;
+    if (frameOptions.stoneWidth === 1 || frameOptions.stoneWidth === 2) {
+      const stoneWidthResult = resolveFrameForStoneWidth(frame, frameOptions.stoneWidth, requiredSpacingMm, normalizedFrameRect.widthMm, normalizedFrameRect.heightMm);
+      if (!stoneWidthResult.ok) {
+        return failure(R.STONE_WIDTH_UNAVAILABLE, stoneWidthResult.message);
+      }
+      effectiveFrame = stoneWidthResult.frame;
+    }
+
     // 2. Cheap up-front checks, before generating any letters: does this frame have any usable
     // interior at all at this stone size (independent of layout), and is layoutId/letterCount
     // structurally valid? Both failures are reported without needing a real font/letters, matching
     // this generator's own established failure-priority order (frame -> layout -> font/fitting).
-    const { boundingBox: interiorBoundingBox } = computeFrameInterior(frame, normalizedFrameRect, requiredSpacingMm);
+    const { boundingBox: interiorBoundingBox } = computeFrameInterior(effectiveFrame, normalizedFrameRect, requiredSpacingMm);
     if (!interiorBoundingBox) {
       return failure(R.FITTING_FAILED, `Frame ${JSON.stringify(frameId)}'s interior is empty for the given frameRect and stoneSizeMm ${stoneSizeMm}/gapMm ${gapMm} (frame too small for its required production clearance).`);
     }
@@ -406,7 +426,7 @@ export class MonogramGenerator {
     // bounding box (always ~1:1 for a symmetric frame), so a wide multi-letter layout genuinely
     // unlocks more of a round/diamond frame's real footprint than a forced-square region would.
     const groupAspectRatio = computeGroupAspectRatio(letterEntries, probeLayoutResult.slots);
-    const inscribedInteriorRect = computeFrameFitRect(frame, normalizedFrameRect, groupAspectRatio, requiredSpacingMm);
+    const inscribedInteriorRect = computeFrameFitRect(effectiveFrame, normalizedFrameRect, groupAspectRatio, requiredSpacingMm);
     if (!inscribedInteriorRect) {
       return failure(R.FITTING_FAILED, `Frame ${JSON.stringify(frameId)} has no usable rectangular interior region for the given frameRect and stoneSizeMm ${stoneSizeMm}/gapMm ${gapMm}.`);
     }
@@ -435,7 +455,13 @@ export class MonogramGenerator {
     const slotByIndex = new Map(layoutResult.slots.map((slot) => [slot.index, slot]));
 
     const frameLayerId = `monogram-${frameId}-${layoutId}-frame`;
-    const frameMode = VECTOR_FILL_MODES.has(frameOptions.mode) ? frameOptions.mode : DEFAULT_FRAME_MODE;
+    // MONO-008: stoneWidth only has meaning for outline-mode row tracing (resolveFrameForStoneWidth()
+    // already produced exactly-one/exactly-two contours built for that mode), so requesting it forces
+    // the frame's own generation mode to 'outline' regardless of frameOptions.mode -- not a new
+    // validation error path, just an override.
+    const frameMode = (frameOptions.stoneWidth === 1 || frameOptions.stoneWidth === 2)
+      ? 'outline'
+      : (VECTOR_FILL_MODES.has(frameOptions.mode) ? frameOptions.mode : DEFAULT_FRAME_MODE);
     const frameColor = (typeof frameOptions.color === 'string' && frameOptions.color.length > 0)
       ? frameOptions.color
       : resolvedColor;
@@ -582,7 +608,7 @@ export class MonogramGenerator {
     // uses. No new geometry code: this is the one point of contact between FrameLibrary's data and
     // the Geometry Engine.
     const frameLayout = this._engine.generatePathLayout({
-      contours: frame.generationNaturalContours,
+      contours: effectiveFrame.generationNaturalContours,
       layerId: frameLayerId,
       xMm: normalizedFrameRect.xMm,
       yMm: normalizedFrameRect.yMm,
@@ -639,7 +665,7 @@ export class MonogramGenerator {
       type: 'path',
       visible: true,
       pathName: `${frame.label} Frame`,
-      contours: frame.generationNaturalContours.map((polygon) => polygon.map((p) => ({ x: p.xMm, y: p.yMm }))),
+      contours: effectiveFrame.generationNaturalContours.map((polygon) => polygon.map((p) => ({ x: p.xMm, y: p.yMm }))),
       x: normalizedFrameRect.xMm,
       y: normalizedFrameRect.yMm,
       w: normalizedFrameRect.widthMm,
