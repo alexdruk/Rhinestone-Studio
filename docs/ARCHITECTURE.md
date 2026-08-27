@@ -1171,8 +1171,8 @@ how `src/preview3d/**` confines Three.js — `app.js` only ever calls the facade
 
 **Implementation status:** RS-3010 built Design as a self-contained authoring tool; RS-3011 made it
 the app's primary view and folded its shapes directly into `project.layers` (removing the earlier
-explicit Commit Shape step); RS-3012 folded the remaining layer types (`svg`, `image`, `text`) and
-the Stamp/Trace placement tools into Design's selection model; RS-3013 added independent
+explicit Commit Shape step); RS-3012 folded the remaining layer types (`svg`, `image`, `text`,
+`circle`) and the Stamp/Trace placement tools into Design's selection model; RS-3013 added independent
 selection/editing for Paint-created regions; RS-3014 gave Stamp/Trace/Paint their own tool-level
 style settings. See `docs/specifications/RS-3011-design-primary-view-scope.md` and
 `docs/specifications/RS-3013-region-selection-editing-scope.md` for full step-by-step scope and
@@ -1223,7 +1223,7 @@ boolean-geometry grid resolution (`targetSpacingMm` in `resolvePaintTargetTwoPas
 concern RS-3014 deliberately left alone, unrelated to a region's stored decoration.
 
 **Selection beyond shapes (RS-3012).** Design's click-to-select / drag / resize / rotate began
-(RS-3010/3011) as a shape-only interaction. RS-3012 extended it, across three shipped steps, to the
+(RS-3010/3011) as a shape-only interaction. RS-3012 extended it, across four shipped steps, to the
 remaining layer types and to the two placement tools:
 
 - **Step 1 — Stamp and Trace respect the selection boundary.** When an `activeSelection` (a region,
@@ -1265,16 +1265,26 @@ remaining layer types and to the two placement tools:
   `TextPlacement.js`'s `computeTextPlacementOffsetMm()` re-centers the (already-rotated) bounding
   box onto for any `rotationDeg`, so a live rotate-drag pivots around it and still lands on the
   correct center once the real stones regenerate.
+- **Step 4 — `circle` layers join Select (no rotate handle).** A circle layer uses a different data
+  model (`cx`/`cy`/`r`, not `x`/`y`/`w`/`h`) — deliberately *not* migrated. `materializeCircleItemFromLayer()`
+  builds the proxy directly from `cx`/`cy`/`r` (this is the one place in `DrawingCanvasTool.js` that
+  reads those fields), and two behavioural specifics follow from circle's own geometry, each carried
+  on an `item.data` flag: `item.data.isCircleProxy` makes the resize drag a *radius-from-center*
+  drag — the new radius is the distance from the fixed center to the pointer, matching `app.js`'s own
+  main-canvas `l.r=Math.max(2,Math.hypot(mm.x-drag.l0.cx,mm.y-drag.l0.cy))`, so any of the 8 handles
+  drives it identically and the center stays pinned (`onShapeResized` reports a centered `2r`-by-`2r`
+  square, which `app.js` converts back to `l.r`); `item.data.noRotateHandle` makes
+  `hitTestRotateHandle()` / `updateRotateHandleItem()` skip the rotate handle entirely, since a
+  circle is rotationally invariant (same "not every layer type gets every handle" precedent Step 3
+  set for text's resize handles). Click/drag reuse the shared `hitTestShapeId()` / `onShapeMoved`
+  machinery unchanged (`onShapeMoved` already routes through `getLayerPosition()`/`setLayerPosition()`,
+  which know circle's `cx`/`cy`). Like `text`, a circle has no `x`/`y`/`w`/`h` box, so
+  `syncFromProjectLayers()` gives it its own reconciliation branch, diffing a freshly re-materialized
+  proxy's bounds.
 
 At each step `app.js`'s `syncFromProjectLayers()` call-site filter widened to carry the new types
-(`l.type==='svg'||l.type==='image'||l.type==='text'` alongside `'path'` and `SHAPE_LIBRARY_KINDS`),
-and `syncFromProjectLayers()` dispatches each type to its own materializer.
-
-**Still out of RS-3012's scope: `circle`.** `materializeShapeLibraryItemFromLayer()`'s doc comment
-gives the reason — a circle layer uses a different data model (`cx`/`cy`/`r`, not `x`/`y`/`w`/`h`),
-`shapeLayerResolveParams()` branches on it, and the resize write-back does not handle it — so
-`app.js`'s filter never passes a circle layer into `syncFromProjectLayers()` and Design has no
-branch for it.
+(`l.type==='svg'||l.type==='image'||l.type==='text'||l.type==='circle'` alongside `'path'` and
+`SHAPE_LIBRARY_KINDS`), and `syncFromProjectLayers()` dispatches each type to its own materializer.
 
 ---
 

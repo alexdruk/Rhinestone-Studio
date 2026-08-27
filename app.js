@@ -1534,6 +1534,12 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     // `contours` into this x/y/w/h box on every generate() call, so writing the new bounds here is
     // sufficient; `contours` itself never needs touching.
     commitHistory();
+    // RS-3012 Step 4: a circle layer (cx/cy/r, not x/y/w/h) resizes by radius-from-center drag --
+    // DrawingCanvasTool.js's own circle branch keeps the center pinned and reports a centered
+    // 2r-by-2r square, so half its width is the new radius. Matches the main-canvas circle resize's
+    // own Math.max(2,...) radius floor (see the drag.kind==='resize' l.type==='circle' branch); cx/cy
+    // stay untouched.
+    if(l.type==='circle'){l.r=Math.max(2,boundsMm.width/2);updateAll(true);return}
     l.x=boundsMm.left;l.y=boundsMm.top;l.w=boundsMm.width;l.h=boundsMm.height;
     updateAll(true);
   },
@@ -2142,14 +2148,16 @@ async function updateAll(skipWrite=false,forceStoneRebuild=false){if(!skipWrite)
   // branches on layer.type internally to materialize/track the two categories separately. RS-3012
   // Step 2: widened again to include 'svg'/'image' -- both already use the same x/y/w/h/rotationDeg
   // box model as every other XYWH_SHAPE_TYPES layer, so they get the same on-canvas click-to-select/
-  // drag/resize/rotate presence in Design that 'path'/SHAPE_LIBRARY_KINDS layers already have. Circle
-  // stays out of scope (see DrawingCanvasTool.js's own materializeShapeLibraryItemFromLayer() doc
-  // comment for why). RS-3012 Step 3: widened once more to include 'text' -- unlike every other type
+  // drag/resize/rotate presence in Design that 'path'/SHAPE_LIBRARY_KINDS layers already have. RS-3012
+  // Step 3: widened once more to include 'text' -- unlike every other type
   // here, it has no x/y/w/h box or vector outline at all, only real stone positions (already computed
   // by the engine.generate() call just above, Design-active or not); syncFromProjectLayers() takes a
   // dedicated code path for it (see its own doc comment) rather than forcing it through the
-  // XYWH_SHAPE_TYPES box model the others share.
-  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'||SHAPE_LIBRARY_KINDS.has(l.type)||l.type==='svg'||l.type==='image'||l.type==='text'),forceStoneRebuild)}else{drawLayout()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}
+  // XYWH_SHAPE_TYPES box model the others share. RS-3012 Step 4: widened a final time to include
+  // 'circle' -- like 'text' it has no x/y/w/h box (cx/cy/r data model, deliberately not migrated), so
+  // syncFromProjectLayers() takes its own dedicated code path for it too; the resize write-back below
+  // (onShapeResized) converts the reported bounds back to l.r.
+  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'||SHAPE_LIBRARY_KINDS.has(l.type)||l.type==='svg'||l.type==='image'||l.type==='text'||l.type==='circle'),forceStoneRebuild)}else{drawLayout()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}
 // RS-3011 freehand-close-and-clear-all-layers fix: deleting the last remaining layer no longer
 // blocks (see deleteLayer()) -- the per-row trash icon and the sidebar "Delete selected layer"
 // button are therefore never disabled for layer count anymore.

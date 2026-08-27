@@ -658,10 +658,9 @@ function materializeShapeFromLayer(layer) {
  * own canvas. Every SHAPE_LIBRARY_KINDS shape is a closed outline (never an open freehand stroke
  * like a 'path' layer can be), so this always closes each contour -- no `layer.closed` check.
  *
- * Deliberately does NOT handle 'circle' (a different data model -- cx/cy/r, not x/y/w/h --
- * shapeLayerResolveParams() branches on it, and this step's own onShapeResized write-back does not)
- * or 'svg'/'image' (their real raster/vector content, not just an outline, would need rendering) --
- * both stay out of Design's own canvas for now, unchanged from before this step.
+ * Deliberately does NOT handle 'circle' (a different data model -- cx/cy/r, not x/y/w/h) or
+ * 'svg'/'image' -- each of those has its own dedicated materializer instead
+ * (materializeCircleItemFromLayer(), RS-3012 Step 4; materializeSvgImageItemFromLayer(), Step 2).
  * @param {object} layer a project.layers entry with type in SHAPE_LIBRARY_KINDS
  * @param {(layer:object)=>({polygons:{xMm:number,yMm:number}[][],boundingBox:*}|null)} resolvePolygons
  * @returns {paper.Path|paper.CompoundPath|null}
@@ -875,6 +874,47 @@ function materializeTextItemFromLayer(layer, getTextLayerStones) {
   item.data.pivotYMm = bounds.center.y;
   item.data.noResizeHandles = true;
   item.data.isTextProxy = true;
+  return item;
+}
+
+/**
+ * RS-3012 Step 4: builds a Paper.js proxy item for a 'circle' project.layers entry -- the last
+ * layer type left out of Design's Select after Steps 2 (svg/image) and 3 (text). A circle layer's
+ * data model is cx/cy/r, NOT the x/y/w/h box every XYWH_SHAPE_TYPES layer (and every other
+ * materializer here) uses -- deliberately not migrated (see docs/ARCHITECTURE.md's own RS-3012
+ * Step 4 note). This is the one place in this module that reads cx/cy/r; the proxy it returns is an
+ * ordinary Paper.js item that click/drag and the resize-handle machinery operate on the same as any
+ * other, with two circle-specific differences that follow from circle's own geometry, both handled
+ * on item.data flags checked elsewhere in this file:
+ *
+ *  - item.data.isCircleProxy -- onMouseDrag's own 'resize' branch reads this to drive l.r via a
+ *    radius-from-center drag (r = distance from the fixed center to the pointer, matching app.js's
+ *    own main-canvas `l.r=Math.max(2,Math.hypot(mm.x-drag.l0.cx,mm.y-drag.l0.cy))`), instead of the
+ *    corner/edge box model every other shape uses. onMouseUp still reports the resulting bounds
+ *    through the shared onShapeResized hook (a centered 2r-by-2r square), which app.js converts back
+ *    to l.r; the drag keeps the center pinned, so cx/cy never change on a resize.
+ *  - item.data.noRotateHandle -- a circle is rotationally invariant, so hitTestRotateHandle()/
+ *    updateRotateHandleItem() skip it entirely (same "not every layer type gets every handle"
+ *    precedent Step 3 set when text got no resize handles). Resize handles ARE drawn (all 8, around
+ *    the axis-aligned cx+/-r box -- byte-identical to app.js's own getLayerBBox() circle branch), so
+ *    dragging any of them changes the radius.
+ *
+ * Unlike its siblings this never calls item.rotate() -- a circle's stones are rotation-invariant and
+ * the proxy carries no rotate handle, so rotationDeg is always stamped 0 and the pivot is just the
+ * circle's own center.
+ * @param {object} layer a project.layers entry with type 'circle'
+ * @returns {paper.Path}
+ */
+function materializeCircleItemFromLayer(layer) {
+  const r = layer.r > 0 ? layer.r : RESIZE_MIN_DIM_MM;
+  const item = new paper.Path.Circle(new paper.Point(layer.cx, layer.cy), r);
+  item.strokeColor = STROKE_COLOR;
+  item.strokeWidth = STROKE_WIDTH_PX / paper.view.zoom;
+  item.data.rotationDeg = 0;
+  item.data.pivotXMm = layer.cx;
+  item.data.pivotYMm = layer.cy;
+  item.data.noRotateHandle = true;
+  item.data.isCircleProxy = true;
   return item;
 }
 
@@ -1490,6 +1530,10 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     if (mode !== 'select' || selectedIds.size !== 1) return false;
     const shape = board.getShape([...selectedIds][0]);
     if (!shape) return false;
+    // RS-3012 Step 4: a circle proxy has no rotate handle at all (rotationally invariant -- see
+    // materializeCircleItemFromLayer()'s own doc comment), mirroring the noResizeHandles guard text
+    // uses just below in hitTestResizeHandle().
+    if (shape.item.data.noRotateHandle) return false;
     const tolerance = ROTATE_HANDLE_HIT_TOLERANCE_PX / paper.view.zoom;
     const { point: handlePoint } = rotateHandlePositionFor(shape.item.bounds);
     return point.getDistance(handlePoint) <= tolerance;
@@ -1737,6 +1781,9 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     if (mode !== 'select' || selectedIds.size !== 1) return;
     const shape = board.getShape([...selectedIds][0]);
     if (!shape) return;
+    // RS-3012 Step 4: a circle proxy never gets a rotate handle drawn -- mirrors hitTestRotateHandle()'s
+    // own guard just above (see materializeCircleItemFromLayer()'s own doc comment).
+    if (shape.item.data.noRotateHandle) return;
     const { point, anchor } = rotateHandlePositionFor(shape.item.bounds);
     const line = new paper.Path.Line(anchor, point);
     line.strokeColor = ROTATE_HANDLE_LINE_COLOR;
@@ -2941,6 +2988,24 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         // once up front is enough -- the assignments below just consume the snapped version.
         // Step 2f: vertex-else-grid, excluding the resized shape's own points.
         const snappedPoint = resolveSnappedPoint(event.point, resizeShapeId);
+        // RS-3012 Step 4: a circle proxy resizes by radius-from-center drag, not the corner/edge box
+        // model below -- the new radius is the distance from the circle's fixed center (resizePivot,
+        // snapshotted at drag-start as cx0/cy0 exactly like every other resize) to the pointer,
+        // matching app.js's own main-canvas `l.r=Math.max(2,Math.hypot(mm.x-drag.l0.cx,mm.y-drag.l0.cy))`.
+        // Any of the 8 handles drives it identically (a circle has no per-handle axis). RESIZE_MIN_DIM_MM
+        // is the radius floor here (min diameter 2*RESIZE_MIN_DIM_MM), matching that main-canvas
+        // Math.max(2,...) floor. The center stays pinned, so onMouseUp reports a centered 2r-by-2r
+        // square through the shared onShapeResized hook and cx/cy never move.
+        if (shape.item.data.isCircleProxy) {
+          const r = Math.max(
+            RESIZE_MIN_DIM_MM,
+            Math.hypot(snappedPoint.x - resizePivot.x, snappedPoint.y - resizePivot.y)
+          );
+          shape.item.bounds = new paper.Rectangle(resizePivot.x - r, resizePivot.y - r, r * 2, r * 2);
+          updateResizeHandles();
+          scheduleStoneRebuildForShape(resizeShapeId);
+          return;
+        }
         if (!resizeRotationDeg0) {
           // Byte-identical to before RS-3034 for every unrotated shape -- the overwhelming majority
           // case (see this milestone's own most important invariant).
@@ -4316,15 +4381,17 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      * every un-cut 'path' layer already used. RS-3012 Step 2: `layers` widened again to also carry
      * every 'svg'/'image' layer -- these have no `naturalBoundingBoxMm` concept either (same as
      * SHAPE_LIBRARY_KINDS), so they share that same plain x/y/w/h comparison branch, just
-     * materializing via materializeSvgImageItemFromLayer() instead (see its own doc comment). Circle
-     * stays out of scope entirely (see materializeShapeLibraryItemFromLayer()'s own doc comment for
-     * why) -- app.js's own filter never passes it into `layers` here, so this method has no branch
-     * for it. RS-3012 Step 3: `layers` widened once more to also carry every 'text' layer -- it has
+     * materializing via materializeSvgImageItemFromLayer() instead (see its own doc comment). RS-3012
+     * Step 3: `layers` widened once more to also carry every 'text' layer -- it has
      * neither `naturalBoundingBoxMm` nor a stored x/y/w/h box (only x/y, an offset), so it takes its
      * own dedicated branch entirely, comparing against a bbox re-derived from its real stones instead
-     * (see materializeTextItemFromLayer()'s own doc comment).
-     * @param {object[]} layers Every current 'path', SHAPE_LIBRARY_KINDS, 'svg', 'image' or 'text'
-     *   project.layers entry.
+     * (see materializeTextItemFromLayer()'s own doc comment). RS-3012 Step 4: `layers` widened a
+     * final time to also carry every 'circle' layer -- it too has no x/y/w/h box (cx/cy/r data model,
+     * deliberately not migrated), so like 'text' it gets its own dedicated branch, comparing against a
+     * bbox re-derived by re-materializing from cx/cy/r (see materializeCircleItemFromLayer()'s own doc
+     * comment).
+     * @param {object[]} layers Every current 'path', SHAPE_LIBRARY_KINDS, 'svg', 'image', 'text' or
+     *   'circle' project.layers entry.
      * @param {boolean} [forceStoneRebuild=false] Rebuild every matched layer's stone Group even when
      *   its bounds haven't changed -- for callers where project.layers may have changed a
      *   non-geometric field from outside Design's own drag handlers (undo/redo, trash-icon delete).
@@ -4346,6 +4413,10 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         // contours/x/y/w/h box, no GeometryEngine outline formula either -- see
         // materializeTextItemFromLayer()'s own doc comment).
         if (layer.type === 'text') return materializeTextItemFromLayer(layer, getTextLayerStones);
+        // RS-3012 Step 4: 'circle' layers use their own builder (cx/cy/r data model, no stored
+        // contours/x/y/w/h box, no GeometryEngine outline formula -- see
+        // materializeCircleItemFromLayer()'s own doc comment).
+        if (layer.type === 'circle') return materializeCircleItemFromLayer(layer);
         return materializeShapeLibraryItemFromLayer(layer, resolveShapeLibraryPolygons);
       }
 
@@ -4457,6 +4528,31 @@ export function createDrawingTool(canvasEl, hooks = {}) {
             freshItem.remove();
           }
           if (boundsChanged || rotationChanged || forceStoneRebuild) rebuildTextStoneGroupForShape(shape.id, stones);
+          continue;
+        }
+        // RS-3012 Step 4: a 'circle' layer has no stored x/y/w/h box (cx/cy/r data model -- see
+        // materializeCircleItemFromLayer()'s own doc comment), so the plain boundsChanged comparison
+        // just below (against layer.x/w/h -- all undefined for a circle) doesn't apply. This re-derives
+        // the proxy's expected bounds by re-materializing from cx/cy/r and compares against the live
+        // item -- the same "materialize a fresh item, diff its bounds, swap if changed" shape the
+        // 'text' branch above uses, catching a circle edited from the Inspector (cx/cy/r fields),
+        // undo/redo, or import. rotationDeg is deliberately ignored: a circle is rotationally invariant
+        // and its proxy is never rotated.
+        if (layer.type === 'circle') {
+          const freshItem = materializeCircleItemFromLayer(layer);
+          const fb = freshItem.bounds;
+          const boundsChanged =
+            Math.abs(b.left - fb.left) > 1e-6 ||
+            Math.abs(b.top - fb.top) > 1e-6 ||
+            Math.abs(b.width - fb.width) > 1e-6 ||
+            Math.abs(b.height - fb.height) > 1e-6;
+          if (boundsChanged) {
+            board.replaceShapeItem(shape.id, freshItem);
+            freshItem.data.layerId = layerId;
+          } else {
+            freshItem.remove();
+          }
+          if (boundsChanged || forceStoneRebuild) rebuildStoneGroupForShape(shape.id);
           continue;
         }
         const boundsChanged =
