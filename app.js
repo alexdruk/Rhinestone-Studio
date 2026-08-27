@@ -1673,7 +1673,14 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   resolveSvgPolygons:(layer)=>{
     if(!permanentEngine||!layer.svgSource)return null;
     return permanentEngine.resolveSvgPolygons({svgSource:layer.svgSource,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h});
-  }
+  },
+  // RS-3012 Step 3: the 'text'-layer counterpart of getLayerStoneParams above, but for stones
+  // directly rather than settings -- a text layer's real stones are never regenerated here, only
+  // filtered out of the `layout` global engine.generate() already produced this same updateAll()
+  // tick (Design-active or not, per that function's own unconditional per-layer loop), so Design's
+  // own canvas never becomes a second place stones can be computed. Mirrors generatePathLayout()'s
+  // own {x,y,d,color} return shape exactly, from the real Stone.xMm/yMm/sizeMm/color fields.
+  getTextLayerStones:(layerId)=>layout.stones.filter(s=>s.layerId===layerId).map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color}))
 });
 // RS-3010 Step 2d: exposes drawingTool's own debugGrid/debugHitTestShapeId QA-only surface for
 // automated verification of the Design canvas's background grid layering -- same "read-only,
@@ -2095,8 +2102,12 @@ async function updateAll(skipWrite=false,forceStoneRebuild=false){if(!skipWrite)
   // box model as every other XYWH_SHAPE_TYPES layer, so they get the same on-canvas click-to-select/
   // drag/resize/rotate presence in Design that 'path'/SHAPE_LIBRARY_KINDS layers already have. Circle
   // stays out of scope (see DrawingCanvasTool.js's own materializeShapeLibraryItemFromLayer() doc
-  // comment for why).
-  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'||SHAPE_LIBRARY_KINDS.has(l.type)||l.type==='svg'||l.type==='image'),forceStoneRebuild)}else{drawLayout()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}
+  // comment for why). RS-3012 Step 3: widened once more to include 'text' -- unlike every other type
+  // here, it has no x/y/w/h box or vector outline at all, only real stone positions (already computed
+  // by the engine.generate() call just above, Design-active or not); syncFromProjectLayers() takes a
+  // dedicated code path for it (see its own doc comment) rather than forcing it through the
+  // XYWH_SHAPE_TYPES box model the others share.
+  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'||SHAPE_LIBRARY_KINDS.has(l.type)||l.type==='svg'||l.type==='image'||l.type==='text'),forceStoneRebuild)}else{drawLayout()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}
 // RS-3011 freehand-close-and-clear-all-layers fix: deleting the last remaining layer no longer
 // blocks (see deleteLayer()) -- the per-row trash icon and the sidebar "Delete selected layer"
 // button are therefore never disabled for layer count anymore.

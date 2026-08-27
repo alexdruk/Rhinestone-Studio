@@ -213,6 +213,13 @@ const RESIZE_HANDLE_STROKE_WIDTH_PX = 1.75;
 const RESIZE_HANDLE_FILL_COLOR = '#ffffff';
 const RESIZE_HANDLE_STROKE_COLOR = '#1478ff';
 const RESIZE_MIN_DIM_MM = 2;
+// RS-3012 Step 3: the fallback footprint materializeTextItemFromLayer() gives a text layer with no
+// stones yet (empty text, an unknown font, or a failed font manifest) -- mirrors
+// materializeSvgImageItemFromLayer()'s own "always give this layer SOME on-canvas presence" rectangle
+// fallback, just centered on the layer's x/y (text has no stored w/h to fall back to) rather than a
+// stored box. 20mm is comfortably click-able at Design's typical zoom, same order of magnitude as
+// this app's default text height (25mm).
+const TEXT_PLACEHOLDER_SIZE_MM = 20;
 // RS-3033: rotate handle's own constants, mirroring app.js's own ROTATE_HANDLE_GAP_MM/
 // ROTATE_HANDLE_RADIUS_PX/drawRotateHandle() styling exactly, for visual consistency between
 // Design's own rotate handle and the main app.js system's -- ROTATE_HANDLE_GAP_MM is a genuine mm
@@ -801,6 +808,77 @@ function materializeSvgImageItemFromLayer(layer, resolveSvgPolygons) {
 }
 
 /**
+ * RS-3012 Step 3: builds a Paper.js proxy item for a 'text' project.layers entry -- the third and
+ * last gap left by materializeShapeFromLayer()/materializeShapeLibraryItemFromLayer()/
+ * materializeSvgImageItemFromLayer() above (see the latter's own doc comment for the shared "always
+ * give this layer SOME on-canvas presence" goal).
+ *
+ * Unlike every other layer type, a text layer has no natural outline of its own to resolve, no
+ * stored x/y/w/h placement box, and -- critically -- its rotationDeg is already baked directly into
+ * its real stone positions by GeometryEngine itself (buildTextLayoutBaseParams() forwards
+ * layer.rotationDeg straight into permanentEngine.generateTextLayout(), which rotates the sampled
+ * points before this app's own x/y offset is even applied -- see that function's own rotation step).
+ * Every OTHER type here rotates an UNROTATED item explicitly (this function's own siblings each call
+ * item.rotate(rotationDeg, pivot)) precisely because their own stones are never pre-rotated by the
+ * engine; a text layer's stones already are, so rotating this item a second time would double the
+ * rotation. This function therefore builds its proxy directly as the AABB of the CURRENT (already-
+ * rotated, already-offset) `stones` list -- real millimeter positions from app.js's own
+ * getTextLayerStones(layer.id) hook, itself just a filter over the same `layout` global
+ * engine.generate() already produces every updateAll() tick (Design-active or not, see that
+ * function's own unconditional per-layer loop) -- never a second call into the font engine (this
+ * module's own architecture never touches GeometryEngine directly, per its header comment).
+ *
+ * item.data.pivotXMm/pivotYMm is set to this same AABB's own center, not layer.x/y -- provably the
+ * correct choice, not an approximation: TextPlacement.js's own computeTextPlacementOffsetMm() always
+ * re-centers a text layer's (already-rotated) bounding box onto exactly
+ * (canvas.width/2 + layer.x, canvas.height/2 + layer.y), for ANY rotationDeg (see that function's own
+ * sibling doc comment proving this algebraically) -- so this AABB's center is, by construction,
+ * exactly the one fixed point a live rotate-drag (which rotates this rectangle rigidly around
+ * item.data.pivotXMm/pivotYMm, same onMouseDrag 'rotate' branch every other layer type shares) can
+ * pivot around and still land back on the correct center once the drag commits and the real stones
+ * regenerate -- with no stored placement box needed to derive it from.
+ *
+ * `stones.length === 0` (empty text, an unknown font, or a failed font manifest -- see
+ * generateTextStonesLive()'s own early-return) falls back to a small fixed-size box centered on
+ * layer.x/y (TEXT_PLACEHOLDER_SIZE_MM), the same "give it presence even with nothing to show yet"
+ * precedent materializeSvgImageItemFromLayer() already established for an unresolvable SVG.
+ *
+ * item.data.noResizeHandles marks this proxy so updateResizeHandles()/hitTestResizeHandle() skip it
+ * -- text has no stored w/h and no resize-by-drag concept in this milestone (font size is controlled
+ * via the Inspector's #height field, not a drag handle); only the rotate handle applies.
+ * @param {object} layer a project.layers entry with type 'text'
+ * @param {(layerId:string)=>({x:number,y:number,d:number,color:string}[]|null)} getTextLayerStones
+ * @returns {paper.Path}
+ */
+function materializeTextItemFromLayer(layer, getTextLayerStones) {
+  const stones = getTextLayerStones(layer.id) || [];
+  let bounds;
+  if (stones.length > 0) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const stone of stones) {
+      const half = stone.d / 2;
+      minX = Math.min(minX, stone.x - half);
+      maxX = Math.max(maxX, stone.x + half);
+      minY = Math.min(minY, stone.y - half);
+      maxY = Math.max(maxY, stone.y + half);
+    }
+    bounds = new paper.Rectangle(minX, minY, Math.max(RESIZE_MIN_DIM_MM, maxX - minX), Math.max(RESIZE_MIN_DIM_MM, maxY - minY));
+  } else {
+    const half = TEXT_PLACEHOLDER_SIZE_MM / 2;
+    bounds = new paper.Rectangle(layer.x - half, layer.y - half, TEXT_PLACEHOLDER_SIZE_MM, TEXT_PLACEHOLDER_SIZE_MM);
+  }
+  const item = new paper.Path.Rectangle(bounds);
+  item.strokeColor = STROKE_COLOR;
+  item.strokeWidth = STROKE_WIDTH_PX / paper.view.zoom;
+  item.data.rotationDeg = layer.rotationDeg || 0;
+  item.data.pivotXMm = bounds.center.x;
+  item.data.pivotYMm = bounds.center.y;
+  item.data.noResizeHandles = true;
+  item.data.isTextProxy = true;
+  return item;
+}
+
+/**
  * RS-3011 Step 1: `hooks` lets app.js own project state while this module stays the "all direct
  * Paper.js usage" facade its own header comment describes -- `getStoneDefaults()`/
  * `onShapeCommitted(layer)` mirror the old commit()'s `{stoneSize,gap,color}` argument and
@@ -936,7 +1014,16 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     // Boolean Operations already uses (see app.js's resolveLayerShapeSource()), for materializing an
     // 'svg' layer's real vector outline as a Paper.js item (see
     // materializeSvgImageItemFromLayer()'s own doc comment). Returns {polygons, boundingBox} or null.
-    resolveSvgPolygons = () => null
+    resolveSvgPolygons = () => null,
+    // RS-3012 Step 3: the 'text'-layer counterpart of getLayerStoneParams above, but for stones
+    // rather than settings -- a text layer's real stones are never regenerated here (this module
+    // must never call the font engine itself, see materializeTextItemFromLayer()'s own doc comment
+    // for why), just read straight off app.js's own already-computed `layout` global (the SAME
+    // StoneLayout engine.generate() already produces once per updateAll() tick, Design-active or
+    // not) filtered to this one layerId. Returns plain {x,y,d,color} stones (same shape
+    // generatePathLayout()'s own return value already uses) or null/[] for a layer with none yet
+    // (empty text, an unknown font, or the font manifest failed to load).
+    getTextLayerStones = () => null
   } = hooks;
   const board = new DrawingBoard();
   let isSetUp = false;
@@ -1422,6 +1509,12 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     if (mode !== 'select' || selectedIds.size !== 1) return null;
     const shape = board.getShape([...selectedIds][0]);
     if (!shape) return null;
+    // RS-3012 Step 3: a text proxy has no resize handles at all (see
+    // materializeTextItemFromLayer()'s own doc comment) -- without this, rotatedHandlePositionsFor()
+    // would still compute 8 handle positions around its bounds even though updateResizeHandles()
+    // never draws them, letting a click near where one WOULD be silently start a resize drag on a
+    // layer type that has no resize concept.
+    if (shape.item.data.noResizeHandles) return null;
     const tolerance = 4 / paper.view.zoom;
     const hit = rotatedHandlePositionsFor(shape.item).find((h) => point.getDistance(h.point) <= tolerance);
     return hit ? hit.name : null;
@@ -1678,6 +1771,9 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     if (mode !== 'select' || selectedIds.size !== 1) return;
     const shape = board.getShape([...selectedIds][0]);
     if (!shape) return;
+    // RS-3012 Step 3: mirrors hitTestResizeHandle()'s own guard -- a text proxy never gets resize
+    // handles drawn (see materializeTextItemFromLayer()'s own doc comment).
+    if (shape.item.data.noResizeHandles) return;
     const sizeMm = RESIZE_HANDLE_SIZE_PX / paper.view.zoom;
     for (const { point } of rotatedHandlePositionsFor(shape.item)) {
       const rect = new paper.Rectangle(point.x - sizeMm / 2, point.y - sizeMm / 2, sizeMm, sizeMm);
@@ -2068,7 +2164,14 @@ export function createDrawingTool(canvasEl, hooks = {}) {
    * existing rebuild entry point rather than a second mechanism.
    */
   function rebuildAllStoneGroups() {
-    for (const shape of board.listShapes()) rebuildStoneGroupForShape(shape.id);
+    for (const shape of board.listShapes()) {
+      // RS-3012 Step 3: a text proxy's stones never come from generatePathLayout()/
+      // getLayerStoneParams() (rebuildStoneGroupForShape()'s own hooks, which return null/no stones
+      // for a non-'path' layer) -- dispatch to its own rebuild so a zoom-bucket change still
+      // re-bakes its sprites at the new spritePxPerMm, same as every other shape here.
+      if (shape.item.data.isTextProxy) rebuildTextStoneGroupForShape(shape.id, getTextLayerStones(shape.item.data.layerId) || []);
+      else rebuildStoneGroupForShape(shape.id);
+    }
   }
 
   /**
@@ -2168,6 +2271,59 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       ...styleParams
     };
     const stones = generatePathLayout(params);
+    const group = buildStoneSpriteGroup(stones, layerId);
+    // RS-3011 resize-perf fix: this shape's resize is still in progress (mouse still down) -- keep
+    // the freshly rebuilt Group hidden too, since every rAF-throttled rebuild during a resize
+    // creates a brand-new Group (default visible=true) that would otherwise undo the hide applied
+    // at drag-start on the very next frame. Scoped to this specific shapeId so an unrelated
+    // rebuild (a different shape, or this same shape via syncFromProjectLayers) is never affected.
+    if (interactionKind === 'resize' && shapeId === resizeShapeId) group.visible = false;
+    group.insertBelow(shape.item);
+    const old = stoneGroups.get(shapeId);
+    if (old) old.remove();
+    stoneGroups.set(shapeId, group);
+  }
+
+  /**
+   * RS-3012 Step 3: the 'text'-layer counterpart of rebuildStoneGroupForShape() above -- builds a
+   * fresh stone-dot Group directly from an already-computed stones list (app.js's
+   * getTextLayerStones() hook, ultimately just a filter over the `layout` global engine.generate()
+   * already produces every tick) via the shared buildStoneSpriteGroup() below, with no
+   * flattenPathToContours()/generatePathLayout() step at all -- a text layer has no Paper.js contour
+   * to flatten and must never trigger a second call into the font engine (see
+   * materializeTextItemFromLayer()'s own doc comment for why). A no-op if the shape no longer
+   * exists, mirroring rebuildStoneGroupForShape()'s own convention.
+   * @param {string} shapeId
+   * @param {{x:number,y:number,d:number,color:string}[]} stones
+   */
+  function rebuildTextStoneGroupForShape(shapeId, stones) {
+    const shape = board.getShape(shapeId);
+    if (!shape) {
+      removeStoneGroupForShape(shapeId);
+      return;
+    }
+    const layerId = shape.item.data.layerId;
+    const group = buildStoneSpriteGroup(stones, layerId);
+    group.insertBelow(shape.item);
+    const old = stoneGroups.get(shapeId);
+    if (old) old.remove();
+    stoneGroups.set(shapeId, group);
+  }
+
+  /**
+   * Builds one paper.Group of paper.SymbolItem crystal-dot sprites (rs-design-crystal-dots) from an
+   * already-computed `{x,y,d,color}[]` stones list -- the shared tail end of
+   * rebuildStoneGroupForShape() (above, for 'path'/SHAPE_LIBRARY_KINDS/'svg'/'image' layers, whose
+   * `stones` come from app.js's generatePathLayout() hook) and rebuildTextStoneGroupForShape() (a
+   * 'text' layer's `stones` come from app.js's getTextLayerStones() hook instead -- see that
+   * function's own doc comment for why text never goes through generatePathLayout() at all). Pure
+   * with respect to `stones`/`layerId`; every zoom-dependent sprite-baking concern
+   * (spritePxPerMm/stoneSymbolDefs/getStoneSprite/getCrystalAppearance) lives here exactly once.
+   * @param {{x:number,y:number,d:number,color:string}[]} stones
+   * @param {string} layerId
+   * @returns {paper.Group}
+   */
+  function buildStoneSpriteGroup(stones, layerId) {
     const group = new paper.Group();
     group.data.isStoneGroup = true;
     // rs-design-crystal-dots: px-per-project-mm the sprites below bake at, clamped so a sprite never
@@ -2197,16 +2353,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       symbolItem.data.isStoneDot = true;
       group.addChild(symbolItem);
     }
-    // RS-3011 resize-perf fix: this shape's resize is still in progress (mouse still down) -- keep
-    // the freshly rebuilt Group hidden too, since every rAF-throttled rebuild during a resize
-    // creates a brand-new Group (default visible=true) that would otherwise undo the hide applied
-    // at drag-start on the very next frame. Scoped to this specific shapeId so an unrelated
-    // rebuild (a different shape, or this same shape via syncFromProjectLayers) is never affected.
-    if (interactionKind === 'resize' && shapeId === resizeShapeId) group.visible = false;
-    group.insertBelow(shape.item);
-    const old = stoneGroups.get(shapeId);
-    if (old) old.remove();
-    stoneGroups.set(shapeId, group);
+    return group;
   }
 
   // RS-3011 Step 3b: resize's own one-rebuild-per-animation-frame throttle, the same
@@ -3173,7 +3320,12 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         // AABB) whenever rotationDeg is nonzero (see that function's own comment), so this always
         // produces the correct, fully-rotated stone Group regardless of exactly when it runs relative
         // to onShapeRotated()'s own async updateAll()/syncFromProjectLayers() reconciliation.
-        if (shape) rebuildStoneGroupForShape(finishedShapeId);
+        // RS-3012 Step 3: a text proxy dispatches to its own rebuild instead -- rebuildStoneGroupForShape()
+        // would otherwise find getLayerStoneParams(layerId) null (not a 'path' layer) and tear the
+        // Group down instead of rebuilding it, leaving the just-rotated text with no visible stones
+        // until the next syncFromProjectLayers() tick's own reconciliation caught up.
+        if (shape && shape.item.data.isTextProxy) rebuildTextStoneGroupForShape(finishedShapeId, (layerId && getTextLayerStones(layerId)) || []);
+        else if (shape) rebuildStoneGroupForShape(finishedShapeId);
         // Belt-and-suspenders restore, same as the 'resize' branch above.
         const finalGroup = stoneGroups.get(finishedShapeId);
         if (finalGroup) finalGroup.visible = true;
@@ -4167,8 +4319,11 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      * materializing via materializeSvgImageItemFromLayer() instead (see its own doc comment). Circle
      * stays out of scope entirely (see materializeShapeLibraryItemFromLayer()'s own doc comment for
      * why) -- app.js's own filter never passes it into `layers` here, so this method has no branch
-     * for it.
-     * @param {object[]} layers Every current 'path', SHAPE_LIBRARY_KINDS, 'svg' or 'image'
+     * for it. RS-3012 Step 3: `layers` widened once more to also carry every 'text' layer -- it has
+     * neither `naturalBoundingBoxMm` nor a stored x/y/w/h box (only x/y, an offset), so it takes its
+     * own dedicated branch entirely, comparing against a bbox re-derived from its real stones instead
+     * (see materializeTextItemFromLayer()'s own doc comment).
+     * @param {object[]} layers Every current 'path', SHAPE_LIBRARY_KINDS, 'svg', 'image' or 'text'
      *   project.layers entry.
      * @param {boolean} [forceStoneRebuild=false] Rebuild every matched layer's stone Group even when
      *   its bounds haven't changed -- for callers where project.layers may have changed a
@@ -4187,6 +4342,10 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         if (layer.type === 'svg' || layer.type === 'image') {
           return materializeSvgImageItemFromLayer(layer, resolveSvgPolygons);
         }
+        // RS-3012 Step 3: 'text' layers use their own builder (real stone positions, no stored
+        // contours/x/y/w/h box, no GeometryEngine outline formula either -- see
+        // materializeTextItemFromLayer()'s own doc comment).
+        if (layer.type === 'text') return materializeTextItemFromLayer(layer, getTextLayerStones);
         return materializeShapeLibraryItemFromLayer(layer, resolveShapeLibraryPolygons);
       }
 
@@ -4213,7 +4372,11 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         if (!item) continue;
         const shapeId = board.addShape(item);
         item.data.layerId = layer.id;
-        rebuildStoneGroupForShape(shapeId);
+        // RS-3012 Step 3: a brand-new 'text' shape (Design just entered, or a text layer added while
+        // already active) needs its stone Group built from getTextLayerStones(), not
+        // generatePathLayout()/getLayerStoneParams() (which return no stones for a non-'path' layer).
+        if (layer.type === 'text') rebuildTextStoneGroupForShape(shapeId, getTextLayerStones(layer.id) || []);
+        else rebuildStoneGroupForShape(shapeId);
       }
 
       for (const shape of board.listShapes()) {
@@ -4264,6 +4427,36 @@ export function createDrawingTool(canvasEl, hooks = {}) {
             }
           }
           if (boundsChanged || rotationChanged || forceStoneRebuild) rebuildStoneGroupForShape(shape.id);
+          continue;
+        }
+        // RS-3012 Step 3: a 'text' layer has no stored x/y/w/h placement box (only x/y, an offset --
+        // see getLayerPosition()/setLayerPosition() in app.js) and no `contours` -- the plain
+        // boundsChanged comparison just below (against layer.x/w/h) doesn't apply to it at all.
+        // Instead, this re-derives the proxy's expected bounds from the SAME already-rotated,
+        // already-offset stones materializeTextItemFromLayer() itself would build from (app.js's
+        // getTextLayerStones() hook, never a second font-engine call -- see that function's own doc
+        // comment), and compares against the live item's current bounds. This single comparison
+        // doubles as the change-detection signal for EVERY kind of text edit at once (move, rotate,
+        // content, font, height, stoneSize, gap) -- any of them shifts where/how the real stones
+        // land, and hence this bbox, so there is no separate "what changed" enumeration to keep in
+        // sync (unlike a 'path' layer's own non-geometric fields, which is exactly why
+        // forceStoneRebuild exists for THOSE -- see this method's own doc comment above).
+        if (layer.type === 'text') {
+          const stones = getTextLayerStones(layerId) || [];
+          const freshItem = materializeTextItemFromLayer(layer, () => stones);
+          const fb = freshItem.bounds;
+          const boundsChanged =
+            Math.abs(b.left - fb.left) > 1e-6 ||
+            Math.abs(b.top - fb.top) > 1e-6 ||
+            Math.abs(b.width - fb.width) > 1e-6 ||
+            Math.abs(b.height - fb.height) > 1e-6;
+          if (boundsChanged || rotationChanged) {
+            board.replaceShapeItem(shape.id, freshItem);
+            freshItem.data.layerId = layerId;
+          } else {
+            freshItem.remove();
+          }
+          if (boundsChanged || rotationChanged || forceStoneRebuild) rebuildTextStoneGroupForShape(shape.id, stones);
           continue;
         }
         const boundsChanged =

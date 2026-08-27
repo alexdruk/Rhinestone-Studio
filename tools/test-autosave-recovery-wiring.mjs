@@ -271,7 +271,7 @@ await test('RS-3010: while drawing mode is active, updateAll() resyncs via drawi
   assert.ok(!calls.includes('drawLayout'), 'drawLayout() must not run while drawingTool owns layoutCanvas');
 });
 
-await test('canvas-desync fix: while drawing mode is active, updateAll() reconciles Design shapes via drawingTool.syncFromProjectLayers(), passed the current \'path\' layers plus every SHAPE_LIBRARY_KINDS layer (RS-3032 Step A) plus every svg/image layer (RS-3012 Step 2) but no others', async () => {
+await test('canvas-desync fix: while drawing mode is active, updateAll() reconciles Design shapes via drawingTool.syncFromProjectLayers(), passed the current \'path\' layers plus every SHAPE_LIBRARY_KINDS layer (RS-3032 Step A) plus every svg/image layer (RS-3012 Step 2) plus every text layer (RS-3012 Step 3) but no others', async () => {
   const projectLayers = [
     { id: 'p1', type: 'path' },
     { id: 't1', type: 'text' },
@@ -283,7 +283,7 @@ await test('canvas-desync fix: while drawing mode is active, updateAll() reconci
   ];
   const { run, getSyncFromProjectLayersArg } = runUpdateAll({ isDrawing: true, projectLayers, buildGenerate: () => async () => ({}) });
   await run();
-  assert.deepEqual(getSyncFromProjectLayersArg(), [projectLayers[0], projectLayers[2], projectLayers[4], projectLayers[5], projectLayers[6]], 'expected path + shape-library + svg/image layers only -- text/circle must stay excluded');
+  assert.deepEqual(getSyncFromProjectLayersArg(), [projectLayers[0], projectLayers[1], projectLayers[2], projectLayers[4], projectLayers[5], projectLayers[6]], 'expected path + shape-library + svg/image + text layers -- circle alone must stay excluded');
 });
 
 await test('canvas-desync fix: while drawing mode is inactive, updateAll() never calls drawingTool.syncFromProjectLayers()', async () => {
