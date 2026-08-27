@@ -52,12 +52,12 @@ await test('2. the old proxy #addCircleLightbox/#addRectLightbox buttons no long
 });
 
 await test('3. Circle and Rectangle are created only via the unified Design Shapes grid (one creation function, one set of buttons)', () => {
-  assert.match(appJs, /async function createShapeLayer\(kind\)\{/, 'expected one unified createShapeLayer(kind) function');
+  assert.match(appJs, /async function createShapeLayer\(kind,extraFieldsOverride=\{\},displayLabelOverride=null\)\{/, 'expected one unified createShapeLayer(kind) function');
   // S-110A: every 'circle' layer-object literal must live inside createShapeLayer() itself (its two
   // size branches -- sized-around-text vs. default) or referenceShapeLayer() (a measurement-only
   // object, never pushed to project.layers, used to size a shape around existing text) -- never a
   // second, independent circle-creation code path anywhere else in app.js.
-  const createShapeLayerFn = appJs.match(/async function createShapeLayer\(kind\)\{[\s\S]*?\n\}/);
+  const createShapeLayerFn = appJs.match(/async function createShapeLayer\(kind,extraFieldsOverride=\{\},displayLabelOverride=null\)\{[\s\S]*?\n\}/);
   const referenceShapeLayerFn = appJs.match(/function referenceShapeLayer\(kind\)\{[\s\S]*?\n\}/);
   assert.ok(createShapeLayerFn, 'expected to find createShapeLayer()');
   assert.ok(referenceShapeLayerFn, 'expected to find referenceShapeLayer()');
@@ -160,15 +160,20 @@ await test('9. shapeLayerResolveParams() builds Circle\'s cx/cy/r vs. every othe
 
   assert.deepEqual(
     shapeLayerResolveParams({ type: 'circle', id: 'c1', cx: 10, cy: 20, r: 5 }),
-    { shape: 'circle', layerId: 'c1', cxMm: 10, cyMm: 20, radiusMm: 5 }
+    { shape: 'circle', layerId: 'c1', cxMm: 10, cyMm: 20, radiusMm: 5, rotationDeg: 0 }
   );
   assert.deepEqual(
     shapeLayerResolveParams({ type: 'ellipse', id: 'e1', x: 1, y: 2, w: 30, h: 40 }),
-    { shape: 'ellipse', layerId: 'e1', xMm: 1, yMm: 2, widthMm: 30, heightMm: 40 }
+    { shape: 'ellipse', layerId: 'e1', xMm: 1, yMm: 2, widthMm: 30, heightMm: 40, rotationDeg: 0 }
   );
   assert.deepEqual(
     shapeLayerResolveParams({ type: 'star', id: 's1', x: 0, y: 0, w: 50, h: 50, points: 6, innerRadiusRatio: 0.6 }),
-    { shape: 'star', layerId: 's1', xMm: 0, yMm: 0, widthMm: 50, heightMm: 50, points: 6, innerRadiusRatio: 0.6 }
+    { shape: 'star', layerId: 's1', xMm: 0, yMm: 0, widthMm: 50, heightMm: 50, points: 6, innerRadiusRatio: 0.6, rotationDeg: 0 }
+  );
+  // RS-3028: a stored non-zero rotationDeg threads through unchanged (no '??0' masking it).
+  assert.deepEqual(
+    shapeLayerResolveParams({ type: 'rectangle', id: 'r1', x: 0, y: 0, w: 20, h: 10, rotationDeg: 90 }),
+    { shape: 'rectangle', layerId: 'r1', xMm: 0, yMm: 0, widthMm: 20, heightMm: 10, rotationDeg: 90 }
   );
 });
 
@@ -206,7 +211,7 @@ await test('12. Ring\'s fitting region is its inner opening alone (not the true 
 });
 
 await test('13. createShapeLayer()/addText() each auto-fit only when exactly one OTHER layer is selected, and never persist a link between the two layers', () => {
-  const createShapeSrc = extractBlock(appJs, /async function createShapeLayer\(kind\)\{[\s\S]*?\n\}/, 'function createShapeLayer()');
+  const createShapeSrc = extractBlock(appJs, /async function createShapeLayer\(kind,extraFieldsOverride=\{\},displayLabelOverride=null\)\{[\s\S]*?\n\}/, 'function createShapeLayer()');
   assert.match(createShapeSrc, /singleOtherSelectedLayer\(\)/);
   assert.match(createShapeSrc, /other\.type==='text'/);
   assert.match(createShapeSrc, /FITTABLE_SHAPE_TYPES\.has\(kind\)/);

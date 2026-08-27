@@ -507,7 +507,7 @@ await test('36. the Rim Band default only applies to text layers, and seeds curv
   assert.ok(enteringRimBandBlockIndex < curveEnabledReadIndex, 'the UI fields must be seeded before writeSelectedControlsToLayer() reads them back into the layer');
   const seedBlock = extractBlock(fn, /if\(enteringRimBand\)\{[\s\S]*?\}/, 'the enteringRimBand seed block');
   assert.match(seedBlock, /el\('curveEnabled'\)\.value='on'/);
-  assert.match(seedBlock, /el\('curveRadiusMm'\)\.value=rimBandCurveRadiusMm\(\)\.toFixed\(2\)/);
+  assert.match(seedBlock, /setLengthField\('curveRadiusMm',rimBandCurveRadiusMm\(\)\)/);
   assert.match(seedBlock, /el\('curveDirection'\)\.value='outside'/, 'Rim Band text must use the "outside" curve direction so it reads normally around the rim (see ArcProjection.js)');
 });
 

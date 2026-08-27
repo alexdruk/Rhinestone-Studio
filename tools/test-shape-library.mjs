@@ -11,7 +11,8 @@ import {
   createArrowNaturalContours,
   createCrossNaturalContours,
   createCrescentNaturalContours,
-  createRingNaturalContours
+  createRingNaturalContours,
+  createShieldNaturalContours
 } from '../src/geometry/ShapeLibrary.js';
 
 // S-110 (Expanded Shape Library) — proves each new shape kind's natural-contour math
@@ -58,10 +59,10 @@ function createEngine() {
 
 // --- 1. Every generator is rooted at (0,0), closed, and produces a plausible shape -------------
 
-await test('1. SHAPE_LIBRARY_KINDS has exactly the nine new shape kinds', () => {
+await test('1. SHAPE_LIBRARY_KINDS has exactly the ten shape kinds (nine from S-110 plus RS-3027\'s Shield)', () => {
   assert.deepEqual(
     [...SHAPE_LIBRARY_KINDS].sort(),
-    ['arrow', 'capsule', 'crescent', 'cross', 'ellipse', 'heart', 'polygon', 'ring', 'star'].sort()
+    ['arrow', 'capsule', 'crescent', 'cross', 'ellipse', 'heart', 'polygon', 'ring', 'shield', 'star'].sort()
   );
 });
 
@@ -69,7 +70,8 @@ await test('2. every generator returns contours rooted at (0,0) (top-left of the
   const generators = [
     createEllipseNaturalContours(), createCapsuleNaturalContours(), createRegularPolygonNaturalContours(6),
     createStarNaturalContours(5, 0.5), createHeartNaturalContours(), createArrowNaturalContours(),
-    createCrossNaturalContours(), createCrescentNaturalContours(), createRingNaturalContours(0.5)
+    createCrossNaturalContours(), createCrescentNaturalContours(), createRingNaturalContours(0.5),
+    createShieldNaturalContours()
   ];
   for (const contours of generators) {
     const box = boundingBoxOf(contours);
@@ -137,8 +139,8 @@ await test('7. Ring returns exactly two concentric contours (outer + inner), and
   assert.throws(() => createRingNaturalContours(0.95), RangeError);
 });
 
-await test('8. Heart/Arrow/Cross/Crescent each produce a single, non-degenerate closed contour', () => {
-  for (const contours of [createHeartNaturalContours(), createArrowNaturalContours(), createCrossNaturalContours(), createCrescentNaturalContours()]) {
+await test('8. Heart/Arrow/Cross/Crescent/Shield each produce a single, non-degenerate closed contour', () => {
+  for (const contours of [createHeartNaturalContours(), createArrowNaturalContours(), createCrossNaturalContours(), createCrescentNaturalContours(), createShieldNaturalContours()]) {
     assert.equal(contours.length, 1, 'expected a single contour');
     assert.ok(contours[0].length >= 4, 'expected a non-trivial polygon');
     assert.ok(shoelaceArea(contours[0]) > 0, 'expected positive area');

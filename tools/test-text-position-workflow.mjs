@@ -170,7 +170,11 @@ await test('A13. the warning is recomputed on every updateAll() call — live du
   // MONO-006A inserted a stale-generation-error status clear between `layout=generated;` and
   // `renderLayerUI();` -- the sequence itself (still unconditional, still every updateAll() call)
   // is what this test cares about, not byte-adjacency.
-  assert.match(updateAllFn, /layout=generated;[\s\S]*?renderLayerUI\(\);drawLayout\(\);drawCup\(\);updateStats\(\);updateHistoryUI\(\);updateEditingUI\(\);updateViewButtons\(\);updateTextOutsidePrintableWarning\(\);/);
+  // RS-3010 Step 1 wrapped drawLayout() in a drawingTool.isActive branch (drawing mode resyncs the
+  // canvas a different way instead) -- tolerate that one branch, but drawCup() onward, including
+  // updateTextOutsidePrintableWarning() itself, must remain a real unconditional, adjacent tail: if
+  // any of those calls became conditional too, or got reordered, this literal chain breaks.
+  assert.match(updateAllFn, /layout=generated;[\s\S]*?renderLayerUI\(\);if\(drawingTool\.isActive\)\{[^}]*\}else\{drawLayout\(\)\}drawCup\(\);updateStats\(\);updateHistoryUI\(\);updateEditingUI\(\);updateViewButtons\(\);updateTextOutsidePrintableWarning\(\);/);
 });
 
 await test('A15. the persistent right Inspector panel (never covered by a modal, always visible while dragging on the canvas) has its own "outside the printable area" warning with a "Center Text" action — not inside the Text Lightbox', () => {
@@ -279,7 +283,7 @@ await test('B11. the frame is visually distinct from the safe-area guide: a diff
   assert.match(safeAreaFn, /rgba\(20,120,255/); // blue, dashed
   assert.match(frameFn, /#ff8c00/); // amber/orange, distinct color
   assert.ok(!frameFn.includes('setLineDash([5'), 'expected a solid (not dashed) frame border, visually distinct from the safe-area guide');
-  assert.match(frameFn, /frameWidthMm\.toFixed\(1\)\} mm/, 'expected the frame\'s width to be displayed in millimeters');
+  assert.match(frameFn, /formatLengthDisplay\(frameWidthMm,project\.units,1\)/, 'expected the frame\'s width to be displayed via the unit-aware formatter (RS-3022)');
 });
 
 await test('B12. dragging the Front View Frame rotates the Object Preview (requirement 2), cheaply -- no engine.generate()/updateAll() on every pointermove tick', () => {

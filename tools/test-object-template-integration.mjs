@@ -248,7 +248,7 @@ await test('13. product/canvas/wrap round-trip through validateProject() for eve
 });
 
 await test('14. applyHistorySnapshot() restores the whole project (including product/canvas/wrap) from one JSON snapshot, exactly like every other field', () => {
-  assert.match(appJs, /function applyHistorySnapshot\(snap\)\{project=snap\.project;selectedLayerId=snap\.selectedLayerId;syncSelectedControlsFromLayer\(\);updateAll\(true\)\}/);
+  assert.match(appJs, /function applyHistorySnapshot\(snap\)\{project=snap\.project;selectedLayerId=snap\.selectedLayerId;syncSelectedControlsFromLayer\(\);updateAll\(true,true\)\}/);
   const snapshotMatch = appJs.match(/function currentSnapshot\(\)\{([\s\S]*?)\}\n/);
   assert.ok(snapshotMatch);
   assert.match(snapshotMatch[1], /project:JSON\.parse\(JSON\.stringify\(project\)\)/, 'currentSnapshot() must deep-clone the whole project object, which already includes product/canvas/wrap -- no RS-1004-specific history code is needed');

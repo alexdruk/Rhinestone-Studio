@@ -4,13 +4,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // S-105 (Persistent Movable Lightboxes): every named Lightbox (Text, Shapes, Import, Image Trace,
-// Design Library, Export, Production Sheet, Shipping & Handling, Settings, Help, Gallery) becomes
-// movable by its header, non-blocking of the 2D canvas/Object Preview/Layers list/Inspector, and
-// stays open until the operator explicitly closes it. One primary Lightbox is open at a time (the
-// existing FIELD_GROUPS shared-field-DOM relocation in app.js only supports one active owner --
-// see docs/specifications/S-105-PersistentMovableLightboxes.md, "Architecture Decision"). The two
-// transient sub-dialogs (lightboxLibraryConfirm, lightboxGalleryPreview) are deliberately untouched
-// -- still fully modal, still not primary, still non-draggable-position-reset out of scope.
+// Export, Production Sheet, Shipping & Handling, Settings, Help, Gallery) becomes movable by its
+// header, non-blocking of the 2D canvas/Object Preview/Layers list/Inspector, and stays open until
+// the operator explicitly closes it. One primary Lightbox is open at a time (the existing
+// FIELD_GROUPS shared-field-DOM relocation in app.js only supports one active owner -- see
+// docs/specifications/S-105-PersistentMovableLightboxes.md, "Architecture Decision"). The
+// transient sub-dialog (lightboxGalleryPreview) is deliberately untouched -- still fully modal,
+// still not primary, still non-draggable-position-reset out of scope.
 // Structural checks against the live src/ui/Lightbox.js / index.html / app.js source, matching this
 // repository's established "check the live source" convention (real interactive drag/clamp/focus
 // behavior is verified with a real browser and recorded in TASK_RESULT.md).
@@ -33,15 +33,15 @@ async function test(name, fn) {
 
 const PRIMARY_OVERLAY_IDS = [
   'lightboxText', 'lightboxShapes', 'lightboxImport', 'lightboxImageTrace', 'lightboxExport',
-  'lightboxProdSheet', 'lightboxShipping', 'lightboxSettings', 'lightboxHelp', 'lightboxLibrary',
+  'lightboxProdSheet', 'lightboxShipping', 'lightboxSettings', 'lightboxHelp',
   'lightboxGallery'
 ];
-const SUB_DIALOG_OVERLAY_IDS = ['lightboxLibraryConfirm', 'lightboxGalleryPreview'];
-const PRIMARY_APP_KEYS = ['text', 'shapes', 'importBox', 'imagetrace', 'exportBox', 'prodSheet', 'shipping', 'settings', 'help', 'library', 'gallery'];
+const SUB_DIALOG_OVERLAY_IDS = ['lightboxGalleryPreview'];
+const PRIMARY_APP_KEYS = ['text', 'shapes', 'importBox', 'imagetrace', 'exportBox', 'prodSheet', 'shipping', 'settings', 'help', 'gallery'];
 
-// ---------- 1. Non-modal: all 11 named Lightboxes, not the two sub-dialogs ----------
+// ---------- 1. Non-modal: all 10 named Lightboxes, not the sub-dialog ----------
 
-await test('1. all 11 named Lightboxes carry the non-modal overlay class and aria-modal="false"', () => {
+await test('1. all 10 named Lightboxes carry the non-modal overlay class and aria-modal="false"', () => {
   for (const id of PRIMARY_OVERLAY_IDS) {
     assert.match(indexHtml, new RegExp(`<div class="lightbox-overlay non-modal[^"]*" id="${id}">`), `expected #${id} to carry the non-modal overlay class`);
     const re = new RegExp(`id="${id}">[\\s\\S]*?<div class="lightbox[^"]*" role="dialog" aria-modal="false"`);
@@ -49,7 +49,7 @@ await test('1. all 11 named Lightboxes carry the non-modal overlay class and ari
   }
 });
 
-await test('2. the two sub-dialogs (libraryConfirm, galleryPreview) keep the plain, fully-modal overlay and aria-modal="true" -- out of scope by design', () => {
+await test('2. the sub-dialog (galleryPreview) keeps the plain, fully-modal overlay and aria-modal="true" -- out of scope by design', () => {
   for (const id of SUB_DIALOG_OVERLAY_IDS) {
     assert.match(indexHtml, new RegExp(`<div class="lightbox-overlay" id="${id}">`), `expected #${id} to keep the plain overlay class (no non-modal)`);
     const re = new RegExp(`id="${id}">[\\s\\S]*?<div class="lightbox[^"]*" role="dialog" aria-modal="true"`);
@@ -121,12 +121,11 @@ await test('10. Lightbox supports an options.primary flag; open() closes any oth
   assert.ok(openMatch[0].indexOf('if (this.isOpen) return;') < openMatch[0].indexOf('primaryLightboxes'), 'expected the isOpen no-op guard before the primary-exclusivity loop');
 });
 
-await test('11. app.js marks exactly the 11 named Lightboxes primary:true; the two sub-dialogs are not primary', () => {
+await test('11. app.js marks exactly the 10 named Lightboxes primary:true; the sub-dialog is not primary', () => {
   for (const key of PRIMARY_APP_KEYS) {
     const re = new RegExp(`${key}:new Lightbox\\('\\w+',\\{primary:true`);
     assert.match(appJs, re, `expected the ${key} Lightbox to be constructed with primary:true`);
   }
-  assert.match(appJs, /libraryConfirm:new Lightbox\('lightboxLibraryConfirm'\)/, 'expected libraryConfirm to stay non-primary (no options object)');
   assert.match(appJs, /galleryPreview:new Lightbox\('lightboxGalleryPreview'\)/, 'expected galleryPreview to stay non-primary (no options object)');
 });
 
@@ -141,7 +140,10 @@ await test('12. every named Lightbox overlay id still appears exactly once in in
 
 await test('13. More Options and the top-menu buttons remain the reopen affordances -- unchanged by this milestone', () => {
   assert.match(appJs, /el\('moreOptionsBtn'\)\.onclick=\(\)=>\{/);
-  assert.match(appJs, /el\('menuText'\)\.onclick=\(\)=>lightboxes\.text\.open\(\)/);
+  // RS-3011 nav-toggle fix: #menuText now also reveals Dual Workspace before opening (see
+  // tools/test-ui-shell-structure.mjs's own coverage of revealDualWorkspaceForLightbox()) -- still
+  // the same reopen affordance, just no longer a bare open() call.
+  assert.match(appJs, /el\('menuText'\)\.onclick=\(\)=>\{revealDualWorkspaceForLightbox\(\);lightboxes\.text\.open\(\);setActiveTopMenuButton\('menuText'\)\}/);
 });
 
 // ---------- 6. Gallery stays disabled from the menu (S-103, untouched) ----------

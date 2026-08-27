@@ -21,8 +21,8 @@
  */
 
 import { BoundingBox, Point2D, createCircleVectorPath, createRectangleVectorPath } from '../text/VectorPath.js';
-import { flattenContourToPolygon, translateContour } from './ContourGeometry.js';
-import { sampleOutlinePoints, sampleMultiContourOutlinePoints, sampleShapeFillPoints, sampleFieldByMode } from './StoneSampler.js';
+import { flattenContourToPolygon, flattenContourToPolygonWithCornerFlags, translateContour, detectPolygonCornerFlags } from './ContourGeometry.js';
+import { sampleOutlinePoints, sampleMultiContourOutlinePoints, sampleShapeFillPoints, sampleFieldByMode, isPointInsidePolygons } from './StoneSampler.js';
 import { Stone } from './Stone.js';
 import { StoneLayout } from './StoneLayout.js';
 import { parseSvgDocument } from '../svg/index.js';
@@ -54,6 +54,14 @@ const DEFAULT_MODE = 'outline';
 // join Circle/Rectangle here -- every one of them is a generateShapeLayout()/resolveShapePolygons()
 // shape, not a new engine method.
 const SHAPE_TYPES = new Set(['circle', 'rectangle', ...SHAPE_LIBRARY_KINDS]);
+// Corner-anchored per-side Outline spacing (StoneSampler.js's sampleCornerAnchoredOutlinePoints()):
+// safe only for shape kinds where every contour vertex is confirmed to be a genuine corner with no
+// smooth-curve tessellation in between -- Rect (flattenContourToPolygonWithCornerFlags() recovers
+// real moveTo/lineTo corner data) and these four ShapeLibrary kinds (every point is trivially a
+// real vertex by construction, per a prior diagnosis). Circle/Ellipse/Ring/Heart/Capsule/Slot have
+// no usable corners and Crescent/Pen-drawn polygons are separate, deferred future work -- none of
+// those kinds appear here, so they keep the existing whole-loop uniform walk unchanged.
+const CORNER_ANCHORED_SHAPE_LIBRARY_KINDS = new Set(['polygon', 'star', 'arrow', 'cross']);
 
 // TXT-102: paragraph-style alignment of each line within its own multi-line text block. 'left'
 // (default) reproduces every pre-TXT-102 layout exactly (each line already starts its own pen walk
@@ -80,6 +88,11 @@ export class GeometryEngine {
       throw new TypeError('GeometryEngine fontProviderRegistry must implement getTextPath().');
     }
     this._fontProviderRegistry = fontProviderRegistry;
+
+    // M13 (perf/svg-polygon-content-cache): content-addressed cache of an SVG document's
+    // flattened polygons in its own natural (pre-placement, pre-scale) coordinates, keyed on the
+    // raw svgSource string. See _svgNaturalPolygons() for the cache-safety argument.
+    this._svgNaturalPolygonCache = new Map();
   }
 
   /**
@@ -604,15 +617,23 @@ export class GeometryEngine {
    * @param {number} [params.yMm] Rectangle top-left Y, required when shape is 'rectangle'.
    * @param {number} [params.widthMm] Rectangle width, required when shape is 'rectangle'.
    * @param {number} [params.heightMm] Rectangle height, required when shape is 'rectangle'.
+   * @param {number} [params.rotationDeg] RS-3028: whole-shape rotation in degrees, clockwise,
+   *   applied to the shape's own contours inside _shapePolygons() around the shape's own
+   *   (pre-rotation) bounding-box center. Default 0 (no rotation, byte-identical to before this
+   *   milestone). Normalized into [0, 360). Affects stone sampling here and, identically, the raw
+   *   polygons resolveShapePolygons() returns, since both share this same rotation step.
    * @returns {StoneLayout}
    */
   generateShapeLayout(params = {}) {
     const options = normalizeShapeParams(params);
-    const { polygons } = this._shapePolygons(options);
+    const { polygons, cornerFlagsByContour } = this._shapePolygons(options);
     const boundingBox = BoundingBox.fromPoints(polygons.flat());
     const spacingMm = options.stoneSizeMm + options.gapMm;
 
-    const points = sampleShapeFillPoints(options.mode, polygons, boundingBox, spacingMm, options.stoneSizeMm);
+    // Layout-quality metrics (Prompt 3): outline-mode sample attrition, see StoneLayout's own
+    // outlineStats doc comment. null for every other mode, so this is a no-op there.
+    const outlineStats = options.mode === 'outline' ? { rawSampleCount: 0, keptCount: 0 } : null;
+    const points = sampleShapeFillPoints(options.mode, polygons, boundingBox, spacingMm, options.stoneSizeMm, true, cornerFlagsByContour, outlineStats);
 
     let stones = points.map((point, index) => new Stone({
       xMm: point.xMm,
@@ -639,7 +660,7 @@ export class GeometryEngine {
       stones = stones.concat(infillStones);
     }
 
-    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
+    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones, outlineStats });
   }
 
   /**
@@ -650,7 +671,10 @@ export class GeometryEngine {
    * outline and its stone-sampled outline are always the same geometry.
    *
    * @param {object} params Same shape as generateShapeLayout()'s params, minus stoneSizeMm/gapMm/mode/color.
-   * @returns {{polygons: import('../text/VectorPath.js').Point2D[][], boundingBox: BoundingBox|null}}
+   * @param {number} [params.rotationDeg] RS-3028: see generateShapeLayout()'s own doc comment --
+   *   the returned polygons/boundingBox are rotated identically, since both entry points share the
+   *   same _shapePolygons() rotation step.
+   * @returns {{polygons: import('../text/VectorPath.js').Point2D[][], boundingBox: BoundingBox|null, cornerFlagsByContour: (boolean[]|null)[]|null}}
    */
   resolveShapePolygons(params = {}) {
     const options = normalizeShapeParams({ ...params, stoneSizeMm: 1, mode: DEFAULT_MODE });
@@ -658,13 +682,50 @@ export class GeometryEngine {
   }
 
   _shapePolygons(options) {
+    const result = this._unrotatedShapePolygons(options);
+
+    // RS-3028: shared rotation step, applied once here regardless of which branch above produced
+    // `result` -- this is the single correct insertion point (see this method's own JSDoc/the
+    // milestone doc for why): every consumer of _shapePolygons() (stone sampling, Boolean
+    // Operations, Fit Text to Shape) sees identically-rotated contours. cornerFlagsByContour is
+    // unaffected by rotation (same points, same corner-ness, just moved), so it passes through
+    // unchanged. A 0 rotation or a null boundingBox (empty result) leaves `result` untouched.
+    if (options.rotationDeg === 0 || !result.boundingBox) {
+      return result;
+    }
+
+    const center = result.boundingBox.center;
+    const pivot = { cxMm: center.xMm, cyMm: center.yMm };
+    // rotatePointsAroundCenter() returns plain {xMm,yMm}-shaped objects (see its own doc comment),
+    // but contour points must stay real Point2D instances -- corner-anchored Outline spacing
+    // (StoneSampler.js's sampleCornerAnchoredOutlinePoints(), fed by Rectangle's cornerFlagsByContour
+    // above) calls .distanceTo() on them. Re-wrap here so every _shapePolygons() caller keeps
+    // receiving genuine Point2D points, rotated or not.
+    const polygons = result.polygons.map((polygon) =>
+      rotatePointsAroundCenter(polygon, options.rotationDeg, pivot).map((p) => new Point2D(p.xMm, p.yMm))
+    );
+    return { ...result, polygons, boundingBox: BoundingBox.fromPoints(polygons.flat()) };
+  }
+
+  _unrotatedShapePolygons(options) {
     if (options.shape === 'circle' || options.shape === 'rectangle') {
       const path = options.shape === 'circle'
         ? createCircleVectorPath({ cxMm: options.cxMm, cyMm: options.cyMm, radiusMm: options.radiusMm, id: options.layerId })
         : createRectangleVectorPath({ xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm, id: options.layerId });
 
+      // Rect's own contour is built from moveTo/lineTo only (see createRectangleVectorPath()) --
+      // every flattened point is a genuine corner -- so it's the one circle/rectangle case that
+      // feeds corner-anchored Outline spacing (see CORNER_ANCHORED_SHAPE_LIBRARY_KINDS above).
+      // Circle has no usable corners and keeps flattenContourToPolygon()'s plain, unaffected path.
+      if (options.shape === 'rectangle') {
+        const flattened = path.contours.map((contour) => flattenContourToPolygonWithCornerFlags(contour));
+        const polygons = flattened.map((f) => f.points);
+        const cornerFlagsByContour = flattened.map((f) => f.cornerFlags);
+        return { polygons, boundingBox: BoundingBox.fromPoints(polygons.flat()), cornerFlagsByContour };
+      }
+
       const polygons = path.contours.map((contour) => flattenContourToPolygon(contour));
-      return { polygons, boundingBox: BoundingBox.fromPoints(polygons.flat()) };
+      return { polygons, boundingBox: BoundingBox.fromPoints(polygons.flat()), cornerFlagsByContour: null };
     }
 
     // S-110: every other shape kind (Ellipse/Capsule/Regular Polygon/Star/Heart/Arrow/Cross/
@@ -672,7 +733,16 @@ export class GeometryEngine {
     // layer's x/y/w/h box via the exact same mechanism _pathPolygons() uses for Boolean Operation
     // results -- see _placeNaturalContours() below.
     const naturalContours = createShapeNaturalContours(options.shape, options);
-    return this._placeNaturalContours(naturalContours, options.xMm, options.yMm, options.widthMm, options.heightMm);
+    const placed = this._placeNaturalContours(naturalContours, options.xMm, options.yMm, options.widthMm, options.heightMm);
+
+    // ShapeLibrary.js stays a pure natural-coordinate generator with no downstream-concern coupling
+    // -- corner tagging for its four known-safe kinds (every point is trivially a real vertex by
+    // construction) is built here instead, never inside ShapeLibrary.js itself.
+    if (!placed.boundingBox || !CORNER_ANCHORED_SHAPE_LIBRARY_KINDS.has(options.shape)) {
+      return { ...placed, cornerFlagsByContour: null };
+    }
+    const cornerFlagsByContour = placed.polygons.map((polygon) => Array(polygon.length).fill(true));
+    return { ...placed, cornerFlagsByContour };
   }
 
   /**
@@ -688,25 +758,20 @@ export class GeometryEngine {
    * @param {number} yMm
    * @param {number|null} widthMm
    * @param {number|null} heightMm
+   * @param {{minXmm:number,minYmm:number,maxXmm:number,maxYmm:number}} [naturalBoundingBoxMm]
+   *   RS-3014 Step 3: forwarded straight through to computeNaturalContourTransform() -- see that
+   *   function's own doc comment. undefined for every caller but _pathPolygons() (the only 'path'-
+   *   layer-specific caller of this shared helper), a safe no-op there exactly like every other
+   *   omitted-optional-param call site.
    * @returns {{polygons: import('../text/VectorPath.js').Point2D[][], boundingBox: BoundingBox|null}}
    */
-  _placeNaturalContours(contours, xMm, yMm, widthMm, heightMm) {
-    const naturalPoints = contours.flat();
-    const naturalBox = BoundingBox.fromPoints(naturalPoints.map((p) => new Point2D(p.xMm, p.yMm)));
-    if (!naturalBox) {
+  _placeNaturalContours(contours, xMm, yMm, widthMm, heightMm, naturalBoundingBoxMm) {
+    const transform = computeNaturalContourTransform(contours, xMm, yMm, widthMm, heightMm, naturalBoundingBoxMm);
+    if (!transform) {
       return { polygons: [], boundingBox: null };
     }
 
-    const targetWidthMm = widthMm ?? naturalBox.widthMm;
-    const targetHeightMm = heightMm ?? naturalBox.heightMm;
-    const scaleX = naturalBox.widthMm > 0 ? targetWidthMm / naturalBox.widthMm : 1;
-    const scaleY = naturalBox.heightMm > 0 ? targetHeightMm / naturalBox.heightMm : 1;
-
-    const polygons = contours.map((contour) => contour.map((p) => new Point2D(
-      xMm + p.xMm * scaleX,
-      yMm + p.yMm * scaleY
-    )));
-
+    const polygons = contours.map((contour) => applyNaturalContourTransform(contour, transform));
     return { polygons, boundingBox: BoundingBox.fromPoints(polygons.flat()) };
   }
 
@@ -746,6 +811,12 @@ export class GeometryEngine {
     const spacingMm = options.stoneSizeMm + options.gapMm;
     const points = [];
 
+    // Layout-quality metrics (Prompt 3): outline-mode sample attrition, see StoneLayout's own
+    // outlineStats doc comment. Accumulated across the closed-contour pass below AND every open
+    // contour's own pass (an SVG document can mix both) -- null, and never touched, for every other
+    // mode, so this is a no-op there.
+    const outlineStats = options.mode === 'outline' ? { rawSampleCount: 0, keptCount: 0 } : null;
+
     // Appended one-by-one (not `points.push(...bigArray)`): spreading a very large sample array
     // as call arguments overflows the JS call stack, which is reachable here (unlike
     // generateShapeLayout()/generateTextLayout()'s flatMap-based accumulation) because an SVG
@@ -756,7 +827,10 @@ export class GeometryEngine {
       // different contours pass closer together than one stone pitch -- see that function's doc
       // comment. Still appended one-by-one, not spread, for the same large-point-set stack-safety
       // reason as before.
-      for (const point of sampleMultiContourOutlinePoints(closedPolygons, spacingMm, { closed: true, minSeparationMm: options.stoneSizeMm })) points.push(point);
+      const closedStats = { rawSampleCount: 0, keptCount: 0 };
+      for (const point of sampleMultiContourOutlinePoints(closedPolygons, spacingMm, { closed: true, minSeparationMm: options.stoneSizeMm }, closedStats)) points.push(point);
+      outlineStats.rawSampleCount += closedStats.rawSampleCount;
+      outlineStats.keptCount += closedStats.keptCount;
     } else {
       for (const point of sampleShapeFillPoints(options.mode, closedPolygons, BoundingBox.fromPoints(closedPolygons.flat()), spacingMm)) {
         points.push(point);
@@ -769,7 +843,12 @@ export class GeometryEngine {
     // cross-contour branch, so this is a pure self-check; open polygons are still never compared
     // against each other, matching this function's pre-existing (out of RC-004A's scope) behavior.
     for (const polygon of openPolygons) {
-      for (const point of sampleMultiContourOutlinePoints([polygon], spacingMm, { closed: false, minSeparationMm: options.stoneSizeMm })) points.push(point);
+      const openStats = outlineStats ? { rawSampleCount: 0, keptCount: 0 } : null;
+      for (const point of sampleMultiContourOutlinePoints([polygon], spacingMm, { closed: false, minSeparationMm: options.stoneSizeMm }, openStats)) points.push(point);
+      if (outlineStats) {
+        outlineStats.rawSampleCount += openStats.rawSampleCount;
+        outlineStats.keptCount += openStats.keptCount;
+      }
     }
 
     let stones = points.map((point, index) => new Stone({
@@ -799,7 +878,7 @@ export class GeometryEngine {
       stones = stones.concat(infillStones);
     }
 
-    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
+    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones, outlineStats });
   }
 
   /**
@@ -819,25 +898,70 @@ export class GeometryEngine {
     return { polygons: closedPolygons, boundingBox: BoundingBox.fromPoints(closedPolygons.flat()) };
   }
 
-  _svgPolygons(options) {
-    const parsed = parseSvgDocument(options.svgSource);
+  /**
+   * Parse + flatten an SVG document into its closed/open contour polygons expressed in the
+   * document's own natural millimeter coordinates (pre-placement, pre-scale), consulting the
+   * content-addressed cache first.
+   *
+   * Cache-safety: the key is the ENTIRE input to a pure, deterministic function pair
+   * (parseSvgDocument() -- documented "pure parsing/measurement", no DOM/Canvas -- followed by
+   * flattenContourToPolygon() at the module constant CURVE_FLATTEN_SEGMENTS). Identical svgSource
+   * therefore always yields identical output, so a matching key can be trusted without any
+   * invalidation step -- staleness is structurally impossible. preserveAspectRatio/viewBox
+   * mapping is already fully baked into parsed.shapes and naturalWidth/HeightMm by
+   * parseSvgDocument(), so nothing placement- or viewport-dependent leaks past this boundary.
+   *
+   * The returned entry's Point2D arrays are shared cache state: callers must map through them
+   * into fresh Point2D instances and must never mutate or hand out the cached objects.
+   *
+   * @param {string} svgSource
+   * @returns {{naturalWidthMm: number, naturalHeightMm: number, closed: Point2D[][], open: Point2D[][]}}
+   */
+  _svgNaturalPolygons(svgSource) {
+    const cached = this._svgNaturalPolygonCache.get(svgSource);
+    if (cached) return cached;
 
-    const targetWidthMm = options.widthMm ?? parsed.naturalWidthMm;
-    const targetHeightMm = options.heightMm ?? parsed.naturalHeightMm;
-    const scaleX = targetWidthMm / parsed.naturalWidthMm;
-    const scaleY = targetHeightMm / parsed.naturalHeightMm;
-
-    const closedPolygons = [];
-    const openPolygons = [];
-    for (const { contour, closed } of parsed.shapes) {
-      const placed = flattenContourToPolygon(contour).map((point) => new Point2D(
-        options.xMm + point.xMm * scaleX,
-        options.yMm + point.yMm * scaleY
-      ));
-      (closed ? closedPolygons : openPolygons).push(placed);
+    const parsed = parseSvgDocument(svgSource);
+    const closed = [];
+    const open = [];
+    for (const { contour, closed: isClosed } of parsed.shapes) {
+      (isClosed ? closed : open).push(flattenContourToPolygon(contour));
     }
+    const entry = {
+      naturalWidthMm: parsed.naturalWidthMm,
+      naturalHeightMm: parsed.naturalHeightMm,
+      closed,
+      open
+    };
 
-    return { closedPolygons, openPolygons };
+    // FIFO eviction: Map preserves insertion order, so the first key is the oldest. Eight entries
+    // comfortably covers realistic per-project SVG layer counts.
+    if (this._svgNaturalPolygonCache.size >= 8) {
+      this._svgNaturalPolygonCache.delete(this._svgNaturalPolygonCache.keys().next().value);
+    }
+    this._svgNaturalPolygonCache.set(svgSource, entry);
+    return entry;
+  }
+
+  _svgPolygons(options) {
+    const natural = this._svgNaturalPolygons(options.svgSource);
+
+    const targetWidthMm = options.widthMm ?? natural.naturalWidthMm;
+    const targetHeightMm = options.heightMm ?? natural.naturalHeightMm;
+    const scaleX = targetWidthMm / natural.naturalWidthMm;
+    const scaleY = targetHeightMm / natural.naturalHeightMm;
+
+    // New Point2D instances every call -- the cached natural polygons are shared mutable state and
+    // callers (sampling, PathBoolean) may hold the returned points across later generate() calls.
+    const place = (polygon) => polygon.map((point) => new Point2D(
+      options.xMm + point.xMm * scaleX,
+      options.yMm + point.yMm * scaleY
+    ));
+
+    return {
+      closedPolygons: natural.closed.map(place),
+      openPolygons: natural.open.map(place)
+    };
   }
 
   /**
@@ -941,6 +1065,21 @@ export class GeometryEngine {
    * @param {number} [params.gapMm]
    * @param {'outline'|'fill'} [params.mode]
    * @param {string} [params.color]
+   * @param {boolean} [params.closed] Whether `contours` form a closed loop (default true). Only
+   *   `mode: 'outline'` reads this; a freehand-drawn shape that never looped back to its start
+   *   passes `false` so it's outline-sampled as an open polyline instead of gaining a synthetic
+   *   closing edge across its two real endpoints (RS-3011).
+   * @param {number} [params.rotationDeg] RS-3033: whole-shape rotation in degrees, clockwise,
+   *   applied inside _pathPolygons() around the PLACED (post-xMm/yMm/widthMm/heightMm) contours'
+   *   own bounding-box center -- the same insertion point/pivot convention _shapePolygons() already
+   *   established for generateShapeLayout() (RS-3028). Default 0 (no rotation, byte-identical to
+   *   before this milestone). Normalized into [0, 360). Affects stone sampling here and, identically,
+   *   the raw polygons resolvePathPolygons() returns, since both share this same rotation step.
+   *   Does NOT rotate `regions`/`stampedStones`/`eraseDaubs`/`erasedGridPositions` -- those are placed
+   *   through their own independent computeNaturalContourTransform() call further below, unaffected
+   *   by this rotation step, matching the pre-existing "each is its own overlay" architecture; a
+   *   rotated path layer with existing Paint/Stamp/Eraser data will visibly desync until a future
+   *   milestone addresses it.
    * @returns {StoneLayout}
    */
   generatePathLayout(params = {}) {
@@ -953,7 +1092,42 @@ export class GeometryEngine {
 
     const placedBoundingBox = BoundingBox.fromPoints(polygons.flat());
     const spacingMm = options.stoneSizeMm + options.gapMm;
-    const points = sampleShapeFillPoints(options.mode, polygons, placedBoundingBox, spacingMm, options.stoneSizeMm);
+    // Corner-anchored per-side Outline spacing for drawn 'path' layers (Rect/Polygon/Pen/Freehand
+    // tools, Boolean-op results) -- the CORNER_ANCHORED_SHAPE_LIBRARY_KINDS mechanism above only
+    // covers ShapeLibrary-generated kinds with known-safe-by-construction corners; drawn contours
+    // reach here as plain flattened points with no such provenance, so detection happens on the
+    // placed polygons instead (must be parallel to the exact vertex arrays being sampled below).
+    // Scoped to closed Outline mode only -- fill/staggered/radial/contour ignore corner flags
+    // entirely (see sampleShapeFillPoints()'s own doc comment) and an open path has no sides to
+    // anchor between (RS-3011 endpoint anchoring is separate, deferred, future work).
+    const cornerFlagsByContour = options.mode === 'outline' && options.closed
+      ? polygons.map((polygon) => {
+        const flags = detectPolygonCornerFlags(polygon, { closed: true });
+        if (!flags) return flags;
+        // RS-congruent-outline (tiny-contour corner-anchor guard): a contour whose flagged corners
+        // cannot geometrically coexist as separate stones -- its own perimeter divided by its own
+        // corner count is already below one stone's pitch, before any dedup/clustering runs -- must
+        // not be anchored at all. Left corner-anchored, clusterCornersByProximity() (StoneSampler.js)
+        // chains every corner into one float-sensitive centroid resolution, which is exactly the
+        // count/position instability this milestone fixes for small near-identical polygons (e.g. a
+        // ring of ~5mm octagons). Falling back to the whole-loop uniform walk here is deterministic
+        // and, for a shape this small relative to spacing, no less faithful a placement.
+        const n = flags.reduce((count, isCorner) => count + (isCorner ? 1 : 0), 0);
+        if (n === 0) return flags;
+        let perimeterMm = 0;
+        const polygonLength = polygon.length;
+        for (let v = 0; v < polygonLength; v++) {
+          const a = polygon[v];
+          const b = polygon[(v + 1) % polygonLength];
+          perimeterMm += Math.hypot(b.xMm - a.xMm, b.yMm - a.yMm);
+        }
+        return perimeterMm / n < spacingMm ? null : flags;
+      })
+      : null;
+    // Layout-quality metrics (Prompt 3): outline-mode sample attrition, see StoneLayout's own
+    // outlineStats doc comment. null for every other mode, so this is a no-op there.
+    const outlineStats = options.mode === 'outline' ? { rawSampleCount: 0, keptCount: 0 } : null;
+    const points = sampleShapeFillPoints(options.mode, polygons, placedBoundingBox, spacingMm, options.stoneSizeMm, options.closed, cornerFlagsByContour, outlineStats);
 
     let stones = points.map((point, index) => new Stone({
       xMm: point.xMm,
@@ -979,7 +1153,216 @@ export class GeometryEngine {
       stones = stones.concat(infillStones);
     }
 
-    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
+    // RS-3011 Step 10a (Paint regions) / Step 12 (Stamp) / Step 13 (Eraser): all three need the
+    // same natural-space -> absolute-space transform options.contours was itself placed through
+    // (not a fresh one derived from each region's/stamp's/daub's own, usually-smaller, extent) --
+    // see computeNaturalContourTransform's own doc comment for why that distinction matters.
+    // Computed once, shared by every branch below.
+    if (options.regions.length > 0 || options.stampedStones.length > 0 || options.eraseDaubs.length > 0 || options.erasedGridPositions.length > 0) {
+      const transform = computeNaturalContourTransform(options.contours, options.xMm, options.yMm, options.widthMm, options.heightMm, options.naturalBoundingBoxMm);
+      // RS-3011 Step 10a: additive, priority-ordered sub-areas that carve their own patch out of the
+      // fill computed above. No-op when `regions` is empty/absent -- every layer predating this step
+      // -- so this branch never changes existing output. See _applyPathRegions()'s own doc comment.
+      if (options.regions.length > 0) {
+        stones = this._applyPathRegions(stones, options, transform, polygons);
+      }
+      // Bugfix (permanent dead zone): `erasedGridPositions` is the persistent-snapshot replacement
+      // for eraseDaubs' own live radius test (see that field's own doc comment below for why the two
+      // now coexist) -- applied here, strictly BEFORE stampedStones are appended, so it only ever
+      // suppresses base-fill/region-patch stones, never a Stamp/Trace placement (those have their own
+      // independent identity and are removed, if erased, directly from stampedStones itself by the
+      // caller instead). Each entry is a snapshotted stone position, not a brush touch -- point-radius
+      // matching against ERASED_POSITION_EPSILON_MM (a tolerance for transform round-trip float noise
+      // only, several orders of magnitude below any real stone pitch) rather than eraseDaubs' own
+      // brush-sized radiusMm. A daub's/entry's xMm/yMm is natural-space, same convention as
+      // stampedStones/eraseDaubs above, so it needs the same applyNaturalContourTransform() conversion
+      // before comparing against `stones`' own absolute coordinates. A null transform (empty contours)
+      // leaves erasedGridPositions unable to suppress anything, same as regions/stampedStones above.
+      // Re-indexes survivors afterward, the same convention eraseDaubs' own final `.map()` below uses.
+      if (options.erasedGridPositions.length > 0 && transform) {
+        const placedErasedPositions = options.erasedGridPositions.map((pos) => {
+          const [placed] = applyNaturalContourTransform([{ xMm: pos.xMm, yMm: pos.yMm }], transform);
+          return placed;
+        });
+        const survivors = stones.filter((stone) => !placedErasedPositions.some((pos) => {
+          const dx = stone.xMm - pos.xMm;
+          const dy = stone.yMm - pos.yMm;
+          return dx * dx + dy * dy <= ERASED_POSITION_EPSILON_MM * ERASED_POSITION_EPSILON_MM;
+        }));
+        stones = survivors.map((stone, index) => new Stone({
+          xMm: stone.xMm,
+          yMm: stone.yMm,
+          sizeMm: stone.sizeMm,
+          color: stone.color,
+          layerId: stone.layerId,
+          index
+        }));
+      }
+      // RS-3011 Step 12 (Stamp): one manually-placed Stone per stampedStones entry, appended
+      // directly on top of everything computed above -- no interior-point test, no masking of nearby
+      // stones, unlike regions above (a stamp is a decoration, not a fill patch; drawleather's own
+      // StampTool.ts doesn't suppress/dedupe against underlying decorations either). `transform` is
+      // the same placement transform every other Stone on this layer went through, so a stamp tracks
+      // its parent shape's move/resize for free, exactly like a region's own contour does. A null
+      // transform (empty contours) leaves stampedStones un-placeable, same as regions above.
+      if (options.stampedStones.length > 0 && transform) {
+        const stampedStoneObjects = options.stampedStones.map((stamp, index) => {
+          const [placed] = applyNaturalContourTransform([{ xMm: stamp.xMm, yMm: stamp.yMm }], transform);
+          return new Stone({
+            xMm: placed.xMm,
+            yMm: placed.yMm,
+            sizeMm: stamp.sizeMm,
+            color: stamp.color,
+            layerId: options.layerId,
+            index: stones.length + index
+          });
+        });
+        stones = stones.concat(stampedStoneObjects);
+      }
+      // RS-3011 Step 13 (Eraser): brush-style removal, applied LAST -- strictly after base fill +
+      // regions + stampedStones (+ erasedGridPositions above) are all combined into one list, so a
+      // daub drops a Stone regardless of which source produced it, stampedStones included. A daub is
+      // a point + radius, not a contour (no polygon/boolean geometry involved) -- drops any Stone
+      // whose center falls within radiusMm of ANY daub. Like a stamp's own xMm/yMm above, a daub's
+      // xMm/yMm is stored in the SAME (0,0)-rooted natural-space convention, so it needs the identical
+      // applyNaturalContourTransform() conversion before comparing against `stones`' own absolute
+      // coordinates -- radiusMm itself is deliberately left untransformed (a fixed physical brush
+      // size, exactly like a stamp's own sizeMm doesn't scale with the parent shape either). A null
+      // transform (empty contours) leaves eraseDaubs unable to erase anything, same as
+      // stampedStones above. No-op when eraseDaubs is empty, matching regions/stampedStones' own
+      // "absent field -> unchanged output" convention. Re-indexes survivors afterward, the same
+      // convention _applyPathRegions()'s own final `.map((stone,index)=>...)` already uses.
+      // Bugfix (permanent dead zone): this is now a LEGACY path only -- kept running, unmodified, so
+      // a project saved before this fix keeps behaving byte-for-byte the same (a live radius test that
+      // also masks future Stamp/Trace placements, exactly as it always has). A NEW Stones-mode erase
+      // never appends to eraseDaubs anymore (see onEraseSweep()'s own doc comment in app.js); it only
+      // grows erasedGridPositions/splices stampedStones above. The two mechanisms are independent and
+      // additive -- either dropping a given Stone is enough -- so an old project with existing
+      // eraseDaubs and a brand-new erasedGridPositions-based erase on the same layer coexist correctly
+      // with no special-case code.
+      if (options.eraseDaubs.length > 0 && transform) {
+        const placedDaubs = options.eraseDaubs.map((daub) => {
+          const [placed] = applyNaturalContourTransform([{ xMm: daub.xMm, yMm: daub.yMm }], transform);
+          return { xMm: placed.xMm, yMm: placed.yMm, radiusMm: daub.radiusMm };
+        });
+        const survivors = stones.filter((stone) => !placedDaubs.some((daub) => {
+          const dx = stone.xMm - daub.xMm;
+          const dy = stone.yMm - daub.yMm;
+          return dx * dx + dy * dy <= daub.radiusMm * daub.radiusMm;
+        }));
+        stones = survivors.map((stone, index) => new Stone({
+          xMm: stone.xMm,
+          yMm: stone.yMm,
+          sizeMm: stone.sizeMm,
+          color: stone.color,
+          layerId: stone.layerId,
+          index
+        }));
+      }
+    }
+
+    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones, outlineStats });
+  }
+
+  /**
+   * RS-3011 Step 10a: applies a 'path' layer's `regions` (Paint) on top of its already-generated
+   * `baseStones`. Each region, in array order, wins over everything computed before it -- the base
+   * fill AND every earlier region -- for its own footprint: any already-computed point that falls
+   * inside the region's own contour is dropped, then the region generates its own fill within that
+   * same contour using its own stoneSizeMm/gapMm/color/fillMode. `contour` is placed through the
+   * exact same (0,0)-rooted natural-space transform (`_placeNaturalContours()`) the layer's own
+   * `contours` field already uses, so a region tracks its parent shape's move/resize for free.
+   * Interior testing reuses `isPointInsidePolygons()` -- the same StoneSampler.js primitive
+   * MixedSizeGenerator.js's own infill pass relies on (via sampleShapeFillPoints()) -- rather than
+   * reimplementing point-in-polygon logic here. A region's own candidate points are then rejected
+   * if they land physically too close to anything already placed (survivors or an earlier region),
+   * so a region's independently-pitched grid never overlaps a stone just outside its own contour
+   * boundary.
+   *
+   * A region's own contour is fixed at paint-time and never re-validated afterward -- normally safe,
+   * since a region's polygon is always a subset of the shape's interior by construction. Outline-mode
+   * Eraser (RS-3014 Step 3) is the first thing that can shrink the shape's own placed base-contour
+   * AFTER a region already exists, with nothing else re-checking the region against it -- without
+   * `shapePolygons`, a region would keep filling a footprint that's since been cut away. Candidate
+   * points are additionally rejected if they fall outside `shapePolygons`, so a region's fill always
+   * tracks its parent shape's CURRENT contour, not just the contour at paint-time.
+   *
+   * @param {Stone[]} baseStones
+   * @param {ReturnType<typeof normalizePathParams>} options
+   * @param {{xMm:number,yMm:number,scaleX:number,scaleY:number}|null} transform The SAME transform
+   *   the layer's own `contours` were placed through (see computeNaturalContourTransform()) --
+   *   never an independently-derived one, or a region smaller than the shape's own natural box
+   *   would be scaled wrong relative to it.
+   * @param {import('../text/VectorPath.js').Point2D[][]} shapePolygons The shape's own current
+   *   placed base-contour polygons (generatePathLayout()'s own `polygons`, computed before the
+   *   regions/stamps/daubs branch runs) -- used to drop any region candidate point that no longer
+   *   falls inside the shape, e.g. after an Outline-mode Eraser cut.
+   * @returns {Stone[]}
+   */
+  _applyPathRegions(baseStones, options, transform, shapePolygons) {
+    if (!transform) {
+      return baseStones;
+    }
+
+    let survivors = baseStones;
+    const regionStoneGroups = [];
+
+    for (const region of options.regions) {
+      const regionPolygons = [applyNaturalContourTransform(region.contour, transform)];
+      const regionBoundingBox = BoundingBox.fromPoints(regionPolygons.flat());
+
+      if (!regionBoundingBox) {
+        continue;
+      }
+
+      const insideRegion = (stone) => isPointInsidePolygons(new Point2D(stone.xMm, stone.yMm), regionPolygons);
+      survivors = survivors.filter((stone) => !insideRegion(stone));
+      for (const group of regionStoneGroups) {
+        group.stones = group.stones.filter((stone) => !insideRegion(stone));
+      }
+
+      const regionSpacingMm = region.stoneSizeMm + region.gapMm;
+      const regionCandidatePoints = sampleShapeFillPoints(
+        region.fillMode, regionPolygons, regionBoundingBox, regionSpacingMm, region.stoneSizeMm, options.closed
+      ).filter((point) => isPointInsidePolygons(new Point2D(point.xMm, point.yMm), shapePolygons));
+      // Contour exclusion above only guarantees a region's own candidates aren't *inside* whatever
+      // it just claimed -- it says nothing about a candidate landing physically too close to a
+      // surviving base/earlier-region stone just outside the boundary (independent grids, no shared
+      // pitch). Rejects each candidate against the FIXED already-placed set only -- never against
+      // other candidates from this same region, which are already guaranteed non-overlapping by
+      // their own regular-grid construction (the same guarantee the base fill's own grid already
+      // relies on); letting them block each other too would re-check pairs whose separation is
+      // *exactly* their own threshold by construction ((s+s)/2+gapMm == s+gapMm == their own grid
+      // pitch), a floating-point boundary that makes acceptance order/position-dependent for no
+      // benefit.
+      const alreadyPlaced = survivors.concat(...regionStoneGroups.map((group) => group.stones));
+      const acceptedPoints = regionCandidatePoints.filter((point) => !alreadyPlaced.some((other) => {
+        const dx = point.xMm - other.xMm;
+        const dy = point.yMm - other.yMm;
+        const minSeparationMm = (region.stoneSizeMm + other.sizeMm) / 2 + region.gapMm;
+        return dx * dx + dy * dy < minSeparationMm * minSeparationMm;
+      }));
+      const regionStones = acceptedPoints.map((point) => new Stone({
+        xMm: point.xMm,
+        yMm: point.yMm,
+        sizeMm: region.stoneSizeMm,
+        color: region.color,
+        layerId: options.layerId,
+        index: 0 // reassigned below, once the final combined order is known
+      }));
+
+      regionStoneGroups.push({ stones: regionStones });
+    }
+
+    const combined = survivors.concat(...regionStoneGroups.map((group) => group.stones));
+    return combined.map((stone, index) => new Stone({
+      xMm: stone.xMm,
+      yMm: stone.yMm,
+      sizeMm: stone.sizeMm,
+      color: stone.color,
+      layerId: stone.layerId,
+      index
+    }));
   }
 
   /**
@@ -999,8 +1382,87 @@ export class GeometryEngine {
     // S-110: delegates to the shared _placeNaturalContours() helper -- see its doc comment. Behavior
     // is unchanged; this is a pure extraction so Boolean Operation results and every S-110 shape
     // kind share one placement implementation instead of two copies of the same math.
-    return this._placeNaturalContours(options.contours, options.xMm, options.yMm, options.widthMm, options.heightMm);
+    // RS-3014 Step 3: options.naturalBoundingBoxMm (a 'path'-layer-only field -- see
+    // normalizePathParams()'s own doc comment -- undefined for every other shape kind's own
+    // _shapePolygons() call to this same shared helper) keeps the BASE FILL sampled below anchored
+    // to the shape's pre-cut extent too, not just regions/stampedStones/eraseDaubs (see the
+    // generatePathLayout() call below): without this, an Outline-mode cut would leave the visible
+    // outline correctly shrunk while the actual sampled fill stones stayed stretched to the
+    // layer's unchanged widthMm/heightMm box -- stones rendering past the shape's own visible
+    // boundary, a production-correctness defect (base fill IS the product), caught during this
+    // step's own browser verification.
+    const result = this._placeNaturalContours(options.contours, options.xMm, options.yMm, options.widthMm, options.heightMm, options.naturalBoundingBoxMm);
+
+    // RS-3033: shared rotation step, mirroring _shapePolygons()'s own RS-3028 rotation insertion
+    // point exactly -- rotate the already-PLACED polygons around their own bounding-box center, so
+    // this is unaffected by whichever xMm/yMm/widthMm/heightMm/naturalBoundingBoxMm branch produced
+    // them above. A 0 rotation or a null boundingBox (empty result) leaves `result` untouched.
+    if (options.rotationDeg === 0 || !result.boundingBox) {
+      return result;
+    }
+    const center = result.boundingBox.center;
+    const pivot = { cxMm: center.xMm, cyMm: center.yMm };
+    const polygons = result.polygons.map((polygon) =>
+      rotatePointsAroundCenter(polygon, options.rotationDeg, pivot).map((p) => new Point2D(p.xMm, p.yMm))
+    );
+    return { ...result, polygons, boundingBox: BoundingBox.fromPoints(polygons.flat()) };
   }
+}
+
+/**
+ * The scale-then-translate transform GeometryEngine._placeNaturalContours() derives from a shape's
+ * own natural contours. A module-level export (not a private class method) since RS-3011 Step 10b
+ * (Paint target selection) needs to invert this exact transform to convert an absolute-mm lasso
+ * intersection back into a 'path' layer's own natural-space contour convention, from outside
+ * GeometryEngine's own generation pipeline -- see PaintRegionSelection.js's
+ * absolutePolygonsToNaturalSpace(). A region's bounding box is almost always smaller than the parent
+ * shape's own natural box (that's the point of a sub-region), so recomputing scaleX/scaleY from the
+ * region's own points instead of reusing this one would silently distort it relative to the shape it
+ * is supposed to track -- the same reasoning applies to Step 10b's inverse use.
+ *
+ * RS-3014 Step 3 (Eraser outline-cut mode): a live 'path' layer's own `contours` can now be
+ * mutated in place after commit (a boolean subtraction shrinking the shape). Recomputing the
+ * natural box fresh from `contours` on every call is exactly what makes that safe UNTIL a cut
+ * changes `contours`' own extent -- at that point every region/stamp/daub on the layer, even ones
+ * nowhere near the cut, would silently rescale/reposition relative to the shape. The optional
+ * `naturalBoundingBoxMm` param lets a caller freeze that box at the moment a layer first becomes
+ * cuttable (see app.js's outline-cut handling) so later cuts no longer move it.
+ *
+ * @param {{minXmm:number,minYmm:number,maxXmm:number,maxYmm:number}|null} [naturalBoundingBoxMm]
+ *   When present and valid, used in place of the live-recomputed box below. Absent/null/undefined
+ *   (every existing call site, every layer predating this step) reproduces prior behavior exactly.
+ * @returns {{xMm:number,yMm:number,scaleX:number,scaleY:number}|null} null when `contours` has no points.
+ */
+export function computeNaturalContourTransform(contours, xMm, yMm, widthMm, heightMm, naturalBoundingBoxMm) {
+  let naturalBox;
+  if (naturalBoundingBoxMm && Number.isFinite(naturalBoundingBoxMm.minXmm) &&
+    Number.isFinite(naturalBoundingBoxMm.minYmm) && Number.isFinite(naturalBoundingBoxMm.maxXmm) &&
+    Number.isFinite(naturalBoundingBoxMm.maxYmm)) {
+    naturalBox = new BoundingBox(
+      naturalBoundingBoxMm.minXmm, naturalBoundingBoxMm.minYmm,
+      naturalBoundingBoxMm.maxXmm, naturalBoundingBoxMm.maxYmm
+    );
+  } else {
+    const naturalPoints = contours.flat();
+    naturalBox = BoundingBox.fromPoints(naturalPoints.map((p) => new Point2D(p.xMm, p.yMm)));
+  }
+  if (!naturalBox) {
+    return null;
+  }
+
+  const targetWidthMm = widthMm ?? naturalBox.widthMm;
+  const targetHeightMm = heightMm ?? naturalBox.heightMm;
+  const scaleX = naturalBox.widthMm > 0 ? targetWidthMm / naturalBox.widthMm : 1;
+  const scaleY = naturalBox.heightMm > 0 ? targetHeightMm / naturalBox.heightMm : 1;
+
+  return { xMm, yMm, scaleX, scaleY };
+}
+
+export function applyNaturalContourTransform(contour, transform) {
+  return contour.map((p) => new Point2D(
+    transform.xMm + p.xMm * transform.scaleX,
+    transform.yMm + p.yMm * transform.scaleY
+  ));
 }
 
 function normalizeTextParams(params) {
@@ -1201,6 +1663,15 @@ export const AUTHORED_FONT_FITTING_GAP_MM = 0.3;
 // magnitude below any real requested-scale difference this milestone cares about.
 const RELATIVE_SCALE_EPSILON = 1e-9;
 
+// Bugfix (permanent dead zone): match tolerance for erasedGridPositions against a freshly-generated
+// stone's own position (see the erasedGridPositions exclusion block above). A stored natural-space
+// position, re-transformed through the SAME forward transform that produced the original stone,
+// reproduces it up to double-precision round-trip noise only (~1e-9mm at this coordinate scale) --
+// 0.001mm is generous headroom above that noise floor while staying far below any real stone pitch
+// (stoneSizeMm + gapMm is never anywhere close to this small), so it can never accidentally match a
+// neighboring, un-erased stone.
+const ERASED_POSITION_EPSILON_MM = 0.001;
+
 // MONO-002: the true nearest-neighbor center-to-center distance across every stone in `stones`, or
 // null if fewer than two stones exist (no pairwise constraint to measure). Reuses the exact
 // grid-hash bucket shape StoneSampler.dedupeStonesByRadius()/MixedSizeGenerator.
@@ -1337,6 +1808,9 @@ function normalizeShapeParams(params) {
     gapMm,
     mode,
     color: params.color ?? null,
+    // RS-3028: rotation, applied once inside _shapePolygons() to the shape's own contours -- see
+    // that method's own comment for why this is the single correct insertion point.
+    rotationDeg: normalizeRotationDeg(assertFiniteNumber(params.rotationDeg ?? 0, 'rotationDeg')),
     // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.
     ...normalizeMixedSizeParams(params, stoneSizeMm)
   };
@@ -1558,9 +2032,231 @@ function normalizePathParams(params) {
     gapMm,
     mode,
     color: params.color ?? null,
+    // RS-3011: defaults to closed (true) unless explicitly told otherwise -- every 'path' layer
+    // before freehand strokes existed was closed by construction (Boolean Operation results always
+    // are), so an absent/undefined `closed` must keep sampling as a closed contour, matching this
+    // layer type's pre-existing behavior exactly. Only an explicit `false` (a freehand stroke that
+    // never looped back to its start) opts into open-contour outline sampling.
+    closed: params.closed !== false,
+    // RS-3033: rotation, applied once inside _pathPolygons() to the shape's already-placed contours
+    // -- see that method's own comment for why this is the single correct insertion point. Same
+    // normalizeRotationDeg()/assertFiniteNumber() convention normalizeShapeParams() already uses.
+    rotationDeg: normalizeRotationDeg(assertFiniteNumber(params.rotationDeg ?? 0, 'rotationDeg')),
+    // RS-3014 Step 3: optional frozen natural-space reference box -- see
+    // computeNaturalContourTransform()'s own doc comment for why this exists. Absent/null/undefined
+    // (every layer predating this step, and every 'path' layer that has never had its contours cut)
+    // is a safe no-op: the transform recomputes the box from `contours` exactly as it always has.
+    naturalBoundingBoxMm: normalizeNaturalBoundingBoxMm(params.naturalBoundingBoxMm),
     // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.
-    ...normalizeMixedSizeParams(params, stoneSizeMm)
+    ...normalizeMixedSizeParams(params, stoneSizeMm),
+    // RS-3011 Step 10a: Paint regions -- see normalizePathRegions()'s own doc comment. Defaults to
+    // [] for every layer with no `regions` field at all (every layer predating this step), matching
+    // this file's existing "absent optional field -> safe no-op default" convention.
+    regions: normalizePathRegions(params.regions),
+    // RS-3011 Step 12: Stamp's manually-placed stones -- see normalizePathStampedStones()'s own doc
+    // comment. Same "absent optional field -> safe no-op default" convention as `regions` above.
+    stampedStones: normalizePathStampedStones(params.stampedStones),
+    // RS-3011 Step 13: Eraser's brush daubs -- see normalizePathEraseDaubs()'s own doc comment.
+    // Same "absent optional field -> safe no-op default" convention as `regions`/`stampedStones`.
+    eraseDaubs: normalizePathEraseDaubs(params.eraseDaubs),
+    // Bugfix (permanent dead zone): Eraser's persistent stone-position snapshots -- see
+    // normalizePathErasedGridPositions()'s own doc comment. Same "absent optional field -> safe
+    // no-op default" convention as `regions`/`stampedStones`/`eraseDaubs` above.
+    erasedGridPositions: normalizePathErasedGridPositions(params.erasedGridPositions)
   };
+}
+
+/**
+ * Normalizes a 'path' layer's optional `naturalBoundingBoxMm` field (RS-3014 Step 3, Eraser
+ * outline-cut). See computeNaturalContourTransform()'s own doc comment for what this freezes and
+ * why. Absent/null -- every layer predating this step -- returns undefined so the field is
+ * omitted from the normalized options entirely, matching this file's existing convention.
+ *
+ * @param {{minXmm:number,minYmm:number,maxXmm:number,maxYmm:number}} [input]
+ * @returns {{minXmm:number,minYmm:number,maxXmm:number,maxYmm:number}|undefined}
+ */
+function normalizeNaturalBoundingBoxMm(input) {
+  if (input === undefined || input === null) {
+    return undefined;
+  }
+  if (typeof input !== 'object') {
+    throw new TypeError('GeometryEngine.generatePathLayout naturalBoundingBoxMm must be an object when provided.');
+  }
+
+  const minXmm = assertFiniteNumber(input.minXmm, 'naturalBoundingBoxMm.minXmm');
+  const minYmm = assertFiniteNumber(input.minYmm, 'naturalBoundingBoxMm.minYmm');
+  const maxXmm = assertFiniteNumber(input.maxXmm, 'naturalBoundingBoxMm.maxXmm');
+  const maxYmm = assertFiniteNumber(input.maxYmm, 'naturalBoundingBoxMm.maxYmm');
+  if (maxXmm < minXmm || maxYmm < minYmm) {
+    throw new RangeError('naturalBoundingBoxMm max values must be greater than or equal to min values.');
+  }
+
+  return { minXmm, minYmm, maxXmm, maxYmm };
+}
+
+/**
+ * Normalizes a 'path' layer's optional `regions` field (RS-3011 Step 10a, Paint). Each region's
+ * `contour` uses the exact same (0,0)-rooted natural-space convention as the layer's own
+ * `contours` -- validated only as loosely as that field already is (a 3+-point array), per this
+ * file's existing permissive style. `fillMode` defaults to `'fill'` (not DEFAULT_MODE/'outline')
+ * because a region is inherently "these stones go in this patch," not an outline concept.
+ *
+ * @param {object[]} [regionsInput]
+ * @returns {{id: string|null, contour: {xMm:number,yMm:number}[], stoneSizeMm: number, gapMm: number, color: string|null, fillMode: string}[]}
+ */
+function normalizePathRegions(regionsInput) {
+  if (regionsInput === undefined || regionsInput === null) {
+    return [];
+  }
+  if (!Array.isArray(regionsInput)) {
+    throw new TypeError('GeometryEngine.generatePathLayout regions must be an array when provided.');
+  }
+  return regionsInput.map((region, index) => normalizePathRegion(region, index));
+}
+
+function normalizePathRegion(region, index) {
+  if (!region || typeof region !== 'object') {
+    throw new TypeError(`regions[${index}] must be an object.`);
+  }
+  if (!Array.isArray(region.contour) || region.contour.length < 3) {
+    throw new TypeError(`regions[${index}] requires a contour array with at least 3 points.`);
+  }
+
+  const stoneSizeMm = assertPositiveNumber(region.stoneSizeMm, `regions[${index}].stoneSizeMm`);
+
+  const gapMm = assertFiniteNumber(region.gapMm ?? 0, `regions[${index}].gapMm`);
+  if (gapMm < 0) {
+    throw new RangeError(`regions[${index}].gapMm must be zero or positive.`);
+  }
+
+  const fillMode = region.fillMode ?? 'fill';
+  if (!SAMPLE_MODES.has(fillMode)) {
+    throw new TypeError(`Unsupported regions[${index}].fillMode: ${fillMode}. Expected one of: ${[...SAMPLE_MODES].join(', ')}`);
+  }
+
+  if (region.color !== undefined && region.color !== null &&
+    (typeof region.color !== 'string' || region.color.length === 0)) {
+    throw new TypeError(`regions[${index}].color must be a non-empty string when provided.`);
+  }
+
+  return {
+    id: typeof region.id === 'string' && region.id.length > 0 ? region.id : null,
+    contour: region.contour,
+    stoneSizeMm,
+    gapMm,
+    color: region.color ?? null,
+    fillMode
+  };
+}
+
+/**
+ * Normalizes a 'path' layer's optional `stampedStones` field (RS-3011 Step 12, Stamp). Each entry's
+ * xMm/yMm uses the exact same (0,0)-rooted natural-space convention as the layer's own `contours` and
+ * a region's own `contour` field -- validated only as loosely as those fields already are, per this
+ * file's existing permissive style.
+ *
+ * @param {object[]} [stampedStonesInput]
+ * @returns {{id: string|null, xMm: number, yMm: number, sizeMm: number, color: string|null}[]}
+ */
+function normalizePathStampedStones(stampedStonesInput) {
+  if (stampedStonesInput === undefined || stampedStonesInput === null) {
+    return [];
+  }
+  if (!Array.isArray(stampedStonesInput)) {
+    throw new TypeError('GeometryEngine.generatePathLayout stampedStones must be an array when provided.');
+  }
+  return stampedStonesInput.map((stamp, index) => normalizePathStampedStone(stamp, index));
+}
+
+function normalizePathStampedStone(stamp, index) {
+  if (!stamp || typeof stamp !== 'object') {
+    throw new TypeError(`stampedStones[${index}] must be an object.`);
+  }
+
+  const xMm = assertFiniteNumber(stamp.xMm, `stampedStones[${index}].xMm`);
+  const yMm = assertFiniteNumber(stamp.yMm, `stampedStones[${index}].yMm`);
+  const sizeMm = assertPositiveNumber(stamp.sizeMm, `stampedStones[${index}].sizeMm`);
+
+  if (stamp.color !== undefined && stamp.color !== null &&
+    (typeof stamp.color !== 'string' || stamp.color.length === 0)) {
+    throw new TypeError(`stampedStones[${index}].color must be a non-empty string when provided.`);
+  }
+
+  return {
+    id: typeof stamp.id === 'string' && stamp.id.length > 0 ? stamp.id : null,
+    xMm,
+    yMm,
+    sizeMm,
+    color: stamp.color ?? null
+  };
+}
+
+/**
+ * Normalizes a 'path' layer's optional `eraseDaubs` field (RS-3011 Step 13, Eraser). Each entry's
+ * xMm/yMm uses the exact same (0,0)-rooted natural-space convention as `stampedStones`/a region's
+ * own `contour` field -- validated only as loosely as those fields already are, mirroring
+ * normalizePathStampedStones()'s own structure exactly (a daub is a point + radiusMm, not a
+ * contour, so there's no polygon/array-of-points field to validate here).
+ *
+ * @param {object[]} [eraseDaubsInput]
+ * @returns {{id: string|null, xMm: number, yMm: number, radiusMm: number}[]}
+ */
+function normalizePathEraseDaubs(eraseDaubsInput) {
+  if (eraseDaubsInput === undefined || eraseDaubsInput === null) {
+    return [];
+  }
+  if (!Array.isArray(eraseDaubsInput)) {
+    throw new TypeError('GeometryEngine.generatePathLayout eraseDaubs must be an array when provided.');
+  }
+  return eraseDaubsInput.map((daub, index) => normalizePathEraseDaub(daub, index));
+}
+
+function normalizePathEraseDaub(daub, index) {
+  if (!daub || typeof daub !== 'object') {
+    throw new TypeError(`eraseDaubs[${index}] must be an object.`);
+  }
+
+  const xMm = assertFiniteNumber(daub.xMm, `eraseDaubs[${index}].xMm`);
+  const yMm = assertFiniteNumber(daub.yMm, `eraseDaubs[${index}].yMm`);
+  const radiusMm = assertPositiveNumber(daub.radiusMm, `eraseDaubs[${index}].radiusMm`);
+
+  return {
+    id: typeof daub.id === 'string' && daub.id.length > 0 ? daub.id : null,
+    xMm,
+    yMm,
+    radiusMm
+  };
+}
+
+/**
+ * Normalizes a 'path' layer's optional `erasedGridPositions` field (bugfix: permanent dead zone).
+ * Each entry is a snapshotted base-fill/region-patch stone position -- NOT a brush touch like
+ * eraseDaubs (no radiusMm), just a point -- using the exact same (0,0)-rooted natural-space
+ * convention as `stampedStones`/`eraseDaubs` above, validated only as loosely as those fields
+ * already are, mirroring normalizePathEraseDaubs()'s own structure minus radiusMm.
+ *
+ * @param {object[]} [erasedGridPositionsInput]
+ * @returns {{xMm: number, yMm: number}[]}
+ */
+function normalizePathErasedGridPositions(erasedGridPositionsInput) {
+  if (erasedGridPositionsInput === undefined || erasedGridPositionsInput === null) {
+    return [];
+  }
+  if (!Array.isArray(erasedGridPositionsInput)) {
+    throw new TypeError('GeometryEngine.generatePathLayout erasedGridPositions must be an array when provided.');
+  }
+  return erasedGridPositionsInput.map((pos, index) => normalizePathErasedGridPosition(pos, index));
+}
+
+function normalizePathErasedGridPosition(pos, index) {
+  if (!pos || typeof pos !== 'object') {
+    throw new TypeError(`erasedGridPositions[${index}] must be an object.`);
+  }
+
+  const xMm = assertFiniteNumber(pos.xMm, `erasedGridPositions[${index}].xMm`);
+  const yMm = assertFiniteNumber(pos.yMm, `erasedGridPositions[${index}].yMm`);
+
+  return { xMm, yMm };
 }
 
 function assertFiniteNumber(value, name) {

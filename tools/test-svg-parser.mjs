@@ -75,6 +75,57 @@ await test('3. <path> parses M L H V C S Q T Z (absolute/relative); multiple M s
   );
 });
 
+await test('3a. a drawing command after Z with no new M implicitly starts a new subpath at the closed subpath\'s start point', () => {
+  const contours = pathDataToContours('M 0 0 L 10 0 L 10 10 Z L 5 -5');
+  assert.equal(contours.length, 2, 'expected the Z-then-L to split into two subpaths');
+  assert.equal(contours[0].closed, true);
+  const firstPoints = contours[0].contour.getPointsUsedByCommands();
+  assert.deepEqual(
+    firstPoints.map((p) => [p.xMm, p.yMm]),
+    [[0, 0], [10, 0], [10, 10]],
+    'the first (closed) subpath must not include the L after Z'
+  );
+  assert.equal(contours[1].closed, false);
+  const secondPoints = contours[1].contour.getPointsUsedByCommands();
+  assert.deepEqual(
+    secondPoints.map((p) => [p.xMm, p.yMm]),
+    [[0, 0], [5, -5]],
+    'the second subpath must start (moveTo) at the closed subpath\'s start point, then draw to (5,-5)'
+  );
+});
+
+await test('3b. the same implicit-new-subpath split works with relative commands', () => {
+  const contours = pathDataToContours('M 0 0 l 10 0 l 0 10 z l 5 -5');
+  assert.equal(contours.length, 2);
+  assert.equal(contours[0].closed, true);
+  const firstPoints = contours[0].contour.getPointsUsedByCommands();
+  assert.deepEqual(
+    firstPoints.map((p) => [p.xMm, p.yMm]),
+    [[0, 0], [10, 0], [10, 10]]
+  );
+  assert.equal(contours[1].closed, false);
+  const secondPoints = contours[1].contour.getPointsUsedByCommands();
+  assert.deepEqual(
+    secondPoints.map((p) => [p.xMm, p.yMm]),
+    [[0, 0], [5, -5]],
+    'relative l after z must resolve against the reset current point (the reopened subpath start)'
+  );
+});
+
+await test('3c. a repeated Z closes the same point again without starting a degenerate new subpath', () => {
+  const contours = pathDataToContours('M0 0 L10 0 Z Z');
+  assert.equal(contours.length, 1, 'a second Z with nothing in between must not create an extra subpath');
+  assert.equal(contours[0].closed, true);
+});
+
+await test('3d. bare coordinates after Z with no following command letter throw a close-path-specific error, not the move-command error', () => {
+  assert.throws(
+    () => pathDataToContours('M0 0 L1 1 Z 5 5'),
+    /close-path/,
+    'expected the error to mention close-path, not "must start with a move command"'
+  );
+});
+
 await test('4. elliptical arc endpoint is correct; degenerate arcs fall back to a line without throwing', () => {
   const segments = arcToBezierSegments(1, 0, 1, 1, 0, false, true, 0, 1);
   const last = segments[segments.length - 1];
@@ -220,9 +271,71 @@ await test('RS-2000: a non-mm unit with NO viewBox also produces shape coordinat
 });
 
 await test('RS-2000: the "mm" unit case is unchanged (byte-identical scale factor of 1, matching every pre-existing test in this file)', () => {
-  const result = parseSvgDocument(svg('<rect x="0" y="0" width="10" height="10"/>', { width: '50mm', height: '20mm', viewBox: '0 0 10 10' }));
+  // viewBox aspect (25:10 = 2.5) matches the declared width/height aspect (50mm:20mm = 2.5), so
+  // preserveAspectRatio alignment is a no-op here regardless of align/meetOrSlice -- see the M5
+  // matched-aspect regression test below for that property itself.
+  const result = parseSvgDocument(svg('<rect x="0" y="0" width="25" height="10"/>', { width: '50mm', height: '20mm', viewBox: '0 0 25 10' }));
   const xs = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.xMm);
-  assert.equal(Math.max(...xs), 50, 'viewBox case: 10 user-units -> 50mm declared width, unaffected by this fix');
+  assert.equal(Math.max(...xs), 50, 'viewBox case: 25 user-units -> 50mm declared width, unaffected by this fix');
+});
+
+await test('M5: matched-aspect viewBox is unaffected by preserveAspectRatio support (pinned regression)', () => {
+  const result = parseSvgDocument(svg('<rect x="0" y="0" width="25" height="10"/>', { width: '50mm', height: '20mm', viewBox: '0 0 25 10' }));
+  const xs = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.xMm);
+  const ys = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.yMm);
+  assert.deepEqual([Math.min(...xs), Math.max(...xs)], [0, 50], 'matched-aspect x-extent must equal today\'s output exactly');
+  assert.deepEqual([Math.min(...ys), Math.max(...ys)], [0, 20], 'matched-aspect y-extent must equal today\'s output exactly');
+});
+
+await test('M5: default (xMidYMid meet) letterboxes a mismatched-aspect viewBox, centering on the narrower axis', () => {
+  const result = parseSvgDocument(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="50mm" viewBox="0 0 100 100">' +
+    '<rect x="0" y="0" width="100" height="100"/></svg>'
+  );
+  const xs = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.xMm);
+  const ys = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.yMm);
+  assert.deepEqual([Math.min(...xs), Math.max(...xs)], [25, 75], 'expected uniform scale 0.5 centered horizontally: [25,75]');
+  assert.deepEqual([Math.min(...ys), Math.max(...ys)], [0, 50], 'expected the full height axis, no letterboxing vertically');
+});
+
+await test('M5: preserveAspectRatio="none" on a mismatched-aspect viewBox restores independent-axis stretching', () => {
+  const result = parseSvgDocument(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="50mm" viewBox="0 0 100 100" preserveAspectRatio="none">' +
+    '<rect x="0" y="0" width="100" height="100"/></svg>'
+  );
+  const xs = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.xMm);
+  const ys = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.yMm);
+  assert.deepEqual([Math.min(...xs), Math.max(...xs)], [0, 100], 'none must stretch x independently to the full declared width');
+  assert.deepEqual([Math.min(...ys), Math.max(...ys)], [0, 50], 'none must stretch y independently to the full declared height');
+});
+
+await test('M5: "xMinYMin meet" aligns the letterboxed content to the top-left instead of centering', () => {
+  const result = parseSvgDocument(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="50mm" viewBox="0 0 100 100" preserveAspectRatio="xMinYMin meet">' +
+    '<rect x="0" y="0" width="100" height="100"/></svg>'
+  );
+  const xs = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.xMm);
+  assert.deepEqual([Math.min(...xs), Math.max(...xs)], [0, 50], 'xMin must pin the scaled content to x=0, not center it');
+});
+
+await test('M5: "xMidYMid slice" scales up to cover, overflowing (not clipping) the shorter axis', () => {
+  const result = parseSvgDocument(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="50mm" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">' +
+    '<rect x="0" y="0" width="100" height="100"/></svg>'
+  );
+  const xs = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.xMm);
+  const ys = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.yMm);
+  assert.deepEqual([Math.min(...xs), Math.max(...xs)], [0, 100], 'slice must scale to cover: full width, scale factor 1.0');
+  assert.deepEqual([Math.min(...ys), Math.max(...ys)], [-25, 75], 'slice must overflow vertically, centered and unclipped');
+});
+
+await test('M5: an unrecognized preserveAspectRatio value falls back to the spec default (xMidYMid meet)', () => {
+  const result = parseSvgDocument(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="50mm" viewBox="0 0 100 100" preserveAspectRatio="banana">' +
+    '<rect x="0" y="0" width="100" height="100"/></svg>'
+  );
+  const xs = result.shapes[0].contour.getPointsUsedByCommands().map((p) => p.xMm);
+  assert.deepEqual([Math.min(...xs), Math.max(...xs)], [25, 75], 'garbage input must behave exactly like the default xMidYMid meet');
 });
 
 console.log('SVG parser tests passed.');

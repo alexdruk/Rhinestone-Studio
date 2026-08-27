@@ -1,0 +1,111 @@
+/**
+ * DrawingBoxGeometry — pure drag-box math shared by the rectangle/ellipse presets
+ * (DrawingCanvasTool.js). Reimplemented from drawleather's `dragSnap.ts`/`ShapeTool.ts` (read for
+ * technique per RS-3001 §5's resolved reuse policy, not copied) and trimmed to what this step
+ * needs -- no from-center drag, no preset-specific corner logic. Kept separate from
+ * DrawingBoard.js so a later slot preset (RS-3010 Step 2b) can add a matching `resolveDragAxis`
+ * helper here without growing the data-model file.
+ */
+
+/**
+ * @param {{x:number,y:number}} start The drag's starting point (mm).
+ * @param {{x:number,y:number}} current The drag's current point (mm).
+ * @returns {{left:number,top:number,width:number,height:number}} The bounding box spanning the
+ *   two corner points.
+ */
+export function resolveDragBox(start, current) {
+  return {
+    left: Math.min(start.x, current.x),
+    top: Math.min(start.y, current.y),
+    width: Math.abs(current.x - start.x),
+    height: Math.abs(current.y - start.y)
+  };
+}
+
+/**
+ * Constrains `current` so both axes have equal magnitude of displacement from `start`, using the
+ * larger of |dx|/|dy| (same approach as drawleather's dragSnap.ts) -- the point resolveDragBox()
+ * should be called with instead of the raw cursor point when Shift constrains a rect to a square
+ * or an ellipse to a circle.
+ * @param {{x:number,y:number}} start
+ * @param {{x:number,y:number}} current
+ * @returns {{x:number,y:number}}
+ */
+export function constrainSquare(start, current) {
+  const dx = current.x - start.x;
+  const dy = current.y - start.y;
+  const magnitude = Math.max(Math.abs(dx), Math.abs(dy));
+  return {
+    x: start.x + Math.sign(dx || 1) * magnitude,
+    y: start.y + Math.sign(dy || 1) * magnitude
+  };
+}
+
+/**
+ * Resolves the slot preset's drag axis (RS-3010 Step 2b): `a` is always the press point, `b` is
+ * always the current/release point -- the pill's straight axis runs from `a` to `b` at any angle.
+ * Trimmed from drawleather's dragSnap.ts the same way resolveDragBox/constrainSquare above were --
+ * no from-center mode, not requested for this step.
+ * @param {{x:number,y:number}} start The drag's starting point (mm).
+ * @param {{x:number,y:number}} current The drag's current point (mm).
+ * @returns {{a:{x:number,y:number}, b:{x:number,y:number}}} The pill's axis endpoints.
+ */
+export function resolveDragAxis(start, current) {
+  return { a: { x: start.x, y: start.y }, b: { x: current.x, y: current.y } };
+}
+
+/**
+ * RS-3010 Step 2e: quantizes `point` to the nearest multiple of `intervalMm` on each axis
+ * independently -- unconditional (not proximity-gated), since grid points are dense/regular enough
+ * that "nearest" is always well-defined. Same style as its siblings above: no Paper.js dependency,
+ * accepts anything shaped `{x,y}`, returns a plain object.
+ * @param {{x:number,y:number}} point
+ * @param {number} intervalMm
+ * @returns {{x:number,y:number}}
+ */
+export function snapToGrid(point, intervalMm) {
+  return {
+    x: Math.round(point.x / intervalMm) * intervalMm,
+    y: Math.round(point.y / intervalMm) * intervalMm
+  };
+}
+
+/**
+ * RS-3010 Step 2f: snaps the direction from `from` to `to` to the nearest multiple of `stepDeg`,
+ * preserving the original distance between the two points -- the Shift-gated angle-constrain
+ * helper for slot's drag axis and polygon's pending edge. Same style as its siblings above: no
+ * Paper.js dependency, accepts anything shaped `{x,y}`, returns a plain object.
+ * @param {{x:number,y:number}} from
+ * @param {{x:number,y:number}} to
+ * @param {number} stepDeg
+ * @returns {{x:number,y:number}}
+ */
+export function snapAngle(from, to, stepDeg) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const distance = Math.hypot(dx, dy);
+  const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const snappedAngleDeg = Math.round(angleDeg / stepDeg) * stepDeg;
+  const snappedAngleRad = (snappedAngleDeg * Math.PI) / 180;
+  return {
+    x: from.x + Math.cos(snappedAngleRad) * distance,
+    y: from.y + Math.sin(snappedAngleRad) * distance
+  };
+}
+
+/**
+ * Design Step C: full-containment test for marquee-select -- true if `inner` (e.g. a shape's
+ * bounds) lies entirely within `outer` (the marquee box). Not intersection -- a shape only
+ * partially covered by the marquee is excluded, per this step's simpler containment-only rule.
+ * @param {{left:number,top:number,width:number,height:number}} outer
+ * @param {{left:number,top:number,width:number,height:number}} inner
+ * @returns {boolean}
+ */
+export function boxContainsBox(outer, inner) {
+  return (
+    inner.left >= outer.left &&
+    inner.top >= outer.top &&
+    inner.left + inner.width <= outer.left + outer.width &&
+    inner.top + inner.height <= outer.top + outer.height
+  );
+}

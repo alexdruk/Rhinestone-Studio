@@ -2,7 +2,9 @@ export {
   GeometryEngine,
   createGeometryEngine,
   TEXT_SCALE_FAILURE_REASONS,
-  AUTHORED_FONT_FITTING_GAP_MM
+  AUTHORED_FONT_FITTING_GAP_MM,
+  computeNaturalContourTransform,
+  applyNaturalContourTransform
 } from './GeometryEngine.js';
 
 export {
@@ -11,12 +13,17 @@ export {
 } from './Stone.js';
 
 export {
-  StoneLayout
+  StoneLayout,
+  findOverlappingStonePairs,
+  hasAnyOverlappingStonePair,
+  measureStoneCrowding
 } from './StoneLayout.js';
 
 export {
   flattenContourToPolygon,
+  flattenContourToPolygonWithCornerFlags,
   translateContour,
+  detectPolygonCornerFlags,
   CURVE_FLATTEN_SEGMENTS
 } from './ContourGeometry.js';
 
@@ -44,6 +51,11 @@ export {
 } from './ContourRingSampler.js';
 
 export {
+  groupCongruentContours,
+  applyRigidTransform
+} from './CongruentContours.js';
+
+export {
   projectPointToArc,
   projectPolygonToArc,
   CURVE_DIRECTIONS,
@@ -54,7 +66,9 @@ export {
   combineShapeSources,
   combineManyShapeSources,
   BOOLEAN_OPERATIONS,
-  BooleanPrecisionError
+  BooleanPrecisionError,
+  MIN_CELL_SIZE_MM,
+  contourAreaAbs
 } from './PathBoolean.js';
 
 export {
@@ -75,5 +89,12 @@ export {
   resolveGenerationContours,
   resolveInnerFittingContours,
   computeFrameInterior,
-  computeFrameFitRect
+  computeFrameFitRect,
+  resolveFrameForStoneWidth
 } from './FrameLibrary.js';
+
+export {
+  selectPaintTarget,
+  absolutePolygonsToNaturalSpace,
+  hitTestPathLayerRegion
+} from './PaintRegionSelection.js';

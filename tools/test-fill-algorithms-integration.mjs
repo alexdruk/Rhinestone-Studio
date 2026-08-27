@@ -98,7 +98,16 @@ await test('8. generateImageStonesLive forwards mode via resolveImageFillMode(la
 
 await test('9. generatePathStonesLive resolves mode via resolveVectorFillMode(layer.fillMode) -- previously hard-coded to \'outline\'', () => {
   // S-200 CI follow-up (2026-07): same tolerance as test 7 above, for the same reason.
-  assert.match(appJs, /gapMm:layer\.gap,mode:resolveVectorFillMode\(layer\.fillMode\),color:layer\.color(?:,\.\.\.mixedSizeParamsFor\(layer\))?\};const result=this\.permanentEngine\.generatePathLayout/);
+  // RS-3011 (2026-08): tolerates the closed:layer.closed!==false field the open-contour fix added
+  // between color and the mixedSizeParamsFor spread.
+  // RS-3011 Step 10b (2026-08): tolerates the regions:layer.regions||[] field (plus its own
+  // multi-line doc comment) the Paint regions-forwarding fix added between closed and
+  // mixedSizeParamsFor -- the [^;]*? connectors (rather than a fixed `,fieldName` literal like the
+  // closed/mixedSizeParamsFor groups use) skip over that comment/whitespace without being so loose
+  // they'd span into an unrelated generate*StonesLive() method: `;` only ever appears at a
+  // statement boundary, never inside this params object literal or its own comments, so a
+  // connector that excludes it can't cross into a neighboring method's own params object.
+  assert.match(appJs, /gapMm:layer\.gap,mode:resolveVectorFillMode\(layer\.fillMode\),color:layer\.color(?:,closed:layer\.closed!==false)?(?:[^;]*?regions:layer\.regions\|\|\[\],)?(?:[^;]*?\.\.\.mixedSizeParamsFor\(layer\))?\};const result=this\.permanentEngine\.generatePathLayout/);
 });
 
 await test('10. the resolver helpers themselves default unknown/missing values to each layer type\'s pre-RS-1011 behavior (backward compatibility)', () => {
@@ -116,8 +125,8 @@ await test('11. syncSelectedControlsFromLayer() reads #shapeFillMode/#imageFillM
 });
 
 await test('12. writeSelectedControlsToLayer() writes fillMode back for circle/rectangle/path/image (editing regenerates geometry through the normal updateAll() path, like every other tracked field)', () => {
-  assert.match(appJs, /l\.r=Math\.max\(1,parseFloat\(el\('shapeW'\)\.value\)\|\|18\);l\.fillMode=resolveVectorFillMode\(el\('shapeFillMode'\)\.value\)/, 'circle');
-  assert.match(appJs, /l\.h=Math\.max\(1,parseFloat\(el\('shapeH'\)\.value\)\|\|30\);l\.fillMode=resolveVectorFillMode\(el\('shapeFillMode'\)\.value\)/, 'rectangle');
+  assert.match(appJs, /l\.r=Math\.max\(1,readLengthField\('shapeW'\)\|\|18\);l\.fillMode=resolveVectorFillMode\(el\('shapeFillMode'\)\.value\)/, 'circle');
+  assert.match(appJs, /l\.h=Math\.max\(1,readLengthField\('shapeH'\)\|\|30\);l\.fillMode=resolveVectorFillMode\(el\('shapeFillMode'\)\.value\)/, 'rectangle');
   assert.match(appJs, /l\.mode=resolveVectorFillMode\(el\('svgMode'\)\.value\)/, 'svg');
   assert.match(appJs, /l\.fillMode=resolveImageFillMode\(el\('imageFillMode'\)\.value\)\}else if\(l\.type==='path'\)/, 'image');
 });

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SHAPE_LIBRARY_KINDS } from '../src/geometry/index.js';
 
 // Autosave & Recovery — app.js wiring.
 //
@@ -22,8 +23,8 @@ import { fileURLToPath } from 'node:url';
 //  2. scheduleAutosave()/flushAutosaveNow() are wired into updateAll() and debounce-then-write
 //     only on an actual content change (not "every mouse move").
 //  3. Manual Save (#exportProject) clears the autosave slot.
-//  4. Every "loading a project is a fresh start" site (Import/Open, Design Library "New Project",
-//     Gallery "Open as copy") re-baselines the autosave slot to the newly loaded project.
+//  4. Every "loading a project is a fresh start" site (Import/Open, Gallery "Open as copy")
+//     re-baselines the autosave slot to the newly loaded project.
 //  5. A pagehide flush listener exists (mid-debounce refresh/crash must not lose the pending write).
 //  6. The recovery *notification* (#status line): shown immediately, auto-dismisses back to "Ready"
 //     after a few seconds unless a newer #status message has since been written, suppressed by a
@@ -168,7 +169,7 @@ await test('a recovered record whose project fails validateProject() falls back 
 // reformatted across physical lines (a multi-line comment inserted mid-body is exactly what broke
 // the old sliceBetween(..., '\n', ...)-based version of this test under MONO-006A).
 
-function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', permanentEngineError = null } = {}) {
+function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', permanentEngineError = null, isDrawing = false, projectLayers = [] } = {}) {
   const calls = [];
   const record = (name) => () => { calls.push(name); };
   const consoleErrors = [];
@@ -178,7 +179,7 @@ function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', 
     return { get textContent() { return statusValue; }, set textContent(v) { statusValue = v; } };
   };
   const engine = { generate: null };
-  const project = {};
+  const project = { layers: projectLayers };
   const fakeConsole = { error: (...args) => consoleErrors.push(args) };
   const writeSelectedControlsToLayer = record('writeSelectedControlsToLayer');
   const renderLayerUI = record('renderLayerUI');
@@ -190,12 +191,22 @@ function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', 
   const updateViewButtons = record('updateViewButtons');
   const updateTextOutsidePrintableWarning = record('updateTextOutsidePrintableWarning');
   const scheduleAutosave = record('scheduleAutosave');
+  let syncFromProjectLayersArg = null;
+  const drawingTool = {
+    isActive: isDrawing,
+    resize: record('drawingTool.resize'),
+    syncFromProjectLayers: (pathLayers) => { syncFromProjectLayersArg = pathLayers; calls.push('drawingTool.syncFromProjectLayers'); }
+  };
 
-  const updateAllSrc = extractFunctionBody(appJs, 'async function updateAll(skipWrite=false){', 'updateAll()');
+  const updateAllSrc = extractFunctionBody(appJs, 'async function updateAll(skipWrite=false,forceStoneRebuild=false){', 'updateAll()');
   const factory = new Function(
     'writeSelectedControlsToLayer', 'engine', 'project', 'el', 'permanentEngineError', 'console',
     'renderLayerUI', 'drawLayout', 'drawCup', 'updateStats', 'updateHistoryUI', 'updateEditingUI',
-    'updateViewButtons', 'updateTextOutsidePrintableWarning', 'scheduleAutosave',
+    'updateViewButtons', 'updateTextOutsidePrintableWarning', 'scheduleAutosave', 'drawingTool', 'devicePixelRatio',
+    // RS-3032 Step A: updateAll()'s own body now references the real, module-level SHAPE_LIBRARY_KINDS
+    // (its Design-canvas sync call site is widened to also cover shape-library layers) -- injected
+    // here as the same real Set app.js imports, not a fake, so this stays a real-behavior extraction.
+    'SHAPE_LIBRARY_KINDS',
     `
     let generationToken=0;
     let layout;
@@ -207,11 +218,12 @@ function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', 
   const { updateAll, bumpGenerationToken } = factory(
     writeSelectedControlsToLayer, engine, project, el, permanentEngineError, fakeConsole,
     renderLayerUI, drawLayout, drawCup, updateStats, updateHistoryUI, updateEditingUI,
-    updateViewButtons, updateTextOutsidePrintableWarning, scheduleAutosave
+    updateViewButtons, updateTextOutsidePrintableWarning, scheduleAutosave, drawingTool, 1,
+    SHAPE_LIBRARY_KINDS
   );
   if (buildGenerate) engine.generate = buildGenerate(bumpGenerationToken);
   const tailCalls = () => calls.filter((c) => c !== 'writeSelectedControlsToLayer');
-  return { run: () => updateAll(skipWrite), calls, tailCalls, getStatus: () => statusValue, consoleErrors };
+  return { run: () => updateAll(skipWrite), calls, tailCalls, getStatus: () => statusValue, consoleErrors, getSyncFromProjectLayersArg: () => syncFromProjectLayersArg };
 }
 
 const SUCCESS_TAIL_ORDER = ['renderLayerUI', 'drawLayout', 'drawCup', 'updateStats', 'updateHistoryUI', 'updateEditingUI', 'updateViewButtons', 'updateTextOutsidePrintableWarning', 'scheduleAutosave'];
@@ -250,6 +262,34 @@ await test('a generation token superseded during the await also short-circuits t
   assert.deepEqual(tailCalls(), [], 'a stale/superseded pass must not run any of the successful-regeneration tail even on a failed generation');
   assert.equal(getStatus(), 'Ready', 'a discarded failing pass must not overwrite #status');
   assert.equal(consoleErrors.length, 0, 'a discarded failing pass must not log the error either');
+});
+
+await test('RS-3010: while drawing mode is active, updateAll() resyncs via drawingTool.resize() instead of drawLayout()', async () => {
+  const { run, calls } = runUpdateAll({ isDrawing: true, buildGenerate: () => async () => ({}) });
+  await run();
+  assert.deepEqual(calls, ['writeSelectedControlsToLayer', ...SUCCESS_TAIL_ORDER.flatMap((c) => c === 'drawLayout' ? ['drawingTool.resize', 'drawingTool.syncFromProjectLayers'] : [c])]);
+  assert.ok(!calls.includes('drawLayout'), 'drawLayout() must not run while drawingTool owns layoutCanvas');
+});
+
+await test('canvas-desync fix: while drawing mode is active, updateAll() reconciles Design shapes via drawingTool.syncFromProjectLayers(), passed the current \'path\' layers plus every SHAPE_LIBRARY_KINDS layer (RS-3032 Step A) plus every svg/image layer (RS-3012 Step 2) plus every text layer (RS-3012 Step 3) plus every circle layer (RS-3012 Step 4) but no others', async () => {
+  const projectLayers = [
+    { id: 'p1', type: 'path' },
+    { id: 't1', type: 'text' },
+    { id: 'p2', type: 'path' },
+    { id: 'c1', type: 'circle' },
+    { id: 's1', type: 'star' },
+    { id: 'svg1', type: 'svg' },
+    { id: 'img1', type: 'image' }
+  ];
+  const { run, getSyncFromProjectLayersArg } = runUpdateAll({ isDrawing: true, projectLayers, buildGenerate: () => async () => ({}) });
+  await run();
+  assert.deepEqual(getSyncFromProjectLayersArg(), projectLayers, 'expected path + shape-library + svg/image + text + circle layers -- every supported Design-selectable type now included');
+});
+
+await test('canvas-desync fix: while drawing mode is inactive, updateAll() never calls drawingTool.syncFromProjectLayers()', async () => {
+  const { run, calls } = runUpdateAll({ isDrawing: false, buildGenerate: () => async () => ({}) });
+  await run();
+  assert.ok(!calls.includes('drawingTool.syncFromProjectLayers'), 'sync must only run while Design actually owns the canvas');
 });
 
 await test('a lingering "Text generation failed" status is cleared back to Ready once generation succeeds again, and a font-manifest error still takes priority over it', async () => {
@@ -293,9 +333,9 @@ await test('every "loading a project is a fresh start" site re-baselines the aut
     assert.match(after, /lastAutosavedProjectJson=null;flushAutosaveNow\(\);/, `expected the "fresh start" site at offset ${idx} (history.clear() + dirty-baseline-reset) to also re-baseline the autosave slot`);
     searchFrom = idx + freshStartMarker.length;
   }
-  // Import/Open, Design Library "New Project", and Gallery "Open as copy" -- see app.js's own
-  // repeated "Mirrors #importProjectFile's ... fresh start" comments at each site.
-  assert.equal(count, 3, 'expected exactly the three known "fresh start" sites (Import, Design Library New Project, Gallery Open as copy)');
+  // Import/Open and Gallery "Open as copy" -- see app.js's own repeated "Mirrors
+  // #importProjectFile's ... fresh start" comments at each site.
+  assert.equal(count, 2, 'expected exactly the two known "fresh start" sites (Import, Gallery Open as copy)');
 });
 
 // ---------- 5. pagehide flush listener exists ----------
@@ -306,10 +346,9 @@ await test("a 'pagehide' listener flushes any pending debounced autosave before 
 
 // ---------- Normal Save/Open/Export behavior is unchanged ----------
 
-await test('Export/Import/New-Project handlers still perform their original, pre-recovery-feature actions (download / validateProject+replace / buildProjectFromItem)', () => {
+await test('Export/Import handlers still perform their original, pre-recovery-feature actions (download / validateProject+replace)', () => {
   assert.match(appJs, /el\('exportProject'\)\.onclick=\(\)=>\{try\{download\('rhinestone-project\.json','application\/json',JSON\.stringify\(project,null,2\)\);cleanProjectJson=JSON\.stringify\(project\);updateHistoryUI\(\);/);
   assert.match(appJs, /validateProject\(JSON\.parse\(await file\.text\(\)\)\)/, 'Import must still validate the uploaded file exactly as before');
-  assert.match(appJs, /buildProjectFromItem\(item,LIBRARY_NEW_PROJECT_DEFAULTS\)/, 'Design Library "New Project" must still build from the library item exactly as before');
 });
 
 // ---------- 6. Recovery notification (#status), extracted and executed for real ----------

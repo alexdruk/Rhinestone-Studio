@@ -2,16 +2,13 @@ import assert from 'node:assert/strict';
 import { GeometryEngine, combineManyShapeSources, SHAPE_LIBRARY_KINDS } from '../src/geometry/index.js';
 import { stoneLayoutToSvg } from '../src/export/SvgExporter.js';
 import { computeProductionSheetLayout, productionSheetToSvg } from '../src/export/ProductionSheetExporter.js';
-import { deriveCategory } from '../src/library/LibraryItem.js';
-import { prepareLayersForInsert } from '../src/library/LibraryTransform.js';
 
 // S-110 (Expanded Shape Library) — proves every new shape kind flows, unmodified, through the
 // existing production pipeline it must reuse (per the milestone's own "do not introduce a second
 // shape system" requirement): Boolean Operations (src/geometry/PathBoolean.js), SVG export
-// (src/export/SvgExporter.js), Production Sheet export (src/export/ProductionSheetExporter.js), and
-// Design Library categorization/insert-offset (src/library/**). Mirrors the existing
-// tools/test-fill-algorithms-integration.mjs / tools/test-path-boolean-integration.mjs conventions:
-// real, unmodified permanent modules, no mocks.
+// (src/export/SvgExporter.js), and Production Sheet export (src/export/ProductionSheetExporter.js).
+// Mirrors the existing tools/test-fill-algorithms-integration.mjs /
+// tools/test-path-boolean-integration.mjs conventions: real, unmodified permanent modules, no mocks.
 
 async function test(name, fn) {
   try {
@@ -107,36 +104,6 @@ await test('5. Production Sheet export accepts every new shape kind\'s generated
     assert.ok(sheet.pageWidthMm > 0 && sheet.pageHeightMm > 0, `${kind}: expected a valid page size`);
     const svg = productionSheetToSvg(layout, options);
     assert.match(svg, /<svg/, `${kind}: expected a valid Production Sheet SVG`);
-  }
-});
-
-// --- 3. Design Library: category derivation and insert-offset behavior for every new shape kind ---
-
-await test('6. every new shape kind derives the \'Shapes\' Design Library category, matching Circle/Rectangle', () => {
-  for (const kind of SHAPE_LIBRARY_KINDS) {
-    assert.equal(deriveCategory([{ type: kind }]), 'Shapes', `${kind} must categorize as 'Shapes'`);
-  }
-  // A mix of a new shape kind with a Circle also stays 'Shapes' (single-category rule), but mixing
-  // with an unrelated type (e.g. 'svg') must fall back to 'Mixed'.
-  assert.equal(deriveCategory([{ type: 'star' }, { type: 'circle' }]), 'Shapes');
-  assert.equal(deriveCategory([{ type: 'star' }, { type: 'svg' }]), 'Mixed');
-});
-
-await test('7. prepareLayersForInsert() re-ids and nudges every new shape kind via its x/y fields (the same generic offset Rectangle/SVG/Image/Path already get)', () => {
-  const extra = { polygon: { sides: 6 }, star: { points: 5, innerRadiusRatio: 0.5 }, ring: { innerRatio: 0.5 } };
-  const layers = [...SHAPE_LIBRARY_KINDS].map((kind) => ({
-    id: `${kind}-orig`, type: kind, visible: true, x: 10, y: 20, w: 30, h: 30, stoneSize: 2, gap: 0.3, color: 'gold', ...(extra[kind] || {})
-  }));
-  const inserted = prepareLayersForInsert(layers);
-  for (let i = 0; i < layers.length; i++) {
-    const kind = layers[i].type;
-    assert.notEqual(inserted[i].id, layers[i].id, `${kind}: expected a fresh id`);
-    assert.equal(inserted[i].x, 18, `${kind}: expected x to be nudged by +8`);
-    assert.equal(inserted[i].y, 28, `${kind}: expected y to be nudged by +8`);
-    // Configurable extra fields must survive the clone untouched.
-    for (const key of Object.keys(extra[kind] || {})) {
-      assert.equal(inserted[i][key], layers[i][key], `${kind}: expected ${key} to survive prepareLayersForInsert() unchanged`);
-    }
   }
 });
 

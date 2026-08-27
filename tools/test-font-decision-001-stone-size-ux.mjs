@@ -31,6 +31,7 @@ import {
   stoneSizeEntirelyExceedsPrintableHeight
 } from '../src/renderer/StoneSizes.js';
 import { getObjectTemplate, getSafeAreaRectMm, getVesselDefaults, computeCanvasFromVessel } from '../src/products/index.js';
+import { displayValueToMm, formatLengthDisplay } from '../src/units/index.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
@@ -90,7 +91,11 @@ function makeEnv() {
   const el = (id) => dom[id];
   let layer = { type: 'text' };
   let template = getObjectTemplate('mug');
-  const project = { canvas: computeCanvasFromVessel(getVesselDefaults('mug')) };
+  const project = { canvas: computeCanvasFromVessel(getVesselDefaults('mug')), units: 'mm' };
+  // RS-3019: local wrappers matching app.js's own readLengthField()/setLengthField() exactly --
+  // the extracted fragments below now call these instead of raw parseFloat(el(id).value)/el(id).value=.
+  function readLengthField(id) { return displayValueToMm(el(id).value, project.units); }
+  function setLengthField(id, mm) { el(id).value = formatLengthDisplay(mm, project.units); }
   // FONT-PORTFOLIO-001: updateStoneSizePrintableCapabilityUI() now also reads isFontKnown()/
   // fontManager (its own font-based gate) -- this suite only exercises the pre-existing shape
   // gate, so a layer here never sets `font`/isFontKnown always resolves false, leaving that
@@ -103,6 +108,7 @@ function makeEnv() {
     'listStoneSizes', 'getSafeAreaRectMm', 'stoneSizeEntirelyExceedsPrintableHeight',
     'isHeightWithinStoneSizeRange', 'stoneSizeHeightMidpointMm',
     'isFontKnown', 'fontManager',
+    'readLengthField', 'setLengthField',
     `
     ${applyStoneSizeHeightAutoSetSrc}
     ${updateStoneSizePrintableCapabilityUISrc}
@@ -113,7 +119,8 @@ function makeEnv() {
     el, () => layer, () => template, project,
     listStoneSizes, getSafeAreaRectMm, stoneSizeEntirelyExceedsPrintableHeight,
     isHeightWithinStoneSizeRange, stoneSizeHeightMidpointMm,
-    isFontKnown, fontManager
+    isFontKnown, fontManager,
+    readLengthField, setLengthField
   );
   return {
     dom,

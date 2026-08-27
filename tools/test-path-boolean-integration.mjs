@@ -144,15 +144,26 @@ await test('10. SUPPORTED_LAYER_TYPES includes \'path\', and validateProject() h
 
 await test('11. GeometryEngine.generate() routes \'path\' layers through generatePathStonesLive() -> permanentEngine.generatePathLayout()', () => {
   assert.match(appJs, /if\(l\.type==='path'\)raw\.push\(\.\.\.await this\.generatePathStonesLive\(l\)\)/);
-  assert.match(appJs, /async generatePathStonesLive\(layer\)\{[\s\S]*?this\.permanentEngine\.generatePathLayout\(params\)/);
+  assert.match(appJs, /async generatePathStonesLive\(layer,\{includeStats=false\}=\{\}\)\{[\s\S]*?this\.permanentEngine\.generatePathLayout\(params\)/);
 });
 
 await test('12. getLayerBBox()/drag-resize/duplicateLayer()/layerLabel()/moreOptionsBtn each have a \'path\' case (shared with rectangle/svg/image)', () => {
   // S-110 generalized every one of these per-type unions (plus nine new shape kinds) into shared
   // XYWH_SHAPE_TYPES/SHAPE_LAYER_TYPES sets -- 'path' still behaves exactly like rectangle/svg/image.
-  assert.match(appJs, /if\(l\.type==='circle'\)return\{[^}]*\};if\(XYWH_SHAPE_TYPES\.has\(l\.type\)\)return\{x:l\.x,y:l\.y,width:l\.w,height:l\.h,x2:l\.x\+l\.w,y2:l\.y\+l\.h\}/);
-  assert.match(appJs, /XYWH_SHAPE_TYPES\.has\(l\.type\)\)\{let x0=drag\.b0\.x/);
-  assert.match(appJs, /if\(XYWH_SHAPE_TYPES\.has\(copy\.type\)\)\{copy\.x\+=8;copy\.y\+=8\}/);
+  // fix/rotated-layer-bbox-hittest extended this same branch again, to route it through
+  // rotatedCornersAABB() so a rotated shape's bbox reflects its true rotated footprint -- a no-op at
+  // 0deg, so path's own unrotated bbox is unchanged.
+  assert.match(appJs, /if\(l\.type==='circle'\)return\{[^}]*\};if\(XYWH_SHAPE_TYPES\.has\(l\.type\)\)return rotatedCornersAABB\(l\.x,l\.y,l\.w,l\.h,l\.rotationDeg\|\|0\);/);
+  // RS-3030: the unrotated fast path picked up an `&&!drag.rotationDeg` guard (the rotated case
+  // now branches to its own local-axis resize algorithm, see the milestone doc) -- 'path' still
+  // isn't special-cased, it's still gated purely by XYWH_SHAPE_TYPES membership like rectangle/svg/image.
+  assert.match(appJs, /XYWH_SHAPE_TYPES\.has\(l\.type\)(?:&&[^)]*)?\)\{let x0=drag\.b0\.x/);
+  // RS-3011 Step 2 added a drawingTool.duplicateShapeForLayer() call inside this same branch (so a
+  // Design-drawn 'path' shape's Paper.js item gets cloned alongside the layer) -- this checks the
+  // enduring invariant (XYWH_SHAPE_TYPES.has(copy.type) still gates an x/y offset assignment for
+  // copy) rather than the exact old one-liner, so it doesn't re-break on the next legitimate edit
+  // inside this block.
+  assert.match(appJs, /if\(XYWH_SHAPE_TYPES\.has\(copy\.type\)\)\{[^}]*copy\.x\s*\+=[^;]+;[^}]*copy\.y\s*\+=[^;]+;[^}]*\}/);
   assert.match(appJs, /if\(l\.type==='path'\)return l\.pathName\|\|'Path'/);
   // S-105 follow-up moved the type->Lightbox mapping (moreOptionsBtn's former inline branch) into
   // the shared lightboxForLayerType() helper -- see tools/test-lightbox-movable-persistent.mjs.
@@ -164,7 +175,7 @@ await test('12. getLayerBBox()/drag-resize/duplicateLayer()/layerLabel()/moreOpt
 await test('13. writeSelectedControlsToLayer() has a \'path\' branch writing the shared x/y/w/h fields back', () => {
   // RS-1011: the path branch also writes l.fillMode now (the Shapes Lightbox's new #shapeFillMode
   // control, shared with circle/rectangle -- see docs/specifications/RS-1011-FillAlgorithms.md).
-  assert.match(appJs, /else if\(l\.type==='path'\)\{l\.x=parseFloat\(el\('shapeX'\)\.value\)\|\|0;l\.y=parseFloat\(el\('shapeY'\)\.value\)\|\|0;l\.w=Math\.max\(2,parseFloat\(el\('shapeW'\)\.value\)\|\|10\);l\.h=Math\.max\(2,parseFloat\(el\('shapeH'\)\.value\)\|\|10\);l\.fillMode=resolveVectorFillMode\(el\('shapeFillMode'\)\.value\)\}/);
+  assert.match(appJs, /else if\(l\.type==='path'\)\{l\.x=readLengthField\('shapeX'\)\|\|0;l\.y=readLengthField\('shapeY'\)\|\|0;l\.w=Math\.max\(2,readLengthField\('shapeW'\)\|\|10\);l\.h=Math\.max\(2,readLengthField\('shapeH'\)\|\|10\);l\.fillMode=resolveVectorFillMode\(el\('shapeFillMode'\)\.value\)\}/);
 });
 
 await test('14. resolveLayerShapeSource() resolves every layer type into a boolean-input source, or null when a shape has no closed outline', () => {

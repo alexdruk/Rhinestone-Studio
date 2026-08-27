@@ -141,7 +141,7 @@ await test('5. shapeAroundTextFitsPrintableArea() reuses getSafeAreaRectMm() -- 
 // --- 3. Structural checks: createShapeLayer()/addText()/fitTextToShape() -----------------------
 
 await test('6. createShapeLayer() computes the shape-around-text decision BEFORE commitHistory(), and only mutates the text layer in the fallback branch', () => {
-  const fn = extractBlock(appJs, /async function createShapeLayer\(kind\)\{[\s\S]*?\n\}/, 'createShapeLayer()');
+  const fn = extractBlock(appJs, /async function createShapeLayer\(kind,extraFieldsOverride=\{\},displayLabelOverride=null\)\{[\s\S]*?\n\}/, 'createShapeLayer()');
   const commitIndex = fn.indexOf('commitHistory();');
   const sizedIndex = fn.indexOf('computeShapeAroundText(');
   const fitsIndex = fn.indexOf('shapeAroundTextFitsPrintableArea(');
@@ -156,7 +156,7 @@ await test('6. createShapeLayer() computes the shape-around-text decision BEFORE
 });
 
 await test('7. createShapeLayer() still falls back to fitTextToShape()/applyTextFitPlan() -- the unmodified S-110 workflow -- when the shape would not fit', () => {
-  const fn = extractBlock(appJs, /async function createShapeLayer\(kind\)\{[\s\S]*?\n\}/, 'createShapeLayer()');
+  const fn = extractBlock(appJs, /async function createShapeLayer\(kind,extraFieldsOverride=\{\},displayLabelOverride=null\)\{[\s\S]*?\n\}/, 'createShapeLayer()');
   assert.match(fn, /await fitTextToShape\(fitPartnerText,layer\)/);
   assert.match(fn, /applyTextFitPlan\(fitPartnerText,plan\)/);
   assert.match(fn, /shapeAroundTextRejected/, 'expected a distinct flag explaining a rejected shape-around-text attempt');

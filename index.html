@@ -63,6 +63,7 @@ input:disabled,select:disabled,button:disabled{opacity:.45;cursor:not-allowed}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
 .field-row-3{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-2)}
 .hint{font-size:var(--font-size-xs);color:var(--color-text-muted);line-height:1.4;margin-top:var(--space-1)}
+#objectTemplateDetail{font-size:9.5px;color:var(--color-text-faint)}
 .kbd{font-family:ui-monospace,Menlo,monospace;background:var(--color-bg);border:1px solid var(--color-border);border-radius:4px;padding:1px 5px;font-size:var(--font-size-xs)}
 
 button.btn{
@@ -80,11 +81,14 @@ button.btn.danger:hover:not(:disabled){background:var(--color-danger-tint)}
 button.btn.block{width:100%}
 button.btn.sm{height:var(--control-height-sm);padding:0 9px;font-size:var(--font-size-xs)}
 button.icon-btn{
-  display:inline-flex;align-items:center;justify-content:center;width:var(--control-height-sm);height:var(--control-height-sm);
+  position:relative;display:inline-flex;align-items:center;justify-content:center;width:var(--control-height-sm);height:var(--control-height-sm);
   border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);background:var(--color-surface);cursor:pointer;font-size:13px;
 }
 button.icon-btn:hover:not(:disabled){background:var(--color-bg)}
 button.icon-btn[aria-pressed="true"]{background:var(--color-primary-tint);border-color:var(--color-primary);color:var(--color-primary-active)}
+/* RS-3015: visible shortcut-key badge, mirrors the letter already shown in each button's title */
+button.icon-btn[data-shortcut]::after{content:attr(data-shortcut);position:absolute;top:2px;right:3px;font-size:9px;line-height:1;font-weight:600;padding:1px 3px;border-radius:3px;background:var(--color-primary-tint);color:var(--color-primary-active);pointer-events:none}
+button.icon-btn[aria-pressed="true"][data-shortcut]::after{background:var(--color-primary);color:#fff}
 .align-icon{width:15px;height:15px;display:block;overflow:visible}
 .btnrow{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
 .color-pick-row{display:flex;align-items:center;gap:var(--space-2)}
@@ -125,12 +129,12 @@ button.icon-btn[aria-pressed="true"]{background:var(--color-primary-tint);border
 .brand .mark{font-size:18px}
 nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-x:auto}
 .topmenu-btn{
-  display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border:1px solid transparent;border-radius:var(--radius-sm);
+  display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border:1px solid transparent;border-bottom-width:2px;border-radius:var(--radius-sm);
   background:transparent;color:var(--color-text);cursor:pointer;font-weight:600;font-size:var(--font-size-sm);white-space:nowrap;
 }
 .topmenu-btn .glyph{font-size:14px;line-height:1}
 .topmenu-btn:hover{background:var(--color-bg)}
-.topmenu-btn[aria-pressed="true"],.topmenu-btn.active{background:var(--color-primary-tint);color:var(--color-primary-active)}
+.topmenu-btn[aria-pressed="true"],.topmenu-btn.active{background:var(--color-primary-tint);color:var(--color-primary-active);border-bottom-color:var(--color-primary)}
 /* ---- S-103 (Product Scope Freeze): disabled top-menu entries stay visible but inert -- no click,
    no hover affordance, no keyboard focus (native [disabled] on a <button> already removes it from
    the tab order and blocks click/Enter/Space activation, so no JS gating is needed here). ---- */
@@ -150,6 +154,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .meta-row:last-child{border-bottom:none}
 .meta-row .meta-label{color:var(--color-text-muted)}
 .meta-row .meta-value{font-weight:600}
+.meta-row .meta-select{font:inherit;font-weight:600;color:inherit;background:var(--color-surface);border:1px solid var(--color-border);border-radius:4px;padding:2px 4px}
 
 #layersList{display:flex;flex-direction:column;gap:6px;margin-bottom:var(--space-2)}
 .layer{
@@ -162,7 +167,6 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .layer button:disabled{opacity:.35;cursor:not-allowed}
 .layer .name{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .layer .type{font-size:9.5px;color:var(--color-text-faint);text-align:right}
-.ruleHint{font-size:var(--font-size-xs);color:var(--color-danger);margin-top:6px;line-height:1.4}
 #status{font-size:var(--font-size-sm);color:var(--color-text-muted)}
 
 /* ============================== Workspace ============================== */
@@ -192,6 +196,41 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .workspace-canvas-area.dual{display:flex;gap:var(--space-3);padding:var(--space-4)}
 .workspace-canvas-area.dual .canvas-panel{position:relative;inset:auto;flex:1 1 0;min-width:0;height:100%}
 .fitNotice{position:absolute;left:var(--space-4);bottom:var(--space-4);color:var(--color-text-muted);font-size:var(--font-size-xs);background:#ffffffe6;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:4px 9px}
+/* RS-3017: on-canvas scale bar, mirroring .fitNotice's positioning convention but bottom-right. */
+.scaleBar{position:absolute;right:var(--space-4);bottom:var(--space-4);display:flex;align-items:center;gap:6px;background:#ffffffe6;border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:4px 9px;font-size:var(--font-size-xs);color:var(--color-text-muted)}
+.scaleBar-track{display:block;height:3px;border-radius:1px;background:var(--color-text-muted)}
+/* RS-3010 Design Step A: two vertical tool rails (general tools on the left, shape presets on the
+   right) + a contextual tool-options panel, positioned via CSS as absolutely-positioned children
+   of #panel2D (same technique .fitNotice above already uses) -- #layout itself never moves in the
+   document. Design Step A correction split the original single rail in two and removed the old
+   horizontal #drawToolGroup row entirely (superseded, not coexisting). */
+.design-tool-rail{position:absolute;top:var(--space-4);z-index:5;width:112px;display:flex;flex-direction:column;gap:4px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:var(--shadow-md);padding:6px}
+.design-tool-rail.rail-left{left:var(--space-4)}
+.design-tool-rail.rail-right{right:var(--space-4)}
+.design-tool-rail button.icon-btn{width:100%;height:auto;justify-content:flex-start;gap:6px;padding:6px 8px;font-size:12px;white-space:nowrap}
+/* RS-3010 Design Step C correction: the rails above overlay #panel2D rather than sitting beside
+   it, so without this #layout's own rendered box extends underneath them -- pointer events landing
+   in that region hit the rail buttons (document.elementFromPoint()), never Paper.js's Tool, and a
+   marquee (or any drag) starting/ending there is silently swallowed. Insets #panel2D's own content
+   box by each rail's full on-screen footprint (its 112px width + the var(--space-4) gap from the
+   panel edge, exactly matching .design-tool-rail/.rail-left/.rail-right above) only while drawing
+   mode is active (class toggled by app.js's setDrawMode(), same isActive gate the rails themselves
+   already use). #layout is never given its own margin -- `.canvas-panel canvas{width:100%}` already
+   sizes it against the parent's content box, so padding here shrinks the canvas by exactly this much
+   without a second place needing to know the number. */
+#panel2D.design-rails-inset{padding-left:calc(112px + var(--space-4));padding-right:calc(112px + var(--space-4))}
+/* RS-3027: #moreShapesPopover is a sibling of .design-tool-rail.rail-right (see index.html's own
+   comment there for why it isn't nested inside it), positioned via the same "absolutely-positioned
+   child of #panel2D" technique -- shares the rail's `right` alignment so it sits flush with the
+   rail's own right edge, with `top` set by app.js at open time (rail.offsetTop+rail.offsetHeight+gap)
+   since the rail's own height depends on its button count, not a fixed value CSS alone could track. */
+#moreShapesPopover{position:absolute;right:var(--space-4);z-index:6;width:260px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:var(--shadow-md);padding:8px}
+/* .shape-grid's own `display:grid` (an author rule) otherwise beats the UA stylesheet's
+   `[hidden]{display:none}` regardless of the hidden attribute -- the same reason
+   .lightbox-tab-panel[hidden] above needs its own override -- so #moreShapesPopover needs one too. */
+#moreShapesPopover[hidden]{display:none}
+.design-canvas-view-group{position:absolute;top:var(--space-4);left:50%;transform:translateX(-50%);z-index:4;display:flex;align-items:center;gap:8px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);padding:6px 10px;font-size:var(--font-size-xs)}
+.design-tool-options-panel{position:absolute;top:calc(var(--space-4) + 40px);left:50%;transform:translateX(-50%);z-index:4;display:flex;align-items:center;gap:var(--space-2);min-height:28px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);padding:6px 10px;font-size:var(--font-size-xs)}
 .workspace-status{display:flex;align-items:center;gap:var(--space-4);padding:var(--space-2) var(--space-4);border-top:1px solid var(--color-border);background:var(--color-surface);font-size:var(--font-size-sm);white-space:nowrap;overflow-x:auto}
 .workspace-status b{font-weight:700}
 .workspace-status span{color:var(--color-text-muted)}
@@ -227,7 +266,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
    full-viewport backdrop captures every pointer event (even over the always-visible sidebar/canvas),
    which blocks continuing to work while the dialog is open. .non-modal keeps the same visual dialog
    shell but lets clicks fall through the backdrop to whatever is behind it -- only the dialog card
-   itself stays interactive. lightboxLibraryConfirm/lightboxGalleryPreview intentionally keep the
+   itself stays interactive. lightboxGalleryPreview intentionally keeps the
    plain, fully-modal backdrop -- see docs/specifications/S-105-PersistentMovableLightboxes.md,
    "Out of Scope". */
 .lightbox-overlay.non-modal{background:transparent;pointer-events:none}
@@ -271,6 +310,11 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
    browser's native input:disabled dimming above) so a checked-but-now-ineligible box still reads
    clearly as checked, not merely near-invisible from two compounding opacities. */
 .checkbox-row.ineligible{color:var(--color-text-muted)}
+/* Stone Size overlap guard: #stoneSize's own currently-selected option is never disabled (a
+   disabled selected <option> traps keyboard navigation in real browsers -- confirmed live, see
+   updateStoneSizeOverlapCapabilityUI()'s doc comment in app.js), so this border is the closed-
+   control's own visible flag, paired with #stoneSizeOverlapWarning's message just below it. */
+#stoneSize.overlap-invalid{border-color:var(--color-danger)}
 /* RS-2012: "Advanced" collapsible (Mixed Stone Size's Minimum/Maximum Size + Conservative Detail).
    Custom marker (default <details> triangle varies by browser/platform) so it reads consistently. */
 .advanced-section{margin-top:var(--space-3);padding-top:var(--space-2);border-top:1px solid var(--color-border)}
@@ -284,10 +328,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .template-card.active{border-color:var(--color-primary);background:var(--color-primary-tint)}
 .template-card h4{font-size:var(--font-size-sm);margin:0 0 4px}
 .template-card p{font-size:var(--font-size-xs);color:var(--color-text-muted);margin:0}
-/* ---- Design Library (RS-1015) ---- */
-.library-toolbar{display:flex;flex-wrap:wrap;gap:var(--space-3);align-items:flex-end;margin-bottom:var(--space-4);padding-bottom:var(--space-4);border-bottom:1px solid var(--color-border)}
-.library-toolbar .field{margin-bottom:0;flex:1 1 220px}
-.library-toolbar .btnrow{display:flex;gap:var(--space-2);flex:0 0 auto}
+/* ---- Design library / Gallery card grid (RS-1015/RS-2001): shared by the Gallery, which reuses
+   these classes for its own cards/grid/badges/controls, see the Gallery comment below. ---- */
 .library-controls{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:flex-end;margin-bottom:var(--space-4)}
 .library-controls .field{margin-bottom:0}
 .library-controls .field.grow{flex:1 1 200px}
@@ -304,12 +346,11 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .library-card-thumb-empty{color:var(--color-text-muted);font-size:var(--font-size-xs)}
 .library-card-body{padding:var(--space-2) var(--space-3);flex:1}
 .library-card-body h4{margin:0 0 6px;font-size:var(--font-size-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.library-card-body input.library-rename-input{width:100%;height:26px;padding:0 6px;font-size:var(--font-size-sm)}
 .library-card-meta{display:flex;gap:6px;flex-wrap:wrap}
 .library-badge{display:inline-block;font-size:var(--font-size-xs);padding:1px 8px;border-radius:999px;background:var(--color-bg);color:var(--color-text-muted);border:1px solid var(--color-border);white-space:nowrap}
 .library-card-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:var(--space-2) var(--space-3);border-top:1px solid var(--color-border)}
 .library-card-actions button.btn{padding:0 4px;font-size:var(--font-size-xs)}
-.library-empty-state,.library-no-results{text-align:center;color:var(--color-text-muted);padding:var(--space-6) var(--space-3);font-size:var(--font-size-sm)}
+.library-no-results{text-align:center;color:var(--color-text-muted);padding:var(--space-6) var(--space-3);font-size:var(--font-size-sm)}
 .help-section{margin-bottom:var(--space-4)}
 .help-section h3{font-size:var(--font-size-sm);font-weight:700;margin-bottom:6px}
 .help-section p,.help-section li{font-size:var(--font-size-sm);color:var(--color-text-muted);line-height:1.5}
@@ -336,10 +377,12 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 <header class="topbar">
   <div class="brand"><span class="mark">💎</span><span>Rhinestone Studio</span></div>
   <nav class="topmenu" aria-label="Main menu">
+    <!-- RS-3010 Design Step A correction: entry point into drawing mode, landing in 'select'
+         (the same activation railSelectToggle already triggers -- see app.js). -->
+    <button class="topmenu-btn" id="menuDesign" title="Design (draw custom shapes directly on the canvas)"><span class="glyph">✎</span>Design</button>
     <button class="topmenu-btn" id="menuText" title="Text (edit the selected text layer's content, font, and curve)"><span class="glyph">🅣</span>Text</button>
     <button class="topmenu-btn" id="menuShapes" title="Shapes and object templates"><span class="glyph">◇</span>Shapes</button>
     <button class="topmenu-btn" id="menuMonogram" title="Generate a monogram from a frame, layout, and letters"><span class="glyph">🄼</span>Monogram</button>
-    <button class="topmenu-btn" id="menuLibrary" title="Design Library is temporarily unavailable while Version 1.0 is under feature freeze (RC-006). All Design Library designs and code remain intact." disabled aria-disabled="true"><span class="glyph">📚</span>Design Library<span class="topmenu-badge">Coming Soon</span></button>
     <button class="topmenu-btn" id="menuGallery" title="Gallery is temporarily unavailable while product scope is reduced (S-103). All Gallery designs and code remain intact." disabled aria-disabled="true"><span class="glyph">✨</span>Gallery<span class="topmenu-badge">Coming Soon</span></button>
     <button class="topmenu-btn" id="menuImport" title="Import an SVG or a Project JSON file"><span class="glyph">⇪</span>Import</button>
     <button class="topmenu-btn" id="menuImageTrace" title="Trace a PNG/JPG/WebP image into stones"><span class="glyph">🖼</span>Image Trace</button>
@@ -365,7 +408,9 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
     <section class="panel-section">
       <h2>Project</h2>
       <div class="field"><label for="projectName">Project name</label><input id="projectName" value="Untitled Project"></div>
-      <div class="meta-row"><span class="meta-label">Units</span><span class="meta-value">mm</span></div>
+      <div class="meta-row"><span class="meta-label">Units</span>
+        <select id="projectUnitsQuick" class="meta-select"><option value="mm" selected>Millimeters (mm)</option>
+        <option value="in">Inches (in)</option></select></div>
       <div class="meta-row"><span class="meta-label">Template</span><span class="meta-value" id="projectTemplateSummary">Mug · 210×90mm</span></div>
     </section>
 
@@ -373,7 +418,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
       <h2>Layers</h2>
       <select id="selectedLayer" class="visually-hidden" aria-label="Selected layer"></select>
       <div id="layersList" role="list" aria-label="Layer list"></div>
-      <button id="deleteSelected" class="btn danger block" style="margin-top:var(--space-2)">Delete selected layer</button><div id="layerRuleHint" class="ruleHint" style="display:none">At least one layer is required — add another layer before you can delete this one.</div>
+      <button id="deleteSelected" class="btn danger block" style="margin-top:var(--space-2)">Delete selected layer</button>
     </section>
 
     <section class="panel-section">
@@ -395,17 +440,16 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
   <!-- ===================== CENTRAL WORKSPACE ===================== -->
   <main class="workspace" aria-label="Design workspace">
     <div class="workspace-toolbar">
-      <div class="tabs" role="tablist" aria-label="Workspace view">
+      <!-- RS-3010 Design Step A correction #2: hidden while Design mode is active (setDrawMode() in
+           app.js) -- setDrawMode(true) already forces setWorkspaceMode('2d') underneath it, so
+           showing tab buttons for views Design doesn't allow switching to is dead/confusing UI. -->
+      <div class="tabs" role="tablist" aria-label="Workspace view" id="workspaceViewTabs">
         <button class="tab active" id="viewTabDual" role="tab" aria-selected="true" title="Show the 2D Canvas and Object Preview side by side">Dual Workspace</button>
         <button class="tab" id="viewTab2D" role="tab" aria-selected="false" title="Show only the 2D Canvas">2D Canvas</button>
         <button class="tab" id="viewTab3D" role="tab" aria-selected="false" title="Show only the Object Preview">Object Preview</button>
       </div>
 
       <div class="toolbar-cluster" id="toolbar2D">
-        <div class="toolbar-group">
-          <button class="icon-btn" id="safeAreaToggle" title="Toggle safe-area guide" aria-pressed="true">▢</button>
-          <span class="hint" title="The reference grid helps align stones to the canvas; it is drawn by the permanent 2D renderer and cannot be turned off in this milestone" style="cursor:help">⊞&nbsp;Grid: always on</span>
-        </div>
         <div class="toolbar-group">
           <span class="toolbar-label">Align &amp; Snap</span>
           <div id="selectionSummary" style="display:inline">No layers selected</div>
@@ -464,6 +508,149 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
       <section class="canvas-panel" id="panel2D" aria-label="2D production canvas">
         <canvas id="layout"></canvas>
         <div class="fitNotice" id="fitNotice"></div>
+        <div class="scaleBar" id="scaleBar" aria-hidden="true">
+          <span class="scaleBar-track" id="scaleBarTrack"></span>
+          <span class="scaleBar-label" id="scaleBarLabel"></span>
+        </div>
+        <!-- RS-3010 Design Step A correction: the single rail splits in two -- a left rail for
+             general/freeform tools (Select, Draw, Pen; future home for an Eraser, not built yet)
+             and a right rail for parametric shape presets (Rect/Ellipse/Slot/Polygon). Every
+             button keeps its exact id and setDrawTool() wiring from the single-rail version.
+             #menuDesign in the top nav is now the fixed entry point into drawing mode (it triggers
+             the exact same activation railSelectToggle does), so both rails can safely gate on
+             drawingTool.isActive like drawModeHint -- unlike the single-rail version,
+             there's no chicken-and-egg problem anymore. -->
+        <div class="design-tool-rail rail-left" id="designToolRailLeft" style="display:none" aria-label="Design tools (general)">
+          <button class="icon-btn" id="railSelectToggle" title="Select (click/shift-click to multi-select, drag to move; drag empty canvas to select a region, Shift+drag to marquee-select layers) (V)" aria-pressed="false">↖ Select</button>
+          <!-- RS-3013 Step 1: Select's twin selection tool -- same click-to-select-a-region/shape
+               behavior as Select above, but a drag draws a lasso (clipped to its target shape) instead
+               of a rectangle. Stays active after each action, same rail-button/aria-pressed convention
+               as Paint/Stamp/Trace/Eraser below, not a one-shot creation tool. -->
+          <button class="icon-btn" id="railLassoToggle" title="Lasso (click to select a region/shape, same as Select; drag a lasso to select part of a shape) (L)" aria-pressed="false">➰ Lasso</button>
+          <button class="icon-btn" id="railDrawToggle" title="Draw a custom freehand shape directly on the canvas (B)" aria-pressed="false">✏️ Draw</button>
+          <button class="icon-btn" id="railPenToggle" title="Pen -- draw straight/curved paths (click for a straight anchor, drag to curve, click back on the last anchor to reset a corner, click back on the first anchor to close) (P)" aria-pressed="false">✒️ Pen</button>
+          <button class="icon-btn" id="railPaintToggle" title="Paint -- drag a lasso over part of a shape to give that area its own stone size/spacing/color (F)" aria-pressed="false">🪣 Paint</button>
+          <!-- RS-3011 Step 12: click to place a single stone, at true stoneSize, exactly where clicked
+               on top of whatever the target shape already generates -- same rail-button/aria-pressed
+               convention as every other persistent tool above. -->
+          <button class="icon-btn" id="railStampToggle" title="Stamp -- click to place a single stone at true size on top of a shape (M)" aria-pressed="false">📍 Stamp</button>
+          <!-- RS-3011 Step 11: drag to draw a path, release to space stones evenly along it (Shift
+               held at release closes the path into a loop) -- same rail-button/aria-pressed
+               convention as Stamp/every other persistent tool above. -->
+          <button class="icon-btn" id="railTraceToggle" title="Trace -- drag to draw a path, stones are spaced evenly along it (hold Shift at release to close the loop) (T)" aria-pressed="false">〰️ Trace</button>
+          <!-- RS-3011 Step 13: click or drag to remove any stone (any of the three sources -- base
+               fill, Paint regions, Stamp/Trace stampedStones) within the brush radius -- same
+               rail-button/aria-pressed convention as Stamp/Trace above. Its own radius control
+               (#eraserRadiusField/#eraserRadiusMm) lives in #designToolOptionsPanel, same
+               "own-field-in-the-shared-panel" convention as Slot's own drawSlotWidthField/
+               drawSlotWidthMm -- see that panel's own markup below. -->
+          <button class="icon-btn" id="railEraserToggle" title="Eraser -- click or drag to remove any stone within the brush radius, regardless of source ([ / ] to resize) (X)" aria-pressed="false">🧽 Eraser</button>
+          <!-- RS-3011 Step 8 Phase B: a one-shot action, not a persistent tool -- deliberately no
+               aria-pressed (never synced by updateDrawToolButtons()), unlike every button above it.
+               Picking a file immediately produces a real, selected, fitted-and-centered shape (see
+               app.js's #designImportSvgFile change handler), the same "no interactive placement"
+               behavior the existing top-nav Import Lightbox already has. -->
+          <button class="icon-btn" id="railImportSvgToggle" title="Import SVG -- add a new shape from an SVG file, fitted and centered on the canvas">⇪ Import SVG</button>
+        </div>
+        <input id="designImportSvgFile" type="file" accept="image/svg+xml,.svg" style="display:none">
+        <!-- RS-3011 Step 8 Phase B: Design's own SVG import, fully separate from the top-nav
+             #importSvgFile above -- that input's change handler is tied to the OLD 'svg'-layer-type
+             pipeline (svgSource stored verbatim, sampled live by StoneSampler); this one runs every
+             imported file through Phase A's Paper.js-native flatten pipeline into a real 'path'
+             layer instead. Two parallel pipelines is this milestone's own deliberate outcome (see
+             Phase A). -->
+        <div class="design-tool-rail rail-right" id="designToolRailRight" style="display:none" aria-label="Design tools (shape presets)">
+          <button class="icon-btn" id="railRectToggle" title="Draw a rectangle (hold Shift for a square) (R)" aria-pressed="false">▭ Rect</button>
+          <button class="icon-btn" id="railEllipseToggle" title="Draw an ellipse (hold Shift for a circle) (E)" aria-pressed="false">◯ Ellipse</button>
+          <button class="icon-btn" id="railSlotToggle" title="Draw a slot (drag to set length/angle, click for a default pill) (S)" aria-pressed="false">⏢ Slot</button>
+          <button class="icon-btn" id="railPolygonToggle" title="Draw a polygon (click to add vertices, click near the first vertex to close) (G)" aria-pressed="false">⬠ Polygon</button>
+          <button class="icon-btn" id="railMoreShapesToggle" title="More shapes" aria-haspopup="true" aria-expanded="false">⋯ More</button>
+        </div>
+        <!-- RS-3027: quick-add popover for 10 Shape Library shapes, a second, faster entry point to
+             the exact same createShapeLayer() the Shapes panel's own #shapeGrid already uses. A
+             sibling of #designToolRailRight (not nested inside it) since that rail has a fixed
+             112px width -- nesting a 10-button grid inside it would squeeze/wrap the grid into that
+             width instead of laying out at its own natural size. Reuses #shapeGrid's own
+             .shape-grid/.shape-grid-btn classes for identical visual style. Circle/Rectangle/
+             Ellipse/Capsule/freeform Polygon are excluded -- the rail/Shapes panel already cover
+             them directly. Pentagon/Hexagon/Octagon aren't new shape kinds -- they're 'polygon'
+             with data-shape-sides preset and data-shape-label overriding the status-text/kind label
+             ("Added Pentagon" instead of "Added Regular Polygon"), read generically below rather
+             than special-cased per id. -->
+        <div class="shape-grid" id="moreShapesPopover" hidden>
+          <button class="btn shape-grid-btn" data-shape-kind="star" title="Add a star layer (configurable points and inner radius)">★<span>Star</span></button>
+          <button class="btn shape-grid-btn" data-shape-kind="ring" title="Add a ring/donut layer (configurable inner opening)">◎<span>Ring</span></button>
+          <button class="btn shape-grid-btn" data-shape-kind="heart" title="Add a heart layer">♥<span>Heart</span></button>
+          <button class="btn shape-grid-btn" data-shape-kind="arrow" title="Add an arrow layer">➤<span>Arrow</span></button>
+          <button class="btn shape-grid-btn" data-shape-kind="cross" title="Add a cross layer">✚<span>Cross</span></button>
+          <button class="btn shape-grid-btn" data-shape-kind="crescent" title="Add a crescent layer">☾<span>Crescent</span></button>
+          <button class="btn shape-grid-btn" data-shape-kind="polygon" data-shape-sides="5" data-shape-label="Pentagon" title="Add a pentagon layer (a 5-sided regular polygon, freely editable afterward)">⬟<span>Pentagon</span></button>
+          <button class="btn shape-grid-btn" data-shape-kind="polygon" data-shape-sides="6" data-shape-label="Hexagon" title="Add a hexagon layer (a 6-sided regular polygon, freely editable afterward)">⬡<span>Hexagon</span></button>
+          <button class="btn shape-grid-btn" data-shape-kind="polygon" data-shape-sides="8" data-shape-label="Octagon" title="Add an octagon layer (an 8-sided regular polygon, freely editable afterward)">🛑<span>Octagon</span></button>
+          <button class="btn shape-grid-btn" data-shape-kind="shield" title="Add a shield layer">🛡<span>Shield</span></button>
+        </div>
+        <!-- RS-3010 Design Step A correction: Grid hint relocated out of the now-gone #toolbar2D
+             toolbar-group, but NOT isActive-gated -- it's a general 2D-canvas display note relevant
+             while editing Text/Shapes/Monogram layers too, not something specific to drawing mode,
+             so it keeps its pre-existing always-visible-while-the-2D-canvas-is-shown behavior.
+             Correction #2: the safe-area toggle button that used to sit here is removed -- showSafeArea
+             is now set purely from the Settings panel's settingsSafeAreaDefault checkbox, no
+             toolbar-level per-session override remains (see app.js). -->
+        <div class="design-canvas-view-group" id="designCanvasViewGroup" aria-label="Canvas view">
+        </div>
+        <!-- RS-3010 Design Step A: contextual tool-options panel -- proves the new layout can host
+             per-tool controls. Holds drawModeHint (relocated from the removed
+             #drawToolGroup, same id/wiring/isActive-gated visibility) and the relocated Slot width
+             field (a DOM move, not a duplicate -- same ids/wiring as before, see
+             drawSlotWidthField/drawSlotWidthMm below), same show/hide-only-while-slot-is-active
+             logic. RS-3011 Step 1: #drawCommitBtn removed -- every shape now lands in project.layers
+             the instant it finalizes, no separate commit action. Future steps add more here. -->
+        <div class="design-tool-options-panel" id="designToolOptionsPanel" style="display:none" aria-label="Tool options">
+          <span id="drawModeHint" class="hint" style="display:none">Drag to draw · Scroll to pan · Ctrl/Cmd+scroll to zoom</span>
+          <label for="drawSlotWidthMm" id="drawSlotWidthField" data-unit-label="Width" style="display:none;margin:0" title="Slot width (mm)">Width (mm)</label>
+          <input id="drawSlotWidthMm" type="number" min="0.1" step="0.5" data-mm-step="0.5" value="6" style="display:none;width:70px">
+          <!-- RS-3011 Step 13 follow-up: relocated from a standalone rail wrapper div into this
+               shared per-tool-options panel, as two sibling elements -- same
+               show/hide-only-while-eraser-is-active convention as drawSlotWidthField/
+               drawSlotWidthMm above, toggled individually in updateDrawToolButtons(). -->
+          <label for="eraserRadiusMm" id="eraserRadiusField" data-unit-label="Radius" style="display:none;margin:0" title="Eraser brush radius (mm) -- also adjustable with [ / ] while Eraser is active">Radius (mm)</label>
+          <input id="eraserRadiusMm" type="number" min="0.5" step="0.5" data-mm-step="0.5" value="1" style="display:none;width:70px">
+          <!-- RS-3014 Step 3: Eraser's own mode toggle -- same "sibling elements toggled individually
+               in updateDrawToolButtons()" convention as eraserRadiusField/eraserRadiusMm just above,
+               and the same two-state <select> pattern #snapEnabled already uses for an on/off toggle
+               (rather than a checkbox/radio pair, which nothing else in this panel uses). -->
+          <label for="eraserMode" id="eraserModeField" style="display:none;margin:0" title="Eraser mode: remove stones, or cut into the shape's own outline">Mode</label>
+          <select id="eraserMode" style="display:none"><option value="stones" selected>Stones</option><option value="outline">Outline</option></select>
+          <!-- RS-3014 Step 1: Stamp's own independent style fields -- same "sibling elements toggled
+               individually in updateDrawToolButtons()" convention as eraserRadiusField/eraserRadiusMm
+               just above. #stampColor is populated by populateStoneColorOptions() at startup, same
+               optgroup markup #stoneColor gets. -->
+          <label for="stampSizeMm" id="stampSizeField" data-unit-label="Stamp Size" style="display:none;margin:0" title="Stamp stone size (mm)">Stamp Size (mm)</label>
+          <input id="stampSizeMm" type="number" min="0.1" step="0.5" data-mm-step="0.5" value="2" style="display:none;width:70px">
+          <label for="stampColor" id="stampColorField" style="display:none;margin:0" title="Stamp stone color">Stamp Color</label>
+          <select id="stampColor" style="display:none"></select>
+          <!-- RS-3014 Step 1: Trace's own independent style fields, same convention as Stamp's just
+               above. -->
+          <label for="traceSizeMm" id="traceSizeField" data-unit-label="Size" style="display:none;margin:0" title="Trace stone size (mm)">Size (mm)</label>
+          <input id="traceSizeMm" type="number" min="0.1" step="0.5" data-mm-step="0.5" value="2" style="display:none;width:70px">
+          <label for="traceGapMm" id="traceGapField" data-unit-label="Gap" style="display:none;margin:0" title="Trace stone gap (mm)">Gap (mm)</label>
+          <input id="traceGapMm" type="number" min="0" step="0.1" data-mm-step="0.1" value="0.3" style="display:none;width:70px">
+          <label for="traceColor" id="traceColorField" style="display:none;margin:0" title="Trace stone color">Color</label>
+          <select id="traceColor" style="display:none"></select>
+          <!-- RS-3014 Step 1: Paint's own independent style fields, same convention as Stamp/Trace
+               just above. -->
+          <label for="paintSizeMm" id="paintSizeField" data-unit-label="Size" style="display:none;margin:0" title="Paint stone size (mm)">Size (mm)</label>
+          <input id="paintSizeMm" type="number" min="0.1" step="0.5" data-mm-step="0.5" value="2" style="display:none;width:70px">
+          <label for="paintGapMm" id="paintGapField" data-unit-label="Gap" style="display:none;margin:0" title="Paint stone gap (mm)">Gap (mm)</label>
+          <input id="paintGapMm" type="number" min="0" step="0.1" data-mm-step="0.1" value="0.3" style="display:none;width:70px">
+          <label for="paintColor" id="paintColorField" style="display:none;margin:0" title="Paint stone color">Color</label>
+          <select id="paintColor" style="display:none"></select>
+          <!-- RS-3011 Step 3a: relocation target for #sharedStoneFields (stoneSize/gap/stoneColor) --
+               same relocateFieldGroups() mechanism the Lightboxes already use (see FIELD_GROUPS.stone
+               in app.js), never a second copy of those fields/ids. Populated only while Design is
+               active with exactly one 'path' layer selected; empty otherwise. -->
+          <div id="designStoneSlot" class="field-slot"></div>
+        </div>
       </section>
       <section class="canvas-panel" id="panel3D" aria-label="3D object preview">
         <canvas id="cup"></canvas>
@@ -541,8 +728,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
             <div id="fontLibraryList" class="font-library-list" role="listbox" aria-label="Font library"></div>
           </div>
           <div class="field-row">
-            <div class="field" id="heightField"><label for="height">Text height (mm)</label><input id="height" type="number" min="4" max="111" step="1" value="25"></div>
-            <div class="field" id="letterHeightField" style="display:none"><label for="letterHeight">Letter height (mm)</label><input id="letterHeight" type="number" step="0.1"></div>
+            <div class="field" id="heightField"><label for="height" data-unit-label="Text height">Text height (mm)</label><input id="height" type="number" min="4" max="111" step="1" data-mm-step="1" value="25"></div>
+            <div class="field" id="letterHeightField" style="display:none"><label for="letterHeight" data-unit-label="Letter height">Letter height (mm)</label><input id="letterHeight" type="number" step="0.1" data-mm-step="0.1"></div>
             <div class="field"><label for="autoFit">Auto fit</label><select id="autoFit"><option value="on">On</option><option value="off">Off</option></select></div>
           </div>
           <p class="hint" id="textSizeFixedHint" style="display:none">Production Fonts are a fixed size — pick a different font for a different scale.</p>
@@ -553,8 +740,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <div class="field-section">
           <h3>Position</h3>
           <div class="field-row">
-            <div class="field"><label for="textX">Position X (mm)</label><input id="textX" type="number" step="1" value="0"></div>
-            <div class="field"><label for="textY">Position Y (mm)</label><input id="textY" type="number" step="1" value="0"></div>
+            <div class="field"><label for="textX" data-unit-label="Position X">Position X (mm)</label><input id="textX" type="number" step="1" data-mm-step="1" value="0"></div>
+            <div class="field"><label for="textY" data-unit-label="Position Y">Position Y (mm)</label><input id="textY" type="number" step="1" data-mm-step="1" value="0"></div>
           </div>
           <p class="validation-message" id="textTooLongWarning" role="status">This text exceeds the object's printable circumference.</p>
           <p class="hint" id="textTooLongWarningDetail"></p>
@@ -570,7 +757,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <p class="hint" id="curveUnavailableHint" style="display:none">Curved text isn't available for Production Fonts yet — switch to a legacy font, or position this text manually.</p>
           <div id="curveControls" style="display:none">
             <div class="field-row">
-              <div class="field"><label for="curveRadiusMm">Curve radius (mm)</label><input id="curveRadiusMm" type="number" min="1" step="1" value="40"></div>
+              <div class="field"><label for="curveRadiusMm" data-unit-label="Curve radius">Curve radius (mm)</label><input id="curveRadiusMm" type="number" min="1" step="1" data-mm-step="1" value="40"></div>
               <div class="field"><label for="curveDirection">Curve direction</label><select id="curveDirection"><option value="outside" selected>Outside</option><option value="inside">Inside</option></select></div>
             </div>
             <div class="field-row">
@@ -611,6 +798,13 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <div class="field"><label for="monogramFrame">Frame</label><select id="monogramFrame" title="The frame shape stones are generated around."></select></div>
           <div class="field"><label for="monogramLayout">Layout</label><select id="monogramLayout" title="How the letters are arranged inside the frame."></select></div>
         </div>
+        <div class="field-row">
+          <div class="field"><label for="monogramFrameStyle">Frame style</label><select id="monogramFrameStyle" title="Solid stone fill, or a traced outline border 1 or 2 stones wide.">
+            <option value="fill" selected>Solid fill</option>
+            <option value="outline-1">Outline – 1 stone wide</option>
+            <option value="outline-2">Outline – 2 stones wide</option>
+          </select></div>
+        </div>
       </div>
       <div class="field-section">
         <h3>Letters</h3>
@@ -627,12 +821,22 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <div class="field"><label for="monogramStoneSize">Stone size</label><select id="monogramStoneSize" title="Standard rhinestone sizes (commercial name and actual diameter)."></select></div>
           <div class="field"><label for="monogramColor">Stone color</label><div class="color-pick-row"><select id="monogramColor"></select><span id="monogramColorSwatch" class="color-swatch" title="Selected color preview"></span></div></div>
         </div>
+        <div class="field-row">
+          <label class="checkbox-row"><input type="checkbox" id="monogramFrameStoneToggle"> Different stone size/color for frame</label>
+        </div>
+        <div class="field-row" id="monogramFrameStoneFields" style="display:none">
+          <div class="field"><label for="monogramFrameStoneSize">Frame stone size</label><select id="monogramFrameStoneSize" title="Standard rhinestone sizes (commercial name and actual diameter)."></select></div>
+          <div class="field"><label for="monogramFrameColor">Frame stone color</label><div class="color-pick-row"><select id="monogramFrameColor"></select><span id="monogramFrameColorSwatch" class="color-swatch" title="Selected color preview"></span></div></div>
+        </div>
       </div>
       <div class="field-section">
         <h3>Frame Size</h3>
         <div class="field-row">
-          <div class="field"><label for="monogramWidth">Width (mm)</label><input id="monogramWidth" type="number" step="1"></div>
-          <div class="field"><label for="monogramHeight">Height (mm)</label><input id="monogramHeight" type="number" step="1"></div>
+          <div class="field"><label for="monogramWidth" data-unit-label="Width">Width (mm)</label><input id="monogramWidth" type="number" step="1" data-mm-step="1"></div>
+          <div class="field"><label for="monogramHeight" data-unit-label="Height">Height (mm)</label><input id="monogramHeight" type="number" step="1" data-mm-step="1"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label for="monogramSizeMarginMm" data-unit-label="Auto-fit margin">Auto-fit margin (mm)</label><input id="monogramSizeMarginMm" type="number" min="0" step="1" data-mm-step="1" value="5"></div>
         </div>
         <p class="hint" id="monogramFrameSizeHint"></p>
       </div>
@@ -752,12 +956,12 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <div class="field-section" id="plateFields" style="display:none">
           <h3>Plate dimensions</h3>
           <div class="field-row">
-            <div class="field"><label for="plateOuterDiameter">Outer Diameter (mm)</label><input id="plateOuterDiameter" type="number" min="250" max="300" step="0.5" value="270"></div>
-            <div class="field"><label for="plateInnerWellDiameter">Inner Well Diameter (mm)</label><input id="plateInnerWellDiameter" type="number" min="175" max="215" step="0.5" value="195"></div>
+            <div class="field"><label for="plateOuterDiameter" data-unit-label="Outer Diameter">Outer Diameter (mm)</label><input id="plateOuterDiameter" type="number" min="250" max="300" step="0.5" data-mm-step="0.5" value="270"></div>
+            <div class="field"><label for="plateInnerWellDiameter" data-unit-label="Inner Well Diameter">Inner Well Diameter (mm)</label><input id="plateInnerWellDiameter" type="number" min="175" max="215" step="0.5" data-mm-step="0.5" value="195"></div>
           </div>
           <div class="field-row">
-            <div class="field"><label for="plateOverallHeight">Overall Height (mm)</label><input id="plateOverallHeight" type="number" min="18" max="32" step="0.5" value="25"></div>
-            <div class="field"><label for="plateCenterDepth">Center Depth (mm)</label><input id="plateCenterDepth" type="number" min="7" max="18" step="0.5" value="12"></div>
+            <div class="field"><label for="plateOverallHeight" data-unit-label="Overall Height">Overall Height (mm)</label><input id="plateOverallHeight" type="number" min="18" max="32" step="0.5" data-mm-step="0.5" value="25"></div>
+            <div class="field"><label for="plateCenterDepth" data-unit-label="Center Depth">Center Depth (mm)</label><input id="plateCenterDepth" type="number" min="7" max="18" step="0.5" data-mm-step="0.5" value="12"></div>
           </div>
           <div class="field">
             <label for="plateDesignTarget">Design Target</label>
@@ -779,11 +983,11 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <div class="field-section" id="vesselFields" style="display:none">
           <h3>Vessel dimensions</h3>
           <div class="field-row">
-            <div class="field"><label for="vesselBodyDiameter">Body Diameter (mm)</label><input id="vesselBodyDiameter" type="number" step="0.5"></div>
-            <div class="field"><label for="vesselBodyHeight">Body Height (mm)</label><input id="vesselBodyHeight" type="number" step="0.5"></div>
+            <div class="field"><label for="vesselBodyDiameter" data-unit-label="Body Diameter">Body Diameter (mm)</label><input id="vesselBodyDiameter" type="number" step="0.5" data-mm-step="0.5"></div>
+            <div class="field"><label for="vesselBodyHeight" data-unit-label="Body Height">Body Height (mm)</label><input id="vesselBodyHeight" type="number" step="0.5" data-mm-step="0.5"></div>
           </div>
           <div class="field-row">
-            <div class="field" id="vesselTopDiameterField"><label for="vesselTopDiameter">Top Diameter (mm)</label><input id="vesselTopDiameter" type="number" step="0.5"></div>
+            <div class="field" id="vesselTopDiameterField"><label for="vesselTopDiameter" data-unit-label="Top Diameter">Top Diameter (mm)</label><input id="vesselTopDiameter" type="number" step="0.5" data-mm-step="0.5"></div>
           </div>
           <p class="hint" id="vesselDetail">Printable height 85.0mm (derived) · Circumference 257.6mm (product information, read-only)</p>
         </div>
@@ -964,7 +1168,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <h3>Page setup</h3>
         <div class="field-row">
           <div class="field"><label for="prodSheetPageSize">Page size</label><select id="prodSheetPageSize"><option value="A4" selected>A4</option><option value="Letter">Letter</option><option value="A3">A3 (large format, e.g. Round Dinner Plate)</option></select></div>
-          <div class="field"><label for="prodSheetMargin">Margin (mm)</label><input id="prodSheetMargin" type="number" min="0" step="1" value="10"></div>
+          <div class="field"><label for="prodSheetMargin" data-unit-label="Margin">Margin (mm)</label><input id="prodSheetMargin" type="number" min="0" step="1" data-mm-step="1" value="10"></div>
         </div>
         <div class="field-row">
           <div class="field"><label for="prodSheetMirror">Mirror</label><select id="prodSheetMirror"><option value="off" selected>Off</option><option value="on">On</option></select></div>
@@ -996,9 +1200,9 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <h3>Package</h3>
         <div class="field"><label for="shipPackageType">Package type</label><select id="shipPackageType"><option value="box" selected>Box</option><option value="mailer">Padded mailer</option><option value="tube">Tube</option><option value="custom">Custom</option></select></div>
         <div class="field-row-3">
-          <div class="field"><label for="shipLengthMm">Length (mm)</label><input id="shipLengthMm" type="number" min="0" step="1"></div>
-          <div class="field"><label for="shipWidthMm">Width (mm)</label><input id="shipWidthMm" type="number" min="0" step="1"></div>
-          <div class="field"><label for="shipHeightMm">Height (mm)</label><input id="shipHeightMm" type="number" min="0" step="1"></div>
+          <div class="field"><label for="shipLengthMm" data-unit-label="Length">Length (mm)</label><input id="shipLengthMm" type="number" min="0" step="1" data-mm-step="1"></div>
+          <div class="field"><label for="shipWidthMm" data-unit-label="Width">Width (mm)</label><input id="shipWidthMm" type="number" min="0" step="1" data-mm-step="1"></div>
+          <div class="field"><label for="shipHeightMm" data-unit-label="Height">Height (mm)</label><input id="shipHeightMm" type="number" min="0" step="1" data-mm-step="1"></div>
         </div>
         <div class="field"><label for="shipWeightG">Weight (g)</label><input id="shipWeightG" type="number" min="0" step="1"></div>
       </div>
@@ -1023,7 +1227,8 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
     <div class="lightbox-body">
       <div class="field-section">
         <h3>General</h3>
-        <div class="meta-row"><span class="meta-label">Units</span><span class="meta-value">mm (fixed)</span></div>
+        <div class="field"><label for="settingsUnits">Units</label>
+          <select id="settingsUnits"><option value="mm" selected>Millimeters (mm)</option><option value="in">Inches (in)</option></select></div>
         <div class="meta-row"><span class="meta-label">Theme</span><span class="meta-value">Light (fixed)</span></div>
       </div>
       <div class="field-section">
@@ -1035,7 +1240,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <h3>Alignment &amp; Snapping</h3>
         <label class="checkbox-row" title="Automatically aligns objects to the canvas, safe area, and other objects while dragging."><input type="checkbox" id="settingsSnapDefault" checked> Enable Snapping</label>
         <div class="field-row">
-          <div class="field"><label for="settingsSnapDistance">Snap Distance</label><input id="settingsSnapDistance" type="number" min="0.5" max="5" step="0.1" value="1.5"></div>
+          <div class="field"><label for="settingsSnapDistance" data-unit-label="Snap Distance">Snap Distance (mm)</label><input id="settingsSnapDistance" type="number" min="0.5" max="5" step="0.1" data-mm-step="0.1" value="1.5"></div>
         </div>
         <p class="hint">How close two elements need to be, in millimeters, before they snap together. Lower values require more precise alignment.</p>
         <label class="checkbox-row" title="Shows temporary guide lines when objects snap into alignment while dragging."><input type="checkbox" id="settingsShowGuides" checked> Show Alignment Guides</label>
@@ -1044,7 +1249,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <h3>New-layer defaults</h3>
         <div class="field-row">
           <div class="field"><label for="settingsDefaultStoneSize">Default stone size</label><select id="settingsDefaultStoneSize"><option value="0.8">0.8 mm</option><option value="1.0">1.0 mm</option><option value="1.2">1.2 mm</option><option value="1.5">1.5 mm</option><option value="1.8">1.8 mm</option><option value="2.0" selected>2.0 mm</option><option value="2.5">2.5 mm</option><option value="3.0">3.0 mm</option></select></div>
-          <div class="field"><label for="settingsDefaultGap">Default gap (mm)</label><input id="settingsDefaultGap" type="number" min="0" max="5" step="0.1" value="0.3"></div>
+          <div class="field"><label for="settingsDefaultGap" data-unit-label="Default gap">Default gap (mm)</label><input id="settingsDefaultGap" type="number" min="0" max="5" step="0.1" value="0.3"></div>
         </div>
       </div>
       <div class="field-section">
@@ -1092,44 +1297,6 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
   </div>
 </div>
 
-<!-- ---------- DESIGN LIBRARY (RS-1015) ---------- -->
-<div class="lightbox-overlay non-modal" id="lightboxLibrary">
-  <div class="lightbox wide" role="dialog" aria-modal="false" aria-labelledby="lightboxLibraryTitle" tabindex="-1">
-    <header class="lightbox-header"><h2 id="lightboxLibraryTitle">Design Library</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
-    <div class="lightbox-body">
-      <div class="library-toolbar">
-        <div class="field"><label for="librarySaveName">Save to library as</label><input id="librarySaveName" type="text" placeholder="Design name" maxlength="80"></div>
-        <div class="btnrow">
-          <button class="btn primary" id="librarySaveProject" title="Save the entire current project as a new Design Library item">Save Whole Project</button>
-          <button class="btn" id="librarySaveSelection" title="Save only the selected layers as a new Design Library item" disabled>Save Selection</button>
-        </div>
-      </div>
-      <p class="hint" id="libraryDisabledHint" style="display:none">Select one or more layers on the canvas or in the Layers list to enable "Save Selection".</p>
-      <div class="library-controls">
-        <div class="field grow"><label for="librarySearch">Search</label><input id="librarySearch" type="search" placeholder="Search designs by name"></div>
-        <div class="field"><label for="libraryCategoryFilter">Category</label><select id="libraryCategoryFilter"><option value="All">All categories</option></select></div>
-        <div class="field"><label for="librarySort">Sort</label><select id="librarySort"><option value="asc">Name (A–Z)</option><option value="desc">Name (Z–A)</option></select></div>
-      </div>
-      <div class="library-empty-state" id="libraryEmptyState" style="display:none">Your Design Library is empty. Save your current project or a selection above to get started.</div>
-      <div class="library-no-results" id="libraryNoResults" style="display:none">No designs match your search or filter.</div>
-      <div class="library-grid" id="libraryGrid"></div>
-    </div>
-    <footer class="lightbox-footer"><span class="footer-note" id="libraryStatus"></span><button class="btn" data-lightbox-close>Close</button></footer>
-  </div>
-</div>
-
-<!-- ---------- DESIGN LIBRARY: DELETE CONFIRMATION (RS-1015) ---------- -->
-<div class="lightbox-overlay" id="lightboxLibraryConfirm">
-  <div class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxLibraryConfirmTitle" tabindex="-1">
-    <header class="lightbox-header"><h2 id="lightboxLibraryConfirmTitle">Delete design?</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
-    <div class="lightbox-body"><p id="libraryConfirmMessage"></p></div>
-    <footer class="lightbox-footer">
-      <button class="btn" data-lightbox-close>Cancel</button>
-      <button class="btn danger" id="libraryConfirmDelete">Delete</button>
-    </footer>
-  </div>
-</div>
-
 <!-- ---------- GALLERY (RS-2001): built-in, read-only example designs ---------- -->
 <div class="lightbox-overlay non-modal" id="lightboxGallery">
   <div class="lightbox wide gallery-lightbox" role="dialog" aria-modal="false" aria-labelledby="lightboxGalleryTitle" tabindex="-1">
@@ -1161,7 +1328,6 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
     </div>
     <footer class="lightbox-footer">
       <span class="footer-note" id="galleryPreviewStatus"></span>
-      <button class="btn" id="galleryPreviewSaveToLibrary" title="Save a copy of this design to your Design Library">Save to Design Library</button>
       <button class="btn primary" id="galleryPreviewOpenCopy" title="Open an editable copy of this design">Open Copy</button>
     </footer>
   </div>
@@ -1174,25 +1340,52 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
      ============================================================================ -->
 <div id="sharedPositionFields">
   <div class="field-row">
-    <div class="field"><label for="shapeX">X (mm)</label><input id="shapeX" type="number" step="1"></div>
-    <div class="field"><label for="shapeY">Y (mm)</label><input id="shapeY" type="number" step="1"></div>
+    <div class="field"><label for="shapeX" data-unit-label="X">X (mm)</label><input id="shapeX" type="number" step="1" data-mm-step="1"></div>
+    <div class="field"><label for="shapeY" data-unit-label="Y">Y (mm)</label><input id="shapeY" type="number" step="1" data-mm-step="1"></div>
   </div>
   <div class="field-row">
-    <div class="field"><label for="shapeW" id="shapeWLabel">Width (mm)</label><input id="shapeW" type="number" step="1"></div>
-    <div class="field" id="shapeHField"><label for="shapeH">Height (mm)</label><input id="shapeH" type="number" step="1"></div>
+    <div class="field"><label for="shapeW" id="shapeWLabel">Width (mm)</label><input id="shapeW" type="number" step="1" data-mm-step="1"></div>
+    <div class="field" id="shapeHField"><label for="shapeH" data-unit-label="Height">Height (mm)</label><input id="shapeH" type="number" step="1" data-mm-step="1"></div>
   </div>
+  <div class="field"><label for="shapeRotationDeg">Rotation (deg)</label><input id="shapeRotationDeg" type="number" min="0" max="360" step="1" value="0"></div>
+  <p class="hint">Drag the round handle above the selected shape on the 2D canvas to rotate it freely, or type an exact angle here. Hold Shift while dragging the handle to snap to 15° steps.</p>
 </div>
 <div id="sharedStoneFields">
   <div class="field-row">
-    <div class="field"><label for="stoneSize">Stone size</label><select id="stoneSize" title="Standard rhinestone sizes (commercial name and actual diameter). Populated from the stone size library."></select></div>
-    <div class="field"><label for="gap">Gap (mm)</label><input id="gap" type="number" min="0" max="5" step="0.1" value="0.3"></div>
+    <div class="field"><label for="stoneSize">Stone size (mm)</label><select id="stoneSize" title="Standard rhinestone sizes (commercial name and actual diameter). Populated from the stone size library."></select></div>
+    <div class="field"><label for="gap" data-unit-label="Gap">Gap (mm)</label><input id="gap" type="number" min="0" max="5" step="0.1" data-mm-step="0.1" value="0.3"></div>
   </div>
+  <!-- Stone Size overlap guard: shown when the currently-selected Stone size would produce genuine
+       physical overlap for this shape's real dimensions/gap/fill mode (updateStoneSizeOverlapCapabilityUI()
+       in app.js) -- the currently-selected size is deliberately never disabled itself (see that
+       function's own doc comment for why), so this is the visible flag it gets instead, the same
+       "separate warning paragraph" idiom #mixedNoEligibleHint already uses. -->
+  <p class="validation-message" id="stoneSizeOverlapWarning" role="alert"></p>
+  <!-- Crowding/attrition warning: informational only (measureStoneCrowding()/StoneLayout.outlineStats
+       in updateStoneSizeOverlapCapabilityUI()) -- dense packing is sometimes exactly what the user
+       wants (pave), so this never disables an option, and is mutually exclusive with the overlap
+       warning above (genuine overlap is the more severe, actionable problem). Uses the .hint idiom,
+       not .validation-message -- this is a suggestion, not an error. -->
+  <p class="hint" id="stoneSizeCrowdingHint" style="display:none"></p>
   <!-- RS-2012: shown instead of relying on #gap's disabled look alone -- an authored Rhinestone
        font (RS Block/RS Modern) bakes spacing into its stone positions, so Gap has no effect for it
        (see isAuthoredStoneFontId() in app.js). Mirrors #textSizeFixedHint/#curveUnavailableHint's
        existing "disable the control + explain why right below it" convention. -->
   <p class="hint" id="gapFixedHint" style="display:none">Character spacing is built into this font.</p>
   <div class="field"><label for="stoneColor">Stone color</label><div class="color-pick-row"><select id="stoneColor"></select><span id="stoneColorSwatch" class="color-swatch" title="Selected color preview"></span></div></div>
+  <!-- RS-3013 Step 5: region-only Fill Style, shown instead of the whole-shape #shapeFillMode
+       (5 options) while a region is selected -- deliberately scoped to just fill/outline for this
+       milestone (see the milestone's own DECIDED item 2: staggered/radial/contour against an
+       arbitrary clipped region contour is unproven and left to a future step). Toggled in
+       syncSelectedControlsFromLayer(), same per-selection-type gate #shapeFillModeField already
+       uses. Lives inside #sharedStoneFields (not #shapeControls, where #shapeFillMode lives) so it
+       follows #stoneSize/#gap/#stoneColor through the exact same relocateFieldGroups() home, since a
+       region only ever exists while Design owns the canvas -- never inside a Lightbox. -->
+  <div class="field" id="regionFillModeField" style="display:none"><label for="regionFillMode">Fill style</label><select id="regionFillMode" title="How rhinestones are arranged across this region."><option value="fill">Fill</option><option value="outline">Outline</option></select></div>
+  <!-- RS-3011 Step 7: shown only for a Design-drawn 'path' layer whose stones are still deferred
+       (stonesGenerated===false, set at draw time by commitFinalizedShape()) -- toggled in
+       syncSelectedControlsFromLayer(), same style as #gapFixedHint's own per-layer-type gate above. -->
+  <div class="field" id="generateStonesField" style="display:none"><button class="btn primary block" id="generateStonesBtn" title="Generate this shape's stones using the current Stone size/Gap/Color">Generate Stones</button></div>
 </div>
 <!-- S-200 (Mixed Stone-Size Layouts): shared, relocated field group (same relocateFieldGroups()
      mechanism as sharedPositionFields/sharedStoneFields above) -- Mixed mode applies uniformly to
@@ -1244,10 +1437,13 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 {
   "imports": {
     "opentype.js": "./src/browser/OpenTypeBrowserAdapter.js",
-    "three": "./node_modules/three/build/three.module.js"
+    "three": "./node_modules/three/build/three.module.js",
+    "paper": "./src/browser/PaperBrowserAdapter.js",
+    "@tarikjabiri/dxf": "./node_modules/@tarikjabiri/dxf/lib/index.esm.js"
   }
 }
 </script>
+<script src="./node_modules/paper/dist/paper-full.js"></script>
 <script type="module" src="./app.js"></script>
 </body>
 </html>

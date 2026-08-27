@@ -73,7 +73,13 @@ function extractRenderLayerUI() {
 
   const source = `${layerLabelMatch[0]}\n${escapeHtmlMatch[0]}\n${renderMatch[0]}\nreturn renderLayerUI;`;
   // eslint-disable-next-line no-new-func
-  return new Function('project', 'selectedLayerId', 'selectedLayerIds', 'el', 'selectedLayer', 'updateObjectTemplateDetail', 'SHAPE_DISPLAY_LABELS', source);
+  // RS-3013 Step 5: renderLayerUI() now reads drawingTool.activeSelection (a selected REGION
+  // outranks the layer's own label in the Inspector header) -- added to this sandbox's parameter
+  // list so the extracted function has a real binding for it, same as every other app.js-level
+  // free variable this harness already supplies (project/selectedLayerId/el/etc.). Callers pass a
+  // minimal {activeSelection: null} stub -- this suite verifies id-escaping, not the region-header
+  // path, so nothing more elaborate is needed.
+  return new Function('project', 'selectedLayerId', 'selectedLayerIds', 'el', 'selectedLayer', 'updateObjectTemplateDetail', 'SHAPE_DISPLAY_LABELS', 'drawingTool', source);
 }
 
 const { validateProject, defaultProject, LAYER_ID_PATTERN } = await extractProjectFunctions();
@@ -181,7 +187,7 @@ await test('4. renderLayerUI() HTML-escapes layer.id in both the #selectedLayer 
   const hostileId = `x" onmouseover="alert(1)`;
   const project = { layers: [{ id: hostileId, type: 'text', text: 'Hi', visible: true }] };
   const { get } = makeMockEl();
-  const renderLayerUI = makeRenderLayerUI(project, hostileId, new Set([hostileId]), get, () => project.layers[0], () => {}, {});
+  const renderLayerUI = makeRenderLayerUI(project, hostileId, new Set([hostileId]), get, () => project.layers[0], () => {}, {}, { activeSelection: null });
   renderLayerUI();
 
   const selectedLayerHtml = get('selectedLayer')._html;
@@ -196,7 +202,7 @@ await test('4. renderLayerUI() renders a normal, LAYER_ID_PATTERN-compliant id u
   const id = 'circle1737384000000';
   const project = { layers: [{ id, type: 'circle', visible: true }] };
   const { get } = makeMockEl();
-  const renderLayerUI = makeRenderLayerUI(project, id, new Set([id]), get, () => project.layers[0], () => {}, {});
+  const renderLayerUI = makeRenderLayerUI(project, id, new Set([id]), get, () => project.layers[0], () => {}, {}, { activeSelection: null });
   renderLayerUI();
   assert.ok(get('selectedLayer')._html.includes(`value="${id}"`));
   assert.ok(get('layersList')._html.includes(`data-layer="${id}"`));

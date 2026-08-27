@@ -112,10 +112,15 @@ drawleather populates into. The following are open questions for this milestone,
 
 ## 5. License Resolution (Blocking Gate)
 
-No `LICENSE` file is present in the drawleather source as audited. Code from drawleather must not
-ship in the commercial Rhinestone Studio product until Sasha and Sergey resolve licensing. This
-blocks the *ship* step only — it does not block audit, spec, or prototype work, including this
-document.
+RESOLVED (2026-08-06, Sasha) -- licensing between Sasha and Sergey is settled. Code/technique
+reuse from drawleather source is no longer blocked; the build-vs-vendor decision recorded
+above (build purpose-fit, not vendor) is unchanged and not revisited by this resolution -- it
+only removes the gate on referencing drawleather's source for implementation technique.
+
+Reuse policy going forward (RS-3010 Step 2a and later): drawleather's source is a reference
+for technique -- read it, reimplement in Rhinestone Studio's own conventions, cite what was
+checked and what was/wasn't reused (and why) in the implementation prompt that used it. Not a
+copy-paste source. See RS-3010 Step 2a's own prompt for the first instance of this.
 
 ---
 

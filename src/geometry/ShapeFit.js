@@ -32,7 +32,7 @@ import { isPointInsidePolygons } from './StoneSampler.js';
  */
 export const FITTABLE_SHAPE_TYPES = new Set([
   'circle', 'rectangle', 'ellipse', 'capsule', 'polygon', 'star', 'heart', 'ring',
-  'arrow', 'cross', 'crescent'
+  'arrow', 'cross', 'crescent', 'shield'
 ]);
 
 const PERIMETER_SAMPLES_PER_EDGE = 10;

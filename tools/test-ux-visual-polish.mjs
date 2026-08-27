@@ -235,9 +235,25 @@ await test('9. geometry counts/bounds from the permanent GeometryEngine are unch
   // own title ("this milestone touches no geometry code") refers to whatever milestone is *current*
   // when a reader is auditing a future, unrelated change; RC-004A is exactly a geometry-code
   // milestone, so this count and the bounding box below are expected to move once more here.
-  assert.equal(result.count, 202, 'expected RC-004A\'s same-contour overlap guard to additionally prune physically overlapping stones within a single glyph contour');
-  assert.ok(Math.abs(result.widthMm - 200.598759) < 0.001, `expected widthMm ~= 200.598759, got ${result.widthMm}`);
-  assert.ok(Math.abs(result.heightMm - 17.097546) < 0.001, `expected heightMm ~= 17.097546, got ${result.heightMm}`);
+  //
+  // RS-3011 corner-gap backfill: 202 -> 212. A 15-character mixed-glyph phrase has many dropped
+  // corners/cusps across all its letters; verified directly (re-running this exact scaled layout and
+  // diffing its stones against the pre-backfill dedupe output) that 10 of them have genuine room for
+  // a legal replacement point and are backfilled, with zero physical overlap anywhere in the result
+  // (re-checked directly, not merely assumed from the count). widthMm is untouched -- backfilling
+  // adds stones inside the already-sampled glyph contours, it never changes their geometry.
+  //
+  // outline-uniform-perimeter-spacing: 212 -> 214. Each glyph contour's raw arc-length walk now
+  // steps by perimeterMm/round(perimeterMm/spacingMm) instead of the raw spacingMm, shifting every
+  // contour's exact raw sample positions -- across 15 characters' worth of contours, this shifts
+  // which curvature/cusp-adjacent chords land under the stoneSizeMm=2mm dedupe threshold and which
+  // dropped points find legal RS-3011 backfill room, net +2 here. widthMm/heightMm are StoneLayout's
+  // own bounding box of actual stone centers (not the underlying glyph vector geometry, which is
+  // unchanged), so they shift by a sub-stone-pitch amount too, since the outermost stone on at least
+  // one glyph now lands at a slightly different sampled position along its contour.
+  assert.equal(result.count, 214, 'expected outline-uniform-perimeter-spacing to shift the same-contour dedupe/backfill outcome across this multi-glyph fixture');
+  assert.ok(Math.abs(result.widthMm - 200.623773) < 0.001, `expected widthMm ~= 200.623773, got ${result.widthMm}`);
+  assert.ok(Math.abs(result.heightMm - 17.113786) < 0.001, `expected heightMm ~= 17.113786, got ${result.heightMm}`);
 });
 
 await test('10. stoneLayoutToSvg()/StoneLayout.toJSON() output for a fixed StoneLayout is unchanged (src/export, src/geometry untouched this milestone)', () => {

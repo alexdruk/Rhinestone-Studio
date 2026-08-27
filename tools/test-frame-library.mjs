@@ -29,7 +29,7 @@ async function test(name, fn) {
   }
 }
 
-const GEOMETRIC_FRAME_IDS = ['circle', 'oval', 'square', 'rounded-square', 'diamond'];
+const GEOMETRIC_FRAME_IDS = ['circle', 'oval', 'square', 'rounded-square', 'diamond', 'octagon', 'pentagon', 'shield'];
 const STANDARD_BOX = { xMm: 10, yMm: 20, widthMm: 60, heightMm: 60 };
 
 function shoelaceArea(contour) {
@@ -43,7 +43,7 @@ function shoelaceArea(contour) {
 
 // --- 1. Every frame loads correctly, with a unique id -------------------------------------------
 
-await test('1. listFrames() returns exactly the five geometric frames, each with a unique id', () => {
+await test('1. listFrames() returns exactly the eight geometric frames, each with a unique id', () => {
   const frames = listFrames();
   assert.equal(frames.length, GEOMETRIC_FRAME_IDS.length);
   const ids = frames.map((f) => f.id);

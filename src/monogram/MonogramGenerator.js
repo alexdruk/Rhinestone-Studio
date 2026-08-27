@@ -27,7 +27,7 @@
  * use for their own storage adapters.
  */
 
-import { getFrameDefinition, computeFrameInterior, computeFrameFitRect } from '../geometry/FrameLibrary.js';
+import { getFrameDefinition, computeFrameInterior, computeFrameFitRect, resolveFrameForStoneWidth } from '../geometry/FrameLibrary.js';
 import { computeMonogramLayout, MONOGRAM_LAYOUT_FAILURE_REASONS } from './MonogramLayouts.js';
 import {
   Stone,
@@ -51,6 +51,9 @@ export const MONOGRAM_GENERATOR_FAILURE_REASONS = Object.freeze({
   BELOW_MINIMUM_SCALE: 'below-minimum-scale',
   LETTER_COLLISION: 'letter-collision',
   FRAME_COLLISION: 'frame-collision',
+  // MONO-008: frameOptions.stoneWidth (1 or 2) could not be honored at this frame size/stone
+  // spacing -- see FrameLibrary.resolveFrameForStoneWidth()'s own 'frame-too-small' reason.
+  STONE_WIDTH_UNAVAILABLE: 'stone-width-unavailable',
   // MONO-005A: the generated layer's own data, regenerated through the real, unmodified
   // GeometryEngine.generateTextLayout() path, did not reproduce the fitted geometry used for
   // validation. Should never happen in practice (see generate()'s round-trip check below) -- this
@@ -236,7 +239,10 @@ export class MonogramGenerator {
    * contract, and verify both round-trip through the normal GeometryEngine.generateTextLayout()
    * path -> generate the frame layer -> validate collisions (letter vs letter, letter vs frame)
    * using real production spacing (stoneSizeMm + gapMm). Never auto-corrects: a letter/frame that
-   * does not fit is a structured failure, not a silently adjusted result.
+   * does not fit is a structured failure, not a silently adjusted result. (MONO-011: a caller's UI
+   * layer may itself retry generate() with an adjusted request.frameOptions.stoneSizeMm after a
+   * FRAME_COLLISION/STONE_WIDTH_UNAVAILABLE failure -- this generator still never adjusts anything
+   * on its own; each retry is an ordinary, independent call.)
    *
    * MONO-005A text x/y contract (see src/editing/TextPlacement.js for the full derivation and
    * source-of-truth): a text layer has no stored absolute position of its own -- it is always
@@ -271,8 +277,12 @@ export class MonogramGenerator {
    *   (project.canvas.width/height) -- required to compute a legal letter layer x/y under the real
    *   text-layer placement contract (see this method's own doc comment above). The caller (a future
    *   UI/integration milestone) always has this, since it already has the whole project.
-   * @param {{mode?:string,color?:string}} [request.frameOptions] Frame-specific overrides; mode
-   *   defaults to 'fill' (a solid stone band), color falls back to request.color.
+   * @param {{mode?:string,color?:string,stoneWidth?:number,stoneSizeMm?:number}} [request.frameOptions]
+   *   Frame-specific overrides; mode defaults to 'fill' (a solid stone band), color falls back to
+   *   request.color. MONO-010: stoneSizeMm falls back to the shared request.stoneSizeMm when
+   *   omitted -- when supplied, it drives only the frame's own stone pitch and its collision
+   *   threshold against the letters; it never affects the letters' own required interior clearance
+   *   (see this method's own comment at requiredSpacingMm/frameRequiredSpacingMm for why).
    * @returns {Promise<{
    *   ok: boolean,
    *   reason?: string,
@@ -317,6 +327,13 @@ export class MonogramGenerator {
     if (color !== undefined && color !== null && (typeof color !== 'string' || color.length === 0)) {
       return failure(R.INVALID_INPUT, 'color must be a non-empty string when provided.');
     }
+    // MONO-010: validated the same way the top-level stoneSizeMm is above -- if a caller supplies
+    // frameOptions.stoneSizeMm at all, it must be a positive finite number. Omitted entirely is fine
+    // (falls back to the shared stoneSizeMm below); only an explicitly-supplied bad value is rejected.
+    if (frameOptions.stoneSizeMm !== undefined
+      && (typeof frameOptions.stoneSizeMm !== 'number' || !Number.isFinite(frameOptions.stoneSizeMm) || frameOptions.stoneSizeMm <= 0)) {
+      return failure(R.INVALID_INPUT, 'frameOptions.stoneSizeMm must be a positive finite number when provided.');
+    }
 
     // 1. Resolve FrameLibrary.
     let frame;
@@ -338,11 +355,52 @@ export class MonogramGenerator {
     // the collision check for why the formula is exactly stoneSizeMm+gapMm).
     const requiredSpacingMm = stoneSizeMm + gapMm;
 
+    // MONO-010: independent frame stone size. stoneSizeMm drives three things in this module: the
+    // frame's interior erosion (computeFrameInterior/computeFrameFitRect below, via
+    // requiredSpacingMm -- how much room is cleared inside the frame for letters), the letter<->frame
+    // collision threshold, and the frame's own stone pitch. Once frame and letters can differ in
+    // size, only the latter two switch to the frame's own size -- interior erosion deliberately stays
+    // keyed to requiredSpacingMm (the letters' own stoneSizeMm+gapMm, computed above and left
+    // untouched), because that value determines how much room the *letters* physically need to be
+    // placed and fitted legally -- the frame's own stone size has no bearing on that. Collision
+    // safety is still fully guaranteed independent of this choice: findCrossGroupCollisions() (used
+    // below) computes each colliding pair's own touching threshold as (stoneA.d + stoneB.d) / 2, so a
+    // large-stone frame around small-stone letters (or vice versa) is still correctly flagged if they
+    // would actually touch, even though the erosion step above never considered the frame's size.
+    //
+    // Computed here, before resolveFrameForStoneWidth() below, because that call's own row-offset
+    // spacing must match the frame's own pitch (frameRequiredSpacingMm), not the letters' -- a larger
+    // frame stone size than requiredSpacingMm would otherwise offset the outline's two rows too
+    // closely, and cross-contour stone dedup would silently delete the entire second row.
+    const frameStoneSizeMm = (typeof frameOptions.stoneSizeMm === 'number' && Number.isFinite(frameOptions.stoneSizeMm) && frameOptions.stoneSizeMm > 0)
+      ? frameOptions.stoneSizeMm
+      : stoneSizeMm;
+    const frameRequiredSpacingMm = frameStoneSizeMm + gapMm;
+
+    // MONO-008: when the caller requests a specific outline stone-width for the frame's own border
+    // (1 or 2 rows at real production spacing, instead of the fixed DEFAULT_INNER_RATIO band),
+    // resolve that geometry now, before any frame-interior/fitting computation below, so every
+    // remaining use of the frame's geometry -- the interior erosion just below, the fit-rect
+    // inscribing in step 4, and the final frame generation at the bottom of this method -- is
+    // consistent with the border actually traced. `frame` itself is left untouched (its label/
+    // category/etc. are still the catalog entry); `effectiveFrame` is what every geometry call below
+    // uses instead.
+    let effectiveFrame = frame;
+    if (frameOptions.stoneWidth === 1 || frameOptions.stoneWidth === 2) {
+      // The row offset must match the frame's own pitch, not the letters' -- a larger frame stone
+      // size dedupes the second row away if offset by the (smaller) letters' requiredSpacingMm.
+      const stoneWidthResult = resolveFrameForStoneWidth(frame, frameOptions.stoneWidth, frameRequiredSpacingMm, normalizedFrameRect.widthMm, normalizedFrameRect.heightMm);
+      if (!stoneWidthResult.ok) {
+        return failure(R.STONE_WIDTH_UNAVAILABLE, stoneWidthResult.message);
+      }
+      effectiveFrame = stoneWidthResult.frame;
+    }
+
     // 2. Cheap up-front checks, before generating any letters: does this frame have any usable
     // interior at all at this stone size (independent of layout), and is layoutId/letterCount
     // structurally valid? Both failures are reported without needing a real font/letters, matching
     // this generator's own established failure-priority order (frame -> layout -> font/fitting).
-    const { boundingBox: interiorBoundingBox } = computeFrameInterior(frame, normalizedFrameRect, requiredSpacingMm);
+    const { boundingBox: interiorBoundingBox } = computeFrameInterior(effectiveFrame, normalizedFrameRect, requiredSpacingMm);
     if (!interiorBoundingBox) {
       return failure(R.FITTING_FAILED, `Frame ${JSON.stringify(frameId)}'s interior is empty for the given frameRect and stoneSizeMm ${stoneSizeMm}/gapMm ${gapMm} (frame too small for its required production clearance).`);
     }
@@ -406,7 +464,7 @@ export class MonogramGenerator {
     // bounding box (always ~1:1 for a symmetric frame), so a wide multi-letter layout genuinely
     // unlocks more of a round/diamond frame's real footprint than a forced-square region would.
     const groupAspectRatio = computeGroupAspectRatio(letterEntries, probeLayoutResult.slots);
-    const inscribedInteriorRect = computeFrameFitRect(frame, normalizedFrameRect, groupAspectRatio, requiredSpacingMm);
+    const inscribedInteriorRect = computeFrameFitRect(effectiveFrame, normalizedFrameRect, groupAspectRatio, requiredSpacingMm);
     if (!inscribedInteriorRect) {
       return failure(R.FITTING_FAILED, `Frame ${JSON.stringify(frameId)} has no usable rectangular interior region for the given frameRect and stoneSizeMm ${stoneSizeMm}/gapMm ${gapMm}.`);
     }
@@ -435,7 +493,13 @@ export class MonogramGenerator {
     const slotByIndex = new Map(layoutResult.slots.map((slot) => [slot.index, slot]));
 
     const frameLayerId = `monogram-${frameId}-${layoutId}-frame`;
-    const frameMode = VECTOR_FILL_MODES.has(frameOptions.mode) ? frameOptions.mode : DEFAULT_FRAME_MODE;
+    // MONO-008: stoneWidth only has meaning for outline-mode row tracing (resolveFrameForStoneWidth()
+    // already produced exactly-one/exactly-two contours built for that mode), so requesting it forces
+    // the frame's own generation mode to 'outline' regardless of frameOptions.mode -- not a new
+    // validation error path, just an override.
+    const frameMode = (frameOptions.stoneWidth === 1 || frameOptions.stoneWidth === 2)
+      ? 'outline'
+      : (VECTOR_FILL_MODES.has(frameOptions.mode) ? frameOptions.mode : DEFAULT_FRAME_MODE);
     const frameColor = (typeof frameOptions.color === 'string' && frameOptions.color.length > 0)
       ? frameOptions.color
       : resolvedColor;
@@ -582,13 +646,13 @@ export class MonogramGenerator {
     // uses. No new geometry code: this is the one point of contact between FrameLibrary's data and
     // the Geometry Engine.
     const frameLayout = this._engine.generatePathLayout({
-      contours: frame.generationNaturalContours,
+      contours: effectiveFrame.generationNaturalContours,
       layerId: frameLayerId,
       xMm: normalizedFrameRect.xMm,
       yMm: normalizedFrameRect.yMm,
       widthMm: normalizedFrameRect.widthMm,
       heightMm: normalizedFrameRect.heightMm,
-      stoneSizeMm,
+      stoneSizeMm: frameStoneSizeMm,
       gapMm,
       mode: frameMode,
       color: frameColor
@@ -611,8 +675,13 @@ export class MonogramGenerator {
     // the fitting-region erosion) -- one shared value for both purposes, never redefined.
     const letterLayerIds = new Set(letterResults.map((r) => r.layerId));
     const allLetterStones = letterResults.flatMap((r) => r.stones);
-    const collisionRecords = allLetterStones.concat(frameLayout.stones)
-      .map((s) => ({ x: s.xMm, y: s.yMm, d: requiredSpacingMm, layerId: s.layerId }));
+    // MONO-010: letters and frame now each get their own `d` (requiredSpacingMm vs
+    // frameRequiredSpacingMm) rather than one shared value across the concatenated array --
+    // findCrossGroupCollisions() already computes each pair's own threshold as (a.d+b.d)/2, so this
+    // is the one place that threshold needs to reflect two possibly-different stone sizes.
+    const collisionRecords = allLetterStones
+      .map((s) => ({ x: s.xMm, y: s.yMm, d: requiredSpacingMm, layerId: s.layerId }))
+      .concat(frameLayout.stones.map((s) => ({ x: s.xMm, y: s.yMm, d: frameRequiredSpacingMm, layerId: s.layerId })));
     const collisions = findCrossGroupCollisions(collisionRecords);
 
     if (collisions.some((c) => letterLayerIds.has(c.layerIdA) && letterLayerIds.has(c.layerIdB))) {
@@ -639,12 +708,12 @@ export class MonogramGenerator {
       type: 'path',
       visible: true,
       pathName: `${frame.label} Frame`,
-      contours: frame.generationNaturalContours.map((polygon) => polygon.map((p) => ({ x: p.xMm, y: p.yMm }))),
+      contours: effectiveFrame.generationNaturalContours.map((polygon) => polygon.map((p) => ({ x: p.xMm, y: p.yMm }))),
       x: normalizedFrameRect.xMm,
       y: normalizedFrameRect.yMm,
       w: normalizedFrameRect.widthMm,
       h: normalizedFrameRect.heightMm,
-      stoneSize: stoneSizeMm,
+      stoneSize: frameStoneSizeMm,
       gap: gapMm,
       color: frameColor,
       fillMode: frameMode
@@ -720,6 +789,7 @@ export class MonogramGenerator {
 
     const diagnostics = {
       productionSpacingMm: requiredSpacingMm,
+      frameStoneSizeMm,
       collisions: { letterCollision: false, frameCollision: false },
       roundTripVerified: true
     };

@@ -1158,6 +1158,265 @@ They do not replace it.
 
 ---
 
+# Design Mode / Drawing Board
+
+Design is a Paper.js-backed drawing board (`src/drawing/DrawingCanvasTool.js`,
+`src/drawing/DrawingBoard.js`) layered onto the same `layoutCanvas` the 2D Production canvas already
+uses — Paper.js's own Project/View is set up lazily on first entry and then only paused/resumed on
+exit/re-entry (`view.autoUpdate`), never torn down, so "canvas interaction owned by exactly one thing
+at a time" holds: while Design is paused, `renderProductionLayout()`/`drawLayout()` own the canvas
+exclusively. All direct use of the `paper` package is confined to `DrawingCanvasTool.js`, mirroring
+how `src/preview3d/**` confines Three.js — `app.js` only ever calls the facade
+`createDrawingTool()` returns.
+
+**Implementation status:** RS-3010 built Design as a self-contained authoring tool; RS-3011 made it
+the app's primary view and folded its shapes directly into `project.layers` (removing the earlier
+explicit Commit Shape step); RS-3012 folded the remaining layer types (`svg`, `image`, `text`,
+`circle`) and the Stamp/Trace placement tools into Design's selection model; RS-3013 added independent
+selection/editing for Paint-created regions; RS-3014 gave Stamp/Trace/Paint their own tool-level
+style settings. See `docs/specifications/RS-3011-design-primary-view-scope.md` and
+`docs/specifications/RS-3013-region-selection-editing-scope.md` for full step-by-step scope and
+decision history — this section summarizes the shipped result, not the process.
+
+**Tool-mode convention.** Design's single Paper.js `Tool` routes every pointer gesture through one
+decision: hit an existing shape first (selection/move takes priority over starting a new draw), else
+draw per the current `mode`. Most tool-rail presets (Rect/Ellipse/Slot/Polygon/Pen/freehand, etc.)
+are one-shot: finishing a shape reverts `mode` back to `'select'` automatically, the same
+`mode`/`updateResizeHandles()`/`updateCursor()` tail `setMode()` itself uses. A fixed set,
+`CLICK_TO_PLACE_MODES = new Set(['stamp', 'trace', 'eraser', 'lasso'])`
+(`src/drawing/DrawingCanvasTool.js`), is the deliberate exception — these tools stay active after
+each placement so the operator can place several in a row, and Escape's idle-revert-to-Select keys
+off this same shared set rather than forking per-tool logic.
+
+**Paint-created regions.** Painting a lasso stroke onto an existing shape (RS-3011 Steps 10a/10b)
+commits a `region` object into that shape's `path` layer — its own `id`, its own natural-space
+`contour`, and its own independent `stoneSizeMm`/`gapMm`/`color`/`fillMode`, layered as a
+priority-ordered patch on top of the parent shape's base fill by
+`GeometryEngine._applyPathRegions()`. RS-3013 made a committed region independently:
+- **selectable** — click-to-select works identically whether Select or the dedicated Lasso rail tool
+  (shortcut `L`) is active, via `hitTestPathLayerRegion()` (`src/geometry/PaintRegionSelection.js`);
+- **movable** — dragging a selected region translates only its own polygon, never the parent shape;
+- **copyable** — duplicates offset by the same fixed 8mm `duplicateLayer()` already uses, copying its
+  stone spec verbatim (no picker on copy — a copy is a duplicate, not a new paint stroke);
+- **deletable** — independently of the parent shape, with no last-region guard (an empty `regions`
+  array is a path layer's normal default state);
+- **stone-spec editable** — `#stoneSize`/`#gap`/`#stoneColor` and a region-only `#regionFillMode`
+  (fill/outline only) read from and write to the selected region's own fields instead of the parent
+  layer's, once a region is the active selection.
+
+A region dragged or copied partly outside its parent shape's outline is not explicitly clipped —
+`_applyPathRegions()` already filters region stones against the shape's live outline on every
+regeneration, so it simply renders fewer stones there, self-correcting if dragged back in.
+
+**Paint's own stone spec (RS-3014 Step 1).** Paint does not inherit the target layer's stone spec.
+It carries its own independent `stoneSizeMm`/`gapMm`/`color` (`app.js`'s module-level
+`paintSettings`), edited through `#paintSizeField`/`#paintGapField`/`#paintColorField` shown in
+`#designToolOptionsPanel` while Paint is the active tool — the same per-tool options panel, toggled
+by the same show-only-while-active convention in `updateDrawToolButtons()`, that Stamp
+(`stampSettings`) and Trace (`traceSettings`) each got their own fields in. `paintSettings` is
+seeded once from the selected layer's `stoneSize`/`gap`/`color` the first time Paint is entered in a
+session (`seedPaintStyleIfNeeded()`, mirroring `seedEraserRadiusIfNeeded()`), then left exactly as
+the operator sets it via the panel fields. Every new region takes its spec from `paintSettings` at
+the moment the stroke is committed (`onPaintStroke()`'s `newRegions` map), never from the target
+layer. The one value still read live from the target layer is `selectPaintTarget()`'s
+boolean-geometry grid resolution (`targetSpacingMm` in `resolvePaintTargetTwoPass()`) — a precision
+concern RS-3014 deliberately left alone, unrelated to a region's stored decoration.
+
+**Selection beyond shapes (RS-3012).** Design's click-to-select / drag / resize / rotate began
+(RS-3010/3011) as a shape-only interaction. RS-3012 extended it, across four shipped steps, to the
+remaining layer types and to the two placement tools:
+
+- **Step 1 — Stamp and Trace respect the selection boundary.** When an `activeSelection` (a region,
+  or a draft rect/lasso) is set, `isPointInActiveSelection(pointAbsoluteMm, selection)` — a
+  standalone top-level function in `app.js`, also handed to `DrawingCanvasTool.js` as the
+  `isPointInActiveSelection` hook — gates stone placement: a hard interior test, no margin or
+  tolerance, unlike `hitTestRegion()`'s deliberately forgiving click-tolerance. A Stamp click
+  outside the boundary places nothing and fires `onStampRejected()` (status message, no history
+  entry). Trace filters its spaced placements point-by-point — a stroke straddling the boundary
+  keeps its in-bounds points; only a stroke with *every* point outside is rejected whole, via
+  `onTraceRejected()`. A null selection means no constraint, byte-identical to before the step.
+- **Step 2 — `svg` and `image` layers join Select.** Both already use the same `x/y/w/h/rotationDeg`
+  box model as every other `XYWH_SHAPE_TYPES` layer, so click/drag/resize/rotate reuse the existing
+  `hitTestShapeId()` / `rotatedHandlePositionsFor()` / `onShapeMoved` / `onShapeResized` /
+  `onShapeRotated` machinery unchanged — the only new code is `materializeSvgImageItemFromLayer()`,
+  which builds the Paper.js proxy. An `svg` layer gets its real vector outline, resolved via the
+  same `permanentEngine.resolveSvgPolygons()` hook Boolean Operations already uses (never a second
+  SVG-markup parser), then rotated by the item itself (`item.rotate()`) since SVG layers never got
+  the RS-3028 rotationDeg-into-the-outline wiring. An `image` layer gets a plain rectangle proxy — a
+  faithful proxy, not a placeholder: the main canvas never draws the source bitmap on `layoutCanvas`
+  either, only the selection box and the generated stone dots, so the rectangle reads exactly as an
+  image layer already reads everywhere else in the app. The same rectangle fallback also covers an
+  `svg` whose outline can't be resolved (missing/unparseable `svgSource`).
+- **Step 3 — `text` layers join Select (no resize handles).** Click / drag / rotate only — font
+  size is an Inspector field (`#height`), not a drag concept, so the proxy sets
+  `item.data.noResizeHandles` and only the rotate handle applies. `materializeTextItemFromLayer()`
+  builds the proxy as the AABB of the text layer's *real, already-computed* stone positions, read
+  through the new `getTextLayerStones(layerId)` hook — itself just a filter over `app.js`'s `layout`
+  global, which `engine.generate(project)` recomputes on every `updateAll()` tick regardless of
+  whether Design is active. It is never a second call into the font engine
+  (`DrawingCanvasTool.js` never touches `GeometryEngine` directly, per its header comment). Unique
+  to `text` among the layer types here: those stones are *already rotated by `GeometryEngine`
+  itself* — `generateTextLayout()` applies `rotationDeg` as a final position transform on the
+  sampled points (`rotateTextPoints()` / `rotatePointsAroundCenter()`, on both the
+  authored-stone-center branch and the sampled branch) before this app's own `x`/`y` offset is
+  applied. Every other layer type here is rotated by Design as an unrotated item
+  (`item.rotate(rotationDeg, pivot)`); rotating a text proxy the same way would double the rotation,
+  so it is deliberately not rotated. Its pivot is that AABB's own center — the fixed point
+  `TextPlacement.js`'s `computeTextPlacementOffsetMm()` re-centers the (already-rotated) bounding
+  box onto for any `rotationDeg`, so a live rotate-drag pivots around it and still lands on the
+  correct center once the real stones regenerate.
+- **Step 4 — `circle` layers join Select (no rotate handle).** A circle layer uses a different data
+  model (`cx`/`cy`/`r`, not `x`/`y`/`w`/`h`) — deliberately *not* migrated. `materializeCircleItemFromLayer()`
+  builds the proxy directly from `cx`/`cy`/`r` (this is the one place in `DrawingCanvasTool.js` that
+  reads those fields), and two behavioural specifics follow from circle's own geometry, each carried
+  on an `item.data` flag: `item.data.isCircleProxy` makes the resize drag a *radius-from-center*
+  drag — the new radius is the distance from the fixed center to the pointer, matching `app.js`'s own
+  main-canvas `l.r=Math.max(2,Math.hypot(mm.x-drag.l0.cx,mm.y-drag.l0.cy))`, so any of the 8 handles
+  drives it identically and the center stays pinned (`onShapeResized` reports a centered `2r`-by-`2r`
+  square, which `app.js` converts back to `l.r`); `item.data.noRotateHandle` makes
+  `hitTestRotateHandle()` / `updateRotateHandleItem()` skip the rotate handle entirely, since a
+  circle is rotationally invariant (same "not every layer type gets every handle" precedent Step 3
+  set for text's resize handles). Click/drag reuse the shared `hitTestShapeId()` / `onShapeMoved`
+  machinery unchanged (`onShapeMoved` already routes through `getLayerPosition()`/`setLayerPosition()`,
+  which know circle's `cx`/`cy`). Like `text`, a circle has no `x`/`y`/`w`/`h` box, so
+  `syncFromProjectLayers()` gives it its own reconciliation branch, diffing a freshly re-materialized
+  proxy's bounds.
+
+At each step `app.js`'s `syncFromProjectLayers()` call-site filter widened to carry the new types
+(`l.type==='svg'||l.type==='image'||l.type==='text'||l.type==='circle'` alongside `'path'` and
+`SHAPE_LIBRARY_KINDS`), and `syncFromProjectLayers()` dispatches each type to its own materializer.
+
+**Known test-coverage gap: `DrawingCanvasTool.js` interaction layer.** Almost none of Design's core
+interaction layer (`src/drawing/DrawingCanvasTool.js`) has committed regression tests. The only
+`tools/*.mjs` test files that exercise `src/drawing/` at all are
+`test-rs3011-step8-svg-import-flattening.mjs`, `test-stone-sprite-cache.mjs`, and
+`test-rs3012-step4-circle-select.mjs` — covering SVG-import flattening, stone-sprite caching, and
+circle-select respectively, not the interaction layer's other tools. There is explicitly zero
+committed coverage for: the Pen (Bezier) tool and its four follow-up fixes; the mode-toggle bug
+fix; the Eraser tool (RS-3011 Step 13 plus five RS-3014 follow-ups); RS-3013's region-editing
+gestures *as Design UI operations* (move / copy / delete / spec-edit — the underlying region data
+model itself *is* covered by the geometry-layer tests around `GeometryEngine._applyPathRegions()`
+and `PaintRegionSelection.js`; it is only the UI-gesture layer that is not); rotation and resize
+handles specifically inside Design (RS-3029 / RS-3030 / RS-3033 / RS-3034); grid autoscale
+(RS-3016); and the shape-library visibility toggle in Design (RS-3032 Step A). This is a named gap
+for future reference, not a defect and not a call to action — framed the same way this codebase
+frames known-but-accepted gaps elsewhere (`docs/specifications/RS-2000-MVPStabilizationValidation.md`'s
+"flagged for awareness, not a defect", `ARCH-REVIEW-001`'s "possible coverage gap, not confirmed").
+The app works, the full suite passes, and this interaction layer is exercised constantly by manual
+browser verification on every Design milestone. Backfilling it is a deliberate non-goal for now:
+it would be speculative test insurance against nothing currently broken. If someone later touches
+one of the tools named above and judges coverage worth adding at that point, this note is where
+they would start.
+
+---
+
+# Monogram Generation
+
+The Monogram Generator (`src/monogram/MonogramGenerator.js`) is a headless pipeline that produces a
+complete monogram — a frame layer plus one letter layer per character — as ordinary `project.layers`
+entries, reusing the normal production path (`GeometryEngine.generateTextLayout()` /
+`generatePathLayout()` → `StoneLayout` → renderer/exporter) rather than holding a parallel,
+ephemeral result. It owns no geometry math of its own: it sequences `FrameLibrary.js` (frame
+contours + fitting interior), `MonogramLayouts.js` (slot geometry inside that interior), and the
+injected `GeometryEngine` (letter generation + `scaleAuthoredTextLayout()` persistent resizing),
+then validates letter/frame collisions using real production spacing (`stoneSizeMm + gapMm`) before
+returning.
+
+**Frame catalog.** `src/geometry/FrameLibrary.js` defines eight hollow frames: Circle, Oval, Square,
+Rounded Square, Diamond, Octagon, Pentagon, and Shield. Every frame is a stone border with an outer
+and inner contour pair; `computeFrameInterior()`/`computeFrameFitRect()` compute the clearance-eroded
+region a letter is fitted inside, kept separate from the frame's own stone-generation geometry
+(`resolveGenerationContours()`) — fitting against the full ring would center a candidate rectangle on
+the ring's own bounding box rather than the hole it actually occupies.
+
+**Stone-wide outline-border option.** A frame can be generated as a solid stone fill (default) or
+traced as an outline exactly 1 or 2 stones wide, via `resolveFrameForStoneWidth()`
+(`FrameLibrary.js`) and the Monogram Lightbox's "Frame style" select (`fill` / `outline-1` /
+`outline-2`, wired in `app.js`'s `buildMonogramRequest()`).
+
+**Product-aware default sizing.** Opening the Monogram Lightbox (or switching frame/product while it
+is open) defaults the frame size to the current product's safe area, shrunk by an operator-editable
+margin and clamped into the frame's own hard `scalingLimitsMm` range — not an arbitrary generic
+midpoint. The Round Dinner Plate is excluded from this auto-fit: its safe-area inset is all-zero
+(safe area is the full square canvas) while its true printable region is circular, so a rect-based
+auto-fit would overshoot the real usable area; Plate keeps the generic-midpoint default instead.
+
+**Independent frame and letter stone size/color.** The Monogram Lightbox has two separate stone-spec
+control groups: the shared `#monogramStoneSize`/`#monogramColor` fields apply to the letters, and a
+toggle-gated `#monogramFrameStoneToggle` reveals `#monogramFrameStoneSize`/`#monogramFrameColor` for
+the frame specifically. Leaving the toggle off omits `frameOptions.stoneSizeMm`/`color` entirely, so
+the generator's own fallback (frame inherits the letters' spec) applies unchanged — toggling off is
+byte-identical to the pre-feature behavior.
+
+**"Never auto-corrects" doctrine.** `MonogramGenerator.generate()`'s own doc comment states it
+directly: *"Never auto-corrects: a letter/frame that does not fit is a structured failure, not a
+silently adjusted result."* A failure to fit returns one of the structured
+`MONOGRAM_GENERATOR_FAILURE_REASONS` (e.g. `FRAME_COLLISION`, `STONE_WIDTH_UNAVAILABLE`,
+`BELOW_MINIMUM_SCALE`) rather than silently shrinking or repositioning anything.
+
+A caller-side auto-shrink wrapper does exist: `app.js`'s `generateMonogramWithFrameAutoShrink()`
+(MONO-011). It sits entirely outside the generator and does not weaken its doctrine — the generator
+itself still never adjusts anything on its own. The wrapper calls `generate()` once, and only on a
+`FRAME_COLLISION` or `STONE_WIDTH_UNAVAILABLE` failure retries with progressively smaller catalog
+stone sizes for `frameOptions.stoneSizeMm` alone (never the letters' shared stone size, never gap,
+never the frame rect) until one succeeds or the candidates are exhausted. Each retry is an ordinary,
+independent `generate()` call — the wrapper decides *to* retry; the generator never decides *for*
+itself. A successful auto-shrink is always surfaced to the user in the status bar ("Frame stones
+reduced to … to fit"), never applied silently.
+
+---
+
+# Units
+
+Internal unit:
+
+millimeters
+
+Rendering may convert to pixels.
+
+Manufacturing always remains millimeters.
+
+**Implementation status:** true everywhere in `src/geometry/**`, `src/text/**`, and
+`src/renderer/**`/`src/export/**` — all internal fields are named with an explicit `Mm` suffix
+(`xMm`, `heightMm`, `stoneSizeMm`, ...), and pixel conversion happens only inside
+`CanvasRenderer2D.fitTransform()` / `CupRenderer`'s local transform math.
+
+**RS-3018+ display-unit system.** As of RS-3018, `project.units` (`'mm'` or `'in'`, default `'mm'`,
+validated in `validateProject()`) is a display preference — which unit a freely-typed length field
+shows and accepts — never a project-content edit. It is deliberately excluded from
+`HISTORY_TRACKED_CONTROL_IDS` and never runs through `commitHistory()`/undo-redo, the same category
+as other view-only editor state like `snapToleranceMm`. Storage stays millimeters everywhere,
+forever; only display/input formatting changes. The conversion math itself is a small,
+dependency-free module, `src/units/LengthUnits.js` (`mmToDisplayValue()`, `displayValueToMm()`,
+`unitSuffix()`, `formatLengthDisplay()`) — `'in'` converts mm↔inches at `MM_PER_INCH = 25.4`,
+anything else (including `'mm'`) passes through unchanged.
+
+`app.js`'s `setLengthField(id, mm)` / `readLengthField(id)` are the shared read/write pair every
+unit-aware `<input>` goes through. `#stoneSize` is permanently excluded (it selects a fixed named
+commercial size, not a free-typed length).
+
+**Canonical-store vs. bare-DOM fields.** A Units switch (`applyUnitsChange()`) must redisplay every
+visible length field in the new unit without drifting the underlying mm value. Two different field
+categories exist:
+
+- **Canonical-store fields** (e.g. the Plate/Vessel dimension inputs) mirror a real mm value already
+  held on `project` (`project.plate.*Mm`, `project.vessel.*Mm`). These are always re-derived directly
+  from `project` on a units switch, so they can never drift regardless of prior display formatting.
+- **Bare-DOM fields** (e.g. `prodSheetMargin`, the Shipping dimension fields, `drawSlotWidthMm`) have
+  no such canonical mm value on `project` — Shipping's own state is session-only, and fields like
+  `prodSheetMargin` are written only by the operator typing into them. For these, RS-3025 added a
+  `dataset.mmValue` stash: every `setLengthField()` write and every tracked field's own `'input'`
+  listener (via `stashTypedLengthField()`) records the exact mm value on `el(id).dataset.mmValue`,
+  computed before any display-side rounding. `refreshAllLengthFieldDisplays()` prefers this stash when
+  present, reading it directly rather than re-deriving mm from an already-rounded display string — the
+  fallback (converting the field's current display value from the previous unit in place) is only used
+  for a field that was never stashed (e.g. before RS-3025, or a value the stash was explicitly cleared
+  for as unparseable). This closes a real round-trip drift bug: converting from an already-rounded
+  2-decimal display value on every unit switch accumulated a few hundredths of a millimeter of error
+  per round trip for fields with no canonical store to fall back on.
+
+---
+
 # Final Rule
 
 If there is ever a choice between

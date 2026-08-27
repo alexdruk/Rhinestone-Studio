@@ -41,7 +41,6 @@ export const GROUPS = {
     'test-object-template.mjs',
     'test-pdf-document.mjs',
     'test-object-dimensions.mjs',
-    'test-stone-layout-texture.mjs',
     'test-object-geometry-builder.mjs',
     'test-crystal-color-catalog.mjs',
     'test-image-pipeline.mjs',
@@ -51,7 +50,6 @@ export const GROUPS = {
     'test-boolean-precision-validation.mjs',
     'test-stone-size-library.mjs',
     'test-fill-algorithms.mjs',
-    'test-design-library.mjs',
     'test-gallery.mjs',
     'test-shape-library.mjs',
     'test-shape-fit.mjs',
@@ -78,7 +76,6 @@ export const GROUPS = {
     'test-path-boolean-integration.mjs',
     'test-variable-stone-sizes.mjs',
     'test-fill-algorithms-integration.mjs',
-    'test-design-library-integration.mjs',
     'test-gallery-integration.mjs',
     'test-typography-font-library.mjs',
     'test-text-position-workflow.mjs',
@@ -88,9 +85,9 @@ export const GROUPS = {
     'test-shapes-around-text-creation.mjs',
     'test-alignment-snapping-wiring.mjs',
     'test-lightbox-controller.mjs',
+    'test-topmenu-active-state.mjs',
     'test-ui-shell-structure.mjs',
     'test-ui-import-autoswitch-regression.mjs',
-    'test-design-library-freeze-gate.mjs',
     'test-autosave-recovery-wiring.mjs',
     'test-font-decision-001-stone-size-ux.mjs',
     'test-font-portfolio-001-stone-size-gating.mjs',
@@ -103,6 +100,10 @@ export const GROUPS = {
     'test-browser-dependency-loading.mjs',
     'test-module-graph-exports.mjs',
     'test-project-model-consolidation.mjs',
+    // Source-tree hygiene guard: no tracked JavaScript source file contains a raw NUL (0x00) byte
+    // (which makes grep/git treat the file as binary). A permanent codebase-level rule, same
+    // category as the module-boundary guards above.
+    'test-source-hygiene.mjs',
   ],
   // Gallery is disabled in the public UI, but its catalog/wiring logic is still protected — both
   // files here already run as part of core/integration, so this group is a complete,
@@ -132,7 +133,7 @@ export const GROUPS = {
   //
   // The 12 groups below, together with architecture/gallery/security/documentation/autosave above,
   // partition all `tools/test-*.mjs` files by subsystem with no gaps and no overlaps (every file
-  // belongs to exactly one of these 16 groups) — Tier 2 of the tiered execution model. `core`/
+  // belongs to exactly one of these 17 groups) — Tier 2 of the tiered execution model. `core`/
   // `integration` above are unaffected: they remain their own, overlapping-with-everything,
   // test-layer-based groups for backward compatibility.
 
@@ -149,6 +150,19 @@ export const GROUPS = {
     'test-image-trace-regression.mjs',
     'test-fill-algorithms.mjs',
     'test-fill-algorithms-integration.mjs',
+    // GeometryEngine / StoneSampler output geometry: per-side corner-anchored Outline sampling for
+    // drawn paths, congruent-contour Outline stability, the boolean stone-overlap early-exit check,
+    // the content-addressed SVG natural-polygon cache (M13), layout-quality crowding/attrition
+    // measurement, additive mixed-size infill (S-200), and Paint-region fill claim/exclude +
+    // lasso-target selection at the geometry level (RS-3011 Steps 10a/10b).
+    'test-congruent-contours.mjs',
+    'test-geometry-path-corner-anchoring.mjs',
+    'test-geometry-stone-overlap-early-exit.mjs',
+    'test-geometry-svg-polygon-cache.mjs',
+    'test-geometry-layout-quality-metrics.mjs',
+    'test-s200-mixed-stone-sizes.mjs',
+    'test-rs3011-step10a-region-data-model.mjs',
+    'test-rs3011-step10b-paint-target-selection.mjs',
   ],
   'stone-layout': [
     'test-stone-color.mjs',
@@ -167,6 +181,16 @@ export const GROUPS = {
     'test-rs-block.mjs',
     'test-rs-modern.mjs',
     'test-font-002-production-font-mode.mjs',
+    // Font certification / evaluation tooling (tools/font-certification/**): certification
+    // classification, glyph-outline command analysis, readability metrics, word-space narrative,
+    // source-font evaluation, plus the manifest.json capHeight/xHeight ratios cross-checked against
+    // a live re-measurement of the real font files (TXT-104).
+    'test-font-cert-001-classification.mjs',
+    'test-font-cert-002-outline-detector-fixtures.mjs',
+    'test-font-cert-002-readability-metrics.mjs',
+    'test-font-cert-002-word-space-narrative.mjs',
+    'test-font-source-001-evaluate.mjs',
+    'test-font-height-ratios.mjs',
   ],
   shapes: [
     'test-shape-fit.mjs',
@@ -195,15 +219,30 @@ export const GROUPS = {
     'test-production-sheet-exporter.mjs',
     'test-pdf-document.mjs',
     'test-export-combined-preview-png.mjs',
+    // SVG import flattening -- flattenPathToContours() generalizing to paper.CompoundPath (holes)
+    // and paper.Group (disjoint pieces), the import half of Import/Export (RS-3011 Step 8 Phase A),
+    // same rationale as test-svg-parser.mjs living here.
+    'test-rs3011-step8-svg-import-flattening.mjs',
+    // Production Sheet per-color/per-size quantity grouping (S-200).
+    'test-s200-production-sheet-grouping.mjs',
   ],
   renderers: [
     'test-render-export-pipeline.mjs',
-    'test-stone-layout-texture.mjs',
     'test-object-preview-renderer.mjs',
     'test-cup-rotation-stabilization.mjs',
     'test-object-geometry-builder.mjs',
     'test-crystal-appearance.mjs',
     'test-crystal-stone-renderer.mjs',
+    // src/preview3d/Preview3DRenderer.js: instanced-stone mesh build/placement/lighting (RS-2013
+    // §4), invalidation-based render scheduling (RS-2011), non-plate stone tangent-frame
+    // orientation. WebGLRenderer needs a real GL context, so these exercise only the pure
+    // construction/scheduling logic in isolation.
+    'test-preview3d-instanced-stones.mjs',
+    'test-preview3d-render-scheduling.mjs',
+    'test-preview3d-stone-orientation.mjs',
+    // src/drawing/StoneSpriteCache.js: offscreen sprite baking for the Design view's stone-dot
+    // preview (cache-hit/miss behaviour against a stubbed canvas).
+    'test-stone-sprite-cache.mjs',
   ],
   // Pure alignment/snap/selection math reused by the UI, kept separate from `ui` (markup/wiring)
   // so --group editing targets exactly that math.
@@ -212,10 +251,14 @@ export const GROUPS = {
     'test-snap-engine.mjs',
     'test-editing-selection.mjs',
     'test-alignment-snapping-wiring.mjs',
+    'test-move-drag-translate.mjs',
+    'test-move-drag-fast-path-wiring.mjs',
+    'test-rs3012-step4-circle-select.mjs',
   ],
   ui: [
     'test-ui-shell-structure.mjs',
     'test-lightbox-controller.mjs',
+    'test-topmenu-active-state.mjs',
     'test-lightbox-movable-persistent.mjs',
     'test-ui-import-autoswitch-regression.mjs',
     'test-text-position-workflow.mjs',
@@ -223,14 +266,39 @@ export const GROUPS = {
     'test-font-decision-001-stone-size-ux.mjs',
     'test-font-portfolio-001-stone-size-gating.mjs',
     'test-auto-fit-default-toggle-warning.mjs',
-  ],
-  'design-library': [
-    'test-design-library.mjs',
-    'test-design-library-integration.mjs',
-    'test-design-library-freeze-gate.mjs',
+    // app.js UI-layer wiring/behaviour: pure mm<->inch display helpers (RS-3018) and the bare-DOM
+    // length-field mm stash that stops Units toggles drifting (RS-3025); the manual Text-height
+    // field clamp (TXT-103); S-200 Mixed Stone Size UI wiring + editing lifecycle; and the RS-2012
+    // Text Gap / Mixed Size UX polish (authored-font Gap lock, ineligible-size explain, Advanced
+    // collapsible).
+    'test-length-units.mjs',
+    'test-rs-3025-length-field-mm-stash.mjs',
+    'test-txt-103-text-sizing-consistency.mjs',
+    'test-s200-app-integration.mjs',
+    'test-rs2012-text-gap-mixed-size-ux.mjs',
   ],
   history: [
     'test-history-manager.mjs',
+  ],
+  // Monogram Generator subsystem (src/monogram/**): the headless generation pipeline and every
+  // piece it orchestrates -- MONO-002 authored-font positional scaling, MONO-004 layout engine,
+  // MONO-005/005A headless generator + persistable authoredScale + cross-group collision query,
+  // MONO-006 UI, MONO-006A/006B stale-authoredScale recovery, MONO-006E fitting refinement, and the
+  // MONO-007..011 frame stone-width / auto-shrink work. A few members touch GeometryEngine or
+  // StoneSampler directly, but each exists to prove a Monogram behaviour, so they belong here.
+  monogram: [
+    'test-mono-002-authored-font-positional-scaling.mjs',
+    'test-mono-004-monogram-layout-engine.mjs',
+    'test-mono-005-headless-monogram-generator.mjs',
+    'test-mono-005a-authored-scale-persistence.mjs',
+    'test-mono-005a-collision-query.mjs',
+    'test-mono-006-monogram-ui.mjs',
+    'test-mono-006a-authored-scale-regression.mjs',
+    'test-mono-006b-stale-authored-scale-initial-load-recovery.mjs',
+    'test-mono-006e-monogram-fitting-refinement.mjs',
+    'test-mono-007-010-coverage.mjs',
+    'test-mono-010-frame-stone-width-spacing.mjs',
+    'test-mono-011-frame-stone-autoshrink.mjs',
   ],
   // Full fixture-driven regression sweep (examples/*.rhs against committed baselines) -- expensive
   // relative to a fast dev loop, but exactly what merge/release/CI validation wants.
@@ -267,7 +335,6 @@ export const GROUPS = {
     'test-ui-shell-structure.mjs',
     'test-history-manager.mjs',
     'test-autosave-manager.mjs',
-    'test-design-library.mjs',
     'test-project-validation-security.mjs',
     'test-documentation-consistency.mjs',
   ],

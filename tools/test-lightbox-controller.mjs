@@ -71,10 +71,10 @@ await test('7. every element with [data-lightbox-close] closes the dialog withou
   assert.match(lightboxSource, /closeButtons\.forEach|for \(const btn of closeButtons\)/);
 });
 
-await test('8. the dialog has proper ARIA: role="dialog", aria-modal="false" for the 11 non-modal S-105 Lightboxes (or "true" for the two modal sub-dialogs lightboxLibraryConfirm/lightboxGalleryPreview -- see test 13 and tools/test-s101-ux-workflow-polish.mjs), and a labelled title, for every Lightbox instance in index.html', () => {
+await test('8. the dialog has proper ARIA: role="dialog", aria-modal="false" for the 10 non-modal S-105 Lightboxes (or "true" for the one modal sub-dialog lightboxGalleryPreview -- see test 13 and tools/test-s101-ux-workflow-polish.mjs), and a labelled title, for every Lightbox instance in index.html', () => {
   const overlayIds = [...appJs.matchAll(/new Lightbox\('(\w+)'/g)].map((m) => m[1]);
   assert.ok(overlayIds.length >= 9, 'expected at least nine Lightbox instances');
-  const MODAL_SUB_DIALOGS = new Set(['lightboxLibraryConfirm', 'lightboxGalleryPreview']);
+  const MODAL_SUB_DIALOGS = new Set(['lightboxGalleryPreview']);
   for (const id of overlayIds) {
     const expectedAriaModal = MODAL_SUB_DIALOGS.has(id) ? 'true' : 'false';
     const re = new RegExp(`<div class="lightbox-overlay[^"]*" id="${id}">[\\s\\S]*?<div class="lightbox[^"]*" role="dialog" aria-modal="${expectedAriaModal}" aria-labelledby="(\\w+)"`);
@@ -84,15 +84,15 @@ await test('8. the dialog has proper ARIA: role="dialog", aria-modal="false" for
   }
 });
 
-await test('13. all 11 named Lightboxes are non-modal (S-105, generalizing the S-101 Shapes precedent): each carries the .non-modal overlay class and aria-modal="false", so canvas/Layers-list/Inspector interaction works while any of them stays open; lightboxLibraryConfirm/lightboxGalleryPreview intentionally keep the plain, fully-modal backdrop', () => {
-  const NON_MODAL_IDS = ['lightboxText', 'lightboxShapes', 'lightboxImport', 'lightboxImageTrace', 'lightboxExport', 'lightboxProdSheet', 'lightboxShipping', 'lightboxSettings', 'lightboxHelp', 'lightboxLibrary', 'lightboxGallery'];
+await test('13. all 10 named Lightboxes are non-modal (S-105, generalizing the S-101 Shapes precedent): each carries the .non-modal overlay class and aria-modal="false", so canvas/Layers-list/Inspector interaction works while any of them stays open; lightboxGalleryPreview intentionally keeps the plain, fully-modal backdrop', () => {
+  const NON_MODAL_IDS = ['lightboxText', 'lightboxShapes', 'lightboxImport', 'lightboxImageTrace', 'lightboxExport', 'lightboxProdSheet', 'lightboxShipping', 'lightboxSettings', 'lightboxHelp', 'lightboxGallery'];
   for (const id of NON_MODAL_IDS) {
     const re = new RegExp(`<div class="lightbox-overlay non-modal[^"]*" id="${id}">`);
     assert.match(indexHtml, re, `expected #${id} to carry the non-modal overlay class`);
   }
   assert.match(indexHtml, /\.lightbox-overlay\.non-modal\{background:transparent;pointer-events:none\}/, 'expected the non-modal overlay to be transparent and click-through');
   assert.match(indexHtml, /\.lightbox-overlay\.non-modal \.lightbox\{pointer-events:auto\}/, 'expected the dialog card itself to remain interactive despite the click-through backdrop');
-  for (const id of ['lightboxLibraryConfirm', 'lightboxGalleryPreview']) {
+  for (const id of ['lightboxGalleryPreview']) {
     assert.match(indexHtml, new RegExp(`<div class="lightbox-overlay" id="${id}">`), `expected #${id} to keep the plain, fully-modal overlay class`);
   }
 });
@@ -119,7 +119,7 @@ await test('11. field-relocation moves the shared position/stone field groups on
   assert.match(appJs, /function relocateFieldGroups\(\)\{/);
   const closers = ['text', 'shapes', 'importBox', 'imagetrace'];
   for (const key of closers) {
-    const re = new RegExp(`${key}:new Lightbox\\('\\w+',\\{primary:true,onOpen\\(\\)\\{[^}]*relocateFieldGroups\\(\\)[\\s\\S]*?onClose\\(\\)\\{[^}]*relocateFieldGroups\\(\\)`);
+    const re = new RegExp(`${key}:new Lightbox\\('\\w+',\\{primary:true,(?:menuButtonId:'\\w+',)?onOpen\\(\\)\\{[^}]*relocateFieldGroups\\(\\)[\\s\\S]*?onClose\\(\\)\\{[^}]*relocateFieldGroups\\(\\)`);
     assert.match(appJs, re, `expected the ${key} Lightbox to relocate field groups on both open and close`);
   }
 });

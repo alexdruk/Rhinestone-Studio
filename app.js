@@ -85,14 +85,14 @@
 // pipeline stages re-run on every threshold/invert/blur/resize edit, but the (comparatively
 // expensive) browser image decode only ever runs once per distinct imageSrc value.
 import './src/browser/BrowserDependencyProbe.js';
-import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames } from './src/geometry/index.js';
+import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace, hitTestPathLayerRegion, computeNaturalContourTransform, applyNaturalContourTransform, isPointInsidePolygons, findOverlappingStonePairs, hasAnyOverlappingStonePair, measureStoneCrowding } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
 import { createDefaultFontProviderRegistry, createDefaultRhinestoneFontRegistry, BoundingBox } from './src/text/index.js';
-import { renderProductionLayout, renderStoneLayout, fitTransform } from './src/renderer/CanvasRenderer2D.js';
+import { renderProductionLayout, renderStoneLayout, fitTransform, chooseNiceStepMm } from './src/renderer/CanvasRenderer2D.js';
 import { createPreview3D } from './src/preview3d/index.js';
 import { circumferenceMm, frontViewFrameWidthMm, canvasXMmForRotationDeg, rotationDegForCanvasXMm, azimuthRadForCanvasXMm, wrapAngleRad } from './src/preview3d/ObjectDimensions.js';
 import { STONE_COLORS } from './src/renderer/StoneColors.js';
-import { listStoneSizes, findStoneSizeByDiameterMm, stoneSizeHeightMidpointMm, isHeightWithinStoneSizeRange, stoneSizeEntirelyExceedsPrintableHeight } from './src/renderer/StoneSizes.js';
+import { listStoneSizes, findStoneSizeByDiameterMm, formatStoneSizeLabel, stoneSizeHeightMidpointMm, isHeightWithinStoneSizeRange, stoneSizeEntirelyExceedsPrintableHeight } from './src/renderer/StoneSizes.js';
 import { stoneLayoutToSvg } from './src/export/SvgExporter.js';
 import { computeProductionSheetLayout, productionSheetToSvg, productionSheetToPdf } from './src/export/ProductionSheetExporter.js';
 import { parseSvgDocument } from './src/svg/index.js';
@@ -112,15 +112,7 @@ import { SNAP_TOLERANCE_MM, NUDGE_STEP_MM, NUDGE_STEP_LARGE_MM, alignLayers, dis
 // wires a Lightbox to a top-menu button or a layer-aware "which fields to show" decision. See
 // docs/specifications/UI-001-CompleteRedesign.md.
 import { Lightbox, el, parseIntOr, download, exportCanvas, syncShippingFieldsFromState, wireShippingApply } from './src/ui/index.js';
-// RS-1015 (Design Library): src/library/** is a new, pure, DOM-free module -- library item
-// creation/validation, category derivation, storage-adapter-injected CRUD/search/filter/sort, and
-// the pure clone/insert/new-project transforms over the existing ad hoc project/layer JSON. It has
-// no dependency on src/geometry/**/StoneLayout/Stone/Project/Layer and never generates stone
-// positions; app.js is the only caller, and is the only place that touches a browser-global
-// (localStorage, via createLocalStorageAdapter) or the existing engine.generate()/
-// renderProductionLayout() pipeline (reused, unmodified, for thumbnail generation). See
-// docs/specifications/RS-1015-DesignLibrary.md.
-import { DesignLibrary, createLocalStorageAdapter, createMemoryStorageAdapter, buildSelectionItemData, buildProjectItemData, buildProjectFromItem, prepareLayersForInsert, getInsertableLayers } from './src/library/index.js';
+import { mmToDisplayValue, displayValueToMm, unitSuffix, formatLengthDisplay } from './src/units/index.js';
 // MONO-006 (Monogram Generator UI): the Monogram Lightbox is a plain front-end -- it never
 // generates geometry, computes layouts, fits, or detects collisions itself. All of that is
 // delegated to MonogramGenerator.generate() (MONO-005/MONO-005A), which returns ordinary project
@@ -136,10 +128,13 @@ import { MonogramGenerator, MONOGRAM_GENERATOR_FAILURE_REASONS, MONOGRAM_LAYOUTS
 // src/library/**'s exact "storage-adapter injected, browser-global only at app.js's edge" shape.
 // It knows nothing about Project/Layer/StoneLayout; app.js is the only caller, and is the only
 // place that decides *when* a meaningful edit happened (debounced below) or touches localStorage
-// (via createAutosaveLocalStorageAdapter). Aliased on import since createLocalStorageAdapter/
-// createMemoryStorageAdapter are already bound above to the Design Library's own adapters.
+// (via createAutosaveLocalStorageAdapter).
 import { AutosaveManager, createLocalStorageAdapter as createAutosaveLocalStorageAdapter, createMemoryStorageAdapter as createAutosaveMemoryStorageAdapter } from './src/persistence/index.js';
 import { validateRhsProject, toAppProjectShape, parseCatalog, search as searchGalleryCatalog, filterByCategory as filterGalleryCategory, categories as galleryCategories, featuredEntries as galleryFeaturedEntries, getEntry as getGalleryEntry } from './src/gallery/index.js';
+// RS-3010 Step 1 (Drawing Board): src/drawing/** confines all direct Paper.js usage the same way
+// src/preview3d/** confines Three.js -- app.js only ever calls the facade createDrawingTool()
+// returns, never `paper` itself.
+import { createDrawingTool, FLATTEN_TOLERANCE_MM, flattenPathToContours, createPathLayerFromContours, importSvgIntoItem } from './src/drawing/index.js';
 // RS-1012 (Vector Boolean Operations): Union/Subtract/Intersect/Exclude over the current
 // multi-selection (the same selectedLayerIds set RS-1009's Align/Snap already uses). No new
 // geometry algorithm lives in app.js: resolveLayerShapeSource() below only asks the permanent
@@ -185,6 +180,9 @@ let TEXT_ENGINE_FONT_IDS=new Set([DEFAULT_TEXT_FONT_ID]);
 // CUP_ROTATION_SENSITIVITY constant along with the custom pointer-drag-to-rotate handler it drove —
 // OrbitControls (src/preview3d/**) now owns pointer interaction on the cup canvas natively.
 const ZOOM_MIN=0.7,ZOOM_MAX=1.4;
+// RS-3017: target on-screen width (CSS px) for the scale bar's reference length -- fed into
+// chooseNiceStepMm's 'atMost' mode so the bar picks the largest nice mm step that still fits.
+const SCALE_BAR_TARGET_PX=100;
 // S-001: how close `rotation` must be to a .viewBtn's data-view (in degrees, mod 360, so -180 and
 // 180 both match Back) for that button to show as the active/highlighted view.
 const VIEW_ANGLE_EPSILON_DEG=0.5;
@@ -194,6 +192,22 @@ const HISTORY_MAX_SIZE=100;
 // RS-1009: arrow key -> unit direction vector (mm), scaled by NUDGE_STEP_MM/NUDGE_STEP_LARGE_MM
 // (src/editing/EditingConstants.js) at keydown time depending on Shift.
 const ARROW_KEY_DELTAS={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
+// RS-3010 Design Step B: single-letter drawing-tool shortcuts, matching the rail buttons'
+// setDrawTool() modes exactly -- V/R/E/S mirror this app's own tool labels; B=Draw follows
+// Photoshop's Brush convention (more recognizable than an arbitrary "D"); G=Polygon leaves P free
+// for RS-3011 Step 9's Pen tool (Illustrator/Figma's near-universal "Pen" binding), per Sasha's own
+// roadmap for this rail. RS-3011 Step 10b: F=Paint (confirmed free elsewhere in the global keydown
+// handler below) -- Photoshop/GIMP's own Fill/Bucket-adjacent mnemonic, close enough to read
+// naturally alongside B=Draw/Brush. RS-3011 Step 12: M=Stamp (confirmed free elsewhere in the global
+// keydown handler below) -- every other single-letter mnemonic close to "stamp" (S) is already taken
+// by Slot, so M stands in for the tool's rubber-stamp "Mark a point" action instead. RS-3011 Step 11:
+// T=Trace (confirmed free elsewhere in the global keydown handler below) -- V/B/R/E/S/G/P/F/M are
+// all already taken, and T is the natural mnemonic for "Trace" itself. RS-3011 Step 13: X=Eraser
+// (confirmed free elsewhere in the global keydown handler below) -- V/B/R/E/S/G/P/F/M/T are all
+// already taken, X reads as a "cross out/remove" mnemonic.
+// RS-3013 Step 1: L=Lasso (confirmed free elsewhere in the global keydown handler below) --
+// V/B/R/E/S/G/P/F/M/T/X are all already taken, L is the natural mnemonic for "Lasso" itself.
+const DRAW_TOOL_SHORTCUT_KEYS={v:'select',l:'lasso',b:'freehand',r:'rect',e:'ellipse',s:'slot',g:'polygon',p:'pen',f:'paint',m:'stamp',t:'trace',x:'eraser'};
 // RS-1005: pixels-per-mm used only when rasterizing the Production Sheet SVG to PNG. Fixed and
 // documented (not derived from devicePixelRatio/viewport fit) so the PNG's pixel dimensions are
 // always a clean, undistorted multiple of the page's mm size -- never a fit-to-viewport scale.
@@ -218,9 +232,10 @@ const imageBufferCache=new Map();
 function setNumericSelectValue(select,num){let best=null,bestDiff=Infinity;for(const opt of select.options){const v=parseFloat(opt.value);if(Number.isFinite(v)){const diff=Math.abs(v-num);if(diff<bestDiff){bestDiff=diff;best=opt.value}}}select.value=best!==null?best:String(num)}
 // RS-1007: builds the Stone color <optgroup>s from STONE_COLORS (17 entries) grouped by each
 // color's `group` field, in catalog order (Object.values() preserves insertion order for the
-// string keys STONE_COLORS is built from). Called once at startup -- index.html no longer
-// hardcodes any <option> for this select.
-function populateStoneColorOptions(){const groups=new Map();for(const c of Object.values(STONE_COLORS)){if(!groups.has(c.group))groups.set(c.group,[]);groups.get(c.group).push(c)}el('stoneColor').innerHTML=[...groups.entries()].map(([group,colors])=>`<optgroup label="${escapeHtml(group)}">${colors.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`).join('')}
+// string keys STONE_COLORS is built from). Called once at startup for #stoneColor, and again
+// (RS-3014 Step 1) for each of Stamp/Trace/Paint's own #stampColor/#traceColor/#paintColor selects
+// -- targetId defaults to 'stoneColor' so every pre-existing call site is unaffected.
+function populateStoneColorOptions(targetId='stoneColor'){const groups=new Map();for(const c of Object.values(STONE_COLORS)){if(!groups.has(c.group))groups.set(c.group,[]);groups.get(c.group).push(c)}el(targetId).innerHTML=[...groups.entries()].map(([group,colors])=>`<optgroup label="${escapeHtml(group)}">${colors.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`).join('')}
 // RS-1013: builds the #stoneSize <option> list from the Stone Library (src/renderer/StoneSizes.js)
 // -- each option's value is the size's plain millimeter diameter (the same raw number a layer's
 // stoneSize / a Stone's sizeMm has always been; see src/geometry/GeometryEngine.js's stoneSizeMm
@@ -478,15 +493,22 @@ function computeLetterHeightBoundsMm(fontId){
     maxMm:solveDesiredCapHeightMm({fontId,engineHeightMm:RAW_ENGINE_HEIGHT_MM_MAX})
   };
 }
+// RS-3019: #height's HTML min/max are static mm literals (index.html) and were never previously
+// updated by JS -- now that #height's displayed value is unit-converted (setLengthField/
+// readLengthField), its bounds must be too, mirroring #letterHeight's own dynamic bounds just below.
+function refreshHeightFieldBounds(){
+  el('height').min=mmToDisplayValue(RAW_ENGINE_HEIGHT_MM_MIN,project.units);
+  el('height').max=mmToDisplayValue(RAW_ENGINE_HEIGHT_MM_MAX,project.units);
+}
 // TXT-104 step 4b: the read/display half of #letterHeight's bidirectional sync with #height -- called
 // from updateTextFontCapabilityUI() (the one place guaranteed to run after every source of a #height
 // value change: a direct edit, the stone-size auto-set snap, or a fresh layer selection) whenever
 // #letterHeightField is shown. Pure DOM read -> solveDesiredCapHeightMm() -> DOM write; never itself
 // dispatches an event, so it can never trigger #letterHeight's own write-direction listener below.
 function syncLetterHeightFromHeight(fontId){
-  const engineHeightMm=parseFloat(el('height').value);
+  const engineHeightMm=readLengthField('height');
   if(!Number.isFinite(engineHeightMm))return;
-  el('letterHeight').value=solveDesiredCapHeightMm({fontId,engineHeightMm}).toFixed(2);
+  el('letterHeight').value=formatLengthDisplay(solveDesiredCapHeightMm({fontId,engineHeightMm}),project.units);
 }
 // MONO-005A: delegates to src/editing/TextPlacement.js's own computeTextPlacementOffsetMm() -- the
 // single shared source of truth for this formula, now also used by MonogramGenerator to compute a
@@ -581,7 +603,7 @@ const XYWH_SHAPE_TYPES=new Set(['rectangle','svg','image','path',...SHAPE_LIBRAR
 const VECTOR_FILL_MODE_TYPES=new Set(['circle','rectangle','path',...SHAPE_LIBRARY_KINDS]);
 const SHAPE_DISPLAY_LABELS={
   circle:'Circle',rectangle:'Rectangle',ellipse:'Ellipse',capsule:'Capsule',polygon:'Regular Polygon',
-  star:'Star',heart:'Heart',arrow:'Arrow',cross:'Cross',crescent:'Crescent',ring:'Ring'
+  star:'Star',heart:'Heart',arrow:'Arrow',cross:'Cross',crescent:'Crescent',ring:'Ring',shield:'Shield'
 };
 // Default creation size (mm) for each non-circle shape kind, centered on the same (105,45) point
 // the original circle/rectangle defaults already used (a 210x90mm default canvas's own center).
@@ -591,7 +613,7 @@ const SHAPE_DISPLAY_LABELS={
 // deliberately non-square since a stretched-to-square pill/arrow would no longer read as one.
 const SHAPE_DEFAULT_SIZES_MM={
   rectangle:{w:80,h:30},ellipse:{w:70,h:45},capsule:{w:80,h:40},polygon:{w:60,h:60},star:{w:60,h:60},
-  heart:{w:55,h:50},arrow:{w:70,h:42},cross:{w:55,h:55},crescent:{w:50,h:62},ring:{w:60,h:60}
+  heart:{w:55,h:50},arrow:{w:70,h:42},cross:{w:55,h:55},crescent:{w:50,h:62},ring:{w:60,h:60},shield:{w:55,h:60}
 };
 // Each configurable shape kind's own extra creation-time fields (Regular Polygon's side count,
 // Star's point count + inner radius, Ring's inner opening) -- everything else needs none.
@@ -621,6 +643,9 @@ function shapeLayerResolveParams(layer){
   return{
     shape:layer.type,layerId:layer.id,
     ...(isCircle?{cxMm:layer.cx,cyMm:layer.cy,radiusMm:layer.r}:{xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h}),
+    // RS-3028: '??' fallback so a pre-RS-3028 saved project (no rotationDeg on its shape layers)
+    // resolves to 0, byte-identical to before this milestone.
+    rotationDeg:layer.rotationDeg??0,
     ...shapeExtraParams(layer)
   };
 }
@@ -686,11 +711,21 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
   }
  }
  async generate(project){await this.recoverStaleAuthoredScales(project);let raw=[];for(const l of project.layers){if(!l.visible)continue;if(l.type==='text')raw.push(...await this.generateTextStonesLive(l,project));if(SHAPE_LAYER_TYPES.has(l.type))raw.push(...await this.generateShapeStonesLive(l));if(l.type==='svg')raw.push(...await this.generateSvgStonesLive(l));if(l.type==='image')raw.push(...await this.generateImageStonesLive(l));if(l.type==='path')raw.push(...await this.generatePathStonesLive(l));}const stones=dedupeStonesByRadius(raw).map(s=>new Stone({xMm:s.x,yMm:s.y,sizeMm:s.d,color:s.color,layerId:s.layerId}));return new StoneLayout({layerId:'project',stones})}
+ // Stone Size overlap guard: the same per-type Live dispatch generate() uses just above, factored
+ // out (not shared with generate() itself, to avoid touching that method's tested source shape) so
+ // updateStoneSizeOverlapCapabilityUI() below can generate one layer's real stones for a *candidate*
+ // stoneSize without touching the rest of the project. No new generation logic -- every branch calls
+ // the exact same generateXStonesLive() method generate() already calls.
+ // {includeStats=false}: when true, each branch below returns {stones,outlineStats} instead of a
+ // bare array -- outlineStats is that candidate's own StoneLayout.outlineStats (null for non-outline
+ // modes/layer types with no outline concept, e.g. text/image/svg-in-fill-mode). Every existing call
+ // site omits this option, so its behavior/return shape is byte-for-byte unchanged.
+ async generateLiveStonesForCandidateLayer(layer,project,{includeStats=false}={}){if(layer.type==='text')return this.generateTextStonesLive(layer,project,{includeStats});if(SHAPE_LAYER_TYPES.has(layer.type))return this.generateShapeStonesLive(layer,{includeStats});if(layer.type==='svg')return this.generateSvgStonesLive(layer,{includeStats});if(layer.type==='image')return this.generateImageStonesLive(layer,{includeStats});if(layer.type==='path')return this.generatePathStonesLive(layer,{includeStats});return includeStats?{stones:[],outlineStats:null}:[]}
  // FONT-002: an unknown font id (not just one hidden from the picker -- see isFontKnown()) is never
  // silently substituted for DEFAULT_TEXT_FONT_ID; that layer's stones are skipped (same shape as an
  // empty-text layer already returning []), and updateTextFontCapabilityUI() surfaces why while it's
  // selected. layer.font itself is left untouched in `project`.
- async generateTextStonesLive(layer,project){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text||!isFontKnown(layer.font))return[];const base={...buildTextLayoutBaseParams(layer),
+ async generateTextStonesLive(layer,project,{includeStats=false}={}){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text||!isFontKnown(layer.font))return includeStats?{stones:[],outlineStats:null}:[];const base={...buildTextLayoutBaseParams(layer),
   // MONO-005A: see resolveAuthoredScale()'s own doc comment. No effect on sampled/OpenType text --
   // GeometryEngine only ever reads authoredScale inside its authored-stone-center branch.
   authoredScale:resolveAuthoredScale(layer)};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const{scale}=computeAutoFitScale(layer,project,result.widthMm);if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
@@ -698,26 +733,68 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
   // canvas. layer.x/layer.y (mm, default 0) are a further offset applied on top of that same
   // auto-centered base position, so pre-RS-1009 Project JSON (no x/y on its text layers) renders
   // byte-identical to before, and dragging/nudging/aligning a text layer just moves this offset.
-  const{offsetX,offsetY}=computeTextPlacementOffset(bb,layer,project);return result.stones.map(s=>({x:s.xMm+offsetX,y:s.yMm+offsetY,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
+  const{offsetX,offsetY}=computeTextPlacementOffset(bb,layer,project);const stones=result.stones.map(s=>({x:s.xMm+offsetX,y:s.yMm+offsetY,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null}:stones}
  // RS-0003.5C1: circle/rectangle layers are generated by the same permanent engine's
  // generateShapeLayout(), mirroring generateTextStonesLive() above. S-110: every new shape kind
  // (Ellipse/Capsule/Regular Polygon/Star/Heart/Arrow/Cross/Crescent/Ring) goes through this exact
  // same call, via shapeLayerResolveParams()'s shared layer->params mapping (module scope, above).
- async generateShapeStonesLive(layer){if(!this.permanentEngine)return[];const params={...shapeLayerResolveParams(layer),stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.fillMode),color:layer.color,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateShapeLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
+ async generateShapeStonesLive(layer,{includeStats=false}={}){if(!this.permanentEngine)return includeStats?{stones:[],outlineStats:null}:[];const params={...shapeLayerResolveParams(layer),stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.fillMode),color:layer.color,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateShapeLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null}:stones}
  // RS-1001: svg layers reuse the same x/y/w/h placement box rectangle layers use; src/svg/**
  // (not app.js) does the actual SVG parsing, inside generateSvgLayout().
- async generateSvgStonesLive(layer){if(!this.permanentEngine)return[];const params={svgSource:layer.svgSource,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.mode),color:layer.color,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateSvgLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
+ async generateSvgStonesLive(layer,{includeStats=false}={}){if(!this.permanentEngine)return includeStats?{stones:[],outlineStats:null}:[];const params={svgSource:layer.svgSource,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.mode),color:layer.color,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateSvgLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null}:stones}
  // RS-1008A: image layers go through the permanent engine's generateImageLayout(), mirroring
  // generateSvgStonesLive()/generateShapeStonesLive() above -- src/image/** only prepares the
  // decoded pixel buffer (decode/cache happens here since that's the one async, DOM-only step;
  // generateImageLayout() itself is synchronous, like generateShapeLayout()). imageBufferCache means
  // the (comparatively expensive) browser image decode only re-runs the first time a given imageSrc
  // is seen; every subsequent call here only re-runs the permanent engine's pure/fast pipeline.
- async generateImageStonesLive(layer){if(!this.permanentEngine||!layer.imageSrc)return[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveImageFillMode(layer.fillMode),color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
+ async generateImageStonesLive(layer,{includeStats=false}={}){if(!this.permanentEngine||!layer.imageSrc)return includeStats?{stones:[],outlineStats:null}:[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveImageFillMode(layer.fillMode),color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null}:stones}
  // RS-1012: 'path' layers (Boolean Operation results) go through the permanent engine's
  // generatePathLayout(), mirroring generateSvgStonesLive()/generateShapeStonesLive() above --
  // layer.contours is already plain (0,0)-rooted polygon data (no parsing step, unlike SVG).
- async generatePathStonesLive(layer){if(!this.permanentEngine)return[];const params={contours:layer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.fillMode),color:layer.color,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generatePathLayout(params);return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}))}
+ // RS-3011 Step 7: stonesGenerated===false gates a Design-drawn shape's entire stone output (base
+ // fill AND Paint regions alike) until "Generate Stones" is pressed -- missing on every layer
+ // predating this step (Boolean Ops results, etc.), so those keep generating live as before.
+ async generatePathStonesLive(layer,{includeStats=false}={}){if(layer.stonesGenerated===false)return includeStats?{stones:[],outlineStats:null}:[];if(!this.permanentEngine)return includeStats?{stones:[],outlineStats:null}:[];const params={contours:layer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveVectorFillMode(layer.fillMode),color:layer.color,closed:layer.closed!==false,
+    // RS-3011 Step 10b: forwards a 'path' layer's Paint regions (Step 10a's own data model) into
+    // live/production generation -- Step 10a wired GeometryEngine's own support for `regions` and
+    // validateProject()'s pass-through, but never actually forwarded the field from a real layer
+    // into a generatePathLayout() call anywhere, so a painted region silently never generated a
+    // single stone until now. Defaults to [] for every layer predating this step, matching
+    // GeometryEngine.normalizePathParams()'s own regions normalizer.
+    regions:layer.regions||[],
+    // RS-3011 Step 12: forwards a 'path' layer's Stamp placements (Step 12's own data model) into
+    // live/production generation, the identical wiring-gap fix Step 10b's own `regions` line above
+    // made for Paint -- defaults to [] for every layer predating this step, matching
+    // GeometryEngine.normalizePathParams()'s own stampedStones normalizer.
+    stampedStones:layer.stampedStones||[],
+    // RS-3011 Step 13: forwards a 'path' layer's Eraser daubs (Step 13's own data model) into
+    // live/production generation, the identical wiring-gap fix Step 10b/Step 12's own `regions`/
+    // `stampedStones` lines above made for Paint/Stamp -- defaults to [] for every layer predating
+    // this step, matching GeometryEngine.normalizePathParams()'s own eraseDaubs normalizer.
+    eraseDaubs:layer.eraseDaubs||[],
+    // Bugfix (permanent dead zone): forwards a 'path' layer's persistent erased-stone-position
+    // snapshots (see onEraseSweep()'s own doc comment) into live/production generation, the
+    // identical wiring-gap fix Step 10b/12/13's own `regions`/`stampedStones`/`eraseDaubs` lines
+    // above made for their own data models -- defaults to [] for every layer predating this fix,
+    // matching GeometryEngine.normalizePathParams()'s own erasedGridPositions normalizer.
+    erasedGridPositions:layer.erasedGridPositions||[],
+    // RS-3014 Step 3: forwards a 'path' layer's frozen natural-space reference box (set once an
+    // Outline-mode Eraser cut first mutates `contours` -- see onEraseSweep()'s own doc comment)
+    // into live/production generation, the identical wiring-gap fix Step 10b/12/13's own `regions`/
+    // `stampedStones`/`eraseDaubs` lines above made for their own data models -- undefined for
+    // every layer never cut, matching GeometryEngine.normalizePathParams()'s own
+    // naturalBoundingBoxMm normalizer's safe-no-op default.
+    naturalBoundingBoxMm:layer.naturalBoundingBoxMm,
+    // RS-3033: forwards a 'path' layer's rotationDeg into live/production generation -- a
+    // pre-existing wiring gap identical in shape to the regions/stampedStones/eraseDaubs ones above
+    // (l.rotationDeg was already writable via the main canvas's own rotate handle/numeric field for
+    // EVERY XYWH_SHAPE_TYPES layer including 'path', but generatePathLayout() never received it, so
+    // it was stored and drawn in the selection UI yet never actually rotated a 'path' layer's own
+    // stones). '??' fallback so a pre-RS-3033 saved project (no rotationDeg on its path layers)
+    // resolves to 0, byte-identical to before this milestone.
+    rotationDeg:layer.rotationDeg??0,
+    ...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generatePathLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null}:stones}
  // RS-2000: the legacy bitmap text engine (FONT5 + generateText/sampleGlyphFill/
  // sampleGlyphStroke/line) and the legacy generateCircle/generateRect/bbox/layerBBox shape path
  // were deleted here -- unreachable since generateTextStonesLive/generateShapeStonesLive took over
@@ -787,6 +864,22 @@ function validateProject(obj){
     // RS-1012: a 'path' layer (a Boolean Operation result) stores its shape directly as contours --
     // an array of (0,0)-rooted polygons, each a numeric {x,y}[] with 3+ points.
     if(l.type==='path'&&!(Array.isArray(l.contours)&&l.contours.length>0&&l.contours.every(c=>Array.isArray(c)&&c.length>=3&&c.every(p=>p&&typeof p.x==='number'&&Number.isFinite(p.x)&&typeof p.y==='number'&&Number.isFinite(p.y)))))throw new Error(`Path layer "${l.id}" is missing a valid non-empty 'contours' array.`);
+    // RS-3011: 'closed' is a plain boolean, not strictly validated here, matching this function's
+    // existing permissive style for other boolean-ish fields (e.g. image.invert above,
+    // textMode/svgMode/curveEnabled elsewhere). Absent (every pre-freehand-stroke saved project) or
+    // any non-false value defaults to closed:true at the GeometryEngine layer -- see
+    // normalizePathParams()'s own doc comment.
+    // RS-3011 Step 10a: 'regions' (Paint) is a 'path' layer's own optional array of
+    // {id,contour,stoneSizeMm,gapMm,color,fill mode} sub-areas, not strictly validated here either --
+    // same permissive precedent as 'closed' above and curveEnabled elsewhere. Passed
+    // through untouched by the `{...l}` spread below either way; absent or empty on every layer
+    // predating this step, which GeometryEngine.normalizePathParams()'s own regions normalizer
+    // treats as a safe no-op (see its doc comment).
+    // RS-3011 Step 12: 'stampedStones' (Stamp) is a 'path' layer's own optional array of
+    // {id,xMm,yMm,sizeMm,color} manually-placed stones, following the identical "not strictly
+    // validated here" convention as 'regions' immediately above -- absent/empty on every layer
+    // predating this step, a safe no-op per GeometryEngine.normalizePathParams()'s own
+    // stampedStones normalizer.
     // S-110: Regular Polygon/Star/Ring's own configurable extra parameters, matching
     // GeometryEngine's own assertIntegerInRange()/assertNumberInRange() validation ranges (see
     // src/geometry/GeometryEngine.js's normalizeShapeParams()) so a malformed saved value is caught
@@ -825,7 +918,7 @@ function validateProject(obj){
   const vessel=VESSEL_PRODUCT_IDS.includes(productId)
     ?(hasExplicitVessel?normalizeVesselParams(productId,obj.vessel):deriveLegacyVesselParams(productId,getObjectTemplate(productId),canvas.width,canvas.height))
     :(hasExplicitVessel?normalizeVesselParams('mug',obj.vessel):getVesselDefaults('mug'));
-  return{version:Number(obj.version)||2,units:'mm',name:typeof obj.name==='string'&&obj.name.length>0?obj.name:DEFAULT_PROJECT_NAME,product:productId,canvas:{width:canvas.width,height:canvas.height},cupColor:typeof obj.cupColor==='string'?obj.cupColor:'#1f3556',wrap:typeof obj.wrap==='string'?obj.wrap:'front',plate:normalizePlateParams(obj.plate),vessel,layers:obj.layers.map(l=>({...l,visible:l.visible!==false}))}
+  return{version:Number(obj.version)||2,units:obj.units==='in'?'in':'mm',name:typeof obj.name==='string'&&obj.name.length>0?obj.name:DEFAULT_PROJECT_NAME,product:productId,canvas:{width:canvas.width,height:canvas.height},cupColor:typeof obj.cupColor==='string'?obj.cupColor:'#1f3556',wrap:typeof obj.wrap==='string'?obj.wrap:'front',plate:normalizePlateParams(obj.plate),vessel,layers:obj.layers.map(l=>({...l,visible:l.visible!==false}))}
 }
 // TXT-101A: pure construction data (no fetch), so it's always available even if the desktop-font
 // manifest fetch below fails -- the Browse Fonts panel's category/metadata lookups for RS Block/RS
@@ -855,6 +948,765 @@ const permanentEngine=new PermanentGeometryEngine({fontProviderRegistry});
 // below (which only exposes app.js's own live-regeneration helpers).
 const monogramGenerator=new MonogramGenerator({geometryEngine:permanentEngine});
 const engine=new GeometryEngine(permanentEngine);let project=defaultProject(),selectedLayerId='text',layout=null,rotation=0,zoom=1,layoutTransform=null,drag=null,generationToken=0;const layoutCanvas=el('layout'),cupCanvas=el('cup');
+// RS-3011 Step 13: Eraser's own brush-size preference -- NOT project data, NOT per-layer (a
+// brush-size preference persists across whatever the user erases next, the same way brush size
+// behaves in any raster tool). radiusMm is seeded from the selected layer's own stoneSize (mirrors
+// getStoneDefaults()'s own `base.stoneSize||2` convention below) the FIRST time Eraser mode is
+// entered in this session -- see seedEraserRadiusIfNeeded() below -- then left exactly as the user
+// sets it afterward via #eraserRadiusMm or the '['/']' shortcuts, regardless of which layer they
+// later erase on.
+const eraserSettings={radiusMm:1,mode:'stones'};
+let eraserRadiusSeeded=false;
+// RS-3014 Step 1: Stamp/Trace/Paint's own independent tool-level style preferences -- same
+// "NOT project data, NOT per-layer" precedent as eraserSettings just above, mirrored three times.
+// Each is seeded from the selected layer's own stoneSize/gap/color (the same `base.stoneSize||2` /
+// `base.gap||.3` / `base.color||'gold'` convention getStoneDefaults() below uses) the FIRST time
+// its own tool is entered in this session -- see seedStampStyleIfNeeded()/seedTraceStyleIfNeeded()/
+// seedPaintStyleIfNeeded() below -- then left exactly as the user sets it afterward via its own
+// panel fields, regardless of which layer they next act on. The three are deliberately independent
+// of each other and of eraserSettings -- not a single shared "draw style" object.
+const stampSettings={sizeMm:2,color:'gold'};
+let stampStyleSeeded=false;
+const traceSettings={sizeMm:2,gapMm:0.3,color:'gold'};
+let traceStyleSeeded=false;
+const paintSettings={sizeMm:2,gapMm:0.3,color:'gold'};
+let paintStyleSeeded=false;
+// Bugfix (BooleanPrecisionError at the gesture boundary): the sentinel resolvePaintTargetTwoPass()
+// returns when a selectPaintTarget() call below throws BooleanPrecisionError (a small/precise
+// stroke against a much larger candidate shape -- see PathBoolean.js's own computeAdaptiveCellSizeMm()
+// doc comment) instead of resolving normally. Deliberately NOT null: null already means "genuinely
+// overlaps nothing," a different case that must keep its own existing (silent/no-status-change)
+// handling -- callers duck-type on `.precisionError` (a plain object, not a class/Symbol, so
+// DrawingCanvasTool.js can recognize it without importing anything from this module, matching this
+// codebase's existing resolveSelectionTarget/hitTestRegion plain-object-contract convention).
+const PAINT_TARGET_PRECISION_ERROR=Object.freeze({precisionError:true});
+// RS-3013 Step 1: the target-shape resolution Paint's own onPaintStroke below needs (best-overlap-
+// by-area, two-pass: a fallback-spacing pass to pick a winner, then that winner's own stoneSize+gap
+// for a precise intersection) is the EXACT SAME resolution Select's rectangle-drag and Lasso's own
+// drag need too (see the new resolveSelectionTarget hook below) -- extracted here so both go
+// through one implementation rather than two copies of the same selectPaintTarget() choreography.
+// Returns null wherever either pass would have (no candidate overlaps at all, or the second pass's
+// own intersection comes back empty) -- callers that want a console message for the common "lasso
+// touched nothing" case (onPaintStroke) log it themselves. Bugfix: returns the distinct
+// PAINT_TARGET_PRECISION_ERROR sentinel above instead of null when either selectPaintTarget() call
+// throws BooleanPrecisionError -- any other error type is rethrown unchanged, this function only
+// ever absorbs this one specific, known error class.
+function resolvePaintTargetTwoPass(polygonsAbsoluteMm){
+  if(!permanentEngine)return null;
+  const candidates=project.layers.filter(l=>l.type==='path'&&l.visible!==false).map(l=>({
+    layerId:l.id,
+    // RS-3014 Step 3: naturalBoundingBoxMm forwarded so a previously-cut layer's candidate
+    // polygon reflects its true (frozen-box-anchored) visible shape, not one stretched back to
+    // its unchanged x/y/w/h -- without this, selectPaintTarget()'s own intersection below would
+    // compute against a shape wider than what's actually on screen, letting a region extend past
+    // the shape's real (cut) boundary even after absolutePolygonsToNaturalSpace()'s own fix.
+    polygons:permanentEngine.resolvePathPolygons({
+      contours:l.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),
+      layerId:l.id,xMm:l.x,yMm:l.y,widthMm:l.w,heightMm:l.h,naturalBoundingBoxMm:l.naturalBoundingBoxMm
+    }).polygons
+  }));
+  // First pass: which candidate does the stroke/rectangle overlap most? The exact grid resolution
+  // barely matters for THIS decision (only for the stored contour's precision, refined below once
+  // the target is known) -- the currently-selected layer's own stone spacing is a reasonable,
+  // already-established fallback (same convention getStoneDefaults() above uses for a brand-new
+  // shape).
+  const fallback=selectedLayer();
+  let firstPass;
+  try{
+    firstPass=selectPaintTarget(polygonsAbsoluteMm,candidates,{targetSpacingMm:(fallback.stoneSize||2)+(fallback.gap||.3)});
+  }catch(error){
+    if(!(error instanceof BooleanPrecisionError))throw error;
+    return PAINT_TARGET_PRECISION_ERROR;
+  }
+  if(!firstPass)return null;
+  const targetLayer=project.layers.find(l=>l.id===firstPass.layerId);
+  const targetCandidate=candidates.find(c=>c.layerId===firstPass.layerId);
+  if(!targetLayer||!targetCandidate)return null;
+  // Second pass, against ONLY the winning candidate, at ITS OWN stone spacing -- once a target is
+  // known, its own stoneSize+gap are authoritative for grid resolution (per Paint's own original
+  // step prompt), not the fallback used to pick it above. One extra combineShapeSources() call per
+  // gesture (not per frame) is an accepted cost -- see PaintRegionSelection.js's own targetSpacingMm
+  // doc comment.
+  let result;
+  try{
+    result=selectPaintTarget(polygonsAbsoluteMm,[targetCandidate],{targetSpacingMm:targetLayer.stoneSize+targetLayer.gap});
+  }catch(error){
+    if(!(error instanceof BooleanPrecisionError))throw error;
+    return PAINT_TARGET_PRECISION_ERROR;
+  }
+  if(!result)return null;
+  return{layerId:targetLayer.id,contours:result.contours};
+}
+// RS-3012 Step 1: Stamp/Trace's own selection-boundary test -- called with the raw click/drag
+// point (absolute project-mm) and DrawingCanvasTool.js's own live `activeSelection` value (passed
+// straight through, not re-read via drawingTool.activeSelection, since the caller already has it
+// in scope the same way onStampPlace/onTracePlace's own layerId is already resolved by the time
+// they're called). Mirrors hitTestRegion's own architecture split immediately above: a region's
+// geometry lives in project.layers[].regions, so 'region'-kind selections resolve through the SAME
+// layer/region lookup + computeNaturalContourTransform()/applyNaturalContourTransform() chain
+// onRegionMoved above already uses, deriving the region's CURRENT absolute polygon (a region's own
+// contour is natural-space and can shift with its parent shape) before testing with
+// isPointInsidePolygons() (single ring, wrapped as [polygon], same convention
+// hitTestPathLayerRegion() itself uses internally via isPointNearPolygon()). 'draft'-kind
+// selections carry their own already-absolute-mm geometry directly on boundsOrContour -- no
+// project.layers lookup needed -- so a rect draft gets a plain axis-aligned bounds test and a
+// lasso draft's boundsOrContour (already the clipped {xMm,yMm}[][] contours
+// resolveSelectionTarget's own selectPaintTarget() resolution produced at creation time) goes
+// straight into isPointInsidePolygons() unwrapped, preserving any holes exactly like the region
+// case. No margin/tolerance anywhere here (unlike REGION_HIT_MARGIN_PX's own click-forgiveness) --
+// a hard interior test, since this gates whether a stone gets placed at all, not whether a click
+// located something to select.
+// Bulk-delete-by-area: pulled out to a standalone top-level function (was previously only an inline
+// arrow function inside the drawingTool hooks object below) so deleteCurrentSelection()'s new
+// 'draft' branch can call the exact same test app.js already hands to DrawingCanvasTool.js as its
+// isPointInActiveSelection hook, instead of a second reimplementation. The hooks object below now
+// just references this by shorthand.
+function isPointInActiveSelection(pointAbsoluteMm,selection){
+  if(!selection)return true;
+  if(selection.kind==='region'){
+    const targetLayer=project.layers.find(l=>l.id===selection.layerId&&l.type==='path');
+    if(!targetLayer)return false;
+    const region=(targetLayer.regions||[]).find(r=>r.id===selection.regionId);
+    if(!region)return false;
+    const naturalContours=targetLayer.contours.map(contour=>contour.map(p=>({xMm:p.x,yMm:p.y})));
+    const transform=computeNaturalContourTransform(naturalContours,targetLayer.x,targetLayer.y,targetLayer.w,targetLayer.h,targetLayer.naturalBoundingBoxMm);
+    if(!transform)return false;
+    const polygon=applyNaturalContourTransform(region.contour,transform);
+    return isPointInsidePolygons(pointAbsoluteMm,[polygon]);
+  }
+  if(selection.kind==='draft'){
+    if(selection.shapeKind==='rect'){
+      const b=selection.boundsOrContour;
+      return pointAbsoluteMm.xMm>=b.left&&pointAbsoluteMm.xMm<=b.left+b.width&&pointAbsoluteMm.yMm>=b.top&&pointAbsoluteMm.yMm<=b.top+b.height;
+    }
+    if(selection.shapeKind==='lasso'){
+      return isPointInsidePolygons(pointAbsoluteMm,selection.boundsOrContour);
+    }
+  }
+  return true;
+}
+// RS-3010 Step 1: one drawing tool bound to layoutCanvas for the app's lifetime -- it lazily calls
+// paper.setup() on first enter() and only pauses/resumes afterward (see DrawingCanvasTool.js's own
+// header comment for why), so constructing it eagerly here does not touch the canvas until the
+// user actually enables Draw mode.
+// RS-3011 Step 1: hooks let DrawingCanvasTool.js construct+push each shape's 'path' layer the
+// instant it finalizes (freehand stroke end, a preset's drag-end, polygon close) without touching
+// project state itself -- app.js stays the only owner of `project`, matching this file's own
+// "never touches project state" doc comment on the old commit()/DrawingBoard.js.
+const drawingTool=createDrawingTool(layoutCanvas,{
+  // stoneSize/gap/color default from the currently-selected layer, the same convention
+  // createShapeLayer()/the SVG-import handler elsewhere in this file already use for a brand-new
+  // shape.
+  getStoneDefaults:()=>{const base=selectedLayer();return{stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold'}},
+  // Hands the constructed layer (same object shape app.js's Boolean Operations code already
+  // produces, RS-1012) to the existing project.layers/updateAll() pipeline unchanged --
+  // commitHistory() before the push, exactly like every other single-shape creation path in this
+  // file (addRect, duplicateLayer, the SVG-import handler, ...).
+  onShapeCommitted:(layer)=>{
+    commitHistory();
+    project.layers.push(layer);
+    selectedLayerId=layer.id;
+    selectedLayerIds=selectOnly(layer.id);
+    syncSelectedControlsFromLayer();
+    updateAll(true);
+    // RS-3011 issue #4a fix: DrawingCanvasTool.js already reverted its own internal mode to
+    // 'select' before calling this hook (see commitFinalizedShape()) -- sync the rail buttons'
+    // aria-pressed state to match, or Rect/Ellipse/Slot/Polygon would keep looking active after
+    // the shape that finalized them already returned Design to Select.
+    updateDrawToolButtons();
+    el('status').textContent='Added shape as new Path layer.';
+  },
+  // RS-3026: fires every time DrawingCanvasTool.js's applyViewport() runs (zoom change, pan,
+  // initial Design-mode entry, resize) -- keeps the scale bar live while Design mode is active.
+  // drawingTool.pxPerMm (Paper's own view.zoom) is already CSS-px-per-mm, unlike the plain
+  // canvas's device-px-per-mm layoutTransform.s, so this passes 1 in place of dpr -- passing the
+  // real devicePixelRatio here would make the bar render dpr× too narrow.
+  onViewportChanged:()=>{
+    if(!drawingTool.isActive)return;
+    updateScaleBar(drawingTool.pxPerMm,1);
+    el('scaleBar').style.display='flex';
+  },
+  // RS-3011 Step 10b: Paint's own finalize hook -- fires once per finished lasso stroke (see
+  // DrawingCanvasTool.js's own onPaintStroke doc comment for exactly when/what `lassoPolygons` is).
+  // Per this milestone's architecture split, this module owns every selectPaintTarget()/
+  // absolutePolygonsToNaturalSpace() call and every project.layers mutation; DrawingCanvasTool.js's
+  // own involvement ends at handing over the closed lasso polygon. RS-3011 issue #4a fix precedent
+  // applies here too: DrawingCanvasTool.js already reverted its own internal mode to 'select'
+  // before calling this hook (see its onMouseUp 'paint' branch) -- updateDrawToolButtons() below
+  // syncs the rail to match, unconditionally, even on the silent-discard path, for the same reason
+  // onShapeCommitted() above always calls it.
+  onPaintStroke:async(lassoPolygons)=>{
+    updateDrawToolButtons();
+    const resolved=resolvePaintTargetTwoPass(lassoPolygons);
+    // Bugfix: distinct from the "genuinely overlaps nothing" case right below -- this stroke DID
+    // overlap a candidate, but the intersection couldn't be computed at a safe precision (see
+    // PAINT_TARGET_PRECISION_ERROR's own doc comment). No region created, no history entry, same
+    // "no mutation happened" behavior as the null case, just a status message that tells the user
+    // WHY instead of leaving Paint looking unresponsive.
+    if(resolved===PAINT_TARGET_PRECISION_ERROR){
+      el('status').textContent='Paint: this stroke is too small/precise for a shape this large — try a bigger area.';
+      return;
+    }
+    if(!resolved){console.info('Paint: lasso overlaps no path layer, discarding stroke.');return;}
+    const targetLayer=project.layers.find(l=>l.id===resolved.layerId);
+    if(!targetLayer)return;
+    // RS-3011 Step 10b DECISION (Sasha delegated, confirmed during scoping): a lasso crossing a
+    // concave notch or a hole can genuinely intersect its target in multiple disjoint pieces --
+    // create ONE region per disjoint contour rather than keeping only the largest piece or
+    // rejecting the whole stroke, so the result matches what the user actually painted. The
+    // region data model is already an array, so this is more of an existing capability, not a new
+    // one. All new regions share the same stone spec and land in the SAME commitHistory() below, so
+    // the whole stroke is one undo step. absolutePolygonsToNaturalSpace() is called once with every
+    // contour together (not once per contour) since it applies the identical transform to each ring
+    // regardless -- an efficiency choice, not a behavior difference from calling it per-contour.
+    const naturalContours=absolutePolygonsToNaturalSpace(resolved.contours,targetLayer);
+    // RS-3014 Step 1: the new region(s)' own decoration style now comes from Paint's own independent
+    // paintSettings, NOT targetLayer's current stoneSize/gap/color -- unlike the two
+    // targetSpacingMm calls above (selectPaintTarget()'s boolean-geometry grid resolution, a
+    // precision concern this milestone deliberately leaves reading the real target layer's live
+    // values).
+    const newRegions=naturalContours.map((contour,index)=>({
+      id:'region'+Date.now()+index,
+      contour,
+      stoneSizeMm:paintSettings.sizeMm,
+      gapMm:paintSettings.gapMm,
+      color:paintSettings.color,
+      fillMode:'fill'
+    }));
+    commitHistory();
+    if(!Array.isArray(targetLayer.regions))targetLayer.regions=[];
+    targetLayer.regions.push(...newRegions);
+    drawingTool.refreshStoneGroupForLayer(targetLayer.id);
+    await updateAll(true);
+    el('status').textContent=`Painted ${newRegions.length} region${newRegions.length===1?'':'s'} on ${layerLabel(targetLayer)}.`;
+  },
+  // RS-3013 Step 1: Select's rectangle-drag and Lasso's own drag both resolve their target shape
+  // through this hook -- the EXACT SAME selectPaintTarget() two-pass resolution onPaintStroke()
+  // above uses (resolvePaintTargetTwoPass(), shared rather than duplicated), just returning the
+  // result instead of ever touching project.layers: this milestone's drag gestures only produce a
+  // transient in-memory selection (activeSelection, DrawingCanvasTool.js's own state), never a real
+  // region -- that stays Paint's job alone. DrawingCanvasTool.js clips the returned `contours` to
+  // build Lasso's own draft polygon (this milestone's clip-at-creation decision for Lasso); Select's
+  // own rectangle-drag reuses only `.layerId` and stores the drawn rectangle unclipped -- see that
+  // file's own onMouseUp 'lasso'/'selectRect' branches for exactly how each consumes this result.
+  // Bugfix: a straight passthrough of resolvePaintTargetTwoPass()'s own return value, so the
+  // PAINT_TARGET_PRECISION_ERROR sentinel (see that function's own doc comment) reaches
+  // DrawingCanvasTool.js unchanged, never collapsed into null here -- that file's own onMouseUp
+  // 'lasso'/'selectRect' branches duck-type on `.precisionError` to call the new
+  // onSelectionTargetPrecisionError hook below instead of silently discarding.
+  resolveSelectionTarget:(polygonsAbsoluteMm)=>resolvePaintTargetTwoPass(polygonsAbsoluteMm),
+  // Bugfix: mirrors onStampRejected/onTraceRejected below -- fires instead of resolveSelectionTarget's
+  // own {layerId,contours}/null outcomes when that call hit the PAINT_TARGET_PRECISION_ERROR sentinel
+  // (a small/precise Select-rectangle-drag or Lasso stroke against a much larger candidate shape). No
+  // draft selection created, no history entry -- same "no mutation happened" behavior as a genuine
+  // no-overlap result, just a status message distinct from both that one and each other.
+  onSelectionTargetPrecisionError:()=>{
+    el('status').textContent='Select/Lasso: this selection is too small/precise for a shape this large — try a larger area.';
+  },
+  // RS-3013 Step 1: region click-select's own hit-test. DrawingCanvasTool.js never touches
+  // project.layers directly (this milestone's own architecture split, same rule Paint's
+  // onPaintStroke above already follows) -- a region lives entirely in project.layers[].regions, so
+  // resolving "which region does this point land on" has to happen here, delegated in one line to
+  // hitTestPathLayerRegion() (src/geometry/PaintRegionSelection.js), the same natural-to-absolute
+  // placement transform GeometryEngine's own _applyPathRegions() uses to place a region for stone
+  // generation. marginMm arrives already converted from screen-px by the caller (DrawingCanvasTool.js's
+  // own screen-px-to-project-mm convention, see that file's REGION_HIT_MARGIN_PX).
+  hitTestRegion:(pointAbsoluteMm,marginMm)=>hitTestPathLayerRegion(pointAbsoluteMm,project.layers.filter(l=>l.type==='path'&&l.visible!==false),marginMm),
+  // RS-3013 Step 2: region-drag's own commit hook -- fires once, at mouseup only, on a real
+  // (non-zero-offset) region-move drag. Synchronous and returns the region's updated absolute-mm
+  // polygon (or null), NOT async/awaited like onPaintStroke/onStampPlace/onTracePlace/onEraseSweep
+  // above -- DrawingCanvasTool.js's own onMouseUp reads this return value immediately to rebuild
+  // activeSelectionItem's outline, so it can't be a Promise (updateAll(true) below is fired the same
+  // "call, don't await" way nudgeSelection()/runAlign()/runDistribute() already do elsewhere in this
+  // file). Derives the region's CURRENT absolute polygon via the SAME computeNaturalContourTransform()/
+  // applyNaturalContourTransform() pair hitTestPathLayerRegion() itself uses internally (never an
+  // independently-recomputed transform), translates it by (dxMm,dyMm), then writes it back through
+  // the EXISTING absolutePolygonsToNaturalSpace() -- the same inverse-transform path onPaintStroke's
+  // own region creation above already relies on, just run once more on an existing region's contour.
+  // DECIDED (this milestone's own scoping): no clipping/rejection against the parent shape's current
+  // outline here -- GeometryEngine's own _applyPathRegions() already filters every region's stone
+  // candidates against the shape's live outline at every regen, so a region moved partly or fully
+  // outside its shape simply renders fewer/zero stones there, self-correcting the moment it's moved
+  // back, with zero new boundary code needed.
+  onRegionMoved:(layerId,regionId,dxMm,dyMm)=>{
+    const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
+    if(!targetLayer)return null;
+    const region=(targetLayer.regions||[]).find(r=>r.id===regionId);
+    if(!region)return null;
+    const naturalContours=targetLayer.contours.map(contour=>contour.map(p=>({xMm:p.x,yMm:p.y})));
+    const transform=computeNaturalContourTransform(naturalContours,targetLayer.x,targetLayer.y,targetLayer.w,targetLayer.h,targetLayer.naturalBoundingBoxMm);
+    if(!transform)return null;
+    const currentPolygon=applyNaturalContourTransform(region.contour,transform);
+    const translatedPolygon=currentPolygon.map(p=>({xMm:p.xMm+dxMm,yMm:p.yMm+dyMm}));
+    const [naturalContour]=absolutePolygonsToNaturalSpace([translatedPolygon],targetLayer);
+    if(!naturalContour)return null;
+    commitHistory();
+    region.contour=naturalContour;
+    drawingTool.refreshStoneGroupForLayer(targetLayer.id);
+    updateAll(true);
+    el('status').textContent=`Moved region on ${layerLabel(targetLayer)}.`;
+    return translatedPolygon;
+  },
+  // RS-3013 Step 5: fires whenever DrawingCanvasTool.js settles on a new activeSelection (a region
+  // click, a region losing selection, a draft rect/lasso selection, or a clear) -- the one place the
+  // Inspector panel needs to resync for a region-vs-shape selection change, since neither gesture
+  // routes through onSelectionChanged above (that hook only ever reports shape/multi-selection
+  // changes via selectedIds, never activeSelection). syncSelectedControlsFromLayer() reads
+  // drawingTool.activeSelection itself (not a parameter here) to decide whether to show the region
+  // branch or fall through to today's layer-based population, same live-read convention
+  // writeSelectedControlsToLayer()'s own new region branch uses. Mirrors the exact
+  // sync+render+editingUI+regen sequence onSelectionChanged already runs for a shape selection
+  // change (line ~1368) -- updateAll(true) is a no-op regen (skipWrite) here since nothing in
+  // project.layers changed, only the display.
+  onActiveSelectionChanged:()=>{
+    syncSelectedControlsFromLayer();renderLayerUI();updateEditingUI();updateAll(true);
+  },
+  // RS-3011 Step 12: Stamp's own finalize hook -- fires once per click (see DrawingCanvasTool.js's
+  // own onStampPlace doc comment for the exact {xMm,yMm,layerId} contract; layerId is already
+  // resolved there via the same hitTestShapeId() Select's own click-to-pick-a-shape branch uses).
+  // Mirrors onPaintStroke's own architecture split immediately above: this module owns the
+  // absolute-to-natural-space absolutePolygonsToNaturalSpace() conversion and every project.layers
+  // mutation; DrawingCanvasTool.js's own involvement ends at resolving the target and handing over
+  // the click point. A null layerId (click hit no shape) discards silently, matching Paint's own "no
+  // target -> discard" precedent -- no history session opened, no status message. Unlike Paint/every
+  // draw preset, `mode` is deliberately left at 'stamp' either way: Stamp is a repeatable
+  // click-to-place action (like an image editor's own stamp tool), not a one-shot commit-then-
+  // revert-to-Select gesture, so there's no updateDrawToolButtons() call here either.
+  // RS-3012 Step 1 / bulk-delete-by-area: now a standalone top-level function (see its own doc
+  // comment above, near resolvePaintTargetTwoPass) referenced here by shorthand so
+  // deleteCurrentSelection()'s new 'draft' branch can call the exact same test.
+  isPointInActiveSelection,
+  // RS-3012 Step 1: fires instead of onStampPlace when a click resolves outside the active
+  // selection's own boundary -- no history session, no stone placed, matching decided item 2's
+  // "reject with feedback" contract (never silent, never "allow anyway").
+  onStampRejected:()=>{
+    el('status').textContent='Stamp: click is outside the current selection.';
+  },
+  // RS-3012 Step 1: fires instead of onTracePlace when EVERY point of a committed Trace drag falls
+  // outside the active selection's own boundary (the filtered placements list is empty) -- no
+  // history session, no stones placed. Deliberately distinct from today's pre-existing "fewer than 2
+  // buffered points" silent discard (DrawingCanvasTool.js's own trace mouseup branch) -- that discard
+  // has no message; a selection-caused empty result must not be silent, per decided item 2.
+  onTraceRejected:()=>{
+    el('status').textContent='Trace: entire stroke was outside the selection.';
+  },
+  onStampPlace:async({xMm,yMm,layerId})=>{
+    if(!layerId)return;
+    const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
+    if(!targetLayer)return;
+    // Feeds absolutePolygonsToNaturalSpace() a single-point "polygon" ([[{xMm,yMm}]]) rather than
+    // duplicating computeNaturalContourTransform/applyNaturalContourTransform logic here -- same
+    // precedent as onPaintStroke's own call just above, just with a 1-point ring instead of a real
+    // lasso contour. Returns [] (not a per-point null) when targetLayer has no placeable transform
+    // (empty contours) -- guarded the same way a missing target is above.
+    const naturalPolygons=absolutePolygonsToNaturalSpace([[{xMm,yMm}]],targetLayer);
+    if(naturalPolygons.length===0)return;
+    const naturalPoint=naturalPolygons[0][0];
+    const stamp={
+      id:'stamp'+Date.now(),
+      xMm:naturalPoint.xMm,
+      yMm:naturalPoint.yMm,
+      // RS-3014 Step 1: sizeMm/color now come from Stamp's own independent stampSettings, seeded
+      // from the target layer's stoneSize/color the first time Stamp is used this session (see
+      // seedStampStyleIfNeeded() below) and left alone afterward, superseding RS-3011 Step 12's
+      // "read the target layer's CURRENT fields at click time" convention.
+      sizeMm:stampSettings.sizeMm,
+      color:stampSettings.color
+    };
+    commitHistory();
+    if(!Array.isArray(targetLayer.stampedStones))targetLayer.stampedStones=[];
+    targetLayer.stampedStones.push(stamp);
+    drawingTool.refreshStoneGroupForLayer(targetLayer.id);
+    await updateAll(true);
+    el('status').textContent=`Placed a stone on ${layerLabel(targetLayer)}.`;
+  },
+  // RS-3011 Step 11: Trace's own finalize hook -- fires once per committed drag (see
+  // DrawingCanvasTool.js's own onTracePlace doc comment for the exact (placements,layerId) contract;
+  // layerId is already resolved there via the same target-hit-test resolveStampTargetLayerId() uses).
+  // Mirrors onStampPlace's own architecture split immediately above, just plural: this module owns
+  // the absolute-to-natural-space absolutePolygonsToNaturalSpace() conversion and every project.layers
+  // mutation, DrawingCanvasTool.js's own involvement ends at computing the spaced points and
+  // resolving the target. A null layerId or empty placements list discards silently, matching Stamp's
+  // own "no target -> discard" precedent -- no history session opened, no status message. Every
+  // placement in `placements` becomes one src/geometry/lineStampSpacing.js-spaced stone, pushed into
+  // the SAME layer.stampedStones array Stamp itself uses (RS-3011 Step 11's own key simplification --
+  // no new layer field, no GeometryEngine.js changes), all in the ONE commitHistory() below so one
+  // drawn line is one undo step (mirrors Paint's own "one lasso -> N regions -> one commit"
+  // precedent). Like Stamp, `mode` is deliberately left at 'trace' either way -- Trace stays active
+  // after each committed line, so there's no updateDrawToolButtons() call here either.
+  // RS-3012 Step 1: droppedCount is a new, optional 3rd argument -- how many of the drag's own
+  // originally-spaced points DrawingCanvasTool.js filtered out for landing outside an active
+  // selection, before this hook ever saw them (0/undefined when no selection was active, the
+  // byte-identical-to-before case). Only changes the status message below; every mutation/placement
+  // path is otherwise untouched from RS-3011 Step 11.
+  onTracePlace:async(placements,layerId,droppedCount=0)=>{
+    if(!layerId||!placements.length)return;
+    const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
+    if(!targetLayer)return;
+    // Feeds absolutePolygonsToNaturalSpace() the whole placements array as one "polygon" -- it's
+    // purely a coordinate transform, so an open polyline in place of a closed ring is fine (same
+    // precedent as onStampPlace's own 1-point-ring call just above).
+    const naturalPolygons=absolutePolygonsToNaturalSpace([placements],targetLayer);
+    if(naturalPolygons.length===0)return;
+    const naturalPoints=naturalPolygons[0];
+    const stamps=naturalPoints.map((p,index)=>({
+      id:'stamp'+Date.now()+'-'+index,
+      xMm:p.xMm,
+      yMm:p.yMm,
+      // RS-3014 Step 1: sizeMm/color now come from Trace's own independent traceSettings, seeded
+      // from the target layer's stoneSize/color the first time Trace is used this session (see
+      // seedTraceStyleIfNeeded() below) and left alone afterward, superseding RS-3011 Step 11
+      // decision 2's "read the target layer's CURRENT fields at release time" convention.
+      sizeMm:traceSettings.sizeMm,
+      color:traceSettings.color
+    }));
+    commitHistory();
+    if(!Array.isArray(targetLayer.stampedStones))targetLayer.stampedStones=[];
+    targetLayer.stampedStones.push(...stamps);
+    drawingTool.refreshStoneGroupForLayer(targetLayer.id);
+    await updateAll(true);
+    el('status').textContent=droppedCount>0
+      ?`Traced ${stamps.length} stone${stamps.length===1?'':'s'} (${droppedCount} outside selection, skipped).`
+      :`Traced ${stamps.length} stone${stamps.length===1?'':'s'} on ${layerLabel(targetLayer)}.`;
+  },
+  // RS-3011 Step 13: Eraser's own finalize hook -- fires once per committed click/drag sweep (see
+  // DrawingCanvasTool.js's own onEraseSweep doc comment for the exact (daubsAbsoluteMm,layerId)
+  // contract; layerId is always a real project.layers id there -- a null/no-target resolution
+  // discards the whole gesture silently before this hook is ever called, same "always call with a
+  // real layerId" contract onTracePlace's own doc comment establishes). Mirrors onTracePlace's own
+  // architecture split immediately above: this module owns the absolute-to-natural-space
+  // absolutePolygonsToNaturalSpace() conversion and every project.layers mutation.
+  // DrawingCanvasTool.js deliberately has no opinion on daub radius -- decision 4: it's a TOOL
+  // setting (eraserSettings.radiusMm), not a stone property, so unlike onStampPlace/onTracePlace's
+  // own sizeMm/color (read from the target layer's CURRENT fields), it's attached here from this
+  // module's own runtime state instead. Everything the 'stones' branch below mutates lands inside
+  // the ONE commitHistory() there, so one sweep is one undo step (mirrors Trace's own "one gesture,
+  // one undo step" precedent -- NOT Stamp's per-click commit). Unlike Paint/every draw preset,
+  // `mode` is deliberately left at 'eraser' either way (decision 7: Eraser stays active after each
+  // committed sweep), so there's no updateDrawToolButtons() call here either.
+  // RS-3014 Step 3 (Dual-mode Eraser): `mode` is DrawingCanvasTool.js's own per-gesture snapshot
+  // (its onEraseSweep hooks-param doc comment above explains why it's captured at gesture-start
+  // rather than read live from eraserSettings.mode here) -- branches into either this same 'stones'
+  // path or the 'outline' path, which cuts `corridorPolygonsAbsoluteMm` into the layer's own
+  // `contours` via the raster boolean-subtraction engine (src/geometry/PathBoolean.js's
+  // combineShapeSources()) instead.
+  // Bugfix (permanent dead zone): the 'stones' branch below no longer pushes a live-forever radius
+  // exclusion into layer.eraseDaubs -- that turned every erase into a permanent dead zone that
+  // silently swallowed any LATER Stamp/Trace placed in the same spot, since eraseDaubs was applied
+  // as a geometric test on every regeneration, over whatever stone list existed AT THAT TIME, not
+  // scoped to what existed when the daub was drawn. Two mechanisms now replace it, matching the two
+  // stone categories GeometryEngine.js's own generatePathLayout() already treats differently:
+  // stampedStones entries under the sweep are spliced out of targetLayer.stampedStones directly (a
+  // real removal -- a later Stamp/Trace at the same spot is a structurally different array entry
+  // with a new id, nothing here ever touches it again); base-fill/region-patch stones have no
+  // individual identity (recomputed fresh every regen), so their OWN current positions are
+  // snapshotted into targetLayer.erasedGridPositions, an accumulating list GeometryEngine.js
+  // excludes by position match on every future regen (see its own doc comment above the
+  // erasedGridPositions exclusion block for the tolerance/healing-on-regrid rationale). A project
+  // saved before this fix keeps any existing layer.eraseDaubs entries applying exactly as before
+  // (GeometryEngine.js's own eraseDaubs block is intentionally left running, unmodified) -- this
+  // hook simply never adds to that array anymore. The two mechanisms are independent and additive,
+  // so an old project's eraseDaubs and a brand-new erasedGridPositions-based erase on the same layer
+  // coexist correctly with no special-case code.
+  onEraseSweep:async(daubsAbsoluteMm,layerId,corridorPolygonsAbsoluteMm,mode)=>{
+    if(!layerId||!daubsAbsoluteMm.length)return;
+    const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
+    if(!targetLayer)return;
+    if(mode==='outline'){
+      // An open Pen/freehand path has no interior to cut -- same graceful-failure precedent
+      // RS-1012's own resolveLayerShapeSource()/runBooleanOp() already establish for a shape with
+      // no closed outline (there: "no closed shape to combine"; here: nothing to cut into).
+      if(targetLayer.closed===false){
+        el('status').textContent=`${layerLabel(targetLayer)} has no closed outline to cut.`;
+        return;
+      }
+      // RS-3011 Step 10a/10b's own absolutePolygonsToNaturalSpace() (PaintRegionSelection.js) --
+      // reused unchanged, not a second coordinate-conversion implementation. It already honors
+      // pathLayer.naturalBoundingBoxMm when present (its own fix, RS-3014 Step 3 follow-up), so a
+      // SECOND+ outline cut on the same layer stays anchored to the frozen box too, not just the
+      // first.
+      const naturalCorridorPolygons=absolutePolygonsToNaturalSpace(corridorPolygonsAbsoluteMm,targetLayer);
+      if(naturalCorridorPolygons.length===0)return;
+      // RS-3014 Step 3 freeze point (see Part 1 / computeNaturalContourTransform()'s own doc
+      // comment): set exactly once, from the contours as they exist right before this, the FIRST
+      // cut, ever mutates them. Every later cut leaves this untouched, so every existing region/
+      // stamp/daub stays anchored to the shape's original extent regardless of how much further
+      // cutting shrinks `contours` itself.
+      if(!targetLayer.naturalBoundingBoxMm){
+        const allPoints=targetLayer.contours.flat();
+        targetLayer.naturalBoundingBoxMm={
+          minXmm:Math.min(...allPoints.map(p=>p.x)),
+          minYmm:Math.min(...allPoints.map(p=>p.y)),
+          maxXmm:Math.max(...allPoints.map(p=>p.x)),
+          maxYmm:Math.max(...allPoints.map(p=>p.y))
+        };
+      }
+      const subjectPolygons=targetLayer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y})));
+      let combined;
+      try{
+        combined=combineShapeSources(
+          {kind:'polygons',polygons:subjectPolygons},
+          {kind:'polygons',polygons:naturalCorridorPolygons},
+          'subtract',
+          {targetSpacingMm:targetLayer.stoneSize+targetLayer.gap}
+        );
+      }catch(error){
+        if(!(error instanceof BooleanPrecisionError))throw error;
+        // Leaves targetLayer.contours untouched -- error.message is already a clear, user-facing
+        // explanation (RS-1012's own runBooleanOp() precedent), not rewritten here.
+        el('status').textContent=error.message;
+        return;
+      }
+      // Mirrors PaintRegionSelection.js's own OVERLAP_AREA_EPSILON_MM2: combineShapeSources()'s
+      // marching-squares tracer already discards any contour below (cellSize**2)/4 as tracing
+      // noise, and actualCellSizeMm is always >= MIN_CELL_SIZE_MM, so a total result area at or
+      // below this floor is indistinguishable from "nothing left," not a bare `=== 0` check.
+      const resultAreaMm2=combined.contours.reduce((sum,c)=>sum+contourAreaAbs(c),0);
+      const areaEpsilonMm2=(MIN_CELL_SIZE_MM*MIN_CELL_SIZE_MM)/4;
+      if(combined.contours.length===0||resultAreaMm2<=areaEpsilonMm2){
+        el('status').textContent='That would erase the entire shape — nothing changed.';
+        return;
+      }
+      commitHistory();
+      targetLayer.contours=combined.contours.map(c=>c.map(p=>({x:p.xMm,y:p.yMm})));
+      // RS-3014 Step 3: unlike every other project.layers write that reaches Design's live canvas
+      // (stoneSize/gap/color/regions/stampedStones/eraseDaubs, a resize), this one changes the
+      // shape's own outline SEGMENTS, not just its placement box or a non-geometric style field --
+      // refreshStoneGroupForLayer() alone only rebuilds the stone dots against whatever outline
+      // Item is already on the canvas, which would keep showing the PRE-cut boundary forever (see
+      // refreshShapeGeometryForLayer()'s own doc comment). This re-materializes the outline Item
+      // from the layer's own new `contours` too, then rebuilds the stone Group against it.
+      drawingTool.refreshShapeGeometryForLayer(targetLayer);
+      await updateAll(true);
+      el('status').textContent=`Cut into ${layerLabel(targetLayer)}'s outline.`;
+      return;
+    }
+    // Absolute-space circle test, identical shape to the legacy eraseDaubs test this replaces (same
+    // eraserSettings.radiusMm brush, same "within radius of ANY daub point" rule) -- stones-mode
+    // deliberately keeps testing against daubsAbsoluteMm's own points rather than switching to
+    // corridorPolygonsAbsoluteMm (that field is only meaningful to Outline mode's own boolean cut,
+    // per DrawingCanvasTool.js's own onEraseSweep doc comment).
+    const daubRadiusMm=eraserSettings.radiusMm;
+    const withinSweep=(xMm,yMm)=>daubsAbsoluteMm.some(d=>{
+      const dx=xMm-d.xMm;const dy=yMm-d.yMm;
+      return dx*dx+dy*dy<=daubRadiusMm*daubRadiusMm;
+    });
+    // Bulk-delete-by-area: the splice-stampedStones/snapshot-erasedGridPositions/commitHistory body
+    // that used to live inline here is now the shared eraseStonesWithinTest() (see its own doc
+    // comment near deleteRegionFromPathLayer/deleteCurrentSelection below) -- this call is
+    // behavior-identical to the old inline body, just passing withinSweep as the interior test
+    // instead of it being hardcoded.
+    const result=await eraseStonesWithinTest(targetLayer,withinSweep);
+    if(!result){
+      el('status').textContent=`Nothing to erase on ${layerLabel(targetLayer)}.`;
+      return;
+    }
+    el('status').textContent=`Erased on ${layerLabel(targetLayer)}.`;
+  },
+  // Freehand is a continuous interaction (many pointermove samples before the stroke ends) --
+  // DrawingCanvasTool.js opens a session at drag-start and closes it at drag-end so one stroke is
+  // one undo step, the same session-coalescing convention HISTORY_TRACKED_CONTROL_IDS' input/change
+  // pair below already uses for continuous field edits.
+  openHistorySession,
+  closeHistorySession,
+  // RS-3011 Step 1 write-through fix: a shape already committed to project.layers (per
+  // onShapeCommitted above) can still be moved/resized/deleted afterward via Design's own Select
+  // tool -- these three keep that project.layers entry in sync, called once each when the
+  // interaction finishes (DrawingCanvasTool.js's onMouseUp/deleteSelected()), not per drag frame.
+  onShapeMoved:(layerId,dxMm,dyMm)=>{
+    const l=project.layers.find(x=>x.id===layerId);
+    if(!l)return;
+    // Same one-commitHistory()-call-per-drag convention as the main-canvas drag-move code above
+    // (see "starting its drag. Exactly one commitHistory() call happens per drag" ) and
+    // nudgeSelection()'s identical getLayerPosition()/setLayerPosition() delta-apply pattern --
+    // reused here rather than reimplemented, just scoped to the one shape id DrawingCanvasTool.js
+    // already resolved.
+    commitHistory();
+    const p=getLayerPosition(l);
+    setLayerPosition(l,p.xMm+dxMm,p.yMm+dyMm);
+    updateAll(true);
+  },
+  onShapeResized:(layerId,boundsMm)=>{
+    const l=project.layers.find(x=>x.id===layerId);
+    if(!l)return;
+    // Every Design-drawn layer is type 'path' (XYWH_SHAPE_TYPES, x/y/w/h fields) -- GeometryEngine's
+    // generatePathLayout()/_placeNaturalContours() re-scales the layer's stored (0,0)-rooted
+    // `contours` into this x/y/w/h box on every generate() call, so writing the new bounds here is
+    // sufficient; `contours` itself never needs touching.
+    commitHistory();
+    // RS-3012 Step 4: a circle layer (cx/cy/r, not x/y/w/h) resizes by radius-from-center drag --
+    // DrawingCanvasTool.js's own circle branch keeps the center pinned and reports a centered
+    // 2r-by-2r square, so half its width is the new radius. Matches the main-canvas circle resize's
+    // own Math.max(2,...) radius floor (see the drag.kind==='resize' l.type==='circle' branch); cx/cy
+    // stay untouched.
+    if(l.type==='circle'){l.r=Math.max(2,boundsMm.width/2);updateAll(true);return}
+    l.x=boundsMm.left;l.y=boundsMm.top;l.w=boundsMm.width;l.h=boundsMm.height;
+    updateAll(true);
+  },
+  // RS-3033: mirrors onShapeMoved/onShapeResized's own body shape exactly -- fires once, at mouseup
+  // only, when a rotate-handle drag on Design's own Select tool completes with a non-zero net
+  // rotation (see DrawingCanvasTool.js's own onShapeRotated hooks-param doc comment for the exact
+  // contract). rotationDeg arrives already normalized into [0,360) (see that file's own onMouseUp
+  // 'rotate' branch), the same convention #rotationDeg/#shapeRotationDeg's own writeSelectedControlsToLayer()
+  // normalization already establishes for the main canvas's rotate handle.
+  onShapeRotated:(layerId,rotationDeg)=>{
+    const l=project.layers.find(x=>x.id===layerId);
+    if(!l)return;
+    commitHistory();
+    l.rotationDeg=rotationDeg;
+    updateAll(true);
+  },
+  onShapeDeleted:(layerId)=>{
+    const l=project.layers.find(x=>x.id===layerId);
+    if(!l)return true;
+    // Reuses deleteLayer() outright -- same commitHistory()-then-filter pattern, same "Cannot
+    // delete the last layer" guard, same selection/updateAll() follow-through, no second copy of
+    // any of that logic. Its return value tells deleteSelected() (DrawingCanvasTool.js) whether the
+    // guard blocked this -- when it did, the shape must stay on the Design canvas too, or it would
+    // vanish from Design while its project.layers entry (correctly) survives.
+    return deleteLayer(l.id);
+  },
+  // RS-3011 Step 2: Design's own selection (click/shift-click/marquee/clear -- see
+  // DrawingCanvasTool.js's own onSelectionChanged doc comment for exactly which gestures fire this)
+  // feeds the same selectedLayerIds/selectedLayerId every other selection-driving code path in this
+  // file already sets, so the already-visible Align/Distribute/Duplicate/rotate-handle system stops
+  // being inert for Design shapes. layerIds' last entry (most-recently-interacted-with, per
+  // DrawingCanvasTool.js's own ordering) becomes selectedLayerId, matching every other multi-select
+  // site's own `ids[ids.length-1]` convention (e.g. the boolean-ops result-selection below).
+  onSelectionChanged:(layerIds)=>{
+    if(!layerIds.length){
+      // Same empty-selection handling as an empty-canvas click on the main layoutCanvas pointerdown
+      // handler above (S-003/RS-1009): selectedLayerId is left pointing at whatever it last did
+      // (still a valid layer -- selectedLayer() falls back to project.layers[0] regardless), only
+      // the multi-selection itself clears.
+      if(selectedLayerIds.size){selectedLayerIds=clearSelection();renderLayerUI();updateEditingUI();drawLayout()
+        // RS-3011 Step 3a: clearing the selection also drops it below designStoneTarget's
+        // size===1 requirement, so the stone fields must return to their Inspector home slot --
+        // this branch returns before reaching syncSelectedControlsFromLayer()'s own
+        // relocateFieldGroups() call below, so it needs its own.
+        relocateFieldGroups()}
+      return;
+    }
+    selectedLayerIds=selectMany(layerIds);
+    selectedLayerId=layerIds[layerIds.length-1];
+    syncSelectedControlsFromLayer();renderLayerUI();updateEditingUI();updateAll(true);
+  },
+  // RS-3011 Step 3b: the two hooks the live Design-canvas stone preview needs. DrawingCanvasTool.js
+  // still never touches project.layers directly (unchanged rule from Step 1/2 above) -- it re-
+  // flattens its OWN live Paper.js item for the contour (already does this for commitFinalizedShape,
+  // see FLATTEN_TOLERANCE_MM there) and asks app.js only for the non-geometric "style" params a
+  // path layer carries (stoneSize/gap/color/fillMode/mixed-size), then asks app.js to run those
+  // params through the exact same GeometryEngine call generatePathStonesLive() above already makes
+  // -- the SAME permanentEngine instance, never a second GeometryEngine.
+  getLayerStoneParams:(layerId)=>{
+    const l=project.layers.find(x=>x.id===layerId);
+    if(!l||l.type!=='path')return null;
+    // RS-3011 Step 7: same stonesGenerated===false gate as generatePathStonesLive() above -- null
+    // is already this hook's "no stones" return (see rebuildStoneGroupForShape()'s own null-check),
+    // so Design's live preview drops the shape's stone Group entirely until the button is pressed.
+    if(l.stonesGenerated===false)return null;
+    // RS-3011 Step 10b: regions (Paint) joins the rest of a path layer's "style" params here so the
+    // live Design-canvas stone preview reflects a painted region immediately, the same wiring-gap
+    // fix as generatePathStonesLive()'s own new `regions` line above. RS-3011 Step 12: stampedStones
+    // (Stamp) joins it the same way, so a placed stamp shows up on the live canvas the instant it's
+    // clicked, not only once "Generate Stones"/an export re-runs generatePathStonesLive().
+    // RS-3011 Step 13: eraseDaubs (Eraser) joins them the same way, so an erase sweep shows up on
+    // the live canvas the instant it's committed, not only once "Generate Stones"/an export
+    // re-runs generatePathStonesLive().
+    // RS-3011 resize-repositioning fix: contours/closed are the layer's own FIXED, author-time
+    // natural-space contour ({x,y}->{xMm,yMm} remapped, same convention generatePathStonesLive()
+    // above already uses) -- the SAME natural reference absolutePolygonsToNaturalSpace() (Stamp/
+    // Trace/Eraser/Paint's own click-to-natural-space conversion) inverts to store a
+    // stampedStone/region/eraseDaub position in the first place. rebuildStoneGroupForShape()
+    // (DrawingCanvasTool.js) needs this exact reference now too -- see its own doc comment for why
+    // substituting the shape's LIVE re-flattened geometry here instead silently broke stamped/
+    // region/erase-daub placement after any resize.
+    // RS-3014 Step 3: naturalBoundingBoxMm joins them the same way, the identical wiring-gap fix
+    // generatePathStonesLive()'s own new line makes for the production pipeline. staticXMm/
+    // staticYMm/staticWidthMm/staticHeightMm (the layer's own x/y/w/h, distinct from
+    // rebuildStoneGroupForShape()'s own `flattened.xMm` etc. -- see its own doc comment) ride
+    // alongside: once a layer has been cut, that call site must use THESE, not the shape's live
+    // re-flattened Paper.js item, when computing its natural-space transform -- combining the
+    // frozen (pre-cut) box with the live item's own ALREADY-shrunk width would shrink the base
+    // fill a second time, and marching squares re-traces the WHOLE boundary (not just the cut
+    // edge) at finite grid resolution, so even the live item's untouched edges carry a little
+    // sub-mm quantization noise that would otherwise very slightly reposition stamps/regions/
+    // daubs on the Design canvas -- exactly what the frozen box exists to prevent. Named
+    // differently from xMm/yMm/widthMm/heightMm (which this object does NOT otherwise define) so
+    // there's no ambiguity about which one a naive `...styleParams` spread would pick up.
+    return{stoneSizeMm:l.stoneSize,gapMm:l.gap,mode:resolveVectorFillMode(l.fillMode),color:l.color,regions:l.regions||[],stampedStones:l.stampedStones||[],eraseDaubs:l.eraseDaubs||[],
+    // Bugfix (permanent dead zone): erasedGridPositions joins the rest of a path layer's "style"
+    // params here so a Stones-mode erase reflects on the live Design-canvas preview immediately,
+    // the same wiring-gap fix generatePathStonesLive()'s own new line makes for the production
+    // pipeline.
+    erasedGridPositions:l.erasedGridPositions||[],naturalBoundingBoxMm:l.naturalBoundingBoxMm,staticXMm:l.x,staticYMm:l.y,staticWidthMm:l.w,staticHeightMm:l.h,
+    // RS-3033: joins the rest of a path layer's "style" params here, the same wiring-gap fix
+    // generatePathStonesLive()'s own new `rotationDeg` line makes for the production pipeline --
+    // rebuildStoneGroupForShape() (DrawingCanvasTool.js) forwards this straight through to its own
+    // generatePathLayout() call, and (like naturalBoundingBoxMm above) also uses its mere presence
+    // to decide when the shape's STATIC box (staticXMm etc., not the shape's own live re-flattened
+    // Paper.js item bounds) must be used instead -- a rotated item's own AABB is generally NOT the
+    // unrotated placement box GeometryEngine's rotation step itself expects to rotate around (see
+    // that call site's own doc comment).
+    rotationDeg:l.rotationDeg??0,
+    contours:l.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),closed:l.closed!==false,...mixedSizeParamsFor(l)};
+  },
+  // Mirrors generatePathStonesLive()'s own result mapping exactly (color:s.color, the raw
+  // STONE_COLORS key, e.g. 'gold') -- rs-design-crystal-dots: DrawingCanvasTool.js's stone dots now
+  // go through the same faceted drawCrystalStone() look CanvasRenderer2D.js uses, which resolves a
+  // stone's color key itself (STONE_COLORS[colorKey]) and needs that raw key, not a pre-resolved
+  // previewColor hex.
+  generatePathLayout:(params)=>{
+    if(!permanentEngine)return[];
+    const result=permanentEngine.generatePathLayout(params);
+    return result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color}));
+  },
+  // RS-3032 Step A: the one new dependency DrawingCanvasTool.js needs to materialize a
+  // SHAPE_LIBRARY_KINDS layer (Star/Ring/Heart/...) as a real Paper.js item -- unlike a 'path'
+  // layer, these have no stored `contours` to read, only a shape formula that lives inside
+  // GeometryEngine. Reuses the SAME permanentEngine.resolveShapePolygons() call/params
+  // (shapeLayerResolveParams()) every other consumer (Boolean Operations, Fit Text to Shape)
+  // already goes through, so this never becomes a second contour-generation implementation.
+  resolveShapeLibraryPolygons:(layer)=>{
+    if(!permanentEngine)return null;
+    return permanentEngine.resolveShapePolygons(shapeLayerResolveParams(layer));
+  },
+  // RS-3012 Step 2: the 'svg'-layer counterpart of resolveShapeLibraryPolygons above, so
+  // DrawingCanvasTool.js can materialize an 'svg' layer's real vector outline as a Paper.js item
+  // (see its own materializeSvgImageItemFromLayer() doc comment) -- the SAME permanentEngine.
+  // resolveSvgPolygons() call resolveLayerShapeSource() already uses for Boolean Operations, never
+  // a second SVG-parsing implementation.
+  resolveSvgPolygons:(layer)=>{
+    if(!permanentEngine||!layer.svgSource)return null;
+    return permanentEngine.resolveSvgPolygons({svgSource:layer.svgSource,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h});
+  },
+  // RS-3012 Step 3: the 'text'-layer counterpart of getLayerStoneParams above, but for stones
+  // directly rather than settings -- a text layer's real stones are never regenerated here, only
+  // filtered out of the `layout` global engine.generate() already produced this same updateAll()
+  // tick (Design-active or not, per that function's own unconditional per-layer loop), so Design's
+  // own canvas never becomes a second place stones can be computed. Mirrors generatePathLayout()'s
+  // own {x,y,d,color} return shape exactly, from the real Stone.xMm/yMm/sizeMm/color fields.
+  getTextLayerStones:(layerId)=>layout.stones.filter(s=>s.layerId===layerId).map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color}))
+});
+// RS-3010 Step 2d: exposes drawingTool's own debugGrid/debugHitTestShapeId QA-only surface for
+// automated verification of the Design canvas's background grid layering -- same "read-only,
+// never used to drive any application logic" precedent as window.__preview3D above.
+window.__drawingTool=drawingTool;
+// RS-3013 Step 2: exposes the live `project` reference itself, read-only, so automated verification
+// can read project.layers[...].regions[...].contour (natural-space, on-disk data) after a region-move
+// commit -- same "QA-only, never drives app logic" precedent as window.__drawingTool/window.__preview3D
+// above; DrawingCanvasTool.js's own activeSelection getter only exposes the transient absolute-mm
+// selection outline, not the committed natural-space storage this verifies. A getter (not a static
+// assignment) since `project` itself is reassigned wholesale on undo/redo/import/autosave-recovery
+// (applyHistorySnapshot() etc.) -- a plain assignment here would silently go stale the first time any
+// of those ran.
+Object.defineProperty(window,'__project',{get:()=>project,configurable:true});
+// M14: read-only view of the current module-level StoneLayout, so automated verification can assert
+// the move-drag fast path's mid-drag translation and its end-of-drag canonical regeneration (that
+// `layout` after pointerup/pointercancel matches a fresh engine.generate(project)). Same "QA-only,
+// never drives app logic" precedent as window.__project above; `layout` is likewise reassigned
+// wholesale on every updateAll(), so this must be a getter, not a static snapshot.
+Object.defineProperty(window,'__layout',{get:()=>layout,configurable:true});
 // RS-1009: the one multi-selection model (src/editing/Selection.js is the only place that
 // computes a new Set from an old one). selectedLayerId (above, pre-existing) keeps driving the
 // single-layer property panel exactly as before -- it always points at the most recently
@@ -950,6 +1802,8 @@ try{
   try{autosave.clear()}catch{}
 }
 let cleanProjectJson=JSON.stringify(project);
+refreshUnitLabels();
+refreshAllFieldSteps();
 // lastAutosavedProjectJson tracks what's actually in the autosave slot right now -- starts equal to
 // the just-decided boot project (restored or default) so nothing is redundantly re-written on the
 // very first updateAll(). scheduleAutosave() (called from updateAll(), so it runs after every
@@ -978,14 +1832,39 @@ function currentSnapshot(){return{project:JSON.parse(JSON.stringify(project)),se
 function commitHistory(){history.commit(currentSnapshot());updateHistoryUI()}
 function openHistorySession(){if(history.sessionOpen)return;history.beginSession(currentSnapshot());updateHistoryUI()}
 function closeHistorySession(){history.endSession()}
-function applyHistorySnapshot(snap){project=snap.project;selectedLayerId=snap.selectedLayerId;syncSelectedControlsFromLayer();updateAll(true)}
+function applyHistorySnapshot(snap){project=snap.project;selectedLayerId=snap.selectedLayerId;syncSelectedControlsFromLayer();updateAll(true,true)}
 function performUndo(){closeHistorySession();const snap=history.undo(currentSnapshot());if(!snap){el('status').textContent='Nothing to undo';updateHistoryUI();return}applyHistorySnapshot(snap);el('status').textContent='Undo'}
 function performRedo(){closeHistorySession();const snap=history.redo(currentSnapshot());if(!snap){el('status').textContent='Nothing to redo';updateHistoryUI();return}applyHistorySnapshot(snap);el('status').textContent='Redo'}
 function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dirtyEl=el('dirtyIndicator');if(undoBtn)undoBtn.disabled=!history.canUndo;if(redoBtn)redoBtn.disabled=!history.canRedo;if(dirtyEl)dirtyEl.textContent=JSON.stringify(project)!==cleanProjectJson?'Unsaved changes':'Saved';
   // UI-001: the left panel's Actions-section Undo/Redo buttons mirror the top bar's undoBtn/redoBtn
   // disabled state exactly -- both call the same performUndo()/performRedo(), never a second history.
   const actionUndoBtn=el('actionUndo'),actionRedoBtn=el('actionRedo');if(actionUndoBtn)actionUndoBtn.disabled=!history.canUndo;if(actionRedoBtn)actionRedoBtn.disabled=!history.canRedo;
-}function syncSelectedControlsFromLayer(){const l=selectedLayer();el('selectedLayer').value=l.id;const isText=l.type==='text';el('textControls').style.display=isText?'block':'none';el('shapeControls').style.display=isText?'none':'block';
+}
+// RS-3013 Step 5: a selected REGION (drawingTool.activeSelection.kind==='region') branches first,
+// populating #stoneSize/#gap/#stoneColor/#regionFillMode from the REGION's own fields (not the
+// parent layer's) and hiding the shape-geometry (#sharedPositionFields) / #shapeFillMode fields a
+// region has no independent version of -- same "region wins" precedent performClickDispatch()
+// (DrawingCanvasTool.js) already established for click-selection itself. Falls through to today's
+// selectedLayer()-based behavior below when activeSelection isn't a region, or is a stale one whose
+// layer/region no longer exist (e.g. after an undo past the region's own creation).
+function syncSelectedControlsFromLayer(){
+  const regionSelection=drawingTool.activeSelection;
+  if(regionSelection&&regionSelection.kind==='region'){
+    const regionLayer=project.layers.find(x=>x.id===regionSelection.layerId&&x.type==='path');
+    const region=regionLayer&&(regionLayer.regions||[]).find(r=>r.id===regionSelection.regionId);
+    if(regionLayer&&region){
+      el('sharedPositionFields').style.display='none';
+      el('shapeFillModeField').style.display='none';
+      el('regionFillModeField').style.display='block';
+      ensureStoneSizeOption(el('stoneSize'),region.stoneSizeMm);
+      setNumericSelectValue(el('stoneSize'),region.stoneSizeMm);
+      setLengthField('gap',region.gapMm);
+      el('stoneColor').value=region.color;
+      el('regionFillMode').value=region.fillMode==='outline'?'outline':'fill';
+      return;
+    }
+  }
+  const l=selectedLayer();el('selectedLayer').value=l.id;const isText=l.type==='text';el('textControls').style.display=isText?'block':'none';el('shapeControls').style.display=isText?'none':'block';
   // UI-001: sharedPositionFields (shapeX/Y/W/H) is relocated between the inspector and a Lightbox
   // slot (see relocateFieldGroups()) and is no longer always a child of #shapeControls, so it needs
   // its own visibility toggle mirroring the exact same isText condition #shapeControls already uses.
@@ -998,6 +1877,9 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
   const isShapeFillType=VECTOR_FILL_MODE_TYPES.has(l.type);
   el('shapeFillModeField').style.display=isShapeFillType?'block':'none';
   if(isShapeFillType)el('shapeFillMode').value=resolveVectorFillMode(l.fillMode);
+  // RS-3013 Step 5: mutually exclusive with #shapeFillMode above, same as sharedPositionFields'
+  // region-vs-layer split -- only shown by the region branch at this function's own top.
+  el('regionFillModeField').style.display='none';
   // S-110: per-shape "Shape options" -- only the fields relevant to the selected shape kind are
   // shown (Regular Polygon's side count; Star's point count + inner radius; Ring's inner opening),
   // matching this function's existing shapeHField (Circle vs. everything else) visibility pattern.
@@ -1009,10 +1891,10 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
   if(showStarFields){el('shapePoints').value=l.points??5;el('shapeInnerRadius').value=l.innerRadiusRatio??0.5}
   if(showRingField)el('shapeRingInner').value=l.innerRatio??0.5;
   if(l.type==='image')el('imageFillMode').value=resolveImageFillMode(l.fillMode);
-  if(isText){el('text').value=l.text;ensureFontOptionForLayer(l.font);el('font').value=l.font;el('height').value=l.height;el('heightAutoAdjustedHint').style.display='none';el('autoFit').value=l.autoFit?'on':'off';el('autoFitOnHint').style.display='none';el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';el('curveRadiusMm').value=l.curveRadiusMm??40;el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??180;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';el('textX').value=l.x||0;el('textY').value=l.y||0;
+  if(isText){el('text').value=l.text;ensureFontOptionForLayer(l.font);el('font').value=l.font;setLengthField('height',l.height);el('heightAutoAdjustedHint').style.display='none';el('autoFit').value=l.autoFit?'on':'off';el('autoFitOnHint').style.display='none';el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';setLengthField('curveRadiusMm',l.curveRadiusMm??40);el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??180;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';setLengthField('textX',l.x||0);setLengthField('textY',l.y||0);
   // TXT-102: '??'/'||' fallbacks so a pre-TXT-102 project (no align/lineSpacing/rotationDeg stored)
   // displays GeometryEngine's own defaults, matching this line's existing curve-field convention.
-  el('textAlign').value=l.align||'left';el('lineSpacing').value=l.lineSpacing??1;el('rotationDeg').value=l.rotationDeg??0}else{el('shapeX').value=l.type==='circle'?l.cx:l.x;el('shapeY').value=l.type==='circle'?l.cy:l.y;el('shapeW').value=l.type==='circle'?l.r:l.w;el('shapeH').value=l.type==='circle'?'':l.h;el('shapeWLabel').textContent=l.type==='circle'?'Radius (mm)':'Width (mm)';el('shapeHField').style.display=l.type==='circle'?'none':'';if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);el('gap').value=l.gap;el('stoneColor').value=l.color;
+  el('textAlign').value=l.align||'left';el('lineSpacing').value=l.lineSpacing??1;el('rotationDeg').value=l.rotationDeg??0}else{setLengthField('shapeX',l.type==='circle'?l.cx:l.x);setLengthField('shapeY',l.type==='circle'?l.cy:l.y);setLengthField('shapeW',l.type==='circle'?l.r:l.w);setLengthField('shapeH',l.type==='circle'?'':l.h);el('shapeWLabel').textContent=(l.type==='circle'?'Radius':'Width')+' ('+unitSuffix(project.units)+')';el('shapeHField').style.display=l.type==='circle'?'none':'';el('shapeRotationDeg').value=l.rotationDeg??0;if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);setLengthField('gap',l.gap);el('stoneColor').value=l.color;
   // S-200: Mixed Stone Size -- applies uniformly to every layer type, same as stoneSize/gap/color
   // just above. allowedSizesMm is only ever catalog values (see MIXED_ALLOWED_SIZE_CHECKBOXES'
   // doc comment), so each checkbox is simply checked when its own diameter is present in the
@@ -1045,10 +1927,10 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
   // S-112: project.plate is likewise project-level -- resync every plate field for the same reason
   // (undo/redo restore, Project JSON import, or a template switch away-and-back must never leave
   // these inputs showing a stale value that a later edit would silently write back).
-  el('plateOuterDiameter').value=project.plate.outerDiameterMm;el('plateInnerWellDiameter').value=project.plate.innerWellDiameterMm;el('plateOverallHeight').value=project.plate.overallHeightMm;el('plateCenterDepth').value=project.plate.centerDepthMm;el('plateColor').value=project.plate.colorId;el('plateDesignTarget').value=project.plate.designTarget;
+  setLengthField('plateOuterDiameter',project.plate.outerDiameterMm);setLengthField('plateInnerWellDiameter',project.plate.innerWellDiameterMm);setLengthField('plateOverallHeight',project.plate.overallHeightMm);setLengthField('plateCenterDepth',project.plate.centerDepthMm);el('plateColor').value=project.plate.colorId;el('plateDesignTarget').value=project.plate.designTarget;
   // RS-2010: project.vessel is likewise project-level -- resync for the same reason as project.plate
   // just above.
-  el('vesselBodyDiameter').value=project.vessel.bodyDiameterMm;el('vesselBodyHeight').value=project.vessel.bodyHeightMm;el('vesselTopDiameter').value=project.vessel.topDiameterMm;
+  setLengthField('vesselBodyDiameter',project.vessel.bodyDiameterMm);setLengthField('vesselBodyHeight',project.vessel.bodyHeightMm);setLengthField('vesselTopDiameter',project.vessel.topDiameterMm);
   // RS-1005: project.name is likewise project-level -- resync for the same reason.
   el('projectName').value=project.name;
   // S-105 follow-up: a type-specific Lightbox (Text/Import/Image Trace) that stays open (non-modal
@@ -1077,8 +1959,37 @@ function updateHistoryUI(){const undoBtn=el('undoBtn'),redoBtn=el('redoBtn'),dir
     const target=lightboxForLayerType(l.type);
     if(target&&!target.isOpen)target.open();
   }
+  // RS-3011 Step 3a: this function already runs on every selection change (canvas click, Layers
+  // list click, Design's own onSelectionChanged, undo/redo, etc.) -- reusing that as the one place
+  // that re-evaluates the stone group's designSlot target, rather than adding a relocateFieldGroups()
+  // call at each of those sites individually.
+  relocateFieldGroups();
 }
-function writeSelectedControlsToLayer(){const l=selectedLayer();
+// RS-3013 Step 5: same "region-first, early return" structure as syncSelectedControlsFromLayer()
+// above -- a selected REGION writes #stoneSize/#gap/#stoneColor/#regionFillMode straight onto the
+// region object (region.stoneSizeMm/gapMm/color/fillMode), not the parent layer. commitHistory()/
+// session-open semantics are already handled by the caller (HISTORY_TRACKED_CONTROL_IDS' own
+// 'input'->openHistorySession()+updateAll() wiring, which is what invokes this function in the
+// first place) -- no separate history call needed here, same as the unbranched function below never
+// calling commitHistory() itself either. drawingTool.refreshStoneGroupForLayer(regionLayer.id) is
+// the EXACT post-write regen call the existing 'path'-layer branch below already uses (see
+// `if(l.type==='path')drawingTool.refreshStoneGroupForLayer(l.id)` further down) -- no updateAll()
+// call here, since this function is itself already running from inside one.
+function writeSelectedControlsToLayer(){
+  const regionSelection=drawingTool.activeSelection;
+  if(regionSelection&&regionSelection.kind==='region'){
+    const regionLayer=project.layers.find(x=>x.id===regionSelection.layerId&&x.type==='path');
+    const region=regionLayer&&(regionLayer.regions||[]).find(r=>r.id===regionSelection.regionId);
+    if(regionLayer&&region){
+      region.stoneSizeMm=parseFloat(el('stoneSize').value)||2;
+      region.gapMm=readLengthField('gap')||.3;
+      region.color=el('stoneColor').value;
+      region.fillMode=el('regionFillMode').value==='outline'?'outline':'fill';
+      drawingTool.refreshStoneGroupForLayer(regionLayer.id);
+      return;
+    }
+  }
+  const l=selectedLayer();
   // S-112A: detected here, before project.plate is overwritten further down in this same function
   // (project.plate.designTarget still holds the *previous* target, el('plateDesignTarget').value the
   // one the user just picked) -- true exactly once, on the edit that switches Design Target to Rim
@@ -1091,7 +2002,7 @@ function writeSelectedControlsToLayer(){const l=selectedLayer();
     // el('curveDirection') reads below pick them up, exactly as if the operator had set them by hand.
     // Center Well/Full Top Surface never run this block, so their text behavior is untouched, and the
     // operator can still freely edit every curve field afterward -- this only seeds a default.
-    if(enteringRimBand){el('curveEnabled').value='on';el('curveRadiusMm').value=rimBandCurveRadiusMm().toFixed(2);el('curveDirection').value='outside';el('curveControls').style.display='block'}
+    if(enteringRimBand){el('curveEnabled').value='on';setLengthField('curveRadiusMm',rimBandCurveRadiusMm());el('curveDirection').value='outside';el('curveControls').style.display='block'}
     // FONT-002: '||l.font' guards against a select somehow reporting '' (should not happen now that
     // ensureFontOptionForLayer() always gives it a matching option, but this is the one write site
     // that could otherwise silently corrupt layer.font to an empty string on the next edit).
@@ -1105,29 +2016,33 @@ function writeSelectedControlsToLayer(){const l=selectedLayer();
     // 111 -- the true max across every catalog size's supportedHeightRangeMm (StoneSizes.js's SS30
     // entry, [106,111]) -- so the largest validated stone sizes' own auto-set midpoints (see
     // #stoneSize's 'input' listener below) are never clamped back down below their own valid range.
-    l.height=Math.max(RAW_ENGINE_HEIGHT_MM_MIN,Math.min(RAW_ENGINE_HEIGHT_MM_MAX,parseFloat(el('height').value)||25));l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;
+    l.height=Math.max(RAW_ENGINE_HEIGHT_MM_MIN,Math.min(RAW_ENGINE_HEIGHT_MM_MAX,readLengthField('height')||25));l.autoFit=el('autoFit').value==='on';l.textMode=el('textMode').value;
     // FONT-002: a Production Font has no curve support (GeometryEngine.generateTextLayout() throws
     // for authored-stone-center fonts with curveEnabled) -- force it off in the stored layer data too
     // (not just the disabled control) so switching *to* an authored font from a curved legacy layer
     // can never leave curveEnabled:true sitting in the data.
-    l.curveEnabled=isAuthoredStoneFontId(l.font)?false:el('curveEnabled').value==='on';l.curveRadiusMm=Math.max(0.1,parseFloat(el('curveRadiusMm').value)||40);l.curveDirection=el('curveDirection').value==='inside'?'inside':'outside';l.curveStartAngleDeg=parseFloat(el('curveStartAngleDeg').value)||0;l.curveSweepAngleDeg=parseFloat(el('curveSweepAngleDeg').value)||180;l.curveAlignment=el('curveAlignment').value;el('curveControls').style.display=l.curveEnabled?'block':'none';
+    l.curveEnabled=isAuthoredStoneFontId(l.font)?false:el('curveEnabled').value==='on';l.curveRadiusMm=Math.max(0.1,readLengthField('curveRadiusMm')||40);l.curveDirection=el('curveDirection').value==='inside'?'inside':'outside';l.curveStartAngleDeg=parseFloat(el('curveStartAngleDeg').value)||0;l.curveSweepAngleDeg=parseFloat(el('curveSweepAngleDeg').value)||180;l.curveAlignment=el('curveAlignment').value;el('curveControls').style.display=l.curveEnabled?'block':'none';
   // UI-001: manual X/Y mm fields for the Text Lightbox, writing to the same layer.x/layer.y fields
   // RS-1009 already added (previously settable only by drag/nudge/align/distribute).
-  l.x=parseFloat(el('textX').value)||0;l.y=parseFloat(el('textY').value)||0;
+  l.x=readLengthField('textX')||0;l.y=readLengthField('textY')||0;
   // TXT-102: align/lineSpacing mirror curveAlignment/curveRadiusMm's own clamp-on-write convention
   // just above -- lineSpacing clamped to the same [0.5,3] range the #lineSpacing input itself allows,
   // rotationDeg normalized into [0,360) exactly like GeometryEngine's own normalizeRotationDeg().
-  l.align=el('textAlign').value;l.lineSpacing=Math.max(0.5,Math.min(3,parseFloat(el('lineSpacing').value)||1));l.rotationDeg=(((parseFloat(el('rotationDeg').value)||0)%360)+360)%360}else if(l.type==='circle'){l.cx=parseFloat(el('shapeX').value)||105;l.cy=parseFloat(el('shapeY').value)||45;l.r=Math.max(1,parseFloat(el('shapeW').value)||18);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(l.type==='rectangle'){l.x=parseFloat(el('shapeX').value)||65;l.y=parseFloat(el('shapeY').value)||30;l.w=Math.max(1,parseFloat(el('shapeW').value)||80);l.h=Math.max(1,parseFloat(el('shapeH').value)||30);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(SHAPE_LIBRARY_KINDS.has(l.type)){
+  l.align=el('textAlign').value;l.lineSpacing=Math.max(0.5,Math.min(3,parseFloat(el('lineSpacing').value)||1));l.rotationDeg=(((parseFloat(el('rotationDeg').value)||0)%360)+360)%360}else if(l.type==='circle'){l.cx=readLengthField('shapeX')||105;l.cy=readLengthField('shapeY')||45;l.r=Math.max(1,readLengthField('shapeW')||18);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(l.type==='rectangle'){l.x=readLengthField('shapeX')||65;l.y=readLengthField('shapeY')||30;l.w=Math.max(1,readLengthField('shapeW')||80);l.h=Math.max(1,readLengthField('shapeH')||30);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(SHAPE_LIBRARY_KINDS.has(l.type)){
   // S-110: every new shape kind shares Rectangle's x/y/w/h + Fill Style write-back, plus its own
   // configurable extra fields (Regular Polygon/Star/Ring only).
-  l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||60);l.h=Math.max(1,parseFloat(el('shapeH').value)||60);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value);
+  l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||60);l.h=Math.max(1,readLengthField('shapeH')||60);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value);
   if(l.type==='polygon')l.sides=Math.max(3,Math.min(12,parseIntOr(el('shapeSides').value,6)));
   if(l.type==='star'){l.points=Math.max(3,Math.min(12,parseIntOr(el('shapePoints').value,5)));l.innerRadiusRatio=Math.max(0.1,Math.min(0.9,parseFloat(el('shapeInnerRadius').value)||0.5))}
   if(l.type==='ring')l.innerRatio=Math.max(0.1,Math.min(0.9,parseFloat(el('shapeRingInner').value)||0.5));
-}else if(l.type==='svg'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.mode=resolveVectorFillMode(el('svgMode').value)}else if(l.type==='image'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(1,parseFloat(el('shapeW').value)||10);l.h=Math.max(1,parseFloat(el('shapeH').value)||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.fillMode=resolveImageFillMode(el('imageFillMode').value)}else if(l.type==='path'){l.x=parseFloat(el('shapeX').value)||0;l.y=parseFloat(el('shapeY').value)||0;l.w=Math.max(2,parseFloat(el('shapeW').value)||10);l.h=Math.max(2,parseFloat(el('shapeH').value)||10);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}
+}else if(l.type==='svg'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||10);l.h=Math.max(1,readLengthField('shapeH')||10);l.mode=resolveVectorFillMode(el('svgMode').value)}else if(l.type==='image'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||10);l.h=Math.max(1,readLengthField('shapeH')||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.fillMode=resolveImageFillMode(el('imageFillMode').value)}else if(l.type==='path'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(2,readLengthField('shapeW')||10);l.h=Math.max(2,readLengthField('shapeH')||10);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}
   const nextStoneSize=parseFloat(el('stoneSize').value)||2;if(nextStoneSize!==l.stoneSize)invalidateAuthoredScaleForGeometryChange(l,'stoneSize');l.stoneSize=nextStoneSize;
-  const nextGap=parseFloat(el('gap').value)||.3;if(nextGap!==l.gap)invalidateAuthoredScaleForGeometryChange(l,'gap');l.gap=nextGap;
+  const nextGap=readLengthField('gap')||.3;if(nextGap!==l.gap)invalidateAuthoredScaleForGeometryChange(l,'gap');l.gap=nextGap;
   l.color=el('stoneColor').value;
+  // RS-3029: shape rotation write-back, mirroring text's own #rotationDeg normalize-into-[0,360)
+  // just above -- this tail block runs once after all six shape branches, so it only ever writes
+  // l.rotationDeg for a non-text (shape) layer, never double-writing text's own already-correct value.
+  if(l.type!=='text')l.rotationDeg=(((parseFloat(el('shapeRotationDeg').value)||0)%360)+360)%360;
   // S-200: Mixed Stone Size -- read back exactly like stoneSize/gap/color just above, applying to
   // every layer type uniformly. allowedSizesMm is rebuilt from the checkbox states on every write
   // (not merged with any prior stored value), matching this app's general "the UI is authoritative
@@ -1141,6 +2056,13 @@ function writeSelectedControlsToLayer(){const l=selectedLayer();
   l.minSizeMm=parseFloat(el('mixedMinSize').value)||null;
   l.maxSizeMm=parseFloat(el('mixedMaxSize').value)||null;
   l.conservativeDetail=Math.max(0,Math.min(1,parseFloat(el('conservativeDetail').value)||0));
+  // RS-3011 Step 3b: every field write above (stoneSize/gap/color/fillMode/mixed-size) can change
+  // a 'path' layer's live stone preview on the Design canvas -- rebuild it here, the one place all
+  // of those writes have already landed on `l`. A no-op for every other layer type, and a no-op for
+  // a 'path' layer with no matching board.shapes item (Design not active / a different shape
+  // selected), per drawingTool.refreshStoneGroupForLayer()'s own findShapeByLayerId() guard --
+  // same write-through convention as onShapeMoved/onShapeResized/onShapeDeleted above.
+  if(l.type==='path')drawingTool.refreshStoneGroupForLayer(l.id);
   project.cupColor=el('cupColor').value;project.wrap=el('wrap').value;
   // S-112: plate fields only read/written while the Round Dinner Plate template is active
   // (mirroring how e.g. bottle-only fields are template-gated) -- normalizePlateParams() clamps
@@ -1151,7 +2073,7 @@ function writeSelectedControlsToLayer(){const l=selectedLayer();
   // wall), and project.cupColor is kept resolved from the selected plate color id so drawCup()/the
   // Object Preview need no plate-specific color plumbing.
   if(currentObjectTemplate().preview.kind==='plate'){
-    project.plate=normalizePlateParams({outerDiameterMm:parseFloat(el('plateOuterDiameter').value),innerWellDiameterMm:parseFloat(el('plateInnerWellDiameter').value),overallHeightMm:parseFloat(el('plateOverallHeight').value),centerDepthMm:parseFloat(el('plateCenterDepth').value),footRingOuterDiameterMm:project.plate.footRingOuterDiameterMm,footRingHeightMm:project.plate.footRingHeightMm,colorId:el('plateColor').value,designTarget:el('plateDesignTarget').value});
+    project.plate=normalizePlateParams({outerDiameterMm:readLengthField('plateOuterDiameter'),innerWellDiameterMm:readLengthField('plateInnerWellDiameter'),overallHeightMm:readLengthField('plateOverallHeight'),centerDepthMm:readLengthField('plateCenterDepth'),footRingOuterDiameterMm:project.plate.footRingOuterDiameterMm,footRingHeightMm:project.plate.footRingHeightMm,colorId:el('plateColor').value,designTarget:el('plateDesignTarget').value});
     project.canvas={width:project.plate.outerDiameterMm,height:project.plate.outerDiameterMm};
     project.cupColor=getPlateColor(project.plate.colorId).hex;
   }
@@ -1163,35 +2085,123 @@ function writeSelectedControlsToLayer(){const l=selectedLayer();
   // height), the vessel counterpart of the plate's own canvas-follows-outer-diameter line above.
   if(VESSEL_PRODUCT_IDS.includes(currentObjectTemplate().id)){
     const vesselProductId=currentObjectTemplate().id;
-    project.vessel=normalizeVesselParams(vesselProductId,{bodyDiameterMm:parseFloat(el('vesselBodyDiameter').value),topDiameterMm:parseFloat(el('vesselTopDiameter').value),bodyHeightMm:parseFloat(el('vesselBodyHeight').value)});
+    project.vessel=normalizeVesselParams(vesselProductId,{bodyDiameterMm:readLengthField('vesselBodyDiameter'),topDiameterMm:readLengthField('vesselTopDiameter'),bodyHeightMm:readLengthField('vesselBodyHeight')});
     project.canvas=computeCanvasFromVessel(project.vessel);
   }
   project.name=el('projectName').value||DEFAULT_PROJECT_NAME;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
-async function updateAll(skipWrite=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated;try{generated=await engine.generate(project)}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Text generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;
+// M14 (perf/move-drag-translate-fast-path): pure translation of an existing StoneLayout for the
+// move-drag fast path. Returns a NEW StoneLayout whose stones are fresh Stone copies of baseLayout's:
+// stones whose layerId is in movedLayerIds are shifted by (dxMm,dyMm); every other stone is carried
+// over with identical values. baseLayout and its Stone instances are never mutated.
+//
+// Why this is geometrically exact per layer: every GeometryEngine sampling grid is anchored to its
+// own layer's box (text placement offset, shape x/y, svg/image x/y, path natural-space transform),
+// so translating the layer's box by (dx,dy) translates every one of that layer's sampled stone
+// centers by exactly (dx,dy) -- nothing about the intra-layer sampling depends on absolute canvas
+// position. The one cross-layer stage, dedupeStonesByRadius() in engine.generate(), is NOT reproduced
+// here: in overlap zones where the moved layer transiently covers another mid-drag, this preview can
+// differ slightly from a true regeneration. That is the milestone's known, by-design approximation --
+// see the end-of-drag regeneration in endActiveDrag() below, which restores the canonical set before
+// anything can persist or export.
+function translateLayoutForMoveDrag(baseLayout,movedLayerIds,dxMm,dyMm){
+  const moved=movedLayerIds instanceof Set?movedLayerIds:new Set(movedLayerIds);
+  const stones=baseLayout.stones.map(s=>{
+    const shift=moved.has(s.layerId);
+    return new Stone({
+      xMm:shift?s.xMm+dxMm:s.xMm,
+      yMm:shift?s.yMm+dyMm:s.yMm,
+      sizeMm:s.sizeMm,
+      color:s.color,
+      layerId:s.layerId,
+      index:s.index,
+      metadata:s.metadata
+    });
+  });
+  return new StoneLayout({layerId:baseLayout.layerId,stones,sourceMode:baseLayout.sourceMode,outlineStats:baseLayout.outlineStats});
+}
+// M14 precondition #1 (verified by reading, not assumed) -- fitTextToShape(): it is a ONE-SHOT
+// action, not a live cross-layer dependency. applyTextFitPlan() bakes the computed heightMm/xMm/yMm
+// straight into the text layer's own fields, and fitTextToShape() is only ever called from three UI
+// entry points (createShapeLayer(), addText(), the #fitTextToShapeBtn click) -- never from
+// engine.generate() or generateTextStonesLive(). So a move drag can never invalidate a stored fit,
+// and the fast path needs no fit-related fallback.
+async function updateAll(skipWrite=false,forceStoneRebuild=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated;try{generated=await engine.generate(project)}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Text generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;
   // MONO-006A: a prior failed generation (e.g. a stale authoredScale rejected by GeometryEngine)
   // leaves this exact status message behind -- once generation succeeds again, it must not keep
   // reading as broken even though the canvas has already recovered.
   if(el('status').textContent.startsWith('Text generation failed'))el('status').textContent='Ready';
-  renderLayerUI();drawLayout();drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}// S-003: a project must always keep at least one layer (deleteLayer()'s guard below), so once
-// only one layer remains, every delete affordance -- the per-row trash icon and the sidebar
-// "Delete selected layer" button -- is disabled here (not just left clickable-but-a-no-op) and
-// #layerRuleHint (sitting directly under the button, always in view) explains why. This runs on
-// every renderLayerUI() call (i.e. after every add/delete/duplicate/undo/redo/import), so the
-// disabled state and hint never go stale relative to the current layer count.
-function renderLayerUI(){const onlyOneLayer=project.layers.length<=1;el('selectedLayer').innerHTML=project.layers.map(l=>`<option value="${escapeHtml(l.id)}">${escapeHtml(layerLabel(l))}</option>`).join('');el('selectedLayer').value=selectedLayerId;el('layersList').innerHTML=project.layers.map(l=>`<div class="layer ${selectedLayerIds.has(l.id)?'selected':''}" data-layer="${escapeHtml(l.id)}"><input type="checkbox" ${l.visible?'checked':''} data-action="visible"><div class="name" data-action="select" title="${escapeHtml(layerLabel(l))}">${escapeHtml(layerLabel(l))}</div><div class="type">${l.type.toUpperCase()}</div><button data-action="select">✎</button><button data-action="duplicate">⧉</button><button data-action="delete" ${onlyOneLayer?'disabled title="At least one layer is required"':''}>🗑</button></div>`).join('');el('deleteSelected').disabled=onlyOneLayer;el('deleteSelected').title=onlyOneLayer?'At least one layer is required':'';el('layerRuleHint').style.display=onlyOneLayer?'block':'none';
+  // RS-3010 Step 1: while drawing mode owns layoutCanvas, drawLayout() itself is a no-op (see its
+  // own guard below) -- calling it here would do nothing useful, and every real trigger that lands
+  // in updateAll() while active (a window resize, a workspace-tab switch reflowing the panel, or
+  // any other edit that happens to run updateAll() concurrently) still needs layoutCanvas's *size*
+  // kept in sync, just through drawingTool's own resync path instead of the normal renderer.
+  renderLayerUI();if(drawingTool.isActive){drawingTool.resize(38*Math.max(1,devicePixelRatio||1));
+  // Canvas-desync fix: reconciles Design's live Paper.js shapes against project.layers on every
+  // updateAll() call while Design is active -- resize() above only keeps the viewport in sync, it
+  // never did this. Covers undo/redo (applyHistorySnapshot() swaps `project` wholesale) and the
+  // Layers-list trash-icon delete (deleteLayer() there is called directly, bypassing
+  // drawingTool.deleteSelected()/onShapeDeleted entirely) -- see syncFromProjectLayers()'s own doc
+  // comment for why this is a no-op after an ordinary Design-originated commit/move/resize/delete,
+  // and for why applyHistorySnapshot()/deleteLayer()'s trash-icon path pass forceStoneRebuild=true.
+  // RS-3032 Step A: widened from 'path'-only to also include every SHAPE_LIBRARY_KINDS layer (Star/
+  // Ring/Heart/... from the "More Shapes" popover/Shapes panel) -- syncFromProjectLayers() itself
+  // branches on layer.type internally to materialize/track the two categories separately. RS-3012
+  // Step 2: widened again to include 'svg'/'image' -- both already use the same x/y/w/h/rotationDeg
+  // box model as every other XYWH_SHAPE_TYPES layer, so they get the same on-canvas click-to-select/
+  // drag/resize/rotate presence in Design that 'path'/SHAPE_LIBRARY_KINDS layers already have. RS-3012
+  // Step 3: widened once more to include 'text' -- unlike every other type
+  // here, it has no x/y/w/h box or vector outline at all, only real stone positions (already computed
+  // by the engine.generate() call just above, Design-active or not); syncFromProjectLayers() takes a
+  // dedicated code path for it (see its own doc comment) rather than forcing it through the
+  // XYWH_SHAPE_TYPES box model the others share. RS-3012 Step 4: widened a final time to include
+  // 'circle' -- like 'text' it has no x/y/w/h box (cx/cy/r data model, deliberately not migrated), so
+  // syncFromProjectLayers() takes its own dedicated code path for it too; the resize write-back below
+  // (onShapeResized) converts the reported bounds back to l.r.
+  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'||SHAPE_LIBRARY_KINDS.has(l.type)||l.type==='svg'||l.type==='image'||l.type==='text'||l.type==='circle'),forceStoneRebuild)}else{drawLayout()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}
+// RS-3011 freehand-close-and-clear-all-layers fix: deleting the last remaining layer no longer
+// blocks (see deleteLayer()) -- the per-row trash icon and the sidebar "Delete selected layer"
+// button are therefore never disabled for layer count anymore.
+function renderLayerUI(){el('selectedLayer').innerHTML=project.layers.map(l=>`<option value="${escapeHtml(l.id)}">${escapeHtml(layerLabel(l))}</option>`).join('');el('selectedLayer').value=selectedLayerId;el('layersList').innerHTML=project.layers.map(l=>`<div class="layer ${selectedLayerIds.has(l.id)?'selected':''}" data-layer="${escapeHtml(l.id)}"><input type="checkbox" ${l.visible?'checked':''} data-action="visible"><div class="name" data-action="select" title="${escapeHtml(layerLabel(l))}">${escapeHtml(layerLabel(l))}</div><div class="type">${l.type.toUpperCase()}</div><button data-action="select">✎</button><button data-action="duplicate">⧉</button><button data-action="delete">🗑</button></div>`).join('');
   // UI-001: keep the right inspector's layer name and the left panel's project/template summary
   // in sync on every render (add/delete/duplicate/undo/redo/import/selection change).
-  el('inspectorLayerName').textContent=layerLabel(selectedLayer());updateObjectTemplateDetail();
+  // RS-3013 Step 5: a selected REGION outranks the underlying layer's own label here, same
+  // "region wins" precedent syncSelectedControlsFromLayer()'s own new branch follows -- checked live
+  // against drawingTool.activeSelection (not cached) since renderLayerUI() re-runs on every
+  // updateAll(), including every keystroke while editing a region's own fields, and must not let the
+  // header flicker back to the parent layer's label mid-edit.
+  el('inspectorLayerName').textContent=drawingTool.activeSelection?.kind==='region'?'Region':layerLabel(selectedLayer());updateObjectTemplateDetail();
 }function layerLabel(l){if(l.type==='text')return l.text||'Text';if(l.type==='svg')return l.svgName||'SVG';if(l.type==='image')return l.imageName||'Image';if(l.type==='path')return l.pathName||'Path';return SHAPE_DISPLAY_LABELS[l.type]||'Shape'}function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function resizeCanvas(c){const r=c.getBoundingClientRect(),dpr=Math.max(1,devicePixelRatio||1),w=Math.floor(r.width*dpr),h=Math.floor(r.height*dpr);if(c.width!==w||c.height!==h){c.width=w;c.height=h}return{w,h,dpr}}
 function layoutMmToPx(p){return{x:layoutTransform.ox+p.x*layoutTransform.s,y:layoutTransform.oy+p.y*layoutTransform.s}}function layoutPxToMm(x,y){return{x:(x-layoutTransform.ox)/layoutTransform.s,y:(y-layoutTransform.oy)/layoutTransform.s}}
-function drawLayout(){const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr});layoutTransform={s,ox,oy,dpr};
+// RS-3017: on-canvas scale bar, bottom-right of #panel2D. `s` (from layoutTransform) is device-px
+// per mm -- resizeCanvas() sizes the canvas backing store by devicePixelRatio, but the scale bar's
+// DOM element widths are CSS px, so dividing by dpr here is required to avoid a dpr-x-too-wide bar
+// on high-DPI screens.
+function updateScaleBar(s,dpr){
+  const stepMm=chooseNiceStepMm(s/dpr,SCALE_BAR_TARGET_PX,'atMost',project.units);
+  const barPx=stepMm*s/dpr;
+  el('scaleBarTrack').style.width=barPx+'px';
+  el('scaleBarLabel').textContent=`${formatLengthDisplay(stepMm,project.units)} ${unitSuffix(project.units)}`;
+}
+function drawLayout(){
+  // RS-3010 Step 1: "canvas interaction owned by exactly one thing at a time" also covers who
+  // *draws* to layoutCanvas, not just pointer/keyboard input -- while drawingTool.isActive, Paper.js
+  // owns rendering (its own autoUpdate loop) and resizeCanvas() below would fight it: changing
+  // canvas.width/height resets the 2D context, wiping Paper's own devicePixelRatio ctx.scale() and
+  // corrupting whatever Paper draws next. A blanket guard here (rather than patching each call
+  // site -- the window resize listener, setWorkspaceMode(), the Settings panel's Apply handler,
+  // ...) means every existing and future drawLayout() caller is automatically safe; setDrawMode(false)'s own explicit
+  // drawLayout() call runs *after* drawingTool.exit() has already flipped isActive off, so it isn't
+  // blocked by this guard.
+  if(drawingTool.isActive)return;
+  const{w,h,dpr}=resizeCanvas(layoutCanvas),ctx=layoutCanvas.getContext('2d');const{s,ox,oy}=renderProductionLayout(ctx,layout,{widthPx:w,heightPx:h,paddingPx:38*dpr,units:project.units});layoutTransform={s,ox,oy,dpr};
+  updateScaleBar(s,dpr);el('scaleBar').style.display=drawingTool.isActive?'none':'flex';
   // S-112: the plate template draws its own circular/annular design-target guide instead of the
   // cylindrical Front View Frame + rectangular safe-area guide -- neither applies to a flat
   // top-down disc (see drawPlateDesignTargetGuide()'s own header comment).
   const isPlate=currentObjectTemplate().preview.kind==='plate';
   if(isPlate){drawPlateDesignTargetGuide(ctx,s,ox,oy,dpr)}else{drawFrontViewFrame(ctx,s,ox,oy,dpr);if(showSafeArea)drawSafeAreaGuide(ctx,s,ox,oy,dpr,getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height))}
-  drawSelection(ctx,s,ox,oy,dpr);drawGuides(ctx,s,ox,oy,dpr);ctx.fillStyle='#516071';ctx.font=`${12*dpr}px Arial`;ctx.fillText(`${layout.count} stones · ${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm · ${selectedLayer().textMode||''}`,20*dpr,h-18*dpr);el('fitNotice').textContent=isPlate?'Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step) · Blue guide shows the selected Design Target’s printable boundary.':'Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step) · Drag the amber Front View Frame to rotate the Object Preview.'}
+  drawSelection(ctx,s,ox,oy,dpr);drawGuides(ctx,s,ox,oy,dpr);ctx.fillStyle='#516071';ctx.font=`${12*dpr}px Arial`;ctx.fillText(`${layout.count} stones · ${formatLengthDisplay(layout.widthMm,project.units,1)}×${formatLengthDisplay(layout.heightMm,project.units,1)} ${unitSuffix(project.units)} · ${selectedLayer().textMode||''}`,20*dpr,h-18*dpr);el('fitNotice').textContent=isPlate?'Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step) · Blue guide shows the selected Design Target’s printable boundary.':'Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step) · Drag the amber Front View Frame to rotate the Object Preview.'}
 // RS-1004: a dashed guide rectangle for the active object template's safe design area, derived from
 // the current project.canvas size. This is a layer-agnostic editor overlay (like drawSelection()
 // below), not a CanvasRenderer2D.js change -- it reuses the exact mm->px transform
@@ -1279,7 +2289,7 @@ function drawFrontViewFrame(ctx,s,ox,oy,dpr){
     ctx.fillRect(rx,ry,rw,rh);
     ctx.strokeRect(rx,ry,rw,rh);
   }
-  const label=`Front View · ${frameWidthMm.toFixed(1)} mm`;
+  const label=`Front View · ${formatLengthDisplay(frameWidthMm,project.units,1)} ${unitSuffix(project.units)}`;
   const labelSeg=segments[0];
   const labelY=oy>16*dpr?oy-8*dpr:oy+16*dpr;
   ctx.font=`bold ${12*dpr}px Arial`;
@@ -1301,10 +2311,38 @@ function isPointerOnFrontViewFrame(mm){
   const deltaRad=normalizeAngleDeltaRad(pointerAzimuthRad-rotationRad);
   return Math.abs(deltaRad)<=wrapAngleRad(project.wrap)/2;
 }
+// fix/rotated-layer-bbox-hittest: rotates a box's four corners clockwise around the box's own
+// center by rotationDeg, via rotatePointDeg() below (module-private verbatim replica of
+// GeometryEngine's rotatePointsAroundCenter() -- reused here rather than re-derived, exactly like
+// every other rotation-aware computation in this file), and returns the corners' axis-aligned
+// bounding box. A 0/360 rotation returns the input box unchanged (byte-identical output for every
+// unrotated layer, matching this file's existing 0-rotation-is-a-no-op convention).
+function rotatedCornersAABB(x,y,w,h,rotationDeg){
+  if(((rotationDeg||0)%360+360)%360===0)return{x,y,width:w,height:h,x2:x+w,y2:y+h};
+  const cx=x+w/2,cy=y+h/2;
+  const corners=[[x,y],[x+w,y],[x+w,y+h],[x,y+h]].map(([px,py])=>rotatePointDeg(px,py,cx,cy,rotationDeg));
+  const xs=corners.map(c=>c.x),ys=corners.map(c=>c.y);
+  const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+  return{x:x0,y:y0,x2:x1,y2:y1,width:x1-x0,height:y1-y0};
+}
 // Text layers have no plain layer fields to compute a bbox from directly (unlike circle/
 // rectangle), so their selection bbox is derived from the already-generated StoneLayout, filtered
 // to this layer's stones and wrapped in a fresh StoneLayout to reuse its getBoundingBox() math.
-function getLayerBBox(l){if(l.type==='circle')return{x:l.cx-l.r,y:l.cy-l.r,width:l.r*2,height:l.r*2,x2:l.cx+l.r,y2:l.cy+l.r};if(XYWH_SHAPE_TYPES.has(l.type))return{x:l.x,y:l.y,width:l.w,height:l.h,x2:l.x+l.w,y2:l.y+l.h};const stones=layout.stones.filter(s=>s.layerId===l.id);if(!stones.length)return{x:0,y:0,x2:0,y2:0,width:0,height:0};const b=new StoneLayout({layerId:l.id,stones}).getBoundingBox();return{x:b.minXmm,y:b.minYmm,x2:b.maxXmm,y2:b.maxYmm,width:b.widthMm,height:b.heightMm}}
+// fix/rotated-layer-bbox-hittest: the XYWH branch now returns the TRUE rotated-corners AABB
+// (rotatedCornersAABB() above) instead of the raw unrotated x/y/w/h box, so every caller that wants
+// a layer's actual visible/production footprint (hitTest's move-containment check, align/snap,
+// marquee-adjacent tooling, the rotate handle's own AABB-top-edge placement, etc.) gets it correctly
+// for a rotated shape. The one caller that must NOT get the rotated AABB is any call feeding this
+// box into rotatedHandlesFor() (which itself rotates whatever box it's given around that box's own
+// center) -- doing so would rotate an already-rotated box a second time. hitTest() below captures
+// its own raw box explicitly for that reason; drawSelection() does the same for its
+// drawSelectionBox() call (see that function's own comment) while still using this AABB, unchanged,
+// for its rotate-handle placement. Audited every other getLayerBBox( call site in this file
+// (unionBBoxOfLayers/selectionBoundsText/groupBBox0, selectedItemsForEditing's align/distribute,
+// the drag-move snap-target list, computeShapeAroundText, rotateHandlePositionMm) -- all either
+// operate on text layers only (untouched by this branch) or genuinely want the visible AABB, which
+// is the point of this fix.
+function getLayerBBox(l){if(l.type==='circle')return{x:l.cx-l.r,y:l.cy-l.r,width:l.r*2,height:l.r*2,x2:l.cx+l.r,y2:l.cy+l.r};if(XYWH_SHAPE_TYPES.has(l.type))return rotatedCornersAABB(l.x,l.y,l.w,l.h,l.rotationDeg||0);const stones=layout.stones.filter(s=>s.layerId===l.id);if(!stones.length)return{x:0,y:0,x2:0,y2:0,width:0,height:0};const b=new StoneLayout({layerId:l.id,stones}).getBoundingBox();return{x:b.minXmm,y:b.minYmm,x2:b.maxXmm,y2:b.maxYmm,width:b.widthMm,height:b.heightMm}}
 // RS-1009: the one pair of functions that know a layer's position field names (cx/cy for circle,
 // x/y for everything else, including the new text-layer offset fields) -- src/editing/** never
 // sees a layer `type`, it only ever returns a translation delta; these two functions turn that
@@ -1315,7 +2353,13 @@ function unionBBoxOfLayers(layers){let x=Infinity,y=Infinity,x2=-Infinity,y2=-In
 // RS-1009: adapts a live project layer into the plain {id,bbox:{xMm,yMm,widthMm,heightMm}} shape
 // src/editing/AlignmentEngine.js expects, for every currently multi-selected layer.
 function selectedItemsForEditing(){return[...selectedLayerIds].map(id=>project.layers.find(l=>l.id===id)).filter(Boolean).map(l=>{const b=getLayerBBox(l);return{id:l.id,bbox:{xMm:b.x,yMm:b.y,widthMm:b.width,heightMm:b.height}}})}
-function applyPositionDeltas(deltas){for(const[id,{dxMm,dyMm}]of deltas){const l=project.layers.find(x=>x.id===id);if(!l)continue;const p=getLayerPosition(l);setLayerPosition(l,p.xMm+dxMm,p.yMm+dyMm)}}
+// RS-3011 Step 2 fix: repositionShapeForLayer() keeps a Design-drawn shape's Paper.js item (in
+// drawingTool's own board.shapes) in sync with the project.layers x/y this loop just wrote --
+// Align/Distribute previously bypassed DrawingCanvasTool.js entirely (unlike the main-canvas drag
+// code, which already writes through via onShapeMoved/onShapeResized), leaving the two visibly out
+// of sync until Design was closed and reopened. A no-op for every non-Design layer type (its own
+// internal lookup finds no matching item.data.layerId).
+function applyPositionDeltas(deltas){for(const[id,{dxMm,dyMm}]of deltas){const l=project.layers.find(x=>x.id===id);if(!l)continue;const p=getLayerPosition(l);const xMm=p.xMm+dxMm,yMm=p.yMm+dyMm;setLayerPosition(l,xMm,yMm);drawingTool.repositionShapeForLayer(l.id,xMm,yMm)}}
 // UI-001B: align/distribute were the only two mutating editor actions with no #status confirmation
 // at all (every other action -- import/export/duplicate/delete/undo/redo -- already reports what it
 // did); a click that moves a layer by a subtle, easy-to-miss amount could look like nothing happened.
@@ -1454,7 +2498,11 @@ async function resolveLayerShapeSource(layer){
     return boundingBox?{kind:'polygons',polygons}:null;
   }
   if(layer.type==='path'){
-    const{polygons,boundingBox}=permanentEngine.resolvePathPolygons({contours:layer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h});
+    // RS-3014 Step 3: naturalBoundingBoxMm forwarded so a Boolean Operation combining a
+    // previously-cut layer resolves its TRUE (frozen-box-anchored) visible shape, not one
+    // stretched back to its unchanged x/y/w/h -- same wiring-gap fix as onPaintStroke()'s own
+    // candidate-resolution call above.
+    const{polygons,boundingBox}=permanentEngine.resolvePathPolygons({contours:layer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y}))),layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,naturalBoundingBoxMm:layer.naturalBoundingBoxMm});
     return boundingBox?{kind:'polygons',polygons}:null;
   }
   if(layer.type==='text'){
@@ -1592,6 +2640,7 @@ function updateEditingUI(){const n=selectedLayerIds.size;el('selectionSummary').
   updateTextFontCapabilityUI();
   updateMixedSizeCapabilityUI();
   updateStoneSizePrintableCapabilityUI();
+  updateStoneSizeOverlapCapabilityUI();
 }
 // FONT-002: keeps every Text Lightbox control that doesn't apply to the selected layer's font
 // (Fill Style, Text height/Auto fit, Curved text) in a disabled/hidden + explained state, and shows
@@ -1620,9 +2669,10 @@ function updateTextFontCapabilityUI(){
   const showLetterHeight=validated&&capHeightMode;
   el('heightField').style.display=showLetterHeight?'none':'block';
   el('letterHeightField').style.display=showLetterHeight?'block':'none';
+  refreshHeightFieldBounds();
   if(showLetterHeight){
     const bounds=computeLetterHeightBoundsMm(fontId);
-    el('letterHeight').min=bounds.minMm;el('letterHeight').max=bounds.maxMm;
+    el('letterHeight').min=mmToDisplayValue(bounds.minMm,project.units);el('letterHeight').max=mmToDisplayValue(bounds.maxMm,project.units);
     syncLetterHeightFromHeight(fontId);
   }
   // Mode-switch affordance (design doc section 3.3): only offered for a validated font, since a
@@ -1647,6 +2697,10 @@ function updateTextFontCapabilityUI(){
   // control untouched with zero architectural changes.
   el('gap').disabled=authored;
   el('gapFixedHint').style.display=authored?'block':'none';
+  // RS-3011 Step 7: "Generate Stones" only for a Design-drawn 'path' layer whose stones are still
+  // deferred -- hidden for every other layer type/state (including a path layer that already has
+  // stones), matching #gapFixedHint's own per-layer-type/state visibility toggle just above.
+  el('generateStonesField').style.display=(l.type==='path'&&l.stonesGenerated===false)?'block':'none';
 }
 // RS-2012: mirrors MixedSizeGenerator.js's normalizeMixedSizeParams() eligibility rule exactly
 // (value < stoneSizeMm && value >= minSizeMm && value <= maxSizeMm), computed live from the
@@ -1783,6 +2837,127 @@ function updateStoneSizePrintableCapabilityUI(){
         :'';
   }
 }
+// Stone Size overlap guard: greys out any #stoneSize <option> that would produce genuine physical
+// overlap (findOverlappingStonePairs(), the same check tools/test-geometry-stone-overlap-same-
+// contour.mjs's regression suite runs) for the CURRENT layer's real dimensions/gap/fillMode, by
+// actually generating that candidate size's real layout and checking it -- no heuristic, no
+// shape-kind branching, works identically for every layer type and both Outline/Fill mode.
+//
+// Composes with updateStoneSizePrintableCapabilityUI() just above rather than fighting it: an
+// option already disabled for that function's own (shape/font) reason is left exactly as-is here
+// (its title kept, this function only adds overlap-disabling on top for options still enabled).
+//
+// The currently-selected size is deliberately never disabled here even when it overlaps (see
+// currentStoneSizeTarget()'s caller below) -- confirmed live in Chrome (tools/scratch/
+// feature-stone-size-overlap-guard-verify/select-disabled-check.mjs) that disabling a <select>'s
+// own currently-selected <option> blocks ArrowDown/ArrowUp keyboard navigation off it entirely,
+// while still displaying as selected -- a real trap, not a hypothetical. Instead, an invalid
+// current selection is left alone but flagged: #stoneSize gets an .overlap-invalid border and
+// #stoneSizeOverlapWarning becomes visible, the same "disabled/dimmed control + separate hint
+// paragraph" idiom #gapFixedHint/#mixedNoEligibleHint already use.
+//
+// RS-3013 Step 5: a selected Paint region has its own stoneSizeMm (see syncSelectedControlsFromLayer()'s
+// "region wins" branch) -- resolved here the same way, so the guard checks the region's own real
+// generated stones, not the parent layer's.
+function currentStoneSizeTarget(){
+  const regionSelection=drawingTool.activeSelection;
+  if(regionSelection&&regionSelection.kind==='region'){
+    const regionLayer=project.layers.find(x=>x.id===regionSelection.layerId&&x.type==='path');
+    const region=regionLayer&&(regionLayer.regions||[]).find(r=>r.id===regionSelection.regionId);
+    if(regionLayer&&region)return{layer:regionLayer,region};
+  }
+  const l=selectedLayer();
+  return l?{layer:l,region:null}:null;
+}
+// Builds the one changed field (stoneSize on a plain layer clone, or stoneSizeMm on a cloned
+// region within a cloned layer's regions[]) and runs it through the exact same Live generation
+// generate() itself uses (via engine.generateLiveStonesForCandidateLayer() above). For a text
+// layer, strips a stale authoredScale when the candidate size differs from the layer's real
+// current stoneSize -- mirrors invalidateAuthoredScaleForGeometryChange()'s own rule (authoredScale
+// is a MONO-005A fit computed for one specific stoneSize; reusing it for a different candidate size
+// would silently mis-scale the candidate layout, corrupting the very check this function exists to run).
+async function stonesForCandidateStoneSize(target,sizeMm,project){
+  const{layer,region}=target;
+  let candidateLayer;
+  if(region){
+    candidateLayer={...layer,regions:(layer.regions||[]).map(r=>r.id===region.id?{...r,stoneSizeMm:sizeMm}:r)};
+  }else{
+    candidateLayer={...layer,stoneSize:sizeMm};
+    if(sizeMm!==layer.stoneSize)delete candidateLayer.authoredScale;
+  }
+  return engine.generateLiveStonesForCandidateLayer(candidateLayer,project,{includeStats:true});
+}
+// Only reachable when there's no layer to check at all (currentStoneSizeTarget() found neither a
+// selected region nor a selected layer) -- updateStoneSizePrintableCapabilityUI() already leaves
+// every option enabled in that same state (isText false, font null), so there is nothing to undo
+// on the options themselves, only this function's own warning/border to clear.
+function clearStoneSizeOverlapUI(){
+  el('stoneSize').classList.remove('overlap-invalid');
+  el('stoneSizeOverlapWarning').classList.remove('visible');el('stoneSizeOverlapWarning').textContent='';
+  el('stoneSizeCrowdingHint').style.display='none';el('stoneSizeCrowdingHint').textContent='';
+}
+// Guarded by a monotonic token (same convention updateAll()'s own generationToken uses) since this
+// runs the real Live generation pipeline (async for text) -- a fast keystroke-to-keystroke edit must
+// never let a stale, slower-to-resolve check overwrite a newer one's result.
+let stoneSizeOverlapCheckToken=0;
+// Crowding/attrition warning thresholds (Prompt 4), calibrated against Prompt 3's measureStoneCrowding()
+// sweep and the three screenshot regimes (healthy / crowded-not-overlapping / genuinely-overlapping)
+// reviewed in chat. Deliberately looser than "any measurable crowding" -- pavé-style intentional tight
+// packing is legitimate, so this only fires for the denser end of the sweep's observed range.
+const STONE_SIZE_CROWDING_FRACTION_THRESHOLD=0.25;
+const STONE_SIZE_ATTRITION_RATIO_THRESHOLD=0.75;
+async function updateStoneSizeOverlapCapabilityUI(){
+  const target=currentStoneSizeTarget();
+  if(!target){clearStoneSizeOverlapUI();return}
+  const token=++stoneSizeOverlapCheckToken;
+  const select=el('stoneSize'),warning=el('stoneSizeOverlapWarning');
+  const currentSizeMm=target.region?target.region.stoneSizeMm:target.layer.stoneSize;
+  const diametersToCheck=new Set(listStoneSizes().map(s=>s.diameterMm));
+  diametersToCheck.add(currentSizeMm);
+  const overlapBySize=new Map();
+  // Captured only for currentSizeMm's own iteration -- the crowding/attrition warning below is about
+  // the user's actual current selection, not a per-option gate like the disable loop just below.
+  let currentStones=null,currentOutlineStats=null;
+  for(const diameterMm of diametersToCheck){
+    const{stones,outlineStats}=await stonesForCandidateStoneSize(target,diameterMm,project);
+    if(token!==stoneSizeOverlapCheckToken)return;
+    overlapBySize.set(diameterMm,hasAnyOverlappingStonePair(stones.map(s=>({xMm:s.x,yMm:s.y,sizeMm:s.d}))));
+    if(diameterMm===currentSizeMm){currentStones=stones;currentOutlineStats=outlineStats}
+  }
+  for(const size of listStoneSizes()){
+    const option=select.querySelector(`option[value="${size.diameterMm}"]`);
+    if(!option)continue;
+    const isCurrent=size.diameterMm===currentSizeMm;
+    if(isCurrent)continue;
+    // updateStoneSizePrintableCapabilityUI() (called just before this function, see
+    // updateEditingUI()) always runs first and unconditionally resets every option's .disabled --
+    // so option.disabled read here is exactly that gate's own fresh verdict, not a stale leftover
+    // from this function's own previous pass. Only add overlap-disabling on top of it.
+    const otherGateDisabled=option.disabled;
+    const overlaps=overlapBySize.get(size.diameterMm);
+    option.disabled=otherGateDisabled||overlaps;
+    if(!otherGateDisabled)option.title=overlaps?`${size.name} would overlap on the current shape.`:'';
+  }
+  const currentOverlaps=overlapBySize.get(currentSizeMm)||false;
+  select.classList.toggle('overlap-invalid',currentOverlaps);
+  warning.textContent=currentOverlaps?"This stone size isn't suitable for this shape — it won't form a uniform figure.":'';
+  warning.classList.toggle('visible',currentOverlaps);
+  // Crowding/attrition warning: informational only, for the CURRENT size only (not a per-option gate
+  // like the disable loop above) -- dense packing is sometimes exactly what the user wants (pavé), so
+  // this never disables an option. Skipped entirely whenever currentOverlaps is already true: genuine
+  // overlap is the more severe, actionable problem, and showing both at once is noise, not more
+  // information.
+  const crowdingHint=el('stoneSizeCrowdingHint');
+  let crowded=false;
+  if(!currentOverlaps){
+    const gapMm=target.region?target.region.gapMm:target.layer.gap;
+    const crowding=measureStoneCrowding(currentStones.map(s=>({xMm:s.x,yMm:s.y,sizeMm:s.d})),{gapMm});
+    const attritionRatio=currentOutlineStats?currentOutlineStats.keptCount/currentOutlineStats.rawSampleCount:1;
+    crowded=crowding.fractionBelowHalfGap>STONE_SIZE_CROWDING_FRACTION_THRESHOLD||attritionRatio<STONE_SIZE_ATTRITION_RATIO_THRESHOLD;
+  }
+  crowdingHint.textContent=crowded?'This stone size may pack tightly on this shape — try a smaller size for more even spacing.':'';
+  crowdingHint.style.display=crowded?'block':'none';
+}
 // RS-0003.5D2: SELECTION_HANDLE_SIZE_PX enlarges the resize handles slightly (was a bare 10px
 // square) and a white halo is stroked behind the dashed outline so the selection reads clearly
 // against any background (light grid, light/dark stones), not just against the plain canvas.
@@ -1790,12 +2965,27 @@ const SELECTION_HANDLE_SIZE_PX=11;
 // RS-1009: draws one selection box (+ optional resize handles); drawSelection() below calls this
 // once per multi-selected layer. Handles only ever draw when exactly one layer is selected
 // (multi-layer resize is out of scope for this milestone) -- unchanged single-selection visuals.
-function drawSelectionBox(ctx,s,ox,oy,dpr,b,showHandles){const rx=ox+b.x*s,ry=oy+b.y*s,rw=b.width*s,rh=b.height*s;ctx.save();ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=4*dpr;ctx.setLineDash([]);ctx.strokeRect(rx,ry,rw,rh);ctx.strokeStyle='#1478ff';ctx.lineWidth=1.75*dpr;ctx.setLineDash([6*dpr,3*dpr]);ctx.strokeRect(rx,ry,rw,rh);ctx.setLineDash([]);if(showHandles){for(const h of handlesFor(b)){const hs=SELECTION_HANDLE_SIZE_PX*dpr;ctx.shadowColor='rgba(20,30,50,.35)';ctx.shadowBlur=3*dpr;ctx.fillStyle='white';ctx.strokeStyle='#1478ff';ctx.lineWidth=1.75*dpr;ctx.beginPath();ctx.rect(ox+h.x*s-hs/2,oy+h.y*s-hs/2,hs,hs);ctx.fill();ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.stroke()}}ctx.restore()}
-function drawSelection(ctx,s,ox,oy,dpr){const selected=project.layers.filter(l=>selectedLayerIds.has(l.id));const single=selected.length===1;for(const l of selected){const b=getLayerBBox(l);drawSelectionBox(ctx,s,ox,oy,dpr,b,single&&l.type!=='text');
+// RS-3030: rotationDeg (default 0, so every pre-existing call site/project renders byte-identical)
+// makes the dashed outline itself a rotated quadrilateral through the box's TRUE rotated corners
+// (via rotatedHandlesFor()) instead of the axis-aligned strokeRect, and draws handles at their
+// rotated positions -- otherwise handles would visually float away from a still-axis-aligned box.
+function drawSelectionBox(ctx,s,ox,oy,dpr,b,showHandles,rotationDeg=0){const rx=ox+b.x*s,ry=oy+b.y*s,rw=b.width*s,rh=b.height*s;ctx.save();if(!rotationDeg){ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=4*dpr;ctx.setLineDash([]);ctx.strokeRect(rx,ry,rw,rh);ctx.strokeStyle='#1478ff';ctx.lineWidth=1.75*dpr;ctx.setLineDash([6*dpr,3*dpr]);ctx.strokeRect(rx,ry,rw,rh);ctx.setLineDash([]);}else{const corners=['nw','ne','se','sw'].map(name=>rotatedHandlesFor(b,rotationDeg).find(h=>h.name===name));const strokeQuad=()=>{ctx.beginPath();ctx.moveTo(ox+corners[0].x*s,oy+corners[0].y*s);for(let i=1;i<corners.length;i++)ctx.lineTo(ox+corners[i].x*s,oy+corners[i].y*s);ctx.closePath()};ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=4*dpr;ctx.setLineDash([]);strokeQuad();ctx.stroke();ctx.strokeStyle='#1478ff';ctx.lineWidth=1.75*dpr;ctx.setLineDash([6*dpr,3*dpr]);strokeQuad();ctx.stroke();ctx.setLineDash([]);}if(showHandles){for(const h of rotatedHandlesFor(b,rotationDeg)){const hs=SELECTION_HANDLE_SIZE_PX*dpr;ctx.shadowColor='rgba(20,30,50,.35)';ctx.shadowBlur=3*dpr;ctx.fillStyle='white';ctx.strokeStyle='#1478ff';ctx.lineWidth=1.75*dpr;ctx.beginPath();ctx.rect(ox+h.x*s-hs/2,oy+h.y*s-hs/2,hs,hs);ctx.fill();ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.stroke()}}ctx.restore()}
+// fix/rotated-layer-bbox-hittest: drawSelectionBox()'s rotated-outline branch calls
+// rotatedHandlesFor(b,rotationDeg) itself, which rotates whatever box it is given a second time --
+// so it needs the raw unrotated x/y/w/h box for XYWH layers, not getLayerBBox()'s now-rotated AABB
+// (see that function's own comment), exactly like hitTest() below. drawRotateHandle() is the
+// opposite: it wants the AABB unchanged, since its handle sits a fixed gap above the AABB's own top
+// edge (rotateHandlePositionMm()'s header comment) -- so only the drawSelectionBox() call below is
+// adjusted, drawRotateHandle() keeps using `b`.
+function drawSelection(ctx,s,ox,oy,dpr){const selected=project.layers.filter(l=>selectedLayerIds.has(l.id));const single=selected.length===1;for(const l of selected){const b=getLayerBBox(l);const outlineBox=XYWH_SHAPE_TYPES.has(l.type)?{x:l.x,y:l.y,width:l.w,height:l.h,x2:l.x+l.w,y2:l.y+l.h}:b;drawSelectionBox(ctx,s,ox,oy,dpr,outlineBox,single&&l.type!=='text',l.rotationDeg||0);
   // TXT-102: text has no resize handles (see drawSelectionBox's showHandles above), but gets its own
   // single rotate handle instead, only while it is the sole selection -- matching the existing
   // single-selection-only precedent resize handles already set.
-  if(single&&l.type==='text')drawRotateHandle(ctx,s,ox,oy,dpr,b)}}
+  // RS-3029: generalized from text-only to every layer type -- a selected shape now shows BOTH its
+  // resize handles (still on its unrotated bbox, unchanged) AND this rotate handle. The two handle
+  // sets are intentionally not geometrically consistent with each other yet for a rotated shape;
+  // reconciling that is a separate, later step (see RS-3029's scope doc), not this one.
+  if(single)drawRotateHandle(ctx,s,ox,oy,dpr,b)}}
 // TXT-102: rotate handle geometry -- a small fixed mm gap directly above the bbox's own top-center,
 // independent of the layer's current rotationDeg. (An earlier version orbited the bbox center at a
 // radius derived from the bbox diagonal, matching Illustrator/Figma's "handle stays attached to the
@@ -1811,6 +3001,17 @@ const ROTATE_HANDLE_HIT_TOLERANCE_MM=4;
 // TXT-102: Shift-drag snap step for the rotate handle -- 15° divides evenly into every angle named
 // in the spec (0/15/30/45/60/90/...), matching Illustrator/Figma's own default rotation snap.
 const ROTATION_SNAP_STEP_DEG=15;
+// RS-3030: replicates GeometryEngine.js's rotatePointsAroundCenter() formula verbatim -- clockwise,
+// since this engine's mm space is Y-down (see that function's own comment for why). A local copy
+// rather than an import because that function is module-private and app.js is the UI/interaction
+// layer, a separate concern from GeometryEngine by this codebase's own convention. Used by every
+// resize-handle/selection-outline/resize-drag computation below so they all rotate identically to
+// the actual stone geometry.
+function rotatePointDeg(x,y,cx,cy,rotationDeg){
+  const radians=rotationDeg*(Math.PI/180),cos=Math.cos(radians),sin=Math.sin(radians);
+  const dx=x-cx,dy=y-cy;
+  return{x:cx+dx*cos-dy*sin,y:cy+dx*sin+dy*cos};
+}
 function rotateHandlePositionMm(b){
   if(b.width<=0&&b.height<=0)return null;
   const topCenterX=b.x+b.width/2;
@@ -1833,6 +3034,23 @@ function drawRotateHandle(ctx,s,ox,oy,dpr,b){
 // guide (out of scope).
 function drawGuides(ctx,s,ox,oy,dpr){if(!activeGuides.length)return;ctx.save();ctx.strokeStyle='#ff3b8d';ctx.lineWidth=1.25*dpr;ctx.setLineDash([4*dpr,3*dpr]);for(const g of activeGuides){ctx.beginPath();if(g.axis==='vertical'){const x=ox+g.valueMm*s;ctx.moveTo(x,oy);ctx.lineTo(x,oy+project.canvas.height*s)}else{const y=oy+g.valueMm*s;ctx.moveTo(ox,y);ctx.lineTo(ox+project.canvas.width*s,y)}ctx.stroke()}ctx.restore()}
 function handlesFor(b){return[{name:'nw',x:b.x,y:b.y},{name:'ne',x:b.x2,y:b.y},{name:'se',x:b.x2,y:b.y2},{name:'sw',x:b.x,y:b.y2},{name:'n',x:b.x+b.width/2,y:b.y},{name:'e',x:b.x2,y:b.y+b.height/2},{name:'s',x:b.x+b.width/2,y:b.y2},{name:'w',x:b.x,y:b.y+b.height/2}]}
+// RS-3030: each handle's unit offset from the box's own center (nw=(-1,-1), n=(0,-1), etc.), implicit
+// in handlesFor() above -- used by the resize-drag algorithm to find a handle's ANCHOR (the opposite
+// corner/edge, i.e. this offset negated) without per-handle-name branching.
+const HANDLE_UNIT_OFFSET={nw:{x:-1,y:-1},ne:{x:1,y:-1},se:{x:1,y:1},sw:{x:-1,y:1},n:{x:0,y:-1},e:{x:1,y:0},s:{x:0,y:1},w:{x:-1,y:0}};
+// RS-3030: handlesFor(b)'s 8 positions rotated around the box's own center by rotationDeg, via
+// rotatePointDeg() above -- so a rotated shape's resize handles (and, via drawSelectionBox(), its
+// selection outline) track its TRUE rotated corners instead of floating on the unrotated axis-
+// aligned box (Step 2's known, explicitly-scoped-out limitation). handlesFor() itself is untouched
+// (other callers, e.g. getLayerBBox()-derived tooling, still want the plain axis-aligned version).
+// A 0 rotation returns handlesFor(b) itself unchanged, guaranteeing byte-identical output for every
+// project saved before this milestone.
+function rotatedHandlesFor(b,rotationDeg){
+  const handles=handlesFor(b);
+  if(!rotationDeg)return handles;
+  const cx=(b.x+b.x2)/2,cy=(b.y+b.y2)/2;
+  return handles.map(h=>{const p=rotatePointDeg(h.x,h.y,cx,cy,rotationDeg);return{name:h.name,x:p.x,y:p.y}});
+}
 // RS-1006: the 3D preview manages its own canvas sizing (a ResizeObserver inside
 // Preview3DRenderer.js), so unlike drawLayout() there is no resizeCanvas()/2D-context call here.
 // update() only rebuilds the mesh/texture when the StoneLayout or display options actually
@@ -1856,7 +3074,7 @@ function updateViewButtons(){document.querySelectorAll('.viewBtn').forEach(b=>b.
 // UI-001: workspace status strip now also reports canvas size, units, safe-area size, and (when
 // any layers are selected) the current selection's bounding box -- purely additional display text,
 // computed from data updateAll() already has (project.canvas, getSafeAreaRectMm(), unionBBoxOfLayers()).
-function selectionBoundsText(){if(!selectedLayerIds.size)return'';const sel=[...selectedLayerIds].map(id=>project.layers.find(x=>x.id===id)).filter(Boolean);if(!sel.length)return'';const b=unionBBoxOfLayers(sel);return`<span>selection: ${b.width.toFixed(1)}×${b.height.toFixed(1)} mm</span>`}
+function selectionBoundsText(){if(!selectedLayerIds.size)return'';const sel=[...selectedLayerIds].map(id=>project.layers.find(x=>x.id===id)).filter(Boolean);if(!sel.length)return'';const b=unionBBoxOfLayers(sel);return`<span>selection: ${formatLengthDisplay(b.width,project.units,1)}×${formatLengthDisplay(b.height,project.units,1)} ${unitSuffix(project.units)}</span>`}
 // S-107 (requirement 6, "Show useful information associated with the Front View Frame"): reuses
 // the existing #cupStats workspace-status bar (already showing per-object/preview info) rather
 // than adding new markup -- Front View width and printable circumference come straight from
@@ -1867,9 +3085,15 @@ function selectionBoundsText(){if(!selectedLayerIds.size)return'';const sel=[...
 // isPointerOnFrontViewFrame()/isTextTooLongForObject()'s own S-112 guards) -- its cupStats line
 // instead reports the plate's own physical metadata: design target, outer/inner diameter, rim
 // width, and approximate weight.
-function plateCupStatsHtml(t){const rimWidthMm=computeRimWidthMm(project.plate.outerDiameterMm,project.plate.innerWellDiameterMm);return`<span>${escapeHtml(t.displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span><span>design target: ${escapeHtml(getPlateDesignTargetMeta(project.plate.designTarget).name)}</span><span>outer diameter: ${project.plate.outerDiameterMm.toFixed(1)} mm</span><span>inner well diameter: ${project.plate.innerWellDiameterMm.toFixed(1)} mm</span><span>rim width: ${rimWidthMm.toFixed(1)} mm</span><span>approx. weight: ${PLATE_ROUND_DINNER_DEFINITION.weightGrams.average} g</span>`}
-function cylindricalCupStatsHtml(t){const{frameWidthMm}=frontViewFrameGeometry();return`<span>${escapeHtml(t.displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span><span>Front View width: ${frameWidthMm.toFixed(1)} mm</span><span>printable circumference: ${printableCircumferenceMm().toFixed(1)} mm</span><span>viewing position: ${Math.round(rotation)}°</span>`}
-function updateStats(){const t=currentObjectTemplate(),isPlate=t.preview.kind==='plate';const safe=getSafeAreaRectMm(t,project.canvas.width,project.canvas.height);el('layoutStats').innerHTML=`<b>${layout.count}</b> stones <span>${layout.widthMm.toFixed(1)}×${layout.heightMm.toFixed(1)} mm</span><span>canvas: ${project.canvas.width}×${project.canvas.height} mm</span><span>safe area: ${safe.widthMm.toFixed(1)}×${safe.heightMm.toFixed(1)} mm</span><span>units: mm</span>${selectionBoundsText()}<span>selected: ${escapeHtml(layerLabel(selectedLayer()))}</span>`;el('cupStats').innerHTML=isPlate?plateCupStatsHtml(t):cylindricalCupStatsHtml(t);updateStoneColorSwatch()}
+function plateCupStatsHtml(t){const rimWidthMm=computeRimWidthMm(project.plate.outerDiameterMm,project.plate.innerWellDiameterMm);return`<span>${escapeHtml(t.displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span><span>design target: ${escapeHtml(getPlateDesignTargetMeta(project.plate.designTarget).name)}</span><span>outer diameter: ${formatLengthDisplay(project.plate.outerDiameterMm,project.units,1)} ${unitSuffix(project.units)}</span><span>inner well diameter: ${formatLengthDisplay(project.plate.innerWellDiameterMm,project.units,1)} ${unitSuffix(project.units)}</span><span>rim width: ${formatLengthDisplay(rimWidthMm,project.units,1)} ${unitSuffix(project.units)}</span><span>approx. weight: ${PLATE_ROUND_DINNER_DEFINITION.weightGrams.average} g</span>`}
+function cylindricalCupStatsHtml(t){const{frameWidthMm}=frontViewFrameGeometry();return`<span>${escapeHtml(t.displayName)}</span><span>same generated layout</span><span>${STONE_COLORS[selectedLayer().color]?.name||''}</span><span>Front View width: ${formatLengthDisplay(frameWidthMm,project.units,1)} ${unitSuffix(project.units)}</span><span>printable circumference: ${formatLengthDisplay(printableCircumferenceMm(),project.units,1)} ${unitSuffix(project.units)}</span><span>viewing position: ${Math.round(rotation)}°</span>`}
+// RS-3011 Step 5: #layoutStats is the 2D-Canvas-view status bar, but it's shared/always-wired
+// regardless of the active view (see the Step 4 investigation) -- while Design is active, showing a
+// non-'path' selected layer's stats (e.g. the seed text layer) is confusing, since that layer has no
+// presence on Design's own canvas (drawingTool only draws/tracks 'path' layers). Falls back to a
+// neutral canvas/safe-area-only summary in that one case; every other view+selection combination,
+// including a 'path' layer selected and visible while Design is active, keeps the full stats.
+function updateStats(){const t=currentObjectTemplate(),isPlate=t.preview.kind==='plate';const safe=getSafeAreaRectMm(t,project.canvas.width,project.canvas.height);const sel=selectedLayer();const u=unitSuffix(project.units);if(drawingTool.isActive&&sel.type!=='path'){el('layoutStats').innerHTML=`<span>canvas: ${formatLengthDisplay(project.canvas.width,project.units,1)}×${formatLengthDisplay(project.canvas.height,project.units,1)} ${u}</span><span>safe area: ${formatLengthDisplay(safe.widthMm,project.units,1)}×${formatLengthDisplay(safe.heightMm,project.units,1)} ${u}</span><span>units: ${u}</span>`}else{el('layoutStats').innerHTML=`<b>${layout.count}</b> stones <span>${formatLengthDisplay(layout.widthMm,project.units,1)}×${formatLengthDisplay(layout.heightMm,project.units,1)} ${u}</span><span>canvas: ${formatLengthDisplay(project.canvas.width,project.units,1)}×${formatLengthDisplay(project.canvas.height,project.units,1)} ${u}</span><span>safe area: ${formatLengthDisplay(safe.widthMm,project.units,1)}×${formatLengthDisplay(safe.heightMm,project.units,1)} ${u}</span><span>units: ${u}</span>${selectionBoundsText()}<span>selected: ${escapeHtml(layerLabel(sel))}</span>`}el('cupStats').innerHTML=isPlate?plateCupStatsHtml(t):cylindricalCupStatsHtml(t);updateStoneColorSwatch()}
 // S-106: Combined Visual Preview PNG. Composites the two already-rendered, always-mounted canvas
 // elements (layoutCanvas/cupCanvas -- both keep a real, non-zero pixel backing store at all times
 // regardless of the active workspace tab, per the .tab-hidden/dual-mode invariant documented at
@@ -1890,15 +3114,163 @@ function composeCombinedPreviewCanvas(){
   ctx.drawImage(cupCanvas,margin+w1+gap,margin+(maxH-h2)/2);
   return c;
 }
-function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(XYWH_SHAPE_TYPES.has(copy.type)){copy.x+=8;copy.y+=8}if(copy.type==='text'){copy.text+=' copy';copy.x=(copy.x||0)+8;copy.y=(copy.y||0)+8}project.layers.push(copy);selectedLayerId=copy.id;selectedLayerIds=selectOnly(copy.id);syncSelectedControlsFromLayer();updateAll()}function deleteLayer(id){if(project.layers.length<=1){el('status').textContent='Cannot delete the last layer';const hint=el('layerRuleHint');hint.style.display='block';hint.scrollIntoView({block:'nearest'});return}commitHistory();project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true)}
+// RS-3013 Step 3: region-level duplicate, a plain app.js-owned function (not a DrawingCanvasTool.js
+// hook) since project.layers/regions data already lives here -- called directly from
+// el('actionDuplicate').onclick below, matching duplicateLayer() immediately below in spirit
+// (commitHistory() first, cloned geometry, a fixed 8mm/8mm offset, new copy becomes the selection)
+// but scoped to one region on the SAME layer rather than a whole layer. Mirrors onRegionMoved()'s
+// own computeNaturalContourTransform()/applyNaturalContourTransform()/absolutePolygonsToNaturalSpace()
+// chain exactly -- region.contour is stored in NATURAL space, a different scale per layer (per
+// computeNaturalContourTransform()'s own scaleX/scaleY), so the 8mm/8mm offset must be applied in
+// ABSOLUTE space via this chain, not added directly to the natural contour's own coordinates.
+// applyNaturalContourTransform()/absolutePolygonsToNaturalSpace() both already return fresh Point2D
+// objects (see GeometryEngine.js), never references into region.contour's own array, so the chain's
+// own output is already an independent clone -- no separate JSON.parse(JSON.stringify()) step is
+// needed on top of it, same as onRegionMoved() itself never adding one before writing its own
+// translated polygon back. Copies stoneSizeMm/gapMm/color/fillMode verbatim from the source region
+// (this milestone's own decided rule: a region copy is a duplicate, not a new paint stroke routed
+// through paintSettings). New id is `'region'+Date.now()+'copy'` -- a non-numeric suffix, so it can
+// never collide with onPaintStroke's own `'region'+Date.now()+index` scheme (index is always a plain
+// integer there, never the string 'copy'), even for a copy and a fresh paint stroke landing in the
+// same millisecond. Returns {newRegionId, polygon} (polygon: the new region's absolute-mm outline,
+// for DrawingCanvasTool.js's own setActiveSelectionToRegion() to draw immediately without a second
+// hit-test round-trip), or null if the layer/region no longer exists -- same defensive no-op
+// precedent onRegionMoved() already established.
+function duplicateRegionInPathLayer(layerId,regionId){
+  const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
+  if(!targetLayer)return null;
+  const region=(targetLayer.regions||[]).find(r=>r.id===regionId);
+  if(!region)return null;
+  const naturalContours=targetLayer.contours.map(contour=>contour.map(p=>({xMm:p.x,yMm:p.y})));
+  const transform=computeNaturalContourTransform(naturalContours,targetLayer.x,targetLayer.y,targetLayer.w,targetLayer.h,targetLayer.naturalBoundingBoxMm);
+  if(!transform)return null;
+  const currentPolygon=applyNaturalContourTransform(region.contour,transform);
+  const translatedPolygon=currentPolygon.map(p=>({xMm:p.xMm+8,yMm:p.yMm+8}));
+  const [naturalContour]=absolutePolygonsToNaturalSpace([translatedPolygon],targetLayer);
+  if(!naturalContour)return null;
+  commitHistory();
+  const newRegion={
+    id:'region'+Date.now()+'copy',
+    contour:naturalContour,
+    stoneSizeMm:region.stoneSizeMm,
+    gapMm:region.gapMm,
+    color:region.color,
+    fillMode:region.fillMode
+  };
+  targetLayer.regions.push(newRegion);
+  drawingTool.refreshStoneGroupForLayer(targetLayer.id);
+  updateAll(true);
+  el('status').textContent=`Duplicated region on ${layerLabel(targetLayer)}.`;
+  return{newRegionId:newRegion.id,polygon:translatedPolygon};
+}
+// RS-3013 Step 4: region-level delete, a plain app.js-owned function (not a DrawingCanvasTool.js
+// hook) since project.layers/regions data already lives here -- mirrors duplicateRegionInPathLayer()
+// immediately above in structure (same layer/region lookup, same defensive no-op if either is
+// missing, commitHistory() first) but removes the region entirely instead of cloning it. Unlike
+// deleteLayer()'s own "last remaining layer" guard (which replaces the last layer with a blank text
+// layer rather than truly deleting it), no analogous guard is needed here: a layer with zero regions
+// is already the normal, default state before any region is ever painted (onPaintStroke's own
+// `if(!Array.isArray(targetLayer.regions))targetLayer.regions=[]` already handles this), so deleting
+// the last region on a layer just leaves it with an empty regions array. No return value -- unlike
+// move/duplicate, there's no new geometry for the caller to use afterward.
+function deleteRegionFromPathLayer(layerId,regionId){
+  const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
+  if(!targetLayer)return;
+  const region=(targetLayer.regions||[]).find(r=>r.id===regionId);
+  if(!region)return;
+  commitHistory();
+  targetLayer.regions=targetLayer.regions.filter(r=>r.id!==regionId);
+  drawingTool.refreshStoneGroupForLayer(targetLayer.id);
+  updateAll(true);
+  el('status').textContent=`Deleted region on ${layerLabel(targetLayer)}.`;
+}
+// Bulk-delete-by-area: extracted out of onEraseSweep's own 'stones' branch below -- that branch's
+// entire body (Item 1/Item 2 splice+snapshot, single commitHistory()) is now this shared function,
+// parameterized by an arbitrary (xMm,yMm)=>boolean interior test instead of the circle-radius test
+// hardcoded there before. onEraseSweep passes its own daub-radius test; deleteCurrentSelection's new
+// 'draft' branch below passes isPointInActiveSelection's own rect-bounds/lasso-polygon test instead --
+// same two mechanisms (stampedStones splice for stamps, erasedGridPositions snapshot for everything
+// else), same regeneration-time exclusion contract, just a different shape of "is this point inside."
+// Returns null and mutates nothing when withinTest matches no stone at all (the no-op guard the
+// original branch already had); otherwise commits history, mutates targetLayer, refreshes the canvas,
+// and returns {removedCount} so each caller can word its own status message.
+async function eraseStonesWithinTest(targetLayer,withinTest){
+  const naturalContours=targetLayer.contours.map(c=>c.map(p=>({xMm:p.x,yMm:p.y})));
+  const transform=computeNaturalContourTransform(naturalContours,targetLayer.x,targetLayer.y,targetLayer.w,targetLayer.h,targetLayer.naturalBoundingBoxMm);
+  const existingStampedStones=targetLayer.stampedStones||[];
+  const survivingStampedStones=existingStampedStones.filter(stamp=>{
+    if(!transform)return true;
+    const[placed]=applyNaturalContourTransform([{xMm:stamp.xMm,yMm:stamp.yMm}],transform);
+    return!withinTest(placed.xMm,placed.yMm);
+  });
+  const currentResult=permanentEngine.generatePathLayout({
+    contours:naturalContours,
+    layerId:targetLayer.id,
+    xMm:targetLayer.x,yMm:targetLayer.y,widthMm:targetLayer.w,heightMm:targetLayer.h,
+    stoneSizeMm:targetLayer.stoneSize,gapMm:targetLayer.gap,
+    mode:resolveVectorFillMode(targetLayer.fillMode),color:targetLayer.color,
+    closed:targetLayer.closed!==false,
+    regions:targetLayer.regions||[],
+    naturalBoundingBoxMm:targetLayer.naturalBoundingBoxMm,
+    erasedGridPositions:targetLayer.erasedGridPositions||[],
+    eraseDaubs:targetLayer.eraseDaubs||[],
+    ...mixedSizeParamsFor(targetLayer)
+  });
+  const newlyErasedAbsolutePoints=currentResult.stones
+    .filter(stone=>withinTest(stone.xMm,stone.yMm))
+    .map(stone=>({xMm:stone.xMm,yMm:stone.yMm}));
+  const removedCount=(existingStampedStones.length-survivingStampedStones.length)+newlyErasedAbsolutePoints.length;
+  if(removedCount===0)return null;
+  commitHistory();
+  targetLayer.stampedStones=survivingStampedStones;
+  if(newlyErasedAbsolutePoints.length>0){
+    const[naturalPoints]=absolutePolygonsToNaturalSpace([newlyErasedAbsolutePoints],targetLayer);
+    if(naturalPoints){
+      if(!Array.isArray(targetLayer.erasedGridPositions))targetLayer.erasedGridPositions=[];
+      targetLayer.erasedGridPositions.push(...naturalPoints.map(p=>({xMm:p.xMm,yMm:p.yMm})));
+    }
+  }
+  drawingTool.refreshStoneGroupForLayer(targetLayer.id);
+  await updateAll(true);
+  return{removedCount};
+}
+// RS-3011 Step 2 fix: for a Design-drawn 'path' layer, duplicateShapeForLayer() clones the matching
+// Paper.js item in drawingTool's own board.shapes too -- previously only project.layers gained a
+// new entry, leaving the copy invisible on the Design canvas until it was closed and reopened. Uses
+// the SAME dx/dy this function already applies to copy.x/copy.y (not a second offset convention);
+// a no-op for every non-'path' layer type via drawingTool's own internal lookup.
+function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();
+  // RS-3011 Step 3b: pushed here, before drawingTool.duplicateShapeForLayer() below, instead of
+  // after every branch (as before this step) -- duplicateShapeForLayer() now builds the clone's own
+  // stone Group immediately via the getLayerStoneParams(newLayerId) hook, which reads project.layers,
+  // so `copy` must already be in the array by the time that call happens. `copy` is pushed by
+  // reference; the circle/text branches below still freely mutate it afterward, same as before.
+  project.layers.push(copy);
+  if(copy.type==='circle'){copy.cx+=8;copy.cy+=8}if(XYWH_SHAPE_TYPES.has(copy.type)){const dx=8,dy=8;copy.x+=dx;copy.y+=dy;drawingTool.duplicateShapeForLayer(l.id,copy.id,dx,dy)}if(copy.type==='text'){copy.text+=' copy';copy.x=(copy.x||0)+8;copy.y=(copy.y||0)+8}selectedLayerId=copy.id;selectedLayerIds=selectOnly(copy.id);syncSelectedControlsFromLayer();updateAll()}// RS-3011 Step 1 write-through fix: returns true/false so onShapeDeleted() (below) knows whether
+// the guard blocked the delete, without duplicating any guard logic itself -- every pre-existing
+// caller already discards the return value, so this stays backward-compatible. RS-3011 freehand-
+// close-and-clear-all-layers fix: deleting the last remaining layer is no longer blocked -- it is
+// replaced in place with a fresh, blank text layer (same shape defaultProject()'s own seed text
+// layer uses, just with text:''), giving the user a genuinely blank project instead of a wall.
+// generateTextStonesLive() already guards `!layer.text` and returns zero stones for empty text --
+// the exact same thing that already happens today if a user manually clears the text field -- so
+// this is an already-proven-safe state, not a new code path.
+function deleteLayer(id){
+  commitHistory();
+  if(project.layers.length<=1){
+    const blank={id:'text'+Date.now(),type:'text',visible:true,text:'',font:DEFAULT_TEXT_FONT_ID,height:25,heightMode:'capHeight',textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0};
+    project.layers=[blank];
+    selectedLayerId=blank.id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true,true);return true
+  }
+  project.layers=project.layers.filter(l=>l.id!==id);selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true,true);return true}
 function pointerToLayout(e){const r=layoutCanvas.getBoundingClientRect(),dpr=layoutTransform.dpr;return layoutPxToMm((e.clientX-r.left)*dpr,(e.clientY-r.top)*dpr)}
 // TXT-102: checked before the generic per-layer loop below -- the rotate handle only ever exists
-// for the single currently-selected text layer (matching drawRotateHandle()'s own single&&
-// l.type==='text' gate), and it is drawn outside the layer's own bbox, so it would never be reached
-// by the bbox-contains 'move' check below anyway.
+// for the single currently-selected layer (matching drawRotateHandle()'s own single gate, RS-3029
+// generalized from text-only to every type), and it is drawn outside the layer's own bbox, so it
+// would never be reached by the bbox-contains 'move' check below anyway.
 function rotateHandleHitTest(mm){
   if(selectedLayerIds.size!==1)return null;
-  const l=project.layers.find(x=>x.type==='text'&&selectedLayerIds.has(x.id));
+  const l=project.layers.find(x=>selectedLayerIds.has(x.id));
   if(!l)return null;
   const b=getLayerBBox(l);
   const h=rotateHandlePositionMm(b);
@@ -1908,7 +3280,38 @@ function rotateHandleHitTest(mm){
   }
   return null;
 }
-function hitTest(mm){const rotateHit=rotateHandleHitTest(mm);if(rotateHit)return rotateHit;const layers=[...project.layers].reverse();for(const l of layers){const b=getLayerBBox(l);for(const h of handlesFor(b)){if(Math.abs(mm.x-h.x)<3&&Math.abs(mm.y-h.y)<3&&l.type!=='text')return{layer:l,kind:'resize',handle:h.name,b0:b}}if(mm.x>=b.x&&mm.x<=b.x2&&mm.y>=b.y&&mm.y<=b.y2)return{layer:l,kind:'move',b0:b}}return null}
+// fix/rotated-layer-bbox-hittest: for XYWH layers, `b` is now the raw stored x/y/w/h box, not
+// getLayerBBox()'s rotated-corners AABB -- rotatedHandlesFor(b,rotationDeg) rotates whatever box
+// it's given around that box's own center, so feeding it the already-rotated AABB would rotate a
+// rotated shape's handles a second time. b0 (captured on both the 'resize' and 'move' return paths)
+// must stay this same raw box: the resize-drag code in pointermove reads drag.b0.x/y/x2/y2 (axis-
+// aligned case) and drag.b0.width/height (rotated-local-axis case), both of which assume an
+// unrotated box. The move-containment check below is the one place that needs the TRUE rotated
+// footprint, so it does its own inverse-rotation test against the raw box instead of using an AABB
+// derived from `b`. Circle/text layers are untouched: `b` for those is still getLayerBBox(l)
+// unchanged, exactly as before this fix.
+function hitTest(mm){
+  const rotateHit=rotateHandleHitTest(mm);if(rotateHit)return rotateHit;
+  const layers=[...project.layers].reverse();
+  for(const l of layers){
+    const rotationDeg=l.rotationDeg||0;
+    const isXywh=XYWH_SHAPE_TYPES.has(l.type);
+    const b=isXywh?{x:l.x,y:l.y,width:l.w,height:l.h,x2:l.x+l.w,y2:l.y+l.h}:getLayerBBox(l);
+    for(const h of rotatedHandlesFor(b,rotationDeg)){
+      if(Math.abs(mm.x-h.x)<3&&Math.abs(mm.y-h.y)<3&&l.type!=='text')return{layer:l,kind:'resize',handle:h.name,b0:b}
+    }
+    let inside;
+    if(isXywh&&(rotationDeg%360+360)%360!==0){
+      const cx=l.x+l.w/2,cy=l.y+l.h/2;
+      const p=rotatePointDeg(mm.x,mm.y,cx,cy,-rotationDeg);
+      inside=p.x>=l.x&&p.x<=l.x+l.w&&p.y>=l.y&&p.y<=l.y+l.h;
+    }else{
+      inside=mm.x>=b.x&&mm.x<=b.x2&&mm.y>=b.y&&mm.y<=b.y2;
+    }
+    if(inside)return{layer:l,kind:'move',b0:b}
+  }
+  return null;
+}
 // S-104: a move-drag previously mapped pointer movement to mm 1:1 (rawDx/rawDy applied verbatim),
 // which made small, precise placements -- text in particular, since it has no resize handles to
 // fall back on -- hard to land exactly. LAYER_MOVE_DRAG_SENSITIVITY scales the pointer's
@@ -1934,6 +3337,10 @@ layoutCanvas.addEventListener('pointerdown',e=>{
   // the other half of "only one top-level tool is active": while Monogram is open, canvas selection
   // is inert.
   if(lightboxes.monogram.isOpen)return;
+  // RS-3010 Step 1: the same "only one top-level tool is active" rule -- while drawing mode owns
+  // layoutCanvas (its own Paper.js Tool, wired in toggleDrawMode() below), the normal hit-test/
+  // select/drag pointerdown flow below must not also fire on the same click.
+  if(drawingTool.isActive)return;
   const mm=pointerToLayout(e);const hit=hitTest(mm);
   // S-107: an empty-canvas click that lands inside the Front View Frame starts a frame drag
   // instead of clearing the selection -- a click on an actual layer/stone still takes priority
@@ -1948,7 +3355,17 @@ layoutCanvas.addEventListener('pointerdown',e=>{
     selectedLayerIds=selectOnly(hit.layer.id);selectedLayerId=hit.layer.id;
     syncSelectedControlsFromLayer();renderLayerUI();updateEditingUI();
     commitHistory();
-    drag={kind:'resize',handle:hit.handle,layerId:hit.layer.id,start:mm,b0:hit.b0,l0:JSON.parse(JSON.stringify(hit.layer))};
+    // RS-3030: rotationDeg + anchorAbs snapshotted once at drag-start, alongside b0/handle/layerId --
+    // resize math needs both on every subsequent pointermove (recomputing anchorAbs live would let
+    // it drift as l.rotationDeg/l.x/l.y/l.w/l.h change mid-drag, when it must stay fixed in place).
+    // anchorAbs is the handle's own ANCHOR (opposite corner/edge, via HANDLE_UNIT_OFFSET negated) at
+    // its true rotated position -- the point that must stay visually fixed while resizing.
+    const rotationDeg0=hit.layer.rotationDeg||0;
+    const cx0=(hit.b0.x+hit.b0.x2)/2,cy0=(hit.b0.y+hit.b0.y2)/2;
+    const off=HANDLE_UNIT_OFFSET[hit.handle];
+    const anchorLocal={x:cx0-off.x*(hit.b0.width/2),y:cy0-off.y*(hit.b0.height/2)};
+    const anchorAbs=rotationDeg0?rotatePointDeg(anchorLocal.x,anchorLocal.y,cx0,cy0,rotationDeg0):anchorLocal;
+    drag={kind:'resize',handle:hit.handle,layerId:hit.layer.id,start:mm,b0:hit.b0,l0:JSON.parse(JSON.stringify(hit.layer)),rotationDeg:rotationDeg0,anchorAbs,handleOffset:off};
     layoutCanvas.setPointerCapture(e.pointerId);updateAll(true);return;
   }
   if(hit.kind==='rotate'){
@@ -1993,7 +3410,13 @@ layoutCanvas.addEventListener('pointerdown',e=>{
   }
   const l0Map=new Map(dragIds.map(id=>[id,JSON.parse(JSON.stringify(project.layers.find(x=>x.id===id)))]));
   const groupBBox0=unionBBoxOfLayers(dragIds.map(id=>project.layers.find(x=>x.id===id)));
-  drag={kind:'move',layerIds:dragIds,start:mm,l0Map,groupBBox0};
+  // M14: baseLayout is the current module-level StoneLayout snapshotted as-is at drag start -- the
+  // move-drag fast path translates a copy of it every pointermove instead of regenerating every
+  // layer. l0Map already captures each moved layer's drag-start position fields (x/y or cx/cy), so it
+  // doubles as the per-layer base-position snapshot the fast path derives its delta from -- no
+  // separate baseLayerPositionsById is needed. `layout` can be null here (generation never succeeded
+  // yet); the pointermove fast path guards on drag.baseLayout and falls back to updateAll(true).
+  drag={kind:'move',layerIds:dragIds,start:mm,l0Map,groupBBox0,baseLayout:layout};
   layoutCanvas.setPointerCapture(e.pointerId);updateAll(true);
 });
 layoutCanvas.addEventListener('pointermove',e=>{
@@ -2047,7 +3470,25 @@ layoutCanvas.addEventListener('pointermove',e=>{
   }else if(drag.kind==='resize'){
     const l=project.layers.find(x=>x.id===drag.layerId);if(!l)return;
     if(l.type==='circle'){l.r=Math.max(2,Math.hypot(mm.x-drag.l0.cx,mm.y-drag.l0.cy))}
-    else if(XYWH_SHAPE_TYPES.has(l.type)){let x0=drag.b0.x,y0=drag.b0.y,x1=drag.b0.x2,y1=drag.b0.y2;if(drag.handle.includes('w'))x0=mm.x;if(drag.handle.includes('e'))x1=mm.x;if(drag.handle.includes('n'))y0=mm.y;if(drag.handle.includes('s'))y1=mm.y;l.x=Math.min(x0,x1);l.y=Math.min(y0,y1);l.w=Math.max(2,Math.abs(x1-x0));l.h=Math.max(2,Math.abs(y1-y0))}
+    else if(XYWH_SHAPE_TYPES.has(l.type)&&!drag.rotationDeg){let x0=drag.b0.x,y0=drag.b0.y,x1=drag.b0.x2,y1=drag.b0.y2;if(drag.handle.includes('w'))x0=mm.x;if(drag.handle.includes('e'))x1=mm.x;if(drag.handle.includes('n'))y0=mm.y;if(drag.handle.includes('s'))y1=mm.y;l.x=Math.min(x0,x1);l.y=Math.min(y0,y1);l.w=Math.max(2,Math.abs(x1-x0));l.h=Math.max(2,Math.abs(y1-y0))}
+    else if(XYWH_SHAPE_TYPES.has(l.type)){
+      // RS-3030: rotated resize -- drag the handle along the shape's own LOCAL (rotated) axes, per
+      // the Illustrator/Figma convention, keeping the opposite corner/edge (anchorAbs, fixed at
+      // drag-start) visually pinned in place. See this milestone's own doc for the full derivation.
+      const rotationDeg=drag.rotationDeg,anchor=drag.anchorAbs,off=drag.handleOffset;
+      // Inverse-rotate the pointer's offset from the anchor into the shape's local, unrotated axes
+      // -- the same space l.w/l.h are already defined in.
+      const local=rotatePointDeg(mm.x-anchor.x,mm.y-anchor.y,0,0,-rotationDeg);
+      let newW=drag.b0.width,newH=drag.b0.height;
+      if(off.x!==0)newW=Math.max(2,Math.abs(local.x));
+      if(off.y!==0)newH=Math.max(2,Math.abs(local.y));
+      // New center sits newW/2,newH/2 (signed by the dragged handle's own unit offset) away from the
+      // anchor in local space; rotate that offset forward back into absolute space and add to the
+      // anchor's fixed absolute position to get the new absolute center.
+      const centerAbsOffset=rotatePointDeg(off.x*newW/2,off.y*newH/2,0,0,rotationDeg);
+      const newCx=anchor.x+centerAbsOffset.x,newCy=anchor.y+centerAbsOffset.y;
+      l.x=newCx-newW/2;l.y=newCy-newH/2;l.w=newW;l.h=newH;
+    }
   }else if(drag.kind==='rotate'){
     const l=project.layers.find(x=>x.id===drag.layerId);if(!l)return;
     const dxMm=mm.x-drag.center.x,dyMm=mm.y-drag.center.y;
@@ -2058,9 +3499,56 @@ layoutCanvas.addEventListener('pointermove',e=>{
     if(e.shiftKey)rotationDeg=Math.round(rotationDeg/ROTATION_SNAP_STEP_DEG)*ROTATION_SNAP_STEP_DEG;
     l.rotationDeg=((rotationDeg%360)+360)%360;
   }
-  syncSelectedControlsFromLayer();updateAll(true);
+  syncSelectedControlsFromLayer();
+  // M14 (perf/move-drag-translate-fast-path): move drags take the translation fast path -- translate a
+  // copy of the drag-start layout (drag.baseLayout) instead of calling engine.generate() for every
+  // layer on every pointermove. Resize and rotate drags are deliberately out of scope for this
+  // milestone and keep their existing full per-frame updateAll(true).
+  //
+  // Approximation contract: translation is geometrically EXACT per layer (every sampling grid is
+  // anchored to its own layer's box -- see translateLayoutForMoveDrag()). The only difference from a
+  // true regeneration is the project-level dedupeStonesByRadius() that runs ACROSS layers: where the
+  // moved layer transiently overlaps another mid-drag, this preview's overlap zone can differ
+  // slightly. endActiveDrag() runs exactly one canonical updateAll(true) at drag end, on every
+  // termination path, so nothing the fast path shows ever persists into project state or an export.
+  if(drag.kind==='move'&&drag.baseLayout){
+    const base0=drag.l0Map.get(drag.layerIds[0]),liveLayer=project.layers.find(x=>x.id===drag.layerIds[0]);
+    if(base0&&liveLayer){
+      // Every dragged layer shares one delta -- the move branch above applies the same dx/dy to all
+      // of them (see the `for(const id of drag.layerIds)` loop) -- so the first layer's drag-start
+      // -> current offset is the whole moved set's translation. Derived from base positions, not
+      // accumulated per-event, so it can never drift.
+      const p0=getLayerPosition(base0),p1=getLayerPosition(liveLayer);
+      layout=translateLayoutForMoveDrag(drag.baseLayout,drag.layerIds,p1.xMm-p0.xMm,p1.yMm-p0.yMm);
+      drawLayout();
+      // Same per-frame 3D-preview refresh updateAll()'s tail performs (drawCup() -> preview3D.update).
+      drawCup();
+    }else{
+      updateAll(true);
+    }
+  }else{
+    updateAll(true);
+  }
 });
-window.addEventListener('pointerup',()=>{drag=null;if(activeGuides.length){activeGuides=[];drawLayout()}});
+window.addEventListener('pointerup',endActiveDrag);
+window.addEventListener('pointercancel',endActiveDrag);
+// M14: EVERY way a layoutCanvas drag can end runs through here. Precondition #2 (verified by grepping
+// app.js, not assumed): the ONLY listener that cleared `drag` was the old `pointerup` handler -- there
+// is no blur/visibilitychange/lostpointercapture handler, and the only `Escape` handling
+// (drawingTool.isActive keydown branch, the #moreShapesPopover close) never touches layoutCanvas
+// `drag`. `pointercancel` was previously unhandled entirely (a canceled drag left `drag` stuck -- a
+// pre-existing latent bug); it is wired here now so the fast-path preview can never survive a cancel.
+// A move drag ran the translation fast path on its pointermoves instead of updateAll(true), so it
+// MUST end with exactly one canonical full regeneration before the layout can persist or export.
+// updateAll(true) commits no history (that happened once at drag start), so there is no double-commit
+// on any path; a plain click with no pointermove is already canonical from pointerdown's own
+// updateAll(true) and the extra regeneration here is idempotent.
+function endActiveDrag(){
+  const ended=drag;
+  drag=null;
+  if(activeGuides.length){activeGuides=[];drawLayout()}
+  if(ended&&ended.kind==='move')updateAll(true);
+}
 window.addEventListener('keydown',e=>{
   const key=e.key.toLowerCase(),mod=e.ctrlKey||e.metaKey;
   // RS-1002: app-level undo/redo takes precedence over any native browser input-level undo, so
@@ -2071,11 +3559,73 @@ window.addEventListener('keydown',e=>{
   // Lightbox is open (see the matching pointerdown gate above for the full rationale). Undo/redo
   // above stay global -- they act on the whole project, not on canvas layer editing.
   if(lightboxes.monogram.isOpen)return;
+  // RS-3010 Step 1/2a: layer-editing shortcuts (arrow-nudge) are inert while drawing mode owns
+  // the canvas, mirroring the pointerdown gate above -- but Step 2a's Delete/Backspace removes
+  // the current drawn-shape selection instead of just being blocked, so it must not fall through
+  // to the project.layers deleteLayer() path below.
+  if(drawingTool.isActive){
+    if(e.key==='Delete'||e.key==='Backspace'){
+      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;
+      e.preventDefault();
+      deleteCurrentSelection();
+    }
+    // RS-3010 Step 2c: Escape cancels whatever drag or in-progress polygon drawingTool.cancelPath()
+    // now covers (see DrawingCanvasTool.js's resetInProgressDrawing()) -- this block's own `return`
+    // below already keeps drawing mode from falling through to any other Escape handler while it
+    // owns the canvas. RS-3011 Step 11: cancelPath() can now also revert mode to 'select' when
+    // Escape is pressed on an idle click-to-place tool (Stamp/Trace, see its own doc comment) --
+    // updateDrawToolButtons() syncs the rail's aria-pressed state to match, the same convention
+    // every other mode-reverting commit (onShapeCommitted, onPaintStroke) already follows.
+    if(e.key==='Escape'){
+      e.preventDefault();
+      drawingTool.cancelPath();
+      updateDrawToolButtons();
+    }
+    // RS-3010 Design Step B: plain-keypress tool shortcuts (no Cmd/Ctrl/Alt/Shift) -- calls the
+    // exact same setDrawTool() the rail buttons use, no new dispatch path. Guarded like
+    // Delete/Backspace above so typing in the Slot width field never gets hijacked.
+    if(!mod&&!e.altKey&&!e.shiftKey&&DRAW_TOOL_SHORTCUT_KEYS[key]){
+      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;
+      e.preventDefault();
+      setDrawTool(DRAW_TOOL_SHORTCUT_KEYS[key]);
+    }
+    // RS-3011 Step 13 decision 4b: '[' / ']' nudge eraserSettings.radiusMm down/up by 0.5mm while
+    // Eraser is active (standard brush-size convention in Photoshop/Procreate/GIMP) -- clamped at
+    // a 0.5mm floor, no ceiling. Guarded like the shortcuts above so typing '[' or ']' into
+    // #eraserRadiusMm itself (or any other field) is never hijacked. The first of the two required
+    // radius-adjustment paths; #eraserRadiusMm's own oninput handler is the second.
+    if((e.key==='['||e.key===']')&&drawingTool.mode==='eraser'){
+      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;
+      e.preventDefault();
+      eraserSettings.radiusMm=Math.max(0.5,eraserSettings.radiusMm+(e.key===']'?0.5:-0.5));
+      drawingTool.setEraserRadiusMm(eraserSettings.radiusMm);
+      setLengthField('eraserRadiusMm',eraserSettings.radiusMm);
+    }
+    // RS-3010 Design Step B: space-held temporary pan. e.repeat filters OS key-repeat spam (so
+    // setSpaceHeld(true) fires once per physical press, not per repeat tick); same input-focus
+    // guard as the shortcuts/Delete above so a space typed into the Slot width field is never
+    // hijacked. Matching keyup listener (below, outside this isActive block since a key can be
+    // released after focus/mode changes) ends the hold.
+    if(e.code==='Space'&&!e.repeat){
+      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;
+      e.preventDefault();
+      drawingTool.setSpaceHeld(true);
+    }
+    return;
+  }
   if(e.key==='Delete'||e.key==='Backspace'){const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;deleteLayer(selectedLayerId)}
   // RS-1009: arrow keys nudge the current multi-selection by a named mm step (NUDGE_STEP_MM,
   // src/editing/EditingConstants.js); Shift+Arrow uses the larger step. Guarded exactly like
   // Delete/Backspace above so typing in a text/number field or using a <select> is never hijacked.
   if(ARROW_KEY_DELTAS[e.key]){const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;e.preventDefault();const step=e.shiftKey?NUDGE_STEP_LARGE_MM:NUDGE_STEP_MM;const[ux,uy]=ARROW_KEY_DELTAS[e.key];nudgeSelection(ux*step,uy*step)}
+});
+// RS-3010 Design Step B: ends the spacebar-held temporary pan started by the keydown handler
+// above. Deliberately not gated on document.activeElement -- releasing a key while focus already
+// moved (e.g. tabbing away mid-hold) must still end the hold, unlike the keydown side which only
+// needs to avoid *starting* one from within an input.
+window.addEventListener('keyup',e=>{
+  if(!drawingTool.isActive)return;
+  if(e.code==='Space')drawingTool.setSpaceHeld(false);
 });
 // RS-1002: these controls edit `project` fields, so one undo step is committed per edit session
 // (opened on the first 'input' event, closed on 'change'). `rotation`/`zoom` are view-only (not
@@ -2130,11 +3680,11 @@ el('mixedMaxSize').addEventListener('input',()=>{
 // about it, and auto-setting a value the operator can neither see take effect nor override would be
 // pure noise.
 function applyStoneSizeHeightAutoSet(l,size){
-  const currentHeight=parseFloat(el('height').value);
+  const currentHeight=readLengthField('height');
   const staysValid=l.heightManuallyEdited&&Number.isFinite(currentHeight)&&isHeightWithinStoneSizeRange(size,currentHeight);
   el('heightAutoAdjustedHint').style.display='none';
   if(staysValid)return;
-  el('height').value=stoneSizeHeightMidpointMm(size);
+  setLengthField('height',stoneSizeHeightMidpointMm(size));
   // Only surface the note when this overrides an existing manual choice -- the very first auto-set
   // on a fresh/never-edited layer is expected, unannounced behavior (matching #height's own
   // un-explained "25" default), not a correction that needs calling out.
@@ -2176,10 +3726,10 @@ el('height').addEventListener('input',()=>{
 el('letterHeight').addEventListener('input',()=>{
   const l=selectedLayer();
   if(!l||l.type!=='text')return;
-  const desiredCapHeightMm=parseFloat(el('letterHeight').value);
+  const desiredCapHeightMm=readLengthField('letterHeight');
   if(!Number.isFinite(desiredCapHeightMm))return;
   const engineHeightMm=solveEngineHeightMm({fontId:l.font,desiredCapHeightMm});
-  el('height').value=Math.max(RAW_ENGINE_HEIGHT_MM_MIN,Math.min(RAW_ENGINE_HEIGHT_MM_MAX,engineHeightMm));
+  setLengthField('height',Math.max(RAW_ENGINE_HEIGHT_MM_MIN,Math.min(RAW_ENGINE_HEIGHT_MM_MAX,engineHeightMm)));
   el('height').dispatchEvent(new Event('input'));
 });
 el('letterHeight').addEventListener('change',()=>{
@@ -2199,6 +3749,19 @@ el('heightModeToggleBtn').addEventListener('click',()=>{
   l.heightMode=l.heightMode==='capHeight'?'raw':'capHeight';
   updateAll(true);
 });
+// RS-3011 Step 7: one-time gate release -- once pressed, stonesGenerated flips to true and this
+// layer regenerates live on every subsequent edit forever after, exactly like any other path layer
+// (no code re-suppresses it). Mirrors onPaintStroke()'s own commitHistory()/mutate/
+// refreshStoneGroupForLayer/updateAll(true) sequence so Design's live preview and the main layout/
+// stats both pick up the newly generated stones in the same call.
+el('generateStonesBtn').addEventListener('click',async()=>{
+  const l=selectedLayer();
+  if(!l||l.type!=='path'||l.stonesGenerated!==false)return;
+  commitHistory();
+  l.stonesGenerated=true;
+  drawingTool.refreshStoneGroupForLayer(l.id);
+  await updateAll(true);
+});
 // Auto Fit now defaults to Off for new layers (Text height reflects the actual rendered size), so
 // switching it back On is a deliberate, easy-to-miss trade-off -- Auto Fit can shrink text below the
 // height needed for reliable readability at the selected stone size. Surfaced every time the operator
@@ -2211,7 +3774,7 @@ el('autoFit').addEventListener('input',()=>{
   const turningOn=el('autoFit').value==='on';
   el('autoFitOnHint').style.display=(l&&l.type==='text'&&!l.autoFit&&turningOn)?'block':'none';
 });
-const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','textAlign','lineSpacing','rotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail'];
+const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','textAlign','lineSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
 // RS-2002: Browse Fonts panel wiring. Toggling/closing never touches history (it only decides
@@ -2241,7 +3804,32 @@ el('objectType').addEventListener('change',()=>{commitHistory();const template=g
   // project.cupColor from the plate's default color id so the Object Preview immediately shows
   // the approved White, not whatever cupColor the previous template left behind.
   if(template.id==='plate'){project.plate=getPlateDefaults();project.cupColor=getPlateColor(project.plate.colorId).hex}
-  syncSelectedControlsFromLayer();updateAll(true)});el('layersList').addEventListener('click',e=>{const row=e.target.closest('.layer');if(!row)return;const id=row.dataset.layer,action=e.target.dataset.action;if(action==='visible'){const l=project.layers.find(x=>x.id===id);commitHistory();l.visible=e.target.checked;updateAll(true);return}if(action==='duplicate'){duplicateLayer(id);return}if(action==='delete'){deleteLayer(id);return}
+  syncSelectedControlsFromLayer();updateAll(true)});el('layersList').addEventListener('click',e=>{const row=e.target.closest('.layer');if(!row)return;const id=row.dataset.layer,action=e.target.dataset.action;
+  // RS-3013 Step 5 follow-up: a selected REGION (drawingTool.activeSelection) is Design-canvas-local
+  // state that must be cleared here too whenever this row click actually MOVES the selection --
+  // matching performClickDispatch()'s own `if(activeSelection) setActiveSelection(null);` precedent
+  // for a canvas shape-click -- but NOT on every row click regardless of what it does; scoped per
+  // action below rather than once at the top, since the four actions differ in whether they touch
+  // selection at all:
+  // - 'visible': never reassigns selectedLayerId/selectedLayerIds (a checkbox toggle on ANY row,
+  //   related or not, is orthogonal to what's selected) -- no clear.
+  // - 'duplicate': duplicateLayer(id) always reassigns selectedLayerId to the new copy, regardless of
+  //   which row's icon was clicked -- clear unconditionally, mirroring that unconditional reassign.
+  // - 'delete': deleteLayer(id) actually reassigns selectedLayerId unconditionally on every call
+  //   (to project.layers[0].id, regardless of which id was removed) -- but that reassignment is an
+  //   orthogonal, pre-existing quirk of deleteLayer() itself (unrelated to regions, unchanged by this
+  //   fix) and never overrides an active region selection anyway, since the region branch at the top
+  //   of syncSelectedControlsFromLayer()/writeSelectedControlsToLayer() always outranks
+  //   selectedLayerId when drawingTool.activeSelection is still set. What actually matters here is
+  //   only the REGION's own layer identity: clear only when the deleted id is the SAME layer the
+  //   active region belongs to (drawingTool.activeSelection?.layerId===id) -- deleting a truly
+  //   unrelated row leaves that region's own layer, and therefore its selection, untouched.
+  // - plain click / Shift-click (the fallthrough below): always reassigns selectedLayerId/
+  //   selectedLayerIds to the clicked row -- clear unconditionally, the original reported gap.
+  if(action==='visible'){const l=project.layers.find(x=>x.id===id);commitHistory();l.visible=e.target.checked;updateAll(true);return}
+  if(action==='duplicate'){if(drawingTool.activeSelection)drawingTool.clearActiveSelection();duplicateLayer(id);return}
+  if(action==='delete'){if(drawingTool.activeSelection&&drawingTool.activeSelection.layerId===id)drawingTool.clearActiveSelection();deleteLayer(id);return}
+  if(drawingTool.activeSelection)drawingTool.clearActiveSelection();
   // RS-1009: Shift-click toggles a layer row in the multi-selection, the same shared toggle a
   // canvas Shift-click uses (src/editing/Selection.js) -- a plain click still selects only that
   // one layer, preserving pre-existing single-selection behavior.
@@ -2334,7 +3922,7 @@ function shapeAroundTextFitsPrintableArea(sized){
 // case. Only when the required shape would spill outside the printable area does this fall back to
 // S-110's original behavior: a normal/default-size shape with the text fitted into it via
 // fitTextToShape(), so the legibility floor and every other S-110 guarantee still apply unchanged.
-async function createShapeLayer(kind){
+async function createShapeLayer(kind,extraFieldsOverride={},displayLabelOverride=null){
   const l=selectedLayer();
   const other=singleOtherSelectedLayer();
   const fitPartnerText=(other&&other.type==='text'&&!other.curveEnabled&&FITTABLE_SHAPE_TYPES.has(kind))?other:null;
@@ -2348,16 +3936,16 @@ async function createShapeLayer(kind){
   let layer;
   if(kind==='circle'){
     layer=shapeAroundText
-      ?{id:'circle'+Date.now(),type:'circle',visible:true,cx:shapeAroundText.cxMm,cy:shapeAroundText.cyMm,r:shapeAroundText.radiusMm,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'}
-      :{id:'circle'+Date.now(),type:'circle',visible:true,cx:105,cy:45,r:DEFAULT_CIRCLE_RADIUS_MM,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold'};
+      ?{id:'circle'+Date.now(),type:'circle',visible:true,cx:shapeAroundText.cxMm,cy:shapeAroundText.cyMm,r:shapeAroundText.radiusMm,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold',rotationDeg:0}
+      :{id:'circle'+Date.now(),type:'circle',visible:true,cx:105,cy:45,r:DEFAULT_CIRCLE_RADIUS_MM,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold',rotationDeg:0};
   }else{
     const{w,h}=shapeAroundText?{w:shapeAroundText.widthMm,h:shapeAroundText.heightMm}:(SHAPE_DEFAULT_SIZES_MM[kind]||{w:60,h:60});
     const x=shapeAroundText?shapeAroundText.xMm:105-w/2,y=shapeAroundText?shapeAroundText.yMm:45-h/2;
-    layer={id:kind+Date.now(),type:kind,visible:true,x,y,w,h,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold',...defaultShapeExtraFields(kind)};
+    layer={id:kind+Date.now(),type:kind,visible:true,x,y,w,h,stoneSize:l.stoneSize||2,gap:l.gap||.3,color:l.color||'gold',rotationDeg:0,...defaultShapeExtraFields(kind),...extraFieldsOverride};
   }
   project.layers.push(layer);
   selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);
-  let statusText=`Added ${SHAPE_DISPLAY_LABELS[kind]||kind}`;
+  let statusText=`Added ${displayLabelOverride||SHAPE_DISPLAY_LABELS[kind]||kind}`;
   if(shapeAroundText){
     statusText+=` sized around "${layerLabel(fitPartnerText)}" (text unchanged)`;
   }else if(fitPartnerText){
@@ -2516,6 +4104,43 @@ el('fitTextToShapeBtn').onclick=async()=>{
   el('status').textContent=`Fit "${layerLabel(pair.text)}" to "${layerLabel(pair.shape)}"`;
 };
 el('shapeGrid').addEventListener('click',e=>{const btn=e.target.closest('[data-shape-kind]');if(!btn)return;createShapeLayer(btn.dataset.shapeKind)});
+// RS-3027: "More shapes" popover on the Design toolbar's right rail -- a second, faster entry point
+// to 10 of #shapeGrid's own shapes, via the exact same createShapeLayer(). Pentagon/Hexagon/Octagon
+// share data-shape-kind="polygon" with a data-shape-sides preset + a data-shape-label status-text
+// override, read generically here rather than three hardcoded id branches.
+function closeMoreShapesPopover(){el('moreShapesPopover').hidden=true;el('railMoreShapesToggle').setAttribute('aria-expanded','false')}
+function openMoreShapesPopover(){
+  const rail=el('designToolRailRight');
+  el('moreShapesPopover').hidden=false;
+  el('railMoreShapesToggle').setAttribute('aria-expanded','true');
+  el('moreShapesPopover').style.top=`${rail.offsetTop+rail.offsetHeight+8}px`;
+}
+el('railMoreShapesToggle').addEventListener('click',e=>{
+  e.stopPropagation();
+  if(el('moreShapesPopover').hidden)openMoreShapesPopover();else closeMoreShapesPopover();
+});
+el('moreShapesPopover').addEventListener('click',e=>{
+  const btn=e.target.closest('[data-shape-kind]');
+  if(!btn)return;
+  const extraFields=btn.dataset.shapeSides?{sides:parseInt(btn.dataset.shapeSides,10)}:{};
+  createShapeLayer(btn.dataset.shapeKind,extraFields,btn.dataset.shapeLabel||null);
+  // RS-3032 Step A supersedes the RS-3031 workaround here: Design's own canvas now tracks/renders
+  // every SHAPE_LIBRARY_KINDS layer directly (see syncFromProjectLayers()'s widened call site
+  // above), so a shape created via this popover -- itself only ever reachable while Design is
+  // active, since #designToolRailRight is hidden otherwise -- is already visible on Design's own
+  // canvas without leaving it. Forcing revealDualWorkspaceForLightbox()'s exit-to-Dual-Workspace
+  // here would just needlessly kick the operator out of Design mode for a shape that no longer
+  // needs it.
+  closeMoreShapesPopover();
+});
+document.addEventListener('mousedown',e=>{
+  if(el('moreShapesPopover').hidden)return;
+  if(e.target.closest('#moreShapesPopover, #railMoreShapesToggle'))return;
+  closeMoreShapesPopover();
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&!el('moreShapesPopover').hidden)closeMoreShapesPopover();
+});
 el('addTextBtn').onclick=()=>addText();
 el('importProject').onclick=()=>el('importProjectFile').click();
 el('importProjectFile').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;
@@ -2542,13 +4167,13 @@ el('importProjectFile').addEventListener('change',async e=>{const file=e.target.
   // is mid-edit with a type-specific Lightbox open", and a fresh whole-project replacement is not that. Closing
   // first clears activeFieldLightbox so the auto-switch is a no-op here, regardless of the imported first layer's type.
   lightboxes.importBox.close();
-  syncSelectedControlsFromLayer();await updateAll(true);el('status').textContent=`Imported ${file.name}: ${project.layers.length} layer(s)`}catch(error){console.error('Project import failed',error);el('status').textContent=`Import failed: ${error.message}`;validationEl.textContent=`Import failed: ${error.message} The current project was left untouched.`;validationEl.style.display='block'}});
+  refreshUnitLabels();refreshAllFieldSteps();syncSelectedControlsFromLayer();await updateAll(true);el('status').textContent=`Imported ${file.name}: ${project.layers.length} layer(s)`}catch(error){console.error('Project import failed',error);el('status').textContent=`Import failed: ${error.message}`;validationEl.textContent=`Import failed: ${error.message} The current project was left untouched.`;validationEl.style.display='block'}});
 el('importSvg').onclick=()=>el('importSvgFile').click();
 // RS-1001: parseSvgDocument() here only validates/measures the file (naturalWidthMm/heightMm,
 // shape count, warnings) — it invents no stone positions, so this direct src/svg call does not
 // violate "only the Geometry Engine generates stone positions". Actual stone generation for the
 // new layer still runs through generate() -> generateSvgStonesLive() -> permanentEngine.generateSvgLayout().
-el('importSvgFile').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{const svgSource=await file.text();const parsed=parseSvgDocument(svgSource);const maxW=project.canvas.width-20,maxH=project.canvas.height-20;let w=parsed.naturalWidthMm,h=parsed.naturalHeightMm;if(w>maxW||h>maxH){const s=Math.min(maxW/w,maxH/h);w*=s;h*=s}const x=(project.canvas.width-w)/2,y=(project.canvas.height-h)/2;const base=selectedLayer();const layer={id:'svg'+Date.now(),type:'svg',visible:true,svgSource,svgName:file.name,x,y,w,h,mode:'outline',stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold'};commitHistory();project.layers.push(layer);selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);syncSelectedControlsFromLayer();await updateAll(true);const warningNote=parsed.warnings.length?` (${parsed.warnings.length} element(s) skipped, see console)`:'';if(parsed.warnings.length)console.warn('SVG import warnings for',file.name,parsed.warnings);el('status').textContent=`Imported ${file.name}: ${parsed.shapes.length} shape(s)${warningNote}`}catch(error){console.error('SVG import failed',error);el('status').textContent=`SVG import failed: ${error.message}`}});
+el('importSvgFile').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{const svgSource=await file.text();const parsed=parseSvgDocument(svgSource);const maxW=project.canvas.width-20,maxH=project.canvas.height-20;let w=parsed.naturalWidthMm,h=parsed.naturalHeightMm;if(w>maxW||h>maxH){const s=Math.min(maxW/w,maxH/h);w*=s;h*=s}const x=(project.canvas.width-w)/2,y=(project.canvas.height-h)/2;const base=selectedLayer();const layer={id:'svg'+Date.now(),type:'svg',visible:true,svgSource,svgName:file.name,x,y,w,h,mode:'outline',stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold',rotationDeg:0};commitHistory();project.layers.push(layer);selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);syncSelectedControlsFromLayer();await updateAll(true);const warningNote=parsed.warnings.length?` (${parsed.warnings.length} element(s) skipped, see console)`:'';if(parsed.warnings.length)console.warn('SVG import warnings for',file.name,parsed.warnings);el('status').textContent=`Imported ${file.name}: ${parsed.shapes.length} shape(s)${warningNote}`}catch(error){console.error('SVG import failed',error);el('status').textContent=`SVG import failed: ${error.message}`}});
 // RS-1008: Image Trace import. Unlike SVG import (which commits a layer directly on file select),
 // this opens a "preview before commit" panel first -- the milestone brief's own required control --
 // since threshold/invert/blur/resize meaningfully change the traced result and are worth seeing
@@ -2613,7 +4238,7 @@ el('imageImportCommit').onclick=async()=>{
   const{threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx}=currentImagePreviewParams();
   const base=selectedLayer();
   const{x,y,w,h}=pendingImageImport.placement;
-  const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:pendingImageImport.dataUrl,imageName:pendingImageImport.fileName,naturalWidthPx:pendingImageImport.naturalWidthPx,naturalHeightPx:pendingImageImport.naturalHeightPx,x,y,w,h,threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx,stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold'};
+  const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:pendingImageImport.dataUrl,imageName:pendingImageImport.fileName,naturalWidthPx:pendingImageImport.naturalWidthPx,naturalHeightPx:pendingImageImport.naturalHeightPx,x,y,w,h,threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx,stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold',rotationDeg:0};
   const importedName=layer.imageName;
   commitHistory();
   project.layers.push(layer);
@@ -2649,7 +4274,7 @@ el('exportCombined').onclick=()=>{if(!layout){el('status').textContent='Export f
 // pattern for Gap/Crystal color) -- see docs/specifications/RS-1005-ProductionSheetGenerator.md for
 // this function's pre-existing fields and docs/specifications/S-112-RoundDinnerPlate.md for the
 // plate-specific additions.
-function currentProductionSheetOptions(){const t=currentObjectTemplate(),isPlate=t.preview.kind==='plate';const plateFields=isPlate?{plateDesignTarget:getPlateDesignTargetMeta(project.plate.designTarget).name,plateOuterDiameterMm:project.plate.outerDiameterMm,plateInnerWellDiameterMm:project.plate.innerWellDiameterMm,plateRimWidthMm:computeRimWidthMm(project.plate.outerDiameterMm,project.plate.innerWellDiameterMm),plateOverallHeightMm:project.plate.overallHeightMm,plateWeightGrams:PLATE_ROUND_DINNER_DEFINITION.weightGrams.average,plateColorName:getPlateColor(project.plate.colorId).name}:{};return{projectName:project.name,objectType:t.displayName,productionWidthMm:project.canvas.width,productionHeightMm:project.canvas.height,gapMm:[...new Set(project.layers.filter(l=>l.visible).map(l=>l.gap))],pageSize:el('prodSheetPageSize').value,marginMm:parseFloat(el('prodSheetMargin').value)||0,mirror:el('prodSheetMirror').value==='on',registrationMarks:el('prodSheetRegMarks').value==='on',...plateFields}}
+function currentProductionSheetOptions(){const t=currentObjectTemplate(),isPlate=t.preview.kind==='plate';const plateFields=isPlate?{plateDesignTarget:getPlateDesignTargetMeta(project.plate.designTarget).name,plateOuterDiameterMm:project.plate.outerDiameterMm,plateInnerWellDiameterMm:project.plate.innerWellDiameterMm,plateRimWidthMm:computeRimWidthMm(project.plate.outerDiameterMm,project.plate.innerWellDiameterMm),plateOverallHeightMm:project.plate.overallHeightMm,plateWeightGrams:PLATE_ROUND_DINNER_DEFINITION.weightGrams.average,plateColorName:getPlateColor(project.plate.colorId).name}:{};return{projectName:project.name,objectType:t.displayName,productionWidthMm:project.canvas.width,productionHeightMm:project.canvas.height,gapMm:[...new Set(project.layers.filter(l=>l.visible).map(l=>l.gap))],pageSize:el('prodSheetPageSize').value,marginMm:readLengthField('prodSheetMargin')||0,mirror:el('prodSheetMirror').value==='on',registrationMarks:el('prodSheetRegMarks').value==='on',units:project.units,...plateFields}}
 el('exportProdSheetSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-production-sheet.svg','image/svg+xml',productionSheetToSvg(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportProdSheetPDF').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-production-sheet.pdf','application/pdf',productionSheetToPdf(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 // PNG has no dedicated src/export/** module (matching #exportPNG/#exportCup's existing "capture,
@@ -2691,15 +4316,22 @@ window.addEventListener('resize',()=>updateAll(true));
 // that could disagree with the first. ----
 const FIELD_GROUPS={
   position:{field:'sharedPositionFields',home:'inspectorPositionSlot',lightboxSlots:{shapes:'shapesPositionSlot',import:'importPositionSlot',imagetrace:'imageTracePositionSlot'}},
-  stone:{field:'sharedStoneFields',home:'inspectorStoneSlot',lightboxSlots:{text:'textStoneSlot',shapes:'shapesStoneSlot',import:'importStoneSlot',imagetrace:'imageTraceStoneSlot'}},
+  // RS-3011 Step 3a: designSlot is a second fallback destination, checked only for this group --
+  // Position/Mixed Size stay Inspector/Lightbox-only, matching the milestone's stated scope
+  // (stoneSize/gap/color only, "still whole-shape, not sub-region").
+  stone:{field:'sharedStoneFields',home:'inspectorStoneSlot',lightboxSlots:{text:'textStoneSlot',shapes:'shapesStoneSlot',import:'importStoneSlot',imagetrace:'imageTraceStoneSlot'},designSlot:'designStoneSlot'},
   // S-200: Mixed Stone Size -- same relocation shape as `stone` above (applies to every layer type).
   mixedSize:{field:'sharedMixedSizeFields',home:'inspectorMixedSizeSlot',lightboxSlots:{text:'textMixedSizeSlot',shapes:'shapesMixedSizeSlot',import:'importMixedSizeSlot',imagetrace:'imageTraceMixedSizeSlot'}}
 };
 let activeFieldLightbox=null;
 function relocateFieldGroups(){
+  // RS-3011 Step 3a: while Design is active with exactly one 'path' (Design-drawn) layer selected,
+  // the stone group's designSlot outranks its Inspector home -- but a Lightbox slot (if one happens
+  // to be open) still outranks both, unchanged from the pre-existing precedence.
+  const designStoneTarget=drawingTool.isActive&&selectedLayerIds.size===1&&selectedLayer().type==='path';
   for(const group of Object.values(FIELD_GROUPS)){
     const fieldEl=el(group.field);
-    const destId=(activeFieldLightbox&&group.lightboxSlots[activeFieldLightbox])||group.home;
+    const destId=(activeFieldLightbox&&group.lightboxSlots[activeFieldLightbox])||(designStoneTarget&&group.designSlot)||group.home;
     const dest=el(destId);
     if(fieldEl&&dest&&fieldEl.parentElement!==dest)dest.appendChild(fieldEl);
   }
@@ -2719,11 +4351,9 @@ const lightboxes={
   imagetrace:new Lightbox('lightboxImageTrace',{primary:true,onOpen(){activeFieldLightbox='imagetrace';relocateFieldGroups();updateImageTraceSections()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
   exportBox:new Lightbox('lightboxExport',{primary:true}),
   prodSheet:new Lightbox('lightboxProdSheet',{primary:true}),
-  shipping:new Lightbox('lightboxShipping',{primary:true,onOpen(){syncShippingFieldsFromState()}}),
+  shipping:new Lightbox('lightboxShipping',{primary:true,onOpen(){syncShippingFieldsFromState(project.units)}}),
   settings:new Lightbox('lightboxSettings',{primary:true,onOpen(){syncSettingsFieldsFromState()}}),
   help:new Lightbox('lightboxHelp',{primary:true}),
-  library:new Lightbox('lightboxLibrary',{primary:true,onOpen(){onLibraryOpen()}}),
-  libraryConfirm:new Lightbox('lightboxLibraryConfirm'),
   gallery:new Lightbox('lightboxGallery',{primary:true,onOpen(){onGalleryOpen()}}),
   galleryPreview:new Lightbox('lightboxGalleryPreview'),
   // MONO-006: no shared field group participates in this Lightbox (Frame/Layout/Letters/Font/Stone
@@ -2733,28 +4363,58 @@ const lightboxes={
   monogram:new Lightbox('lightboxMonogram',{primary:true,onOpen(){onMonogramOpen()}})
 };
 
-el('menuText').onclick=()=>lightboxes.text.open();
-el('menuShapes').onclick=()=>lightboxes.shapes.open();
-el('menuMonogram').onclick=()=>lightboxes.monogram.open();
-// RC-006 (Version 1.0 Feature Freeze): #menuLibrary carries the native `disabled` attribute (see
-// index.html), which makes the browser withhold click/Enter/Space activation and tab focus
-// entirely -- this handler is wired the same as every other menu item and is deliberately left
-// in place (Design Library code/tests/stored data stay intact), it is just unreachable via the UI
-// for now.
-el('menuLibrary').onclick=()=>lightboxes.library.open();
+// RS-topmenu-active-persist: highlighting the active top-menu section is a navigation-level
+// concept owned by app.js, not a per-dialog open/close concern -- a Lightbox closing (X, Escape,
+// backdrop, or a programmatic close after a successful action) does not mean the user has left
+// that section, so Lightbox.js itself has no involvement in this at all (see src/ui/Lightbox.js).
+const TOP_MENU_BUTTON_IDS=['menuText','menuShapes','menuMonogram','menuGallery','menuImport','menuImageTrace','menuExport','menuProdSheet','menuShipping','menuSettings','menuHelp'];
+let activeTopMenuButtonId=null;
+function setActiveTopMenuButton(id){
+  if(activeTopMenuButtonId===id)return;
+  if(activeTopMenuButtonId)el(activeTopMenuButtonId).setAttribute('aria-pressed','false');
+  activeTopMenuButtonId=id;
+  if(id)el(id).setAttribute('aria-pressed','true');
+}
+
+// RS-3011 nav-toggle fix: a Lightbox that opens over Design (or over a non-Dual workspace view)
+// left the underlying view untouched -- Design has no Object Preview of its own, so a user
+// opening Text/Shapes/Monogram/etc. from Design got no product preview behind the Lightbox at
+// all. Reveal Dual Workspace first, through the exact same setWorkspaceMode('dual')+
+// persistActiveView('dual') pair viewTabDual's own onclick below uses -- not a separate
+// mechanism -- so a reload afterward lands back in Dual Workspace too. When Design is active,
+// setDrawMode(false) (Design's own existing exit path, per DECISION 2 below -- opening one of
+// these Lightboxes is now the only way to leave Design) must run first: setWorkspaceMode('dual')
+// alone does not toggle drawingTool.isActive or hide Design's own rails, so skipping this would
+// leave Design's rails and the Dual Workspace panels both visible at once. Design's own exit
+// restores workspaceModeBeforeDrawing, not necessarily 'dual', so setWorkspaceMode('dual') still
+// runs afterward if that restore landed anywhere else. Skipped entirely when Dual Workspace is
+// already showing and Design isn't active (redundant no-op call).
+function revealDualWorkspaceForLightbox(){
+  const exitingDesign=drawingTool.isActive;
+  if(exitingDesign)setDrawMode(false);
+  if(exitingDesign||workspaceMode!=='dual'){
+    if(workspaceMode!=='dual')setWorkspaceMode('dual');
+    persistActiveView('dual');
+  }
+}
+el('menuText').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.text.open();setActiveTopMenuButton('menuText')};
+el('menuShapes').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.shapes.open();setActiveTopMenuButton('menuShapes')};
+el('menuMonogram').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.monogram.open();setActiveTopMenuButton('menuMonogram')};
 // S-103 (Product Scope Freeze): #menuGallery carries the native `disabled` attribute (see
 // index.html), which makes the browser withhold click/Enter/Space activation and tab focus
 // entirely -- this handler is wired the same as every other menu item and is deliberately left
 // in place (Gallery code/tests/fixtures stay intact), it is just unreachable via the UI for now.
-el('menuGallery').onclick=()=>lightboxes.gallery.open();
-el('menuImport').onclick=()=>lightboxes.importBox.open();
-el('menuImageTrace').onclick=()=>lightboxes.imagetrace.open();
-el('menuExport').onclick=()=>lightboxes.exportBox.open();
-el('exportShortcut').onclick=()=>lightboxes.exportBox.open();
-el('menuProdSheet').onclick=()=>lightboxes.prodSheet.open();
-el('menuShipping').onclick=()=>lightboxes.shipping.open();
-el('menuSettings').onclick=()=>lightboxes.settings.open();
-el('menuHelp').onclick=()=>lightboxes.help.open();
+el('menuGallery').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.gallery.open();setActiveTopMenuButton('menuGallery')};
+el('menuImport').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.importBox.open();setActiveTopMenuButton('menuImport')};
+el('menuImageTrace').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.imagetrace.open();setActiveTopMenuButton('menuImageTrace')};
+el('menuExport').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.exportBox.open();setActiveTopMenuButton('menuExport')};
+el('exportShortcut').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.exportBox.open();setActiveTopMenuButton('menuExport')};
+el('menuProdSheet').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.prodSheet.open();setActiveTopMenuButton('menuProdSheet')};
+// Shipping/Settings/Help show no design/geometry content -- nothing behind them for Dual
+// Workspace to usefully reveal, so these deliberately keep the old behavior.
+el('menuShipping').onclick=()=>{lightboxes.shipping.open();setActiveTopMenuButton('menuShipping')};
+el('menuSettings').onclick=()=>{lightboxes.settings.open();setActiveTopMenuButton('menuSettings')};
+el('menuHelp').onclick=()=>{lightboxes.help.open();setActiveTopMenuButton('menuHelp')};
 
 // S-105 follow-up: the layer-type -> Lightbox mapping used by both "More Options" (below) and
 // syncSelectedControlsFromLayer()'s auto-switch (so a type-specific Lightbox left open across a
@@ -2830,6 +4490,9 @@ function monogramFailureMessage(result,request){
   if(reason===R.BELOW_MINIMUM_SCALE)return `${designText} cannot fit using ${stoneSizeText} stones inside a ${frameSizeText} ${frameLabel} frame${limitingFactorText}. Increase the frame size, or choose a smaller stone size.`;
   if(reason===R.LETTER_COLLISION)return `Two or more letters in this${layoutLabel?` ${layoutLabel}`:''} monogram would touch at ${stoneSizeText} spacing in a ${frameSizeText} ${frameLabel} frame. Increase the frame size, choose a different layout, or choose a smaller stone size.`;
   if(reason===R.FRAME_COLLISION)return `A letter would touch the frame in this${layoutLabel?` ${layoutLabel}`:''} monogram at ${stoneSizeText} spacing in a ${frameSizeText} ${frameLabel} frame. Increase the frame size, or choose a smaller stone size.`;
+  // MONO-008: the generator's own message already names the frame/stone-width context -- no
+  // request-specific data to add here, unlike the reasons above.
+  if(reason===R.STONE_WIDTH_UNAVAILABLE)return result.message;
   return MONOGRAM_FAILURE_MESSAGES[reason]||'Monogram generation failed. Please check your settings and try again.';
 }
 // Frame choices come straight from FrameLibrary.listFrames() -- adding a frame there needs no
@@ -2847,23 +4510,74 @@ function populateMonogramLayoutOptions(){el('monogramLayout').innerHTML=Object.v
 function authoredProductionFonts(){return fontManager?fontManager.listFonts().filter(f=>f.providerId==='rhinestone'):[]}
 function populateMonogramFontOptions(){if(!fontManager)return;el('monogramFont').innerHTML=groupFontsByCategory(authoredProductionFonts()).map(([role,fonts])=>`<optgroup label="${escapeHtml(fontCategoryLabel(role))}">${fonts.map(f=>`<option value="${f.id}">${escapeHtml(f.family)}</option>`).join('')}</optgroup>`).join('')}
 function populateMonogramStoneSizeOptions(){el('monogramStoneSize').innerHTML=listStoneSizes().map(s=>`<option value="${s.diameterMm}">${escapeHtml(s.name)} — ${s.diameterMm.toFixed(1)} mm</option>`).join('')}
-function populateMonogramColorOptions(){const groups=new Map();for(const c of Object.values(STONE_COLORS)){if(!groups.has(c.group))groups.set(c.group,[]);groups.get(c.group).push(c)}el('monogramColor').innerHTML=[...groups.entries()].map(([group,colors])=>`<optgroup label="${escapeHtml(group)}">${colors.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`).join('')}
 function updateMonogramColorSwatch(){const c=STONE_COLORS[el('monogramColor').value];el('monogramColorSwatch').style.background=c?c.previewColor:'transparent'}
+// MONO-010: mirrors populateMonogramStoneSizeOptions()/populateStoneColorOptions()/
+// updateMonogramColorSwatch() above verbatim, retargeted at the frame-specific selects.
+function populateMonogramFrameStoneSizeOptions(){el('monogramFrameStoneSize').innerHTML=listStoneSizes().map(s=>`<option value="${s.diameterMm}">${escapeHtml(s.name)} — ${s.diameterMm.toFixed(1)} mm</option>`).join('')}
+function updateMonogramFrameColorSwatch(){const c=STONE_COLORS[el('monogramFrameColor').value];el('monogramFrameColorSwatch').style.background=c?c.previewColor:'transparent'}
+function updateMonogramFrameStoneControlsVisibility(){el('monogramFrameStoneFields').style.display=el('monogramFrameStoneToggle').checked?'':'none'}
+// MONO-009: the frame's own generic scalingLimitsMm midpoint is a size that only ever coincidentally
+// fits the current product's real printable area. For every product except Plate, default instead to
+// that product's safe area (getSafeAreaRectMm) shrunk by the operator-configurable #monogramSizeMarginMm,
+// clamped into the frame's hard scalingLimitsMm range. Plate is excluded: its safeAreaInsetMm is all-zero
+// (safe area === the full square canvas), while Plate's true printable region is circular, not the
+// square/rect this function reasons about -- a rect-based auto-fit would overshoot the real usable area
+// and place a frame that overlaps the plate's edge, so Plate deliberately keeps the old generic-midpoint
+// default rather than being given a wrong one.
+function computeMonogramDefaultSizeMm(frame){
+  const template=currentObjectTemplate();
+  const limits=frame.scalingLimitsMm;
+  if(template.preview.kind==='plate'){
+    return{
+      widthMm:Math.round((limits.minWidthMm+limits.maxWidthMm)/2),
+      heightMm:Math.round((limits.minHeightMm+limits.maxHeightMm)/2)
+    };
+  }
+  const marginMm=readLengthField('monogramSizeMarginMm')||0;
+  const safe=getSafeAreaRectMm(template,project.canvas.width,project.canvas.height);
+  const widthMm=Math.max(limits.minWidthMm,Math.min(limits.maxWidthMm,safe.widthMm-2*marginMm));
+  const heightMm=Math.max(limits.minHeightMm,Math.min(limits.maxHeightMm,safe.heightMm-2*marginMm));
+  return{widthMm,heightMm};
+}
 // Frame Size Width/Height bounds come from FrameLibrary's own scalingLimitsMm for the selected
 // frame -- the same field this app already uses to bound vessel/plate dimensions. Only resets the
 // current value when it falls outside the new frame's range, so switching frames back and forth
-// never fights a value the user just typed.
+// never fights a value the user just typed. MONO-009: this conservative reuse-if-valid behavior is
+// deliberately different from applyMonogramSizeMargin() below, which always reapplies the computed
+// default -- see that function's own comment for why.
 function updateMonogramFrameSizeBounds(){
   const frame=listFrames().find(f=>f.id===el('monogramFrame').value);
   if(!frame)return;
   const limits=frame.scalingLimitsMm;
   const widthInput=el('monogramWidth'),heightInput=el('monogramHeight');
-  widthInput.min=String(limits.minWidthMm);widthInput.max=String(limits.maxWidthMm);
-  heightInput.min=String(limits.minHeightMm);heightInput.max=String(limits.maxHeightMm);
-  const currentW=parseFloat(widthInput.value),currentH=parseFloat(heightInput.value);
-  if(!Number.isFinite(currentW)||currentW<limits.minWidthMm||currentW>limits.maxWidthMm)widthInput.value=String(Math.round((limits.minWidthMm+limits.maxWidthMm)/2));
-  if(!Number.isFinite(currentH)||currentH<limits.minHeightMm||currentH>limits.maxHeightMm)heightInput.value=String(Math.round((limits.minHeightMm+limits.maxHeightMm)/2));
-  el('monogramFrameSizeHint').textContent=`${frame.label}: width ${limits.minWidthMm}-${limits.maxWidthMm}mm, height ${limits.minHeightMm}-${limits.maxHeightMm}mm.`;
+  widthInput.min=String(mmToDisplayValue(limits.minWidthMm,project.units));widthInput.max=String(mmToDisplayValue(limits.maxWidthMm,project.units));
+  heightInput.min=String(mmToDisplayValue(limits.minHeightMm,project.units));heightInput.max=String(mmToDisplayValue(limits.maxHeightMm,project.units));
+  const currentW=readLengthField('monogramWidth'),currentH=readLengthField('monogramHeight');
+  const defaultSize=computeMonogramDefaultSizeMm(frame);
+  if(!Number.isFinite(currentW)||currentW<limits.minWidthMm||currentW>limits.maxWidthMm)setLengthField('monogramWidth',defaultSize.widthMm);
+  if(!Number.isFinite(currentH)||currentH<limits.minHeightMm||currentH>limits.maxHeightMm)setLengthField('monogramHeight',defaultSize.heightMm);
+  const suffix=unitSuffix(project.units);
+  let hint=`${frame.label}: width ${mmToDisplayValue(limits.minWidthMm,project.units)}-${mmToDisplayValue(limits.maxWidthMm,project.units)}${suffix}, height ${mmToDisplayValue(limits.minHeightMm,project.units)}-${mmToDisplayValue(limits.maxHeightMm,project.units)}${suffix}.`;
+  // MONO-009: Plate has no auto-fit default (see computeMonogramDefaultSizeMm()'s own comment for
+  // why) -- the margin field is disabled and a note is appended here rather than shown via a
+  // separate hint element, since this is the one place both the range text and this note are
+  // already refreshed together (frame change, units change, boot, monogram open).
+  const isPlate=currentObjectTemplate().preview.kind==='plate';
+  el('monogramSizeMarginMm').disabled=isPlate;
+  if(isPlate)hint+=' Auto-fit isn\'t available for Plate yet -- frame size defaults to this frame\'s own generic range.';
+  el('monogramFrameSizeHint').textContent=hint;
+}
+// MONO-009: unlike updateMonogramFrameSizeBounds()'s conservative reuse-if-valid behavior on frame
+// switch, editing the margin field always reapplies the computed size -- the margin field's entire
+// purpose is "resize the frame," so silently doing nothing because a width was already typed would
+// make the field appear broken.
+function applyMonogramSizeMargin(){
+  const frame=listFrames().find(f=>f.id===el('monogramFrame').value);
+  if(!frame)return;
+  const{widthMm,heightMm}=computeMonogramDefaultSizeMm(frame);
+  setLengthField('monogramWidth',widthMm);
+  setLengthField('monogramHeight',heightMm);
+  updateMonogramGenerateButtonState();
 }
 // MONOGRAM_LAYOUT_LETTER_COUNTS is authoritative (MonogramLayouts.js) -- this only mirrors it into
 // a visible hint and the input's maxlength; the same count is re-checked in
@@ -2884,8 +4598,8 @@ function validateMonogramControls(){
   const layoutId=el('monogramLayout').value;
   const fontId=el('monogramFont').value;
   const lettersRaw=el('monogramLetters').value.trim();
-  const widthMm=parseFloat(el('monogramWidth').value);
-  const heightMm=parseFloat(el('monogramHeight').value);
+  const widthMm=readLengthField('monogramWidth');
+  const heightMm=readLengthField('monogramHeight');
   if(!frameId)return{ok:false,message:'Choose a frame.'};
   if(!layoutId)return{ok:false,message:'Choose a layout.'};
   if(!fontId)return{ok:false,message:'Choose a font. Only production fonts are offered here.'};
@@ -2915,18 +4629,64 @@ function buildMonogramRequest(validated){
   // resolveFontProviderId() -- same call generateTextStonesLive() already makes for every ordinary
   // text layer -- so an authored font resolves through the real Rhinestone font provider, not the
   // OpenType one; omitting this made the real GeometryEngine mis-resolve authored fonts entirely.
-  return{frameId:validated.frameId,layoutId:validated.layoutId,letters:validated.letters,fontId:validated.fontId,providerId:resolveFontProviderId(validated.fontId),stoneSizeMm,color,frameRect,canvasMm};
+  // MONO-008: #monogramFrameStyle is a UI-level concept (static options, not FrameLibrary-catalog-
+  // driven), mapped here to the frameOptions MonogramGenerator actually understands. 'fill' maps to
+  // {} -- zero behavior change from before this field existed.
+  const frameStyle=el('monogramFrameStyle').value;
+  const frameOptions=frameStyle==='outline-1'?{mode:'outline',stoneWidth:1}
+    :frameStyle==='outline-2'?{mode:'outline',stoneWidth:2}
+    :{};
+  // MONO-010: only set when the toggle is checked -- unchecked must leave frameOptions exactly as
+  // it was before this milestone (no stoneSizeMm/color keys at all), so the generator's own
+  // frameOptions.stoneSizeMm ?? stoneSizeMm / frameOptions.color ?? resolvedColor fallbacks still
+  // apply unchanged. This is the one place that makes "toggle off" byte-identical to pre-milestone
+  // behavior.
+  if(el('monogramFrameStoneToggle').checked){
+    frameOptions.stoneSizeMm=parseFloat(el('monogramFrameStoneSize').value);
+    frameOptions.color=el('monogramFrameColor').value;
+  }
+  return{frameId:validated.frameId,layoutId:validated.layoutId,letters:validated.letters,fontId:validated.fontId,providerId:resolveFontProviderId(validated.fontId),stoneSizeMm,color,frameRect,canvasMm,frameOptions};
 }
-function onMonogramOpen(){clearMonogramValidation();updateMonogramGenerateButtonState()}
+// MONO-009: also refreshes frame-size bounds/default on open (out-of-range-only, same as a frame
+// switch) so a product switched while the lightbox was closed gets a chance to apply its own
+// safe-area default on next open, rather than only on frame-change/units-change/boot.
+function onMonogramOpen(){clearMonogramValidation();updateMonogramFrameSizeBounds();updateMonogramGenerateButtonState()}
+// MONO-011: UI-layer-only auto-shrink retry loop. MonogramGenerator.generate() keeps its "never
+// auto-corrects" doctrine (see its own doc comment) -- this wrapper is the thing that decides to
+// retry, and it only ever adjusts frameOptions.stoneSizeMm (never the shared letters' stoneSizeMm,
+// never gap, never the frame rect). Only FRAME_COLLISION and STONE_WIDTH_UNAVAILABLE are frame-
+// stone-pitch problems this can plausibly fix; every other failure reason (letter fitting/collision,
+// bad input) is returned unchanged, exactly like calling generate() directly.
+async function generateMonogramWithFrameAutoShrink(request){
+  const R=MONOGRAM_GENERATOR_FAILURE_REASONS;
+  const firstResult=await monogramGenerator.generate(request);
+  if(firstResult.ok||(firstResult.reason!==R.FRAME_COLLISION&&firstResult.reason!==R.STONE_WIDTH_UNAVAILABLE)){
+    return{result:firstResult,appliedFrameStoneSizeMm:null};
+  }
+  const requestedFrameStoneSizeMm=request.frameOptions&&request.frameOptions.stoneSizeMm;
+  if(!Number.isFinite(requestedFrameStoneSizeMm))return{result:firstResult,appliedFrameStoneSizeMm:null};
+  const candidates=listStoneSizes().map(s=>s.diameterMm).filter(d=>d<requestedFrameStoneSizeMm).sort((a,b)=>b-a);
+  for(const candidate of candidates){
+    const retryResult=await monogramGenerator.generate({...request,frameOptions:{...request.frameOptions,stoneSizeMm:candidate}});
+    if(retryResult.ok)return{result:retryResult,appliedFrameStoneSizeMm:candidate};
+    if(retryResult.reason!==R.FRAME_COLLISION&&retryResult.reason!==R.STONE_WIDTH_UNAVAILABLE){
+      // A smaller frame stone introduced a different failure -- stop immediately rather than keep
+      // shrinking, and report the ORIGINAL failure (its message names the size the user actually
+      // chose, not an intermediate candidate they never asked for).
+      return{result:firstResult,appliedFrameStoneSizeMm:null};
+    }
+  }
+  return{result:firstResult,appliedFrameStoneSizeMm:null};
+}
 async function generateMonogram(){
   const validation=validateMonogramControls();
   if(!validation.ok){showMonogramValidation(validation.message);return}
   clearMonogramValidation();
   const request=buildMonogramRequest(validation);
   el('monogramGenerate').disabled=true;
-  let result;
+  let result,appliedFrameStoneSizeMm;
   try{
-    result=await monogramGenerator.generate(request);
+    ({result,appliedFrameStoneSizeMm}=await generateMonogramWithFrameAutoShrink(request));
   }catch(error){
     console.error('Monogram generation failed',error);
     showMonogramValidation('Monogram generation failed. Please check your settings and try again.');
@@ -2948,18 +4708,38 @@ async function generateMonogram(){
   syncSelectedControlsFromLayer();
   updateAll(true);
   lightboxes.monogram.close();
-  el('status').textContent=`Generated monogram (${result.layers.length} layer${result.layers.length===1?'':'s'}).`;
+  if(appliedFrameStoneSizeMm!=null){
+    // MONO-010's boot-sync block (`el('monogramFrameStoneSize').value=el('monogramStoneSize').value`)
+    // establishes the convention that this control reflects the frame stone size actually in use --
+    // keep that true after an auto-shrink too, and always surface the adjustment to the user rather
+    // than letting it happen silently (per MONO-011's own scope: never silent).
+    el('monogramFrameStoneSize').value=String(appliedFrameStoneSizeMm);
+    el('status').textContent=`Generated monogram (${result.layers.length} layer${result.layers.length===1?'':'s'}). Frame stones reduced to ${formatStoneSizeLabel(appliedFrameStoneSizeMm)} to fit.`;
+  }else{
+    el('status').textContent=`Generated monogram (${result.layers.length} layer${result.layers.length===1?'':'s'}).`;
+  }
 }
-populateMonogramFrameOptions();populateMonogramLayoutOptions();populateMonogramStoneSizeOptions();populateMonogramColorOptions();
-updateMonogramColorSwatch();updateMonogramFrameSizeBounds();updateMonogramLetterCountHint();
+populateMonogramFrameOptions();populateMonogramLayoutOptions();populateMonogramStoneSizeOptions();populateStoneColorOptions('monogramColor');
+populateMonogramFrameStoneSizeOptions();populateStoneColorOptions('monogramFrameColor');
+// MONO-010: one-time initial sync only, mirroring updateMonogramFrameSizeBounds()'s (MONO-009)
+// "never fight a value already set" precedent -- set the frame-specific selects to match the
+// shared ones once at boot so first-time toggle-on doesn't jump to an arbitrary first-in-list
+// default, then never resync automatically again (toggling off/on preserves whatever was set).
+el('monogramFrameStoneSize').value=el('monogramStoneSize').value;
+el('monogramFrameColor').value=el('monogramColor').value;
+updateMonogramColorSwatch();updateMonogramFrameColorSwatch();updateMonogramFrameSizeBounds();updateMonogramLetterCountHint();
+updateMonogramFrameStoneControlsVisibility();
 if(fontManager)populateMonogramFontOptions();
 el('monogramFrame').addEventListener('change',()=>{updateMonogramFrameSizeBounds();updateMonogramGenerateButtonState()});
 el('monogramLayout').addEventListener('change',()=>{updateMonogramLetterCountHint();updateMonogramGenerateButtonState()});
 el('monogramLetters').addEventListener('input',()=>updateMonogramGenerateButtonState());
 el('monogramFont').addEventListener('change',()=>updateMonogramGenerateButtonState());
 el('monogramColor').addEventListener('change',()=>{updateMonogramColorSwatch();updateMonogramGenerateButtonState()});
-el('monogramWidth').addEventListener('input',()=>updateMonogramGenerateButtonState());
-el('monogramHeight').addEventListener('input',()=>updateMonogramGenerateButtonState());
+el('monogramWidth').addEventListener('input',()=>{stashTypedLengthField('monogramWidth');updateMonogramGenerateButtonState()});
+el('monogramHeight').addEventListener('input',()=>{stashTypedLengthField('monogramHeight');updateMonogramGenerateButtonState()});
+el('monogramSizeMarginMm').addEventListener('input',()=>{stashTypedLengthField('monogramSizeMarginMm');applyMonogramSizeMargin()});
+el('monogramFrameStoneToggle').addEventListener('change',()=>{updateMonogramFrameStoneControlsVisibility();updateMonogramGenerateButtonState()});
+el('monogramFrameColor').addEventListener('change',()=>updateMonogramFrameColorSwatch());
 el('monogramGenerate').onclick=()=>generateMonogram();
 
 // ---- Shapes Lightbox: Design Shapes / Object Templates tabs ----
@@ -2976,9 +4756,10 @@ function updateObjectTemplateDetail(){
   const isPlate=t.preview.kind==='plate';
   const isVessel=VESSEL_PRODUCT_IDS.includes(t.id);
   const detailEl=el('objectTemplateDetail');
-  if(detailEl)detailEl.textContent=`Production ${t.productionWidthMm}×${t.productionHeightMm}mm · Safe area inset ${s.top}/${s.right}/${s.bottom}/${s.left}mm · Default wrap: ${t.wrap.default}`;
+  const u=unitSuffix(project.units);
+  if(detailEl)detailEl.textContent=`Production ${formatLengthDisplay(t.productionWidthMm,project.units,1)}×${formatLengthDisplay(t.productionHeightMm,project.units,1)}${u} · Safe area inset ${formatLengthDisplay(s.top,project.units,1)}/${formatLengthDisplay(s.right,project.units,1)}/${formatLengthDisplay(s.bottom,project.units,1)}/${formatLengthDisplay(s.left,project.units,1)}${u} · Default wrap: ${t.wrap.default}`;
   const summaryEl=el('projectTemplateSummary');
-  if(summaryEl)summaryEl.textContent=`${t.displayName} · ${project.canvas.width}×${project.canvas.height}mm`;
+  if(summaryEl)summaryEl.textContent=`${t.displayName} · ${formatLengthDisplay(project.canvas.width,project.units,1)}×${formatLengthDisplay(project.canvas.height,project.units,1)}${u}`;
   // S-112: the plate-only dimension/design-target field group and the plate-only color swatch
   // (in place of the generic #cupColor preview-background swatch) are shown only while the Round
   // Dinner Plate template is active -- every other template's fields are unaffected.
@@ -3056,63 +4837,521 @@ function setWorkspaceMode(mode,skipUpdate){
   el('layoutStats').style.display=show2D?'flex':'none';el('cupStats').style.display=show3D?'flex':'none';
   if(!skipUpdate)updateAll(true);
 }
-el('viewTabDual').onclick=()=>setWorkspaceMode('dual');
-el('viewTab2D').onclick=()=>setWorkspaceMode('2d');
-el('viewTab3D').onclick=()=>setWorkspaceMode('preview');
-// Desktop always starts in Dual Workspace (matching the static HTML default); narrower/smaller
-// screens start collapsed to the 2D Canvas alone so neither panel is squeezed unusably thin. This
-// is only the *starting* mode -- the three tab buttons above let the user switch freely afterward
-// at any screen size. skipUpdate=true here: this runs before the boot-time updateAll(true) at the
-// bottom of this file, so there is no generated layout yet to redraw.
-if(!window.matchMedia('(min-width: 900px)').matches)setWorkspaceMode('2d',true);
+// RS-3011 Step 4: which of Design/Dual Workspace/2D Canvas/Object Preview was last active, so a
+// page reload lands back where the user left off -- a client-side UI preference, not project data,
+// same storage-only convention as FONT_FAVORITES_STORAGE_KEY above (see its own comment): a
+// dedicated localStorage key, read once at boot, degrading silently to a no-op on any storage
+// error, never routed through AutosaveManager (that class only ever persists
+// {project, selectedLayerId}).
+const ACTIVE_VIEW_STORAGE_KEY='rhinestoneStudio.activeView';
+const ACTIVE_VIEW_VALUES=new Set(['design','dual','2d','preview']);
+function loadActiveView(){try{const raw=localStorage.getItem(ACTIVE_VIEW_STORAGE_KEY);return ACTIVE_VIEW_VALUES.has(raw)?raw:null}catch{return null}}
+function persistActiveView(value){try{localStorage.setItem(ACTIVE_VIEW_STORAGE_KEY,value)}catch{}}
+el('viewTabDual').onclick=()=>{setWorkspaceMode('dual');persistActiveView('dual')};
+el('viewTab2D').onclick=()=>{setWorkspaceMode('2d');persistActiveView('2d')};
+el('viewTab3D').onclick=()=>{setWorkspaceMode('preview');persistActiveView('preview')};
+// RS-3011 Step 4: Design is the app's actual default view -- a browser with nothing yet in
+// ACTIVE_VIEW_STORAGE_KEY (first-ever visit) resolves to 'design', not 'dual'. A narrower/smaller
+// screen still always forces 2D-Canvas-only regardless of the resolved value (Sasha's explicit
+// decision: the narrow-viewport override wins even over a saved 'design'/'dual' preference) --
+// same narrow-viewport behavior this file has always had, just layered on top of the new
+// persisted-preference read instead of a hardcoded 'dual' start. The override is never written
+// back to storage: it's a viewport-driven display choice, not a new user preference, so the
+// original saved value survives for the next reload on a wider window. skipUpdate=true on the
+// non-Design branch below, same reasoning as before this change: this runs before the boot-time
+// updateAll(true) at the bottom of this file, so there is no generated layout yet to redraw.
+// bootActiveView is only *resolved* here -- the 'design' branch is *triggered* further down, right
+// after #menuDesign's own handler (see "RS-3011 Step 4: boot-time Design entry" there), because
+// setDrawMode()/workspaceModeBeforeDrawing aren't declared yet at this point in the file and this
+// must reuse the exact same call the click path uses, not a hand-rolled boot-only duplicate of it.
+let bootActiveView=loadActiveView();
+if(bootActiveView===null)bootActiveView='design';
+if(!window.matchMedia('(min-width: 900px)').matches)bootActiveView='2d';
+if(bootActiveView!=='design')setWorkspaceMode(bootActiveView,true);
 
-// ---- Safe-area toggle (view-only editor state; see the showSafeArea declaration above and
-// drawLayout()). No grid toggle exists here -- see the showSafeArea declaration's comment above. ----
-el('safeAreaToggle').onclick=()=>{showSafeArea=!showSafeArea;el('safeAreaToggle').setAttribute('aria-pressed',String(showSafeArea));el('settingsSafeAreaDefault').checked=showSafeArea;drawLayout()};
+// ---- RS-3010 Step 1/2a: drawing mode toggle group. Entering hands layoutCanvas to drawingTool's
+// own Paper.js scene (drawingTool.enter()) exactly like the pointerdown/keydown gates above
+// assume; exiting hands it back to the normal renderer (drawLayout()). resizeCanvas() is called
+// first so drawingTool's base fit scale is computed against the canvas's *current* pixel size,
+// the same dpr-aware sizing drawLayout() itself always uses.
+//
+// Design Step A correction: the two design rails plus #menuDesign are now the only entry points
+// (the old horizontal #drawToolGroup row is gone). Entering also forces the workspace into 2D-only
+// view (drawing mode's own Paper.js scene only ever owns the 2D canvas) -- workspaceModeBeforeDrawing
+// captures whatever mode was active so exiting can restore it, rather than always landing back on
+// '2d'. ----
+let workspaceModeBeforeDrawing=null;
+function setDrawMode(active,mode){
+  if(active){
+    workspaceModeBeforeDrawing=workspaceMode;
+    // Force 2D-only view before drawingTool.enter() measures layoutCanvas's box below -- same
+    // "reflow before measuring" reasoning as the display toggles that follow: switching away from
+    // Dual Workspace changes #panel2D's own CSS layout (position:relative/flex sizing vs. the
+    // absolute/inset sizing single-view mode uses), so this must land before enter()'s
+    // getBoundingClientRect() call, not after.
+    setWorkspaceMode('2d');
+    // Show the hint text -- letting the toolbar finish reflowing/wrapping around it -- BEFORE
+    // calling drawingTool.enter(), which measures layoutCanvas's current box via
+    // resyncViewSize(). Doing this in the other order sizes Paper's viewport against the
+    // canvas's PRE-reflow box: if showing this UI causes the toolbar to wrap onto a second line
+    // (more likely now that Step 2a added Rect/Ellipse buttons alongside Draw), the canvas's
+    // available CSS height shrinks immediately afterward but its already-sized Paper.js backing
+    // store does not, leaving drawn content misaligned/squished for the rest of the session.
+    // Setting style.display here forces the browser to recompute layout by the time enter()'s
+    // getBoundingClientRect() call runs, since both happen in the same synchronous task.
+    el('drawModeHint').style.display='';
+    el('designToolOptionsPanel').style.display='';
+    el('designToolRailLeft').style.display='';
+    el('designToolRailRight').style.display='';
+    // RS-3010 Design Step C correction: reserve room for both rails so #layout's rendered box
+    // stops extending underneath them (see the #panel2D.design-rails-inset CSS rule) -- added here,
+    // alongside the style.display toggles above, for the exact same "same synchronous task forces
+    // the reflow enter()'s getBoundingClientRect() below reads" reason this block's own comment
+    // already documents for those.
+    el('panel2D').classList.add('design-rails-inset');
+    // RS-3010 Design Step A correction #2: setWorkspaceMode('2d') above already forces the
+    // workspace to the 2D Canvas view -- the Dual Workspace/2D Canvas/Object Preview tab row is
+    // dead UI while Design can't switch away from it, so hide the whole tab row too.
+    el('workspaceViewTabs').style.display='none';
+    // drawingTool.enter() resyncs layoutCanvas's size itself (see DrawingCanvasTool.js's
+    // resyncViewSize()) -- app.js must not also call resizeCanvas() here, or the two would fight
+    // over which one's dpr-scaled canvas.width/height sticks.
+    drawingTool.enter({width:project.canvas.width,height:project.canvas.height},38*Math.max(1,devicePixelRatio||1),mode);
+    el('status').textContent='Drawing mode: drag on the canvas to draw a shape. It becomes a Path layer immediately.';
+  }else{
+    drawingTool.exit();
+    el('drawModeHint').style.display='none';
+    el('designToolOptionsPanel').style.display='none';
+    el('designToolRailLeft').style.display='none';
+    el('designToolRailRight').style.display='none';
+    el('workspaceViewTabs').style.display='';
+    // RS-3010 Design Step C correction: drop the rail inset before setWorkspaceMode() below reads
+    // #layout's box (via its own updateAll(true) -> resizeCanvas()) -- landing it here, alongside
+    // the other hide-toggles and before that read, keeps #layout at its normal full width the
+    // instant Design mode is no longer active, matching the isActive gate the rails themselves use.
+    el('panel2D').classList.remove('design-rails-inset');
+    // Restores whatever workspace mode was active before this session started (setWorkspaceMode()
+    // already runs updateAll(true) internally, which covers the drawLayout()/drawCup()/stats
+    // refresh this branch needed anyway -- no separate drawLayout() call required).
+    setWorkspaceMode(workspaceModeBeforeDrawing);
+    workspaceModeBeforeDrawing=null;
+    // RS-3010 Design Step A correction #2: setDrawMode(true) above sets a "Drawing mode: ..."
+    // status message that otherwise sticks around indefinitely after leaving Design -- reset to
+    // the app's neutral status (see the two other 'Ready' resets in this file).
+    el('status').textContent='Ready';
+  }
+  // RS-3011 Step 3a: covers entering/exiting Design when the selection itself doesn't change (a
+  // shape already selected before this toggle) -- syncSelectedControlsFromLayer()'s own
+  // relocateFieldGroups() call only fires on an actual selection change, not on this toggle alone.
+  relocateFieldGroups();
+  updateDrawToolButtons();
+}
+function updateDrawToolButtons(){
+  const active=drawingTool.isActive,mode=drawingTool.mode;
+  const showSlotWidth=active&&mode==='slot';
+  el('drawSlotWidthField').style.display=showSlotWidth?'':'none';
+  el('drawSlotWidthField').title=`Slot width (${unitSuffix(project.units)})`;
+  el('drawSlotWidthMm').style.display=showSlotWidth?'':'none';
+  // RS-topmenu-active-state: #menuDesign has no rail/mode of its own -- it reflects Design mode
+  // as a whole (entering Design via any rail tool, or the Design menu button itself, all count).
+  el('menuDesign').setAttribute('aria-pressed',String(active));
+  // RS-topmenu-active-persist: entering Design mode is the moment the user has actually left
+  // whichever Lightbox section was highlighted -- clear it here rather than on every rail-tool
+  // switch within Design (setActiveTopMenuButton()'s no-op-if-same-id guard makes repeated calls
+  // while active stays true harmless, so this needs no separate edge-transition tracking).
+  if(active)setActiveTopMenuButton(null);
+  // RS-3010 Design Step A correction: the old horizontal row's five preset buttons are gone --
+  // these two rails (split left/right) are now the only aria-pressed sync targets.
+  el('railSelectToggle').setAttribute('aria-pressed',String(active&&mode==='select'));
+  el('railLassoToggle').setAttribute('aria-pressed',String(active&&mode==='lasso'));
+  el('railDrawToggle').setAttribute('aria-pressed',String(active&&mode==='freehand'));
+  el('railRectToggle').setAttribute('aria-pressed',String(active&&mode==='rect'));
+  el('railEllipseToggle').setAttribute('aria-pressed',String(active&&mode==='ellipse'));
+  el('railSlotToggle').setAttribute('aria-pressed',String(active&&mode==='slot'));
+  el('railPolygonToggle').setAttribute('aria-pressed',String(active&&mode==='polygon'));
+  el('railPenToggle').setAttribute('aria-pressed',String(active&&mode==='pen'));
+  el('railPaintToggle').setAttribute('aria-pressed',String(active&&mode==='paint'));
+  el('railStampToggle').setAttribute('aria-pressed',String(active&&mode==='stamp'));
+  el('railTraceToggle').setAttribute('aria-pressed',String(active&&mode==='trace'));
+  el('railEraserToggle').setAttribute('aria-pressed',String(active&&mode==='eraser'));
+  // RS-3011 Step 13 decision 4a: eraserRadiusField/eraserRadiusMm's own visibility toggle, same
+  // active-and-mode-matches idiom as drawSlotWidthField/drawSlotWidthMm above (two sibling
+  // elements in #designToolOptionsPanel, toggled individually) -- kept in sync with
+  // eraserSettings.radiusMm every time it's shown, so it always reflects the current brush size
+  // regardless of which entry point (rail click, 'x' shortcut, '[' / ']' nudge) last changed it.
+  const showEraserRadius=active&&mode==='eraser';
+  el('eraserRadiusField').style.display=showEraserRadius?'':'none';
+  el('eraserRadiusField').title=`Eraser brush radius (${unitSuffix(project.units)}) -- also adjustable with [ / ] while Eraser is active`;
+  el('eraserRadiusMm').style.display=showEraserRadius?'':'none';
+  if(showEraserRadius)setLengthField('eraserRadiusMm',eraserSettings.radiusMm);
+  // RS-3014 Step 3: eraserModeField/eraserMode's own visibility toggle, same convention as
+  // eraserRadiusField/eraserRadiusMm just above -- kept in sync with eraserSettings.mode every
+  // time it's shown.
+  el('eraserModeField').style.display=showEraserRadius?'':'none';
+  el('eraserMode').style.display=showEraserRadius?'':'none';
+  if(showEraserRadius)el('eraserMode').value=eraserSettings.mode;
+  // RS-3014 Step 1: Stamp/Trace/Paint's own field-group visibility toggles, same
+  // active-and-mode-matches idiom as showEraserRadius just above, kept in sync with each tool's own
+  // settings object every time it's shown, so it always reflects the current style regardless of
+  // which entry point (rail click, panel field) last changed it.
+  const showStampStyle=active&&mode==='stamp';
+  el('stampSizeField').style.display=showStampStyle?'':'none';
+  el('stampSizeField').title=`Stamp stone size (${unitSuffix(project.units)})`;
+  el('stampSizeMm').style.display=showStampStyle?'':'none';
+  el('stampColorField').style.display=showStampStyle?'':'none';
+  el('stampColor').style.display=showStampStyle?'':'none';
+  if(showStampStyle){setLengthField('stampSizeMm',stampSettings.sizeMm);el('stampColor').value=stampSettings.color}
+  const showTraceStyle=active&&mode==='trace';
+  el('traceSizeField').style.display=showTraceStyle?'':'none';
+  el('traceSizeField').title=`Trace stone size (${unitSuffix(project.units)})`;
+  el('traceSizeMm').style.display=showTraceStyle?'':'none';
+  el('traceGapField').style.display=showTraceStyle?'':'none';
+  el('traceGapField').title=`Trace stone gap (${unitSuffix(project.units)})`;
+  el('traceGapMm').style.display=showTraceStyle?'':'none';
+  el('traceColorField').style.display=showTraceStyle?'':'none';
+  el('traceColor').style.display=showTraceStyle?'':'none';
+  if(showTraceStyle){setLengthField('traceSizeMm',traceSettings.sizeMm);setLengthField('traceGapMm',traceSettings.gapMm);el('traceColor').value=traceSettings.color}
+  const showPaintStyle=active&&mode==='paint';
+  el('paintSizeField').style.display=showPaintStyle?'':'none';
+  el('paintSizeField').title=`Paint stone size (${unitSuffix(project.units)})`;
+  el('paintSizeMm').style.display=showPaintStyle?'':'none';
+  el('paintGapField').style.display=showPaintStyle?'':'none';
+  el('paintGapField').title=`Paint stone gap (${unitSuffix(project.units)})`;
+  el('paintGapMm').style.display=showPaintStyle?'':'none';
+  el('paintColorField').style.display=showPaintStyle?'':'none';
+  el('paintColor').style.display=showPaintStyle?'':'none';
+  if(showPaintStyle){setLengthField('paintSizeMm',paintSettings.sizeMm);setLengthField('paintGapMm',paintSettings.gapMm);el('paintColor').value=paintSettings.color}
+}
+// RS-3011 Step 13 decision 4: seeds eraserSettings.radiusMm from the currently selected layer's own
+// stoneSize (mirrors getStoneDefaults()'s own `base.stoneSize||2` convention above) the FIRST time
+// Eraser mode is entered in this session -- eraserRadiusSeeded latches true right after, so every
+// later entry leaves radiusMm exactly as the user last set it, regardless of which layer they next
+// erase on. Called from setDrawTool() below, before either of its own dispatch branches.
+function seedEraserRadiusIfNeeded(){
+  if(eraserRadiusSeeded)return;
+  eraserRadiusSeeded=true;
+  const base=selectedLayer();
+  eraserSettings.radiusMm=Math.max(0.5,base.stoneSize||2);
+  drawingTool.setEraserRadiusMm(eraserSettings.radiusMm);
+}
+// RS-3014 Step 1: seeds stampSettings/traceSettings/paintSettings from the currently selected
+// layer's own stoneSize/gap/color (mirrors seedEraserRadiusIfNeeded()'s own convention exactly) the
+// FIRST time each tool is entered in this session -- each tool's own *StyleSeeded flag latches true
+// right after, so every later entry leaves that tool's settings exactly as the user last set them,
+// regardless of which layer they next act on. Called from setDrawTool() below, before either of its
+// own dispatch branches.
+function seedStampStyleIfNeeded(){
+  if(stampStyleSeeded)return;
+  stampStyleSeeded=true;
+  const base=selectedLayer();
+  stampSettings.sizeMm=base.stoneSize||2;
+  stampSettings.color=base.color||'gold';
+  drawingTool.setStampStyle(stampSettings);
+}
+function seedTraceStyleIfNeeded(){
+  if(traceStyleSeeded)return;
+  traceStyleSeeded=true;
+  const base=selectedLayer();
+  traceSettings.sizeMm=base.stoneSize||2;
+  traceSettings.gapMm=base.gap||.3;
+  traceSettings.color=base.color||'gold';
+  drawingTool.setTraceStyle(traceSettings);
+}
+function seedPaintStyleIfNeeded(){
+  if(paintStyleSeeded)return;
+  paintStyleSeeded=true;
+  const base=selectedLayer();
+  paintSettings.sizeMm=base.stoneSize||2;
+  paintSettings.gapMm=base.gap||.3;
+  paintSettings.color=base.color||'gold';
+}
+function setDrawTool(mode){
+  if(mode==='eraser')seedEraserRadiusIfNeeded();
+  if(mode==='stamp')seedStampStyleIfNeeded();
+  if(mode==='trace')seedTraceStyleIfNeeded();
+  if(mode==='paint')seedPaintStyleIfNeeded();
+  if(drawingTool.isActive){
+    // RS-3011 issue #3 fix: re-clicking the already-active tool's own rail button is a no-op --
+    // it must never exit Design. Select/Draw/Rect/Ellipse/Slot/Polygon are all persistent
+    // tool-rail buttons now (not just a single Draw toggle), so "click active tool again" no
+    // longer reads as "leave Design" the way it did when Draw was the only entry point. Design's
+    // own enter/exit toggle now lives on #menuDesign instead (below), independent of tool state.
+    if(drawingTool.mode===mode)return;
+    drawingTool.setMode(mode);
+    updateDrawToolButtons();
+    return;
+  }
+  setDrawMode(true,mode);
+}
+el('drawSlotWidthMm').oninput=()=>{stashTypedLengthField('drawSlotWidthMm');drawingTool.setSlotWidthMm(readLengthField('drawSlotWidthMm'))};
+el('railSelectToggle').onclick=()=>setDrawTool('select');
+el('railLassoToggle').onclick=()=>setDrawTool('lasso');
+el('railDrawToggle').onclick=()=>setDrawTool('freehand');
+el('railRectToggle').onclick=()=>setDrawTool('rect');
+el('railEllipseToggle').onclick=()=>setDrawTool('ellipse');
+el('railSlotToggle').onclick=()=>setDrawTool('slot');
+el('railPolygonToggle').onclick=()=>setDrawTool('polygon');
+el('railPenToggle').onclick=()=>setDrawTool('pen');
+el('railPaintToggle').onclick=()=>setDrawTool('paint');
+el('railStampToggle').onclick=()=>setDrawTool('stamp');
+el('railTraceToggle').onclick=()=>setDrawTool('trace');
+el('railEraserToggle').onclick=()=>setDrawTool('eraser');
+// RS-3015: visible shortcut-key badges on the rail buttons above -- reads DRAW_TOOL_SHORTCUT_KEYS
+// (rather than hardcoding letters here) so the badge can never drift out of sync with the actual
+// keybinding.
+function initDrawToolShortcutBadges(){
+  const modeToKey={};
+  for(const key in DRAW_TOOL_SHORTCUT_KEYS)modeToKey[DRAW_TOOL_SHORTCUT_KEYS[key]]=key;
+  const idsByMode={railSelectToggle:'select',railLassoToggle:'lasso',railDrawToggle:'freehand',
+    railRectToggle:'rect',railEllipseToggle:'ellipse',railSlotToggle:'slot',railPolygonToggle:'polygon',
+    railPenToggle:'pen',railPaintToggle:'paint',railStampToggle:'stamp',railTraceToggle:'trace',
+    railEraserToggle:'eraser'};
+  for(const id in idsByMode){
+    const key=modeToKey[idsByMode[id]];
+    if(key)el(id).setAttribute('data-shortcut',key.toUpperCase());
+  }
+}
+initDrawToolShortcutBadges();
+// RS-3011 Step 13 decision 4a: the second of the two required radius-adjustment paths (the first
+// is the '[' / ']' keydown handling below) -- writes straight through to both eraserSettings (this
+// module's own runtime state) and drawingTool.setEraserRadiusMm() (its live ghost/drag-preview
+// radius), same "own state + tool's live value, both updated together" pattern the '[' / ']'
+// handler below follows.
+el('eraserRadiusMm').oninput=()=>{
+  const parsed=readLengthField('eraserRadiusMm');
+  if(!Number.isFinite(parsed))return;
+  eraserSettings.radiusMm=Math.max(0.5,parsed);
+  drawingTool.setEraserRadiusMm(eraserSettings.radiusMm);
+};
+// RS-3014 Step 3: Eraser's own mode toggle, same "own state + tool's live value, both updated
+// together" pattern as #eraserRadiusMm's own handler just above.
+el('eraserMode').onchange=()=>{
+  eraserSettings.mode=el('eraserMode').value;
+  drawingTool.setEraserMode(eraserSettings.mode);
+};
+// RS-3014 Step 1: Stamp/Trace/Paint's own panel field handlers, same "own state + tool's live
+// value, both updated together" pattern as #eraserRadiusMm's own handler just above. Paint has no
+// drawingTool-side setter to push into (its lasso preview doesn't render stone-colored geometry --
+// see onPaintStroke's own doc comment above), so its handlers only update paintSettings.
+el('stampSizeMm').oninput=()=>{
+  const parsed=readLengthField('stampSizeMm');
+  if(!Number.isFinite(parsed))return;
+  stampSettings.sizeMm=parsed;
+  drawingTool.setStampStyle(stampSettings);
+};
+el('stampColor').oninput=()=>{
+  stampSettings.color=el('stampColor').value;
+  drawingTool.setStampStyle(stampSettings);
+};
+el('traceSizeMm').oninput=()=>{
+  const parsed=readLengthField('traceSizeMm');
+  if(!Number.isFinite(parsed))return;
+  traceSettings.sizeMm=parsed;
+  drawingTool.setTraceStyle(traceSettings);
+};
+el('traceGapMm').oninput=()=>{
+  const parsed=readLengthField('traceGapMm');
+  if(!Number.isFinite(parsed))return;
+  traceSettings.gapMm=parsed;
+  drawingTool.setTraceStyle(traceSettings);
+};
+el('traceColor').oninput=()=>{
+  traceSettings.color=el('traceColor').value;
+  drawingTool.setTraceStyle(traceSettings);
+};
+el('paintSizeMm').oninput=()=>{
+  const parsed=readLengthField('paintSizeMm');
+  if(!Number.isFinite(parsed))return;
+  paintSettings.sizeMm=parsed;
+};
+el('paintGapMm').oninput=()=>{
+  const parsed=readLengthField('paintGapMm');
+  if(!Number.isFinite(parsed))return;
+  paintSettings.gapMm=parsed;
+};
+el('paintColor').oninput=()=>{
+  paintSettings.color=el('paintColor').value;
+};
+// RS-3011 Step 8 Phase B: Import SVG is a one-shot action, not a draw-tool mode -- clicking it
+// never calls setDrawTool()/setMode(), it just opens its own hidden file input, matching the
+// existing top-nav Import Lightbox's own el('importSvg').onclick pattern below (a fully separate
+// input/handler -- that one's pipeline stores svgSource verbatim for an 'svg'-type layer; this one
+// runs the file through Phase A's Paper.js-native flatten pipeline into a real 'path' layer).
+el('railImportSvgToggle').onclick=()=>el('designImportSvgFile').click();
+el('designImportSvgFile').addEventListener('change',async e=>{
+  const file=e.target.files[0];e.target.value='';if(!file)return;
+  try{
+    const svgSource=await file.text();
+    const item=importSvgIntoItem(svgSource,project.canvas.width,project.canvas.height);
+    const flattened=flattenPathToContours(item,FLATTEN_TOLERANCE_MM);
+    if(!flattened.contours.length){el('status').textContent=`Import failed: "${file.name}" has no usable shape geometry.`;return}
+    const base=selectedLayer();
+    const{layer,warning}=createPathLayerFromContours(flattened,{stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold',pathName:file.name});
+    // RS-3011 Step 7: same gate every other Design-created shape gets -- the outline appears
+    // immediately, stones wait for the "Generate Stones" button.
+    layer.stonesGenerated=false;
+    commitHistory();
+    project.layers.push(layer);
+    selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);
+    syncSelectedControlsFromLayer();
+    await updateAll(true);
+    // Design's own on-canvas selection (`drawingTool`'s internal selectedIds) only exists once
+    // syncFromProjectLayers() (run synchronously inside updateAll() above, while Design is active)
+    // has materialized this brand-new layer into a real board.shapes item -- see
+    // selectShapeForLayer()'s own doc comment for why this call is needed at all.
+    drawingTool.selectShapeForLayer(layer.id);
+    const warningNote=warning?` — ${warning}`:'';
+    el('status').textContent=`Imported ${file.name}: ${flattened.contours.length} shape(s)${warningNote}`;
+  }catch(error){
+    console.error('Design SVG import failed',error);
+    el('status').textContent=`SVG import failed: ${error.message}`;
+  }
+});
+// RS-3011 nav-toggle fix: #menuDesign no longer toggles. It always means "go to Design" --
+// matching setDrawTool()'s own same-mode no-op convention above (fa80918): entering is
+// idempotent, clicking it while Design is already active does nothing. There is no longer a
+// direct "exit Design" button -- Dual Workspace is reached only by opening one of the Lightboxes
+// above, a deliberate tradeoff.
+el('menuDesign').onclick=()=>{
+  if(drawingTool.isActive)return;
+  setDrawTool('select');persistActiveView('design');
+};
+// RS-3011 Step 4: boot-time Design entry -- resolved above (bootActiveView==='design'), but
+// deferred until here because setDrawMode()/workspaceModeBeforeDrawing aren't declared until this
+// point in the file, and this reuses the exact same call the click-driven path above uses so the
+// "RS-3010 Design Step A correction #2" DOM-timing ordering (style.display toggles land before
+// drawingTool.enter()'s getBoundingClientRect() call, in the same synchronous task) applies
+// identically at boot, not a hand-rolled boot-only duplicate of it. Always starts in Select mode,
+// not the last-used tool -- simpler/safer to always start fresh here.
+//
+// A real boot-only race was found and fixed here during Playwright verification (comparing
+// boot-time vs. click-triggered Design entry, scenario (g) below): #layoutStats' own text is only
+// populated once updateAll()'s `await engine.generate(project)` resolves (see updateStats()), which
+// on the click path has always already happened at least once by the time a user can click
+// #menuDesign -- #layoutStats is already at its real, final height, so entering Design never
+// observes it change. At boot, #layoutStats has never been populated yet, so if setDrawMode(true,
+// ...) below ran immediately, drawingTool.enter()'s resyncViewSize() would measure the canvas
+// against #layoutStats' short placeholder height, and the real stats text landing moments later
+// (asynchronously, after generation resolves) would shrink #layoutStats -- and therefore #layout's
+// own box -- out from under an already-fixed Paper.js backing store, with nothing to resync it
+// afterward. Settling one real generation cycle first (in whatever mode the static HTML/`
+// workspaceMode` default already shows -- explicit here rather than assumed) means #layoutStats is
+// already at its final height before setDrawMode()'s own DOM-timing care runs.
+// RS-3011 Step 4 flash fix: setWorkspaceMode('dual',true) below applies Dual Workspace's full
+// visible DOM state (two-panel layout, workspace tabs, Align & Snap / Front-Left-Right-Back
+// toolbars) before the settle-generation await yields control back to the browser -- confirmed via
+// CDP screencast to produce a real, painted ~25-30ms flash of Dual Workspace before Design appears.
+// visibility:hidden (not display:none) keeps every element inside .workspace participating in
+// layout -- #layoutStats/#cupStats etc. still measure/settle against their real box, preserving the
+// scenario (g) canvas-sizing fix documented above -- while producing no visible paint for the
+// duration. Scoped to .workspace (the single ancestor of the two-panel canvas layout, the workspace
+// tabs, and the toolbar controls the flash screenshot showed -- everything Dual Workspace's
+// boot-time state paints, and also everything Design's own rails/panel end up in) rather than
+// <body>, so the top menu and left panel (already correct, unaffected by this gap) keep rendering
+// normally throughout.
+if(bootActiveView==='design'){
+  const workspaceEl=document.querySelector('.workspace');
+  if(workspaceEl)workspaceEl.style.visibility='hidden';
+  setWorkspaceMode('dual',true);
+  await updateAll(true);
+  setDrawMode(true,'select');
+  if(workspaceEl)workspaceEl.style.visibility='';
+}
+// Figma-style trackpad/mouse mapping, kept out of the normal pointerdown/move/up flow entirely so
+// a drag on the canvas always draws and never pans: plain scroll pans (deltaX/deltaY), Ctrl/Cmd+
+// scroll (or a trackpad pinch, which the browser reports as wheel+ctrlKey) zooms.
+layoutCanvas.addEventListener('wheel',e=>{if(!drawingTool.isActive)return;drawingTool.onWheel(e)},{passive:false});
+// RS-3011 Step 9 follow-up: double-click finishes an in-progress Pen path as an open shape, an
+// alternative to clicking back on the first anchor (which closes it). hasInProgressPen already
+// folds in the interactionKind==='pen' check, so this doesn't duplicate it.
+layoutCanvas.addEventListener('dblclick',e=>{
+  if(!drawingTool.isActive||!drawingTool.hasInProgressPen)return;
+  drawingTool.finishOpenPenPath();
+});
 
 // ---- Left panel Actions shortcuts: each calls the exact same function as its top-bar/per-row
 // equivalent -- no new history, selection, or export logic. ----
 el('actionUndo').onclick=()=>performUndo();
 el('actionRedo').onclick=()=>performRedo();
-el('actionDuplicate').onclick=()=>duplicateLayer(selectedLayerId);
-el('actionDelete').onclick=()=>deleteLayer(selectedLayerId);
+// RS-3013 Step 3: a selected REGION (drawingTool.activeSelection.kind==='region') duplicates just
+// that region via duplicateRegionInPathLayer() above, then hands the new copy's id/polygon to
+// drawingTool.setActiveSelectionToRegion() so its outline renders as the current selection
+// immediately, without a second hit-test round-trip. A null/undefined activeSelection or a 'draft'
+// kind (an in-progress rect/lasso selection with no committed region behind it yet) falls through
+// unchanged to today's whole-layer duplicateLayer(selectedLayerId) -- same "leave drafts alone
+// entirely" rule Step 2's region-move already followed.
+el('actionDuplicate').onclick=()=>{
+  const selection=drawingTool.activeSelection;
+  if(selection&&selection.kind==='region'){
+    const result=duplicateRegionInPathLayer(selection.layerId,selection.regionId);
+    if(result)drawingTool.setActiveSelectionToRegion(selection.layerId,result.newRegionId,result.polygon);
+    return;
+  }
+  duplicateLayer(selectedLayerId);
+};
+// RS-3013 Step 4: shared by both Delete entry points -- this button's own onclick immediately below,
+// and the global keydown handler's Delete/Backspace branch inside `if(drawingTool.isActive){...}` --
+// same "factor the shared logic once" precedent Step 2's own tryStartRegionMove() fix already set,
+// so neither entry point carries its own duplicated region-vs-fallthrough branch. A selected REGION
+// (drawingTool.activeSelection.kind==='region') deletes just that region via
+// deleteRegionFromPathLayer(), then clears the selection via drawingTool.clearActiveSelection() --
+// unlike Step 3's duplicate, delete leaves NOTHING selected afterward; it does not fall back to
+// selecting the parent shape, matching deleteSelected()'s own existing behavior for a whole shape. A
+// null/undefined activeSelection falls through unchanged to the existing drawingTool.deleteSelected().
+// Bulk-delete-by-area: a 'draft' kind (an in-progress rect/lasso area from Select/Lasso, not yet a
+// committed region) USED to fall through to deleteSelected() too, but Step 4's own diagnosis already
+// established that fallback is a no-op here -- the draft's own commit clears selectedIds before
+// Delete can act, so nothing was ever actually working in this case. This branch replaces that dead
+// fallback: it erases every stone (base-fill, region-patch, and stamped alike) whose position falls
+// inside the draft's own area, via the shared eraseStonesWithinTest() (see its own doc comment near
+// deleteRegionFromPathLayer above) -- passing isPointInActiveSelection (this file's own standalone
+// function, the exact same test already wired into drawingTool's own hooks for Stamp/Trace, see its
+// doc comment near resolvePaintTargetTwoPass) as the withinTest, rather than reimplementing a second
+// rect-bounds/lasso-polygon test here. Region OBJECTS are never touched -- only their rendered stones
+// within the area disappear, exactly like ordinary Eraser use already does; a region left fully
+// hollowed out stays present in layer.regions as an empty-output object, no new behavior needed. Per
+// Step 1's own resolveSelectionTarget() contract, a draft always resolves to exactly one layer, so
+// this never needs to reason about multiple targets. Clears the selection afterward either way --
+// nothing is left "selected" once its contents are gone, same as the region branch above.
+async function deleteCurrentSelection(){
+  const selection=drawingTool.activeSelection;
+  if(selection&&selection.kind==='region'){
+    deleteRegionFromPathLayer(selection.layerId,selection.regionId);
+    drawingTool.clearActiveSelection();
+    return;
+  }
+  if(selection&&selection.kind==='draft'){
+    const targetLayer=project.layers.find(l=>l.id===selection.layerId&&l.type==='path');
+    if(targetLayer){
+      const withinTest=(xMm,yMm)=>isPointInActiveSelection({xMm,yMm},selection);
+      const result=await eraseStonesWithinTest(targetLayer,withinTest);
+      el('status').textContent=result
+        ?`Erased ${result.removedCount} stone${result.removedCount===1?'':'s'} within the selected area.`
+        :'Nothing to erase within the selected area.';
+    }
+    drawingTool.clearActiveSelection();
+    return;
+  }
+  drawingTool.deleteSelected();
+}
+el('actionDelete').onclick=()=>deleteCurrentSelection();
 function saveProjectDownload(){el('exportProject').click()}
 el('actionSave').onclick=saveProjectDownload;
 el('saveProject').onclick=saveProjectDownload;
 
-// ---- Design Library (RS-1015): save/browse/reuse rhinestone designs. See
-// docs/specifications/RS-1015-DesignLibrary.md. A library item's `data` is never a new schema --
-// it is a verbatim, deep-cloned copy of the exact ad hoc project/layer JSON `#exportProject`/
-// `duplicateLayer()` already read and write (see `src/library/LibraryTransform.js`). Thumbnails
-// reuse the existing `engine.generate()` bridge + the permanent `renderProductionLayout()` against
-// an offscreen canvas -- the same generate-then-render call sequence `drawLayout()` already
-// performs against the live canvas, never a second rendering pipeline. Insertion/new-project reuse
-// the existing commitHistory()/updateAll()/history.clear() patterns every other layer-adding or
-// project-replacing action already uses, so undo/redo, Production Sheet, and every exporter work
-// against library-sourced layers with zero further changes. ----
-const LIBRARY_STORAGE_KEY='rhinestone-studio:design-library';
+// ---- Thumbnails (RS-2001): shared generate -> render -> capture sequence reused by the Gallery
+// for its own cards/previews -- the existing `engine.generate()` bridge + the permanent
+// `renderProductionLayout()` against an offscreen canvas, the same generate-then-render call
+// sequence `drawLayout()` already performs against the live canvas, never a second rendering
+// pipeline. ----
 const LIBRARY_THUMB_WIDTH_PX=260,LIBRARY_THUMB_HEIGHT_PX=170;
-const LIBRARY_NEW_PROJECT_DEFAULTS={defaultProduct:'mug',defaultCupColor:'#1f3556',defaultWrap:'front',projectVersion:2};
-let designLibrary;
-try{
-  designLibrary=new DesignLibrary({storageAdapter:createLocalStorageAdapter(LIBRARY_STORAGE_KEY)});
-}catch(error){
-  console.warn('Design Library: localStorage is unavailable in this environment; using in-memory storage for this session only.',error);
-  designLibrary=new DesignLibrary({storageAdapter:createMemoryStorageAdapter()});
-}
-let libraryQuery='',libraryCategory='All',librarySortDir='asc',pendingLibraryDeleteId=null;
 
-function currentSelectedLayers(){return project.layers.filter(l=>selectedLayerIds.has(l.id))}
-
-// RS-2001: generalized from the Design-Library-only generateLibraryThumbnail() so the Gallery
-// reuses the exact same generate -> render -> capture sequence for its own cards/previews, rather
-// than a second thumbnail renderer.
 async function generateProjectThumbnail(tempProject){
   try{
     const stoneLayout=await engine.generate(tempProject);
     const canvas=document.createElement('canvas');
     canvas.width=LIBRARY_THUMB_WIDTH_PX;canvas.height=LIBRARY_THUMB_HEIGHT_PX;
-    renderProductionLayout(canvas.getContext('2d'),stoneLayout,{widthPx:canvas.width,heightPx:canvas.height,paddingPx:12});
+    renderProductionLayout(canvas.getContext('2d'),stoneLayout,{widthPx:canvas.width,heightPx:canvas.height,paddingPx:12,units:tempProject.units||'mm'});
     return canvas.toDataURL('image/png');
   }catch(error){
     console.error('Thumbnail generation failed',error);
@@ -3120,159 +5359,13 @@ async function generateProjectThumbnail(tempProject){
   }
 }
 
-function updateLibrarySaveButtons(){
-  const hasSelection=selectedLayerIds.size>0;
-  el('librarySaveSelection').disabled=!hasSelection;
-  el('libraryDisabledHint').style.display=hasSelection?'none':'block';
-}
-
-function libraryFilteredSortedItems(){
-  const searched=designLibrary.search(libraryQuery);
-  const filtered=designLibrary.filterByCategory(searched,libraryCategory);
-  return designLibrary.sortByName(filtered,librarySortDir);
-}
-
-function renderLibraryGrid(){
-  const all=designLibrary.list();
-  const items=libraryFilteredSortedItems();
-  const categories=['All',...designLibrary.categories()];
-  el('libraryCategoryFilter').innerHTML=categories.map(c=>`<option value="${escapeHtml(c)}" ${c===libraryCategory?'selected':''}>${c==='All'?'All categories':escapeHtml(c)}</option>`).join('');
-  el('libraryEmptyState').style.display=all.length===0?'block':'none';
-  el('libraryNoResults').style.display=(all.length>0&&items.length===0)?'block':'none';
-  el('libraryGrid').innerHTML=items.map(item=>`<div class="library-card" data-item="${item.id}">
-      <div class="library-card-thumb">${item.thumbnail?`<img src="${item.thumbnail}" alt="Preview of ${escapeHtml(item.name)}">`:'<span class="library-card-thumb-empty">No preview</span>'}</div>
-      <div class="library-card-body">
-        <h4 data-role="name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</h4>
-        <div class="library-card-meta"><span class="library-badge">${item.kind==='project'?'Project':'Selection'}</span><span class="library-badge">${escapeHtml(item.category)}</span></div>
-      </div>
-      <div class="library-card-actions">
-        <button class="btn" data-action="insert" title="Insert into the current project">Insert</button>
-        <button class="btn" data-action="newProject" title="Start a new project from this design">New Project</button>
-        <button class="btn" data-action="rename" title="Rename this design">Rename</button>
-        <button class="btn" data-action="duplicate" title="Duplicate this design">Duplicate</button>
-        <button class="btn danger" data-action="delete" title="Delete this design">Delete</button>
-      </div>
-    </div>`).join('');
-}
-
-function onLibraryOpen(){
-  libraryQuery='';libraryCategory='All';librarySortDir='asc';
-  el('librarySearch').value='';el('librarySort').value='asc';el('libraryStatus').textContent='';
-  updateLibrarySaveButtons();
-  renderLibraryGrid();
-}
-
-async function saveProjectToLibrary(){
-  const name=el('librarySaveName').value.trim()||project.name||DEFAULT_PROJECT_NAME;
-  const data=buildProjectItemData(project);
-  const thumbnail=await generateProjectThumbnail(project);
-  designLibrary.add({kind:'project',name,data,thumbnail});
-  el('librarySaveName').value='';
-  renderLibraryGrid();
-  el('libraryStatus').textContent=`Saved "${name}" to the Design Library.`;
-}
-
-async function saveSelectionToLibrary(){
-  const layers=currentSelectedLayers();
-  if(layers.length===0)return;
-  const name=el('librarySaveName').value.trim()||'Untitled Selection';
-  const data=buildSelectionItemData(layers,project.canvas);
-  const thumbnail=await generateProjectThumbnail({...project,layers});
-  designLibrary.add({kind:'selection',name,data,thumbnail});
-  el('librarySaveName').value='';
-  renderLibraryGrid();
-  el('libraryStatus').textContent=`Saved "${name}" to the Design Library.`;
-}
-
-function insertLibraryItem(id){
-  const item=designLibrary.get(id);if(!item)return;
-  const newLayers=prepareLayersForInsert(getInsertableLayers(item));
-  commitHistory();
-  project.layers.push(...newLayers);
-  selectedLayerIds=selectMany(newLayers.map(l=>l.id));
-  selectedLayerId=newLayers[newLayers.length-1].id;
-  syncSelectedControlsFromLayer();
-  updateAll(true);
-  updateLibrarySaveButtons();
-  el('libraryStatus').textContent=`Inserted "${item.name}" (${newLayers.length} layer${newLayers.length===1?'':'s'}).`;
-}
-
-function createProjectFromLibraryItem(id){
-  const item=designLibrary.get(id);if(!item)return;
-  const built=buildProjectFromItem(item,LIBRARY_NEW_PROJECT_DEFAULTS);
-  project=validateProject(built);
-  selectedLayerId=project.layers[0].id;selectedLayerIds=selectOnly(selectedLayerId);
-  // Mirrors #importProjectFile's exact "loading/replacing a project is a fresh start, not an
-  // undoable edit" history-clear + dirty-baseline-reset pattern.
-  history.clear();cleanProjectJson=JSON.stringify(project);
-  // RC-005: loading a project (Import/Open, Design Library "New Project", Gallery "Open as copy")
-  // is a fresh start -- immediately re-baseline the autosave slot to this project so a crash right
-  // after loading still recovers *this* project, not stale content from before it loaded. Also
-  // guards "never overwrite a manually saved/opened project": invalidating
-  // lastAutosavedProjectJson first forces flushAutosaveNow() to actually write (it no-ops when the
-  // live project already matches what's stored), so the old record is always replaced here, never
-  // left to linger and get offered as a stale "recovery" on some later boot.
-  lastAutosavedProjectJson=null;flushAutosaveNow();
-  syncSelectedControlsFromLayer();updateAll(true);
-  lightboxes.library.close();
-  el('status').textContent=`Started a new project from "${item.name}".`;
-}
-
-function beginRenameLibraryItem(card,id){
-  const item=designLibrary.get(id);if(!item)return;
-  const nameEl=card.querySelector('[data-role="name"]');
-  const input=document.createElement('input');
-  input.type='text';input.maxLength=80;input.value=item.name;input.className='library-rename-input';
-  nameEl.replaceWith(input);input.focus();input.select();
-  let settled=false;
-  const commit=()=>{
-    if(settled)return;settled=true;
-    const value=input.value.trim();
-    if(value&&value!==item.name){designLibrary.rename(id,value);el('libraryStatus').textContent='Renamed.'}
-    renderLibraryGrid();
-  };
-  input.addEventListener('keydown',e=>{
-    if(e.key==='Enter'){e.preventDefault();commit()}
-    else if(e.key==='Escape'){e.preventDefault();settled=true;renderLibraryGrid()}
-  });
-  input.addEventListener('blur',commit);
-}
-
-function requestDeleteLibraryItem(id){
-  const item=designLibrary.get(id);if(!item)return;
-  pendingLibraryDeleteId=id;
-  el('libraryConfirmMessage').textContent=`Delete "${item.name}" from the Design Library? This cannot be undone.`;
-  lightboxes.libraryConfirm.open();
-}
-
-el('librarySaveProject').onclick=()=>{saveProjectToLibrary()};
-el('librarySaveSelection').onclick=()=>{saveSelectionToLibrary()};
-el('librarySearch').addEventListener('input',()=>{libraryQuery=el('librarySearch').value;renderLibraryGrid()});
-el('libraryCategoryFilter').addEventListener('change',()=>{libraryCategory=el('libraryCategoryFilter').value;renderLibraryGrid()});
-el('librarySort').addEventListener('change',()=>{librarySortDir=el('librarySort').value;renderLibraryGrid()});
-el('libraryGrid').addEventListener('click',e=>{
-  const card=e.target.closest('.library-card');if(!card)return;
-  const id=card.dataset.item,action=e.target.dataset.action;
-  if(action==='insert')insertLibraryItem(id);
-  else if(action==='newProject')createProjectFromLibraryItem(id);
-  else if(action==='duplicate'){designLibrary.duplicate(id);renderLibraryGrid();el('libraryStatus').textContent='Duplicated.'}
-  else if(action==='delete')requestDeleteLibraryItem(id);
-  else if(action==='rename')beginRenameLibraryItem(card,id);
-});
-el('libraryConfirmDelete').onclick=()=>{
-  if(pendingLibraryDeleteId){designLibrary.remove(pendingLibraryDeleteId);pendingLibraryDeleteId=null;renderLibraryGrid();el('libraryStatus').textContent='Deleted.'}
-  lightboxes.libraryConfirm.close();
-};
-
 // ---- Gallery (RS-2001): a built-in, permanent, READ-ONLY set of example projects sourced from
 // examples/*.rhs + examples/manifest.json + examples/baselines.json + examples/gallery.json (the
-// curatorial metadata this milestone adds). Gallery is not the Design Library: items are never
-// renamed/duplicated/deleted, and nothing here is ever written back to examples/**. "Open Copy"
-// fetches a fixture, translates it through the existing toAppProjectShape()/validateProject()
-// bridge (src/gallery/index.js), and replaces the live project exactly like #importProjectFile
-// already does; "Save to Library" reuses buildProjectItemData()/designLibrary.add() without
-// touching the live project at all. Thumbnails reuse generateProjectThumbnail() above -- no second
-// thumbnail renderer, no second render pipeline. ----
+// curatorial metadata this milestone adds). Items are never renamed/duplicated/deleted, and
+// nothing here is ever written back to examples/**. "Open Copy" fetches a fixture, translates it
+// through the existing toAppProjectShape()/validateProject() bridge (src/gallery/index.js), and
+// replaces the live project exactly like #importProjectFile already does. Thumbnails reuse
+// generateProjectThumbnail() above -- no second thumbnail renderer, no second render pipeline. ----
 let galleryEntries=null,galleryFixtures=null,galleryLoadError=null;
 let galleryQuery='',galleryCategory='All',galleryPreviewFile=null;
 const galleryThumbnailCache=new Map();
@@ -3392,26 +5485,12 @@ async function openGalleryItemAsCopy(file){
     // the live project already matches what's stored), so the old record is always replaced here,
     // never left to linger and get offered as a stale "recovery" on some later boot.
     lastAutosavedProjectJson=null;flushAutosaveNow();
-    syncSelectedControlsFromLayer();await updateAll(true);
+    refreshUnitLabels();refreshAllFieldSteps();syncSelectedControlsFromLayer();await updateAll(true);
     lightboxes.galleryPreview.close();lightboxes.gallery.close();
     el('status').textContent=`Opened an editable copy of "${entry.title}" from the Gallery.`;
   }catch(error){
     console.error('Gallery: failed to open item as a copy',error);
     el('galleryPreviewStatus').textContent=`Failed to open: ${error.message}`;
-  }
-}
-
-async function saveGalleryItemToLibrary(file){
-  const entry=getGalleryEntry(galleryEntries,file);if(!entry)return;
-  try{
-    const appProject=buildAppProjectFromGalleryFile(file,entry.title);
-    const data=buildProjectItemData(appProject);
-    const thumbnail=await generateGalleryThumbnail(file,entry.title);
-    designLibrary.add({kind:'project',name:entry.title,data,thumbnail});
-    el('galleryPreviewStatus').textContent=`Saved "${entry.title}" to the Design Library.`;
-  }catch(error){
-    console.error('Gallery: failed to save item to the Design Library',error);
-    el('galleryPreviewStatus').textContent=`Save failed: ${error.message}`;
   }
 }
 
@@ -3424,14 +5503,15 @@ el('galleryGrid').addEventListener('click',e=>{
   else if(action==='openCopy')openGalleryItemAsCopy(file);
 });
 el('galleryPreviewOpenCopy').onclick=()=>{if(galleryPreviewFile)openGalleryItemAsCopy(galleryPreviewFile)};
-el('galleryPreviewSaveToLibrary').onclick=()=>{if(galleryPreviewFile)saveGalleryItemToLibrary(galleryPreviewFile)};
 
 // ---- Shipping & Handling: local, session-scoped metadata only. Deliberately not part of
 // `project` / Project JSON / undo-redo this milestone -- see
 // docs/specifications/UI-001-CompleteRedesign.md, "Shipping & Handling". ----
 // ARC-001: shippingInfo state, syncShippingFieldsFromState(), and the #shipApply wiring moved to
 // src/ui/ShippingPanel.js (imported above); wireShippingApply() is called once at startup, below.
-wireShippingApply();
+// RS-3018: units passed as a live getter (not a snapshot) so Apply always reads the operator's
+// current Units setting, not whatever it was when the app booted.
+wireShippingApply(()=>project.units);
 
 // ---- Settings: mirrors the live grid/safe-area/snap toggle state (one boolean each, never a
 // second independent copy). Default stone size/gap are session-local preference fields not yet
@@ -3440,17 +5520,126 @@ wireShippingApply();
 function syncSettingsFieldsFromState(){
   el('settingsGridDefault').checked=true;el('settingsGridDefault').disabled=true;
   el('settingsSafeAreaDefault').checked=showSafeArea;el('settingsSnapDefault').checked=snapEnabled;
-  el('settingsSnapDistance').value=snapToleranceMm;el('settingsShowGuides').checked=showSnapGuides;
+  setLengthField('settingsSnapDistance',snapToleranceMm);el('settingsShowGuides').checked=showSnapGuides;
+  el('settingsUnits').value=project.units;
+}
+// RS-3020 Part D: #settingsSnapDistance's HTML min/max are static mm literals (index.html), same
+// situation RS-3019 solved for #height with refreshHeightFieldBounds() -- its display value is
+// now unit-converted, so its bounds must be too.
+function refreshSnapDistanceFieldBounds(){
+  el('settingsSnapDistance').min=mmToDisplayValue(0.5,project.units);
+  el('settingsSnapDistance').max=mmToDisplayValue(5,project.units);
 }
 el('settingsApply').onclick=()=>{
-  showSafeArea=el('settingsSafeAreaDefault').checked;el('safeAreaToggle').setAttribute('aria-pressed',String(showSafeArea));
+  showSafeArea=el('settingsSafeAreaDefault').checked;
   snapEnabled=el('settingsSnapDefault').checked;el('snapEnabled').value=snapEnabled?'on':'off';
-  snapToleranceMm=Math.min(5,Math.max(0.5,parseFloat(el('settingsSnapDistance').value)||SNAP_TOLERANCE_MM));
+  snapToleranceMm=Math.min(5,Math.max(0.5,readLengthField('settingsSnapDistance')||SNAP_TOLERANCE_MM));
   showSnapGuides=el('settingsShowGuides').checked;
   drawLayout();
 };
 
-populateStoneColorOptions();populateStoneSizeOptions();populateMixedSizeSelectOptions();
+// RS-3018: project.units is a display preference (which unit a freely-typed length field shows/
+// accepts), never a project-content edit -- deliberately not run through commitHistory()/undo-redo
+// and deliberately not in HISTORY_TRACKED_CONTROL_IDS, same category as settingsSnapDefault/
+// settingsShowGuides above. Storage stays mm everywhere, forever; only display/input formatting
+// changes. #stoneSize (fixed named sizes, not a free-typed length) is permanently excluded.
+function setLengthField(id,mm){el(id).value=formatLengthDisplay(mm,project.units);el(id).dataset.mmValue=String(mm)}
+function readLengthField(id){return displayValueToMm(el(id).value,project.units)}
+// RS-3025: called from each of the eight length fields' own 'input' listeners so a value the
+// operator just typed also gets an exact-mm stash, computed from the raw typed value in the
+// current display unit -- before any display-side rounding -- so it survives later Units round
+// trips losslessly, same as a programmatic setLengthField() write. Without this, hand-typed values
+// in prodSheetMargin/shipLengthMm/shipWidthMm/shipHeightMm/drawSlotWidthMm (which have no other
+// writer besides direct typing) would never get a usable stash at all, leaving the original drift
+// bug unfixed for exactly the fields an operator is most likely to type into.
+function stashTypedLengthField(id){
+  const mm=displayValueToMm(el(id).value,project.units);
+  if(Number.isFinite(mm))el(id).dataset.mmValue=String(mm);else delete el(id).dataset.mmValue;
+}
+function refreshUnitLabels(){
+  document.querySelectorAll('[data-unit-label]').forEach(labelEl=>{
+    labelEl.textContent=`${labelEl.dataset.unitLabel} (${unitSuffix(project.units)})`;
+  });
+  const quickEl=el('projectUnitsQuick');if(quickEl)quickEl.value=project.units;
+}
+// Plate/Vessel fields mirror canonical project.plate/vessel mm state, so they can always be
+// re-derived from `project` regardless of what units were previously displayed. prodSheetMargin
+// and the Shipping length fields have no such canonical store on `project` (prodSheetMargin is a
+// bare DOM field; Shipping's shippingInfo is session-only and only written on #shipApply) -- for
+// those, convert the field's own current display value from `previousUnits` in place.
+// RS-3025: that display-value-conversion path re-derives mm from an already-2-decimal-rounded
+// display string, which drifts a few hundredths of a mm on every unit round trip. setLengthField()
+// now stashes the exact mm it was last given in dataset.mmValue, and each field's own 'input'
+// listener (via stashTypedLengthField()) re-stashes the exact mm computed from what was just typed
+// -- so here, a stash is present and used directly whether the value came from a programmatic write
+// or a hand-typed one; only a field with genuinely no parseable value (dataset.mmValue never set,
+// or explicitly deleted for an unparseable typed value) falls back to the old convert-from-display
+// path.
+function refreshAllLengthFieldDisplays(previousUnits=project.units){
+  setLengthField('plateOuterDiameter',project.plate.outerDiameterMm);
+  setLengthField('plateInnerWellDiameter',project.plate.innerWellDiameterMm);
+  setLengthField('plateOverallHeight',project.plate.overallHeightMm);
+  setLengthField('plateCenterDepth',project.plate.centerDepthMm);
+  setLengthField('vesselBodyDiameter',project.vessel.bodyDiameterMm);
+  setLengthField('vesselBodyHeight',project.vessel.bodyHeightMm);
+  setLengthField('vesselTopDiameter',project.vessel.topDiameterMm);
+  for(const id of['prodSheetMargin','shipLengthMm','shipWidthMm','shipHeightMm','monogramWidth','monogramHeight','monogramSizeMarginMm','drawSlotWidthMm']){
+    const stashedMm=parseFloat(el(id).dataset.mmValue);
+    if(Number.isFinite(stashedMm)){
+      el(id).value=formatLengthDisplay(stashedMm,project.units);
+      el(id).dataset.mmValue=String(stashedMm);
+      continue;
+    }
+    const raw=el(id).value;
+    if(raw==='')continue;
+    const mm=displayValueToMm(raw,previousUnits);
+    if(!Number.isFinite(mm))continue;
+    el(id).value=formatLengthDisplay(mm,project.units);
+  }
+}
+// RS-3025: prodSheetMargin and the three Shipping fields never go through setLengthField() today
+// (prodSheetMargin has no writer at all besides the operator; Shipping's own
+// syncShippingFieldsFromState() in ShippingPanel.js formats directly) -- typing is their ONLY
+// source of a value, so stashTypedLengthField() here is what actually fixes the drift for these
+// four fields, not just parity with the setLengthField()-backed ones above.
+for(const id of['prodSheetMargin','shipLengthMm','shipWidthMm','shipHeightMm']){
+  el(id).addEventListener('input',()=>stashTypedLengthField(id));
+}
+// RS-3024: every convertible numeric field's HTML `step` attribute is mm-tuned and, unlike its
+// `value`, was never made unit-aware -- in inches mode the spinner-arrow/Up-Down-key increment
+// still applied the raw mm step unconverted. Proposed inch steps are clean round decimals (not a
+// literal mm->in conversion of the step, which would produce ugly non-round increments).
+const MM_STEP_TO_IN_STEP={0.1:0.01,0.5:0.02,1:0.05};
+function refreshAllFieldSteps(){
+  document.querySelectorAll('[data-mm-step]').forEach(inputEl=>{
+    const mmStep=parseFloat(inputEl.dataset.mmStep);
+    inputEl.step=project.units==='in'?(MM_STEP_TO_IN_STEP[mmStep]??mmStep):mmStep;
+  });
+}
+async function applyUnitsChange(newUnits){
+  const previousUnits=project.units;
+  project.units=newUnits;
+  refreshUnitLabels();
+  refreshAllLengthFieldDisplays(previousUnits);
+  // RS-3019: monogramWidth/Height's min/max bounds and #monogramFrameSizeHint (unlike their own
+  // .value, just refreshed above) are otherwise only ever refreshed by #monogramFrame's own
+  // 'change' listener or the one-time boot call -- both blind to a later Units switch.
+  updateMonogramFrameSizeBounds();
+  // RS-3020 Part E: updateDrawToolButtons() (Eraser/Stamp/Trace/Paint tool-session-state fields)
+  // and syncSettingsFieldsFromState()/refreshSnapDistanceFieldBounds() (Snap Distance) are, like
+  // updateMonogramFrameSizeBounds() above, outside updateAll()'s own refresh chain -- a Units
+  // switch would otherwise leave their displayed values in the old unit until next touched.
+  updateDrawToolButtons();
+  syncSettingsFieldsFromState();
+  refreshSnapDistanceFieldBounds();
+  refreshAllFieldSteps();
+  syncSelectedControlsFromLayer();
+  await updateAll(true);
+}
+el('settingsUnits').addEventListener('change',()=>applyUnitsChange(el('settingsUnits').value));
+el('projectUnitsQuick').addEventListener('change',()=>applyUnitsChange(el('projectUnitsQuick').value));
+
+populateStoneColorOptions();populateStoneColorOptions('stampColor');populateStoneColorOptions('traceColor');populateStoneColorOptions('paintColor');populateStoneSizeOptions();populateMixedSizeSelectOptions();
 // RS-2002: only populated when fontManager actually loaded -- if the manifest fetch failed,
 // index.html's static two-option #font markup (Courier Prime/Great Vibes) is left as the fallback,
 // and permanentEngineError's #status message (set inside updateAll(), see generate() above)

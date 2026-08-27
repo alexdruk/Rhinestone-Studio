@@ -65,16 +65,20 @@ function section(html, heading) {
 
 // === Top menu ===================================================================================
 
+// RS-3011 nav-toggle fix: opening a Lightbox that shows/produces design content (Text, Shapes,
+// Import, Image Trace, Export, Production Sheet) now reveals Dual Workspace first, via
+// revealDualWorkspaceForLightbox() -- see test 3b below. Shipping/Settings/Help show no
+// design/geometry content and deliberately keep the old plain-open behavior.
 const MENU_ITEMS = [
-  { id: 'menuText', label: 'Text', lightbox: 'lightboxText' },
-  { id: 'menuShapes', label: 'Shapes', lightbox: 'lightboxShapes' },
-  { id: 'menuImport', label: 'Import', lightbox: 'lightboxImport' },
-  { id: 'menuImageTrace', label: 'Image Trace', lightbox: 'lightboxImageTrace' },
-  { id: 'menuExport', label: 'Export', lightbox: 'lightboxExport' },
-  { id: 'menuProdSheet', label: 'Production Sheet', lightbox: 'lightboxProdSheet' },
-  { id: 'menuShipping', label: 'Shipping', lightbox: 'lightboxShipping' },
-  { id: 'menuSettings', label: 'Settings', lightbox: 'lightboxSettings' },
-  { id: 'menuHelp', label: 'Help', lightbox: 'lightboxHelp' }
+  { id: 'menuText', label: 'Text', lightbox: 'lightboxText', revealsDualWorkspace: true },
+  { id: 'menuShapes', label: 'Shapes', lightbox: 'lightboxShapes', revealsDualWorkspace: true },
+  { id: 'menuImport', label: 'Import', lightbox: 'lightboxImport', revealsDualWorkspace: true },
+  { id: 'menuImageTrace', label: 'Image Trace', lightbox: 'lightboxImageTrace', revealsDualWorkspace: true },
+  { id: 'menuExport', label: 'Export', lightbox: 'lightboxExport', revealsDualWorkspace: true },
+  { id: 'menuProdSheet', label: 'Production Sheet', lightbox: 'lightboxProdSheet', revealsDualWorkspace: true },
+  { id: 'menuShipping', label: 'Shipping', lightbox: 'lightboxShipping', revealsDualWorkspace: false },
+  { id: 'menuSettings', label: 'Settings', lightbox: 'lightboxSettings', revealsDualWorkspace: false },
+  { id: 'menuHelp', label: 'Help', lightbox: 'lightboxHelp', revealsDualWorkspace: false }
 ];
 
 await test('1. all nine top-menu buttons exist, in the required order', () => {
@@ -98,20 +102,36 @@ await test('2. every top-menu button has an icon glyph, a visible text label, an
 });
 
 await test('3. every top-menu button opens exactly its documented Lightbox, and every Lightbox overlay exists exactly once', () => {
-  for (const { id, lightbox } of MENU_ITEMS) {
-    const re = new RegExp(`el\\('${id}'\\)\\.onclick=\\(\\)=>lightboxes\\.\\w+\\.open\\(\\)`);
-    assert.match(appJs, re, `expected #${id} to open a Lightbox`);
+  for (const { id, lightbox, revealsDualWorkspace } of MENU_ITEMS) {
+    const re = revealsDualWorkspace
+      ? new RegExp(`el\\('${id}'\\)\\.onclick=\\(\\)=>\\{revealDualWorkspaceForLightbox\\(\\);lightboxes\\.\\w+\\.open\\(\\);setActiveTopMenuButton\\('${id}'\\)\\}`)
+      : new RegExp(`el\\('${id}'\\)\\.onclick=\\(\\)=>\\{lightboxes\\.\\w+\\.open\\(\\);setActiveTopMenuButton\\('${id}'\\)\\}`);
+    assert.match(appJs, re, `expected #${id} to open a Lightbox${revealsDualWorkspace ? ', revealing Dual Workspace first' : ''}`);
     const matches = indexHtml.match(new RegExp(`id="${lightbox}"`, 'g')) || [];
     assert.equal(matches.length, 1, `expected exactly one #${lightbox}`);
     assert.match(indexHtml, new RegExp(`<div class="lightbox-overlay(?: [\\w-]+)?" id="${lightbox}">`), `expected #${lightbox} to be a lightbox-overlay`);
   }
 });
 
+await test('3b. revealDualWorkspaceForLightbox() actually exits Design (setDrawMode(false)) before reusing the exact setWorkspaceMode(\'dual\')+persistActiveView(\'dual\') pair the Dual Workspace tab itself uses, and is skipped entirely when Dual Workspace is already showing and Design is not active', () => {
+  const fnMatch = appJs.match(/function revealDualWorkspaceForLightbox\(\)\{[\s\S]*?\n\}/);
+  assert.ok(fnMatch, 'expected a revealDualWorkspaceForLightbox() function in app.js');
+  const body = fnMatch[0];
+  assert.match(body, /const exitingDesign=drawingTool\.isActive;/);
+  assert.match(body, /if\(exitingDesign\)setDrawMode\(false\);/);
+  assert.match(body, /if\(exitingDesign\|\|workspaceMode!=='dual'\)\{/);
+  assert.match(body, /if\(workspaceMode!=='dual'\)setWorkspaceMode\('dual'\);/);
+  assert.match(body, /persistActiveView\('dual'\);/);
+  // setDrawMode(false) must run before the setWorkspaceMode('dual') check, not after -- otherwise
+  // Design's own exit-restore (workspaceModeBeforeDrawing) would clobber the freshly-set 'dual'.
+  assert.ok(body.indexOf('setDrawMode(false)') < body.indexOf("setWorkspaceMode('dual')"), 'expected setDrawMode(false) to run before forcing workspaceMode to dual');
+});
+
 await test('4. the top bar also exposes Undo, Redo, Save, and an Export shortcut, each with a tooltip or visible label', () => {
   for (const id of ['undoBtn', 'redoBtn', 'saveProject', 'exportShortcut']) {
     assert.match(indexHtml, new RegExp(`id="${id}"`), `expected #${id} in the top bar`);
   }
-  assert.match(appJs, /el\('exportShortcut'\)\.onclick=\(\)=>lightboxes\.exportBox\.open\(\)/, 'expected the Export shortcut to open the Export Lightbox');
+  assert.match(appJs, /el\('exportShortcut'\)\.onclick=\(\)=>\{revealDualWorkspaceForLightbox\(\);lightboxes\.exportBox\.open\(\);setActiveTopMenuButton\('menuExport'\)\}/, 'expected the Export shortcut to reveal Dual Workspace and open the Export Lightbox');
 });
 
 // === Lightbox content ============================================================================
@@ -207,7 +227,9 @@ await test('9. Image Trace, Export, Production Sheet, Shipping, Settings, and He
   for (const id of ['settingsSafeAreaDefault', 'settingsSnapDefault', 'settingsDefaultStoneSize', 'settingsDefaultGap']) {
     assert.ok(settingsBody.includes(`id="${id}"`), `expected the Settings Lightbox to contain #${id}`);
   }
-  assert.ok(/mm \(fixed\)/.test(settingsBody));
+  // RS-3018: Units is now a real control (Millimeters/Inches), not static "mm (fixed)" text.
+  assert.ok(settingsBody.includes('id="settingsUnits"'), 'expected the Settings Lightbox to contain #settingsUnits');
+  assert.ok(/Millimeters \(mm\)/.test(settingsBody) && /Inches \(in\)/.test(settingsBody));
   assert.ok(/Light \(fixed\)/.test(settingsBody));
 
   const helpBody = extractElementHtml(indexHtml, 'lightboxHelp');
@@ -248,7 +270,7 @@ await test('12. Project section: name, rename input, units, template summary', (
 
 await test('13. Layers section: list, delete, no per-layer-type detail forms, no duplicate shape-creation controls', () => {
   const body = section(leftPanel, 'Layers');
-  for (const id of ['layersList', 'deleteSelected', 'layerRuleHint']) {
+  for (const id of ['layersList', 'deleteSelected']) {
     assert.ok(body.includes(`id="${id}"`), `expected #${id} in the Layers section`);
   }
   // S-110: Design Shapes is the one place to create a shape.
@@ -272,8 +294,66 @@ await test('14. Actions section: Undo, Redo, Duplicate selected, Delete selected
   }
   assert.match(appJs, /el\('actionUndo'\)\.onclick=\(\)=>performUndo\(\)/);
   assert.match(appJs, /el\('actionRedo'\)\.onclick=\(\)=>performRedo\(\)/);
-  assert.match(appJs, /el\('actionDuplicate'\)\.onclick=\(\)=>duplicateLayer\(selectedLayerId\)/);
-  assert.match(appJs, /el\('actionDelete'\)\.onclick=\(\)=>deleteLayer\(selectedLayerId\)/);
+  // RS-3013 Step 3: actionDuplicate's handler is no longer a single-expression arrow -- it branches
+  // on drawingTool.activeSelection.kind==='region' to duplicate just that region, falling through to
+  // the ORIGINAL whole-layer duplicateLayer(selectedLayerId) call otherwise. Rather than pinning the
+  // entire handler body verbatim (which broke the instant Step 3 added the region branch) or slicing
+  // up to the next el(...) wiring line as a fixed end-marker (the same fragile-to-reformatting/
+  // false-positive-via-intervening-comment trap MONO-006A's own extractFunctionBody() doc comment
+  // warns about -- see tools/test-autosave-recovery-wiring.mjs), extract the handler's own `{...}`
+  // block by brace depth, so the captured text is exactly this handler's real code, nothing
+  // adjacent, regardless of comments or reordering around it -- then assert the fallthrough call
+  // still appears inside it, the real invariant this test cares about (Duplicate is wired to a
+  // handler that still knows how to duplicateLayer(selectedLayerId)), not the literal shape of that
+  // handler.
+  const actionDuplicateMarker = "el('actionDuplicate').onclick=";
+  const actionDuplicateStart = appJs.indexOf(actionDuplicateMarker);
+  assert.ok(actionDuplicateStart !== -1, "expected to find \"el('actionDuplicate').onclick=\" in app.js");
+  const actionDuplicateBraceStart = appJs.indexOf('{', actionDuplicateStart);
+  assert.ok(actionDuplicateBraceStart !== -1, "expected to find the opening \"{\" of actionDuplicate's onclick handler in app.js");
+  let braceDepth = 0;
+  let actionDuplicateBody = null;
+  for (let i = actionDuplicateBraceStart; i < appJs.length; i++) {
+    if (appJs[i] === '{') braceDepth++;
+    else if (appJs[i] === '}') {
+      braceDepth--;
+      if (braceDepth === 0) {
+        actionDuplicateBody = appJs.slice(actionDuplicateBraceStart + 1, i);
+        break;
+      }
+    }
+  }
+  assert.ok(actionDuplicateBody !== null, "expected to find the matching closing \"}\" of actionDuplicate's onclick handler in app.js");
+  assert.match(actionDuplicateBody, /duplicateLayer\(selectedLayerId\)/, 'expected the actionDuplicate handler to still fall through to duplicateLayer(selectedLayerId)');
+  // RS-3013 Step 4: actionDelete's handler is now a one-line dispatch to the shared
+  // deleteCurrentSelection() helper (also used by the Design keydown Delete/Backspace branch), which
+  // itself branches on drawingTool.activeSelection.kind==='region' to delete just that region via
+  // deleteRegionFromPathLayer(), falling through to the ORIGINAL drawingTool.deleteSelected() call
+  // otherwise. Same brace-balanced extraction pattern as actionDuplicateBody immediately above (not a
+  // literal-onclick pin, not a fixed-end-marker slice) so this survives reformatting/reordering
+  // around it; the real invariant is that the shared helper still knows how to delete a region AND
+  // still falls through to drawingTool.deleteSelected() for everything else.
+  assert.match(appJs, /el\('actionDelete'\)\.onclick=\(\)=>deleteCurrentSelection\(\)/, 'expected actionDelete to dispatch through the shared deleteCurrentSelection() helper');
+  const deleteCurrentSelectionMarker = 'function deleteCurrentSelection(){';
+  const deleteCurrentSelectionStart = appJs.indexOf(deleteCurrentSelectionMarker);
+  assert.ok(deleteCurrentSelectionStart !== -1, 'expected to find "function deleteCurrentSelection(){" in app.js');
+  const deleteCurrentSelectionBraceStart = appJs.indexOf('{', deleteCurrentSelectionStart);
+  let deleteBraceDepth = 0;
+  let deleteCurrentSelectionBody = null;
+  for (let i = deleteCurrentSelectionBraceStart; i < appJs.length; i++) {
+    if (appJs[i] === '{') deleteBraceDepth++;
+    else if (appJs[i] === '}') {
+      deleteBraceDepth--;
+      if (deleteBraceDepth === 0) {
+        deleteCurrentSelectionBody = appJs.slice(deleteCurrentSelectionBraceStart + 1, i);
+        break;
+      }
+    }
+  }
+  assert.ok(deleteCurrentSelectionBody !== null, 'expected to find the matching closing "}" of deleteCurrentSelection() in app.js');
+  assert.match(deleteCurrentSelectionBody, /deleteRegionFromPathLayer\(/, 'expected deleteCurrentSelection() to delete just the region when one is selected');
+  assert.match(deleteCurrentSelectionBody, /drawingTool\.clearActiveSelection\(\)/, 'expected deleteCurrentSelection() to clear selection after a region delete');
+  assert.match(deleteCurrentSelectionBody, /drawingTool\.deleteSelected\(\)/, 'expected deleteCurrentSelection() to still fall through to drawingTool.deleteSelected()');
   assert.match(appJs, /el\('actionSave'\)\.onclick=saveProjectDownload/);
   const historyUi = appJs.match(/function updateHistoryUI\(\)\{([\s\S]*?)\n\}/);
   assert.ok(historyUi, 'expected updateHistoryUI()');
@@ -333,14 +413,14 @@ await test('18. runAlign/runDistribute report what they did via #status, only af
   assert.ok(distFn.indexOf('if(items.length<3)return;') < distFn.indexOf("el('status')"));
 });
 
-await test('19. the workspace has a real three-way view switch (Dual Workspace, 2D Canvas, Object Preview), defaulting to Dual on desktop and collapsing to single-view under 900px without overriding a later manual switch', () => {
+await test('19. the workspace has a real three-way view switch (Dual Workspace, 2D Canvas, Object Preview) that persists across a reload, Design is the true first-visit default (not Dual), and a narrow viewport (<900px) always overrides to 2D Canvas only without clobbering the saved preference', () => {
   assert.match(indexHtml, /id="viewTabDual"[^>]*class="tab active"|class="tab active"[^>]*id="viewTabDual"/);
   assert.match(indexHtml, /id="viewTab2D"/);
   assert.match(indexHtml, /id="viewTab3D"/);
   assert.match(appJs, /function setWorkspaceMode\(mode/);
-  assert.match(appJs, /el\('viewTabDual'\)\.onclick=\(\)=>setWorkspaceMode\('dual'\)/);
-  assert.match(appJs, /el\('viewTab2D'\)\.onclick=\(\)=>setWorkspaceMode\('2d'\)/);
-  assert.match(appJs, /el\('viewTab3D'\)\.onclick=\(\)=>setWorkspaceMode\('preview'\)/);
+  assert.match(appJs, /el\('viewTabDual'\)\.onclick=\(\)=>\{setWorkspaceMode\('dual'\);persistActiveView\('dual'\)\}/);
+  assert.match(appJs, /el\('viewTab2D'\)\.onclick=\(\)=>\{setWorkspaceMode\('2d'\);persistActiveView\('2d'\)\}/);
+  assert.match(appJs, /el\('viewTab3D'\)\.onclick=\(\)=>\{setWorkspaceMode\('preview'\);persistActiveView\('preview'\)\}/);
 
   const panel2D = indexHtml.match(/<section class="canvas-panel[^"]*" id="panel2D"/)[0];
   const panel3D = indexHtml.match(/<section class="canvas-panel[^"]*" id="panel3D"/)[0];
@@ -353,20 +433,42 @@ await test('19. the workspace has a real three-way view switch (Dual Workspace, 
   assert.match(indexHtml, /\.workspace-canvas-area\.dual \.canvas-panel\{position:relative/);
   assert.match(indexHtml, /\.canvas-panel\.tab-hidden\{visibility:hidden;pointer-events:none\}/);
 
+  // RS-3011 Step 4: active view is persisted to its own localStorage key -- not routed through
+  // AutosaveManager (project data only) -- and defaults to Design, not Dual, when nothing is
+  // stored yet (first-ever visit).
+  assert.match(appJs, /const ACTIVE_VIEW_STORAGE_KEY='rhinestoneStudio\.activeView'/);
+  assert.match(appJs, /function loadActiveView\(\)/);
+  assert.match(appJs, /function persistActiveView\(value\)/);
+  assert.match(appJs, /let bootActiveView=loadActiveView\(\);/);
+  assert.match(appJs, /if\(bootActiveView===null\)bootActiveView='design';/);
+
+  // A narrow viewport (<900px) always overrides the resolved view to 2D Canvas only, even over a
+  // saved 'design'/'dual' preference, and that override is never written back to storage.
   assert.match(appJs, /window\.matchMedia\('\(min-width: 900px\)'\)/);
-  assert.match(appJs, /setWorkspaceMode\('2d',true\)/);
+  assert.match(appJs, /if\(!window\.matchMedia\('\(min-width: 900px\)'\)\.matches\)bootActiveView='2d';/);
+  assert.match(appJs, /if\(bootActiveView!=='design'\)setWorkspaceMode\(bootActiveView,true\);/);
+
+  // Entering Design (the fourth persisted view, via #menuDesign) persists 'design'. #menuDesign no
+  // longer toggles -- clicking it while Design is already active is a no-op (matching
+  // setDrawTool()'s own same-mode no-op convention), never an exit. There is no direct "exit
+  // Design" button; Dual Workspace is reached only by opening one of the Lightboxes above.
+  assert.match(appJs, /el\('menuDesign'\)\.onclick=\(\)=>\{\s*if\(drawingTool\.isActive\)return;\s*setDrawTool\('select'\);persistActiveView\('design'\);\s*\};/);
+  assert.doesNotMatch(appJs, /el\('menuDesign'\)\.onclick=\(\)=>\{\s*if\(drawingTool\.isActive\)\{setDrawMode\(false\)/, 'expected #menuDesign to no longer have an exit branch');
+  // A resolved 'design' boot view settles one real generation cycle (so #layoutStats is already at
+  // its final height) before calling setDrawMode -- otherwise Paper.js's canvas resync locks in a
+  // pre-generation box that shrinks out from under it moments later, a real regression caught by
+  // comparing boot-time vs. click-triggered Design entry (RS-3011 Step 4 verification scenario g).
+  // The settle step also visually suppresses .workspace (visibility:hidden, not display:none, so
+  // #layoutStats etc. still measure/settle against their real box) for its duration -- CDP
+  // screencast verification caught a real ~25-30ms painted flash of Dual Workspace otherwise.
+  assert.match(appJs, /if\(bootActiveView==='design'\)\{\s*const workspaceEl=document\.querySelector\('\.workspace'\);\s*if\(workspaceEl\)workspaceEl\.style\.visibility='hidden';\s*setWorkspaceMode\('dual',true\);\s*await updateAll\(true\);\s*setDrawMode\(true,'select'\);\s*if\(workspaceEl\)workspaceEl\.style\.visibility='';\s*\}/);
 });
 
-await test('20. editing/rotation keeps updating both canvases regardless of view mode, and the grid-always-on label reads clearly on its own', () => {
+await test('20. editing/rotation keeps updating both canvases regardless of view mode', () => {
   const updateAllFn = appJs.match(/async function updateAll\([\s\S]*?\n\}/)[0];
   assert.match(updateAllFn, /drawLayout\(\)/);
   assert.match(updateAllFn, /drawCup\(\)/);
   assert.doesNotMatch(updateAllFn, /workspaceMode===/, 'drawLayout/drawCup must not be gated on the view mode');
-
-  const label = indexHtml.match(/<span class="hint"[^>]*>[^<]*always on[^<]*<\/span>/i);
-  assert.ok(label, 'expected to find the grid-always-on label');
-  assert.doesNotMatch(label[0], />#&nbsp;always on</, 'the old bare "# always on" label (unexplained "#" glyph) should be gone');
-  assert.match(label[0], /grid/i, 'the visible text itself should say "grid", not rely solely on the tooltip');
 });
 
 console.log('UI shell structure tests passed.');

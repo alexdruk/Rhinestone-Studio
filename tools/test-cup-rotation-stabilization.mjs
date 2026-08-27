@@ -125,7 +125,7 @@ await test('6. CupRenderer remains StoneLayout-only (no Project/Layer/layer-type
 
 await test('7. app.js defines a single view-button synchronization helper and calls it from updateAll(), not only from the view-button click handler', () => {
   assert.match(appJs, /function updateViewButtons\(\)\{/, 'expected an updateViewButtons() helper');
-  const updateAllBody = appJs.match(/async function updateAll\(skipWrite=false\)\{[\s\S]*?\n\}/)?.[0] ?? appJs.match(/async function updateAll\(skipWrite=false\)\{.*/)?.[0];
+  const updateAllBody = appJs.match(/async function updateAll\(skipWrite=false,forceStoneRebuild=false\)\{[\s\S]*?\n\}/)?.[0] ?? appJs.match(/async function updateAll\(skipWrite=false,forceStoneRebuild=false\)\{.*/)?.[0];
   assert.ok(updateAllBody, 'expected to locate updateAll()\'s body');
   assert.match(updateAllBody, /updateViewButtons\(\);/, 'expected updateAll() to call updateViewButtons() so every rotation-changing path (view button, reset, slider, drag) stays in sync');
   const viewBtnHandler = appJs.match(/document\.querySelectorAll\('\.viewBtn'\)\.forEach\([^;]*?;\}\)/)?.[0] ?? '';

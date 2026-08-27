@@ -312,3 +312,79 @@ narrative (non-path) mention of `RC-010` in this file. No stale references requi
 `node tools/run-tests.mjs --all` is 99/99, unchanged from `RC-012`. No `src/**`/`app.js`/
 `index.html` regressions from any of the three milestones this entry covers. The
 version-bump/tag/main-merge decision `RC-008` deferred remains outstanding.
+
+### Version 1.1.0 — released 2026-08-27 (`v1.1.0`)
+
+Version 1.1.0 is the first tagged release since `v1.0.1` (`729480c`, 2026-08-04). It closes the
+version-bump/tag/`main`-merge decision `RC-008` originally deferred and that every subsequent gate
+re-audit — `RC-011`, `RC-012`, `RC-014` — recorded as still outstanding. That decision has been
+exercised exactly once before, for `v1.0.1`; this is the second time. The bump is semver-minor,
+not major: everything below is additive — new tools, new UI surfaces, and internal
+rendering-path swaps invisible to saved project files. Nothing removes a user-facing capability
+or breaks project-JSON backward compatibility, regardless of how large the underlying effort was.
+
+**Design becomes the primary view (`RS-3010`, `RS-3011`, `RS-3012`).** `RS-3010` built the
+drawing-mode shell: a dedicated Paper.js viewport with a tool rail, rectangle/ellipse/slot/regular-polygon
+presets, freehand and Pen (Bézier) tools, a background grid with autoscale for large designs,
+grid/vertex/Shift-angle snapping wired into every snap site, marquee select, single-shape resize
+handles, and space-held panning; Step 0 retired `src/library/**` and brought in Paper.js and
+`@tarikjabiri/dxf`. `RS-3011` promoted Design to the default, reload-persistent primary view:
+shapes become real project layers the moment they are drawn (Commit Shape removed), the stone
+fields are mirrored into Design's own options panel, live per-shape stone dots render on the
+canvas, stone generation is button-gated, layers are named by shape type, SVG can be imported
+directly into Design as multi-contour geometry, and the Stamp / Trace / Eraser tools plus the
+Paint-region data model and tool landed here. `RS-3012` unified selection — svg/image, text, and
+circle layers all join Design's Select tool for click/drag/resize/rotate, and Stamp/Trace now
+respect the active selection boundary.
+
+**Paint region editing (`RS-3013`, `RS-3014`).** `RS-3013` made Select and Lasso twin selection
+tools and added region-level move, copy/duplicate, delete, and per-region stone-spec editing.
+`RS-3014` split Stamp/Trace/Paint style settings so each carries its own state, gave the Eraser a
+sweep-preview corridor and a dual mode (stone erase plus outline cut), and fixed a cluster of
+region-leak and edge-hugging-drag target-resolution bugs.
+
+**Universal shape rotation (`RS-3027`–`RS-3034`).** Rotation became a first-class property of
+every shape layer: `RS-3028` added the data model and GeometryEngine support, `RS-3029` the
+rotate handle, UI field, and interaction, `RS-3030` resize handles that rotate with the shape.
+`RS-3031`/`RS-3032` fixed Shape Library shapes (including those created via the More Shapes
+popover) being invisible or untracked inside Design; `RS-3033`/`RS-3034` brought rotation and
+rotated resize handles into Design's own Select tool. `RS-3027` added Shape Library shortcuts to
+the Design toolbar, and a follow-up corrected rotated-layer bounding boxes in hit-test, snap, and
+align.
+
+**Units and Design-canvas QA (`RS-3015`–`RS-3026`).** `RS-3018` introduced the units architecture
+(plus an `src/units` barrel); `RS-3019`–`RS-3025` then rolled inch display through every
+convertible surface — per-layer geometry fields, Gap/Stamp/Trace/Paint/Eraser/snap-distance
+fields, the grid and scale bars, the status bar and on-canvas text, and the Production Sheet
+PDF/SVG export — with `RS-3023` adding the Left-panel Units dropdown and a permanent `(mm)` marker
+on Stone size, `RS-3024` making numeric step/gradation unit-aware, and a fix for unit-toggle
+round-trip drift on bare-DOM length fields. Alongside: `RS-3015` shortcut-key badges on the
+Design toolbar, `RS-3016` grid autoscale, `RS-3017` an on-canvas scale bar for `#panel2D`, and
+`RS-3026` a scale bar for Design/drawing mode.
+
+**Monogram maturity (`MONO-007`–`MONO-011`).** `MONO-007`/`MONO-008` added Octagon, Pentagon, and
+Shield frames plus a per-generation frame stone-width outline option; `MONO-009` made the frame
+default size product-aware (excluding Plate); `MONO-010` gave the frame independent stone size
+and color from the letters; `MONO-011` added a UI-layer frame-stone auto-shrink retry loop.
+
+**Full-codebase audit fixes (`M2`/`M3`/`M5`/`M6`/`M7`/`M9`/`M12`/`M13`/`M14`).** `M2` fixed an
+outline-2 monogram frame stone-spacing collapse; `M3` fixed SVG subpath-after-closepath fusion
+per spec §9.3.4; `M5` implemented `preserveAspectRatio` in SVG viewBox mapping; `M6` backfilled
+`MONO-007`/`008`/`010` test coverage; `M7` deduped the monogram color-picker populate functions;
+`M9` backfilled `docs/ARCHITECTURE.md` for Design mode, Monogram, and Units; `M12` fixed an
+embedded NUL byte in `StoneSampler.js`'s pair-key join; `M13` added an SVG polygon content cache
+to `generateSvgLayout()`; `M14` added a move-drag translation fast path.
+
+**Rendering and geometry refinements.** Consistent tangent-frame stone orientation in the 3D
+preview; consistent stone counts and positions on congruent contours; faceted crystal-sprite
+stones in Design view; Outline-mode stone spacing normalized to the whole perimeter with
+corner-anchored per-side spacing for Rect/Polygon/Star/Arrow/Cross; a Stone Size picker that
+greys out sizes that would overlap for the current shape; bulk-delete-by-area; and top-menu
+active-state highlighting that persists across its lightbox. `RS-3001` (CSS-isolation spike) was
+retired with a build-vs-vendor decision recorded.
+
+**Testing gate.** The `tools/test-*.mjs` suite stands at 117 files, up from 100 at `v1.0.1`. The
+1.1.0 gate requires `node tools/run-tests.mjs --all` and `node tools/run-tests.mjs --group
+documentation` both green before the `develop`→`main` merge; both were confirmed by Sasha
+immediately prior to tagging. No `src/**`, `app.js`, or `index.html` changes are part of this
+release milestone itself — it touches only `package.json`, this file, and the `main` branch.

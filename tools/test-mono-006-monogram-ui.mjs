@@ -38,6 +38,7 @@ import { stoneLayoutToSvg } from '../src/export/SvgExporter.js';
 import { FontManager } from '../src/fonts/index.js';
 import { createDefaultFontProviderRegistry } from '../src/text/index.js';
 import { MonogramGenerator, MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS, MONOGRAM_GENERATOR_FAILURE_REASONS } from '../src/monogram/index.js';
+import { displayValueToMm, formatLengthDisplay, mmToDisplayValue, unitSuffix } from '../src/units/index.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
@@ -78,6 +79,7 @@ const fontCategoryLabelFnSrc = sliceLine(appJs, 'function fontCategoryLabel(role
 const groupFontsByCategorySrc = sliceLine(appJs, 'function groupFontsByCategory(fonts){', 'groupFontsByCategory()');
 const productionFontsSrc = sliceLine(appJs, 'function productionFonts(){', 'productionFonts()');
 const escapeHtmlSrc = sliceLine(appJs, 'function escapeHtml(s){', 'escapeHtml()');
+const populateStoneColorOptionsSrc = sliceLine(appJs, "function populateStoneColorOptions(targetId='stoneColor'){", 'populateStoneColorOptions()');
 const currentSnapshotSrc = sliceLine(appJs, 'function currentSnapshot(){', 'currentSnapshot()');
 const commitHistorySrc = sliceLine(appJs, 'function commitHistory(){', 'commitHistory()');
 const closeHistorySessionSrc = sliceLine(appJs, 'function closeHistorySession(){', 'closeHistorySession()');
@@ -88,8 +90,13 @@ const performRedoSrc = sliceLine(appJs, 'function performRedo(){', 'performRedo(
 const lightboxesSrc = sliceBetween(appJs, 'const lightboxes={', "\nel('menuText')", 'the lightboxes construction')
   .replace(/\nel\('menuText'\)$/, '');
 const menuMonogramWiringSrc = (() => {
-  const line = "el('menuMonogram').onclick=()=>lightboxes.monogram.open();";
-  assert.ok(appJs.includes(line), 'expected #menuMonogram to be wired to lightboxes.monogram.open()');
+  // RS-3011 nav-toggle fix: #menuMonogram now also reveals Dual Workspace before opening (see
+  // tools/test-ui-shell-structure.mjs's own coverage of revealDualWorkspaceForLightbox()). The
+  // sandbox below stubs revealDualWorkspaceForLightbox as a no-op -- this test exercises Monogram
+  // generation/validation/insertion, not the workspace-view switch, and none of the scenarios here
+  // click #menuMonogram itself (they call s.lightboxes.monogram.open() directly).
+  const line = "el('menuMonogram').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.monogram.open();setActiveTopMenuButton('menuMonogram')};";
+  assert.ok(appJs.includes(line), 'expected #menuMonogram to be wired to lightboxes.monogram.open(), revealing Dual Workspace first');
   return line;
 })();
 const lightboxForLayerTypeSrc = sliceBetween(appJs, 'function lightboxForLayerType(t){', '\n}', 'lightboxForLayerType()', { inclusive: true });
@@ -148,6 +155,7 @@ const sandboxFactory = new Function(
   // tools/test-ui-import-autoswitch-regression.mjs's own stub list).
   'relocateFieldGroups', 'updateObjectTemplateDetail', 'updateImageTraceSections',
   'syncShippingFieldsFromState', 'syncSettingsFieldsFromState', 'onLibraryOpen', 'onGalleryOpen',
+  'readLengthField', 'setLengthField', 'mmToDisplayValue', 'unitSuffix',
   `
   ${shapeLayerTypesSrc}
   ${resolveFontProviderIdSrc}
@@ -156,6 +164,7 @@ const sandboxFactory = new Function(
   ${groupFontsByCategorySrc}
   ${productionFontsSrc}
   ${escapeHtmlSrc}
+  ${populateStoneColorOptionsSrc}
   const history=new HistoryManager({maxSize:100});
   let project=initialProject;
   let selectedLayerId='initial-layer';
@@ -174,7 +183,7 @@ const sandboxFactory = new Function(
     lightboxes, lightboxForLayerType, generateMonogram, validateMonogramControls,
     updateMonogramGenerateButtonState, monogramFailureMessage,
     populateMonogramFrameOptions, populateMonogramLayoutOptions, populateMonogramFontOptions,
-    populateMonogramStoneSizeOptions, populateMonogramColorOptions, updateMonogramFrameSizeBounds,
+    populateMonogramStoneSizeOptions, populateStoneColorOptions, updateMonogramFrameSizeBounds,
     updateMonogramLetterCountHint,
     performUndo, performRedo,
     getProject: () => project,
@@ -211,13 +220,21 @@ function makeStubMonogramGenerator(nextResult) {
 
 function buildScenario({ project, monogramGenerator, fontManager = makeFakeFontManager() } = {}) {
   installFakeDom();
+  const resolvedProject = project || { canvas: { width: 200, height: 200 }, layers: [{ id: 'initial-layer', type: 'text' }], units: 'mm' };
+  // RS-3019: local wrappers matching app.js's own readLengthField()/setLengthField() exactly --
+  // the sliced Monogram section below now calls these instead of raw parseFloat(el(id).value)/
+  // el(id).value=. Closes over resolvedProject (the same object the sandbox's inner `project` is
+  // initialized from) rather than a module-level project, since each scenario builds its own.
+  function readLengthField(id) { return displayValueToMm(el(id).value, resolvedProject.units); }
+  function setLengthField(id, mm) { el(id).value = formatLengthDisplay(mm, resolvedProject.units); }
   const sandbox = sandboxFactory(
     Lightbox, HistoryManager, SHAPE_LIBRARY_KINDS, el, listFrames, listStoneSizes, findStoneSizeByDiameterMm, STONE_COLORS,
     MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS, MONOGRAM_GENERATOR_FAILURE_REASONS,
-    fontManager, project || { canvas: { width: 200, height: 200 }, layers: [{ id: 'initial-layer', type: 'text' }] },
+    fontManager, resolvedProject,
     selectMany, () => {}, () => {}, () => {},
     monogramGenerator,
-    () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {}
+    () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {},
+    readLengthField, setLengthField, mmToDisplayValue, unitSuffix
   );
   return sandbox;
 }
@@ -300,7 +317,7 @@ await test('2d. Stone size options match the real Stone Library (listStoneSizes(
 
 await test('2e. Color options match the real crystal color catalog (STONE_COLORS)', () => {
   const s = buildScenario({ monogramGenerator: makeStubMonogramGenerator(fakeSuccessResult([])) });
-  s.populateMonogramColorOptions();
+  s.populateStoneColorOptions('monogramColor');
   const html = el('monogramColor').innerHTML;
   for (const c of Object.values(STONE_COLORS)) {
     assert.ok(html.includes(`value="${c.id}"`), `expected a <option> for color "${c.id}"`);
@@ -444,7 +461,13 @@ for (const reason of Object.values(MONOGRAM_GENERATOR_FAILURE_REASONS)) {
     // exactly what generateMonogram() itself passes (including layoutId), built from the same
     // control values set above.
     const message = s.monogramFailureMessage(
-      { reason },
+      // message matches fakeFailureResult()'s own `stub failure: ${reason}` text exactly -- the
+      // generated result below (the actual generateMonogram() flow, via the stub generator) uses
+      // that same fixture, and MONO-008's stone-width-unavailable reason returns result.message
+      // directly (see app.js's own doc comment: the generator's own message already names the
+      // frame/stone-width context), so this manually-built result must carry the identical text for
+      // the two to match.
+      { reason, message: `stub failure: ${reason}` },
       { frameId: 'circle', layoutId: MONOGRAM_LAYOUTS.SINGLE, stoneSizeMm: 2.8, frameRect: { widthMm: 80, heightMm: 80 } }
     );
     assert.ok(message.length > 0);
