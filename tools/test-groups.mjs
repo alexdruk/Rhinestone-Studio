@@ -210,6 +210,8 @@ export const GROUPS = {
     'test-snap-engine.mjs',
     'test-editing-selection.mjs',
     'test-alignment-snapping-wiring.mjs',
+    'test-move-drag-translate.mjs',
+    'test-move-drag-fast-path-wiring.mjs',
   ],
   ui: [
     'test-ui-shell-structure.mjs',
