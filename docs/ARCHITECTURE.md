@@ -1171,8 +1171,10 @@ how `src/preview3d/**` confines Three.js — `app.js` only ever calls the facade
 
 **Implementation status:** RS-3010 built Design as a self-contained authoring tool; RS-3011 made it
 the app's primary view and folded its shapes directly into `project.layers` (removing the earlier
-explicit Commit Shape step); RS-3013 added independent selection/editing for Paint-created regions.
-See `docs/specifications/RS-3011-design-primary-view-scope.md` and
+explicit Commit Shape step); RS-3012 folded the remaining layer types (`svg`, `image`, `text`) and
+the Stamp/Trace placement tools into Design's selection model; RS-3013 added independent
+selection/editing for Paint-created regions; RS-3014 gave Stamp/Trace/Paint their own tool-level
+style settings. See `docs/specifications/RS-3011-design-primary-view-scope.md` and
 `docs/specifications/RS-3013-region-selection-editing-scope.md` for full step-by-step scope and
 decision history — this section summarizes the shipped result, not the process.
 
@@ -1206,11 +1208,73 @@ A region dragged or copied partly outside its parent shape's outline is not expl
 `_applyPathRegions()` already filters region stones against the shape's live outline on every
 regeneration, so it simply renders fewer stones there, self-correcting if dragged back in.
 
-**Deliberate gap: no pre-paint stone-spec picker.** A new region still has no UI moment between
-"lasso released" and "region committed" — the paint-stroke handler reads the target layer's current
-`stoneSize`/`gap`/`color` at commit time, silently inherited, exactly as before RS-3013. This was
-explicitly scoped and deferred, not overlooked — see RS-3013's "Deferred" section for the open
-questions (where such a picker would live, what it would default to) that were never resolved.
+**Paint's own stone spec (RS-3014 Step 1).** Paint does not inherit the target layer's stone spec.
+It carries its own independent `stoneSizeMm`/`gapMm`/`color` (`app.js`'s module-level
+`paintSettings`), edited through `#paintSizeField`/`#paintGapField`/`#paintColorField` shown in
+`#designToolOptionsPanel` while Paint is the active tool — the same per-tool options panel, toggled
+by the same show-only-while-active convention in `updateDrawToolButtons()`, that Stamp
+(`stampSettings`) and Trace (`traceSettings`) each got their own fields in. `paintSettings` is
+seeded once from the selected layer's `stoneSize`/`gap`/`color` the first time Paint is entered in a
+session (`seedPaintStyleIfNeeded()`, mirroring `seedEraserRadiusIfNeeded()`), then left exactly as
+the operator sets it via the panel fields. Every new region takes its spec from `paintSettings` at
+the moment the stroke is committed (`onPaintStroke()`'s `newRegions` map), never from the target
+layer. The one value still read live from the target layer is `selectPaintTarget()`'s
+boolean-geometry grid resolution (`targetSpacingMm` in `resolvePaintTargetTwoPass()`) — a precision
+concern RS-3014 deliberately left alone, unrelated to a region's stored decoration.
+
+**Selection beyond shapes (RS-3012).** Design's click-to-select / drag / resize / rotate began
+(RS-3010/3011) as a shape-only interaction. RS-3012 extended it, across three shipped steps, to the
+remaining layer types and to the two placement tools:
+
+- **Step 1 — Stamp and Trace respect the selection boundary.** When an `activeSelection` (a region,
+  or a draft rect/lasso) is set, `isPointInActiveSelection(pointAbsoluteMm, selection)` — a
+  standalone top-level function in `app.js`, also handed to `DrawingCanvasTool.js` as the
+  `isPointInActiveSelection` hook — gates stone placement: a hard interior test, no margin or
+  tolerance, unlike `hitTestRegion()`'s deliberately forgiving click-tolerance. A Stamp click
+  outside the boundary places nothing and fires `onStampRejected()` (status message, no history
+  entry). Trace filters its spaced placements point-by-point — a stroke straddling the boundary
+  keeps its in-bounds points; only a stroke with *every* point outside is rejected whole, via
+  `onTraceRejected()`. A null selection means no constraint, byte-identical to before the step.
+- **Step 2 — `svg` and `image` layers join Select.** Both already use the same `x/y/w/h/rotationDeg`
+  box model as every other `XYWH_SHAPE_TYPES` layer, so click/drag/resize/rotate reuse the existing
+  `hitTestShapeId()` / `rotatedHandlePositionsFor()` / `onShapeMoved` / `onShapeResized` /
+  `onShapeRotated` machinery unchanged — the only new code is `materializeSvgImageItemFromLayer()`,
+  which builds the Paper.js proxy. An `svg` layer gets its real vector outline, resolved via the
+  same `permanentEngine.resolveSvgPolygons()` hook Boolean Operations already uses (never a second
+  SVG-markup parser), then rotated by the item itself (`item.rotate()`) since SVG layers never got
+  the RS-3028 rotationDeg-into-the-outline wiring. An `image` layer gets a plain rectangle proxy — a
+  faithful proxy, not a placeholder: the main canvas never draws the source bitmap on `layoutCanvas`
+  either, only the selection box and the generated stone dots, so the rectangle reads exactly as an
+  image layer already reads everywhere else in the app. The same rectangle fallback also covers an
+  `svg` whose outline can't be resolved (missing/unparseable `svgSource`).
+- **Step 3 — `text` layers join Select (no resize handles).** Click / drag / rotate only — font
+  size is an Inspector field (`#height`), not a drag concept, so the proxy sets
+  `item.data.noResizeHandles` and only the rotate handle applies. `materializeTextItemFromLayer()`
+  builds the proxy as the AABB of the text layer's *real, already-computed* stone positions, read
+  through the new `getTextLayerStones(layerId)` hook — itself just a filter over `app.js`'s `layout`
+  global, which `engine.generate(project)` recomputes on every `updateAll()` tick regardless of
+  whether Design is active. It is never a second call into the font engine
+  (`DrawingCanvasTool.js` never touches `GeometryEngine` directly, per its header comment). Unique
+  to `text` among the layer types here: those stones are *already rotated by `GeometryEngine`
+  itself* — `generateTextLayout()` applies `rotationDeg` as a final position transform on the
+  sampled points (`rotateTextPoints()` / `rotatePointsAroundCenter()`, on both the
+  authored-stone-center branch and the sampled branch) before this app's own `x`/`y` offset is
+  applied. Every other layer type here is rotated by Design as an unrotated item
+  (`item.rotate(rotationDeg, pivot)`); rotating a text proxy the same way would double the rotation,
+  so it is deliberately not rotated. Its pivot is that AABB's own center — the fixed point
+  `TextPlacement.js`'s `computeTextPlacementOffsetMm()` re-centers the (already-rotated) bounding
+  box onto for any `rotationDeg`, so a live rotate-drag pivots around it and still lands on the
+  correct center once the real stones regenerate.
+
+At each step `app.js`'s `syncFromProjectLayers()` call-site filter widened to carry the new types
+(`l.type==='svg'||l.type==='image'||l.type==='text'` alongside `'path'` and `SHAPE_LIBRARY_KINDS`),
+and `syncFromProjectLayers()` dispatches each type to its own materializer.
+
+**Still out of RS-3012's scope: `circle`.** `materializeShapeLibraryItemFromLayer()`'s doc comment
+gives the reason — a circle layer uses a different data model (`cx`/`cy`/`r`, not `x`/`y`/`w`/`h`),
+`shapeLayerResolveParams()` branches on it, and the resize write-back does not handle it — so
+`app.js`'s filter never passes a circle layer into `syncFromProjectLayers()` and Design has no
+branch for it.
 
 ---
 
