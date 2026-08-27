@@ -253,6 +253,7 @@ export const GROUPS = {
     'test-alignment-snapping-wiring.mjs',
     'test-move-drag-translate.mjs',
     'test-move-drag-fast-path-wiring.mjs',
+    'test-rs3012-step4-circle-select.mjs',
   ],
   ui: [
     'test-ui-shell-structure.mjs',

@@ -2675,6 +2675,16 @@ export function createDrawingTool(canvasEl, hooks = {}) {
             : anchorLocal;
           resizeAnchorAbs = new paper.Point(anchorAbs.x, anchorAbs.y);
           resizePivot = new paper.Point(cx0, cy0);
+          // RS-3012 Step 4: a circle proxy's resize is radius-from-center (onMouseDrag's own
+          // isCircleProxy branch), so its pivot must be the circle's true center, not the box-corner
+          // anchor model above. For a circle proxy cx0/cy0 (the local box center) already equals
+          // item.data.pivotXMm/pivotYMm exactly -- materializeCircleItemFromLayer() builds a
+          // Path.Circle whose bounds are exactly [cx-r, cy-r, 2r, 2r] (the circle's x/y extrema land
+          // on its 0/90/180/270-degree anchor points) -- but read the stamped pivot directly so the
+          // radius-from-center drag can't drift if that ever stops holding.
+          if (shape.item.data.isCircleProxy) {
+            resizePivot = new paper.Point(shape.item.data.pivotXMm, shape.item.data.pivotYMm);
+          }
           // RS-3011 resize-perf fix: hide the stone Group for the duration of the drag. CDP tracing
           // (tools/scratch/rs-3011-resize-perf-spike/) found the dominant per-frame cost during a
           // resize drag is Paper.js's own canvas redraw (handleCallbacks -> View.update(), ~7.2ms
