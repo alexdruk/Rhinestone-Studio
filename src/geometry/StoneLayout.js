@@ -124,6 +124,54 @@ export function findOverlappingStonePairs(stones) {
   return pairs;
 }
 
+/**
+ * Boolean early-exit counterpart to findOverlappingStonePairs(): returns true the instant any one
+ * physically-overlapping stone pair is found, without collecting every pair. Accepts Stone instances
+ * or plain {xMm,yMm,sizeMm} objects. Uses the exact same overlap test findOverlappingStonePairs()
+ * uses -- distanceMm < (a.sizeMm + b.sizeMm) / 2 - 1e-9 -- but scans with the grid-bucket technique
+ * measureStoneCrowding() implements (cell size = the largest stone diameter present, 3x3-neighborhood
+ * scan) so a "does any pair overlap?" check is not paying O(n^2) cost per candidate. findOverlapping-
+ * StonePairs() stays the regression suite's shared overlap definition; this is only for callers that
+ * consume a bare boolean (the Stone Size picker's overlap guard in app.js).
+ *
+ * @param {(Stone|{xMm: number, yMm: number, sizeMm: number})[]} stones
+ * @returns {boolean}
+ */
+export function hasAnyOverlappingStonePair(stones) {
+  if (stones.length < 2) return false;
+
+  const cellSizeMm = Math.max(...stones.map((stone) => stone.sizeMm));
+  const buckets = new Map();
+  for (const stone of stones) {
+    const gx = Math.floor(stone.xMm / cellSizeMm);
+    const gy = Math.floor(stone.yMm / cellSizeMm);
+    const key = `${gx},${gy}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(stone);
+  }
+
+  for (const stone of stones) {
+    const gx = Math.floor(stone.xMm / cellSizeMm);
+    const gy = Math.floor(stone.yMm / cellSizeMm);
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const bucket = buckets.get(`${gx + dx},${gy + dy}`);
+        if (!bucket) continue;
+        for (const other of bucket) {
+          if (other === stone) continue;
+          const distanceMm = Math.hypot(stone.xMm - other.xMm, stone.yMm - other.yMm);
+          const minSeparationMm = (stone.sizeMm + other.sizeMm) / 2;
+          if (distanceMm < minSeparationMm - 1e-9) {
+            return true;
+          }
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
 function median(sortedValues) {
   const n = sortedValues.length;
   const mid = Math.floor(n / 2);
