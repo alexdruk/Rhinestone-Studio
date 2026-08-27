@@ -327,8 +327,9 @@ or breaks project-JSON backward compatibility, regardless of how large the under
 drawing-mode shell: a dedicated Paper.js viewport with a tool rail, rectangle/ellipse/slot/regular-polygon
 presets, freehand and Pen (Bézier) tools, a background grid with autoscale for large designs,
 grid/vertex/Shift-angle snapping wired into every snap site, marquee select, single-shape resize
-handles, and space-held panning; Step 0 retired `src/library/**` and brought in Paper.js and
-`@tarikjabiri/dxf`. `RS-3011` promoted Design to the default, reload-persistent primary view:
+handles, and space-held panning; Step 0 retired the old `library` directory (previously under
+`src/`) and brought in Paper.js plus the @tarikjabiri/dxf npm package for DXF export. `RS-3011`
+promoted Design to the default, reload-persistent primary view:
 shapes become real project layers the moment they are drawn (Commit Shape removed), the stone
 fields are mirrored into Design's own options panel, live per-shape stone dots render on the
 canvas, stone generation is button-gated, layers are named by shape type, SVG can be imported
