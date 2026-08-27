@@ -393,3 +393,15 @@ tools/scratch/rs-3034-resize-verify/
 # (bbox-center bugfix) and per-generation frame stone-width (1/2-row outline tracing), same "never
 # a repo artifact" category as the scratch folders above
 tools/scratch/rs-monogram-frames/
+
+# One-shot milestone-verification scripts committed directly under tools/ before the "scratch
+# scripts live in tools/scratch/, gitignored, never tracked" convention was settled -- untracked
+# now (working-tree copies kept), same "never a repo artifact" category as the folders above:
+#   - M14 move-drag translate fast-path end-state equivalence check (live-browser Playwright)
+#   - RS-3026 Design scale-bar verification (live-browser Playwright)
+#   - RS-3026 units/inches verification (live-browser Playwright)
+#   - RS-2013 instanced-stone standalone harness screenshot capture
+tools/m14-move-drag-equivalence-verify.mjs
+tools/rs-3026-design-scale-bar-verify.mjs
+tools/rs-3026-units-inches-verify.mjs
+tools/rs2013-instanced-stone-harness-screenshot.mjs

@@ -12,16 +12,20 @@ copyable, deletable, and stone-size/color-editable after creation.
 ## Status
 
 **Shipped.** Steps 1–5 below are merged into `develop`. One item from the original proposed build
-outline — a pre-paint stone-spec picker (Decision 3) — was never built; see "Deferred" at the end
-of this document.
+outline — a pre-paint stone-spec picker (Decision 3) — was not built as part of this milestone; it
+was resolved separately afterward by RS-3014 Step 1. See "Deferred" at the end of this document.
 
 Note on the task number: RS-3011's own "Deferred" section names a possible future "RS-3012" as the
 follow-up for its Decision 1 — *unifying Select across every layer type* (Text, Shapes-library,
 Monogram output, imports). This document is deliberately numbered RS-3013, not RS-3012, and is a
 separate milestone from that one, despite real overlap between them (Lasso, shipped in Step 1
-below, is a small, real slice of that same deferred direction). RS-3012 itself remains unscoped and
-undecided — still just the one-line mention in RS-3011's own "Deferred" section, nothing more. This
-document does not resolve it, in part or in full.
+below, is a small, real slice of that same deferred direction). RS-3012 has since become a milestone
+in its own right and has shipped three steps of its own — Stamp/Trace respecting the active-selection
+boundary, `svg`/`image` layers joining Select, and `text` layers joining Select. The authoritative
+summary of RS-3012's current scope is the "Selection beyond shapes (RS-3012)" section of
+`docs/ARCHITECTURE.md`; consult that, not this document, for where RS-3012 stands. None of that work
+happened here — this document did not resolve RS-3012, in part or in full, and nothing below should
+be read as having advanced it.
 
 ## Why this milestone
 
@@ -50,8 +54,8 @@ editable thing" was already built and production-correct before this milestone �
 per-region, and `_applyPathRegions()` already treated each region as an independent,
 priority-ordered patch on top of the base fill. What this milestone added was purely the
 **editing surface**: a way to select one, operations that act on a selection of that shape instead
-of a whole layer, and (still open, see "Deferred") a way to set a new region's spec before it's
-created rather than after.
+of a whole layer, and (resolved afterward by RS-3014 Step 1, see "Deferred") a way to set a new
+region's spec before it's created rather than after.
 
 ## `drawleather` precedent check
 
@@ -87,8 +91,9 @@ reshape, since an arbitrary post-hoc resize could produce a region that no longe
 against its parent) was followed by omission. No resize operation exists for a region as of this
 writing.
 
-**3. Pre-paint stone-spec picker.** Not resolved, not built. See "Deferred" below — this is the one
-genuine gap between the original proposed scope and what shipped.
+**3. Pre-paint stone-spec picker.** Not resolved or built within RS-3013 — this was the one genuine
+gap between the original proposed scope and what shipped. Resolved afterward by RS-3014 Step 1; see
+"Deferred" below.
 
 **4. Moving/copying a region across its parent's own boundary.** Resolved: **no explicit clipping
 logic was added.** `GeometryEngine._applyPathRegions()` already filters region stones against the
@@ -139,14 +144,29 @@ layer-level one, per RS-3011 Step 1's own standing convention.
 
 ## Deferred
 
-**Pre-paint stone-spec picker (originally Decision 3 / build-step 6).** A new region still has no
-UI moment between "lasso released" and "region committed" — `onPaintStroke()` still reads the
-target layer's current `stoneSize`/`gap`/`color` directly at commit time, silently inherited exactly
-as before this milestone. If this is still wanted, it needs its own scoping pass: where the picker
-lives (a small panel near the Paint rail button, mirroring how the shape tools already mirror a
-layer's own stone fields into `#designToolOptionsPanel`?) and what it defaults to (last-used region
-spec? the target layer's current spec, shown and now editable rather than silently applied?) were
-never decided.
+**Pre-paint stone-spec picker (originally Decision 3 / build-step 6) — RESOLVED by RS-3014 Step 1
+(`c7e8cf2`).** Left open by RS-3013, closed by the next Paint-adjacent milestone. `onPaintStroke()`
+no longer reads the target layer's `stoneSize`/`gap`/`color` at commit time. Paint now carries its
+own independent style — a module-level `paintSettings` object (`sizeMm`/`gapMm`/`color` in `app.js`),
+the same "not project data, not per-layer" precedent `eraserSettings` already established, mirrored
+alongside the new `stampSettings`/`traceSettings`. `paintSettings` is seeded once — from the
+currently selected layer's `stoneSize`/`gap`/`color` — the first time Paint is entered in a session
+(`seedPaintStyleIfNeeded()`, latched by `paintStyleSeeded`, mirroring `seedEraserRadiusIfNeeded()`),
+then left exactly as the operator sets it and held sticky across later strokes and across whichever
+layer is selected next. It is edited through the `#paintSizeMm` / `#paintGapMm` / `#paintColor`
+fields (handlers near `seedPaintStyleIfNeeded()` in `app.js`), which live in `#designToolOptionsPanel`
+and are shown only while Paint is the active tool (`updateDrawToolButtons()`) — the same per-tool
+options panel, on the same show-only-while-active convention, that Stamp and Trace got their own
+fields in at the same step. `onPaintStroke()`'s `newRegions` map now takes each new region's
+`stoneSizeMm`/`gapMm`/`color` straight from `paintSettings` at commit time, never from the target
+layer.
+
+The two questions this section originally left undecided were answered as: the picker lives in a
+per-tool field group in `#designToolOptionsPanel` (the same place the shape tools mirror a layer's
+stone fields), and it defaults to the selected layer's current spec — shown as an editable starting
+point rather than silently applied. The one value still read live from the target layer is
+`resolvePaintTargetTwoPass()`'s boolean-geometry grid resolution (`targetSpacingMm`), a precision
+concern RS-3014 deliberately left alone and unrelated to a region's stored decoration.
 
 **Region reordering/priority and region grouping** — neither was raised in the original feedback
 that prompted this milestone; still not assumed in scope.
