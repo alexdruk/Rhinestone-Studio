@@ -348,7 +348,7 @@ export function findCrossGroupCollisions(stones) {
           const ddy = stone.y - other.y;
           const minSeparationMm = (stone.d + other.d) / 2;
           if (ddx * ddx + ddy * ddy < minSeparationMm * minSeparationMm) {
-            const pairKey = [stone.layerId, other.layerId].sort().join(' ');
+            const pairKey = [stone.layerId, other.layerId].sort().join('\x00');
             if (!seenGroupPairs.has(pairKey)) {
               seenGroupPairs.add(pairKey);
               collisions.push({ layerIdA: stone.layerId, layerIdB: other.layerId });
