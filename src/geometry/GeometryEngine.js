@@ -88,6 +88,11 @@ export class GeometryEngine {
       throw new TypeError('GeometryEngine fontProviderRegistry must implement getTextPath().');
     }
     this._fontProviderRegistry = fontProviderRegistry;
+
+    // M13 (perf/svg-polygon-content-cache): content-addressed cache of an SVG document's
+    // flattened polygons in its own natural (pre-placement, pre-scale) coordinates, keyed on the
+    // raw svgSource string. See _svgNaturalPolygons() for the cache-safety argument.
+    this._svgNaturalPolygonCache = new Map();
   }
 
   /**
@@ -893,25 +898,70 @@ export class GeometryEngine {
     return { polygons: closedPolygons, boundingBox: BoundingBox.fromPoints(closedPolygons.flat()) };
   }
 
-  _svgPolygons(options) {
-    const parsed = parseSvgDocument(options.svgSource);
+  /**
+   * Parse + flatten an SVG document into its closed/open contour polygons expressed in the
+   * document's own natural millimeter coordinates (pre-placement, pre-scale), consulting the
+   * content-addressed cache first.
+   *
+   * Cache-safety: the key is the ENTIRE input to a pure, deterministic function pair
+   * (parseSvgDocument() -- documented "pure parsing/measurement", no DOM/Canvas -- followed by
+   * flattenContourToPolygon() at the module constant CURVE_FLATTEN_SEGMENTS). Identical svgSource
+   * therefore always yields identical output, so a matching key can be trusted without any
+   * invalidation step -- staleness is structurally impossible. preserveAspectRatio/viewBox
+   * mapping is already fully baked into parsed.shapes and naturalWidth/HeightMm by
+   * parseSvgDocument(), so nothing placement- or viewport-dependent leaks past this boundary.
+   *
+   * The returned entry's Point2D arrays are shared cache state: callers must map through them
+   * into fresh Point2D instances and must never mutate or hand out the cached objects.
+   *
+   * @param {string} svgSource
+   * @returns {{naturalWidthMm: number, naturalHeightMm: number, closed: Point2D[][], open: Point2D[][]}}
+   */
+  _svgNaturalPolygons(svgSource) {
+    const cached = this._svgNaturalPolygonCache.get(svgSource);
+    if (cached) return cached;
 
-    const targetWidthMm = options.widthMm ?? parsed.naturalWidthMm;
-    const targetHeightMm = options.heightMm ?? parsed.naturalHeightMm;
-    const scaleX = targetWidthMm / parsed.naturalWidthMm;
-    const scaleY = targetHeightMm / parsed.naturalHeightMm;
-
-    const closedPolygons = [];
-    const openPolygons = [];
-    for (const { contour, closed } of parsed.shapes) {
-      const placed = flattenContourToPolygon(contour).map((point) => new Point2D(
-        options.xMm + point.xMm * scaleX,
-        options.yMm + point.yMm * scaleY
-      ));
-      (closed ? closedPolygons : openPolygons).push(placed);
+    const parsed = parseSvgDocument(svgSource);
+    const closed = [];
+    const open = [];
+    for (const { contour, closed: isClosed } of parsed.shapes) {
+      (isClosed ? closed : open).push(flattenContourToPolygon(contour));
     }
+    const entry = {
+      naturalWidthMm: parsed.naturalWidthMm,
+      naturalHeightMm: parsed.naturalHeightMm,
+      closed,
+      open
+    };
 
-    return { closedPolygons, openPolygons };
+    // FIFO eviction: Map preserves insertion order, so the first key is the oldest. Eight entries
+    // comfortably covers realistic per-project SVG layer counts.
+    if (this._svgNaturalPolygonCache.size >= 8) {
+      this._svgNaturalPolygonCache.delete(this._svgNaturalPolygonCache.keys().next().value);
+    }
+    this._svgNaturalPolygonCache.set(svgSource, entry);
+    return entry;
+  }
+
+  _svgPolygons(options) {
+    const natural = this._svgNaturalPolygons(options.svgSource);
+
+    const targetWidthMm = options.widthMm ?? natural.naturalWidthMm;
+    const targetHeightMm = options.heightMm ?? natural.naturalHeightMm;
+    const scaleX = targetWidthMm / natural.naturalWidthMm;
+    const scaleY = targetHeightMm / natural.naturalHeightMm;
+
+    // New Point2D instances every call -- the cached natural polygons are shared mutable state and
+    // callers (sampling, PathBoolean) may hold the returned points across later generate() calls.
+    const place = (polygon) => polygon.map((point) => new Point2D(
+      options.xMm + point.xMm * scaleX,
+      options.yMm + point.yMm * scaleY
+    ));
+
+    return {
+      closedPolygons: natural.closed.map(place),
+      openPolygons: natural.open.map(place)
+    };
   }
 
   /**
