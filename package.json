@@ -22,6 +22,7 @@
     "test:editing": "node tools/run-tests.mjs --group editing",
     "test:ui": "node tools/run-tests.mjs --group ui",
     "test:history": "node tools/run-tests.mjs --group history",
+    "test:monogram": "node tools/run-tests.mjs --group monogram",
     "test:release-smoke": "node tools/run-tests.mjs --group release-smoke",
     "test:documentation": "node tools/run-tests.mjs --group documentation",
     "test:security": "node tools/run-tests.mjs --group security",
