@@ -1286,6 +1286,28 @@ At each step `app.js`'s `syncFromProjectLayers()` call-site filter widened to ca
 (`l.type==='svg'||l.type==='image'||l.type==='text'||l.type==='circle'` alongside `'path'` and
 `SHAPE_LIBRARY_KINDS`), and `syncFromProjectLayers()` dispatches each type to its own materializer.
 
+**Known test-coverage gap: `DrawingCanvasTool.js` interaction layer.** Almost none of Design's core
+interaction layer (`src/drawing/DrawingCanvasTool.js`) has committed regression tests. The only
+`tools/*.mjs` test files that exercise `src/drawing/` at all are
+`test-rs3011-step8-svg-import-flattening.mjs`, `test-stone-sprite-cache.mjs`, and
+`test-rs3012-step4-circle-select.mjs` — covering SVG-import flattening, stone-sprite caching, and
+circle-select respectively, not the interaction layer's other tools. There is explicitly zero
+committed coverage for: the Pen (Bezier) tool and its four follow-up fixes; the mode-toggle bug
+fix; the Eraser tool (RS-3011 Step 13 plus five RS-3014 follow-ups); RS-3013's region-editing
+gestures *as Design UI operations* (move / copy / delete / spec-edit — the underlying region data
+model itself *is* covered by the geometry-layer tests around `GeometryEngine._applyPathRegions()`
+and `PaintRegionSelection.js`; it is only the UI-gesture layer that is not); rotation and resize
+handles specifically inside Design (RS-3029 / RS-3030 / RS-3033 / RS-3034); grid autoscale
+(RS-3016); and the shape-library visibility toggle in Design (RS-3032 Step A). This is a named gap
+for future reference, not a defect and not a call to action — framed the same way this codebase
+frames known-but-accepted gaps elsewhere (`docs/specifications/RS-2000-MVPStabilizationValidation.md`'s
+"flagged for awareness, not a defect", `ARCH-REVIEW-001`'s "possible coverage gap, not confirmed").
+The app works, the full suite passes, and this interaction layer is exercised constantly by manual
+browser verification on every Design milestone. Backfilling it is a deliberate non-goal for now:
+it would be speculative test insurance against nothing currently broken. If someone later touches
+one of the tools named above and judges coverage worth adding at that point, this note is where
+they would start.
+
 ---
 
 # Monogram Generation
