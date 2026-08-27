@@ -1695,6 +1695,12 @@ window.__drawingTool=drawingTool;
 // (applyHistorySnapshot() etc.) -- a plain assignment here would silently go stale the first time any
 // of those ran.
 Object.defineProperty(window,'__project',{get:()=>project,configurable:true});
+// M14: read-only view of the current module-level StoneLayout, so automated verification can assert
+// the move-drag fast path's mid-drag translation and its end-of-drag canonical regeneration (that
+// `layout` after pointerup/pointercancel matches a fresh engine.generate(project)). Same "QA-only,
+// never drives app logic" precedent as window.__project above; `layout` is likewise reassigned
+// wholesale on every updateAll(), so this must be a getter, not a static snapshot.
+Object.defineProperty(window,'__layout',{get:()=>layout,configurable:true});
 // RS-1009: the one multi-selection model (src/editing/Selection.js is the only place that
 // computes a new Set from an old one). selectedLayerId (above, pre-existing) keeps driving the
 // single-layer property panel exactly as before -- it always points at the most recently
@@ -2077,6 +2083,42 @@ function writeSelectedControlsToLayer(){
     project.canvas=computeCanvasFromVessel(project.vessel);
   }
   project.name=el('projectName').value||DEFAULT_PROJECT_NAME;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
+// M14 (perf/move-drag-translate-fast-path): pure translation of an existing StoneLayout for the
+// move-drag fast path. Returns a NEW StoneLayout whose stones are fresh Stone copies of baseLayout's:
+// stones whose layerId is in movedLayerIds are shifted by (dxMm,dyMm); every other stone is carried
+// over with identical values. baseLayout and its Stone instances are never mutated.
+//
+// Why this is geometrically exact per layer: every GeometryEngine sampling grid is anchored to its
+// own layer's box (text placement offset, shape x/y, svg/image x/y, path natural-space transform),
+// so translating the layer's box by (dx,dy) translates every one of that layer's sampled stone
+// centers by exactly (dx,dy) -- nothing about the intra-layer sampling depends on absolute canvas
+// position. The one cross-layer stage, dedupeStonesByRadius() in engine.generate(), is NOT reproduced
+// here: in overlap zones where the moved layer transiently covers another mid-drag, this preview can
+// differ slightly from a true regeneration. That is the milestone's known, by-design approximation --
+// see the end-of-drag regeneration in endActiveDrag() below, which restores the canonical set before
+// anything can persist or export.
+function translateLayoutForMoveDrag(baseLayout,movedLayerIds,dxMm,dyMm){
+  const moved=movedLayerIds instanceof Set?movedLayerIds:new Set(movedLayerIds);
+  const stones=baseLayout.stones.map(s=>{
+    const shift=moved.has(s.layerId);
+    return new Stone({
+      xMm:shift?s.xMm+dxMm:s.xMm,
+      yMm:shift?s.yMm+dyMm:s.yMm,
+      sizeMm:s.sizeMm,
+      color:s.color,
+      layerId:s.layerId,
+      index:s.index,
+      metadata:s.metadata
+    });
+  });
+  return new StoneLayout({layerId:baseLayout.layerId,stones,sourceMode:baseLayout.sourceMode,outlineStats:baseLayout.outlineStats});
+}
+// M14 precondition #1 (verified by reading, not assumed) -- fitTextToShape(): it is a ONE-SHOT
+// action, not a live cross-layer dependency. applyTextFitPlan() bakes the computed heightMm/xMm/yMm
+// straight into the text layer's own fields, and fitTextToShape() is only ever called from three UI
+// entry points (createShapeLayer(), addText(), the #fitTextToShapeBtn click) -- never from
+// engine.generate() or generateTextStonesLive(). So a move drag can never invalidate a stored fit,
+// and the fast path needs no fit-related fallback.
 async function updateAll(skipWrite=false,forceStoneRebuild=false){if(!skipWrite)writeSelectedControlsToLayer();const token=++generationToken;let generated;try{generated=await engine.generate(project)}catch(error){if(token!==generationToken)return;console.error('Layout generation failed',error);el('status').textContent=`Text generation failed: ${error.message}`;return}if(token!==generationToken)return;layout=generated;
   // MONO-006A: a prior failed generation (e.g. a stale authoredScale rejected by GeometryEngine)
   // leaves this exact status message behind -- once generation succeeds again, it must not keep
@@ -3360,7 +3402,13 @@ layoutCanvas.addEventListener('pointerdown',e=>{
   }
   const l0Map=new Map(dragIds.map(id=>[id,JSON.parse(JSON.stringify(project.layers.find(x=>x.id===id)))]));
   const groupBBox0=unionBBoxOfLayers(dragIds.map(id=>project.layers.find(x=>x.id===id)));
-  drag={kind:'move',layerIds:dragIds,start:mm,l0Map,groupBBox0};
+  // M14: baseLayout is the current module-level StoneLayout snapshotted as-is at drag start -- the
+  // move-drag fast path translates a copy of it every pointermove instead of regenerating every
+  // layer. l0Map already captures each moved layer's drag-start position fields (x/y or cx/cy), so it
+  // doubles as the per-layer base-position snapshot the fast path derives its delta from -- no
+  // separate baseLayerPositionsById is needed. `layout` can be null here (generation never succeeded
+  // yet); the pointermove fast path guards on drag.baseLayout and falls back to updateAll(true).
+  drag={kind:'move',layerIds:dragIds,start:mm,l0Map,groupBBox0,baseLayout:layout};
   layoutCanvas.setPointerCapture(e.pointerId);updateAll(true);
 });
 layoutCanvas.addEventListener('pointermove',e=>{
@@ -3443,9 +3491,56 @@ layoutCanvas.addEventListener('pointermove',e=>{
     if(e.shiftKey)rotationDeg=Math.round(rotationDeg/ROTATION_SNAP_STEP_DEG)*ROTATION_SNAP_STEP_DEG;
     l.rotationDeg=((rotationDeg%360)+360)%360;
   }
-  syncSelectedControlsFromLayer();updateAll(true);
+  syncSelectedControlsFromLayer();
+  // M14 (perf/move-drag-translate-fast-path): move drags take the translation fast path -- translate a
+  // copy of the drag-start layout (drag.baseLayout) instead of calling engine.generate() for every
+  // layer on every pointermove. Resize and rotate drags are deliberately out of scope for this
+  // milestone and keep their existing full per-frame updateAll(true).
+  //
+  // Approximation contract: translation is geometrically EXACT per layer (every sampling grid is
+  // anchored to its own layer's box -- see translateLayoutForMoveDrag()). The only difference from a
+  // true regeneration is the project-level dedupeStonesByRadius() that runs ACROSS layers: where the
+  // moved layer transiently overlaps another mid-drag, this preview's overlap zone can differ
+  // slightly. endActiveDrag() runs exactly one canonical updateAll(true) at drag end, on every
+  // termination path, so nothing the fast path shows ever persists into project state or an export.
+  if(drag.kind==='move'&&drag.baseLayout){
+    const base0=drag.l0Map.get(drag.layerIds[0]),liveLayer=project.layers.find(x=>x.id===drag.layerIds[0]);
+    if(base0&&liveLayer){
+      // Every dragged layer shares one delta -- the move branch above applies the same dx/dy to all
+      // of them (see the `for(const id of drag.layerIds)` loop) -- so the first layer's drag-start
+      // -> current offset is the whole moved set's translation. Derived from base positions, not
+      // accumulated per-event, so it can never drift.
+      const p0=getLayerPosition(base0),p1=getLayerPosition(liveLayer);
+      layout=translateLayoutForMoveDrag(drag.baseLayout,drag.layerIds,p1.xMm-p0.xMm,p1.yMm-p0.yMm);
+      drawLayout();
+      // Same per-frame 3D-preview refresh updateAll()'s tail performs (drawCup() -> preview3D.update).
+      drawCup();
+    }else{
+      updateAll(true);
+    }
+  }else{
+    updateAll(true);
+  }
 });
-window.addEventListener('pointerup',()=>{drag=null;if(activeGuides.length){activeGuides=[];drawLayout()}});
+window.addEventListener('pointerup',endActiveDrag);
+window.addEventListener('pointercancel',endActiveDrag);
+// M14: EVERY way a layoutCanvas drag can end runs through here. Precondition #2 (verified by grepping
+// app.js, not assumed): the ONLY listener that cleared `drag` was the old `pointerup` handler -- there
+// is no blur/visibilitychange/lostpointercapture handler, and the only `Escape` handling
+// (drawingTool.isActive keydown branch, the #moreShapesPopover close) never touches layoutCanvas
+// `drag`. `pointercancel` was previously unhandled entirely (a canceled drag left `drag` stuck -- a
+// pre-existing latent bug); it is wired here now so the fast-path preview can never survive a cancel.
+// A move drag ran the translation fast path on its pointermoves instead of updateAll(true), so it
+// MUST end with exactly one canonical full regeneration before the layout can persist or export.
+// updateAll(true) commits no history (that happened once at drag start), so there is no double-commit
+// on any path; a plain click with no pointermove is already canonical from pointerdown's own
+// updateAll(true) and the extra regeneration here is idempotent.
+function endActiveDrag(){
+  const ended=drag;
+  drag=null;
+  if(activeGuides.length){activeGuides=[];drawLayout()}
+  if(ended&&ended.kind==='move')updateAll(true);
+}
 window.addEventListener('keydown',e=>{
   const key=e.key.toLowerCase(),mod=e.ctrlKey||e.metaKey;
   // RS-1002: app-level undo/redo takes precedence over any native browser input-level undo, so
