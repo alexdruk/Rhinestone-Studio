@@ -59,6 +59,12 @@ function sliceBalanced(source, startMarker, label) {
 }
 
 const findBolderSiblingSrc = sliceBalanced(appJs, 'function findBolderSibling(fontManager,font){', 'findBolderSibling()');
+// PERF-005: updateStoneSizeOverlapCapabilityUI() now calls out to these two module-level pieces
+// (the availability-sweep function, and its own target-key tracking) instead of doing the full
+// catalog sweep inline -- sliced in verbatim alongside it so this harness keeps exercising the real
+// source, not a pre-PERF-005 shape of it.
+const stoneSizeAvailabilityStateSrc = appJs.match(/let lastStoneSizeAvailabilityTargetKey=undefined;\nfunction stoneSizeTargetKey\(target\)\{[^\n]*\}/)[0];
+const updateAvailabilitySrc = sliceBalanced(appJs, 'async function updateStoneSizeOptionAvailabilityUI(target,currentSizeMm){', 'updateStoneSizeOptionAvailabilityUI()');
 const updateFnSrc = sliceBalanced(appJs, 'async function updateStoneSizeOverlapCapabilityUI(){', 'updateStoneSizeOverlapCapabilityUI()');
 
 // The crowding/attrition thresholds are module-level consts outside either slice -- pull them in
@@ -102,7 +108,9 @@ function makeEnv({ layer, currentStones, currentOutlineStats }) {
     `
     let stoneSizeOverlapCheckToken=0;
     ${thresholdSrc}
+    ${stoneSizeAvailabilityStateSrc}
     ${findBolderSiblingSrc}
+    ${updateAvailabilitySrc}
     ${updateFnSrc}
     return { updateStoneSizeOverlapCapabilityUI, findBolderSibling };
     `

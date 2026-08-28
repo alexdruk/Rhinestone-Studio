@@ -2972,10 +2972,11 @@ function clearStoneSizeOverlapUI(){
   el('stoneSize').classList.remove('overlap-invalid');
   el('stoneSizeOverlapWarning').classList.remove('visible');el('stoneSizeOverlapWarning').textContent='';
   el('stoneSizeCrowdingHint').style.display='none';el('stoneSizeCrowdingHint').textContent='';
+  lastStoneSizeAvailabilityTargetKey=undefined; // PERF-005: force a fresh sweep next time a target exists again
 }
-// Guarded by a monotonic token (same convention updateAll()'s own generationToken uses) since this
-// runs the real Live generation pipeline (async for text) -- a fast keystroke-to-keystroke edit must
-// never let a stale, slower-to-resolve check overwrite a newer one's result.
+// PERF-005: `stoneSizeOverlapCheckToken` also guards updateStoneSizeOptionAvailabilityUI() below --
+// both run the real Live generation pipeline and must never let a stale, slower-to-resolve check
+// overwrite a newer one's result.
 let stoneSizeOverlapCheckToken=0;
 // Crowding/attrition warning thresholds (Prompt 4), calibrated against Prompt 3's measureStoneCrowding()
 // sweep and the three screenshot regimes (healthy / crowded-not-overlapping / genuinely-overlapping)
@@ -2983,6 +2984,45 @@ let stoneSizeOverlapCheckToken=0;
 // packing is legitimate, so this only fires for the denser end of the sweep's observed range.
 const STONE_SIZE_CROWDING_FRACTION_THRESHOLD=0.25;
 const STONE_SIZE_ATTRITION_RATIO_THRESHOLD=0.75;
+// PERF-005: which target (layer id + region id, or null) updateStoneSizeOptionAvailabilityUI()
+// last actually swept every stone size for -- lets updateStoneSizeOverlapCapabilityUI() below skip
+// re-running that sweep on every keystroke of an unrelated control (font, fill mode, height, text,
+// ...) and only re-run it when the selection itself changed, or #stoneSize is about to be opened
+// (see its own 'focus' listener). A stale sweep just leaves the *other* options' disabled/title
+// state slightly behind until the next legitimate trigger -- never wrong about the option the user
+// currently has selected, which the cheap per-call path below always keeps fresh.
+let lastStoneSizeAvailabilityTargetKey=undefined;
+function stoneSizeTargetKey(target){return target?`${target.layer.id}:${target.region?target.region.id:''}`:null}
+// PERF-005: the expensive half of the old updateStoneSizeOverlapCapabilityUI() -- generates a
+// candidate layout for every *other* catalog stone size (not just the current one) purely to decide
+// which #stoneSize <option>s should be disabled (would-overlap) and their tooltip. This used to run
+// unconditionally on every HISTORY_TRACKED_CONTROL_IDS edit (font pick, fill-mode change, height
+// edit, ...); it's now called only when the selection actually changed (see
+// updateStoneSizeOverlapCapabilityUI() below) or when #stoneSize is about to be opened, cutting the
+// per-keystroke cost of switching fonts/fill on an already-selected layer from up to 6 full Live
+// generations down to 1.
+async function updateStoneSizeOptionAvailabilityUI(target,currentSizeMm){
+  const token=++stoneSizeOverlapCheckToken;
+  const select=el('stoneSize');
+  const diametersToCheck=new Set(listStoneSizes().map(s=>s.diameterMm));
+  diametersToCheck.delete(currentSizeMm); // the current size's own overlap state is the cheap path's job, not this sweep's
+  for(const diameterMm of diametersToCheck){
+    const{stones}=await stonesForCandidateStoneSize(target,diameterMm,project);
+    if(token!==stoneSizeOverlapCheckToken)return;
+    const overlaps=hasAnyOverlappingStonePair(stones.map(s=>({xMm:s.x,yMm:s.y,sizeMm:s.d})));
+    const size=listStoneSizes().find(s=>s.diameterMm===diameterMm);
+    const option=select.querySelector(`option[value="${diameterMm}"]`);
+    if(!option||!size)continue;
+    // updateStoneSizePrintableCapabilityUI() (called just before this function, see
+    // updateEditingUI()) always runs first and unconditionally resets every option's .disabled --
+    // so option.disabled read here is exactly that gate's own fresh verdict, not a stale leftover
+    // from this function's own previous pass. Only add overlap-disabling on top of it.
+    const otherGateDisabled=option.disabled;
+    option.disabled=otherGateDisabled||overlaps;
+    if(!otherGateDisabled)option.title=overlaps?`${size.name} would overlap on the current shape.`:'';
+  }
+  lastStoneSizeAvailabilityTargetKey=stoneSizeTargetKey(target);
+}
 // FONT-LIB-003: the crowding hint's *firing* (thresholds, measureStoneCrowding(), outlineStats
 // attrition -- all above) is unchanged. Only its wording changes for a text layer: instead of the
 // generic "try a smaller size", it names the layer's font family and, when that family has a
@@ -2990,47 +3030,33 @@ const STONE_SIZE_ATTRITION_RATIO_THRESHOLD=0.75;
 // by name -- plus "a larger stone size" and "a taller letter height", both of which scale a thin
 // stroke up proportionally. All still informational only (dense packing is sometimes intentional):
 // no button, no auto-apply. Non-text layers (shape/path/svg/image) keep the original generic wording.
+// PERF-005: this now generates exactly one candidate layout (the current stone size) per call,
+// instead of one per catalog stone size -- see updateStoneSizeOptionAvailabilityUI() above for the
+// other options' disabled/title state, which is swept separately and less often.
 async function updateStoneSizeOverlapCapabilityUI(){
   const target=currentStoneSizeTarget();
   if(!target){clearStoneSizeOverlapUI();return}
   const token=++stoneSizeOverlapCheckToken;
   const select=el('stoneSize'),warning=el('stoneSizeOverlapWarning');
   const currentSizeMm=target.region?target.region.stoneSizeMm:target.layer.stoneSize;
-  const diametersToCheck=new Set(listStoneSizes().map(s=>s.diameterMm));
-  diametersToCheck.add(currentSizeMm);
-  const overlapBySize=new Map();
-  // Captured only for currentSizeMm's own iteration -- the crowding/attrition warning below is about
-  // the user's actual current selection, not a per-option gate like the disable loop just below.
-  let currentStones=null,currentOutlineStats=null;
-  for(const diameterMm of diametersToCheck){
-    const{stones,outlineStats}=await stonesForCandidateStoneSize(target,diameterMm,project);
-    if(token!==stoneSizeOverlapCheckToken)return;
-    overlapBySize.set(diameterMm,hasAnyOverlappingStonePair(stones.map(s=>({xMm:s.x,yMm:s.y,sizeMm:s.d}))));
-    if(diameterMm===currentSizeMm){currentStones=stones;currentOutlineStats=outlineStats}
-  }
-  for(const size of listStoneSizes()){
-    const option=select.querySelector(`option[value="${size.diameterMm}"]`);
-    if(!option)continue;
-    const isCurrent=size.diameterMm===currentSizeMm;
-    if(isCurrent)continue;
-    // updateStoneSizePrintableCapabilityUI() (called just before this function, see
-    // updateEditingUI()) always runs first and unconditionally resets every option's .disabled --
-    // so option.disabled read here is exactly that gate's own fresh verdict, not a stale leftover
-    // from this function's own previous pass. Only add overlap-disabling on top of it.
-    const otherGateDisabled=option.disabled;
-    const overlaps=overlapBySize.get(size.diameterMm);
-    option.disabled=otherGateDisabled||overlaps;
-    if(!otherGateDisabled)option.title=overlaps?`${size.name} would overlap on the current shape.`:'';
-  }
-  const currentOverlaps=overlapBySize.get(currentSizeMm)||false;
+  const{stones:currentStones,outlineStats:currentOutlineStats}=await stonesForCandidateStoneSize(target,currentSizeMm,project);
+  if(token!==stoneSizeOverlapCheckToken)return;
+  const currentOverlaps=hasAnyOverlappingStonePair(currentStones.map(s=>({xMm:s.x,yMm:s.y,sizeMm:s.d})));
   select.classList.toggle('overlap-invalid',currentOverlaps);
   warning.textContent=currentOverlaps?"This stone size isn't suitable for this shape — it won't form a uniform figure.":'';
   warning.classList.toggle('visible',currentOverlaps);
+  // PERF-005: the other catalog sizes' disabled/title state only needs refreshing when the
+  // selection itself changed since the last sweep -- an edit to font/fill/height/etc. on the same
+  // already-selected layer reuses whatever the last sweep found, which #stoneSize's own 'focus'
+  // listener (below) also refreshes right before the user actually opens the dropdown.
+  if(stoneSizeTargetKey(target)!==lastStoneSizeAvailabilityTargetKey){
+    updateStoneSizeOptionAvailabilityUI(target,currentSizeMm).catch(error=>console.error('Stone size availability sweep failed',error));
+  }
   // Crowding/attrition warning: informational only, for the CURRENT size only (not a per-option gate
-  // like the disable loop above) -- dense packing is sometimes exactly what the user wants (pavé), so
-  // this never disables an option. Skipped entirely whenever currentOverlaps is already true: genuine
-  // overlap is the more severe, actionable problem, and showing both at once is noise, not more
-  // information.
+  // like updateStoneSizeOptionAvailabilityUI() above) -- dense packing is sometimes exactly what the
+  // user wants (pavé), so this never disables an option. Skipped entirely whenever currentOverlaps is
+  // already true: genuine overlap is the more severe, actionable problem, and showing both at once is
+  // noise, not more information.
   const crowdingHint=el('stoneSizeCrowdingHint');
   let crowded=false;
   if(!currentOverlaps){
@@ -3803,6 +3829,17 @@ el('stoneSize').addEventListener('input',()=>{
   const size=findStoneSizeByDiameterMm(parseFloat(el('stoneSize').value));
   if(!size)return;
   applyStoneSizeHeightAutoSet(l,size);
+});
+// PERF-005: updateStoneSizeOptionAvailabilityUI()'s per-option-disabled sweep is otherwise only
+// re-run when the selection itself changes (see updateStoneSizeOverlapCapabilityUI()) -- this
+// refreshes it right before the user actually opens the dropdown, so an edit made to the selected
+// layer since the last sweep (font, fill mode, height, ...) is reflected by the time they pick a
+// size, without paying that sweep's cost on every one of those other edits.
+el('stoneSize').addEventListener('focus',()=>{
+  const target=currentStoneSizeTarget();
+  if(!target)return;
+  const currentSizeMm=target.region?target.region.stoneSizeMm:target.layer.stoneSize;
+  updateStoneSizeOptionAvailabilityUI(target,currentSizeMm).catch(error=>console.error('Stone size availability sweep failed',error));
 });
 // Marks this layer's height as a deliberate manual choice so the Stone size listener above stops
 // silently overriding it on future changes (as long as it stays valid for the newly-selected size).
