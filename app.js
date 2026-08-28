@@ -2714,6 +2714,11 @@ function updateEditingUI(){const n=selectedLayerIds.size;el('selectionSummary').
   updateMixedSizeCapabilityUI();
   updateStoneSizePrintableCapabilityUI();
   updateStoneSizeOverlapCapabilityUI();
+  // FONT-LIB-004: deliberately last, and NOT between updateTextFontCapabilityUI() and
+  // updateMixedSizeCapabilityUI() -- tools/test-rs2012-text-gap-mixed-size-ux.mjs asserts those two
+  // stay adjacent. Order is otherwise irrelevant here: this reads only the layer's own
+  // height/stoneSize/font and touches only its own warning element.
+  updateTextHeightReadabilityUI();
 }
 // FONT-002: keeps every Text Lightbox control that doesn't apply to the selected layer's font
 // (Fill Style, Text height/Auto fit, Curved text) in a disabled/hidden + explained state, and shows
@@ -2875,6 +2880,41 @@ function updateMixedSizeCapabilityUI(){
   }else{
     hint.classList.remove('visible');hint.textContent='';
   }
+}
+// FONT-LIB-004: the readability check the font library was missing. An audit of all 29 enabled
+// OpenType fonts through FONT-CERT-001/002's real analysis pipeline
+// (tools/font-certification/audit-manifest-readability.mjs) found ZERO font/stone-size combinations
+// that fail at each size's own validated default height -- but a broad, font-independent collapse
+// as soon as height drops below that size's supportedHeightRangeMm minimum. Readability here is
+// governed by the height-to-stone-diameter ratio, not by which font is selected, so the right gate
+// is this one height check rather than per-font `unsupportedStoneSizes` entries (which stay exactly
+// as FONT-PORTFOLIO-001's human raters set them -- see that milestone's own spec).
+// applyStoneSizeHeightAutoSet() already enforces the range on a *stone size* change; this covers
+// every other route to an out-of-range height (a direct #height edit, a loaded project, an Auto Fit
+// shrink, TXT-104's capHeight conversion). Warning only, never a clamp -- see index.html's own
+// comment on #heightBelowReadableWarning for why.
+// FONT-LIB-004: shared predicate -- true when `layer` is a text layer whose height sits below its
+// current stone size's validated minimum. Used by BOTH the height warning below and
+// updateStoneSizeOverlapCapabilityUI()'s crowding hint, which suppresses its own font-blaming
+// message whenever this is true (the height is the root cause there; naming the font would send the
+// user after a fix that cannot work -- see the crowding hint's own comment).
+function textHeightBelowReadableMinimum(layer){
+  // Authored Production Fonts (RS Block/RS Modern) are a fixed size with their own baked-in stone
+  // pitch -- supportedHeightRangeMm is an OpenType-sampling concept that does not apply to them
+  // (same exclusion #textModeField/#gapFixedHint already make).
+  if(!layer||layer.type!=='text'||isAuthoredStoneFontId(layer.font))return null;
+  const size=findStoneSizeByDiameterMm(layer.stoneSize);
+  const heightMm=layer.height;
+  if(!size||!Number.isFinite(heightMm))return null;
+  return heightMm<size.supportedHeightRangeMm[0]?{size,heightMm}:null;
+}
+function updateTextHeightReadabilityUI(){
+  const warning=el('heightBelowReadableWarning');
+  const below=textHeightBelowReadableMinimum(selectedLayer());
+  warning.textContent=below
+    ? `At ${below.size.name} stones, text this short (${formatLengthDisplay(below.heightMm,project.units,1)} ${unitSuffix(project.units)}) won't read clearly — ${formatLengthDisplay(below.size.supportedHeightRangeMm[0],project.units,1)} ${unitSuffix(project.units)} or taller is the tested minimum for this stone size.`
+    : '';
+  warning.classList.toggle('visible',Boolean(below));
 }
 // FONT-DECISION-001 (Studio Integration follow-up): disables + dims + explains (via title) every
 // #stoneSize <option> whose entire FONT-DECISION-001-validated supportedHeightRangeMm (StoneSizes.js)
@@ -3068,22 +3108,43 @@ async function updateStoneSizeOverlapCapabilityUI(){
   const genericCrowdingText='This stone size may pack tightly on this shape — try a smaller size for more even spacing.';
   let crowdingText='';
   if(crowded){
-    // Text-layer case (FONT-LIB-003): name the font family, and suggest a bolder sibling weight when
-    // one exists. Falls back to the generic wording for a text layer whose font id can't be resolved
-    // (legacy/unknown font) and for every non-text layer type.
+    // Text-layer case (FONT-LIB-003, reworded by FONT-LIB-004): name the font family, and suggest a
+    // bolder sibling weight when one exists. Falls back to the generic wording for a text layer
+    // whose font id can't be resolved (legacy/unknown font) and for every non-text layer type.
+    //
+    // FONT-LIB-004 precedence: suppressed entirely when the layer's height is below its stone
+    // size's validated minimum (textHeightBelowReadableMinimum()). FONT-LIB-004's audit showed
+    // crowding in that regime is driven by the height-to-stone-diameter ratio, NOT by the font --
+    // a bold geometric sans crowds at 15mm/SS16 exactly as a fine script does -- so naming the font
+    // there misattributes the cause and points the user at a font switch that cannot fix it.
+    // #heightBelowReadableWarning is already on screen saying the accurate thing, and two warnings
+    // blaming two different causes is worse than one correct one. Same mutual-exclusivity idiom
+    // this function already applies for currentOverlaps above.
     const layer=target.layer;
-    const font=layer&&layer.type==='text'&&layer.font&&fontManager&&fontManager.hasFont(layer.font)?fontManager.getFont(layer.font):null;
-    if(font){
+    const heightIsRootCause=Boolean(textHeightBelowReadableMinimum(layer));
+    const font=!heightIsRootCause&&layer&&layer.type==='text'&&layer.font&&fontManager&&fontManager.hasFont(layer.font)?fontManager.getFont(layer.font):null;
+    if(heightIsRootCause){
+      crowdingText='';
+    }else if(font){
+      // Wording (FONT-LIB-004): describes the stroke rather than the typeface ("strokes are narrow
+      // at this stone size", not "Great Vibes is thin"). At a height already inside the validated
+      // range the font's own stroke geometry genuinely is the differentiator, so naming it is fair
+      // -- but the phrasing should point at the fixable property rather than read as a verdict on
+      // the font, and should present all three remedies as equals rather than leading with a font
+      // switch.
       const bolder=findBolderSibling(fontManager,font);
       crowdingText=bolder
-        ?`${font.family} ${font.style} is thin at this stone size — try ${font.family} ${bolder.style}, a larger stone size, or a taller letter height.`
-        :`${font.family} is thin at this stone size — try a larger stone size or a taller letter height.`;
+        ? `${font.family} ${font.style}'s strokes are narrow at this stone size — a heavier weight (${font.family} ${bolder.style}), a larger stone size, or a taller letter height would each give more even coverage.`
+        : `${font.family}'s strokes are narrow at this stone size — a larger stone size or a taller letter height would give more even coverage.`;
     }else{
       crowdingText=genericCrowdingText;
     }
   }
   crowdingHint.textContent=crowdingText;
-  crowdingHint.style.display=crowded?'block':'none';
+  // FONT-LIB-004: keyed off crowdingText, not `crowded` -- the height-root-cause branch above
+  // deliberately produces an empty message while `crowded` is still true, and an empty but *shown*
+  // <p> would render as a stray blank gap in the Lightbox.
+  crowdingHint.style.display=crowdingText?'block':'none';
 }
 // RS-0003.5D2: SELECTION_HANDLE_SIZE_PX enlarges the resize handles slightly (was a bare 10px
 // square) and a white halo is stroked behind the dashed outline so the selection reads clearly
