@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { FontManager } from '../src/fonts/index.js';
 import { listStoneSizes } from '../src/renderer/StoneSizes.js';
 import { hasAnyOverlappingStonePair, measureStoneCrowding } from '../src/geometry/StoneLayout.js';
+import { findStoneSizeByDiameterMm } from '../src/renderer/StoneSizes.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
@@ -59,6 +60,10 @@ function sliceBalanced(source, startMarker, label) {
 }
 
 const findBolderSiblingSrc = sliceBalanced(appJs, 'function findBolderSibling(fontManager,font){', 'findBolderSibling()');
+// FONT-LIB-004: the crowding hint now defers to the height warning when the layer's height is below
+// its stone size's validated minimum -- sliced in so this harness exercises the real precedence
+// rule rather than a stubbed stand-in.
+const heightPredicateSrc = sliceBalanced(appJs, 'function textHeightBelowReadableMinimum(layer){', 'textHeightBelowReadableMinimum()');
 // PERF-005: updateStoneSizeOverlapCapabilityUI() now calls out to these two module-level pieces
 // (the availability-sweep function, and its own target-key tracking) instead of doing the full
 // catalog sweep inline -- sliced in verbatim alongside it so this harness keeps exercising the real
@@ -105,11 +110,13 @@ function makeEnv({ layer, currentStones, currentOutlineStats }) {
   const factory = new Function(
     'el', 'currentStoneSizeTarget', 'clearStoneSizeOverlapUI', 'listStoneSizes',
     'stonesForCandidateStoneSize', 'project', 'hasAnyOverlappingStonePair', 'measureStoneCrowding', 'fontManager',
+    'isAuthoredStoneFontId', 'findStoneSizeByDiameterMm',
     `
     let stoneSizeOverlapCheckToken=0;
     ${thresholdSrc}
     ${stoneSizeAvailabilityStateSrc}
     ${findBolderSiblingSrc}
+    ${heightPredicateSrc}
     ${updateAvailabilitySrc}
     ${updateFnSrc}
     return { updateStoneSizeOverlapCapabilityUI, findBolderSibling };
@@ -117,7 +124,8 @@ function makeEnv({ layer, currentStones, currentOutlineStats }) {
   );
   const api = factory(
     el, currentStoneSizeTarget, clearStoneSizeOverlapUI, listStoneSizes,
-    stonesForCandidateStoneSize, {}, hasAnyOverlappingStonePair, measureStoneCrowding, fontManager
+    stonesForCandidateStoneSize, {}, hasAnyOverlappingStonePair, measureStoneCrowding, fontManager,
+    (id) => ['rs-block','rs-modern'].includes(id), findStoneSizeByDiameterMm
   );
   return { dom, ...api };
 }
@@ -153,7 +161,7 @@ await test('2. Poppins Regular crowded (Poppins SemiBold/Bold available) -> the 
   const text = env.dom.stoneSizeCrowdingHint.textContent;
   assert.equal(
     text,
-    'Poppins Regular is thin at this stone size — try Poppins SemiBold, a larger stone size, or a taller letter height.',
+    "Poppins Regular's strokes are narrow at this stone size — a heavier weight (Poppins SemiBold), a larger stone size, or a taller letter height would each give more even coverage.",
     'expected the exact font-aware "try <bolder>" wording, naming SemiBold (weight 600, the lightest sibling heavier than 400)'
   );
 });
@@ -182,7 +190,7 @@ await test('3. a crowded single-style family (Great Vibes) omits the "try <bolde
   const text = env.dom.stoneSizeCrowdingHint.textContent;
   assert.equal(
     text,
-    'Great Vibes is thin at this stone size — try a larger stone size or a taller letter height.'
+    "Great Vibes's strokes are narrow at this stone size — a larger stone size or a taller letter height would give more even coverage."
   );
   assert.ok(!/ try Great Vibes /.test(text), 'no self-referential "try Great Vibes <style>" clause');
 });
@@ -235,6 +243,30 @@ await test('5. firing threshold unchanged: attrition ratio >= 0.75 with healthy 
   await env.updateStoneSizeOverlapCapabilityUI();
   assert.equal(env.dom.stoneSizeCrowdingHint.style.display, 'block');
   assert.equal(env.dom.stoneSizeCrowdingHint.textContent, GENERIC_TEXT, 'non-text crowded wording is unchanged from pre-milestone');
+});
+
+await test('5c. FONT-LIB-004 precedence: when the layer\'s height is below its stone size\'s validated minimum, the crowding hint stays silent -- the height warning owns that case, and blaming the font there would send the user after a fix that cannot work', async () => {
+  const SS6_MM = findStoneSizeByDiameterMm(2).diameterMm;
+  const minMm = findStoneSizeByDiameterMm(2).supportedHeightRangeMm[0];
+  // Same crowded fixture as test 1/3, but with a height below SS6's validated minimum.
+  const below = makeEnv({
+    layer: { type: 'text', font: 'great-vibes-regular', stoneSize: SS6_MM, gap: 0.3, height: minMm - 10 },
+    currentStones: SEPARATED(SS6_MM),
+    currentOutlineStats: { keptCount: 60, rawSampleCount: 100 }
+  });
+  await below.updateStoneSizeOverlapCapabilityUI();
+  assert.equal(below.dom.stoneSizeCrowdingHint.textContent, '', 'expected no crowding message while the height is the root cause');
+  assert.equal(below.dom.stoneSizeCrowdingHint.style.display, 'none', 'an empty message must not render as a blank gap');
+
+  // Identical fixture at a height INSIDE the validated range still gets the font-aware message --
+  // proving the suppression is the height check, not a blanket disabling of the hint.
+  const inRange = makeEnv({
+    layer: { type: 'text', font: 'great-vibes-regular', stoneSize: SS6_MM, gap: 0.3, height: minMm + 5 },
+    currentStones: SEPARATED(SS6_MM),
+    currentOutlineStats: { keptCount: 60, rawSampleCount: 100 }
+  });
+  await inRange.updateStoneSizeOverlapCapabilityUI();
+  assert.match(inRange.dom.stoneSizeCrowdingHint.textContent, /Great Vibes/, 'expected the font-aware message once height is no longer the root cause');
 });
 
 await test('5b. genuine overlap still suppresses the crowding hint entirely (mutual exclusivity unchanged)', async () => {

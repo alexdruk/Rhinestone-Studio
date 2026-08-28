@@ -736,6 +736,17 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           </div>
           <p class="hint" id="textSizeFixedHint" style="display:none">Production Fonts are a fixed size — pick a different font for a different scale.</p>
           <p class="hint" id="heightAutoAdjustedHint" style="display:none"></p>
+          <!-- FONT-LIB-004: text height is the dominant readability variable, not the font. The app
+               already knows each stone size's FONT-DECISION-001-validated supportedHeightRangeMm and
+               auto-sets/snaps to it on a *stone size* change (applyStoneSizeHeightAutoSet()), but a
+               direct #height edit was never checked against it -- so SS6 at 15mm rendered
+               unreadable output with no feedback at all. This warns whenever the current height is
+               below the current stone size's validated minimum, whatever route it got there
+               (manual edit, capHeight-mode conversion, loaded project, Auto Fit shrink). Deliberately
+               a warning, not a clamp: an existing project may already hold an out-of-range height,
+               and a deliberately tiny accent word is a legitimate (if fragile) choice -- the same
+               "explain, never silently override" stance #stoneSizeCrowdingHint takes. -->
+          <p class="validation-message" id="heightBelowReadableWarning" role="alert"></p>
           <p class="hint" id="autoFitOnHint" style="display:none">Auto Fit shrinks text to stay within the printable area, which can override the height needed for reliable readability at your selected stone size.</p>
           <p class="hint" id="heightModeToggleHint" style="display:none"><button type="button" class="btn sm" id="heightModeToggleBtn"></button></p>
         </div>
