@@ -1367,7 +1367,11 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
        in updateStoneSizeOverlapCapabilityUI()) -- dense packing is sometimes exactly what the user
        wants (pave), so this never disables an option, and is mutually exclusive with the overlap
        warning above (genuine overlap is the more severe, actionable problem). Uses the .hint idiom,
-       not .validation-message -- this is a suggestion, not an error. -->
+       not .validation-message -- this is a suggestion, not an error.
+       FONT-LIB-003: for a text layer the message is font-aware -- it names the font family and, when
+       the family has a heavier enabled sibling than the current style, suggests that bolder weight by
+       name, alongside "a larger stone size" and "a taller letter height". Non-text layers keep the
+       generic "try a smaller size" wording. Still informational only: no switch-font button. -->
   <p class="hint" id="stoneSizeCrowdingHint" style="display:none"></p>
   <!-- RS-2012: shown instead of relying on #gap's disabled look alone -- an authored Rhinestone
        font (RS Block/RS Modern) bakes spacing into its stone positions, so Gap has no effect for it

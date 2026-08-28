@@ -424,6 +424,18 @@ function fontFamilyEntries(fonts){
   }
   return entries;
 }
+// FONT-LIB-003: the lowest-weight *enabled* font in the same family as `font` whose weight is
+// strictly heavier than `font`'s -- i.e. the concrete "try a bolder weight" candidate the crowding
+// hint (updateStoneSizeOverlapCapabilityUI()) offers for a thin-stroke text layer. Returns null when
+// the family is single-weight or `font` is already its heaviest enabled style. Companion to
+// fontFamilyEntries() above, which already sorts a family's styles lightest-first.
+function findBolderSibling(fontManager,font){
+  if(!fontManager||!font)return null;
+  const heavier=fontManager.listFonts().filter(f=>f.family===font.family&&f.enabled===true&&(f.weight||400)>(font.weight||400));
+  if(heavier.length===0)return null;
+  heavier.sort((a,b)=>(a.weight||400)-(b.weight||400)||a.style.localeCompare(b.style));
+  return heavier[0];
+}
 // Same category grouping/sorting as groupFontsByCategory(), but over fontFamilyEntries() rather than
 // individual font records -- so the Browse Fonts panel shows one row per family.
 function groupFamilyEntriesByCategory(entries){
@@ -2971,6 +2983,13 @@ let stoneSizeOverlapCheckToken=0;
 // packing is legitimate, so this only fires for the denser end of the sweep's observed range.
 const STONE_SIZE_CROWDING_FRACTION_THRESHOLD=0.25;
 const STONE_SIZE_ATTRITION_RATIO_THRESHOLD=0.75;
+// FONT-LIB-003: the crowding hint's *firing* (thresholds, measureStoneCrowding(), outlineStats
+// attrition -- all above) is unchanged. Only its wording changes for a text layer: instead of the
+// generic "try a smaller size", it names the layer's font family and, when that family has a
+// heavier enabled sibling than the current style (findBolderSibling()), suggests that bolder weight
+// by name -- plus "a larger stone size" and "a taller letter height", both of which scale a thin
+// stroke up proportionally. All still informational only (dense packing is sometimes intentional):
+// no button, no auto-apply. Non-text layers (shape/path/svg/image) keep the original generic wording.
 async function updateStoneSizeOverlapCapabilityUI(){
   const target=currentStoneSizeTarget();
   if(!target){clearStoneSizeOverlapUI();return}
@@ -3020,7 +3039,24 @@ async function updateStoneSizeOverlapCapabilityUI(){
     const attritionRatio=currentOutlineStats?currentOutlineStats.keptCount/currentOutlineStats.rawSampleCount:1;
     crowded=crowding.fractionBelowHalfGap>STONE_SIZE_CROWDING_FRACTION_THRESHOLD||attritionRatio<STONE_SIZE_ATTRITION_RATIO_THRESHOLD;
   }
-  crowdingHint.textContent=crowded?'This stone size may pack tightly on this shape — try a smaller size for more even spacing.':'';
+  const genericCrowdingText='This stone size may pack tightly on this shape — try a smaller size for more even spacing.';
+  let crowdingText='';
+  if(crowded){
+    // Text-layer case (FONT-LIB-003): name the font family, and suggest a bolder sibling weight when
+    // one exists. Falls back to the generic wording for a text layer whose font id can't be resolved
+    // (legacy/unknown font) and for every non-text layer type.
+    const layer=target.layer;
+    const font=layer&&layer.type==='text'&&layer.font&&fontManager&&fontManager.hasFont(layer.font)?fontManager.getFont(layer.font):null;
+    if(font){
+      const bolder=findBolderSibling(fontManager,font);
+      crowdingText=bolder
+        ?`${font.family} ${font.style} is thin at this stone size — try ${font.family} ${bolder.style}, a larger stone size, or a taller letter height.`
+        :`${font.family} is thin at this stone size — try a larger stone size or a taller letter height.`;
+    }else{
+      crowdingText=genericCrowdingText;
+    }
+  }
+  crowdingHint.textContent=crowdingText;
   crowdingHint.style.display=crowded?'block':'none';
 }
 // RS-0003.5D2: SELECTION_HANDLE_SIZE_PX enlarges the resize handles slightly (was a bare 10px
