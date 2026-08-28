@@ -144,14 +144,49 @@ export function sampleFillPoints(polygons, boundingBox, spacingMm) {
  * Even-odd point-in-polygon test across multiple polygons, so glyph holes
  * (inner contours) correctly subtract from outer contours.
  *
+ * PERF-006: a grid fill (sampleFillPoints() and the other fill-mode loops in this file) calls this
+ * once per candidate point against the *same* `polygons` array every time -- for a large/dense fill
+ * of a multi-contour shape (many characters, or a shape assembled from many parts), that's grid
+ * points times total vertices across every contour, most of which can never match (a candidate far
+ * to the side of one letter's contour still ran that letter's whole ray-cast loop before this fix --
+ * this matters more in X than Y for text specifically, since the glyphs in one line of text mostly
+ * share a Y range but are spread out horizontally). Each contour's bounding box is cheap to
+ * precompute once and cache by the `polygons` array's own identity (a WeakMap self-invalidates once
+ * that array is no longer referenced, and this pipeline never mutates a polygon's points in place
+ * after construction -- see Point2D's own translate()/scale(), which return new instances -- so
+ * caching by reference is safe: the same array reference always holds the same coordinates for as
+ * long as it's reachable). A point outside a contour's bounding box cannot cross any of that
+ * contour's edges under the ray-cast test below, so skipping it can never change the even-odd
+ * result -- this is a pure reject, not an approximation.
+ *
  * @param {Point2D} point
  * @param {Point2D[][]} polygons
  * @returns {boolean}
  */
+const polygonBoundsCache = new WeakMap(); // polygons (Point2D[][]) -> {minX, maxX, minY, maxY}[], same order/length as polygons
+function getPolygonBounds(polygons) {
+  let bounds = polygonBoundsCache.get(polygons);
+  if (bounds) return bounds;
+  bounds = polygons.map((polygon) => {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const v of polygon) {
+      if (v.xMm < minX) minX = v.xMm;
+      if (v.xMm > maxX) maxX = v.xMm;
+      if (v.yMm < minY) minY = v.yMm;
+      if (v.yMm > maxY) maxY = v.yMm;
+    }
+    return { minX, maxX, minY, maxY };
+  });
+  polygonBoundsCache.set(polygons, bounds);
+  return bounds;
+}
 export function isPointInsidePolygons(point, polygons) {
   let inside = false;
-  for (const polygon of polygons) {
-    if (isPointInsidePolygon(point, polygon)) {
+  const bounds = getPolygonBounds(polygons);
+  for (let i = 0; i < polygons.length; i++) {
+    const b = bounds[i];
+    if (point.xMm < b.minX || point.xMm > b.maxX || point.yMm < b.minY || point.yMm > b.maxY) continue; // pure reject, see doc comment above
+    if (isPointInsidePolygon(point, polygons[i])) {
       inside = !inside;
     }
   }
