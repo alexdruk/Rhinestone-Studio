@@ -833,7 +833,7 @@ default export so `OpenTypeProvider.js` itself needs no browser-specific branch.
 ```mermaid
 flowchart TD
     Layer["Text layer params\ntext, font, height, textMode, stoneSize, gap, color, autoFit"]
-    Resolve["app.js generateTextStonesLive()\nresolve fontId (courier-prime-regular /\ngreat-vibes-regular only, else default),\nmode = textMode==='fill' ? 'fill' : 'outline'"]
+    Resolve["app.js generateTextStonesLive()\nresolve fontId (any enabled manifest font\nor authored RS font; else default),\nmode = textMode==='fill' ? 'fill' : 'outline'"]
     PermGen["GeometryEngine.generateTextLayout()"]
     PerChar["per character:\nFontProviderRegistry.getTextPath()"]
     OTP["OpenTypeProvider\nparse font (cached per fontId),\ncharToGlyph + kerning"]
@@ -1023,15 +1023,19 @@ No other legacy/dead code is currently known in the application.
    generates stone positions" — but it means the permanent engine has no native multi-layer
    aggregation API, and `StoneLayout`'s single-`layerId` constructor is worked around with a
    `'project'` sentinel rather than a real multi-layer representation.
-2. **The font manifest's `enabled` flag does not gate what can actually be loaded.**
-   `assets/fonts/manifest.json` marks all three registered fonts (`courier-prime-regular`,
-   `roboto-mono-regular`, `great-vibes-regular`) as `"enabled": false`, but
-   `FontManager.getFont()` — which `OpenTypeProvider` calls — does not check `enabled` (only
-   `listFonts()`/`listFamilies()`/`getDefaultFont()` do). `app.js` calls `getFont()` directly by
-   id, so the two fonts it actually offers (`courier-prime-regular`, `great-vibes-regular`) load
-   and render live text despite being marked disabled. `roboto-mono-regular`'s font file
-   (`assets/fonts/RobotoMono-Regular.ttf`) is a 14-byte placeholder stub, not a real font — it is
-   unreferenced by `app.js` today, but would throw from `opentype.parse()` if ever selected.
+2. **The font manifest's `enabled` flag gates the picker but not `FontManager.getFont()`.** As of
+   FONT-LIB-002 the font picker (`app.js`'s `productionFonts()`, which builds both the `#font`
+   `<select>` and the Browse Fonts panel) offers every `assets/fonts/manifest.json` record with
+   `"enabled": true`, plus the authored `providerId: 'rhinestone'` fonts (RS Block / RS Modern) —
+   FONT-002 had restricted it to the authored fonts and FONT-DECISION-001 re-admitted OpenType fonts
+   only with `"rhinestoneValidated": true`; that flag is now display-only (the library row's ✓
+   "Rated legible" badge), while `unsupportedStoneSizes` still gates individual stone sizes per font.
+   But `FontManager.getFont()` — which `OpenTypeProvider` calls — still does not check `enabled`
+   (only `listFonts()`/`listFamilies()`/`getDefaultFont()` do), so a project that references a
+   since-disabled font id still resolves and renders live text. The only shipped disabled record is
+   `roboto-mono-regular`, whose file (`assets/fonts/RobotoMono-Regular.ttf`) is an intentionally
+   unparsable 14-byte stub kept for `tools/test-opentype-provider.mjs`; it is unreferenced by
+   `app.js` and would throw from `opentype.parse()` if ever selected.
 3. **No Validation Engine, DXF export, or manufacturing reports exist yet.** These remain future
    milestones per "Future Direction" below, not regressions. (The product-plugin system and the
    3D/WebGL renderer, previously also listed here as not-yet-built, were implemented by RS-1004 and

@@ -66,7 +66,7 @@ await test('3. RS Block / RS Modern (authored stone-center fonts) must NOT have 
   }
 });
 
-await test('4. legacy, non-validated OpenType fonts (never offered by productionFonts()) must NOT have capHeightRatio/xHeightRatio', () => {
+await test('4. OpenType fonts outside TXT-104\'s measured portfolio (every bundled font except the rhinestoneValidated 4) must NOT have capHeightRatio/xHeightRatio', () => {
   for (const font of manifest.fonts) {
     if (EXPECTED_IN_SCOPE_IDS.includes(font.id)) continue;
     if (font.providerId === 'rhinestone') continue; // covered by test 3

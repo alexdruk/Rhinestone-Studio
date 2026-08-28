@@ -273,7 +273,7 @@ function updateStoneColorSwatch(){const c=STONE_COLORS[el('stoneColor').value];e
 // in app.js: category is font.role, family is font.family, both straight from the manifest.
 const FONT_CATEGORY_LABELS={script:'Script','sans-serif':'Sans Serif',serif:'Serif',display:'Display',monogram:'Monogram',decorative:'Decorative',block:'Block',handwritten:'Handwritten',monospace:'Monospace',rhinestone:'Production Fonts','rounded-sans':'Rounded Sans'};
 function fontCategoryLabel(role){return FONT_CATEGORY_LABELS[role]||(role?role.charAt(0).toUpperCase()+role.slice(1):'Other')}
-function groupFontsByCategory(fonts){const groups=new Map();for(const f of fonts){const key=f.role||'display';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(f)}for(const list of groups.values())list.sort((a,b)=>a.family.localeCompare(b.family));return[...groups.entries()].sort((a,b)=>fontCategoryLabel(a[0]).localeCompare(fontCategoryLabel(b[0])))}
+function groupFontsByCategory(fonts){const groups=new Map();for(const f of fonts){const key=f.role||'display';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(f)}for(const list of groups.values())list.sort((a,b)=>a.family.localeCompare(b.family)||(a.weight||400)-(b.weight||400)||a.style.localeCompare(b.style));return[...groups.entries()].sort((a,b)=>fontCategoryLabel(a[0]).localeCompare(fontCategoryLabel(b[0])))}
 // A font family name safe to drop into a CSS font-family value / HTML style attribute. Every
 // bundled family name is plain ASCII with no quotes (see assets/fonts/manifest.json), but this
 // strips quote characters defensively rather than assuming that stays true forever.
@@ -297,15 +297,19 @@ function populateFontCategoryFilterOptions(){if(!fontManager)return;const catego
 // alphabetically within each group -- mirrors populateStoneColorOptions()'s existing pattern.
 // Disabled fonts (just the RobotoMono placeholder today) are never listed, matching
 // TEXT_ENGINE_FONT_IDS above.
-// FONT-002: only Production Fonts (providerId 'rhinestone') are offered here -- OpenType fonts stay
-// fully registered/enabled (existing projects keep loading/rendering/exporting unchanged, see
-// resolveFontProviderId() below) but are no longer offered as a *pick* for new/other text layers.
-// FONT-DECISION-001: an OpenType font can also earn a place here by clearing this project's
-// human-and-metric rhinestone legibility bar (manifest `rhinestoneValidated:true`) -- unvalidated
-// legacy OpenType fonts remain hidden exactly as FONT-002 decided.
-// A layer that already uses one is handled by ensureFontOptionForLayer(), not by listing it here.
-function productionFonts(){return fontManager?fontManager.listFonts().filter(f=>f.providerId==='rhinestone'||f.rhinestoneValidated===true):[]}
-function populateFontOptions(){if(!fontManager)return;el('font').innerHTML=groupFontsByCategory(productionFonts()).map(([role,fonts])=>`<optgroup label="${escapeHtml(fontCategoryLabel(role))}">${fonts.map(f=>`<option value="${f.id}" style="font-family:'${cssFontFamily(f.family)}'">${escapeHtml(f.family)}</option>`).join('')}</optgroup>`).join('')}
+// FONT-002 originally offered only the authored Production Fonts (providerId 'rhinestone');
+// FONT-DECISION-001 additionally let an OpenType font in once it carried `rhinestoneValidated:true`.
+// FONT-LIB-002 opens the gate fully: the picker now offers every font with `enabled:true` in the
+// manifest (plus the authored providerId:'rhinestone' fonts, which are enabled too). FONT-DECISION-001
+// already established that an untransformed OpenType font is the production approach, so any enabled
+// OpenType font is a legitimate pick. `rhinestoneValidated` is kept but demoted to a display-only
+// signal -- it drives the library row's ✓ "Rated legible" badge, nothing more. `unsupportedStoneSizes`
+// still drives per-font stone-size gating (updateStoneSizePrintableCapabilityUI()), unchanged.
+// Disabled records (just the RobotoMono placeholder today) are still never listed -- listFonts()
+// filters them out. A layer already using a disabled/unknown font is handled by
+// ensureFontOptionForLayer(), not by listing it here.
+function productionFonts(){return fontManager?fontManager.listFonts().filter(f=>f.providerId==='rhinestone'||f.enabled===true):[]}
+function populateFontOptions(){if(!fontManager)return;el('font').innerHTML=groupFontsByCategory(productionFonts()).map(([role,fonts])=>`<optgroup label="${escapeHtml(fontCategoryLabel(role))}">${fonts.map(f=>`<option value="${f.id}" style="font-family:'${cssFontFamily(f.family)}'">${escapeHtml(f.family+(f.style&&f.style!=='Regular'?' '+f.style:''))}</option>`).join('')}</optgroup>`).join('')}
 // FONT-002: a native <select> silently falls back to value='' if no <option> matches -- without
 // this, a layer already using a legacy (hidden-from-the-list) font would desync #font's displayed
 // value from l.font, and the very next edit's writeSelectedControlsToLayer() (l.font=el('font').value)
@@ -406,13 +410,70 @@ async function populateFontPreviewCanvases(container){
     await yieldToMainThread();
   }
 }
-function fontLibraryRowHtml(f,currentFontId){const isFav=favoriteFontIds.has(f.id);return`<div class="font-library-row"><button type="button" class="font-fav${isFav?' active':''}" data-fav-font="${f.id}" title="${isFav?'Remove from favorites':'Add to favorites'}" aria-pressed="${isFav}">${isFav?'★':'☆'}</button><button type="button" class="font-library-item" data-pick-font="${f.id}" role="option" aria-selected="${f.id===currentFontId}"><canvas class="font-preview-canvas" data-preview-font="${f.id}" width="160" height="36" aria-hidden="true"></canvas><span class="font-library-item-meta"><span class="font-library-item-name">${escapeHtml(f.family)}</span><span class="font-library-item-category">${escapeHtml(fontCategoryLabel(f.role))}</span></span></button></div>`}
+// FONT-LIB-002: collapses a flat font list to one entry per family. `styles` is that family's
+// records lightest-weight first; `rep` is the family's Regular (or its lowest weight when there is
+// no Regular) -- the style used for the row's preview and for a plain click on the row's name.
+function fontFamilyEntries(fonts){
+  const byFamily=new Map();
+  for(const f of fonts){if(!byFamily.has(f.family))byFamily.set(f.family,[]);byFamily.get(f.family).push(f)}
+  const entries=[];
+  for(const[family,styles]of byFamily){
+    styles.sort((a,b)=>(a.weight||400)-(b.weight||400)||a.style.localeCompare(b.style));
+    const rep=styles.find(s=>s.style==='Regular')||styles[0];
+    entries.push({family,role:rep.role,styles,rep});
+  }
+  return entries;
+}
+// Same category grouping/sorting as groupFontsByCategory(), but over fontFamilyEntries() rather than
+// individual font records -- so the Browse Fonts panel shows one row per family.
+function groupFamilyEntriesByCategory(entries){
+  const groups=new Map();
+  for(const e of entries){const key=e.role||'display';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(e)}
+  for(const list of groups.values())list.sort((a,b)=>a.family.localeCompare(b.family));
+  return[...groups.entries()].sort((a,b)=>fontCategoryLabel(a[0]).localeCompare(fontCategoryLabel(b[0])));
+}
+// One Browse Fonts panel row for a whole family. `activeId` (defaults to the family's rep) is the
+// style whose id the row's name-click and favorite star act on, and the one the inline style
+// <select> starts on -- Recently Used / Favorites pass the specific style id that earned the pin.
+// A family with >1 style gets that compact <select>; a single-style family gets none. The preview
+// canvas always renders the family's rep style (its Regular / lowest weight). rhinestoneValidated
+// only shows a muted "Rated legible" badge now (FONT-LIB-002) -- it no longer gates the picker.
+function fontLibraryRowHtml(entry,currentFontId,activeId){
+  const active=(activeId&&entry.styles.find(s=>s.id===activeId))||entry.rep;
+  const isFav=favoriteFontIds.has(active.id);
+  const selected=entry.styles.some(s=>s.id===currentFontId);
+  const badge=active.rhinestoneValidated===true?`<span class="font-rated-badge" title="Cleared Rhinestone Studio's human + metric stone-dot legibility review (FONT-DECISION-001 / FONT-PORTFOLIO-001).">✓ Rated legible</span>`:'';
+  const styleSelect=entry.styles.length>1?`<select class="font-style-select" data-style-select="${escapeHtml(entry.family)}" aria-label="${escapeHtml(entry.family)} style">${entry.styles.map(s=>`<option value="${s.id}"${s.id===active.id?' selected':''}>${escapeHtml(s.style)}</option>`).join('')}</select>`:'';
+  const subtitle=`${escapeHtml(fontCategoryLabel(entry.role))}${entry.styles.length>1?` · ${entry.styles.length} styles`:''}`;
+  return`<div class="font-library-row"><button type="button" class="font-fav${isFav?' active':''}" data-fav-font="${active.id}" title="${isFav?'Remove from favorites':'Add to favorites'}" aria-pressed="${isFav}">${isFav?'★':'☆'}</button><button type="button" class="font-library-item" data-pick-font="${active.id}" role="option" aria-selected="${selected}"><canvas class="font-preview-canvas" data-preview-font="${entry.rep.id}" width="160" height="36" aria-hidden="true"></canvas><span class="font-library-item-meta"><span class="font-library-item-name">${escapeHtml(entry.family)}</span>${badge}<span class="font-library-item-category">${subtitle}</span></span></button>${styleSelect}</div>`;
+}
 // Renders the Browse Fonts panel's list: pinned "Recently Used" then "Favorites" groups (each only
-// among fonts matching the current search/category filter), then every category group in
-// alphabetical order, then kicks off (without awaiting) filling in every row's live rhinestone
-// preview. Re-run on every search keystroke, category change, and favorite toggle; cheap at this
-// catalog size (12 fonts today) since preview generation itself is cached.
-function renderFontLibraryList(){if(!fontManager)return;const list=el('fontLibraryList');const query=fontSearchQuery.trim().toLowerCase();const fonts=productionFonts().filter(f=>(!fontCategoryFilterValue||f.role===fontCategoryFilterValue)&&(!query||f.family.toLowerCase().includes(query)||fontCategoryLabel(f.role).toLowerCase().includes(query)));if(fonts.length===0){list.innerHTML='<div class="font-library-empty">No fonts match your search.</div>';return}const currentFontId=el('font').value;const recents=recentFontIds.map(id=>fonts.find(f=>f.id===id)).filter(Boolean);const favorites=fonts.filter(f=>favoriteFontIds.has(f.id)).sort((a,b)=>a.family.localeCompare(b.family));let html='';if(recents.length)html+=`<div class="font-library-group">Recently Used</div>${recents.map(f=>fontLibraryRowHtml(f,currentFontId)).join('')}`;if(favorites.length)html+=`<div class="font-library-group">Favorites</div>${favorites.map(f=>fontLibraryRowHtml(f,currentFontId)).join('')}`;for(const[role,group]of groupFontsByCategory(fonts))html+=`<div class="font-library-group">${escapeHtml(fontCategoryLabel(role))}</div>${group.map(f=>fontLibraryRowHtml(f,currentFontId)).join('')}`;list.innerHTML=html;populateFontPreviewCanvases(list).catch(error=>console.error('Font preview rendering failed',error))}
+// among fonts matching the current search/category filter, and keeping per-style granularity), then
+// every category group in alphabetical order, then kicks off (without awaiting) filling in every
+// row's live rhinestone preview. Re-run on every search keystroke, category change, favorite toggle,
+// and style pick; preview generation is cached so re-renders stay cheap.
+function renderFontLibraryList(){
+  if(!fontManager)return;
+  const list=el('fontLibraryList');
+  const query=fontSearchQuery.trim().toLowerCase();
+  const fonts=productionFonts().filter(f=>(!fontCategoryFilterValue||f.role===fontCategoryFilterValue)&&(!query||f.family.toLowerCase().includes(query)||f.style.toLowerCase().includes(query)||fontCategoryLabel(f.role).toLowerCase().includes(query)));
+  if(fonts.length===0){list.innerHTML='<div class="font-library-empty">No fonts match your search.</div>';return}
+  const currentFontId=el('font').value;
+  const entries=fontFamilyEntries(fonts);
+  const entryByFamily=new Map(entries.map(e=>[e.family,e]));
+  const entryForId=id=>{const f=fonts.find(x=>x.id===id);return f?entryByFamily.get(f.family):null};
+  const seenRecent=new Set();
+  const recents=recentFontIds.map(id=>{const e=entryForId(id);if(!e||seenRecent.has(id))return null;seenRecent.add(id);return{entry:e,activeId:id}}).filter(Boolean);
+  const favorites=[];
+  for(const e of entries)for(const s of e.styles)if(favoriteFontIds.has(s.id))favorites.push({entry:e,activeId:s.id});
+  favorites.sort((a,b)=>a.entry.family.localeCompare(b.entry.family));
+  let html='';
+  if(recents.length)html+=`<div class="font-library-group">Recently Used</div>${recents.map(r=>fontLibraryRowHtml(r.entry,currentFontId,r.activeId)).join('')}`;
+  if(favorites.length)html+=`<div class="font-library-group">Favorites</div>${favorites.map(r=>fontLibraryRowHtml(r.entry,currentFontId,r.activeId)).join('')}`;
+  for(const[role,group]of groupFamilyEntriesByCategory(entries))html+=`<div class="font-library-group">${escapeHtml(fontCategoryLabel(role))}</div>${group.map(e=>fontLibraryRowHtml(e,currentFontId)).join('')}`;
+  list.innerHTML=html;
+  populateFontPreviewCanvases(list).catch(error=>console.error('Font preview rendering failed',error));
+}
 function openFontLibraryPanel(){el('fontLibraryPanel').hidden=false;el('fontLibraryBtn').setAttribute('aria-expanded','true');fontSearchQuery='';el('fontSearch').value='';renderFontLibraryList();el('fontSearch').focus()}
 function closeFontLibraryPanel(){el('fontLibraryPanel').hidden=true;el('fontLibraryBtn').setAttribute('aria-expanded','false')}
 // Writes the picked font into the one real #font control and replays the exact 'input'+'change'
@@ -2652,10 +2713,14 @@ function updateTextFontCapabilityUI(){
   const fontId=isText?l.font:null;
   const known=isText&&isFontKnown(fontId);
   const authored=known&&isAuthoredStoneFontId(fontId);
-  // FONT-DECISION-001: a known, non-authored font can still be one of productionFonts()'s offered
-  // picks (rhinestoneValidated:true) -- only a font that's neither authored nor offered is "legacy".
+  // FONT-LIB-002: the picker now offers every enabled OpenType font, so "legacy" no longer tracks
+  // "unvalidated". A font is legacy only if it is neither authored nor `enabled` in the manifest --
+  // i.e. a project references a font id whose record has been disabled (or a still-known but retired
+  // font). `validated` stays as its own separate flag: it no longer gates the picker, but TXT-104's
+  // capHeight letter-height mode below still keys off it (a rhinestoneValidated font is the one that
+  // carries capHeightRatio).
   const validated=known&&!authored&&fontManager.getFont(fontId).rhinestoneValidated===true;
-  const legacy=known&&!authored&&!validated;
+  const legacy=known&&!authored&&fontManager.getFont(fontId).enabled!==true;
   const unknown=isText&&!known;
   el('textModeField').style.display=authored?'none':'block';
   // TXT-104 step 4b: a capHeight-mode layer on a validated (capHeightRatio-bearing) font displays
@@ -3784,6 +3849,9 @@ el('fontLibraryBtn').addEventListener('click',()=>{if(el('fontLibraryPanel').hid
 el('fontSearch').addEventListener('input',()=>{fontSearchQuery=el('fontSearch').value;renderFontLibraryList()});
 el('fontCategoryFilter').addEventListener('change',()=>{fontCategoryFilterValue=el('fontCategoryFilter').value;renderFontLibraryList()});
 el('fontLibraryList').addEventListener('click',e=>{const favBtn=e.target.closest('[data-fav-font]');if(favBtn){toggleFavoriteFont(favBtn.dataset.favFont);return}const pickBtn=e.target.closest('[data-pick-font]');if(pickBtn)pickFont(pickBtn.dataset.pickFont)});
+// FONT-LIB-002: choosing a weight/style from a family row's inline <select> applies it exactly like
+// clicking the row's name -- pickFont() replays #font's input+change and closes the panel.
+el('fontLibraryList').addEventListener('change',e=>{const styleSel=e.target.closest('[data-style-select]');if(styleSel)pickFont(styleSel.value)});
 // TXT-101A: "Recently Used" also tracks picks made directly from the native <select> (not just the
 // Browse Fonts panel) -- a second, independent listener on the same 'change' event
 // HISTORY_TRACKED_CONTROL_IDS already listens to above, not a replacement for it.
@@ -4503,8 +4571,8 @@ function populateMonogramLayoutOptions(){el('monogramLayout').innerHTML=Object.v
 // Authored (stoneCenters-based) fonts only, never OpenType/sampled fonts, per this milestone's own
 // requirement -- MonogramGenerator only supports authored fonts (see its own "invalid-font"
 // rejection), so this deliberately filters providerId==='rhinestone' directly rather than reusing
-// productionFonts() (FONT-DECISION-001 widened that shared helper to also include validated
-// OpenType fonts for the ordinary #font picker, which MonogramGenerator cannot use). A dedicated
+// productionFonts() (FONT-DECISION-001, then FONT-LIB-002, widened that shared helper to offer every
+// enabled OpenType font in the ordinary #font picker, none of which MonogramGenerator can use). A dedicated
 // #monogramFont select (not the shared #font element) so this Lightbox never participates in
 // relocateFieldGroups().
 function authoredProductionFonts(){return fontManager?fontManager.listFonts().filter(f=>f.providerId==='rhinestone'):[]}

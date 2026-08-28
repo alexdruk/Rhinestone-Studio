@@ -323,7 +323,8 @@ await test('22. RS Modern is manifest-registered as a production font alongside 
   assert.equal(manager.getFont(FONT_ID).family, 'RS Modern');
   assert.equal(manager.getFont(FONT_ID).providerId, 'rhinestone');
   assert.equal(manager.getFont(FONT_ID).enabled, true);
-  assert.equal(manager.listFonts({ includeDisabled: true }).length, 15);
+  // 15 through FONT-PORTFOLIO-001; FONT-LIB-002 added 17 more static OpenType instances -- 32.
+  assert.equal(manager.listFonts({ includeDisabled: true }).length, 32);
   for (const id of ['courier-prime-regular', 'great-vibes-regular', 'anton-regular', 'rs-block']) {
     assert.ok(manager.hasFont(id), `expected pre-existing font id "${id}" to still resolve`);
   }

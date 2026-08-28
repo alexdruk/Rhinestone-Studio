@@ -171,6 +171,193 @@
       "notes": "FONT-PORTFOLIO-001: casual connected script, cleared this project's human rhinestone legibility bar at an overall 61% Readable across SS6/10/16/20/30. SS30 disabled (unsupportedStoneSizes) -- human rating collapsed to 6% Readable at that size specifically; see FONT-DIAG-001's still-open FONT-POLICY-001 recommendation (SS30's own height ceiling, not this font's outline). Raters also flagged one narrow, size-independent defect (\"8th\" misread as \"86h\") present at all 5 sizes -- tracked but not size-gated, since it does not correlate with stone size the way the SS30 collapse does.",
       "capHeightRatio": 0.807,
       "xHeightRatio": 0.391
+    },
+    {
+      "id": "pacifico-regular",
+      "family": "Pacifico",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Pacifico-Regular.ttf",
+      "role": "script",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: bold, rounded surf-style brush script. OFL. Static instance."
+    },
+    {
+      "id": "alex-brush-regular",
+      "family": "Alex Brush",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/AlexBrush-Regular.ttf",
+      "role": "script",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: fine-tipped calligraphic signature brush script. OFL. Static instance."
+    },
+    {
+      "id": "allura-regular",
+      "family": "Allura",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Allura-Regular.ttf",
+      "role": "script",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: flowing monoline formal script. OFL. Static instance."
+    },
+    {
+      "id": "satisfy-regular",
+      "family": "Satisfy",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Satisfy-Regular.ttf",
+      "role": "script",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: casual angled brush script. Apache-2.0 (upstream apache/satisfy). Static instance."
+    },
+    {
+      "id": "kaushan-script-regular",
+      "family": "Kaushan Script",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/KaushanScript-Regular.ttf",
+      "role": "script",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: energetic dry-brush script with a slight upward slant. OFL. Static instance."
+    },
+    {
+      "id": "yellowtail-regular",
+      "family": "Yellowtail",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Yellowtail-Regular.ttf",
+      "role": "script",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: bold retro connected brush script. Apache-2.0 (upstream apache/yellowtail). Static instance."
+    },
+    {
+      "id": "cookie-regular",
+      "family": "Cookie",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Cookie-Regular.ttf",
+      "role": "script",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: tidy upright semi-connected script. OFL. Static instance."
+    },
+    {
+      "id": "parisienne-regular",
+      "family": "Parisienne",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Parisienne-Regular.ttf",
+      "role": "script",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: delicate vintage penmanship script. OFL. Static instance."
+    },
+    {
+      "id": "mr-dafoe-regular",
+      "family": "Mr Dafoe",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/MrDafoe-Regular.ttf",
+      "role": "script",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: 1950s advertising-style connected penmanship script. OFL. Static instance."
+    },
+    {
+      "id": "bebas-neue-regular",
+      "family": "Bebas Neue",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/BebasNeue-Regular.ttf",
+      "role": "block",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: tall all-caps condensed sans display block. OFL. Static instance."
+    },
+    {
+      "id": "righteous-regular",
+      "family": "Righteous",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Righteous-Regular.ttf",
+      "role": "display",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: geometric Art-Deco-flavoured display sans. OFL. Static instance."
+    },
+    {
+      "id": "lilita-one-regular",
+      "family": "Lilita One",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/LilitaOne-Regular.ttf",
+      "role": "display",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: chunky rounded poster display face. OFL. Static instance."
+    },
+    {
+      "id": "abril-fatface-regular",
+      "family": "Abril Fatface",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/AbrilFatface-Regular.ttf",
+      "role": "display",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: high-contrast Didone headline display serif. OFL. Static instance."
+    },
+    {
+      "id": "poppins-regular",
+      "family": "Poppins",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Poppins-Regular.ttf",
+      "role": "sans-serif",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: geometric monoline sans, Regular weight. OFL. Static instance."
+    },
+    {
+      "id": "poppins-semibold",
+      "family": "Poppins",
+      "style": "SemiBold",
+      "weight": 600,
+      "path": "assets/fonts/Poppins-SemiBold.ttf",
+      "role": "sans-serif",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: geometric monoline sans, SemiBold weight. OFL. Static instance."
+    },
+    {
+      "id": "poppins-bold",
+      "family": "Poppins",
+      "style": "Bold",
+      "weight": 700,
+      "path": "assets/fonts/Poppins-Bold.ttf",
+      "role": "sans-serif",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: geometric monoline sans, Bold weight. OFL. Static instance."
+    },
+    {
+      "id": "lobster-two-bold",
+      "family": "Lobster Two",
+      "style": "Bold",
+      "weight": 700,
+      "path": "assets/fonts/LobsterTwo-Bold.ttf",
+      "role": "decorative",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: refined retro-signage script display, Bold weight. OFL. Static instance."
     }
   ]
 }
