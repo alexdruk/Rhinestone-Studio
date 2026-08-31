@@ -15,6 +15,10 @@ export const EXCLUDED_FROM_DEFAULT = [
   // precedent — test:full only.
   'test-cup-rotation-stabilization.mjs',
   'test-object-preview-renderer.mjs',
+  // READ-003: test 5 re-measures stemWidthRatio for all 29 in-scope fonts (interior grid sampling
+  // over 62 glyphs each, ~75s) to prove the manifest has not drifted from the real font files.
+  // Too heavy for the default loop; run via `npm run test:full` or an explicit filter.
+  'test-read-003-stem-width.mjs',
 ];
 
 // Named groups, organized around stable subsystems (MAINT-001 — Test Suite Consolidation) rather
@@ -191,6 +195,10 @@ export const GROUPS = {
     'test-font-cert-002-word-space-narrative.mjs',
     'test-font-source-001-evaluate.mjs',
     'test-font-height-ratios.mjs',
+    // READ-003: manifest.json stemWidthRatio (stroke-narrower-than-one-stone gate) cross-checked
+    // against a live re-measurement of the real font files. Slow (~75s) -- excluded from the default
+    // suite, but part of the `--group text` run.
+    'test-read-003-stem-width.mjs',
   ],
   shapes: [
     'test-shape-fit.mjs',

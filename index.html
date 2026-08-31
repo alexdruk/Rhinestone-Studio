@@ -745,7 +745,14 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
                (manual edit, capHeight-mode conversion, loaded project, Auto Fit shrink). Deliberately
                a warning, not a clamp: an existing project may already hold an out-of-range height,
                and a deliberately tiny accent word is a legitimate (if fragile) choice -- the same
-               "explain, never silently override" stance #stoneSizeCrowdingHint takes. -->
+               "explain, never silently override" stance #stoneSizeCrowdingHint takes.
+               READ-003: this same element also carries the stronger, font-specific
+               stroke-narrower-than-one-stone warning (textStrokeNarrowerThanOneStone()), which takes
+               precedence over the height message when both apply. Exactly one message ever shows.
+               That check is Layer 1 of the readability program in
+               docs/specifications/READ-000-readability-architecture.md; Layer 3 (READ-006) will
+               later replace FONT-LIB-004's font-blind height rule here with font- and mode-aware
+               readability floors. -->
           <p class="validation-message" id="heightBelowReadableWarning" role="alert"></p>
           <p class="hint" id="autoFitOnHint" style="display:none">Auto Fit shrinks text to stay within the printable area, which can override the height needed for reliable readability at your selected stone size.</p>
           <p class="hint" id="heightModeToggleHint" style="display:none"><button type="button" class="btn sm" id="heightModeToggleBtn"></button></p>
