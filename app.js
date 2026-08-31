@@ -2908,13 +2908,67 @@ function textHeightBelowReadableMinimum(layer){
   if(!size||!Number.isFinite(heightMm))return null;
   return heightMm<size.supportedHeightRangeMm[0]?{size,heightMm}:null;
 }
+// READ-003: shared predicate, beside textHeightBelowReadableMinimum() -- non-null when `layer` is a
+// text layer whose font's dominant stroke, at the layer's current height, is physically narrower
+// than a single stone AND the layer fills the letter interior with stones. `stemWidthMm =
+// font.stemWidthRatio * layer.height` (stemWidthRatio is measured offline per font by
+// tools/measure-font-stem-width.mjs and stored in assets/fonts/manifest.json).
+//
+// This is Layer 1 of the readability program in
+// docs/specifications/READ-000-readability-architecture.md -- the live physical-impossibility check
+// that needs no baked data (Layer 3 / READ-006 will later supersede FONT-LIB-004's height rule with
+// font- and mode-aware readability floors on this same warning surface).
+//
+// The impossibility argument is specifically about FILLING AN INTERIOR: a stone dropped into a
+// region narrower than its own diameter overhangs both edges, so no sampling of that interior can
+// render the letterform. That holds for the interior-filling fill styles (Grid/Staggered/Radial/
+// Contour) and NOT for Outline mode, where stones trace the letterform as a single bead line --
+// a hairline script rendered that way is the canonical rhinestone result, not a defect (Great Vibes
+// @ 42.5mm/SS6 and Dancing Script @ 34.3mm/SS6, both stem-to-stone ~0.7, are product-owner-confirmed
+// good; the cases this still catches are Cinzel radial @ 0.56 and Caveat fill @ 0.61). An absent or
+// unrecognised textMode resolves to 'outline' via resolveTextFillMode()'s own fallback and is
+// therefore silent -- a false "impossible" verdict on a good design is worse than a missed warning.
+//
+// When it does fire it is the STRONGEST readability signal -- geometry, not a quality judgement (see
+// the precedence note on updateTextHeightReadabilityUI()). O(1): no geometry at runtime. Returns
+// null for a non-text layer, an Outline-mode (or unrecognised-mode) text layer, an authored
+// Production Font, a font carrying no stemWidthRatio (older manifest / legacy-or-unknown font id),
+// or a non-finite height / stone size.
+const READ_003_INTERIOR_FILL_MODES=new Set(['fill','staggered','radial','contour']);
+function textStrokeNarrowerThanOneStone(layer){
+  if(!layer||layer.type!=='text'||isAuthoredStoneFontId(layer.font)||!isFontKnown(layer.font))return null;
+  if(!READ_003_INTERIOR_FILL_MODES.has(resolveTextFillMode(layer.textMode)))return null;
+  const ratio=fontManager.getFont(layer.font).stemWidthRatio;
+  if(typeof ratio!=='number'||!Number.isFinite(ratio))return null;
+  const heightMm=layer.height,stoneSizeMm=layer.stoneSize;
+  if(!Number.isFinite(heightMm)||!Number.isFinite(stoneSizeMm))return null;
+  const stemWidthMm=ratio*heightMm;
+  if(!(stemWidthMm<stoneSizeMm))return null;
+  const font=fontManager.getFont(layer.font);
+  const fontLabel=font.style&&font.style!=='Regular'?`${font.family} ${font.style}`:font.family;
+  return{stemWidthMm,stoneSizeMm,fontLabel};
+}
+// Both readability signals share the single #heightBelowReadableWarning element, and exactly one
+// message shows. Precedence, strongest first:
+//   1. READ-003  stroke narrower than one stone   (physically impossible to render)
+//   2. FONT-LIB-004  height below the validated minimum for this stone size
+// FONT-LIB-003's crowding hint is the weakest and defers to whichever of these is active (see
+// updateStoneSizeOverlapCapabilityUI()). Warning, not a clamp -- an existing project may already
+// hold such a layer, and the fix (taller text or smaller stones) belongs to the user.
 function updateTextHeightReadabilityUI(){
   const warning=el('heightBelowReadableWarning');
-  const below=textHeightBelowReadableMinimum(selectedLayer());
-  warning.textContent=below
-    ? `At ${below.size.name} stones, text this short (${formatLengthDisplay(below.heightMm,project.units,1)} ${unitSuffix(project.units)}) won't read clearly — ${formatLengthDisplay(below.size.supportedHeightRangeMm[0],project.units,1)} ${unitSuffix(project.units)} or taller is the tested minimum for this stone size.`
-    : '';
-  warning.classList.toggle('visible',Boolean(below));
+  const layer=selectedLayer();
+  const stroke=textStrokeNarrowerThanOneStone(layer);
+  const below=stroke?null:textHeightBelowReadableMinimum(layer);
+  const u=unitSuffix(project.units);
+  let message='';
+  if(stroke){
+    message=`${stroke.fontLabel}'s strokes are about ${formatLengthDisplay(stroke.stemWidthMm,project.units,2)} ${u} wide at this height — narrower than one ${formatLengthDisplay(stroke.stoneSizeMm,project.units,1)} ${u} stone, so stones would overhang the letters on both sides. Use a taller text height or a smaller stone size.`;
+  }else if(below){
+    message=`At ${below.size.name} stones, text this short (${formatLengthDisplay(below.heightMm,project.units,1)} ${u}) won't read clearly — ${formatLengthDisplay(below.size.supportedHeightRangeMm[0],project.units,1)} ${u} or taller is the tested minimum for this stone size.`;
+  }
+  warning.textContent=message;
+  warning.classList.toggle('visible',Boolean(message));
 }
 // FONT-DECISION-001 (Studio Integration follow-up): disables + dims + explains (via title) every
 // #stoneSize <option> whose entire FONT-DECISION-001-validated supportedHeightRangeMm (StoneSizes.js)
@@ -3112,18 +3166,20 @@ async function updateStoneSizeOverlapCapabilityUI(){
     // bolder sibling weight when one exists. Falls back to the generic wording for a text layer
     // whose font id can't be resolved (legacy/unknown font) and for every non-text layer type.
     //
-    // FONT-LIB-004 precedence: suppressed entirely when the layer's height is below its stone
-    // size's validated minimum (textHeightBelowReadableMinimum()). FONT-LIB-004's audit showed
-    // crowding in that regime is driven by the height-to-stone-diameter ratio, NOT by the font --
-    // a bold geometric sans crowds at 15mm/SS16 exactly as a fine script does -- so naming the font
-    // there misattributes the cause and points the user at a font switch that cannot fix it.
-    // #heightBelowReadableWarning is already on screen saying the accurate thing, and two warnings
-    // blaming two different causes is worse than one correct one. Same mutual-exclusivity idiom
-    // this function already applies for currentOverlaps above.
+    // Precedence: suppressed entirely when a stronger readability signal already owns
+    // #heightBelowReadableWarning -- READ-003 stroke-narrower-than-one-stone
+    // (textStrokeNarrowerThanOneStone()) or FONT-LIB-004 height-below-validated-minimum
+    // (textHeightBelowReadableMinimum()). FONT-LIB-004's audit showed crowding in the height regime
+    // is driven by the height-to-stone-diameter ratio, NOT the font (a bold geometric sans crowds at
+    // 15mm/SS16 exactly as a fine script does), and READ-003's stroke case is a geometric
+    // impossibility no font switch fixes -- so naming the font in either regime misattributes the
+    // cause. #heightBelowReadableWarning is already on screen saying the accurate thing, and two
+    // warnings blaming two different causes is worse than one correct one. Same mutual-exclusivity
+    // idiom this function already applies for currentOverlaps above.
     const layer=target.layer;
-    const heightIsRootCause=Boolean(textHeightBelowReadableMinimum(layer));
-    const font=!heightIsRootCause&&layer&&layer.type==='text'&&layer.font&&fontManager&&fontManager.hasFont(layer.font)?fontManager.getFont(layer.font):null;
-    if(heightIsRootCause){
+    const strongerSignalActive=Boolean(textStrokeNarrowerThanOneStone(layer))||Boolean(textHeightBelowReadableMinimum(layer));
+    const font=!strongerSignalActive&&layer&&layer.type==='text'&&layer.font&&fontManager&&fontManager.hasFont(layer.font)?fontManager.getFont(layer.font):null;
+    if(strongerSignalActive){
       crowdingText='';
     }else if(font){
       // Wording (FONT-LIB-004): describes the stroke rather than the typeface ("strokes are narrow

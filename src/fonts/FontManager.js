@@ -53,7 +53,17 @@ function normalizeFontRecord(record) {
     // no OpenType em-box concept at all, and every non-validated legacy OpenType font), so nothing
     // existing changes behavior.
     capHeightRatio: typeof record.capHeightRatio === 'number' ? record.capHeightRatio : undefined,
-    xHeightRatio: typeof record.xHeightRatio === 'number' ? record.xHeightRatio : undefined
+    xHeightRatio: typeof record.xHeightRatio === 'number' ? record.xHeightRatio : undefined,
+    // READ-003: ratio of this font's dominant stem width (p75 of the interior local-stroke-width
+    // distribution over PRODUCTION_REVIEW_GLYPHS) to the em-square heightMm the engine is given --
+    // see tools/measure-font-stem-width.mjs. app.js's textStrokeNarrowerThanOneStone() multiplies it
+    // by the layer's height to get the stroke width in mm and compares that to the stone diameter:
+    // for an interior-filling text mode, a stroke narrower than one stone can never be rendered
+    // legibly (the stone overhangs it on both sides). This backs Layer 1 of the readability program
+    // in docs/specifications/READ-000-readability-architecture.md. Defaults to undefined for records
+    // without it (the two authored rhinestone fonts, which have no vector outline, and any
+    // older/legacy manifest), so nothing existing changes behavior.
+    stemWidthRatio: typeof record.stemWidthRatio === 'number' ? record.stemWidthRatio : undefined
   });
 }
 
