@@ -117,9 +117,9 @@ export function normalizedStonePoints(stones) {
  * arbitrary glyphs/phrases rather than the fixed PRODUCTION_REVIEW_GLYPHS/WORDS corpus -- reuse
  * this one measurement function against the real, unmodified pipeline instead of re-deriving it.
  */
-export async function analyzeOne(engine, fontId, text, stoneSizeId, heightMm) {
+export async function analyzeOne(engine, fontId, text, stoneSizeId, heightMm, { mode = 'outline', gapMm = PRODUCTION_GAP_MM, curve = null } = {}) {
   const stoneSizeMm = STONE_SIZE_BY_ID[stoneSizeId].diameterMm;
-  const pitchMm = stoneSizeMm + PRODUCTION_GAP_MM;
+  const pitchMm = stoneSizeMm + gapMm;
   let layout = null;
   let error = null;
   try {
@@ -129,16 +129,21 @@ export async function analyzeOne(engine, fontId, text, stoneSizeId, heightMm) {
       layerId: 'font-cert-001',
       heightMm,
       stoneSizeMm,
-      gapMm: PRODUCTION_GAP_MM,
-      mode: 'outline',
-      color: 'gold'
+      gapMm,
+      mode,
+      color: 'gold',
+      // READ-004: curve, when non-null, spreads the exact curve fields app.js's
+      // buildTextLayoutBaseParams() passes (curveEnabled/curveRadiusMm/curveDirection/
+      // curveStartAngleDeg/curveSweepAngleDeg/curveAlignment). Omitted entirely when null so
+      // straight text is byte-identical to before.
+      ...(curve ?? {})
     });
   } catch (err) {
     error = err.message;
   }
 
   if (error) {
-    return { text, stoneSizeId, stoneSizeMm, heightMm, error, stoneCount: 0 };
+    return { text, stoneSizeId, stoneSizeMm, heightMm, mode, gapMm, error, stoneCount: 0 };
   }
 
   const stones = layout.stones.map((s) => ({ xMm: s.xMm, yMm: s.yMm, sizeMm: s.sizeMm }));
@@ -152,6 +157,8 @@ export async function analyzeOne(engine, fontId, text, stoneSizeId, heightMm) {
     stoneSizeId,
     stoneSizeMm,
     heightMm,
+    mode,
+    gapMm,
     error: null,
     stoneCount: stones.length,
     boundingBoxMm: boundingBox ? { widthMm: boundingBox.widthMm, heightMm: boundingBox.heightMm } : null,
@@ -176,7 +183,7 @@ export async function analyzeOne(engine, fontId, text, stoneSizeId, heightMm) {
  *   SPECIMEN_HEIGHT_MM_BY_SIZE's ratio-derived heights when omitted, so existing FONT-CERT-001/002 call
  *   sites are unaffected -- this parameter is purely additive.
  */
-export async function runProductionAnalysis(candidateAbsolutePath, { heightMmBySize } = {}) {
+export async function runProductionAnalysis(candidateAbsolutePath, { heightMmBySize, mode = 'outline' } = {}) {
   const { engine, fontId } = await buildCandidateEngine(candidateAbsolutePath);
   const resolvedHeightMmBySize = { ...SPECIMEN_HEIGHT_MM_BY_SIZE, ...heightMmBySize };
 
@@ -184,7 +191,7 @@ export async function runProductionAnalysis(candidateAbsolutePath, { heightMmByS
   for (const char of PRODUCTION_REVIEW_GLYPHS) {
     const bySize = new Map();
     for (const sizeId of STONE_SIZE_IDS) {
-      bySize.set(sizeId, await analyzeOne(engine, fontId, char, sizeId, resolvedHeightMmBySize[sizeId]));
+      bySize.set(sizeId, await analyzeOne(engine, fontId, char, sizeId, resolvedHeightMmBySize[sizeId], { mode }));
     }
     glyphResults.set(char, bySize);
   }
@@ -193,7 +200,7 @@ export async function runProductionAnalysis(candidateAbsolutePath, { heightMmByS
   for (const word of PRODUCTION_REVIEW_WORDS) {
     const bySize = new Map();
     for (const sizeId of STONE_SIZE_IDS) {
-      bySize.set(sizeId, await analyzeOne(engine, fontId, word, sizeId, resolvedHeightMmBySize[sizeId]));
+      bySize.set(sizeId, await analyzeOne(engine, fontId, word, sizeId, resolvedHeightMmBySize[sizeId], { mode }));
     }
     wordResults.set(word, bySize);
   }

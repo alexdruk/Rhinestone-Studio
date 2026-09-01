@@ -201,6 +201,10 @@ export const GROUPS = {
     // against a live re-measurement of the real font files. Slow (~75s) -- excluded from the default
     // suite, but part of the `--group text` run.
     'test-read-003-stem-width.mjs',
+    // READ-004: recognition harness -- A-first signal ordering, sheet answer-leakage / no-repeated
+    // -character rules, pure scoring, cache keying, and the analyzeOne() mode-threading regression.
+    // No network, stub oracle only; light enough for the default suite.
+    'test-read-004-recognition-harness.mjs',
   ],
   shapes: [
     'test-shape-fit.mjs',
