@@ -164,6 +164,7 @@ export const GROUPS = {
     'test-geometry-stone-overlap-early-exit.mjs',
     'test-geometry-svg-polygon-cache.mjs',
     'test-geometry-layout-quality-metrics.mjs',
+    'test-read-001-contour-centreline.mjs',
     'test-s200-mixed-stone-sizes.mjs',
     'test-rs3011-step10a-region-data-model.mjs',
     'test-rs3011-step10b-paint-target-selection.mjs',

@@ -148,7 +148,7 @@ await test('4. generateImageLayout() defaults to fill mode when no mode is given
 
 // --- 3. Precision: minimum spacing, no overlap, no duplicates -----------------------------------
 
-await test('5. Grid/Staggered/Radial/Contour Fill never place two stones closer than the configured stone pitch (measured, not visually inspected)', () => {
+await test('5. every fill mode respects its own minimum-spacing floor (Grid/Staggered: full pitch; Radial/Contour: stoneSizeMm, per READ-001)', () => {
   const engine = createEngine();
   const stoneSizeMm = 2, gapMm = 0.3, spacingMm = stoneSizeMm + gapMm;
   const shapes = [
@@ -159,12 +159,15 @@ await test('5. Grid/Staggered/Radial/Contour Fill never place two stones closer 
     for (const mode of ['fill', 'staggered', 'radial', 'contour']) {
       const layout = engine.generateShapeLayout({ ...shapeParams, layerId: 'x', stoneSizeMm, gapMm, mode });
       const min = minSpacingMm(layout.stones);
+      // READ-001: Radial/Contour dedupe at the physical stone diameter (stoneSizeMm), not the
+      // gap-inclusive pitch -- flooring at the full pitch culled sub-pitch lanes wholesale where
+      // contour branches converge. Grid/Staggered place points on a lattice and keep the full pitch.
+      const floorMm = (mode === 'radial' || mode === 'contour') ? stoneSizeMm : spacingMm;
       assert.ok(
-        min >= spacingMm - 1e-6,
-        `${shapeParams.shape} ${mode}: minimum spacing ${min.toFixed(4)}mm must be >= the ${spacingMm}mm stone pitch`
+        min >= floorMm - 1e-6,
+        `${shapeParams.shape} ${mode}: minimum spacing ${min.toFixed(4)}mm must be >= the ${floorMm}mm floor`
       );
-      // Hard physical-overlap floor: even independent of the pitch target, no two stone *edges*
-      // (diameter stoneSizeMm each) may overlap.
+      // Hard physical-overlap floor for every mode: no two stone edges (diameter stoneSizeMm) overlap.
       assert.ok(min >= stoneSizeMm - 1e-6, `${shapeParams.shape} ${mode}: stones must not physically overlap`);
     }
   }
@@ -252,12 +255,33 @@ await test('11. mixed stone sizes across layers each keep their own independent 
   }
 });
 
-await test('12. increasing gap increases the achieved stone pitch proportionally, for every fill mode (one spacing formula, no second one)', () => {
+function medianSpacingMm(stones) {
+  // per-stone nearest-neighbour distance, then the median across stones
+  const nn = stones.map((s, i) => {
+    let m = Infinity;
+    for (let j = 0; j < stones.length; j++) {
+      if (j === i) continue;
+      const d = Math.hypot(s.xMm - stones[j].xMm, s.yMm - stones[j].yMm);
+      if (d < m) m = d;
+    }
+    return m;
+  }).sort((a, b) => a - b);
+  return nn.length ? nn[Math.floor(nn.length / 2)] : 0;
+}
+
+await test('12. increasing gap increases the achieved stone pitch, for every fill mode (one spacing formula, no second one)', () => {
   const engine = createEngine();
   for (const mode of ['fill', 'staggered', 'radial', 'contour']) {
     const tight = engine.generateShapeLayout({ shape: 'rectangle', layerId: 'r', stoneSizeMm: 2, gapMm: 0.2, mode, xMm: 0, yMm: 0, widthMm: 40, heightMm: 40 });
     const loose = engine.generateShapeLayout({ shape: 'rectangle', layerId: 'r', stoneSizeMm: 2, gapMm: 1.5, mode, xMm: 0, yMm: 0, widthMm: 40, heightMm: 40 });
-    assert.ok(minSpacingMm(tight.stones) < minSpacingMm(loose.stones), `${mode}: a larger gap must widen the minimum achieved spacing`);
+    // READ-001: Contour Fill's *minimum* achieved spacing is now floored at stoneSizeMm wherever
+    // rings converge or a sliver collapses to its centreline (Part B: the dedupe floor is the
+    // physical stone diameter, not the gap-inclusive pitch) -- so the minimum no longer scales with
+    // the gap. Its ring-to-ring spacing still does, which the *median* nearest-neighbour distance
+    // captures. Every mode still honours the hard no-overlap floor.
+    const achieved = mode === 'contour' ? medianSpacingMm : minSpacingMm;
+    assert.ok(achieved(tight.stones) < achieved(loose.stones), `${mode}: a larger gap must widen the achieved spacing`);
+    assert.ok(minSpacingMm(tight.stones) >= 2 - 1e-6 && minSpacingMm(loose.stones) >= 2 - 1e-6, `${mode}: no two stones may physically overlap`);
     assert.ok(loose.count < tight.count, `${mode}: a larger gap must place fewer stones over the same area`);
   }
 });
