@@ -1,7 +1,8 @@
 # READ-000 — Readability program: architecture proposal
 
-Status: **Proposal, for sign-off.** Not implemented. Supersedes the ad-hoc approach that produced
-FONT-LIB-003 and FONT-LIB-004.
+Status: **Partially implemented.** READ-003 (Layer 1 physical-impossibility gate) and READ-001
+(Layer 0 contour centreline) are merged; the remaining layers are still for sign-off. Supersedes the
+ad-hoc approach that produced FONT-LIB-003 and FONT-LIB-004.
 
 ---
 
@@ -54,12 +55,15 @@ Six findings from the investigation, in the order they changed the picture:
 
 ### Layer 0 — Fix contour and radial for text (READ-001, READ-002)
 
-Contour fill walks concentric offset rings inward from the boundary. On a closed shape that is
-correct; on a letter stroke the rings advancing from both edges collide in the middle, which is
+Contour fill traces one iso-distance loop per threshold inward from the boundary. On a closed shape
+that is correct; on a letter stroke that single loop runs down one side of the stroke and back up
+the other, and where the stroke narrows its two opposing branches converge — sampled naively that
+lays two near-coincident rows of stones which greedy dedupe then culls in arbitrary walk order,
 exactly the mush in the reported screenshots. The correct degenerate case for a narrow stroke is a
 **single line down the stroke's medial axis** — the monoline result rhinestone lettering actually
-wants. Proposed rule: when the remaining stroke width falls below ~2 stone pitches, emit one
-centreline run instead of another ring pair.
+wants. **Implemented in READ-001** (`docs/specifications/READ-001-ContourCentreline.md`):
+`splitSliverRuns()` collapses any run that has closed up below one stone pitch to a line of
+midpoints, plus sub-cell-accurate ring placement and a `stoneSizeMm` (not full-pitch) dedupe floor.
 
 Radial fill rays outward from a single centroid. For an eight-letter word that centroid is
 meaningless. Proposed rule: for text layers, compute radial per glyph rather than per layout.
@@ -149,8 +153,8 @@ being warned at heights the current rule misses. FONT-LIB-004's `#heightBelowRea
 
 | | milestone | depends on | why here |
 |---|---|---|---|
-| 1 | READ-003 live impossibility check | — | Independent, immediate, no data needed |
-| 2 | READ-001 contour centreline | — | Highest value; removes causes |
+| 1 | READ-003 live impossibility check | — | Independent, immediate, no data needed — **merged** |
+| 2 | READ-001 contour centreline | — | Highest value; removes causes — **merged** |
 | 3 | READ-002 radial per-glyph | — | Same |
 | 4 | READ-004 render + recognition harness | 001, 002 | Grid must render post-fix geometry |
 | 5 | READ-005 sweep + bake floors | 004 | |

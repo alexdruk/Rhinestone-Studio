@@ -47,6 +47,9 @@ export {
 
 export {
   computeInwardRingPolygons,
+  splitSliverRuns,
+  loopIsElongated,
+  ELONGATION_MIN_ISOPERIMETRIC,
   ContourFillPrecisionError
 } from './ContourRingSampler.js';
 

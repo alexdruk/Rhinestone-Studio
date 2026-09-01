@@ -832,7 +832,7 @@ export class GeometryEngine {
       outlineStats.rawSampleCount += closedStats.rawSampleCount;
       outlineStats.keptCount += closedStats.keptCount;
     } else {
-      for (const point of sampleShapeFillPoints(options.mode, closedPolygons, BoundingBox.fromPoints(closedPolygons.flat()), spacingMm)) {
+      for (const point of sampleShapeFillPoints(options.mode, closedPolygons, BoundingBox.fromPoints(closedPolygons.flat()), spacingMm, options.stoneSizeMm)) {
         points.push(point);
       }
     }
@@ -1011,7 +1011,7 @@ export class GeometryEngine {
 
     const placement = { xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm };
     const spacingMm = options.stoneSizeMm + options.gapMm;
-    const points = sampleFieldByMode(options.mode, field, placement, spacingMm);
+    const points = sampleFieldByMode(options.mode, field, placement, spacingMm, options.stoneSizeMm);
 
     let stones = points.map((point, index) => new Stone({
       xMm: point.xMm,

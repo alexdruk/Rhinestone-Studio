@@ -348,12 +348,12 @@
       "file": "image-trace-monogram.rhs",
       "layerCount": 1,
       "visibleLayerCount": 1,
-      "stoneCount": 196,
+      "stoneCount": 274,
       "bounds": {
-        "minXmm": 85.3375,
-        "minYmm": 18.5875,
-        "maxXmm": 118.462914,
-        "maxYmm": 71.3875
+        "minXmm": 85.457031,
+        "minYmm": 18.903906,
+        "maxXmm": 116.875,
+        "maxYmm": 71.099219
       },
       "fontIds": [],
       "colors": [
@@ -446,7 +446,7 @@
       "file": "mixed-fill-styles-and-sizes.rhs",
       "layerCount": 5,
       "visibleLayerCount": 5,
-      "stoneCount": 1168,
+      "stoneCount": 1534,
       "bounds": {
         "minXmm": 32.15,
         "minYmm": 37.954102,
