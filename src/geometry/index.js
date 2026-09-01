@@ -32,6 +32,8 @@ export {
   sampleFillPoints,
   sampleFieldFillPoints,
   isPointInsidePolygons,
+  groupPolygonsIntoComponents,
+  radialStepCount,
   sampleStaggeredFillPoints,
   sampleStaggeredFieldFillPoints,
   sampleRadialFillPoints,
