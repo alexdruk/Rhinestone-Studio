@@ -1,8 +1,8 @@
 # READ-000 — Readability program: architecture proposal
 
-Status: **Partially implemented.** READ-003 (Layer 1 physical-impossibility gate) and READ-001
-(Layer 0 contour centreline) are merged; the remaining layers are still for sign-off. Supersedes the
-ad-hoc approach that produced FONT-LIB-003 and FONT-LIB-004.
+Status: **Partially implemented.** READ-003 (Layer 1 physical-impossibility gate), READ-001 (Layer 0
+contour centreline) and READ-002 (Layer 0 radial per-component) are merged; the remaining layers are
+still for sign-off. Supersedes the ad-hoc approach that produced FONT-LIB-003 and FONT-LIB-004.
 
 ---
 
@@ -65,8 +65,20 @@ wants. **Implemented in READ-001** (`docs/specifications/READ-001-ContourCentrel
 `splitSliverRuns()` collapses any run that has closed up below one stone pitch to a line of
 midpoints, plus sub-cell-accurate ring placement and a `stoneSizeMm` (not full-pitch) dedupe floor.
 
-Radial fill rays outward from a single centroid. For an eight-letter word that centroid is
-meaningless. Proposed rule: for text layers, compute radial per glyph rather than per layout.
+Radial fill rays outward from a single anchor: the bounding-box centre of the whole layout. For an
+eight-letter word that anchor sits in the middle of the word with no relation to any letter, so the
+pattern is a tight bullseye at the middle letters and near-straight rows (indistinguishable from
+Grid Fill) at the outer ones — one mode, two behaviours in one word. **Implemented in READ-002**
+(`docs/specifications/READ-002-RadialPerGlyph.md`): `groupPolygonsIntoComponents()` splits the
+contours into connected components by even-odd nesting — deliberately a connected component, not a
+character, so an `i`'s dot and stem anchor separately while an `a`'s counter stays a hole of its
+outer — and `sampleRadialFillPoints()` rays each component out from its own bounding-box centre,
+keeping a candidate only if it is inside both its own component and the global polygon set. A
+single-component shape (Circle, Rectangle, single-glyph text, one-piece SVG) is byte-identical to
+before. READ-002 also fixed a floating-point floor bug that dropped every radial fill's innermost
+ring from 6 stones to 5 (17.6% over-spaced). Radial fill for image/raster layers keeps the single
+whole-placement anchor — connected-component labelling on a density field is a different technique,
+deferred (`docs/BACKLOG.md`).
 
 These are the highest-value items: they likely remove most bad cases at source, and they turn two
 "broken" modes into useful ones rather than deleting user options.
@@ -155,7 +167,7 @@ being warned at heights the current rule misses. FONT-LIB-004's `#heightBelowRea
 |---|---|---|---|
 | 1 | READ-003 live impossibility check | — | Independent, immediate, no data needed — **merged** |
 | 2 | READ-001 contour centreline | — | Highest value; removes causes — **merged** |
-| 3 | READ-002 radial per-glyph | — | Same |
+| 3 | READ-002 radial per-component | — | Highest value; removes causes — **merged** |
 | 4 | READ-004 render + recognition harness | 001, 002 | Grid must render post-fix geometry |
 | 5 | READ-005 sweep + bake floors | 004 | |
 | 6 | READ-006 live UI on floors | 005 | Supersedes FONT-LIB-004's rule |

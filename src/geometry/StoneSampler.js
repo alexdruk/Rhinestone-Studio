@@ -6,7 +6,7 @@
  * placement. They contain no font, rendering, or export concerns.
  */
 
-import { Point2D } from '../text/VectorPath.js';
+import { Point2D, BoundingBox } from '../text/VectorPath.js';
 import { computeInwardRingPolygons, splitSliverRuns } from './ContourRingSampler.js';
 import { groupCongruentContours, applyRigidTransform } from './CongruentContours.js';
 
@@ -210,6 +210,106 @@ function isPointInsidePolygon(point, polygon) {
   }
 
   return inside;
+}
+
+/**
+ * READ-002 Part A: group a flat contour list into connected components by even-odd nesting.
+ *
+ * Returns `Point2D[][][]` -- an array of components, each an array of contours: one outer contour
+ * followed by its holes, exactly the `[outer, ...holes]` shape sampleContourFillPoints() /
+ * isPointInsidePolygons() already expect for one glyph or one shape part.
+ *
+ * The unit is a **connected component by even-odd nesting**, deliberately NOT a character:
+ *
+ *  - An `i`'s dot and its stem become separate components, so each gets its own radial anchor -- a
+ *    per-character anchor would sit in the empty space between the two.
+ *  - An `a`'s counter stays a hole of its outer contour, so the even-odd `isPointInsidePolygons()`
+ *    semantics are preserved with no hole-specific code, exactly as sampleContourFillPoints()
+ *    already relies on.
+ *  - Grouping is derivable from the polygons already passed in, so this change stays entirely
+ *    inside StoneSampler.js. A true per-character unit would need glyph identity threaded from
+ *    GeometryEngine._buildLineContours() through _textPolygons() into the sampler, and would fix
+ *    text only.
+ *  - It generalises to SVG imports and multi-part shape layers at no extra cost.
+ *
+ * Algorithm:
+ *  1. Compute each contour's bounding box once.
+ *  2. `depth[i]` = the number of contours `j !== i` whose bounding box contains contour `i`'s
+ *     bounding box AND for which `isPointInsidePolygons(polygons[i][0], [polygons[j]])` is true. The
+ *     bounding-box test is a prefilter only; the point test decides.
+ *  3. Even `depth` is an outer and starts a component. Components are emitted in ascending order of
+ *     their outer contour's index in `polygons`, so the output is deterministic.
+ *  4. Odd `depth` is a hole, attached to the containing even-depth contour with the smallest
+ *     bounding-box area. An odd-depth contour with no containing outer (should not occur; defensive)
+ *     becomes its own component rather than being dropped.
+ *
+ * @param {Point2D[][]} polygons
+ * @returns {Point2D[][][]}
+ */
+export function groupPolygonsIntoComponents(polygons) {
+  const n = polygons.length;
+  if (n === 0) return [];
+
+  const bounds = polygons.map((polygon) => {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const v of polygon) {
+      if (v.xMm < minX) minX = v.xMm;
+      if (v.xMm > maxX) maxX = v.xMm;
+      if (v.yMm < minY) minY = v.yMm;
+      if (v.yMm > maxY) maxY = v.yMm;
+    }
+    return { minX, maxX, minY, maxY, areaMm2: Math.max(0, maxX - minX) * Math.max(0, maxY - minY) };
+  });
+
+  const bboxContains = (outer, inner) =>
+    outer.minX <= inner.minX && outer.maxX >= inner.maxX &&
+    outer.minY <= inner.minY && outer.maxY >= inner.maxY;
+
+  // containers[i] = indices j !== i that geometrically contain contour i (bbox prefilter, then the
+  // deciding point-in-polygon test).
+  const containers = polygons.map((polygon, i) => {
+    const inside = [];
+    if (polygon.length > 0) {
+      for (let j = 0; j < n; j++) {
+        if (j === i) continue;
+        if (!bboxContains(bounds[j], bounds[i])) continue;
+        if (isPointInsidePolygons(polygon[0], [polygons[j]])) inside.push(j);
+      }
+    }
+    return inside;
+  });
+
+  const depth = containers.map((c) => c.length);
+  const isOuter = depth.map((d) => d % 2 === 0);
+
+  const components = [];
+  const componentByOuterIndex = new Map();
+  for (let i = 0; i < n; i++) {
+    if (!isOuter[i]) continue;
+    const contours = [polygons[i]];
+    components.push(contours);
+    componentByOuterIndex.set(i, contours);
+  }
+
+  for (let i = 0; i < n; i++) {
+    if (isOuter[i]) continue;
+    let bestOuter = -1;
+    let bestAreaMm2 = Infinity;
+    for (const j of containers[i]) {
+      if (!isOuter[j]) continue;
+      if (bounds[j].areaMm2 < bestAreaMm2) {
+        bestAreaMm2 = bounds[j].areaMm2;
+        bestOuter = j;
+      }
+    }
+    if (bestOuter === -1) {
+      components.push([polygons[i]]); // defensive: an odd-depth contour with no containing outer
+    } else {
+      componentByOuterIndex.get(bestOuter).push(polygons[i]);
+    }
+  }
+
+  return components;
 }
 
 /**
@@ -1179,17 +1279,73 @@ function boundingBoxFarthestCornerDistanceMm(boundingBox, center) {
 // spacingMm in a straight line. Chord length for n equally-spaced points is `2*r*sin(pi/n)`, a
 // function that decreases as n increases; solving `2*r*sin(pi/n) = spacingMm` for n and flooring
 // picks the *largest* n (most points) whose chord still meets or exceeds spacingMm.
-function radialStepCount(radiusMm, spacingMm) {
+//
+// READ-002 Part C: floor with a small absolute epsilon. At `r === spacingMm` the half-chord ratio is
+// exactly 0.5 and the exact answer is exactly 6, because `2r*sin(pi/6) = r = spacingMm`. But
+// `Math.asin(0.5)` rounds a half-ulp above `pi/6`, so `Math.PI / Math.asin(0.5)` evaluates to
+// `5.999999999999999` and a bare floor returns 5 -- a 3.527mm chord where 3.000mm was intended,
+// 17.6% over-spaced, on the innermost ring of every radial field ever produced. k = 2..20 were
+// checked and are unchanged by the `+ 1e-9` epsilon; the worst-case chord shortfall it can
+// introduce is ~1e-9 relative, far below any physical tolerance.
+export function radialStepCount(radiusMm, spacingMm) {
   const halfChordRatio = Math.min(1, spacingMm / (2 * radiusMm));
-  return Math.max(1, Math.floor(Math.PI / Math.asin(halfChordRatio)));
+  return Math.max(1, Math.floor(Math.PI / Math.asin(halfChordRatio) + 1e-9));
+}
+
+// READ-002 Part B: the raw concentric-ring candidate points (center first, then each ring's
+// arc-length-even points) for one anchor. No point-in-polygon filtering or dedupe here -- callers
+// apply those. Factored out of sampleRadialFillPoints() so the single-component path stays
+// byte-identical to the pre-READ-002 code while the multi-component path reuses the identical ring
+// geometry per component.
+function radialCandidatePoints(center, maxRadiusMm, spacingMm) {
+  const points = [center];
+  for (let radiusMm = spacingMm; radiusMm <= maxRadiusMm; radiusMm += spacingMm) {
+    const stepCount = radialStepCount(radiusMm, spacingMm);
+    for (let step = 0; step < stepCount; step++) {
+      const angleRad = (step / stepCount) * 2 * Math.PI;
+      points.push(new Point2D(
+        center.xMm + radiusMm * Math.cos(angleRad),
+        center.yMm + radiusMm * Math.sin(angleRad)
+      ));
+    }
+  }
+  return points;
 }
 
 /**
  * Fill the interior of one or more polygons with concentric rings of points spaced radially and
- * along each ring's own arc-length by spacingMm, centered on the shape's own bounding-box center
- * (see docs/specifications/RS-1011-FillAlgorithms.md, "Radial Fill" -- always well-defined, so no
- * per-layer center override field is needed). One stone sits at the exact center when the center
- * point itself is inside the shape.
+ * along each ring's own arc-length by spacingMm (see docs/specifications/RS-1011-FillAlgorithms.md,
+ * "Radial Fill", and docs/specifications/READ-002-RadialPerGlyph.md). One stone sits at each
+ * anchor when the anchor itself is inside the shape.
+ *
+ * READ-002 Part B: the pattern's scale is set by distance from the anchor, so a single whole-layout
+ * anchor makes a multi-part shape (an eight-letter word, an SVG with disjoint pieces) render as a
+ * bullseye at its middle and as near-straight rows at its edges -- one mode, two behaviours in one
+ * layout. So the contours are grouped into connected components (groupPolygonsIntoComponents()) and
+ * each component rays out from its own bounding-box centre.
+ *
+ *  - Exactly one component: the `boundingBox` argument is used exactly as before READ-002 and the
+ *    original code path runs unchanged. This guarantees every existing single-component caller
+ *    (Circle, Rectangle, Slot, Polygon, single-glyph text, a one-piece SVG) stays byte-identical
+ *    (modulo the one extra innermost-ring stone Part C adds).
+ *  - Two or more components: each rays out from its own box's centre and farthest-corner radius; a
+ *    candidate is kept only if it is inside BOTH its own component AND the global `polygons` set.
+ *    The global test preserves today's even-odd `isPointInsidePolygons()` semantics bit-for-bit;
+ *    the component test stops one component's rings bleeding into another.
+ *
+ * The combined candidate set is deduped once via `dedupeStonePoints(points, stoneSizeMm)` -- the
+ * READ-001 `stoneSizeMm` floor, unchanged, including across components (no separate cross-component
+ * floor). That floor guarantees no pair of stones is ever closer than one stone diameter, same-
+ * component or cross-component alike. The *gap* between stones of two different components is NOT
+ * guaranteed: per-component anchors are independent, so two adjacent glyphs' facing edge stones can
+ * land arbitrarily close, down to zero gap (measured worst case across an 8-font x 10-string x
+ * 4-size sweep: 1.0025x the stone diameter). This is the first time Radial Fill produces sub-pitch
+ * spacing at all -- a single whole-layout anchor previously made min NN >= spacingMm structurally.
+ * Same class as contour's post-READ-001 2.57mm-at-2.5mm neighbour. See
+ * docs/specifications/READ-002-RadialPerGlyph.md.
+ *
+ * `sampleRadialFieldFillPoints()` (image/raster layers) has the same single-anchor defect but needs
+ * raster connected-component labelling on a density field -- out of scope, see docs/BACKLOG.md.
  *
  * @param {Point2D[][]} polygons
  * @param {import('../text/VectorPath.js').BoundingBox|null} boundingBox
@@ -1205,23 +1361,27 @@ export function sampleRadialFillPoints(polygons, boundingBox, spacingMm, stoneSi
     return [];
   }
 
-  const center = boundingBoxCenter(boundingBox);
-  const maxRadiusMm = boundingBoxFarthestCornerDistanceMm(boundingBox, center);
-  const points = [];
+  const components = groupPolygonsIntoComponents(polygons);
 
-  if (isPointInsidePolygons(center, polygons)) {
-    points.push(center);
+  if (components.length <= 1) {
+    // Single component (or an empty polygon set): use the caller's boundingBox exactly as today.
+    const center = boundingBoxCenter(boundingBox);
+    const maxRadiusMm = boundingBoxFarthestCornerDistanceMm(boundingBox, center);
+    const points = radialCandidatePoints(center, maxRadiusMm, spacingMm)
+      .filter((candidate) => isPointInsidePolygons(candidate, polygons));
+    return dedupeStonePoints(points, stoneSizeMm);
   }
 
-  for (let radiusMm = spacingMm; radiusMm <= maxRadiusMm; radiusMm += spacingMm) {
-    const stepCount = radialStepCount(radiusMm, spacingMm);
-    for (let step = 0; step < stepCount; step++) {
-      const angleRad = (step / stepCount) * 2 * Math.PI;
-      const candidate = new Point2D(
-        center.xMm + radiusMm * Math.cos(angleRad),
-        center.yMm + radiusMm * Math.sin(angleRad)
-      );
-      if (isPointInsidePolygons(candidate, polygons)) {
+  const points = [];
+  for (const componentContours of components) {
+    const componentBox = BoundingBox.fromPoints(componentContours.flat());
+    if (!componentBox) {
+      continue;
+    }
+    const center = boundingBoxCenter(componentBox);
+    const maxRadiusMm = boundingBoxFarthestCornerDistanceMm(componentBox, center);
+    for (const candidate of radialCandidatePoints(center, maxRadiusMm, spacingMm)) {
+      if (isPointInsidePolygons(candidate, componentContours) && isPointInsidePolygons(candidate, polygons)) {
         points.push(candidate);
       }
     }
