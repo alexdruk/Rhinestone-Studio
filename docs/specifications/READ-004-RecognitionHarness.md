@@ -273,14 +273,14 @@ macOS 13, where Playwright has no bundled-Chromium download).
 the layout as a person would see the design. This path **bypasses signal A entirely**: it calls
 `analyzeOne()` directly rather than `runProbe()`, and never touches `buildRecognitionSheetHtml()`
 (which correctly throws when `measurements` is null). That is deliberate — the two cases that fail
-signal A, Cinzel radial and Caveat fill, are exactly the images that need looking at. All 11 cases
+signal A, Cinzel radial and Caveat fill, are exactly the images that need looking at. All 12 cases
 render, including the curved one. `renderPlainCase()` / `runPlainRenders()` are exported for reuse.
 
-### 8.1 Ground-truth signal-A verdicts (all 11 cases, `--oracle stub`)
+### 8.1 Ground-truth signal-A verdicts (all 12 cases, `--oracle stub`)
 
 | font | mode | heightMm | stone | signal A | reason |
 |---|---|---|---|---|---|
-| anton-regular | outline | 36.52 | ss6 | **pass** | — |
+| anton-regular | Grid fill | 36.52 | ss6 | **pass** | — |
 | poppins-regular | outline | 42.5 | ss6 | **pass** | — |
 | great-vibes-regular | outline | 42.5 | ss6 | **pass** | — |
 | dancing-script-regular | outline | 34.3 | ss6 | **pass** | — |
@@ -290,10 +290,19 @@ render, including the curved one. `renderPlainCase()` / `runPlainRenders()` are 
 | lobster-regular | contour | 42 | ss10 | **pass** | — |
 | lilita-one-regular | contour | 40 | ss10 | **pass** | — |
 | lilita-one-regular | radial | 58 | ss16 | **pass** | — |
+| anton-regular | outline | 36.52 | ss6 | **pass** | — |
 | anton-regular | contour (curved) | 60 | ss10 | **pass** | — |
 
 The two failures are exactly Cinzel radial and Caveat fill — the pair READ-003's investigation
 identified as the cases the stroke gate still catches (READ-000 §1.2).
+
+**Row 1's mode was wrong through five passes.** The row was rendered and rated during READ-004 as
+`anton-regular` *Grid fill*, verdict "good" — the only interior-fill case in the ground truth rated
+good — but `STRAIGHT_GROUND_TRUTH_CASES` carried it as `mode: 'outline'`, so `--render plain` had
+been drawing an outline for it from the first commit through `05a8540`. The sixth pass corrects the
+row to `fill`. The `anton-regular` *outline* render at the same height/stone was also produced and
+rated during READ-004; rather than discard that rating, it is kept as the **twelfth case** (row 11
+above), flagged in the source as not part of the original ground truth.
 
 **The curved row uses a real design-plane product geometry (Part 7).** `curveRadiusMm` is the
 **round dinner plate's rim-band mid-radius** — `src/products/definitions/plate-round-dinner.json`,

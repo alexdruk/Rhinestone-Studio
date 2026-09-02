@@ -59,7 +59,7 @@ export const PLAIN_RENDER_TEXT = 'Vitalina';
 // --- ground-truth case list (real manifest ids, verified) ------------------------------------
 
 const STRAIGHT_GROUND_TRUTH_CASES = [
-  { fontId: 'anton-regular',          mode: 'outline', heightMm: 36.52, stoneSizeId: 'ss6' },
+  { fontId: 'anton-regular',          mode: 'fill',    heightMm: 36.52, stoneSizeId: 'ss6' },
   { fontId: 'poppins-regular',        mode: 'outline', heightMm: 42.5,  stoneSizeId: 'ss6' },
   { fontId: 'great-vibes-regular',    mode: 'outline', heightMm: 42.5,  stoneSizeId: 'ss6' },
   { fontId: 'dancing-script-regular', mode: 'outline', heightMm: 34.3,  stoneSizeId: 'ss6' },
@@ -68,7 +68,12 @@ const STRAIGHT_GROUND_TRUTH_CASES = [
   { fontId: 'caveat-regular',         mode: 'fill',    heightMm: 55,    stoneSizeId: 'ss16' },
   { fontId: 'lobster-regular',        mode: 'contour', heightMm: 42,    stoneSizeId: 'ss10' },
   { fontId: 'lilita-one-regular',     mode: 'contour', heightMm: 40,    stoneSizeId: 'ss10' },
-  { fontId: 'lilita-one-regular',     mode: 'radial',  heightMm: 58,    stoneSizeId: 'ss16' }
+  { fontId: 'lilita-one-regular',     mode: 'radial',  heightMm: 58,    stoneSizeId: 'ss16' },
+  // Not part of the original ground truth. The first row was recorded as anton-regular Grid fill
+  // (rated "good") but the harness had it as `mode: 'outline'` through five passes; row 1 is now
+  // 'fill' to match the rating. This anton-regular *outline* render was also produced and rated
+  // during READ-004 and the rating is worth keeping, so it stays as an extra case.
+  { fontId: 'anton-regular',          mode: 'outline', heightMm: 36.52, stoneSizeId: 'ss6' }
 ];
 
 // Part 7 (revised in the third pass): the single curved row uses a real DESIGN-PLANE product
