@@ -99,24 +99,53 @@ one or more contact sheets, reusing `specimenPages.mjs`'s stone-circle rendering
 1. **One probe per sheet.** Every sheet comes from a single probe record, i.e. one
    `(font, mode, height, stone size)`. Two probes are never composited onto one image.
 
-2. **No character appears twice on a sheet.** A recognizer that can see the same glyph rendered
-   *legibly* elsewhere on the image reads a degraded copy by cross-referencing it, not by resolving
-   the letterforms — the identical false-pass mechanism READ-000 §3 identifies for familiar phrases
-   ("Happy Birthday" completed from a language prior rather than read). Enforced two ways:
-   - every tile on a sheet has a distinct `expectedText`; and
-   - single-character tiles are partitioned by class — letters on their own sheets, digits on their
-     own sheets, multi-character strings on their own sheets — so a lone `o` is never on the same
-     image as `oo` or `Sophia`, and a lone `8` never shares an image with `88`.
+2. **No character appears in two entries on a sheet.** A recognizer that can see the same glyph
+   rendered *legibly* elsewhere on the image reads a degraded copy by cross-referencing it, not by
+   resolving the letterforms — the identical false-pass mechanism READ-000 §3 identifies for
+   familiar phrases ("Happy Birthday" completed from a language prior rather than read). A character
+   repeated *within one entry* (`mm`, `88`) carries no such advantage — both copies are equally
+   degraded — so the rule is strictly cross-entry. The partitioning is:
 
-3. **Tiles are labelled by index only.** The expected answer never appears as readable text
-   anywhere in the HTML — not in a caption, comment, `title`, `alt`, `aria-*`, or `data-*`. A lone
-   letter or digit is unavoidably present in SVG coordinates, hex colours, and CSS keywords, so the
-   guarantee is "not as a label or human-readable string", not "not one matching byte anywhere";
-   the built-in leak guard rejects comments and `alt`/`aria`/`data-` attributes outright, checks
-   every caption against every answer, and does a full-HTML substring scan for entries ≥ 3
-   characters. The index-label alphabet is chosen disjoint from the sheet's own glyphs (numeric
-   labels for letter/string sheets, letter labels for digit sheets) so the label can't spell an
-   answer either.
+   - **Single-character entries** are grouped by confusability (union-find over `CONFUSABLE_PAIRS`;
+     with the current corpus that is `{I,l,1} {O,0,Q} {S,5} {B,8} {G,C} {e,c,o} {6,9}`), and each
+     confusable group is placed *whole* onto one sheet — a pair split across two sheets is a hard
+     failure. The remaining characters are filled round-robin to balance tile counts, and **every
+     single-character sheet is asserted (in the builder, not only the test) to carry at least one
+     letter and at least one digit.**
+
+     This replaces the previous **partition-by-class** rule (letters on letter sheets, digits on
+     digit sheets). That rule made every sheet homogeneous, which structurally *removes* the
+     alphanumeric confusables — O/0, S/5, B/8, I/1, l/1 — from measurement: a recognizer looking at
+     a letters-only sheet cannot make the O→0 error because no digit is on the page. This product
+     sells names and years in the same design, so those are exactly the confusions that matter. The
+     class prior is a contamination of the same family as the language prior READ-000 §3 rejects
+     familiar phrases for — "this page is all letters, so it can't be a digit" is the same kind of
+     outside-the-glyph inference as "this phrase is *Happy Birthday*" — and it was reintroduced by
+     the very rule built to prevent cross-referencing.
+
+   - **Multi-character entries** are packed greedily: each entry goes on the first sheet whose
+     character set (whitespace ignored) is disjoint from it, opening a new sheet when none fits.
+     However many sheets that produces is accepted. `STRESS_STRINGS` (15 entries, e.g. `mm` beside
+     `mnuvw`, `rn` beside `nn`) lands on **3** sheets, not 1.
+
+   Single- and multi-character entries never share a sheet, so a lone `o` is never on the same
+   image as `oo` or `Sophia`. Order within a sheet is deterministic (by corpus index) so the same
+   corpus always produces the same sheets and the cache key keeps meaning something.
+
+3. **Tiles are labelled with circled numerals (`①②③…`).** That alphabet is disjoint from Latin
+   letters and Arabic digits under every composition, so — now that sheets are no longer
+   homogeneous — the label can never spell, or even share a character with, an expected answer
+   regardless of what a sheet contains. (The previous scheme — numeric labels for letter/string
+   sheets, alphabetic for digit sheets — argued disjointness from sheet homogeneity, and already
+   failed on the mixed string sheet where numeric labels `01`–`15` shared the image with the
+   answers `88` and `69`.) `labelsForClass()` collapses to one unconditional `labelsForCount()`.
+   The expected answer never appears as readable text anywhere in the HTML — not in a caption,
+   comment, `title`, `alt`, `aria-*`, or `data-*`. A lone letter or digit is unavoidably present in
+   SVG coordinates, hex colours, and CSS keywords, so the guarantee is "not as a label or
+   human-readable string", not "not one matching byte anywhere"; the built-in leak guard rejects
+   comments and `alt`/`aria`/`data-` attributes outright, checks every caption against every answer
+   (unconditional, since no caption can legitimately contain a Latin/Arabic run), and does a
+   full-HTML substring scan for entries ≥ 3 characters.
 
 4. **`tileInventory` is the answer key.** `[{ index, expectedText }]` is returned *alongside* the
    HTML and lives only in the record store — never embedded in the page, and never handed to the
@@ -189,6 +218,7 @@ A probe that **fails signal A** produces no sheet, no PNG, and no oracle call, s
 
 ```
 node tools/font-certification/readability-probe.mjs --cases ground-truth --oracle stub
+node tools/font-certification/readability-probe.mjs --render plain --channel chrome
 ```
 
 `--oracle stub` is the only mode exercised in this milestone. `--oracle pinned` exists in the
@@ -196,6 +226,14 @@ argument parsing and is reachable (it constructs `createPinnedOracle()`), but is
 `--corpus` selects the tier (`words` default, `search`, `full`); `--only` restricts to font ids;
 `--channel` passes a Playwright browser channel through `screenshotPages()` (needed as `chrome` on
 macOS 13, where Playwright has no bundled-Chromium download).
+
+`--render plain` is a **ground-truth render mode**: one PNG per ground-truth case showing the text
+`"Vitalina"` at that case's font / mode / height / stone size — no tiles, no labels, no grid, just
+the layout as a person would see the design. This path **bypasses signal A entirely**: it calls
+`analyzeOne()` directly rather than `runProbe()`, and never touches `buildRecognitionSheetHtml()`
+(which correctly throws when `measurements` is null). That is deliberate — the two cases that fail
+signal A, Cinzel radial and Caveat fill, are exactly the images that need looking at. All 11 cases
+render, including the curved one. `renderPlainCase()` / `runPlainRenders()` are exported for reuse.
 
 ### 8.1 Ground-truth signal-A verdicts (all 11 cases, `--oracle stub`)
 
@@ -214,49 +252,116 @@ macOS 13, where Playwright has no bundled-Chromium download).
 | anton-regular | contour (curved) | 60 | ss10 | **pass** | — |
 
 The two failures are exactly Cinzel radial and Caveat fill — the pair READ-003's investigation
-identified as the cases the stroke gate still catches (READ-000 §1.2). The curved row uses
-`curveRadiusMm: 120` with an upward arc; the prompt's `curveDirection: 'up'` is recorded on the
-probe as-authored and mapped to the arc engine's upward-bulging direction (`'outside'`, a 180°
-sweep, `ArcProjection.js` only accepts `outside`/`inside`) — both values are kept in the record's
-`curve` field.
+identified as the cases the stroke gate still catches (READ-000 §1.2).
+
+**The curved row uses a real product geometry (Part 7).** `curveRadiusMm` is the **Standard Mug**
+body-wall radius — `src/products/definitions/vessel-standard-mug.json`, `bodyDiameterMm: 82` →
+**41 mm**. `curveSweepAngleDeg` is *derived* so `"Vitalina"` subtends its natural arc rather than an
+arbitrary sweep: `sweepDeg = (textWidthMm / radiusMm) · 180/π`, where `textWidthMm` is the rendered
+width of `"Vitalina"` at 60 mm in `anton-regular` (`contour`, `ss10`) — **178.387 mm**, measured at
+run time. That gives **`curveSweepAngleDeg ≈ 249.288`**. (The previous value, `curveRadiusMm: 120` /
+`curveSweepAngleDeg: 180`, was a 377 mm arc chosen only to satisfy `normalizeCurveParams()`'s
+non-zero requirement; at that radius `"Vitalina"` filled half the arc and was stretched 2×.) A
+178 mm name genuinely wraps ~70 % of the way around an 82 mm mug, so the sweep is large — that is
+the real geometry, and it is exactly what READ-005 needs to look at. The product, radius, measured
+width and derived sweep are all recorded in the probe record's `curve.derivation`. The prompt's
+`curveDirection: 'up'` is kept as-authored and mapped to the arc engine's upward-bulging direction
+(`'outside'`; `ArcProjection.js` only accepts `outside`/`inside`) — both values live in `curve`.
 
 ---
 
-## 9. Part I — the ratio-invariance residual
+## 9. Part 5 — direct layout-invariance measurement
 
-READ-000 §3 stores **one floor per `(font, mode)`** on the premise that height-to-stone-diameter
-generalises across all five stone sizes. `PRODUCTION_GAP_MM` is absolute, so pitch/diameter runs
-from **1.150 at SS6 to 1.047 at SS30** and the premise holds only approximately. Measured before
-READ-005 commits ~900 recognition calls to it.
+READ-000 §3 stores **one floor per `(font, mode)`** on the premise that at a matched
+height-to-stone-diameter ratio the *layout* is the same up to scale across all five stone sizes.
+`PRODUCTION_GAP_MM` is absolute, so pitch/diameter runs from **1.150 at SS6 to 1.047 at SS30** and
+the premise holds only approximately. Measured before READ-005 commits ~2,100 recognition calls to
+it.
 
-For `anton-regular`, `caveat-regular`, `great-vibes-regular`, `lilita-one-regular` × all five modes
-× `{ss6, ss30}` at matched height-to-diameter ratios `{10, 12.5, 15, 20}`, on the string
-`"Vitalina"`:
+### 9.1 What the committed Part I measured, and why it could not answer the question
 
-**Literal metric** — `stoneCount / (stemWidthRatio × heightMm)`, SS30/SS6 quotient:
+The original Part I measured **total stone count**. That number cannot answer whether the layout is
+scale-similar: at a matched height/diameter ratio an interior fill tiles an *area*, so its stone
+count scales as `((2.3/2.0)/(6.7/6.4))² = 1.2065` **by construction**, and the reported interior-mode
+residuals clustered on exactly that value. That is area scaling, not a failure of ratio invariance —
+and it is equally consistent with the layout being perfectly scale-similar. The stone-count metric
+answers a different question than the one it was asked. Its stated conclusion ("interior-fill floors
+do not generalise, up to ~49 %") **is not supported by the data, and neither is its opposite.** It
+is withdrawn.
 
-> **max |quotient − 1| = 0.7278** (quotient 0.2722), at **(great-vibes-regular, radial, 10)**.
+### 9.2 The direct measurement
 
-The literal quotient sits near **1/3.2 ≈ 0.31** *by construction*: at a matched height/diameter
-ratio the stone **count** is nearly size-invariant (that is the whole point of the ratio), but
-`stemWidthRatio × heightMm` — a millimetre stem width — is 3.2× larger at SS30 (heightMm(ss30) /
-heightMm(ss6) = 6.4 / 2.0), so the quotient carries that trivial linear-scale term. The literal
-number answers the prompt; it is not the interesting residual.
+`tools/scratch/read-004-invariance-chamfer.mjs` (scratch, gitignored). For **every enabled manifest
+font** (31) × all **5 modes** × ratios `{10, 12.5, 15, 20}` × the glyph set `['R','a','e','8','m']`:
+generate the layout at SS6 and at SS30 at the matched ratio, and compute
 
-**Supplementary metric** — stem width expressed in **stone diameters**
-(`stoneCount × stoneSizeMm / (stemWidthRatio × heightMm)`), which removes the 3.2× term and is the
-quantity that actually tests whether a per-`(font, mode)` floor generalises across sizes:
+```
+chamferDistance(normalizedStonePoints(ss6.stones), normalizedStonePoints(ss30.stones))
+```
 
-> **max |quotient − 1| = 0.4889** (quotient 1.4889), at **(lilita-one-regular, radial, 12.5)**.
+— the normalisation is unit-height and centred, so this is purely "is the SS30 layout the SS6 layout
+rescaled?". A `(font, mode, ratio)` triple whose `stemWidthRatio × ratio < 1` is **skipped** (signal
+A rejects it; a measurement there is meaningless). `rs-block` / `rs-modern` are authored stone-map
+fonts with no `stemWidthRatio` and no OpenType outline for `analyzeOne()` to sample, so their 40
+triples are unmeasurable here.
 
-- **Outline mode is genuinely size-invariant:** |quotient − 1| ≤ ~0.05 for every font and ratio.
-  A single outline floor per font is safe.
-- **The interior-fill modes are not:** `fill` / `staggered` / `radial` / `contour` show 8–49%
-  residual, worst in `radial` and at the extreme ratios. A single floor for these modes needs
-  either a per-stone-size measurement or a conservative margin, and READ-005 should say which.
+| bucket | triples |
+|---|---:|
+| total `(font, mode, ratio)` | 620 |
+| authored, unmeasurable (`rs-block`, `rs-modern`) | 40 |
+| skipped (`stemWidthRatio × ratio < 1`) | 360 |
+| **measured** | **220** |
 
-The complete raw table is in the final report for `feature/read-004` and is regenerated by
-`tools/scratch/read-004-ratio-invariance-residual.mjs` (scratch, gitignored).
+Over the **1,100** measured `(triple, glyph)` points (0 errored):
+
+> **Maximum chamfer distance = 0.1633**, at **(`abril-fatface-regular`, `radial`, ratio 12.5, glyph
+> `e`)**.
+>
+> Measured points exceeding `NEAR_IDENTICAL_CHAMFER_THRESHOLD` (0.09): **48 / 1,100**.
+> Measured triples with at least one glyph over threshold: **27 / 220**.
+
+Per-`(font, mode)` maxima (measured triples only) are in the `feature/read-004` final report and are
+regenerated by the script. The shape of the result: **outline is essentially scale-invariant**
+(per-`(font, mode)` outline maxima all ≤ ~0.09, most ≤ 0.05), while the **interior-fill modes drift
+more, worst in `fill`/`staggered`/`radial` on the heavy display faces** (`abril-fatface`, `lilita-one`,
+`righteous`, `pacifico`, `poppins-bold`) — but the drift is a chamfer of 0.10–0.16 on a unit-height
+normalisation, i.e. a *few percent of glyph height*, not a categorically different layout.
+
+### 9.3 The invariance question is still open
+
+Chamfer on the *geometry* is a proxy. It says the layouts are close, not that a recognizer reads
+them the same. **READ-004 does not settle whether one floor per `(font, mode)` is safe.** READ-005
+settles it directly: run the binary search **at both SS6 and SS30** for **four `(font, mode)` cells
+that clear signal A** — one outline and three interior-fill, chosen to span the drift above (e.g.
+`courier-prime`/outline, `lilita-one`/fill, `abril-fatface`/radial, `pacifico`/staggered) — and
+compare the resulting floors. If they agree within the E-margin, one number per `(font, mode)`
+stands; if not, READ-005 records a per-stone-size floor or a conservative margin for the
+interior-fill modes and says which.
+
+### 9.4 READ-005 cost, and why it is a resumable batch job
+
+Corrected estimate, with the tiered corpus and the multi-sheet partition:
+
+| tier | ~passes | note |
+|---|---:|---|
+| `search` | ~800 | 31 fonts × ~5 modes × ~5 search steps, 2 sheets each |
+| `full` | ~1,200 | signal B at candidate floors, 6 sheets each |
+| `words` | ~160 | signal C confirmation at the candidate floor only |
+| **total recognition calls** | **~2,100** | against READ-000's original estimate of **78** |
+
+The 27× blow-up is the price of removing the class prior (more, smaller sheets) and of the
+tiered corpus. It makes READ-005 a **resumable batch job** — which is exactly what `probeRecordStore`
+is for: a probe whose cache key already exists is returned without re-rendering, so the sweep
+survives being run per-font across sessions.
+
+Two economies READ-005 should use:
+
+- **Early termination.** If a `(font, mode)` already passes signal B at the *bottom* of the search
+  range, record "no floor needed in range" and stop — do not bisect.
+- **Bracket seeding.** The existing outline certification data in `assets/fonts/manifest.json`
+  (`rhinestoneValidated`, `unsupportedStoneSizes`) brackets the outline search — use it to seed the
+  bisection bounds, **not** as an answer (it is outline-only and predates the Layer 0 geometry
+  fixes).
 
 ---
 
@@ -268,10 +373,12 @@ The complete raw table is in the final report for `feature/read-004` and is rege
   bug, not a readability finding, and its fix is a render-changing font-file migration deferred to
   its own milestone. **READ-005 must either exclude `montserrat-regular` from the sweep or record
   the caveat alongside its floor**, so a hairline-Thin measurement is never mistaken for Montserrat
-  Regular's real behaviour.
-- **Curved text** is represented by exactly one ground-truth row. Arc projection distorts spacing;
-  READ-005 should either add curvature as a sweep dimension or apply a conservative margin to curved
-  layers and say so (READ-000 §5).
+  Regular's real behaviour. (In Part 5's measurement all of Montserrat's triples are skipped —
+  `0.0145 × 20 = 0.29 < 1` — so it contributes nothing there.)
+- **Curved text** is represented by exactly one ground-truth row, now on a real product geometry
+  (Part 7 / §8.1: Standard Mug 41 mm wall, derived 249.3° sweep). Arc projection distorts spacing,
+  and a name this long wraps most of the way around the mug; READ-005 should either add curvature as
+  a sweep dimension or apply a conservative margin to curved layers and say so (READ-000 §5).
 - The stub oracle's readings in `--oracle stub` runs are a deterministic stand-in for real model
   noise (a fixed `O→0`, `l→1`, `S→5`, drop-trailing-`y` perturbation), so every ground-truth
   probe over the `words` tier reports the same aggregate CER. READ-005 replaces the stub entirely.

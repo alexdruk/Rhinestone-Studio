@@ -10,21 +10,38 @@
  * 1. **One probe per sheet.** Every sheet built here comes from a single probe record, i.e. a
  *    single (font, mode, height, stone size). Two probes are never composited onto one image.
  *
- * 2. **No character appears twice on a sheet.** A recognizer that can see the same glyph rendered
- *    legibly elsewhere on the image reads a degraded copy by cross-referencing, not by resolving
- *    it — the same false-pass mechanism READ-000 §3 identifies for familiar phrases. Enforced two
- *    ways: (a) every tile on a sheet has a distinct `expectedText`, and (b) single-character
- *    tiles are partitioned by class (letters on their own sheets, digits on their own sheets,
- *    multi-character strings on their own sheets) so a lone glyph is never on the same image as a
- *    string that contains it.
+ * 2. **No character appears in two entries on a sheet.** A recognizer that can see the same glyph
+ *    rendered legibly elsewhere on the image reads a degraded copy by cross-referencing it, not by
+ *    resolving the letterforms — the same false-pass mechanism READ-000 §3 identifies for familiar
+ *    phrases. (A character repeated *within one entry*, e.g. `mm`, carries no such advantage — both
+ *    copies are equally degraded — so the rule is strictly cross-entry.) Enforced structurally by
+ *    the two partitioners below:
  *
- * 3. **Tiles are labelled by index only.** The expected answer never appears as readable text
- *    anywhere in the HTML — not in a caption, not in a comment, not in `title`/`alt`/`aria`/
- *    `data-`. (A lone letter or digit is unavoidably present in SVG coordinates, hex colours, CSS
- *    keywords, and tag names, so the guarantee is "not as a label or human-readable string", not
- *    "not one matching byte anywhere".) The index label alphabet is chosen to be disjoint from the
- *    sheet's own expected glyphs (numeric labels for letter/string sheets, letter labels for digit
- *    sheets), so the label itself can't spell an answer either.
+ *    - **Single-character entries** are grouped by confusability (union-find over `CONFUSABLE_PAIRS`)
+ *      and each confusable group is placed *whole* onto one sheet — a pair split across two sheets
+ *      is a hard failure, because the whole point of the `search` tier is to measure O/0, S/5, B/8,
+ *      I/1 discrimination and a homogeneous letters-only / digits-only sheet makes that
+ *      structurally unmeasurable (the class prior is a contamination of the same family as the
+ *      language prior). The remaining characters are filled round-robin to balance tile counts,
+ *      and **every single-character sheet is asserted to carry at least one letter and at least one
+ *      digit** — that invariant is what kills the class prior.
+ *
+ *    - **Multi-character entries** are packed greedily: each entry goes on the first sheet whose
+ *      character set (whitespace ignored) is disjoint from it, opening a new sheet when none fits.
+ *      However many sheets that produces is accepted.
+ *
+ *    Single- and multi-character entries never share a sheet, so a lone `o` is never on the same
+ *    image as `oo` or `Sophia`. Order within a sheet is deterministic for a given corpus (by
+ *    corpus index), so the same corpus always produces the same sheets and the cache key keeps
+ *    meaning something.
+ *
+ * 3. **Tiles are labelled with circled numerals (`①②③…`).** That alphabet is disjoint from Latin
+ *    letters and Arabic digits under every composition, so the label can never spell — or even
+ *    share a character with — an expected answer, regardless of what a sheet contains. The expected
+ *    answer never appears as readable text anywhere in the HTML — not in a caption, comment,
+ *    `title`, `alt`, `aria-*`, or `data-*`. (A lone letter or digit is unavoidably present in SVG
+ *    coordinates, hex colours, and CSS keywords, so the guarantee is "not as a label or
+ *    human-readable string", not "not one matching byte anywhere".)
  *
  * 4. Stone rendering and the per-size px/mm table come from specimenPages.mjs (`renderLayoutSvg`,
  *    `RHINESTONE_SPECIMEN_PX_PER_MM_BY_SIZE`), imported, not copied.
@@ -34,44 +51,142 @@
  */
 import { renderLayoutSvg, RHINESTONE_SPECIMEN_PX_PER_MM_BY_SIZE } from './specimenPages.mjs';
 import { resolveCorpus } from './readabilityProbe.mjs';
+import { CONFUSABLE_PAIRS } from './requiredCharacters.mjs';
 
 export const MAX_TILES_PER_SHEET = 24;
 
-function classifyEntry(entry) {
-  if ([...entry].length !== 1) return 'string';
-  return /[0-9]/.test(entry) ? 'digit' : 'letter';
+function isSingleCharEntry(entry) {
+  return [...entry].length === 1;
+}
+
+/** Distinct, whitespace-stripped characters of an entry — the unit rule 2 partitions on. */
+export function entryChars(entry) {
+  return [...new Set([...entry].filter((ch) => !/\s/.test(ch)))];
+}
+
+const isLatinLetter = (ch) => /[A-Za-z]/.test(ch);
+const isArabicDigit = (ch) => /[0-9]/.test(ch);
+
+// --- single-character partitioning -----------------------------------------------------------
+
+/**
+ * Union-find over CONFUSABLE_PAIRS, restricted to the characters actually present. Returns the
+ * groups as arrays, each in corpus order, the groups themselves in first-appearance order.
+ */
+function confusableGroups(entries) {
+  const present = new Set(entries);
+  const parent = new Map(entries.map((ch) => [ch, ch]));
+  const find = (x) => {
+    while (parent.get(x) !== x) {
+      parent.set(x, parent.get(parent.get(x)));
+      x = parent.get(x);
+    }
+    return x;
+  };
+  for (const [a, b] of CONFUSABLE_PAIRS) {
+    if (!present.has(a) || !present.has(b)) continue;
+    parent.set(find(a), find(b));
+  }
+  const byRoot = new Map();
+  for (const ch of entries) {
+    const root = find(ch);
+    if (!byRoot.has(root)) byRoot.set(root, []);
+    byRoot.get(root).push(ch);
+  }
+  return [...byRoot.values()];
+}
+
+function partitionSingleChars(entries) {
+  if (entries.length === 0) return [];
+  const corpusIndex = new Map(entries.map((ch, i) => [ch, i]));
+  const sheetCount = Math.max(1, Math.ceil(entries.length / MAX_TILES_PER_SHEET));
+  const sheets = Array.from({ length: sheetCount }, () => []);
+  const emptiest = () => {
+    let best = 0;
+    for (let i = 1; i < sheets.length; i++) if (sheets[i].length < sheets[best].length) best = i;
+    return best;
+  };
+
+  const groups = confusableGroups(entries);
+  const confusable = groups
+    .filter((g) => g.length > 1)
+    .map((g, appearance) => ({ g, appearance }))
+    .sort((x, y) => (y.g.length - x.g.length) || (x.appearance - y.appearance));
+  const loners = groups.filter((g) => g.length === 1).map((g) => g[0]);
+
+  // confusable groups first, whole, largest onto the emptiest sheet
+  for (const { g } of confusable) sheets[emptiest()].push(...g);
+  // then the rest, round-robin onto the emptiest sheet, in corpus order
+  for (const ch of loners.sort((a, b) => corpusIndex.get(a) - corpusIndex.get(b))) {
+    sheets[emptiest()].push(ch);
+  }
+  for (const sheet of sheets) sheet.sort((a, b) => corpusIndex.get(a) - corpusIndex.get(b));
+
+  // invariant (rule 2): every sheet mixes letters and digits, so no recognizer can lean on a
+  // "this page is all letters" prior to rule out the O→0 / S→5 / B→8 error.
+  sheets.forEach((sheet, i) => {
+    if (!sheet.some(isLatinLetter) || !sheet.some(isArabicDigit)) {
+      throw new Error(
+        `recognitionSheets: single-character sheet ${i} is not letter+digit mixed ` +
+        `(${JSON.stringify(sheet.join(''))}) — the class prior is not neutralised`
+      );
+    }
+  });
+  // invariant (rule 2): a confusable pair is never split across two sheets.
+  const sheetOf = new Map();
+  sheets.forEach((sheet, i) => sheet.forEach((ch) => sheetOf.set(ch, i)));
+  for (const [a, b] of CONFUSABLE_PAIRS) {
+    if (sheetOf.has(a) && sheetOf.has(b) && sheetOf.get(a) !== sheetOf.get(b)) {
+      throw new Error(`recognitionSheets: confusable pair ${a}/${b} split across sheets ${sheetOf.get(a)} and ${sheetOf.get(b)}`);
+    }
+  }
+
+  return sheets.filter((s) => s.length > 0).map((entries) => ({ cls: 'mixed', entries }));
+}
+
+// --- multi-character partitioning ------------------------------------------------------------
+
+function partitionMultiChars(entries) {
+  const sheets = [];
+  for (const entry of entries) {
+    const chars = entryChars(entry);
+    let target = sheets.find((s) => chars.every((ch) => !s.chars.has(ch)));
+    if (!target) {
+      target = { entries: [], chars: new Set() };
+      sheets.push(target);
+    }
+    target.entries.push(entry);
+    for (const ch of chars) target.chars.add(ch);
+  }
+  return sheets.map((s) => ({ cls: 'string', entries: s.entries }));
 }
 
 /**
- * Splits corpus entries into sheet-sized groups that each satisfy rule 2. Order within a class is
- * preserved; classes are emitted letters → digits → strings.
+ * Splits corpus entries into sheet-sized groups that each satisfy rule 2. Single-character entries
+ * and multi-character entries are partitioned separately (see the module doc) and never share a
+ * sheet. Deterministic for a given corpus.
  */
 export function partitionEntries(entries) {
-  const byClass = { letter: [], digit: [], string: [] };
-  for (const entry of entries) byClass[classifyEntry(entry)].push(entry);
-
-  const groups = [];
-  for (const cls of ['letter', 'digit', 'string']) {
-    const list = byClass[cls];
-    for (let i = 0; i < list.length; i += MAX_TILES_PER_SHEET) {
-      groups.push({ cls, entries: list.slice(i, i + MAX_TILES_PER_SHEET) });
-    }
-  }
-  return groups;
+  const singles = entries.filter(isSingleCharEntry);
+  const multis = entries.filter((e) => !isSingleCharEntry(e));
+  return [...partitionSingleChars(singles), ...partitionMultiChars(multis)];
 }
 
-// Label alphabet disjoint from the sheet's expected glyphs: a digit sheet gets letter labels, a
-// letter or string sheet gets zero-padded numeric labels.
-function labelsForClass(cls, count) {
-  if (cls === 'digit') {
-    const alphabet = 'abcdefghijklmnopqrstuvwxyz';
-    return Array.from({ length: count }, (_, i) => {
-      if (i < alphabet.length) return alphabet[i];
-      const hi = Math.floor(i / alphabet.length) - 1;
-      return alphabet[hi] + alphabet[i % alphabet.length];
-    });
+// --- labels ---------------------------------------------------------------------------------
+
+// Circled numerals ①..⑳ (U+2460..) then ㉑..㉟ (U+3251..) — a single alphabet that is disjoint
+// from Latin letters and Arabic digits under every composition, so the label itself can never
+// spell an answer regardless of what a sheet contains.
+const CIRCLED_NUMERALS = [
+  ...Array.from({ length: 20 }, (_, i) => String.fromCodePoint(0x2460 + i)),
+  ...Array.from({ length: 15 }, (_, i) => String.fromCodePoint(0x3251 + i))
+];
+
+export function labelsForCount(count) {
+  if (count > CIRCLED_NUMERALS.length) {
+    throw new Error(`recognitionSheets: ${count} tiles exceeds the ${CIRCLED_NUMERALS.length}-symbol circled-numeral label alphabet`);
   }
-  return Array.from({ length: count }, (_, i) => String(i + 1).padStart(2, '0'));
+  return CIRCLED_NUMERALS.slice(0, count);
 }
 
 const PAGE_CSS = `
@@ -80,7 +195,7 @@ const PAGE_CSS = `
   main { padding: 24px; }
   .grid { display: flex; flex-wrap: wrap; gap: 22px; align-items: flex-start; }
   .cell { background: #131c27; border: 1px solid #26313f; border-radius: 6px; padding: 10px 10px 14px; width: 640px; max-width: 640px; overflow: hidden; box-sizing: border-box; }
-  .cap { font: 600 13px ui-monospace, Menlo, monospace; color: #9fb0c3; text-align: center; margin: 0 0 8px; letter-spacing: 0.12em; }
+  .cap { font: 600 15px ui-monospace, Menlo, monospace; color: #9fb0c3; text-align: center; margin: 0 0 8px; letter-spacing: 0.12em; }
   .art { display: flex; align-items: center; justify-content: center; min-height: 40px; }
   .art svg { display: block; max-width: 100%; height: auto; }
   .art .row-note, .art .stone-error { display: none; }
@@ -107,12 +222,13 @@ ${bodyHtml}
 }
 
 // Belt-and-braces: fail loudly if any answer-key material made it into the markup as readable
-// text. Comments and alt/aria/data- attributes are rejected outright. Captions are checked against
-// every expected answer. A full-HTML substring scan is applied only to entries of length >= 3
-// (words and the long stress strings): a 1- or 2-character sequence coincides too readily with an
-// SVG coordinate, a hex colour, or a CSS keyword to treat a raw byte match as a leak, and those
-// short entries are already covered by the caption + structural checks and by the label alphabet
-// being disjoint from the sheet's glyphs.
+// text. Comments and alt/aria/data- attributes are rejected outright. Because the labels are
+// circled numerals — disjoint from Latin letters and Arabic digits — the caption check is
+// unconditional: no caption can legitimately contain any run of Latin/Arabic characters. A
+// full-HTML substring scan is still applied only to entries of length >= 3 (words and the long
+// stress strings): a 1- or 2-character sequence coincides too readily with an SVG coordinate, a
+// hex colour, or a CSS keyword to treat a raw byte match as a leak, and those short entries are
+// already covered by the caption + structural checks.
 function assertNoAnswerLeak(html, tileInventory) {
   if (/<!--/.test(html)) throw new Error('recognitionSheets: sheet HTML contains a comment');
   if (/\b(alt|aria-label|data-[\w-]+)\s*=/.test(html)) {
@@ -152,7 +268,7 @@ export function buildRecognitionSheetHtml({ probeRecord, corpus } = {}) {
   const groups = partitionEntries(resolved.entries);
 
   const sheets = groups.map((group, sheetIndex) => {
-    const labels = labelsForClass(group.cls, group.entries.length);
+    const labels = labelsForCount(group.entries.length);
     const tileInventory = [];
     const cells = group.entries.map((text, i) => {
       const label = labels[i];
