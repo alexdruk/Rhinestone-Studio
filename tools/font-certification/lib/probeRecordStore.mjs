@@ -9,10 +9,12 @@
  *
  * sha256 over the canonical (recursively key-sorted) JSON of:
  *   { fontId, mode, heightMm, stoneSizeId, gapMm, corpusName, corpusHash, sheetPngSha256, modelId,
- *     harnessVersion }
+ *     harnessVersion, providerId }
  *
  * Every one of those fields feeds the key, so changing any of them — the geometry inputs, the
  * corpus, the rendered image, or the model — is a cache miss rather than a silent stale hit.
+ * `providerId` is here because two probes that differ only by provider produce different geometry
+ * (READ-005a-1): without it, one provider's inputs could resolve to another provider's record.
  * `sheetPngSha256` folds in the pixels actually read: for a multi-sheet probe it is the sha256 of
  * the per-sheet PNG hashes joined in order. `harnessVersion` (readabilityProbe.HARNESS_VERSION)
  * covers the code paths the PNG hash does not — most importantly `recognitionScoring.mjs`, where a
@@ -24,6 +26,14 @@ import path from 'node:path';
 import { repoPath } from './repoPaths.mjs';
 
 export const PROBE_RECORDS_DIR = repoPath('tools/font-certification/output/read-004/probe-records');
+
+// READ-005a Part C: the resume index. `sheetPngSha256` is part of the cache key, so without this a
+// resumed sweep must re-render every sheet just to discover it already holds the record.
+// Geometry→PNG is deterministic, so the PNG hash is a pure function of the other key inputs; this
+// index maps the sha256 of those deterministic inputs to the full cache key. It is a shortcut into
+// the store, never a replacement for the key — the full cache key is still computed and stored on
+// first write, and every audit property is unchanged.
+export const PROBE_INDEX_DIR = repoPath('tools/font-certification/output/read-004/probe-index');
 
 /** Recursively sort object keys so JSON.stringify is canonical. Arrays keep their order. */
 export function canonicalize(value) {
@@ -47,7 +57,7 @@ export function combineSheetPngHashes(perSheetSha256) {
   return sha256Hex(perSheetSha256.join('\n'));
 }
 
-const KEY_FIELDS = ['fontId', 'mode', 'heightMm', 'stoneSizeId', 'gapMm', 'corpusName', 'corpusHash', 'sheetPngSha256', 'modelId', 'harnessVersion'];
+const KEY_FIELDS = ['fontId', 'mode', 'heightMm', 'stoneSizeId', 'gapMm', 'corpusName', 'corpusHash', 'sheetPngSha256', 'modelId', 'harnessVersion', 'providerId'];
 
 /**
  * @param {object} fields must contain every KEY_FIELD
@@ -66,6 +76,80 @@ function recordPath(cacheKey) {
   return path.join(PROBE_RECORDS_DIR, `${cacheKey}.json`);
 }
 
+// --- resume index (READ-005a Part C) ---------------------------------------------------------
+
+// Every cache-key field EXCEPT `sheetPngSha256`. These are exactly the inputs that determine the
+// geometry, and therefore — deterministically — the PNG and its hash.
+export const DETERMINISTIC_KEY_FIELDS = [
+  'fontId', 'mode', 'heightMm', 'stoneSizeId', 'gapMm',
+  'corpusName', 'corpusHash', 'modelId', 'harnessVersion', 'providerId'
+];
+
+/**
+ * sha256 over the canonical JSON of the deterministic inputs only. `providerId` is required to be
+ * present (pass `null` explicitly for an ordinary font) so an accidental omission is a loud error,
+ * not a silently different key — the same strictness computeCacheKey() applies.
+ * @param {object} fields must contain every DETERMINISTIC_KEY_FIELD
+ * @returns {string} hex sha256 deterministic-inputs key
+ */
+export function computeDeterministicKey(fields) {
+  const picked = {};
+  for (const field of DETERMINISTIC_KEY_FIELDS) {
+    if (fields[field] === undefined) throw new Error(`computeDeterministicKey: missing deterministic field "${field}"`);
+    picked[field] = fields[field];
+  }
+  return sha256Hex(canonicalJson(picked));
+}
+
+function indexPath(deterministicKey) {
+  return path.join(PROBE_INDEX_DIR, `${deterministicKey}.json`);
+}
+
+function pickDeterministicInputs(fields) {
+  const out = {};
+  for (const field of DETERMINISTIC_KEY_FIELDS) {
+    out[field] = field === 'providerId' ? (fields[field] ?? null) : fields[field];
+  }
+  return out;
+}
+
+/**
+ * Write the index entry that maps this record's deterministic inputs to its full cache key. Called
+ * by writeRecord() whenever a record is written.
+ */
+export async function writeIndexEntry(record) {
+  const inputs = pickDeterministicInputs(record);
+  const deterministicKey = computeDeterministicKey(inputs);
+  await mkdir(PROBE_INDEX_DIR, { recursive: true });
+  await writeFile(
+    indexPath(deterministicKey),
+    `${JSON.stringify({ deterministicKey, cacheKey: record.cacheKey, ...inputs, updatedAt: new Date().toISOString() }, null, 2)}\n`,
+    'utf8'
+  );
+  return indexPath(deterministicKey);
+}
+
+/** @returns {Promise<object|null>} the index entry for these deterministic inputs, or null. */
+export async function readIndexEntry(deterministicInputs) {
+  const deterministicKey = computeDeterministicKey(pickDeterministicInputs(deterministicInputs));
+  try {
+    return JSON.parse(await readFile(indexPath(deterministicKey), 'utf8'));
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
+/**
+ * The full stored record for a set of deterministic inputs, without needing a PNG hash: resolve the
+ * cache key through the index, then load the record. Returns null if either step misses.
+ */
+export async function lookupRecordByDeterministicInputs(deterministicInputs) {
+  const entry = await readIndexEntry(deterministicInputs);
+  if (!entry) return null;
+  return readRecord(entry.cacheKey);
+}
+
 /** @returns {Promise<object|null>} the stored record for this key, or null if absent. */
 export async function readRecord(cacheKey) {
   try {
@@ -80,13 +164,18 @@ export async function hasRecord(cacheKey) {
   return (await readRecord(cacheKey)) !== null;
 }
 
-/** Writes the record to `${cacheKey}.json`. The record must carry `.cacheKey`. */
+/**
+ * Writes the record to `${cacheKey}.json` and, alongside it, the resume-index entry mapping the
+ * record's deterministic inputs to that cache key (READ-005a Part C). The record must carry
+ * `.cacheKey` and every DETERMINISTIC_KEY_FIELD.
+ */
 export async function writeRecord(record) {
   if (!record || typeof record.cacheKey !== 'string') {
     throw new Error('writeRecord: record must carry a string cacheKey');
   }
   await mkdir(PROBE_RECORDS_DIR, { recursive: true });
   await writeFile(recordPath(record.cacheKey), `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+  await writeIndexEntry(record);
   return recordPath(record.cacheKey);
 }
 
@@ -140,7 +229,8 @@ export function assembleRecord({ probeRecord, modelId, sheets }) {
     corpusHash: probeRecord.corpusHash,
     sheetPngSha256,
     modelId,
-    harnessVersion: probeRecord.harnessVersion
+    harnessVersion: probeRecord.harnessVersion,
+    providerId: probeRecord.providerId ?? null
   };
 
   const aggregateCer = sheets.length
@@ -150,6 +240,7 @@ export function assembleRecord({ probeRecord, modelId, sheets }) {
   return {
     cacheKey: computeCacheKey(keyFields),
     ...keyFields,
+    // Extra provenance carried on the record but not in the cache key.
     curve: probeRecord.curve ?? null,
     stemWidthRatio: probeRecord.stemWidthRatio ?? null,
     signalA: probeRecord.signalA,
