@@ -100,12 +100,25 @@ one or more contact sheets, reusing `specimenPages.mjs`'s stone-circle rendering
 1. **One probe per sheet.** Every sheet comes from a single probe record, i.e. one
    `(font, mode, height, stone size)`. Two probes are never composited onto one image.
 
-2. **No character appears in two entries on a sheet.** A recognizer that can see the same glyph
-   rendered *legibly* elsewhere on the image reads a degraded copy by cross-referencing it, not by
-   resolving the letterforms — the identical false-pass mechanism READ-000 §3 identifies for
-   familiar phrases ("Happy Birthday" completed from a language prior rather than read). A character
-   repeated *within one entry* (`mm`, `88`) carries no such advantage — both copies are equally
-   degraded — so the rule is strictly cross-entry. The partitioning is:
+2. **No character appears in two entries on a sheet — on the tiers where the unit of recognition is
+   the glyph.** A recognizer that can see the same glyph rendered *legibly* elsewhere on the image
+   reads a degraded copy by cross-referencing it, not by resolving the letterforms — the identical
+   false-pass mechanism READ-000 §3 identifies for familiar phrases ("Happy Birthday" completed from
+   a language prior rather than read). A character repeated *within one entry* (`mm`, `88`) carries
+   no such advantage — both copies are equally degraded — so the rule is strictly cross-entry.
+
+   **Which tiers get the rule.** `search` and `full` do: their task is glyph identification —
+   isolated characters, and stress strings like `rn` beside `m` where the question is "is this an
+   `m` or an `r``n`". `words` does **not**: there the unit of recognition is the whole word, so two
+   personal names sharing an `a` is incidental — every English word shares letters with every other
+   — and a single word alone on a page *with no distractors* is an easier read than one among
+   several, so fragmenting the 9 words across sheets would weaken signal C rather than protect it.
+   The rule is carried as a corpus-tier property (`glyphIdentificationTask`, declared per tier in
+   `CORPORA` and threaded through `resolveCorpus()` into `partitionEntries()` — `search`/`full`
+   true, `words` false), not as a heuristic on entry content, so a future corpus change cannot
+   silently flip it and the partitioner never special-cases a tier by name.
+
+   The partitioning is:
 
    - **Single-character entries** are grouped by confusability (union-find over `CONFUSABLE_PAIRS`;
      with the current corpus that is `{I,l,1} {O,0,Q} {S,5} {B,8} {G,C} {e,c,o} {6,9}`), and each
@@ -135,15 +148,21 @@ one or more contact sheets, reusing `specimenPages.mjs`'s stone-circle rendering
      prior READ-000 §3 rejects familiar phrases for — "this page is all letters, so it can't be a
      digit" is the same kind of outside-the-glyph inference as "this phrase is *Happy Birthday*".
 
-   - **Multi-character entries** are packed greedily: each entry goes on the first sheet whose
-     character set (whitespace ignored) is disjoint from it, opening a new sheet when none fits.
-     However many sheets that produces is accepted. They are **exempt from digit balancing** —
-     `partitionMultiChars` partitions on character disjointness and cannot also balance classes, so
-     `full`'s sheet 4 (`rn mm oo ee pp qq ww`, all lowercase) is homogeneous by construction. That
-     is acceptable: the stress strings test `rn`-vs-`m` and doubled-letter confusions, not
-     letter-vs-digit, and no digit stress string exists to pair against. `STRESS_STRINGS` (15
-     entries, e.g. `mm` beside
+   - **Multi-character entries on a glyph-identification tier** (`full`'s stress strings) are packed
+     greedily: each entry goes on the first sheet whose character set (whitespace ignored) is
+     disjoint from it, opening a new sheet when none fits. However many sheets that produces is
+     accepted. They are **exempt from digit balancing** — `partitionMultiChars` partitions on
+     character disjointness and cannot also balance classes, so `full`'s sheet 4
+     (`rn mm oo ee pp qq ww`, all lowercase) is homogeneous by construction. That is acceptable: the
+     stress strings test `rn`-vs-`m` and doubled-letter confusions, not letter-vs-digit, and no
+     digit stress string exists to pair against. `STRESS_STRINGS` (15 entries, e.g. `mm` beside
      `mnuvw`, `rn` beside `nn`) lands on **3** sheets, not 1.
+
+   - **Multi-character entries on a non-glyph tier** (`words`) are **not** disjointness-partitioned:
+     all 9 words go on **one** sheet. `assertNoAnswerLeak` still runs over that sheet unchanged — no
+     answer appears as readable text — but rule 2 does not, because a legible `Emma` on the same page
+     as a degraded `Ashley` gives a word recognizer nothing (the shared `a` is not the unit it is
+     reading), and a distractor-free single-word page would make signal C an *easier* read.
 
    Single- and multi-character entries never share a sheet, so a lone `o` is never on the same
    image as `oo` or `Sophia`. Order within a sheet is deterministic (by corpus index) so the same
@@ -393,8 +412,11 @@ Corrected estimate, with the tiered corpus and the multi-sheet partition:
 |---|---:|---|
 | `search` | **1,550** | 31 fonts × 5 modes × ~5 search steps = 775 probes, × 2 sheets each |
 | `full` | **930** | 155 `(font, mode)` cells × 6 sheets, at the candidate floor |
-| `words` | **155** | 155 cells, signal C confirmation at the candidate floor only |
+| `words` | **155** | 155 `(font, mode)` cells × **1 sheet** — the `words` tier is not disjointness-partitioned (§4), so all 9 words share one sheet; signal C confirmation at the candidate floor only |
 | **total recognition calls** | **≈ 2,635** | against READ-000's original estimate of **78** — **~34×** |
+
+`search`: `31 × 5 × 5 = 775`, `× 2 = 1,550`. `full`: `31 × 5 = 155` cells `× 6 = 930`. `words`:
+`155 × 1 = 155`. Total `1,550 + 930 + 155 = 2,635`.
 
 The blow-up is the price of removing the class prior (more, smaller sheets) and of the tiered
 corpus. It makes READ-005 a **resumable batch job** — which is exactly what `probeRecordStore` is

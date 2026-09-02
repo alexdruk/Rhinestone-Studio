@@ -111,8 +111,12 @@ await test('2. a built sheet leaks none of its expected strings, over every corp
 
 // --- 3. Partitioning rules ------------------------------------------------------------------
 
-await test('3a. no character appears in two entries on the same sheet, over every corpus tier', () => {
-  for (const corpusName of Object.keys(CORPORA)) {
+await test('3a. cross-entry no-repeat holds for the glyph-identification tiers; the words tier is exempt and lands on exactly one sheet', () => {
+  // `search` and `full` are glyph-identification tasks: no character may appear in two entries on a
+  // sheet, so a degraded glyph can't be resolved from a legible copy elsewhere on the page.
+  for (const corpusName of ['search', 'full']) {
+    assert.equal(resolveCorpus(corpusName).glyphIdentificationTask, true,
+      `${corpusName}: expected glyphIdentificationTask true`);
     for (const sheet of sheetsForTier(corpusName)) {
       // one entry's repeated character (e.g. "mm") is not a cross-referencing risk -- the rule is
       // strictly cross-entry, so each tile contributes its DISTINCT characters.
@@ -121,6 +125,21 @@ await test('3a. no character appears in two entries on the same sheet, over ever
         `${corpusName} sheet ${sheet.index}: a character appears in two entries (${JSON.stringify(sheet.tileInventory.map((t) => t.expectedText))})`);
     }
   }
+
+  // `words` is deliberately exempt: the unit of recognition is the word, not the glyph, and a lone
+  // word on a distractor-free page is an EASIER read. The exemption is pinned, not incidental.
+  assert.equal(resolveCorpus('words').glyphIdentificationTask, false,
+    'words: expected glyphIdentificationTask false');
+  const wordSheets = sheetsForTier('words');
+  assert.equal(wordSheets.length, 1, `words tier must produce exactly one sheet, got ${wordSheets.length}`);
+  assert.deepEqual(
+    wordSheets[0].tileInventory.map((t) => t.expectedText),
+    resolveCorpus('words').entries,
+    'the single words sheet carries every word in corpus order');
+  // and it does share characters across entries -- that is the point of the exemption.
+  const wordChars = wordSheets[0].tileInventory.flatMap((t) => entryChars(t.expectedText));
+  assert.ok(new Set(wordChars).size < wordChars.length,
+    'the words sheet is expected to have characters shared across entries (exemption is meaningful)');
 });
 
 await test('3b. every single-character sheet has its digits balanced to the proportional target (|digits - expected| <= 1)', () => {

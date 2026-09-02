@@ -73,10 +73,18 @@ const FULL_CORPUS = [...PRODUCTION_REVIEW_GLYPHS, ...STRESS_STRINGS];
 // `words` — the 9 PRODUCTION_REVIEW_WORDS (signal C, context-realistic).
 const WORDS_CORPUS = [...PRODUCTION_REVIEW_WORDS];
 
+// Each tier declares whether its unit of recognition is the glyph. When it is, the sheet builder
+// applies the cross-entry no-repeat rule (recognitionSheets §4 rule 2): a degraded glyph must not
+// be resolvable by finding a legible copy of that same glyph elsewhere on the page. `search` and
+// `full` are glyph-identification tasks — isolated characters, and `rn`-vs-`m` stress strings. The
+// `words` tier is not: the unit is the whole word, two names sharing an `a` is incidental (every
+// English word shares letters with every other), and a lone word on a distractor-free page is an
+// *easier* read, so partitioning it would weaken signal C rather than protect it. Carried as tier
+// data, not inferred from entry content, so a future corpus edit cannot silently flip it.
 export const CORPORA = Object.freeze({
-  search: SEARCH_CORPUS,
-  full: FULL_CORPUS,
-  words: WORDS_CORPUS
+  search: Object.freeze({ entries: SEARCH_CORPUS, glyphIdentificationTask: true }),
+  full: Object.freeze({ entries: FULL_CORPUS, glyphIdentificationTask: true }),
+  words: Object.freeze({ entries: WORDS_CORPUS, glyphIdentificationTask: false })
 });
 
 function corpusHash(entries) {
@@ -84,19 +92,26 @@ function corpusHash(entries) {
 }
 
 /**
- * @param {string | { name: string, entries: string[] }} nameOrObject
- * @returns {{ name: string, entries: string[], hash: string }}
+ * @param {string | { name: string, entries: string[], glyphIdentificationTask?: boolean }} nameOrObject
+ * @returns {{ name: string, entries: string[], hash: string, glyphIdentificationTask: boolean }}
  */
 export function resolveCorpus(nameOrObject) {
   if (nameOrObject && typeof nameOrObject === 'object' && Array.isArray(nameOrObject.entries)) {
-    return { name: nameOrObject.name, entries: nameOrObject.entries, hash: nameOrObject.hash ?? corpusHash(nameOrObject.entries) };
+    return {
+      name: nameOrObject.name,
+      entries: nameOrObject.entries,
+      hash: nameOrObject.hash ?? corpusHash(nameOrObject.entries),
+      // an ad-hoc corpus is treated as a glyph-identification task unless it says otherwise — the
+      // no-repeat rule is the safe default; the exemption must be explicit.
+      glyphIdentificationTask: nameOrObject.glyphIdentificationTask ?? true
+    };
   }
   const name = nameOrObject;
-  const entries = CORPORA[name];
-  if (!entries) {
+  const tier = CORPORA[name];
+  if (!tier) {
     throw new Error(`readabilityProbe: unknown corpus tier "${name}" (expected one of: ${Object.keys(CORPORA).join(', ')})`);
   }
-  return { name, entries, hash: corpusHash(entries) };
+  return { name, entries: tier.entries, hash: corpusHash(tier.entries), glyphIdentificationTask: tier.glyphIdentificationTask };
 }
 
 // --- signal D --------------------------------------------------------------------------------

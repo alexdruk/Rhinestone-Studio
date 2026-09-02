@@ -10,11 +10,18 @@
  * 1. **One probe per sheet.** Every sheet built here comes from a single probe record, i.e. a
  *    single (font, mode, height, stone size). Two probes are never composited onto one image.
  *
- * 2. **No character appears in two entries on a sheet.** A recognizer that can see the same glyph
- *    rendered legibly elsewhere on the image reads a degraded copy by cross-referencing it, not by
- *    resolving the letterforms — the same false-pass mechanism READ-000 §3 identifies for familiar
- *    phrases. (A character repeated *within one entry*, e.g. `mm`, carries no such advantage — both
- *    copies are equally degraded — so the rule is strictly cross-entry.) Enforced structurally by
+ * 2. **No character appears in two entries on a sheet — where the unit of recognition is the glyph.**
+ *    A recognizer that can see the same glyph rendered legibly elsewhere on the image reads a
+ *    degraded copy by cross-referencing it, not by resolving the letterforms — the same false-pass
+ *    mechanism READ-000 §3 identifies for familiar phrases. (A character repeated *within one
+ *    entry*, e.g. `mm`, carries no such advantage — both copies are equally degraded — so the rule
+ *    is strictly cross-entry.) This applies to the `search` and `full` tiers, where the task is
+ *    glyph identification (isolated characters, or `rn` beside `m`). It does **not** apply to the
+ *    `words` tier: there the unit of recognition is the word, two names sharing an `a` is incidental
+ *    (every English word shares letters with every other), and a single word alone on a
+ *    distractor-free page is an *easier* read — partitioning it would weaken signal C, not protect
+ *    it. `resolveCorpus()` carries a `glyphIdentificationTask` flag per tier; `partitionEntries()`
+ *    threads it and only applies the disjointness pack when it is true. Enforced structurally by
  *    the two partitioners below:
  *
  *    - **Single-character entries** are grouped by confusability (union-find over `CONFUSABLE_PAIRS`)
@@ -26,9 +33,11 @@
  *      and **every single-character sheet is asserted to carry at least one letter and at least one
  *      digit** — that invariant is what kills the class prior.
  *
- *    - **Multi-character entries** are packed greedily: each entry goes on the first sheet whose
- *      character set (whitespace ignored) is disjoint from it, opening a new sheet when none fits.
- *      However many sheets that produces is accepted.
+ *    - **Multi-character entries**, when `glyphIdentificationTask` is true (the `full` tier's stress
+ *      strings), are packed greedily: each entry goes on the first sheet whose character set
+ *      (whitespace ignored) is disjoint from it, opening a new sheet when none fits. However many
+ *      sheets that produces is accepted. When it is false (the `words` tier) they all go on one
+ *      sheet, no disjointness partitioning.
  *
  *    Single- and multi-character entries never share a sheet, so a lone `o` is never on the same
  *    image as `oo` or `Sophia`. Order within a sheet is deterministic for a given corpus (by
@@ -214,14 +223,28 @@ function partitionMultiChars(entries) {
 }
 
 /**
- * Splits corpus entries into sheet-sized groups that each satisfy rule 2. Single-character entries
- * and multi-character entries are partitioned separately (see the module doc) and never share a
- * sheet. Deterministic for a given corpus.
+ * Splits corpus entries into sheet-sized groups. Single-character entries and multi-character
+ * entries are partitioned separately (see the module doc) and never share a sheet. Deterministic
+ * for a given corpus.
+ *
+ * The cross-entry no-repeat rule (rule 2) applies only where the unit of recognition is the glyph.
+ * `glyphIdentificationTask` (a corpus-tier property, threaded from `resolveCorpus()`) controls it:
+ *
+ *   - `true` (the `search` and `full` tiers): single chars are confusable-grouped and digit-balanced;
+ *     multi-char stress strings are disjointness-packed onto as many sheets as that needs.
+ *   - `false` (the `words` tier): the unit is the word, not the glyph, so two entries sharing a
+ *     letter is not a cross-referencing risk. Multi-char entries all go on ONE sheet; a single word
+ *     alone on a distractor-free page is an easier read, not a leak.
+ *
+ * The partitioner never inspects the tier name — only this flag.
  */
-export function partitionEntries(entries) {
+export function partitionEntries(entries, { glyphIdentificationTask = true } = {}) {
   const singles = entries.filter(isSingleCharEntry);
   const multis = entries.filter((e) => !isSingleCharEntry(e));
-  return [...partitionSingleChars(singles), ...partitionMultiChars(multis)];
+  const multiSheets = glyphIdentificationTask
+    ? partitionMultiChars(multis)
+    : (multis.length > 0 ? [{ cls: 'string', entries: multis }] : []);
+  return [...partitionSingleChars(singles), ...multiSheets];
 }
 
 // --- labels ---------------------------------------------------------------------------------
@@ -317,7 +340,7 @@ export function buildRecognitionSheetHtml({ probeRecord, corpus } = {}) {
   if (!pxPerMm) throw new Error(`recognitionSheets: no px/mm scale for stone size "${probeRecord.stoneSizeId}"`);
 
   const byText = new Map(probeRecord.measurements.map((m) => [m.text, m]));
-  const groups = partitionEntries(resolved.entries);
+  const groups = partitionEntries(resolved.entries, { glyphIdentificationTask: resolved.glyphIdentificationTask });
 
   const sheets = groups.map((group, sheetIndex) => {
     const labels = labelsForCount(group.entries.length);
