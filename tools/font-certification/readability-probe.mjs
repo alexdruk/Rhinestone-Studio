@@ -36,6 +36,7 @@ import { createHash } from 'node:crypto';
 import { FontManager } from '../../src/fonts/index.js';
 import { createDefaultFontProviderRegistry } from '../../src/text/index.js';
 import { GeometryEngine } from '../../src/geometry/index.js';
+import { getPlateDefaults, getPlateDesignTargetGuide } from '../../src/products/index.js';
 import { repoPath } from './lib/repoPaths.mjs';
 import { runProbe } from './lib/readabilityProbe.mjs';
 import { analyzeOne } from './lib/productionAnalysis.mjs';
@@ -70,17 +71,22 @@ const STRAIGHT_GROUND_TRUTH_CASES = [
   { fontId: 'lilita-one-regular',     mode: 'radial',  heightMm: 58,    stoneSizeId: 'ss16' }
 ];
 
-// Part 7: the single curved row uses a real product geometry. The radius is the Standard Mug body
-// wall radius (src/products/definitions/vessel-standard-mug.json, bodyDiameterMm 82 → 41mm), and
-// curveSweepAngleDeg is derived at run time so "Vitalina" subtends its natural arc rather than an
-// arbitrary sweep: sweepDeg = (textWidthMm / radiusMm) · 180/π, where textWidthMm is the rendered
-// width of "Vitalina" at 60mm in anton-regular. The measurement and the derived sweep are recorded
-// in the probe record's `curve.derivation`.
+// Part 7 (revised in the third pass): the single curved row uses a real DESIGN-PLANE product
+// geometry — the round dinner plate's rim band. A mug's body radius describes the cylinder a flat
+// decal wraps *around*; it is not a radius in the design plane where ArcProjection operates, and
+// using it gave a 249° sweep (end letters rotated ±125°). The plate rim band is a flat annulus in
+// the design plane, and app.js's own `rimBandCurveRadiusMm()` (app.js:2316) is the only place the
+// codebase derives a curve radius from product geometry: the mid-radius of the rim annulus
+// (`(outerRadiusMm + innerRadiusMm) / 2`) from `getPlateDesignTargetGuide('rimBand', ...)`.
+//
+// curveSweepAngleDeg is still derived so "Vitalina" subtends its natural (undistorted) arc:
+// ArcProjection stretches the text uniformly onto the sweep with `t = xMm / totalAdvanceWidthMm`,
+// so `sweep = width / radius` is exactly the sweep at which arc length equals text width and the
+// stretch factor is 1. The measurement and everything derived are recorded in `curve.derivation`.
 export const CURVED_CASE_PRODUCT = Object.freeze({
-  productId: 'vessel-standard-mug',
-  productName: 'Standard Mug',
-  bodyDiameterMm: 82,
-  curveRadiusMm: 41,
+  productId: 'plate-round-dinner',
+  productName: 'Round Dinner Plate',
+  designTarget: 'rimBand',
   measureText: 'Vitalina',
   measureFontId: 'anton-regular',
   measureHeightMm: 60,
@@ -90,15 +96,26 @@ export const CURVED_CASE_PRODUCT = Object.freeze({
 
 export async function deriveCurvedCase(engine) {
   const p = CURVED_CASE_PRODUCT;
+  const plate = getPlateDefaults();
+  // Same derivation as app.js's rimBandCurveRadiusMm(): mid-radius of the rim annulus.
+  const guide = getPlateDesignTargetGuide('rimBand', plate, plate.outerDiameterMm, plate.outerDiameterMm);
+  const outerRimRadiusMm = guide.outerRadiusMm;
+  const innerRimRadiusMm = guide.innerRadiusMm;
+  const curveRadiusMm = (outerRimRadiusMm + innerRimRadiusMm) / 2;
+
   const m = await analyzeOne(engine, p.measureFontId, p.measureText, p.measureStoneSizeId, p.measureHeightMm, { mode: p.measureMode });
   if (m.error || !m.boundingBoxMm) throw new Error(`deriveCurvedCase: could not measure "${p.measureText}" (${m.error ?? 'no bbox'})`);
   const measuredTextWidthMm = m.boundingBoxMm.widthMm;
-  const curveSweepAngleDeg = (measuredTextWidthMm / p.curveRadiusMm) * (180 / Math.PI);
+  const curveSweepAngleDeg = (measuredTextWidthMm / curveRadiusMm) * (180 / Math.PI);
   const derivation = {
     productId: p.productId,
     productName: p.productName,
-    bodyDiameterMm: p.bodyDiameterMm,
-    curveRadiusMm: p.curveRadiusMm,
+    designTarget: p.designTarget,
+    outerDiameterMm: plate.outerDiameterMm,
+    innerWellDiameterMm: plate.innerWellDiameterMm,
+    outerRimRadiusMm,
+    innerRimRadiusMm,
+    curveRadiusMm,
     measureText: p.measureText,
     measureFontId: p.measureFontId,
     measureHeightMm: p.measureHeightMm,
@@ -108,8 +125,8 @@ export async function deriveCurvedCase(engine) {
   return {
     fontId: 'anton-regular', mode: 'contour', heightMm: 60, stoneSizeId: 'ss10',
     curve: {
-      authored: { curveEnabled: true, curveRadiusMm: p.curveRadiusMm, curveDirection: 'up', curveAlignment: 'center' },
-      curveEnabled: true, curveRadiusMm: p.curveRadiusMm, curveDirection: 'outside',
+      authored: { curveEnabled: true, curveRadiusMm, curveDirection: 'up', curveAlignment: 'center' },
+      curveEnabled: true, curveRadiusMm, curveDirection: 'outside',
       curveStartAngleDeg: 0, curveSweepAngleDeg, curveAlignment: 'center',
       derivation
     }

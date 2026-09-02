@@ -19,6 +19,10 @@ import { fileURLToPath } from 'node:url';
 import { listStoneSizes, findStoneSizeByDiameterMm } from '../src/renderer/StoneSizes.js';
 import { formatLengthDisplay, unitSuffix } from '../src/units/index.js';
 import { FontManager } from '../src/fonts/index.js';
+// READ-004 Part B moved the stroke-narrower-than-one-stone arithmetic and its fill-mode gate out of
+// app.js into this shared module. The sliced textStrokeNarrowerThanOneStone() calls the real
+// predicate, so it is injected into the factory like every other app.js dependency.
+import { strokeNarrowerThanOneStone, INTERIOR_FILL_MODES } from '../src/text/index.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
@@ -35,6 +39,14 @@ async function test(name, fn) {
     console.error(error);
     process.exitCode = 1;
   }
+}
+
+// A future app.js refactor that removes one of these patterns should fail with a named error
+// ("app.js no longer contains X"), not a null dereference on `.match(...)[0]`.
+function matchOne(source, regex, label) {
+  const m = source.match(regex);
+  if (!m) throw new Error(`app.js no longer contains ${label} (pattern: ${regex})`);
+  return m[0];
 }
 
 function sliceBalanced(source, startMarker, label) {
@@ -59,10 +71,15 @@ function sliceBalanced(source, startMarker, label) {
 // and, since READ-003 was scoped to interior-filling modes, resolveTextFillMode() +
 // TEXT_MODE_TO_ENGINE_MODE + the READ_003_INTERIOR_FILL_MODES set -- sliced verbatim so the harness
 // exercises the real fill-style gate, not a stub.
-const textModeMapSrc = appJs.match(/const TEXT_MODE_TO_ENGINE_MODE=\{[^}]*\};/)[0];
-const resolveTextFillModeSrc = appJs.match(/function resolveTextFillMode\(textMode\)\{[^}]*\}/)[0];
-const interiorFillModesSrc = appJs.match(/const READ_003_INTERIOR_FILL_MODES=new Set\(\[[^\]]*\]\);/)[0];
+const textModeMapSrc = matchOne(appJs, /const TEXT_MODE_TO_ENGINE_MODE=\{[^}]*\};/, 'TEXT_MODE_TO_ENGINE_MODE');
+const resolveTextFillModeSrc = matchOne(appJs, /function resolveTextFillMode\(textMode\)\{[^}]*\}/, 'resolveTextFillMode()');
 const strokePredicateSrc = sliceBalanced(appJs, 'function textStrokeNarrowerThanOneStone(layer){', 'textStrokeNarrowerThanOneStone()');
+
+// READ-004 Part B: the fill-mode gate that used to live in app.js as READ_003_INTERIOR_FILL_MODES
+// now lives in src/text/StrokeWidthGate.js. Pin the policy where it moved to -- this is what the
+// deleted `interiorFillModesSrc` slice was implicitly guarding.
+assert.deepEqual([...INTERIOR_FILL_MODES].sort(), ['contour', 'fill', 'radial', 'staggered'],
+  'INTERIOR_FILL_MODES must be exactly {fill, staggered, radial, contour}');
 const heightPredicateSrc = sliceBalanced(appJs, 'function textHeightBelowReadableMinimum(layer){', 'textHeightBelowReadableMinimum()');
 const updateFnSrc = sliceBalanced(appJs, 'function updateTextHeightReadabilityUI(){', 'updateTextHeightReadabilityUI()');
 
@@ -76,12 +93,12 @@ function run(layer, { units = 'mm', authoredFontIds = ['rs-block', 'rs-modern'] 
   const el = (id) => (id === 'heightBelowReadableWarning' ? warning : { textContent: '', classList: makeClassList(), style: {} });
   const factory = new Function(
     'el', 'selectedLayer', 'isAuthoredStoneFontId', 'isFontKnown', 'fontManager', 'findStoneSizeByDiameterMm',
-    'formatLengthDisplay', 'unitSuffix', 'project',
-    `${textModeMapSrc}\n${resolveTextFillModeSrc}\n${interiorFillModesSrc}\n${strokePredicateSrc}\n${heightPredicateSrc}\n${updateFnSrc}\nreturn updateTextHeightReadabilityUI;`
+    'formatLengthDisplay', 'unitSuffix', 'project', 'strokeNarrowerThanOneStone',
+    `${textModeMapSrc}\n${resolveTextFillModeSrc}\n${strokePredicateSrc}\n${heightPredicateSrc}\n${updateFnSrc}\nreturn updateTextHeightReadabilityUI;`
   );
   const fn = factory(
     el, () => layer, (id) => authoredFontIds.includes(id), (id) => fontManager.hasFont(id), fontManager, findStoneSizeByDiameterMm,
-    formatLengthDisplay, unitSuffix, { units }
+    formatLengthDisplay, unitSuffix, { units }, strokeNarrowerThanOneStone
   );
   fn();
   return warning;

@@ -96,30 +96,82 @@ function confusableGroups(entries) {
   return [...byRoot.values()];
 }
 
+// Squared deviation of `counts` from a matching array of `targets`.
+function sumSquaredDeviation(counts, targets) {
+  return counts.reduce((sum, c, i) => sum + (c - targets[i]) ** 2, 0);
+}
+
+// The class prior is only neutralised if the digits are spread across sheets in PROPORTION to tile
+// count, not merely present. Deviation from the proportional digit target is penalised alongside
+// tile imbalance; 4 makes a one-digit swing outweigh a few tiles of imbalance without letting digit
+// balance override the "keep every confusable group whole" hard rule.
+const DIGIT_BALANCE_WEIGHT = 4;
+
 function partitionSingleChars(entries) {
   if (entries.length === 0) return [];
   const corpusIndex = new Map(entries.map((ch, i) => [ch, i]));
-  const sheetCount = Math.max(1, Math.ceil(entries.length / MAX_TILES_PER_SHEET));
+  const corpusTiles = entries.length;
+  const corpusDigits = entries.filter(isArabicDigit).length;
+  const corpusLetters = corpusTiles - corpusDigits;
+  const sheetCount = Math.max(1, Math.ceil(corpusTiles / MAX_TILES_PER_SHEET));
+  const nominalTiles = corpusTiles / sheetCount;
+
   const sheets = Array.from({ length: sheetCount }, () => []);
-  const emptiest = () => {
-    let best = 0;
-    for (let i = 1; i < sheets.length; i++) if (sheets[i].length < sheets[best].length) best = i;
-    return best;
-  };
+  const sheetDigits = new Array(sheetCount).fill(0);
+
+  // Proportional digit target for a hypothetical sheet of `tiles` tiles (Part 2): with balanced
+  // tile counts this is corpusDigits / sheetCount.
+  const digitTargetFor = (tiles) => corpusDigits * tiles / corpusTiles;
+  // Fair per-sheet share of each class, used to steer loner placement (a fixed target, not one
+  // that moves with the sheet's own current size).
+  const fairDigits = corpusDigits / sheetCount;
+  const fairLetters = corpusLetters / sheetCount;
 
   const groups = confusableGroups(entries);
   const confusable = groups
     .filter((g) => g.length > 1)
-    .map((g, appearance) => ({ g, appearance }))
+    .map((g, appearance) => ({ g, digits: g.filter(isArabicDigit).length, appearance }))
     .sort((x, y) => (y.g.length - x.g.length) || (x.appearance - y.appearance));
-  const loners = groups.filter((g) => g.length === 1).map((g) => g[0]);
+  const loners = groups.filter((g) => g.length === 1).map((g) => g[0])
+    .sort((a, b) => corpusIndex.get(a) - corpusIndex.get(b));
 
-  // confusable groups first, whole, largest onto the emptiest sheet
-  for (const { g } of confusable) sheets[emptiest()].push(...g);
-  // then the rest, round-robin onto the emptiest sheet, in corpus order
-  for (const ch of loners.sort((a, b) => corpusIndex.get(a) - corpusIndex.get(b))) {
-    sheets[emptiest()].push(ch);
+  // Confusable groups, whole, largest first. Each goes to the sheet minimising the combined cost
+  // of (a) resulting tile imbalance and (b) resulting deviation from the proportional digit target
+  // — so the digit-bearing groups spread out instead of clustering (Part 2).
+  for (const { g, digits } of confusable) {
+    let best = 0;
+    let bestCost = Infinity;
+    for (let k = 0; k < sheetCount; k++) {
+      const tileCounts = sheets.map((s, i) => s.length + (i === k ? g.length : 0));
+      const digitCounts = sheetDigits.map((d, i) => d + (i === k ? digits : 0));
+      const cost = sumSquaredDeviation(tileCounts, tileCounts.map(() => nominalTiles))
+        + DIGIT_BALANCE_WEIGHT * sumSquaredDeviation(digitCounts, tileCounts.map(digitTargetFor));
+      if (cost < bestCost) { bestCost = cost; best = k; }
+    }
+    sheets[best].push(...g);
+    sheetDigits[best] += digits;
   }
+
+  // Loners, in corpus order, each to whichever sheet is currently furthest below its fair share
+  // for that loner's class (digit or letter); ties broken toward the smaller sheet so overall tile
+  // counts stay balanced too.
+  for (const ch of loners) {
+    const digit = isArabicDigit(ch);
+    let best = 0;
+    let bestScore = -Infinity;
+    for (let k = 0; k < sheetCount; k++) {
+      const have = digit ? sheetDigits[k] : sheets[k].length - sheetDigits[k];
+      const deficit = (digit ? fairDigits : fairLetters) - have;
+      const score = deficit - 1e-6 * sheets[k].length;
+      if (score > bestScore) {
+        bestScore = score;
+        best = k;
+      }
+    }
+    sheets[best].push(ch);
+    if (digit) sheetDigits[best] += 1;
+  }
+
   for (const sheet of sheets) sheet.sort((a, b) => corpusIndex.get(a) - corpusIndex.get(b));
 
   // invariant (rule 2): every sheet mixes letters and digits, so no recognizer can lean on a

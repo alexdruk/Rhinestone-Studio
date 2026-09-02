@@ -123,13 +123,19 @@ await test('3a. no character appears in two entries on the same sheet, over ever
   }
 });
 
-await test('3b. every single-character sheet carries at least one letter and at least one digit', () => {
+await test('3b. every single-character sheet has its digits balanced to the proportional target (|digits - expected| <= 1)', () => {
   for (const corpusName of Object.keys(CORPORA)) {
+    const singles = resolveCorpus(corpusName).entries.filter((e) => [...e].length === 1);
+    const singleTiles = singles.length;
+    const singleDigits = singles.filter((c) => /[0-9]/.test(c)).length;
     for (const sheet of sheetsForTier(corpusName)) {
       if (!sheet.tileInventory.every(isSingleCharTile)) continue;
       const glyphs = sheet.tileInventory.map((t) => t.expectedText);
+      const digitCount = glyphs.filter((c) => /[0-9]/.test(c)).length;
+      const expectedDigits = singleDigits * glyphs.length / singleTiles;
       assert.ok(glyphs.some((c) => /[A-Za-z]/.test(c)), `${corpusName} sheet ${sheet.index}: no letter`);
-      assert.ok(glyphs.some((c) => /[0-9]/.test(c)), `${corpusName} sheet ${sheet.index}: no digit`);
+      assert.ok(Math.abs(digitCount - expectedDigits) <= 1,
+        `${corpusName} sheet ${sheet.index}: ${digitCount} digits vs proportional target ${expectedDigits.toFixed(2)} — deviation > 1 ("at least one" is not enough)`);
     }
   }
 });

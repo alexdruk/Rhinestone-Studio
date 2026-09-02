@@ -50,8 +50,9 @@ immediately: `signalA.passed = false`, `oracleRequired = false`, `measurements =
 caller must not build a sheet or attempt a reading.
 
 This is what keeps the expensive recognition calls off physically-unbuildable combinations
-(READ-000 §3, combination rule step 1). READ-005 is ~800–960 probes; signal A eliminates whole
-`(font, mode)` regions with a single multiply before a single pixel is rendered.
+(READ-000 §3, combination rule step 1). READ-005 is on the order of a thousand probes and ~2,600
+recognition calls (§9.4); signal A eliminates whole `(font, mode)` regions — for every script face,
+every interior-fill mode (§9.2.1) — with a single multiply before a single pixel is rendered.
 
 If the pure check passes, layouts are measured for every corpus entry and the rest of signal A
 (the collision / error / zero-stone checks) is evaluated over those measurements. Signal D is then
@@ -109,23 +110,39 @@ one or more contact sheets, reusing `specimenPages.mjs`'s stone-circle rendering
    - **Single-character entries** are grouped by confusability (union-find over `CONFUSABLE_PAIRS`;
      with the current corpus that is `{I,l,1} {O,0,Q} {S,5} {B,8} {G,C} {e,c,o} {6,9}`), and each
      confusable group is placed *whole* onto one sheet — a pair split across two sheets is a hard
-     failure. The remaining characters are filled round-robin to balance tile counts, and **every
-     single-character sheet is asserted (in the builder, not only the test) to carry at least one
-     letter and at least one digit.**
+     failure. Groups are then **assigned to balance digits in proportion to tile count**, not merely
+     to be present: each sheet's digit target is `corpusDigits × sheetTiles / corpusTiles` (with
+     balanced tile counts, `corpusDigits / sheetCount`), and a group is placed on the sheet that
+     minimises the combined squared deviation from that digit target and from an even tile split.
+     The remaining loner characters then go to whichever sheet is currently furthest below its fair
+     share of that loner's class. **Every single-character sheet is asserted `|digitCount −
+     digitTarget| ≤ 1`** (in the test) and to carry at least one letter and at least one digit (in
+     the builder).
 
-     This replaces the previous **partition-by-class** rule (letters on letter sheets, digits on
-     digit sheets). That rule made every sheet homogeneous, which structurally *removes* the
-     alphanumeric confusables — O/0, S/5, B/8, I/1, l/1 — from measurement: a recognizer looking at
-     a letters-only sheet cannot make the O→0 error because no digit is on the page. This product
-     sells names and years in the same design, so those are exactly the confusions that matter. The
-     class prior is a contamination of the same family as the language prior READ-000 §3 rejects
-     familiar phrases for — "this page is all letters, so it can't be a digit" is the same kind of
-     outside-the-glyph inference as "this phrase is *Happy Birthday*" — and it was reintroduced by
-     the very rule built to prevent cross-referencing.
+     An earlier version of this rule assigned confusable groups largest-onto-emptiest with **no
+     class balancing** and asserted only "at least one digit". That is a formal pass, not a
+     substantive one: on the `search` tier (25 % digits) it produced sheets that were 7 % and 43 %
+     digits, and it put `{I,l,1}` and `{G,C}` on the *digit-poorest* sheet — so `l→1` and `I→1`, the
+     two confusions that most need a digit-rich page, got the weakest digit context in the corpus.
+     A single `1` beside thirteen letters weakens the letter prior; it does not remove it.
+
+     This whole rule replaces the still-earlier **partition-by-class** rule (letters on letter
+     sheets, digits on digit sheets). That rule made every sheet homogeneous, which structurally
+     *removes* the alphanumeric confusables — O/0, S/5, B/8, I/1, l/1 — from measurement: a
+     recognizer looking at a letters-only sheet cannot make the O→0 error because no digit is on the
+     page. This product sells names and years in the same design, so those are exactly the
+     confusions that matter. The class prior is a contamination of the same family as the language
+     prior READ-000 §3 rejects familiar phrases for — "this page is all letters, so it can't be a
+     digit" is the same kind of outside-the-glyph inference as "this phrase is *Happy Birthday*".
 
    - **Multi-character entries** are packed greedily: each entry goes on the first sheet whose
      character set (whitespace ignored) is disjoint from it, opening a new sheet when none fits.
-     However many sheets that produces is accepted. `STRESS_STRINGS` (15 entries, e.g. `mm` beside
+     However many sheets that produces is accepted. They are **exempt from digit balancing** —
+     `partitionMultiChars` partitions on character disjointness and cannot also balance classes, so
+     `full`'s sheet 4 (`rn mm oo ee pp qq ww`, all lowercase) is homogeneous by construction. That
+     is acceptable: the stress strings test `rn`-vs-`m` and doubled-letter confusions, not
+     letter-vs-digit, and no digit stress string exists to pair against. `STRESS_STRINGS` (15
+     entries, e.g. `mm` beside
      `mnuvw`, `rn` beside `nn`) lands on **3** sheets, not 1.
 
    Single- and multi-character entries never share a sheet, so a lone `o` is never on the same
@@ -254,19 +271,30 @@ render, including the curved one. `renderPlainCase()` / `runPlainRenders()` are 
 The two failures are exactly Cinzel radial and Caveat fill — the pair READ-003's investigation
 identified as the cases the stroke gate still catches (READ-000 §1.2).
 
-**The curved row uses a real product geometry (Part 7).** `curveRadiusMm` is the **Standard Mug**
-body-wall radius — `src/products/definitions/vessel-standard-mug.json`, `bodyDiameterMm: 82` →
-**41 mm**. `curveSweepAngleDeg` is *derived* so `"Vitalina"` subtends its natural arc rather than an
-arbitrary sweep: `sweepDeg = (textWidthMm / radiusMm) · 180/π`, where `textWidthMm` is the rendered
-width of `"Vitalina"` at 60 mm in `anton-regular` (`contour`, `ss10`) — **178.387 mm**, measured at
-run time. That gives **`curveSweepAngleDeg ≈ 249.288`**. (The previous value, `curveRadiusMm: 120` /
-`curveSweepAngleDeg: 180`, was a 377 mm arc chosen only to satisfy `normalizeCurveParams()`'s
-non-zero requirement; at that radius `"Vitalina"` filled half the arc and was stretched 2×.) A
-178 mm name genuinely wraps ~70 % of the way around an 82 mm mug, so the sweep is large — that is
-the real geometry, and it is exactly what READ-005 needs to look at. The product, radius, measured
-width and derived sweep are all recorded in the probe record's `curve.derivation`. The prompt's
-`curveDirection: 'up'` is kept as-authored and mapped to the arc engine's upward-bulging direction
-(`'outside'`; `ArcProjection.js` only accepts `outside`/`inside`) — both values live in `curve`.
+**The curved row uses a real design-plane product geometry (Part 7).** `curveRadiusMm` is the
+**round dinner plate's rim-band mid-radius** — `src/products/definitions/plate-round-dinner.json`,
+`outerDiameterMm: 270` / `innerWellDiameterMm: 195` → outer rim R **135 mm**, inner rim R **97.5 mm**,
+**mid R 116.25 mm** — derived at run time exactly as `app.js`'s `rimBandCurveRadiusMm()` (`app.js:2316`)
+does, via `getPlateDesignTargetGuide('rimBand', …)`. That is the *only* place the codebase itself
+derives a curve radius from product geometry, and curved text on a plate rim is a real production
+case. A mug's body radius (the earlier choice, 41 mm) describes the cylinder a flat decal wraps
+*around* — it is not a radius in the design plane where `ArcProjection` operates, and it gave a
+249° sweep with the end letters rotated ±125°.
+
+`curveSweepAngleDeg` is *derived* so `"Vitalina"` subtends its natural, **undistorted** arc.
+`ArcProjection.projectPointToArc()` computes `t = xMm / totalAdvanceWidthMm` and
+`angle = sweepStart + sweep·t`, so the text is uniformly stretched onto the sweep and the radius is
+independent of it; `sweep = width / radius` is therefore the sweep at which arc length equals text
+width and the stretch factor is exactly 1. For the measured `"Vitalina"` width of **178.387 mm**
+(`anton-regular`, `contour`, `ss10`, 60 mm) that gives **`curveSweepAngleDeg ≈ 87.93`** (end letters
+tilted ~±44°). (The pre-third-pass value, `curveRadiusMm: 41` / `sweep ≈ 249.3`, calibrated
+READ-005's curvature margin on near-upside-down text; the pre-second-pass value,
+`curveRadiusMm: 120` / `sweep: 180`, was a 377 mm arc chosen only to satisfy
+`normalizeCurveParams()`'s non-zero requirement and stretched the text 2×.) The product id, design
+target (`rimBand`), both rim radii, the mid-radius, the measured width and the derived sweep are all
+recorded in the probe record's `curve.derivation`. The prompt's `curveDirection: 'up'` is kept
+as-authored and mapped to the arc engine's upward-bulging direction (`'outside'`; `ArcProjection.js`
+only accepts `outside`/`inside`) — both values live in `curve`.
 
 ---
 
@@ -275,7 +303,7 @@ width and derived sweep are all recorded in the probe record's `curve.derivation
 READ-000 §3 stores **one floor per `(font, mode)`** on the premise that at a matched
 height-to-stone-diameter ratio the *layout* is the same up to scale across all five stone sizes.
 `PRODUCTION_GAP_MM` is absolute, so pitch/diameter runs from **1.150 at SS6 to 1.047 at SS30** and
-the premise holds only approximately. Measured before READ-005 commits ~2,100 recognition calls to
+the premise holds only approximately. Measured before READ-005 commits ~2,635 recognition calls to
 it.
 
 ### 9.1 What the committed Part I measured, and why it could not answer the question
@@ -312,6 +340,25 @@ triples are unmeasurable here.
 | skipped (`stemWidthRatio × ratio < 1`) | 360 |
 | **measured** | **220** |
 
+### 9.2.1 The 360 skips are themselves a finding
+
+Every script face is skipped at **every** tested ratio, because `stemWidthRatio × 20 < 1` for all of
+them. That is not just an exclusion from this measurement — it means their interior-fill-mode floors
+are governed by **signal A, not signal B**, and sit at `1 / stemWidthRatio`:
+
+| font | `stemWidthRatio` | interior-fill A-floor (`1/ratio`) |
+|---|---:|---:|
+| great-vibes-regular | 0.0357 | **28.0** |
+| cinzel-regular | 0.0398 | **25.1** |
+| caveat-regular | 0.0443 | **22.6** |
+| … vs anton-regular | 0.1225 | 8.2 |
+| … vs lilita-one-regular | 0.1355 | 7.4 |
+
+**Consequence for READ-005: the binary-search height range must be per-font and seeded at the
+A-boundary**, not a fixed bracket. A fixed `[6, 30]` ratio search would spend most of its steps
+below the A-floor for every script face (where the answer is already "unsupported") and barely reach
+the top of their usable range.
+
 Over the **1,100** measured `(triple, glyph)` points (0 errored):
 
 > **Maximum chamfer distance = 0.1633**, at **(`abril-fatface-regular`, `radial`, ratio 12.5, glyph
@@ -342,17 +389,17 @@ interior-fill modes and says which.
 
 Corrected estimate, with the tiered corpus and the multi-sheet partition:
 
-| tier | ~passes | note |
+| tier | passes | derivation |
 |---|---:|---|
-| `search` | ~800 | 31 fonts × ~5 modes × ~5 search steps, 2 sheets each |
-| `full` | ~1,200 | signal B at candidate floors, 6 sheets each |
-| `words` | ~160 | signal C confirmation at the candidate floor only |
-| **total recognition calls** | **~2,100** | against READ-000's original estimate of **78** |
+| `search` | **1,550** | 31 fonts × 5 modes × ~5 search steps = 775 probes, × 2 sheets each |
+| `full` | **930** | 155 `(font, mode)` cells × 6 sheets, at the candidate floor |
+| `words` | **155** | 155 cells, signal C confirmation at the candidate floor only |
+| **total recognition calls** | **≈ 2,635** | against READ-000's original estimate of **78** — **~34×** |
 
-The 27× blow-up is the price of removing the class prior (more, smaller sheets) and of the
-tiered corpus. It makes READ-005 a **resumable batch job** — which is exactly what `probeRecordStore`
-is for: a probe whose cache key already exists is returned without re-rendering, so the sweep
-survives being run per-font across sessions.
+The blow-up is the price of removing the class prior (more, smaller sheets) and of the tiered
+corpus. It makes READ-005 a **resumable batch job** — which is exactly what `probeRecordStore` is
+for: a probe whose cache key already exists is returned without re-rendering, so the sweep survives
+being run per-font across sessions.
 
 Two economies READ-005 should use:
 
@@ -375,10 +422,10 @@ Two economies READ-005 should use:
   the caveat alongside its floor**, so a hairline-Thin measurement is never mistaken for Montserrat
   Regular's real behaviour. (In Part 5's measurement all of Montserrat's triples are skipped —
   `0.0145 × 20 = 0.29 < 1` — so it contributes nothing there.)
-- **Curved text** is represented by exactly one ground-truth row, now on a real product geometry
-  (Part 7 / §8.1: Standard Mug 41 mm wall, derived 249.3° sweep). Arc projection distorts spacing,
-  and a name this long wraps most of the way around the mug; READ-005 should either add curvature as
-  a sweep dimension or apply a conservative margin to curved layers and say so (READ-000 §5).
+- **Curved text** is represented by exactly one ground-truth row, on a real design-plane geometry
+  (Part 7 / §8.1: round dinner plate rim band, mid-radius 116.25 mm, derived undistorted sweep
+  ≈ 87.9°). Arc projection still distorts spacing at the ends; READ-005 should either add curvature
+  as a sweep dimension or apply a conservative margin to curved layers and say so (READ-000 §5).
 - The stub oracle's readings in `--oracle stub` runs are a deterministic stand-in for real model
   noise (a fixed `O→0`, `l→1`, `S→5`, drop-trailing-`y` perturbation), so every ground-truth
   probe over the `words` tier reports the same aggregate CER. READ-005 replaces the stub entirely.
