@@ -44,7 +44,7 @@ import {
 // Bumped whenever a change to this module, the sheet builder, the scorer, or the geometry they
 // depend on would make a stored probe record no longer reproducible from its inputs. Part of every
 // cache key (probeRecordStore.mjs) so a stale record is a cache miss, not a silent wrong answer.
-export const HARNESS_VERSION = 'read-004.1';
+export const HARNESS_VERSION = 'read-004.5';
 
 // --- corpus tiers, as data --------------------------------------------------------------------
 

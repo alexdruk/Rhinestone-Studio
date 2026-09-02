@@ -207,16 +207,21 @@ await test('4. scoreProbe() returns exact per-tile distances for a fixed fixture
 
 // --- 5. Cache keying -----------------------------------------------------------------------
 
-await test('5. cache key: mode-only difference changes it; identical inputs match; sheetPngSha256 changes it', () => {
+await test('5. cache key: mode-only difference changes it; identical inputs match; sheetPngSha256 and harnessVersion change it', () => {
   const base = {
     fontId: 'anton-regular', mode: 'fill', heightMm: 36.52, stoneSizeId: 'ss6', gapMm: 0.3,
-    corpusName: 'words', corpusHash: 'abc123', sheetPngSha256: 'deadbeef', modelId: 'stub-oracle'
+    corpusName: 'words', corpusHash: 'abc123', sheetPngSha256: 'deadbeef', modelId: 'stub-oracle',
+    harnessVersion: 'read-004.5'
   };
   const key = computeCacheKey(base);
   assert.equal(computeCacheKey({ ...base }), key, 'identical inputs must produce the same key');
   assert.notEqual(computeCacheKey({ ...base, mode: 'contour' }), key, 'a mode change must change the key');
   assert.notEqual(computeCacheKey({ ...base, sheetPngSha256: 'feedface' }), key, 'a PNG-hash change must change the key');
+  // a scorer change leaves the PNG byte-identical, so harnessVersion is the only field that catches it.
+  assert.notEqual(computeCacheKey({ ...base, harnessVersion: 'read-004.6' }), key,
+    'a harnessVersion change must change the key (same PNG, different code path)');
   assert.throws(() => computeCacheKey({ ...base, modelId: undefined }), /missing key field/);
+  assert.throws(() => computeCacheKey({ ...base, harnessVersion: undefined }), /missing key field/);
 });
 
 // --- 6. Part A regression: analyzeOne() with no options is byte-identical to develop ----------

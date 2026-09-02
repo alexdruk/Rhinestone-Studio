@@ -280,7 +280,7 @@ export async function runRecognitionCase(testCase, opts = {}) {
     fontId: probeRecord.fontId, mode: probeRecord.mode, heightMm: probeRecord.heightMm,
     stoneSizeId: probeRecord.stoneSizeId, gapMm: probeRecord.gapMm,
     corpusName: probeRecord.corpusName, corpusHash: probeRecord.corpusHash,
-    sheetPngSha256, modelId
+    sheetPngSha256, modelId, harnessVersion: probeRecord.harnessVersion
   });
 
   const existing = force ? null : await readRecord(cacheKey);

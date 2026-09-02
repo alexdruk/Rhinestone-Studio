@@ -8,12 +8,15 @@
  * ## Cache key
  *
  * sha256 over the canonical (recursively key-sorted) JSON of:
- *   { fontId, mode, heightMm, stoneSizeId, gapMm, corpusName, corpusHash, sheetPngSha256, modelId }
+ *   { fontId, mode, heightMm, stoneSizeId, gapMm, corpusName, corpusHash, sheetPngSha256, modelId,
+ *     harnessVersion }
  *
  * Every one of those fields feeds the key, so changing any of them — the geometry inputs, the
  * corpus, the rendered image, or the model — is a cache miss rather than a silent stale hit.
  * `sheetPngSha256` folds in the pixels actually read: for a multi-sheet probe it is the sha256 of
- * the per-sheet PNG hashes joined in order.
+ * the per-sheet PNG hashes joined in order. `harnessVersion` (readabilityProbe.HARNESS_VERSION)
+ * covers the code paths the PNG hash does not — most importantly `recognitionScoring.mjs`, where a
+ * scorer change leaves the rendered sheet byte-identical but changes `aggregateCer`.
  */
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
@@ -44,7 +47,7 @@ export function combineSheetPngHashes(perSheetSha256) {
   return sha256Hex(perSheetSha256.join('\n'));
 }
 
-const KEY_FIELDS = ['fontId', 'mode', 'heightMm', 'stoneSizeId', 'gapMm', 'corpusName', 'corpusHash', 'sheetPngSha256', 'modelId'];
+const KEY_FIELDS = ['fontId', 'mode', 'heightMm', 'stoneSizeId', 'gapMm', 'corpusName', 'corpusHash', 'sheetPngSha256', 'modelId', 'harnessVersion'];
 
 /**
  * @param {object} fields must contain every KEY_FIELD
@@ -136,7 +139,8 @@ export function assembleRecord({ probeRecord, modelId, sheets }) {
     corpusName: probeRecord.corpusName,
     corpusHash: probeRecord.corpusHash,
     sheetPngSha256,
-    modelId
+    modelId,
+    harnessVersion: probeRecord.harnessVersion
   };
 
   const aggregateCer = sheets.length
@@ -146,7 +150,6 @@ export function assembleRecord({ probeRecord, modelId, sheets }) {
   return {
     cacheKey: computeCacheKey(keyFields),
     ...keyFields,
-    harnessVersion: probeRecord.harnessVersion,
     curve: probeRecord.curve ?? null,
     stemWidthRatio: probeRecord.stemWidthRatio ?? null,
     signalA: probeRecord.signalA,

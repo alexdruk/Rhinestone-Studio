@@ -230,16 +230,21 @@ fully reproducible from the stored record.
 **Cache key** = sha256 over the canonical (recursively key-sorted) JSON of:
 
 ```
-{ fontId, mode, heightMm, stoneSizeId, gapMm, corpusName, corpusHash, sheetPngSha256, modelId }
+{ fontId, mode, heightMm, stoneSizeId, gapMm, corpusName, corpusHash, sheetPngSha256, modelId,
+  harnessVersion }
 ```
 
 Every field feeds the key, so changing any geometry input, the corpus, the rendered pixels, or the
 model is a cache **miss** rather than a silent stale hit. `sheetPngSha256` for a multi-sheet probe
-is the sha256 of the per-sheet PNG hashes joined in order. Reading a record whose key already
-exists returns it without re-rendering — READ-005 must be resumable across sessions and re-runnable
-per font.
+is the sha256 of the per-sheet PNG hashes joined in order. `harnessVersion`
+(`readabilityProbe.HARNESS_VERSION`, `read-004.5`) covers the code paths the PNG hash does not —
+most importantly a change to `recognitionScoring.mjs`, which leaves the rendered sheet
+byte-identical but changes `aggregateCer`; bump it whenever the probe, sheet builder, scorer, or
+their geometry changes in a way that makes a stored record no longer reproducible. Reading a record
+whose key already exists returns it without re-rendering — READ-005 must be resumable across
+sessions and re-runnable per font.
 
-Each stored record contains, at minimum: the cache key and every field feeding it, `harnessVersion`,
+Each stored record contains, at minimum: the cache key and every field feeding it,
 the signal A verdict and reasons, the signal D numbers, the (stones-stripped) layout measurements,
 and per sheet: `pngSha256`, `tileInventory`, `rawReadings` verbatim, and the scoring output. The
 heavy per-stone position arrays are dropped on write — they are deterministic geometry, re-derivable
