@@ -73,10 +73,13 @@ Grid Fill) at the outer ones — one mode, two behaviours in one word. **Impleme
 contours into connected components by even-odd nesting — deliberately a connected component, not a
 character, so an `i`'s dot and stem anchor separately while an `a`'s counter stays a hole of its
 outer — and `sampleRadialFillPoints()` rays each component out from its own bounding-box centre,
-keeping a candidate only if it is inside both its own component and the global polygon set. A
-single-component shape (Circle, Rectangle, single-glyph text, one-piece SVG) is byte-identical to
-before. READ-002 also fixed a floating-point floor bug that dropped every radial fill's innermost
-ring from 6 stones to 5 (17.6% over-spaced). Radial fill for image/raster layers keeps the single
+keeping a candidate only if it is inside both its own component and the global polygon set. For a
+single-component shape (Circle, Rectangle, single-glyph text, one-piece SVG) the component split is
+a no-op, but the layout is *not* byte-identical to before: READ-002 also fixed a floating-point
+floor bug that dropped every radial fill's innermost ring from 6 stones to 5 (17.6% over-spaced),
+and that ring is regenerated on every radial fill including single-component ones — which is exactly
+why the `mixed-fill-styles-and-sizes.rhs` fixture (a one-component rectangle) moved 1534 → 1535
+(see `docs/specifications/READ-002-RadialPerGlyph.md` §6). Radial fill for image/raster layers keeps the single
 whole-placement anchor — connected-component labelling on a density field is a different technique,
 deferred (`docs/BACKLOG.md`).
 

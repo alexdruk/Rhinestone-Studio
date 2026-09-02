@@ -87,7 +87,7 @@
 import './src/browser/BrowserDependencyProbe.js';
 import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace, hitTestPathLayerRegion, computeNaturalContourTransform, applyNaturalContourTransform, isPointInsidePolygons, findOverlappingStonePairs, hasAnyOverlappingStonePair, measureStoneCrowding } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
-import { createDefaultFontProviderRegistry, createDefaultRhinestoneFontRegistry, BoundingBox } from './src/text/index.js';
+import { createDefaultFontProviderRegistry, createDefaultRhinestoneFontRegistry, BoundingBox, strokeNarrowerThanOneStone } from './src/text/index.js';
 import { renderProductionLayout, renderStoneLayout, fitTransform, chooseNiceStepMm } from './src/renderer/CanvasRenderer2D.js';
 import { createPreview3D } from './src/preview3d/index.js';
 import { circumferenceMm, frontViewFrameWidthMm, canvasXMmForRotationDeg, rotationDegForCanvasXMm, azimuthRadForCanvasXMm, wrapAngleRad } from './src/preview3d/ObjectDimensions.js';
@@ -2910,43 +2910,34 @@ function textHeightBelowReadableMinimum(layer){
 }
 // READ-003: shared predicate, beside textHeightBelowReadableMinimum() -- non-null when `layer` is a
 // text layer whose font's dominant stroke, at the layer's current height, is physically narrower
-// than a single stone AND the layer fills the letter interior with stones. `stemWidthMm =
-// font.stemWidthRatio * layer.height` (stemWidthRatio is measured offline per font by
-// tools/measure-font-stem-width.mjs and stored in assets/fonts/manifest.json).
+// than a single stone AND the layer fills the letter interior with stones.
 //
 // This is Layer 1 of the readability program in
 // docs/specifications/READ-000-readability-architecture.md -- the live physical-impossibility check
 // that needs no baked data (Layer 3 / READ-006 will later supersede FONT-LIB-004's height rule with
 // font- and mode-aware readability floors on this same warning surface).
 //
-// The impossibility argument is specifically about FILLING AN INTERIOR: a stone dropped into a
-// region narrower than its own diameter overhangs both edges, so no sampling of that interior can
-// render the letterform. That holds for the interior-filling fill styles (Grid/Staggered/Radial/
-// Contour) and NOT for Outline mode, where stones trace the letterform as a single bead line --
-// a hairline script rendered that way is the canonical rhinestone result, not a defect (Great Vibes
-// @ 42.5mm/SS6 and Dancing Script @ 34.3mm/SS6, both stem-to-stone ~0.7, are product-owner-confirmed
-// good; the cases this still catches are Cinzel radial @ 0.56 and Caveat fill @ 0.61). An absent or
-// unrecognised textMode resolves to 'outline' via resolveTextFillMode()'s own fallback and is
-// therefore silent -- a false "impossible" verdict on a good design is worse than a missed warning.
+// READ-004 moved the arithmetic and the mode gate out to src/text/StrokeWidthGate.js
+// (strokeNarrowerThanOneStone()) so signal A of the offline recognition harness and this live
+// warning share one source of truth -- see that module's doc for the impossibility argument, why
+// only the interior-fill modes count, and every case that returns null. This wrapper does only what
+// the shared function cannot: resolve the layer's font and fill mode, skip authored/unknown fonts,
+// and build the user-facing label.
 //
 // When it does fire it is the STRONGEST readability signal -- geometry, not a quality judgement (see
-// the precedence note on updateTextHeightReadabilityUI()). O(1): no geometry at runtime. Returns
-// null for a non-text layer, an Outline-mode (or unrecognised-mode) text layer, an authored
-// Production Font, a font carrying no stemWidthRatio (older manifest / legacy-or-unknown font id),
-// or a non-finite height / stone size.
-const READ_003_INTERIOR_FILL_MODES=new Set(['fill','staggered','radial','contour']);
+// the precedence note on updateTextHeightReadabilityUI()). O(1): no geometry at runtime.
 function textStrokeNarrowerThanOneStone(layer){
   if(!layer||layer.type!=='text'||isAuthoredStoneFontId(layer.font)||!isFontKnown(layer.font))return null;
-  if(!READ_003_INTERIOR_FILL_MODES.has(resolveTextFillMode(layer.textMode)))return null;
-  const ratio=fontManager.getFont(layer.font).stemWidthRatio;
-  if(typeof ratio!=='number'||!Number.isFinite(ratio))return null;
-  const heightMm=layer.height,stoneSizeMm=layer.stoneSize;
-  if(!Number.isFinite(heightMm)||!Number.isFinite(stoneSizeMm))return null;
-  const stemWidthMm=ratio*heightMm;
-  if(!(stemWidthMm<stoneSizeMm))return null;
   const font=fontManager.getFont(layer.font);
+  const hit=strokeNarrowerThanOneStone({
+    stemWidthRatio:font.stemWidthRatio,
+    heightMm:layer.height,
+    stoneSizeMm:layer.stoneSize,
+    mode:resolveTextFillMode(layer.textMode)
+  });
+  if(!hit)return null;
   const fontLabel=font.style&&font.style!=='Regular'?`${font.family} ${font.style}`:font.family;
-  return{stemWidthMm,stoneSizeMm,fontLabel};
+  return{stemWidthMm:hit.stemWidthMm,stoneSizeMm:hit.stoneSizeMm,fontLabel};
 }
 // Both readability signals share the single #heightBelowReadableWarning element, and exactly one
 // message shows. Precedence, strongest first:

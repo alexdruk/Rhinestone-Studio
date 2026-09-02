@@ -26,6 +26,11 @@ export {
 } from './rhinestoneFont/index.js';
 
 export {
+  INTERIOR_FILL_MODES,
+  strokeNarrowerThanOneStone
+} from './StrokeWidthGate.js';
+
+export {
   Point2D,
   BoundingBox,
   PathCommand,

@@ -23,6 +23,10 @@ import { FontManager } from '../src/fonts/index.js';
 import { listStoneSizes } from '../src/renderer/StoneSizes.js';
 import { hasAnyOverlappingStonePair, measureStoneCrowding } from '../src/geometry/StoneLayout.js';
 import { findStoneSizeByDiameterMm } from '../src/renderer/StoneSizes.js';
+// READ-004 Part B moved the stroke-narrower-than-one-stone arithmetic and its fill-mode gate out of
+// app.js into this shared module. app.js's textStrokeNarrowerThanOneStone() (sliced below) now calls
+// the real predicate, so it is passed into the factory like every other app.js dependency.
+import { strokeNarrowerThanOneStone, INTERIOR_FILL_MODES } from '../src/text/index.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
@@ -42,6 +46,14 @@ async function test(name, fn) {
 }
 
 // ---------- Slice the real app.js source (same convention as FONT-DECISION-001 / TXT-103) ----------
+
+// A future app.js refactor that removes one of these patterns should fail with a named error
+// ("app.js no longer contains X"), not a null dereference on `.match(...)[0]`.
+function matchOne(source, regex, label) {
+  const m = source.match(regex);
+  if (!m) throw new Error(`app.js no longer contains ${label} (pattern: ${regex})`);
+  return m[0];
+}
 
 function sliceBalanced(source, startMarker, label) {
   const start = source.indexOf(startMarker);
@@ -64,24 +76,29 @@ const findBolderSiblingSrc = sliceBalanced(appJs, 'function findBolderSibling(fo
 // #heightBelowReadableWarning -- READ-003 stroke-narrower-than-one-stone, or FONT-LIB-004
 // height-below-validated-minimum. Slice both predicates in (plus READ-003's fill-mode gate helpers)
 // so this harness exercises the real precedence rule rather than a stubbed stand-in.
-const textModeMapSrc = appJs.match(/const TEXT_MODE_TO_ENGINE_MODE=\{[^}]*\};/)[0];
-const resolveTextFillModeSrc = appJs.match(/function resolveTextFillMode\(textMode\)\{[^}]*\}/)[0];
-const interiorFillModesSrc = appJs.match(/const READ_003_INTERIOR_FILL_MODES=new Set\(\[[^\]]*\]\);/)[0];
+const textModeMapSrc = matchOne(appJs, /const TEXT_MODE_TO_ENGINE_MODE=\{[^}]*\};/, 'TEXT_MODE_TO_ENGINE_MODE');
+const resolveTextFillModeSrc = matchOne(appJs, /function resolveTextFillMode\(textMode\)\{[^}]*\}/, 'resolveTextFillMode()');
 const strokePredicateSrc = sliceBalanced(appJs, 'function textStrokeNarrowerThanOneStone(layer){', 'textStrokeNarrowerThanOneStone()');
 const heightPredicateSrc = sliceBalanced(appJs, 'function textHeightBelowReadableMinimum(layer){', 'textHeightBelowReadableMinimum()');
 // PERF-005: updateStoneSizeOverlapCapabilityUI() now calls out to these two module-level pieces
 // (the availability-sweep function, and its own target-key tracking) instead of doing the full
 // catalog sweep inline -- sliced in verbatim alongside it so this harness keeps exercising the real
 // source, not a pre-PERF-005 shape of it.
-const stoneSizeAvailabilityStateSrc = appJs.match(/let lastStoneSizeAvailabilityTargetKey=undefined;\nfunction stoneSizeTargetKey\(target\)\{[^\n]*\}/)[0];
+const stoneSizeAvailabilityStateSrc = matchOne(appJs, /let lastStoneSizeAvailabilityTargetKey=undefined;\nfunction stoneSizeTargetKey\(target\)\{[^\n]*\}/, 'stoneSizeTargetKey() + its state');
 const updateAvailabilitySrc = sliceBalanced(appJs, 'async function updateStoneSizeOptionAvailabilityUI(target,currentSizeMm){', 'updateStoneSizeOptionAvailabilityUI()');
 const updateFnSrc = sliceBalanced(appJs, 'async function updateStoneSizeOverlapCapabilityUI(){', 'updateStoneSizeOverlapCapabilityUI()');
 
 // The crowding/attrition thresholds are module-level consts outside either slice -- pull them in
 // verbatim so this suite would break if a future milestone silently retuned them (test 5's guard).
-const thresholdSrc = appJs.match(/const STONE_SIZE_CROWDING_FRACTION_THRESHOLD=[^\n]*\nconst STONE_SIZE_ATTRITION_RATIO_THRESHOLD=[^\n]*/)[0];
+const thresholdSrc = matchOne(appJs, /const STONE_SIZE_CROWDING_FRACTION_THRESHOLD=[^\n]*\nconst STONE_SIZE_ATTRITION_RATIO_THRESHOLD=[^\n]*/, 'the crowding/attrition thresholds');
 assert.match(thresholdSrc, /=0\.25;/);
 assert.match(thresholdSrc, /=0\.75;/);
+
+// READ-004 Part B: the fill-mode gate that used to live in app.js as READ_003_INTERIOR_FILL_MODES
+// now lives in src/text/StrokeWidthGate.js. Pin the policy where it moved to -- this is what the
+// deleted `interiorFillModesSrc` slice was implicitly guarding.
+assert.deepEqual([...INTERIOR_FILL_MODES].sort(), ['contour', 'fill', 'radial', 'staggered'],
+  'INTERIOR_FILL_MODES must be exactly {fill, staggered, radial, contour}');
 
 const GENERIC_TEXT = 'This stone size may pack tightly on this shape — try a smaller size for more even spacing.';
 
@@ -115,7 +132,7 @@ function makeEnv({ layer, currentStones, currentOutlineStats }) {
   const factory = new Function(
     'el', 'currentStoneSizeTarget', 'clearStoneSizeOverlapUI', 'listStoneSizes',
     'stonesForCandidateStoneSize', 'project', 'hasAnyOverlappingStonePair', 'measureStoneCrowding', 'fontManager',
-    'isAuthoredStoneFontId', 'isFontKnown', 'findStoneSizeByDiameterMm',
+    'isAuthoredStoneFontId', 'isFontKnown', 'findStoneSizeByDiameterMm', 'strokeNarrowerThanOneStone',
     `
     let stoneSizeOverlapCheckToken=0;
     ${thresholdSrc}
@@ -123,7 +140,6 @@ function makeEnv({ layer, currentStones, currentOutlineStats }) {
     ${findBolderSiblingSrc}
     ${textModeMapSrc}
     ${resolveTextFillModeSrc}
-    ${interiorFillModesSrc}
     ${strokePredicateSrc}
     ${heightPredicateSrc}
     ${updateAvailabilitySrc}
@@ -134,7 +150,7 @@ function makeEnv({ layer, currentStones, currentOutlineStats }) {
   const api = factory(
     el, currentStoneSizeTarget, clearStoneSizeOverlapUI, listStoneSizes,
     stonesForCandidateStoneSize, {}, hasAnyOverlappingStonePair, measureStoneCrowding, fontManager,
-    (id) => ['rs-block','rs-modern'].includes(id), (id) => fontManager.hasFont(id), findStoneSizeByDiameterMm
+    (id) => ['rs-block','rs-modern'].includes(id), (id) => fontManager.hasFont(id), findStoneSizeByDiameterMm, strokeNarrowerThanOneStone
   );
   return { dom, ...api };
 }

@@ -48,6 +48,11 @@ __pycache__/
 # only the JSON measurements and the experiment report they support are committed)
 tools/font-cal-001/output/fonts/
 
+# READ-004/READ-005: the recognition-harness output tree -- probe records (resumable across
+# sessions), generated contact-sheet HTML/PNGs, and Playwright profile dirs. The app only ever
+# consumes the baked floors READ-005 derives from these; the intermediate artifacts are never tracked.
+tools/font-certification/output/
+
 # ---------------------------------------------------------------------------
 # Scratch + one-off verification artifacts -- never tracked
 # ---------------------------------------------------------------------------
