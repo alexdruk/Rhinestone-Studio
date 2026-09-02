@@ -79,7 +79,7 @@ export function createPinnedOracle({ apiKey = process.env.ANTHROPIC_API_KEY, mod
     throw new Error('createPinnedOracle: no API key (pass { apiKey } or set ANTHROPIC_API_KEY)');
   }
 
-  return async function pinnedOracle({ pngPath, pngBuffer, tileCount }) {
+  const pinnedOracle = async function pinnedOracle({ pngPath, pngBuffer, tileCount }) {
     if (!Number.isInteger(tileCount) || tileCount < 1) {
       throw new Error(`createPinnedOracle: tileCount must be a positive integer, got ${tileCount}`);
     }
@@ -131,4 +131,9 @@ export function createPinnedOracle({ apiKey = process.env.ANTHROPIC_API_KEY, mod
     }
     return { modelId, rawReadings };
   };
+  // Exposed so a caller can learn the model id this oracle will report WITHOUT invoking it — the
+  // index lookup key and the stored record's modelId must be the same value even when `modelId` is
+  // overridden here (READ-005b re-pins to a dated snapshot).
+  pinnedOracle.modelId = modelId;
+  return pinnedOracle;
 }

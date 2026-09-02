@@ -117,7 +117,7 @@ export function normalizedStonePoints(stones) {
  * arbitrary glyphs/phrases rather than the fixed PRODUCTION_REVIEW_GLYPHS/WORDS corpus -- reuse
  * this one measurement function against the real, unmodified pipeline instead of re-deriving it.
  */
-export async function analyzeOne(engine, fontId, text, stoneSizeId, heightMm, { mode = 'outline', gapMm = PRODUCTION_GAP_MM, curve = null } = {}) {
+export async function analyzeOne(engine, fontId, text, stoneSizeId, heightMm, { mode = 'outline', gapMm = PRODUCTION_GAP_MM, curve = null, providerId = undefined } = {}) {
   const stoneSizeMm = STONE_SIZE_BY_ID[stoneSizeId].diameterMm;
   const pitchMm = stoneSizeMm + gapMm;
   let layout = null;
@@ -126,6 +126,12 @@ export async function analyzeOne(engine, fontId, text, stoneSizeId, heightMm, { 
     layout = await engine.generateTextLayout({
       text,
       fontId,
+      // READ-005a: authored rhinestone fonts (rs-block/rs-modern) resolve to the OpenType provider
+      // and throw unless the caller names their provider, exactly as app.js's
+      // buildTextLayoutBaseParams() does via resolveFontProviderId(). When providerId is undefined
+      // this key is `providerId: undefined`, which normalizeTextParams() folds to null — byte-
+      // identical to omitting it, so every pre-existing call site is unaffected.
+      providerId,
       layerId: 'font-cert-001',
       heightMm,
       stoneSizeMm,
@@ -183,7 +189,7 @@ export async function analyzeOne(engine, fontId, text, stoneSizeId, heightMm, { 
  *   SPECIMEN_HEIGHT_MM_BY_SIZE's ratio-derived heights when omitted, so existing FONT-CERT-001/002 call
  *   sites are unaffected -- this parameter is purely additive.
  */
-export async function runProductionAnalysis(candidateAbsolutePath, { heightMmBySize, mode = 'outline' } = {}) {
+export async function runProductionAnalysis(candidateAbsolutePath, { heightMmBySize, mode = 'outline', providerId = undefined } = {}) {
   const { engine, fontId } = await buildCandidateEngine(candidateAbsolutePath);
   const resolvedHeightMmBySize = { ...SPECIMEN_HEIGHT_MM_BY_SIZE, ...heightMmBySize };
 
@@ -191,7 +197,7 @@ export async function runProductionAnalysis(candidateAbsolutePath, { heightMmByS
   for (const char of PRODUCTION_REVIEW_GLYPHS) {
     const bySize = new Map();
     for (const sizeId of STONE_SIZE_IDS) {
-      bySize.set(sizeId, await analyzeOne(engine, fontId, char, sizeId, resolvedHeightMmBySize[sizeId], { mode }));
+      bySize.set(sizeId, await analyzeOne(engine, fontId, char, sizeId, resolvedHeightMmBySize[sizeId], { mode, providerId }));
     }
     glyphResults.set(char, bySize);
   }
@@ -200,7 +206,7 @@ export async function runProductionAnalysis(candidateAbsolutePath, { heightMmByS
   for (const word of PRODUCTION_REVIEW_WORDS) {
     const bySize = new Map();
     for (const sizeId of STONE_SIZE_IDS) {
-      bySize.set(sizeId, await analyzeOne(engine, fontId, word, sizeId, resolvedHeightMmBySize[sizeId], { mode }));
+      bySize.set(sizeId, await analyzeOne(engine, fontId, word, sizeId, resolvedHeightMmBySize[sizeId], { mode, providerId }));
     }
     wordResults.set(word, bySize);
   }

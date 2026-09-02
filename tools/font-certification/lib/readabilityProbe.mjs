@@ -44,7 +44,7 @@ import {
 // Bumped whenever a change to this module, the sheet builder, the scorer, or the geometry they
 // depend on would make a stored probe record no longer reproducible from its inputs. Part of every
 // cache key (probeRecordStore.mjs) so a stale record is a cache miss, not a silent wrong answer.
-export const HARNESS_VERSION = 'read-004.5';
+export const HARNESS_VERSION = 'read-005.0';
 
 // --- corpus tiers, as data --------------------------------------------------------------------
 
@@ -158,6 +158,11 @@ function computeSignalD(measurements) {
  * @param {object} params
  * @param {object} params.engine A GeometryEngine wired to a font provider registry that resolves `fontId`.
  * @param {string} params.fontId
+ * @param {string} [params.providerId] READ-005a: the font's manifest providerId, threaded into
+ *   every analyzeOne() call so authored rhinestone fonts (rs-block/rs-modern) resolve to their own
+ *   provider instead of throwing an OpenType load error that runProbe() would otherwise turn into a
+ *   false signal-A rejection. Undefined for every ordinary font — analyzeOne() then behaves exactly
+ *   as before (the registry falls back to its own default).
  * @param {number} params.stemWidthRatio The font's manifest stemWidthRatio (or undefined/null for
  *   authored / legacy fonts — signal A's stroke check then no-ops, exactly like the live app).
  * @param {string} params.mode 'outline' | 'fill' | 'staggered' | 'radial' | 'contour'
@@ -169,7 +174,7 @@ function computeSignalD(measurements) {
  *   (curveEnabled/curveRadiusMm/curveDirection/curveStartAngleDeg/curveSweepAngleDeg/curveAlignment)
  * @returns {Promise<object>} the probe record
  */
-export async function runProbe({ engine, fontId, stemWidthRatio, mode, heightMm, stoneSizeId, gapMm = PRODUCTION_GAP_MM, corpus, curve = null }) {
+export async function runProbe({ engine, fontId, providerId = undefined, stemWidthRatio, mode, heightMm, stoneSizeId, gapMm = PRODUCTION_GAP_MM, corpus, curve = null }) {
   const stoneSizeMm = STONE_SIZE_BY_ID[stoneSizeId]?.diameterMm;
   if (!Number.isFinite(stoneSizeMm)) {
     throw new Error(`readabilityProbe: unknown stoneSizeId "${stoneSizeId}"`);
@@ -179,6 +184,7 @@ export async function runProbe({ engine, fontId, stemWidthRatio, mode, heightMm,
   const base = {
     harnessVersion: HARNESS_VERSION,
     fontId,
+    providerId: providerId ?? null,
     mode,
     heightMm,
     stoneSizeId,
@@ -211,7 +217,7 @@ export async function runProbe({ engine, fontId, stemWidthRatio, mode, heightMm,
   // --- layout measurements for every corpus entry (the real pipeline) ---
   const measurements = [];
   for (const text of resolved.entries) {
-    measurements.push(await analyzeOne(engine, fontId, text, stoneSizeId, heightMm, { mode, gapMm, curve }));
+    measurements.push(await analyzeOne(engine, fontId, text, stoneSizeId, heightMm, { mode, gapMm, curve, providerId }));
   }
 
   // --- Signal A, part 2: collectProductionIssues()-equivalent over the measured layouts ---

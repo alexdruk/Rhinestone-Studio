@@ -26,6 +26,8 @@
  *   --render <mode>     `plain` — ground-truth PNGs instead of recognition sheets
  *   --only <id[,id]>    restrict to these font ids
  *   --force             ignore an existing cached record and re-run
+ *   --verify-render     on a resume-index hit, still re-render and fail loudly if the recomputed
+ *                       sheetPngSha256 differs from the stored record (default: skip rendering)
  *   --channel <name>    Playwright browser channel passed through screenshotPages() (e.g. `chrome`
  *                       when the bundled Chromium build is unavailable, as on macOS 13)
  */
@@ -42,9 +44,9 @@ import { runProbe } from './lib/readabilityProbe.mjs';
 import { analyzeOne } from './lib/productionAnalysis.mjs';
 import { buildRecognitionSheetHtml } from './lib/recognitionSheets.mjs';
 import { renderLayoutSvg, RHINESTONE_SPECIMEN_PX_PER_MM_BY_SIZE } from './lib/specimenPages.mjs';
-import { createStubOracle, createPinnedOracle, PINNED_MODEL_ID } from './lib/recognitionOracle.mjs';
+import { createStubOracle, createPinnedOracle, PINNED_MODEL_ID, STUB_MODEL_ID } from './lib/recognitionOracle.mjs';
 import { scoreProbe } from './lib/recognitionScoring.mjs';
-import { assembleRecord, computeCacheKey, readRecord, writeRecord, combineSheetPngHashes } from './lib/probeRecordStore.mjs';
+import { assembleRecord, computeCacheKey, readRecord, writeRecord, combineSheetPngHashes, lookupRecordByDeterministicInputs } from './lib/probeRecordStore.mjs';
 import { screenshotPages } from './lib/screenshotPages.mjs';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -143,7 +145,7 @@ export async function resolveGroundTruthCases(engine) {
 }
 
 function parseArgs(argv) {
-  const args = { cases: 'ground-truth', oracle: 'stub', corpus: 'words', render: null, only: null, force: false, channel: undefined };
+  const args = { cases: 'ground-truth', oracle: 'stub', corpus: 'words', render: null, only: null, force: false, verifyRender: false, channel: undefined };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--cases') args.cases = argv[++i];
@@ -153,6 +155,7 @@ function parseArgs(argv) {
     else if (a === '--only') args.only = argv[++i].split(',').map((s) => s.trim()).filter(Boolean);
     else if (a === '--channel') args.channel = argv[++i];
     else if (a === '--force') args.force = true;
+    else if (a === '--verify-render') args.verifyRender = true;
     else if (a.startsWith('--cases=')) args.cases = a.slice(8);
     else if (a.startsWith('--oracle=')) args.oracle = a.slice(9);
     else if (a.startsWith('--corpus=')) args.corpus = a.slice(9);
@@ -215,6 +218,7 @@ function curveForEngineOf(testCase) {
 export async function runRecognitionCase(testCase, opts = {}) {
   const {
     engine, fontsById, oracleMode = 'stub', corpus = 'words', force = false, channel,
+    verifyRender = false,
     buildSheets = buildRecognitionSheetHtml, screenshot = screenshotPages,
     sheetsDir = SHEETS_DIR, profileBaseDir = PW_PROFILE_DIR
   } = opts;
@@ -225,6 +229,7 @@ export async function runRecognitionCase(testCase, opts = {}) {
   const probeRecord = await runProbe({
     engine,
     fontId: testCase.fontId,
+    providerId: font.providerId,
     stemWidthRatio: font.stemWidthRatio,
     mode: testCase.mode,
     heightMm: testCase.heightMm,
@@ -240,52 +245,107 @@ export async function runRecognitionCase(testCase, opts = {}) {
     return { label, signalA: false, reasons: probeRecord.signalA.reasons, oracleRequired: probeRecord.oracleRequired, pngs: [] };
   }
 
+  // Resolve the oracle and the exact model id it will report BEFORE the index lookup, so the lookup
+  // key and the stored record's modelId are guaranteed to be the same value — even when
+  // createPinnedOracle() is handed a modelId override (READ-005b re-pins to a dated snapshot).
+  // Reading `oracle.modelId` never invokes the oracle.
+  const oracle = oracleMode === 'pinned' ? createPinnedOracle() : null;
+  const lookupModelId = oracle ? oracle.modelId : STUB_MODEL_ID;
+
+  // READ-005a Part C: the deterministic inputs are every cache-key field except sheetPngSha256
+  // (geometry→PNG is deterministic, so the PNG hash is a pure function of the rest). On an index
+  // hit we return the stored record without rendering a single sheet.
+  const deterministicInputs = {
+    fontId: probeRecord.fontId, mode: probeRecord.mode, heightMm: probeRecord.heightMm,
+    stoneSizeId: probeRecord.stoneSizeId, gapMm: probeRecord.gapMm,
+    corpusName: probeRecord.corpusName, corpusHash: probeRecord.corpusHash,
+    modelId: lookupModelId, harnessVersion: probeRecord.harnessVersion,
+    providerId: probeRecord.providerId ?? null
+  };
+
+  const indexed = force ? null : await lookupRecordByDeterministicInputs(deterministicInputs);
+  if (indexed && !verifyRender) {
+    return { label, signalA: true, cacheKey: indexed.cacheKey, aggregateCer: indexed.aggregateCer, cached: true, fromIndex: true, pngs: [] };
+  }
+
   await mkdir(sheetsDir, { recursive: true });
   const { sheets } = buildSheets({ probeRecord });
   const slug = caseSlug(testCase);
-  const oracle = oracleMode === 'pinned' ? createPinnedOracle() : null;
-  const modelIdForStub = 'stub-oracle';
 
-  const scoredSheets = [];
-  for (const sheet of sheets) {
-    const htmlFile = `${slug}__sheet${sheet.index}.html`;
-    const pngFile = path.join(sheetsDir, `${slug}__sheet${sheet.index}.png`);
+  // Part B (D-3): write every sheet's HTML first, screenshot all of them in ONE browser context,
+  // then read + score. Was one static server + one launchPersistentContext PER sheet. The per-sheet
+  // PNG file names are unchanged — `sheetPngSha256` and every cache key depend on those bytes.
+  const pages = sheets.map((sheet) => ({
+    sheet,
+    htmlFile: `${slug}__sheet${sheet.index}.html`,
+    pngFile: path.join(sheetsDir, `${slug}__sheet${sheet.index}.png`)
+  }));
+  for (const { sheet, htmlFile } of pages) {
     await writeFile(path.join(sheetsDir, htmlFile), sheet.html, 'utf8');
+  }
+  if (pages.length) {
     await screenshot({
       dir: sheetsDir,
-      pages: [{ htmlFile, pngFile }],
-      profileDir: path.join(profileBaseDir, `${slug}-${sheet.index}`),
+      pages: pages.map(({ htmlFile, pngFile }) => ({ htmlFile, pngFile })),
+      profileDir: path.join(profileBaseDir, slug),
       channel
     });
+  }
+
+  const scoredSheets = [];
+  for (const { sheet, pngFile } of pages) {
     const png = await readFile(pngFile);
     const sha = pngSha256(png);
 
-    let modelId;
+    let sheetModelId;
     let rawReadings;
     if (oracleMode === 'pinned') {
-      ({ modelId, rawReadings } = await oracle({ pngPath: pngFile, tileCount: sheet.tileInventory.length }));
+      ({ modelId: sheetModelId, rawReadings } = await oracle({ pngPath: pngFile, tileCount: sheet.tileInventory.length }));
     } else {
       // key by 1-based tile position: the stub is positional (it only sees tileCount), and the
       // tile labels are now circled numerals, not stringified positions.
       const stub = createStubOracle(Object.fromEntries(
         sheet.tileInventory.map((t, i) => [i + 1, simulateReading(t.expectedText)])
       ));
-      ({ modelId, rawReadings } = await stub({ tileCount: sheet.tileInventory.length }));
-      modelId = modelIdForStub;
+      ({ rawReadings } = await stub({ tileCount: sheet.tileInventory.length }));
+      sheetModelId = STUB_MODEL_ID;
     }
 
     const scoring = scoreProbe({ tileInventory: sheet.tileInventory, rawReadings });
-    scoredSheets.push({ ...sheet, pngSha256: sha, pngFile, rawReadings, scoring, modelId });
+    scoredSheets.push({ ...sheet, pngSha256: sha, pngFile, rawReadings, scoring, modelId: sheetModelId });
   }
 
-  const modelId = scoredSheets[0]?.modelId ?? modelIdForStub;
+  const modelId = scoredSheets[0]?.modelId ?? lookupModelId;
+  // The record is written to the index under `modelId`; the index was queried under `lookupModelId`.
+  // If they ever diverge, every future resume would be a permanent index miss — fail loudly instead.
+  if (modelId !== lookupModelId) {
+    throw new Error(
+      `runRecognitionCase: oracle reported modelId ${JSON.stringify(modelId)} but the resume-index ` +
+      `lookup used ${JSON.stringify(lookupModelId)} for ${label} — the record would be indexed under ` +
+      `a key it can never be found by.`
+    );
+  }
   const perSheetSha = scoredSheets.map((s) => s.pngSha256);
   const sheetPngSha256 = perSheetSha.length === 1 ? perSheetSha[0] : combineSheetPngHashes(perSheetSha);
+
+  if (indexed && verifyRender) {
+    if (sheetPngSha256 !== indexed.sheetPngSha256) {
+      throw new Error(
+        `--verify-render: re-rendered sheetPngSha256 does not match the stored record for ${label}\n` +
+        `  stored:   ${indexed.sheetPngSha256}\n` +
+        `  rendered: ${sheetPngSha256}\n` +
+        `  probe inputs: ${JSON.stringify(deterministicInputs)}`
+      );
+    }
+    return { label, signalA: true, cacheKey: indexed.cacheKey, aggregateCer: indexed.aggregateCer, cached: true, fromIndex: true, verifiedRender: true, pngs: scoredSheets.map((s) => s.pngFile) };
+  }
+
   const cacheKey = computeCacheKey({
     fontId: probeRecord.fontId, mode: probeRecord.mode, heightMm: probeRecord.heightMm,
     stoneSizeId: probeRecord.stoneSizeId, gapMm: probeRecord.gapMm,
     corpusName: probeRecord.corpusName, corpusHash: probeRecord.corpusHash,
-    sheetPngSha256, modelId, harnessVersion: probeRecord.harnessVersion
+    sheetPngSha256, modelId, harnessVersion: probeRecord.harnessVersion,
+    providerId: probeRecord.providerId ?? null
   });
 
   const existing = force ? null : await readRecord(cacheKey);
@@ -375,13 +435,15 @@ async function run() {
   const summary = [];
   for (const testCase of cases) {
     const res = await runRecognitionCase(testCase, {
-      engine, fontsById, oracleMode: args.oracle, corpus: args.corpus, force: args.force, channel: args.channel
+      engine, fontsById, oracleMode: args.oracle, corpus: args.corpus, force: args.force,
+      verifyRender: args.verifyRender, channel: args.channel
     });
     summary.push(res);
     if (!res.signalA) {
       console.log(`SKIP  ${res.label}\n      signalA FAIL: ${res.reasons.join('; ')}`);
     } else if (res.cached) {
-      console.log(`HIT   ${res.label}  (cache ${res.cacheKey.slice(0, 12)})  aggregateCER=${res.aggregateCer?.toFixed(4)}`);
+      const via = res.fromIndex ? (res.verifiedRender ? 'index, render verified' : 'index') : 'cache';
+      console.log(`HIT   ${res.label}  (${via} ${res.cacheKey.slice(0, 12)})  aggregateCER=${res.aggregateCer?.toFixed(4)}`);
     } else {
       console.log(`OK    ${res.label}  aggregateCER=${res.aggregateCer.toFixed(4)}  -> ${path.relative(repoRoot, res.recordPath)}`);
     }
