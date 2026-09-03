@@ -120,6 +120,7 @@ export const GROUPS = {
   // and package.json scripts).
   documentation: [
     'test-documentation-consistency.mjs',
+    'test-read-005-derived-tables.mjs',
   ],
   // Input-validation/XSS hardening checks (layer.id, escapeHtml, renderLayerUI against hostile
   // input).

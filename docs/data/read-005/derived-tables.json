@@ -1,0 +1,846 @@
+{
+  "meta": {
+    "milestone": "READ-005B",
+    "generatedBy": "tools/font-certification/analyze-ratings.mjs",
+    "inputs": [
+      "ratings.csv",
+      "calibration-key.json",
+      "tracking-renders-ratings.csv",
+      "tracking-key.json"
+    ],
+    "causeTags": [
+      "inaccurate",
+      "tooClose",
+      "tooManyStones",
+      "ugly",
+      "extraStones"
+    ]
+  },
+  "session1": {
+    "rowCount": 135,
+    "marginals": {
+      "readable": {
+        "yes": 117,
+        "struggle": 15,
+        "no": 3
+      },
+      "sellable": {
+        "yes": 46,
+        "no": 89
+      }
+    },
+    "raterSelfConsistency": {
+      "n": 15,
+      "readable": 14,
+      "sellable": 13,
+      "both": 12
+    },
+    "rejectionCauses": {
+      "population": 89,
+      "noNote": 5,
+      "noTagMatch": 0,
+      "multiTag": 10,
+      "perTag": {
+        "inaccurate": {
+          "n": 44,
+          "populationSharePct": 49.4
+        },
+        "tooClose": {
+          "n": 25,
+          "populationSharePct": 28.1
+        },
+        "tooManyStones": {
+          "n": 12,
+          "populationSharePct": 13.5
+        },
+        "ugly": {
+          "n": 9,
+          "populationSharePct": 10.1
+        },
+        "extraStones": {
+          "n": 4,
+          "populationSharePct": 4.5
+        }
+      },
+      "distinctNotes": [
+        {
+          "note": "\"V\"  and \"a\" are inaccurate",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "\"V\"  and extra stones below some letters make this inaccurate",
+          "tags": [
+            "inaccurate",
+            "extraStones"
+          ]
+        },
+        {
+          "note": "\"V\" and \"a\" are inaccurate",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "\"V\" inaccurate\n",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "\"V\", \"n\" and \"a\"  are inaccurate",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "\"V\", \"t\" and \"a\" are inaccurate",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "\"a\" and \"e\" are inaccurate",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "\"al\" is inaccurate",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "Letters are too close",
+          "tags": [
+            "tooClose"
+          ]
+        },
+        {
+          "note": "an extra letter ufter \"u\" when on two lines ",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "inaccuarte letters especially \"V\" and \"t\"",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "inaccurate",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "inaccurate  letters",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "inaccurate letters",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "letteres are extremely close",
+          "tags": [
+            "tooClose"
+          ]
+        },
+        {
+          "note": "letters are inaccurate and too close",
+          "tags": [
+            "inaccurate",
+            "tooClose"
+          ]
+        },
+        {
+          "note": "letters are too close",
+          "tags": [
+            "tooClose"
+          ]
+        },
+        {
+          "note": "letters are too close to each other",
+          "tags": [
+            "tooClose"
+          ]
+        },
+        {
+          "note": "letters are too close, \"a\" difficult to read",
+          "tags": [
+            "tooClose"
+          ]
+        },
+        {
+          "note": "letters are too close, \"i\" croosed with \"t', \"a' with \"l\"",
+          "tags": [
+            "inaccurate",
+            "tooClose"
+          ]
+        },
+        {
+          "note": "m looks like double n, extra stone under a and u",
+          "tags": [
+            "inaccurate",
+            "extraStones"
+          ]
+        },
+        {
+          "note": "no spacing between letters",
+          "tags": [
+            "tooClose"
+          ]
+        },
+        {
+          "note": "not equal spacing between letters",
+          "tags": [
+            "tooClose"
+          ]
+        },
+        {
+          "note": "some stones are inside the countour",
+          "tags": [
+            "extraStones"
+          ]
+        },
+        {
+          "note": "too  many stones",
+          "tags": [
+            "tooManyStones"
+          ]
+        },
+        {
+          "note": "too  many strones",
+          "tags": [
+            "tooManyStones"
+          ]
+        },
+        {
+          "note": "too amny stones",
+          "tags": [
+            "tooManyStones"
+          ]
+        },
+        {
+          "note": "too close",
+          "tags": [
+            "tooClose"
+          ]
+        },
+        {
+          "note": "too close, \"i\" intercent \"t\"",
+          "tags": [
+            "inaccurate",
+            "tooClose"
+          ]
+        },
+        {
+          "note": "too close, extra stones",
+          "tags": [
+            "tooClose",
+            "extraStones"
+          ]
+        },
+        {
+          "note": "too close, inaccurate letters",
+          "tags": [
+            "inaccurate",
+            "tooClose"
+          ]
+        },
+        {
+          "note": "too close, too many stones",
+          "tags": [
+            "tooClose",
+            "tooManyStones"
+          ]
+        },
+        {
+          "note": "too little spacing between letters",
+          "tags": [
+            "tooClose"
+          ]
+        },
+        {
+          "note": "too many stones",
+          "tags": [
+            "tooManyStones"
+          ]
+        },
+        {
+          "note": "too may stones, letters look inaccurate",
+          "tags": [
+            "inaccurate",
+            "tooManyStones"
+          ]
+        },
+        {
+          "note": "ugly",
+          "tags": [
+            "ugly"
+          ]
+        }
+      ]
+    },
+    "lettersNamed": [
+      {
+        "letter": "V",
+        "count": 8
+      },
+      {
+        "letter": "a",
+        "count": 7
+      },
+      {
+        "letter": "t",
+        "count": 3
+      },
+      {
+        "letter": "i",
+        "count": 2
+      },
+      {
+        "letter": "e",
+        "count": 1
+      },
+      {
+        "letter": "l",
+        "count": 1
+      },
+      {
+        "letter": "n",
+        "count": 1
+      },
+      {
+        "letter": "u",
+        "count": 1
+      }
+    ],
+    "modeRatio": [
+      {
+        "mode": "outline",
+        "n": 53,
+        "sellable": 32,
+        "sellablePct": 60.4,
+        "bands": {
+          "<20": {
+            "n": 4,
+            "sellable": 0,
+            "sellablePct": 0
+          },
+          "20–25": {
+            "n": 15,
+            "sellable": 9,
+            "sellablePct": 60
+          },
+          "25–30": {
+            "n": 21,
+            "sellable": 12,
+            "sellablePct": 57.1
+          },
+          "30+": {
+            "n": 13,
+            "sellable": 11,
+            "sellablePct": 84.6
+          }
+        }
+      },
+      {
+        "mode": "staggered",
+        "n": 23,
+        "sellable": 2,
+        "sellablePct": 8.7,
+        "bands": {
+          "<20": {
+            "n": 4,
+            "sellable": 0,
+            "sellablePct": 0
+          },
+          "20–25": {
+            "n": 7,
+            "sellable": 0,
+            "sellablePct": 0
+          },
+          "25–30": {
+            "n": 9,
+            "sellable": 1,
+            "sellablePct": 11.1
+          },
+          "30+": {
+            "n": 3,
+            "sellable": 1,
+            "sellablePct": 33.3
+          }
+        }
+      },
+      {
+        "mode": "fill",
+        "n": 20,
+        "sellable": 7,
+        "sellablePct": 35,
+        "bands": {
+          "<20": {
+            "n": 5,
+            "sellable": 0,
+            "sellablePct": 0
+          },
+          "20–25": {
+            "n": 5,
+            "sellable": 3,
+            "sellablePct": 60
+          },
+          "25–30": {
+            "n": 7,
+            "sellable": 3,
+            "sellablePct": 42.9
+          },
+          "30+": {
+            "n": 3,
+            "sellable": 1,
+            "sellablePct": 33.3
+          }
+        }
+      },
+      {
+        "mode": "radial",
+        "n": 20,
+        "sellable": 2,
+        "sellablePct": 10,
+        "bands": {
+          "<20": {
+            "n": 2,
+            "sellable": 0,
+            "sellablePct": 0
+          },
+          "20–25": {
+            "n": 8,
+            "sellable": 1,
+            "sellablePct": 12.5
+          },
+          "25–30": {
+            "n": 6,
+            "sellable": 1,
+            "sellablePct": 16.7
+          },
+          "30+": {
+            "n": 4,
+            "sellable": 0,
+            "sellablePct": 0
+          }
+        }
+      },
+      {
+        "mode": "contour",
+        "n": 19,
+        "sellable": 3,
+        "sellablePct": 15.8,
+        "bands": {
+          "<20": {
+            "n": 4,
+            "sellable": 0,
+            "sellablePct": 0
+          },
+          "20–25": {
+            "n": 6,
+            "sellable": 0,
+            "sellablePct": 0
+          },
+          "25–30": {
+            "n": 5,
+            "sellable": 2,
+            "sellablePct": 40
+          },
+          "30+": {
+            "n": 4,
+            "sellable": 1,
+            "sellablePct": 25
+          }
+        }
+      }
+    ],
+    "scriptFaceBands": {
+      "block": "joined-scripts",
+      "n": 20,
+      "sellable": 8,
+      "sellablePct": 40,
+      "bands": {
+        "<22": {
+          "n": 0,
+          "sellable": 0,
+          "sellablePct": null
+        },
+        "22–26": {
+          "n": 6,
+          "sellable": 0,
+          "sellablePct": 0
+        },
+        "26–29": {
+          "n": 7,
+          "sellable": 3,
+          "sellablePct": 42.9
+        },
+        "29+": {
+          "n": 7,
+          "sellable": 5,
+          "sellablePct": 71.4
+        }
+      }
+    },
+    "interiorFidelity": {
+      "bands": [
+        "15–20",
+        "20–25",
+        "25–30",
+        "30+"
+      ],
+      "groups": [
+        {
+          "modes": [
+            "fill",
+            "staggered",
+            "radial"
+          ],
+          "population": 61,
+          "excludedBelow15": 2,
+          "byBand": {
+            "15–20": {
+              "n": 9,
+              "rejections": 9,
+              "inaccurate": 4,
+              "inaccuratePctOfRejections": 44.4,
+              "inaccuratePctOfRows": 44.4
+            },
+            "20–25": {
+              "n": 20,
+              "rejections": 16,
+              "inaccurate": 12,
+              "inaccuratePctOfRejections": 75,
+              "inaccuratePctOfRows": 60
+            },
+            "25–30": {
+              "n": 22,
+              "rejections": 17,
+              "inaccurate": 11,
+              "inaccuratePctOfRejections": 64.7,
+              "inaccuratePctOfRows": 50
+            },
+            "30+": {
+              "n": 10,
+              "rejections": 8,
+              "inaccurate": 7,
+              "inaccuratePctOfRejections": 87.5,
+              "inaccuratePctOfRows": 70
+            }
+          }
+        },
+        {
+          "modes": [
+            "fill",
+            "staggered",
+            "radial",
+            "contour"
+          ],
+          "population": 78,
+          "excludedBelow15": 4,
+          "byBand": {
+            "15–20": {
+              "n": 11,
+              "rejections": 11,
+              "inaccurate": 4,
+              "inaccuratePctOfRejections": 36.4,
+              "inaccuratePctOfRows": 36.4
+            },
+            "20–25": {
+              "n": 26,
+              "rejections": 22,
+              "inaccurate": 14,
+              "inaccuratePctOfRejections": 63.6,
+              "inaccuratePctOfRows": 53.8
+            },
+            "25–30": {
+              "n": 27,
+              "rejections": 20,
+              "inaccurate": 13,
+              "inaccuratePctOfRejections": 65,
+              "inaccuratePctOfRows": 48.1
+            },
+            "30+": {
+              "n": 14,
+              "rejections": 11,
+              "inaccurate": 8,
+              "inaccuratePctOfRejections": 72.7,
+              "inaccuratePctOfRows": 57.1
+            }
+          }
+        }
+      ]
+    }
+  },
+  "session2": {
+    "rowCount": 75,
+    "perBlock": [
+      {
+        "block": "paired-tracked",
+        "n": 24,
+        "all": {
+          "sellable": 12,
+          "sellablePct": 50
+        },
+        "rated": {
+          "n": 24,
+          "sellable": 12,
+          "sellablePct": 50
+        }
+      },
+      {
+        "block": "paired-control",
+        "n": 24,
+        "all": {
+          "sellable": 3,
+          "sellablePct": 12.5
+        },
+        "rated": {
+          "n": 22,
+          "sellable": 3,
+          "sellablePct": 13.6
+        }
+      },
+      {
+        "block": "specificity",
+        "n": 11,
+        "all": {
+          "sellable": 0,
+          "sellablePct": 0
+        },
+        "rated": {
+          "n": 11,
+          "sellable": 0,
+          "sellablePct": 0
+        }
+      },
+      {
+        "block": "harm",
+        "n": 9,
+        "all": {
+          "sellable": 9,
+          "sellablePct": 100
+        },
+        "rated": {
+          "n": 9,
+          "sellable": 9,
+          "sellablePct": 100
+        }
+      },
+      {
+        "block": "repeats",
+        "n": 7,
+        "all": {
+          "sellable": 3,
+          "sellablePct": 42.9
+        },
+        "rated": {
+          "n": 7,
+          "sellable": 3,
+          "sellablePct": 42.9
+        }
+      }
+    ],
+    "unratedRows": {
+      "count": 2,
+      "rows": [
+        {
+          "slug": "31bd0784",
+          "block": "paired-control",
+          "fontId": "cookie-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "3a742b32",
+          "block": "paired-control",
+          "fontId": "parisienne-regular",
+          "mode": "outline"
+        }
+      ]
+    },
+    "paired": {
+      "trackedCount": 24,
+      "partnersAllInControl": true,
+      "partnersOneToOne": true,
+      "pairs": 24,
+      "evaluablePairs": 22,
+      "excludedPairs": [
+        {
+          "tracked": "41f3c0d3",
+          "control": "3a742b32",
+          "reason": "control 3a742b32 unrated"
+        },
+        {
+          "tracked": "dded3612",
+          "control": "31bd0784",
+          "reason": "control 31bd0784 unrated"
+        }
+      ],
+      "cells": {
+        "trackedYesControlNo": 8,
+        "trackedNoControlYes": 0,
+        "both": 3,
+        "neither": 11
+      },
+      "mcnemar": {
+        "b": 8,
+        "c": 0,
+        "p": 0.0078
+      },
+      "widthCostOnWins": {
+        "n": 8,
+        "medianPct": 25.31,
+        "minPct": 4.38,
+        "maxPct": 51.31,
+        "valuesPct": [
+          4.38,
+          20.95,
+          23.39,
+          24.38,
+          26.24,
+          26.63,
+          34.37,
+          51.31
+        ]
+      },
+      "perModeEvaluable": [
+        {
+          "mode": "contour",
+          "trackedYes": 3,
+          "trackedN": 6,
+          "controlYes": 1,
+          "controlN": 6
+        },
+        {
+          "mode": "fill",
+          "trackedYes": 0,
+          "trackedN": 3,
+          "controlYes": 0,
+          "controlN": 3
+        },
+        {
+          "mode": "outline",
+          "trackedYes": 8,
+          "trackedN": 12,
+          "controlYes": 2,
+          "controlN": 12
+        },
+        {
+          "mode": "staggered",
+          "trackedYes": 0,
+          "trackedN": 1,
+          "controlYes": 0,
+          "controlN": 1
+        }
+      ],
+      "residualComplaints": {
+        "rows": [
+          {
+            "slug": "0835783d",
+            "note": "too many stones",
+            "tags": [
+              "tooManyStones"
+            ]
+          },
+          {
+            "slug": "2d4d2789",
+            "note": "inaccurate",
+            "tags": [
+              "inaccurate"
+            ]
+          },
+          {
+            "slug": "35425638",
+            "note": "inaccurate",
+            "tags": [
+              "inaccurate"
+            ]
+          },
+          {
+            "slug": "4670f182",
+            "note": "inaccurate letters",
+            "tags": [
+              "inaccurate"
+            ]
+          },
+          {
+            "slug": "4dbc35da",
+            "note": "inaccurate",
+            "tags": [
+              "inaccurate"
+            ]
+          },
+          {
+            "slug": "7984c725",
+            "note": "inaccurate",
+            "tags": [
+              "inaccurate"
+            ]
+          },
+          {
+            "slug": "8615921e",
+            "note": "inaccurate",
+            "tags": [
+              "inaccurate"
+            ]
+          },
+          {
+            "slug": "cf61f73c",
+            "note": "inaccurate",
+            "tags": [
+              "inaccurate"
+            ]
+          },
+          {
+            "slug": "d55d24db",
+            "note": "too close",
+            "tags": [
+              "tooClose"
+            ]
+          },
+          {
+            "slug": "e2920ba8",
+            "note": "different spacing between letters",
+            "tags": [
+              "tooClose"
+            ]
+          },
+          {
+            "slug": "e930afc5",
+            "note": "too close",
+            "tags": [
+              "tooClose"
+            ]
+          }
+        ],
+        "perTag": {
+          "inaccurate": 7,
+          "tooClose": 3,
+          "tooManyStones": 1,
+          "ugly": 0,
+          "extraStones": 0
+        },
+        "noTag": 0
+      },
+      "trackedSeparationNotAchieved": {
+        "count": 2,
+        "slugs": [
+          "4670f182",
+          "e0aed570"
+        ]
+      }
+    }
+  }
+}
