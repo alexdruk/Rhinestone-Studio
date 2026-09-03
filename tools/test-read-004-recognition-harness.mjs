@@ -295,4 +295,33 @@ await test('9. runProbe() for rs-block returns a record with passing signal A, n
   assert.equal(probe.signalF, null, 'signalF must be null for a font with no vector outline — not a thrown error');
 });
 
+// --- 10. Part A: analyzeOne() forwards letterSpacingMm to generateTextLayout() ----------------
+// READ-005 tracking experiment. analyzeOne() built its own params object and never passed
+// letterSpacingMm, so the whole experiment's measurements were silently taken at zero tracking.
+// A "does not throw" assertion would not have caught that — this checks the layout actually
+// widens and the stones actually move.
+
+await test('10. analyzeOne() with letterSpacingMm: 3 returns a wider layout with shifted stone positions', async () => {
+  const args = ['anton-regular', 'Emmanuel', 'ss10', 60];
+  const base = await analyzeOne(engine, ...args, { mode: 'outline' });
+  const spaced = await analyzeOne(engine, ...args, { mode: 'outline', letterSpacingMm: 3 });
+
+  assert.equal(base.error, null);
+  assert.equal(spaced.error, null);
+  // "Emmanuel" is 8 glyphs → 7 inter-glyph gaps → +21mm of pen advance.
+  assert.ok(
+    spaced.boundingBoxMm.widthMm > base.boundingBoxMm.widthMm + 15,
+    `expected width to grow by ~21mm, got ${base.boundingBoxMm.widthMm} → ${spaced.boundingBoxMm.widthMm}`
+  );
+  // Outline sampling is per-glyph, so the stone count is unchanged but every glyph past the first
+  // is translated — the position lists must not be identical.
+  assert.equal(spaced.stoneCount, base.stoneCount, 'tracking shifts stones, it does not add or remove them');
+  assert.notDeepEqual(spaced.stones, base.stones, 'stone positions must change when tracking is applied');
+
+  // And undefined must remain byte-identical to omitting the option entirely.
+  const omitted = await analyzeOne(engine, ...args, { mode: 'outline' });
+  const explicitUndefined = await analyzeOne(engine, ...args, { mode: 'outline', letterSpacingMm: undefined });
+  assert.deepEqual(explicitUndefined.stones, omitted.stones, 'letterSpacingMm: undefined folds to zero tracking');
+});
+
 console.log('READ-004 recognition harness tests passed.');
