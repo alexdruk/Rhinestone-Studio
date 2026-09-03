@@ -1,10 +1,15 @@
-# READ-005A — Calibration findings from 210 blind human ratings
+# READ-005A — Calibration findings from 208 blind human ratings
 
 Status: **findings of record.** Supersedes `docs/specifications/READ-005-SweepAndFloors.md` §1.2,
 §3.2, §3.4, §4.2, §4.3 and §7. That document is kept unrewritten per this repo's convention of
 preserving superseded findings (cf. `RS-3001-drawing-board-integration.md`).
 
 Measured against `develop` at `6358727`. Where this document and the code disagree, the code wins.
+
+Every quantity in §2, §3, §4.3, §4.5 and §4.6 is recomputed from `docs/data/read-005/` by
+`tools/font-certification/analyze-ratings.mjs` and frozen in `docs/data/read-005/derived-tables.json`,
+which `tools/test-read-005-derived-tables.mjs` asserts on every run. Where this document and that
+file disagree, the file wins and this document is stale.
 
 ## 1. What READ-005a built
 
@@ -30,18 +35,26 @@ Marginals: readable 117 yes / 15 struggle / 3 no. Sellable 46 yes / 89 no.
 Rater self-consistency from 15 hidden repeats: readable 14/15, sellable 13/15, both 12/15. So ~13% is
 the noise floor on the sell axis; no signal can be judged better than ~87%.
 
-Rejection causes, of 89 `sell=no`. All 46 sellable rows carried no note; notes were used only to
-record failure.
+Rejection causes over the 89 `sell=no` rows. All 46 sellable rows carried no note; notes were used
+only to record failure. The classifier is **multi-label** — 10 rows name more than one cause — so the
+counts below do not sum to 89 and the shares do not sum to 100%. Five of the 89 rows carry no note at
+all; no note failed to match a tag.
 
-| cause | n | share |
+| cause | n | share of 89 |
 |---|---:|---:|
-| inaccurate letterforms | 39 | 44% |
-| letters too close | 25 | 28% |
-| too many stones | 10 | 11% |
-| ugly | 9 | 10% |
-| extra stones | 4 | 4% |
+| inaccurate letterforms | 44 | 49.4% |
+| letters too close | 25 | 28.1% |
+| too many stones | 12 | 13.5% |
+| ugly | 9 | 10.1% |
+| extra stones | 4 | 4.5% |
 
-Letters named in the notes: V (8), a (7), t (3), i (2).
+The classifier is a keyword matcher over free text and is typo-tolerant by design ("too amny stones",
+"inaccuarte"). It is deliberately coarse: "not equal spacing between letters" is filed under "letters
+too close" although it is an evenness complaint rather than a crowding one, and a clause like "'a'
+difficult to read" attached to a crowding note contributes nothing. The exact rules and the tag set
+assigned to every distinct note string are in `analyze-ratings.mjs` and its markdown report.
+
+Letters named in the notes: V (8), a (7), t (3), i (2), and one mention each of e, l, n and u.
 
 ## 3. Session 2 — the tracking experiment, 75 paired renders
 
@@ -53,26 +66,35 @@ tracking reaching `separationRatio >= 0.95` — with pair members ≥15 position
 specificity block (cases rejected as "inaccurate", tracked) and a harm block (already-sellable cases,
 tracked).
 
+Two of the 24 control renders were never rated (`3a742b32`, parisienne-regular outline; `31bd0784`,
+cookie-regular outline), so their pairs are not evaluable. The table below is over the remaining 22
+pairs.
+
 | | n |
 |---|---:|
 | tracked sellable, control not | 8 |
 | tracked not, control sellable | 0 |
-| both | 2 |
-| neither | 10 |
+| both | 3 |
+| neither | 11 |
 
-McNemar exact two-sided p = 0.0078. Block level: control 13% sellable, tracked 50%.
+McNemar exact two-sided p = 0.0078 (b=8, c=0). Block level: tracked 50% sellable (12/24), control
+13.6% (3/22 rated; 12.5% if the two unrated rows are counted as failures).
 
 All three controls behave:
 
-- **Drift** — the control block (identical cases, zero tracking) came back 13% sellable, matching the
-  independently measured 13% self-inconsistency exactly.
+- **Drift** — the control block (identical cases, zero tracking) came back 3 of 22 rated, 13.6%,
+  against an independently measured sellable self-inconsistency of 2 of 15, 13.3%. The control block
+  reproduces the rater's own noise floor to within half a point, which is as close as 22 and 15
+  observations can resolve.
 - **Specificity** — 0 of 11. Tracking rescued no "inaccurate" case.
 - **Harm** — 9 of 9 still sellable. Tracking broke nothing.
 
-Cost: median +26% width on the eight fixes (range +4.4% to +51.3%). Effect concentrated in outline
-(tracked 8/12 vs control 2/14) and contour (3/6 vs 1/6). Residual complaint on the ten tracking did
-not fix: 7 "inaccurate", 1 "too many stones", 2 still crowded — tracking removed the crowding and
-exposed the fidelity defect underneath.
+Cost: median +25.3% width on the eight fixes (range +4.4% to +51.3%). Effect concentrated in outline
+(tracked 8/12 vs control 2/12) and contour (3/6 vs 1/6); fill was 0/3 both ways and staggered 0/1.
+Two of the 24 tracked renders never reached `separationRatio >= 0.95` even at the maximum tracking
+tried. Residual complaint on the eleven tracked members still rejected: 7 "inaccurate", 3 still
+crowded, 1 "too many stones" — tracking removed the crowding and exposed the fidelity defect
+underneath.
 
 ## 4. Findings that were expensive to obtain
 
@@ -103,6 +125,11 @@ Caveat: only 10 of 70 non-script renders sit below ratio 20, so the comparison i
 | radial | 20 | 10% | 0% | 13% | 17% | 0% |
 | staggered | 23 | 9% | 0% | 0% | 11% | 33% |
 
+Several cells rest on very few observations: staggered 30+ is 1 of 3, radial 20–25 is 1 of 8, contour
+30+ is 1 of 4, staggered 25–30 is 1 of 9, and fill 30+ is 1 of 3. Per-band counts for every cell are
+in `derived-tables.json`. The mode totals (n=53, 23, 20, 20, 19) carry the weight here; the band
+percentages are indicative only.
+
 Fill peaks at 20–25 and declines — a band, not a floor, which READ-000's monotone-in-ratio assumption
 cannot express. Staggered and radial never clear ~15% at any ratio.
 
@@ -113,15 +140,22 @@ clearly the best mode, and READ-000's original instinct to treat it as the basel
 
 ### 4.5 Joined scripts are sellable at high ratio
 
-8 of 20 (40%), all with `separationRatio` 0.13–0.50. Script faces by ratio band: 7% (<22), 12%
-(22–26), 27% (26–29), 42% (29–32). READ-005 §3.2's fixed-denominator decision would have marked
-eleven faces unsupported and deleted a sellable class. Within scripts F does not discriminate at all
-(Great Vibes sells at sep 0.13; Cookie fails at 0.13).
+8 of 20 (40%), all with `separationRatio` 0.13–0.50. Script faces by ratio band: no rows below 22,
+then 0% (0 of 6) at 22–26, 42.9% (3 of 7) at 26–29, and 71.4% (5 of 7) at 29 and above. READ-005
+§3.2's fixed-denominator decision would have marked eleven faces unsupported and deleted a sellable
+class. Within scripts F does not discriminate at all (Great Vibes sells at sep 0.13; Cookie fails at
+0.13).
 
-### 4.6 The dominant defect is ratio-invariant and has now defeated six metrics
+### 4.6 The dominant defect gets worse with ratio and has now defeated six metrics
 
-"Inaccurate" is 44% of rejections and does not fall with ratio — interior modes read 36% / 46% / 44% /
-50% across ratio bands 15–20 / 20–25 / 25–30 / 30–32.
+"Inaccurate" is the largest single rejection cause at 44 of 89, and its share of rejections **rises**
+with ratio rather than staying flat. Across fill, staggered and radial it runs 44.4% / 75% / 64.7% /
+87.5% of rejections over ratio bands 15–20 / 20–25 / 25–30 / 30+; folding in contour gives 36.4% /
+63.6% / 65% / 72.7%. Rows below ratio 15 are excluded and reported separately.
+
+This is stronger than the earlier claim that the defect is ratio-invariant, and it is the reason no
+height floor can reach it: raising the ratio strips away the crowding and stone-count complaints and
+leaves fidelity as very nearly the only defect standing.
 
 Tried and failed: shape fidelity; stones-across-stroke; topology (READ-000 §1.3); **coverage
 deficit**, which runs backwards (0.394 for inaccurate vs 0.466 for not, and staggered has the best
@@ -198,4 +232,7 @@ rejections stays unmeasured.
 
 `docs/data/read-005/` — the two rating CSVs, their two blind keys, and the F+A ladder, with a
 checksum manifest. `tools/font-certification/output/read-005/` remains canonical for tooling and
-remains gitignored; the PNG render sets are not archived.
+remains gitignored; the PNG render sets are not archived. `derived-tables.json` in the same directory
+holds every computed table in this document, regenerated by
+`node tools/font-certification/analyze-ratings.mjs --write` and guarded by
+`tools/test-read-005-derived-tables.mjs`.
