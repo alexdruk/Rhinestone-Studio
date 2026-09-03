@@ -246,6 +246,7 @@ export function assembleRecord({ probeRecord, modelId, sheets }) {
     signalA: probeRecord.signalA,
     oracleRequired: probeRecord.oracleRequired,
     signalD: probeRecord.signalD,
+    signalF: probeRecord.signalF ?? null,
     measurements: slimMeasurements(probeRecord.measurements),
     sheets: sheets.map((s) => ({
       index: s.index,

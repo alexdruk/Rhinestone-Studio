@@ -275,4 +275,24 @@ await test('8. runRecognitionCase() for cinzel-regular / radial / 56 / ss16 retu
   assert.ok(Array.isArray(res.reasons) && /narrower than one/.test(res.reasons[0]));
 });
 
+// --- 9. signal F on an authored rhinestone font never throws (READ-005a-2 Fix 1) -------------
+
+await test('9. runProbe() for rs-block returns a record with passing signal A, non-null measurements, and signalF === null', async () => {
+  const rsBlock = fontsById.get('rs-block');
+  const probe = await runProbe({
+    engine,
+    fontId: 'rs-block',
+    providerId: rsBlock.providerId, // 'rhinestone' — authored stone centers, no vector outline
+    stemWidthRatio: rsBlock.stemWidthRatio, // undefined — the stroke check no-ops, exactly like the live app
+    mode: 'fill',
+    heightMm: 28,
+    stoneSizeId: 'ss10',
+    corpus: 'full' // includes multi-character STRESS_STRINGS, so the signal-F path is exercised
+  });
+
+  assert.equal(probe.signalA.passed, true, 'rs-block must pass signal A (D-1 fix, READ-005a-1)');
+  assert.ok(Array.isArray(probe.measurements) && probe.measurements.length > 0, 'measurements must be present');
+  assert.equal(probe.signalF, null, 'signalF must be null for a font with no vector outline — not a thrown error');
+});
+
 console.log('READ-004 recognition harness tests passed.');
