@@ -6,7 +6,7 @@ preserving superseded findings (cf. `RS-3001-drawing-board-integration.md`).
 
 Measured against `develop` at `6358727`. Where this document and the code disagree, the code wins.
 
-Every quantity in §2, §3, §4.3, §4.5 and §4.6 is recomputed from `docs/data/read-005/` by
+Every quantity in §2, §3, §4.3, §4.5, §4.6 and §7 item 2 is recomputed from `docs/data/read-005/` by
 `tools/font-certification/analyze-ratings.mjs` and frozen in `docs/data/read-005/derived-tables.json`,
 which `tools/test-read-005-derived-tables.mjs` asserts on every run. Where this document and that
 file disagree, the file wins and this document is stale.
@@ -125,13 +125,13 @@ Caveat: only 10 of 70 non-script renders sit below ratio 20, so the comparison i
 | radial | 20 | 10% | 0% | 13% | 17% | 0% |
 | staggered | 23 | 9% | 0% | 0% | 11% | 33% |
 
+Fill peaks at 20–25 and declines — a band, not a floor, which READ-000's monotone-in-ratio assumption
+cannot express. Staggered and radial never clear ~15% at any ratio.
+
 Several cells rest on very few observations: staggered 30+ is 1 of 3, radial 20–25 is 1 of 8, contour
 30+ is 1 of 4, staggered 25–30 is 1 of 9, and fill 30+ is 1 of 3. Per-band counts for every cell are
 in `derived-tables.json`. The mode totals (n=53, 23, 20, 20, 19) carry the weight here; the band
 percentages are indicative only.
-
-Fill peaks at 20–25 and declines — a band, not a floor, which READ-000's monotone-in-ratio assumption
-cannot express. Staggered and radial never clear ~15% at any ratio.
 
 ### 4.4 Outline is the best mode, not the worst
 
@@ -219,7 +219,7 @@ rejections stays unmeasured.
    tracking that reaches `separationRatio >= 0.95`, bounded by the printable area. This must interact
    sanely with `autoFit` and `isTextOutsidePrintableArea()` in `app.js`: tracking trades width, autoFit
    trades height. Highest-value validated work available.
-2. **The fidelity defect.** the largest rejection cause at 44 of 89, rising with ratio rather than
+2. **The fidelity defect.** The largest rejection cause at 44 of 89, rising with ratio rather than
    flat, six metrics defeated, and overwhelmingly concentrated in staggered, where 19 of 23 renders
    and 19 of 21 rejections carry the tag, against 4 of 53 for outline. Probably a geometry problem in
    the interior samplers rather than a readability problem. One concrete reproducible case:

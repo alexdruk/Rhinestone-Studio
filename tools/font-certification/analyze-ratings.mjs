@@ -608,6 +608,13 @@ function renderMarkdown(data) {
     L.push(`| ${m.mode} | ${m.n} | ${m.sellablePct}% | ${cell('<20')} | ${cell('20–25')} | ${cell('25–30')} | ${cell('30+')} |`);
   }
 
+  L.push('\n### Inaccurate-tag load by mode\n');
+  L.push('| mode | n | rejections | inaccurate |');
+  L.push('|---|---:|---:|---:|');
+  for (const m of s1.inaccurateByMode) {
+    L.push(`| ${m.mode} | ${m.n} | ${m.sellNo} | ${m.inaccurate} |`);
+  }
+
   L.push('\n### Script-face bands (block = joined-scripts)\n');
   L.push(`n=${s1.scriptFaceBands.n}, sellable ${s1.scriptFaceBands.sellable}/${s1.scriptFaceBands.n} (${s1.scriptFaceBands.sellablePct}%)\n`);
   L.push('| band | n | sellable | % |');
