@@ -117,7 +117,7 @@ export function normalizedStonePoints(stones) {
  * arbitrary glyphs/phrases rather than the fixed PRODUCTION_REVIEW_GLYPHS/WORDS corpus -- reuse
  * this one measurement function against the real, unmodified pipeline instead of re-deriving it.
  */
-export async function analyzeOne(engine, fontId, text, stoneSizeId, heightMm, { mode = 'outline', gapMm = PRODUCTION_GAP_MM, curve = null, providerId = undefined } = {}) {
+export async function analyzeOne(engine, fontId, text, stoneSizeId, heightMm, { mode = 'outline', gapMm = PRODUCTION_GAP_MM, curve = null, providerId = undefined, letterSpacingMm = undefined } = {}) {
   const stoneSizeMm = STONE_SIZE_BY_ID[stoneSizeId].diameterMm;
   const pitchMm = stoneSizeMm + gapMm;
   let layout = null;
@@ -136,6 +136,11 @@ export async function analyzeOne(engine, fontId, text, stoneSizeId, heightMm, { 
       heightMm,
       stoneSizeMm,
       gapMm,
+      // READ-005 tracking experiment: added inter-glyph spacing, in mm. `analyzeOne()` built its
+      // own params object and never forwarded this, so callers passing it were silently ignored.
+      // When undefined, normalizeTextParams() folds it to 0 (assertFiniteNumber(x ?? 0)) — byte-
+      // identical to omitting it, so every pre-existing call site is unaffected.
+      letterSpacingMm,
       mode,
       color: 'gold',
       // READ-004: curve, when non-null, spreads the exact curve fields app.js's
