@@ -466,6 +466,38 @@
         }
       }
     ],
+    "inaccurateByMode": [
+      {
+        "mode": "outline",
+        "n": 53,
+        "sellNo": 21,
+        "inaccurate": 4
+      },
+      {
+        "mode": "staggered",
+        "n": 23,
+        "sellNo": 21,
+        "inaccurate": 19
+      },
+      {
+        "mode": "fill",
+        "n": 20,
+        "sellNo": 13,
+        "inaccurate": 8
+      },
+      {
+        "mode": "radial",
+        "n": 20,
+        "sellNo": 18,
+        "inaccurate": 8
+      },
+      {
+        "mode": "contour",
+        "n": 19,
+        "sellNo": 16,
+        "inaccurate": 5
+      }
+    ],
     "scriptFaceBands": {
       "block": "joined-scripts",
       "n": 20,

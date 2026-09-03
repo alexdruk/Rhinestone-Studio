@@ -98,7 +98,7 @@ underneath.
 
 ## 4. Findings that were expensive to obtain
 
-These cost 210 human ratings. Do not re-derive or contradict them without new data.
+These cost 208 human ratings. Do not re-derive or contradict them without new data.
 
 ### 4.1 Signal E dominates; signal B barely discriminates
 
@@ -219,12 +219,13 @@ rejections stays unmeasured.
    tracking that reaches `separationRatio >= 0.95`, bounded by the printable area. This must interact
    sanely with `autoFit` and `isTextOutsidePrintableArea()` in `app.js`: tracking trades width, autoFit
    trades height. Highest-value validated work available.
-2. **The fidelity defect.** 44% of rejections, ratio-invariant, six metrics defeated, concentrated in
-   staggered (18 of 23 renders) and radial. Probably a geometry problem in the interior samplers
-   rather than a readability problem. One concrete reproducible case: `cinzel-regular` / radial /
-   ratio 31.5 / 88.2mm / "Emmanuel", where the rater noted an extra letter appearing after "u" when
-   set on two lines. Likely related to the READ-002 backlog item on `sampleRadialFieldFillPoints()`
-   still using a single whole-placement anchor.
+2. **The fidelity defect.** the largest rejection cause at 44 of 89, rising with ratio rather than
+   flat, six metrics defeated, and overwhelmingly concentrated in staggered, where 19 of 23 renders
+   and 19 of 21 rejections carry the tag, against 4 of 53 for outline. Probably a geometry problem in
+   the interior samplers rather than a readability problem. One concrete reproducible case:
+   `cinzel-regular` / radial / ratio 31.5 / 88.2mm / "Emmanuel", where the rater noted an extra
+   letter appearing after "u" when set on two lines. Likely related to the READ-002 backlog item on
+   `sampleRadialFieldFillPoints()` still using a single whole-placement anchor.
 3. **A product decision on staggered and radial** (9% and 10% sellable at every ratio tested): fix the
    geometry, or stop offering them for text.
 
