@@ -146,7 +146,21 @@ function bandOf(value, bands) {
   return null;
 }
 
-function bandTable(rows, bands) {
+// Assert that a set of band counts accounts for exactly `population` rows, and throw loudly if
+// not. Every banded table in this file is a partition of a declared population — a row that lands
+// in no band (as a ratio of exactly 32.0 did before the script-face top band was made open-ended)
+// is a bug in the band edges, not something to swallow silently.
+function assertBandSum(bandRows, population, label) {
+  const sum = bandRows.reduce((acc, b) => acc + b.n, 0);
+  if (sum !== population) {
+    throw new Error(
+      `${label}: band counts sum to ${sum} but the table population is ${population} ` +
+      `(${population - sum} row(s) fall outside every band)`,
+    );
+  }
+}
+
+function bandTable(rows, bands, label) {
   // rows: [{ ratio, sellable(boolean) }]
   const out = {};
   for (const band of bands) {
@@ -154,6 +168,7 @@ function bandTable(rows, bands) {
     const k = inBand.filter((r) => r.sellable).length;
     out[band.label] = { n: inBand.length, sellable: k, sellablePct: pct(k, inBand.length) };
   }
+  assertBandSum(Object.values(out), rows.length, label);
   return out;
 }
 
@@ -168,7 +183,16 @@ const SCRIPT_BANDS = [
   { label: '<22', lo: -Infinity, hi: 22 },
   { label: '22–26', lo: 22, hi: 26 },
   { label: '26–29', lo: 26, hi: 29 },
-  { label: '29–32', lo: 29, hi: 32 },
+  { label: '29+', lo: 29, hi: Infinity },
+];
+
+// The interior-mode fidelity cut (findings §4.6) is scoped to ratio >= 15; rows below that are
+// reported separately as `excludedBelow15` and are not part of this table's population.
+const INTERIOR_BANDS = [
+  { label: '15–20', lo: 15, hi: 20 },
+  { label: '20–25', lo: 20, hi: 25 },
+  { label: '25–30', lo: 25, hi: 30 },
+  { label: '30+', lo: 30, hi: Infinity },
 ];
 
 // --- session 1 --------------------------------------------------------------------------------
@@ -257,7 +281,7 @@ function computeSession1(ratings, key) {
         n: rows.length,
         sellable: k,
         sellablePct: pct(k, rows.length),
-        bands: bandTable(rows, MODE_BANDS),
+        bands: bandTable(rows, MODE_BANDS, `session1.modeRatio[${mode}].bands`),
       };
     });
 
@@ -266,6 +290,46 @@ function computeSession1(ratings, key) {
     .filter((r) => key[r.slug].block === 'joined-scripts')
     .map((r) => ({ ratio: key[r.slug].ratio, sellable: r.sellable === 'yes' }));
   const scriptK = scriptRows.filter((x) => x.sellable).length;
+
+  // Interior-mode fidelity cut (findings §4.6): for two mode groups, per ratio band, how much of
+  // the rejection load carries the `inaccurate` tag. Scoped to ratio >= 15.
+  const interiorRow = (r) => ({
+    ratio: key[r.slug].ratio,
+    mode: key[r.slug].mode,
+    sellNo: r.sellable === 'no',
+    inaccurate: classifyNote(r.notes ?? '').includes('inaccurate'),
+  });
+  const interiorGroup = (modes) => {
+    const rows = ratings.filter((r) => modes.includes(key[r.slug].mode)).map(interiorRow);
+    const inRange = rows.filter((r) => r.ratio >= 15);
+    const byBand = {};
+    for (const band of INTERIOR_BANDS) {
+      const b = inRange.filter((r) => bandOf(r.ratio, INTERIOR_BANDS) === band.label);
+      const rejections = b.filter((r) => r.sellNo).length;
+      const inaccurate = b.filter((r) => r.sellNo && r.inaccurate).length;
+      byBand[band.label] = {
+        n: b.length,
+        rejections,
+        inaccurate,
+        inaccuratePctOfRejections: pct(inaccurate, rejections),
+        inaccuratePctOfRows: pct(inaccurate, b.length),
+      };
+    }
+    assertBandSum(Object.values(byBand), inRange.length, `session1.interiorFidelity[${modes.join('+')}]`);
+    return {
+      modes,
+      population: inRange.length,
+      excludedBelow15: rows.length - inRange.length,
+      byBand,
+    };
+  };
+  const interiorFidelity = {
+    bands: INTERIOR_BANDS.map((b) => b.label),
+    groups: [
+      interiorGroup(['fill', 'staggered', 'radial']),
+      interiorGroup(['fill', 'staggered', 'radial', 'contour']),
+    ],
+  };
 
   return {
     rowCount: ratings.length,
@@ -286,8 +350,9 @@ function computeSession1(ratings, key) {
       n: scriptRows.length,
       sellable: scriptK,
       sellablePct: pct(scriptK, scriptRows.length),
-      bands: bandTable(scriptRows, SCRIPT_BANDS),
+      bands: bandTable(scriptRows, SCRIPT_BANDS, 'session1.scriptFaceBands.bands'),
     },
+    interiorFidelity,
   };
 }
 
@@ -522,9 +587,23 @@ function renderMarkdown(data) {
   L.push(`n=${s1.scriptFaceBands.n}, sellable ${s1.scriptFaceBands.sellable}/${s1.scriptFaceBands.n} (${s1.scriptFaceBands.sellablePct}%)\n`);
   L.push('| band | n | sellable | % |');
   L.push('|---|---:|---:|---:|');
-  for (const label of ['<22', '22–26', '26–29', '29–32']) {
+  for (const label of ['<22', '22–26', '26–29', '29+']) {
     const b = s1.scriptFaceBands.bands[label];
     L.push(`| ${label} | ${b.n} | ${b.sellable} | ${b.sellablePct === null ? '—' : b.sellablePct + '%'} |`);
+  }
+
+  L.push('\n### Interior-mode fidelity cut (ratio >= 15)\n');
+  for (const g of s1.interiorFidelity.groups) {
+    L.push(`**${g.modes.join(' + ')}** — population ${g.population}, excluded below ratio 15: ${g.excludedBelow15}\n`);
+    L.push('| band | n | rejections | inaccurate | share of rejections | share of rows |');
+    L.push('|---|---:|---:|---:|---:|---:|');
+    for (const label of s1.interiorFidelity.bands) {
+      const b = g.byBand[label];
+      const pr = b.inaccuratePctOfRejections === null ? '—' : b.inaccuratePctOfRejections + '%';
+      const pw = b.inaccuratePctOfRows === null ? '—' : b.inaccuratePctOfRows + '%';
+      L.push(`| ${label} | ${b.n} | ${b.rejections} | ${b.inaccurate} | ${pr} | ${pw} |`);
+    }
+    L.push('');
   }
 
   L.push('\n## Session 2 — tracking experiment\n');

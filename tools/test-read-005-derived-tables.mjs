@@ -83,6 +83,36 @@ await test('5. this file is registered in tools/test-groups.mjs (documentation g
   });
 });
 
+await test('6. every banded table partitions its declared population (band counts sum exactly)', () => {
+  const data = computeAll();
+  const sumBands = (bands) => Object.values(bands).reduce((acc, b) => acc + b.n, 0);
+  const checks = [];
+
+  for (const m of data.session1.modeRatio) {
+    checks.push([`session1.modeRatio[${m.mode}].bands`, sumBands(m.bands), m.n]);
+  }
+  checks.push([
+    'session1.scriptFaceBands.bands',
+    sumBands(data.session1.scriptFaceBands.bands),
+    data.session1.scriptFaceBands.n,
+  ]);
+  for (const g of data.session1.interiorFidelity.groups) {
+    checks.push([
+      `session1.interiorFidelity[${g.modes.join('+')}]`,
+      sumBands(g.byBand),
+      g.population,
+    ]);
+  }
+
+  assert.ok(checks.length >= 7, `expected to find several banded tables, found ${checks.length}`);
+  for (const [label, sum, population] of checks) {
+    assert.equal(sum, population, `${label}: band counts sum to ${sum}, population is ${population}`);
+  }
+
+  // The script-face top band must be open-ended: a ratio of exactly 32.0 belongs in it.
+  assert.ok('29+' in data.session1.scriptFaceBands.bands, 'script-face top band should be "29+"');
+});
+
 if (process.exitCode === 1) {
   console.error('\nREAD-005 derived-tables check FAILED.');
 } else {

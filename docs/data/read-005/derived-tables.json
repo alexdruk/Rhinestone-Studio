@@ -487,12 +487,101 @@
           "sellable": 3,
           "sellablePct": 42.9
         },
-        "29–32": {
-          "n": 6,
-          "sellable": 4,
-          "sellablePct": 66.7
+        "29+": {
+          "n": 7,
+          "sellable": 5,
+          "sellablePct": 71.4
         }
       }
+    },
+    "interiorFidelity": {
+      "bands": [
+        "15–20",
+        "20–25",
+        "25–30",
+        "30+"
+      ],
+      "groups": [
+        {
+          "modes": [
+            "fill",
+            "staggered",
+            "radial"
+          ],
+          "population": 61,
+          "excludedBelow15": 2,
+          "byBand": {
+            "15–20": {
+              "n": 9,
+              "rejections": 9,
+              "inaccurate": 4,
+              "inaccuratePctOfRejections": 44.4,
+              "inaccuratePctOfRows": 44.4
+            },
+            "20–25": {
+              "n": 20,
+              "rejections": 16,
+              "inaccurate": 12,
+              "inaccuratePctOfRejections": 75,
+              "inaccuratePctOfRows": 60
+            },
+            "25–30": {
+              "n": 22,
+              "rejections": 17,
+              "inaccurate": 11,
+              "inaccuratePctOfRejections": 64.7,
+              "inaccuratePctOfRows": 50
+            },
+            "30+": {
+              "n": 10,
+              "rejections": 8,
+              "inaccurate": 7,
+              "inaccuratePctOfRejections": 87.5,
+              "inaccuratePctOfRows": 70
+            }
+          }
+        },
+        {
+          "modes": [
+            "fill",
+            "staggered",
+            "radial",
+            "contour"
+          ],
+          "population": 78,
+          "excludedBelow15": 4,
+          "byBand": {
+            "15–20": {
+              "n": 11,
+              "rejections": 11,
+              "inaccurate": 4,
+              "inaccuratePctOfRejections": 36.4,
+              "inaccuratePctOfRows": 36.4
+            },
+            "20–25": {
+              "n": 26,
+              "rejections": 22,
+              "inaccurate": 14,
+              "inaccuratePctOfRejections": 63.6,
+              "inaccuratePctOfRows": 53.8
+            },
+            "25–30": {
+              "n": 27,
+              "rejections": 20,
+              "inaccurate": 13,
+              "inaccuratePctOfRejections": 65,
+              "inaccuratePctOfRows": 48.1
+            },
+            "30+": {
+              "n": 14,
+              "rejections": 11,
+              "inaccurate": 8,
+              "inaccuratePctOfRejections": 72.7,
+              "inaccuratePctOfRows": 57.1
+            }
+          }
+        }
+      ]
     }
   },
   "session2": {
