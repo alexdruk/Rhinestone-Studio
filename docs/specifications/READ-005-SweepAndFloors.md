@@ -204,21 +204,46 @@ exists and signal B cannot see (§1.3).
 For a layout of text `T` at `(fontId, mode, heightMm, stoneSizeId, gapMm, curve)`:
 
 ```
-pitchMm         = stoneSizeMm + gapMm
-clusterCount    = |union-find over stones, edge when centre distance <= 1.6 * pitchMm|
-componentCount  = |groupPolygonsIntoComponents(resolveTextPolygons(T, fontId, heightMm, curve))|
-separationRatio = clusterCount / componentCount
+pitchMm            = stoneSizeMm + gapMm
+clusterCount       = |union-find over stones, edge when centre distance <= 1.6 * pitchMm|
+expectedComponents = sum over non-whitespace characters c of T of
+                       |overlap-grouped components of c rendered ALONE|
+separationRatio    = clusterCount / expectedComponents
 ```
 
-`clusterCount` is already computed and returned by `analyzeOne()`; no new geometry is introduced.
-`groupPolygonsIntoComponents()` is READ-002's even-odd-nesting component splitter, exported from
-`src/geometry/index.js`.
+`clusterCount` is already computed and returned by `analyzeOne()` at exactly this threshold
+(`CLUSTER_GAP_MULTIPLIER = 1.6`); no new stone geometry is introduced.
 
-Signal F **passes** when `separationRatio >= F_SEPARATION_THRESHOLD`.
+Signal F **passes** when `min(separationRatio over all multi-character corpus entries) >=
+F_SEPARATION_THRESHOLD`. The minimum governs because one merged letter pair spoils the design.
 
 `F_SEPARATION_THRESHOLD` is **provisionally 0.65** — the midpoint of the observed gap, sellable
 cases at 0.80/1.00/1.10 against non-sellable A-passing cases at 0.10–0.50. **The committed value is
-set in Step 4 from the held-out block (§6), not from the twelve cases that suggested it.**
+set in Step 4 from the held-out block (§5), not from the twelve cases that suggested it.**
+
+**Why the denominator is a per-character sum.** Two simpler definitions were measured across 29
+fonts × 2 texts and both are systematically wrong:
+
+- *Even-odd nesting* (`groupPolygonsIntoComponents()`) **over-counts**, because many faces ship
+  glyphs as multiple unmerged, overlapping contours. `cinzel-regular` reports 45 components for
+  `"Vitalina"` and 58 for `"Emmanuel"` where the answer is 8; `baloo2-variable-regular` reports
+  17/25, `montserrat-regular` 13/10, `playfair-display-regular` 12/11. A denominator inflated 5.6×
+  drives `separationRatio` toward zero and would push those fonts to "unsupported at any ratio".
+- *Whole-word overlap grouping* **under-counts**, because it merges letters that touch. Every joined
+  script collapses — `great-vibes-regular` to 4/2, `pacifico-regular` and `parisienne-regular` to
+  3/1, `cookie-regular` to 4/1 — and even `courier-prime-regular` drops to 7 on `"Emmanuel"` where
+  the `mm` pair meets. Since merging is precisely what signal F exists to detect, a denominator that
+  absorbs it is self-defeating: it would have let `great-vibes-regular` pass at ratio 21.3, against
+  its human rating, silently reversing §3.2.
+
+The per-character sum is correct on every font measured, with no per-font flag. Isolating the
+character removes neighbour merging (so joined scripts score 10 and 8) while still merging a single
+glyph's own overlapping contours (so Cinzel's `V` counts once, not four times). It is also
+automatically case-aware: all-caps faces score `"Vitalina"` as 8, because `i` renders as `I` with no
+dot, which is the right answer for those faces and not obtainable from the string alone.
+
+Semantically it is the count of separate blobs the word *should* have if no letters merged — the
+correct denominator for a merge detector.
 
 ### 3.2 The denominator is the font's own outline component count (fixed denominator)
 

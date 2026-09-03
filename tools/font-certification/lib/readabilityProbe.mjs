@@ -27,6 +27,7 @@ import { createHash } from 'node:crypto';
 import { STONE_SIZE_BY_ID } from '../../../src/renderer/StoneSizes.js';
 import { strokeNarrowerThanOneStone } from '../../../src/text/index.js';
 import { analyzeOne, normalizedStonePoints, PRODUCTION_GAP_MM } from './productionAnalysis.mjs';
+import { expectedComponentCount } from './glyphSeparation.mjs';
 import { chamferDistance } from './shapeSimilarity.mjs';
 import {
   CONFUSABLE_PAIRS,
@@ -44,7 +45,13 @@ import {
 // Bumped whenever a change to this module, the sheet builder, the scorer, or the geometry they
 // depend on would make a stored probe record no longer reproducible from its inputs. Part of every
 // cache key (probeRecordStore.mjs) so a stale record is a cache miss, not a silent wrong answer.
-export const HARNESS_VERSION = 'read-005.0';
+export const HARNESS_VERSION = 'read-005.1';
+
+// READ-005 §3 — signal F's pass threshold on min(separationRatio) over a probe's multi-character
+// corpus entries. Provisional: spec §3.1 fixes the committed value in Step 4 from the held-out
+// validation block, not from the twelve cases that suggested it. Recorded on every probe record;
+// gates nothing in this milestone (§3.4).
+export const F_SEPARATION_THRESHOLD = 0.65;
 
 // --- corpus tiers, as data --------------------------------------------------------------------
 
@@ -152,6 +159,45 @@ function computeSignalD(measurements) {
   };
 }
 
+// --- signal F --------------------------------------------------------------------------------
+
+/**
+ * READ-005 §3 — glyph separation, measured on whole words (the level at which crowding exists and
+ * signal B, which isolates glyphs, structurally cannot see). Recorded on every probe record;
+ * gates nothing (§3.4: F does not gate until it clears the held-out validation block).
+ *
+ * Per corpus entry of two or more characters, reusing the analyzeOne() clusterCount already
+ * measured for it (at pitchMm * 1.6 — not recomputed):
+ *
+ *     separationRatio = clusterCount / expectedComponentCount(engine, fontId, entryText)
+ *
+ * Single-character entries have no letter-to-letter separation to measure and are omitted.
+ * Aggregation is by minimum: one merged letter pair spoils the design, so the worst entry governs.
+ * The full `entries` array is recorded so any other aggregation can be re-derived later.
+ *
+ * Returns `null` for a font with no vector outline (authored rhinestone fonts — rs-block/rs-modern):
+ * signal F's denominator is undefined there, and `expectedComponentCount()` reports that by
+ * returning `null` rather than throwing.
+ */
+async function computeSignalF({ engine, fontId, providerId, measurements }) {
+  const entries = [];
+  for (const m of measurements) {
+    if (m.error || [...m.text].length < 2 || !Number.isFinite(m.clusterCount)) continue;
+    const expectedComponents = await expectedComponentCount(engine, fontId, m.text, providerId);
+    if (expectedComponents === null) return null;
+    const separationRatio = expectedComponents > 0 ? m.clusterCount / expectedComponents : null;
+    entries.push({ text: m.text, clusterCount: m.clusterCount, expectedComponents, separationRatio });
+  }
+  const ratios = entries.map((e) => e.separationRatio).filter((r) => Number.isFinite(r));
+  const minSeparationRatio = ratios.length > 0 ? Math.min(...ratios) : null;
+  return {
+    entries,
+    minSeparationRatio,
+    threshold: F_SEPARATION_THRESHOLD,
+    passed: minSeparationRatio === null ? null : minSeparationRatio >= F_SEPARATION_THRESHOLD
+  };
+}
+
 // --- the probe -------------------------------------------------------------------------------
 
 /**
@@ -210,7 +256,8 @@ export async function runProbe({ engine, fontId, providerId = undefined, stemWid
       },
       oracleRequired: false,
       measurements: null,
-      signalD: null
+      signalD: null,
+      signalF: null
     };
   }
 
@@ -241,6 +288,7 @@ export async function runProbe({ engine, fontId, providerId = undefined, stemWid
     signalA: { passed, reasons },
     oracleRequired: passed,
     measurements,
-    signalD: computeSignalD(measurements)
+    signalD: computeSignalD(measurements),
+    signalF: await computeSignalF({ engine, fontId, providerId, measurements })
   };
 }
