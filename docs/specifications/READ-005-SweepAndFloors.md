@@ -5,6 +5,11 @@ Status: **proposed, not implemented.** Layer 2 of the readability program
 built (`docs/specifications/READ-004-RecognitionHarness.md`). READ-006 then consumes this
 milestone's baked floors in the live UI, superseding FONT-LIB-004's font-blind height rule.
 
+> Sections 1.2, 3.2, 3.4, 4.2, 4.3 and 7 are **superseded** by
+> `docs/specifications/READ-005A-CalibrationFindings.md`, which records 210 blind human ratings
+> collected after this document was written. Kept unrewritten per this repo's convention of
+> preserving superseded findings. §1.1 stands.
+
 Where READ-004 and this document disagree, READ-004 is the more accurate account of the harness as
 built; where either disagrees with the code, the code wins. Everything in §2 below was measured
 against `develop` at `5fb897f`, not recalled.
