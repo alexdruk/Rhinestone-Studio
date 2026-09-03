@@ -113,6 +113,18 @@ await test('6. every banded table partitions its declared population (band count
   assert.ok('29+' in data.session1.scriptFaceBands.bands, 'script-face top band should be "29+"');
 });
 
+await test('7. inaccurateByMode inaccurate counts sum to the overall inaccurate tag count', () => {
+  const data = computeAll();
+  const byMode = data.session1.inaccurateByMode;
+  assert.equal(byMode.length, 5, 'expected all five modes');
+  const sum = byMode.reduce((acc, m) => acc + m.inaccurate, 0);
+  assert.equal(
+    sum,
+    data.session1.rejectionCauses.perTag.inaccurate.n,
+    `per-mode inaccurate counts sum to ${sum}, rejectionCauses.perTag.inaccurate.n is ${data.session1.rejectionCauses.perTag.inaccurate.n}`,
+  );
+});
+
 if (process.exitCode === 1) {
   console.error('\nREAD-005 derived-tables check FAILED.');
 } else {

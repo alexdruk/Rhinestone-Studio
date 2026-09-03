@@ -285,6 +285,30 @@ function computeSession1(ratings, key) {
       };
     });
 
+  // Inaccurate-tag load by mode (findings §7 item 2): for each mode, the render count, the
+  // sellable === 'no' count, and how many of those rejections carry the `inaccurate` tag. The
+  // per-mode inaccurate counts must account for every inaccurate-tagged rejection exactly once.
+  const modeInaccMap = new Map();
+  for (const r of ratings) {
+    const mode = key[r.slug].mode;
+    if (!modeInaccMap.has(mode)) modeInaccMap.set(mode, { mode, n: 0, sellNo: 0, inaccurate: 0 });
+    const row = modeInaccMap.get(mode);
+    row.n += 1;
+    if (r.sellable === 'no') {
+      row.sellNo += 1;
+      if (classifyNote(r.notes ?? '').includes('inaccurate')) row.inaccurate += 1;
+    }
+  }
+  const inaccurateByMode = [...modeInaccMap.values()]
+    .sort((a, b) => b.n - a.n || (a.mode < b.mode ? -1 : 1));
+  const inaccurateByModeSum = inaccurateByMode.reduce((acc, m) => acc + m.inaccurate, 0);
+  if (inaccurateByModeSum !== perTagCount.inaccurate) {
+    throw new Error(
+      `session1.inaccurateByMode: inaccurate counts sum to ${inaccurateByModeSum} but ` +
+      `rejectionCauses.perTag.inaccurate.n is ${perTagCount.inaccurate}`,
+    );
+  }
+
   // Script-face bands over key.block === 'joined-scripts'.
   const scriptRows = ratings
     .filter((r) => key[r.slug].block === 'joined-scripts')
@@ -345,6 +369,7 @@ function computeSession1(ratings, key) {
     },
     lettersNamed,
     modeRatio,
+    inaccurateByMode,
     scriptFaceBands: {
       block: 'joined-scripts',
       n: scriptRows.length,
@@ -581,6 +606,13 @@ function renderMarkdown(data) {
       return `${b.sellablePct === null ? '—' : b.sellablePct + '%'} (n=${b.n})`;
     };
     L.push(`| ${m.mode} | ${m.n} | ${m.sellablePct}% | ${cell('<20')} | ${cell('20–25')} | ${cell('25–30')} | ${cell('30+')} |`);
+  }
+
+  L.push('\n### Inaccurate-tag load by mode\n');
+  L.push('| mode | n | rejections | inaccurate |');
+  L.push('|---|---:|---:|---:|');
+  for (const m of s1.inaccurateByMode) {
+    L.push(`| ${m.mode} | ${m.n} | ${m.sellNo} | ${m.inaccurate} |`);
   }
 
   L.push('\n### Script-face bands (block = joined-scripts)\n');
