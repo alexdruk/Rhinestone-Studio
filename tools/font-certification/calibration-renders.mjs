@@ -53,14 +53,16 @@ const INTERIOR_MODES = ['fill', 'staggered', 'radial', 'contour'];
 const F_THRESHOLD = 0.65;
 
 // The seven joined-script faces spec §5 names for the joined-scripts block.
-const JOINED_SCRIPT_FONTS = [
+// Exported (READ-007 §4.4) so the ratings analysis reads the same list instead of copying it.
+export const JOINED_SCRIPT_FONTS = [
   'great-vibes-regular', 'dancing-script-regular', 'allura-regular',
   'alex-brush-regular', 'parisienne-regular', 'cookie-regular', 'mr-dafoe-regular'
 ];
 
 // Faces that are unambiguously NOT connected scripts — the pool for the non-script outline block.
 // (Everything cursive/handwritten is deliberately excluded, matching spec §5's intent.)
-const NON_SCRIPT_FONTS = new Set([
+// Exported (READ-007 §4.4) so the ratings analysis reads the same set instead of copying it.
+export const NON_SCRIPT_FONTS = new Set([
   'courier-prime-regular', 'pt-serif-regular', 'playfair-display-regular', 'cinzel-regular',
   'anton-regular', 'bebas-neue-regular', 'righteous-regular', 'lilita-one-regular',
   'abril-fatface-regular', 'poppins-regular', 'poppins-semibold', 'poppins-bold',

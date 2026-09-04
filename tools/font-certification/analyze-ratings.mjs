@@ -12,6 +12,11 @@
  *
  * `f-ladder.json` is deliberately NOT read (7.4 MB, no table below needs it).
  *
+ * READ-007 adds four analysis-only tables under `session1` (`ratioBySeparation`, `blockByRatioBand`,
+ * `floorCandidates`, `nonScriptCut`) that test the auto-fit readability floor's evidence for a
+ * separation-band confound. They read the same four inputs; no product code or rendered output
+ * changes. See `docs/specifications/READ-007-RatioFloorEvidence.md`.
+ *
  * The classifier rules in this file are fixed by the READ-005B milestone prompt. They are applied
  * verbatim and emit whatever they produce; they are NOT tuned to match numbers already written in
  * the findings document. Divergences are expected and are reported by `--check` against the golden
@@ -27,6 +32,11 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+// READ-007 §4.4: the script-face lists are imported from the render builder rather than copied, so
+// the two files can never drift. calibration-renders.mjs reads f-ladder.json only inside run(), so
+// importing it here loads no data and keeps `.meta.inputs` at the same four files.
+import { NON_SCRIPT_FONTS, JOINED_SCRIPT_FONTS } from './calibration-renders.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DATA_DIR = path.join(REPO_ROOT, 'docs', 'data', 'read-005');
@@ -355,6 +365,131 @@ function computeSession1(ratings, key) {
     ],
   };
 
+  // --- READ-007: ratio-floor evidence ---------------------------------------------------------
+  // Every row keyed to its calibration metadata once. `ratio` is the height-to-stone-diameter
+  // ratio the F+A ladder was built on (f-ladder.mjs: heightMm = ratio * stoneSizeMm), so it is
+  // directly comparable to a candidate auto-fit floor expressed in stone diameters.
+  const r7Rows = ratings.map((r) => ({
+    ratio: key[r.slug].ratio,
+    mode: key[r.slug].mode,
+    block: key[r.slug].block,
+    separationBand: key[r.slug].separationBand,
+    fontId: key[r.slug].fontId,
+    sellable: r.sellable === 'yes',
+  }));
+
+  // "Offered modes" (READ-007 §3): the two engine modes READ-006A left in the #textMode picker.
+  const OFFERED_ENGINE_MODES = ['outline', 'fill'];
+  const isOffered = (row) => OFFERED_ENGINE_MODES.includes(row.mode);
+  const SEPARATION_BANDS = ['merge', 'aligned', 'fragmented'];
+
+  // 4.1 — ratio × separation band. Each separation subgroup is banded over ratio through the
+  // shared bandTable()/assertBandSum() path, so a row landing in no ratio band throws.
+  const ratioBySeparationScope = (rows, label) => {
+    const missing = rows.filter((row) => !SEPARATION_BANDS.includes(row.separationBand)).length;
+    const bySeparation = {};
+    let grouped = 0;
+    for (const sb of SEPARATION_BANDS) {
+      const sub = rows.filter((row) => row.separationBand === sb);
+      grouped += sub.length;
+      bySeparation[sb] = bandTable(sub, MODE_BANDS, `${label}[${sb}]`);
+    }
+    if (grouped + missing !== rows.length) {
+      throw new Error(
+        `${label}: separation subgroups (${grouped}) + rows with no band (${missing}) ` +
+        `!= scope population ${rows.length}`,
+      );
+    }
+    return { population: rows.length, noSeparationBand: missing, bySeparation };
+  };
+  const ratioBySeparation = {
+    ratioBands: MODE_BANDS.map((b) => b.label),
+    separationBands: SEPARATION_BANDS,
+    scopes: {
+      allModes: ratioBySeparationScope(r7Rows, 'session1.ratioBySeparation.allModes'),
+      offeredModes: ratioBySeparationScope(
+        r7Rows.filter(isOffered), 'session1.ratioBySeparation.offeredModes',
+      ),
+    },
+  };
+
+  // 4.2 — block provenance by ratio band. Each block is banded over ratio the same way.
+  const R7_BLOCKS = [
+    'interior-fill-positives', 'f-heldout-validation', 'joined-scripts',
+    'non-script-outline', 'repeats',
+  ];
+  const blockByRatioBand = (() => {
+    const byBlock = {};
+    let grouped = 0;
+    for (const b of R7_BLOCKS) {
+      const sub = r7Rows.filter((row) => row.block === b);
+      grouped += sub.length;
+      byBlock[b] = bandTable(sub, MODE_BANDS, `session1.blockByRatioBand[${b}]`);
+    }
+    if (grouped !== r7Rows.length) {
+      throw new Error(
+        `session1.blockByRatioBand: block subgroups sum to ${grouped} but population is ` +
+        `${r7Rows.length} — a row carries a block value outside ${JSON.stringify(R7_BLOCKS)}`,
+      );
+    }
+    return { ratioBands: MODE_BANDS.map((b) => b.label), blocks: R7_BLOCKS, population: r7Rows.length, byBlock };
+  })();
+
+  // 4.3 — floor-candidate decision table. Threshold cuts, not bands: a straight partition at each
+  // candidate ratio, both operands of every rate emitted.
+  const FLOOR_CANDIDATES = [10, 15, 18, 20, 22, 25];
+  const floorCut = (rows, threshold) => {
+    const below = rows.filter((row) => row.ratio < threshold);
+    const atOrAbove = rows.filter((row) => row.ratio >= threshold);
+    return {
+      rowsBelow: below.length,
+      sellableBelow: below.filter((row) => row.sellable).length,
+      rowsAtOrAbove: atOrAbove.length,
+      sellableAtOrAbove: atOrAbove.filter((row) => row.sellable).length,
+    };
+  };
+  const floorScope = (rows, label) => {
+    const byCandidate = {};
+    for (const c of FLOOR_CANDIDATES) {
+      const cut = floorCut(rows, c);
+      if (cut.rowsBelow + cut.rowsAtOrAbove !== rows.length) {
+        throw new Error(`${label}: candidate ${c} — rowsBelow + rowsAtOrAbove != population ${rows.length}`);
+      }
+      byCandidate[c] = cut;
+    }
+    return { population: rows.length, byCandidate };
+  };
+  const floorCandidates = {
+    candidates: FLOOR_CANDIDATES,
+    scopes: {
+      allModes: floorScope(r7Rows, 'session1.floorCandidates.allModes'),
+      offeredModes: floorScope(r7Rows.filter(isOffered), 'session1.floorCandidates.offeredModes'),
+      offeredModesExcludingMerge: floorScope(
+        r7Rows.filter((row) => isOffered(row) && row.separationBand !== 'merge'),
+        'session1.floorCandidates.offeredModesExcludingMerge',
+      ),
+    },
+  };
+
+  // 4.4 — reproducibility check on READ-005A §4.2's non-script cut. Non-script = font in the
+  // imported NON_SCRIPT_FONTS set. Also count fonts that fall in neither script list: those are
+  // silently absent from both the non-script and the joined-script cuts.
+  const nonScriptRows = r7Rows.filter((row) => NON_SCRIPT_FONTS.has(row.fontId));
+  const nonScriptCutCounts = floorCut(nonScriptRows, 20);
+  if (nonScriptCutCounts.rowsBelow + nonScriptCutCounts.rowsAtOrAbove !== nonScriptRows.length) {
+    throw new Error('session1.nonScriptCut: rowsBelow + rowsAtOrAbove != population');
+  }
+  const joinedScriptSet = new Set(JOINED_SCRIPT_FONTS);
+  const keyFonts = [...new Set(Object.values(key).map((k) => k.fontId))].sort();
+  const fontsInNeither = keyFonts.filter((f) => !NON_SCRIPT_FONTS.has(f) && !joinedScriptSet.has(f));
+  const nonScriptCut = {
+    threshold: 20,
+    definition: 'fontId in NON_SCRIPT_FONTS (imported from calibration-renders.mjs)',
+    population: nonScriptRows.length,
+    ...nonScriptCutCounts,
+    fontsInNeitherScriptSet: { count: fontsInNeither.length, fonts: fontsInNeither },
+  };
+
   return {
     rowCount: ratings.length,
     marginals: { readable: marginal('readable'), sellable: marginal('sellable') },
@@ -378,6 +513,10 @@ function computeSession1(ratings, key) {
       bands: bandTable(scriptRows, SCRIPT_BANDS, 'session1.scriptFaceBands.bands'),
     },
     interiorFidelity,
+    ratioBySeparation,
+    blockByRatioBand,
+    floorCandidates,
+    nonScriptCut,
   };
 }
 
@@ -636,6 +775,90 @@ function renderMarkdown(data) {
       L.push(`| ${label} | ${b.n} | ${b.rejections} | ${b.inaccurate} | ${pr} | ${pw} |`);
     }
     L.push('');
+  }
+
+  // --- READ-007 sections ------------------------------------------------------------------
+  const sumCells = (bandsObj) => Object.values(bandsObj).reduce((acc, c) => acc + c.n, 0);
+  const sumScope = (byBand) => Object.values(byBand).reduce((acc, bt) => acc + sumCells(bt), 0);
+
+  L.push('\n## READ-007 — ratio-floor evidence\n');
+  L.push('New derived tables. No product code and no rendered output change; recomputed from the');
+  L.push('same four frozen inputs. `ratio` throughout is height-to-stone-diameter.\n');
+
+  L.push('### 4.1 Ratio × separation band\n');
+  for (const [scopeName, scope] of Object.entries(s1.ratioBySeparation.scopes)) {
+    L.push(`**${scopeName}** — population ${scope.population}, summed cells ${sumScope(scope.bySeparation)}, rows with no separationBand: ${scope.noSeparationBand}\n`);
+    L.push('| separation | <20 | 20–25 | 25–30 | 30+ |');
+    L.push('|---|---:|---:|---:|---:|');
+    for (const sb of s1.ratioBySeparation.separationBands) {
+      const bt = scope.bySeparation[sb];
+      const cell = (label) => {
+        const c = bt[label];
+        return `${c.sellable}/${c.n}${c.sellablePct === null ? '' : ` (${c.sellablePct}%)`}`;
+      };
+      L.push(`| ${sb} | ${cell('<20')} | ${cell('20–25')} | ${cell('25–30')} | ${cell('30+')} |`);
+    }
+    L.push('');
+    // Within-band collapse: below-20 against at-or-above-20, both operands, quoting the cells
+    // above (the three upper bands summed). No new key path — this is a reading of 4.1's table.
+    L.push('_below 20 vs at or above 20 (sellable / n), from the cells above:_\n');
+    L.push('| separation | below 20 | at or above 20 |');
+    L.push('|---|---:|---:|');
+    for (const sb of s1.ratioBySeparation.separationBands) {
+      const bt = scope.bySeparation[sb];
+      const below = bt['<20'];
+      const aboveN = bt['20–25'].n + bt['25–30'].n + bt['30+'].n;
+      const aboveK = bt['20–25'].sellable + bt['25–30'].sellable + bt['30+'].sellable;
+      L.push(`| ${sb} | ${below.sellable}/${below.n} | ${aboveK}/${aboveN} |`);
+    }
+    L.push('');
+  }
+
+  L.push('### 4.2 Block provenance by ratio band\n');
+  const bbrb = s1.blockByRatioBand;
+  L.push(`population ${bbrb.population}, summed cells ${sumScope(bbrb.byBlock)}\n`);
+  L.push('| block | <20 | 20–25 | 25–30 | 30+ |');
+  L.push('|---|---:|---:|---:|---:|');
+  for (const b of bbrb.blocks) {
+    const bt = bbrb.byBlock[b];
+    L.push(`| ${b} | ${bt['<20'].n} | ${bt['20–25'].n} | ${bt['25–30'].n} | ${bt['30+'].n} |`);
+  }
+  L.push('');
+
+  L.push('### 4.3 Floor candidates\n');
+  L.push('Each cell: `sellableBelow / rowsBelow  ·  sellableAtOrAbove / rowsAtOrAbove`.\n');
+  const floorScopeNames = Object.keys(s1.floorCandidates.scopes);
+  L.push(`| floor | ${floorScopeNames.join(' | ')} |`);
+  L.push(`|---|${floorScopeNames.map(() => '---').join('|')}|`);
+  for (const c of s1.floorCandidates.candidates) {
+    const cells = floorScopeNames.map((name) => {
+      const x = s1.floorCandidates.scopes[name].byCandidate[c];
+      return `${x.sellableBelow}/${x.rowsBelow} · ${x.sellableAtOrAbove}/${x.rowsAtOrAbove}`;
+    });
+    L.push(`| ${c} | ${cells.join(' | ')} |`);
+  }
+  L.push('');
+  const lowestFloor = s1.floorCandidates.candidates[0];
+  for (const name of floorScopeNames) {
+    const sc = s1.floorCandidates.scopes[name];
+    L.push(
+      `- ${name}: population ${sc.population}; rows below the lowest candidate (ratio ${lowestFloor}): ` +
+      `${sc.byCandidate[lowestFloor].rowsBelow}`,
+    );
+  }
+  L.push('');
+  L.push('Read `sellableBelow / rowsBelow` as two counts, never a rate: where `rowsBelow` is 0 or 1');
+  L.push('the cut has no population to speak of, not a 0% result.');
+
+  L.push('\n### 4.4 Non-script cut — reproducibility of READ-005A §4.2\n');
+  const ns = s1.nonScriptCut;
+  L.push(`- definition: ${ns.definition}`);
+  L.push(`- population: ${ns.population}`);
+  L.push(`- threshold ${ns.threshold}: below — ${ns.sellableBelow}/${ns.rowsBelow} sellable; at or above — ${ns.sellableAtOrAbove}/${ns.rowsAtOrAbove} sellable`);
+  L.push(`- distinct fonts in calibration-key.json in neither NON_SCRIPT_FONTS nor JOINED_SCRIPT_FONTS: ${ns.fontsInNeitherScriptSet.count}`);
+  if (ns.fontsInNeitherScriptSet.count > 0) {
+    L.push('  - these fonts are silently absent from both the non-script and the joined-script cuts:');
+    L.push(`    ${ns.fontsInNeitherScriptSet.fonts.join(', ')}`);
   }
 
   L.push('\n## Session 2 — tracking experiment\n');
