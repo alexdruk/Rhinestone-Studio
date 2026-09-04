@@ -231,24 +231,27 @@ await test('14. solveDesiredCapHeightMm() and computeLetterHeightBoundsMm() thro
 // Design doc section 3.4/4 step 5 claims computeAutoFitScale() and ShapeFit.computeShapeFitScale()
 // already treat layer.height as an opaque scalar to re-scale and re-measure, with no opinion on
 // what it "means" -- i.e. heightMode ('raw' vs 'capHeight') cannot affect either function's output,
-// since neither function reads heightMode at all (confirmed by re-reading both bodies: app.js:432-440
-// only reads layer.autoFit/layer.stoneSize/layer.gap/layer.height/project.canvas.width;
-// ShapeFit.computeShapeFitScale() takes currentHeightMm/measuredWidthMm/measuredHeightMm/spacingMm/
-// targetWidthMm/targetHeightMm/minHeightToSpacingRatio as plain numbers, never a layer object). These
+// since neither function reads heightMode at all (confirmed by re-reading both bodies:
+// computeAutoFitScale() only reads layer.autoFit/layer.stoneSize/layer.height/project.canvas.width;
+// ShapeFit.computeShapeFitScale() takes currentHeightMm/measuredWidthMm/measuredHeightMm/stoneSizeMm/
+// targetWidthMm/targetHeightMm/minHeightToStoneRatio as plain numbers, never a layer object). These
 // tests prove that claim empirically with two otherwise-identical layers differing only in
 // heightMode, rather than resting on the design doc's inspection alone. Zero production code change
 // expected or made for this step.
 
 const computeAutoFitScaleSrc = extractBlock(appJs, /function computeAutoFitScale\([^)]*\)\{[\s\S]*?\n\}/, 'function computeAutoFitScale()');
-const minAutoFitRatioDecl = extractBlock(appJs, /const MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO=\d+(\.\d+)?;/, 'the MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO declaration');
-const MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO = Number(minAutoFitRatioDecl.match(/=([\d.]+);/)[1]);
+const minRatioDecl = extractBlock(appJs, /const MIN_HEIGHT_TO_STONE_RATIO=\d+(\.\d+)?;/, 'the MIN_HEIGHT_TO_STONE_RATIO declaration');
+const MIN_HEIGHT_TO_STONE_RATIO = Number(minRatioDecl.match(/=([\d.]+);/)[1]);
 // eslint-disable-next-line no-new-func
-const computeAutoFitScale = new Function(`${minAutoFitRatioDecl}\nreturn ${computeAutoFitScaleSrc};`)();
+const computeAutoFitScale = new Function(`${minRatioDecl}\nreturn ${computeAutoFitScaleSrc};`)();
 
 const shapeFitProject = { canvas: { width: 210, height: 90 } };
 
 await test('15. computeAutoFitScale() returns an identical scale for two layers differing only in heightMode (mode-agnostic, per design doc section 3.4)', () => {
-  const rawLayer = { autoFit: true, height: 25, heightMode: 'raw', stoneSize: 2, gap: 0.3 };
+  // height 60 (> 16 x the 2mm stone = 32mm floor) so the fit-to-width shrink is the binding
+  // constraint here, not READ-008's MIN_HEIGHT_TO_STONE_RATIO floor -- isolates the mode-agnostic
+  // claim from the separate floor-clamp path.
+  const rawLayer = { autoFit: true, height: 60, heightMode: 'raw', stoneSize: 2, gap: 0.3 };
   const capHeightLayer = { ...rawLayer, heightMode: 'capHeight' };
   const measuredWidthMm = 250; // forces mild overflow (fit-to-width shrink, scale < 1)
 
@@ -272,16 +275,17 @@ await test('15. computeAutoFitScale() returns an identical scale for two layers 
 });
 
 await test('16. ShapeFit.computeShapeFitScale() returns an identical scale for two layers differing only in heightMode (mode-agnostic, per design doc section 3.4)', () => {
-  const rawLayer = { height: 25, heightMode: 'raw', stoneSize: 2, gap: 0.3 };
+  const rawLayer = { height: 50, heightMode: 'raw', stoneSize: 2, gap: 0.3 };
   const capHeightLayer = { ...rawLayer, heightMode: 'capHeight' };
   // measuredWidthMm/measuredHeightMm/targetWidthMm/targetHeightMm chosen so the width axis is the
-  // binding constraint (scaleForWidth=0.75 < scaleForHeight=0.9), forcing a shrink (scale < 1) that
-  // stays above the legibility floor (spacingMm*minHeightToSpacingRatio = 2.3*6 = 13.8mm), so this
-  // test isolates the mode-agnostic claim rather than the separate legibility-floor path.
-  const fitParams = { measuredWidthMm: 200, measuredHeightMm: 50, targetWidthMm: 150, targetHeightMm: 45, minHeightToSpacingRatio: MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO };
+  // binding constraint (scaleForWidth=0.75 < scaleForHeight=0.9), forcing a shrink (scale < 1) whose
+  // floored height (50 * 0.75 = 37.5mm) stays above the legibility floor
+  // (stoneSizeMm*minHeightToStoneRatio = 2*16 = 32mm), so this test isolates the mode-agnostic claim
+  // rather than the separate legibility-floor path.
+  const fitParams = { measuredWidthMm: 200, measuredHeightMm: 50, targetWidthMm: 150, targetHeightMm: 45, minHeightToStoneRatio: MIN_HEIGHT_TO_STONE_RATIO };
 
-  const rawResult = computeShapeFitScale({ currentHeightMm: rawLayer.height, spacingMm: rawLayer.stoneSize + rawLayer.gap, ...fitParams });
-  const capHeightResult = computeShapeFitScale({ currentHeightMm: capHeightLayer.height, spacingMm: capHeightLayer.stoneSize + capHeightLayer.gap, ...fitParams });
+  const rawResult = computeShapeFitScale({ currentHeightMm: rawLayer.height, stoneSizeMm: rawLayer.stoneSize, ...fitParams });
+  const capHeightResult = computeShapeFitScale({ currentHeightMm: capHeightLayer.height, stoneSizeMm: capHeightLayer.stoneSize, ...fitParams });
 
   assert.ok(rawResult.ok && capHeightResult.ok, `expected both fits to succeed, got ${JSON.stringify(rawResult)} / ${JSON.stringify(capHeightResult)}`);
   assert.ok(rawResult.scale < 1, `expected this target box to force a shrink, got scale=${rawResult.scale}`);

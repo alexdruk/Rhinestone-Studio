@@ -114,27 +114,30 @@ export function computeInscribedRect(polygons, boundingBox, aspectRatio) {
 /**
  * Computes the scale to apply to a text layer's current heightMm so its measured box (at that
  * current height) fits inside a target box, honoring a minimum legible height
- * (spacingMm * minHeightToSpacingRatio) -- the same legibility-floor concept S-107's
+ * (stoneSizeMm * minHeightToStoneRatio) -- the same legibility-floor concept S-107's
  * computeAutoFitScale() already established for safe-area auto-fit (app.js), reused here (via this
  * parameter, not a hardcoded copy) so the two features can never disagree on "how small is too
- * small". Assumes text width/height scale linearly with requested heightMm, the same approximation
- * computeAutoFitScale() already makes -- callers re-measure the actual regenerated geometry at the
- * chosen height rather than trusting this scale as exact.
+ * small". READ-008: the floor is measured against stone diameter alone, not stone pitch (stoneSize +
+ * gap) -- gap is user-editable and legibility-irrelevant; passing the pitch here would silently give
+ * Fit Text to Shape a floor of minHeightToStoneRatio x pitch instead of x diameter. Assumes text
+ * width/height scale linearly with requested heightMm, the same approximation computeAutoFitScale()
+ * already makes -- callers re-measure the actual regenerated geometry at the chosen height rather
+ * than trusting this scale as exact.
  *
  * @param {object} params
  * @param {number} params.currentHeightMm The text layer's current heightMm (what measuredWidthMm/
  *   measuredHeightMm were measured at).
  * @param {number} params.measuredWidthMm
  * @param {number} params.measuredHeightMm
- * @param {number} params.spacingMm stoneSizeMm + gapMm.
+ * @param {number} params.stoneSizeMm Stone diameter (NOT stoneSize + gap).
  * @param {number} params.targetWidthMm
  * @param {number} params.targetHeightMm
- * @param {number} params.minHeightToSpacingRatio
+ * @param {number} params.minHeightToStoneRatio
  * @returns {{ok:true,scale:number}|{ok:false,reason:'empty'|'degenerate'|'legibility'}}
  */
 export function computeShapeFitScale({
-  currentHeightMm, measuredWidthMm, measuredHeightMm, spacingMm,
-  targetWidthMm, targetHeightMm, minHeightToSpacingRatio
+  currentHeightMm, measuredWidthMm, measuredHeightMm, stoneSizeMm,
+  targetWidthMm, targetHeightMm, minHeightToStoneRatio
 }) {
   if (!(measuredWidthMm > 0) || !(measuredHeightMm > 0)) return { ok: false, reason: 'empty' };
 
@@ -143,7 +146,7 @@ export function computeShapeFitScale({
   let scale = Math.min(scaleForWidth, scaleForHeight);
   if (!Number.isFinite(scale) || scale <= 0) return { ok: false, reason: 'degenerate' };
 
-  const floorHeightMm = spacingMm > 0 ? spacingMm * minHeightToSpacingRatio : 0;
+  const floorHeightMm = stoneSizeMm > 0 ? stoneSizeMm * minHeightToStoneRatio : 0;
   const requestedHeightMm = currentHeightMm * scale;
 
   if (floorHeightMm > 0 && requestedHeightMm < floorHeightMm) {

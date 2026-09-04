@@ -3,9 +3,13 @@
 // An audit of every enabled OpenType font through FONT-CERT-001/002's real analysis pipeline
 // (tools/font-certification/audit-manifest-readability.mjs) found zero font/stone-size combinations
 // that fail at each size's own validated default height, but a broad, font-INDEPENDENT collapse as
-// soon as height drops below that size's supportedHeightRangeMm minimum. So the readability gate
-// this milestone adds is a height check, not per-font `unsupportedStoneSizes` entries -- see
+// soon as the height-to-stone-diameter ratio drops too low. So the readability gate this milestone
+// adds is a height check, not per-font `unsupportedStoneSizes` entries -- see
 // docs/specifications/FONT-LIB-004-ReadabilityGating.md.
+//
+// READ-008: the gate was rebased from the catalog size's supportedHeightRangeMm[0] (which silently
+// never fired for a stone diameter matching no catalog size) to the shared MIN_HEIGHT_TO_STONE_RATIO
+// floor (height / stone diameter), so it now fires at ANY diameter. Tests updated to the new basis.
 //
 // updateTextHeightReadabilityUI() is sliced verbatim from app.js and executed against stub el()/
 // selectedLayer() plus the REAL StoneSizes catalog and units module -- the same source-extraction
@@ -16,7 +20,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { listStoneSizes, findStoneSizeByDiameterMm } from '../src/renderer/StoneSizes.js';
+import { listStoneSizes } from '../src/renderer/StoneSizes.js';
 import { formatLengthDisplay, unitSuffix } from '../src/units/index.js';
 import { FontManager } from '../src/fonts/index.js';
 // READ-004 Part B moved the stroke-narrower-than-one-stone arithmetic and its fill-mode gate out of
@@ -83,6 +87,13 @@ assert.deepEqual([...INTERIOR_FILL_MODES].sort(), ['contour', 'fill', 'radial', 
 const heightPredicateSrc = sliceBalanced(appJs, 'function textHeightBelowReadableMinimum(layer){', 'textHeightBelowReadableMinimum()');
 const updateFnSrc = sliceBalanced(appJs, 'function updateTextHeightReadabilityUI(){', 'updateTextHeightReadabilityUI()');
 
+// READ-008: textHeightBelowReadableMinimum() now closes over the module-level MIN_HEIGHT_TO_STONE_RATIO
+// constant instead of reading a catalog size record -- extract its value from app.js and inject it,
+// the same way every other app.js dependency is injected into the factory below.
+const RATIO_DECL = matchOne(appJs, /const MIN_HEIGHT_TO_STONE_RATIO=\d+(?:\.\d+)?;/, 'the MIN_HEIGHT_TO_STONE_RATIO declaration');
+const MIN_HEIGHT_TO_STONE_RATIO = Number(RATIO_DECL.match(/=([\d.]+);/)[1]);
+const floorFor = (stoneDiameterMm) => stoneDiameterMm * MIN_HEIGHT_TO_STONE_RATIO;
+
 function makeClassList() {
   const set = new Set();
   return { add: (c) => set.add(c), remove: (c) => set.delete(c), toggle: (c, on) => (on ? set.add(c) : set.delete(c)), contains: (c) => set.has(c) };
@@ -92,12 +103,12 @@ function run(layer, { units = 'mm', authoredFontIds = ['rs-block', 'rs-modern'] 
   const warning = { textContent: '', classList: makeClassList() };
   const el = (id) => (id === 'heightBelowReadableWarning' ? warning : { textContent: '', classList: makeClassList(), style: {} });
   const factory = new Function(
-    'el', 'selectedLayer', 'isAuthoredStoneFontId', 'isFontKnown', 'fontManager', 'findStoneSizeByDiameterMm',
+    'el', 'selectedLayer', 'isAuthoredStoneFontId', 'isFontKnown', 'fontManager', 'MIN_HEIGHT_TO_STONE_RATIO',
     'formatLengthDisplay', 'unitSuffix', 'project', 'strokeNarrowerThanOneStone',
     `${textModeMapSrc}\n${resolveTextFillModeSrc}\n${strokePredicateSrc}\n${heightPredicateSrc}\n${updateFnSrc}\nreturn updateTextHeightReadabilityUI;`
   );
   const fn = factory(
-    el, () => layer, (id) => authoredFontIds.includes(id), (id) => fontManager.hasFont(id), fontManager, findStoneSizeByDiameterMm,
+    el, () => layer, (id) => authoredFontIds.includes(id), (id) => fontManager.hasFont(id), fontManager, MIN_HEIGHT_TO_STONE_RATIO,
     formatLengthDisplay, unitSuffix, { units }, strokeNarrowerThanOneStone
   );
   fn();
@@ -114,6 +125,11 @@ const SS30 = listStoneSizes().find((s) => s.id === 'ss30');
 // SS16/SS20 and the heights used below its stroke is comfortably wider than one stone -- only the
 // height gate can fire. `assertStrokeInactive()` makes that a checked precondition, not an assumption.
 const HEIGHT_FONT = 'anton-regular';
+
+// One shared #heightBelowReadableWarning element carries either message; these identify which.
+const READ003_MARKERS = [/narrower than one/, /overhang/];
+const FONTLIB004_MARKER = /minimum for this stone diameter/;
+
 function assertStrokeInactive(layer) {
   const ratio = fontManager.getFont(layer.font).stemWidthRatio;
   assert.ok(
@@ -124,39 +140,41 @@ function assertStrokeInactive(layer) {
 
 // Tests 1-9 isolate the FONT-LIB-004 height gate. They use anton-regular (thickest stem) at
 // SS16/SS20 so the READ-003 stroke gate (tested separately, 11-13) stays inactive -- verified by
-// assertStrokeInactive() on every fixture.
+// assertStrokeInactive() on every fixture. READ-008: the threshold is now
+// floorFor(stoneDiameterMm) = stoneDiameterMm * MIN_HEIGHT_TO_STONE_RATIO, not the catalog size's
+// supportedHeightRangeMm[0].
 
-await test('1. a text layer whose height is below its stone size\'s validated minimum gets a warning naming both the stone size and the tested minimum', () => {
+await test('1. a text layer whose height is below the ratio floor for its stone diameter gets a warning naming the stone diameter and the minimum height it needs', () => {
   const layer = { type: 'text', font: HEIGHT_FONT, stoneSize: SS16.diameterMm, height: 50 };
   assertStrokeInactive(layer);
   const w = run(layer);
   assert.ok(w.classList.contains('visible'), 'expected the warning to be visible');
-  assert.match(w.textContent, new RegExp(SS16.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 'expected the stone size name');
-  assert.match(w.textContent, new RegExp(String(SS16.supportedHeightRangeMm[0])), 'expected the validated minimum height');
+  assert.match(w.textContent, new RegExp(`${SS16.diameterMm} mm stones`), 'expected the stone diameter');
+  assert.match(w.textContent, new RegExp(`${floorFor(SS16.diameterMm)} mm or taller`), 'expected the minimum height this diameter needs');
 });
 
-await test('2. a text layer at or above the validated minimum shows no warning (boundary is inclusive)', () => {
-  const atMin = run({ type: 'text', font: HEIGHT_FONT, stoneSize: SS16.diameterMm, height: SS16.supportedHeightRangeMm[0] });
-  assert.equal(atMin.classList.contains('visible'), false, 'exactly at the minimum must NOT warn');
-  assert.equal(atMin.textContent, '');
-  const above = run({ type: 'text', font: HEIGHT_FONT, stoneSize: SS16.diameterMm, height: 78 });
-  assert.equal(above.classList.contains('visible'), false, 'the app default height must never warn');
+await test('2. a text layer exactly at the ratio floor shows no warning (boundary is inclusive)', () => {
+  const atFloor = run({ type: 'text', font: HEIGHT_FONT, stoneSize: SS16.diameterMm, height: floorFor(SS16.diameterMm) });
+  assert.equal(atFloor.classList.contains('visible'), false, 'exactly at the floor must NOT warn');
+  assert.equal(atFloor.textContent, '');
+  const above = run({ type: 'text', font: HEIGHT_FONT, stoneSize: SS16.diameterMm, height: floorFor(SS16.diameterMm) + 14 });
+  assert.equal(above.classList.contains('visible'), false, 'a comfortably tall layer must never warn');
 });
 
-await test('3. one mm below the minimum does warn -- the threshold is the validated minimum itself, not an approximation of it', () => {
-  const layer = { type: 'text', font: HEIGHT_FONT, stoneSize: SS16.diameterMm, height: SS16.supportedHeightRangeMm[0] - 1 };
+await test('3. one mm below the floor does warn -- the threshold is the ratio floor itself, not an approximation of it', () => {
+  const layer = { type: 'text', font: HEIGHT_FONT, stoneSize: SS16.diameterMm, height: floorFor(SS16.diameterMm) - 1 };
   assertStrokeInactive(layer);
   assert.ok(run(layer).classList.contains('visible'));
 });
 
-await test('4. the threshold is per stone size, not global: a height that is fine at SS16 still warns at SS20', () => {
-  const height = SS16.supportedHeightRangeMm[0] + 1; // fine for SS16
+await test('4. the threshold is per stone diameter, not global: a height that is fine at SS16 still warns at SS20', () => {
+  const height = floorFor(SS16.diameterMm) + 1; // fine for SS16 (4.0mm stone -> 64mm floor)
   const okAtSs16 = run({ type: 'text', font: HEIGHT_FONT, stoneSize: SS16.diameterMm, height });
   assert.equal(okAtSs16.classList.contains('visible'), false);
   const layerSs20 = { type: 'text', font: HEIGHT_FONT, stoneSize: SS20.diameterMm, height };
   assertStrokeInactive(layerSs20);
   const warnsAtSs20 = run(layerSs20);
-  assert.ok(warnsAtSs20.classList.contains('visible'), `expected ${height}mm to warn at ${SS20.name} (min ${SS20.supportedHeightRangeMm[0]}mm)`);
+  assert.ok(warnsAtSs20.classList.contains('visible'), `expected ${height}mm to warn at SS20 (4.7mm stone -> ${floorFor(SS20.diameterMm)}mm floor)`);
 });
 
 await test('5. the height warning is font-INDEPENDENT -- readability there is governed by height-to-stone ratio, so two different fonts warn with an identical message at the same height/size', () => {
@@ -170,7 +188,7 @@ await test('5. the height warning is font-INDEPENDENT -- readability there is go
   assert.equal(wa.textContent, wb.textContent, 'the height message must not vary by font');
 });
 
-await test('6. authored Production Fonts (RS Block / RS Modern) are exempt -- supportedHeightRangeMm is an OpenType-sampling concept and they carry their own baked-in stone pitch', () => {
+await test('6. authored Production Fonts (RS Block / RS Modern) are exempt -- the ratio floor is an OpenType-sizing concept and they carry their own baked-in stone pitch', () => {
   for (const fontId of ['rs-block', 'rs-modern']) {
     const w = run({ type: 'text', font: fontId, stoneSize: SS6.diameterMm, height: 15 });
     assert.equal(w.classList.contains('visible'), false, `${fontId} must never trigger the height warning`);
@@ -185,10 +203,16 @@ await test('7. non-text layers and no selection never warn', () => {
   assert.equal(run(null).classList.contains('visible'), false, 'no selection must not warn');
 });
 
-await test('8. a non-catalog (custom/legacy) stoneSize resolves to no size record and is left alone rather than throwing', () => {
-  // height 40 keeps anton's stroke wider than the 3.33mm custom stone too, so neither gate fires.
-  const w = run({ type: 'text', font: HEIGHT_FONT, stoneSize: 3.33, height: 40 });
-  assert.equal(w.classList.contains('visible'), false);
+await test('8. READ-008: a non-catalog (custom/legacy) stone diameter is now checked against the ratio floor too -- it no longer escapes the warning just because it matches no catalog size', () => {
+  const stoneSize = 3.33; // not in the catalog; findStoneSizeByDiameterMm() would return null
+  // below the floor (3.33 * 16 = 53.28mm) -> warns; anton's stroke stays wider than the stone so
+  // only the height gate can fire (0.1225 * 40 = 4.9mm >= 3.33mm).
+  const below = run({ type: 'text', font: HEIGHT_FONT, stoneSize, height: 40 });
+  assert.ok(below.classList.contains('visible'), 'a custom stone diameter below its ratio floor must now warn');
+  assert.match(below.textContent, FONTLIB004_MARKER);
+  // at/above the floor -> silent
+  const above = run({ type: 'text', font: HEIGHT_FONT, stoneSize, height: 55 });
+  assert.equal(above.classList.contains('visible'), false, 'a custom stone diameter above its ratio floor stays silent');
 });
 
 await test('9. the height message respects the project\'s unit setting (inches, not raw mm, when units are imperial)', () => {
@@ -196,7 +220,7 @@ await test('9. the height message respects the project\'s unit setting (inches, 
   assertStrokeInactive(layer);
   const w = run(layer, { units: 'in' });
   assert.match(w.textContent, /in\b/, 'expected an inch suffix when the project is in imperial units');
-  assert.ok(!new RegExp(`\\b${SS16.supportedHeightRangeMm[0]} mm\\b`).test(w.textContent), 'must not print the raw mm figure when units are imperial');
+  assert.ok(!new RegExp(`\\b${floorFor(SS16.diameterMm)} mm\\b`).test(w.textContent), 'must not print the raw mm figure when units are imperial');
 });
 
 await test('10. index.html declares #heightBelowReadableWarning next to #height, and app.js calls updateTextHeightReadabilityUI() from updateEditingUI() so it stays live', () => {
@@ -212,10 +236,7 @@ await test('10. index.html declares #heightBelowReadableWarning next to #height,
 });
 
 // --- READ-003 precedence: one shared #heightBelowReadableWarning element, strongest signal wins ---
-//   1. READ-003 stroke-narrower-than-one-stone   2. FONT-LIB-004 height-below-validated-minimum
-
-const READ003_MARKERS = [/narrower than one/, /overhang/];
-const FONTLIB004_MARKER = /tested minimum for this stone size/;
+//   1. READ-003 stroke-narrower-than-one-stone   2. FONT-LIB-004 height-below-the-ratio-floor
 
 // The READ-003 stroke gate only applies to the interior-filling fill styles (Grid/Staggered/Radial/
 // Contour), never Outline -- tracing a hairline letterform as one bead line is the canonical
@@ -223,11 +244,11 @@ const FONTLIB004_MARKER = /tested minimum for this stone size/;
 // `textMode`; fixtures that mean to prove Outline is exempt set `textMode: 'stroke'`.
 
 await test('11. a fill-mode layer that is BOTH stroke-impossible and below the height minimum shows only the READ-003 message', () => {
-  // Great Vibes fill @ 50mm on an SS16 (4mm) stone: stem ~1.8mm < 4mm (stroke-impossible) AND 50 < 65mm.
+  // Great Vibes fill @ 50mm on an SS16 (4mm) stone: stem ~1.8mm < 4mm (stroke-impossible) AND 50 < 64mm floor.
   const layer = { type: 'text', font: 'great-vibes-regular', textMode: 'fill', stoneSize: SS16.diameterMm, height: 50 };
   const ratio = fontManager.getFont(layer.font).stemWidthRatio;
   assert.ok(ratio * layer.height < layer.stoneSize, 'test setup: stroke must be narrower than the stone');
-  assert.ok(layer.height < SS16.supportedHeightRangeMm[0], 'test setup: height must also be below the validated minimum');
+  assert.ok(layer.height < floorFor(SS16.diameterMm), 'test setup: height must also be below the ratio floor');
   const w = run(layer);
   assert.ok(w.classList.contains('visible'));
   assert.match(w.textContent, /Great Vibes/, 'the READ-003 message names the font');
@@ -245,9 +266,9 @@ await test('12. a fill-mode layer that is ONLY below the height minimum (stroke 
 });
 
 await test('13. a radial-fill layer that is stroke-impossible at an OTHERWISE-fine height still shows the READ-003 message', () => {
-  // Great Vibes radial @ 70mm on SS16: 70 >= 65mm (height gate satisfied) but stem ~2.5mm < 4mm stone.
+  // Great Vibes radial @ 70mm on SS16: 70 >= 64mm floor (height gate satisfied) but stem ~2.5mm < 4mm stone.
   const layer = { type: 'text', font: 'great-vibes-regular', textMode: 'radial', stoneSize: SS16.diameterMm, height: 70 };
-  assert.ok(layer.height >= SS16.supportedHeightRangeMm[0], 'test setup: height must be inside the validated range');
+  assert.ok(layer.height >= floorFor(SS16.diameterMm), 'test setup: height must be at/above the ratio floor');
   const w = run(layer);
   assert.ok(w.classList.contains('visible'));
   for (const marker of READ003_MARKERS) assert.match(w.textContent, marker);
@@ -271,11 +292,11 @@ await test('15. a text layer on a font with no stemWidthRatio (legacy/unknown id
 // --- READ-003 fill-mode scoping (the follow-up fix) ---
 
 await test('16. Outline mode never triggers the READ-003 gate, even with a stem well under one stone', () => {
-  // Great Vibes outline @ 70mm on SS16: stem ~2.5mm < 4mm, height 70 >= 65mm -> element fully silent.
+  // Great Vibes outline @ 70mm on SS16: stem ~2.5mm < 4mm, height 70 >= 64mm floor -> element fully silent.
   const layer = { type: 'text', font: 'great-vibes-regular', textMode: 'stroke', stoneSize: SS16.diameterMm, height: 70 };
   const ratio = fontManager.getFont(layer.font).stemWidthRatio;
   assert.ok(ratio * layer.height < layer.stoneSize, 'test setup: stem must be narrower than the stone');
-  assert.ok(layer.height >= SS16.supportedHeightRangeMm[0], 'test setup: height must be inside the validated range');
+  assert.ok(layer.height >= floorFor(SS16.diameterMm), 'test setup: height must be at/above the ratio floor');
   const w = run(layer);
   assert.equal(w.classList.contains('visible'), false, 'Outline mode traces the letterform as a bead line -- not an impossibility');
   assert.equal(w.textContent, '');
@@ -288,17 +309,17 @@ await test('17. false-positive regression guard: Great Vibes Outline @ 42.5mm / 
   const layer = { type: 'text', font: 'great-vibes-regular', textMode: 'stroke', stoneSize: SS6.diameterMm, height: 42.5 };
   const stemMm = fontManager.getFont(layer.font).stemWidthRatio * layer.height;
   assert.ok(stemMm < SS6.diameterMm, `test setup: stem ${stemMm.toFixed(2)}mm must be under the ${SS6.diameterMm}mm stone`);
-  assert.ok(layer.height >= SS6.supportedHeightRangeMm[0], 'test setup: height is at/above SS6 min, so FONT-LIB-004 is not in play either');
+  assert.ok(layer.height >= floorFor(SS6.diameterMm), 'test setup: height is at/above the SS6 ratio floor (32mm), so FONT-LIB-004 is not in play either');
   const w = run(layer);
   assert.equal(w.classList.contains('visible'), false, 'this case was rated good in Outline mode -- no warning at all');
   assert.equal(w.textContent, '');
 });
 
-await test('18. false-positive regression guard + precedence: Dancing Script Outline @ 34.3mm / SS6 shows the FONT-LIB-004 height message, never the READ-003 one', () => {
-  const layer = { type: 'text', font: 'dancing-script-regular', textMode: 'stroke', stoneSize: SS6.diameterMm, height: 34.3 };
+await test('18. false-positive regression guard + precedence: Dancing Script Outline @ 28mm / SS6 shows the FONT-LIB-004 height message, never the READ-003 one', () => {
+  const layer = { type: 'text', font: 'dancing-script-regular', textMode: 'stroke', stoneSize: SS6.diameterMm, height: 28 };
   const stemMm = fontManager.getFont(layer.font).stemWidthRatio * layer.height;
   assert.ok(stemMm < SS6.diameterMm, `test setup: stem ${stemMm.toFixed(2)}mm must be under the ${SS6.diameterMm}mm stone (would fire pre-fix)`);
-  assert.ok(layer.height < SS6.supportedHeightRangeMm[0], 'test setup: 34.3mm is below SS6\'s 35mm validated minimum');
+  assert.ok(layer.height < floorFor(SS6.diameterMm), 'test setup: 28mm is below the SS6 ratio floor (32mm)');
   const w = run(layer);
   assert.ok(w.classList.contains('visible'), 'FONT-LIB-004 still owns the element for a below-minimum height');
   assert.match(w.textContent, FONTLIB004_MARKER, 'the weaker height signal is NOT suppressed just because the stroke gate went silent');
