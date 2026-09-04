@@ -211,14 +211,25 @@ await test('A17. the workspace warning reuses the existing .validation-message a
 // Part 1 (auto-fit's legibility floor, computeAutoFitScale()/MIN_HEIGHT_TO_STONE_RATIO) predates this
 // and still stops illegible over-shrinking (checks B17-B21 below). READ-008 re-expressed that floor
 // against stone diameter alone (was stone pitch) and raised it to 16 -- the B17-B21 fixtures were
-// updated to the new basis.
+// updated to the new basis. READ-009 moved the floor itself (MIN_HEIGHT_TO_STONE_RATIO and the
+// scale math) into src/geometry/TextAutoFit.js so the Gallery fixture bridge's own auto-fit path
+// shares it -- app.js's computeAutoFitScale() is now a thin project/layer-shape adapter over that
+// shared function, so this suite imports the real shared module directly instead of regex-slicing
+// app.js source (the MONO-006D lesson: brittle source-slicing breaks on any unrelated refactor of
+// the sliced function's body).
 // ===============================================================================================
 
-const ratioDecl = extractBlock(appJs, /const MIN_HEIGHT_TO_STONE_RATIO=\d+(\.\d+)?;/, 'the MIN_HEIGHT_TO_STONE_RATIO declaration');
-const computeAutoFitScaleSrc = extractBlock(appJs, /function computeAutoFitScale\([^)]*\)\{[\s\S]*?\n\}/, 'function computeAutoFitScale()');
+const { maxAutoFitWidthMm, computeTextAutoFitScale } = await import('../src/geometry/index.js');
 
-// eslint-disable-next-line no-new-func
-const computeAutoFitScale = new Function(`${ratioDecl}\nreturn ${computeAutoFitScaleSrc};`)();
+function computeAutoFitScale(layer, project, measuredWidthMm) {
+  if (!layer.autoFit) return { scale: 1 };
+  return computeTextAutoFitScale({
+    measuredWidthMm,
+    maxWidthMm: maxAutoFitWidthMm(project.canvas.width),
+    heightMm: layer.height,
+    stoneSizeMm: layer.stoneSize
+  });
+}
 
 await test('B1. the old maxWidth/floorApplied-driven too-long workflow is fully removed: no autoFitFloorAppliedByLayerId, floorApplied, recommendedWrapModeForFit, or textTooLongActionMessage remain in app.js', () => {
   for (const gone of ['autoFitFloorAppliedByLayerId', 'floorApplied', 'recommendedWrapModeForFit', 'textTooLongActionMessage']) {
@@ -361,8 +372,10 @@ await test('B17. autoFit off never rescales', () => {
 
 await test('B18. text that already fits (widthMm <= maxWidth) is never rescaled -- short/medium text is untouched', () => {
   const layer = { autoFit: true, height: 25, stoneSize: 2, gap: 0.3 };
-  assert.deepEqual(computeAutoFitScale(layer, project, 150), { scale: 1 });
-  assert.deepEqual(computeAutoFitScale(layer, project, 200), { scale: 1 }); // exactly at the boundary (maxWidth = 210-10)
+  // READ-009: computeTextAutoFitScale() also reports floored/degenerate, so the no-op result now
+  // carries all three keys (both false here) rather than {scale:1} alone.
+  assert.deepEqual(computeAutoFitScale(layer, project, 150), { scale: 1, floored: false, degenerate: false });
+  assert.deepEqual(computeAutoFitScale(layer, project, 200), { scale: 1, floored: false, degenerate: false }); // exactly at the boundary (maxWidth = 210-10)
 });
 
 await test('B19. mild overflow rescales by fit-to-width, unaffected by the legibility floor (height 60 / 2mm stone starts well above the 16x = 32mm floor)', () => {

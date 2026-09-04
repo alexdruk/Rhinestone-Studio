@@ -12,13 +12,18 @@ import { assertTestRegistered } from './lib/test-registration-assertions.mjs';
 // StoneSizes.js's five supportedHeightRangeMm minima, not on READ-007's calibration, which cannot
 // locate a boundary below ratio 20 (docs/specifications/READ-008-RatioFloor.md).
 //
-// This suite proves the behavioural blast radius is *exactly* two committed fixtures. It extracts
-// the real computeAutoFitScale() from app.js source and executes it (the `new Function` idiom
-// tools/test-text-position-workflow.mjs already uses -- the arithmetic is never reimplemented),
-// drives it against every examples/*.rhs fixture using real permanentEngine.generateTextLayout()
-// widths, and asserts a hardcoded, explicitly named list of the fixtures whose auto-fit scale the
-// new floor changes -- with their before/after scales -- plus the complementary property that every
-// other fixture's auto-fit scale is byte-identical before and after.
+// This suite proves the behavioural blast radius is *exactly* two committed fixtures. READ-009
+// moved the floor's arithmetic (MIN_HEIGHT_TO_STONE_RATIO, the scale math) out of app.js and into
+// the shared src/geometry/TextAutoFit.js module, so this suite now imports the real shared
+// function directly instead of extracting+`new Function`-evaluating app.js source (the old
+// extraction still finds app.js's thin computeAutoFitScale() wrapper, but that wrapper's body
+// calls the shared module's exports, which a bare `new Function` sandbox has no closure over --
+// this is the same MONO-006D lesson tools/test-text-position-workflow.mjs already applied). It
+// drives the real function against every examples/*.rhs fixture using real
+// permanentEngine.generateTextLayout() widths, and asserts a hardcoded, explicitly named list of
+// the fixtures whose auto-fit scale the new floor changes -- with their before/after scales --
+// plus the complementary property that every other fixture's auto-fit scale is byte-identical
+// before and after.
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const examplesDir = path.join(repoRoot, 'examples');
@@ -26,7 +31,7 @@ const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
 
 const { FontManager } = await import('../src/fonts/index.js');
 const { createDefaultFontProviderRegistry } = await import('../src/text/index.js');
-const { GeometryEngine } = await import('../src/geometry/index.js');
+const { GeometryEngine, MIN_HEIGHT_TO_STONE_RATIO, maxAutoFitWidthMm, computeTextAutoFitScale } = await import('../src/geometry/index.js');
 const { validateRhsProject, toAppProjectShape } = await import('../src/gallery/RhsFixtureBridge.js');
 
 async function test(name, fn) {
@@ -40,7 +45,7 @@ async function test(name, fn) {
   }
 }
 
-// --- the code under test: the real computeAutoFitScale() + its constant, from app.js source -------
+// --- the code under test: the real shared floor, plus app.js's thin wrapper over it --------------
 
 function extractBlock(source, pattern, label) {
   const match = source.match(pattern);
@@ -48,11 +53,19 @@ function extractBlock(source, pattern, label) {
   return match[0];
 }
 
-const ratioDecl = extractBlock(appJs, /const MIN_HEIGHT_TO_STONE_RATIO=\d+(\.\d+)?;/, 'the MIN_HEIGHT_TO_STONE_RATIO declaration');
+// Structural check only (test 0 below) -- app.js's own wrapper still must read layer.stoneSize and
+// never layer.gap. The actual arithmetic under test is the imported computeTextAutoFitScale().
 const computeAutoFitScaleSrc = extractBlock(appJs, /function computeAutoFitScale\([^)]*\)\{[\s\S]*?\n\}/, 'function computeAutoFitScale()');
-// eslint-disable-next-line no-new-func
-const computeAutoFitScale = new Function(`${ratioDecl}\nreturn ${computeAutoFitScaleSrc};`)();
-const MIN_HEIGHT_TO_STONE_RATIO = Number(ratioDecl.match(/=([\d.]+);/)[1]);
+
+function computeAutoFitScale(layer, project, measuredWidthMm) {
+  if (!layer.autoFit) return { scale: 1 };
+  return computeTextAutoFitScale({
+    measuredWidthMm,
+    maxWidthMm: maxAutoFitWidthMm(project.canvas.width),
+    heightMm: layer.height,
+    stoneSizeMm: layer.stoneSize
+  });
+}
 
 // The pre-READ-008 floor: height / (stoneSize + gap) >= 6. Reproduced here ONLY as an oracle to
 // prove the change is confined to the fixtures named below -- it is not the code under test.

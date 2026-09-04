@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GeometryEngine, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale } from '../src/geometry/index.js';
+import { GeometryEngine, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, MIN_HEIGHT_TO_STONE_RATIO } from '../src/geometry/index.js';
 import { computeTextLayerPositionForTargetCenterMm } from '../src/editing/index.js';
 import { BoundingBox } from '../src/text/VectorPath.js';
 import { FontManager } from '../src/fonts/index.js';
@@ -55,7 +55,10 @@ const shapeExtraParamsSrc = extractBlock(appJs, /function shapeExtraParams\(laye
 const shapeLayerResolveParamsSrc = extractBlock(appJs, /function shapeLayerResolveParams\(layer\)\{[\s\S]*?\n\}/, 'shapeLayerResolveParams()');
 const resolveShapeLayerPolygonsForFittingSrc = extractBlock(appJs, /function resolveShapeLayerPolygonsForFitting\(shapeLayer\)\{[\s\S]*?\n\}/, 'resolveShapeLayerPolygonsForFitting()');
 const layerLabelSrc = extractBlock(appJs, /function layerLabel\(l\)\{.*?\}/, 'layerLabel()');
-const minRatioSrc = extractBlock(appJs, /const MIN_HEIGHT_TO_STONE_RATIO=\d+;/, 'MIN_HEIGHT_TO_STONE_RATIO');
+// READ-009 moved the MIN_HEIGHT_TO_STONE_RATIO declaration itself into src/geometry/TextAutoFit.js
+// (app.js now imports it); fitTextToShape()'s body still reads it as a free variable unchanged, so
+// it's redeclared here from the real imported value rather than sliced out of app.js source.
+const minRatioSrc = `const MIN_HEIGHT_TO_STONE_RATIO=${MIN_HEIGHT_TO_STONE_RATIO};`;
 const fitTextToShapeSrc = extractBlock(appJs, /async function fitTextToShape\(textLayer,shapeLayer\)\{[\s\S]*?\n\}/, 'fitTextToShape()');
 
 const fontManager = new FontManager(manifest);

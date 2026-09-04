@@ -27,6 +27,7 @@ import { FontManager } from '../src/fonts/index.js';
 // app.js into this shared module. The sliced textStrokeNarrowerThanOneStone() calls the real
 // predicate, so it is injected into the factory like every other app.js dependency.
 import { strokeNarrowerThanOneStone, INTERIOR_FILL_MODES } from '../src/text/index.js';
+import { MIN_HEIGHT_TO_STONE_RATIO } from '../src/geometry/TextAutoFit.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
@@ -88,10 +89,9 @@ const heightPredicateSrc = sliceBalanced(appJs, 'function textHeightBelowReadabl
 const updateFnSrc = sliceBalanced(appJs, 'function updateTextHeightReadabilityUI(){', 'updateTextHeightReadabilityUI()');
 
 // READ-008: textHeightBelowReadableMinimum() now closes over the module-level MIN_HEIGHT_TO_STONE_RATIO
-// constant instead of reading a catalog size record -- extract its value from app.js and inject it,
-// the same way every other app.js dependency is injected into the factory below.
-const RATIO_DECL = matchOne(appJs, /const MIN_HEIGHT_TO_STONE_RATIO=\d+(?:\.\d+)?;/, 'the MIN_HEIGHT_TO_STONE_RATIO declaration');
-const MIN_HEIGHT_TO_STONE_RATIO = Number(RATIO_DECL.match(/=([\d.]+);/)[1]);
+// constant instead of reading a catalog size record -- inject the real value into the factory below,
+// the same way every other app.js dependency is injected. READ-009 moved the declaration itself into
+// src/geometry/TextAutoFit.js (app.js now imports it), so the value comes from that real import.
 const floorFor = (stoneDiameterMm) => stoneDiameterMm * MIN_HEIGHT_TO_STONE_RATIO;
 
 function makeClassList() {

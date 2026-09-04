@@ -89,6 +89,13 @@ export {
 } from './ShapeFit.js';
 
 export {
+  MIN_HEIGHT_TO_STONE_RATIO,
+  PRINTABLE_MARGIN_MM,
+  maxAutoFitWidthMm,
+  computeTextAutoFitScale
+} from './TextAutoFit.js';
+
+export {
   listFrames,
   getFrameDefinition,
   resolveGenerationContours,
