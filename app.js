@@ -85,7 +85,7 @@
 // pipeline stages re-run on every threshold/invert/blur/resize edit, but the (comparatively
 // expensive) browser image decode only ever runs once per distinct imageSrc value.
 import './src/browser/BrowserDependencyProbe.js';
-import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace, hitTestPathLayerRegion, computeNaturalContourTransform, applyNaturalContourTransform, isPointInsidePolygons, findOverlappingStonePairs, hasAnyOverlappingStonePair, measureStoneCrowding } from './src/geometry/index.js';
+import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace, hitTestPathLayerRegion, computeNaturalContourTransform, applyNaturalContourTransform, isPointInsidePolygons, findOverlappingStonePairs, hasAnyOverlappingStonePair, measureStoneCrowding, solveLetterSpacingMm, TRACKING_XPITCH_LADDER } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
 import { createDefaultFontProviderRegistry, createDefaultRhinestoneFontRegistry, BoundingBox, strokeNarrowerThanOneStone } from './src/text/index.js';
 import { renderProductionLayout, renderStoneLayout, fitTransform, chooseNiceStepMm } from './src/renderer/CanvasRenderer2D.js';
@@ -573,6 +573,28 @@ function refreshHeightFieldBounds(){
   el('height').min=mmToDisplayValue(RAW_ENGINE_HEIGHT_MM_MIN,project.units);
   el('height').max=mmToDisplayValue(RAW_ENGINE_HEIGHT_MM_MAX,project.units);
 }
+// READ-006: #letterSpacing's bounds are derived from pitchMm (stoneSize + gap), not fixed literals.
+// TRACKING_XPITCH_LADDER's top rung is 4 x pitchMm -- 20.0mm at SS20, 26.8mm at SS30 (where even the
+// 3x rung is 20.1mm) -- so a fixed [-2,20] cap would let the "Separate letters" button, which writes
+// l.letterSpacing directly, have its own solved value silently clamped back down by the next
+// tracked-control write with no undo entry. max = top rung x pitchMm; min = -pitchMm.
+//
+// pitchMm is read from the #stoneSize/#gap CONTROLS, not layer.stoneSize/layer.gap: in
+// writeSelectedControlsToLayer() the text branch clamps l.letterSpacing *before* the shared tail
+// block writes l.stoneSize/l.gap, so the layer's pitch is still stale there. Same "read the
+// controls, not the possibly-stale layer" convention mixedSizeEligibleIds() documents; the
+// fallbacks match that tail block's own (parseFloat(...)||2 / readLengthField('gap')||.3).
+function letterSpacingBoundsMm(){
+  const pitchMm=(parseFloat(el('stoneSize').value)||2)+(readLengthField('gap')||.3);
+  return{minMm:-pitchMm,maxMm:TRACKING_XPITCH_LADDER[TRACKING_XPITCH_LADDER.length-1]*pitchMm};
+}
+function refreshLetterSpacingFieldBounds(){
+  const l=selectedLayer();
+  if(!l||l.type!=='text')return;
+  const{minMm,maxMm}=letterSpacingBoundsMm();
+  el('letterSpacing').min=mmToDisplayValue(minMm,project.units);
+  el('letterSpacing').max=mmToDisplayValue(maxMm,project.units);
+}
 // TXT-104 step 4b: the read/display half of #letterHeight's bidirectional sync with #height -- called
 // from updateTextFontCapabilityUI() (the one place guaranteed to run after every source of a #height
 // value change: a direct edit, the stone-size auto-set snap, or a fresh layer selection) whenever
@@ -736,6 +758,10 @@ function buildTextLayoutBaseParams(layer){const fontId=layer.font;const authored
   // TXT-102: '??' fallbacks so a pre-TXT-102 saved project (no align/lineSpacing/rotationDeg on its
   // text layers) renders byte-identical -- 'left'/1/0 are exactly GeometryEngine's own defaults.
   align:layer.align??'left',lineSpacing:layer.lineSpacing??1,rotationDeg:layer.rotationDeg??0,
+  // READ-006: added inter-glyph tracking, mm. Zeroed for authored stone fonts exactly like
+  // curveEnabled above -- expectedComponentCount() has no outline to work from for rs-block/rs-modern
+  // (spec §4.5). '??' fallback so a pre-READ-006 project is byte-identical.
+  letterSpacingMm:authored?0:(layer.letterSpacing??0),
   // S-200: see mixedSizeParamsFor()'s own doc comment.
   ...mixedSizeParamsFor(layer)}}
 class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=permanentEngine}
@@ -889,7 +915,7 @@ const DEFAULT_PROJECT_NAME='Untitled Project';
 // FONT-002: stoneSize/gap default to RS Block's own recommendedStoneSizeMm/recommendedGapMm (2.8/0.3)
 // now that it's the default font, matching the family's own authored pitch (PITCH_MM=3.1 in
 // families/rsBlock.js) instead of the generic pre-FONT-002 2/0.3.
-function defaultProject(){const vessel=getVesselDefaults('mug');return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,product:'mug',canvas:computeCanvasFromVessel(vessel),cupColor:'#1f3556',wrap:'front',plate:getPlateDefaults(),vessel,layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:25,heightMode:'capHeight',textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0}]}}
+function defaultProject(){const vessel=getVesselDefaults('mug');return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,product:'mug',canvas:computeCanvasFromVessel(vessel),cupColor:'#1f3556',wrap:'front',plate:getPlateDefaults(),vessel,layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:25,heightMode:'capHeight',textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,letterSpacing:0,x:0,y:0}]}}
 // RS-0003.5D1: validates an imported Project JSON file against the exact ad hoc project/layer
 // shape #exportProject already produces (JSON.stringify(project)). Throws a specific Error
 // describing the first problem found instead of silently accepting a malformed project; the
@@ -1967,7 +1993,10 @@ function syncSelectedControlsFromLayer(){
   if(isText){el('text').value=l.text;ensureFontOptionForLayer(l.font);el('font').value=l.font;setLengthField('height',l.height);el('heightAutoAdjustedHint').style.display='none';el('autoFit').value=l.autoFit?'on':'off';el('autoFitOnHint').style.display='none';el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';setLengthField('curveRadiusMm',l.curveRadiusMm??40);el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??180;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';setLengthField('textX',l.x||0);setLengthField('textY',l.y||0);
   // TXT-102: '??'/'||' fallbacks so a pre-TXT-102 project (no align/lineSpacing/rotationDeg stored)
   // displays GeometryEngine's own defaults, matching this line's existing curve-field convention.
-  el('textAlign').value=l.align||'left';el('lineSpacing').value=l.lineSpacing??1;el('rotationDeg').value=l.rotationDeg??0}else{setLengthField('shapeX',l.type==='circle'?l.cx:l.x);setLengthField('shapeY',l.type==='circle'?l.cy:l.y);setLengthField('shapeW',l.type==='circle'?l.r:l.w);setLengthField('shapeH',l.type==='circle'?'':l.h);el('shapeWLabel').textContent=(l.type==='circle'?'Radius':'Width')+' ('+unitSuffix(project.units)+')';el('shapeHField').style.display=l.type==='circle'?'none':'';el('shapeRotationDeg').value=l.rotationDeg??0;if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);setLengthField('gap',l.gap);el('stoneColor').value=l.color;
+  el('textAlign').value=l.align||'left';el('lineSpacing').value=l.lineSpacing??1;el('rotationDeg').value=l.rotationDeg??0;
+  // READ-006: '??' fallback so a pre-READ-006 layer displays 0. The hint is written by
+  // #separateLettersBtn and cleared on selection change, exactly like #heightAutoAdjustedHint.
+  setLengthField('letterSpacing',l.letterSpacing??0);el('letterSpacingHint').style.display='none'}else{setLengthField('shapeX',l.type==='circle'?l.cx:l.x);setLengthField('shapeY',l.type==='circle'?l.cy:l.y);setLengthField('shapeW',l.type==='circle'?l.r:l.w);setLengthField('shapeH',l.type==='circle'?'':l.h);el('shapeWLabel').textContent=(l.type==='circle'?'Radius':'Width')+' ('+unitSuffix(project.units)+')';el('shapeHField').style.display=l.type==='circle'?'none':'';el('shapeRotationDeg').value=l.rotationDeg??0;if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);setLengthField('gap',l.gap);el('stoneColor').value=l.color;
   // S-200: Mixed Stone Size -- applies uniformly to every layer type, same as stoneSize/gap/color
   // just above. allowedSizesMm is only ever catalog values (see MIXED_ALLOWED_SIZE_CHECKBOXES'
   // doc comment), so each checkbox is simply checked when its own diameter is present in the
@@ -2101,7 +2130,12 @@ function writeSelectedControlsToLayer(){
   // TXT-102: align/lineSpacing mirror curveAlignment/curveRadiusMm's own clamp-on-write convention
   // just above -- lineSpacing clamped to the same [0.5,3] range the #lineSpacing input itself allows,
   // rotationDeg normalized into [0,360) exactly like GeometryEngine's own normalizeRotationDeg().
-  l.align=el('textAlign').value;l.lineSpacing=Math.max(0.5,Math.min(3,parseFloat(el('lineSpacing').value)||1));l.rotationDeg=(((parseFloat(el('rotationDeg').value)||0)%360)+360)%360}else if(l.type==='circle'){l.cx=readLengthField('shapeX')||105;l.cy=readLengthField('shapeY')||45;l.r=Math.max(1,readLengthField('shapeW')||18);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(l.type==='rectangle'){l.x=readLengthField('shapeX')||65;l.y=readLengthField('shapeY')||30;l.w=Math.max(1,readLengthField('shapeW')||80);l.h=Math.max(1,readLengthField('shapeH')||30);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(SHAPE_LIBRARY_KINDS.has(l.type)){
+  l.align=el('textAlign').value;l.lineSpacing=Math.max(0.5,Math.min(3,parseFloat(el('lineSpacing').value)||1));l.rotationDeg=(((parseFloat(el('rotationDeg').value)||0)%360)+360)%360;
+  // READ-006: clamped to the pitch-derived bounds letterSpacingBoundsMm() computes from the
+  // #stoneSize/#gap controls (NOT l.stoneSize/l.gap -- those are written by the shared tail block
+  // below, after this line) -- the SAME values refreshLetterSpacingFieldBounds() writes onto
+  // #letterSpacing's min/max. Same clamp-on-write convention as lineSpacing just above.
+  const lsBounds=letterSpacingBoundsMm();l.letterSpacing=Math.max(lsBounds.minMm,Math.min(lsBounds.maxMm,readLengthField('letterSpacing')||0))}else if(l.type==='circle'){l.cx=readLengthField('shapeX')||105;l.cy=readLengthField('shapeY')||45;l.r=Math.max(1,readLengthField('shapeW')||18);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(l.type==='rectangle'){l.x=readLengthField('shapeX')||65;l.y=readLengthField('shapeY')||30;l.w=Math.max(1,readLengthField('shapeW')||80);l.h=Math.max(1,readLengthField('shapeH')||30);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(SHAPE_LIBRARY_KINDS.has(l.type)){
   // S-110: every new shape kind shares Rectangle's x/y/w/h + Fill Style write-back, plus its own
   // configurable extra fields (Regular Polygon/Star/Ring only).
   l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||60);l.h=Math.max(1,readLengthField('shapeH')||60);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value);
@@ -2586,7 +2620,10 @@ async function resolveLayerShapeSource(layer){
     // shape to combine" here rather than letting that throw surface, so runBooleanOp()'s existing
     // missing-shape message (extended below to name Production Fonts) is what the user sees.
     if(isAuthoredStoneFontId(fontId))return null;
-    const base={text:layer.text,fontId,providerId:resolveFontProviderId(fontId),layerId:layer.id,heightMm:layer.height,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};
+    // READ-006 (spec §3.1 item 4): this branch builds its OWN params for resolveTextPolygons(), so
+    // letterSpacingMm has to be forwarded here too or a tracked text layer resolves untracked
+    // polygons in boolean ops. '??' fallback so a pre-READ-006 layer is byte-identical.
+    const base={text:layer.text,fontId,providerId:resolveFontProviderId(fontId),layerId:layer.id,heightMm:layer.height,letterSpacingMm:layer.letterSpacing??0,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};
     let resolved=await permanentEngine.resolveTextPolygons(base);
     if(layer.autoFit&&resolved.boundingBox){
       const{scale}=computeAutoFitScale(layer,project,resolved.boundingBox.widthMm);
@@ -2752,6 +2789,7 @@ function updateTextFontCapabilityUI(){
   el('heightField').style.display=showLetterHeight?'none':'block';
   el('letterHeightField').style.display=showLetterHeight?'block':'none';
   refreshHeightFieldBounds();
+  refreshLetterSpacingFieldBounds();
   if(showLetterHeight){
     const bounds=computeLetterHeightBoundsMm(fontId);
     el('letterHeight').min=mmToDisplayValue(bounds.minMm,project.units);el('letterHeight').max=mmToDisplayValue(bounds.maxMm,project.units);
@@ -2779,6 +2817,12 @@ function updateTextFontCapabilityUI(){
   // control untouched with zero architectural changes.
   el('gap').disabled=authored;
   el('gapFixedHint').style.display=authored?'block':'none';
+  // READ-006: an authored stone font has no vector outline for expectedComponentCount() to work
+  // from, so the ladder solve is undefined for it (spec §4.5) -- disable the field and the button
+  // and explain why, exactly like #gap/#gapFixedHint just above.
+  el('letterSpacing').disabled=authored;
+  el('separateLettersBtn').disabled=authored;
+  el('letterSpacingFixedHint').style.display=authored?'block':'none';
   // RS-3011 Step 7: "Generate Stones" only for a Design-drawn 'path' layer whose stones are still
   // deferred -- hidden for every other layer type/state (including a path layer that already has
   // stones), matching #gapFixedHint's own per-layer-type/state visibility toggle just above.
@@ -3493,7 +3537,7 @@ function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)retu
 function deleteLayer(id){
   commitHistory();
   if(project.layers.length<=1){
-    const blank={id:'text'+Date.now(),type:'text',visible:true,text:'',font:DEFAULT_TEXT_FONT_ID,height:25,heightMode:'capHeight',textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0};
+    const blank={id:'text'+Date.now(),type:'text',visible:true,text:'',font:DEFAULT_TEXT_FONT_ID,height:25,heightMode:'capHeight',textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,letterSpacing:0,x:0,y:0};
     project.layers=[blank];
     selectedLayerId=blank.id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true,true);return true
   }
@@ -4008,6 +4052,63 @@ el('generateStonesBtn').addEventListener('click',async()=>{
   drawingTool.refreshStoneGroupForLayer(l.id);
   await updateAll(true);
 });
+// READ-006: the one-shot letter-spacing solve (docs/specifications/READ-006-LetterSpacing.md §4, §5).
+// NOT a HISTORY_TRACKED_CONTROL_IDS id -- it is a discrete action that commits its own history entry
+// before mutating, exactly like #objectType's change listener (commitHistory() then mutate then
+// updateAll()), never the continuous-session pattern. Contour mode takes ~2s (spec §2.1); the busy
+// state is expected. Three outcomes per spec §4.2/§4.4: apply, refuse under Auto Fit, or never
+// separated -- the last two write only the hint and leave l.letterSpacing/l.height untouched.
+el('separateLettersBtn').addEventListener('click',async()=>{
+  const l=selectedLayer();
+  if(!l||l.type!=='text'||isAuthoredStoneFontId(l.font))return;
+  const btn=el('separateLettersBtn'),hint=el('letterSpacingHint'),u=unitSuffix(project.units);
+  const restore=()=>{btn.disabled=false;btn.textContent='Separate letters'};
+  btn.disabled=true;btn.textContent='Separating…';hint.style.display='none';
+  let res;
+  try{
+    // Matches the validated experiment (spec §4.1): generateTextLayout() directly, Auto Fit off,
+    // the SAME permanentEngine. buildTextLayoutBaseParams() supplies text/font/provider/height/
+    // stoneSize/gap/mode; solveLetterSpacingMm() overrides letterSpacingMm per ladder rung.
+    const pitchMm=(l.stoneSize||0)+(l.gap||0);
+    res=await solveLetterSpacingMm({engine:permanentEngine,layerParams:buildTextLayoutBaseParams(l),pitchMm});
+  }catch(error){
+    console.error('Separate letters failed',error);
+    restore();
+    hint.textContent='Could not work out a letter spacing for this text.';hint.style.display='block';
+    return;
+  }
+  restore();
+  // Outcome 3 (spec §4.4): no rung reached the 0.95 target. Apply nothing -- clamping to 4x pitch
+  // and presenting it as a fix would be a false guarantee (2 of the 24 calibration cases hit this).
+  if(!res.separationAchieved){
+    hint.textContent='These letters can’t be separated at this text height and font. Try a taller text height, a different font, or a smaller stone size.';
+    hint.style.display='block';
+    return;
+  }
+  const zeroWidthMm=res.untrackedWidthMm;
+  const trackedWidthMm=res.widthMm;
+  const spacingText=`${formatLengthDisplay(res.letterSpacingMm,project.units,2)} ${u}`;
+  // Outcome 2 (spec §4.2): with Auto Fit on, the solved spacing would push the measured width past
+  // canvas.width - 10. Auto Fit converts that added width into lost height -- the very quantity
+  // separation exists to protect -- so apply nothing and name the remedies that change the
+  // comparison. Copy modelled on textTooLongDetailMessage().
+  const widthLimitMm=project.canvas.width-10;
+  if(res.letterSpacingMm>0&&l.autoFit&&trackedWidthMm!=null&&trackedWidthMm>widthLimitMm){
+    const shortfallMm=trackedWidthMm-widthLimitMm;
+    hint.textContent=`Separating the letters needs ${spacingText} of spacing, making this text ${formatLengthDisplay(trackedWidthMm,project.units,1)} ${u} wide -- ${formatLengthDisplay(shortfallMm,project.units,1)} ${u} more than fits with Auto Fit on. Turn Auto Fit off and shorten the text, or drop a stone size.`;
+    hint.style.display='block';
+    return;
+  }
+  // Outcome 1 (spec §4.4): solved and it fits. One undoable edit; the hint states the new spacing,
+  // the new width, and the growth over the untracked (zero-spacing) width.
+  commitHistory();
+  l.letterSpacing=res.letterSpacingMm;
+  await updateAll(true);
+  setLengthField('letterSpacing',l.letterSpacing);
+  const growthPct=(zeroWidthMm>0&&trackedWidthMm!=null)?((trackedWidthMm-zeroWidthMm)/zeroWidthMm*100):null;
+  hint.textContent=`Letter spacing set to ${spacingText}. This text is now ${formatLengthDisplay(trackedWidthMm,project.units,1)} ${u} wide`+(growthPct!=null?`, ${growthPct>=0?'+':''}${growthPct.toFixed(0)}% over the untracked width.`:'.');
+  hint.style.display='block';
+});
 // Auto Fit now defaults to Off for new layers (Text height reflects the actual rendered size), so
 // switching it back On is a deliberate, easy-to-miss trade-off -- Auto Fit can shrink text below the
 // height needed for reliable readability at the selected stone size. Surfaced every time the operator
@@ -4020,7 +4121,7 @@ el('autoFit').addEventListener('input',()=>{
   const turningOn=el('autoFit').value==='on';
   el('autoFitOnHint').style.display=(l&&l.type==='text'&&!l.autoFit&&turningOn)?'block':'none';
 });
-const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','textAlign','lineSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail'];
+const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','textAlign','lineSpacing','letterSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
 // RS-2002: Browse Fonts panel wiring. Toggling/closing never touches history (it only decides
@@ -4217,7 +4318,7 @@ async function addText(){
   const other=singleOtherSelectedLayer();
   const fitPartnerShape=(other&&FITTABLE_SHAPE_TYPES.has(other.type))?other:null;
   commitHistory();
-  const layer={id:'text'+Date.now(),type:'text',visible:true,text:'New Text',font:TEXT_ENGINE_FONT_IDS.has(l.font)?l.font:DEFAULT_TEXT_FONT_ID,height:25,heightMode:'capHeight',textMode:'stroke',stoneSize:l.stoneSize||2.8,gap:l.gap||.3,color:l.color||'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0};
+  const layer={id:'text'+Date.now(),type:'text',visible:true,text:'New Text',font:TEXT_ENGINE_FONT_IDS.has(l.font)?l.font:DEFAULT_TEXT_FONT_ID,height:25,heightMode:'capHeight',textMode:'stroke',stoneSize:l.stoneSize||2.8,gap:l.gap||.3,color:l.color||'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,letterSpacing:0,x:0,y:0};
   project.layers.push(layer);
   selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);
   let statusText='Added text layer';

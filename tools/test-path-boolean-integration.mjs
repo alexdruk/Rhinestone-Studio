@@ -201,7 +201,9 @@ await test('14. resolveLayerShapeSource() resolves every layer type into a boole
   // "requires a non-empty layerId" without it) -- caught by browser verification when a text layer
   // was included in a multi-selection alongside a shape.
   // TXT-101A also threads providerId (resolveFontProviderId(fontId)) into this same params object.
-  assert.match(appJs, /const base=\{text:layer\.text,fontId,providerId:resolveFontProviderId\(fontId\),layerId:layer\.id,heightMm:layer\.height,curveEnabled:/);
+  // READ-006 acceptance 4: this branch builds its OWN params, so letterSpacingMm must be forwarded
+  // here too or a tracked text layer resolves untracked polygons in boolean ops.
+  assert.match(appJs, /const base=\{text:layer\.text,fontId,providerId:resolveFontProviderId\(fontId\),layerId:layer\.id,heightMm:layer\.height,letterSpacingMm:layer\.letterSpacing\?\?0,curveEnabled:/);
 });
 
 await test('15. runBooleanOp() requires 2+ layers, commits history before mutating, removes the source layers, and reports a specific status message', () => {

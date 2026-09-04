@@ -27,7 +27,7 @@ import { createHash } from 'node:crypto';
 import { STONE_SIZE_BY_ID } from '../../../src/renderer/StoneSizes.js';
 import { strokeNarrowerThanOneStone } from '../../../src/text/index.js';
 import { analyzeOne, normalizedStonePoints, PRODUCTION_GAP_MM } from './productionAnalysis.mjs';
-import { expectedComponentCount } from './glyphSeparation.mjs';
+import { expectedComponentCount } from '../../../src/geometry/index.js';
 import { chamferDistance } from './shapeSimilarity.mjs';
 import {
   CONFUSABLE_PAIRS,

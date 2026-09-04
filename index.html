@@ -721,7 +721,13 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
               <option value="right">Right</option>
             </select></div>
             <div class="field"><label for="lineSpacing">Line spacing</label><input id="lineSpacing" type="number" min="0.5" max="3" step="0.1" value="1"></div>
+            <div class="field"><label for="letterSpacing" data-unit-label="Letter spacing">Letter spacing (mm)</label><input id="letterSpacing" type="number" min="-2" max="20" step="0.1" data-mm-step="0.1" value="0"></div>
           </div>
+          <!-- READ-006: one-shot ladder solve (docs/specifications/READ-006-LetterSpacing.md §4).
+               Contour mode takes ~2s -- the busy state is expected, not a bug. -->
+          <button type="button" class="btn sm" id="separateLettersBtn" title="Find the smallest added letter spacing that pulls this text's letters apart, and write it into the field above">Separate letters</button>
+          <p class="hint" id="letterSpacingHint" style="display:none"></p>
+          <p class="hint" id="letterSpacingFixedHint" style="display:none">Letter spacing is built into this font.</p>
           <div id="fontLibraryPanel" class="font-library-panel" hidden>
             <div class="font-library-toolbar">
               <input type="text" id="fontSearch" placeholder="Search fonts by name or category…" aria-label="Search fonts">

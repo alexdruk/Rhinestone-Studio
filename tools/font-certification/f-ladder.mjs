@@ -31,7 +31,7 @@ import { createDefaultFontProviderRegistry } from '../../src/text/index.js';
 import { GeometryEngine } from '../../src/geometry/index.js';
 import { STONE_SIZE_BY_ID } from '../../src/renderer/StoneSizes.js';
 import { runProbe, HARNESS_VERSION, F_SEPARATION_THRESHOLD } from './lib/readabilityProbe.mjs';
-import { expectedComponentCount } from './lib/glyphSeparation.mjs';
+import { expectedComponentCount, separationBand } from '../../src/geometry/index.js';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const OUT_DIR = path.join(repoRoot, 'tools/font-certification/output/read-005');
@@ -51,16 +51,6 @@ const EXCLUDED_FONT = 'montserrat-regular';
 // a stored cell's derived fields wrong. A cell whose `derivedSchema` differs is re-derived from its
 // stored rungs (no re-evaluation), so adding a derived field never forces a full re-sweep.
 const DERIVED_SCHEMA = 'read-005a-2';
-
-// READ-005a-2 Fix 2 — `separationRatio` conflates two different defects: below 0.65 is merging (what
-// signal F gates on), above ~1.35 is fragmentation (spec §3.3 records it, deliberately does not
-// gate). Recorded per rung per text so the held-out calibration block can be stratified.
-function separationBand(r) {
-  if (!Number.isFinite(r)) return null;
-  if (r < 0.65) return 'merge';
-  if (r < 1.35) return 'aligned';
-  return 'fragmented';
-}
 
 function ladderStart(mode, stemWidthRatio) {
   if (INTERIOR_MODES.has(mode)) return Math.max(6, Math.ceil(1 / stemWidthRatio));

@@ -103,3 +103,14 @@ export {
   absolutePolygonsToNaturalSpace,
   hitTestPathLayerRegion
 } from './PaintRegionSelection.js';
+
+export {
+  countClusters,
+  overlapComponentCount,
+  expectedComponentCount,
+  separationBand,
+  solveLetterSpacingMm,
+  CLUSTER_GAP_MULTIPLIER,
+  SEPARATION_TARGET,
+  TRACKING_XPITCH_LADDER
+} from './GlyphSeparation.js';
