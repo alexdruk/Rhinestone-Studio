@@ -11,6 +11,7 @@ import { FontManager } from '../../../src/fonts/index.js';
 import { FontProviderRegistry, OpenTypeProvider } from '../../../src/text/index.js';
 import { GeometryEngine } from '../../../src/geometry/GeometryEngine.js';
 import { STONE_SIZE_BY_ID } from '../../../src/renderer/StoneSizes.js';
+import { countClusters, CLUSTER_GAP_MULTIPLIER } from '../../../src/geometry/index.js';
 import { chamferDistance } from './shapeSimilarity.mjs';
 import { STONE_SIZE_IDS, CONFUSABLE_PAIRS, PRODUCTION_REVIEW_GLYPHS, PRODUCTION_REVIEW_WORDS } from './requiredCharacters.mjs';
 
@@ -37,7 +38,6 @@ export const SPECIMEN_HEIGHT_MM_BY_SIZE = Object.fromEntries(
 );
 
 export const PRODUCTION_GAP_MM = 0.3; // matches defaultProject()'s own default gap (app.js)
-const CLUSTER_GAP_MULTIPLIER = 1.6; // stones within (pitch * this) of each other are one connected cluster
 const ISOLATION_MULTIPLIER = 2.5; // a stone farther than (pitch * this) from its nearest neighbor is "isolated"
 const SIMILARITY_CHAMFER_THRESHOLD = 0.09; // normalized (unit-height) units; see chamferDistance()
 
@@ -75,25 +75,6 @@ function pairwiseStats(stones, spacingMm) {
     collisionCount,
     nearestNeighborMm
   };
-}
-
-function countClusters(stones, thresholdMm) {
-  const n = stones.length;
-  if (n === 0) return 0;
-  const parent = Array.from({ length: n }, (_, i) => i);
-  const find = (x) => (parent[x] === x ? x : (parent[x] = find(parent[x])));
-  const union = (a, b) => {
-    const ra = find(a);
-    const rb = find(b);
-    if (ra !== rb) parent[ra] = rb;
-  };
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      const d = Math.hypot(stones[i].xMm - stones[j].xMm, stones[i].yMm - stones[j].yMm);
-      if (d <= thresholdMm) union(i, j);
-    }
-  }
-  return new Set(Array.from({ length: n }, (_, i) => find(i))).size;
 }
 
 export function normalizedStonePoints(stones) {

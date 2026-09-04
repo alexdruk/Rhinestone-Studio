@@ -33,7 +33,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { FontManager } from '../../src/fonts/index.js';
 import { createDefaultFontProviderRegistry } from '../../src/text/index.js';
-import { GeometryEngine } from '../../src/geometry/index.js';
+import { GeometryEngine, separationBand } from '../../src/geometry/index.js';
 import { STONE_SIZE_BY_ID } from '../../src/renderer/StoneSizes.js';
 import { analyzeOne } from './lib/productionAnalysis.mjs';
 import { renderLayoutSvg, RHINESTONE_SPECIMEN_PX_PER_MM_BY_SIZE } from './lib/specimenPages.mjs';
@@ -51,17 +51,6 @@ const TEXTS = ['Vitalina', 'Emmanuel'];
 const DENSE_STONE_SIZE_ID = 'ss10';
 const INTERIOR_MODES = ['fill', 'staggered', 'radial', 'contour'];
 const F_THRESHOLD = 0.65;
-
-// READ-005a-2 Fix 2 — `separationRatio` conflates merging (below 0.65, the defect signal F gates
-// on) with fragmentation (above ~1.35, recorded by spec §3.3 but deliberately not gated). The
-// held-out block's `>= 0.65` half is stratified into these bands so the ratings can tell "F was
-// wrong about merging" apart from "F passed something that had shattered". Matches f-ladder.mjs.
-function separationBand(r) {
-  if (!Number.isFinite(r)) return null;
-  if (r < 0.65) return 'merge';
-  if (r < 1.35) return 'aligned';
-  return 'fragmented';
-}
 
 // The seven joined-script faces spec §5 names for the joined-scripts block.
 const JOINED_SCRIPT_FONTS = [

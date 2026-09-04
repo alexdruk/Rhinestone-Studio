@@ -87,8 +87,10 @@ solve on every keystroke is not available.
 `separationRatio` is **not monotone** in `letterSpacingMm`. Two of eight sampled calibration cases
 fall back partway up the ladder — `mr-dafoe-regular` runs
 `0.13 0.25 0.25 0.38 0.25 0.25 0.25 0.38 0.50 0.50 1.00`, and `sacramento-regular` shows the same
-shape. Binary search would return a wrong answer on those. The solve is a linear scan of all eleven
-rungs or nothing.
+shape. Binary search would return a wrong answer on those. The solve is an **ascending** scan that
+returns at the first rung reaching `SEPARATION_TARGET` — never bisected, and never skipping a rung.
+The ladder is ascending, so the first hit is the lowest; non-monotonicity above it is irrelevant.
+Only a case that never separates walks all eleven rungs.
 
 ### 2.3 The 0.95 target is sometimes reached by fragmentation
 
@@ -128,8 +130,10 @@ Verified at `edb220b`.
 A new text-layer field must land in all four or the layer's own schema disagrees with itself:
 
 1. `defaultProject()` — `app.js:892`
-2. blank-layer literal — `app.js:3496`
-3. duplicate-layer literal — `app.js:4220`
+2. blank-layer literal (the `#addTextBtn` empty-text path) — `app.js:3496`
+3. `addText()`'s `'New Text'` literal — `app.js:4220`. (Not `duplicateLayer()`: that one, at
+   `app.js:3477`, deep-clones with `JSON.parse(JSON.stringify(l))` and carries any new field
+   automatically — no change there.)
 4. **`resolveLayerShapeSource()`'s text branch — `app.js:2588`.** This builds its *own* params
    object for `resolveTextPolygons()` and calls `computeAutoFitScale()` itself. Omitting
    `letterSpacingMm` here means a tracked text layer used as a boolean-op input silently resolves
@@ -162,9 +166,17 @@ defect. It would also run in a configuration the experiment never tested — the
 
 Ships instead:
 
-- **`Letter spacing (mm)`** — a numeric field beside `Line spacing`, `step="0.1"`, range
-  `[-2, 20]` in mm, default `0`. Negative values are allowed (the engine validates them and tighter
-  tracking is a legitimate display choice); the solve never produces one.
+- **`Letter spacing (mm)`** — a numeric field beside `Line spacing`, `step="0.1"`, default `0`,
+  with bounds **derived per layer from `pitchMm` (`stoneSize + gap`)**: `max = TRACKING_XPITCH_LADDER`'s
+  top rung × `pitchMm`, `min = -pitchMm`. A fixed `[-2, 20]` literal is wrong — the ladder's top rung
+  is `4 × pitchMm`: 20.0 mm at SS20 (pitch 5.0 mm) and 26.8 mm at SS30 (pitch 6.7 mm), where even
+  the 3× rung reaches 20.1 mm. The button writes `letterSpacingMm` straight onto the layer, so at
+  those sizes its own solved value would be silently clamped back down by the next tracked-control
+  write, with no undo entry. `app.js` writes these derived
+  bounds onto the field's `min`/`max` (a `refreshLetterSpacingFieldBounds()` alongside
+  `refreshHeightFieldBounds()`) and `writeSelectedControlsToLayer()`'s clamp reads the same values,
+  never literals. Negative values are allowed (the engine validates them and tighter tracking is a
+  legitimate display choice); the solve never produces one.
 - **`Separate letters`** — a button that runs the validated ladder once, on demand, against the
   currently selected text layer, and writes the winning `letterSpacingMm` into that field as one
   undoable edit.
@@ -236,7 +248,8 @@ because `resolveTextPolygons()` has no outline to give for an authored stone map
 is a fact about the data, not a policy choice.
 
 `letterSpacingMm` gets the treatment `curveEnabled` already has in `buildTextLayoutBaseParams()`
-(`authored ? 0 : (layer.letterSpacingMm ?? 0)`), and both the field and the button join
+(`authored ? 0 : (layer.letterSpacing ?? 0)` — the layer field is `letterSpacing`; nothing writes a
+`letterSpacingMm` onto a layer), and both the field and the button join
 `#height` / `#autoFit` / `#gap` / `#curveEnabled` in `updateTextFontCapabilityUI()`'s disabled set
 with a hint alongside `#gapFixedHint`.
 
@@ -256,11 +269,15 @@ Stated as measurements, not criteria.
 1. `node tools/font-certification/analyze-ratings.mjs` emits output byte-identical to before the
    change, and `tools/test-read-005-derived-tables.mjs` passes **unmodified**.
 2. Re-solving the ladder through `src/geometry/GlyphSeparation.js` for all 24 `paired-tracked`
-   entries in `docs/data/read-005/tracking-key.json` reproduces each entry's stored
-   `letterSpacingXPitch` **exactly**, all 24.
-3. A text layer created by each of `defaultProject()`, the blank-layer literal and the
-   duplicate-layer literal carries `letterSpacing: 0`; `Object.keys()` of the three literals'
-   text-layer objects are set-equal.
+   entries in `docs/data/read-005/tracking-key.json`: the **22** entries stored with
+   `separationAchieved: true` reproduce their stored `letterSpacingXPitch` **exactly**, and the
+   **2** entries stored with `separationAchieved: false` return `{ separationAchieved: false }`
+   rather than the stored `letterSpacingXPitch` of `4` — that `4` is only the top-rung clamp
+   `tracking-renders.mjs` applied because it needed a render, which the product must not do
+   (§2.3, §4.4).
+3. A text layer created by each of `defaultProject()`, the blank-layer literal and `addText()`'s
+   literal carries `letterSpacing: 0`; `Object.keys()` of the three literals' text-layer objects are
+   set-equal.
 4. With a non-zero `letterSpacing`, the bounding box returned by `resolveLayerShapeSource()` for
    that layer has the same width as `generateTextStonesLive()`'s bounding box for the same layer, to
    within 0.01 mm. (Fails today by construction — §3.1 item 4.)

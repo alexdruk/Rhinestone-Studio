@@ -37,10 +37,9 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { FontManager } from '../../src/fonts/index.js';
 import { createDefaultFontProviderRegistry } from '../../src/text/index.js';
-import { GeometryEngine } from '../../src/geometry/index.js';
+import { GeometryEngine, expectedComponentCount, SEPARATION_TARGET, TRACKING_XPITCH_LADDER } from '../../src/geometry/index.js';
 import { STONE_SIZE_BY_ID } from '../../src/renderer/StoneSizes.js';
 import { analyzeOne, PRODUCTION_GAP_MM } from './lib/productionAnalysis.mjs';
-import { expectedComponentCount } from './lib/glyphSeparation.mjs';
 import { renderLayoutSvg, RHINESTONE_SPECIMEN_PX_PER_MM_BY_SIZE } from './lib/specimenPages.mjs';
 import { screenshotPages } from './lib/screenshotPages.mjs';
 
@@ -53,11 +52,10 @@ const KEY_FILE = path.join(OUT_DIR, 'tracking-key.json');
 const WORK_DIR = path.join(OUT_DIR, 'tracking-work');
 const PW_PROFILE_DIR = path.join(OUT_DIR, 'pw-profile-tracking');
 
-// Per-case tracking sweep (spec Part B): letterSpacingMm over these multiples of pitchMm, take the
-// LOWEST where clusterCount / expectedComponentCount >= FULL_SEPARATION. The two cases that never
-// reach it use 4 x pitch with separationAchieved: false.
-const TRACKING_XPITCH_LADDER = [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4];
-const FULL_SEPARATION = 0.95;
+// Per-case tracking sweep (spec Part B): letterSpacingMm over TRACKING_XPITCH_LADDER multiples of
+// pitchMm, take the LOWEST where clusterCount / expectedComponentCount >= SEPARATION_TARGET. The two
+// cases that never reach it use 4 x pitch with separationAchieved: false. Both constants moved to
+// src/geometry/GlyphSeparation.js (READ-006); SEPARATION_TARGET was FULL_SEPARATION here.
 const CONTROL_XPITCH = 2.0; // specificity + harm blocks
 
 const MIN_PAIR_DISTANCE = 15; // emission-order positions between a pair's two members
@@ -232,7 +230,7 @@ async function chooseTracking(engine, providerId, spec) {
     rungs.push({ xPitch, letterSpacingMm: ls, separationRatio: ratio, widthMm: m.boundingBoxMm?.widthMm ?? null, error: m.error });
   }
   const before = rungs[0];
-  let chosen = rungs.find((r) => Number.isFinite(r.separationRatio) && r.separationRatio >= FULL_SEPARATION) ?? null;
+  let chosen = rungs.find((r) => Number.isFinite(r.separationRatio) && r.separationRatio >= SEPARATION_TARGET) ?? null;
   let separationAchieved = true;
   if (!chosen) {
     chosen = rungs[rungs.length - 1]; // 4 x pitch
@@ -421,7 +419,7 @@ async function run() {
       letterSpacingXPitch: 0,
       separationRatioBefore: sweep.before.separationRatio,
       separationRatioAfter: sweep.before.separationRatio,
-      separationAchieved: Number.isFinite(sweep.before.separationRatio) && sweep.before.separationRatio >= FULL_SEPARATION,
+      separationAchieved: Number.isFinite(sweep.before.separationRatio) && sweep.before.separationRatio >= SEPARATION_TARGET,
       widthMm: beforeWidth,
       widthGrowthPct: 0,
       pairKey, repeatOf: null, originalSlug: rec.originalSlug
@@ -448,7 +446,7 @@ async function run() {
         letterSpacingXPitch: CONTROL_XPITCH,
         separationRatioBefore: sep(m0),
         separationRatioAfter: sep(m1),
-        separationAchieved: (() => { const s = sep(m1); return Number.isFinite(s) && s >= FULL_SEPARATION; })(),
+        separationAchieved: (() => { const s = sep(m1); return Number.isFinite(s) && s >= SEPARATION_TARGET; })(),
         widthMm: w1,
         widthGrowthPct: growth,
         pairKey: null, repeatOf: null, originalSlug: rec.originalSlug
