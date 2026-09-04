@@ -337,6 +337,26 @@ function ensureFontOptionForLayer(fontId){
   }
   select.appendChild(option);
 }
+// READ-006A: Staggered/Radial/Contour were retired as TEXT fill styles (index.html dropped their
+// #textMode <option>s). TEXT_MODE_TO_ENGINE_MODE still maps all five, so a project saved with one of
+// the retired values still renders byte-identically -- but a native <select> would fall back to
+// value='' with no matching <option>, and the next writeSelectedControlsToLayer() (l.textMode=
+// el('textMode').value) would silently rewrite that layer's real mode. Mirrors
+// ensureFontOptionForLayer() above exactly: called from syncSelectedControlsFromLayer() right before
+// el('textMode').value=... is set, the injected option is tagged [data-retired-option] and replaced
+// (never accumulated) on every call, so switching selection away never leaves a stale entry.
+const RETIRED_TEXT_MODES=new Set(['staggered','radial','contour']);
+const RETIRED_TEXT_MODE_LABELS={staggered:'Staggered Fill',radial:'Radial Fill',contour:'Contour Fill'};
+function ensureTextModeOptionForLayer(textMode){
+  const select=el('textMode');
+  const stale=select.querySelector('option[data-retired-option]');
+  if(stale)stale.remove();
+  if(!RETIRED_TEXT_MODES.has(textMode)||select.querySelector(`option[value="${textMode}"]`))return;
+  const option=document.createElement('option');
+  option.value=textMode;option.dataset.retiredOption='1';
+  option.textContent=`${RETIRED_TEXT_MODE_LABELS[textMode]} (retired)`;
+  select.appendChild(option);
+}
 // Favorites are a client-side browsing preference, not project data -- stored in localStorage,
 // never read/written by save/load/export/Design Library/Gallery, so they carry no compatibility
 // risk and don't need to round-trip through a project file.
@@ -1990,7 +2010,7 @@ function syncSelectedControlsFromLayer(){
   if(showStarFields){el('shapePoints').value=l.points??5;el('shapeInnerRadius').value=l.innerRadiusRatio??0.5}
   if(showRingField)el('shapeRingInner').value=l.innerRatio??0.5;
   if(l.type==='image')el('imageFillMode').value=resolveImageFillMode(l.fillMode);
-  if(isText){el('text').value=l.text;ensureFontOptionForLayer(l.font);el('font').value=l.font;setLengthField('height',l.height);el('heightAutoAdjustedHint').style.display='none';el('autoFit').value=l.autoFit?'on':'off';el('autoFitOnHint').style.display='none';el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';setLengthField('curveRadiusMm',l.curveRadiusMm??40);el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??180;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';setLengthField('textX',l.x||0);setLengthField('textY',l.y||0);
+  if(isText){el('text').value=l.text;ensureFontOptionForLayer(l.font);el('font').value=l.font;setLengthField('height',l.height);el('heightAutoAdjustedHint').style.display='none';el('autoFit').value=l.autoFit?'on':'off';el('autoFitOnHint').style.display='none';ensureTextModeOptionForLayer(l.textMode);el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';setLengthField('curveRadiusMm',l.curveRadiusMm??40);el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??180;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';setLengthField('textX',l.x||0);setLengthField('textY',l.y||0);
   // TXT-102: '??'/'||' fallbacks so a pre-TXT-102 project (no align/lineSpacing/rotationDeg stored)
   // displays GeometryEngine's own defaults, matching this line's existing curve-field convention.
   el('textAlign').value=l.align||'left';el('lineSpacing').value=l.lineSpacing??1;el('rotationDeg').value=l.rotationDeg??0;
@@ -2777,6 +2797,10 @@ function updateTextFontCapabilityUI(){
   const legacy=known&&!authored&&fontManager.getFont(fontId).enabled!==true;
   const unknown=isText&&!known;
   el('textModeField').style.display=authored?'none':'block';
+  // READ-006A: the selected text layer still carries one of the three retired fill styles
+  // (Staggered/Radial/Contour). #textMode shows it via ensureTextModeOptionForLayer()'s injected
+  // "(retired)" option; this hint explains the state. Nothing is auto-switched.
+  el('retiredTextModeHint').style.display=(isText&&RETIRED_TEXT_MODES.has(l.textMode))?'block':'none';
   // TXT-104 step 4b: a capHeight-mode layer on a validated (capHeightRatio-bearing) font displays
   // #letterHeight -- a derived view of #height in real cap-height mm -- instead of raw #height
   // itself; every other combination (raw mode, authored font, legacy/unknown font) keeps showing
