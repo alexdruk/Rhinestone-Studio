@@ -485,7 +485,7 @@ function computeSession1(ratings, key) {
   const fontsInNeither = keyFonts.filter((f) => !NON_SCRIPT_FONTS.has(f) && !joinedScriptSet.has(f));
   const nonScriptCut = {
     threshold: 20,
-    definition: 'fontId in NON_SCRIPT_FONTS (imported from calibration-renders.mjs)',
+    definition: 'fontId in NON_SCRIPT_FONTS (tools/font-certification/lib/scriptFaceFonts.mjs)',
     population: nonScriptRows.length,
     ...nonScriptCutCounts,
     fontsInNeitherScriptSet: { count: fontsInNeither.length, fonts: fontsInNeither },
