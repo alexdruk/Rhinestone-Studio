@@ -3577,7 +3577,7 @@ function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)retu
 function deleteLayer(id){
   commitHistory();
   if(project.layers.length<=1){
-    const blank={id:'text'+Date.now(),type:'text',visible:true,text:'',font:DEFAULT_TEXT_FONT_ID,height:25,heightMode:'capHeight',textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,letterSpacing:0,x:0,y:0};
+    const blank={id:'text'+Date.now(),type:'text',visible:true,text:'',font:DEFAULT_TEXT_FONT_ID,height:45,heightMode:'capHeight',textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,letterSpacing:0,x:0,y:0};
     project.layers=[blank];
     selectedLayerId=blank.id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true,true);return true
   }

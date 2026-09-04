@@ -89,13 +89,19 @@ const exampleFiles = (await readdir(examplesDir)).filter((f) => f.endsWith('.rhs
 
 // One row per visible autoFit text layer across the whole fixture set.
 const rows = [];
+// Fixtures validateRhsProject()/toAppProjectShape() reject are recorded, not silently skipped --
+// test 1 asserts this is exactly zero across the whole fixture set (every examples/*.rhs file is a
+// well-formed RhsFixtureBridge project), so a future fixture that genuinely fails to translate
+// fails loudly here instead of quietly shrinking the measured set.
+const swallowedFiles = [];
 for (const file of exampleFiles) {
   const raw = JSON.parse(await readFile(path.join(examplesDir, file), 'utf8'));
   let app;
   try {
     app = toAppProjectShape(validateRhsProject(raw, file));
-  } catch {
-    continue; // fixtures whose schema this bridge doesn't accept carry no text-with-autoFit layer
+  } catch (error) {
+    swallowedFiles.push({ file, message: error.message });
+    continue;
   }
   for (const layer of app.layers) {
     if (layer.type !== 'text' || layer.visible === false || !layer.autoFit) continue;
@@ -136,8 +142,17 @@ const FLOOR_CHANGES = {
   }
 };
 
-await test('1. the sub-suite actually exercised every autoFit text layer in the fixture set (guards against a fixture silently dropping out)', () => {
-  assert.ok(rows.length >= 10, `expected to have measured >= 10 autoFit text layers, measured ${rows.length}`);
+// The exact count of autoFit text layers across the current examples/*.rhs set: bottle-front-design
+// (2), business-logo-monogram-bottle (1), long-name-autofit (1), long-script-name (1),
+// mixed-fill-styles-and-sizes (2), multi-color-mixed-layers (1), svg-logo-import (1),
+// team-jersey-name-number (1), tumbler-wrap-design (1), vitalina-serbin (1),
+// wedding-bride-tribe-tumbler (1) = 13. An exact count, not a floor, so an added/removed autoFit
+// text layer anywhere in the fixture set is caught here rather than passing silently.
+const EXPECTED_ROW_COUNT = 13;
+
+await test('1. no examples/*.rhs fixture was silently dropped by the RhsFixtureBridge translation, and the sub-suite measured exactly the expected set of autoFit text layers', () => {
+  assert.deepEqual(swallowedFiles, [], `expected every examples/*.rhs fixture to translate cleanly; ${swallowedFiles.length} did not: ${JSON.stringify(swallowedFiles)}`);
+  assert.equal(rows.length, EXPECTED_ROW_COUNT, `expected exactly ${EXPECTED_ROW_COUNT} autoFit text layers across the fixture set, measured ${rows.length}: ${JSON.stringify(rows.map((r) => r.file))}`);
   for (const name of Object.keys(FLOOR_CHANGES)) {
     assert.ok(rows.some((r) => r.file === name), `named fixture ${name} was not measured`);
   }

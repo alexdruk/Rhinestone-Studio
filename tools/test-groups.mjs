@@ -282,6 +282,10 @@ export const GROUPS = {
     'test-font-decision-001-stone-size-ux.mjs',
     'test-font-portfolio-001-stone-size-gating.mjs',
     'test-auto-fit-default-toggle-warning.mjs',
+    // READ-008: the auto-fit readability floor's basis/value, re-expressed in stone diameters --
+    // companion to test-text-position-workflow.mjs's B17-B21 (computeAutoFitScale() itself) and
+    // test-auto-fit-default-toggle-warning.mjs (the Auto Fit control) directly above.
+    'test-read-008-ratio-floor.mjs',
     // app.js UI-layer wiring/behaviour: pure mm<->inch display helpers (RS-3018) and the bare-DOM
     // length-field mm stash that stops Units toggles drifting (RS-3025); the manual Text-height
     // field clamp (TXT-103); S-200 Mixed Stone Size UI wiring + editing lifecycle; and the RS-2012
