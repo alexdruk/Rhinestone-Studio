@@ -55,7 +55,7 @@ const shapeExtraParamsSrc = extractBlock(appJs, /function shapeExtraParams\(laye
 const shapeLayerResolveParamsSrc = extractBlock(appJs, /function shapeLayerResolveParams\(layer\)\{[\s\S]*?\n\}/, 'shapeLayerResolveParams()');
 const resolveShapeLayerPolygonsForFittingSrc = extractBlock(appJs, /function resolveShapeLayerPolygonsForFitting\(shapeLayer\)\{[\s\S]*?\n\}/, 'resolveShapeLayerPolygonsForFitting()');
 const layerLabelSrc = extractBlock(appJs, /function layerLabel\(l\)\{.*?\}/, 'layerLabel()');
-const minAutoFitRatioSrc = extractBlock(appJs, /const MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO=\d+;/, 'MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO');
+const minRatioSrc = extractBlock(appJs, /const MIN_HEIGHT_TO_STONE_RATIO=\d+;/, 'MIN_HEIGHT_TO_STONE_RATIO');
 const fitTextToShapeSrc = extractBlock(appJs, /async function fitTextToShape\(textLayer,shapeLayer\)\{[\s\S]*?\n\}/, 'fitTextToShape()');
 
 const fontManager = new FontManager(manifest);
@@ -82,7 +82,7 @@ function build() {
     ${shapeLayerResolveParamsSrc}
     ${resolveShapeLayerPolygonsForFittingSrc}
     ${layerLabelSrc}
-    ${minAutoFitRatioSrc}
+    ${minRatioSrc}
     ${fitTextToShapeSrc}
     return { fitTextToShape, isAuthoredStoneFontId, isFontKnown, resolveFontProviderId };
     `
@@ -91,11 +91,14 @@ function build() {
 
 const { fitTextToShape, isAuthoredStoneFontId, isFontKnown, resolveFontProviderId } = build();
 
-const RECTANGLE_SHAPE = { id: 'shape1', type: 'rectangle', x: 20, y: 20, w: 100, h: 50, stoneSize: 2.8, gap: 0.3 };
+// READ-008: the legibility floor is now 16 x stone diameter (was 6 x stone pitch), so a legible
+// 'Alex' at a 2.8mm stone needs >= 44.8mm of height -- the rectangle and the text layer's default
+// height are sized so test 6's end-to-end fit has real room, rather than tripping the raised floor.
+const RECTANGLE_SHAPE = { id: 'shape1', type: 'rectangle', x: 10, y: 5, w: 180, h: 80, stoneSize: 2.8, gap: 0.3 };
 
 function textLayer(overrides = {}) {
   return {
-    id: 'text1', type: 'text', text: 'Alex', font: 'rs-block', height: 25, stoneSize: 2.8, gap: 0.3,
+    id: 'text1', type: 'text', text: 'Alex', font: 'rs-block', height: 50, stoneSize: 2.8, gap: 0.3,
     curveEnabled: false, ...overrides
   };
 }

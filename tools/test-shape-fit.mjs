@@ -115,11 +115,11 @@ await test('6. a hexagon\'s inscribed rect area ratio is plausible (between a ve
 
 await test('7. computeShapeFitScale() shrinks text to fit a smaller target box', () => {
   const result = computeShapeFitScale({
-    // A small spacingMm keeps the legibility floor (spacingMm * 6 = 3mm) well below the scaled
+    // A small stoneSizeMm keeps the legibility floor (stoneSizeMm * 6 = 3mm) well below the scaled
     // height (12.5mm) -- isolates "does scaling-down work" from the separate floor-clamping
     // behavior, which tests 9/10 cover on their own.
     currentHeightMm: 25, measuredWidthMm: 100, measuredHeightMm: 25,
-    spacingMm: 0.5, targetWidthMm: 50, targetHeightMm: 20, minHeightToSpacingRatio: 6
+    stoneSizeMm: 0.5, targetWidthMm: 50, targetHeightMm: 20, minHeightToStoneRatio: 6
   });
   assert.ok(result.ok);
   assert.ok(result.scale < 1, 'a target box smaller than the measured text must produce scale < 1');
@@ -129,19 +129,19 @@ await test('7. computeShapeFitScale() shrinks text to fit a smaller target box',
 await test('8. computeShapeFitScale() can grow text to better fill a generously larger target box', () => {
   const result = computeShapeFitScale({
     currentHeightMm: 10, measuredWidthMm: 40, measuredHeightMm: 10,
-    spacingMm: 1, targetWidthMm: 80, targetHeightMm: 30, minHeightToSpacingRatio: 6
+    stoneSizeMm: 1, targetWidthMm: 80, targetHeightMm: 30, minHeightToStoneRatio: 6
   });
   assert.ok(result.ok);
   assert.ok(result.scale > 1, 'a generously larger target box should be allowed to grow the text');
 });
 
-await test('9. computeShapeFitScale() clamps to the legibility floor (spacingMm * minHeightToSpacingRatio) rather than shrinking further', () => {
+await test('9. computeShapeFitScale() clamps to the legibility floor (stoneSizeMm * minHeightToStoneRatio) rather than shrinking further', () => {
   // Without a floor, fitting 100mm-wide text into a 10mm-wide box would need scale 0.1 (height -> 2.5mm).
-  // The floor (spacingMm=2.3, ratio=6 -> 13.8mm) is well above that, so the floored height's width
+  // The floor (stoneSizeMm=2.3, ratio=6 -> 13.8mm) is well above that, so the floored height's width
   // (100 * (13.8/25) = 55.2mm) must still be checked against the (generous) target width below.
   const result = computeShapeFitScale({
     currentHeightMm: 25, measuredWidthMm: 100, measuredHeightMm: 25,
-    spacingMm: 2.3, targetWidthMm: 200, targetHeightMm: 14, minHeightToSpacingRatio: 6
+    stoneSizeMm: 2.3, targetWidthMm: 200, targetHeightMm: 14, minHeightToStoneRatio: 6
   });
   assert.ok(result.ok);
   const flooredHeightMm = 25 * result.scale;
@@ -151,14 +151,14 @@ await test('9. computeShapeFitScale() clamps to the legibility floor (spacingMm 
 await test('10. computeShapeFitScale() fails with reason "legibility" when even the floored height does not fit the target width', () => {
   const result = computeShapeFitScale({
     currentHeightMm: 25, measuredWidthMm: 100, measuredHeightMm: 25,
-    spacingMm: 2.3, targetWidthMm: 10, targetHeightMm: 10, minHeightToSpacingRatio: 6
+    stoneSizeMm: 2.3, targetWidthMm: 10, targetHeightMm: 10, minHeightToStoneRatio: 6
   });
   assert.equal(result.ok, false);
   assert.equal(result.reason, 'legibility');
 });
 
 await test('11. computeShapeFitScale() fails with reason "empty"/"degenerate" for zero/invalid measured text size', () => {
-  const base = { currentHeightMm: 25, spacingMm: 2.3, targetWidthMm: 50, targetHeightMm: 50, minHeightToSpacingRatio: 6 };
+  const base = { currentHeightMm: 25, stoneSizeMm: 2.3, targetWidthMm: 50, targetHeightMm: 50, minHeightToStoneRatio: 6 };
   assert.equal(computeShapeFitScale({ ...base, measuredWidthMm: 0, measuredHeightMm: 25 }).ok, false);
   assert.equal(computeShapeFitScale({ ...base, measuredWidthMm: 100, measuredHeightMm: 0 }).ok, false);
 });
@@ -191,7 +191,7 @@ await test('13. end-to-end fit computation succeeds for every FITTABLE_SHAPE_TYP
     assert.ok(rect && rect.widthMm > 0, `${kind}: expected a usable inscribed rect`);
     const scaleResult = computeShapeFitScale({
       currentHeightMm: 20, measuredWidthMm: 60, measuredHeightMm: 20,
-      spacingMm: 2.3, targetWidthMm: rect.widthMm, targetHeightMm: rect.heightMm, minHeightToSpacingRatio: 6
+      stoneSizeMm: 2.3, targetWidthMm: rect.widthMm, targetHeightMm: rect.heightMm, minHeightToStoneRatio: 6
     });
     assert.ok(typeof scaleResult.ok === 'boolean', `${kind}: expected a definite ok/fail result`);
   }

@@ -208,11 +208,13 @@ await test('A17. the workspace warning reuses the existing .validation-message a
 // printable circumference (reusing ObjectDimensions.js's circumferenceMm()), rather than a
 // "current viewing angle" legibility concern.
 //
-// Part 1 (auto-fit's legibility floor, computeAutoFitScale()/MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO)
-// predates this and is unchanged -- it still stops illegible over-shrinking (checks B17-B21 below).
+// Part 1 (auto-fit's legibility floor, computeAutoFitScale()/MIN_HEIGHT_TO_STONE_RATIO) predates this
+// and still stops illegible over-shrinking (checks B17-B21 below). READ-008 re-expressed that floor
+// against stone diameter alone (was stone pitch) and raised it to 16 -- the B17-B21 fixtures were
+// updated to the new basis.
 // ===============================================================================================
 
-const ratioDecl = extractBlock(appJs, /const MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO=\d+(\.\d+)?;/, 'the MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO declaration');
+const ratioDecl = extractBlock(appJs, /const MIN_HEIGHT_TO_STONE_RATIO=\d+(\.\d+)?;/, 'the MIN_HEIGHT_TO_STONE_RATIO declaration');
 const computeAutoFitScaleSrc = extractBlock(appJs, /function computeAutoFitScale\([^)]*\)\{[\s\S]*?\n\}/, 'function computeAutoFitScale()');
 
 // eslint-disable-next-line no-new-func
@@ -346,7 +348,8 @@ await test('B16. the too-long warning\'s Inspector panel copy has no misleading 
   assert.ok(!blockMatch[0].includes('workspaceCenterTextBtn'), 'the too-long warning must not offer Center Text');
 });
 
-// --- Behavioral checks — computeAutoFitScale() (Part 1, predates the Front View Frame, unchanged) ---
+// --- Behavioral checks — computeAutoFitScale() (Part 1, predates the Front View Frame; the
+//     legibility floor's basis/value changed in READ-008, fixtures updated to match) ---
 
 const project = { canvas: { width: 210, height: 90 } };
 
@@ -362,21 +365,22 @@ await test('B18. text that already fits (widthMm <= maxWidth) is never rescaled 
   assert.deepEqual(computeAutoFitScale(layer, project, 200), { scale: 1 }); // exactly at the boundary (maxWidth = 210-10)
 });
 
-await test('B19. mild overflow rescales exactly as before (fit-to-width, unaffected by the legibility floor)', () => {
-  const layer = { autoFit: true, height: 25, stoneSize: 2, gap: 0.3 };
+await test('B19. mild overflow rescales by fit-to-width, unaffected by the legibility floor (height 60 / 2mm stone starts well above the 16x = 32mm floor)', () => {
+  const layer = { autoFit: true, height: 60, stoneSize: 2, gap: 0.3 };
   const { scale } = computeAutoFitScale(layer, project, 250);
   assert.ok(Math.abs(scale - 0.8) < 1e-9, `expected the fit-to-width scale 0.8, got ${scale}`);
 });
 
-await test('B20. severe overflow still clamps to the 6x legibility floor instead of collapsing into illegible stone soup', () => {
-  const layer = { autoFit: true, height: 25, stoneSize: 2, gap: 0.3 };
+await test('B20. severe overflow clamps to the 16x height-to-stone-diameter floor instead of collapsing into illegible stone soup', () => {
+  // height 60 / 2mm stone -> floor 32mm (ratio 16). The floor is a shrink limit, never a grow
+  // target, so the starting height must sit above it for the clamp to be observable.
+  const layer = { autoFit: true, height: 60, stoneSize: 2, gap: 0.3 };
   const measuredWidthMm = 786.3;
   const fitScale = (project.canvas.width - 10) / measuredWidthMm;
   const { scale } = computeAutoFitScale(layer, project, measuredWidthMm);
   assert.ok(scale > fitScale, 'expected the floor to win over the old, more-aggressive fit-to-width shrink');
-  const spacingMm = layer.stoneSize + layer.gap;
   const resultingHeightMm = layer.height * scale;
-  assert.ok(resultingHeightMm / spacingMm >= 6 - 1e-9, 'expected the resulting height/spacing ratio to sit at the 6x legibility floor');
+  assert.ok(resultingHeightMm / layer.stoneSize >= 16 - 1e-9, 'expected the resulting height/stone-diameter ratio to sit at the 16x legibility floor');
 });
 
 await test('B21. the floor never scales height up past the original nominal height', () => {
@@ -400,7 +404,9 @@ await test('B23. the same phrase fits a wider object\'s circumference once the o
 });
 
 await test('B24. medium text ("Vitalina Serbin", 199.4mm raw) never triggers the too-long warning on any real object: on the mug/tumbler it fits under maxWidth outright (autoFit never engages, scale=1); on the narrower bottle autoFit\'s existing fit-to-maxWidth shrink (unchanged Part 1 behavior, no legibility floor needed at this length) already brings the resolved width under maxWidth, which is itself always < circumferenceMm', () => {
-  const layer = { autoFit: true, height: 25, stoneSize: 2, gap: 0.3 };
+  // height 45 / 2mm stone = ratio 22.5, above READ-008's 16x floor, so the floor never binds at
+  // this text length and the fit-to-width shrink path is exactly what runs.
+  const layer = { autoFit: true, height: 45, stoneSize: 2, gap: 0.3 };
   for (const canvasWidthMm of [210, 230, 180]) {
     const proj = { canvas: { width: canvasWidthMm, height: 90 } };
     const { scale } = computeAutoFitScale(layer, proj, 199.4);

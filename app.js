@@ -522,28 +522,37 @@ function toggleFavoriteFont(fontId){if(favoriteFontIds.has(fontId))favoriteFontI
 // below applies this to already-generated stones; resolveLayerShapeSource()'s text branch applies
 // the exact same formula to already-generated *polygons* (RS-1012 boolean input), so both stay in
 // sync by construction instead of by duplicated arithmetic.
-// S-107: the minimum heightMm/spacingMm ratio auto-fit will shrink text to. spacingMm (stoneSize+gap)
-// is the fixed physical stone pitch -- unlike heightMm, it never scales down here, because a stone's
-// size is a real catalog rhinestone (see src/renderer/StoneSizes.js), not a continuously-adjustable
-// display value; shrinking it during auto-fit would silently produce a non-orderable size. Below
-// this ratio there are too few stones across a glyph's shrunk stroke width for the letterform to
-// read as anything but a blurred row of dots (confirmed empirically -- see
-// docs/specifications/S-107-LongTextReadability.md's audit). Auto-fit still shrinks heightMm as much
-// as it can within this floor; only text so long it would need to shrink past the floor now overflows
-// maxWidth instead of collapsing into illegible stone soup.
-const MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO=6;
+// READ-008: the minimum height-to-stone-diameter ratio (layer.height / layer.stoneSize, always the
+// raw engine height -- never a cap-height-mode display value) that auto-fit and Fit Text to Shape
+// will shrink text to. Measured against stone diameter ALONE, not stoneSize+gap: gap is user-editable
+// and has nothing to do with legibility, so a floor expressed in stone pitch silently drifts every
+// time the user edits gap (S-107's original basis -- see docs/specifications/READ-007-RatioFloorEvidence.md
+// for the correction). stoneSize itself never scales down here -- it is a real catalog rhinestone
+// (src/renderer/StoneSizes.js), not a continuously-adjustable display value, and shrinking it during
+// auto-fit would silently produce a non-orderable size. Below this ratio there are too few stones
+// across a glyph's shrunk stroke width for the letterform to read as anything but a blurred row of
+// dots. Auto-fit still shrinks heightMm as much as it can within this floor; only text so long it
+// would need to shrink past the floor overflows maxWidth instead of collapsing into stone soup.
+//
+// Value 16: READ-007's calibration set cannot locate a boundary below ratio 20 -- every ratio under
+// 20 is a uniform zero-cost floor there, so it cannot distinguish 15 from 20 (READ-007 §8). 16 is
+// chosen on independent evidence: StoneSizes.js's five supportedHeightRangeMm minima imply ratios of
+// 17.50 / 16.07 / 16.25 / 17.02 / 16.56 (SS6..SS30) -- five independently derived minima converging
+// on 16-17.5, and a floor of 20 would put SS30's entire validated range permanently in warning.
+// 16-20 remains an unresolved band; see docs/specifications/READ-008-RatioFloor.md.
+const MIN_HEIGHT_TO_STONE_RATIO=16;
 // Computes the heightMm scale factor generateTextStonesLive()/resolveLayerShapeSource() apply for
 // auto-fit text, given that text's straight (unscaled) measured widthMm. Shared by both call sites
 // so their auto-fit decisions can never drift apart (mirrors computeTextPlacementOffset() above).
-// `scale` is 1 (no change) whenever auto-fit is off, the text already fits, or heightMm/spacingMm is
-// degenerate -- this arithmetic is byte-identical to before this milestone's follow-up.
+// `scale` is 1 (no change) whenever auto-fit is off, the text already fits, or heightMm/stoneSize is
+// degenerate.
 function computeAutoFitScale(layer,project,measuredWidthMm){
   if(!layer.autoFit||!(measuredWidthMm>0))return{scale:1};
   const maxWidth=project.canvas.width-10;
   if(measuredWidthMm<=maxWidth)return{scale:1};
   const fitScale=maxWidth/measuredWidthMm;
-  const spacingMm=(layer.stoneSize||0)+(layer.gap||0);
-  const minScale=spacingMm>0&&layer.height>0?(spacingMm*MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO)/layer.height:fitScale;
+  const stoneSizeMm=layer.stoneSize||0;
+  const minScale=stoneSizeMm>0&&layer.height>0?(stoneSizeMm*MIN_HEIGHT_TO_STONE_RATIO)/layer.height:fitScale;
   return{scale:Math.min(1,Math.max(fitScale,minScale))};
 }
 // TXT-104 step 2: solves the em-square heightMm generateTextLayout() must be called with so that a
@@ -935,7 +944,10 @@ const DEFAULT_PROJECT_NAME='Untitled Project';
 // FONT-002: stoneSize/gap default to RS Block's own recommendedStoneSizeMm/recommendedGapMm (2.8/0.3)
 // now that it's the default font, matching the family's own authored pitch (PITCH_MM=3.1 in
 // families/rsBlock.js) instead of the generic pre-FONT-002 2/0.3.
-function defaultProject(){const vessel=getVesselDefaults('mug');return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,product:'mug',canvas:computeCanvasFromVessel(vessel),cupColor:'#1f3556',wrap:'front',plate:getPlateDefaults(),vessel,layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:25,heightMode:'capHeight',textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,letterSpacing:0,x:0,y:0}]}}
+// READ-008: height 25 -> 45 so the stored value is ratio-coherent with the 2.8 mm default stone
+// (45/2.8 = 16.07, just above MIN_HEIGHT_TO_STONE_RATIO). RS Block is authored, so heightMm is a
+// no-op for it -- identical width and stone count at 25, 45 and 60 -- and this changes no output.
+function defaultProject(){const vessel=getVesselDefaults('mug');return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,product:'mug',canvas:computeCanvasFromVessel(vessel),cupColor:'#1f3556',wrap:'front',plate:getPlateDefaults(),vessel,layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:45,heightMode:'capHeight',textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,letterSpacing:0,x:0,y:0}]}}
 // RS-0003.5D1: validates an imported Project JSON file against the exact ad hoc project/layer
 // shape #exportProject already produces (JSON.stringify(project)). Throws a specific Error
 // describing the first problem found instead of silently accepting a malformed project; the
@@ -2953,28 +2965,32 @@ function updateMixedSizeCapabilityUI(){
 // OpenType fonts through FONT-CERT-001/002's real analysis pipeline
 // (tools/font-certification/audit-manifest-readability.mjs) found ZERO font/stone-size combinations
 // that fail at each size's own validated default height -- but a broad, font-independent collapse
-// as soon as height drops below that size's supportedHeightRangeMm minimum. Readability here is
-// governed by the height-to-stone-diameter ratio, not by which font is selected, so the right gate
-// is this one height check rather than per-font `unsupportedStoneSizes` entries (which stay exactly
-// as FONT-PORTFOLIO-001's human raters set them -- see that milestone's own spec).
-// applyStoneSizeHeightAutoSet() already enforces the range on a *stone size* change; this covers
-// every other route to an out-of-range height (a direct #height edit, a loaded project, an Auto Fit
-// shrink, TXT-104's capHeight conversion). Warning only, never a clamp -- see index.html's own
-// comment on #heightBelowReadableWarning for why.
-// FONT-LIB-004: shared predicate -- true when `layer` is a text layer whose height sits below its
-// current stone size's validated minimum. Used by BOTH the height warning below and
-// updateStoneSizeOverlapCapabilityUI()'s crowding hint, which suppresses its own font-blaming
-// message whenever this is true (the height is the root cause there; naming the font would send the
-// user after a fix that cannot work -- see the crowding hint's own comment).
+// as soon as the height-to-stone-diameter ratio drops too low. Readability here is governed by that
+// ratio, not by which font is selected, so the right gate is this one height check rather than
+// per-font `unsupportedStoneSizes` entries (which stay exactly as FONT-PORTFOLIO-001's human raters
+// set them -- see that milestone's own spec).
+// READ-008: rebased from the catalog size's supportedHeightRangeMm[0] (which never fired for a
+// non-catalog stone diameter -- findStoneSizeByDiameterMm() returned null and the check was skipped
+// entirely) to the shared MIN_HEIGHT_TO_STONE_RATIO floor, so it now fires at ANY stone diameter.
+// applyStoneSizeHeightAutoSet() already enforces the catalog range on a *stone size* change; this
+// covers every other route to an out-of-range height (a direct #height edit, a loaded project, an
+// Auto Fit shrink, TXT-104's capHeight conversion). Warning only, never a clamp -- see index.html's
+// own comment on #heightBelowReadableWarning for why.
+// FONT-LIB-004: shared predicate -- non-null when `layer` is a text layer whose height sits below
+// the MIN_HEIGHT_TO_STONE_RATIO floor for its current stone diameter. Used by BOTH the height
+// warning below and updateStoneSizeOverlapCapabilityUI()'s crowding hint, which suppresses its own
+// font-blaming message whenever this is true (the height is the root cause there; naming the font
+// would send the user after a fix that cannot work -- see the crowding hint's own comment).
 function textHeightBelowReadableMinimum(layer){
   // Authored Production Fonts (RS Block/RS Modern) are a fixed size with their own baked-in stone
-  // pitch -- supportedHeightRangeMm is an OpenType-sampling concept that does not apply to them
-  // (same exclusion #textModeField/#gapFixedHint already make).
+  // pitch -- this ratio floor is an OpenType-sizing concept that does not apply to them (same
+  // exclusion #textModeField/#gapFixedHint already make).
   if(!layer||layer.type!=='text'||isAuthoredStoneFontId(layer.font))return null;
-  const size=findStoneSizeByDiameterMm(layer.stoneSize);
+  const stoneSizeMm=layer.stoneSize;
   const heightMm=layer.height;
-  if(!size||!Number.isFinite(heightMm))return null;
-  return heightMm<size.supportedHeightRangeMm[0]?{size,heightMm}:null;
+  if(!Number.isFinite(stoneSizeMm)||stoneSizeMm<=0||!Number.isFinite(heightMm))return null;
+  const minHeightMm=stoneSizeMm*MIN_HEIGHT_TO_STONE_RATIO;
+  return heightMm<minHeightMm?{stoneSizeMm,heightMm,minHeightMm}:null;
 }
 // READ-003: shared predicate, beside textHeightBelowReadableMinimum() -- non-null when `layer` is a
 // text layer whose font's dominant stroke, at the layer's current height, is physically narrower
@@ -3010,7 +3026,7 @@ function textStrokeNarrowerThanOneStone(layer){
 // Both readability signals share the single #heightBelowReadableWarning element, and exactly one
 // message shows. Precedence, strongest first:
 //   1. READ-003  stroke narrower than one stone   (physically impossible to render)
-//   2. FONT-LIB-004  height below the validated minimum for this stone size
+//   2. FONT-LIB-004  height below the MIN_HEIGHT_TO_STONE_RATIO floor for this stone diameter
 // FONT-LIB-003's crowding hint is the weakest and defers to whichever of these is active (see
 // updateStoneSizeOverlapCapabilityUI()). Warning, not a clamp -- an existing project may already
 // hold such a layer, and the fix (taller text or smaller stones) belongs to the user.
@@ -3024,7 +3040,7 @@ function updateTextHeightReadabilityUI(){
   if(stroke){
     message=`${stroke.fontLabel}'s strokes are about ${formatLengthDisplay(stroke.stemWidthMm,project.units,2)} ${u} wide at this height — narrower than one ${formatLengthDisplay(stroke.stoneSizeMm,project.units,1)} ${u} stone, so stones would overhang the letters on both sides. Use a taller text height or a smaller stone size.`;
   }else if(below){
-    message=`At ${below.size.name} stones, text this short (${formatLengthDisplay(below.heightMm,project.units,1)} ${u}) won't read clearly — ${formatLengthDisplay(below.size.supportedHeightRangeMm[0],project.units,1)} ${u} or taller is the tested minimum for this stone size.`;
+    message=`At ${formatLengthDisplay(below.stoneSizeMm,project.units,1)} ${u} stones, text this short (${formatLengthDisplay(below.heightMm,project.units,1)} ${u}) won't read clearly — ${formatLengthDisplay(below.minHeightMm,project.units,1)} ${u} or taller is the minimum for this stone diameter. Use a taller text height or a smaller stone size.`;
   }
   warning.textContent=message;
   warning.classList.toggle('visible',Boolean(message));
@@ -3561,7 +3577,7 @@ function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)retu
 function deleteLayer(id){
   commitHistory();
   if(project.layers.length<=1){
-    const blank={id:'text'+Date.now(),type:'text',visible:true,text:'',font:DEFAULT_TEXT_FONT_ID,height:25,heightMode:'capHeight',textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,letterSpacing:0,x:0,y:0};
+    const blank={id:'text'+Date.now(),type:'text',visible:true,text:'',font:DEFAULT_TEXT_FONT_ID,height:45,heightMode:'capHeight',textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,letterSpacing:0,x:0,y:0};
     project.layers=[blank];
     selectedLayerId=blank.id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true,true);return true
   }
@@ -4342,7 +4358,10 @@ async function addText(){
   const other=singleOtherSelectedLayer();
   const fitPartnerShape=(other&&FITTABLE_SHAPE_TYPES.has(other.type))?other:null;
   commitHistory();
-  const layer={id:'text'+Date.now(),type:'text',visible:true,text:'New Text',font:TEXT_ENGINE_FONT_IDS.has(l.font)?l.font:DEFAULT_TEXT_FONT_ID,height:25,heightMode:'capHeight',textMode:'stroke',stoneSize:l.stoneSize||2.8,gap:l.gap||.3,color:l.color||'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,letterSpacing:0,x:0,y:0};
+  // READ-008: born at exactly the MIN_HEIGHT_TO_STONE_RATIO floor for the inherited stone diameter,
+  // never the old fixed 25 mm (which was below the floor for any stone >= ~1.6 mm).
+  const inheritedStoneSize=l.stoneSize||2.8;
+  const layer={id:'text'+Date.now(),type:'text',visible:true,text:'New Text',font:TEXT_ENGINE_FONT_IDS.has(l.font)?l.font:DEFAULT_TEXT_FONT_ID,height:inheritedStoneSize*MIN_HEIGHT_TO_STONE_RATIO,heightMode:'capHeight',textMode:'stroke',stoneSize:inheritedStoneSize,gap:l.gap||.3,color:l.color||'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,letterSpacing:0,x:0,y:0};
   project.layers.push(layer);
   selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);
   let statusText='Added text layer';
@@ -4363,8 +4382,9 @@ async function addText(){
 // (unscaled) size via the same resolveTextPolygons() call generateTextStonesLive()/
 // resolveLayerShapeSource()'s text branch already use, finds the largest inscribed rectangle of the
 // text's own aspect ratio via ShapeFit.computeInscribedRect(), then the required scale via
-// ShapeFit.computeShapeFitScale() -- reusing S-107's own MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO
-// legibility floor so the two features can never disagree on "how small is too small". Never
+// ShapeFit.computeShapeFitScale() -- reusing S-107's own MIN_HEIGHT_TO_STONE_RATIO legibility floor
+// (READ-008: height / stone diameter, gap excluded) so the two features can never disagree on "how
+// small is too small". Never
 // touches font/stoneSize/gap/fillMode/color/curve fields, and never converts curved text to
 // straight text (aborts instead, with a specific message).
 async function fitTextToShape(textLayer,shapeLayer){
@@ -4405,10 +4425,9 @@ async function fitTextToShape(textLayer,shapeLayer){
   if(!inscribed||!(inscribed.widthMm>0)){
     return{ok:false,reason:'no-region',message:`"${layerLabel(shapeLayer)}" has no usable region to fit text into.`};
   }
-  const spacingMm=(textLayer.stoneSize||0)+(textLayer.gap||0);
   const scaleResult=computeShapeFitScale({
     currentHeightMm:textLayer.height,measuredWidthMm:measured.boundingBox.widthMm,measuredHeightMm:measured.boundingBox.heightMm,
-    spacingMm,targetWidthMm:inscribed.widthMm,targetHeightMm:inscribed.heightMm,minHeightToSpacingRatio:MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO
+    stoneSizeMm:textLayer.stoneSize||0,targetWidthMm:inscribed.widthMm,targetHeightMm:inscribed.heightMm,minHeightToStoneRatio:MIN_HEIGHT_TO_STONE_RATIO
   });
   if(!scaleResult.ok){
     return{ok:false,reason:'legibility',message:`This text can’t fit inside "${layerLabel(shapeLayer)}" at the current stone size and gap without becoming unreadable. Its previous size and position were kept. Try a smaller stone size/gap, shorter text, or a larger shape.`};
