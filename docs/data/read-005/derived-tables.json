@@ -1039,7 +1039,7 @@
     },
     "nonScriptCut": {
       "threshold": 20,
-      "definition": "fontId in NON_SCRIPT_FONTS (imported from calibration-renders.mjs)",
+      "definition": "fontId in NON_SCRIPT_FONTS (tools/font-certification/lib/scriptFaceFonts.mjs)",
       "population": 70,
       "rowsBelow": 10,
       "sellableBelow": 0,

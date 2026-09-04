@@ -33,10 +33,11 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// READ-007 §4.4: the script-face lists are imported from the render builder rather than copied, so
-// the two files can never drift. calibration-renders.mjs reads f-ladder.json only inside run(), so
-// importing it here loads no data and keeps `.meta.inputs` at the same four files.
-import { NON_SCRIPT_FONTS, JOINED_SCRIPT_FONTS } from './calibration-renders.mjs';
+// READ-007 §4.4: the script-face lists are imported from a shared data-only leaf module rather than
+// copied, so this analysis and calibration-renders.mjs can never drift. The leaf module has zero
+// imports — this file's transitive import graph stays free of src/ and of every npm package, and
+// `.meta.inputs` stays at the same four files.
+import { NON_SCRIPT_FONTS, JOINED_SCRIPT_FONTS } from './lib/scriptFaceFonts.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DATA_DIR = path.join(REPO_ROOT, 'docs', 'data', 'read-005');
@@ -484,7 +485,7 @@ function computeSession1(ratings, key) {
   const fontsInNeither = keyFonts.filter((f) => !NON_SCRIPT_FONTS.has(f) && !joinedScriptSet.has(f));
   const nonScriptCut = {
     threshold: 20,
-    definition: 'fontId in NON_SCRIPT_FONTS (imported from calibration-renders.mjs)',
+    definition: 'fontId in NON_SCRIPT_FONTS (tools/font-certification/lib/scriptFaceFonts.mjs)',
     population: nonScriptRows.length,
     ...nonScriptCutCounts,
     fontsInNeitherScriptSet: { count: fontsInNeither.length, fonts: fontsInNeither },

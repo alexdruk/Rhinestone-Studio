@@ -38,6 +38,7 @@ import { STONE_SIZE_BY_ID } from '../../src/renderer/StoneSizes.js';
 import { analyzeOne } from './lib/productionAnalysis.mjs';
 import { renderLayoutSvg, RHINESTONE_SPECIMEN_PX_PER_MM_BY_SIZE } from './lib/specimenPages.mjs';
 import { screenshotPages } from './lib/screenshotPages.mjs';
+import { JOINED_SCRIPT_FONTS, NON_SCRIPT_FONTS } from './lib/scriptFaceFonts.mjs';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const OUT_DIR = path.join(repoRoot, 'tools/font-certification/output/read-005');
@@ -52,22 +53,9 @@ const DENSE_STONE_SIZE_ID = 'ss10';
 const INTERIOR_MODES = ['fill', 'staggered', 'radial', 'contour'];
 const F_THRESHOLD = 0.65;
 
-// The seven joined-script faces spec §5 names for the joined-scripts block.
-// Exported (READ-007 §4.4) so the ratings analysis reads the same list instead of copying it.
-export const JOINED_SCRIPT_FONTS = [
-  'great-vibes-regular', 'dancing-script-regular', 'allura-regular',
-  'alex-brush-regular', 'parisienne-regular', 'cookie-regular', 'mr-dafoe-regular'
-];
-
-// Faces that are unambiguously NOT connected scripts — the pool for the non-script outline block.
-// (Everything cursive/handwritten is deliberately excluded, matching spec §5's intent.)
-// Exported (READ-007 §4.4) so the ratings analysis reads the same set instead of copying it.
-export const NON_SCRIPT_FONTS = new Set([
-  'courier-prime-regular', 'pt-serif-regular', 'playfair-display-regular', 'cinzel-regular',
-  'anton-regular', 'bebas-neue-regular', 'righteous-regular', 'lilita-one-regular',
-  'abril-fatface-regular', 'poppins-regular', 'poppins-semibold', 'poppins-bold',
-  'baloo2-variable-regular'
-]);
+// JOINED_SCRIPT_FONTS (joined-scripts block) and NON_SCRIPT_FONTS (non-script outline block) now
+// live in ./lib/scriptFaceFonts.mjs so analyze-ratings.mjs can share them without importing this
+// file. See that module's header.
 
 // --- deterministic PRNG (mulberry32) --------------------------------------------------------
 
