@@ -707,13 +707,19 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
             <p class="hint" id="legacyFontHint" style="display:none">This text uses a legacy font. It still renders, edits, and exports correctly, but isn't offered for new picks — switch to a Production Font (RS Block / RS Modern) for the native rhinestone-dot workflow.</p>
             <p class="validation-message" id="unknownFontHint" role="alert" style="display:none">This text uses a font that's not available. Its text and settings are preserved, but it won't render until a compatible font is restored.</p></div>
             <div class="field" id="textModeField"><label for="textMode">Fill Style</label><select id="textMode" title="How rhinestones are arranged across this text.">
+              <!-- READ-006A: Staggered/Radial/Contour retired as TEXT fill styles (product owner's
+                   call from the READ-005 calibration). The identical options in #svgMode/#shapeFillMode/
+                   #imageFillMode are deliberately left in place -- shapes/SVG/images were never rated.
+                   A project saved with a retired textMode still renders exactly as before: nothing was
+                   dropped from TEXT_MODE_TO_ENGINE_MODE, and ensureTextModeOptionForLayer() re-injects
+                   a "(retired)" option so #textMode can still display that layer's real mode. -->
               <option value="stroke" selected>Outline - stones follow the letters</option>
               <option value="fill">Grid Fill - even rows and columns</option>
-              <option value="staggered">Staggered Fill - offset rows, tighter packing</option>
-              <option value="radial">Radial Fill - rings out from the center</option>
-              <option value="contour">Contour Fill - rings that follow the letters inward</option>
             </select></div>
           </div>
+          <!-- READ-006A: shown by updateTextFontCapabilityUI() only while the selected text layer's
+               textMode is one of the three retired values. Same p.hint style as #autoFitOnHint. -->
+          <p class="hint" id="retiredTextModeHint" style="display:none">This fill style is no longer offered for new designs. This text still renders exactly as it was saved. Switching it to Outline or Grid Fill is one-way — the retired style can't be picked again afterwards.</p>
           <div class="field-row">
             <div class="field"><label for="textAlign">Alignment</label><select id="textAlign" title="How multiple lines align relative to each other. No effect on single-line text.">
               <option value="left" selected>Left</option>

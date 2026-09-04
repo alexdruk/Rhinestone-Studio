@@ -30,13 +30,29 @@ async function test(name, fn) {
 
 // --- 1. Fill Style controls exist, per layer type, with the right option set ---------------------
 
-await test('1. Text Lightbox #textMode offers Outline/Grid/Staggered/Radial/Contour, keeping its pre-existing "stroke" value for Outline', () => {
+// READ-006A (2026-09): Staggered/Radial/Contour retired as TEXT fill styles (product owner's call
+// from the READ-005 calibration -- see docs/specifications/READ-006A-RetireTextFillModes.md).
+// #textMode now offers only Outline + Grid Fill. The identical options in #svgMode / #shapeFillMode /
+// #imageFillMode are deliberately kept (tests 2-4) -- shapes/SVG/images were never rated.
+await test('1. Text Lightbox #textMode offers only Outline + Grid Fill (READ-006A retired Staggered/Radial/Contour for text), keeping its pre-existing "stroke" value for Outline', () => {
   const match = indexHtml.match(/<select id="textMode"[^>]*>([\s\S]*?)<\/select>/);
   assert.ok(match, 'expected a #textMode select');
   const optionsHtml = match[1];
   assert.match(optionsHtml, /<option value="stroke" selected>/, 'expected the pre-existing "stroke" value to remain Outline\'s stored value');
-  for (const value of ['fill', 'staggered', 'radial', 'contour']) {
-    assert.match(optionsHtml, new RegExp(`<option value="${value}">`), `expected a #textMode option for "${value}"`);
+  assert.match(optionsHtml, /<option value="fill">/, 'expected a #textMode option for "fill"');
+  for (const value of ['staggered', 'radial', 'contour']) {
+    assert.doesNotMatch(optionsHtml, new RegExp(`<option value="${value}"`), `expected NO #textMode option for the retired mode "${value}"`);
+  }
+});
+
+// READ-006A: point 2 -- the retired values must still be mapped by TEXT_MODE_TO_ENGINE_MODE, so a
+// project saved with textMode 'staggered'/'radial'/'contour' still renders byte-identically (dropping
+// an entry would make resolveTextFillMode() fall through to ||'outline' and silently convert it).
+await test('1b. TEXT_MODE_TO_ENGINE_MODE still maps all five text modes (retired values keep rendering unchanged)', () => {
+  const mapSrc = appJs.match(/const TEXT_MODE_TO_ENGINE_MODE=\{([^}]*)\};/);
+  assert.ok(mapSrc, 'expected TEXT_MODE_TO_ENGINE_MODE');
+  for (const pair of ['stroke:\'outline\'', 'fill:\'fill\'', 'staggered:\'staggered\'', 'radial:\'radial\'', 'contour:\'contour\'']) {
+    assert.ok(mapSrc[1].includes(pair), `expected TEXT_MODE_TO_ENGINE_MODE to keep ${pair}`);
   }
 });
 
