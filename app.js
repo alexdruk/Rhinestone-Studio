@@ -2986,6 +2986,21 @@ function textHeightBelowReadableMinimum(layer){
   const minHeightMm=stoneSizeMm*MIN_HEIGHT_TO_STONE_RATIO;
   return heightMm<minHeightMm?{stoneSizeMm,heightMm,minHeightMm}:null;
 }
+// READ-010: textHeightBelowReadableMinimum()'s only two callers before this milestone
+// (updateTextHeightReadabilityUI() and updateStoneSizeOverlapCapabilityUI()) both read a single
+// layer -- selectedLayer() or target.layer -- so the warning it feeds is scoped to whichever layer
+// happens to be selected. A project can hold several below-floor text layers with none of them
+// selected, in which case neither call site ever fires and the condition is invisible right up to
+// export. This is the project-wide counterpart: same predicate, applied across every layer, so a
+// caller that needs to know "does this PROJECT have a problem" (not "is the SELECTED layer fine")
+// has one. Reuses textHeightBelowReadableMinimum() verbatim -- no second copy of the floor test.
+// Visible layers only: a hidden layer contributes no stones to the production sheet.
+function textLayersBelowReadableMinimum(){
+  return project.layers
+    .filter(l=>l.visible)
+    .map(l=>{const hit=textHeightBelowReadableMinimum(l);return hit?{...hit,layer:l}:null})
+    .filter(Boolean);
+}
 // READ-003: shared predicate, beside textHeightBelowReadableMinimum() -- non-null when `layer` is a
 // text layer whose font's dominant stroke, at the layer's current height, is physically narrower
 // than a single stone AND the layer fills the letter interior with stones.
@@ -3038,6 +3053,12 @@ function updateTextHeightReadabilityUI(){
   }
   warning.textContent=message;
   warning.classList.toggle('visible',Boolean(message));
+  // READ-010: the fix-to-floor affordance only ever targets the FONT-LIB-004 height message. It is
+  // hidden for READ-003's stroke message on purpose -- that one means the font's stroke is
+  // physically too thin at ANY height for this stone size, so a "set height to X" button would
+  // promise a fix that doesn't actually clear the warning.
+  el('heightFixToFloorHint').style.display=below?'block':'none';
+  if(below)el('heightFixToFloorBtn').textContent=`Set height to ${formatLengthDisplay(below.minHeightMm,project.units,1)} ${u}`;
 }
 // FONT-DECISION-001 (Studio Integration follow-up): disables + dims + explains (via title) every
 // #stoneSize <option> whose entire FONT-DECISION-001-validated supportedHeightRangeMm (StoneSizes.js)
@@ -4073,6 +4094,22 @@ el('heightModeToggleBtn').addEventListener('click',()=>{
   l.heightMode=l.heightMode==='capHeight'?'raw':'capHeight';
   updateAll(true);
 });
+// READ-010: writes the ratio floor -- NOT applyStoneSizeHeightAutoSet()'s catalog
+// supportedHeightRangeMm midpoint -- into #height, then dispatches 'input' then 'change' on it, the
+// same pattern #letterHeight's own listener uses above. That inherits heightManuallyEdited marking,
+// history tracking, and regeneration for free; this handler itself never mutates l.height directly
+// and never calls commitHistory(). ceilToDisplayPrecisionMm() guards the round-trip through
+// setLengthField()/readLengthField() so the written value never displays a hair below the floor it
+// was meant to clear.
+el('heightFixToFloorBtn').addEventListener('click',()=>{
+  const l=selectedLayer();
+  if(!l||l.type!=='text')return;
+  const below=textHeightBelowReadableMinimum(l);
+  if(!below)return;
+  setLengthField('height',ceilToDisplayPrecisionMm(below.minHeightMm,project.units));
+  el('height').dispatchEvent(new Event('input'));
+  el('height').dispatchEvent(new Event('change'));
+});
 // RS-3011 Step 7: one-time gate release -- once pressed, stonesGenerated flips to true and this
 // layer regenerates live on every subsequent edit forever after, exactly like any other path layer
 // (no code re-suppresses it). Mirrors onPaintStroke()'s own commitHistory()/mutate/
@@ -4661,15 +4698,36 @@ el('exportCombined').onclick=()=>{if(!layout){el('status').textContent='Export f
 // pattern for Gap/Crystal color) -- see docs/specifications/RS-1005-ProductionSheetGenerator.md for
 // this function's pre-existing fields and docs/specifications/S-112-RoundDinnerPlate.md for the
 // plate-specific additions.
+// READ-010: WARN AND PROCEED, never a block. The MIN_HEIGHT_TO_STONE_RATIO floor is font-blind and
+// its 16-20 ratio band is still unresolved (see the comment above that constant in
+// src/geometry/TextAutoFit.js) -- gating a shop's actual production-sheet export on a rule the
+// program itself calls provisional would be the wrong trade, so this only ever writes into
+// #prodSheetValidation; no caller disables an export button or returns early because of it.
+// updateTextHeightReadabilityUI() already warns about this, but only for whichever layer happens to
+// be selected (see textLayersBelowReadableMinimum()'s own comment on that gap) -- this itemizes
+// every offending VISIBLE layer in the project by name, so the operator sees the whole sheet's
+// picture before printing, not just whatever they last had selected.
+function updateProdSheetReadabilityValidation(){
+  const validation=el('prodSheetValidation');
+  const hits=textLayersBelowReadableMinimum();
+  const u=unitSuffix(project.units);
+  let message='';
+  if(hits.length){
+    const items=hits.map(({layer,heightMm,minHeightMm})=>`"${layerLabel(layer)}" (${formatLengthDisplay(heightMm,project.units,1)} ${u}, needs ${formatLengthDisplay(minHeightMm,project.units,1)} ${u} or taller)`).join('; ');
+    message=`${hits.length} text layer${hits.length===1?'':'s'} on this sheet ${hits.length===1?'is':'are'} below the readability minimum for its stone size: ${items}. This will still export — consider a taller height or a smaller stone size before printing.`;
+  }
+  validation.textContent=message;
+  validation.classList.toggle('visible',Boolean(message));
+}
 function currentProductionSheetOptions(){const t=currentObjectTemplate(),isPlate=t.preview.kind==='plate';const plateFields=isPlate?{plateDesignTarget:getPlateDesignTargetMeta(project.plate.designTarget).name,plateOuterDiameterMm:project.plate.outerDiameterMm,plateInnerWellDiameterMm:project.plate.innerWellDiameterMm,plateRimWidthMm:computeRimWidthMm(project.plate.outerDiameterMm,project.plate.innerWellDiameterMm),plateOverallHeightMm:project.plate.overallHeightMm,plateWeightGrams:PLATE_ROUND_DINNER_DEFINITION.weightGrams.average,plateColorName:getPlateColor(project.plate.colorId).name}:{};return{projectName:project.name,objectType:t.displayName,productionWidthMm:project.canvas.width,productionHeightMm:project.canvas.height,gapMm:[...new Set(project.layers.filter(l=>l.visible).map(l=>l.gap))],pageSize:el('prodSheetPageSize').value,marginMm:readLengthField('prodSheetMargin')||0,mirror:el('prodSheetMirror').value==='on',registrationMarks:el('prodSheetRegMarks').value==='on',units:project.units,...plateFields}}
-el('exportProdSheetSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-production-sheet.svg','image/svg+xml',productionSheetToSvg(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
-el('exportProdSheetPDF').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-production-sheet.pdf','application/pdf',productionSheetToPdf(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+el('exportProdSheetSVG').onclick=()=>{updateProdSheetReadabilityValidation();if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-production-sheet.svg','image/svg+xml',productionSheetToSvg(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+el('exportProdSheetPDF').onclick=()=>{updateProdSheetReadabilityValidation();if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-production-sheet.pdf','application/pdf',productionSheetToPdf(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 // PNG has no dedicated src/export/** module (matching #exportPNG/#exportCup's existing "capture,
 // not a standalone exporter" precedent): it rasterizes the already-generated production-sheet SVG
 // via an offscreen Image+canvas at a fixed PRODUCTION_SHEET_PNG_DPI, so the raster's pixel
 // dimensions are always an undistorted multiple of the page's mm size -- never fit-to-viewport
 // scaled the way the on-screen 2D canvas is.
-el('exportProdSheetPNG').onclick=async()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{
+el('exportProdSheetPNG').onclick=async()=>{updateProdSheetReadabilityValidation();if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{
   const options=currentProductionSheetOptions();
   const svgMarkup=productionSheetToSvg(layout,options);
   const{pageWidthMm,pageHeightMm}=computeProductionSheetLayout(layout,options);
@@ -4737,7 +4795,10 @@ const lightboxes={
   importBox:new Lightbox('lightboxImport',{primary:true,onOpen(){activeFieldLightbox='import';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
   imagetrace:new Lightbox('lightboxImageTrace',{primary:true,onOpen(){activeFieldLightbox='imagetrace';relocateFieldGroups();updateImageTraceSections()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
   exportBox:new Lightbox('lightboxExport',{primary:true}),
-  prodSheet:new Lightbox('lightboxProdSheet',{primary:true}),
+  // READ-010: onOpen re-runs the project-wide readability sweep every time the lightbox opens, so it
+  // can never go stale from an edit made while it was closed (matching shipping/settings' own
+  // onOpen-refresh idiom just below).
+  prodSheet:new Lightbox('lightboxProdSheet',{primary:true,onOpen(){updateProdSheetReadabilityValidation()}}),
   shipping:new Lightbox('lightboxShipping',{primary:true,onOpen(){syncShippingFieldsFromState(project.units)}}),
   settings:new Lightbox('lightboxSettings',{primary:true,onOpen(){syncSettingsFieldsFromState()}}),
   help:new Lightbox('lightboxHelp',{primary:true}),
@@ -5932,6 +5993,23 @@ el('settingsApply').onclick=()=>{
 // changes. #stoneSize (fixed named sizes, not a free-typed length) is permanently excluded.
 function setLengthField(id,mm){el(id).value=formatLengthDisplay(mm,project.units);el(id).dataset.mmValue=String(mm)}
 function readLengthField(id){return displayValueToMm(el(id).value,project.units)}
+// READ-010: setLengthField()/readLengthField() round-trip a value through formatLengthDisplay()'s
+// fixed-decimals rounding in the DISPLAY unit, then re-parse from that rounded .value -- they never
+// consult the dataset.mmValue stash on read. formatLengthDisplay() rounds to the nearest 2 decimals,
+// which can round DOWN (e.g. a floor of 44.803mm displays as "44.80", which reads back as 44.80mm --
+// still below the 44.803mm floor it was meant to clear). Any caller that writes a target mm value
+// through setLengthField() and needs the read-back to land AT OR ABOVE that value (not just close to
+// it) must round the display-unit value up first, which is exactly what this does: convert to the
+// display unit, round UP at the same 2-decimal precision setLengthField()/formatLengthDisplay() use,
+// then convert back to mm. The epsilon subtracted before Math.ceil() keeps a value that is already
+// exact at 2 decimals (modulo float noise from the mm<->inch conversion) from being bumped up an
+// unnecessary extra step.
+function ceilToDisplayPrecisionMm(mm,units,decimals=2){
+  const displayValue=mmToDisplayValue(mm,units);
+  const factor=10**decimals;
+  const roundedUpDisplay=Math.ceil(displayValue*factor-1e-9)/factor;
+  return displayValueToMm(roundedUpDisplay,units);
+}
 // RS-3025: called from each of the eight length fields' own 'input' listeners so a value the
 // operator just typed also gets an exact-mm stash, computed from the raw typed value in the
 // current display unit -- before any display-side rounding -- so it survives later Units round
