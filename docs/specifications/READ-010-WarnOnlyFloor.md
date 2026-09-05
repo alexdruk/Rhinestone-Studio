@@ -120,17 +120,56 @@ looking at go away; jumping further, to the catalog's own recommended range, is 
 decision that belongs to the operator, not to a button next to a warning about one specific
 threshold.
 
+**This choice is not sticky.** For every catalog size, the ratio floor sits strictly below that same
+size's own `supportedHeightRangeMm[0]` — SS6: 32 vs 35, SS10: 44.8 vs 45, SS16: 64 vs 65, SS20: 75.2
+vs 80, SS30: 102.4 vs 106. `applyStoneSizeHeightAutoSet()`'s `isHeightWithinStoneSizeRange()` check
+(`src/renderer/StoneSizes.js`) is therefore never satisfied by a height the fix-to-floor button just
+wrote, for that same stone size. Since that check only runs from `#stoneSize`'s own `'input'`
+listener (`app.js:4038`), the fix-to-floor height survives untouched until the operator changes the
+stone size selection at all — but the very next such change, even switching to a different size and
+back to the original one, finds `staysValid` false and silently overwrites the height with the new
+size's `stoneSizeHeightMidpointMm()`, discarding the fix-to-floor value without any further warning.
+
 ### The rounding trap
 
 `setLengthField()` writes `formatLengthDisplay(mm, units)` into `.value`; `readLengthField()` parses
 back from `.value` (via `displayValueToMm()`), never from the `dataset.mmValue` stash.
 `formatLengthDisplay()` rounds to a **fixed number of decimals in the display unit**
-(`Number(v.toFixed(2))`). A naive `setLengthField('height', minHeightMm)` can therefore round the
-*displayed* value down — e.g. a floor of `44.803mm` displays as `"44.80"`, and reading that back
-yields `44.80mm`, which is still below the `44.803mm` floor the button claimed to clear. The same
-bites in `'in'` mode: the floor is converted to inches, rounded to 2 decimals for display, and
-converted back — rounding down at the display step still lands below the original mm floor after the
-round trip.
+(`Number(v.toFixed(2))`).
+
+**This is not a millimetre-precision problem.** Every catalog stone size's ratio floor
+(`diameterMm × MIN_HEIGHT_TO_STONE_RATIO`, `src/renderer/StoneSizes.js`) is already exact at 2
+decimals in mm — `2.0×16=32`, `2.8×16=44.8`, `4.0×16=64`, `4.7×16=75.2`, `6.4×16=102.4` — so in `'mm'`
+display mode a naive `setLengthField('height', floorMm)` never rounds down at all; the round trip
+lands exactly on the floor for all five sizes. The trap is specific to **`'in'` display mode**: the
+mm→inch conversion (`÷25.4`) produces a value with far more than 2 decimal digits, and rounding *that*
+to 2 decimals for display can land on either side of the true floor depending on the third decimal
+digit. Run through the real `setLengthField`/`readLengthField` round trip
+(`src/units/LengthUnits.js`'s actual `formatLengthDisplay`/`displayValueToMm`) for all five catalog
+sizes in both display modes:
+
+| Size | floorMm | `'mm'` round trip | `'in'` displayed | `'in'` round trip | fails in `'in'`? |
+|------|--------:|-------------------:|------------------:|--------------------:|:---:|
+| SS6  | 32.0  | 32.0  (exact) | "1.26" | 32.004  | no  |
+| SS10 | 44.8  | 44.8  (exact) | "1.76" | 44.704  | **yes** |
+| SS16 | 64.0  | 64.0  (exact) | "2.52" | 64.008  | no  |
+| SS20 | 75.2  | 75.2  (exact) | "2.96" | 75.184  | **yes** |
+| SS30 | 102.4 | 102.4 (exact) | "4.03" | 102.362 | **yes** |
+
+Three of the five catalog sizes (SS10, SS20, SS30) round-trip *below* their own floor in `'in'` mode
+under a naive write — SS10's 44.8mm floor becomes "1.76" in, which reads back as 44.704mm, still
+short of the 44.8mm the button claimed to clear. SS6 and SS16 happen not to fail only because their
+particular inch conversions round *up* at the second decimal by coincidence of arithmetic, not
+because inch mode is safe — a different `MIN_HEIGHT_TO_STONE_RATIO` value or a non-catalog stone
+diameter could just as easily land either of them on the wrong side too. No catalog size fails in
+`'mm'` mode, at any diameter, because the floor is always an exact multiple of a whole number
+of millimetres times 16 with no more than 1 decimal digit of its own.
+
+This is exactly why the guard cannot be simplified away by testing only `'mm'` mode: every catalog
+size would round-trip correctly there even with a naive `setLengthField('height', floorMm)`, so a
+future reader who checks mm mode alone and concludes `ceilToDisplayPrecisionMm()` is unnecessary
+overhead would be wrong — the failure only shows up in `'in'` mode, and only for three of the five
+sizes.
 
 `ceilToDisplayPrecisionMm()` (`app.js:6007`) fixes this at the source: it converts the floor to the
 display unit, rounds **up** at the same 2-decimal precision `setLengthField()`/`formatLengthDisplay()`
@@ -166,6 +205,16 @@ the `sliceBalanced()` real-source-execution harness pattern
   project, and finds none when all layers are at or above floor.
 - Hidden below-floor layers are excluded.
 - Authored Production Font layers are excluded (inherited from the per-layer predicate).
+- Production Sheet validation itemizes below-floor visible text layers by name in a genuinely
+  mixed-type project (a non-text layer is present alongside the text layers), and `layerLabel()`'s
+  non-text `SHAPE_DISPLAY_LABELS` fallback branch is exercised directly against a non-text layer —
+  not merely included in the project, since `updateProdSheetReadabilityValidation()` only ever calls
+  `layerLabel()` on layers `textLayersBelowReadableMinimum()` already filtered to text, so a non-text
+  layer alone in the project never reaches that branch through that path.
 - The fix-to-floor value, after a full `setLengthField()` → `readLengthField()` round trip, lands at
-  or above the floor in both `project.units` modes (`'mm'` and `'in'`).
+  or above the floor in `'mm'` mode (test 7, using several representative values) and in `'in'` mode
+  (test 8). Test 9 additionally proves the guard is load-bearing on a real, reachable input — SS10's
+  own ratio floor (44.8mm) in `'in'` mode, the case identified in §4 — showing both that a naive
+  (non-ceiled) write round-trips below the floor there, and that the same input through
+  `ceilToDisplayPrecisionMm()` clears it.
 - The fix-to-floor button/hint is hidden when READ-003's stroke message takes precedence.

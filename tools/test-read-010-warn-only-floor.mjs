@@ -65,6 +65,11 @@ const heightPredicateSrc = sliceBalanced(appJs, 'function textHeightBelowReadabl
 const projectPredicateSrc = sliceBalanced(appJs, 'function textLayersBelowReadableMinimum(){', 'textLayersBelowReadableMinimum()');
 const prodSheetValidationSrc = sliceBalanced(appJs, 'function updateProdSheetReadabilityValidation(){', 'updateProdSheetReadabilityValidation()');
 const layerLabelSrc = sliceBalanced(appJs, 'function layerLabel(l){', 'layerLabel()');
+// layerLabel()'s non-text fallback branch reads the real SHAPE_DISPLAY_LABELS map -- sliced verbatim
+// so a non-text layer in the harness exercises the real fallback rather than throwing a
+// ReferenceError on an undeclared free variable (only text layers were exercised before, which never
+// reach this branch at all).
+const shapeDisplayLabelsSrc = matchOne(appJs, /const SHAPE_DISPLAY_LABELS=\{[^}]*\};/, 'SHAPE_DISPLAY_LABELS');
 const ceilFnSrc = sliceBalanced(appJs, 'function ceilToDisplayPrecisionMm(mm,units,decimals=2){', 'ceilToDisplayPrecisionMm()');
 const setLengthFieldSrc = matchOne(appJs, /function setLengthField\(id,mm\)\{[^}]*\}/, 'setLengthField()');
 const readLengthFieldSrc = matchOne(appJs, /function readLengthField\(id\)\{[^}]*\}/, 'readLengthField()');
@@ -89,6 +94,7 @@ function runProjectSweep(layers, { authoredFontIds = ['rs-block', 'rs-modern'] }
 }
 
 const SS6 = listStoneSizes().find((s) => s.id === 'ss6');
+const SS10 = listStoneSizes().find((s) => s.id === 'ss10');
 const SS16 = listStoneSizes().find((s) => s.id === 'ss16');
 const HEIGHT_FONT = 'anton-regular';
 
@@ -144,36 +150,50 @@ await test('4. authored Production Font layers are excluded (inherited from the 
 
 // --- updateProdSheetReadabilityValidation() harness ---
 
+// Returns both the validation element AND the sliced layerLabel(), so a test can call layerLabel()
+// directly on a non-text layer -- updateProdSheetReadabilityValidation() itself only ever calls
+// layerLabel() on layers textLayersBelowReadableMinimum() already filtered to text, so merely
+// including a non-text layer in `layers` would never actually reach layerLabel()'s non-text
+// SHAPE_DISPLAY_LABELS fallback branch through that path alone.
 function runProdSheetValidation(layers, { units = 'mm', authoredFontIds = ['rs-block', 'rs-modern'] } = {}) {
   const validation = { textContent: '', classList: makeClassList() };
   const el = (id) => (id === 'prodSheetValidation' ? validation : { textContent: '', classList: makeClassList() });
   const project = { layers, units };
   const factory = new Function(
     'el', 'project', 'isAuthoredStoneFontId', 'MIN_HEIGHT_TO_STONE_RATIO', 'formatLengthDisplay', 'unitSuffix',
-    `${heightPredicateSrc}\n${projectPredicateSrc}\n${layerLabelSrc}\n${prodSheetValidationSrc}\nreturn updateProdSheetReadabilityValidation;`
+    `${shapeDisplayLabelsSrc}\n${heightPredicateSrc}\n${projectPredicateSrc}\n${layerLabelSrc}\n${prodSheetValidationSrc}\nreturn{updateProdSheetReadabilityValidation,layerLabel};`
   );
-  const fn = factory(el, project, (id) => authoredFontIds.includes(id), MIN_HEIGHT_TO_STONE_RATIO, formatLengthDisplay, unitSuffix);
-  fn();
-  return validation;
+  const { updateProdSheetReadabilityValidation, layerLabel } = factory(el, project, (id) => authoredFontIds.includes(id), MIN_HEIGHT_TO_STONE_RATIO, formatLengthDisplay, unitSuffix);
+  updateProdSheetReadabilityValidation();
+  return { validation, layerLabel };
 }
 
-await test('5. Production Sheet validation itemizes every below-floor visible text layer by name', () => {
+await test('5. Production Sheet validation itemizes every below-floor visible text layer by name, in a mixed-type project', () => {
+  const circleLayer = { id: 'c', type: 'circle', visible: true, cx: 50, cy: 50, r: 10 };
   const layers = [
     { id: 'a', type: 'text', text: 'Header', visible: true, font: HEIGHT_FONT, stoneSize: SS16.diameterMm, height: 30 },
-    { id: 'b', type: 'text', text: 'Footer', visible: true, font: HEIGHT_FONT, stoneSize: SS6.diameterMm, height: 20 }
+    { id: 'b', type: 'text', text: 'Footer', visible: true, font: HEIGHT_FONT, stoneSize: SS6.diameterMm, height: 20 },
+    // Present so the project is genuinely mixed-type -- above no floor (the predicate only applies to
+    // text), so it must not appear in the message or affect the count.
+    circleLayer
   ];
-  const v = runProdSheetValidation(layers);
-  assert.ok(v.classList.contains('visible'));
-  assert.match(v.textContent, /Header/);
-  assert.match(v.textContent, /Footer/);
-  assert.match(v.textContent, /2 text layers/);
+  const { validation, layerLabel } = runProdSheetValidation(layers);
+  assert.ok(validation.classList.contains('visible'));
+  assert.match(validation.textContent, /Header/);
+  assert.match(validation.textContent, /Footer/);
+  assert.match(validation.textContent, /2 text layers/);
+  // layerLabel() is meant to run across mixed-type projects (renderLayerUI() calls it on every
+  // layer, not just below-floor text ones) -- its non-text branch reads the real SHAPE_DISPLAY_LABELS
+  // map, sliced and injected above. Calling it directly on the circle proves that injection is
+  // load-bearing: without it, this throws ReferenceError rather than merely being unreachable code.
+  assert.equal(layerLabel(circleLayer), 'Circle');
 });
 
 await test('6. Production Sheet validation is silent when no visible layer is below floor', () => {
   const layers = [{ id: 'a', type: 'text', text: 'Header', visible: true, font: HEIGHT_FONT, stoneSize: SS16.diameterMm, height: floorFor(SS16.diameterMm) }];
-  const v = runProdSheetValidation(layers);
-  assert.equal(v.classList.contains('visible'), false);
-  assert.equal(v.textContent, '');
+  const { validation } = runProdSheetValidation(layers);
+  assert.equal(validation.classList.contains('visible'), false);
+  assert.equal(validation.textContent, '');
 });
 
 // --- ceilToDisplayPrecisionMm() round-trip harness ---
@@ -210,12 +230,25 @@ await test('8. the fix-to-floor value round-trips at or above the floor in inch 
   }
 });
 
-await test('9. a naive (non-ceiled) write can round-trip BELOW the floor -- proving ceilToDisplayPrecisionMm is load-bearing, not redundant', () => {
-  const { project, setLengthField, readLengthField } = makeLengthFieldHarness('mm');
-  const minHeightMm = 44.803; // toFixed(2) rounds this DOWN to "44.80"
-  setLengthField('height', minHeightMm); // naive write, no ceiling
-  const roundTripped = readLengthField('height');
-  assert.ok(roundTripped < minHeightMm, `test setup: expected the naive round trip (${roundTripped}) to land below the floor (${minHeightMm})`);
+await test("9. a naive (non-ceiled) write can round-trip BELOW the floor in inch mode -- proving ceilToDisplayPrecisionMm is load-bearing, not redundant", () => {
+  // SS10's own ratio floor (44.8mm), not an arbitrary literal: in 'mm' mode this value is already
+  // exact at 2 decimals and round-trips losslessly even without ceiling (see the "no catalog size
+  // fails in mm mode" derivation in READ-010-WarnOnlyFloor.md §4) -- the trap only bites in 'in'
+  // mode, where 44.8mm / 25.4 = 1.7638...in displays as "1.76" (rounds DOWN) and reads back as
+  // 44.704mm, short of the 44.8mm floor.
+  const minHeightMm = SS10.diameterMm * MIN_HEIGHT_TO_STONE_RATIO;
+  assert.equal(minHeightMm, 44.8, 'test setup: SS10 ratio floor');
+
+  const naive = makeLengthFieldHarness('in');
+  naive.setLengthField('height', minHeightMm); // naive write, no ceiling
+  const naiveRoundTripped = naive.readLengthField('height');
+  assert.ok(naiveRoundTripped < minHeightMm, `test setup: expected the naive round trip (${naiveRoundTripped}) to land below the floor (${minHeightMm}) in inch mode`);
+
+  // Same input, through ceilToDisplayPrecisionMm(): the round trip now clears the floor.
+  const guarded = makeLengthFieldHarness('in');
+  guarded.setLengthField('height', guarded.ceilToDisplayPrecisionMm(minHeightMm, guarded.project.units));
+  const guardedRoundTripped = guarded.readLengthField('height');
+  assert.ok(guardedRoundTripped >= minHeightMm, `expected the ceiled round trip (${guardedRoundTripped}) to clear the floor (${minHeightMm}) in inch mode`);
 });
 
 // --- fix-to-floor hint visibility vs. READ-003 precedence ---
