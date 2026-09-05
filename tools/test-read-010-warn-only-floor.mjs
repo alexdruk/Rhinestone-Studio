@@ -322,9 +322,9 @@ await test('13. index.html declares the fix-to-floor hint/button and #prodSheetV
 });
 
 await test('14. the three Production Sheet export handlers and the lightbox onOpen all call updateProdSheetReadabilityValidation()', () => {
-  assert.match(appJs, /el\('exportProdSheetSVG'\)\.onclick=\(\)=>\{updateProdSheetReadabilityValidation\(\);/);
-  assert.match(appJs, /el\('exportProdSheetPDF'\)\.onclick=\(\)=>\{updateProdSheetReadabilityValidation\(\);/);
-  assert.match(appJs, /el\('exportProdSheetPNG'\)\.onclick=async\(\)=>\{updateProdSheetReadabilityValidation\(\);/);
+  assert.match(appJs, /el\('exportProdSheetSVG'\)\.onclick=\(\)=>\{if\(!layout\)\{[^}]*return\}try\{updateProdSheetReadabilityValidation\(\);/);
+  assert.match(appJs, /el\('exportProdSheetPDF'\)\.onclick=\(\)=>\{if\(!layout\)\{[^}]*return\}try\{updateProdSheetReadabilityValidation\(\);/);
+  assert.match(appJs, /el\('exportProdSheetPNG'\)\.onclick=async\(\)=>\{if\(!layout\)\{[^}]*return\}try\{\s*updateProdSheetReadabilityValidation\(\);/);
   assert.match(appJs, /prodSheet:new Lightbox\('lightboxProdSheet',\{primary:true,onOpen\(\)\{updateProdSheetReadabilityValidation\(\)\}\}\)/);
 });
 

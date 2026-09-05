@@ -65,9 +65,19 @@ concern for layer names.
 - `lightboxes.prodSheet`'s `onOpen` (`app.js:4801`) — the same idiom
   `lightboxes.shipping`/`lightboxes.settings` already use to refresh their own fields on open.
 - Each of the three export handlers — `#exportProdSheetSVG` (`app.js:4723`), `#exportProdSheetPDF`
-  (`app.js:4724`), `#exportProdSheetPNG` (`app.js:4730`) — calls it as the first statement, before
-  their existing `if(!layout)` guard and export work. One shared function, three call sites; the
-  logic itself is never duplicated.
+  (`app.js:4724`), `#exportProdSheetPNG` (`app.js:4730`) — calls it as the first statement **inside
+  their `try` block**, after the existing `if(!layout){…return}` guard. One shared function, three
+  call sites; the logic itself is never duplicated.
+
+**Handler ordering constraint.** The call must sit inside `try`, not ahead of the `if(!layout)`
+guard where it originally landed. Because the floor is warn-only (see below), a throw from the
+readability sweep must not be allowed to escape the handler uncaught: an uncaught exception in the
+`onclick` would leave `#status` silent and, worse, read as a dead export button. Inside `try` the
+existing `catch(error){ el('status').textContent = 'Export failed: ' + error.message }` reports it
+on the same status line every other export failure already uses. Keeping the `!layout` guard first
+also means the sweep never runs when there is nothing to export. The three assertions in
+`tools/test-read-010-warn-only-floor.mjs` (test 14) and test 21 of
+`tools/test-production-sheet-exporter.mjs` both pin this ordering.
 
 Scoped to the Production Sheet only. 2D SVG/PNG, the 3D preview, and the JSON exports are previews
 and interchange formats, not the artifact a shop floor actually cuts from — they are deliberately

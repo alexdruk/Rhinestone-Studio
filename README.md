@@ -72,5 +72,20 @@ npm test
 `npm run test:geometry` or `npm run test:ui` runs just that area, and `npm run test:full` runs
 everything — see `docs/AI_ENGINEER.md` for the full tiered-testing model.
 
+### Git hooks
+
+This repo ships a `pre-merge-commit` hook in `.githooks/` that runs the full suite
+(`node tools/run-tests.mjs --all`) and aborts the merge if anything fails. CI only runs on
+`develop` and `main`, so without this hook a broken feature branch is only caught *after* its
+merge commit has already landed. Enable it once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+One blind spot: when a merge stops for conflict resolution, git runs `pre-commit` rather than
+`pre-merge-commit`, so a conflicted merge still needs a manual `node tools/run-tests.mjs --all`
+before you finish it.
+
 See `docs/AI_ENGINEER.md` and `docs/MILESTONE_WORKFLOW.md` for the full development/testing/review
 workflow, and `CONTRIBUTING.md` for commit conventions.
