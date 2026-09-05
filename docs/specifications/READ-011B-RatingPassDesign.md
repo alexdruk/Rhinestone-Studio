@@ -117,17 +117,33 @@ bound.
 The floor is expressed as a ratio; this block is the check that a ratio genuinely transfers across
 stone sizes rather than standing in for an absolute millimetre height.
 
-### 4.2 Rhinestone probe (12 renders) — a separate stratum
+### 4.2 Rhinestone probe (12 renders) — a separate stratum, excluded from the rating pass
 
 `rs-block` and `rs-modern` at rungs 16 / 19 / 22, both modes, `none` tracking, SS10.
 
 These classify as `unmeasured` (READ-011A §5): every stone position is authored on a fixed pitch,
 there is no outline to measure a stem from, so `stemWidthRatio` is undefined and they **cannot be
-pooled with the stem-regime strata**. But `rs-block` is the default Production Font, and a
-readability floor with no evidence for the default font is not shippable. The probe is marked as its
-own stratum in `meta.strata` (`kind: "unmeasured"`), kept deliberately small, and analysed on its
-own terms — the future authored-pitch floor rule for these fonts (READ-011A §5) is a different
-milestone.
+pooled with the stem-regime strata**. The plan included them because `rs-block` is the default
+Production Font and a readability floor with no evidence for the default font is not shippable.
+
+**READ-011C established that the ratio band does not exist for these fonts.** The render-geometry
+audit (`tools/font-certification/read-011-audit-renders.mjs`) recomputed each probe entry's layout
+and found a **constant 21.40 mm ink height and a constant stone count at every one of the three
+rungs** — because `RhinestoneFontProvider` deliberately does not scale authored stone positions by
+`heightMm` (`src/text/rhinestoneFont/RhinestoneFontProvider.js`: *"Validated but not applied"*; the
+families are authored at one fixed `PITCH_MM`). Rungs 16 / 19 / 22 therefore render as
+byte-identical geometry. Rating three identical images under three different ratio labels would
+inject meaningless rows into the per-ratio band statistics the floor fit consumes.
+
+So the block is **excluded from the rating pass rather than re-scoped** — not collapsed to one
+representative rung, not turned into a stone-size probe. The 12 entries stay in
+`render-plan.json` (frozen) and in `render-key.json` with their `presentationIndex` untouched;
+`render-key.json` marks each one `excludedFromRating: true` with an `exclusionReason`, and the
+rating sheet + `ratings.csv` cover only the remaining 147 specimens. The authored-pitch floor
+question for these fonts (READ-011A §5) — and the two defects the audit surfaced, that the READ-010
+warn-only floor gates on a `heightMm ÷ stoneDiameterMm` ratio that has no effect on authored-font
+output, and that `rsBlock.js` / `rsModern.js` hardcode `PITCH_MM = 3.1` with no stone-size
+awareness (`docs/BACKLOG.md`) — are separate milestones.
 
 ### 4.3 Repeats (15 renders)
 

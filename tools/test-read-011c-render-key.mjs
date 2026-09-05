@@ -15,8 +15,12 @@ import { assertTestRegistered } from './lib/test-registration-assertions.mjs';
 //   3. every separation entry has all four tracking fields, with separationAchieved consistent with
 //      separationRatioAfter against the 0.95 threshold;
 //   4. every none entry has zero letter spacing;
-//   5. presentation indices form a complete 0..n-1 permutation;
-//   6. this file is registered in the geometry group and runs in both the default and full suites.
+//   5. presentation indices form a complete 0..n-1 permutation (excluded entries included);
+//   6-8. the derived fields (separationDelta / identicalToUntracked / duplicateOf);
+//   9. the rhinestone probe is excluded from rating: exactly 12 entries, all stemRegime 'unmeasured'
+//      with a non-null reason, every other entry with a null reason;
+//   10. docs/data/read-011/ratings.csv has exactly one row per non-excluded slug and none for excluded;
+//   11. this file is registered in the geometry group and runs in both the default and full suites.
 //
 // It asserts nothing about image files on disk -- the renders are gitignored, so this test must pass
 // on a bare clone. Its whole import graph is this file, node: builtins and the test-registration
@@ -91,9 +95,12 @@ await test('4. every none entry has zero letter spacing', () => {
   }
 });
 
-await test('5. presentation indices form a complete 0..n-1 permutation', () => {
+await test('5. presentation indices form a complete 0..n-1 permutation, excluded entries included', () => {
   const indices = keyEntries.map((e) => e.presentationIndex).sort((a, b) => a - b);
   assert.deepEqual(indices, [...Array(keyEntries.length).keys()], 'indices are exactly 0..n-1 with no gaps or repeats');
+  // The excluded entries keep their slots — the rating sheet skips them, it does not renumber.
+  const excludedIndices = keyEntries.filter((e) => e.excludedFromRating).map((e) => e.presentationIndex);
+  assert.ok(excludedIndices.every((i) => Number.isInteger(i) && i >= 0 && i < keyEntries.length));
 });
 
 const SPEC_FIELDS = ['fontId', 'mode', 'ratio', 'stoneSizeId', 'text', 'letterSpacingMm'];
@@ -150,7 +157,41 @@ await test('8. every duplicateOf resolves to an earlier-presentation entry with 
   }
 });
 
-await test('9. this file is registered in the geometry group and runs in both the default and full suites', () => {
+await test('9. the rhinestone probe is excluded from rating: exactly 12 entries, unmeasured + reasoned; every other entry reason null', () => {
+  const excluded = keyEntries.filter((e) => e.excludedFromRating === true);
+  assert.equal(excluded.length, 12, 'exactly 12 entries excluded from rating');
+  for (const e of excluded) {
+    assert.equal(e.stemRegime, 'unmeasured', `excluded entry ${e.slug} must be stemRegime 'unmeasured'`);
+    assert.equal(typeof e.exclusionReason, 'string', `excluded entry ${e.slug} needs a string reason`);
+    assert.ok(e.exclusionReason.length > 0, `excluded entry ${e.slug} reason must be non-empty`);
+  }
+  for (const e of keyEntries) {
+    if (e.excludedFromRating) continue;
+    assert.strictEqual(e.excludedFromRating, false, `entry ${e.slug} excludedFromRating must be false, not falsy`);
+    assert.strictEqual(e.exclusionReason, null, `non-excluded entry ${e.slug} must have a null reason`);
+  }
+  // Nothing else in the corpus classifies as unmeasured.
+  const unmeasured = keyEntries.filter((e) => e.stemRegime === 'unmeasured');
+  assert.equal(unmeasured.length, 12, 'the 12 unmeasured entries are exactly the excluded set');
+});
+
+await test('10. ratings.csv has exactly one row per non-excluded slug and none for excluded', async () => {
+  const csv = await readFile(path.join(repoRoot, 'docs/data/read-011/ratings.csv'), 'utf8');
+  const lines = csv.split('\n').filter((l) => l.length > 0);
+  assert.equal(lines[0], 'slug,readable,sellable,notes', 'header byte-identical to read-005');
+  const rowSlugs = lines.slice(1).map((l) => {
+    const m = l.match(/^"([0-9a-f]{8})"/);
+    assert.ok(m, `ratings.csv row is not a quoted 8-hex slug: ${l}`);
+    return m[1];
+  });
+  const expected = keyEntries.filter((e) => !e.excludedFromRating).map((e) => e.slug).sort();
+  assert.deepEqual([...rowSlugs].sort(), expected, 'one row per non-excluded slug, no extras');
+  const excludedSet = new Set(keyEntries.filter((e) => e.excludedFromRating).map((e) => e.slug));
+  for (const s of rowSlugs) assert.ok(!excludedSet.has(s), `ratings.csv contains excluded slug ${s}`);
+  assert.equal(new Set(rowSlugs).size, rowSlugs.length, 'no duplicate rows');
+});
+
+await test('11. this file is registered in the geometry group and runs in both the default and full suites', () => {
   assertTestRegistered({
     filename: 'test-read-011c-render-key.mjs',
     group: 'geometry',

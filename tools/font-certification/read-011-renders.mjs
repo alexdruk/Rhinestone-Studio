@@ -154,17 +154,86 @@ export function deriveKeyFacts(entries) {
   return entries;
 }
 
+// READ-011C: the rhinestone probe (rs-block / rs-modern) is out of the rating pass. The audit
+// (tools/font-certification/read-011-audit-renders.mjs) established that RhinestoneFontProvider
+// deliberately does not scale authored stone positions by heightMm (src/text/rhinestoneFont/
+// RhinestoneFontProvider.js "Validated but not applied"): all three ratio rungs (16 / 19 / 22)
+// produce byte-identical geometry — the audit measured a constant 21.40mm ink height and a
+// constant stone count at every specified height. Rating them would feed meaningless ratio labels
+// into the band statistics, so the block is excluded rather than re-scoped.
+//
+// The 12 entries stay in the plan and the key with their presentationIndex untouched — the rating
+// sheet simply skips them, and the exclusion is recorded per-entry so provenance survives.
+const RHINESTONE_EXCLUSION_REASON =
+  'RhinestoneFontProvider does not scale authored stone positions by heightMm, so ratio rungs ' +
+  '16 / 19 / 22 produce byte-identical geometry — the READ-011C audit measured a constant 21.40mm ' +
+  'ink height and constant stone count at every specified height. Rating these would enter ' +
+  'meaningless ratio labels into the band statistics.';
+
+/**
+ * Two fields on every entry: excludedFromRating (boolean) and exclusionReason (string, null when
+ * not excluded). Derived from stemRegime — the unmeasured regime is exactly the authored rhinestone
+ * fonts (READ-011A §5: no outline, so stemWidthRatio and hence the regime is undefined) — never
+ * from a slug list. Mutates in place; safe to re-run.
+ */
+export function deriveRatingExclusion(entries) {
+  for (const e of entries) {
+    const excluded = e.stemRegime === 'unmeasured';
+    e.excludedFromRating = excluded;
+    e.exclusionReason = excluded ? RHINESTONE_EXCLUSION_REASON : null;
+  }
+  return entries;
+}
+
+// The non-excluded slugs in the recorded presentation order — what the rating sheet and the blank
+// ratings.csv both cover. presentationIndex stays a complete permutation over ALL entries; this
+// just drops the excluded ones from the sequence.
+function ratingSlugsInPresentationOrder(entries) {
+  return [...entries]
+    .filter((e) => !e.excludedFromRating)
+    .sort((a, b) => a.presentationIndex - b.presentationIndex)
+    .map((e) => e.slug);
+}
+
+// Writes the blank ratings.csv (header byte-identical to docs/data/read-005/ratings.csv, one row
+// per non-excluded slug) and the blind rating sheet (through make-rating-page.mjs). No rendering —
+// the PNGs are unchanged. Returns the rated slug list.
+async function writeRatingArtifacts(keyEntries) {
+  const ratingSlugs = ratingSlugsInPresentationOrder(keyEntries);
+
+  const read005Header = (await readFile(READ_005_RATINGS_FILE, 'utf8')).split('\n', 1)[0];
+  const csvCell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const csvLines = [read005Header, ...ratingSlugs.map((s) => [s, '', '', ''].map(csvCell).join(','))];
+  await writeFile(RATINGS_TEMPLATE_FILE, csvLines.join('\n') + '\n', 'utf8');
+
+  const imgDir = path.relative(path.dirname(RATING_HTML), RENDER_DIR) || '.';
+  await writeFile(RATING_HTML, buildRatingPageHtml({
+    slugs: ratingSlugs,
+    imgDir,
+    storeKey: 'read011-ratings-v1',
+    csvName: 'read-011-ratings.csv'
+  }), 'utf8');
+
+  return ratingSlugs;
+}
+
 async function run() {
   const args = process.argv.slice(2);
   const channel = args.includes('--channel') ? args[args.indexOf('--channel') + 1] : undefined;
 
-  // --derive-only: recompute the three derived key fields (deriveKeyFacts) from the existing
-  // render-key.json and rewrite it. No engine, no rendering — the renders are unchanged.
+  // --derive-only: recompute everything that is a pure function of the existing render-key.json —
+  // the derived key fields (deriveKeyFacts), the rating exclusion (deriveRatingExclusion), and the
+  // downstream rating sheet + blank CSV. No engine, no rendering — the PNGs are unchanged.
   if (args.includes('--derive-only')) {
     const key = JSON.parse(await readFile(KEY_FILE, 'utf8'));
     deriveKeyFacts(key.entries);
+    deriveRatingExclusion(key.entries);
+    key.meta.ratingSpecimens = key.entries.filter((e) => !e.excludedFromRating).length;
+    key.meta.excludedFromRating = key.entries.length - key.meta.ratingSpecimens;
     await writeFile(KEY_FILE, JSON.stringify(key, null, 2) + '\n', 'utf8');
+    const ratingSlugs = await writeRatingArtifacts(key.entries);
     console.log(`derived fields written for ${key.entries.length} entries -> ${path.relative(repoRoot, KEY_FILE)}`);
+    console.log(`rating sheet + blank CSV rebuilt for ${ratingSlugs.length} non-excluded specimens (${key.meta.excludedFromRating} excluded)`);
     return;
   }
 
@@ -327,7 +396,9 @@ async function run() {
     .sort((a, b) => a.presentationIndex - b.presentationIndex);
 
   deriveKeyFacts(keyEntries);
+  deriveRatingExclusion(keyEntries);
 
+  const ratingSpecimens = keyEntries.filter((e) => !e.excludedFromRating).length;
   const key = {
     meta: {
       milestone: 'READ-011C',
@@ -338,29 +409,17 @@ async function run() {
       presentationSeedHex: `0x${PRESENTATION_SEED.toString(16)}`,
       separationTargetRatio: separationTarget,
       total: keyEntries.length,
+      ratingSpecimens,
+      excludedFromRating: keyEntries.length - ratingSpecimens,
       renderDir: 'tools/font-certification/output/read-011/renders'
     },
     entries: keyEntries
   };
   await writeFile(KEY_FILE, JSON.stringify(key, null, 2) + '\n', 'utf8');
 
-  // --- blank ratings.csv (header byte-identical to docs/data/read-005/ratings.csv) ----------
+  // --- rating sheet + blank ratings.csv, over the non-excluded specimens only ---------------
 
-  const read005Header = (await readFile(READ_005_RATINGS_FILE, 'utf8')).split('\n', 1)[0];
-  const csvCell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const csvLines = [read005Header];
-  for (const ke of keyEntries) csvLines.push([ke.slug, '', '', ''].map(csvCell).join(','));
-  await writeFile(RATINGS_TEMPLATE_FILE, csvLines.join('\n') + '\n', 'utf8');
-
-  // --- rating sheet, through make-rating-page.mjs, in the recorded presentation order -------
-
-  const imgDir = path.relative(path.dirname(RATING_HTML), RENDER_DIR) || '.';
-  await writeFile(RATING_HTML, buildRatingPageHtml({
-    slugs: presentationOrder,
-    imgDir,
-    storeKey: 'read011-ratings-v1',
-    csvName: 'read-011-ratings.csv'
-  }), 'utf8');
+  await writeRatingArtifacts(keyEntries);
 
   // --- report -----------------------------------------------------------------------------
 

@@ -8,7 +8,9 @@
     "presentationSeedHex": "0x11c2026",
     "separationTargetRatio": 0.95,
     "total": 159,
-    "renderDir": "tools/font-certification/output/read-011/renders"
+    "renderDir": "tools/font-certification/output/read-011/renders",
+    "ratingSpecimens": 147,
+    "excludedFromRating": 12
   },
   "entries": [
     {
@@ -32,7 +34,9 @@
       "presentationIndex": 0,
       "separationDelta": 0.5,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "111a00be",
@@ -55,7 +59,9 @@
       "presentationIndex": 1,
       "separationDelta": 0.7,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "b02d02b4",
@@ -78,7 +84,9 @@
       "presentationIndex": 2,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "e081b242",
@@ -101,7 +109,9 @@
       "presentationIndex": 3,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "abea0f8d",
@@ -124,7 +134,9 @@
       "presentationIndex": 4,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "e63a41af",
@@ -147,7 +159,9 @@
       "presentationIndex": 5,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "24e680ff",
@@ -170,7 +184,9 @@
       "presentationIndex": 6,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "369ed7b3",
@@ -193,7 +209,9 @@
       "presentationIndex": 7,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "6deefda9",
@@ -216,7 +234,9 @@
       "presentationIndex": 8,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "196910b7",
@@ -239,7 +259,9 @@
       "presentationIndex": 9,
       "separationDelta": 1,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "46439e3b",
@@ -262,7 +284,9 @@
       "presentationIndex": 10,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "a2173b1b",
@@ -285,7 +309,9 @@
       "presentationIndex": 11,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "3cd2b867",
@@ -308,7 +334,9 @@
       "presentationIndex": 12,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "fd523a17",
@@ -331,7 +359,9 @@
       "presentationIndex": 13,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "496fdb73",
@@ -354,7 +384,9 @@
       "presentationIndex": 14,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "fea9f594",
@@ -377,7 +409,9 @@
       "presentationIndex": 15,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "60bbb91f",
@@ -400,7 +434,9 @@
       "presentationIndex": 16,
       "separationDelta": 0.8,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "37ab540f",
@@ -423,7 +459,9 @@
       "presentationIndex": 17,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "22984c2d",
@@ -446,7 +484,9 @@
       "presentationIndex": 18,
       "separationDelta": 0.5,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "492f2264",
@@ -469,7 +509,9 @@
       "presentationIndex": 19,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "bf0a5cc0",
@@ -492,7 +534,9 @@
       "presentationIndex": 20,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "d966692a",
@@ -515,7 +559,9 @@
       "presentationIndex": 21,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "5a950a6c",
@@ -538,7 +584,9 @@
       "presentationIndex": 22,
       "separationDelta": 0.7,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "825be43d",
@@ -561,7 +609,9 @@
       "presentationIndex": 23,
       "separationDelta": 0.75,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "a64ffc5c",
@@ -584,7 +634,9 @@
       "presentationIndex": 24,
       "separationDelta": 0.625,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "e5c12224",
@@ -607,7 +659,9 @@
       "presentationIndex": 25,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": true,
+      "exclusionReason": "RhinestoneFontProvider does not scale authored stone positions by heightMm, so ratio rungs 16 / 19 / 22 produce byte-identical geometry — the READ-011C audit measured a constant 21.40mm ink height and constant stone count at every specified height. Rating these would enter meaningless ratio labels into the band statistics."
     },
     {
       "slug": "2dd3acbb",
@@ -630,7 +684,9 @@
       "presentationIndex": 26,
       "separationDelta": 0.7,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "797e9a4b",
@@ -653,7 +709,9 @@
       "presentationIndex": 27,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "b12fa951",
@@ -676,7 +734,9 @@
       "presentationIndex": 28,
       "separationDelta": 0.5,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "e11f74fc",
@@ -699,7 +759,9 @@
       "presentationIndex": 29,
       "separationDelta": 0.875,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "ac96316d",
@@ -722,7 +784,9 @@
       "presentationIndex": 30,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "1b7ebcb0",
@@ -745,7 +809,9 @@
       "presentationIndex": 31,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "e5c08736",
@@ -768,7 +834,9 @@
       "presentationIndex": 32,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "a9606325",
@@ -791,7 +859,9 @@
       "presentationIndex": 33,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "9f709566",
@@ -814,7 +884,9 @@
       "presentationIndex": 34,
       "separationDelta": 0.7,
       "identicalToUntracked": false,
-      "duplicateOf": "111a00be"
+      "duplicateOf": "111a00be",
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "7cd5605d",
@@ -837,7 +909,9 @@
       "presentationIndex": 35,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "7098c1a0",
@@ -860,7 +934,9 @@
       "presentationIndex": 36,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "7a4886f4",
@@ -883,7 +959,9 @@
       "presentationIndex": 37,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "3bf95b5a",
@@ -906,7 +984,9 @@
       "presentationIndex": 38,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "d901606b",
@@ -929,7 +1009,9 @@
       "presentationIndex": 39,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": true,
+      "exclusionReason": "RhinestoneFontProvider does not scale authored stone positions by heightMm, so ratio rungs 16 / 19 / 22 produce byte-identical geometry — the READ-011C audit measured a constant 21.40mm ink height and constant stone count at every specified height. Rating these would enter meaningless ratio labels into the band statistics."
     },
     {
       "slug": "57171783",
@@ -952,7 +1034,9 @@
       "presentationIndex": 40,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "9afe431e",
@@ -975,7 +1059,9 @@
       "presentationIndex": 41,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": "3bf95b5a"
+      "duplicateOf": "3bf95b5a",
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "2c0898e4",
@@ -998,7 +1084,9 @@
       "presentationIndex": 42,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "ced67b56",
@@ -1021,7 +1109,9 @@
       "presentationIndex": 43,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "614fee96",
@@ -1044,7 +1134,9 @@
       "presentationIndex": 44,
       "separationDelta": 0.5,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "849cd728",
@@ -1067,7 +1159,9 @@
       "presentationIndex": 45,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "2a6428aa",
@@ -1090,7 +1184,9 @@
       "presentationIndex": 46,
       "separationDelta": 0.875,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "1e45583d",
@@ -1113,7 +1209,9 @@
       "presentationIndex": 47,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "1619d7f4",
@@ -1136,7 +1234,9 @@
       "presentationIndex": 48,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "315f622b",
@@ -1159,7 +1259,9 @@
       "presentationIndex": 49,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": true,
+      "exclusionReason": "RhinestoneFontProvider does not scale authored stone positions by heightMm, so ratio rungs 16 / 19 / 22 produce byte-identical geometry — the READ-011C audit measured a constant 21.40mm ink height and constant stone count at every specified height. Rating these would enter meaningless ratio labels into the band statistics."
     },
     {
       "slug": "e0e41947",
@@ -1182,7 +1284,9 @@
       "presentationIndex": 50,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "0f320099",
@@ -1205,7 +1309,9 @@
       "presentationIndex": 51,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "14303d54",
@@ -1228,7 +1334,9 @@
       "presentationIndex": 52,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "d2a8395f",
@@ -1251,7 +1359,9 @@
       "presentationIndex": 53,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "d5f09d4f",
@@ -1274,7 +1384,9 @@
       "presentationIndex": 54,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": "46439e3b"
+      "duplicateOf": "46439e3b",
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "9b84f150",
@@ -1297,7 +1409,9 @@
       "presentationIndex": 55,
       "separationDelta": 0.75,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "703eab4a",
@@ -1320,7 +1434,9 @@
       "presentationIndex": 56,
       "separationDelta": 1,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "1191f008",
@@ -1343,7 +1459,9 @@
       "presentationIndex": 57,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "4908417d",
@@ -1366,7 +1484,9 @@
       "presentationIndex": 58,
       "separationDelta": 0.25,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "7e6a3886",
@@ -1389,7 +1509,9 @@
       "presentationIndex": 59,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "e869b79b",
@@ -1412,7 +1534,9 @@
       "presentationIndex": 60,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": true,
+      "exclusionReason": "RhinestoneFontProvider does not scale authored stone positions by heightMm, so ratio rungs 16 / 19 / 22 produce byte-identical geometry — the READ-011C audit measured a constant 21.40mm ink height and constant stone count at every specified height. Rating these would enter meaningless ratio labels into the band statistics."
     },
     {
       "slug": "fe95d67e",
@@ -1435,7 +1559,9 @@
       "presentationIndex": 61,
       "separationDelta": 0.8,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "0b0b3fd4",
@@ -1458,7 +1584,9 @@
       "presentationIndex": 62,
       "separationDelta": 0.25,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "549af2ba",
@@ -1481,7 +1609,9 @@
       "presentationIndex": 63,
       "separationDelta": 0.6,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "42e785f5",
@@ -1504,7 +1634,9 @@
       "presentationIndex": 64,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "ce77af0e",
@@ -1527,7 +1659,9 @@
       "presentationIndex": 65,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "34c9c2a4",
@@ -1550,7 +1684,9 @@
       "presentationIndex": 66,
       "separationDelta": 0.5,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "db9e6413",
@@ -1573,7 +1709,9 @@
       "presentationIndex": 67,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "b1a26343",
@@ -1596,7 +1734,9 @@
       "presentationIndex": 68,
       "separationDelta": 1,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "e64d769d",
@@ -1619,7 +1759,9 @@
       "presentationIndex": 69,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "185ee896",
@@ -1642,7 +1784,9 @@
       "presentationIndex": 70,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "b67cfe0e",
@@ -1665,7 +1809,9 @@
       "presentationIndex": 71,
       "separationDelta": 0.9,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "6547773b",
@@ -1688,7 +1834,9 @@
       "presentationIndex": 72,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": "7e6a3886"
+      "duplicateOf": "7e6a3886",
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "4052d5ad",
@@ -1711,7 +1859,9 @@
       "presentationIndex": 73,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "9c4a1048",
@@ -1734,7 +1884,9 @@
       "presentationIndex": 74,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "2c4d1173",
@@ -1757,7 +1909,9 @@
       "presentationIndex": 75,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "4845392d",
@@ -1780,7 +1934,9 @@
       "presentationIndex": 76,
       "separationDelta": 0.125,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "20c16d25",
@@ -1803,7 +1959,9 @@
       "presentationIndex": 77,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "0335db6f",
@@ -1826,7 +1984,9 @@
       "presentationIndex": 78,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "64c9c54f",
@@ -1849,7 +2009,9 @@
       "presentationIndex": 79,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "f0f08a55",
@@ -1872,7 +2034,9 @@
       "presentationIndex": 80,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": true,
+      "exclusionReason": "RhinestoneFontProvider does not scale authored stone positions by heightMm, so ratio rungs 16 / 19 / 22 produce byte-identical geometry — the READ-011C audit measured a constant 21.40mm ink height and constant stone count at every specified height. Rating these would enter meaningless ratio labels into the band statistics."
     },
     {
       "slug": "a9adfc51",
@@ -1895,7 +2059,9 @@
       "presentationIndex": 81,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "ee9577a4",
@@ -1918,7 +2084,9 @@
       "presentationIndex": 82,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "a9a0afaf",
@@ -1941,7 +2109,9 @@
       "presentationIndex": 83,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": "fea9f594"
+      "duplicateOf": "fea9f594",
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "c73e1160",
@@ -1964,7 +2134,9 @@
       "presentationIndex": 84,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "fb621b3d",
@@ -1987,7 +2159,9 @@
       "presentationIndex": 85,
       "separationDelta": 0.625,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "1195a2d9",
@@ -2010,7 +2184,9 @@
       "presentationIndex": 86,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": "fea9f594"
+      "duplicateOf": "fea9f594",
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "22f3e71f",
@@ -2033,7 +2209,9 @@
       "presentationIndex": 87,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "60137352",
@@ -2056,7 +2234,9 @@
       "presentationIndex": 88,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "d29601c0",
@@ -2079,7 +2259,9 @@
       "presentationIndex": 89,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "012f6961",
@@ -2102,7 +2284,9 @@
       "presentationIndex": 90,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "30fadadf",
@@ -2125,7 +2309,9 @@
       "presentationIndex": 91,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": true,
+      "exclusionReason": "RhinestoneFontProvider does not scale authored stone positions by heightMm, so ratio rungs 16 / 19 / 22 produce byte-identical geometry — the READ-011C audit measured a constant 21.40mm ink height and constant stone count at every specified height. Rating these would enter meaningless ratio labels into the band statistics."
     },
     {
       "slug": "dc04ba8c",
@@ -2148,7 +2334,9 @@
       "presentationIndex": 92,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "0a031013",
@@ -2171,7 +2359,9 @@
       "presentationIndex": 93,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": "797e9a4b"
+      "duplicateOf": "797e9a4b",
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "51695ce6",
@@ -2194,7 +2384,9 @@
       "presentationIndex": 94,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "55bd524d",
@@ -2217,7 +2409,9 @@
       "presentationIndex": 95,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "dc1ad7e7",
@@ -2240,7 +2434,9 @@
       "presentationIndex": 96,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": "849cd728"
+      "duplicateOf": "849cd728",
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "101f3944",
@@ -2263,7 +2459,9 @@
       "presentationIndex": 97,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "6e2425c7",
@@ -2286,7 +2484,9 @@
       "presentationIndex": 98,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "212a2249",
@@ -2309,7 +2509,9 @@
       "presentationIndex": 99,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "f2a42979",
@@ -2332,7 +2534,9 @@
       "presentationIndex": 100,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "dd901001",
@@ -2355,7 +2559,9 @@
       "presentationIndex": 101,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "0b0304df",
@@ -2378,7 +2584,9 @@
       "presentationIndex": 102,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "be012103",
@@ -2401,7 +2609,9 @@
       "presentationIndex": 103,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": "ac96316d"
+      "duplicateOf": "ac96316d",
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "a2a84b3f",
@@ -2424,7 +2634,9 @@
       "presentationIndex": 104,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": "ee9577a4"
+      "duplicateOf": "ee9577a4",
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "9557ebd6",
@@ -2447,7 +2659,9 @@
       "presentationIndex": 105,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "bff2d558",
@@ -2470,7 +2684,9 @@
       "presentationIndex": 106,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "e5598083",
@@ -2493,7 +2709,9 @@
       "presentationIndex": 107,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": true,
+      "exclusionReason": "RhinestoneFontProvider does not scale authored stone positions by heightMm, so ratio rungs 16 / 19 / 22 produce byte-identical geometry — the READ-011C audit measured a constant 21.40mm ink height and constant stone count at every specified height. Rating these would enter meaningless ratio labels into the band statistics."
     },
     {
       "slug": "77ccb85d",
@@ -2516,7 +2734,9 @@
       "presentationIndex": 108,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "025ce6a1",
@@ -2539,7 +2759,9 @@
       "presentationIndex": 109,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": true,
+      "exclusionReason": "RhinestoneFontProvider does not scale authored stone positions by heightMm, so ratio rungs 16 / 19 / 22 produce byte-identical geometry — the READ-011C audit measured a constant 21.40mm ink height and constant stone count at every specified height. Rating these would enter meaningless ratio labels into the band statistics."
     },
     {
       "slug": "1ce8c131",
@@ -2562,7 +2784,9 @@
       "presentationIndex": 110,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "348c42c4",
@@ -2585,7 +2809,9 @@
       "presentationIndex": 111,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "48a08595",
@@ -2608,7 +2834,9 @@
       "presentationIndex": 112,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "40cbf7e4",
@@ -2631,7 +2859,9 @@
       "presentationIndex": 113,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "aabfe322",
@@ -2654,7 +2884,9 @@
       "presentationIndex": 114,
       "separationDelta": 0.5,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "0837902b",
@@ -2677,7 +2909,9 @@
       "presentationIndex": 115,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "79b83bd9",
@@ -2700,7 +2934,9 @@
       "presentationIndex": 116,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "b3981ef7",
@@ -2723,7 +2959,9 @@
       "presentationIndex": 117,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "771ec772",
@@ -2746,7 +2984,9 @@
       "presentationIndex": 118,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "0649e9ba",
@@ -2769,7 +3009,9 @@
       "presentationIndex": 119,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "7e736d99",
@@ -2792,7 +3034,9 @@
       "presentationIndex": 120,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "1d0f509b",
@@ -2815,7 +3059,9 @@
       "presentationIndex": 121,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "37d2cce7",
@@ -2838,7 +3084,9 @@
       "presentationIndex": 122,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "b20906f1",
@@ -2861,7 +3109,9 @@
       "presentationIndex": 123,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "20683b08",
@@ -2884,7 +3134,9 @@
       "presentationIndex": 124,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": "e0e41947"
+      "duplicateOf": "e0e41947",
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "4242ebe8",
@@ -2907,7 +3159,9 @@
       "presentationIndex": 125,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": "3cd2b867"
+      "duplicateOf": "3cd2b867",
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "b599816c",
@@ -2930,7 +3184,9 @@
       "presentationIndex": 126,
       "separationDelta": 0.75,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "49833813",
@@ -2953,7 +3209,9 @@
       "presentationIndex": 127,
       "separationDelta": 0.625,
       "identicalToUntracked": false,
-      "duplicateOf": "a64ffc5c"
+      "duplicateOf": "a64ffc5c",
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "29c3dd0e",
@@ -2976,7 +3234,9 @@
       "presentationIndex": 128,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": true,
+      "exclusionReason": "RhinestoneFontProvider does not scale authored stone positions by heightMm, so ratio rungs 16 / 19 / 22 produce byte-identical geometry — the READ-011C audit measured a constant 21.40mm ink height and constant stone count at every specified height. Rating these would enter meaningless ratio labels into the band statistics."
     },
     {
       "slug": "e977e4b3",
@@ -2999,7 +3259,9 @@
       "presentationIndex": 129,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "66e462c8",
@@ -3022,7 +3284,9 @@
       "presentationIndex": 130,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "aa479c53",
@@ -3045,7 +3309,9 @@
       "presentationIndex": 131,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "13cfbf0e",
@@ -3068,7 +3334,9 @@
       "presentationIndex": 132,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": true,
+      "exclusionReason": "RhinestoneFontProvider does not scale authored stone positions by heightMm, so ratio rungs 16 / 19 / 22 produce byte-identical geometry — the READ-011C audit measured a constant 21.40mm ink height and constant stone count at every specified height. Rating these would enter meaningless ratio labels into the band statistics."
     },
     {
       "slug": "9f8aa133",
@@ -3091,7 +3359,9 @@
       "presentationIndex": 133,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "bc9ae6d3",
@@ -3114,7 +3384,9 @@
       "presentationIndex": 134,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "3a212cdd",
@@ -3137,7 +3409,9 @@
       "presentationIndex": 135,
       "separationDelta": 0.6,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "53003dc9",
@@ -3160,7 +3434,9 @@
       "presentationIndex": 136,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": "1619d7f4"
+      "duplicateOf": "1619d7f4",
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "fa3d9880",
@@ -3183,7 +3459,9 @@
       "presentationIndex": 137,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": "0649e9ba"
+      "duplicateOf": "0649e9ba",
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "d00a1a02",
@@ -3206,7 +3484,9 @@
       "presentationIndex": 138,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "787051cb",
@@ -3229,7 +3509,9 @@
       "presentationIndex": 139,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": true,
+      "exclusionReason": "RhinestoneFontProvider does not scale authored stone positions by heightMm, so ratio rungs 16 / 19 / 22 produce byte-identical geometry — the READ-011C audit measured a constant 21.40mm ink height and constant stone count at every specified height. Rating these would enter meaningless ratio labels into the band statistics."
     },
     {
       "slug": "b7c73f2a",
@@ -3252,7 +3534,9 @@
       "presentationIndex": 140,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "86130e4a",
@@ -3275,7 +3559,9 @@
       "presentationIndex": 141,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": "9f8aa133"
+      "duplicateOf": "9f8aa133",
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "7aa85667",
@@ -3298,7 +3584,9 @@
       "presentationIndex": 142,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "8bc6397e",
@@ -3321,7 +3609,9 @@
       "presentationIndex": 143,
       "separationDelta": 0.75,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "30e61701",
@@ -3344,7 +3634,9 @@
       "presentationIndex": 144,
       "separationDelta": 1.25,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "0533367c",
@@ -3367,7 +3659,9 @@
       "presentationIndex": 145,
       "separationDelta": 0.75,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "f55191b6",
@@ -3390,7 +3684,9 @@
       "presentationIndex": 146,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": "22f3e71f"
+      "duplicateOf": "22f3e71f",
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "f5f6731f",
@@ -3413,7 +3709,9 @@
       "presentationIndex": 147,
       "separationDelta": 0.2,
       "identicalToUntracked": false,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "95b6faa7",
@@ -3436,7 +3734,9 @@
       "presentationIndex": 148,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "1eddf88c",
@@ -3459,7 +3759,9 @@
       "presentationIndex": 149,
       "separationDelta": 1,
       "identicalToUntracked": false,
-      "duplicateOf": "b1a26343"
+      "duplicateOf": "b1a26343",
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "bedad78b",
@@ -3482,7 +3784,9 @@
       "presentationIndex": 150,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "a1fd14be",
@@ -3505,7 +3809,9 @@
       "presentationIndex": 151,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": true,
+      "exclusionReason": "RhinestoneFontProvider does not scale authored stone positions by heightMm, so ratio rungs 16 / 19 / 22 produce byte-identical geometry — the READ-011C audit measured a constant 21.40mm ink height and constant stone count at every specified height. Rating these would enter meaningless ratio labels into the band statistics."
     },
     {
       "slug": "58a4e85b",
@@ -3528,7 +3834,9 @@
       "presentationIndex": 152,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "ef0ab067",
@@ -3551,7 +3859,9 @@
       "presentationIndex": 153,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "14cb9202",
@@ -3574,7 +3884,9 @@
       "presentationIndex": 154,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "961ce5b6",
@@ -3597,7 +3909,9 @@
       "presentationIndex": 155,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": null
+      "duplicateOf": null,
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "e770929f",
@@ -3620,7 +3934,9 @@
       "presentationIndex": 156,
       "separationDelta": 0,
       "identicalToUntracked": true,
-      "duplicateOf": "d29601c0"
+      "duplicateOf": "d29601c0",
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "ebd38fcf",
@@ -3643,7 +3959,9 @@
       "presentationIndex": 157,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": "e5c08736"
+      "duplicateOf": "e5c08736",
+      "excludedFromRating": false,
+      "exclusionReason": null
     },
     {
       "slug": "d0d643d8",
@@ -3666,7 +3984,9 @@
       "presentationIndex": 158,
       "separationDelta": null,
       "identicalToUntracked": null,
-      "duplicateOf": "1b7ebcb0"
+      "duplicateOf": "1b7ebcb0",
+      "excludedFromRating": false,
+      "exclusionReason": null
     }
   ]
 }
