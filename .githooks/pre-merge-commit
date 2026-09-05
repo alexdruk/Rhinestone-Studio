@@ -1,0 +1,15 @@
+#!/bin/sh
+# Run the full test suite before a merge commit is created.
+#
+# Why this hook exists: feature branches in this repo are local-only, so
+# .github/workflows/ci.yml only ever runs on develop and main -- it reports
+# *after* a merge has already landed. Running --all here aborts the merge
+# before the merge commit exists if anything is broken. (READ-010 fix.)
+#
+# Blind spot: git runs pre-commit, not pre-merge-commit, when a merge stops
+# for conflict resolution -- a conflicted merge still needs a manual
+# `node tools/run-tests.mjs --all` run.
+node tools/run-tests.mjs --all || {
+	echo "pre-merge-commit: test suite failed -- aborting merge." >&2
+	exit 1
+}

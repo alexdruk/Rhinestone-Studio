@@ -4720,14 +4720,16 @@ function updateProdSheetReadabilityValidation(){
   validation.classList.toggle('visible',Boolean(message));
 }
 function currentProductionSheetOptions(){const t=currentObjectTemplate(),isPlate=t.preview.kind==='plate';const plateFields=isPlate?{plateDesignTarget:getPlateDesignTargetMeta(project.plate.designTarget).name,plateOuterDiameterMm:project.plate.outerDiameterMm,plateInnerWellDiameterMm:project.plate.innerWellDiameterMm,plateRimWidthMm:computeRimWidthMm(project.plate.outerDiameterMm,project.plate.innerWellDiameterMm),plateOverallHeightMm:project.plate.overallHeightMm,plateWeightGrams:PLATE_ROUND_DINNER_DEFINITION.weightGrams.average,plateColorName:getPlateColor(project.plate.colorId).name}:{};return{projectName:project.name,objectType:t.displayName,productionWidthMm:project.canvas.width,productionHeightMm:project.canvas.height,gapMm:[...new Set(project.layers.filter(l=>l.visible).map(l=>l.gap))],pageSize:el('prodSheetPageSize').value,marginMm:readLengthField('prodSheetMargin')||0,mirror:el('prodSheetMirror').value==='on',registrationMarks:el('prodSheetRegMarks').value==='on',units:project.units,...plateFields}}
-el('exportProdSheetSVG').onclick=()=>{updateProdSheetReadabilityValidation();if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-production-sheet.svg','image/svg+xml',productionSheetToSvg(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
-el('exportProdSheetPDF').onclick=()=>{updateProdSheetReadabilityValidation();if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-production-sheet.pdf','application/pdf',productionSheetToPdf(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+// READ-010's readability floor is warn-only: a throw inside updateProdSheetReadabilityValidation()'s sweep must be caught and reported via the existing #status catch, not escape uncaught and silently disable the export button -- so the call sits inside try, after the !layout guard.
+el('exportProdSheetSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{updateProdSheetReadabilityValidation();download('rhinestone-production-sheet.svg','image/svg+xml',productionSheetToSvg(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+el('exportProdSheetPDF').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{updateProdSheetReadabilityValidation();download('rhinestone-production-sheet.pdf','application/pdf',productionSheetToPdf(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 // PNG has no dedicated src/export/** module (matching #exportPNG/#exportCup's existing "capture,
 // not a standalone exporter" precedent): it rasterizes the already-generated production-sheet SVG
 // via an offscreen Image+canvas at a fixed PRODUCTION_SHEET_PNG_DPI, so the raster's pixel
 // dimensions are always an undistorted multiple of the page's mm size -- never fit-to-viewport
 // scaled the way the on-screen 2D canvas is.
-el('exportProdSheetPNG').onclick=async()=>{updateProdSheetReadabilityValidation();if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{
+el('exportProdSheetPNG').onclick=async()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{
+  updateProdSheetReadabilityValidation();
   const options=currentProductionSheetOptions();
   const svgMarkup=productionSheetToSvg(layout,options);
   const{pageWidthMm,pageHeightMm}=computeProductionSheetLayout(layout,options);
