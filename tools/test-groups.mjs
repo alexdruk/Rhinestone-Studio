@@ -173,6 +173,10 @@ export const GROUPS = {
     // TextAutoFit.js) classifying each manifest font into a stroke regime from its measured
     // stemWidthRatio. Grouped with the other src/geometry leaf-module tests here.
     'test-read-011-stem-regime.mjs',
+    // READ-011B: docs/data/read-011/render-plan.json -- the frozen experimental design for the
+    // READ-011 rating pass, enumerated by tools/font-certification/read-011-plan.mjs from the
+    // manifest and StemRegime.js. Grouped with test-read-011-stem-regime.mjs.
+    'test-read-011b-render-plan.mjs',
     'test-s200-mixed-stone-sizes.mjs',
     'test-rs3011-step10a-region-data-model.mjs',
     'test-rs3011-step10b-paint-target-selection.mjs',
