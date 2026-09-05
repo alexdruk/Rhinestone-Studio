@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { FontManager } from '../src/fonts/index.js';
 import { listStoneSizes } from '../src/renderer/StoneSizes.js';
 import { hasAnyOverlappingStonePair, measureStoneCrowding } from '../src/geometry/StoneLayout.js';
+import { MIN_HEIGHT_TO_STONE_RATIO } from '../src/geometry/TextAutoFit.js';
 import { findStoneSizeByDiameterMm } from '../src/renderer/StoneSizes.js';
 // READ-004 Part B moved the stroke-narrower-than-one-stone arithmetic and its fill-mode gate out of
 // app.js into this shared module. app.js's textStrokeNarrowerThanOneStone() (sliced below) now calls
@@ -80,11 +81,10 @@ const textModeMapSrc = matchOne(appJs, /const TEXT_MODE_TO_ENGINE_MODE=\{[^}]*\}
 const resolveTextFillModeSrc = matchOne(appJs, /function resolveTextFillMode\(textMode\)\{[^}]*\}/, 'resolveTextFillMode()');
 const strokePredicateSrc = sliceBalanced(appJs, 'function textStrokeNarrowerThanOneStone(layer){', 'textStrokeNarrowerThanOneStone()');
 const heightPredicateSrc = sliceBalanced(appJs, 'function textHeightBelowReadableMinimum(layer){', 'textHeightBelowReadableMinimum()');
-// READ-008: textHeightBelowReadableMinimum() now closes over MIN_HEIGHT_TO_STONE_RATIO -- extract
-// its value and inject it into the factory like every other app.js dependency.
-const MIN_HEIGHT_TO_STONE_RATIO = Number(
-  matchOne(appJs, /const MIN_HEIGHT_TO_STONE_RATIO=\d+(?:\.\d+)?;/, 'MIN_HEIGHT_TO_STONE_RATIO').match(/=([\d.]+);/)[1]
-);
+// READ-008: textHeightBelowReadableMinimum() now closes over MIN_HEIGHT_TO_STONE_RATIO -- inject
+// the real value into the factory like every other app.js dependency. READ-009 moved the
+// declaration itself into src/geometry/TextAutoFit.js (app.js now imports it), so the value comes
+// from that real import rather than being sliced out of app.js source.
 // PERF-005: updateStoneSizeOverlapCapabilityUI() now calls out to these two module-level pieces
 // (the availability-sweep function, and its own target-key tracking) instead of doing the full
 // catalog sweep inline -- sliced in verbatim alongside it so this harness keeps exercising the real

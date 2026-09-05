@@ -19,7 +19,7 @@
     },
     {
       "file": "long-name-autofit.rhs",
-      "description": "Long two-word name at a text height that exceeds the canvas, forcing the auto-fit rescale pass; dark navy cup, wide wrap.",
+      "description": "A single name set at a text height that exceeds the canvas, forcing the auto-fit rescale pass; dark navy cup, wide wrap.",
       "purpose": ["long-name", "block-font", "outline-mode", "autofit", "dark-cup", "wide-wrap"]
     },
     {
@@ -84,7 +84,7 @@
     },
     {
       "file": "long-script-name.rhs",
-      "description": "Long three-word name in Great Vibes script at a height that forces auto-fit, wide wrap, cream cup.",
+      "description": "Two-word name in Great Vibes script at a height that forces auto-fit, wide wrap, cream cup.",
       "purpose": ["long-name", "script-font", "outline-mode", "autofit", "light-cup", "wide-wrap"]
     },
     {

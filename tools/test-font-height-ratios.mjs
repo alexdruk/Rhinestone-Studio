@@ -239,11 +239,22 @@ await test('14. solveDesiredCapHeightMm() and computeLetterHeightBoundsMm() thro
 // heightMode, rather than resting on the design doc's inspection alone. Zero production code change
 // expected or made for this step.
 
-const computeAutoFitScaleSrc = extractBlock(appJs, /function computeAutoFitScale\([^)]*\)\{[\s\S]*?\n\}/, 'function computeAutoFitScale()');
-const minRatioDecl = extractBlock(appJs, /const MIN_HEIGHT_TO_STONE_RATIO=\d+(\.\d+)?;/, 'the MIN_HEIGHT_TO_STONE_RATIO declaration');
-const MIN_HEIGHT_TO_STONE_RATIO = Number(minRatioDecl.match(/=([\d.]+);/)[1]);
-// eslint-disable-next-line no-new-func
-const computeAutoFitScale = new Function(`${minRatioDecl}\nreturn ${computeAutoFitScaleSrc};`)();
+// READ-009 moved MIN_HEIGHT_TO_STONE_RATIO and the auto-fit scale math into the shared
+// src/geometry/TextAutoFit.js module (app.js's computeAutoFitScale() is now a thin wrapper over
+// it), so this suite imports the real shared function directly rather than extracting+`new
+// Function`-evaluating app.js source -- the wrapper's body calls that shared module, which a bare
+// `new Function` sandbox has no closure over.
+const { MIN_HEIGHT_TO_STONE_RATIO, maxAutoFitWidthMm, computeTextAutoFitScale } = await import('../src/geometry/index.js');
+
+function computeAutoFitScale(layer, project, measuredWidthMm) {
+  if (!layer.autoFit) return { scale: 1 };
+  return computeTextAutoFitScale({
+    measuredWidthMm,
+    maxWidthMm: maxAutoFitWidthMm(project.canvas.width),
+    heightMm: layer.height,
+    stoneSizeMm: layer.stoneSize
+  });
+}
 
 const shapeFitProject = { canvas: { width: 210, height: 90 } };
 

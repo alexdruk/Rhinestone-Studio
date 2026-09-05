@@ -85,7 +85,7 @@
 // pipeline stages re-run on every threshold/invert/blur/resize edit, but the (comparatively
 // expensive) browser image decode only ever runs once per distinct imageSrc value.
 import './src/browser/BrowserDependencyProbe.js';
-import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace, hitTestPathLayerRegion, computeNaturalContourTransform, applyNaturalContourTransform, isPointInsidePolygons, findOverlappingStonePairs, hasAnyOverlappingStonePair, measureStoneCrowding, solveLetterSpacingMm, TRACKING_XPITCH_LADDER } from './src/geometry/index.js';
+import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace, hitTestPathLayerRegion, computeNaturalContourTransform, applyNaturalContourTransform, isPointInsidePolygons, findOverlappingStonePairs, hasAnyOverlappingStonePair, measureStoneCrowding, solveLetterSpacingMm, TRACKING_XPITCH_LADDER, MIN_HEIGHT_TO_STONE_RATIO, PRINTABLE_MARGIN_MM, maxAutoFitWidthMm, computeTextAutoFitScale } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
 import { createDefaultFontProviderRegistry, createDefaultRhinestoneFontRegistry, BoundingBox, strokeNarrowerThanOneStone } from './src/text/index.js';
 import { renderProductionLayout, renderStoneLayout, fitTransform, chooseNiceStepMm } from './src/renderer/CanvasRenderer2D.js';
@@ -540,20 +540,14 @@ function toggleFavoriteFont(fontId){if(favoriteFontIds.has(fontId))favoriteFontI
 // 17.50 / 16.07 / 16.25 / 17.02 / 16.56 (SS6..SS30) -- five independently derived minima converging
 // on 16-17.5, and a floor of 20 would put SS30's entire validated range permanently in warning.
 // 16-20 remains an unresolved band; see docs/specifications/READ-008-RatioFloor.md.
-const MIN_HEIGHT_TO_STONE_RATIO=16;
-// Computes the heightMm scale factor generateTextStonesLive()/resolveLayerShapeSource() apply for
-// auto-fit text, given that text's straight (unscaled) measured widthMm. Shared by both call sites
-// so their auto-fit decisions can never drift apart (mirrors computeTextPlacementOffset() above).
-// `scale` is 1 (no change) whenever auto-fit is off, the text already fits, or heightMm/stoneSize is
-// degenerate.
+// READ-009: MIN_HEIGHT_TO_STONE_RATIO and the auto-fit scale math above now live in
+// src/geometry/TextAutoFit.js so the Gallery fixture bridge's own auto-fit path
+// (src/gallery/RhsFixtureBridge.js's generateTextStonesForLayer()) shares the same floor instead of
+// silently reimplementing fit-to-width with no legibility guarantee.
 function computeAutoFitScale(layer,project,measuredWidthMm){
-  if(!layer.autoFit||!(measuredWidthMm>0))return{scale:1};
-  const maxWidth=project.canvas.width-10;
-  if(measuredWidthMm<=maxWidth)return{scale:1};
-  const fitScale=maxWidth/measuredWidthMm;
-  const stoneSizeMm=layer.stoneSize||0;
-  const minScale=stoneSizeMm>0&&layer.height>0?(stoneSizeMm*MIN_HEIGHT_TO_STONE_RATIO)/layer.height:fitScale;
-  return{scale:Math.min(1,Math.max(fitScale,minScale))};
+  if(!layer.autoFit)return{scale:1};
+  return computeTextAutoFitScale({measuredWidthMm,maxWidthMm:maxAutoFitWidthMm(project.canvas.width),
+    heightMm:layer.height,stoneSizeMm:layer.stoneSize});
 }
 // TXT-104 step 2: solves the em-square heightMm generateTextLayout() must be called with so that a
 // font's rendered capital letters come out to desiredCapHeightMm, per the design doc's section 3.1
