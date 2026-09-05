@@ -127,6 +127,10 @@ export const GROUPS = {
   documentation: [
     'test-documentation-consistency.mjs',
     'test-read-005-derived-tables.mjs',
+    // READ-011D: pins the READ-011 derived-tables golden (docs/data/read-011/derived-tables.json,
+    // computeSession3() in analyze-ratings.mjs) the same way test-read-005-derived-tables.mjs pins
+    // the READ-005 one — a pre-registered analysis rule guarded against drift before ratings land.
+    'test-read-011d-session3.mjs',
   ],
   // Input-validation/XSS hardening checks (layer.id, escapeHtml, renderLayerUI against hostile
   // input).

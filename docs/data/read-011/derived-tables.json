@@ -1,0 +1,2857 @@
+{
+  "meta": {
+    "milestone": "READ-011D",
+    "generatedBy": "tools/font-certification/analyze-ratings.mjs",
+    "inputs": [
+      "docs/data/read-011/ratings.csv",
+      "docs/data/read-011/render-key.json",
+      "assets/fonts/manifest.json"
+    ],
+    "causeTags": [
+      "inaccurate",
+      "tooClose",
+      "tooManyStones",
+      "ugly",
+      "extraStones"
+    ],
+    "duplicateKeyFields": [
+      "fontId",
+      "mode",
+      "ratio",
+      "stoneSizeId",
+      "text",
+      "letterSpacingMm"
+    ],
+    "achievedTrackingDefinition": "letterSpacingMm > 0",
+    "spanMinPositions": 15,
+    "regimePools": {
+      "monoline": [
+        "alex-brush-regular",
+        "allura-regular",
+        "cinzel-regular",
+        "great-vibes-regular",
+        "montserrat-regular",
+        "parisienne-regular",
+        "sacramento-regular"
+      ],
+      "transitional": [
+        "baloo2-variable-regular",
+        "caveat-regular",
+        "cookie-regular",
+        "courier-prime-regular",
+        "dancing-script-regular",
+        "mr-dafoe-regular",
+        "playfair-display-regular",
+        "pt-serif-regular",
+        "satisfy-regular",
+        "yellowtail-regular"
+      ],
+      "massed": [
+        "abril-fatface-regular",
+        "anton-regular",
+        "bebas-neue-regular",
+        "kaushan-script-regular",
+        "lilita-one-regular",
+        "lobster-regular",
+        "lobster-two-bold",
+        "pacifico-regular",
+        "poppins-bold",
+        "poppins-regular",
+        "poppins-semibold",
+        "righteous-regular"
+      ]
+    },
+    "regimeMedianStemWidthRatio": {
+      "monoline": 0.0303,
+      "transitional": 0.055349999999999996,
+      "massed": 0.09255
+    },
+    "cutGrids": {
+      "stonesAcrossStem": [
+        0.6,
+        0.8,
+        1,
+        1.2,
+        1.4,
+        1.6,
+        1.8,
+        2
+      ],
+      "ratio": [
+        16,
+        17.5,
+        19,
+        20.5,
+        22
+      ]
+    },
+    "clearanceRule": {
+      "minSellableRatePctAtOrAbove": 60,
+      "minMarginPctOverBelow": 20,
+      "minRatedRowsAtOrAbove": 12
+    },
+    "selectionToleranceStones": 0.25,
+    "comparisonFigure": "READ-005 session 1: 13/15 sellable self-consistency"
+  },
+  "session3": {
+    "rowCount": 147,
+    "unratedRows": {
+      "count": 147,
+      "rows": [
+        {
+          "slug": "012f6961",
+          "block": "main",
+          "fontId": "montserrat-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "0335db6f",
+          "block": "main",
+          "fontId": "parisienne-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "0533367c",
+          "block": "main",
+          "fontId": "allura-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "0649e9ba",
+          "block": "main",
+          "fontId": "parisienne-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "0837902b",
+          "block": "main",
+          "fontId": "pt-serif-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "0a031013",
+          "block": "repeats",
+          "fontId": "montserrat-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "0b0304df",
+          "block": "main",
+          "fontId": "caveat-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "0b0b3fd4",
+          "block": "main",
+          "fontId": "playfair-display-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "0f320099",
+          "block": "main",
+          "fontId": "anton-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "101f3944",
+          "block": "main",
+          "fontId": "cinzel-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "111a00be",
+          "block": "main",
+          "fontId": "parisienne-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "1191f008",
+          "block": "main",
+          "fontId": "courier-prime-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "1195a2d9",
+          "block": "main",
+          "fontId": "abril-fatface-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "14303d54",
+          "block": "size-invariance",
+          "fontId": "montserrat-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "14cb9202",
+          "block": "main",
+          "fontId": "montserrat-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "1619d7f4",
+          "block": "main",
+          "fontId": "baloo2-variable-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "185ee896",
+          "block": "main",
+          "fontId": "caveat-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "196910b7",
+          "block": "main",
+          "fontId": "bebas-neue-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "1b7ebcb0",
+          "block": "main",
+          "fontId": "dancing-script-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "1ce8c131",
+          "block": "main",
+          "fontId": "kaushan-script-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "1d0f509b",
+          "block": "main",
+          "fontId": "allura-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "1e45583d",
+          "block": "main",
+          "fontId": "sacramento-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "1eddf88c",
+          "block": "main",
+          "fontId": "lobster-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "20683b08",
+          "block": "main",
+          "fontId": "cinzel-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "20c16d25",
+          "block": "main",
+          "fontId": "yellowtail-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "212a2249",
+          "block": "size-invariance",
+          "fontId": "montserrat-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "22984c2d",
+          "block": "main",
+          "fontId": "lobster-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "22f3e71f",
+          "block": "main",
+          "fontId": "lilita-one-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "24e680ff",
+          "block": "size-invariance",
+          "fontId": "cookie-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "2a6428aa",
+          "block": "main",
+          "fontId": "great-vibes-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "2c0898e4",
+          "block": "main",
+          "fontId": "courier-prime-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "2c4d1173",
+          "block": "main",
+          "fontId": "alex-brush-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "2dd3acbb",
+          "block": "main",
+          "fontId": "sacramento-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "30e61701",
+          "block": "main",
+          "fontId": "anton-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "348c42c4",
+          "block": "main",
+          "fontId": "lilita-one-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "34c9c2a4",
+          "block": "main",
+          "fontId": "satisfy-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "369ed7b3",
+          "block": "main",
+          "fontId": "lobster-two-bold",
+          "mode": "fill"
+        },
+        {
+          "slug": "37ab540f",
+          "block": "main",
+          "fontId": "great-vibes-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "37d2cce7",
+          "block": "main",
+          "fontId": "righteous-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "3a212cdd",
+          "block": "main",
+          "fontId": "lobster-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "3bf95b5a",
+          "block": "main",
+          "fontId": "courier-prime-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "3cd2b867",
+          "block": "main",
+          "fontId": "great-vibes-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "4052d5ad",
+          "block": "main",
+          "fontId": "baloo2-variable-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "40cbf7e4",
+          "block": "main",
+          "fontId": "dancing-script-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "4242ebe8",
+          "block": "repeats",
+          "fontId": "great-vibes-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "42e785f5",
+          "block": "main",
+          "fontId": "parisienne-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "46439e3b",
+          "block": "main",
+          "fontId": "pt-serif-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "4845392d",
+          "block": "main",
+          "fontId": "playfair-display-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "48a08595",
+          "block": "main",
+          "fontId": "mr-dafoe-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "4908417d",
+          "block": "main",
+          "fontId": "bebas-neue-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "492f2264",
+          "block": "main",
+          "fontId": "satisfy-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "496fdb73",
+          "block": "main",
+          "fontId": "caveat-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "49833813",
+          "block": "main",
+          "fontId": "mr-dafoe-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "51695ce6",
+          "block": "size-invariance",
+          "fontId": "montserrat-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "53003dc9",
+          "block": "main",
+          "fontId": "baloo2-variable-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "549af2ba",
+          "block": "main",
+          "fontId": "lobster-two-bold",
+          "mode": "outline"
+        },
+        {
+          "slug": "55bd524d",
+          "block": "main",
+          "fontId": "righteous-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "57171783",
+          "block": "main",
+          "fontId": "righteous-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "58a4e85b",
+          "block": "main",
+          "fontId": "abril-fatface-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "5a950a6c",
+          "block": "main",
+          "fontId": "satisfy-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "60137352",
+          "block": "main",
+          "fontId": "poppins-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "60bbb91f",
+          "block": "main",
+          "fontId": "lobster-two-bold",
+          "mode": "outline"
+        },
+        {
+          "slug": "614fee96",
+          "block": "main",
+          "fontId": "sacramento-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "64c9c54f",
+          "block": "main",
+          "fontId": "bebas-neue-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "6547773b",
+          "block": "main",
+          "fontId": "cookie-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "66e462c8",
+          "block": "main",
+          "fontId": "dancing-script-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "6deefda9",
+          "block": "main",
+          "fontId": "great-vibes-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "6e2425c7",
+          "block": "main",
+          "fontId": "caveat-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "703eab4a",
+          "block": "main",
+          "fontId": "pacifico-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "7098c1a0",
+          "block": "size-invariance",
+          "fontId": "lilita-one-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "771ec772",
+          "block": "size-invariance",
+          "fontId": "cookie-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "77ccb85d",
+          "block": "main",
+          "fontId": "montserrat-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "797e9a4b",
+          "block": "main",
+          "fontId": "montserrat-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "79b83bd9",
+          "block": "main",
+          "fontId": "poppins-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "7a4886f4",
+          "block": "main",
+          "fontId": "sacramento-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "7aa85667",
+          "block": "main",
+          "fontId": "yellowtail-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "7cd5605d",
+          "block": "main",
+          "fontId": "poppins-semibold",
+          "mode": "outline"
+        },
+        {
+          "slug": "7e6a3886",
+          "block": "main",
+          "fontId": "cookie-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "7e736d99",
+          "block": "main",
+          "fontId": "cookie-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "825be43d",
+          "block": "main",
+          "fontId": "alex-brush-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "849cd728",
+          "block": "repeats",
+          "fontId": "poppins-semibold",
+          "mode": "fill"
+        },
+        {
+          "slug": "86130e4a",
+          "block": "repeats",
+          "fontId": "poppins-semibold",
+          "mode": "fill"
+        },
+        {
+          "slug": "8bc6397e",
+          "block": "main",
+          "fontId": "mr-dafoe-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "9557ebd6",
+          "block": "main",
+          "fontId": "montserrat-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "95b6faa7",
+          "block": "main",
+          "fontId": "parisienne-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "961ce5b6",
+          "block": "main",
+          "fontId": "baloo2-variable-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "9afe431e",
+          "block": "main",
+          "fontId": "courier-prime-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "9b84f150",
+          "block": "main",
+          "fontId": "allura-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "9c4a1048",
+          "block": "main",
+          "fontId": "alex-brush-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "9f709566",
+          "block": "repeats",
+          "fontId": "parisienne-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "9f8aa133",
+          "block": "main",
+          "fontId": "poppins-semibold",
+          "mode": "fill"
+        },
+        {
+          "slug": "a2173b1b",
+          "block": "main",
+          "fontId": "cinzel-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "a2a84b3f",
+          "block": "main",
+          "fontId": "bebas-neue-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "a64ffc5c",
+          "block": "repeats",
+          "fontId": "mr-dafoe-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "a9606325",
+          "block": "main",
+          "fontId": "poppins-bold",
+          "mode": "outline"
+        },
+        {
+          "slug": "a9a0afaf",
+          "block": "main",
+          "fontId": "abril-fatface-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "a9adfc51",
+          "block": "main",
+          "fontId": "great-vibes-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "aa479c53",
+          "block": "main",
+          "fontId": "playfair-display-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "aabfe322",
+          "block": "main",
+          "fontId": "sacramento-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "abea0f8d",
+          "block": "size-invariance",
+          "fontId": "montserrat-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "ac96316d",
+          "block": "main",
+          "fontId": "allura-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "b02d02b4",
+          "block": "main",
+          "fontId": "sacramento-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "b12fa951",
+          "block": "main",
+          "fontId": "satisfy-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "b1a26343",
+          "block": "repeats",
+          "fontId": "lobster-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "b20906f1",
+          "block": "main",
+          "fontId": "lobster-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "b3981ef7",
+          "block": "main",
+          "fontId": "allura-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "b599816c",
+          "block": "main",
+          "fontId": "yellowtail-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "b67cfe0e",
+          "block": "main",
+          "fontId": "mr-dafoe-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "b7c73f2a",
+          "block": "main",
+          "fontId": "cookie-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "bc9ae6d3",
+          "block": "main",
+          "fontId": "poppins-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "be012103",
+          "block": "main",
+          "fontId": "allura-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "bedad78b",
+          "block": "main",
+          "fontId": "kaushan-script-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "bf0a5cc0",
+          "block": "main",
+          "fontId": "alex-brush-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "bff2d558",
+          "block": "main",
+          "fontId": "playfair-display-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "c73e1160",
+          "block": "main",
+          "fontId": "parisienne-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "ce77af0e",
+          "block": "main",
+          "fontId": "alex-brush-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "ced67b56",
+          "block": "size-invariance",
+          "fontId": "lilita-one-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "d00a1a02",
+          "block": "main",
+          "fontId": "poppins-bold",
+          "mode": "outline"
+        },
+        {
+          "slug": "d0d643d8",
+          "block": "repeats",
+          "fontId": "dancing-script-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "d29601c0",
+          "block": "repeats",
+          "fontId": "poppins-bold",
+          "mode": "fill"
+        },
+        {
+          "slug": "d2a8395f",
+          "block": "main",
+          "fontId": "pacifico-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "d5f09d4f",
+          "block": "repeats",
+          "fontId": "pt-serif-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "d966692a",
+          "block": "size-invariance",
+          "fontId": "cookie-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "da5671f0",
+          "block": "main",
+          "fontId": "yellowtail-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "db9e6413",
+          "block": "main",
+          "fontId": "cinzel-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "dc04ba8c",
+          "block": "main",
+          "fontId": "lilita-one-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "dc1ad7e7",
+          "block": "main",
+          "fontId": "poppins-semibold",
+          "mode": "fill"
+        },
+        {
+          "slug": "dd901001",
+          "block": "size-invariance",
+          "fontId": "lilita-one-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "e081b242",
+          "block": "size-invariance",
+          "fontId": "lilita-one-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "e0e41947",
+          "block": "main",
+          "fontId": "cinzel-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "e11f74fc",
+          "block": "main",
+          "fontId": "great-vibes-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "e5c08736",
+          "block": "repeats",
+          "fontId": "dancing-script-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "e63a41af",
+          "block": "main",
+          "fontId": "pt-serif-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "e64d769d",
+          "block": "main",
+          "fontId": "kaushan-script-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "e770929f",
+          "block": "main",
+          "fontId": "poppins-bold",
+          "mode": "fill"
+        },
+        {
+          "slug": "e977e4b3",
+          "block": "main",
+          "fontId": "poppins-semibold",
+          "mode": "outline"
+        },
+        {
+          "slug": "ebd38fcf",
+          "block": "main",
+          "fontId": "dancing-script-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "ee9577a4",
+          "block": "repeats",
+          "fontId": "bebas-neue-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "ef0ab067",
+          "block": "main",
+          "fontId": "montserrat-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "f2a42979",
+          "block": "size-invariance",
+          "fontId": "cookie-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "f55191b6",
+          "block": "repeats",
+          "fontId": "lilita-one-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "f5f6731f",
+          "block": "main",
+          "fontId": "pt-serif-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "fa3d9880",
+          "block": "repeats",
+          "fontId": "parisienne-regular",
+          "mode": "fill"
+        },
+        {
+          "slug": "fb621b3d",
+          "block": "main",
+          "fontId": "anton-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "fd523a17",
+          "block": "main",
+          "fontId": "lilita-one-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "fe95d67e",
+          "block": "main",
+          "fontId": "pacifico-regular",
+          "mode": "outline"
+        },
+        {
+          "slug": "fea9f594",
+          "block": "repeats",
+          "fontId": "abril-fatface-regular",
+          "mode": "fill"
+        }
+      ]
+    },
+    "marginals": {
+      "readable": {
+        "": 147
+      },
+      "sellable": {
+        "": 147
+      }
+    },
+    "duplicateGroups": {
+      "count": 20,
+      "sizes": {
+        "2": 19,
+        "3": 1
+      },
+      "primaryPopulation": 126,
+      "droppedRows": 21,
+      "byKind": {
+        "main/repeats pair": 14,
+        "main/main collision": 5,
+        "triple": 1
+      },
+      "groups": [
+        {
+          "key": "parisienne-regular|outline|20.5|ss10|Vitalina|6.2",
+          "fontId": "parisienne-regular",
+          "mode": "outline",
+          "ratio": 20.5,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 6.2,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "111a00be",
+          "memberSlugs": [
+            "111a00be",
+            "9f709566"
+          ],
+          "presentationIndices": [
+            1,
+            34
+          ],
+          "presentationSpan": 33,
+          "sheetPositions": [
+            1,
+            33
+          ],
+          "sheetSpan": 32,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "separation"
+          ],
+          "trackingContrastPresent": false,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "pt-serif-regular|fill|20.5|ss10|Emmanuel|0",
+          "fontId": "pt-serif-regular",
+          "mode": "fill",
+          "ratio": 20.5,
+          "stoneSizeId": "ss10",
+          "text": "Emmanuel",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "46439e3b",
+          "memberSlugs": [
+            "46439e3b",
+            "d5f09d4f"
+          ],
+          "presentationIndices": [
+            10,
+            54
+          ],
+          "presentationSpan": 44,
+          "sheetPositions": [
+            10,
+            51
+          ],
+          "sheetSpan": 41,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "separation"
+          ],
+          "trackingContrastPresent": false,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "great-vibes-regular|fill|17.5|ss10|Emmanuel|0",
+          "fontId": "great-vibes-regular",
+          "mode": "fill",
+          "ratio": 17.5,
+          "stoneSizeId": "ss10",
+          "text": "Emmanuel",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "3cd2b867",
+          "memberSlugs": [
+            "3cd2b867",
+            "4242ebe8"
+          ],
+          "presentationIndices": [
+            12,
+            125
+          ],
+          "presentationSpan": 113,
+          "sheetPositions": [
+            12,
+            117
+          ],
+          "sheetSpan": 105,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "none"
+          ],
+          "trackingContrastPresent": false,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "abril-fatface-regular|fill|22|ss10|Vitalina|0",
+          "fontId": "abril-fatface-regular",
+          "mode": "fill",
+          "ratio": 22,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 0,
+          "size": 3,
+          "kind": "triple",
+          "hasSeededRepeat": true,
+          "primarySlug": "fea9f594",
+          "memberSlugs": [
+            "fea9f594",
+            "a9a0afaf",
+            "1195a2d9"
+          ],
+          "presentationIndices": [
+            15,
+            83,
+            86
+          ],
+          "presentationSpan": 71,
+          "sheetPositions": [
+            15,
+            78,
+            81
+          ],
+          "sheetSpan": 66,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "none",
+            "separation"
+          ],
+          "trackingContrastPresent": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "mr-dafoe-regular|fill|22|ss10|Emmanuel|12.4",
+          "fontId": "mr-dafoe-regular",
+          "mode": "fill",
+          "ratio": 22,
+          "stoneSizeId": "ss10",
+          "text": "Emmanuel",
+          "letterSpacingMm": 12.4,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "a64ffc5c",
+          "memberSlugs": [
+            "a64ffc5c",
+            "49833813"
+          ],
+          "presentationIndices": [
+            24,
+            127
+          ],
+          "presentationSpan": 103,
+          "sheetPositions": [
+            24,
+            119
+          ],
+          "sheetSpan": 95,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "separation"
+          ],
+          "trackingContrastPresent": false,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "montserrat-regular|outline|19|ss10|Vitalina|0",
+          "fontId": "montserrat-regular",
+          "mode": "outline",
+          "ratio": 19,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "797e9a4b",
+          "memberSlugs": [
+            "797e9a4b",
+            "0a031013"
+          ],
+          "presentationIndices": [
+            27,
+            93
+          ],
+          "presentationSpan": 66,
+          "sheetPositions": [
+            26,
+            87
+          ],
+          "sheetSpan": 61,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "none"
+          ],
+          "trackingContrastPresent": false,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "allura-regular|fill|22|ss10|Vitalina|0",
+          "fontId": "allura-regular",
+          "mode": "fill",
+          "ratio": 22,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/main collision",
+          "hasSeededRepeat": false,
+          "primarySlug": "ac96316d",
+          "memberSlugs": [
+            "ac96316d",
+            "be012103"
+          ],
+          "presentationIndices": [
+            30,
+            103
+          ],
+          "presentationSpan": 73,
+          "sheetPositions": [
+            29,
+            97
+          ],
+          "sheetSpan": 68,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "none",
+            "separation"
+          ],
+          "trackingContrastPresent": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "dancing-script-regular|outline|16|ss10|Vitalina|0",
+          "fontId": "dancing-script-regular",
+          "mode": "outline",
+          "ratio": 16,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "1b7ebcb0",
+          "memberSlugs": [
+            "1b7ebcb0",
+            "d0d643d8"
+          ],
+          "presentationIndices": [
+            31,
+            158
+          ],
+          "presentationSpan": 127,
+          "sheetPositions": [
+            30,
+            146
+          ],
+          "sheetSpan": 116,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "none"
+          ],
+          "trackingContrastPresent": false,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "dancing-script-regular|outline|22|ss10|Emmanuel|0",
+          "fontId": "dancing-script-regular",
+          "mode": "outline",
+          "ratio": 22,
+          "stoneSizeId": "ss10",
+          "text": "Emmanuel",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "e5c08736",
+          "memberSlugs": [
+            "e5c08736",
+            "ebd38fcf"
+          ],
+          "presentationIndices": [
+            32,
+            157
+          ],
+          "presentationSpan": 125,
+          "sheetPositions": [
+            31,
+            145
+          ],
+          "sheetSpan": 114,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "none"
+          ],
+          "trackingContrastPresent": false,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "courier-prime-regular|outline|17.5|ss10|Vitalina|0",
+          "fontId": "courier-prime-regular",
+          "mode": "outline",
+          "ratio": 17.5,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/main collision",
+          "hasSeededRepeat": false,
+          "primarySlug": "3bf95b5a",
+          "memberSlugs": [
+            "3bf95b5a",
+            "9afe431e"
+          ],
+          "presentationIndices": [
+            38,
+            41
+          ],
+          "presentationSpan": 3,
+          "sheetPositions": [
+            37,
+            39
+          ],
+          "sheetSpan": 2,
+          "spansUnderMinPositions": true,
+          "trackingTargets": [
+            "none",
+            "separation"
+          ],
+          "trackingContrastPresent": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "poppins-semibold|fill|17.5|ss10|Emmanuel|0",
+          "fontId": "poppins-semibold",
+          "mode": "fill",
+          "ratio": 17.5,
+          "stoneSizeId": "ss10",
+          "text": "Emmanuel",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "849cd728",
+          "memberSlugs": [
+            "849cd728",
+            "dc1ad7e7"
+          ],
+          "presentationIndices": [
+            45,
+            96
+          ],
+          "presentationSpan": 51,
+          "sheetPositions": [
+            43,
+            90
+          ],
+          "sheetSpan": 47,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "none"
+          ],
+          "trackingContrastPresent": false,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "baloo2-variable-regular|outline|22|ss10|Vitalina|0",
+          "fontId": "baloo2-variable-regular",
+          "mode": "outline",
+          "ratio": 22,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/main collision",
+          "hasSeededRepeat": false,
+          "primarySlug": "1619d7f4",
+          "memberSlugs": [
+            "1619d7f4",
+            "53003dc9"
+          ],
+          "presentationIndices": [
+            48,
+            136
+          ],
+          "presentationSpan": 88,
+          "sheetPositions": [
+            46,
+            126
+          ],
+          "sheetSpan": 80,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "none",
+            "separation"
+          ],
+          "trackingContrastPresent": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "cinzel-regular|outline|22|ss10|Vitalina|0",
+          "fontId": "cinzel-regular",
+          "mode": "outline",
+          "ratio": 22,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/main collision",
+          "hasSeededRepeat": false,
+          "primarySlug": "e0e41947",
+          "memberSlugs": [
+            "e0e41947",
+            "20683b08"
+          ],
+          "presentationIndices": [
+            50,
+            124
+          ],
+          "presentationSpan": 74,
+          "sheetPositions": [
+            47,
+            116
+          ],
+          "sheetSpan": 69,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "none",
+            "separation"
+          ],
+          "trackingContrastPresent": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "cookie-regular|fill|19|ss10|Vitalina|0",
+          "fontId": "cookie-regular",
+          "mode": "fill",
+          "ratio": 19,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/main collision",
+          "hasSeededRepeat": false,
+          "primarySlug": "7e6a3886",
+          "memberSlugs": [
+            "7e6a3886",
+            "6547773b"
+          ],
+          "presentationIndices": [
+            59,
+            72
+          ],
+          "presentationSpan": 13,
+          "sheetPositions": [
+            56,
+            68
+          ],
+          "sheetSpan": 12,
+          "spansUnderMinPositions": true,
+          "trackingTargets": [
+            "none",
+            "separation"
+          ],
+          "trackingContrastPresent": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "lobster-regular|fill|16|ss10|Emmanuel|4.65",
+          "fontId": "lobster-regular",
+          "mode": "fill",
+          "ratio": 16,
+          "stoneSizeId": "ss10",
+          "text": "Emmanuel",
+          "letterSpacingMm": 4.65,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "b1a26343",
+          "memberSlugs": [
+            "b1a26343",
+            "1eddf88c"
+          ],
+          "presentationIndices": [
+            68,
+            149
+          ],
+          "presentationSpan": 81,
+          "sheetPositions": [
+            64,
+            138
+          ],
+          "sheetSpan": 74,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "separation"
+          ],
+          "trackingContrastPresent": false,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "bebas-neue-regular|outline|22|ss10|Vitalina|0",
+          "fontId": "bebas-neue-regular",
+          "mode": "outline",
+          "ratio": 22,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "ee9577a4",
+          "memberSlugs": [
+            "ee9577a4",
+            "a2a84b3f"
+          ],
+          "presentationIndices": [
+            82,
+            104
+          ],
+          "presentationSpan": 22,
+          "sheetPositions": [
+            77,
+            98
+          ],
+          "sheetSpan": 21,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "none"
+          ],
+          "trackingContrastPresent": false,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "lilita-one-regular|outline|20.5|ss10|Emmanuel|0",
+          "fontId": "lilita-one-regular",
+          "mode": "outline",
+          "ratio": 20.5,
+          "stoneSizeId": "ss10",
+          "text": "Emmanuel",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "22f3e71f",
+          "memberSlugs": [
+            "22f3e71f",
+            "f55191b6"
+          ],
+          "presentationIndices": [
+            87,
+            146
+          ],
+          "presentationSpan": 59,
+          "sheetPositions": [
+            82,
+            135
+          ],
+          "sheetSpan": 53,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "none"
+          ],
+          "trackingContrastPresent": false,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "poppins-bold|fill|20.5|ss10|Vitalina|0",
+          "fontId": "poppins-bold",
+          "mode": "fill",
+          "ratio": 20.5,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "d29601c0",
+          "memberSlugs": [
+            "d29601c0",
+            "e770929f"
+          ],
+          "presentationIndices": [
+            89,
+            156
+          ],
+          "presentationSpan": 67,
+          "sheetPositions": [
+            84,
+            144
+          ],
+          "sheetSpan": 60,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "separation"
+          ],
+          "trackingContrastPresent": false,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "parisienne-regular|fill|17.5|ss10|Vitalina|0",
+          "fontId": "parisienne-regular",
+          "mode": "fill",
+          "ratio": 17.5,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "0649e9ba",
+          "memberSlugs": [
+            "0649e9ba",
+            "fa3d9880"
+          ],
+          "presentationIndices": [
+            119,
+            137
+          ],
+          "presentationSpan": 18,
+          "sheetPositions": [
+            111,
+            127
+          ],
+          "sheetSpan": 16,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "separation"
+          ],
+          "trackingContrastPresent": false,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "poppins-semibold|fill|22|ss10|Emmanuel|0",
+          "fontId": "poppins-semibold",
+          "mode": "fill",
+          "ratio": 22,
+          "stoneSizeId": "ss10",
+          "text": "Emmanuel",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "9f8aa133",
+          "memberSlugs": [
+            "9f8aa133",
+            "86130e4a"
+          ],
+          "presentationIndices": [
+            133,
+            141
+          ],
+          "presentationSpan": 8,
+          "sheetPositions": [
+            123,
+            130
+          ],
+          "sheetSpan": 7,
+          "spansUnderMinPositions": true,
+          "trackingTargets": [
+            "none"
+          ],
+          "trackingContrastPresent": false,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        }
+      ]
+    },
+    "selfConsistency": {
+      "n": 20,
+      "readableAgreement": 20,
+      "sellableAgreement": 20,
+      "bothAgreement": 20,
+      "seededRepeatsUnderMinPositions": {
+        "count": 1,
+        "groups": [
+          {
+            "key": "poppins-semibold|fill|22|ss10|Emmanuel|0",
+            "primarySlug": "9f8aa133",
+            "sheetSpan": 7
+          }
+        ]
+      }
+    },
+    "degenerateTrackingCells": {
+      "count": 6,
+      "cells": [
+        {
+          "key": "abril-fatface-regular|fill|22|ss10|Vitalina|0",
+          "fontId": "abril-fatface-regular",
+          "mode": "fill",
+          "ratio": 22,
+          "primarySlug": "fea9f594",
+          "memberSlugs": [
+            "fea9f594",
+            "a9a0afaf",
+            "1195a2d9"
+          ],
+          "trackingTargets": [
+            "none",
+            "separation"
+          ]
+        },
+        {
+          "key": "allura-regular|fill|22|ss10|Vitalina|0",
+          "fontId": "allura-regular",
+          "mode": "fill",
+          "ratio": 22,
+          "primarySlug": "ac96316d",
+          "memberSlugs": [
+            "ac96316d",
+            "be012103"
+          ],
+          "trackingTargets": [
+            "none",
+            "separation"
+          ]
+        },
+        {
+          "key": "courier-prime-regular|outline|17.5|ss10|Vitalina|0",
+          "fontId": "courier-prime-regular",
+          "mode": "outline",
+          "ratio": 17.5,
+          "primarySlug": "3bf95b5a",
+          "memberSlugs": [
+            "3bf95b5a",
+            "9afe431e"
+          ],
+          "trackingTargets": [
+            "none",
+            "separation"
+          ]
+        },
+        {
+          "key": "baloo2-variable-regular|outline|22|ss10|Vitalina|0",
+          "fontId": "baloo2-variable-regular",
+          "mode": "outline",
+          "ratio": 22,
+          "primarySlug": "1619d7f4",
+          "memberSlugs": [
+            "1619d7f4",
+            "53003dc9"
+          ],
+          "trackingTargets": [
+            "none",
+            "separation"
+          ]
+        },
+        {
+          "key": "cinzel-regular|outline|22|ss10|Vitalina|0",
+          "fontId": "cinzel-regular",
+          "mode": "outline",
+          "ratio": 22,
+          "primarySlug": "e0e41947",
+          "memberSlugs": [
+            "e0e41947",
+            "20683b08"
+          ],
+          "trackingTargets": [
+            "none",
+            "separation"
+          ]
+        },
+        {
+          "key": "cookie-regular|fill|19|ss10|Vitalina|0",
+          "fontId": "cookie-regular",
+          "mode": "fill",
+          "ratio": 19,
+          "primarySlug": "7e6a3886",
+          "memberSlugs": [
+            "7e6a3886",
+            "6547773b"
+          ],
+          "trackingTargets": [
+            "none",
+            "separation"
+          ]
+        }
+      ]
+    },
+    "achievedTracking": {
+      "definition": "letterSpacingMm > 0",
+      "primaryPopulation": 126,
+      "tracked": 31,
+      "untracked": 95,
+      "byMode": {
+        "outline": {
+          "tracked": 23,
+          "untracked": 40
+        },
+        "fill": {
+          "tracked": 8,
+          "untracked": 55
+        }
+      },
+      "ratedLevel": {
+        "population": 147,
+        "tracked": 34,
+        "untracked": 113,
+        "trackedByMode": {
+          "outline": 24,
+          "fill": 10
+        }
+      },
+      "intentSeparationResolvedToZeroMm": {
+        "total": 33,
+        "byMode": {
+          "outline": 7,
+          "fill": 26
+        },
+        "ofSeparationEntriesByMode": {
+          "outline": 31,
+          "fill": 36
+        }
+      },
+      "courierPrimeFailedEntry": {
+        "slug": "1191f008",
+        "trackingTarget": "separation",
+        "letterSpacingMm": 0,
+        "inPrimaryPopulation": true,
+        "countedAs": "untracked"
+      }
+    },
+    "floorByStones": {
+      "form": "A — single constant",
+      "cutVariable": "stonesAcrossStem = ratio × stemWidthRatio",
+      "scopedBy": "mode × achievedTracking",
+      "candidates": [
+        0.6,
+        0.8,
+        1,
+        1.2,
+        1.4,
+        1.6,
+        1.8,
+        2
+      ],
+      "scopes": {
+        "outline|tracked": {
+          "population": 23,
+          "byCandidate": {
+            "1": {
+              "rowsBelow": 12,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 11,
+              "sellableAtOrAbove": 0
+            },
+            "2": {
+              "rowsBelow": 21,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 2,
+              "sellableAtOrAbove": 0
+            },
+            "0.6": {
+              "rowsBelow": 5,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 18,
+              "sellableAtOrAbove": 0
+            },
+            "0.8": {
+              "rowsBelow": 9,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 14,
+              "sellableAtOrAbove": 0
+            },
+            "1.2": {
+              "rowsBelow": 13,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 10,
+              "sellableAtOrAbove": 0
+            },
+            "1.4": {
+              "rowsBelow": 16,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 7,
+              "sellableAtOrAbove": 0
+            },
+            "1.6": {
+              "rowsBelow": 18,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 5,
+              "sellableAtOrAbove": 0
+            },
+            "1.8": {
+              "rowsBelow": 19,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 4,
+              "sellableAtOrAbove": 0
+            }
+          }
+        },
+        "outline|untracked": {
+          "population": 40,
+          "byCandidate": {
+            "1": {
+              "rowsBelow": 21,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 19,
+              "sellableAtOrAbove": 0
+            },
+            "2": {
+              "rowsBelow": 34,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 6,
+              "sellableAtOrAbove": 0
+            },
+            "0.6": {
+              "rowsBelow": 6,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 34,
+              "sellableAtOrAbove": 0
+            },
+            "0.8": {
+              "rowsBelow": 14,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 26,
+              "sellableAtOrAbove": 0
+            },
+            "1.2": {
+              "rowsBelow": 26,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 14,
+              "sellableAtOrAbove": 0
+            },
+            "1.4": {
+              "rowsBelow": 28,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 12,
+              "sellableAtOrAbove": 0
+            },
+            "1.6": {
+              "rowsBelow": 29,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 11,
+              "sellableAtOrAbove": 0
+            },
+            "1.8": {
+              "rowsBelow": 31,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 9,
+              "sellableAtOrAbove": 0
+            }
+          }
+        },
+        "fill|tracked": {
+          "population": 8,
+          "byCandidate": {
+            "1": {
+              "rowsBelow": 2,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 6,
+              "sellableAtOrAbove": 0
+            },
+            "2": {
+              "rowsBelow": 8,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 0,
+              "sellableAtOrAbove": 0
+            },
+            "0.6": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 8,
+              "sellableAtOrAbove": 0
+            },
+            "0.8": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 8,
+              "sellableAtOrAbove": 0
+            },
+            "1.2": {
+              "rowsBelow": 3,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 5,
+              "sellableAtOrAbove": 0
+            },
+            "1.4": {
+              "rowsBelow": 7,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 1,
+              "sellableAtOrAbove": 0
+            },
+            "1.6": {
+              "rowsBelow": 7,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 1,
+              "sellableAtOrAbove": 0
+            },
+            "1.8": {
+              "rowsBelow": 8,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 0,
+              "sellableAtOrAbove": 0
+            }
+          }
+        },
+        "fill|untracked": {
+          "population": 55,
+          "byCandidate": {
+            "1": {
+              "rowsBelow": 33,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 22,
+              "sellableAtOrAbove": 0
+            },
+            "2": {
+              "rowsBelow": 46,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 9,
+              "sellableAtOrAbove": 0
+            },
+            "0.6": {
+              "rowsBelow": 13,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 42,
+              "sellableAtOrAbove": 0
+            },
+            "0.8": {
+              "rowsBelow": 23,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 32,
+              "sellableAtOrAbove": 0
+            },
+            "1.2": {
+              "rowsBelow": 38,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 17,
+              "sellableAtOrAbove": 0
+            },
+            "1.4": {
+              "rowsBelow": 41,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 14,
+              "sellableAtOrAbove": 0
+            },
+            "1.6": {
+              "rowsBelow": 43,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 12,
+              "sellableAtOrAbove": 0
+            },
+            "1.8": {
+              "rowsBelow": 44,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 11,
+              "sellableAtOrAbove": 0
+            }
+          }
+        }
+      }
+    },
+    "floorByRatio": {
+      "form": "B — three class steps",
+      "cutVariable": "ratio",
+      "scopedBy": "stemRegime × mode × achievedTracking",
+      "candidates": [
+        16,
+        17.5,
+        19,
+        20.5,
+        22
+      ],
+      "scopes": {
+        "monoline|outline|tracked": {
+          "population": 9,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 9,
+              "sellableAtOrAbove": 0
+            },
+            "19": {
+              "rowsBelow": 4,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 5,
+              "sellableAtOrAbove": 0
+            },
+            "22": {
+              "rowsBelow": 8,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 1,
+              "sellableAtOrAbove": 0
+            },
+            "17.5": {
+              "rowsBelow": 2,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 7,
+              "sellableAtOrAbove": 0
+            },
+            "20.5": {
+              "rowsBelow": 6,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 3,
+              "sellableAtOrAbove": 0
+            }
+          }
+        },
+        "monoline|outline|untracked": {
+          "population": 12,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 12,
+              "sellableAtOrAbove": 0
+            },
+            "19": {
+              "rowsBelow": 4,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 8,
+              "sellableAtOrAbove": 0
+            },
+            "22": {
+              "rowsBelow": 10,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 2,
+              "sellableAtOrAbove": 0
+            },
+            "17.5": {
+              "rowsBelow": 2,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 10,
+              "sellableAtOrAbove": 0
+            },
+            "20.5": {
+              "rowsBelow": 8,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 4,
+              "sellableAtOrAbove": 0
+            }
+          }
+        },
+        "monoline|fill|tracked": {
+          "population": 0,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 0,
+              "sellableAtOrAbove": 0
+            },
+            "19": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 0,
+              "sellableAtOrAbove": 0
+            },
+            "22": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 0,
+              "sellableAtOrAbove": 0
+            },
+            "17.5": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 0,
+              "sellableAtOrAbove": 0
+            },
+            "20.5": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 0,
+              "sellableAtOrAbove": 0
+            }
+          }
+        },
+        "monoline|fill|untracked": {
+          "population": 21,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 21,
+              "sellableAtOrAbove": 0
+            },
+            "19": {
+              "rowsBelow": 8,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 13,
+              "sellableAtOrAbove": 0
+            },
+            "22": {
+              "rowsBelow": 18,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 3,
+              "sellableAtOrAbove": 0
+            },
+            "17.5": {
+              "rowsBelow": 4,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 17,
+              "sellableAtOrAbove": 0
+            },
+            "20.5": {
+              "rowsBelow": 14,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 7,
+              "sellableAtOrAbove": 0
+            }
+          }
+        },
+        "transitional|outline|tracked": {
+          "population": 6,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 6,
+              "sellableAtOrAbove": 0
+            },
+            "19": {
+              "rowsBelow": 3,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 3,
+              "sellableAtOrAbove": 0
+            },
+            "22": {
+              "rowsBelow": 5,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 1,
+              "sellableAtOrAbove": 0
+            },
+            "17.5": {
+              "rowsBelow": 2,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 4,
+              "sellableAtOrAbove": 0
+            },
+            "20.5": {
+              "rowsBelow": 4,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 2,
+              "sellableAtOrAbove": 0
+            }
+          }
+        },
+        "transitional|outline|untracked": {
+          "population": 14,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 14,
+              "sellableAtOrAbove": 0
+            },
+            "19": {
+              "rowsBelow": 4,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 10,
+              "sellableAtOrAbove": 0
+            },
+            "22": {
+              "rowsBelow": 12,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 2,
+              "sellableAtOrAbove": 0
+            },
+            "17.5": {
+              "rowsBelow": 2,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 12,
+              "sellableAtOrAbove": 0
+            },
+            "20.5": {
+              "rowsBelow": 9,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 5,
+              "sellableAtOrAbove": 0
+            }
+          }
+        },
+        "transitional|fill|tracked": {
+          "population": 5,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 5,
+              "sellableAtOrAbove": 0
+            },
+            "19": {
+              "rowsBelow": 2,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 3,
+              "sellableAtOrAbove": 0
+            },
+            "22": {
+              "rowsBelow": 3,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 2,
+              "sellableAtOrAbove": 0
+            },
+            "17.5": {
+              "rowsBelow": 1,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 4,
+              "sellableAtOrAbove": 0
+            },
+            "20.5": {
+              "rowsBelow": 3,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 2,
+              "sellableAtOrAbove": 0
+            }
+          }
+        },
+        "transitional|fill|untracked": {
+          "population": 16,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 16,
+              "sellableAtOrAbove": 0
+            },
+            "19": {
+              "rowsBelow": 6,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 10,
+              "sellableAtOrAbove": 0
+            },
+            "22": {
+              "rowsBelow": 14,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 2,
+              "sellableAtOrAbove": 0
+            },
+            "17.5": {
+              "rowsBelow": 3,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 13,
+              "sellableAtOrAbove": 0
+            },
+            "20.5": {
+              "rowsBelow": 10,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 6,
+              "sellableAtOrAbove": 0
+            }
+          }
+        },
+        "massed|outline|tracked": {
+          "population": 8,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 8,
+              "sellableAtOrAbove": 0
+            },
+            "19": {
+              "rowsBelow": 4,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 4,
+              "sellableAtOrAbove": 0
+            },
+            "22": {
+              "rowsBelow": 6,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 2,
+              "sellableAtOrAbove": 0
+            },
+            "17.5": {
+              "rowsBelow": 2,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 6,
+              "sellableAtOrAbove": 0
+            },
+            "20.5": {
+              "rowsBelow": 6,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 2,
+              "sellableAtOrAbove": 0
+            }
+          }
+        },
+        "massed|outline|untracked": {
+          "population": 14,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 14,
+              "sellableAtOrAbove": 0
+            },
+            "19": {
+              "rowsBelow": 4,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 10,
+              "sellableAtOrAbove": 0
+            },
+            "22": {
+              "rowsBelow": 12,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 2,
+              "sellableAtOrAbove": 0
+            },
+            "17.5": {
+              "rowsBelow": 2,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 12,
+              "sellableAtOrAbove": 0
+            },
+            "20.5": {
+              "rowsBelow": 8,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 6,
+              "sellableAtOrAbove": 0
+            }
+          }
+        },
+        "massed|fill|tracked": {
+          "population": 3,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 3,
+              "sellableAtOrAbove": 0
+            },
+            "19": {
+              "rowsBelow": 2,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 1,
+              "sellableAtOrAbove": 0
+            },
+            "22": {
+              "rowsBelow": 3,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 0,
+              "sellableAtOrAbove": 0
+            },
+            "17.5": {
+              "rowsBelow": 2,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 1,
+              "sellableAtOrAbove": 0
+            },
+            "20.5": {
+              "rowsBelow": 3,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 0,
+              "sellableAtOrAbove": 0
+            }
+          }
+        },
+        "massed|fill|untracked": {
+          "population": 18,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 18,
+              "sellableAtOrAbove": 0
+            },
+            "19": {
+              "rowsBelow": 6,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 12,
+              "sellableAtOrAbove": 0
+            },
+            "22": {
+              "rowsBelow": 15,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 3,
+              "sellableAtOrAbove": 0
+            },
+            "17.5": {
+              "rowsBelow": 2,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 16,
+              "sellableAtOrAbove": 0
+            },
+            "20.5": {
+              "rowsBelow": 11,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 7,
+              "sellableAtOrAbove": 0
+            }
+          }
+        }
+      }
+    },
+    "sizeInvariance": {
+      "pairs": [
+        {
+          "fontId": "montserrat-regular",
+          "mode": "fill",
+          "ratio": 19,
+          "bigSlug": "14303d54",
+          "bigStoneSizeId": "ss20",
+          "bigSellable": "",
+          "bigRated": false,
+          "ss10Slug": "012f6961",
+          "ss10Sellable": "",
+          "ss10Rated": false
+        },
+        {
+          "fontId": "montserrat-regular",
+          "mode": "outline",
+          "ratio": 19,
+          "bigSlug": "212a2249",
+          "bigStoneSizeId": "ss16",
+          "bigSellable": "",
+          "bigRated": false,
+          "ss10Slug": "797e9a4b",
+          "ss10Sellable": "",
+          "ss10Rated": false
+        },
+        {
+          "fontId": "cookie-regular",
+          "mode": "fill",
+          "ratio": 19,
+          "bigSlug": "24e680ff",
+          "bigStoneSizeId": "ss20",
+          "bigSellable": "",
+          "bigRated": false,
+          "ss10Slug": "7e6a3886",
+          "ss10Sellable": "",
+          "ss10Rated": false
+        },
+        {
+          "fontId": "montserrat-regular",
+          "mode": "outline",
+          "ratio": 19,
+          "bigSlug": "51695ce6",
+          "bigStoneSizeId": "ss20",
+          "bigSellable": "",
+          "bigRated": false,
+          "ss10Slug": "797e9a4b",
+          "ss10Sellable": "",
+          "ss10Rated": false
+        },
+        {
+          "fontId": "lilita-one-regular",
+          "mode": "fill",
+          "ratio": 19,
+          "bigSlug": "7098c1a0",
+          "bigStoneSizeId": "ss16",
+          "bigSellable": "",
+          "bigRated": false,
+          "ss10Slug": "348c42c4",
+          "ss10Sellable": "",
+          "ss10Rated": false
+        },
+        {
+          "fontId": "cookie-regular",
+          "mode": "outline",
+          "ratio": 19,
+          "bigSlug": "771ec772",
+          "bigStoneSizeId": "ss16",
+          "bigSellable": "",
+          "bigRated": false,
+          "ss10Slug": "b7c73f2a",
+          "ss10Sellable": "",
+          "ss10Rated": false
+        },
+        {
+          "fontId": "montserrat-regular",
+          "mode": "fill",
+          "ratio": 19,
+          "bigSlug": "abea0f8d",
+          "bigStoneSizeId": "ss16",
+          "bigSellable": "",
+          "bigRated": false,
+          "ss10Slug": "012f6961",
+          "ss10Sellable": "",
+          "ss10Rated": false
+        },
+        {
+          "fontId": "lilita-one-regular",
+          "mode": "fill",
+          "ratio": 19,
+          "bigSlug": "ced67b56",
+          "bigStoneSizeId": "ss20",
+          "bigSellable": "",
+          "bigRated": false,
+          "ss10Slug": "348c42c4",
+          "ss10Sellable": "",
+          "ss10Rated": false
+        },
+        {
+          "fontId": "cookie-regular",
+          "mode": "fill",
+          "ratio": 19,
+          "bigSlug": "d966692a",
+          "bigStoneSizeId": "ss16",
+          "bigSellable": "",
+          "bigRated": false,
+          "ss10Slug": "7e6a3886",
+          "ss10Sellable": "",
+          "ss10Rated": false
+        },
+        {
+          "fontId": "lilita-one-regular",
+          "mode": "outline",
+          "ratio": 19,
+          "bigSlug": "dd901001",
+          "bigStoneSizeId": "ss20",
+          "bigSellable": "",
+          "bigRated": false,
+          "ss10Slug": "dc04ba8c",
+          "ss10Sellable": "",
+          "ss10Rated": false
+        },
+        {
+          "fontId": "lilita-one-regular",
+          "mode": "outline",
+          "ratio": 19,
+          "bigSlug": "e081b242",
+          "bigStoneSizeId": "ss16",
+          "bigSellable": "",
+          "bigRated": false,
+          "ss10Slug": "dc04ba8c",
+          "ss10Sellable": "",
+          "ss10Rated": false
+        },
+        {
+          "fontId": "cookie-regular",
+          "mode": "outline",
+          "ratio": 19,
+          "bigSlug": "f2a42979",
+          "bigStoneSizeId": "ss20",
+          "bigSellable": "",
+          "bigRated": false,
+          "ss10Slug": "b7c73f2a",
+          "ss10Sellable": "",
+          "ss10Rated": false
+        }
+      ],
+      "perSize": {
+        "ss10": {
+          "n": 6,
+          "rated": 0,
+          "sellable": 0
+        },
+        "ss16": {
+          "n": 6,
+          "rated": 0,
+          "sellable": 0
+        },
+        "ss20": {
+          "n": 6,
+          "rated": 0,
+          "sellable": 0
+        }
+      }
+    },
+    "trackingContrast": {
+      "note": "between-font contrast only; tracking is unpaired (spec §2). Not a McNemar-style paired test.",
+      "scopedBy": "mode × achievedTracking",
+      "scopes": {
+        "outline|tracked": {
+          "n": 23,
+          "rated": 0,
+          "sellable": 0,
+          "sellablePct": null
+        },
+        "outline|untracked": {
+          "n": 40,
+          "rated": 0,
+          "sellable": 0,
+          "sellablePct": null
+        },
+        "fill|tracked": {
+          "n": 8,
+          "rated": 0,
+          "sellable": 0,
+          "sellablePct": null
+        },
+        "fill|untracked": {
+          "n": 55,
+          "rated": 0,
+          "sellable": 0,
+          "sellablePct": null
+        }
+      }
+    },
+    "trackingContrastByIntent": {
+      "note": "sensitivity table on trackingTarget (intent), not achieved spacing (spec §4).",
+      "scopedBy": "mode × trackingTarget",
+      "scopes": {
+        "outline|none": {
+          "n": 35,
+          "rated": 0,
+          "sellable": 0,
+          "sellablePct": null
+        },
+        "outline|separation": {
+          "n": 28,
+          "rated": 0,
+          "sellable": 0,
+          "sellablePct": null
+        },
+        "fill|none": {
+          "n": 34,
+          "rated": 0,
+          "sellable": 0,
+          "sellablePct": null
+        },
+        "fill|separation": {
+          "n": 29,
+          "rated": 0,
+          "sellable": 0,
+          "sellablePct": null
+        }
+      }
+    },
+    "separationShortfall": {
+      "count": 5,
+      "allOutline": true,
+      "rows": [
+        {
+          "slug": "1191f008",
+          "fontId": "courier-prime-regular",
+          "mode": "outline",
+          "ratio": 19,
+          "separationRatioBefore": 0.8,
+          "separationRatioAfter": 0.8,
+          "letterSpacingMm": 0,
+          "inPrimaryPopulation": true,
+          "countedAs": "untracked",
+          "sellable": ""
+        },
+        {
+          "slug": "549af2ba",
+          "fontId": "lobster-two-bold",
+          "mode": "outline",
+          "ratio": 17.5,
+          "separationRatioBefore": 0.3,
+          "separationRatioAfter": 0.9,
+          "letterSpacingMm": 6.2,
+          "inPrimaryPopulation": true,
+          "countedAs": "tracked",
+          "sellable": ""
+        },
+        {
+          "slug": "60bbb91f",
+          "fontId": "lobster-two-bold",
+          "mode": "outline",
+          "ratio": 22,
+          "separationRatioBefore": 0.1,
+          "separationRatioAfter": 0.9,
+          "letterSpacingMm": 9.3,
+          "inPrimaryPopulation": true,
+          "countedAs": "tracked",
+          "sellable": ""
+        },
+        {
+          "slug": "614fee96",
+          "fontId": "sacramento-regular",
+          "mode": "outline",
+          "ratio": 16,
+          "separationRatioBefore": 0.3,
+          "separationRatioAfter": 0.8,
+          "letterSpacingMm": 6.2,
+          "inPrimaryPopulation": true,
+          "countedAs": "tracked",
+          "sellable": ""
+        },
+        {
+          "slug": "f5f6731f",
+          "fontId": "pt-serif-regular",
+          "mode": "outline",
+          "ratio": 16,
+          "separationRatioBefore": 0.6,
+          "separationRatioAfter": 0.8,
+          "letterSpacingMm": 1.55,
+          "inPrimaryPopulation": true,
+          "countedAs": "tracked",
+          "sellable": ""
+        }
+      ]
+    },
+    "rejectionCauses": {
+      "population": 0,
+      "noNote": 0,
+      "noTagMatch": 0,
+      "multiTag": 0,
+      "perTag": {
+        "inaccurate": {
+          "n": 0,
+          "populationSharePct": null
+        },
+        "tooClose": {
+          "n": 0,
+          "populationSharePct": null
+        },
+        "tooManyStones": {
+          "n": 0,
+          "populationSharePct": null
+        },
+        "ugly": {
+          "n": 0,
+          "populationSharePct": null
+        },
+        "extraStones": {
+          "n": 0,
+          "populationSharePct": null
+        }
+      },
+      "distinctNotes": []
+    }
+  }
+}

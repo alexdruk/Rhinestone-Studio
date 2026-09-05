@@ -43,6 +43,14 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const DATA_DIR = path.join(REPO_ROOT, 'docs', 'data', 'read-005');
 const GOLDEN_FILE = path.join(DATA_DIR, 'derived-tables.json');
 
+// READ-011D — the rating-analysis pre-registration. `computeSession3()` reads these plus
+// `assets/fonts/manifest.json` and writes its own golden, `derived-tables.json` under read-011.
+// `computeAll()`'s inputs and returned shape are untouched; session 3 is a separate function with a
+// separate golden. See `docs/specifications/READ-011D-AnalysisPreRegistration.md`.
+const DATA_DIR_011 = path.join(REPO_ROOT, 'docs', 'data', 'read-011');
+const GOLDEN_FILE_011 = path.join(DATA_DIR_011, 'derived-tables.json');
+const MANIFEST_FILE = path.join(REPO_ROOT, 'assets', 'fonts', 'manifest.json');
+
 // --- RFC 4180 CSV reader ------------------------------------------------------------------------
 // Quoted fields in these files contain embedded newlines and commas, so a line-based split gives
 // the wrong row count. This is a minimal compliant reader: it honours quoting, "" escapes, and
@@ -205,6 +213,35 @@ const INTERIOR_BANDS = [
   { label: '25–30', lo: 25, hi: 30 },
   { label: '30+', lo: 30, hi: Infinity },
 ];
+
+// --- floor-cut helpers -----------------------------------------------------------------------
+// A "floor cut" is a straight partition of a rated population at a candidate threshold, with both
+// operands of every rate emitted and never a rate itself (READ-007 §4.3 / READ-011D §7). READ-005B
+// scoped every cut on the height-to-stone ratio; READ-011D reuses the same shape with other cut
+// variables, so the accessor is a parameter defaulting to `row.ratio`.
+
+function floorCut(rows, threshold, valueOf = (row) => row.ratio) {
+  const below = rows.filter((row) => valueOf(row) < threshold);
+  const atOrAbove = rows.filter((row) => valueOf(row) >= threshold);
+  return {
+    rowsBelow: below.length,
+    sellableBelow: below.filter((row) => row.sellable).length,
+    rowsAtOrAbove: atOrAbove.length,
+    sellableAtOrAbove: atOrAbove.filter((row) => row.sellable).length,
+  };
+}
+
+function buildFloorScope(rows, candidates, label, valueOf = (row) => row.ratio) {
+  const byCandidate = {};
+  for (const c of candidates) {
+    const cut = floorCut(rows, c, valueOf);
+    if (cut.rowsBelow + cut.rowsAtOrAbove !== rows.length) {
+      throw new Error(`${label}: candidate ${c} — rowsBelow + rowsAtOrAbove != population ${rows.length}`);
+    }
+    byCandidate[c] = cut;
+  }
+  return { population: rows.length, byCandidate };
+}
 
 // --- session 1 --------------------------------------------------------------------------------
 
@@ -439,27 +476,7 @@ function computeSession1(ratings, key) {
   // 4.3 — floor-candidate decision table. Threshold cuts, not bands: a straight partition at each
   // candidate ratio, both operands of every rate emitted.
   const FLOOR_CANDIDATES = [10, 15, 18, 20, 22, 25];
-  const floorCut = (rows, threshold) => {
-    const below = rows.filter((row) => row.ratio < threshold);
-    const atOrAbove = rows.filter((row) => row.ratio >= threshold);
-    return {
-      rowsBelow: below.length,
-      sellableBelow: below.filter((row) => row.sellable).length,
-      rowsAtOrAbove: atOrAbove.length,
-      sellableAtOrAbove: atOrAbove.filter((row) => row.sellable).length,
-    };
-  };
-  const floorScope = (rows, label) => {
-    const byCandidate = {};
-    for (const c of FLOOR_CANDIDATES) {
-      const cut = floorCut(rows, c);
-      if (cut.rowsBelow + cut.rowsAtOrAbove !== rows.length) {
-        throw new Error(`${label}: candidate ${c} — rowsBelow + rowsAtOrAbove != population ${rows.length}`);
-      }
-      byCandidate[c] = cut;
-    }
-    return { population: rows.length, byCandidate };
-  };
+  const floorScope = (rows, label) => buildFloorScope(rows, FLOOR_CANDIDATES, label);
   const floorCandidates = {
     candidates: FLOOR_CANDIDATES,
     scopes: {
@@ -651,6 +668,460 @@ function computeSession2(ratings, key) {
       perModeEvaluable,
       residualComplaints: { rows: residualRows, perTag: residualPerTag, noTag: residualNoTag },
       trackedSeparationNotAchieved: { count: sepNotAchieved.length, slugs: sepNotAchieved },
+    },
+  };
+}
+
+// --- session 3 (READ-011D) -------------------------------------------------------------------
+// Pre-registered before the READ-011 rating sheet is filled in. Every number is recomputed from
+// docs/data/read-011/ratings.csv, docs/data/read-011/render-key.json and assets/fonts/manifest.json;
+// nothing here is hardcoded from the spec. computeSession3() has its own inputs and its own golden
+// (GOLDEN_FILE_011); computeAll() above is not touched.
+// See docs/specifications/READ-011D-AnalysisPreRegistration.md.
+
+const round4 = (x) => Math.round(x * 1e4) / 1e4;
+
+// The duplicate-spec key (READ-011D §2). Two renders with an identical tuple are the same image.
+const S3_DUP_KEY_FIELDS = ['fontId', 'mode', 'ratio', 'stoneSizeId', 'text', 'letterSpacingMm'];
+const s3DupKey = (e) => S3_DUP_KEY_FIELDS.map((f) => e[f]).join('|');
+
+// The two candidate cut grids (READ-011D §6). Fixed here; §11 forbids moving them post-ratings.
+const S3_STONES_CANDIDATES = [0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0];
+const S3_RATIO_CANDIDATES = [16, 17.5, 19, 20.5, 22];
+
+// The clearance rule operands (READ-011D §7). Emitted as data; the analyzer never applies the rule.
+const S3_CLEARANCE = { minSellableRatePctAtOrAbove: 60, minMarginPctOverBelow: 20, minRatedRowsAtOrAbove: 12 };
+
+const S3_REGIMES = ['monoline', 'transitional', 'massed'];
+const S3_MODES = ['outline', 'fill'];
+const S3_ACHIEVED = ['tracked', 'untracked'];
+const S3_INTENT = ['none', 'separation'];
+const S3_SPAN_MIN_POSITIONS = 15; // READ-005's repeat design separation (READ-005A §3).
+
+function s3AssertSameSet(a, b, label) {
+  const only = (x, y) => [...x].filter((v) => !y.has(v)).sort();
+  const missing = only(a, b);
+  const extra = only(b, a);
+  if (missing.length || extra.length) {
+    throw new Error(`${label}: sets differ (only-left ${JSON.stringify(missing)}, only-right ${JSON.stringify(extra)})`);
+  }
+}
+
+export function computeSession3() {
+  const ratings = readCsvObjects(path.join(DATA_DIR_011, 'ratings.csv'));
+  const key = JSON.parse(readFileSync(path.join(DATA_DIR_011, 'render-key.json'), 'utf8'));
+  const manifest = JSON.parse(readFileSync(MANIFEST_FILE, 'utf8'));
+
+  const rowBySlug = new Map(ratings.map((r) => [r.slug, r]));
+  const entryBySlug = new Map(key.entries.map((e) => [e.slug, e]));
+
+  // The analysis set: one row per rated (non-excluded) specimen (READ-011D §3). No row is dropped
+  // on geometric grounds; the only structural handling is the duplicate rule below.
+  const rated = key.entries.filter((e) => e.excludedFromRating === false);
+  const sheet = [...rated].sort((a, b) => a.presentationIndex - b.presentationIndex);
+  const sheetPos = new Map(sheet.map((e, i) => [e.slug, i]));
+
+  const mk = (e) => {
+    const r = rowBySlug.get(e.slug) ?? { readable: '', sellable: '', notes: '' };
+    return {
+      slug: e.slug,
+      fontId: e.fontId,
+      stemRegime: e.stemRegime,
+      stemWidthRatio: e.stemWidthRatio,
+      mode: e.mode,
+      ratio: e.ratio,
+      stoneSizeId: e.stoneSizeId,
+      text: e.text,
+      block: e.block,
+      trackingTarget: e.trackingTarget,
+      letterSpacingMm: e.letterSpacingMm,
+      repeatOf: e.repeatOf,
+      duplicateOf: e.duplicateOf,
+      presentationIndex: e.presentationIndex,
+      separationRatioBefore: e.separationRatioBefore,
+      separationRatioAfter: e.separationRatioAfter,
+      separationAchieved: e.separationAchieved,
+      readableRaw: r.readable,
+      sellableRaw: r.sellable,
+      notes: r.notes ?? '',
+      isRated: r.sellable !== '',
+      readable: r.readable === 'yes',
+      sellable: r.sellable === 'yes',
+      // Achieved tracking, not intended (READ-011D §4): the causal factor is the spacing applied.
+      tracked: e.letterSpacingMm > 0,
+      // stonesAcrossStem = ratio × stemWidthRatio (READ-011D §6 Form A cut variable).
+      stonesAcrossStem: e.stemWidthRatio == null ? null : round4(e.ratio * e.stemWidthRatio),
+    };
+  };
+  const allRows = rated.map(mk);
+  const rowBySlugA = new Map(allRows.map((r) => [r.slug, r]));
+
+  // --- duplicate groups (READ-011D §2, §3, §5) ----------------------------------------------
+  const groupMap = new Map();
+  for (const r of allRows) {
+    const gk = s3DupKey(r);
+    if (!groupMap.has(gk)) groupMap.set(gk, []);
+    groupMap.get(gk).push(r);
+  }
+  const groups = [...groupMap.values()]
+    .filter((members) => members.length > 1)
+    .map((members) => {
+      const sorted = [...members].sort((a, b) => a.presentationIndex - b.presentationIndex);
+      const primary = sorted[0];
+      const pidx = sorted.map((m) => m.presentationIndex);
+      const spos = sorted.map((m) => sheetPos.get(m.slug));
+      const trackingTargets = [...new Set(sorted.map((m) => m.trackingTarget))].sort();
+      const hasSeededRepeat = sorted.some((m) => m.repeatOf != null);
+      const kind = sorted.length > 2 ? 'triple'
+        : hasSeededRepeat ? 'main/repeats pair'
+        : 'main/main collision';
+      const readableSame = new Set(sorted.map((m) => m.readableRaw)).size === 1;
+      const sellableSame = new Set(sorted.map((m) => m.sellableRaw)).size === 1;
+      const sheetSpan = spos[spos.length - 1] - spos[0];
+      return {
+        key: s3DupKey(primary),
+        fontId: primary.fontId,
+        mode: primary.mode,
+        ratio: primary.ratio,
+        stoneSizeId: primary.stoneSizeId,
+        text: primary.text,
+        letterSpacingMm: primary.letterSpacingMm,
+        size: sorted.length,
+        kind,
+        hasSeededRepeat,
+        primarySlug: primary.slug,
+        memberSlugs: sorted.map((m) => m.slug),
+        presentationIndices: pidx,
+        presentationSpan: pidx[pidx.length - 1] - pidx[0],
+        sheetPositions: spos,
+        sheetSpan,
+        spansUnderMinPositions: sheetSpan < S3_SPAN_MIN_POSITIONS,
+        trackingTargets,
+        trackingContrastPresent: trackingTargets.length > 1,
+        readableSame,
+        sellableSame,
+        bothSame: readableSame && sellableSame,
+      };
+    })
+    .sort((a, b) => a.presentationIndices[0] - b.presentationIndices[0]);
+
+  // Non-primary members leave the primary tables (READ-011D §3). Cross-check against the
+  // render-key's own duplicateOf field, which implements the same "earliest presentation wins" rule.
+  const droppedComputed = new Set();
+  for (const g of groups) for (const s of g.memberSlugs) if (s !== g.primarySlug) droppedComputed.add(s);
+  const droppedInKey = new Set(rated.filter((e) => e.duplicateOf != null).map((e) => e.slug));
+  s3AssertSameSet(droppedComputed, droppedInKey, 'session3.duplicateGroups: computed non-primary set vs render-key duplicateOf');
+
+  const primaryRows = allRows.filter((r) => r.duplicateOf == null);
+  if (primaryRows.length !== allRows.length - droppedComputed.size) {
+    throw new Error(`session3: primary population ${primaryRows.length} != ${allRows.length} - ${droppedComputed.size}`);
+  }
+
+  const groupSizes = {};
+  for (const g of groups) groupSizes[g.size] = (groupSizes[g.size] ?? 0) + 1;
+
+  const degenerate = groups.filter((g) => g.trackingContrastPresent);
+  for (const g of degenerate) {
+    if (g.letterSpacingMm !== 0) {
+      throw new Error(`session3.degenerateTrackingCells: ${g.key} has a tracking contrast but letterSpacingMm ${g.letterSpacingMm} != 0`);
+    }
+  }
+
+  // --- regime pool medians from the manifest (READ-011D §6) --------------------------------
+  const swrByFont = new Map(manifest.fonts.map((f) => [f.id, f.stemWidthRatio]));
+  const regimeMedians = {};
+  const regimePools = {};
+  for (const regime of S3_REGIMES) {
+    const pool = [...new Set(rated.filter((e) => e.stemRegime === regime).map((e) => e.fontId))].sort();
+    regimePools[regime] = pool;
+    const values = pool.map((id) => swrByFont.get(id));
+    if (values.some((v) => typeof v !== 'number' || !Number.isFinite(v))) {
+      throw new Error(`session3: regime "${regime}" pool contains a font with no manifest stemWidthRatio`);
+    }
+    // Each rated entry's carried stemWidthRatio must match the manifest it was planned from.
+    for (const e of rated.filter((x) => x.stemRegime === regime)) {
+      if (e.stemWidthRatio !== swrByFont.get(e.fontId)) {
+        throw new Error(`session3: ${e.fontId} render-key stemWidthRatio ${e.stemWidthRatio} != manifest ${swrByFont.get(e.fontId)}`);
+      }
+    }
+    regimeMedians[regime] = median(values);
+  }
+
+  // --- marginals, unrated rows, rejection causes (READ-011D §3, §9) ------------------------
+  const marginal = (field) => {
+    const counts = {};
+    for (const r of ratings) {
+      const v = r[field] ?? '';
+      counts[v] = (counts[v] ?? 0) + 1;
+    }
+    return counts;
+  };
+  const unrated = allRows
+    .filter((r) => r.sellableRaw === '')
+    .map((r) => ({ slug: r.slug, block: r.block, fontId: r.fontId, mode: r.mode }))
+    .sort((a, b) => (a.slug < b.slug ? -1 : 1));
+
+  const noRows = allRows.filter((r) => r.sellableRaw === 'no');
+  let noNote = 0;
+  let noTagMatch = 0;
+  let multiTag = 0;
+  const perTagCount = Object.fromEntries(CAUSE_TAGS.map((t) => [t, 0]));
+  const distinctNotesMap = new Map();
+  for (const r of noRows) {
+    const note = r.notes ?? '';
+    if (note.trim() === '') { noNote += 1; continue; }
+    const tags = classifyNote(note);
+    if (!distinctNotesMap.has(note)) distinctNotesMap.set(note, tags);
+    if (tags.length === 0) noTagMatch += 1;
+    if (tags.length > 1) multiTag += 1;
+    for (const t of tags) perTagCount[t] += 1;
+  }
+  const perTag = {};
+  for (const t of CAUSE_TAGS) {
+    perTag[t] = { n: perTagCount[t], populationSharePct: pct(perTagCount[t], noRows.length) };
+  }
+  const distinctNotes = [...distinctNotesMap.entries()]
+    .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+    .map(([note, tags]) => ({ note, tags }));
+
+  // --- self-consistency (READ-011D §5) ----------------------------------------------------
+  const scAgree = { readable: 0, sellable: 0, both: 0 };
+  for (const g of groups) {
+    if (g.readableSame) scAgree.readable += 1;
+    if (g.sellableSame) scAgree.sellable += 1;
+    if (g.bothSame) scAgree.both += 1;
+  }
+  const seededUnderMin = groups.filter((g) => g.hasSeededRepeat && g.spansUnderMinPositions);
+
+  // --- achieved tracking arms (READ-011D §4) --------------------------------------------
+  const armSplit = (rows) => {
+    const t = rows.filter((r) => r.tracked).length;
+    return { tracked: t, untracked: rows.length - t };
+  };
+  const intentZero = allRows.filter((r) => r.trackingTarget === 'separation' && r.letterSpacingMm === 0);
+  const ratedTracked = allRows.filter((r) => r.tracked);
+  const courierFail = allRows.find((r) => r.fontId === 'courier-prime-regular' && r.separationAchieved === false);
+  const achievedTracking = {
+    definition: 'letterSpacingMm > 0',
+    primaryPopulation: primaryRows.length,
+    ...armSplit(primaryRows),
+    byMode: Object.fromEntries(S3_MODES.map((m) => [m, armSplit(primaryRows.filter((r) => r.mode === m))])),
+    ratedLevel: {
+      population: allRows.length,
+      ...armSplit(allRows),
+      trackedByMode: Object.fromEntries(S3_MODES.map((m) => [m, ratedTracked.filter((r) => r.mode === m).length])),
+    },
+    intentSeparationResolvedToZeroMm: {
+      total: intentZero.length,
+      byMode: Object.fromEntries(S3_MODES.map((m) => [m, intentZero.filter((r) => r.mode === m).length])),
+      ofSeparationEntriesByMode: Object.fromEntries(S3_MODES.map((m) => [
+        m, allRows.filter((r) => r.trackingTarget === 'separation' && r.mode === m).length,
+      ])),
+    },
+    courierPrimeFailedEntry: courierFail
+      ? {
+        slug: courierFail.slug,
+        trackingTarget: courierFail.trackingTarget,
+        letterSpacingMm: courierFail.letterSpacingMm,
+        inPrimaryPopulation: courierFail.duplicateOf == null,
+        countedAs: courierFail.tracked ? 'tracked' : 'untracked',
+      }
+      : null,
+  };
+
+  // --- floor decision tables (READ-011D §6, §9) --------------------------------------------
+  const trackedMatch = (r, arm) => (arm === 'tracked' ? r.tracked : !r.tracked);
+  const floorByStones = {
+    form: 'A — single constant',
+    cutVariable: 'stonesAcrossStem = ratio × stemWidthRatio',
+    scopedBy: 'mode × achievedTracking',
+    candidates: S3_STONES_CANDIDATES,
+    scopes: {},
+  };
+  for (const m of S3_MODES) {
+    for (const arm of S3_ACHIEVED) {
+      const rows = primaryRows.filter((r) => r.mode === m && trackedMatch(r, arm));
+      floorByStones.scopes[`${m}|${arm}`] = buildFloorScope(
+        rows, S3_STONES_CANDIDATES, `session3.floorByStones[${m}|${arm}]`, (r) => r.ratio * r.stemWidthRatio,
+      );
+    }
+  }
+  const floorByRatio = {
+    form: 'B — three class steps',
+    cutVariable: 'ratio',
+    scopedBy: 'stemRegime × mode × achievedTracking',
+    candidates: S3_RATIO_CANDIDATES,
+    scopes: {},
+  };
+  for (const regime of S3_REGIMES) {
+    for (const m of S3_MODES) {
+      for (const arm of S3_ACHIEVED) {
+        const rows = primaryRows.filter((r) => r.stemRegime === regime && r.mode === m && trackedMatch(r, arm));
+        floorByRatio.scopes[`${regime}|${m}|${arm}`] = buildFloorScope(
+          rows, S3_RATIO_CANDIDATES, `session3.floorByRatio[${regime}|${m}|${arm}]`, (r) => r.ratio,
+        );
+      }
+    }
+  }
+
+  // --- size invariance (READ-011D §9) ---------------------------------------------------
+  const bigRows = allRows.filter((r) => r.stoneSizeId === 'ss16' || r.stoneSizeId === 'ss20');
+  const siPairs = bigRows.map((r) => {
+    const cp = allRows.find((c) => c.stoneSizeId === 'ss10' && c.fontId === r.fontId
+      && c.mode === r.mode && c.ratio === r.ratio && c.block === 'main' && c.trackingTarget === 'none');
+    if (!cp) throw new Error(`session3.sizeInvariance: no SS10 counterpart for ${r.slug} (${r.fontId} ${r.mode} ${r.ratio})`);
+    return {
+      fontId: r.fontId,
+      mode: r.mode,
+      ratio: r.ratio,
+      bigSlug: r.slug,
+      bigStoneSizeId: r.stoneSizeId,
+      bigSellable: r.sellableRaw,
+      bigRated: r.isRated,
+      ss10Slug: cp.slug,
+      ss10Sellable: cp.sellableRaw,
+      ss10Rated: cp.isRated,
+    };
+  }).sort((a, b) => (a.bigSlug < b.bigSlug ? -1 : 1));
+  const sideCount = (rows) => ({
+    n: rows.length,
+    rated: rows.filter((r) => r.isRated).length,
+    sellable: rows.filter((r) => r.sellable).length,
+  });
+  const ss10Counterparts = [...new Set(siPairs.map((p) => p.ss10Slug))].map((s) => rowBySlugA.get(s));
+  const sizeInvariance = {
+    pairs: siPairs,
+    perSize: {
+      ss10: sideCount(ss10Counterparts),
+      ss16: sideCount(bigRows.filter((r) => r.stoneSizeId === 'ss16')),
+      ss20: sideCount(bigRows.filter((r) => r.stoneSizeId === 'ss20')),
+    },
+  };
+
+  // --- tracking contrast, between-font only (READ-011D §2, §4) --------------------------
+  const rateCell = (rows) => {
+    const ratedRows = rows.filter((r) => r.isRated);
+    const k = ratedRows.filter((r) => r.sellable).length;
+    return { n: rows.length, rated: ratedRows.length, sellable: k, sellablePct: pct(k, ratedRows.length) };
+  };
+  const trackingContrast = {
+    note: 'between-font contrast only; tracking is unpaired (spec §2). Not a McNemar-style paired test.',
+    scopedBy: 'mode × achievedTracking',
+    scopes: {},
+  };
+  for (const m of S3_MODES) {
+    for (const arm of S3_ACHIEVED) {
+      trackingContrast.scopes[`${m}|${arm}`] = rateCell(primaryRows.filter((r) => r.mode === m && trackedMatch(r, arm)));
+    }
+  }
+  const trackingContrastByIntent = {
+    note: 'sensitivity table on trackingTarget (intent), not achieved spacing (spec §4).',
+    scopedBy: 'mode × trackingTarget',
+    scopes: {},
+  };
+  for (const m of S3_MODES) {
+    for (const intent of S3_INTENT) {
+      trackingContrastByIntent.scopes[`${m}|${intent}`] = rateCell(
+        primaryRows.filter((r) => r.mode === m && r.trackingTarget === intent),
+      );
+    }
+  }
+
+  // --- separation shortfall (READ-011D §2) ---------------------------------------------
+  const shortfallRows = allRows
+    .filter((r) => r.separationAchieved === false)
+    .map((r) => ({
+      slug: r.slug,
+      fontId: r.fontId,
+      mode: r.mode,
+      ratio: r.ratio,
+      separationRatioBefore: r.separationRatioBefore,
+      separationRatioAfter: r.separationRatioAfter,
+      letterSpacingMm: r.letterSpacingMm,
+      inPrimaryPopulation: r.duplicateOf == null,
+      countedAs: r.tracked ? 'tracked' : 'untracked',
+      sellable: r.sellableRaw,
+    }))
+    .sort((a, b) => (a.slug < b.slug ? -1 : 1));
+  const separationShortfall = {
+    count: shortfallRows.length,
+    allOutline: shortfallRows.every((r) => r.mode === 'outline'),
+    rows: shortfallRows,
+  };
+
+  return {
+    meta: {
+      milestone: 'READ-011D',
+      generatedBy: 'tools/font-certification/analyze-ratings.mjs',
+      inputs: [
+        'docs/data/read-011/ratings.csv',
+        'docs/data/read-011/render-key.json',
+        'assets/fonts/manifest.json',
+      ],
+      causeTags: CAUSE_TAGS,
+      duplicateKeyFields: S3_DUP_KEY_FIELDS,
+      achievedTrackingDefinition: 'letterSpacingMm > 0',
+      spanMinPositions: S3_SPAN_MIN_POSITIONS,
+      regimePools,
+      regimeMedianStemWidthRatio: regimeMedians,
+      cutGrids: { stonesAcrossStem: S3_STONES_CANDIDATES, ratio: S3_RATIO_CANDIDATES },
+      clearanceRule: S3_CLEARANCE,
+      selectionToleranceStones: 0.25,
+      comparisonFigure: 'READ-005 session 1: 13/15 sellable self-consistency',
+    },
+    session3: {
+      rowCount: ratings.length,
+      unratedRows: { count: unrated.length, rows: unrated },
+      marginals: { readable: marginal('readable'), sellable: marginal('sellable') },
+      duplicateGroups: {
+        count: groups.length,
+        sizes: groupSizes,
+        primaryPopulation: primaryRows.length,
+        droppedRows: droppedComputed.size,
+        byKind: {
+          'main/repeats pair': groups.filter((g) => g.kind === 'main/repeats pair').length,
+          'main/main collision': groups.filter((g) => g.kind === 'main/main collision').length,
+          triple: groups.filter((g) => g.kind === 'triple').length,
+        },
+        groups,
+      },
+      selfConsistency: {
+        n: groups.length,
+        readableAgreement: scAgree.readable,
+        sellableAgreement: scAgree.sellable,
+        bothAgreement: scAgree.both,
+        seededRepeatsUnderMinPositions: {
+          count: seededUnderMin.length,
+          groups: seededUnderMin.map((g) => ({ key: g.key, primarySlug: g.primarySlug, sheetSpan: g.sheetSpan })),
+        },
+      },
+      degenerateTrackingCells: {
+        count: degenerate.length,
+        cells: degenerate.map((g) => ({
+          key: g.key,
+          fontId: g.fontId,
+          mode: g.mode,
+          ratio: g.ratio,
+          primarySlug: g.primarySlug,
+          memberSlugs: g.memberSlugs,
+          trackingTargets: g.trackingTargets,
+        })),
+      },
+      achievedTracking,
+      floorByStones,
+      floorByRatio,
+      sizeInvariance,
+      trackingContrast,
+      trackingContrastByIntent,
+      separationShortfall,
+      rejectionCauses: {
+        population: noRows.length,
+        noNote,
+        noTagMatch,
+        multiTag,
+        perTag,
+        distinctNotes,
+      },
     },
   };
 }
@@ -906,10 +1377,138 @@ function renderMarkdown(data) {
   L.push(`\n### Tracked members with separationAchieved === false: ${p.trackedSeparationNotAchieved.count}`);
   L.push(p.trackedSeparationNotAchieved.slugs.join(', '));
 
+  L.push(renderSession3Markdown(computeSession3()));
+
   return L.join('\n') + '\n';
 }
 
+// --- session 3 markdown (READ-011D) -----------------------------------------------------------
+
+function renderSession3Markdown(data) {
+  const L = [];
+  const s3 = data.session3;
+  const m = data.meta;
+  L.push('\n\n## READ-011D — rating-analysis pre-registration\n');
+  L.push('Recomputed from `docs/data/read-011/{ratings.csv,render-key.json}` and');
+  L.push('`assets/fonts/manifest.json`. Written before the sheet is rated: with an empty outcome');
+  L.push('column every sellable rate below is `null`. See');
+  L.push('`docs/specifications/READ-011D-AnalysisPreRegistration.md`.\n');
+
+  L.push(`- rated rows: ${s3.rowCount}; unrated (blank sellable): ${s3.unratedRows.count}`);
+  L.push(`- readable marginals: ${JSON.stringify(s3.marginals.readable)}`);
+  L.push(`- sellable marginals: ${JSON.stringify(s3.marginals.sellable)}\n`);
+
+  const dg = s3.duplicateGroups;
+  L.push('### Duplicate groups\n');
+  L.push(`count ${dg.count}, sizes ${JSON.stringify(dg.sizes)}, by kind ${JSON.stringify(dg.byKind)}`);
+  L.push(`→ primary population ${dg.primaryPopulation} (= ${s3.rowCount} − ${dg.droppedRows})`);
+  L.push(`degenerate tracking cells (a contrast with no contrast in it): ${s3.degenerateTrackingCells.count}\n`);
+
+  const sc = s3.selfConsistency;
+  L.push('### Self-consistency (over all duplicate groups)\n');
+  L.push(`n=${sc.n}: readable ${sc.readableAgreement}/${sc.n}, sellable ${sc.sellableAgreement}/${sc.n}, both ${sc.bothAgreement}/${sc.n}`);
+  L.push(`seeded repeats spanning < ${m.spanMinPositions} sheet positions: ${sc.seededRepeatsUnderMinPositions.count} ` +
+    `(${sc.seededRepeatsUnderMinPositions.groups.map((g) => `${g.primarySlug} @ ${g.sheetSpan}`).join(', ') || '—'})`);
+  L.push(`comparison figure: ${m.comparisonFigure}\n`);
+
+  const at = s3.achievedTracking;
+  L.push('### Achieved tracking (letterSpacingMm > 0)\n');
+  L.push(`primary population ${at.primaryPopulation}: ${at.tracked} tracked, ${at.untracked} untracked`);
+  L.push(`  by mode: ${S3_MODES.map((x) => `${x} ${at.byMode[x].tracked}/${at.byMode[x].tracked + at.byMode[x].untracked}`).join(', ')}`);
+  L.push(`rated level (pre-duplicate-rule): ${at.ratedLevel.tracked} tracked ` +
+    `(${S3_MODES.map((x) => `${x} ${at.ratedLevel.trackedByMode[x]}`).join(', ')}), ${at.ratedLevel.untracked} untracked`);
+  L.push(`separation intent resolved to 0 mm: ${at.intentSeparationResolvedToZeroMm.total} ` +
+    `(${S3_MODES.map((x) => `${x} ${at.intentSeparationResolvedToZeroMm.byMode[x]}/${at.intentSeparationResolvedToZeroMm.ofSeparationEntriesByMode[x]}`).join(', ')})`);
+  if (at.courierPrimeFailedEntry) {
+    const c = at.courierPrimeFailedEntry;
+    L.push(`courier-prime failed separation entry ${c.slug}: counted as ${c.countedAs} (in primary: ${c.inPrimaryPopulation})`);
+  }
+  L.push('');
+
+  L.push('### Regime pool-median stemWidthRatio (from the manifest)\n');
+  for (const regime of S3_REGIMES) {
+    L.push(`- ${regime}: ${m.regimeMedianStemWidthRatio[regime]} (pool of ${m.regimePools[regime].length})`);
+  }
+  L.push(`selection tolerance: ±${m.selectionToleranceStones} stones\n`);
+
+  const floorTable = (fl, title) => {
+    L.push(`### ${title}\n`);
+    L.push(`form ${fl.form}; cut variable \`${fl.cutVariable}\`; scoped by ${fl.scopedBy}.`);
+    L.push('Each cell: `sellableBelow/rowsBelow · sellableAtOrAbove/rowsAtOrAbove`.\n');
+    L.push(`| cut | ${Object.keys(fl.scopes).join(' | ')} |`);
+    L.push(`|---|${Object.keys(fl.scopes).map(() => '---').join('|')}|`);
+    for (const c of fl.candidates) {
+      const cells = Object.values(fl.scopes).map((sco) => {
+        const x = sco.byCandidate[c];
+        return `${x.sellableBelow}/${x.rowsBelow} · ${x.sellableAtOrAbove}/${x.rowsAtOrAbove}`;
+      });
+      L.push(`| ${c} | ${cells.join(' | ')} |`);
+    }
+    L.push('');
+  };
+  floorTable(s3.floorByStones, 'Form A — floor by stones-across-stem');
+  floorTable(s3.floorByRatio, 'Form B — floor by ratio, per regime');
+
+  L.push('### Size invariance\n');
+  L.push(`| size | n | rated | sellable |`);
+  L.push('|---|---:|---:|---:|');
+  for (const sz of ['ss10', 'ss16', 'ss20']) {
+    const c = s3.sizeInvariance.perSize[sz];
+    L.push(`| ${sz} | ${c.n} | ${c.rated} | ${c.sellable} |`);
+  }
+  L.push('');
+
+  const contrastTable = (ct, title) => {
+    L.push(`### ${title}\n`);
+    L.push(`${ct.note}\n`);
+    L.push('| scope | n | rated | sellable | rate |');
+    L.push('|---|---:|---:|---:|---:|');
+    for (const [name, cell] of Object.entries(ct.scopes)) {
+      L.push(`| ${name} | ${cell.n} | ${cell.rated} | ${cell.sellable} | ${cell.sellablePct === null ? '—' : cell.sellablePct + '%'} |`);
+    }
+    L.push('');
+  };
+  contrastTable(s3.trackingContrast, 'Tracking contrast (achieved, between-font)');
+  contrastTable(s3.trackingContrastByIntent, 'Tracking contrast by intent (sensitivity)');
+
+  L.push('### Separation shortfall\n');
+  L.push(`${s3.separationShortfall.count} entries below separationRatioAfter 0.95, all outline: ${s3.separationShortfall.allOutline}\n`);
+  L.push('| slug | font | ratio | before → after | letterSpacingMm | in primary |');
+  L.push('|---|---|---:|---|---:|---|');
+  for (const r of s3.separationShortfall.rows) {
+    L.push(`| ${r.slug} | ${r.fontId} | ${r.ratio} | ${r.separationRatioBefore} → ${r.separationRatioAfter} | ${r.letterSpacingMm} | ${r.inPrimaryPopulation} |`);
+  }
+  L.push('');
+
+  L.push('### Rejection causes\n');
+  L.push(`population (sellable = no): ${s3.rejectionCauses.population}; ` +
+    `no note ${s3.rejectionCauses.noNote}, no tag match ${s3.rejectionCauses.noTagMatch}, multi-tag ${s3.rejectionCauses.multiTag}`);
+
+  return L.join('\n');
+}
+
 // --- CLI ------------------------------------------------------------------------------------
+
+function checkGolden(file, data) {
+  const rel = path.relative(REPO_ROOT, file);
+  let committed;
+  try {
+    committed = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (err) {
+    process.stderr.write(`cannot read ${rel}: ${err.message}\n`);
+    return false;
+  }
+  const diffs = diffPaths(data, committed);
+  if (diffs.length === 0) {
+    process.stdout.write(`OK — ${rel} matches\n`);
+    return true;
+  }
+  process.stderr.write(`MISMATCH — ${diffs.length} path(s) differ from ${rel}:\n`);
+  for (const d of diffs) {
+    process.stderr.write(`  ${d.path}\n    committed: ${JSON.stringify(d.expected)}\n    computed:  ${JSON.stringify(d.actual)}\n`);
+  }
+  return false;
+}
 
 function main() {
   const args = process.argv.slice(2);
@@ -923,28 +1522,15 @@ function main() {
   if (args.includes('--write')) {
     writeFileSync(GOLDEN_FILE, JSON.stringify(data, null, 2) + '\n');
     process.stdout.write(`wrote ${path.relative(REPO_ROOT, GOLDEN_FILE)}\n`);
+    writeFileSync(GOLDEN_FILE_011, JSON.stringify(computeSession3(), null, 2) + '\n');
+    process.stdout.write(`wrote ${path.relative(REPO_ROOT, GOLDEN_FILE_011)}\n`);
     return;
   }
 
   if (args.includes('--check')) {
-    let committed;
-    try {
-      committed = JSON.parse(readFileSync(GOLDEN_FILE, 'utf8'));
-    } catch (err) {
-      process.stderr.write(`cannot read ${path.relative(REPO_ROOT, GOLDEN_FILE)}: ${err.message}\n`);
-      process.exitCode = 1;
-      return;
-    }
-    const diffs = diffPaths(data, committed);
-    if (diffs.length === 0) {
-      process.stdout.write('OK — derived-tables.json matches computeAll()\n');
-      return;
-    }
-    process.stderr.write(`MISMATCH — ${diffs.length} path(s) differ from ${path.relative(REPO_ROOT, GOLDEN_FILE)}:\n`);
-    for (const d of diffs) {
-      process.stderr.write(`  ${d.path}\n    committed: ${JSON.stringify(d.expected)}\n    computed:  ${JSON.stringify(d.actual)}\n`);
-    }
-    process.exitCode = 1;
+    const okA = checkGolden(GOLDEN_FILE, data);
+    const okB = checkGolden(GOLDEN_FILE_011, computeSession3());
+    if (!okA || !okB) process.exitCode = 1;
     return;
   }
 
