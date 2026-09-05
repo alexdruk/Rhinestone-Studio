@@ -37,11 +37,13 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { FontManager } from '../../src/fonts/index.js';
 import { createDefaultFontProviderRegistry } from '../../src/text/index.js';
-import { GeometryEngine, expectedComponentCount, SEPARATION_TARGET, TRACKING_XPITCH_LADDER } from '../../src/geometry/index.js';
-import { STONE_SIZE_BY_ID } from '../../src/renderer/StoneSizes.js';
-import { analyzeOne, PRODUCTION_GAP_MM } from './lib/productionAnalysis.mjs';
+import { GeometryEngine, expectedComponentCount, SEPARATION_TARGET } from '../../src/geometry/index.js';
 import { renderLayoutSvg, RHINESTONE_SPECIMEN_PX_PER_MM_BY_SIZE } from './lib/specimenPages.mjs';
 import { screenshotPages } from './lib/screenshotPages.mjs';
+// READ-011C: the tracking sweep (chooseTracking + measure + pitchMmFor) moved to ./lib/trackingSolver.mjs
+// so read-011-renders.mjs resolves separation targets with the exact same implementation. See that
+// module's header.
+import { chooseTracking, measure, pitchMmFor } from './lib/trackingSolver.mjs';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const OUT_DIR = path.join(repoRoot, 'tools/font-certification/output/read-005');
@@ -52,10 +54,10 @@ const KEY_FILE = path.join(OUT_DIR, 'tracking-key.json');
 const WORK_DIR = path.join(OUT_DIR, 'tracking-work');
 const PW_PROFILE_DIR = path.join(OUT_DIR, 'pw-profile-tracking');
 
-// Per-case tracking sweep (spec Part B): letterSpacingMm over TRACKING_XPITCH_LADDER multiples of
-// pitchMm, take the LOWEST where clusterCount / expectedComponentCount >= SEPARATION_TARGET. The two
-// cases that never reach it use 4 x pitch with separationAchieved: false. Both constants moved to
-// src/geometry/GlyphSeparation.js (READ-006); SEPARATION_TARGET was FULL_SEPARATION here.
+// Per-case tracking sweep (spec Part B) is chooseTracking() in ./lib/trackingSolver.mjs: letterSpacingMm
+// over TRACKING_XPITCH_LADDER multiples of pitchMm, take the LOWEST where
+// clusterCount / expectedComponentCount >= SEPARATION_TARGET; cases that never reach it use 4 x pitch
+// with separationAchieved: false.
 const CONTROL_XPITCH = 2.0; // specificity + harm blocks
 
 const MIN_PAIR_DISTANCE = 15; // emission-order positions between a pair's two members
@@ -200,44 +202,8 @@ function svgWithoutNotes(markup) {
   return markup.slice(0, end + '</svg>'.length);
 }
 
-// --- one measurement -------------------------------------------------------------------------
-
-async function measure(engine, providerId, spec, letterSpacingMm) {
-  return analyzeOne(engine, spec.fontId, spec.text, spec.stoneSizeId, spec.heightMm, {
-    mode: spec.mode,
-    providerId,
-    letterSpacingMm
-  });
-}
-
-function pitchMmFor(stoneSizeId) {
-  return STONE_SIZE_BY_ID[stoneSizeId].diameterMm + PRODUCTION_GAP_MM;
-}
-
-// Sweep the tracking ladder for a paired-tracked case; return the chosen letterSpacing and the
-// before/after separation numbers. `expectedComponents` is the signal-F denominator (per-character
-// overlap-component sum) — invariant to tracking, so measured once.
-async function chooseTracking(engine, providerId, spec) {
-  const pitchMm = pitchMmFor(spec.stoneSizeId);
-  const expectedComponents = await expectedComponentCount(engine, spec.fontId, spec.text, providerId);
-  const rungs = [];
-  for (const xPitch of TRACKING_XPITCH_LADDER) {
-    const ls = Number((xPitch * pitchMm).toFixed(6));
-    const m = await measure(engine, providerId, spec, ls);
-    const ratio = (!m.error && expectedComponents > 0 && Number.isFinite(m.clusterCount))
-      ? m.clusterCount / expectedComponents
-      : null;
-    rungs.push({ xPitch, letterSpacingMm: ls, separationRatio: ratio, widthMm: m.boundingBoxMm?.widthMm ?? null, error: m.error });
-  }
-  const before = rungs[0];
-  let chosen = rungs.find((r) => Number.isFinite(r.separationRatio) && r.separationRatio >= SEPARATION_TARGET) ?? null;
-  let separationAchieved = true;
-  if (!chosen) {
-    chosen = rungs[rungs.length - 1]; // 4 x pitch
-    separationAchieved = false;
-  }
-  return { pitchMm, expectedComponents, before, chosen, separationAchieved, rungs };
-}
+// measure(), pitchMmFor() and chooseTracking() — the tracking ladder sweep — are imported from
+// ./lib/trackingSolver.mjs (READ-011C consolidation).
 
 // --- constrained emission order ----------------------------------------------------------------
 // Place all items in a seeded shuffle, then repair: while any constrained pair is < MIN_PAIR_DISTANCE

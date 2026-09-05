@@ -19,6 +19,10 @@ export const EXCLUDED_FROM_DEFAULT = [
   // over 62 glyphs each, ~75s) to prove the manifest has not drifted from the real font files.
   // Too heavy for the default loop; run via `npm run test:full` or an explicit filter.
   'test-read-003-stem-width.mjs',
+  // READ-011C: re-runs lib/trackingSolver.mjs against all 75 frozen READ-005 tracking-key specs
+  // (full font pipeline, ~44 ladder sweeps). Guards the extracted solver + detects GlyphSeparation.js
+  // drift; too heavy for the default loop.
+  'test-read-011c-tracking-solver-regression.mjs',
 ];
 
 // Named groups, organized around stable subsystems (MAINT-001 — Test Suite Consolidation) rather
@@ -177,6 +181,14 @@ export const GROUPS = {
     // READ-011 rating pass, enumerated by tools/font-certification/read-011-plan.mjs from the
     // manifest and StemRegime.js. Grouped with test-read-011-stem-regime.mjs.
     'test-read-011b-render-plan.mjs',
+    // READ-011C: docs/data/read-011/render-key.json -- the key produced alongside the (gitignored)
+    // rating-pass renders. Carries the READ-011B design through unchanged and adds the resolved
+    // letter spacing + separation numbers + seeded presentation index. Grouped with the other
+    // READ-011 design/key tests.
+    'test-read-011c-render-key.mjs',
+    // READ-011C: pins the extracted lib/trackingSolver.mjs against the frozen READ-005 tracking-key.
+    // EXCLUDED_FROM_DEFAULT (heavy) -- see the list above.
+    'test-read-011c-tracking-solver-regression.mjs',
     'test-s200-mixed-stone-sizes.mjs',
     'test-rs3011-step10a-region-data-model.mjs',
     'test-rs3011-step10b-paint-target-selection.mjs',

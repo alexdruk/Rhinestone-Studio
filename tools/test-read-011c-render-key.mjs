@@ -1,0 +1,202 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { assertTestRegistered } from './lib/test-registration-assertions.mjs';
+
+// READ-011C -- docs/data/read-011/render-key.json is the key produced by
+// tools/font-certification/read-011-renders.mjs alongside the (gitignored) specimen renders. It
+// carries the frozen READ-011B design forward unchanged and adds, per entry, the resolved letter
+// spacing plus the three separation numbers and the seeded presentation index. This suite pins that
+// contract so a re-render that quietly drops an entry, mislabels a separation result, or breaks the
+// presentation permutation fails loudly:
+//   1. the key covers every plan slug exactly once, with no extras;
+//   2. every plan field is carried through unchanged;
+//   3. every separation entry has all four tracking fields, with separationAchieved consistent with
+//      separationRatioAfter against the 0.95 threshold;
+//   4. every none entry has zero letter spacing;
+//   5. presentation indices form a complete 0..n-1 permutation (excluded entries included);
+//   6-8. the derived fields (separationDelta / identicalToUntracked / duplicateOf);
+//   9. the rhinestone probe is excluded from rating: exactly 12 entries, all stemRegime 'unmeasured'
+//      with a non-null reason, every other entry with a null reason;
+//   10. docs/data/read-011/ratings.csv has exactly one row per non-excluded slug and none for excluded;
+//   11. this file is registered in the geometry group and runs in both the default and full suites.
+//
+// It asserts nothing about image files on disk -- the renders are gitignored, so this test must pass
+// on a bare clone. Its whole import graph is this file, node: builtins and the test-registration
+// helper (which reads tools/test-groups.mjs + run-tests.mjs) -- no src/, no Playwright.
+
+const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+
+const plan = JSON.parse(await readFile(path.join(repoRoot, 'docs/data/read-011/render-plan.json'), 'utf8'));
+const key = JSON.parse(await readFile(path.join(repoRoot, 'docs/data/read-011/render-key.json'), 'utf8'));
+
+const planEntries = plan.entries;
+const keyEntries = key.entries;
+const keyBySlug = new Map(keyEntries.map((e) => [e.slug, e]));
+
+const PLAN_FIELDS = [
+  'slug', 'fontId', 'stemRegime', 'stemWidthRatio', 'mode', 'ratio', 'stoneSizeId',
+  'stoneDiameterMm', 'heightMm', 'text', 'trackingTarget', 'block', 'repeatOf'
+];
+const SEPARATION_THRESHOLD = plan.meta.separationTargetRatio ?? 0.95;
+
+async function test(name, fn) {
+  try {
+    await fn();
+    console.log(`✓ ${name}`);
+  } catch (error) {
+    console.error(`✗ ${name}`);
+    console.error(error);
+    process.exitCode = 1;
+  }
+}
+
+await test('1. the key covers every plan slug exactly once, with no extras', () => {
+  assert.equal(keyEntries.length, planEntries.length, 'entry count');
+  const planSlugs = planEntries.map((e) => e.slug).sort();
+  const keySlugs = keyEntries.map((e) => e.slug).sort();
+  assert.deepEqual(keySlugs, planSlugs, 'slug sets match exactly');
+  assert.equal(new Set(keySlugs).size, keySlugs.length, 'no duplicate slug in the key');
+});
+
+await test('2. every plan field is carried through unchanged', () => {
+  for (const p of planEntries) {
+    const k = keyBySlug.get(p.slug);
+    assert.ok(k, `plan slug ${p.slug} missing from key`);
+    for (const f of PLAN_FIELDS) {
+      assert.deepEqual(k[f], p[f], `entry ${p.slug} field "${f}" (${JSON.stringify(k[f])} != ${JSON.stringify(p[f])})`);
+    }
+  }
+});
+
+await test('3. every separation entry has all four tracking fields, separationAchieved consistent with the 0.95 threshold', () => {
+  const sep = keyEntries.filter((e) => e.trackingTarget === 'separation');
+  assert.ok(sep.length > 0, 'the design has separation entries');
+  for (const e of sep) {
+    assert.equal(typeof e.letterSpacingMm, 'number', `entry ${e.slug} letterSpacingMm is a number`);
+    assert.ok(Number.isFinite(e.letterSpacingMm) && e.letterSpacingMm >= 0, `entry ${e.slug} letterSpacingMm >= 0`);
+    assert.equal(typeof e.separationRatioBefore, 'number', `entry ${e.slug} separationRatioBefore is a number`);
+    assert.equal(typeof e.separationRatioAfter, 'number', `entry ${e.slug} separationRatioAfter is a number`);
+    assert.equal(typeof e.separationAchieved, 'boolean', `entry ${e.slug} separationAchieved is a boolean`);
+    assert.equal(
+      e.separationAchieved,
+      e.separationRatioAfter >= SEPARATION_THRESHOLD,
+      `entry ${e.slug}: separationAchieved=${e.separationAchieved} but separationRatioAfter=${e.separationRatioAfter} vs threshold ${SEPARATION_THRESHOLD}`
+    );
+  }
+});
+
+await test('4. every none entry has zero letter spacing', () => {
+  const none = keyEntries.filter((e) => e.trackingTarget === 'none');
+  assert.ok(none.length > 0);
+  for (const e of none) {
+    assert.strictEqual(e.letterSpacingMm, 0, `entry ${e.slug} (trackingTarget none) letterSpacingMm must be 0`);
+  }
+});
+
+await test('5. presentation indices form a complete 0..n-1 permutation, excluded entries included', () => {
+  const indices = keyEntries.map((e) => e.presentationIndex).sort((a, b) => a - b);
+  assert.deepEqual(indices, [...Array(keyEntries.length).keys()], 'indices are exactly 0..n-1 with no gaps or repeats');
+  // The excluded entries keep their slots — the rating sheet skips them, it does not renumber.
+  const excludedIndices = keyEntries.filter((e) => e.excludedFromRating).map((e) => e.presentationIndex);
+  assert.ok(excludedIndices.every((i) => Number.isInteger(i) && i >= 0 && i < keyEntries.length));
+});
+
+const SPEC_FIELDS = ['fontId', 'mode', 'ratio', 'stoneSizeId', 'text', 'letterSpacingMm'];
+const specSignature = (e) => SPEC_FIELDS.map((f) => e[f]).join('|');
+
+await test('6. separationDelta is exactly separationRatioAfter - separationRatioBefore (4dp), null for none entries', () => {
+  for (const e of keyEntries) {
+    if (e.trackingTarget === 'separation'
+        && typeof e.separationRatioBefore === 'number' && typeof e.separationRatioAfter === 'number') {
+      const expected = Number((e.separationRatioAfter - e.separationRatioBefore).toFixed(4));
+      assert.strictEqual(e.separationDelta, expected, `entry ${e.slug} separationDelta`);
+    } else {
+      assert.strictEqual(e.separationDelta, null, `entry ${e.slug} (${e.trackingTarget}) separationDelta must be null`);
+    }
+  }
+});
+
+await test('7. identicalToUntracked agrees with letterSpacingMm', () => {
+  for (const e of keyEntries) {
+    if (e.trackingTarget === 'separation') {
+      assert.strictEqual(
+        e.identicalToUntracked, e.letterSpacingMm === 0,
+        `entry ${e.slug}: identicalToUntracked=${e.identicalToUntracked} but letterSpacingMm=${e.letterSpacingMm}`
+      );
+    } else {
+      assert.strictEqual(e.identicalToUntracked, null, `entry ${e.slug} (${e.trackingTarget}) identicalToUntracked must be null`);
+    }
+  }
+  // The design note says roughly half the separation entries collapse to zero spacing.
+  const sep = keyEntries.filter((e) => e.trackingTarget === 'separation');
+  const collapsed = sep.filter((e) => e.identicalToUntracked === true).length;
+  assert.ok(collapsed > 0 && collapsed < sep.length, `expected some but not all separation entries collapsed (got ${collapsed}/${sep.length})`);
+});
+
+await test('8. every duplicateOf resolves to an earlier-presentation entry with an identical spec; no entry is its own duplicate', () => {
+  for (const e of keyEntries) {
+    if (e.duplicateOf === null) continue;
+    assert.notEqual(e.duplicateOf, e.slug, `entry ${e.slug} is marked as its own duplicate`);
+    const target = keyBySlug.get(e.duplicateOf);
+    assert.ok(target, `entry ${e.slug} duplicateOf ${e.duplicateOf} does not resolve`);
+    assert.equal(specSignature(target), specSignature(e), `entry ${e.slug} duplicateOf ${e.duplicateOf}: specs differ`);
+    assert.ok(
+      target.presentationIndex < e.presentationIndex,
+      `entry ${e.slug} (pi ${e.presentationIndex}) duplicateOf ${e.duplicateOf} (pi ${target.presentationIndex}) is not earlier`
+    );
+  }
+  // duplicateOf must name the EARLIEST same-spec entry, and it is distinct from repeatOf.
+  const earliestBySpec = new Map();
+  for (const e of [...keyEntries].sort((a, b) => a.presentationIndex - b.presentationIndex)) {
+    const sig = specSignature(e);
+    const expected = earliestBySpec.has(sig) ? earliestBySpec.get(sig) : null;
+    assert.strictEqual(e.duplicateOf, expected, `entry ${e.slug} duplicateOf should be ${expected}`);
+    if (!earliestBySpec.has(sig)) earliestBySpec.set(sig, e.slug);
+  }
+});
+
+await test('9. the rhinestone probe is excluded from rating: exactly 12 entries, unmeasured + reasoned; every other entry reason null', () => {
+  const excluded = keyEntries.filter((e) => e.excludedFromRating === true);
+  assert.equal(excluded.length, 12, 'exactly 12 entries excluded from rating');
+  for (const e of excluded) {
+    assert.equal(e.stemRegime, 'unmeasured', `excluded entry ${e.slug} must be stemRegime 'unmeasured'`);
+    assert.equal(typeof e.exclusionReason, 'string', `excluded entry ${e.slug} needs a string reason`);
+    assert.ok(e.exclusionReason.length > 0, `excluded entry ${e.slug} reason must be non-empty`);
+  }
+  for (const e of keyEntries) {
+    if (e.excludedFromRating) continue;
+    assert.strictEqual(e.excludedFromRating, false, `entry ${e.slug} excludedFromRating must be false, not falsy`);
+    assert.strictEqual(e.exclusionReason, null, `non-excluded entry ${e.slug} must have a null reason`);
+  }
+  // Nothing else in the corpus classifies as unmeasured.
+  const unmeasured = keyEntries.filter((e) => e.stemRegime === 'unmeasured');
+  assert.equal(unmeasured.length, 12, 'the 12 unmeasured entries are exactly the excluded set');
+});
+
+await test('10. ratings.csv has exactly one row per non-excluded slug and none for excluded', async () => {
+  const csv = await readFile(path.join(repoRoot, 'docs/data/read-011/ratings.csv'), 'utf8');
+  const lines = csv.split('\n').filter((l) => l.length > 0);
+  assert.equal(lines[0], 'slug,readable,sellable,notes', 'header byte-identical to read-005');
+  const rowSlugs = lines.slice(1).map((l) => {
+    const m = l.match(/^"([0-9a-f]{8})"/);
+    assert.ok(m, `ratings.csv row is not a quoted 8-hex slug: ${l}`);
+    return m[1];
+  });
+  const expected = keyEntries.filter((e) => !e.excludedFromRating).map((e) => e.slug).sort();
+  assert.deepEqual([...rowSlugs].sort(), expected, 'one row per non-excluded slug, no extras');
+  const excludedSet = new Set(keyEntries.filter((e) => e.excludedFromRating).map((e) => e.slug));
+  for (const s of rowSlugs) assert.ok(!excludedSet.has(s), `ratings.csv contains excluded slug ${s}`);
+  assert.equal(new Set(rowSlugs).size, rowSlugs.length, 'no duplicate rows');
+});
+
+await test('11. this file is registered in the geometry group and runs in both the default and full suites', () => {
+  assertTestRegistered({
+    filename: 'test-read-011c-render-key.mjs',
+    group: 'geometry',
+    includedInDefault: true
+  });
+});
+
+console.log('READ-011C render-key tests passed.');
