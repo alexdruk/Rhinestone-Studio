@@ -292,25 +292,9 @@ await test('13. stoneLayoutToSvg() produces well-formed SVG whose circle count a
   }
 });
 
-// READ-009: long-name-autofit.rhs and long-script-name.rhs are a pre-existing, already-tracked
-// exception (docs/specifications/READ-008-RatioFloor.md §4.2), not a regression this milestone
-// introduced. Their text is long enough, at their committed heightMm/stoneSizeMm, that READ-008's
-// MIN_HEIGHT_TO_STONE_RATIO floor (already live in app.js's real computeAutoFitScale() before
-// READ-009) refuses to shrink them enough to fit their canvas -- opening either fixture as a copy
-// in the live app has produced this exact overflow since READ-008 merged. Before READ-009, the
-// Gallery fixture bridge's own auto-fit path had no floor at all, so the committed baseline masked
-// this by silently over-shrinking these two fixtures well past what the live app actually renders.
-// READ-009 closed that gap (the bridge now shares the same floor), which is why their committed
-// geometry starts overflowing here too -- correctly matching live-app behavior, not diverging from
-// it. Fixing the underlying overflow (shorten the text, choose a smaller stone size, or a wider
-// object) is a separate, not-yet-scheduled milestone; this exemption is named, not silent, so a
-// third fixture doing the same thing is still caught.
-const KNOWN_AUTOFIT_FLOOR_OVERFLOW_FILES = new Set(['long-name-autofit.rhs', 'long-script-name.rhs']);
-
 await test('14. no stone lies wildly outside the project canvas (generous manufacturing tolerance, not a tight visual margin)', async () => {
   const TOLERANCE_MM = 50; // generous: catches genuinely broken output (e.g. runaway auto-fit), not tight framing
   for (const file of filesWithGeneration) {
-    if (KNOWN_AUTOFIT_FLOOR_OVERFLOW_FILES.has(file)) continue;
     const project = validateRhsProject(loaded.get(file), file);
     const layout = await generateProjectStoneLayout(project, engine);
     for (const stone of layout.stones) {

@@ -116,6 +116,7 @@ export const GROUPS = {
   gallery: [
     'test-gallery.mjs',
     'test-gallery-integration.mjs',
+    'test-read-009-bridge-autofit-floor.mjs',
   ],
   // Docs/manifest consistency checks (README/ARCHITECTURE/BACKLOG/etc. against the real filesystem
   // and package.json scripts).

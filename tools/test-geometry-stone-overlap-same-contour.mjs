@@ -79,16 +79,20 @@ await test('1. long-script-name.rhs (the confirmed release-blocking script-font 
   // raw sample positions shift slightly -- which corner/cusp-adjacent chords fall under the physical
   // dedupe threshold, and which dropped points have legal RS-3011 backfill room, both shift with
   // them across this fixture's many contours.
-  // READ-009: 363 -> 665. This fixture's Auto Fit was previously shrinking its heightMm well below
-  // READ-008's MIN_HEIGHT_TO_STONE_RATIO floor because the Gallery fixture bridge
+  // READ-009 (first pass): 363 -> 665. This fixture's Auto Fit was previously shrinking its heightMm
+  // well below READ-008's MIN_HEIGHT_TO_STONE_RATIO floor because the Gallery fixture bridge
   // (generateProjectStoneLayout(), which this test calls, is generateTextStonesForLayer() under
   // RS-2001's single-implementation rename) had its own floor-less fit-to-width auto-fit, never
-  // wired to the floor app.js already enforced. Now that it shares the same floor
-  // (src/geometry/TextAutoFit.js), this fixture's text renders larger (matching what the live app
-  // has always produced for the same layer), so its outline has room for more, not fewer, stones.
-  // Re-verified at current committed geometry: still 0 overlapping pairs and still comfortably
-  // above the "not a collapsed skeleton" floor below.
-  assert.equal(layout.stones.length, 665, 'deterministic stone count for this fixture at its committed geometry');
+  // wired to the floor app.js already enforced.
+  // READ-009 (second pass): 665 -> 586. The fixture's text changed from the three-word
+  // "Anastasiya Konstantinovna Volkova" (heightMm 26, floor-clamped to scale 0.923) to the
+  // two-word "Anastasiya Volkova" (heightMm 45, fit-to-width scale 0.678, comfortably above the
+  // floor without clamping) -- see docs/specifications/READ-009-FixtureAutoFitFloor.md for why the
+  // fixture itself moved rather than just its committed geometry. Still the same font/stoneSizeMm,
+  // still a dense multi-word Great Vibes script with plenty of tight cursive loops, so it continues
+  // to serve RC-004A's original purpose: 0 overlapping pairs (asserted above) on a genuinely
+  // collision-prone script outline, not a synthetic worst case.
+  assert.equal(layout.stones.length, 586, 'deterministic stone count for this fixture at its committed geometry');
   assert.ok(layout.stones.length > 300, 'the fix must not collapse a script font down to a sparse skeleton');
 });
 

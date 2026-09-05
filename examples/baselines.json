@@ -63,12 +63,12 @@
       "file": "long-name-autofit.rhs",
       "layerCount": 1,
       "visibleLayerCount": 1,
-      "stoneCount": 842,
+      "stoneCount": 441,
       "bounds": {
-        "minXmm": -102.50087,
-        "minYmm": 34.361719,
-        "maxXmm": 312.50087,
-        "maxYmm": 55.638281
+        "minXmm": 4.96838,
+        "minYmm": 32.822845,
+        "maxXmm": 205.03162,
+        "maxYmm": 57.177155
       },
       "fontIds": [
         "courier-prime-regular"
@@ -309,12 +309,12 @@
       "file": "long-script-name.rhs",
       "layerCount": 1,
       "visibleLayerCount": 1,
-      "stoneCount": 665,
+      "stoneCount": 586,
       "bounds": {
-        "minXmm": -37.181924,
-        "minYmm": 30.553222,
-        "maxXmm": 247.181924,
-        "maxYmm": 59.446778
+        "minXmm": 4.851996,
+        "minYmm": 26.832259,
+        "maxXmm": 205.148004,
+        "maxYmm": 63.167741
       },
       "fontIds": [
         "great-vibes-regular"

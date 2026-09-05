@@ -12,18 +12,26 @@ import { assertTestRegistered } from './lib/test-registration-assertions.mjs';
 // StoneSizes.js's five supportedHeightRangeMm minima, not on READ-007's calibration, which cannot
 // locate a boundary below ratio 20 (docs/specifications/READ-008-RatioFloor.md).
 //
-// This suite proves the behavioural blast radius is *exactly* two committed fixtures. READ-009
-// moved the floor's arithmetic (MIN_HEIGHT_TO_STONE_RATIO, the scale math) out of app.js and into
-// the shared src/geometry/TextAutoFit.js module, so this suite now imports the real shared
-// function directly instead of extracting+`new Function`-evaluating app.js source (the old
+// READ-009 moved the floor's arithmetic (MIN_HEIGHT_TO_STONE_RATIO, the scale math) out of app.js
+// and into the shared src/geometry/TextAutoFit.js module, so this suite now imports the real
+// shared function directly instead of extracting+`new Function`-evaluating app.js source (the old
 // extraction still finds app.js's thin computeAutoFitScale() wrapper, but that wrapper's body
 // calls the shared module's exports, which a bare `new Function` sandbox has no closure over --
-// this is the same MONO-006D lesson tools/test-text-position-workflow.mjs already applied). It
-// drives the real function against every examples/*.rhs fixture using real
-// permanentEngine.generateTextLayout() widths, and asserts a hardcoded, explicitly named list of
-// the fixtures whose auto-fit scale the new floor changes -- with their before/after scales --
-// plus the complementary property that every other fixture's auto-fit scale is byte-identical
-// before and after.
+// this is the same MONO-006D lesson tools/test-text-position-workflow.mjs already applied).
+//
+// This suite originally proved the floor's behavioural blast radius was *exactly* two named
+// fixtures (long-name-autofit.rhs, long-script-name.rhs), asserting their specific before/after
+// scales against a hardcoded list. READ-009 re-authored both fixtures (shorter names, taller text)
+// so auto-fit still genuinely engages for both, but the fit-to-width scale alone now lands above
+// the floor for every fixture in the corpus -- see
+// docs/specifications/READ-009-FixtureAutoFitFloor.md for why the fixtures moved rather than the
+// committed geometry alone. A hardcoded "exactly these two" list would have nothing left to name,
+// so this suite now asserts the underlying invariant directly: no committed fixture's auto-fit
+// scale is floor-clamped. That invariant has teeth -- it fails the day anyone adds or edits a
+// fixture whose auto-fit genuinely needs the floor, which is exactly the case this suite exists to
+// catch. Floor-clamping itself is still exercised directly, against a synthetic in-memory project
+// using the retired long-name-autofit.rhs parameters, by
+// tools/test-read-009-bridge-autofit-floor.mjs.
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const examplesDir = path.join(repoRoot, 'examples');
@@ -65,18 +73,6 @@ function computeAutoFitScale(layer, project, measuredWidthMm) {
     heightMm: layer.height,
     stoneSizeMm: layer.stoneSize
   });
-}
-
-// The pre-READ-008 floor: height / (stoneSize + gap) >= 6. Reproduced here ONLY as an oracle to
-// prove the change is confined to the fixtures named below -- it is not the code under test.
-function preRead008AutoFitScale(layer, project, measuredWidthMm) {
-  if (!layer.autoFit || !(measuredWidthMm > 0)) return { scale: 1 };
-  const maxWidth = project.canvas.width - 10;
-  if (measuredWidthMm <= maxWidth) return { scale: 1 };
-  const fitScale = maxWidth / measuredWidthMm;
-  const spacingMm = (layer.stoneSize || 0) + (layer.gap || 0);
-  const minScale = spacingMm > 0 && layer.height > 0 ? (spacingMm * 6) / layer.height : fitScale;
-  return { scale: Math.min(1, Math.max(fitScale, minScale)) };
 }
 
 await test('0. the extracted floor is expressed against stone diameter alone (not pitch) and its value is 16', () => {
@@ -130,30 +126,16 @@ for (const file of exampleFiles) {
       color: layer.color
     });
     const project = { canvas: { width: app.canvas.width, height: app.canvas.height } };
+    const fit = computeAutoFitScale(layer, project, result.widthMm);
     rows.push({
       file,
       text: layer.text,
       widthMm: result.widthMm,
-      before: preRead008AutoFitScale(layer, project, result.widthMm).scale,
-      after: computeAutoFitScale(layer, project, result.widthMm).scale
+      scale: fit.scale,
+      floored: Boolean(fit.floored)
     });
   }
 }
-
-// The named list -- a list, not a count. Every fixture whose auto-fit scale READ-008's floor moves,
-// with the exact before (pitch basis, ratio 6) and after (diameter basis, ratio 16) scales.
-const FLOOR_CHANGES = {
-  'long-name-autofit.rhs': {
-    text: 'Alexandria Konstantinova',
-    before: 0.46304994675729105, // fit-to-width: (210-10) / 431.9188489289052
-    after: 0.96 // MIN_HEIGHT_TO_STONE_RATIO floor: 1.8 * 16 / 30
-  },
-  'long-script-name.rhs': {
-    text: 'Anastasiya Konstantinovna Volkova',
-    before: 0.6489219393227753, // fit-to-width: (210-10) / 308.20348008070584
-    after: 12 / 13 // MIN_HEIGHT_TO_STONE_RATIO floor: 1.5 * 16 / 26
-  }
-};
 
 // The exact count of autoFit text layers across the current examples/*.rhs set: bottle-front-design
 // (2), business-logo-monogram-bottle (1), long-name-autofit (1), long-script-name (1),
@@ -166,42 +148,15 @@ const EXPECTED_ROW_COUNT = 13;
 await test('1. no examples/*.rhs fixture was silently dropped by the RhsFixtureBridge translation, and the sub-suite measured exactly the expected set of autoFit text layers', () => {
   assert.deepEqual(swallowedFiles, [], `expected every examples/*.rhs fixture to translate cleanly; ${swallowedFiles.length} did not: ${JSON.stringify(swallowedFiles)}`);
   assert.equal(rows.length, EXPECTED_ROW_COUNT, `expected exactly ${EXPECTED_ROW_COUNT} autoFit text layers across the fixture set, measured ${rows.length}: ${JSON.stringify(rows.map((r) => r.file))}`);
-  for (const name of Object.keys(FLOOR_CHANGES)) {
-    assert.ok(rows.some((r) => r.file === name), `named fixture ${name} was not measured`);
-  }
 });
 
-await test('2. READ-008 changes the auto-fit scale of exactly the named fixtures -- long-name-autofit.rhs and long-script-name.rhs -- and no others', () => {
-  const observed = rows
-    .filter((r) => Math.abs(r.before - r.after) > 1e-9)
-    .map((r) => r.file)
-    .sort();
-  assert.deepEqual(observed, Object.keys(FLOOR_CHANGES).sort(),
-    'the floor must move exactly the named fixtures');
+await test('2. no committed examples/*.rhs fixture currently needs the floor to be clamped -- READ-009 re-authored the two fixtures that once did (long-name-autofit.rhs, long-script-name.rhs) so their auto-fit fits within the floor unclamped; this is a live invariant, not a historical snapshot, so it fails the moment any fixture is added or edited into needing the clamp again', () => {
+  const clamped = rows.filter((r) => r.floored);
+  assert.deepEqual(clamped.map((r) => r.file), [],
+    `expected no fixture to have a floor-clamped auto-fit scale, found: ${JSON.stringify(clamped)}`);
 });
 
-await test('3. each named fixture\'s before/after auto-fit scale is exactly as recorded', () => {
-  for (const [file, expected] of Object.entries(FLOOR_CHANGES)) {
-    const row = rows.find((r) => r.file === file);
-    assert.equal(row.text, expected.text, `${file}: text layer identity`);
-    assert.ok(Math.abs(row.before - expected.before) < 1e-9,
-      `${file}: before (pitch basis, ratio 6) expected ${expected.before}, got ${row.before}`);
-    assert.ok(Math.abs(row.after - expected.after) < 1e-9,
-      `${file}: after (diameter basis, ratio 16) expected ${expected.after}, got ${row.after}`);
-    assert.ok(expected.before < expected.after,
-      `${file}: the floor raises the scale (less shrink), so after must exceed before`);
-  }
-});
-
-await test('4. every fixture NOT on the named list is byte-unchanged: identical auto-fit scale before and after', () => {
-  for (const row of rows) {
-    if (FLOOR_CHANGES[row.file]) continue;
-    assert.equal(row.after, row.before,
-      `${row.file} ("${row.text}") auto-fit scale changed (${row.before} -> ${row.after}) but is not on the named list`);
-  }
-});
-
-await test('5. this file is registered in test:integration and the default suite (via tools/test-groups.mjs + tools/run-tests.mjs)', () => {
+await test('3. this file is registered in test:integration and the default suite (via tools/test-groups.mjs + tools/run-tests.mjs)', () => {
   assertTestRegistered({
     filename: 'test-read-008-ratio-floor.mjs',
     group: 'integration',
