@@ -766,6 +766,14 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
                later replace FONT-LIB-004's font-blind height rule here with font- and mode-aware
                readability floors. -->
           <p class="validation-message" id="heightBelowReadableWarning" role="alert"></p>
+          <!-- READ-010: fix-to-floor affordance for the FONT-LIB-004 height message above. Shown only
+               when `below` is truthy and `stroke` is not (updateTextHeightReadabilityUI()) -- READ-003's
+               stroke message means no height increase alone can fix it, so this stays hidden then.
+               Writes the ratio floor (stone diameter × MIN_HEIGHT_TO_STONE_RATIO), not
+               applyStoneSizeHeightAutoSet()'s catalog supportedHeightRangeMm midpoint -- the minimum
+               change that clears the warning on screen, not a jump to the catalog's own recommended
+               range. See docs/specifications/READ-010-WarnOnlyFloor.md. -->
+          <p class="hint" id="heightFixToFloorHint" style="display:none"><button type="button" class="btn sm" id="heightFixToFloorBtn"></button></p>
           <p class="hint" id="autoFitOnHint" style="display:none">Auto Fit shrinks text to stay within the printable area, but never below the minimum height needed for reliable readability at your selected stone size -- very long text may extend past the printable area instead of shrinking further.</p>
           <p class="hint" id="heightModeToggleHint" style="display:none"><button type="button" class="btn sm" id="heightModeToggleBtn"></button></p>
         </div>
