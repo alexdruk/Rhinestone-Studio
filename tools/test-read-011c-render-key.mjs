@@ -96,7 +96,61 @@ await test('5. presentation indices form a complete 0..n-1 permutation', () => {
   assert.deepEqual(indices, [...Array(keyEntries.length).keys()], 'indices are exactly 0..n-1 with no gaps or repeats');
 });
 
-await test('6. this file is registered in the geometry group and runs in both the default and full suites', () => {
+const SPEC_FIELDS = ['fontId', 'mode', 'ratio', 'stoneSizeId', 'text', 'letterSpacingMm'];
+const specSignature = (e) => SPEC_FIELDS.map((f) => e[f]).join('|');
+
+await test('6. separationDelta is exactly separationRatioAfter - separationRatioBefore (4dp), null for none entries', () => {
+  for (const e of keyEntries) {
+    if (e.trackingTarget === 'separation'
+        && typeof e.separationRatioBefore === 'number' && typeof e.separationRatioAfter === 'number') {
+      const expected = Number((e.separationRatioAfter - e.separationRatioBefore).toFixed(4));
+      assert.strictEqual(e.separationDelta, expected, `entry ${e.slug} separationDelta`);
+    } else {
+      assert.strictEqual(e.separationDelta, null, `entry ${e.slug} (${e.trackingTarget}) separationDelta must be null`);
+    }
+  }
+});
+
+await test('7. identicalToUntracked agrees with letterSpacingMm', () => {
+  for (const e of keyEntries) {
+    if (e.trackingTarget === 'separation') {
+      assert.strictEqual(
+        e.identicalToUntracked, e.letterSpacingMm === 0,
+        `entry ${e.slug}: identicalToUntracked=${e.identicalToUntracked} but letterSpacingMm=${e.letterSpacingMm}`
+      );
+    } else {
+      assert.strictEqual(e.identicalToUntracked, null, `entry ${e.slug} (${e.trackingTarget}) identicalToUntracked must be null`);
+    }
+  }
+  // The design note says roughly half the separation entries collapse to zero spacing.
+  const sep = keyEntries.filter((e) => e.trackingTarget === 'separation');
+  const collapsed = sep.filter((e) => e.identicalToUntracked === true).length;
+  assert.ok(collapsed > 0 && collapsed < sep.length, `expected some but not all separation entries collapsed (got ${collapsed}/${sep.length})`);
+});
+
+await test('8. every duplicateOf resolves to an earlier-presentation entry with an identical spec; no entry is its own duplicate', () => {
+  for (const e of keyEntries) {
+    if (e.duplicateOf === null) continue;
+    assert.notEqual(e.duplicateOf, e.slug, `entry ${e.slug} is marked as its own duplicate`);
+    const target = keyBySlug.get(e.duplicateOf);
+    assert.ok(target, `entry ${e.slug} duplicateOf ${e.duplicateOf} does not resolve`);
+    assert.equal(specSignature(target), specSignature(e), `entry ${e.slug} duplicateOf ${e.duplicateOf}: specs differ`);
+    assert.ok(
+      target.presentationIndex < e.presentationIndex,
+      `entry ${e.slug} (pi ${e.presentationIndex}) duplicateOf ${e.duplicateOf} (pi ${target.presentationIndex}) is not earlier`
+    );
+  }
+  // duplicateOf must name the EARLIEST same-spec entry, and it is distinct from repeatOf.
+  const earliestBySpec = new Map();
+  for (const e of [...keyEntries].sort((a, b) => a.presentationIndex - b.presentationIndex)) {
+    const sig = specSignature(e);
+    const expected = earliestBySpec.has(sig) ? earliestBySpec.get(sig) : null;
+    assert.strictEqual(e.duplicateOf, expected, `entry ${e.slug} duplicateOf should be ${expected}`);
+    if (!earliestBySpec.has(sig)) earliestBySpec.set(sig, e.slug);
+  }
+});
+
+await test('9. this file is registered in the geometry group and runs in both the default and full suites', () => {
   assertTestRegistered({
     filename: 'test-read-011c-render-key.mjs',
     group: 'geometry',

@@ -29,7 +29,10 @@
       "separationRatioBefore": 0.5,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 0
+      "presentationIndex": 0,
+      "separationDelta": 0.5,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "111a00be",
@@ -49,7 +52,10 @@
       "separationRatioBefore": 0.6,
       "separationRatioAfter": 1.3,
       "separationAchieved": true,
-      "presentationIndex": 1
+      "presentationIndex": 1,
+      "separationDelta": 0.7,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "b02d02b4",
@@ -69,7 +75,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 2
+      "presentationIndex": 2,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "e081b242",
@@ -89,7 +98,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 3
+      "presentationIndex": 3,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "abea0f8d",
@@ -109,7 +121,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 4
+      "presentationIndex": 4,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "e63a41af",
@@ -129,7 +144,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 5
+      "presentationIndex": 5,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "24e680ff",
@@ -149,7 +167,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 6
+      "presentationIndex": 6,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "369ed7b3",
@@ -169,7 +190,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 7
+      "presentationIndex": 7,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "6deefda9",
@@ -189,7 +213,10 @@
       "separationRatioBefore": 2,
       "separationRatioAfter": 2,
       "separationAchieved": true,
-      "presentationIndex": 8
+      "presentationIndex": 8,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "196910b7",
@@ -209,7 +236,10 @@
       "separationRatioBefore": 0.25,
       "separationRatioAfter": 1.25,
       "separationAchieved": true,
-      "presentationIndex": 9
+      "presentationIndex": 9,
+      "separationDelta": 1,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "46439e3b",
@@ -229,7 +259,10 @@
       "separationRatioBefore": 1.125,
       "separationRatioAfter": 1.125,
       "separationAchieved": true,
-      "presentationIndex": 10
+      "presentationIndex": 10,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "a2173b1b",
@@ -249,7 +282,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 11
+      "presentationIndex": 11,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "3cd2b867",
@@ -269,7 +305,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 12
+      "presentationIndex": 12,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "fd523a17",
@@ -289,7 +328,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 13
+      "presentationIndex": 13,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "496fdb73",
@@ -309,7 +351,10 @@
       "separationRatioBefore": 1.125,
       "separationRatioAfter": 1.125,
       "separationAchieved": true,
-      "presentationIndex": 14
+      "presentationIndex": 14,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "fea9f594",
@@ -329,7 +374,10 @@
       "separationRatioBefore": 1.4,
       "separationRatioAfter": 1.4,
       "separationAchieved": true,
-      "presentationIndex": 15
+      "presentationIndex": 15,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "60bbb91f",
@@ -349,7 +397,10 @@
       "separationRatioBefore": 0.1,
       "separationRatioAfter": 0.9,
       "separationAchieved": false,
-      "presentationIndex": 16
+      "presentationIndex": 16,
+      "separationDelta": 0.8,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "37ab540f",
@@ -369,7 +420,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 17
+      "presentationIndex": 17,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "22984c2d",
@@ -389,7 +443,10 @@
       "separationRatioBefore": 0.5,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 18
+      "presentationIndex": 18,
+      "separationDelta": 0.5,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "492f2264",
@@ -409,7 +466,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 19
+      "presentationIndex": 19,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "bf0a5cc0",
@@ -429,7 +489,10 @@
       "separationRatioBefore": 3.375,
       "separationRatioAfter": 3.375,
       "separationAchieved": true,
-      "presentationIndex": 20
+      "presentationIndex": 20,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "d966692a",
@@ -449,7 +512,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 21
+      "presentationIndex": 21,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "5a950a6c",
@@ -469,7 +535,10 @@
       "separationRatioBefore": 0.5,
       "separationRatioAfter": 1.2,
       "separationAchieved": true,
-      "presentationIndex": 22
+      "presentationIndex": 22,
+      "separationDelta": 0.7,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "825be43d",
@@ -489,7 +558,10 @@
       "separationRatioBefore": 0.25,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 23
+      "presentationIndex": 23,
+      "separationDelta": 0.75,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "a64ffc5c",
@@ -509,7 +581,10 @@
       "separationRatioBefore": 0.375,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 24
+      "presentationIndex": 24,
+      "separationDelta": 0.625,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "e5c12224",
@@ -529,7 +604,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 25
+      "presentationIndex": 25,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "2dd3acbb",
@@ -549,7 +627,10 @@
       "separationRatioBefore": 0.3,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 26
+      "presentationIndex": 26,
+      "separationDelta": 0.7,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "797e9a4b",
@@ -569,7 +650,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 27
+      "presentationIndex": 27,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "b12fa951",
@@ -589,7 +673,10 @@
       "separationRatioBefore": 0.5,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 28
+      "presentationIndex": 28,
+      "separationDelta": 0.5,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "e11f74fc",
@@ -609,7 +696,10 @@
       "separationRatioBefore": 0.5,
       "separationRatioAfter": 1.375,
       "separationAchieved": true,
-      "presentationIndex": 29
+      "presentationIndex": 29,
+      "separationDelta": 0.875,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "ac96316d",
@@ -629,7 +719,10 @@
       "separationRatioBefore": 2,
       "separationRatioAfter": 2,
       "separationAchieved": true,
-      "presentationIndex": 30
+      "presentationIndex": 30,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "1b7ebcb0",
@@ -649,7 +742,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 31
+      "presentationIndex": 31,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "e5c08736",
@@ -669,7 +765,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 32
+      "presentationIndex": 32,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "a9606325",
@@ -689,7 +788,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 33
+      "presentationIndex": 33,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "9f709566",
@@ -709,7 +811,10 @@
       "separationRatioBefore": 0.6,
       "separationRatioAfter": 1.3,
       "separationAchieved": true,
-      "presentationIndex": 34
+      "presentationIndex": 34,
+      "separationDelta": 0.7,
+      "identicalToUntracked": false,
+      "duplicateOf": "111a00be"
     },
     {
       "slug": "7cd5605d",
@@ -729,7 +834,10 @@
       "separationRatioBefore": 1.2,
       "separationRatioAfter": 1.2,
       "separationAchieved": true,
-      "presentationIndex": 35
+      "presentationIndex": 35,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "7098c1a0",
@@ -749,7 +857,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 36
+      "presentationIndex": 36,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "7a4886f4",
@@ -769,7 +880,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 37
+      "presentationIndex": 37,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "3bf95b5a",
@@ -789,7 +903,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 38
+      "presentationIndex": 38,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "d901606b",
@@ -809,7 +926,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 39
+      "presentationIndex": 39,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "57171783",
@@ -829,7 +949,10 @@
       "separationRatioBefore": 1,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 40
+      "presentationIndex": 40,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "9afe431e",
@@ -849,7 +972,10 @@
       "separationRatioBefore": 1.2,
       "separationRatioAfter": 1.2,
       "separationAchieved": true,
-      "presentationIndex": 41
+      "presentationIndex": 41,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": "3bf95b5a"
     },
     {
       "slug": "2c0898e4",
@@ -869,7 +995,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 42
+      "presentationIndex": 42,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "ced67b56",
@@ -889,7 +1018,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 43
+      "presentationIndex": 43,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "614fee96",
@@ -909,7 +1041,10 @@
       "separationRatioBefore": 0.3,
       "separationRatioAfter": 0.8,
       "separationAchieved": false,
-      "presentationIndex": 44
+      "presentationIndex": 44,
+      "separationDelta": 0.5,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "849cd728",
@@ -929,7 +1064,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 45
+      "presentationIndex": 45,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "2a6428aa",
@@ -949,7 +1087,10 @@
       "separationRatioBefore": 0.375,
       "separationRatioAfter": 1.25,
       "separationAchieved": true,
-      "presentationIndex": 46
+      "presentationIndex": 46,
+      "separationDelta": 0.875,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "1e45583d",
@@ -969,7 +1110,10 @@
       "separationRatioBefore": 3.125,
       "separationRatioAfter": 3.125,
       "separationAchieved": true,
-      "presentationIndex": 47
+      "presentationIndex": 47,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "1619d7f4",
@@ -989,7 +1133,10 @@
       "separationRatioBefore": 1,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 48
+      "presentationIndex": 48,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "315f622b",
@@ -1009,7 +1156,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 49
+      "presentationIndex": 49,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "e0e41947",
@@ -1029,7 +1179,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 50
+      "presentationIndex": 50,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "0f320099",
@@ -1049,7 +1202,10 @@
       "separationRatioBefore": 1,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 51
+      "presentationIndex": 51,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "14303d54",
@@ -1069,7 +1225,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 52
+      "presentationIndex": 52,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "d2a8395f",
@@ -1089,7 +1248,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 53
+      "presentationIndex": 53,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "d5f09d4f",
@@ -1109,7 +1271,10 @@
       "separationRatioBefore": 1.125,
       "separationRatioAfter": 1.125,
       "separationAchieved": true,
-      "presentationIndex": 54
+      "presentationIndex": 54,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": "46439e3b"
     },
     {
       "slug": "9b84f150",
@@ -1129,7 +1294,10 @@
       "separationRatioBefore": 0.25,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 55
+      "presentationIndex": 55,
+      "separationDelta": 0.75,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "703eab4a",
@@ -1149,7 +1317,10 @@
       "separationRatioBefore": 0.25,
       "separationRatioAfter": 1.25,
       "separationAchieved": true,
-      "presentationIndex": 56
+      "presentationIndex": 56,
+      "separationDelta": 1,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "1191f008",
@@ -1169,7 +1340,10 @@
       "separationRatioBefore": 0.8,
       "separationRatioAfter": 0.8,
       "separationAchieved": false,
-      "presentationIndex": 57
+      "presentationIndex": 57,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "4908417d",
@@ -1189,7 +1363,10 @@
       "separationRatioBefore": 0.75,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 58
+      "presentationIndex": 58,
+      "separationDelta": 0.25,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "7e6a3886",
@@ -1209,7 +1386,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 59
+      "presentationIndex": 59,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "e869b79b",
@@ -1229,7 +1409,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 60
+      "presentationIndex": 60,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "fe95d67e",
@@ -1249,7 +1432,10 @@
       "separationRatioBefore": 0.2,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 61
+      "presentationIndex": 61,
+      "separationDelta": 0.8,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "0b0b3fd4",
@@ -1269,7 +1455,10 @@
       "separationRatioBefore": 0.875,
       "separationRatioAfter": 1.125,
       "separationAchieved": true,
-      "presentationIndex": 62
+      "presentationIndex": 62,
+      "separationDelta": 0.25,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "549af2ba",
@@ -1289,7 +1478,10 @@
       "separationRatioBefore": 0.3,
       "separationRatioAfter": 0.9,
       "separationAchieved": false,
-      "presentationIndex": 63
+      "presentationIndex": 63,
+      "separationDelta": 0.6,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "42e785f5",
@@ -1309,7 +1501,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 64
+      "presentationIndex": 64,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "ce77af0e",
@@ -1329,7 +1524,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 65
+      "presentationIndex": 65,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "34c9c2a4",
@@ -1349,7 +1547,10 @@
       "separationRatioBefore": 0.5,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 66
+      "presentationIndex": 66,
+      "separationDelta": 0.5,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "db9e6413",
@@ -1369,7 +1570,10 @@
       "separationRatioBefore": 2.5,
       "separationRatioAfter": 2.5,
       "separationAchieved": true,
-      "presentationIndex": 67
+      "presentationIndex": 67,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "b1a26343",
@@ -1389,7 +1593,10 @@
       "separationRatioBefore": 0.25,
       "separationRatioAfter": 1.25,
       "separationAchieved": true,
-      "presentationIndex": 68
+      "presentationIndex": 68,
+      "separationDelta": 1,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "e64d769d",
@@ -1409,7 +1616,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 69
+      "presentationIndex": 69,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "185ee896",
@@ -1429,7 +1639,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 70
+      "presentationIndex": 70,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "b67cfe0e",
@@ -1449,7 +1662,10 @@
       "separationRatioBefore": 0.1,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 71
+      "presentationIndex": 71,
+      "separationDelta": 0.9,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "6547773b",
@@ -1469,7 +1685,10 @@
       "separationRatioBefore": 1,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 72
+      "presentationIndex": 72,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": "7e6a3886"
     },
     {
       "slug": "4052d5ad",
@@ -1489,7 +1708,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 73
+      "presentationIndex": 73,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "9c4a1048",
@@ -1509,7 +1731,10 @@
       "separationRatioBefore": 1.8,
       "separationRatioAfter": 1.8,
       "separationAchieved": true,
-      "presentationIndex": 74
+      "presentationIndex": 74,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "2c4d1173",
@@ -1529,7 +1754,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 75
+      "presentationIndex": 75,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "4845392d",
@@ -1549,7 +1777,10 @@
       "separationRatioBefore": 0.875,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 76
+      "presentationIndex": 76,
+      "separationDelta": 0.125,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "20c16d25",
@@ -1569,7 +1800,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 77
+      "presentationIndex": 77,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "0335db6f",
@@ -1589,7 +1823,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 78
+      "presentationIndex": 78,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "64c9c54f",
@@ -1609,7 +1846,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 79
+      "presentationIndex": 79,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "f0f08a55",
@@ -1629,7 +1869,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 80
+      "presentationIndex": 80,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "a9adfc51",
@@ -1649,7 +1892,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 81
+      "presentationIndex": 81,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "ee9577a4",
@@ -1669,7 +1915,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 82
+      "presentationIndex": 82,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "a9a0afaf",
@@ -1689,7 +1938,10 @@
       "separationRatioBefore": 1.4,
       "separationRatioAfter": 1.4,
       "separationAchieved": true,
-      "presentationIndex": 83
+      "presentationIndex": 83,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": "fea9f594"
     },
     {
       "slug": "c73e1160",
@@ -1709,7 +1961,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 84
+      "presentationIndex": 84,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "fb621b3d",
@@ -1729,7 +1984,10 @@
       "separationRatioBefore": 0.375,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 85
+      "presentationIndex": 85,
+      "separationDelta": 0.625,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "1195a2d9",
@@ -1749,7 +2007,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 86
+      "presentationIndex": 86,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": "fea9f594"
     },
     {
       "slug": "22f3e71f",
@@ -1769,7 +2030,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 87
+      "presentationIndex": 87,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "60137352",
@@ -1789,7 +2053,10 @@
       "separationRatioBefore": 1.125,
       "separationRatioAfter": 1.125,
       "separationAchieved": true,
-      "presentationIndex": 88
+      "presentationIndex": 88,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "d29601c0",
@@ -1809,7 +2076,10 @@
       "separationRatioBefore": 1,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 89
+      "presentationIndex": 89,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "012f6961",
@@ -1829,7 +2099,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 90
+      "presentationIndex": 90,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "30fadadf",
@@ -1849,7 +2122,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 91
+      "presentationIndex": 91,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "dc04ba8c",
@@ -1869,7 +2145,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 92
+      "presentationIndex": 92,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "0a031013",
@@ -1889,7 +2168,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 93
+      "presentationIndex": 93,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": "797e9a4b"
     },
     {
       "slug": "51695ce6",
@@ -1909,7 +2191,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 94
+      "presentationIndex": 94,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "55bd524d",
@@ -1929,7 +2214,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 95
+      "presentationIndex": 95,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "dc1ad7e7",
@@ -1949,7 +2237,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 96
+      "presentationIndex": 96,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": "849cd728"
     },
     {
       "slug": "101f3944",
@@ -1969,7 +2260,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 97
+      "presentationIndex": 97,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "6e2425c7",
@@ -1989,7 +2283,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 98
+      "presentationIndex": 98,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "212a2249",
@@ -2009,7 +2306,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 99
+      "presentationIndex": 99,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "f2a42979",
@@ -2029,7 +2329,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 100
+      "presentationIndex": 100,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "dd901001",
@@ -2049,7 +2352,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 101
+      "presentationIndex": 101,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "0b0304df",
@@ -2069,7 +2375,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 102
+      "presentationIndex": 102,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "be012103",
@@ -2089,7 +2398,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 103
+      "presentationIndex": 103,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": "ac96316d"
     },
     {
       "slug": "a2a84b3f",
@@ -2109,7 +2421,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 104
+      "presentationIndex": 104,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": "ee9577a4"
     },
     {
       "slug": "9557ebd6",
@@ -2129,7 +2444,10 @@
       "separationRatioBefore": 2.5,
       "separationRatioAfter": 2.5,
       "separationAchieved": true,
-      "presentationIndex": 105
+      "presentationIndex": 105,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "bff2d558",
@@ -2149,7 +2467,10 @@
       "separationRatioBefore": 2,
       "separationRatioAfter": 2,
       "separationAchieved": true,
-      "presentationIndex": 106
+      "presentationIndex": 106,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "e5598083",
@@ -2169,7 +2490,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 107
+      "presentationIndex": 107,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "77ccb85d",
@@ -2189,7 +2513,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 108
+      "presentationIndex": 108,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "025ce6a1",
@@ -2209,7 +2536,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 109
+      "presentationIndex": 109,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "1ce8c131",
@@ -2229,7 +2559,10 @@
       "separationRatioBefore": 1.25,
       "separationRatioAfter": 1.25,
       "separationAchieved": true,
-      "presentationIndex": 110
+      "presentationIndex": 110,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "348c42c4",
@@ -2249,7 +2582,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 111
+      "presentationIndex": 111,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "48a08595",
@@ -2269,7 +2605,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 112
+      "presentationIndex": 112,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "40cbf7e4",
@@ -2289,7 +2628,10 @@
       "separationRatioBefore": 1.4,
       "separationRatioAfter": 1.4,
       "separationAchieved": true,
-      "presentationIndex": 113
+      "presentationIndex": 113,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "aabfe322",
@@ -2309,7 +2651,10 @@
       "separationRatioBefore": 0.5,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 114
+      "presentationIndex": 114,
+      "separationDelta": 0.5,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "0837902b",
@@ -2329,7 +2674,10 @@
       "separationRatioBefore": 1.5,
       "separationRatioAfter": 1.5,
       "separationAchieved": true,
-      "presentationIndex": 115
+      "presentationIndex": 115,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "79b83bd9",
@@ -2349,7 +2697,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 116
+      "presentationIndex": 116,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "b3981ef7",
@@ -2369,7 +2720,10 @@
       "separationRatioBefore": 3.25,
       "separationRatioAfter": 3.25,
       "separationAchieved": true,
-      "presentationIndex": 117
+      "presentationIndex": 117,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "771ec772",
@@ -2389,7 +2743,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 118
+      "presentationIndex": 118,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "0649e9ba",
@@ -2409,7 +2766,10 @@
       "separationRatioBefore": 3,
       "separationRatioAfter": 3,
       "separationAchieved": true,
-      "presentationIndex": 119
+      "presentationIndex": 119,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "7e736d99",
@@ -2429,7 +2789,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 120
+      "presentationIndex": 120,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "1d0f509b",
@@ -2449,7 +2812,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 121
+      "presentationIndex": 121,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "37d2cce7",
@@ -2469,7 +2835,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 122
+      "presentationIndex": 122,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "b20906f1",
@@ -2489,7 +2858,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 123
+      "presentationIndex": 123,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "20683b08",
@@ -2509,7 +2881,10 @@
       "separationRatioBefore": 1.375,
       "separationRatioAfter": 1.375,
       "separationAchieved": true,
-      "presentationIndex": 124
+      "presentationIndex": 124,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": "e0e41947"
     },
     {
       "slug": "4242ebe8",
@@ -2529,7 +2904,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 125
+      "presentationIndex": 125,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": "3cd2b867"
     },
     {
       "slug": "b599816c",
@@ -2549,7 +2927,10 @@
       "separationRatioBefore": 0.25,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 126
+      "presentationIndex": 126,
+      "separationDelta": 0.75,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "49833813",
@@ -2569,7 +2950,10 @@
       "separationRatioBefore": 0.375,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 127
+      "presentationIndex": 127,
+      "separationDelta": 0.625,
+      "identicalToUntracked": false,
+      "duplicateOf": "a64ffc5c"
     },
     {
       "slug": "29c3dd0e",
@@ -2589,7 +2973,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 128
+      "presentationIndex": 128,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "e977e4b3",
@@ -2609,7 +2996,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 129
+      "presentationIndex": 129,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "66e462c8",
@@ -2629,7 +3019,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 130
+      "presentationIndex": 130,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "aa479c53",
@@ -2649,7 +3042,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 131
+      "presentationIndex": 131,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "13cfbf0e",
@@ -2669,7 +3065,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 132
+      "presentationIndex": 132,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "9f8aa133",
@@ -2689,7 +3088,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 133
+      "presentationIndex": 133,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "bc9ae6d3",
@@ -2709,7 +3111,10 @@
       "separationRatioBefore": 1,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 134
+      "presentationIndex": 134,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "3a212cdd",
@@ -2729,7 +3134,10 @@
       "separationRatioBefore": 0.4,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 135
+      "presentationIndex": 135,
+      "separationDelta": 0.6,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "53003dc9",
@@ -2749,7 +3157,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 136
+      "presentationIndex": 136,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": "1619d7f4"
     },
     {
       "slug": "fa3d9880",
@@ -2769,7 +3180,10 @@
       "separationRatioBefore": 3,
       "separationRatioAfter": 3,
       "separationAchieved": true,
-      "presentationIndex": 137
+      "presentationIndex": 137,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": "0649e9ba"
     },
     {
       "slug": "d00a1a02",
@@ -2789,7 +3203,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 138
+      "presentationIndex": 138,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "787051cb",
@@ -2809,7 +3226,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 139
+      "presentationIndex": 139,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "b7c73f2a",
@@ -2829,7 +3249,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 140
+      "presentationIndex": 140,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "86130e4a",
@@ -2849,7 +3272,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 141
+      "presentationIndex": 141,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": "9f8aa133"
     },
     {
       "slug": "7aa85667",
@@ -2869,7 +3295,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 142
+      "presentationIndex": 142,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "8bc6397e",
@@ -2889,7 +3318,10 @@
       "separationRatioBefore": 0.25,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 143
+      "presentationIndex": 143,
+      "separationDelta": 0.75,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "30e61701",
@@ -2909,7 +3341,10 @@
       "separationRatioBefore": 0.5,
       "separationRatioAfter": 1.75,
       "separationAchieved": true,
-      "presentationIndex": 144
+      "presentationIndex": 144,
+      "separationDelta": 1.25,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "0533367c",
@@ -2929,7 +3364,10 @@
       "separationRatioBefore": 0.25,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 145
+      "presentationIndex": 145,
+      "separationDelta": 0.75,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "f55191b6",
@@ -2949,7 +3387,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 146
+      "presentationIndex": 146,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": "22f3e71f"
     },
     {
       "slug": "f5f6731f",
@@ -2969,7 +3410,10 @@
       "separationRatioBefore": 0.6,
       "separationRatioAfter": 0.8,
       "separationAchieved": false,
-      "presentationIndex": 147
+      "presentationIndex": 147,
+      "separationDelta": 0.2,
+      "identicalToUntracked": false,
+      "duplicateOf": null
     },
     {
       "slug": "95b6faa7",
@@ -2989,7 +3433,10 @@
       "separationRatioBefore": 2.4,
       "separationRatioAfter": 2.4,
       "separationAchieved": true,
-      "presentationIndex": 148
+      "presentationIndex": 148,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "1eddf88c",
@@ -3009,7 +3456,10 @@
       "separationRatioBefore": 0.25,
       "separationRatioAfter": 1.25,
       "separationAchieved": true,
-      "presentationIndex": 149
+      "presentationIndex": 149,
+      "separationDelta": 1,
+      "identicalToUntracked": false,
+      "duplicateOf": "b1a26343"
     },
     {
       "slug": "bedad78b",
@@ -3029,7 +3479,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 150
+      "presentationIndex": 150,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "a1fd14be",
@@ -3049,7 +3502,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 151
+      "presentationIndex": 151,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "58a4e85b",
@@ -3069,7 +3525,10 @@
       "separationRatioBefore": 2,
       "separationRatioAfter": 2,
       "separationAchieved": true,
-      "presentationIndex": 152
+      "presentationIndex": 152,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": null
     },
     {
       "slug": "ef0ab067",
@@ -3089,7 +3548,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 153
+      "presentationIndex": 153,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "14cb9202",
@@ -3109,7 +3571,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 154
+      "presentationIndex": 154,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "961ce5b6",
@@ -3129,7 +3594,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 155
+      "presentationIndex": 155,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": null
     },
     {
       "slug": "e770929f",
@@ -3149,7 +3617,10 @@
       "separationRatioBefore": 1,
       "separationRatioAfter": 1,
       "separationAchieved": true,
-      "presentationIndex": 156
+      "presentationIndex": 156,
+      "separationDelta": 0,
+      "identicalToUntracked": true,
+      "duplicateOf": "d29601c0"
     },
     {
       "slug": "ebd38fcf",
@@ -3169,7 +3640,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 157
+      "presentationIndex": 157,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": "e5c08736"
     },
     {
       "slug": "d0d643d8",
@@ -3189,7 +3663,10 @@
       "separationRatioBefore": null,
       "separationRatioAfter": null,
       "separationAchieved": null,
-      "presentationIndex": 158
+      "presentationIndex": 158,
+      "separationDelta": null,
+      "identicalToUntracked": null,
+      "duplicateOf": "1b7ebcb0"
     }
   ]
 }

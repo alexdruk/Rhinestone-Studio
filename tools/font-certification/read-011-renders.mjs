@@ -111,9 +111,62 @@ const PLAN_FIELDS = [
   'stoneDiameterMm', 'heightMm', 'text', 'trackingTarget', 'block', 'repeatOf'
 ];
 
+// The full render spec — two entries with the same tuple render byte-identically.
+const SPEC_FIELDS = ['fontId', 'mode', 'ratio', 'stoneSizeId', 'text', 'letterSpacingMm'];
+const specSignature = (e) => SPEC_FIELDS.map((f) => e[f]).join('|');
+
+/**
+ * Three fields derived purely from values already on each key entry — no geometry, no rendering.
+ * Mutates `entries` in place (appending the fields, so they serialise after presentationIndex) and
+ * returns it. Safe to re-run: recomputes from the same inputs every time.
+ *
+ *   separationDelta       separationRatioAfter - separationRatioBefore (4dp); null unless both are
+ *                         finite numbers, i.e. null for every trackingTarget 'none' entry. A raw
+ *                         measurement — deliberately NOT bucketed into pass/fail categories.
+ *   identicalToUntracked  true when trackingTarget is 'separation' and the resolved letterSpacingMm
+ *                         is 0 (the solve collapsed to the untracked spec); false for other
+ *                         separation entries; null for 'none' entries (the N/A convention the key
+ *                         already uses for the separation numbers).
+ *   duplicateOf           slug of the earliest-by-presentationIndex entry sharing this entry's full
+ *                         render spec (SPEC_FIELDS); null if this entry is that earliest one. This
+ *                         is spec-collision detection across the WHOLE set — mostly a separation arm
+ *                         that collapsed to letterSpacingMm 0 colliding with its untracked twin —
+ *                         and is independent of repeatOf, which marks the deliberate repeats block
+ *                         and is left untouched.
+ */
+export function deriveKeyFacts(entries) {
+  const earliestBySpec = new Map();
+  for (const e of [...entries].sort((a, b) => a.presentationIndex - b.presentationIndex)) {
+    const before = e.separationRatioBefore;
+    const after = e.separationRatioAfter;
+    e.separationDelta = (Number.isFinite(before) && Number.isFinite(after))
+      ? Number((after - before).toFixed(4))
+      : null;
+
+    e.identicalToUntracked = e.trackingTarget === 'separation'
+      ? e.letterSpacingMm === 0
+      : null;
+
+    const sig = specSignature(e);
+    e.duplicateOf = earliestBySpec.has(sig) ? earliestBySpec.get(sig) : null;
+    if (!earliestBySpec.has(sig)) earliestBySpec.set(sig, e.slug);
+  }
+  return entries;
+}
+
 async function run() {
   const args = process.argv.slice(2);
   const channel = args.includes('--channel') ? args[args.indexOf('--channel') + 1] : undefined;
+
+  // --derive-only: recompute the three derived key fields (deriveKeyFacts) from the existing
+  // render-key.json and rewrite it. No engine, no rendering — the renders are unchanged.
+  if (args.includes('--derive-only')) {
+    const key = JSON.parse(await readFile(KEY_FILE, 'utf8'));
+    deriveKeyFacts(key.entries);
+    await writeFile(KEY_FILE, JSON.stringify(key, null, 2) + '\n', 'utf8');
+    console.log(`derived fields written for ${key.entries.length} entries -> ${path.relative(repoRoot, KEY_FILE)}`);
+    return;
+  }
 
   const plan = JSON.parse(await readFile(PLAN_FILE, 'utf8'));
   const entries = plan.entries;
@@ -272,6 +325,8 @@ async function run() {
       };
     })
     .sort((a, b) => a.presentationIndex - b.presentationIndex);
+
+  deriveKeyFacts(keyEntries);
 
   const key = {
     meta: {
