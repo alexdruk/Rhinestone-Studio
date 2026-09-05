@@ -177,6 +177,11 @@ export const GROUPS = {
     // READ-011 rating pass, enumerated by tools/font-certification/read-011-plan.mjs from the
     // manifest and StemRegime.js. Grouped with test-read-011-stem-regime.mjs.
     'test-read-011b-render-plan.mjs',
+    // READ-011C: docs/data/read-011/render-key.json -- the key produced alongside the (gitignored)
+    // rating-pass renders. Carries the READ-011B design through unchanged and adds the resolved
+    // letter spacing + separation numbers + seeded presentation index. Grouped with the other
+    // READ-011 design/key tests.
+    'test-read-011c-render-key.mjs',
     'test-s200-mixed-stone-sizes.mjs',
     'test-rs3011-step10a-region-data-model.mjs',
     'test-rs3011-step10b-paint-target-selection.mjs',
