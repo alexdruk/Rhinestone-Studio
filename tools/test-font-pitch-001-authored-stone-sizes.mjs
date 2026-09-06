@@ -28,6 +28,24 @@ import * as rsModern from '../src/text/rhinestoneFont/families/rsModern.js';
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const manifest = JSON.parse(await readFile(path.join(repoRoot, 'assets/fonts/manifest.json'), 'utf8'));
 const fontManager = new FontManager(manifest);
+const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
+
+// Slice a function's full source (signature through its balanced closing brace) out of app.js --
+// same technique as test-font-portfolio-001-stone-size-gating.mjs.
+function sliceBalanced(source, startMarker) {
+  const start = source.indexOf(startMarker);
+  assert.ok(start !== -1, `expected to find "${startMarker}" in app.js`);
+  const braceStart = source.indexOf('{', start);
+  let depth = 0;
+  for (let i = braceStart; i < source.length; i += 1) {
+    if (source[i] === '{') depth += 1;
+    else if (source[i] === '}') {
+      depth -= 1;
+      if (depth === 0) return source.slice(start, i + 1);
+    }
+  }
+  throw new Error(`unbalanced braces slicing "${startMarker}"`);
+}
 
 async function test(name, fn) {
   try {
@@ -149,5 +167,43 @@ for (const { fontId, module } of FAMILIES) {
     );
   });
 }
+
+// app.js can't import PITCH_MM (it must not reach into src/text/rhinestoneFont/families/), so the
+// pitch appears as a bare literal in two user-facing strings. This test is the only thing keeping
+// those literals honest: if PITCH_MM ever changes, or an editor "rounds" the copy, this fails.
+await test('the pitch literal in app.js\'s authored-font messaging equals rsBlock.js / rsModern.js PITCH_MM', () => {
+  assert.equal(
+    rsBlock.PITCH_MM, rsModern.PITCH_MM,
+    `RS Block and RS Modern PITCH_MM disagree (${rsBlock.PITCH_MM} vs ${rsModern.PITCH_MM}) -- this test assumes one shared authored pitch`
+  );
+  const pitchMm = rsBlock.PITCH_MM;
+
+  // Each entry: the app.js function to slice, and a regex whose one capture group is the pitch
+  // literal inside that function's authored-font string (anchored to the literal's own copy, so a
+  // stray "3.1mm" in a nearby comment is never what gets matched).
+  const literalSites = [
+    {
+      fn: 'function updateStoneSizePrintableCapabilityUI(){',
+      label: 'updateStoneSizePrintableCapabilityUI() font-gate tooltip',
+      re: /wider than \$\{font\.family\}'s fixed (\d+(?:\.\d+)?)mm stone grid/
+    },
+    {
+      fn: 'async function updateStoneSizeOverlapCapabilityUI(){',
+      label: 'updateStoneSizeOverlapCapabilityUI() authored-font warning',
+      re: /places every stone on a fixed (\d+(?:\.\d+)?)mm grid/
+    }
+  ];
+
+  for (const site of literalSites) {
+    const fnSrc = sliceBalanced(appJs, site.fn);
+    const match = fnSrc.match(site.re);
+    assert.ok(match, `could not find the pitch literal in ${site.label} -- did the wording change?`);
+    const literalMm = Number(match[1]);
+    assert.equal(
+      literalMm, pitchMm,
+      `${site.label} says ${literalMm}mm but rsBlock.js / rsModern.js PITCH_MM is ${pitchMm}mm -- update the app.js string to match the authored pitch`
+    );
+  }
+});
 
 console.log('FONT-PITCH-001 authored-stone-size gating tests passed.');

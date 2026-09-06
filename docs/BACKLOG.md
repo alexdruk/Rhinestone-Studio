@@ -23,6 +23,8 @@ review found no open release-blocking defect).
 
 ## Deferred technical follow-ups
 
+A row closed by a later milestone keeps its original finding text and gains a bold `Resolved by <MILESTONE>:` prefix in the Notes cell.
+
 |Item|Found by|Notes|
 |---|---|---|
 |`sampleRadialFillPoints()` per-component anchors do not extend to `sampleRadialFieldFillPoints()`|READ-002|The vector radial sampler now rays out from one anchor per connected component (`groupPolygonsIntoComponents()`), fixing the "bullseye in the middle, straight rows at the edges" defect for multi-part text/SVG. `sampleRadialFieldFillPoints()` (image/raster layers, `GeometryEngine.generateImageLayout()`) still uses a single whole-placement anchor and has the same defect, but a raster density field has no polygon contours to group — it needs raster connected-component (blob) labelling of the density mask, a different technique. Left untouched by READ-002.|
