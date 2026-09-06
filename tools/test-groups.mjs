@@ -214,6 +214,10 @@ export const GROUPS = {
     'test-rs-block.mjs',
     'test-rs-modern.mjs',
     'test-font-002-production-font-mode.mjs',
+    // FONT-PITCH-001: derives each authored font's overlap-safe stone-size set from its real glyph
+    // maps + kerning tables and pins it against the manifest's unsupportedStoneSizes -- grouped with
+    // the other rhinestone-font tests it imports from (rsBlock.js / rsModern.js).
+    'test-font-pitch-001-authored-stone-sizes.mjs',
     // Font certification / evaluation tooling (tools/font-certification/**): certification
     // classification, glyph-outline command analysis, readability metrics, word-space narrative,
     // source-font evaluation, plus the manifest.json capHeight/xHeight ratios cross-checked against
