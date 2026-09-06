@@ -219,28 +219,44 @@ const INTERIOR_BANDS = [
 // operands of every rate emitted and never a rate itself (READ-007 §4.3 / READ-011D §7). READ-005B
 // scoped every cut on the height-to-stone ratio; READ-011D reuses the same shape with other cut
 // variables, so the accessor is a parameter defaulting to `row.ratio`.
+//
+// `withRatedCounts` is opt-in and only READ-011D's session 3 passes it. It adds `ratedBelow` /
+// `ratedAtOrAbove` (rows whose `sellable` cell is non-blank) alongside the population counts, so a
+// partially-rated sheet keeps population and rate denominator separate (READ-011D §3, §7). Session 1
+// leaves it off and its golden (`docs/data/read-005/derived-tables.json`) stays byte-identical.
 
-function floorCut(rows, threshold, valueOf = (row) => row.ratio) {
+function floorCut(rows, threshold, valueOf = (row) => row.ratio, withRatedCounts = false) {
   const below = rows.filter((row) => valueOf(row) < threshold);
   const atOrAbove = rows.filter((row) => valueOf(row) >= threshold);
-  return {
+  const cut = {
     rowsBelow: below.length,
     sellableBelow: below.filter((row) => row.sellable).length,
     rowsAtOrAbove: atOrAbove.length,
     sellableAtOrAbove: atOrAbove.filter((row) => row.sellable).length,
   };
+  if (withRatedCounts) {
+    cut.ratedBelow = below.filter((row) => row.isRated).length;
+    cut.ratedAtOrAbove = atOrAbove.filter((row) => row.isRated).length;
+  }
+  return cut;
 }
 
-function buildFloorScope(rows, candidates, label, valueOf = (row) => row.ratio) {
+function buildFloorScope(rows, candidates, label, valueOf = (row) => row.ratio, withRatedCounts = false) {
+  const ratedCount = withRatedCounts ? rows.filter((row) => row.isRated).length : null;
   const byCandidate = {};
   for (const c of candidates) {
-    const cut = floorCut(rows, c, valueOf);
+    const cut = floorCut(rows, c, valueOf, withRatedCounts);
     if (cut.rowsBelow + cut.rowsAtOrAbove !== rows.length) {
       throw new Error(`${label}: candidate ${c} — rowsBelow + rowsAtOrAbove != population ${rows.length}`);
     }
+    if (withRatedCounts && cut.ratedBelow + cut.ratedAtOrAbove !== ratedCount) {
+      throw new Error(`${label}: candidate ${c} — ratedBelow + ratedAtOrAbove != rated count ${ratedCount}`);
+    }
     byCandidate[c] = cut;
   }
-  return { population: rows.length, byCandidate };
+  return withRatedCounts
+    ? { population: rows.length, rated: ratedCount, byCandidate }
+    : { population: rows.length, byCandidate };
 }
 
 // --- session 1 --------------------------------------------------------------------------------
@@ -775,8 +791,12 @@ export function computeSession3() {
       const kind = sorted.length > 2 ? 'triple'
         : hasSeededRepeat ? 'main/repeats pair'
         : 'main/main collision';
-      const readableSame = new Set(sorted.map((m) => m.readableRaw)).size === 1;
-      const sellableSame = new Set(sorted.map((m) => m.sellableRaw)).size === 1;
+      // A blank cell never counts as agreement (READ-011D §5): "same" needs every member non-blank
+      // and equal. `allMembersRated` gates the agreement denominator to fully-rated groups.
+      const same = (vals) => vals.every((v) => v !== '') && new Set(vals).size === 1;
+      const readableSame = same(sorted.map((m) => m.readableRaw));
+      const sellableSame = same(sorted.map((m) => m.sellableRaw));
+      const allMembersRated = sorted.every((m) => m.sellableRaw !== '');
       const sheetSpan = spos[spos.length - 1] - spos[0];
       return {
         key: s3DupKey(primary),
@@ -798,6 +818,7 @@ export function computeSession3() {
         spansUnderMinPositions: sheetSpan < S3_SPAN_MIN_POSITIONS,
         trackingTargets,
         trackingContrastPresent: trackingTargets.length > 1,
+        allMembersRated,
         readableSame,
         sellableSame,
         bothSame: readableSame && sellableSame,
@@ -885,13 +906,30 @@ export function computeSession3() {
     .map(([note, tags]) => ({ note, tags }));
 
   // --- self-consistency (READ-011D §5) ----------------------------------------------------
+  // Agreement is tallied only over duplicate groups whose members are all rated; `n` (all groups)
+  // and `fullyRatedGroups` (the agreement denominator) are emitted separately so a partially-rated
+  // sheet reads unambiguously.
   const scAgree = { readable: 0, sellable: 0, both: 0 };
+  let fullyRatedGroups = 0;
   for (const g of groups) {
+    if (!g.allMembersRated) continue;
+    fullyRatedGroups += 1;
     if (g.readableSame) scAgree.readable += 1;
     if (g.sellableSame) scAgree.sellable += 1;
     if (g.bothSame) scAgree.both += 1;
   }
   const seededUnderMin = groups.filter((g) => g.hasSeededRepeat && g.spansUnderMinPositions);
+  // The all-groups under-15 summary (not just the seeded repeats) — a group can be a probable
+  // recognition and a degenerate tracking cell at once, and both weaken its contribution.
+  const groupsUnderMin = groups
+    .filter((g) => g.spansUnderMinPositions)
+    .map((g) => ({
+      key: g.key,
+      primarySlug: g.primarySlug,
+      sheetSpan: g.sheetSpan,
+      kind: g.kind,
+      isDegenerateTrackingCell: g.trackingContrastPresent,
+    }));
 
   // --- achieved tracking arms (READ-011D §4) --------------------------------------------
   const armSplit = (rows) => {
@@ -941,8 +979,10 @@ export function computeSession3() {
   for (const m of S3_MODES) {
     for (const arm of S3_ACHIEVED) {
       const rows = primaryRows.filter((r) => r.mode === m && trackedMatch(r, arm));
+      // The cut uses the unrounded ratio × stemWidthRatio product; `stonesAcrossStem` on each row is
+      // the same product rounded to 4 places, emitted for display only.
       floorByStones.scopes[`${m}|${arm}`] = buildFloorScope(
-        rows, S3_STONES_CANDIDATES, `session3.floorByStones[${m}|${arm}]`, (r) => r.ratio * r.stemWidthRatio,
+        rows, S3_STONES_CANDIDATES, `session3.floorByStones[${m}|${arm}]`, (r) => r.ratio * r.stemWidthRatio, true,
       );
     }
   }
@@ -958,7 +998,7 @@ export function computeSession3() {
       for (const arm of S3_ACHIEVED) {
         const rows = primaryRows.filter((r) => r.stemRegime === regime && r.mode === m && trackedMatch(r, arm));
         floorByRatio.scopes[`${regime}|${m}|${arm}`] = buildFloorScope(
-          rows, S3_RATIO_CANDIDATES, `session3.floorByRatio[${regime}|${m}|${arm}]`, (r) => r.ratio,
+          rows, S3_RATIO_CANDIDATES, `session3.floorByRatio[${regime}|${m}|${arm}]`, (r) => r.ratio, true,
         );
       }
     }
@@ -1087,12 +1127,17 @@ export function computeSession3() {
       },
       selfConsistency: {
         n: groups.length,
+        fullyRatedGroups,
         readableAgreement: scAgree.readable,
         sellableAgreement: scAgree.sellable,
         bothAgreement: scAgree.both,
         seededRepeatsUnderMinPositions: {
           count: seededUnderMin.length,
           groups: seededUnderMin.map((g) => ({ key: g.key, primarySlug: g.primarySlug, sheetSpan: g.sheetSpan })),
+        },
+        groupsUnderMinPositions: {
+          count: groupsUnderMin.length,
+          groups: groupsUnderMin,
         },
       },
       degenerateTrackingCells: {
@@ -1405,9 +1450,12 @@ function renderSession3Markdown(data) {
   L.push(`degenerate tracking cells (a contrast with no contrast in it): ${s3.degenerateTrackingCells.count}\n`);
 
   const sc = s3.selfConsistency;
-  L.push('### Self-consistency (over all duplicate groups)\n');
-  L.push(`n=${sc.n}: readable ${sc.readableAgreement}/${sc.n}, sellable ${sc.sellableAgreement}/${sc.n}, both ${sc.bothAgreement}/${sc.n}`);
-  L.push(`seeded repeats spanning < ${m.spanMinPositions} sheet positions: ${sc.seededRepeatsUnderMinPositions.count} ` +
+  L.push('### Self-consistency\n');
+  L.push(`groups ${sc.n}; fully-rated (agreement denominator) ${sc.fullyRatedGroups}: ` +
+    `readable ${sc.readableAgreement}/${sc.fullyRatedGroups}, sellable ${sc.sellableAgreement}/${sc.fullyRatedGroups}, both ${sc.bothAgreement}/${sc.fullyRatedGroups}`);
+  L.push(`groups spanning < ${m.spanMinPositions} sheet positions: ${sc.groupsUnderMinPositions.count} ` +
+    `(${sc.groupsUnderMinPositions.groups.map((g) => `${g.primarySlug} @ ${g.sheetSpan} [${g.kind}${g.isDegenerateTrackingCell ? ', degenerate' : ''}]`).join('; ') || '—'})`);
+  L.push(`of those, seeded repeats: ${sc.seededRepeatsUnderMinPositions.count} ` +
     `(${sc.seededRepeatsUnderMinPositions.groups.map((g) => `${g.primarySlug} @ ${g.sheetSpan}`).join(', ') || '—'})`);
   L.push(`comparison figure: ${m.comparisonFigure}\n`);
 
@@ -1434,13 +1482,14 @@ function renderSession3Markdown(data) {
   const floorTable = (fl, title) => {
     L.push(`### ${title}\n`);
     L.push(`form ${fl.form}; cut variable \`${fl.cutVariable}\`; scoped by ${fl.scopedBy}.`);
-    L.push('Each cell: `sellableBelow/rowsBelow · sellableAtOrAbove/rowsAtOrAbove`.\n');
+    L.push('Each cell: `sellableBelow/ratedBelow/rowsBelow · sellableAtOrAbove/ratedAtOrAbove/rowsAtOrAbove`');
+    L.push('(`rows*` is population including unrated; `rated*` is the rate denominator).\n');
     L.push(`| cut | ${Object.keys(fl.scopes).join(' | ')} |`);
     L.push(`|---|${Object.keys(fl.scopes).map(() => '---').join('|')}|`);
     for (const c of fl.candidates) {
       const cells = Object.values(fl.scopes).map((sco) => {
         const x = sco.byCandidate[c];
-        return `${x.sellableBelow}/${x.rowsBelow} · ${x.sellableAtOrAbove}/${x.rowsAtOrAbove}`;
+        return `${x.sellableBelow}/${x.ratedBelow}/${x.rowsBelow} · ${x.sellableAtOrAbove}/${x.ratedAtOrAbove}/${x.rowsAtOrAbove}`;
       });
       L.push(`| ${c} | ${cells.join(' | ')} |`);
     }

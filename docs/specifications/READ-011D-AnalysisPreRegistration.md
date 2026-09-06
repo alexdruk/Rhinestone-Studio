@@ -83,9 +83,12 @@ lowest `presentationIndex` enters the primary tables; the remaining members feed
 `computeSession3()` cross-checks its computed non-primary set against that field. Twenty-one rows
 leave the primary tables this way, so the **primary population is 147 − 21 = 126 rows**.
 
-Rows with a blank `sellable` are listed under `session3.unratedRows` and are excluded from every
-rate, mirroring `session2.unratedRows` in READ-005B. At the pre-registration commit that is all
-147 rows; the count falls as the sheet is rated.
+Rows with a blank `sellable` are listed under `session3.unratedRows`, mirroring
+`session2.unratedRows` in READ-005B. They **remain in `rowsBelow` / `rowsAtOrAbove`** as
+population — those counts still sum to the scope population — but they are excluded from every rate
+through the separate `ratedBelow` / `ratedAtOrAbove` counts (§7, §9), so population and rate
+denominator are never confused. At the pre-registration commit every row is unrated; the count
+falls as the sheet is filled in.
 
 ## 4. Achieved tracking, not intended tracking
 
@@ -104,18 +107,36 @@ checkable.
 
 ## 5. Self-consistency
 
-Agreement is computed over all 20 duplicate groups, not only the 15 seeded repeats: the five
-accidental collisions are equally valid re-presentations of one image to the rater. For each group
-`session3.selfConsistency` reports whether the members agree on `readable`, on `sellable`, and on
-both, and the group's `presentationSpan` (index distance) and `sheetSpan` (distance in rated-row
-positions).
+Span and agreement are both computed over all 20 duplicate groups, not only the 15 seeded repeats:
+the five accidental collisions are equally valid re-presentations of one image to the rater. Each
+group in `session3.duplicateGroups.groups` carries its `presentationSpan` (index distance), its
+`sheetSpan` (distance in rated-row positions), an `allMembersRated` flag, and whether its members
+agree on `readable`, on `sellable`, and on both.
 
-A group is flagged `spansUnderMinPositions` when its `sheetSpan` is below 15 — READ-005's design
-separation for hidden repeats (READ-005A §3). Three groups are under 15 by sheet distance, but two
-of them are accidental `main`/`main` collisions that were never placed under a separation contract.
-Of the fifteen **seeded** repeats, exactly one falls short: `poppins-semibold` fill 22
-(`Emmanuel`), whose repeat sits 7 rated-row positions from its source.
-`session3.selfConsistency.seededRepeatsUnderMinPositions` records it.
+**Agreement denominator.** A group counts toward agreement only when every member has a non-blank
+`sellable` (`allMembersRated`); a blank cell never counts as agreement. `session3.selfConsistency`
+emits `n` (all 20 groups) and `fullyRatedGroups` (the agreement denominator) as separate fields, so
+a partially-rated sheet reads unambiguously. At the pre-registration commit `fullyRatedGroups` is
+0 and all three agreement counts are 0.
+
+**Under-15 spans.** A group is flagged `spansUnderMinPositions` when its `sheetSpan` is below 15 —
+READ-005's design separation for hidden repeats (READ-005A §3). The flag is evaluated on all 20
+groups; `session3.selfConsistency.groupsUnderMinPositions` lists every group that trips it, and the
+`seededRepeatsUnderMinPositions` subset lists only the seeded repeats among them. Three groups are
+under 15:
+
+- `courier-prime-regular` outline 17.5 spans **2** sheet positions. It is byte-identical (the
+  solver reached separation at 0 mm), and it is simultaneously one of the six degenerate tracking
+  cells (§2) — a `none` and a `separation` render that collapsed to the same image. It is therefore
+  both a near-certain recognition *and* a contrast with no contrast in it, and it contributes
+  weakly on both counts.
+- `cookie-regular` fill 19 spans **12**, likewise a byte-identical `none`/`separation` collision
+  and a degenerate tracking cell.
+- `poppins-semibold` fill 22 (`Emmanuel`) spans **7**. This is the one **seeded** repeat under 15,
+  short of READ-005's ≥ 15-position design separation; it is not a degenerate cell.
+
+The flag is the mechanism — it is emitted so the by-hand analysis can down-weight these groups.
+§7's clearance rule does not change.
 
 READ-005 session 1 measured 13/15 sellable self-consistency; that is the comparison figure
 (`meta.comparisonFigure`).
@@ -132,9 +153,13 @@ mode × achieved tracking. Uses every rated primary row and estimates one parame
 five rung values). Scoped by stem regime × mode × achieved tracking. `session3.floorByRatio`.
 
 **Selection rule, fixed here.** Convert each regime's chosen Form-B `ratio` cut into stones by
-multiplying it by that regime's pool-median `stemWidthRatio`, computed from
-`assets/fonts/manifest.json` over the regime's enabled-and-measured pool and recorded in
-`meta.regimeMedianStemWidthRatio`:
+multiplying it by that regime's pool-median `stemWidthRatio`, recorded in
+`meta.regimeMedianStemWidthRatio`. The **regime pool** is the set of fonts appearing in the rated
+set for that regime (`session3.meta.regimePools`); the median is taken over each pool font's
+`stemWidthRatio` in `assets/fonts/manifest.json`. That set currently equals the manifest's
+enabled-and-measured pool for all three regimes — 7 / 10 / 12 fonts — and the analyzer asserts
+each rated entry's carried `stemWidthRatio` against the manifest value, so the two cannot silently
+diverge:
 
 | regime | pool size | pool-median `stemWidthRatio` |
 | --- | --: | --- |
@@ -148,20 +173,24 @@ The tolerance is 0.25 and does not move (`meta.selectionToleranceStones`).
 
 ## 7. Clearance
 
-A candidate cut is **cleared** when, reading rated rows only:
+A candidate cut is **cleared** when, reading the rated counts:
 
-- the sellable rate at or above the cut is ≥ 60%,
-- that rate is at least 20 percentage points above the below-cut rate, and
-- at least 12 rated rows sit at or above the cut.
+- the sellable rate at or above the cut, `sellableAtOrAbove / ratedAtOrAbove`, is ≥ 60%,
+- that rate is at least 20 percentage points above the below-cut rate
+  `sellableBelow / ratedBelow`, and
+- `ratedAtOrAbove` is at least 12.
 
 The chosen floor is the smallest cleared candidate, read at **achieved tracking = untracked** (the
 condition the product produces by default — `letterSpacingMm` has no UI control) and at whichever
 of the two modes clears at the higher cut.
 
-`computeSession3()` emits both operands of every rate — `rowsBelow` / `sellableBelow` /
-`rowsAtOrAbove` / `sellableAtOrAbove` per candidate per scope, with the assertion that the two row
-counts sum to the scope population — and **never applies the clearance rule itself**. §7 is applied
-by hand to the emitted tables, exactly as READ-007 did. The thresholds are recorded as data in
+`computeSession3()` emits both operands of every rate — `sellableBelow` / `ratedBelow` /
+`rowsBelow` and `sellableAtOrAbove` / `ratedAtOrAbove` / `rowsAtOrAbove` per candidate per scope,
+with the assertions that `rowsBelow + rowsAtOrAbove` equals the scope population and
+`ratedBelow + ratedAtOrAbove` equals the scope's rated count (`scope.rated`) — and **never applies
+the clearance rule itself**. `rows*` is population (unrated rows included); `rated*` is the rate
+denominator; the clearance rule reads only `rated*` and `sellable*`. §7 is applied by hand to the
+emitted tables, exactly as READ-007 did. The thresholds are recorded as data in
 `meta.clearanceRule`.
 
 ## 8. The null branch
@@ -181,12 +210,23 @@ threshold, or a widened tolerance.
 `sizeInvariance` · `trackingContrast` · `trackingContrastByIntent` · `separationShortfall` ·
 `rejectionCauses`.
 
-`floorByStones` and `floorByRatio` reuse the `session1.floorCandidates` shape —
-`{ candidates, scopes: { … : { population, byCandidate } } }` with
-`rowsBelow` / `sellableBelow` / `rowsAtOrAbove` / `sellableAtOrAbove`. `sizeInvariance` pairs each
-SS16 / SS20 render with its SS10 counterpart at the same `fontId`, `mode` and `ratio` and reports
-the counts on both sides. `trackingContrast` is the between-font pooled rate by
-mode × achieved tracking; `trackingContrastByIntent` is the same table keyed by `trackingTarget`.
+`floorByStones` and `floorByRatio` extend the `session1.floorCandidates` shape —
+`{ candidates, scopes: { … : { population, rated, byCandidate } } }`. Each `byCandidate` entry
+carries `sellableBelow` / `ratedBelow` / `rowsBelow` and `sellableAtOrAbove` / `ratedAtOrAbove` /
+`rowsAtOrAbove`: `rows*` is population with unrated rows included (and `rowsBelow + rowsAtOrAbove`
+sums to `population`), `rated*` is the rate denominator (and `ratedBelow + ratedAtOrAbove` sums to
+`rated`), and the two are never conflated. Session 1's own two call sites stay on the default and
+emit only the `rows*` / `sellable*` fields, so `docs/data/read-005/derived-tables.json` is
+untouched.
+
+`selfConsistency` emits `n` (all groups), `fullyRatedGroups` (the agreement denominator), the
+three agreement counts, `seededRepeatsUnderMinPositions`, and `groupsUnderMinPositions` (all 20
+groups, each with `key`, `primarySlug`, `sheetSpan`, `kind`, and `isDegenerateTrackingCell`).
+
+`sizeInvariance` pairs each SS16 / SS20 render with its SS10 counterpart at the same `fontId`,
+`mode` and `ratio` and reports the counts on both sides. `trackingContrast` is the between-font
+pooled rate by mode × achieved tracking; `trackingContrastByIntent` is the same table keyed by
+`trackingTarget`.
 
 `meta` records milestone `READ-011D`, `generatedBy`, `inputs`
 (`docs/data/read-011/ratings.csv`, `docs/data/read-011/render-key.json`,

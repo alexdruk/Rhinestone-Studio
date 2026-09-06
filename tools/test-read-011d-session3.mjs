@@ -144,22 +144,56 @@ await test('8. the rating sheet is in strictly increasing presentationIndex orde
     'ratings.csv row order == presentationIndex order');
 });
 
-await test('9. the primary population balances across every floor-decision scope', () => {
+await test('9. every floor-decision scope balances population and rated counts, and rated is present', () => {
   const s3 = computeSession3().session3;
   for (const [name, fl] of [['floorByStones', s3.floorByStones], ['floorByRatio', s3.floorByRatio]]) {
     const total = Object.values(fl.scopes).reduce((acc, sc) => acc + sc.population, 0);
     assert.equal(total, 126, `${name}: scope populations sum to ${total}, not 126`);
     for (const [scopeName, sc] of Object.entries(fl.scopes)) {
+      assert.equal(typeof sc.rated, 'number', `${name}.${scopeName}: rated count missing`);
       for (const c of fl.candidates) {
         const cut = sc.byCandidate[c];
         assert.equal(cut.rowsBelow + cut.rowsAtOrAbove, sc.population,
           `${name}.${scopeName} candidate ${c}: rowsBelow + rowsAtOrAbove != population`);
+        assert.equal(typeof cut.ratedBelow, 'number', `${name}.${scopeName} candidate ${c}: ratedBelow missing`);
+        assert.equal(typeof cut.ratedAtOrAbove, 'number', `${name}.${scopeName} candidate ${c}: ratedAtOrAbove missing`);
+        assert.equal(cut.ratedBelow + cut.ratedAtOrAbove, sc.rated,
+          `${name}.${scopeName} candidate ${c}: ratedBelow + ratedAtOrAbove != scope rated count`);
       }
     }
   }
 });
 
-await test('10. the three regime pool-median stemWidthRatios come from the manifest', () => {
+await test('10. self-consistency: n is 20, fullyRatedGroups is 0 with all agreement counts 0 at this commit', () => {
+  const sc = computeSession3().session3.selfConsistency;
+  assert.equal(sc.n, 20, 'n covers all 20 duplicate groups');
+  assert.equal(sc.fullyRatedGroups, 0, 'no group is fully rated on the blank sheet');
+  assert.equal(sc.readableAgreement, 0);
+  assert.equal(sc.sellableAgreement, 0);
+  assert.equal(sc.bothAgreement, 0);
+});
+
+await test('11. groupsUnderMinPositions has 3 entries with sheet spans 2, 7 and 12', () => {
+  const s3 = computeSession3().session3;
+  const sc = s3.selfConsistency;
+  assert.equal(sc.groupsUnderMinPositions.count, 3);
+  assert.deepEqual(
+    sc.groupsUnderMinPositions.groups.map((g) => g.sheetSpan).sort((a, b) => a - b),
+    [2, 7, 12],
+  );
+  // The span-2 group is the courier-prime none/separation collision — a degenerate tracking cell.
+  const span2 = sc.groupsUnderMinPositions.groups.find((g) => g.sheetSpan === 2);
+  assert.equal(span2.key, 'courier-prime-regular|outline|17.5|ss10|Vitalina|0');
+  assert.equal(span2.isDegenerateTrackingCell, true);
+  const span2Full = s3.duplicateGroups.groups.find((g) => g.key === span2.key);
+  assert.deepEqual([...span2Full.memberSlugs].sort(), ['3bf95b5a', '9afe431e'],
+    'the span-2 group is the courier-prime none/separation slug pair');
+  // Only the span-7 poppins-semibold pair is a seeded repeat.
+  assert.equal(sc.seededRepeatsUnderMinPositions.count, 1);
+  assert.equal(sc.seededRepeatsUnderMinPositions.groups[0].sheetSpan, 7);
+});
+
+await test('12. the three regime pool-median stemWidthRatios come from the manifest', () => {
   const manifest = JSON.parse(readFileSync(path.join(REPO_ROOT, 'assets', 'fonts', 'manifest.json'), 'utf8'));
   const swr = new Map(manifest.fonts.map((f) => [f.id, f.stemWidthRatio]));
   const median = (a) => {
@@ -175,7 +209,7 @@ await test('10. the three regime pool-median stemWidthRatios come from the manif
   }
 });
 
-await test('11. this file is registered in tools/test-groups.mjs (documentation group) and the default suite', () => {
+await test('13. this file is registered in tools/test-groups.mjs (documentation group) and the default suite', () => {
   assertTestRegistered({
     filename: 'test-read-011d-session3.mjs',
     group: 'documentation',
