@@ -123,7 +123,8 @@
       "role": "rhinestone",
       "enabled": true,
       "providerId": "rhinestone",
-      "notes": "FONT-002: the default Production Font (src/text/rhinestoneFont/families/rsBlock.js) -- every stone position is individually hand-authored, not sampled from a vector outline. `path` is a documentation-only identifier, not a real font file -- RhinestoneFontProvider generates glyph geometry from authored stone centers at runtime and never fetches/parses it (see injectFontFaceRules() in app.js, which only declares @font-face rules for providerId:'opentype' entries). The diagnostic-only RS Block Prototype (SS10) remains intentionally unregistered here."
+      "unsupportedStoneSizes": ["ss16", "ss20", "ss30"],
+      "notes": "FONT-002: the default Production Font (src/text/rhinestoneFont/families/rsBlock.js) -- every stone position is individually hand-authored, not sampled from a vector outline. `path` is a documentation-only identifier, not a real font file -- RhinestoneFontProvider generates glyph geometry from authored stone centers at runtime and never fetches/parses it (see injectFontFaceRules() in app.js, which only declares @font-face rules for providerId:'opentype' entries). The diagnostic-only RS Block Prototype (SS10) remains intentionally unregistered here. FONT-PITCH-001: SS16/SS20/SS30 are excluded because every stone is authored on a fixed 3.1 mm grid (rsBlock.js PITCH_MM) and a stone wider than that pitch overlaps its own neighbour -- this is a physical-spacing limit, not a readability judgement."
     },
     {
       "id": "rs-modern",
@@ -134,7 +135,8 @@
       "role": "rhinestone",
       "enabled": true,
       "providerId": "rhinestone",
-      "notes": "FONT-002: the second Production Font (src/text/rhinestoneFont/families/rsModern.js) -- a distinct geometric/grotesque style (no serifs, single-story a/g, round bowls) at the same authored pitch as RS Block. `path` is a documentation-only identifier, not a real font file -- see rs-block's own note above for why."
+      "unsupportedStoneSizes": ["ss16", "ss20", "ss30"],
+      "notes": "FONT-002: the second Production Font (src/text/rhinestoneFont/families/rsModern.js) -- a distinct geometric/grotesque style (no serifs, single-story a/g, round bowls) at the same authored pitch as RS Block. `path` is a documentation-only identifier, not a real font file -- see rs-block's own note above for why. FONT-PITCH-001: SS16/SS20/SS30 are excluded because every stone is authored on a fixed 3.1 mm grid (rsModern.js PITCH_MM) and a stone wider than that pitch overlaps its own neighbour -- this is a physical-spacing limit, not a readability judgement."
     },
     {
       "id": "baloo2-variable-regular",

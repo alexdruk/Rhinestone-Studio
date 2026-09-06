@@ -3085,6 +3085,17 @@ function updateStoneSizePrintableCapabilityUI(){
   const template=currentObjectTemplate();
   const safe=isText?getSafeAreaRectMm(template,project.canvas.width,project.canvas.height):null;
   const font=isText&&isFontKnown(l.font)?fontManager.getFont(l.font):null;
+  // FONT-PITCH-001: an authored Production Font (isAuthoredStoneFontId) places every stone on a
+  // fixed grid (rsBlock.js / rsModern.js PITCH_MM = 3.1mm), so a size disabled by the font gate is
+  // disabled for a physical-spacing reason, not the FONT-PORTFOLIO-001 readability reason -- the two
+  // want different tooltips. `3.1` is a literal here on purpose: app.js must not reach into
+  // src/text/rhinestoneFont/families/ for one constant, and tools/test-font-pitch-001-authored-stone-
+  // sizes.mjs is what keeps this string and rsBlock.js's PITCH_MM aligned. The safe sizes are read
+  // from the catalog (every size the font does NOT list), never hand-typed.
+  const authoredPitchFont=Boolean(font&&isAuthoredStoneFontId(l.font));
+  const authoredSafeSizeNames=authoredPitchFont
+    ?listStoneSizes().filter(s=>!font.unsupportedStoneSizes.includes(s.id)).map(s=>s.name).join(' or ')
+    :'';
   for(const size of listStoneSizes()){
     const option=el('stoneSize').querySelector(`option[value="${size.diameterMm}"]`);
     if(!option)continue;
@@ -3094,7 +3105,9 @@ function updateStoneSizePrintableCapabilityUI(){
     option.title=exceedsShape
       ?`${size.name} needs ${size.supportedHeightRangeMm[0]}-${size.supportedHeightRangeMm[1]}mm height — doesn't fit this ${template.displayName}'s printable area (${safe.heightMm.toFixed(0)}mm available).`
       :unsupportedByFont
-        ?`${size.name} isn't recommended with ${font.family} — readability testing showed poor results at this size (pending a height-calibration fix).`
+        ?(authoredPitchFont
+          ?`${size.name} stones are ${size.diameterMm}mm, wider than ${font.family}'s fixed 3.1mm stone grid — they would overlap. Use ${authoredSafeSizeNames}.`
+          :`${size.name} isn't recommended with ${font.family} — readability testing showed poor results at this size (pending a height-calibration fix).`)
         :'';
   }
 }
@@ -3227,7 +3240,17 @@ async function updateStoneSizeOverlapCapabilityUI(){
   if(token!==stoneSizeOverlapCheckToken)return;
   const currentOverlaps=hasAnyOverlappingStonePair(currentStones.map(s=>({xMm:s.x,yMm:s.y,sizeMm:s.d})));
   select.classList.toggle('overlap-invalid',currentOverlaps);
-  warning.textContent=currentOverlaps?"This stone size isn't suitable for this shape — it won't form a uniform figure.":'';
+  // FONT-PITCH-001: same firing condition and .overlap-invalid behaviour for every layer, but a text
+  // layer on an authored Production Font overlaps because the font's stones sit on a fixed 3.1mm grid
+  // (rsBlock.js / rsModern.js PITCH_MM) -- not because the figure won't tile on this shape. The generic
+  // message would send the user after a shape change that cannot fix it, so word this case for the
+  // real cause. Non-authored layers keep the original wording untouched.
+  const authoredTextPitchOverlap=currentOverlaps&&target.layer&&target.layer.type==='text'&&isAuthoredStoneFontId(target.layer.font);
+  warning.textContent=currentOverlaps
+    ?(authoredTextPitchOverlap
+      ?"This Production Font places every stone on a fixed 3.1mm grid — a wider stone size overlaps its neighbours. Choose a smaller stone size; changing the shape won't help."
+      :"This stone size isn't suitable for this shape — it won't form a uniform figure.")
+    :'';
   warning.classList.toggle('visible',currentOverlaps);
   // PERF-005: the other catalog sizes' disabled/title state only needs refreshing when the
   // selection itself changed since the last sweep -- an edit to font/fill/height/etc. on the same
