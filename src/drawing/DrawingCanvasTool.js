@@ -789,13 +789,51 @@ function materializeSvgImageItemFromLayer(layer, resolveSvgPolygons) {
     }
   }
 
-  if (!item) {
-    const w = Math.max(RESIZE_MIN_DIM_MM, layer.w);
-    const h = Math.max(RESIZE_MIN_DIM_MM, layer.h);
-    item = new paper.Path.Rectangle(new paper.Rectangle(layer.x, layer.y, w, h));
-    item.strokeColor = STROKE_COLOR;
-    item.strokeWidth = STROKE_WIDTH_PX / paper.view.zoom;
-  }
+  // The rectangle fallback (an 'image' layer, or an 'svg' whose outline couldn't be resolved) is the
+  // exact same x/y/w/h/rotationDeg proxy a first-class 'rectangle' layer needs -- built once, in
+  // buildRectangleProxyItem() below, rather than a second copy here. It stamps rotationDeg/pivot
+  // itself, so this returns early and leaves the real-outline branch's own tail untouched.
+  if (!item) return buildRectangleProxyItem(layer);
+
+  const rotationDeg = layer.rotationDeg || 0;
+  const pivot = new paper.Point(layer.x + layer.w / 2, layer.y + layer.h / 2);
+  if (rotationDeg) item.rotate(rotationDeg, pivot);
+  item.data.rotationDeg = rotationDeg;
+  item.data.pivotXMm = pivot.x;
+  item.data.pivotYMm = pivot.y;
+  return item;
+}
+
+/**
+ * RS-3012 Step 5: builds a Paper.js proxy item for a 'rectangle' project.layers entry -- the last
+ * first-class layer type left out of Design's Select after Steps 2 (svg/image), 3 (text) and 4
+ * (circle). Unlike 'circle', a rectangle is pure x/y/w/h/rotationDeg -- the identical box model every
+ * XYWH_SHAPE_TYPES layer (app.js) already uses -- so it needs no new geometry and no new interaction
+ * machinery: click/drag/resize/rotate all reuse the existing hitTestShapeId() /
+ * rotatedHandlePositionsFor() / onShapeMoved / onShapeResized / onShapeRotated paths unchanged, and
+ * onShapeResized's own generic l.x/y/w/h write-back (app.js) covers a rectangle resize with no new
+ * branch. The proxy is just the placed rectangle path, rotated by an explicit item.rotate() the same
+ * way materializeShapeFromLayer() rotates a 'path' layer's own unrotated contours -- a rectangle's
+ * stones are never pre-rotated by the engine (unlike 'text', whose rotation is baked into its stone
+ * positions -- see materializeTextItemFromLayer()'s own doc comment).
+ *
+ * This is also the shared builder materializeSvgImageItemFromLayer() above uses for its own rectangle
+ * fallback (an 'image' layer, or an unresolvable 'svg') -- one copy of the "clamp to
+ * RESIZE_MIN_DIM_MM, place at x/y, stroke, rotate around the box center, stamp rotationDeg/pivot"
+ * construction, not three.
+ *
+ * Sets NO item.data interaction flags: a rectangle needs neither noResizeHandles ('text', Step 3)
+ * nor noRotateHandle / isCircleProxy ('circle', Step 4) -- the XYWH box-model assumption holds
+ * exactly, so every handle behaves as it does for a 'path' or SHAPE_LIBRARY_KINDS shape.
+ * @param {object} layer a project.layers entry with type 'rectangle' (or the svg/image fallback path)
+ * @returns {paper.Path}
+ */
+function buildRectangleProxyItem(layer) {
+  const w = Math.max(RESIZE_MIN_DIM_MM, layer.w);
+  const h = Math.max(RESIZE_MIN_DIM_MM, layer.h);
+  const item = new paper.Path.Rectangle(new paper.Rectangle(layer.x, layer.y, w, h));
+  item.strokeColor = STROKE_COLOR;
+  item.strokeWidth = STROKE_WIDTH_PX / paper.view.zoom;
 
   const rotationDeg = layer.rotationDeg || 0;
   const pivot = new paper.Point(layer.x + layer.w / 2, layer.y + layer.h / 2);
@@ -4399,9 +4437,13 @@ export function createDrawingTool(canvasEl, hooks = {}) {
      * final time to also carry every 'circle' layer -- it too has no x/y/w/h box (cx/cy/r data model,
      * deliberately not migrated), so like 'text' it gets its own dedicated branch, comparing against a
      * bbox re-derived by re-materializing from cx/cy/r (see materializeCircleItemFromLayer()'s own doc
-     * comment).
-     * @param {object[]} layers Every current 'path', SHAPE_LIBRARY_KINDS, 'svg', 'image', 'text' or
-     *   'circle' project.layers entry.
+     * comment). RS-3012 Step 5: `layers` widened once more to also carry every 'rectangle' layer --
+     * unlike 'text'/'circle' it IS a plain x/y/w/h/rotationDeg box (the same model 'path'/'svg'/'image'
+     * use), so it takes the SAME generic bounds-comparison branch below (against layer.x/y/w/h), just
+     * re-materializing its cheap rectangle proxy via buildRectangleProxyItem() -- no dedicated branch,
+     * no item.data interaction flags (see buildRectangleProxyItem()'s own doc comment).
+     * @param {object[]} layers Every current 'path', SHAPE_LIBRARY_KINDS, 'svg', 'image', 'text',
+     *   'circle' or 'rectangle' project.layers entry.
      * @param {boolean} [forceStoneRebuild=false] Rebuild every matched layer's stone Group even when
      *   its bounds haven't changed -- for callers where project.layers may have changed a
      *   non-geometric field from outside Design's own drag handlers (undo/redo, trash-icon delete).
@@ -4410,7 +4452,9 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       // RS-3032 Step A: the one place this method decides which materialization builder a layer
       // uses -- 'path' layers keep using the existing contours-based builder unchanged. RS-3012
       // Step 2: 'svg'/'image' layers use their own builder (no stored contours, no GeometryEngine
-      // shape formula either). Everything else reaching this method is a SHAPE_LIBRARY_KINDS layer
+      // shape formula either). RS-3012 Steps 3/4/5: 'text', 'circle' and 'rectangle' each get their
+      // own explicit branch below ('rectangle' shares the plain rectangle proxy the svg/image
+      // fallback already builds). Everything else reaching this method is a SHAPE_LIBRARY_KINDS layer
       // (app.js's own call-site filter guarantees no other type ever arrives here), which has no
       // stored contours at all and must ask GeometryEngine for its outline via the injected
       // resolveShapeLibraryPolygons hook.
@@ -4427,6 +4471,11 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         // contours/x/y/w/h box, no GeometryEngine outline formula -- see
         // materializeCircleItemFromLayer()'s own doc comment).
         if (layer.type === 'circle') return materializeCircleItemFromLayer(layer);
+        // RS-3012 Step 5: 'rectangle' is a plain x/y/w/h/rotationDeg box (the same model as 'path'/
+        // 'svg'/'image'), so it reuses the shared rectangle proxy -- MANDATORY branch: without it a
+        // rectangle would fall through to the shape-library builder below, which would ask
+        // GeometryEngine for a SHAPE_LIBRARY_KINDS outline for a kind it does not know.
+        if (layer.type === 'rectangle') return buildRectangleProxyItem(layer);
         return materializeShapeLibraryItemFromLayer(layer, resolveShapeLibraryPolygons);
       }
 
@@ -4608,6 +4657,15 @@ export function createDrawingTool(canvasEl, hooks = {}) {
               board.replaceShapeItem(shape.id, newItem);
               newItem.data.layerId = layerId;
             }
+          } else if (layer.type === 'rectangle') {
+            // RS-3012 Step 5: a 'rectangle' HAS a real x/y/w/h box, so it reaches this generic branch
+            // (against layer.x/y/w/h) rather than needing 'text'/'circle''s own re-materialize-and-
+            // diff branch above -- but an already-rotated rectangle can't take the 'path' branch's
+            // in-place `.bounds =` stretch (that is only valid for an unrotated item), so it just
+            // rebuilds the cheap proxy, the same reasoning as 'svg'/'image' directly above.
+            const newItem = buildRectangleProxyItem(layer);
+            board.replaceShapeItem(shape.id, newItem);
+            newItem.data.layerId = layerId;
           } else {
             // RS-3032 Step A: a SHAPE_LIBRARY_KINDS layer's geometry is NOT simply its natural shape
             // stretched into the box -- GeometryEngine resolves it at the new width/height and THEN
