@@ -458,14 +458,6 @@ function findBolderSibling(fontManager,font){
   heavier.sort((a,b)=>(a.weight||400)-(b.weight||400)||a.style.localeCompare(b.style));
   return heavier[0];
 }
-// Same category grouping/sorting as groupFontsByCategory(), but over fontFamilyEntries() rather than
-// individual font records -- so the Browse Fonts panel shows one row per family.
-function groupFamilyEntriesByCategory(entries){
-  const groups=new Map();
-  for(const e of entries){const key=e.role||'display';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(e)}
-  for(const list of groups.values())list.sort((a,b)=>a.family.localeCompare(b.family));
-  return[...groups.entries()].sort((a,b)=>fontCategoryLabel(a[0]).localeCompare(fontCategoryLabel(b[0])));
-}
 // One Browse Fonts panel row for a whole family. `activeId` (defaults to the family's rep) is the
 // style whose id the row's name-click and favorite star act on, and the one the inline style
 // <select> starts on -- Recently Used / Favorites pass the specific style id that earned the pin.
@@ -483,9 +475,10 @@ function fontLibraryRowHtml(entry,currentFontId,activeId){
 }
 // Renders the Browse Fonts panel's list: pinned "Recently Used" then "Favorites" groups (each only
 // among fonts matching the current search/category filter, and keeping per-style granularity), then
-// every category group in alphabetical order, then kicks off (without awaiting) filling in every
-// row's live rhinestone preview. Re-run on every search keystroke, category change, favorite toggle,
-// and style pick; preview generation is cached so re-renders stay cheap.
+// every family in one flat alphabetical list under a single "All fonts" header, then kicks off
+// (without awaiting) filling in every row's live rhinestone preview. Re-run on every search
+// keystroke, category change, favorite toggle, and style pick; preview generation is cached so
+// re-renders stay cheap.
 function renderFontLibraryList(){
   if(!fontManager)return;
   const list=el('fontLibraryList');
@@ -504,7 +497,18 @@ function renderFontLibraryList(){
   let html='';
   if(recents.length)html+=`<div class="font-library-group">Recently Used</div>${recents.map(r=>fontLibraryRowHtml(r.entry,currentFontId,r.activeId)).join('')}`;
   if(favorites.length)html+=`<div class="font-library-group">Favorites</div>${favorites.map(r=>fontLibraryRowHtml(r.entry,currentFontId,r.activeId)).join('')}`;
-  for(const[role,group]of groupFamilyEntriesByCategory(entries))html+=`<div class="font-library-group">${escapeHtml(fontCategoryLabel(role))}</div>${group.map(e=>fontLibraryRowHtml(e,currentFontId)).join('')}`;
+  // FONT-LIB-006: one flat alphabetical list under a single always-present "All fonts" header, in
+  // place of the previous eleven per-category headers. The panel's own #fontCategoryFilter and the
+  // fontCategoryLabel() match in the fonts filter above already slice the list by category -- the
+  // category headers were a third mechanism for the same job, and an expensive one: 11 headers for
+  // 28 family rows inside a 280px-max scroll viewport (index.html), six of them introducing a single
+  // font. The one "All fonts" header stays (unconditionally -- a header that is always there is
+  // easier to reason about than a conditional one, and the label is accurate whether or not
+  // Recently Used / Favorites precede it): without it the Favorites section has no terminator and
+  // the full family list reads as a continuation of Favorites. fontFamilyEntries() returns entries
+  // in manifest order, so sort here.
+  const sortedEntries=[...entries].sort((a,b)=>a.family.localeCompare(b.family));
+  html+=`<div class="font-library-group">All fonts</div>${sortedEntries.map(e=>fontLibraryRowHtml(e,currentFontId)).join('')}`;
   list.innerHTML=html;
   populateFontPreviewCanvases(list).catch(error=>console.error('Font preview rendering failed',error));
 }
