@@ -1434,10 +1434,10 @@ function renderSession3Markdown(data) {
   const s3 = data.session3;
   const m = data.meta;
   L.push('\n\n## READ-011D — rating-analysis pre-registration\n');
-  L.push('Recomputed from `docs/data/read-011/{ratings.csv,render-key.json}` and');
-  L.push('`assets/fonts/manifest.json`. Written before the sheet is rated: with an empty outcome');
-  L.push('column every sellable rate below is `null`. See');
-  L.push('`docs/specifications/READ-011D-AnalysisPreRegistration.md`.\n');
+  L.push('Recomputed from the landed READ-011 ratings —');
+  L.push('`docs/data/read-011/{ratings.csv,render-key.json}` and `assets/fonts/manifest.json`. The');
+  L.push('rule these tables feed is `docs/specifications/READ-011D-AnalysisPreRegistration.md` §§6–8;');
+  L.push('the recorded outcome is `docs/specifications/READ-011E-PreRegistrationDefect.md`.\n');
 
   L.push(`- rated rows: ${s3.rowCount}; unrated (blank sellable): ${s3.unratedRows.count}`);
   L.push(`- readable marginals: ${JSON.stringify(s3.marginals.readable)}`);

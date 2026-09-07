@@ -96,898 +96,18 @@
   "session3": {
     "rowCount": 147,
     "unratedRows": {
-      "count": 147,
-      "rows": [
-        {
-          "slug": "012f6961",
-          "block": "main",
-          "fontId": "montserrat-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "0335db6f",
-          "block": "main",
-          "fontId": "parisienne-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "0533367c",
-          "block": "main",
-          "fontId": "allura-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "0649e9ba",
-          "block": "main",
-          "fontId": "parisienne-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "0837902b",
-          "block": "main",
-          "fontId": "pt-serif-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "0a031013",
-          "block": "repeats",
-          "fontId": "montserrat-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "0b0304df",
-          "block": "main",
-          "fontId": "caveat-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "0b0b3fd4",
-          "block": "main",
-          "fontId": "playfair-display-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "0f320099",
-          "block": "main",
-          "fontId": "anton-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "101f3944",
-          "block": "main",
-          "fontId": "cinzel-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "111a00be",
-          "block": "main",
-          "fontId": "parisienne-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "1191f008",
-          "block": "main",
-          "fontId": "courier-prime-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "1195a2d9",
-          "block": "main",
-          "fontId": "abril-fatface-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "14303d54",
-          "block": "size-invariance",
-          "fontId": "montserrat-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "14cb9202",
-          "block": "main",
-          "fontId": "montserrat-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "1619d7f4",
-          "block": "main",
-          "fontId": "baloo2-variable-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "185ee896",
-          "block": "main",
-          "fontId": "caveat-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "196910b7",
-          "block": "main",
-          "fontId": "bebas-neue-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "1b7ebcb0",
-          "block": "main",
-          "fontId": "dancing-script-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "1ce8c131",
-          "block": "main",
-          "fontId": "kaushan-script-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "1d0f509b",
-          "block": "main",
-          "fontId": "allura-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "1e45583d",
-          "block": "main",
-          "fontId": "sacramento-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "1eddf88c",
-          "block": "main",
-          "fontId": "lobster-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "20683b08",
-          "block": "main",
-          "fontId": "cinzel-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "20c16d25",
-          "block": "main",
-          "fontId": "yellowtail-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "212a2249",
-          "block": "size-invariance",
-          "fontId": "montserrat-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "22984c2d",
-          "block": "main",
-          "fontId": "lobster-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "22f3e71f",
-          "block": "main",
-          "fontId": "lilita-one-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "24e680ff",
-          "block": "size-invariance",
-          "fontId": "cookie-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "2a6428aa",
-          "block": "main",
-          "fontId": "great-vibes-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "2c0898e4",
-          "block": "main",
-          "fontId": "courier-prime-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "2c4d1173",
-          "block": "main",
-          "fontId": "alex-brush-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "2dd3acbb",
-          "block": "main",
-          "fontId": "sacramento-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "30e61701",
-          "block": "main",
-          "fontId": "anton-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "348c42c4",
-          "block": "main",
-          "fontId": "lilita-one-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "34c9c2a4",
-          "block": "main",
-          "fontId": "satisfy-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "369ed7b3",
-          "block": "main",
-          "fontId": "lobster-two-bold",
-          "mode": "fill"
-        },
-        {
-          "slug": "37ab540f",
-          "block": "main",
-          "fontId": "great-vibes-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "37d2cce7",
-          "block": "main",
-          "fontId": "righteous-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "3a212cdd",
-          "block": "main",
-          "fontId": "lobster-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "3bf95b5a",
-          "block": "main",
-          "fontId": "courier-prime-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "3cd2b867",
-          "block": "main",
-          "fontId": "great-vibes-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "4052d5ad",
-          "block": "main",
-          "fontId": "baloo2-variable-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "40cbf7e4",
-          "block": "main",
-          "fontId": "dancing-script-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "4242ebe8",
-          "block": "repeats",
-          "fontId": "great-vibes-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "42e785f5",
-          "block": "main",
-          "fontId": "parisienne-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "46439e3b",
-          "block": "main",
-          "fontId": "pt-serif-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "4845392d",
-          "block": "main",
-          "fontId": "playfair-display-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "48a08595",
-          "block": "main",
-          "fontId": "mr-dafoe-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "4908417d",
-          "block": "main",
-          "fontId": "bebas-neue-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "492f2264",
-          "block": "main",
-          "fontId": "satisfy-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "496fdb73",
-          "block": "main",
-          "fontId": "caveat-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "49833813",
-          "block": "main",
-          "fontId": "mr-dafoe-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "51695ce6",
-          "block": "size-invariance",
-          "fontId": "montserrat-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "53003dc9",
-          "block": "main",
-          "fontId": "baloo2-variable-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "549af2ba",
-          "block": "main",
-          "fontId": "lobster-two-bold",
-          "mode": "outline"
-        },
-        {
-          "slug": "55bd524d",
-          "block": "main",
-          "fontId": "righteous-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "57171783",
-          "block": "main",
-          "fontId": "righteous-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "58a4e85b",
-          "block": "main",
-          "fontId": "abril-fatface-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "5a950a6c",
-          "block": "main",
-          "fontId": "satisfy-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "60137352",
-          "block": "main",
-          "fontId": "poppins-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "60bbb91f",
-          "block": "main",
-          "fontId": "lobster-two-bold",
-          "mode": "outline"
-        },
-        {
-          "slug": "614fee96",
-          "block": "main",
-          "fontId": "sacramento-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "64c9c54f",
-          "block": "main",
-          "fontId": "bebas-neue-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "6547773b",
-          "block": "main",
-          "fontId": "cookie-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "66e462c8",
-          "block": "main",
-          "fontId": "dancing-script-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "6deefda9",
-          "block": "main",
-          "fontId": "great-vibes-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "6e2425c7",
-          "block": "main",
-          "fontId": "caveat-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "703eab4a",
-          "block": "main",
-          "fontId": "pacifico-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "7098c1a0",
-          "block": "size-invariance",
-          "fontId": "lilita-one-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "771ec772",
-          "block": "size-invariance",
-          "fontId": "cookie-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "77ccb85d",
-          "block": "main",
-          "fontId": "montserrat-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "797e9a4b",
-          "block": "main",
-          "fontId": "montserrat-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "79b83bd9",
-          "block": "main",
-          "fontId": "poppins-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "7a4886f4",
-          "block": "main",
-          "fontId": "sacramento-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "7aa85667",
-          "block": "main",
-          "fontId": "yellowtail-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "7cd5605d",
-          "block": "main",
-          "fontId": "poppins-semibold",
-          "mode": "outline"
-        },
-        {
-          "slug": "7e6a3886",
-          "block": "main",
-          "fontId": "cookie-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "7e736d99",
-          "block": "main",
-          "fontId": "cookie-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "825be43d",
-          "block": "main",
-          "fontId": "alex-brush-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "849cd728",
-          "block": "repeats",
-          "fontId": "poppins-semibold",
-          "mode": "fill"
-        },
-        {
-          "slug": "86130e4a",
-          "block": "repeats",
-          "fontId": "poppins-semibold",
-          "mode": "fill"
-        },
-        {
-          "slug": "8bc6397e",
-          "block": "main",
-          "fontId": "mr-dafoe-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "9557ebd6",
-          "block": "main",
-          "fontId": "montserrat-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "95b6faa7",
-          "block": "main",
-          "fontId": "parisienne-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "961ce5b6",
-          "block": "main",
-          "fontId": "baloo2-variable-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "9afe431e",
-          "block": "main",
-          "fontId": "courier-prime-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "9b84f150",
-          "block": "main",
-          "fontId": "allura-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "9c4a1048",
-          "block": "main",
-          "fontId": "alex-brush-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "9f709566",
-          "block": "repeats",
-          "fontId": "parisienne-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "9f8aa133",
-          "block": "main",
-          "fontId": "poppins-semibold",
-          "mode": "fill"
-        },
-        {
-          "slug": "a2173b1b",
-          "block": "main",
-          "fontId": "cinzel-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "a2a84b3f",
-          "block": "main",
-          "fontId": "bebas-neue-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "a64ffc5c",
-          "block": "repeats",
-          "fontId": "mr-dafoe-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "a9606325",
-          "block": "main",
-          "fontId": "poppins-bold",
-          "mode": "outline"
-        },
-        {
-          "slug": "a9a0afaf",
-          "block": "main",
-          "fontId": "abril-fatface-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "a9adfc51",
-          "block": "main",
-          "fontId": "great-vibes-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "aa479c53",
-          "block": "main",
-          "fontId": "playfair-display-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "aabfe322",
-          "block": "main",
-          "fontId": "sacramento-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "abea0f8d",
-          "block": "size-invariance",
-          "fontId": "montserrat-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "ac96316d",
-          "block": "main",
-          "fontId": "allura-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "b02d02b4",
-          "block": "main",
-          "fontId": "sacramento-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "b12fa951",
-          "block": "main",
-          "fontId": "satisfy-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "b1a26343",
-          "block": "repeats",
-          "fontId": "lobster-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "b20906f1",
-          "block": "main",
-          "fontId": "lobster-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "b3981ef7",
-          "block": "main",
-          "fontId": "allura-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "b599816c",
-          "block": "main",
-          "fontId": "yellowtail-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "b67cfe0e",
-          "block": "main",
-          "fontId": "mr-dafoe-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "b7c73f2a",
-          "block": "main",
-          "fontId": "cookie-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "bc9ae6d3",
-          "block": "main",
-          "fontId": "poppins-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "be012103",
-          "block": "main",
-          "fontId": "allura-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "bedad78b",
-          "block": "main",
-          "fontId": "kaushan-script-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "bf0a5cc0",
-          "block": "main",
-          "fontId": "alex-brush-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "bff2d558",
-          "block": "main",
-          "fontId": "playfair-display-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "c73e1160",
-          "block": "main",
-          "fontId": "parisienne-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "ce77af0e",
-          "block": "main",
-          "fontId": "alex-brush-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "ced67b56",
-          "block": "size-invariance",
-          "fontId": "lilita-one-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "d00a1a02",
-          "block": "main",
-          "fontId": "poppins-bold",
-          "mode": "outline"
-        },
-        {
-          "slug": "d0d643d8",
-          "block": "repeats",
-          "fontId": "dancing-script-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "d29601c0",
-          "block": "repeats",
-          "fontId": "poppins-bold",
-          "mode": "fill"
-        },
-        {
-          "slug": "d2a8395f",
-          "block": "main",
-          "fontId": "pacifico-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "d5f09d4f",
-          "block": "repeats",
-          "fontId": "pt-serif-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "d966692a",
-          "block": "size-invariance",
-          "fontId": "cookie-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "da5671f0",
-          "block": "main",
-          "fontId": "yellowtail-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "db9e6413",
-          "block": "main",
-          "fontId": "cinzel-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "dc04ba8c",
-          "block": "main",
-          "fontId": "lilita-one-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "dc1ad7e7",
-          "block": "main",
-          "fontId": "poppins-semibold",
-          "mode": "fill"
-        },
-        {
-          "slug": "dd901001",
-          "block": "size-invariance",
-          "fontId": "lilita-one-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "e081b242",
-          "block": "size-invariance",
-          "fontId": "lilita-one-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "e0e41947",
-          "block": "main",
-          "fontId": "cinzel-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "e11f74fc",
-          "block": "main",
-          "fontId": "great-vibes-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "e5c08736",
-          "block": "repeats",
-          "fontId": "dancing-script-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "e63a41af",
-          "block": "main",
-          "fontId": "pt-serif-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "e64d769d",
-          "block": "main",
-          "fontId": "kaushan-script-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "e770929f",
-          "block": "main",
-          "fontId": "poppins-bold",
-          "mode": "fill"
-        },
-        {
-          "slug": "e977e4b3",
-          "block": "main",
-          "fontId": "poppins-semibold",
-          "mode": "outline"
-        },
-        {
-          "slug": "ebd38fcf",
-          "block": "main",
-          "fontId": "dancing-script-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "ee9577a4",
-          "block": "repeats",
-          "fontId": "bebas-neue-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "ef0ab067",
-          "block": "main",
-          "fontId": "montserrat-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "f2a42979",
-          "block": "size-invariance",
-          "fontId": "cookie-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "f55191b6",
-          "block": "repeats",
-          "fontId": "lilita-one-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "f5f6731f",
-          "block": "main",
-          "fontId": "pt-serif-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "fa3d9880",
-          "block": "repeats",
-          "fontId": "parisienne-regular",
-          "mode": "fill"
-        },
-        {
-          "slug": "fb621b3d",
-          "block": "main",
-          "fontId": "anton-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "fd523a17",
-          "block": "main",
-          "fontId": "lilita-one-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "fe95d67e",
-          "block": "main",
-          "fontId": "pacifico-regular",
-          "mode": "outline"
-        },
-        {
-          "slug": "fea9f594",
-          "block": "repeats",
-          "fontId": "abril-fatface-regular",
-          "mode": "fill"
-        }
-      ]
+      "count": 0,
+      "rows": []
     },
     "marginals": {
       "readable": {
-        "": 147
+        "yes": 109,
+        "struggle": 25,
+        "no": 13
       },
       "sellable": {
-        "": 147
+        "no": 102,
+        "yes": 45
       }
     },
     "duplicateGroups": {
@@ -1035,10 +155,10 @@
             "separation"
           ],
           "trackingContrastPresent": false,
-          "allMembersRated": false,
-          "readableSame": false,
-          "sellableSame": false,
-          "bothSame": false
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
         },
         {
           "key": "pt-serif-regular|fill|20.5|ss10|Emmanuel|0",
@@ -1071,10 +191,10 @@
             "separation"
           ],
           "trackingContrastPresent": false,
-          "allMembersRated": false,
-          "readableSame": false,
-          "sellableSame": false,
-          "bothSame": false
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
         },
         {
           "key": "great-vibes-regular|fill|17.5|ss10|Emmanuel|0",
@@ -1107,10 +227,10 @@
             "none"
           ],
           "trackingContrastPresent": false,
-          "allMembersRated": false,
-          "readableSame": false,
-          "sellableSame": false,
-          "bothSame": false
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
         },
         {
           "key": "abril-fatface-regular|fill|22|ss10|Vitalina|0",
@@ -1147,10 +267,10 @@
             "separation"
           ],
           "trackingContrastPresent": true,
-          "allMembersRated": false,
-          "readableSame": false,
-          "sellableSame": false,
-          "bothSame": false
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
         },
         {
           "key": "mr-dafoe-regular|fill|22|ss10|Emmanuel|12.4",
@@ -1183,9 +303,9 @@
             "separation"
           ],
           "trackingContrastPresent": false,
-          "allMembersRated": false,
+          "allMembersRated": true,
           "readableSame": false,
-          "sellableSame": false,
+          "sellableSame": true,
           "bothSame": false
         },
         {
@@ -1219,8 +339,8 @@
             "none"
           ],
           "trackingContrastPresent": false,
-          "allMembersRated": false,
-          "readableSame": false,
+          "allMembersRated": true,
+          "readableSame": true,
           "sellableSame": false,
           "bothSame": false
         },
@@ -1256,10 +376,10 @@
             "separation"
           ],
           "trackingContrastPresent": true,
-          "allMembersRated": false,
-          "readableSame": false,
-          "sellableSame": false,
-          "bothSame": false
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
         },
         {
           "key": "dancing-script-regular|outline|16|ss10|Vitalina|0",
@@ -1292,10 +412,10 @@
             "none"
           ],
           "trackingContrastPresent": false,
-          "allMembersRated": false,
-          "readableSame": false,
-          "sellableSame": false,
-          "bothSame": false
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
         },
         {
           "key": "dancing-script-regular|outline|22|ss10|Emmanuel|0",
@@ -1328,8 +448,8 @@
             "none"
           ],
           "trackingContrastPresent": false,
-          "allMembersRated": false,
-          "readableSame": false,
+          "allMembersRated": true,
+          "readableSame": true,
           "sellableSame": false,
           "bothSame": false
         },
@@ -1365,10 +485,10 @@
             "separation"
           ],
           "trackingContrastPresent": true,
-          "allMembersRated": false,
-          "readableSame": false,
-          "sellableSame": false,
-          "bothSame": false
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
         },
         {
           "key": "poppins-semibold|fill|17.5|ss10|Emmanuel|0",
@@ -1401,10 +521,10 @@
             "none"
           ],
           "trackingContrastPresent": false,
-          "allMembersRated": false,
-          "readableSame": false,
-          "sellableSame": false,
-          "bothSame": false
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
         },
         {
           "key": "baloo2-variable-regular|outline|22|ss10|Vitalina|0",
@@ -1438,8 +558,8 @@
             "separation"
           ],
           "trackingContrastPresent": true,
-          "allMembersRated": false,
-          "readableSame": false,
+          "allMembersRated": true,
+          "readableSame": true,
           "sellableSame": false,
           "bothSame": false
         },
@@ -1475,10 +595,10 @@
             "separation"
           ],
           "trackingContrastPresent": true,
-          "allMembersRated": false,
-          "readableSame": false,
-          "sellableSame": false,
-          "bothSame": false
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
         },
         {
           "key": "cookie-regular|fill|19|ss10|Vitalina|0",
@@ -1512,9 +632,9 @@
             "separation"
           ],
           "trackingContrastPresent": true,
-          "allMembersRated": false,
+          "allMembersRated": true,
           "readableSame": false,
-          "sellableSame": false,
+          "sellableSame": true,
           "bothSame": false
         },
         {
@@ -1548,10 +668,10 @@
             "separation"
           ],
           "trackingContrastPresent": false,
-          "allMembersRated": false,
-          "readableSame": false,
-          "sellableSame": false,
-          "bothSame": false
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
         },
         {
           "key": "bebas-neue-regular|outline|22|ss10|Vitalina|0",
@@ -1584,10 +704,10 @@
             "none"
           ],
           "trackingContrastPresent": false,
-          "allMembersRated": false,
-          "readableSame": false,
-          "sellableSame": false,
-          "bothSame": false
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
         },
         {
           "key": "lilita-one-regular|outline|20.5|ss10|Emmanuel|0",
@@ -1620,10 +740,10 @@
             "none"
           ],
           "trackingContrastPresent": false,
-          "allMembersRated": false,
-          "readableSame": false,
-          "sellableSame": false,
-          "bothSame": false
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
         },
         {
           "key": "poppins-bold|fill|20.5|ss10|Vitalina|0",
@@ -1656,10 +776,10 @@
             "separation"
           ],
           "trackingContrastPresent": false,
-          "allMembersRated": false,
-          "readableSame": false,
-          "sellableSame": false,
-          "bothSame": false
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
         },
         {
           "key": "parisienne-regular|fill|17.5|ss10|Vitalina|0",
@@ -1692,10 +812,10 @@
             "separation"
           ],
           "trackingContrastPresent": false,
-          "allMembersRated": false,
-          "readableSame": false,
-          "sellableSame": false,
-          "bothSame": false
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
         },
         {
           "key": "poppins-semibold|fill|22|ss10|Emmanuel|0",
@@ -1728,19 +848,19 @@
             "none"
           ],
           "trackingContrastPresent": false,
-          "allMembersRated": false,
-          "readableSame": false,
-          "sellableSame": false,
-          "bothSame": false
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
         }
       ]
     },
     "selfConsistency": {
       "n": 20,
-      "fullyRatedGroups": 0,
-      "readableAgreement": 0,
-      "sellableAgreement": 0,
-      "bothAgreement": 0,
+      "fullyRatedGroups": 20,
+      "readableAgreement": 18,
+      "sellableAgreement": 17,
+      "bothAgreement": 15,
       "seededRepeatsUnderMinPositions": {
         "count": 1,
         "groups": [
@@ -1934,162 +1054,162 @@
       "scopes": {
         "outline|tracked": {
           "population": 23,
-          "rated": 0,
+          "rated": 23,
           "byCandidate": {
             "1": {
               "rowsBelow": 12,
-              "sellableBelow": 0,
+              "sellableBelow": 7,
               "rowsAtOrAbove": 11,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 7,
+              "ratedBelow": 12,
+              "ratedAtOrAbove": 11
             },
             "2": {
               "rowsBelow": 21,
-              "sellableBelow": 0,
+              "sellableBelow": 14,
               "rowsAtOrAbove": 2,
               "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedBelow": 21,
+              "ratedAtOrAbove": 2
             },
             "0.6": {
               "rowsBelow": 5,
-              "sellableBelow": 0,
+              "sellableBelow": 3,
               "rowsAtOrAbove": 18,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 11,
+              "ratedBelow": 5,
+              "ratedAtOrAbove": 18
             },
             "0.8": {
               "rowsBelow": 9,
-              "sellableBelow": 0,
+              "sellableBelow": 6,
               "rowsAtOrAbove": 14,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 8,
+              "ratedBelow": 9,
+              "ratedAtOrAbove": 14
             },
             "1.2": {
               "rowsBelow": 13,
-              "sellableBelow": 0,
+              "sellableBelow": 8,
               "rowsAtOrAbove": 10,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 6,
+              "ratedBelow": 13,
+              "ratedAtOrAbove": 10
             },
             "1.4": {
               "rowsBelow": 16,
-              "sellableBelow": 0,
+              "sellableBelow": 9,
               "rowsAtOrAbove": 7,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 5,
+              "ratedBelow": 16,
+              "ratedAtOrAbove": 7
             },
             "1.6": {
               "rowsBelow": 18,
-              "sellableBelow": 0,
+              "sellableBelow": 11,
               "rowsAtOrAbove": 5,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 3,
+              "ratedBelow": 18,
+              "ratedAtOrAbove": 5
             },
             "1.8": {
               "rowsBelow": 19,
-              "sellableBelow": 0,
+              "sellableBelow": 12,
               "rowsAtOrAbove": 4,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 2,
+              "ratedBelow": 19,
+              "ratedAtOrAbove": 4
             }
           }
         },
         "outline|untracked": {
           "population": 40,
-          "rated": 0,
+          "rated": 40,
           "byCandidate": {
             "1": {
               "rowsBelow": 21,
-              "sellableBelow": 0,
+              "sellableBelow": 3,
               "rowsAtOrAbove": 19,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 12,
+              "ratedBelow": 21,
+              "ratedAtOrAbove": 19
             },
             "2": {
               "rowsBelow": 34,
-              "sellableBelow": 0,
+              "sellableBelow": 12,
               "rowsAtOrAbove": 6,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 3,
+              "ratedBelow": 34,
+              "ratedAtOrAbove": 6
             },
             "0.6": {
               "rowsBelow": 6,
-              "sellableBelow": 0,
+              "sellableBelow": 1,
               "rowsAtOrAbove": 34,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 14,
+              "ratedBelow": 6,
+              "ratedAtOrAbove": 34
             },
             "0.8": {
               "rowsBelow": 14,
-              "sellableBelow": 0,
+              "sellableBelow": 1,
               "rowsAtOrAbove": 26,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 14,
+              "ratedBelow": 14,
+              "ratedAtOrAbove": 26
             },
             "1.2": {
               "rowsBelow": 26,
-              "sellableBelow": 0,
+              "sellableBelow": 7,
               "rowsAtOrAbove": 14,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 8,
+              "ratedBelow": 26,
+              "ratedAtOrAbove": 14
             },
             "1.4": {
               "rowsBelow": 28,
-              "sellableBelow": 0,
+              "sellableBelow": 8,
               "rowsAtOrAbove": 12,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 7,
+              "ratedBelow": 28,
+              "ratedAtOrAbove": 12
             },
             "1.6": {
               "rowsBelow": 29,
-              "sellableBelow": 0,
+              "sellableBelow": 9,
               "rowsAtOrAbove": 11,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 6,
+              "ratedBelow": 29,
+              "ratedAtOrAbove": 11
             },
             "1.8": {
               "rowsBelow": 31,
-              "sellableBelow": 0,
+              "sellableBelow": 9,
               "rowsAtOrAbove": 9,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 6,
+              "ratedBelow": 31,
+              "ratedAtOrAbove": 9
             }
           }
         },
         "fill|tracked": {
           "population": 8,
-          "rated": 0,
+          "rated": 8,
           "byCandidate": {
             "1": {
               "rowsBelow": 2,
               "sellableBelow": 0,
               "rowsAtOrAbove": 6,
               "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedBelow": 2,
+              "ratedAtOrAbove": 6
             },
             "2": {
               "rowsBelow": 8,
               "sellableBelow": 0,
               "rowsAtOrAbove": 0,
               "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
+              "ratedBelow": 8,
               "ratedAtOrAbove": 0
             },
             "0.6": {
@@ -2098,7 +1218,7 @@
               "rowsAtOrAbove": 8,
               "sellableAtOrAbove": 0,
               "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedAtOrAbove": 8
             },
             "0.8": {
               "rowsBelow": 0,
@@ -2106,109 +1226,109 @@
               "rowsAtOrAbove": 8,
               "sellableAtOrAbove": 0,
               "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedAtOrAbove": 8
             },
             "1.2": {
               "rowsBelow": 3,
               "sellableBelow": 0,
               "rowsAtOrAbove": 5,
               "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedBelow": 3,
+              "ratedAtOrAbove": 5
             },
             "1.4": {
               "rowsBelow": 7,
               "sellableBelow": 0,
               "rowsAtOrAbove": 1,
               "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedBelow": 7,
+              "ratedAtOrAbove": 1
             },
             "1.6": {
               "rowsBelow": 7,
               "sellableBelow": 0,
               "rowsAtOrAbove": 1,
               "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedBelow": 7,
+              "ratedAtOrAbove": 1
             },
             "1.8": {
               "rowsBelow": 8,
               "sellableBelow": 0,
               "rowsAtOrAbove": 0,
               "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
+              "ratedBelow": 8,
               "ratedAtOrAbove": 0
             }
           }
         },
         "fill|untracked": {
           "population": 55,
-          "rated": 0,
+          "rated": 55,
           "byCandidate": {
             "1": {
               "rowsBelow": 33,
               "sellableBelow": 0,
               "rowsAtOrAbove": 22,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 8,
+              "ratedBelow": 33,
+              "ratedAtOrAbove": 22
             },
             "2": {
               "rowsBelow": 46,
-              "sellableBelow": 0,
+              "sellableBelow": 4,
               "rowsAtOrAbove": 9,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 4,
+              "ratedBelow": 46,
+              "ratedAtOrAbove": 9
             },
             "0.6": {
               "rowsBelow": 13,
               "sellableBelow": 0,
               "rowsAtOrAbove": 42,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 8,
+              "ratedBelow": 13,
+              "ratedAtOrAbove": 42
             },
             "0.8": {
               "rowsBelow": 23,
               "sellableBelow": 0,
               "rowsAtOrAbove": 32,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 8,
+              "ratedBelow": 23,
+              "ratedAtOrAbove": 32
             },
             "1.2": {
               "rowsBelow": 38,
-              "sellableBelow": 0,
+              "sellableBelow": 1,
               "rowsAtOrAbove": 17,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 7,
+              "ratedBelow": 38,
+              "ratedAtOrAbove": 17
             },
             "1.4": {
               "rowsBelow": 41,
-              "sellableBelow": 0,
+              "sellableBelow": 1,
               "rowsAtOrAbove": 14,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 7,
+              "ratedBelow": 41,
+              "ratedAtOrAbove": 14
             },
             "1.6": {
               "rowsBelow": 43,
-              "sellableBelow": 0,
+              "sellableBelow": 2,
               "rowsAtOrAbove": 12,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 6,
+              "ratedBelow": 43,
+              "ratedAtOrAbove": 12
             },
             "1.8": {
               "rowsBelow": 44,
-              "sellableBelow": 0,
+              "sellableBelow": 3,
               "rowsAtOrAbove": 11,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 5,
+              "ratedBelow": 44,
+              "ratedAtOrAbove": 11
             }
           }
         }
@@ -2228,93 +1348,93 @@
       "scopes": {
         "monoline|outline|tracked": {
           "population": 9,
-          "rated": 0,
+          "rated": 9,
           "byCandidate": {
             "16": {
               "rowsBelow": 0,
               "sellableBelow": 0,
               "rowsAtOrAbove": 9,
-              "sellableAtOrAbove": 0,
+              "sellableAtOrAbove": 6,
               "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedAtOrAbove": 9
             },
             "19": {
               "rowsBelow": 4,
-              "sellableBelow": 0,
+              "sellableBelow": 2,
               "rowsAtOrAbove": 5,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 4,
+              "ratedBelow": 4,
+              "ratedAtOrAbove": 5
             },
             "22": {
               "rowsBelow": 8,
-              "sellableBelow": 0,
+              "sellableBelow": 5,
               "rowsAtOrAbove": 1,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 1,
+              "ratedBelow": 8,
+              "ratedAtOrAbove": 1
             },
             "17.5": {
               "rowsBelow": 2,
-              "sellableBelow": 0,
+              "sellableBelow": 1,
               "rowsAtOrAbove": 7,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 5,
+              "ratedBelow": 2,
+              "ratedAtOrAbove": 7
             },
             "20.5": {
               "rowsBelow": 6,
-              "sellableBelow": 0,
+              "sellableBelow": 3,
               "rowsAtOrAbove": 3,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 3,
+              "ratedBelow": 6,
+              "ratedAtOrAbove": 3
             }
           }
         },
         "monoline|outline|untracked": {
           "population": 12,
-          "rated": 0,
+          "rated": 12,
           "byCandidate": {
             "16": {
               "rowsBelow": 0,
               "sellableBelow": 0,
               "rowsAtOrAbove": 12,
-              "sellableAtOrAbove": 0,
+              "sellableAtOrAbove": 1,
               "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedAtOrAbove": 12
             },
             "19": {
               "rowsBelow": 4,
               "sellableBelow": 0,
               "rowsAtOrAbove": 8,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 1,
+              "ratedBelow": 4,
+              "ratedAtOrAbove": 8
             },
             "22": {
               "rowsBelow": 10,
-              "sellableBelow": 0,
+              "sellableBelow": 1,
               "rowsAtOrAbove": 2,
               "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedBelow": 10,
+              "ratedAtOrAbove": 2
             },
             "17.5": {
               "rowsBelow": 2,
               "sellableBelow": 0,
               "rowsAtOrAbove": 10,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 1,
+              "ratedBelow": 2,
+              "ratedAtOrAbove": 10
             },
             "20.5": {
               "rowsBelow": 8,
-              "sellableBelow": 0,
+              "sellableBelow": 1,
               "rowsAtOrAbove": 4,
               "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedBelow": 8,
+              "ratedAtOrAbove": 4
             }
           }
         },
@@ -2366,7 +1486,7 @@
         },
         "monoline|fill|untracked": {
           "population": 21,
-          "rated": 0,
+          "rated": 21,
           "byCandidate": {
             "16": {
               "rowsBelow": 0,
@@ -2374,137 +1494,137 @@
               "rowsAtOrAbove": 21,
               "sellableAtOrAbove": 0,
               "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedAtOrAbove": 21
             },
             "19": {
               "rowsBelow": 8,
               "sellableBelow": 0,
               "rowsAtOrAbove": 13,
               "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedBelow": 8,
+              "ratedAtOrAbove": 13
             },
             "22": {
               "rowsBelow": 18,
               "sellableBelow": 0,
               "rowsAtOrAbove": 3,
               "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedBelow": 18,
+              "ratedAtOrAbove": 3
             },
             "17.5": {
               "rowsBelow": 4,
               "sellableBelow": 0,
               "rowsAtOrAbove": 17,
               "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedBelow": 4,
+              "ratedAtOrAbove": 17
             },
             "20.5": {
               "rowsBelow": 14,
               "sellableBelow": 0,
               "rowsAtOrAbove": 7,
               "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedBelow": 14,
+              "ratedAtOrAbove": 7
             }
           }
         },
         "transitional|outline|tracked": {
           "population": 6,
-          "rated": 0,
+          "rated": 6,
           "byCandidate": {
             "16": {
               "rowsBelow": 0,
               "sellableBelow": 0,
               "rowsAtOrAbove": 6,
-              "sellableAtOrAbove": 0,
+              "sellableAtOrAbove": 3,
               "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedAtOrAbove": 6
             },
             "19": {
               "rowsBelow": 3,
-              "sellableBelow": 0,
+              "sellableBelow": 1,
               "rowsAtOrAbove": 3,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 2,
+              "ratedBelow": 3,
+              "ratedAtOrAbove": 3
             },
             "22": {
               "rowsBelow": 5,
-              "sellableBelow": 0,
+              "sellableBelow": 2,
               "rowsAtOrAbove": 1,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 1,
+              "ratedBelow": 5,
+              "ratedAtOrAbove": 1
             },
             "17.5": {
               "rowsBelow": 2,
               "sellableBelow": 0,
               "rowsAtOrAbove": 4,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 3,
+              "ratedBelow": 2,
+              "ratedAtOrAbove": 4
             },
             "20.5": {
               "rowsBelow": 4,
-              "sellableBelow": 0,
+              "sellableBelow": 2,
               "rowsAtOrAbove": 2,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 1,
+              "ratedBelow": 4,
+              "ratedAtOrAbove": 2
             }
           }
         },
         "transitional|outline|untracked": {
           "population": 14,
-          "rated": 0,
+          "rated": 14,
           "byCandidate": {
             "16": {
               "rowsBelow": 0,
               "sellableBelow": 0,
               "rowsAtOrAbove": 14,
-              "sellableAtOrAbove": 0,
+              "sellableAtOrAbove": 6,
               "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedAtOrAbove": 14
             },
             "19": {
               "rowsBelow": 4,
-              "sellableBelow": 0,
+              "sellableBelow": 1,
               "rowsAtOrAbove": 10,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 5,
+              "ratedBelow": 4,
+              "ratedAtOrAbove": 10
             },
             "22": {
               "rowsBelow": 12,
-              "sellableBelow": 0,
+              "sellableBelow": 5,
               "rowsAtOrAbove": 2,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 1,
+              "ratedBelow": 12,
+              "ratedAtOrAbove": 2
             },
             "17.5": {
               "rowsBelow": 2,
               "sellableBelow": 0,
               "rowsAtOrAbove": 12,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 6,
+              "ratedBelow": 2,
+              "ratedAtOrAbove": 12
             },
             "20.5": {
               "rowsBelow": 9,
-              "sellableBelow": 0,
+              "sellableBelow": 2,
               "rowsAtOrAbove": 5,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 4,
+              "ratedBelow": 9,
+              "ratedAtOrAbove": 5
             }
           }
         },
         "transitional|fill|tracked": {
           "population": 5,
-          "rated": 0,
+          "rated": 5,
           "byCandidate": {
             "16": {
               "rowsBelow": 0,
@@ -2512,183 +1632,183 @@
               "rowsAtOrAbove": 5,
               "sellableAtOrAbove": 0,
               "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedAtOrAbove": 5
             },
             "19": {
               "rowsBelow": 2,
               "sellableBelow": 0,
               "rowsAtOrAbove": 3,
               "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedBelow": 2,
+              "ratedAtOrAbove": 3
             },
             "22": {
               "rowsBelow": 3,
               "sellableBelow": 0,
               "rowsAtOrAbove": 2,
               "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedBelow": 3,
+              "ratedAtOrAbove": 2
             },
             "17.5": {
               "rowsBelow": 1,
               "sellableBelow": 0,
               "rowsAtOrAbove": 4,
               "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedBelow": 1,
+              "ratedAtOrAbove": 4
             },
             "20.5": {
               "rowsBelow": 3,
               "sellableBelow": 0,
               "rowsAtOrAbove": 2,
               "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedBelow": 3,
+              "ratedAtOrAbove": 2
             }
           }
         },
         "transitional|fill|untracked": {
           "population": 16,
-          "rated": 0,
+          "rated": 16,
           "byCandidate": {
             "16": {
               "rowsBelow": 0,
               "sellableBelow": 0,
               "rowsAtOrAbove": 16,
-              "sellableAtOrAbove": 0,
+              "sellableAtOrAbove": 1,
               "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedAtOrAbove": 16
             },
             "19": {
               "rowsBelow": 6,
               "sellableBelow": 0,
               "rowsAtOrAbove": 10,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 1,
+              "ratedBelow": 6,
+              "ratedAtOrAbove": 10
             },
             "22": {
               "rowsBelow": 14,
-              "sellableBelow": 0,
+              "sellableBelow": 1,
               "rowsAtOrAbove": 2,
               "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedBelow": 14,
+              "ratedAtOrAbove": 2
             },
             "17.5": {
               "rowsBelow": 3,
               "sellableBelow": 0,
               "rowsAtOrAbove": 13,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 1,
+              "ratedBelow": 3,
+              "ratedAtOrAbove": 13
             },
             "20.5": {
               "rowsBelow": 10,
               "sellableBelow": 0,
               "rowsAtOrAbove": 6,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 1,
+              "ratedBelow": 10,
+              "ratedAtOrAbove": 6
             }
           }
         },
         "massed|outline|tracked": {
           "population": 8,
-          "rated": 0,
+          "rated": 8,
           "byCandidate": {
             "16": {
               "rowsBelow": 0,
               "sellableBelow": 0,
               "rowsAtOrAbove": 8,
-              "sellableAtOrAbove": 0,
+              "sellableAtOrAbove": 5,
               "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedAtOrAbove": 8
             },
             "19": {
               "rowsBelow": 4,
-              "sellableBelow": 0,
+              "sellableBelow": 2,
               "rowsAtOrAbove": 4,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 3,
+              "ratedBelow": 4,
+              "ratedAtOrAbove": 4
             },
             "22": {
               "rowsBelow": 6,
-              "sellableBelow": 0,
+              "sellableBelow": 3,
               "rowsAtOrAbove": 2,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 2,
+              "ratedBelow": 6,
+              "ratedAtOrAbove": 2
             },
             "17.5": {
               "rowsBelow": 2,
-              "sellableBelow": 0,
+              "sellableBelow": 1,
               "rowsAtOrAbove": 6,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 4,
+              "ratedBelow": 2,
+              "ratedAtOrAbove": 6
             },
             "20.5": {
               "rowsBelow": 6,
-              "sellableBelow": 0,
+              "sellableBelow": 3,
               "rowsAtOrAbove": 2,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 2,
+              "ratedBelow": 6,
+              "ratedAtOrAbove": 2
             }
           }
         },
         "massed|outline|untracked": {
           "population": 14,
-          "rated": 0,
+          "rated": 14,
           "byCandidate": {
             "16": {
               "rowsBelow": 0,
               "sellableBelow": 0,
               "rowsAtOrAbove": 14,
-              "sellableAtOrAbove": 0,
+              "sellableAtOrAbove": 8,
               "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedAtOrAbove": 14
             },
             "19": {
               "rowsBelow": 4,
-              "sellableBelow": 0,
+              "sellableBelow": 2,
               "rowsAtOrAbove": 10,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 6,
+              "ratedBelow": 4,
+              "ratedAtOrAbove": 10
             },
             "22": {
               "rowsBelow": 12,
-              "sellableBelow": 0,
+              "sellableBelow": 7,
               "rowsAtOrAbove": 2,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 1,
+              "ratedBelow": 12,
+              "ratedAtOrAbove": 2
             },
             "17.5": {
               "rowsBelow": 2,
-              "sellableBelow": 0,
+              "sellableBelow": 1,
               "rowsAtOrAbove": 12,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 7,
+              "ratedBelow": 2,
+              "ratedAtOrAbove": 12
             },
             "20.5": {
               "rowsBelow": 8,
-              "sellableBelow": 0,
+              "sellableBelow": 3,
               "rowsAtOrAbove": 6,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 5,
+              "ratedBelow": 8,
+              "ratedAtOrAbove": 6
             }
           }
         },
         "massed|fill|tracked": {
           "population": 3,
-          "rated": 0,
+          "rated": 3,
           "byCandidate": {
             "16": {
               "rowsBelow": 0,
@@ -2696,22 +1816,22 @@
               "rowsAtOrAbove": 3,
               "sellableAtOrAbove": 0,
               "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedAtOrAbove": 3
             },
             "19": {
               "rowsBelow": 2,
               "sellableBelow": 0,
               "rowsAtOrAbove": 1,
               "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedBelow": 2,
+              "ratedAtOrAbove": 1
             },
             "22": {
               "rowsBelow": 3,
               "sellableBelow": 0,
               "rowsAtOrAbove": 0,
               "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
+              "ratedBelow": 3,
               "ratedAtOrAbove": 0
             },
             "17.5": {
@@ -2719,62 +1839,62 @@
               "sellableBelow": 0,
               "rowsAtOrAbove": 1,
               "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedBelow": 2,
+              "ratedAtOrAbove": 1
             },
             "20.5": {
               "rowsBelow": 3,
               "sellableBelow": 0,
               "rowsAtOrAbove": 0,
               "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
+              "ratedBelow": 3,
               "ratedAtOrAbove": 0
             }
           }
         },
         "massed|fill|untracked": {
           "population": 18,
-          "rated": 0,
+          "rated": 18,
           "byCandidate": {
             "16": {
               "rowsBelow": 0,
               "sellableBelow": 0,
               "rowsAtOrAbove": 18,
-              "sellableAtOrAbove": 0,
+              "sellableAtOrAbove": 7,
               "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "ratedAtOrAbove": 18
             },
             "19": {
               "rowsBelow": 6,
-              "sellableBelow": 0,
+              "sellableBelow": 1,
               "rowsAtOrAbove": 12,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 6,
+              "ratedBelow": 6,
+              "ratedAtOrAbove": 12
             },
             "22": {
               "rowsBelow": 15,
-              "sellableBelow": 0,
+              "sellableBelow": 5,
               "rowsAtOrAbove": 3,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 2,
+              "ratedBelow": 15,
+              "ratedAtOrAbove": 3
             },
             "17.5": {
               "rowsBelow": 2,
               "sellableBelow": 0,
               "rowsAtOrAbove": 16,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 7,
+              "ratedBelow": 2,
+              "ratedAtOrAbove": 16
             },
             "20.5": {
               "rowsBelow": 11,
-              "sellableBelow": 0,
+              "sellableBelow": 3,
               "rowsAtOrAbove": 7,
-              "sellableAtOrAbove": 0,
-              "ratedBelow": 0,
-              "ratedAtOrAbove": 0
+              "sellableAtOrAbove": 4,
+              "ratedBelow": 11,
+              "ratedAtOrAbove": 7
             }
           }
         }
@@ -2788,11 +1908,11 @@
           "ratio": 19,
           "bigSlug": "14303d54",
           "bigStoneSizeId": "ss20",
-          "bigSellable": "",
-          "bigRated": false,
+          "bigSellable": "no",
+          "bigRated": true,
           "ss10Slug": "012f6961",
-          "ss10Sellable": "",
-          "ss10Rated": false
+          "ss10Sellable": "no",
+          "ss10Rated": true
         },
         {
           "fontId": "montserrat-regular",
@@ -2800,11 +1920,11 @@
           "ratio": 19,
           "bigSlug": "212a2249",
           "bigStoneSizeId": "ss16",
-          "bigSellable": "",
-          "bigRated": false,
+          "bigSellable": "no",
+          "bigRated": true,
           "ss10Slug": "797e9a4b",
-          "ss10Sellable": "",
-          "ss10Rated": false
+          "ss10Sellable": "yes",
+          "ss10Rated": true
         },
         {
           "fontId": "cookie-regular",
@@ -2812,11 +1932,11 @@
           "ratio": 19,
           "bigSlug": "24e680ff",
           "bigStoneSizeId": "ss20",
-          "bigSellable": "",
-          "bigRated": false,
+          "bigSellable": "no",
+          "bigRated": true,
           "ss10Slug": "7e6a3886",
-          "ss10Sellable": "",
-          "ss10Rated": false
+          "ss10Sellable": "no",
+          "ss10Rated": true
         },
         {
           "fontId": "montserrat-regular",
@@ -2824,11 +1944,11 @@
           "ratio": 19,
           "bigSlug": "51695ce6",
           "bigStoneSizeId": "ss20",
-          "bigSellable": "",
-          "bigRated": false,
+          "bigSellable": "no",
+          "bigRated": true,
           "ss10Slug": "797e9a4b",
-          "ss10Sellable": "",
-          "ss10Rated": false
+          "ss10Sellable": "yes",
+          "ss10Rated": true
         },
         {
           "fontId": "lilita-one-regular",
@@ -2836,11 +1956,11 @@
           "ratio": 19,
           "bigSlug": "7098c1a0",
           "bigStoneSizeId": "ss16",
-          "bigSellable": "",
-          "bigRated": false,
+          "bigSellable": "no",
+          "bigRated": true,
           "ss10Slug": "348c42c4",
-          "ss10Sellable": "",
-          "ss10Rated": false
+          "ss10Sellable": "no",
+          "ss10Rated": true
         },
         {
           "fontId": "cookie-regular",
@@ -2848,11 +1968,11 @@
           "ratio": 19,
           "bigSlug": "771ec772",
           "bigStoneSizeId": "ss16",
-          "bigSellable": "",
-          "bigRated": false,
+          "bigSellable": "no",
+          "bigRated": true,
           "ss10Slug": "b7c73f2a",
-          "ss10Sellable": "",
-          "ss10Rated": false
+          "ss10Sellable": "no",
+          "ss10Rated": true
         },
         {
           "fontId": "montserrat-regular",
@@ -2860,11 +1980,11 @@
           "ratio": 19,
           "bigSlug": "abea0f8d",
           "bigStoneSizeId": "ss16",
-          "bigSellable": "",
-          "bigRated": false,
+          "bigSellable": "no",
+          "bigRated": true,
           "ss10Slug": "012f6961",
-          "ss10Sellable": "",
-          "ss10Rated": false
+          "ss10Sellable": "no",
+          "ss10Rated": true
         },
         {
           "fontId": "lilita-one-regular",
@@ -2872,11 +1992,11 @@
           "ratio": 19,
           "bigSlug": "ced67b56",
           "bigStoneSizeId": "ss20",
-          "bigSellable": "",
-          "bigRated": false,
+          "bigSellable": "yes",
+          "bigRated": true,
           "ss10Slug": "348c42c4",
-          "ss10Sellable": "",
-          "ss10Rated": false
+          "ss10Sellable": "no",
+          "ss10Rated": true
         },
         {
           "fontId": "cookie-regular",
@@ -2884,11 +2004,11 @@
           "ratio": 19,
           "bigSlug": "d966692a",
           "bigStoneSizeId": "ss16",
-          "bigSellable": "",
-          "bigRated": false,
+          "bigSellable": "no",
+          "bigRated": true,
           "ss10Slug": "7e6a3886",
-          "ss10Sellable": "",
-          "ss10Rated": false
+          "ss10Sellable": "no",
+          "ss10Rated": true
         },
         {
           "fontId": "lilita-one-regular",
@@ -2896,11 +2016,11 @@
           "ratio": 19,
           "bigSlug": "dd901001",
           "bigStoneSizeId": "ss20",
-          "bigSellable": "",
-          "bigRated": false,
+          "bigSellable": "no",
+          "bigRated": true,
           "ss10Slug": "dc04ba8c",
-          "ss10Sellable": "",
-          "ss10Rated": false
+          "ss10Sellable": "no",
+          "ss10Rated": true
         },
         {
           "fontId": "lilita-one-regular",
@@ -2908,11 +2028,11 @@
           "ratio": 19,
           "bigSlug": "e081b242",
           "bigStoneSizeId": "ss16",
-          "bigSellable": "",
-          "bigRated": false,
+          "bigSellable": "no",
+          "bigRated": true,
           "ss10Slug": "dc04ba8c",
-          "ss10Sellable": "",
-          "ss10Rated": false
+          "ss10Sellable": "no",
+          "ss10Rated": true
         },
         {
           "fontId": "cookie-regular",
@@ -2920,28 +2040,28 @@
           "ratio": 19,
           "bigSlug": "f2a42979",
           "bigStoneSizeId": "ss20",
-          "bigSellable": "",
-          "bigRated": false,
+          "bigSellable": "no",
+          "bigRated": true,
           "ss10Slug": "b7c73f2a",
-          "ss10Sellable": "",
-          "ss10Rated": false
+          "ss10Sellable": "no",
+          "ss10Rated": true
         }
       ],
       "perSize": {
         "ss10": {
           "n": 6,
-          "rated": 0,
-          "sellable": 0
+          "rated": 6,
+          "sellable": 1
         },
         "ss16": {
           "n": 6,
-          "rated": 0,
+          "rated": 6,
           "sellable": 0
         },
         "ss20": {
           "n": 6,
-          "rated": 0,
-          "sellable": 0
+          "rated": 6,
+          "sellable": 1
         }
       }
     },
@@ -2951,27 +2071,27 @@
       "scopes": {
         "outline|tracked": {
           "n": 23,
-          "rated": 0,
-          "sellable": 0,
-          "sellablePct": null
+          "rated": 23,
+          "sellable": 14,
+          "sellablePct": 60.9
         },
         "outline|untracked": {
           "n": 40,
-          "rated": 0,
-          "sellable": 0,
-          "sellablePct": null
+          "rated": 40,
+          "sellable": 15,
+          "sellablePct": 37.5
         },
         "fill|tracked": {
           "n": 8,
-          "rated": 0,
+          "rated": 8,
           "sellable": 0,
-          "sellablePct": null
+          "sellablePct": 0
         },
         "fill|untracked": {
           "n": 55,
-          "rated": 0,
-          "sellable": 0,
-          "sellablePct": null
+          "rated": 55,
+          "sellable": 8,
+          "sellablePct": 14.5
         }
       }
     },
@@ -2981,27 +2101,27 @@
       "scopes": {
         "outline|none": {
           "n": 35,
-          "rated": 0,
-          "sellable": 0,
-          "sellablePct": null
+          "rated": 35,
+          "sellable": 10,
+          "sellablePct": 28.6
         },
         "outline|separation": {
           "n": 28,
-          "rated": 0,
-          "sellable": 0,
-          "sellablePct": null
+          "rated": 28,
+          "sellable": 19,
+          "sellablePct": 67.9
         },
         "fill|none": {
           "n": 34,
-          "rated": 0,
-          "sellable": 0,
-          "sellablePct": null
+          "rated": 34,
+          "sellable": 3,
+          "sellablePct": 8.8
         },
         "fill|separation": {
           "n": 29,
-          "rated": 0,
-          "sellable": 0,
-          "sellablePct": null
+          "rated": 29,
+          "sellable": 5,
+          "sellablePct": 17.2
         }
       }
     },
@@ -3019,7 +2139,7 @@
           "letterSpacingMm": 0,
           "inPrimaryPopulation": true,
           "countedAs": "untracked",
-          "sellable": ""
+          "sellable": "yes"
         },
         {
           "slug": "549af2ba",
@@ -3031,7 +2151,7 @@
           "letterSpacingMm": 6.2,
           "inPrimaryPopulation": true,
           "countedAs": "tracked",
-          "sellable": ""
+          "sellable": "yes"
         },
         {
           "slug": "60bbb91f",
@@ -3043,7 +2163,7 @@
           "letterSpacingMm": 9.3,
           "inPrimaryPopulation": true,
           "countedAs": "tracked",
-          "sellable": ""
+          "sellable": "yes"
         },
         {
           "slug": "614fee96",
@@ -3055,7 +2175,7 @@
           "letterSpacingMm": 6.2,
           "inPrimaryPopulation": true,
           "countedAs": "tracked",
-          "sellable": ""
+          "sellable": "yes"
         },
         {
           "slug": "f5f6731f",
@@ -3067,38 +2187,168 @@
           "letterSpacingMm": 1.55,
           "inPrimaryPopulation": true,
           "countedAs": "tracked",
-          "sellable": ""
+          "sellable": "no"
         }
       ]
     },
     "rejectionCauses": {
-      "population": 0,
-      "noNote": 0,
-      "noTagMatch": 0,
-      "multiTag": 0,
+      "population": 102,
+      "noNote": 35,
+      "noTagMatch": 3,
+      "multiTag": 3,
       "perTag": {
         "inaccurate": {
-          "n": 0,
-          "populationSharePct": null
+          "n": 44,
+          "populationSharePct": 43.1
         },
         "tooClose": {
-          "n": 0,
-          "populationSharePct": null
+          "n": 18,
+          "populationSharePct": 17.6
         },
         "tooManyStones": {
-          "n": 0,
-          "populationSharePct": null
+          "n": 2,
+          "populationSharePct": 2
         },
         "ugly": {
           "n": 0,
-          "populationSharePct": null
+          "populationSharePct": 0
         },
         "extraStones": {
-          "n": 0,
-          "populationSharePct": null
+          "n": 3,
+          "populationSharePct": 2.9
         }
       },
-      "distinctNotes": []
+      "distinctNotes": [
+        {
+          "note": "\"V\"  and \"n\" are inaccurate",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "\"V\" and \"a\" are inaccurate",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "\"V\" is inaccurate",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "\"i\" cross \"t\"",
+          "tags": []
+        },
+        {
+          "note": "extra stones , inaccurate",
+          "tags": [
+            "inaccurate",
+            "extraStones"
+          ]
+        },
+        {
+          "note": "extra stones below i, l",
+          "tags": [
+            "extraStones"
+          ]
+        },
+        {
+          "note": "inaccuarate",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "inaccuare",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "inaccuarte",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "inaccurate",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "inaccurate\n",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "inaccurate, extra stones below l, i ...",
+          "tags": [
+            "inaccurate",
+            "extraStones"
+          ]
+        },
+        {
+          "note": "inaccuratre",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "inacurate",
+          "tags": []
+        },
+        {
+          "note": "letters are inaccurate",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "letters are too close to each other",
+          "tags": [
+            "tooClose"
+          ]
+        },
+        {
+          "note": "letters are too small",
+          "tags": []
+        },
+        {
+          "note": "not equal spacing",
+          "tags": [
+            "tooClose"
+          ]
+        },
+        {
+          "note": "too close",
+          "tags": [
+            "tooClose"
+          ]
+        },
+        {
+          "note": "too close\n",
+          "tags": [
+            "tooClose"
+          ]
+        },
+        {
+          "note": "too close, inaccurate letters",
+          "tags": [
+            "inaccurate",
+            "tooClose"
+          ]
+        },
+        {
+          "note": "too many stones",
+          "tags": [
+            "tooManyStones"
+          ]
+        }
+      ]
     }
   }
 }

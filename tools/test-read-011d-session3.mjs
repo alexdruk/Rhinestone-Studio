@@ -5,8 +5,13 @@
 // tools/font-certification/analyze-ratings.mjs recomputes every session-3 table from
 // docs/data/read-011/{ratings.csv,render-key.json} and assets/fonts/manifest.json; this test pins
 // that computation to the committed golden docs/data/read-011/derived-tables.json, and pins the
-// structural invariants that must hold while the outcome column is still blank, so the
-// pre-registration fails loudly if the analysis set or the duplicate rule ever drifts.
+// structural invariants of the analysis set, so the pre-registration fails loudly if the analysis
+// set or the duplicate rule ever drifts.
+//
+// READ-011E landed the ratings: the sheet is now fully rated. Tests 3 and 10, which used to assert
+// a blank outcome column, now assert a complete one — the rating vocabulary, per-row completeness,
+// and the self-consistency agreement counts the filled golden carries. Everything else is
+// rating-independent and unchanged.
 //
 // It also re-asserts that computeAll() still deep-equals the frozen READ-005 golden — session 3 is
 // a separate function writing a separate golden and must not perturb READ-005B (spec §10).
@@ -54,7 +59,7 @@ await test('2. computeAll() still deep-equals the frozen READ-005 golden (spec �
   assert.deepEqual(computeAll(), golden);
 });
 
-await test('3. ratings.csv has 147 rows matching the 147 non-excluded render-key slugs exactly', () => {
+await test('3. ratings.csv is a fully rated 147-row sheet matching the 147 non-excluded render-key slugs exactly', () => {
   assert.equal(ratings.length, 147, 'ratings.csv data rows');
   assert.equal(rated.length, 147, 'non-excluded render-key entries');
   assert.deepEqual(
@@ -62,10 +67,18 @@ await test('3. ratings.csv has 147 rows matching the 147 non-excluded render-key
     [...rated.map((e) => e.slug)].sort(),
     'the rated slug set is exactly the non-excluded render-key slug set',
   );
-  // Pre-registration: every outcome cell is blank at this commit (spec §1).
+  // READ-011E: the sheet is now filled in. Every row carries a value from the rating vocabulary,
+  // nothing is blank, and no row that sold carries a rejection note.
+  const READABLE_OK = new Set(['yes', 'struggle', 'no']);
+  const SELLABLE_OK = new Set(['yes', 'no']);
   for (const r of ratings) {
-    assert.equal(r.readable, '', `${r.slug} readable must be blank`);
-    assert.equal(r.sellable, '', `${r.slug} sellable must be blank`);
+    assert.notEqual(r.readable, '', `${r.slug} readable must not be blank`);
+    assert.notEqual(r.sellable, '', `${r.slug} sellable must not be blank`);
+    assert.ok(READABLE_OK.has(r.readable), `${r.slug} readable ${JSON.stringify(r.readable)} outside {yes,struggle,no}`);
+    assert.ok(SELLABLE_OK.has(r.sellable), `${r.slug} sellable ${JSON.stringify(r.sellable)} outside {yes,no}`);
+    if (r.sellable === 'yes') {
+      assert.equal(r.notes ?? '', '', `${r.slug} sold but carries a note ${JSON.stringify(r.notes)}`);
+    }
   }
 });
 
@@ -164,13 +177,16 @@ await test('9. every floor-decision scope balances population and rated counts, 
   }
 });
 
-await test('10. self-consistency: n is 20, fullyRatedGroups is 0 with all agreement counts 0 at this commit', () => {
+await test('10. self-consistency: n is 20, all 20 groups fully rated, agreement 18 readable / 17 sellable / 15 both', () => {
+  // READ-011E: the sheet is filled, so every duplicate group is fully rated and the agreement
+  // denominator is 20. The three counts below are read from the regenerated golden
+  // (docs/data/read-011/derived-tables.json), not chosen here.
   const sc = computeSession3().session3.selfConsistency;
   assert.equal(sc.n, 20, 'n covers all 20 duplicate groups');
-  assert.equal(sc.fullyRatedGroups, 0, 'no group is fully rated on the blank sheet');
-  assert.equal(sc.readableAgreement, 0);
-  assert.equal(sc.sellableAgreement, 0);
-  assert.equal(sc.bothAgreement, 0);
+  assert.equal(sc.fullyRatedGroups, 20, 'every duplicate group is fully rated');
+  assert.equal(sc.readableAgreement, 18);
+  assert.equal(sc.sellableAgreement, 17);
+  assert.equal(sc.bothAgreement, 15);
 });
 
 await test('11. groupsUnderMinPositions has 3 entries with sheet spans 2, 7 and 12', () => {

@@ -1,6 +1,6 @@
 # READ-011D — Rating-analysis pre-registration
 
-**Status:** implemented. Branch `feature/read-011d-analysis-preregistration` off `develop`.
+**Status:** implemented, then executed. Branch `feature/read-011d-analysis-preregistration` off `develop`. The procedure below was run against the landed READ-011 ratings and returned no floor: §6's selection rule could never adopt Form A, and Form B was power-capped at the value `MIN_HEIGHT_TO_STONE_RATIO` already holds. Superseded in effect by `docs/specifications/READ-011E-PreRegistrationDefect.md`; the pre-registered text below is unchanged as evidence.
 
 **Authorises:** this record, a new `computeSession3()` in
 `tools/font-certification/analyze-ratings.mjs`, the new golden file
