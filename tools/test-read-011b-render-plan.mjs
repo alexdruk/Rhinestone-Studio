@@ -8,7 +8,8 @@ import { assertTestRegistered } from './lib/test-registration-assertions.mjs';
 // READ-011 rating pass, enumerated by tools/font-certification/read-011-plan.mjs. This suite pins
 // the design's own invariants so a regenerate that quietly changes the factorial, the stratum
 // definitions, or the balance fails loudly:
-//   1. every entry's fontId is an enabled manifest font;
+//   1. every entry's fontId resolves to a known manifest font -- enabled, or (FONT-LIB-005)
+//      montserrat-regular, retired from the picker but kept as a real rated font;
 //   2. every entry's stemRegime is exactly classifyStemRegime() on that font's manifest stemWidthRatio;
 //   3. every slug is a unique 8-hex string;
 //   4. heightMm == ratio x stoneDiameterMm and lands inside the 4-111mm engine bound;
@@ -63,11 +64,29 @@ await test('0. plan shape: meta.seed recorded, block counts sum to the entry tot
   }
 });
 
-await test('1. every entry fontId is an enabled manifest font', () => {
+// FONT-LIB-005: montserrat-regular is retired from the picker (enabled:false)
+// but is a real, renderable font with a measured stemWidthRatio and 11 frozen
+// READ-011 render-plan entries. It stays in READ-011A's recorded membership.
+// roboto-mono-regular is excluded instead because its file is a 14-byte
+// non-font stub -- no outline, nothing to measure. Note it also carries no
+// stemWidthRatio, so admitting it here would classify it 'unmeasured' and
+// push that count 2 -> 3.
+// The matching Set in tools/test-read-011-stem-regime.mjs keeps its own copy;
+// no shared module for a one-element Set.
+const RETIRED_RATED_FONT_IDS = new Set(['montserrat-regular']);
+
+await test('1. every entry fontId resolves to a known manifest font, enabled or retired-but-rated', () => {
   for (const e of entries) {
     const font = fontById.get(e.fontId);
     assert.ok(font, `entry ${e.slug} references unknown font "${e.fontId}"`);
-    assert.notEqual(font.enabled, false, `font "${e.fontId}" is disabled in the manifest`);
+    if (font.enabled === false) {
+      assert.ok(
+        RETIRED_RATED_FONT_IDS.has(font.id),
+        `entry ${e.slug} references "${e.fontId}", which is disabled in the manifest and is NOT ` +
+          'recorded as retired-but-rated -- the plan references a font that has been removed from ' +
+          'the library without being kept in RETIRED_RATED_FONT_IDS'
+      );
+    }
   }
 });
 

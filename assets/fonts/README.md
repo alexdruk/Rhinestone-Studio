@@ -12,7 +12,7 @@ output -- Rhinestone layouts must be deterministic across machines.
 | Courier Prime | Monospace | `CourierPrime-Regular.ttf` | Google Fonts (`ofl/courierprime`) |
 | Great Vibes | Script | `GreatVibes-Regular.ttf` | Google Fonts (`ofl/greatvibes`) |
 | PT Serif | Serif | `PTSerif-Regular.ttf` | Google Fonts (`ofl/ptserif`) |
-| Montserrat | Sans Serif | `Montserrat-Regular.ttf` | Google Fonts (`ofl/montserrat`) |
+| Montserrat _(retired, FONT-LIB-005)_ | Sans Serif | `Montserrat-Regular.ttf` | Google Fonts (`ofl/montserrat`) |
 | Playfair Display | Display | `PlayfairDisplay-Regular.ttf` | Google Fonts (`ofl/playfairdisplay`) |
 | Cinzel | Monogram | `Cinzel-Regular.ttf` | Google Fonts (`ofl/cinzel`) |
 | Lobster | Decorative | `Lobster-Regular.ttf` | Google Fonts (`ofl/lobster`) |
@@ -38,9 +38,19 @@ output -- Rhinestone layouts must be deterministic across machines.
 
 The first nine are licensed under the SIL Open Font License (OFL) -- free for commercial rhinestone
 production use, with no attribution requirement in the finished product. Regular/static instances
-were used throughout; where upstream only ships a variable font (Montserrat, Playfair Display,
-Cinzel, Caveat), the default-weight master was taken as-is (`opentype.js` reads a variable font's
-`glyf` table directly, which already holds the default-instance outlines).
+were used throughout; where upstream only ships a variable font (Playfair Display, Cinzel, Caveat),
+the default-weight master was taken as-is (`opentype.js` reads a variable font's `glyf` table
+directly, which already holds the default-instance outlines) -- and for those three the default
+master *is* the 400 weight.
+
+**Montserrat is retired (FONT-LIB-005).** Its file is Google's official variable Montserrat, whose
+`wght` axis defaults to 100 -- so `opentype.js` renders it as Montserrat **Thin** (`usWeightClass
+= 100`), not Regular. There is no static Regular in `google/fonts`. At its measured
+`stemWidthRatio` of 0.0145 the stroke is thinner than the smallest stone at every height a mug can
+print (0.0145 x 85 mm = 1.23 mm < 2.0 mm), so it trips READ-003's stroke gate everywhere. The
+`.ttf` stays bundled and unchanged so saved projects that use it keep rendering; `manifest.json`
+now carries `"enabled": false`, `"style": "Thin"`, `"weight": 100`. Poppins covers the modern-sans
+role. See `docs/specifications/FONT-LIB-005-MontserratRetired.md`.
 
 ### FONT-LIB-002 additions
 

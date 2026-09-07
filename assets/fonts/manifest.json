@@ -37,12 +37,12 @@
     {
       "id": "montserrat-regular",
       "family": "Montserrat",
-      "style": "Regular",
-      "weight": 400,
+      "style": "Thin",
+      "weight": 100,
       "path": "assets/fonts/Montserrat-Regular.ttf",
       "role": "sans-serif",
-      "enabled": true,
-      "notes": "RS-2002: clean geometric sans-serif with excellent readability at small stone sizes; one of the most recognized/requested Google Fonts sans-serifs. READ-003 DATA BUG (not fixed here): this bundled file reports usWeightClass=100 (Thin), where Anton/Great Vibes report 400 -- it is Montserrat Thin shipped under this 'Regular' id and style label, so picking Montserrat silently yields a hairline weight (stemWidthRatio 0.0145, lowest in the library). Fix is a font-file replacement with a render-changing migration for existing projects; tracked in docs/BACKLOG.md. id/family/style/weight/path intentionally left unchanged.",
+      "enabled": false,
+      "notes": "RS-2002: chosen as a clean geometric sans-serif -- one of the most recognized/requested Google Fonts sans-serifs. FONT-LIB-005: retired from the picker (enabled:false). The bundled file is Google's official VARIABLE Montserrat (byte-identical to ofl/montserrat/Montserrat[wght].ttf), whose wght axis is min/default/max 100/100/900 -- so opentype.js renders its default instance, which is Thin (usWeightClass=100, full name 'Montserrat Thin'). This is not a mis-bundled static; there is no static Montserrat-Regular.ttf in google/fonts. stemWidthMm = 0.0145 * heightMm, so the smallest stone (SS6, 2.0mm) needs heightMm >= 138, but a mug's printableHeightMm is 85 (0.0145 * 85 = 1.23mm) -- it trips READ-003's stroke-narrower-than-one-stone gate at every reachable height and stone size. Producing a true Regular means instancing the VF at wght=400, which needs Python fontTools (a second language in a Node-only toolchain) for one binary; Poppins already covers the modern-sans role at 400/600/700. The .ttf is retained deliberately, tracked and unchanged: fontManager.listFonts() keeps disabled records so saved projects that use Montserrat keep rendering byte-identically. style/weight corrected to Thin/100 to match the file; id/family/path/role/stemWidthRatio unchanged (family stays 'Montserrat' for sibling grouping; stemWidthRatio is frozen READ-011 data).",
       "stemWidthRatio": 0.0145
     },
     {

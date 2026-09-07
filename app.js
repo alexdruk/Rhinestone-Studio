@@ -157,7 +157,9 @@ import { createDrawingTool, FLATTEN_TOLERANCE_MM, flattenPathToContours, createP
 // organized into categories (script/serif/sans-serif/display/monogram/decorative/block/
 // handwritten/monospace, stored in each font's existing `role` field), and replaced the
 // hardcoded TEXT_ENGINE_FONT_IDS Set below with one derived from fontManager.listFonts() once the
-// manifest loads -- previously every new bundled font needed a matching app.js edit here, the exact
+// manifest loads (FONT-LIB-005: with includeDisabled:true, so the set means "every id the text
+// engine accepts" and a disabled-but-renderable font stays duplicable -- see the load site) --
+// previously every new bundled font needed a matching app.js edit here, the exact
 // "second font list" duplication docs/specifications/RS-2000A-PostMVPAudit.md flagged, and the
 // manifest's `enabled` flag gated nothing real. The #font <select> (inside the Text Lightbox) is
 // now populated at startup from the same fontManager.listFonts() call, grouped into <optgroup>s and
@@ -1050,7 +1052,12 @@ function validateProject(obj){
 // Modern/RS Script never depend on network success.
 const rhinestoneFontRegistry=createDefaultRhinestoneFontRegistry();
 let fontProviderRegistry=null,permanentEngineError=null,fontManager=null;
-try{fontManager=await FontManager.fromUrl('./assets/fonts/manifest.json');fontProviderRegistry=createDefaultFontProviderRegistry(fontManager,{rhinestoneFontRegistry});TEXT_ENGINE_FONT_IDS=new Set(fontManager.listFonts().map(f=>f.id))}catch(error){permanentEngineError=error;console.error('Font manifest failed to load; text layers will render empty until this is resolved. Shape layers are unaffected.',error)}
+try{fontManager=await FontManager.fromUrl('./assets/fonts/manifest.json');fontProviderRegistry=createDefaultFontProviderRegistry(fontManager,{rhinestoneFontRegistry});TEXT_ENGINE_FONT_IDS=new Set(fontManager.listFonts({includeDisabled:true}).map(f=>f.id))}catch(error){permanentEngineError=error;console.error('Font manifest failed to load; text layers will render empty until this is resolved. Shape layers are unaffected.',error)}
+// FONT-LIB-005: includeDisabled:true here, so TEXT_ENGINE_FONT_IDS is exactly "every font id the
+// text engine will accept" -- identical to fontManager.hasFont()/isFontKnown(). A disabled font
+// (montserrat-regular, retired as an unmanufacturable hairline) still renders in existing projects,
+// so a layer that renders must stay duplicable: addText() at the "font:TEXT_ENGINE_FONT_IDS.has(...)"
+// call site would otherwise silently rewrite an inherited Montserrat layer to the default font.
 // TXT-101A: given a fontId already known-valid against TEXT_ENGINE_FONT_IDS (see the fallback
 // pattern at every generateTextStonesLive()/resolveLayerShapeSource()/fitTextToShape() call site),
 // resolves which FontProviderRegistry provider should render it. Falls back to 'opentype' (the
