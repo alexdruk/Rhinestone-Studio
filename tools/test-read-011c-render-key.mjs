@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertTestRegistered } from './lib/test-registration-assertions.mjs';
+import { readCsvObjects } from './font-certification/analyze-ratings.mjs';
 
 // READ-011C -- docs/data/read-011/render-key.json is the key produced by
 // tools/font-certification/read-011-renders.mjs alongside the (gitignored) specimen renders. It
@@ -19,12 +20,14 @@ import { assertTestRegistered } from './lib/test-registration-assertions.mjs';
 //   6-8. the derived fields (separationDelta / identicalToUntracked / duplicateOf);
 //   9. the rhinestone probe is excluded from rating: exactly 12 entries, all stemRegime 'unmeasured'
 //      with a non-null reason, every other entry with a null reason;
-//   10. docs/data/read-011/ratings.csv has exactly one row per non-excluded slug and none for excluded;
+//   10. docs/data/read-011/ratings.csv parses (through the shared RFC-4180 reader) to exactly one
+//       row per non-excluded slug and none for excluded;
 //   11. this file is registered in the geometry group and runs in both the default and full suites.
 //
 // It asserts nothing about image files on disk -- the renders are gitignored, so this test must pass
-// on a bare clone. Its whole import graph is this file, node: builtins and the test-registration
-// helper (which reads tools/test-groups.mjs + run-tests.mjs) -- no src/, no Playwright.
+// on a bare clone. Its whole import graph is this file, node: builtins, the test-registration
+// helper (which reads tools/test-groups.mjs + run-tests.mjs), and analyze-ratings.mjs's
+// readCsvObjects (itself node: builtins plus one data-only leaf module) -- no src/, no Playwright.
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
@@ -175,15 +178,18 @@ await test('9. the rhinestone probe is excluded from rating: exactly 12 entries,
   assert.equal(unmeasured.length, 12, 'the 12 unmeasured entries are exactly the excluded set');
 });
 
-await test('10. ratings.csv has exactly one row per non-excluded slug and none for excluded', async () => {
-  const csv = await readFile(path.join(repoRoot, 'docs/data/read-011/ratings.csv'), 'utf8');
-  const lines = csv.split('\n').filter((l) => l.length > 0);
-  assert.equal(lines[0], 'slug,readable,sellable,notes', 'header byte-identical to read-005');
-  const rowSlugs = lines.slice(1).map((l) => {
-    const m = l.match(/^"([0-9a-f]{8})"/);
-    assert.ok(m, `ratings.csv row is not a quoted 8-hex slug: ${l}`);
-    return m[1];
-  });
+await test('10. ratings.csv parses to exactly one row per non-excluded slug and none for excluded', async () => {
+  const csvPath = path.join(repoRoot, 'docs/data/read-011/ratings.csv');
+  // Parse through analyze-ratings.mjs's RFC-4180 reader, not a line split: the rated sheet has
+  // newlines inside quoted `notes` fields (valid, and how it was rated), so splitting on \n invents
+  // orphan rows. This test failing on a hand-rolled second definition of "a row" is what added the
+  // shared reader here.
+  const csv = await readFile(csvPath, 'utf8');
+  assert.equal(csv.split('\n')[0], 'slug,readable,sellable,notes', 'header byte-identical to read-005');
+  const rowSlugs = readCsvObjects(csvPath).map((r) => r.slug);
+  for (const s of rowSlugs) {
+    assert.ok(/^[0-9a-f]{8}$/.test(s), `ratings.csv row slug is not 8 hex chars: ${JSON.stringify(s)}`);
+  }
   const expected = keyEntries.filter((e) => !e.excludedFromRating).map((e) => e.slug).sort();
   assert.deepEqual([...rowSlugs].sort(), expected, 'one row per non-excluded slug, no extras');
   const excludedSet = new Set(keyEntries.filter((e) => e.excludedFromRating).map((e) => e.slug));

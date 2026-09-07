@@ -28,10 +28,13 @@
  * Tracked outputs:
  *   docs/data/read-011/render-key.json   every plan field + the four tracking fields + presentationIndex
  *   docs/data/read-011/ratings.csv       blank template, header byte-identical to read-005/ratings.csv
+ *                                        — refuses to overwrite once the sheet carries any rating
  */
 import { readFile, writeFile, mkdir, copyFile, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { readCsvObjects } from './analyze-ratings.mjs';
 import { FontManager } from '../../src/fonts/index.js';
 import { createDefaultFontProviderRegistry } from '../../src/text/index.js';
 import { GeometryEngine } from '../../src/geometry/index.js';
@@ -200,6 +203,19 @@ function ratingSlugsInPresentationOrder(entries) {
 // the PNGs are unchanged. Returns the rated slug list.
 async function writeRatingArtifacts(keyEntries) {
   const ratingSlugs = ratingSlugsInPresentationOrder(keyEntries);
+
+  // Never overwrite a rated sheet. Once READ-011E landed the ratings, RATINGS_TEMPLATE_FILE holds
+  // 147 human judgements that this script cannot reproduce; a fresh template has to be a deliberate
+  // act outside this run, not a silent side effect of re-deriving. Guard is scoped to this one file.
+  if (existsSync(RATINGS_TEMPLATE_FILE)) {
+    const rated = readCsvObjects(RATINGS_TEMPLATE_FILE)
+      .filter((r) => (r.readable ?? '') !== '' || (r.sellable ?? '') !== '');
+    if (rated.length > 0) {
+      console.error(`refusing to overwrite ${path.relative(repoRoot, RATINGS_TEMPLATE_FILE)}: ${rated.length} rated row(s) present.`);
+      console.error('Move or delete the file deliberately if a fresh blank template is genuinely wanted, then re-run.');
+      process.exit(1);
+    }
+  }
 
   const read005Header = (await readFile(READ_005_RATINGS_FILE, 'utf8')).split('\n', 1)[0];
   const csvCell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
