@@ -287,12 +287,17 @@ await test('13. a search with no matches shows an explicit empty state, not a bl
   assert.match(html, /No fonts match your search/);
 });
 
-await test('14. a favorited font is pinned under its own "Favorites" group, ahead of its category group', () => {
+await test('14. a favorited font is pinned under its own "Favorites" group, ahead of the flat "All fonts" list', () => {
   const manager = new FontManager(manifest);
   const html = runFontLibrary(manager, { favoriteIds: ['rs-modern'] });
   const favIndex = html.indexOf('Favorites');
-  const categoryIndex = html.indexOf('Production Fonts');
-  assert.ok(favIndex >= 0 && categoryIndex > favIndex, 'expected a Favorites group before the Production Fonts category group');
+  // FONT-LIB-006 retired the per-category headers: the flat family list now sits under one
+  // "All fonts" header. The old anchor 'Production Fonts' is no longer a header -- it now matches
+  // the fontCategoryLabel() subtitle fontLibraryRowHtml() prints on every row (including the
+  // favorited rs-modern row inside the Favorites section itself), so it no longer measures group
+  // ordering. Anchor on the real "All fonts" header instead.
+  const allFontsIndex = html.indexOf('>All fonts<');
+  assert.ok(favIndex >= 0 && allFontsIndex > favIndex, 'expected the Favorites group before the flat "All fonts" list');
   const favoritesSection = html.slice(favIndex, html.indexOf('font-library-group', favIndex + 1));
   assert.match(favoritesSection, /data-fav-font="rs-modern"/);
 });
