@@ -29,15 +29,25 @@ test('FontManager loads deterministic manifest', () => {
   assert.equal(manager.listFonts({ includeDisabled: true }).length, 32);
 });
 
-test('FontManager enables every bundled font except the RobotoMono placeholder', () => {
+test('FontManager enables every bundled font except the RobotoMono placeholder and the retired Montserrat', () => {
   const manager = new FontManager(manifest);
   // RS-2000A flagged that the manifest's `enabled` flag previously gated nothing real -- app.js
   // loaded fonts by hardcoded id regardless of it. RS-2002 makes `enabled` the actual gate the
   // live app derives its font list from (see app.js's TEXT_ENGINE_FONT_IDS), so this manifest-level
-  // invariant matters now: everything except the known-corrupt placeholder must be enabled.
-  assert.equal(manager.listFonts().length, 31);
-  assert.equal(manager.listFonts({ includeDisabled: true }).length - manager.listFonts().length, 1);
+  // invariant matters now.
+  // FONT-LIB-005: two records are now disabled, for different reasons -- roboto-mono-regular (a
+  // 14-byte non-font stub) and montserrat-regular (the bundled file is Google's variable Montserrat
+  // whose wght axis defaults to 100, i.e. Thin; 0.0145 * 85mm mug printable height = 1.23mm, below
+  // the 2.0mm smallest stone, so it is unmanufacturable at any reachable height). The .ttf is
+  // retained so saved projects keep rendering -- see the "still KNOWN" assertion below.
+  assert.equal(manager.listFonts().length, 30);
+  assert.equal(manager.listFonts({ includeDisabled: true }).length - manager.listFonts().length, 2);
   assert.equal(manager.getFont('roboto-mono-regular').enabled, false);
+  assert.equal(manager.getFont('montserrat-regular').enabled, false);
+  // The saved-project guarantee: montserrat-regular stays a KNOWN font record even though it is no
+  // longer offered, so an existing Montserrat text layer still resolves and renders byte-identically.
+  assert.equal(manager.hasFont('montserrat-regular'), true);
+  assert.equal(manager.getFont('montserrat-regular').family, 'Montserrat');
 });
 
 test('FontManager defaults providerId to "opentype" for every bundled record, and the field still works generically for a future rhinestone-tagged record', () => {

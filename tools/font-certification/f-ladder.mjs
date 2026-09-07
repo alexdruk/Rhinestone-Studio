@@ -9,6 +9,12 @@
  * (spec §4.1 — the bundled file is Montserrat Thin under a Regular id), crossed with the 5 sample
  * modes. 28 × 5 = 140 cells. Texts: "Vitalina" and "Emmanuel".
  *
+ * FONT-LIB-005 made the EXCLUDED_FONT constant redundant — montserrat-regular is now
+ * `enabled: false` in the manifest, so the "every enabled manifest font" filter already drops it.
+ * The explicit exclusion is retained deliberately: it keeps this script's cell set stable and
+ * self-documenting against READ-005's frozen output (f-ladder.json / read-005/f-ladder.json), and
+ * makes the spec §4.1 rationale visible at the point of use.
+ *
  * Two ladders per cell:
  *   - Dense  — ss10 only, ratio from the cell's start to 32.0 in 0.5 steps.
  *   - Coarse — all five stone sizes, ratios [10, 12.5, 15, 18, 21, 24, 28, 32].
@@ -45,6 +51,7 @@ const DENSE_TOP_RATIO = 32.0;
 const DENSE_STEP = 0.5;
 const COARSE_RATIOS = [10, 12.5, 15, 18, 21, 24, 28, 32];
 const COARSE_STONE_SIZE_IDS = ['ss6', 'ss10', 'ss16', 'ss20', 'ss30'];
+// FONT-LIB-005: now redundant (montserrat-regular is enabled:false), kept deliberately -- see header.
 const EXCLUDED_FONT = 'montserrat-regular';
 
 // READ-005a-2 Fix 2 — bumped when a change to deriveCell()/separationBand()/plateauRatio would make

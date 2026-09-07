@@ -1,8 +1,12 @@
 # READ-006 — Letter spacing in the product
 
-Status: **proposed, not implemented.** First READ milestone to touch `app.js`. Consumes the tracking
-experiment recorded in `docs/specifications/READ-005A-CalibrationFindings.md` §6 and frozen in
-`docs/data/read-005/derived-tables.json` under `session2.paired`.
+Status: **implemented** (commit `339dcdd`, `feature/read-006-letter-spacing`). First READ milestone
+to touch `app.js`. Consumes the tracking experiment recorded in
+`docs/specifications/READ-005A-CalibrationFindings.md` §6 and frozen in
+`docs/data/read-005/derived-tables.json` under `session2.paired`. `#letterSpacing` is a live text
+control (`index.html`), `letterSpacingBoundsMm()` derives its pitch-based bounds, and
+`writeSelectedControlsToLayer()` clamps `l.letterSpacing` on write; the "Separate letters" button
+solves and writes a per-rung value. FONT-LIB-005 corrected this line (was left stale).
 
 Everything in §1 and §2 below was measured against `develop` at `edb220b` (a fresh clone, real git
 and real engine runs), not recalled. Where this document disagrees with the code, the code wins;

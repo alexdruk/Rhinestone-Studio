@@ -5,10 +5,16 @@
 // "re-execute the real code, never hardcode the expected output" convention. A future font-file
 // swap (or a percentile/method change) that forgets to re-run `--write` is caught here.
 //
-// NOTE: test 5 re-measures all 29 in-scope fonts (interior grid sampling over 62 glyphs each) and
+// NOTE: test 5 re-measures all 28 in-scope fonts (interior grid sampling over 62 glyphs each) and
 // takes ~75s. This file is therefore in tools/test-groups.mjs's EXCLUDED_FROM_DEFAULT (test:full /
 // explicit-filter only), the same treatment the repo already gives suites that are too heavy for
 // the default `npm test` loop.
+//
+// FONT-LIB-005: montserrat-regular left the in-scope set (29 -> 28). It is now enabled:false -- the
+// bundled file is Google's variable Montserrat rendering at its wght=100 (Thin) default, an
+// unmanufacturable hairline -- so it is no longer offered and no longer live-remeasured here. Its
+// frozen stemWidthRatio 0.0145 is instead pinned by tools/test-font-lib-005-montserrat-retired.mjs
+// against the file's recorded sha256.
 
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -49,7 +55,8 @@ const fontsById = new Map(fontManager.manifest.fonts.map((f) => [f.id, f]));
 
 // Every enabled font that resolves through the OpenType provider -- FONT-LIB-002 opened the picker
 // to the whole library, so every one of these needs the check (deliberately wider than TXT-104's
-// four rhinestoneValidated fonts).
+// four rhinestoneValidated fonts). FONT-LIB-005: montserrat-regular is now enabled:false, so
+// isInScope() (enabled === true && providerId === 'opentype') drops it -- 29 -> 28.
 const IN_SCOPE_IDS = fontManager.manifest.fonts.filter(isInScope).map((f) => f.id);
 
 // The three anchors from the READ-003 investigation. cinzel/caveat were reported unreadable
@@ -60,12 +67,15 @@ const ANCHORS = [
   { id: 'anton-regular', heightMm: 36.52, stoneMm: 2.0, reportedStemMm: 4.37, readable: true }
 ];
 
-await test('0. scope is every enabled providerId:opentype font (29), and excludes the rhinestone + disabled fonts', () => {
-  assert.equal(IN_SCOPE_IDS.length, 29, `expected 29 in-scope fonts, got ${IN_SCOPE_IDS.length}: ${IN_SCOPE_IDS.join(', ')}`);
+await test('0. scope is every enabled providerId:opentype font (28), and excludes the rhinestone + disabled fonts', () => {
+  // FONT-LIB-005: 29 -> 28. montserrat-regular is now enabled:false (retired hairline), so it joins
+  // rs-block/rs-modern/roboto-mono-regular as out-of-scope for the live re-measurement.
+  assert.equal(IN_SCOPE_IDS.length, 28, `expected 28 in-scope fonts, got ${IN_SCOPE_IDS.length}: ${IN_SCOPE_IDS.join(', ')}`);
   for (const id of ['rs-block', 'rs-modern']) {
     assert.equal(IN_SCOPE_IDS.includes(id), false, `${id} (authored stone centres) must be out of scope`);
   }
   assert.equal(IN_SCOPE_IDS.includes('roboto-mono-regular'), false, 'the disabled roboto-mono stub must be out of scope');
+  assert.equal(IN_SCOPE_IDS.includes('montserrat-regular'), false, 'FONT-LIB-005: the retired Montserrat must be out of scope');
 });
 
 await test('1. manifest.json carries a numeric stemWidthRatio for exactly the in-scope fonts', () => {
@@ -167,10 +177,13 @@ await test('8. the glyph corpus is PRODUCTION_REVIEW_GLYPHS (62 glyphs), not an 
   assert.equal(new Set(PRODUCTION_REVIEW_GLYPHS).size, 62, 'no duplicate glyphs');
 });
 
-await test('9. the manifest still parses and the font count is unchanged (32 records, 29 in scope)', () => {
+await test('9. the manifest still parses and the record count is unchanged (32 records, 28 in scope)', () => {
   assert.equal(manifest.fonts.length, 32, 'READ-003 must not add or remove font records');
   assert.equal(manifest.fonts.filter((f) => f.providerId === 'rhinestone').length, 2);
-  assert.equal(manifest.fonts.filter((f) => f.enabled === false).length, 1);
+  // FONT-LIB-005: two disabled records, for different reasons -- roboto-mono-regular is a 14-byte
+  // non-font stub (no outline to measure), montserrat-regular is an unmanufacturable hairline whose
+  // .ttf is retained only so saved projects keep rendering.
+  assert.equal(manifest.fonts.filter((f) => f.enabled === false).length, 2);
 });
 
 await test('10. this file is registered in the `text` group and excluded from the default suite (slow re-measurement)', () => {

@@ -220,6 +220,51 @@ await test('docs/BACKLOG.md and docs/PRODUCT_ROADMAP.md no longer claim shipped 
   }
 });
 
+await test('docs/BACKLOG.md defect rows worded as findings (not "Planned") are marked "Resolved by" once the fix ships', () => {
+  // FONT-LIB-005: the guard above only catches the literal roadmap words "Planned"/"not started".
+  // The BACKLOG's "Known data defects" / "Deferred technical follow-ups" rows are worded as defect
+  // findings instead -- "deferred to its own milestone", "appears zero times in app.js",
+  // "proposed, not implemented" -- so a shipped fix left two of them (Montserrat Thin, letter
+  // spacing) reading as still-open. This widens the check to those phrasings, keyed to a machine
+  // fact that proves the fix shipped, and requires the row to carry the repo's `**Resolved by`
+  // marker.
+  //
+  //   old guard:  /planned|not started/i           on three named roadmap feature rows
+  //   new guard:  /deferred to its own milestone|appears zero times|proposed, not implemented/i
+  //               on any BACKLOG row, unless the row already carries "**Resolved by"
+  const STALE_FINDING_PHRASING = /deferred to its own milestone|appears zero times|proposed, not implemented/i;
+  const rows = readDoc('docs/BACKLOG.md').split('\n').filter((line) => line.startsWith('|') && line.includes('|', 1));
+
+  // A machine fact per known-resolved defect: if it holds, the fix has shipped and the row must say so.
+  const manifestText = readFileSync(path.join(REPO_ROOT, 'assets/fonts/manifest.json'), 'utf8');
+  const montserratRetired = /"id":\s*"montserrat-regular"[\s\S]*?"enabled":\s*false/.test(manifestText);
+  const appJsText = readFileSync(path.join(REPO_ROOT, 'app.js'), 'utf8');
+  const letterSpacingWired = appJsText.includes('letterSpacingBoundsMm');
+
+  for (const row of rows) {
+    const isResolved = row.includes('**Resolved by');
+    if (isResolved) continue;
+    if (!STALE_FINDING_PHRASING.test(row)) continue;
+
+    if (/montserrat/i.test(row)) {
+      assert.ok(
+        !montserratRetired,
+        'docs/BACKLOG.md Montserrat row still reads as an open/deferred finding, but ' +
+          'assets/fonts/manifest.json has montserrat-regular enabled:false (FONT-LIB-005 shipped) -- ' +
+          'give the row the "**Resolved by FONT-LIB-005:**" treatment',
+      );
+    }
+    if (/letter spacing/i.test(row)) {
+      assert.ok(
+        !letterSpacingWired,
+        'docs/BACKLOG.md letter-spacing row still reads as an open finding, but app.js has ' +
+          'letterSpacingBoundsMm() (READ-006 shipped) -- give the row the "**Resolved by READ-006:**" ' +
+          'treatment and correct the "appears zero times in app.js" count',
+      );
+    }
+  }
+});
+
 await test('docs/ARCHITECTURE.md does not contradict itself on the product-plugin system / 3D renderer', () => {
   // Regression guard for the specific internal self-contradiction RC-007 fixed: "Future Direction"
   // and "Current Architectural Limitations" both still said these were not implemented, while the

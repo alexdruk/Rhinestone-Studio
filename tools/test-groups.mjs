@@ -241,6 +241,10 @@ export const GROUPS = {
     // -character rules, pure scoring, cache keying, and the analyzeOne() mode-threading regression.
     // No network, stub oracle only; light enough for the default suite.
     'test-read-004-recognition-harness.mjs',
+    // FONT-LIB-005: montserrat-regular retired from the picker (enabled:false -- the bundled file
+    // renders as Montserrat Thin, an unmanufacturable hairline). Manifest/arithmetic/hash checks
+    // that the .ttf is retained for saved projects while the font leaves productionFonts().
+    'test-font-lib-005-montserrat-retired.mjs',
   ],
   shapes: [
     'test-shape-fit.mjs',

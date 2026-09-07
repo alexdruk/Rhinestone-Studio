@@ -6,9 +6,10 @@
  *
  * `oflPath` is the file's path under google/fonts' `ofl/` directory (verified to exist there at
  * authoring time), which mirrors what fonts.google.com serves. `variableFont: true` marks families that
- * ship only as a variable TTF (no static Regular instance) -- these are evaluated at their default
- * (Regular/400) instance, the same outline opentype.js reads by default and the same one the app's own
- * pipeline would use, since the app has no variable-instancing logic.
+ * ship only as a variable TTF (no static Regular instance) -- these are evaluated at whatever weight
+ * the file's own wght axis defaults to, the same outline opentype.js reads by default and the same one
+ * the app's own pipeline would use, since the app has no variable-instancing logic. That default is NOT
+ * always 400: FONT-LIB-005 found Montserrat[wght].ttf defaults to 100 (Thin).
  */
 
 export const FONT_SOURCE_CATALOG = [

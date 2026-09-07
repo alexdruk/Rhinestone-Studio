@@ -105,12 +105,21 @@ await test('1. every category the spec requires (Serif/Sans Serif/Display/Monogr
   }
 });
 
-await test('2. the manifest still has exactly one disabled entry (the RobotoMono placeholder), and it is unchanged', () => {
+await test('2. the manifest has exactly two disabled entries (RobotoMono placeholder + retired Montserrat), and their files are unchanged', () => {
   const manager = new FontManager(manifest);
   const disabled = manager.listFonts({ includeDisabled: true }).filter((f) => !f.enabled);
-  assert.equal(disabled.length, 1);
-  assert.equal(disabled[0].id, 'roboto-mono-regular');
-  assert.equal(disabled[0].path, 'assets/fonts/RobotoMono-Regular.ttf');
+  // FONT-LIB-005: two disabled records, for different reasons -- roboto-mono-regular is a 14-byte
+  // non-font stub (test-opentype-provider.mjs depends on it), montserrat-regular is a
+  // retired-but-renderable hairline (the bundled file renders as Montserrat Thin) whose .ttf is
+  // kept so saved projects that use it still resolve and render byte-identically.
+  assert.deepEqual(
+    disabled.map((f) => f.id).sort(),
+    ['montserrat-regular', 'roboto-mono-regular'],
+    'expected exactly {roboto-mono-regular, montserrat-regular} disabled'
+  );
+  const byId = new Map(disabled.map((f) => [f.id, f]));
+  assert.equal(byId.get('roboto-mono-regular').path, 'assets/fonts/RobotoMono-Regular.ttf');
+  assert.equal(byId.get('montserrat-regular').path, 'assets/fonts/Montserrat-Regular.ttf');
 });
 
 await test('3. every enabled font\'s referenced file actually exists on disk', async () => {
@@ -159,22 +168,31 @@ await test('6. app.js wires open/close/search/pick/favorite handlers for the Bro
 await test('7. TEXT_ENGINE_FONT_IDS is derived from fontManager.listFonts(), not a hardcoded id list', () => {
   assert.ok(!/const TEXT_ENGINE_FONT_IDS=new Set\(\['courier-prime-regular','great-vibes-regular'\]\)/.test(appJs), 'expected the old hardcoded two-id Set to be gone');
   assert.match(appJs, /let TEXT_ENGINE_FONT_IDS=new Set\(\[DEFAULT_TEXT_FONT_ID\]\)/, 'expected a reassignable fallback Set');
-  assert.match(appJs, /TEXT_ENGINE_FONT_IDS=new Set\(fontManager\.listFonts\(\)\.map\(f=>f\.id\)\)/, 'expected TEXT_ENGINE_FONT_IDS to be reassigned from the live manifest');
+  // FONT-LIB-005: the reassignment now passes {includeDisabled:true} so a disabled-but-renderable
+  // font (retired Montserrat) stays accepted by the text engine and a saved Montserrat layer stays
+  // duplicable. This assertion pins that argument -- the bare listFonts() form must NOT match.
+  assert.match(appJs, /TEXT_ENGINE_FONT_IDS=new Set\(fontManager\.listFonts\(\{includeDisabled:true\}\)\.map\(f=>f\.id\)\)/, 'expected TEXT_ENGINE_FONT_IDS to be reassigned from the live manifest with includeDisabled:true');
 });
 
 await test('8. every currently-enabled manifest font id would be accepted as valid text-engine input', () => {
   const manager = new FontManager(manifest);
   const idsInSource = new Set(manager.listFonts().map((f) => f.id));
-  // Simulates the real reassignment line's right-hand side against the real manifest.
+  // Every enabled manifest id is a well-formed, text-engine-acceptable string. (The live
+  // TEXT_ENGINE_FONT_IDS is built with includeDisabled:true as of FONT-LIB-005 -- a strict
+  // superset of this set -- and that exact behaviour is pinned by
+  // tools/test-font-lib-005-montserrat-retired.mjs test 7.)
   for (const id of idsInSource) assert.ok(typeof id === 'string' && id.length > 0);
   // FONT-002 added RS Modern (rs-modern, providerId:'rhinestone') alongside RS Block and the 9
   // RS-2002 desktop fonts -- 11. FONT-DECISION-001 added baloo2-variable-regular -- 12.
   // FONT-PORTFOLIO-001 added sacramento-regular and dancing-script-regular -- 14. FONT-LIB-002
-  // added 17 more static OpenType instances -- 31 enabled ids.
-  // (TEXT_ENGINE_FONT_IDS still derives from every *enabled* manifest font, so existing/legacy-fonted
-  // projects keep resolving. As of FONT-LIB-002 the picker offers every enabled font too, see test 9.)
+  // added 17 more static OpenType instances -- 31 enabled ids. FONT-LIB-005 retired
+  // montserrat-regular (enabled:false -- the bundled file renders as Montserrat Thin, an
+  // unmanufacturable hairline) -- 30 enabled ids.
+  // (TEXT_ENGINE_FONT_IDS derives from fontManager.listFonts({includeDisabled:true}) as of
+  // FONT-LIB-005, so a disabled-but-renderable font stays accepted by the text engine and a saved
+  // Montserrat layer keeps rendering; the picker still offers only enabled fonts -- see test 9.)
   // The SS10 prototype remains manifest-unregistered (see src/text/rhinestoneFont/index.js).
-  assert.equal(idsInSource.size, 31);
+  assert.equal(idsInSource.size, 30);
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -321,9 +339,12 @@ await test('17. pickFont() writes the value into #font and replays input+change 
   // real FontManager needed for this test's assertions) exercises that guard instead of hitting an
   // undefined free variable.
   // eslint-disable-next-line no-new-func
-  const run = new Function('el', 'fontManager', `${source}\npickFont('montserrat-regular');`);
+  // FONT-LIB-005: was pickFont('montserrat-regular'); montserrat-regular is now retired
+  // (enabled:false) and #font is populated from productionFonts(), so it can no longer resolve as
+  // an option. Any other enabled OpenType font exercises the same path -- poppins-regular.
+  const run = new Function('el', 'fontManager', `${source}\npickFont('poppins-regular');`);
   run(el, null);
-  assert.equal(el('font').value, 'montserrat-regular');
+  assert.equal(el('font').value, 'poppins-regular');
   assert.ok(inputFired, 'expected pickFont() to dispatch an input event (history session + live regen)');
   assert.ok(changeFired, 'expected pickFont() to dispatch a change event (closes the history session)');
   assert.equal(el('fontLibraryPanel').hidden, true, 'expected pickFont() to close the panel');
