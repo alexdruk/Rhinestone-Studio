@@ -118,6 +118,37 @@ rated — so the best result Form B could have returned in outline is **monoline
 Every tracked scope is empty: achieved tracking never populated a scope densely enough to fit a
 per-regime cut.
 
+**5.1 — the bottom rung's margin test is undefined**
+
+At Form-B cut **16** — the minimum `ratio` in the render plan — every one of the twelve scopes
+reads `0 / 0 / 0` below the cut: `sellableBelow`, `ratedBelow` and `rowsBelow` are all structurally
+zero, because nothing was rendered below the bottom rung of the grid.
+
+READ-011D §7's second clause requires the at-or-above rate to be "at least 20 percentage points
+above the below-cut rate `sellableBelow / ratedBelow`". With `ratedBelow = 0` that below-cut rate
+is `0 / 0` — undefined — and READ-011D §7 does not say how the margin clause resolves when the
+below-set is empty. That is a fourth pre-registration gap, and it lands where it matters:
+`monoline|outline|untracked`'s only row-eligible cut is 16 (the table above), so the one
+scope-and-cut on which Form B's monoline outline result depends is the one place §7's margin clause
+cannot be evaluated. Under the reading that an undefined margin does not clear, monoline yields no
+Form-B outline cut at all, and §6 can never be handed the three regime cuts it requires — a second
+route to the §4 conclusion.
+
+**The disposition in §8 is unchanged under either reading of the empty below-set**, and both are
+recorded here. All counts are from `docs/data/read-011/derived-tables.json`.
+
+- *An undefined margin does not clear.* Cut 16 clears in no scope; Form B returns nothing in
+  outline for monoline.
+- *An empty below-set counts as a zero below-cut rate, so the margin clause is trivially
+  satisfied.* Cut 16 must then still pass the 60% rate clause and the 12-row minimum. READ-011D §7
+  reads at achieved tracking = untracked, and at that level no scope passes both — the at-or-above
+  `sellable / rated` counts are `monoline|outline` 1 / 12, `transitional|outline` 6 / 14,
+  `massed|outline` 8 / 14, `monoline|fill` 0 / 21, `transitional|fill` 1 / 16, `massed|fill`
+  7 / 18, every rate below 60%. At the tracked level `monoline|outline` (6 / 9) and `massed|outline`
+  (5 / 8) do exceed 60%, but both fall short of the 12-row minimum, and §7 does not read at tracked.
+
+Either way no Form-B cut clears at rung 16, so `MIN_HEIGHT_TO_STONE_RATIO` stays at 16 (§8).
+
 ## 6. Defect 3 — the ratio grid could not express the constant-N hypothesis outside transitional
 
 A constant floor of **N = 1.0 stone across the stem** corresponds to `ratio = 1 / stemWidthRatio`:
@@ -186,8 +217,11 @@ rating begins.** For every branch of every selection rule: can it fire at all? F
 cut in every scope: can it reach the row minimum? Both defects in this document were computable
 from the blank sheet at the READ-011D commit — no outcome data was needed for either.
 `tools/test-read-011e-reachability.mjs` is the worked example: it derives every quantity from
-`meta` and `session3.floorByRatio` and asserts the reachability facts, and assertions 2–5 read only
-population and manifest values, so they would have passed or failed identically on the blank sheet.
+`meta` and `session3.floorByRatio` and asserts the reachability facts, and assertions 2–5 and 6
+read only population and manifest values, so they would have passed or failed identically on the
+blank sheet. The dry-run must also check that every clause of the clearance rule is **evaluable**
+in every scope at every candidate cut — not only that each cut can reach the row minimum — since
+§5.1's undefined margin at rung 16 was a structural fact of the grid, visible before any rating.
 
 ## 12. Out of scope
 

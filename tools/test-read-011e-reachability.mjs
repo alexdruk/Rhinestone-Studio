@@ -9,10 +9,11 @@
 //
 // This test re-derives every quantity at runtime from computeSession3()'s `meta` (manifest-derived
 // regime medians, the ±0.25 tolerance) and `session3.floorByRatio` (the ratio cut grid and each
-// scope's population counts), and hardcodes only the expected results. Assertions 2–5 read only
-// population (`rowsAtOrAbove`) and manifest values, never a `sellable`/`rated` count, so they hold
-// identically on the blank sheet and on the filled one — that is the point: the defect was visible
-// before rating.
+// scope's population counts), and hardcodes only the expected results. Assertions 2–5 and 6 read
+// only population (`rowsAtOrAbove` / `rowsBelow`) and manifest values, never a `sellable`/`rated`
+// count, so they hold identically on the blank sheet and on the filled one — that is the point:
+// the defect was visible before rating. Assertion 6 covers §5.1: READ-011D §7's margin clause has
+// no denominator at the bottom rung, because nothing was rendered below ratio 16.
 //
 // Import graph: this file, node: builtins, analyze-ratings.mjs (zero npm, zero src/), and the
 // test-registration helper. It reads no rendered image and passes on a bare clone.
@@ -123,7 +124,19 @@ await test('5. a constant N = 1.0 stone implies ratios 33.0 / 18.1 / 10.8, and o
   );
 });
 
-await test('6. this file is registered in tools/test-groups.mjs (documentation group) and the default suite', () => {
+await test('6. at Form-B cut 16 every one of the twelve scopes has rowsBelow 0, so READ-011D §7\'s margin clause has no denominator at the bottom rung', () => {
+  const scopeKeys = Object.keys(session3.floorByRatio.scopes);
+  assert.equal(scopeKeys.length, 12, 'three regimes × two modes × two tracking arms');
+  for (const scopeKey of scopeKeys) {
+    assert.equal(
+      session3.floorByRatio.scopes[scopeKey].byCandidate[16].rowsBelow,
+      0,
+      `${scopeKey}: rowsBelow at cut 16 must be 0 — 16 is the minimum ratio in the render plan`,
+    );
+  }
+});
+
+await test('7. this file is registered in tools/test-groups.mjs (documentation group) and the default suite', () => {
   assertTestRegistered({
     filename: 'test-read-011e-reachability.mjs',
     group: 'documentation',
