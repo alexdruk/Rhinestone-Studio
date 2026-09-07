@@ -131,6 +131,11 @@ export const GROUPS = {
     // computeSession3() in analyze-ratings.mjs) the same way test-read-005-derived-tables.mjs pins
     // the READ-005 one — a pre-registered analysis rule guarded against drift before ratings land.
     'test-read-011d-session3.mjs',
+    // READ-011E: the reachability dry-run for READ-011D's selection rule — proves from population
+    // and manifest values alone (blank or filled sheet) that §6's ±0.25 tolerance was unsatisfiable
+    // and Form B was power-capped below the interesting range. See
+    // docs/specifications/READ-011E-PreRegistrationDefect.md.
+    'test-read-011e-reachability.mjs',
   ],
   // Input-validation/XSS hardening checks (layer.id, escapeHtml, renderLayerUI against hostile
   // input).
