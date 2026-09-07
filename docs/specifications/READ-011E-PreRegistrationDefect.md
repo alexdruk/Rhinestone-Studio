@@ -186,9 +186,9 @@ The READ-011 manipulation was built to test the constant-N stroke-reading model 
 
 **No floor.** `MIN_HEIGHT_TO_STONE_RATIO` stays at **16**, warn-only.
 
-This is **not** READ-011D §8's null branch. §8 ships no floor only when *neither form clears* —
+This is **not** READ-011D §8's null branch. READ-011D §8 ships no floor only when *neither form clears* —
 and Form A did clear, at 1.0 stones-across-stem in `outline|untracked` (§2). The route to "no
-floor" here is different: §6, the rule that was supposed to license adopting Form A's result, could
+floor" here is different: READ-011D §6, the rule that was supposed to license adopting Form A's result, could
 **never fire** (§4). Adopting Form A's number now — after seeing that Form B was capped and Form A
 happened to clear — would be fitting the conclusion to the ratings, which READ-011D §11 forbids.
 
