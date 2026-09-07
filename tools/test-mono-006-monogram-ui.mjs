@@ -37,7 +37,7 @@ import { STONE_COLORS } from '../src/renderer/StoneColors.js';
 import { stoneLayoutToSvg } from '../src/export/SvgExporter.js';
 import { FontManager } from '../src/fonts/index.js';
 import { createDefaultFontProviderRegistry } from '../src/text/index.js';
-import { MonogramGenerator, MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS, MONOGRAM_GENERATOR_FAILURE_REASONS } from '../src/monogram/index.js';
+import { MonogramGenerator, MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS, MONOGRAM_GENERATOR_FAILURE_REASONS, isMonogramEligibleStemWidthRatio } from '../src/monogram/index.js';
 import { displayValueToMm, formatLengthDisplay, mmToDisplayValue, unitSuffix } from '../src/units/index.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -146,7 +146,7 @@ const sandboxFactory = new Function(
   'Lightbox', 'HistoryManager', 'SHAPE_LIBRARY_KINDS', 'el', 'listFrames', 'listStoneSizes', 'findStoneSizeByDiameterMm', 'STONE_COLORS',
   'MONOGRAM_LAYOUTS', 'MONOGRAM_LAYOUT_LETTER_COUNTS', 'MONOGRAM_GENERATOR_FAILURE_REASONS',
   'fontManager', 'initialProject', 'selectMany', 'syncSelectedControlsFromLayer', 'updateAll', 'updateHistoryUI',
-  'monogramGenerator',
+  'monogramGenerator', 'isMonogramEligibleStemWidthRatio',
   // Every one of these is referenced only inside OTHER Lightboxes' onOpen/onClose callbacks
   // (text/shapes/import/imagetrace/shipping/settings/library/gallery) -- unrelated to Monogram, but
   // the real `const lightboxes={...}` construction is sliced verbatim (see lightboxesSrc below), so
@@ -198,7 +198,10 @@ function makeFakeFontManager() {
   const fonts = [
     { id: 'rs-block', family: 'RS Block', role: 'block', providerId: 'rhinestone' },
     { id: 'rs-modern', family: 'RS Modern', role: 'sans-serif', providerId: 'rhinestone' },
-    { id: 'courier-prime-regular', family: 'Courier Prime', role: 'monospace', providerId: 'opentype' }
+    // MONO-012: courier-prime's stemWidthRatio (0.0537) is just above MONOGRAM_MAX_STEM_WIDTH_RATIO
+    // (0.053125) -- still ineligible for the monogram picker. great-vibes (0.0357) is eligible.
+    { id: 'courier-prime-regular', family: 'Courier Prime', role: 'monospace', providerId: 'opentype', stemWidthRatio: 0.0537 },
+    { id: 'great-vibes-regular', family: 'Great Vibes', role: 'script', providerId: 'opentype', stemWidthRatio: 0.0357 }
   ];
   const byId = new Map(fonts.map((f) => [f.id, f]));
   return {
@@ -232,7 +235,7 @@ function buildScenario({ project, monogramGenerator, fontManager = makeFakeFontM
     MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS, MONOGRAM_GENERATOR_FAILURE_REASONS,
     fontManager, resolvedProject,
     selectMany, () => {}, () => {}, () => {},
-    monogramGenerator,
+    monogramGenerator, isMonogramEligibleStemWidthRatio,
     () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {},
     readLengthField, setLengthField, mmToDisplayValue, unitSuffix
   );
@@ -297,13 +300,14 @@ await test('2b. Layout options cover exactly the four MONOGRAM_LAYOUTS ids', () 
   }
 });
 
-await test('2c. Font options are the authored (production) fonts only -- OpenType fonts are excluded', () => {
+await test('2c. Font options are authored fonts plus monogram-eligible (thin-stemmed) OpenType fonts; thick-stemmed OpenType fonts are excluded (MONO-012)', () => {
   const s = buildScenario({ monogramGenerator: makeStubMonogramGenerator(fakeSuccessResult([])) });
   s.populateMonogramFontOptions();
   const html = el('monogramFont').innerHTML;
   assert.ok(html.includes('value="rs-block"'), 'expected the authored rs-block font to be offered');
   assert.ok(html.includes('value="rs-modern"'), 'expected the authored rs-modern font to be offered');
-  assert.ok(!html.includes('courier-prime-regular'), 'an OpenType/sampled font must never be offered in the Monogram font picker');
+  assert.ok(html.includes('value="great-vibes-regular"'), 'MONO-012: a thin-stemmed OpenType script font is now offered');
+  assert.ok(!html.includes('courier-prime-regular'), 'a thick-stemmed OpenType font (stemWidthRatio above the readability-floor threshold) must not be offered');
 });
 
 await test('2d. Stone size options match the real Stone Library (listStoneSizes())', () => {

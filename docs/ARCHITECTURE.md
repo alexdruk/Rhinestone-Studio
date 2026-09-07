@@ -1388,6 +1388,22 @@ independent `generate()` call — the wrapper decides *to* retry; the generator 
 itself. A successful auto-shrink is always surfaced to the user in the status bar ("Frame stones
 reduced to … to fit"), never applied silently.
 
+**Thin-stemmed OpenType script fonts (MONO-012).** The picker (`monogramEligibleFonts()`, renamed
+from `authoredProductionFonts()`) now offers, alongside the two authored `providerId:'rhinestone'`
+fonts, every enabled OpenType font thin enough that a single-chain letter still clears the
+readability floor. `src/monogram/SingleChain.js` is pure sizing arithmetic: in outline mode a stroke
+sampled at ≈0.85 stone diameters wide (`singleChainHeightMm()`) fills in as one continuous bead
+chain instead of a hollow double outline. Because a single-chain letter's height-to-stone ratio is
+`0.85 / stemWidthRatio` regardless of stone size, eligibility is one stone-size-independent gate:
+`stemWidthRatio ≤ 0.85 / MIN_HEIGHT_TO_STONE_RATIO` (`MONOGRAM_MAX_STEM_WIDTH_RATIO`, derived — it
+must track the floor, unlike `StemRegime.js`'s deliberately-fixed class boundaries). Gating the
+picker keeps a below-floor monogram structurally unreachable, so the floor never needs a monogram
+exemption. In `MonogramGenerator.generate()`, an eligible OpenType letter is sized by regenerating
+at a smaller `heightMm` (never a position scale) until it fits its slot; if fitting has to shrink it
+below `minChainStones()` — the larger of the 0.70 chain minimum and the readability floor — it fails
+`CHAIN_TOO_THIN`. Its emitted layer carries the fitted `heightMm` as a real geometry input with
+`heightMode:'raw'` and no `authoredScale`; the authored branch is unchanged.
+
 ---
 
 # Units

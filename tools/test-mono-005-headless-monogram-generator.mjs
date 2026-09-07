@@ -353,14 +353,42 @@ await test('a letters array of the wrong length returns unsupported-letter-count
   assert.equal(result.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.UNSUPPORTED_LETTER_COUNT);
 });
 
-await test('a non-authored (OpenType) font returns a structured invalid-font failure', async () => {
+await test('a thick-stemmed OpenType font (courier-prime, ratio 0.0537 > 0.053125) returns a structured invalid-font failure', async () => {
+  // MONO-012: courier-prime-regular is now ineligible -- its stemWidthRatio (manifest: 0.0537) is
+  // just above MONOGRAM_MAX_STEM_WIDTH_RATIO (0.85 / 16 = 0.053125), so a single-chain letter would
+  // sit below the readability floor. Still INVALID_FONT, now for the stem-width reason.
   const { generator } = createRealGenerator();
   const result = await generator.generate({
     frameId: 'square', layoutId: 'single', letters: ['A'], fontId: 'courier-prime-regular',
+    stemWidthRatio: 0.0537,
     stoneSizeMm: 2.8, canvasMm: CANVAS_MM, frameRect: { xMm: 0, yMm: 0, widthMm: 80, heightMm: 80 }
   });
   assert.equal(result.ok, false);
   assert.equal(result.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.INVALID_FONT);
+});
+
+await test('a thin-stemmed OpenType font (Great Vibes) is now accepted and emits a non-authored layout (MONO-012)', async () => {
+  const { geometryEngine, generator } = createRealGenerator();
+  const result = await generator.generate({
+    frameId: 'circle', layoutId: 'single', letters: ['A'], fontId: 'great-vibes-regular',
+    providerId: 'opentype', stemWidthRatio: 0.0357,
+    stoneSizeMm: 2.0, color: 'gold', canvasMm: CANVAS_MM,
+    frameRect: { xMm: 0, yMm: 0, widthMm: 80, heightMm: 80 }
+  });
+  assert.equal(result.ok, true);
+  const letterLayer = result.layers.find((l) => l.type === 'text');
+  assert.equal(letterLayer.text, 'A');
+  // OpenType letters carry no authoredScale axis and declare heightMode explicitly.
+  assert.equal(letterLayer.authoredScale, undefined);
+  assert.equal(letterLayer.heightMode, 'raw');
+  assert.equal(letterLayer.height, result.measurements.letters[0].fittedHeightMm);
+  // Regenerating from the persisted fields reproduces a sampled ('outline'), not authored, layout.
+  const regen = await geometryEngine.generateTextLayout({
+    text: letterLayer.text, fontId: letterLayer.font, providerId: 'opentype', layerId: letterLayer.id,
+    heightMm: letterLayer.height, stoneSizeMm: letterLayer.stoneSize, gapMm: letterLayer.gap,
+    mode: 'outline', color: letterLayer.color, curveEnabled: false
+  });
+  assert.notEqual(regen.sourceMode, 'authored');
 });
 
 await test('a letter that cannot legally fit its slot even at the largest scale that fits returns below-minimum-scale', async () => {
