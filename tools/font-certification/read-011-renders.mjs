@@ -204,18 +204,7 @@ function ratingSlugsInPresentationOrder(entries) {
 async function writeRatingArtifacts(keyEntries) {
   const ratingSlugs = ratingSlugsInPresentationOrder(keyEntries);
 
-  // Never overwrite a rated sheet. Once READ-011E landed the ratings, RATINGS_TEMPLATE_FILE holds
-  // 147 human judgements that this script cannot reproduce; a fresh template has to be a deliberate
-  // act outside this run, not a silent side effect of re-deriving. Guard is scoped to this one file.
-  if (existsSync(RATINGS_TEMPLATE_FILE)) {
-    const rated = readCsvObjects(RATINGS_TEMPLATE_FILE)
-      .filter((r) => (r.readable ?? '') !== '' || (r.sellable ?? '') !== '');
-    if (rated.length > 0) {
-      console.error(`refusing to overwrite ${path.relative(repoRoot, RATINGS_TEMPLATE_FILE)}: ${rated.length} rated row(s) present.`);
-      console.error('Move or delete the file deliberately if a fresh blank template is genuinely wanted, then re-run.');
-      process.exit(1);
-    }
-  }
+  assertRatingsSheetUnrated(); // defence in depth — run() already checked before the key was touched
 
   const read005Header = (await readFile(READ_005_RATINGS_FILE, 'utf8')).split('\n', 1)[0];
   const csvCell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -233,7 +222,24 @@ async function writeRatingArtifacts(keyEntries) {
   return ratingSlugs;
 }
 
+// Never overwrite a rated sheet. Once READ-011E landed the ratings, RATINGS_TEMPLATE_FILE holds 147
+// human judgements this script cannot reproduce; a fresh template must be a deliberate act outside
+// this run. Called first thing in run() — before the tracked render-key.json is read for rewriting
+// or written — so both the full pass and --derive-only refuse *before* the key moves and leaves it
+// disagreeing with the sheet (test-read-011c-render-key.mjs test 10). Scoped to this one file.
+function assertRatingsSheetUnrated() {
+  if (!existsSync(RATINGS_TEMPLATE_FILE)) return;
+  const rated = readCsvObjects(RATINGS_TEMPLATE_FILE)
+    .filter((r) => (r.readable ?? '') !== '' || (r.sellable ?? '') !== '');
+  if (rated.length === 0) return;
+  console.error(`refusing to overwrite ${path.relative(repoRoot, RATINGS_TEMPLATE_FILE)}: ${rated.length} rated row(s) present.`);
+  console.error('Move or delete the file deliberately if a fresh blank template is genuinely wanted, then re-run.');
+  process.exit(1);
+}
+
 async function run() {
+  assertRatingsSheetUnrated();
+
   const args = process.argv.slice(2);
   const channel = args.includes('--channel') ? args[args.indexOf('--channel') + 1] : undefined;
 
