@@ -2300,8 +2300,13 @@ async function updateAll(skipWrite=false,forceStoneRebuild=false){if(!skipWrite)
   // XYWH_SHAPE_TYPES box model the others share. RS-3012 Step 4: widened a final time to include
   // 'circle' -- like 'text' it has no x/y/w/h box (cx/cy/r data model, deliberately not migrated), so
   // syncFromProjectLayers() takes its own dedicated code path for it too; the resize write-back below
-  // (onShapeResized) converts the reported bounds back to l.r.
-  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'||SHAPE_LIBRARY_KINDS.has(l.type)||l.type==='svg'||l.type==='image'||l.type==='text'||l.type==='circle'),forceStoneRebuild)}else{drawLayout()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}
+  // (onShapeResized) converts the reported bounds back to l.r. RS-3012 Step 5: widened once more to
+  // include 'rectangle' -- a first-class layer type (SUPPORTED_LAYER_TYPES/XYWH_SHAPE_TYPES) that was
+  // simply never listed here, so it was the one layer type still unselectable in Design. Unlike
+  // 'circle' it IS a plain x/y/w/h/rotationDeg box, so it needs no new interaction machinery at all --
+  // syncFromProjectLayers() materializes it as a rotated rectangle proxy and every drag/resize/rotate
+  // reuses the shared XYWH machinery (onShapeResized's generic l.x/y/w/h write-back covers it too).
+  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'||SHAPE_LIBRARY_KINDS.has(l.type)||l.type==='svg'||l.type==='image'||l.type==='text'||l.type==='circle'||l.type==='rectangle'),forceStoneRebuild)}else{drawLayout()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}
 // RS-3011 freehand-close-and-clear-all-layers fix: deleting the last remaining layer no longer
 // blocks (see deleteLayer()) -- the per-row trash icon and the sidebar "Delete selected layer"
 // button are therefore never disabled for layer count anymore.

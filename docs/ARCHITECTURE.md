@@ -1227,7 +1227,7 @@ boolean-geometry grid resolution (`targetSpacingMm` in `resolvePaintTargetTwoPas
 concern RS-3014 deliberately left alone, unrelated to a region's stored decoration.
 
 **Selection beyond shapes (RS-3012).** Design's click-to-select / drag / resize / rotate began
-(RS-3010/3011) as a shape-only interaction. RS-3012 extended it, across four shipped steps, to the
+(RS-3010/3011) as a shape-only interaction. RS-3012 extended it, across five shipped steps, to the
 remaining layer types and to the two placement tools:
 
 - **Step 1 — Stamp and Trace respect the selection boundary.** When an `activeSelection` (a region,
@@ -1285,10 +1285,27 @@ remaining layer types and to the two placement tools:
   which know circle's `cx`/`cy`). Like `text`, a circle has no `x`/`y`/`w`/`h` box, so
   `syncFromProjectLayers()` gives it its own reconciliation branch, diffing a freshly re-materialized
   proxy's bounds.
+- **Step 5 — `rectangle` layers join Select.** `rectangle` is a first-class layer type
+  (`SUPPORTED_LAYER_TYPES` / `XYWH_SHAPE_TYPES` / `VECTOR_FILL_MODE_TYPES`, and `GeometryEngine`'s
+  `SHAPE_TYPES`) that Gallery `.rhs` fixtures build and that occurs across several `examples/*.rhs` —
+  it was simply never added to the call-site filter, so it was the one layer type still unselectable
+  in Design while every layer beside it selected normally. Unlike `circle` it needs *no* new
+  interaction machinery: a rectangle is a plain `x`/`y`/`w`/`h`/`rotationDeg` box, so click / drag /
+  resize / rotate reuse `hitTestShapeId()` / `rotatedHandlePositionsFor()` / `onShapeMoved` /
+  `onShapeResized` / `onShapeRotated` unchanged, and `onShapeResized`'s own generic `l.x/y/w/h`
+  write-back covers a rectangle resize with no new branch. The proxy — a rotated rectangle path — is
+  built by `buildRectangleProxyItem()`, the *same* builder extracted from the rectangle fallback
+  `materializeSvgImageItemFromLayer()` already used for an `image` layer and for an unresolvable
+  `svg`, so there is exactly one copy of that construction. It sets no `item.data` flags: neither
+  `noResizeHandles` (Step 3) nor `noRotateHandle` / `isCircleProxy` (Step 4) — the box model holds
+  exactly. Because it *has* a stored `x`/`y`/`w`/`h` box, it takes the same generic
+  bounds-comparison branch in `syncFromProjectLayers()` that `path` / `svg` / `image` use, not
+  `text` / `circle`'s dedicated re-materialize-and-diff branch.
 
 At each step `app.js`'s `syncFromProjectLayers()` call-site filter widened to carry the new types
-(`l.type==='svg'||l.type==='image'||l.type==='text'||l.type==='circle'` alongside `'path'` and
-`SHAPE_LIBRARY_KINDS`), and `syncFromProjectLayers()` dispatches each type to its own materializer.
+(`l.type==='svg'||l.type==='image'||l.type==='text'||l.type==='circle'||l.type==='rectangle'`
+alongside `'path'` and `SHAPE_LIBRARY_KINDS`), and `syncFromProjectLayers()` dispatches each type to
+its own materializer.
 
 **Known test-coverage gap: `DrawingCanvasTool.js` interaction layer.** Almost none of Design's core
 interaction layer (`src/drawing/DrawingCanvasTool.js`) has committed regression tests. The only
