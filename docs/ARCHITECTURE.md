@@ -1308,12 +1308,15 @@ alongside `'path'` and `SHAPE_LIBRARY_KINDS`), and `syncFromProjectLayers()` dis
 its own materializer.
 
 **Known test-coverage gap: `DrawingCanvasTool.js` interaction layer.** Almost none of Design's core
-interaction layer (`src/drawing/DrawingCanvasTool.js`) has committed regression tests. The only
+interaction layer (`src/drawing/DrawingCanvasTool.js`) has committed regression tests. The
 `tools/*.mjs` test files that exercise `src/drawing/` at all are
-`test-rs3011-step8-svg-import-flattening.mjs`, `test-stone-sprite-cache.mjs`, and
-`test-rs3012-step4-circle-select.mjs` — covering SVG-import flattening, stone-sprite caching, and
-circle-select respectively, not the interaction layer's other tools. There is explicitly zero
-committed coverage for: the Pen (Bezier) tool and its four follow-up fixes; the mode-toggle bug
+`test-rs3011-step8-svg-import-flattening.mjs`, `test-stone-sprite-cache.mjs`,
+`test-rs3012-step4-circle-select.mjs`, `test-rs3012-step5-rectangle-select.mjs`, and
+`test-maint-003-materializer-contract.mjs` — covering SVG-import flattening, stone-sprite caching,
+circle- and rectangle-select, and (MAINT-003) the layer-in / proxy-out contract of all six of
+`syncFromProjectLayers()`'s materializers respectively, not the interaction layer's other tools.
+The materializer layer is now covered; the remaining gap is the interaction layer proper. There is
+explicitly zero committed coverage for: the Pen (Bezier) tool and its four follow-up fixes; the mode-toggle bug
 fix; the Eraser tool (RS-3011 Step 13 plus five RS-3014 follow-ups); RS-3013's region-editing
 gestures *as Design UI operations* (move / copy / delete / spec-edit — the underlying region data
 model itself *is* covered by the geometry-layer tests around `GeometryEngine._applyPathRegions()`

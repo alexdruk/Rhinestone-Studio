@@ -311,6 +311,7 @@ export const GROUPS = {
     'test-move-drag-fast-path-wiring.mjs',
     'test-rs3012-step4-circle-select.mjs',
     'test-rs3012-step5-rectangle-select.mjs',
+    'test-maint-003-materializer-contract.mjs',
   ],
   ui: [
     'test-ui-shell-structure.mjs',
