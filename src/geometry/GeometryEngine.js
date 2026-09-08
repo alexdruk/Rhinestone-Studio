@@ -217,17 +217,31 @@ export class GeometryEngine {
     } else if (options.weightOptions) {
       // MONO-015: weight-following stone size. Three phases, in this deliberate order (sampling at
       // the largest pitch first would leave phase C nothing to drop):
-      //   A. sample the outline exactly as a uniform layer at weightMinSizeMm would -- same pitch
-      //      (weightMinSizeMm + gapMm), same overlap floor (weightMinSizeMm). Byte-identical to
-      //      today's uniform path for that size; no sampler change needed for this phase.
+      //   A. sample the outline at the min pitch, then oversample by 2x when the layer actually
+      //      mixes sizes (see below).
       //   B. probe the local stroke width at each survivor (capped at weightMaxSizeMm) and assign
       //      each a catalog diameter via weightSizeMm().
-      //   C. radius-aware drop: phase A only guaranteed weightMinSizeMm separation, but larger
-      //      assigned stones need more -- dropOverlappingSizedStones() removes the physical overlaps
-      //      this creates (floor (d1+d2)/2, no gap term -- see its doc comment).
+      //   C. radius-aware drop: phase A only guaranteed weightMinSizeMm/oversampleFactor separation,
+      //      and larger assigned stones need more -- dropOverlappingSizedStones() removes the
+      //      physical overlaps this creates (floor (d1+d2)/2, no gap term -- see its doc comment).
+      //
+      // Phase A oversampling. Phase C only ever drops, so a survivor sits at an integer multiple of
+      // the phase-A pitch. At the plain min pitch (2.3 mm for SS6/0.3) a 2.8 mm stone assigned to a
+      // 2.3-pitched run ends up 4.6 mm from its neighbour -- 48% over its own 3.1 mm d+gap ideal,
+      // the SINGLE_CHAIN_MIN_RATIO gap-failure mode (SingleChain.js:22). Halving the phase-A pitch
+      // (spacing AND separation floor -- lowering only spacing does nothing, sampleMultiContour-
+      // OutlinePoints() re-quantises at minSeparationMm, StoneSampler.js) drops the quantisation
+      // step to 1.15 mm, so a 2.8 mm run lands ~3.45 mm (+11%) and a 4.0 mm run ~4.6 mm (+7%).
+      //
+      // The factor is 1 when weightMinSizeMm === weightMaxSizeMm: every stone is then the same
+      // size, so phase A at the min pitch is already exact and oversampling buys nothing. Pinning
+      // it to 1 in that case keeps the reduction-to-uniform guarantee byte-identical *by
+      // construction* (identical sampleShapeFillPoints() arguments), not by luck.
       const { minSizeMm: weightMinSizeMm, maxSizeMm: weightMaxSizeMm } = options.weightOptions;
-      const phaseASpacingMm = weightMinSizeMm + options.gapMm;
-      const phaseASamples = sampleShapeFillPoints('outline', polygons, boundingBox, phaseASpacingMm, weightMinSizeMm);
+      const oversampleFactor = weightMaxSizeMm > weightMinSizeMm ? 2 : 1;
+      const phaseASpacingMm = (weightMinSizeMm + options.gapMm) / oversampleFactor;
+      const phaseAMinSeparationMm = weightMinSizeMm / oversampleFactor;
+      const phaseASamples = sampleShapeFillPoints('outline', polygons, boundingBox, phaseASpacingMm, phaseAMinSeparationMm);
       const strokeWidthsMm = strokeWidthsForSamples(phaseASamples, polygons, weightMaxSizeMm);
       const assignedStones = phaseASamples.map((point, i) => ({
         xMm: point.xMm,

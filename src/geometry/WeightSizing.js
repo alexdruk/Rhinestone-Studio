@@ -4,16 +4,16 @@
  * Turns a measured local stroke width (from src/geometry/StrokeWidthProbe.js) into a catalog stone
  * diameter. Pure arithmetic over the standard rhinestone catalog.
  *
- * src/geometry/** never imports src/renderer/StoneSizes.js (geometry works in raw millimeters for
- * any positive value -- see StoneSizes.js's own doc comment), so the catalog diameters are
- * hand-mirrored here as data, the same convention app.js's MIXED_ALLOWED_SIZE_CHECKBOXES and the
- * VECTOR_FILL_MODES/SAMPLE_MODES enum pairs already use. tools/test-mono-015-weight-sizing.mjs
- * cross-checks WEIGHT_SIZING_CATALOG_DIAMETERS_MM against listStoneSizes() on every run so the two
- * cannot drift apart.
+ * The catalog diameters are derived directly from src/renderer/StoneSizes.js -- a plain rendering/
+ * display constant, not an engine dependency (geometry still works in raw millimeters for any
+ * positive value; this module just needs to know which diameters are commercially standard), the
+ * same import src/monogram/FrameHierarchy.js already makes. No hand-copied literal.
  */
 
-// Ascending, mirrored from src/renderer/StoneSizes.js (SS6 / SS10 / SS16 / SS20 / SS30).
-export const WEIGHT_SIZING_CATALOG_DIAMETERS_MM = [2.0, 2.8, 4.0, 4.7, 6.4];
+import { listStoneSizes } from '../renderer/StoneSizes.js';
+
+// Ascending (StoneSizes.js validates strictly-ascending diameterMm): SS6 / SS10 / SS16 / SS20 / SS30.
+export const WEIGHT_SIZING_CATALOG_DIAMETERS_MM = listStoneSizes().map((size) => size.diameterMm);
 
 /**
  * The stone diameter assigned to a stroke sample of local width `widthMm`: the smallest catalog

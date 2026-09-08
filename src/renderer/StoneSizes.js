@@ -4,11 +4,15 @@
  * Rendering/UI display metadata only, mirroring `CrystalColors.js`'s catalog pattern exactly: a
  * `Stone`/layer only ever carries a plain millimeter number (`Stone.sizeMm`, a layer's
  * `stoneSize`) — see `src/geometry/Stone.js` and `src/geometry/GeometryEngine.js`'s
- * `stoneSizeMm` params. Nothing in `src/geometry/**` reads this file or knows what an "SS16" is;
- * geometry generation, fill sampling, and stone spacing already work in raw millimeters for any
- * positive value, mixed freely across layers. This catalog exists purely so the stone-size picker
- * (and the Production Sheet header) can show a commercial size name next to that millimeter value,
- * instead of forcing users to already know rhinestone industry sizing.
+ * `stoneSizeMm` params. Geometry generation, fill sampling, and stone spacing all work in raw
+ * millimeters for any positive value, mixed freely across layers; this catalog exists so the
+ * stone-size picker (and the Production Sheet header) can show a commercial size name next to that
+ * millimeter value, instead of forcing users to already know rhinestone industry sizing.
+ *
+ * MONO-015: `src/geometry/WeightSizing.js` now imports `listStoneSizes()` from here to snap a
+ * probed stroke width to a standard diameter (the same import `src/monogram/FrameHierarchy.js`
+ * makes). That is a one-way display-constant dependency -- this file still imports nothing from
+ * `src/geometry/**` and knows nothing about sampling.
  *
  * Diameters below are nominal, commonly-cited industry values (not calibrated to any specific
  * manufacturer's tolerance spec) — the same "decorative approximation, not manufacturer-exact"

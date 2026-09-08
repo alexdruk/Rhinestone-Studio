@@ -50,10 +50,12 @@ function assertPositiveNumber(value, name) {
  * @param {number} [params.conservativeDetail] 0..1, default DEFAULT_CONSERVATIVE_DETAIL.
  * @param {number} stoneSizeMm The layer's own primary stone size (already validated by the caller).
  * @param {{allowWeight?: boolean}} [opts] MONO-015: whether `sizeMode: 'weight'` is legal for this
- *   caller. Only normalizeTextParams() (text layers) passes `true`; every other generate*Layout()
- *   caller leaves it false, and a stray `sizeMode: 'weight'` on a non-text layer is then coerced to
- *   'uniform' (weight sizing is opt-in and additive -- an unsupported layer keeps its exact
- *   pre-MONO-015 behaviour rather than throwing on hand-edited JSON).
+ *   caller. Only normalizeTextParams() (text layers, outline mode) passes `true`; every other
+ *   generate*Layout() caller leaves it false, and `sizeMode: 'weight'` there is a hard error --
+ *   weight-following stone size is valid only for a text layer sampled in outline mode, so any
+ *   other combination is a caller bug, not something to silently absorb. (An *unknown* mode string
+ *   is a separate case handled by app.js's resolveSizeMode() old-project fallback, never reaching
+ *   here.)
  * @returns {{sizeMode: 'uniform'|'mixed'|'weight', mixedOptions: null | {...}, weightOptions?: {minSizeMm: number, maxSizeMm: number}}}
  */
 export function normalizeMixedSizeParams(params, stoneSizeMm, { allowWeight = false } = {}) {
@@ -63,7 +65,7 @@ export function normalizeMixedSizeParams(params, stoneSizeMm, { allowWeight = fa
   }
   if (sizeMode === 'weight') {
     if (!allowWeight) {
-      return { sizeMode: 'uniform', mixedOptions: null };
+      throw new Error("MixedSizeGenerator.normalizeMixedSizeParams: sizeMode 'weight' (weight-following stone size) is only supported for a text layer sampled in outline mode.");
     }
     // Flat on the layer, nested here at the engine boundary -- the same shape this function already
     // produces for 'mixed'. weightMinSizeMm / weightMaxSizeMm are deliberately NOT S-200's

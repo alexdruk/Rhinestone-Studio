@@ -64,6 +64,54 @@ function taperedStrokePolygon(lengthMm, w0Mm, w1Mm, segments = 80) {
   return [...top, ...bottom.reverse()];
 }
 
+/**
+ * Split a stone list (in engine output order == per-contour walk order) into runs of consecutive
+ * same-diameter stones, further splitting where the jump to the next stone exceeds 1.5x that run's
+ * own `d + gapMm` ideal pitch -- a contour boundary or a genuine (phase-C-dropped) gap, not a
+ * continuation of the same chain. Returns `{sizeMm, stones, pitches}` per run.
+ */
+function sameSizeRuns(stones, gapMm) {
+  const runs = [];
+  let current = null;
+  for (const s of stones) {
+    if (current && s.sizeMm === current.sizeMm) {
+      const prev = current.stones[current.stones.length - 1];
+      const step = Math.hypot(s.xMm - prev.xMm, s.yMm - prev.yMm);
+      if (step <= 1.5 * (s.sizeMm + gapMm)) {
+        current.stones.push(s);
+        current.pitches.push(step);
+        continue;
+      }
+    }
+    current = { sizeMm: s.sizeMm, stones: [s], pitches: [] };
+    runs.push(current);
+  }
+  return runs;
+}
+
+function median(values) {
+  const a = [...values].sort((x, y) => x - y);
+  const m = Math.floor(a.length / 2);
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+
+/**
+ * Per-diameter table of every >=3-stone run's median centre-to-centre pitch, its diameter's own
+ * `d + gapMm` ideal, and the percentage over/under. Printed by the spacing tests.
+ */
+function pitchTable(stones, gapMm) {
+  const runs = sameSizeRuns(stones, gapMm).filter((r) => r.stones.length >= 3);
+  const present = [...new Set(stones.map((s) => s.sizeMm))].sort((a, b) => a - b);
+  return present.map((d) => {
+    const idealMm = d + gapMm;
+    const rows = runs.filter((r) => r.sizeMm === d).map((r) => {
+      const medianPitchMm = median(r.pitches);
+      return { length: r.stones.length, medianPitchMm, offPct: ((medianPitchMm - idealMm) / idealMm) * 100 };
+    });
+    return { d, idealMm, rows };
+  });
+}
+
 function noPairViolatesHalfSum(stones) {
   for (let i = 0; i < stones.length; i++) {
     for (let j = i + 1; j < stones.length; j++) {
@@ -79,9 +127,12 @@ function noPairViolatesHalfSum(stones) {
 
 // ---------------------------------------------------------------------------
 
-await test('catalog cross-check: WEIGHT_SIZING_CATALOG_DIAMETERS_MM matches src/renderer/StoneSizes.js exactly (hand-mirror cannot drift)', () => {
+await test('catalog cross-check: WEIGHT_SIZING_CATALOG_DIAMETERS_MM is derived from src/renderer/StoneSizes.js (imported, not hand-copied)', () => {
   const fromLibrary = listStoneSizes().map((s) => s.diameterMm);
-  assert.deepEqual(CATALOG, fromLibrary, `catalog mirror ${JSON.stringify(CATALOG)} != listStoneSizes() ${JSON.stringify(fromLibrary)}`);
+  // WeightSizing.js now imports listStoneSizes() directly, so this is a tautology by construction --
+  // kept as a cheap guard that the derivation (and the ascending order it relies on) still holds.
+  assert.deepEqual(CATALOG, fromLibrary, `catalog ${JSON.stringify(CATALOG)} != listStoneSizes() ${JSON.stringify(fromLibrary)}`);
+  for (let i = 1; i < CATALOG.length; i++) assert.ok(CATALOG[i] > CATALOG[i - 1], 'catalog must be strictly ascending');
 });
 
 await test('weightSizeMm: smallest catalog diameter >= width, then clamped into [min,max]; SS16 is 4.0 mm (not 3.8)', () => {
@@ -143,11 +194,15 @@ await test('1. probe monotonicity on a synthetic tapered stroke: monotone widths
 // Test 2 -- the vacuity control. Print entering/leaving counts, no verdict.
 // ---------------------------------------------------------------------------
 
-await test('2. vacuity control (run by name): phase C entering vs leaving count on the tapered stroke -- both printed', () => {
+await test('2. vacuity control (run by name): phase C entering vs leaving count on the tapered stroke, at the real 2x-oversampled phase-A pitch -- both printed', () => {
+  const gapMm = 0.3;
+  const minMm = 2.0;
+  const maxMm = 4.0;
+  const factor = 2; // maxMm > minMm
   const polygon = taperedStrokePolygon(40, 0.8, 4.0);
-  const phaseA = sampleShapeFillPoints('outline', [polygon], { minXmm: 0, minYmm: -2.5, maxXmm: 40, maxYmm: 2.5 }, 2.3, 2.0);
-  const widths = strokeWidthsForSamples(phaseA, [polygon], 4.0);
-  const assigned = phaseA.map((p, i) => ({ xMm: p.xMm, yMm: p.yMm, sizeMm: weightSizeMm(widths[i], 2.0, 4.0) }));
+  const phaseA = sampleShapeFillPoints('outline', [polygon], { minXmm: 0, minYmm: -2.5, maxXmm: 40, maxYmm: 2.5 }, (minMm + gapMm) / factor, minMm / factor);
+  const widths = strokeWidthsForSamples(phaseA, [polygon], maxMm);
+  const assigned = phaseA.map((p, i) => ({ xMm: p.xMm, yMm: p.yMm, sizeMm: weightSizeMm(widths[i], minMm, maxMm) }));
   const survivors = dropOverlappingSizedStones(assigned);
   console.log(`    phase C: entering ${assigned.length} stones, leaving ${survivors.length} stones (dropped ${assigned.length - survivors.length})`);
   if (assigned.length - survivors.length === 0) {
@@ -174,48 +229,115 @@ await test('3. reduction to uniform: weight {2.0, 2.0} text layout is byte-ident
 });
 
 // ---------------------------------------------------------------------------
-// Test 4 -- real glyph. Print the raw uniform and weight counts.
+// Test 4 -- real glyph spacing, in place of a stone-count band.
 //
-// The spec's Tests item 4 anticipates the weight count landing within +-25% of uniform SS6. The
-// measured value on develop's Great Vibes at 45 mm / SS6 / weight {2.0, 4.0} is ~ -31% (see the
-// printed numbers below). That gap is inherent to the three-phase design, not a probe defect:
-//   * phase A samples the outline at the *minimum* pitch (weightMinSizeMm + gapMm), by design (a
-//     coarser phase A would make phase C's overlap check unable to fire -- see the spec);
-//   * phase C drops the later stone of every overlapping pair with no re-spacing, so any run of
-//     samples assigned a size >= one catalog step above the minimum thins to ~50% retention;
-//   * ~48% of the outline samples of Great Vibes "A" at 45 mm exceed 2 mm of stroke width (this is
-//     a swashy display capital), so roughly a quarter of the layer is lost to that thinning.
-// The assertion band below is therefore widened to +-40% -- still a real regression guard (a broken
-// probe or an over-eager phase C would blow past it) -- and this deviation from the spec's stated
-// +-25% is flagged in the milestone report and docs/specifications/MONO-015-WeightSizing.md.
+// A total stone count cannot guard weight mode: a layout mixing 2.0/2.8/4.0 mm stones must land
+// somewhere between uniform-2.0 and uniform-4.0, and on develop uniform-2.8 alone is already -34%
+// (uniform "A" 45 mm: 2.0 -> 94, 2.8 -> 62, 4.0 -> 36). No band anchored to the uniform-SS6 count
+// can be both tight and correct. What CAN be guarded is the pitch inside a run of same-size stones:
+// phase C only drops, so survivors sit at integer multiples of the phase-A pitch, and at the plain
+// min pitch a 2.8 mm run comes out 48% over-spaced against its own d+gap ideal -- the
+// SINGLE_CHAIN_MIN_RATIO gap-failure mode. GeometryEngine's weight branch oversamples phase A by 2x
+// when the layer mixes sizes; these tests assert that fixes the pitch.
 // ---------------------------------------------------------------------------
 
-await test('4. real glyph: Great Vibes "A" 45 mm SS6 weight {2.0, 4.0} -- >= 2 distinct sizes, stem does not trip CHAIN_TOO_THIN; uniform + weight counts printed', async () => {
+const OVERSAMPLE_TOLERANCE = 0.15; // median run pitch must be within 15% of d + gapMm
+
+// The oversample factor GeometryEngine.js's weight branch applies. Kept here so the synthetic-stroke
+// test drives the primitives with the exact same arithmetic the engine uses.
+const oversampleFactor = (minMm, maxMm) => (maxMm > minMm ? 2 : 1);
+
+await test('4a. synthetic tapered stroke: at the plain min pitch a 2.8 mm run is ~48% over-spaced (the defect); with 2x oversampling every present diameter\'s median run pitch is within 15% of d + gapMm', () => {
+  const gapMm = 0.3;
+  const minMm = 2.0;
+  const maxMm = 4.0;
+  // 80 mm long, 0.8 -> 4.6 mm wide: sustained runs of 2.0, 2.8 and 4.0 mm all occur.
+  const polygon = taperedStrokePolygon(80, 0.8, 4.6, 120);
+  const boundingBox = { minXmm: 0, minYmm: -2.5, maxXmm: 80, maxYmm: 2.5 };
+
+  const runAt = (factor) => {
+    const spacingMm = (minMm + gapMm) / factor;
+    const separationMm = minMm / factor;
+    const samples = sampleShapeFillPoints('outline', [polygon], boundingBox, spacingMm, separationMm);
+    const widths = strokeWidthsForSamples(samples, [polygon], maxMm);
+    const assigned = samples.map((p, i) => ({ xMm: p.xMm, yMm: p.yMm, sizeMm: weightSizeMm(widths[i], minMm, maxMm) }));
+    return dropOverlappingSizedStones(assigned);
+  };
+
+  // Factor 1 -- the defect. At least one >=3-stone run must exceed the tolerance.
+  const factor1 = runAt(1);
+  const table1 = pitchTable(factor1, gapMm);
+  console.log('    factor 1 (plain min pitch):');
+  for (const t of table1) {
+    for (const r of t.rows) console.log(`      d=${t.d} len=${r.length} medianPitch=${r.medianPitchMm.toFixed(3)} ideal=${t.idealMm.toFixed(2)} off=${r.offPct.toFixed(1)}%`);
+  }
+  const worstFactor1 = Math.max(...table1.flatMap((t) => t.rows.map((r) => Math.abs(r.offPct))), 0);
+  assert.ok(worstFactor1 / 100 > OVERSAMPLE_TOLERANCE,
+    `factor 1 should over-space some run past ${OVERSAMPLE_TOLERANCE * 100}% -- worst was ${worstFactor1.toFixed(1)}%. If this fails, the run grouping is wrong, not the sampler.`);
+
+  // Factor 2 -- the fix. EVERY present diameter has at least one >=3-stone run, and every such run's
+  // median pitch is within tolerance.
+  const factor2 = runAt(oversampleFactor(minMm, maxMm));
+  const table2 = pitchTable(factor2, gapMm);
+  console.log(`    factor ${oversampleFactor(minMm, maxMm)} (oversampled): ${factor2.length} stones`);
+  for (const t of table2) {
+    assert.ok(t.rows.length >= 1, `no >=3-stone run of ${t.d} mm stones to measure pitch on`);
+    for (const r of t.rows) {
+      console.log(`      d=${t.d} len=${r.length} medianPitch=${r.medianPitchMm.toFixed(3)} ideal=${t.idealMm.toFixed(2)} off=${r.offPct.toFixed(1)}%`);
+      assert.ok(Math.abs(r.offPct) / 100 <= OVERSAMPLE_TOLERANCE,
+        `a ${t.d} mm run's median pitch ${r.medianPitchMm.toFixed(3)} mm is ${r.offPct.toFixed(1)}% off its ${t.idealMm.toFixed(2)} mm ideal (> ${OVERSAMPLE_TOLERANCE * 100}%)`);
+    }
+  }
+});
+
+await test('4b. real engine path: Great Vibes "A" 45 mm weight {2.0, 4.0} -- every >=3-stone run\'s median pitch is within 15% of d + gapMm; the min and max diameters each form such a run', async () => {
   const base = {
     text: 'A', fontId: 'great-vibes-regular', providerId: 'opentype', layerId: 'weight-glyph',
     heightMm: 45, stoneSizeMm: 2.0, gapMm: 0.3, mode: 'outline', color: 'gold'
   };
-  const uniform = await engine.generateTextLayout(base);
   const weight = await engine.generateTextLayout({ ...base, sizeMode: 'weight', weightMinSizeMm: 2.0, weightMaxSizeMm: 4.0 });
   const distinct = [...new Set(weight.stones.map((s) => s.sizeMm))].sort((a, b) => a - b);
-  const deltaPct = ((weight.count / uniform.count) - 1) * 100;
-  console.log(`    uniform SS6 count: ${uniform.count}`);
-  console.log(`    weight {2.0,4.0} count: ${weight.count}  (${deltaPct.toFixed(1)}% vs uniform; distinct sizes ${JSON.stringify(distinct)})`);
 
   assert.ok(distinct.length >= 2, `expected at least two distinct sizes, got ${JSON.stringify(distinct)}`);
-  const violation = noPairViolatesHalfSum(weight.stones);
-  assert.equal(violation, null, `a stone pair physically overlaps: ${JSON.stringify(violation)}`);
+  assert.equal(noPairViolatesHalfSum(weight.stones), null, 'a stone pair physically overlaps');
 
-  // Sanity anchor from the spec: stem width at 45 mm = 0.0357 * 45 = 1.6065 mm -> weightSizeMm
-  // assigns 2.0 -> 0.803 stones across the stem, above SINGLE_CHAIN_MIN_RATIO (0.70). So this glyph
-  // must not trip CHAIN_TOO_THIN via the monogram path; report the arithmetic if it ever does.
+  const table = pitchTable(weight.stones, 0.3);
+  console.log('    Great Vibes "A" weight {2.0, 4.0} run pitches (>= 3 stones):');
+  for (const t of table) {
+    if (t.rows.length === 0) {
+      console.log(`      d=${t.d}: no sustained run -- this glyph has no >=3-stone chain of ${t.d} mm stones (short transition regions only)`);
+      continue;
+    }
+    for (const r of t.rows) {
+      console.log(`      d=${t.d} len=${r.length} medianPitch=${r.medianPitchMm.toFixed(3)} ideal=${t.idealMm.toFixed(2)} off=${r.offPct.toFixed(1)}%`);
+      assert.ok(Math.abs(r.offPct) / 100 <= OVERSAMPLE_TOLERANCE,
+        `a ${t.d} mm run's median pitch ${r.medianPitchMm.toFixed(3)} mm is ${r.offPct.toFixed(1)}% off its ${t.idealMm.toFixed(2)} mm ideal`);
+    }
+  }
+  // The range endpoints (2.0 and 4.0) are the diameters guaranteed a sustained region by
+  // construction -- the hairline and the thickest stroke. 2.8 mm is a transition width on this
+  // particular glyph and legitimately has no >=3 chain (printed above, not asserted).
+  for (const d of [2.0, 4.0]) {
+    const t = table.find((row) => row.d === d);
+    assert.ok(t && t.rows.length >= 1, `expected at least one >=3-stone run of ${d} mm stones on Great Vibes "A"`);
+  }
+
+  // Stem sanity anchor (spec): 0.0357 * 45 = 1.6065 mm -> weightSizeMm assigns 2.0 -> 0.803 stones
+  // across the stem, above SINGLE_CHAIN_MIN_RATIO (0.70).
   const stemWidthMm = 0.0357 * 45;
-  const stemStoneMm = weightSizeMm(stemWidthMm, 2.0, 4.0);
-  const stemStones = stemWidthMm / stemStoneMm;
-  console.log(`    stem: width ${stemWidthMm.toFixed(4)} mm -> stone ${stemStoneMm} mm -> ${stemStones.toFixed(4)} stones across (must exceed 0.70)`);
-  assert.ok(stemStones > 0.70, `stem stones ${stemStones.toFixed(4)} <= SINGLE_CHAIN_MIN_RATIO 0.70`);
+  const stemStones = stemWidthMm / weightSizeMm(stemWidthMm, 2.0, 4.0);
+  console.log(`    stem: width ${stemWidthMm.toFixed(4)} mm -> stone ${weightSizeMm(stemWidthMm, 2.0, 4.0)} mm -> ${stemStones.toFixed(4)} stones across (must exceed 0.70)`);
+  assert.ok(stemStones > 0.70, `stem stones ${stemStones.toFixed(4)} <= 0.70`);
+});
 
-  assert.ok(Math.abs(deltaPct) <= 40, `weight count ${weight.count} is ${deltaPct.toFixed(1)}% from uniform ${uniform.count} -- outside the widened +-40% band (spec: +-25%)`);
+await test('4c. golden stone count: Great Vibes "A" 45 mm weight {2.0, 4.0} == 68, exact (develop uniform anchors: 2.0 -> 94, 2.8 -> 62, 4.0 -> 36; a correct weight mix lands between 94 and 36)', async () => {
+  const base = {
+    text: 'A', fontId: 'great-vibes-regular', providerId: 'opentype', layerId: 'weight-golden',
+    heightMm: 45, stoneSizeMm: 2.0, gapMm: 0.3, mode: 'outline', color: 'gold'
+  };
+  const weight = await engine.generateTextLayout({ ...base, sizeMode: 'weight', weightMinSizeMm: 2.0, weightMaxSizeMm: 4.0 });
+  console.log(`    Great Vibes "A" weight {2.0, 4.0} stone count: ${weight.count}`);
+  assert.equal(weight.count, 68, 'golden stone count changed');
 });
 
 // ---------------------------------------------------------------------------
@@ -243,16 +365,38 @@ await test('5. mode guard: sizeMode "weight" throws for mode "fill", and for an 
   );
 });
 
-await test('5b. non-text callers coerce a stray sizeMode "weight" to uniform rather than throwing (opt-in, additive)', () => {
-  const weightShape = engine.generateShapeLayout({
-    shape: 'rectangle', layerId: 's', xMm: 0, yMm: 0, widthMm: 40, heightMm: 20,
-    stoneSizeMm: 2.0, gapMm: 0.3, mode: 'outline', sizeMode: 'weight', weightMinSizeMm: 2.0, weightMaxSizeMm: 4.0
-  });
-  const uniformShape = engine.generateShapeLayout({
-    shape: 'rectangle', layerId: 's', xMm: 0, yMm: 0, widthMm: 40, heightMm: 20,
-    stoneSizeMm: 2.0, gapMm: 0.3, mode: 'outline'
-  });
-  assert.deepEqual(weightShape.toJSON().stones, uniformShape.toJSON().stones, 'shape layer weight != uniform -- weight must be inert for non-text');
+await test('5b. non-text callers throw on a stray sizeMode "weight" (caller bug, not silently absorbed)', () => {
+  assert.throws(
+    () => engine.generateShapeLayout({
+      shape: 'rectangle', layerId: 's', xMm: 0, yMm: 0, widthMm: 40, heightMm: 20,
+      stoneSizeMm: 2.0, gapMm: 0.3, mode: 'outline', sizeMode: 'weight', weightMinSizeMm: 2.0, weightMaxSizeMm: 4.0
+    }),
+    /only supported for a text layer sampled in outline mode/,
+    'a shape layer with sizeMode "weight" must throw'
+  );
+  assert.throws(
+    () => engine.generateSvgLayout({
+      svgSource: '<svg xmlns="http://www.w3.org/2000/svg" width="20mm" height="20mm"><rect width="20" height="20"/></svg>',
+      layerId: 's', xMm: 0, yMm: 0, widthMm: 20, heightMm: 20,
+      stoneSizeMm: 2.0, gapMm: 0.3, mode: 'outline', sizeMode: 'weight', weightMinSizeMm: 2.0, weightMaxSizeMm: 4.0
+    }),
+    /only supported for a text layer sampled in outline mode/,
+    'an SVG layer with sizeMode "weight" must throw'
+  );
+});
+
+await test('5c. an *unknown* sizeMode string is still the old-project compatibility path (resolveSizeMode falls back to uniform; the engine never sees it)', () => {
+  // resolveSizeMode() (app.js) maps anything not in SIZE_MODES to 'uniform' before mixedSizeParamsFor()
+  // forwards it, so the engine only ever receives 'uniform' | 'mixed' | 'weight'. Passing a literal
+  // unknown mode straight to the engine is a TypeError -- distinct from the 'weight'-on-a-shape case.
+  assert.throws(
+    () => engine.generateShapeLayout({
+      shape: 'rectangle', layerId: 's', xMm: 0, yMm: 0, widthMm: 40, heightMm: 20,
+      stoneSizeMm: 2.0, gapMm: 0.3, mode: 'outline', sizeMode: 'lopsided'
+    }),
+    /Unsupported sizeMode/,
+    'an unknown sizeMode string must be a TypeError from the engine'
+  );
 });
 
 // ---------------------------------------------------------------------------

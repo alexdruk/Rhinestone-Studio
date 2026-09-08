@@ -101,9 +101,25 @@ layer — it simply renders as it did before MONO-015.
 The order is the opposite of the obvious one, and it matters: sampling at the largest pitch first
 would leave phase C nothing to drop, which is a check that cannot fail.
 
-* **Phase A — sample.** `sampleShapeFillPoints('outline', polygons, boundingBox, weightMinSizeMm +
-  gapMm, weightMinSizeMm)`. Byte-identical to today's output for a uniform layer at `weightMinSizeMm`;
-  no sampler change needed for this phase.
+* **Phase A — sample, then oversample.**
+  `oversampleFactor = weightMaxSizeMm > weightMinSizeMm ? 2 : 1`;
+  `sampleShapeFillPoints('outline', polygons, boundingBox, (weightMinSizeMm + gapMm) /
+  oversampleFactor, weightMinSizeMm / oversampleFactor)`.
+
+  Why oversample. Phase C only ever *drops*, so a survivor sits at an integer multiple of the
+  phase-A pitch. At the plain min pitch (2.3 mm for SS6 / 0.3 gap) a 2.8 mm stone assigned to a
+  2.3-pitched run ends up 4.6 mm from its neighbour — **48 % over** its own 3.1 mm `d + gap` ideal,
+  which is the `SINGLE_CHAIN_MIN_RATIO` (`SingleChain.js:22`) gap-failure mode: the middle of the
+  catalog comes out systematically over-spaced. Halving the phase-A pitch drops the quantisation
+  step to 1.15 mm, so a 2.8 mm run lands ≈ 3.45 mm (+11 %) and a 4.0 mm run ≈ 4.6 mm (+7 %) — both
+  inside a 15 % tolerance. **Both** the walk step *and* the separation floor must be divided:
+  lowering only the step does nothing, because `sampleMultiContourOutlinePoints()` re-quantises any
+  point closer than `minSeparationMm` straight back to 2.3.
+
+  The factor is **1** when `weightMinSizeMm === weightMaxSizeMm`. Every stone is then one size, so
+  phase A at the min pitch is already exact and oversampling buys nothing — and pinning it to 1
+  keeps the reduction-to-uniform guarantee (weight `{d, d}` is byte-identical to uniform at `d`)
+  true *by construction* — identical `sampleShapeFillPoints()` arguments — not by luck.
 * **Phase B — probe and assign.** `strokeWidthsForSamples(survivors, polygons, weightMaxSizeMm)`,
   then `weightSizeMm(width, weightMinSizeMm, weightMaxSizeMm)` per sample.
 * **Phase C — radius-aware drop.** `StoneSampler.dropOverlappingSizedStones(assigned)`: for every
@@ -111,18 +127,19 @@ would leave phase C nothing to drop, which is a check that cannot fail.
   `>= (d1 + d2) / 2`; where it fails, drop the *later* sample in walk order. Never moves a stone.
   The floor is `(d1 + d2) / 2` with **no `+ gapMm`** — the exact per-pair generalisation of the
   scalar `minSeparationMm: stoneSizeMm` that `sampleShapeFillPoints()` passes for uniform outline
-  mode: for two equal stones `(d + d) / 2 = d`, so the pass reduces to current behaviour when
-  `weightMinSizeMm === weightMaxSizeMm`. A gap term would make weight mode stricter than uniform for
-  no stated reason.
+  mode: for two equal stones `(d + d) / 2 = d`. A gap term would make weight mode stricter than
+  uniform for no stated reason. (The *chain* pitch is not restored by phase C — it drops, it does
+  not re-space — it is restored by phase A oversampling: a run of same-size stones survives at
+  ≈ `d + gap`, not at 2×`d`.)
 
   **`dedupeStonesByRadius()` was not reused.** Every stone in one text layer carries the same
   `layerId`, and that function skips same-`layerId` pairs unconditionally
   (`StoneSampler.js:379-385`), so applied within a layer it is a no-op on every pair. Phase C
   compares every pair regardless of `layerId`.
 
-Phase C does real work because phase A only guaranteed `weightMinSizeMm` separation while larger
-assigned stones need more (the vacuity control in `tools/test-mono-015-weight-sizing.mjs` prints
-the entering/leaving counts).
+Phase C does real work because phase A only guaranteed `weightMinSizeMm / oversampleFactor`
+separation while larger assigned stones need more (the vacuity control in
+`tools/test-mono-015-weight-sizing.mjs` prints the entering/leaving counts).
 
 ---
 
@@ -164,21 +181,30 @@ is a new rule.
 
 ## 8. Results
 
-`tools/test-mono-015-weight-sizing.mjs` — all groups pass. Notable printed numbers:
+`tools/test-mono-015-weight-sizing.mjs` — all groups pass.
 
-* Great Vibes "A" at 45 mm / SS6, uniform **94** stones; weight `{2.0, 4.0}` **65** stones
-  (**−30.9 %**; distinct sizes `[2, 2.8, 4]`).
+**Why a stone-count band was not the guard.** A weight layout mixing 2.0 / 2.8 / 4.0 mm stones must
+land somewhere between the uniform-2.0 and uniform-4.0 counts, and on `develop` uniform-2.8 *alone*
+is already −34 % (uniform Great Vibes "A" at 45 mm: 2.0 → **94**, 2.8 → **62**, 4.0 → **36**). No
+band anchored to the uniform-SS6 count is both tight and correct.
+
+**What is guarded instead — chain pitch.** Group the stones into runs of consecutive same-diameter
+stones (split at any jump > 1.5 × that diameter's `d + gapMm`, i.e. a contour boundary or a
+phase-C-dropped gap). For every run of ≥ 3 stones, the **median** centre-to-centre pitch must be
+within **15 %** of `d + gapMm` (median, not max — corner anchoring makes individual pitches near a
+corner legitimately irregular).
+
+* Synthetic tapered stroke (0.8 → 4.6 mm, all three diameters form sustained runs): at the plain min
+  pitch the 2.8 mm run is **+48.2 %** over-spaced; with oversampling every diameter's median run
+  pitch is within tolerance (2.0 mm −0.1 %, 2.8 mm +11.2 %, 4.0 mm +6.9 %).
+* Great Vibes "A" at 45 mm, weight `{2.0, 4.0}` through the real engine: the 2.0 mm and 4.0 mm runs
+  are all within tolerance; 2.8 mm is a transition width on this particular glyph and forms only
+  2-stone regions (printed, not asserted — the range endpoints are the diameters guaranteed a
+  sustained region).
+* **Golden stone count, pinned exact:** Great Vibes "A" at 45 mm, weight `{2.0, 4.0}` = **68**
+  stones (between the uniform 94 and 36 anchors).
 * Screenshots (`docs/screenshots/mono-015/`, Mug / gold / Great Vibes "A" / layout single / frame
-  none / SS6 base): uniform **103**, weight `{SS6, SS10}` **84**, weight `{SS6, SS16}` **64**.
-
-**Deviation from the brief's Tests item 4.** The brief anticipates the Great Vibes "A" weight count
-landing within ±25 % of uniform SS6; the measured value is −31 %. This is inherent to the
-three-phase design, not a probe defect: phase A samples at the *minimum* pitch by design, phase C
-drops the later stone of every overlapping pair with no re-spacing (so any run of samples assigned a
-size ≥ one catalog step above the minimum thins to ~50 % retention), and ~48 % of the outline
-samples of this swashy display capital exceed 2 mm of stroke width. The test's assertion band is
-widened to ±40 % (still a real regression guard) with an inline comment; item 4's other checks (≥ 2
-distinct sizes, no physical overlap, stem clears `SINGLE_CHAIN_MIN_RATIO`) pass as written.
+  none / SS6 base): uniform **103**, weight `{SS6, SS10}` **95**, weight `{SS6, SS16}` **71**.
 
 ---
 
