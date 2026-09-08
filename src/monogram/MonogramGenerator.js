@@ -35,7 +35,8 @@ import {
   TEXT_SCALE_FAILURE_REASONS,
   AUTHORED_FONT_FITTING_GAP_MM,
   MIN_HEIGHT_TO_STONE_RATIO,
-  findCrossGroupCollisions
+  findCrossGroupCollisions,
+  weightSizeMm
 } from '../geometry/index.js';
 import { computeTextLayerPositionForTargetCenterMm } from '../editing/index.js';
 // MONO-012: single-chain sizing arithmetic for OpenType script fonts. Pure arithmetic, no geometry
@@ -44,7 +45,6 @@ import {
   SINGLE_CHAIN_MIN_RATIO,
   MONOGRAM_MAX_STEM_WIDTH_RATIO,
   singleChainHeightMm,
-  stemStones,
   minChainStones,
   isMonogramEligibleStemWidthRatio
 } from './SingleChain.js';
@@ -318,6 +318,12 @@ export class MonogramGenerator {
    * @param {number} [request.stemWidthRatio] MONO-012: the font's measured stroke-width fraction
    *   (manifest `stemWidthRatio`). Required for a non-authored font; ignored for authored fonts.
    * @param {string} [request.providerId]
+   * @param {boolean} [request.weightSizing] MONO-015: opt in to weight-following stone size for the
+   *   letters (OpenType fonts only; default off -- every path is the pre-MONO-015 uniform path).
+   * @param {number} [request.weightMinSizeMm] MONO-015: hairline stone size / layer floor. Required
+   *   when `weightSizing` is true. Conventionally `request.stoneSizeMm`.
+   * @param {number} [request.weightMaxSizeMm] MONO-015: widest assigned stone size. Required when
+   *   `weightSizing` is true. Conventionally two catalog steps above `request.stoneSizeMm`, clamped.
    * @param {number} request.stoneSizeMm Applies uniformly to the frame and every letter.
    * @param {number} [request.gapMm] Production spacing gap, default AUTHORED_FONT_FITTING_GAP_MM.
    * @param {string} [request.color] Default DEFAULT_STONE_COLOR.
@@ -356,8 +362,19 @@ export class MonogramGenerator {
       stemWidthRatio,
       // MONO-013: negative "overlap" in mm for the 'script' layout only. Optional, default 0.
       // Ignored by every other layout. Validated inside the script branch below.
-      interlockMm
+      interlockMm,
+      // MONO-015: opt-in weight-following stone size for the letters (OpenType fonts only). When
+      // false/absent every path below is the exact pre-MONO-015 uniform path, unchanged. When true,
+      // the letter generateTextLayout() calls request sizeMode 'weight' with these flat bounds and
+      // the emitted text layer persists them.
+      weightSizing = false,
+      weightMinSizeMm,
+      weightMaxSizeMm
     } = request || {};
+    // MONO-015: a compact bundle threaded through ctx and every letter generateTextLayout() call.
+    const weightParams = (weightSizing && typeof weightMinSizeMm === 'number' && typeof weightMaxSizeMm === 'number')
+      ? { sizeMode: 'weight', weightMinSizeMm, weightMaxSizeMm }
+      : null;
     const R = MONOGRAM_GENERATOR_FAILURE_REASONS;
 
     if (typeof frameId !== 'string' || frameId.length === 0) {
@@ -526,7 +543,7 @@ export class MonogramGenerator {
         stoneSizeMm, gapMm, requiredSpacingMm,
         frameStoneSizeMm, frameRequiredSpacingMm, frameOptions,
         fontId, providerId, letters, layoutId, fontIsAuthored, stemWidthRatio,
-        interlockMm
+        interlockMm, weightParams
       });
     }
 
@@ -668,7 +685,10 @@ export class MonogramGenerator {
             fittedLayout = await this._engine.generateTextLayout({
               text: letter, fontId, providerId, layerId: letterLayerId,
               heightMm: fitHeightMm, stoneSizeMm, gapMm, mode: 'outline',
-              color: resolvedColor, curveEnabled: false
+              color: resolvedColor, curveEnabled: false,
+              // MONO-015: weightParams is null unless the request opted in -- then this is the exact
+              // sizeMode 'weight' call a live text layer would make with the persisted flat fields.
+              ...(weightParams || {})
             });
           } catch (error) {
             return failure(R.INVALID_FONT, `Letter ${JSON.stringify(letter)} (slot ${i}) could not be generated with font ${JSON.stringify(fontId)} at heightMm ${fitHeightMm}: ${error.message}`);
@@ -694,7 +714,17 @@ export class MonogramGenerator {
         // as a continuous chain, fail -- naming whichever of the two bounds bound (see
         // SingleChain.minChainStones()). Expect this shrink-then-check path to be the normal path,
         // not an edge case: ideal single-chain heights are large relative to typical slots.
-        const achievedStemStones = stemStones({ heightMm: fitHeightMm, stoneSizeMm, stemWidthRatio });
+        // MONO-015: `achievedStemStones = stemWidthMm / (stone assigned at that width)`. Uniform:
+        // the stone is stoneSizeMm everywhere, so this is stemStones()'s R*stemWidthRatio identity
+        // unchanged. Weight sizing: the stem gets whatever weightSizeMm() assigns at its own width,
+        // so divide by that -- NOT by weightMinSizeMm (would make the gate silently permissive) or
+        // weightMaxSizeMm (arbitrarily strict). Enabling weight sizing may legitimately push a
+        // thin-stemmed letter into CHAIN_TOO_THIN; that is correct, not a regression.
+        const stemWidthMm = stemWidthRatio * fitHeightMm;
+        const stemStoneMm = weightParams
+          ? weightSizeMm(stemWidthMm, weightParams.weightMinSizeMm, weightParams.weightMaxSizeMm)
+          : stoneSizeMm;
+        const achievedStemStones = stemWidthMm / stemStoneMm;
         const minStones = minChainStones({ stemWidthRatio });
         const floorStones = MIN_HEIGHT_TO_STONE_RATIO * stemWidthRatio;
         if (achievedStemStones < minStones) {
@@ -990,6 +1020,12 @@ export class MonogramGenerator {
         // exact letter's own round-trip check. Omitted entirely for OpenType letters (MONO-012):
         // they have no authored branch for it to apply to.
         ...(r.isAuthored ? { authoredScale: r.requestedScale } : {}),
+        // MONO-015: persist the flat weight-following fields for an OpenType letter generated with
+        // weight sizing on, so a live re-render reproduces the same varying-size chain. Authored
+        // letters never carry them (weight sizing is outline-only).
+        ...(!r.isAuthored && weightParams
+          ? { sizeMode: 'weight', weightMinSizeMm: weightParams.weightMinSizeMm, weightMaxSizeMm: weightParams.weightMaxSizeMm }
+          : {}),
         // The generator has already performed fitting; autoFit is additionally a no-op for
         // authored fonts today (TXT-103A), so it is left off rather than implying it does anything.
         autoFit: false,
@@ -1081,8 +1117,12 @@ export class MonogramGenerator {
    * StoneSampler.js:481). So a fitted script mark can legally have a closest pair between
    * `stoneSizeMm` and `stoneSizeMm + gapMm` apart. That is accepted and expected for an interlocked
    * mark — letters are meant to touch — and is measured into `measurements.minStoneDistanceMm`, not
-   * gated. Only a value BELOW `stoneSizeMm - 1e-6` (which the sampler is supposed to make
-   * impossible) is a hard failure.
+   * gated. Only a physical *overlap* is a hard failure: per pair, distance below
+   * `(d1 + d2) / 2 - 1e-6`. For a uniform mark every `d` is `stoneSizeMm`, so that is
+   * `stoneSizeMm - 1e-6` exactly as before. MONO-015: for a weight-sized mark the per-pair
+   * threshold varies (assigned stones range over `[weightMinSizeMm, weightMaxSizeMm]`); a scalar
+   * `stoneSizeMm` check would pass vacuously since every assigned stone is `>= weightMinSizeMm`.
+   * The binding pair's two diameters are recorded in `measurements.minStoneDistancePairDiametersMm`.
    *
    * No internal round-trip regeneration (see the comment at the fit loop's end and the MONO-012
    * precedent it cites); tools/test-mono-013-interlock.mjs owns the persisted-field round trip.
@@ -1096,7 +1136,7 @@ export class MonogramGenerator {
       normalizedFrameRect, normalizedCanvasMm, resolvedColor,
       stoneSizeMm, gapMm, requiredSpacingMm,
       frameStoneSizeMm, frameRequiredSpacingMm, frameOptions,
-      fontId, providerId, letters, layoutId, fontIsAuthored, stemWidthRatio
+      fontId, providerId, letters, layoutId, fontIsAuthored, stemWidthRatio, weightParams
     } = ctx;
 
     // Authored (stone-center) fonts have no vector stem to form a chain and no outline for swashes
@@ -1185,7 +1225,8 @@ export class MonogramGenerator {
         fittedLayout = await this._engine.generateTextLayout({
           text: joinedText, fontId, providerId, layerId: letterLayerId,
           heightMm: fitHeightMm, stoneSizeMm, gapMm, mode: 'outline',
-          color: resolvedColor, curveEnabled: false, letterSpacingMm: interlockMm
+          color: resolvedColor, curveEnabled: false, letterSpacingMm: interlockMm,
+          ...(weightParams || {}) // MONO-015: opt-in weight-following stone size
         });
       } catch (error) {
         return failure(R.INVALID_FONT, `The string ${JSON.stringify(joinedText)} could not be generated with font ${JSON.stringify(fontId)} at heightMm ${fitHeightMm}: ${error.message}`);
@@ -1209,7 +1250,14 @@ export class MonogramGenerator {
     // Shrinking to fit drags R (heightMm / stoneSizeMm) and the stem-stone count down. If the
     // fitted mark no longer reads as a continuous chain, fail — naming whichever bound bound (same
     // logic as MONO-012's per-letter CHAIN_TOO_THIN), and naming the string, not a letter/slot.
-    const achievedStemStones = stemStones({ heightMm: fitHeightMm, stoneSizeMm, stemWidthRatio });
+    // MONO-015: divide the stem width by the stone actually assigned there (weightSizeMm at the
+    // stem width for a weight-sized mark, stoneSizeMm otherwise) -- same generalisation as the
+    // per-letter path above.
+    const stemWidthMm = stemWidthRatio * fitHeightMm;
+    const stemStoneMm = weightParams
+      ? weightSizeMm(stemWidthMm, weightParams.weightMinSizeMm, weightParams.weightMaxSizeMm)
+      : stoneSizeMm;
+    const achievedStemStones = stemWidthMm / stemStoneMm;
     const minStones = minChainStones({ stemWidthRatio });
     const floorStones = MIN_HEIGHT_TO_STONE_RATIO * stemWidthRatio;
     if (achievedStemStones < minStones) {
@@ -1292,23 +1340,43 @@ export class MonogramGenerator {
       }
     }
 
-    // Clearance measurement — measure, do not gate. See this method's own doc comment.
+    // Clearance measurement — measure, do not gate the "letters may touch" range. See this
+    // method's own doc comment. minStoneDistanceMm is the raw closest-pair distance (reported);
+    // the hard failure below is per-pair against that pair's own physical touching threshold
+    // (d1 + d2) / 2 -- for a uniform mark every d is stoneSizeMm so this is stoneSizeMm - 1e-6
+    // exactly as before; for a MONO-015 weight-sized mark the threshold varies per pair, and a
+    // scalar stoneSizeMm check would pass vacuously since every assigned stone is >= weightMinSizeMm.
     let minStoneDistanceMm = Infinity;
     let closestPair = null;
+    let worstOverlapMm = 0;          // max( (d1+d2)/2 - dist ) over all pairs; > 0 means a real overlap
+    let worstOverlapPair = null;
+    let worstOverlapDiametersMm = null;
     for (let a = 0; a < finalStones.length; a++) {
       for (let b = a + 1; b < finalStones.length; b++) {
         const dx = finalStones[a].xMm - finalStones[b].xMm;
         const dy = finalStones[a].yMm - finalStones[b].yMm;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist < minStoneDistanceMm) { minStoneDistanceMm = dist; closestPair = [a, b]; }
+        const overlapMm = (finalStones[a].sizeMm + finalStones[b].sizeMm) / 2 - dist;
+        if (overlapMm > worstOverlapMm) {
+          worstOverlapMm = overlapMm;
+          worstOverlapPair = [a, b];
+          worstOverlapDiametersMm = [finalStones[a].sizeMm, finalStones[b].sizeMm];
+        }
       }
     }
-    if (finalStones.length >= 2 && minStoneDistanceMm < stoneSizeMm - 1e-6) {
-      const [a, b] = closestPair;
-      return failure(R.INTERNAL_CONTRACT_MISMATCH, `The interlocked string ${JSON.stringify(joinedText)}: two stones are ${minStoneDistanceMm.toFixed(6)} mm apart, below the sampler's ${stoneSizeMm} mm minimum separation. Closest pair: (${finalStones[a].xMm}, ${finalStones[a].yMm}) and (${finalStones[b].xMm}, ${finalStones[b].yMm}).`, {
-        diagnostics: { string: joinedText, minStoneDistanceMm, closestPair }
+    if (finalStones.length >= 2 && worstOverlapMm > 1e-6) {
+      const [a, b] = worstOverlapPair;
+      return failure(R.INTERNAL_CONTRACT_MISMATCH, `The interlocked string ${JSON.stringify(joinedText)}: two stones (${worstOverlapDiametersMm[0]} mm and ${worstOverlapDiametersMm[1]} mm) are ${Math.sqrt((finalStones[a].xMm - finalStones[b].xMm) ** 2 + (finalStones[a].yMm - finalStones[b].yMm) ** 2).toFixed(6)} mm apart, below their ${((worstOverlapDiametersMm[0] + worstOverlapDiametersMm[1]) / 2).toFixed(6)} mm touching distance. Closest such pair: (${finalStones[a].xMm}, ${finalStones[a].yMm}) and (${finalStones[b].xMm}, ${finalStones[b].yMm}).`, {
+        diagnostics: { string: joinedText, minStoneDistanceMm, closestPair, worstOverlapMm, worstOverlapPair, worstOverlapDiametersMm }
       });
     }
+    // The two diameters of the pair that binds the clearance (the raw closest pair). Reported
+    // alongside minStoneDistanceMm so a weight-sized mark's clearance can be read against the right
+    // per-pair threshold.
+    const minStoneDistancePairDiametersMm = closestPair
+      ? [finalStones[closestPair[0]].sizeMm, finalStones[closestPair[1]].sizeMm]
+      : null;
     if (!Number.isFinite(minStoneDistanceMm)) minStoneDistanceMm = null; // < 2 stones
 
     // --- Build ordinary project layers -------------------------------------------------------
@@ -1355,7 +1423,12 @@ export class MonogramGenerator {
       lineSpacing: 1,
       rotationDeg: 0,
       x: layerXMm,
-      y: layerYMm
+      y: layerYMm,
+      // MONO-015: persist the flat weight-following fields so a live re-render of this interlocked
+      // mark reproduces the same varying-size chain. Absent (uniform) unless the request opted in.
+      ...(weightParams
+        ? { sizeMode: 'weight', weightMinSizeMm: weightParams.weightMinSizeMm, weightMaxSizeMm: weightParams.weightMaxSizeMm }
+        : {})
     };
 
     const layers = isNoFrame ? [letterLayerObj] : [frameLayerObj, letterLayerObj];
@@ -1376,9 +1449,13 @@ export class MonogramGenerator {
       frameHierarchy: isNoFrame ? null : classifyFrameHierarchy(frameStoneSizeMm, stoneSizeMm),
       slots: layoutResult.slots,
       // MONO-013: the applied overlap, and the measured (not gated) closest-pair distance in the
-      // emitted mark. minStoneDistanceMm between stoneSizeMm and stoneSizeMm+gapMm is expected.
+      // emitted mark. For a uniform mark, minStoneDistanceMm between stoneSizeMm and
+      // stoneSizeMm + gapMm is expected (letters are meant to touch). MONO-015: for a weight-sized
+      // mark read minStoneDistanceMm against minStoneDistancePairDiametersMm's own (d1 + d2) / 2,
+      // not against stoneSizeMm -- the binding pair's stones may each be larger than the base size.
       interlockMm,
       minStoneDistanceMm,
+      minStoneDistancePairDiametersMm,
       letters: [{
         letter: joinedText,
         slotIndex: 0,

@@ -1440,6 +1440,29 @@ clamped there by `writeSelectedControlsToLayer()` with no undo entry (READ-006).
 `#monogramInterlock` "Overlap" slider is shown only for the script layout. See
 `docs/specifications/MONO-013-Interlock.md`.
 
+**Weight-following stone size (MONO-015).** A third `sizeMode` for text layers, `'weight'`, opt-in
+everywhere — no existing layer, project, fixture or monogram changes behaviour unless it is
+explicitly turned on. It is valid only for a text layer sampled in outline mode; every other
+combination throws from `GeometryEngine.generateTextLayout()`, and a stray `'weight'` on a non-text
+layer is coerced to `'uniform'` (`normalizeMixedSizeParams({allowWeight})`). Persisted as two flat
+layer fields, `weightMinSizeMm` / `weightMaxSizeMm` (deliberately not S-200's `minSizeMm` /
+`maxSizeMm`, so a mode-switched layer round-trips unambiguously); the engine bundles them the same
+way it bundles `mixedOptions`. `src/geometry/StrokeWidthProbe.js` is pure geometry — it casts an
+inward ray from each outline sample to the opposite contour edge to measure the local stroke width —
+and `src/geometry/WeightSizing.js` maps that width to the smallest catalog diameter `≥` it, clamped
+into `[weightMinSizeMm, weightMaxSizeMm]` (this enforces the *upper* single-chain bound — a stone at
+least as wide as the stroke keeps both edges collapsed onto one chain — but not the lower one: a
+hairline narrower than `weightMinSizeMm` is floored there and its stem can drop below the 0.70 chain
+minimum). Sampling is three phases: (A) sample the outline at the *minimum* pitch
+(`weightMinSizeMm + gapMm`) — byte-identical to a uniform layer at that size; (B) probe and assign
+per sample; (C) `StoneSampler.dropOverlappingSizedStones()` removes the physical overlaps the
+larger assigned stones create, per-pair floor `(d1 + d2) / 2`, dropping the later stone in walk
+order. Phase A must come first — a coarser phase A would make phase C's check unable to fire. The
+Monogram tool exposes it as one opt-in checkbox (`#monogramWeightSizing`, OpenType fonts only);
+MONO-012's `CHAIN_TOO_THIN` gate and MONO-013's clearance assertion both generalise to divide by
+the per-stem / per-pair assigned diameter rather than a scalar. See
+`docs/specifications/MONO-015-WeightSizing.md`.
+
 ---
 
 # Units

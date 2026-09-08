@@ -386,3 +386,22 @@ the export was a different, unrelated ad hoc shape
 repository-wide search that no example, test, or application code still depends on that retired
 shape, so no versioned compatibility layer exists or is needed for it — see
 `docs/specifications/RS-0003.5D1-ProductionExportValidation.md`, "Current Repository State".
+
+## Weight-following stone size (MONO-015)
+
+`sizeMode: 'weight'` is a third, opt-in size mode for outline-mode text layers (alongside S-200's
+`'uniform'`/`'mixed'`): larger catalog stones on the wide parts of a stroke, smaller on hairlines.
+
+* `StrokeWidthProbe.js` — pure geometry, no engine dependency. `localStrokeWidthMm(point,
+  inwardNormal, polygons, maxMm)` casts a ray into the shape and returns the distance to the first
+  contour crossing (capped at `maxMm`); `strokeWidthsForSamples(samples, polygons, maxMm)` derives
+  each on-contour sample's inward normal from its nearest edge (winding by signed area) and probes.
+* `WeightSizing.js` — `weightSizeMm(widthMm, minMm, maxMm)`: smallest catalog diameter `>= widthMm`,
+  clamped into `[minMm, maxMm]`. Enforces the upper single-chain bound, not the lower.
+  `defaultWeightMaxSizeMm()` is the "two catalog steps up, clamped" default a first enable applies.
+* `StoneSampler.dropOverlappingSizedStones()` — phase C: drops the later stone of every pair closer
+  than `(d1 + d2) / 2` (no gap term — reduces to the uniform `minSeparationMm: stoneSizeMm` floor
+  when all stones are one size). Not `dedupeStonesByRadius()`, which skips same-`layerId` pairs.
+
+`GeometryEngine.generateTextLayout()` runs phases A (sample at `weightMinSizeMm + gapMm`), B (probe
++ assign) and C in that order. See `docs/specifications/MONO-015-WeightSizing.md`.

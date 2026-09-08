@@ -22,7 +22,10 @@
 
 import { BoundingBox, Point2D, createCircleVectorPath, createRectangleVectorPath } from '../text/VectorPath.js';
 import { flattenContourToPolygon, flattenContourToPolygonWithCornerFlags, translateContour, detectPolygonCornerFlags } from './ContourGeometry.js';
-import { sampleOutlinePoints, sampleMultiContourOutlinePoints, sampleShapeFillPoints, sampleFieldByMode, isPointInsidePolygons } from './StoneSampler.js';
+import { sampleOutlinePoints, sampleMultiContourOutlinePoints, sampleShapeFillPoints, sampleFieldByMode, isPointInsidePolygons, dropOverlappingSizedStones } from './StoneSampler.js';
+// MONO-015 (weight-following stone size): local stroke-width probe + catalog size mapping.
+import { strokeWidthsForSamples } from './StrokeWidthProbe.js';
+import { weightSizeMm } from './WeightSizing.js';
 import { Stone } from './Stone.js';
 import { StoneLayout } from './StoneLayout.js';
 import { parseSvgDocument } from '../svg/index.js';
@@ -141,6 +144,13 @@ export class GeometryEngine {
       throw new TypeError('GeometryEngine.generateTextLayout requires a fontProviderRegistry (none was supplied to the constructor).');
     }
     const options = normalizeTextParams(params);
+
+    // MONO-015: weight-following stone size is valid only for a text layer sampled in outline mode.
+    // Any other combination fails explicitly here, in the style of the curveEnabled rejection below.
+    if (options.weightOptions && options.mode !== 'outline') {
+      throw new Error(`GeometryEngine.generateTextLayout: weight-following stone size (sizeMode 'weight') requires outline mode, not ${JSON.stringify(options.mode)}.`);
+    }
+
     const { polygons, boundingBox, authoredStones } = await this._textPolygons(options);
 
     let stones;
@@ -157,6 +167,9 @@ export class GeometryEngine {
       // not applied.
       if (options.curveEnabled) {
         throw new Error('GeometryEngine.generateTextLayout: curved text is not supported for fonts that supply authored stone centers.');
+      }
+      if (options.weightOptions) {
+        throw new Error('GeometryEngine.generateTextLayout: weight-following stone size (sizeMode \'weight\') is not supported for fonts that supply authored stone centers.');
       }
       let authoredResultStones = authoredStones.map((point, index) => new Stone({
         xMm: point.xMm,
@@ -201,6 +214,39 @@ export class GeometryEngine {
         metadata: point.metadata
       }));
       sourceMode = 'authored';
+    } else if (options.weightOptions) {
+      // MONO-015: weight-following stone size. Three phases, in this deliberate order (sampling at
+      // the largest pitch first would leave phase C nothing to drop):
+      //   A. sample the outline exactly as a uniform layer at weightMinSizeMm would -- same pitch
+      //      (weightMinSizeMm + gapMm), same overlap floor (weightMinSizeMm). Byte-identical to
+      //      today's uniform path for that size; no sampler change needed for this phase.
+      //   B. probe the local stroke width at each survivor (capped at weightMaxSizeMm) and assign
+      //      each a catalog diameter via weightSizeMm().
+      //   C. radius-aware drop: phase A only guaranteed weightMinSizeMm separation, but larger
+      //      assigned stones need more -- dropOverlappingSizedStones() removes the physical overlaps
+      //      this creates (floor (d1+d2)/2, no gap term -- see its doc comment).
+      const { minSizeMm: weightMinSizeMm, maxSizeMm: weightMaxSizeMm } = options.weightOptions;
+      const phaseASpacingMm = weightMinSizeMm + options.gapMm;
+      const phaseASamples = sampleShapeFillPoints('outline', polygons, boundingBox, phaseASpacingMm, weightMinSizeMm);
+      const strokeWidthsMm = strokeWidthsForSamples(phaseASamples, polygons, weightMaxSizeMm);
+      const assignedStones = phaseASamples.map((point, i) => ({
+        xMm: point.xMm,
+        yMm: point.yMm,
+        sizeMm: weightSizeMm(strokeWidthsMm[i], weightMinSizeMm, weightMaxSizeMm)
+      }));
+      const survivingStones = dropOverlappingSizedStones(assignedStones);
+
+      const pivot = boundingBoxCenterOfPoints(survivingStones);
+      const points = rotatePointsAroundCenter(survivingStones, options.rotationDeg, pivot);
+      stones = points.map((point, index) => new Stone({
+        xMm: point.xMm,
+        yMm: point.yMm,
+        sizeMm: point.sizeMm,
+        color: options.color,
+        layerId: options.layerId,
+        index
+      }));
+      sourceMode = options.mode;
     } else {
       const spacingMm = options.stoneSizeMm + options.gapMm;
       const sampledPoints = sampleShapeFillPoints(options.mode, polygons, boundingBox, spacingMm, options.stoneSizeMm)
@@ -1547,7 +1593,8 @@ function normalizeTextParams(params) {
     authoredScale,
     ...curve,
     // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.
-    ...normalizeMixedSizeParams(params, stoneSizeMm)
+    // MONO-015: text layers are the only caller allowed to opt into sizeMode 'weight'.
+    ...normalizeMixedSizeParams(params, stoneSizeMm, { allowWeight: true })
   };
 }
 

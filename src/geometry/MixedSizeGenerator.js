@@ -15,7 +15,7 @@
 import { Stone } from './Stone.js';
 import { sampleShapeFillPoints, sampleFieldByMode } from './StoneSampler.js';
 
-const SIZE_MODES = new Set(['uniform', 'mixed']);
+const SIZE_MODES = new Set(['uniform', 'mixed', 'weight']);
 
 // Deliberately biased toward the sparse end -- "intentionally conservative... do not aggressively
 // maximize stone count" (S-200 brief). See infillPitchMm() below for how this scales candidate
@@ -49,12 +49,37 @@ function assertPositiveNumber(value, name) {
  * @param {number} [params.maxSizeMm]
  * @param {number} [params.conservativeDetail] 0..1, default DEFAULT_CONSERVATIVE_DETAIL.
  * @param {number} stoneSizeMm The layer's own primary stone size (already validated by the caller).
- * @returns {{sizeMode: 'uniform'|'mixed', mixedOptions: null | {allowedSizesMm: number[], minSizeMm: number, maxSizeMm: number, conservativeDetail: number, eligibleSizesMm: number[]}}}
+ * @param {{allowWeight?: boolean}} [opts] MONO-015: whether `sizeMode: 'weight'` is legal for this
+ *   caller. Only normalizeTextParams() (text layers) passes `true`; every other generate*Layout()
+ *   caller leaves it false, and a stray `sizeMode: 'weight'` on a non-text layer is then coerced to
+ *   'uniform' (weight sizing is opt-in and additive -- an unsupported layer keeps its exact
+ *   pre-MONO-015 behaviour rather than throwing on hand-edited JSON).
+ * @returns {{sizeMode: 'uniform'|'mixed'|'weight', mixedOptions: null | {...}, weightOptions?: {minSizeMm: number, maxSizeMm: number}}}
  */
-export function normalizeMixedSizeParams(params, stoneSizeMm) {
+export function normalizeMixedSizeParams(params, stoneSizeMm, { allowWeight = false } = {}) {
   const sizeMode = params.sizeMode ?? 'uniform';
   if (!SIZE_MODES.has(sizeMode)) {
     throw new TypeError(`Unsupported sizeMode: ${sizeMode}. Expected one of: ${[...SIZE_MODES].join(', ')}`);
+  }
+  if (sizeMode === 'weight') {
+    if (!allowWeight) {
+      return { sizeMode: 'uniform', mixedOptions: null };
+    }
+    // Flat on the layer, nested here at the engine boundary -- the same shape this function already
+    // produces for 'mixed'. weightMinSizeMm / weightMaxSizeMm are deliberately NOT S-200's
+    // minSizeMm / maxSizeMm (those belong to 'mixed'; sharing them would make a mode-switched layer
+    // ambiguous on round-trip). Both default to stoneSizeMm when absent, which makes weight mode
+    // reduce to uniform output.
+    const minSizeMm = params.weightMinSizeMm !== undefined && params.weightMinSizeMm !== null
+      ? assertPositiveNumber(params.weightMinSizeMm, 'weightMinSizeMm')
+      : stoneSizeMm;
+    const maxSizeMm = params.weightMaxSizeMm !== undefined && params.weightMaxSizeMm !== null
+      ? assertPositiveNumber(params.weightMaxSizeMm, 'weightMaxSizeMm')
+      : stoneSizeMm;
+    if (minSizeMm > maxSizeMm) {
+      throw new RangeError('weightMinSizeMm must not exceed weightMaxSizeMm.');
+    }
+    return { sizeMode, mixedOptions: null, weightOptions: { minSizeMm, maxSizeMm } };
   }
   if (sizeMode === 'uniform') {
     return { sizeMode, mixedOptions: null };
