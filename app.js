@@ -123,7 +123,7 @@ import { mmToDisplayValue, displayValueToMm, unitSuffix, formatLengthDisplay } f
 // src/monogram/index.js barrel this milestone adds (src/monogram/** had none before -- only test
 // files imported it directly; app.js may only import permanent modules through a src/*/index.js
 // barrel, see tools/test-architecture-module-boundaries.mjs).
-import { MonogramGenerator, MONOGRAM_GENERATOR_FAILURE_REASONS, MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS } from './src/monogram/index.js';
+import { MonogramGenerator, MONOGRAM_GENERATOR_FAILURE_REASONS, MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS, isMonogramEligibleStemWidthRatio } from './src/monogram/index.js';
 // RC-005 (Autosave & Crash Recovery): src/persistence/** is a new, pure, DOM-free module -- mirrors
 // src/library/**'s exact "storage-adapter injected, browser-global only at app.js's edge" shape.
 // It knows nothing about Project/Layer/StoneLayout; app.js is the only caller, and is the only
@@ -4942,6 +4942,7 @@ const MONOGRAM_FAILURE_MESSAGES={
   [MONOGRAM_GENERATOR_FAILURE_REASONS.LAYOUT_NOT_FOUND]:'The selected layout is not available.',
   [MONOGRAM_GENERATOR_FAILURE_REASONS.UNSUPPORTED_LETTER_COUNT]:'The number of letters does not match the selected layout.',
   [MONOGRAM_GENERATOR_FAILURE_REASONS.INVALID_FONT]:'The selected font cannot be used for Monogram generation. Choose a different production font.',
+  [MONOGRAM_GENERATOR_FAILURE_REASONS.CHAIN_TOO_THIN]:'A letter is too small to read as a continuous bead chain at this stone size. Use a smaller stone size, a larger frame, or a layout with fewer letters.',
   [MONOGRAM_GENERATOR_FAILURE_REASONS.INTERNAL_CONTRACT_MISMATCH]:'Monogram generation failed unexpectedly. Please try again.'
 };
 // MONO-006C/MONO-006E: item 7 ("better fitting diagnostics") -- for the sizing/spacing failure
@@ -4982,6 +4983,9 @@ function monogramFailureMessage(result,request){
   // MONO-008: the generator's own message already names the frame/stone-width context -- no
   // request-specific data to add here, unlike the reasons above.
   if(reason===R.STONE_WIDTH_UNAVAILABLE)return result.message;
+  // MONO-012: the generator's CHAIN_TOO_THIN message already names the font, stone size, achieved
+  // stem-stone ratio, which bound bound, and a concrete suggestion -- surface it verbatim.
+  if(reason===R.CHAIN_TOO_THIN&&result.message)return result.message;
   return MONOGRAM_FAILURE_MESSAGES[reason]||'Monogram generation failed. Please check your settings and try again.';
 }
 // Frame choices come straight from FrameLibrary.listFrames() -- adding a frame there needs no
@@ -4989,15 +4993,16 @@ function monogramFailureMessage(result,request){
 // "index.html hardcodes no <option>, the catalog is the only source" convention.
 function populateMonogramFrameOptions(){el('monogramFrame').innerHTML=listFrames().map(f=>`<option value="${f.id}">${escapeHtml(f.label)}</option>`).join('')}
 function populateMonogramLayoutOptions(){el('monogramLayout').innerHTML=Object.values(MONOGRAM_LAYOUTS).map(id=>`<option value="${id}">${escapeHtml(MONOGRAM_LAYOUT_LABELS[id]||id)}</option>`).join('')}
-// Authored (stoneCenters-based) fonts only, never OpenType/sampled fonts, per this milestone's own
-// requirement -- MonogramGenerator only supports authored fonts (see its own "invalid-font"
-// rejection), so this deliberately filters providerId==='rhinestone' directly rather than reusing
-// productionFonts() (FONT-DECISION-001, then FONT-LIB-002, widened that shared helper to offer every
-// enabled OpenType font in the ordinary #font picker, none of which MonogramGenerator can use). A dedicated
-// #monogramFont select (not the shared #font element) so this Lightbox never participates in
-// relocateFieldGroups().
-function authoredProductionFonts(){return fontManager?fontManager.listFonts().filter(f=>f.providerId==='rhinestone'):[]}
-function populateMonogramFontOptions(){if(!fontManager)return;el('monogramFont').innerHTML=groupFontsByCategory(authoredProductionFonts()).map(([role,fonts])=>`<optgroup label="${escapeHtml(fontCategoryLabel(role))}">${fonts.map(f=>`<option value="${f.id}">${escapeHtml(f.family)}</option>`).join('')}</optgroup>`).join('')}
+// MONO-012: the fonts the Monogram tool can use -- every authored (stoneCenters-based) font, plus
+// every enabled OpenType font whose measured stemWidthRatio is thin enough that a single-chain
+// letter still clears the readability floor (isMonogramEligibleStemWidthRatio(), stone-size-
+// independent). Gating the picker here -- rather than exempting textLayersBelowReadableMinimum()
+// from monogram letters -- makes a below-floor monogram structurally unreachable, so the floor never
+// needs an opinion about monograms. Deliberately NOT productionFonts(): that helper offers every
+// enabled OpenType font, most of which are too thick-stemmed for a chain. A dedicated #monogramFont
+// select (not the shared #font element) so this Lightbox never participates in relocateFieldGroups().
+function monogramEligibleFonts(){return fontManager?fontManager.listFonts().filter(f=>f.providerId==='rhinestone'||isMonogramEligibleStemWidthRatio(f.stemWidthRatio)):[]}
+function populateMonogramFontOptions(){if(!fontManager)return;el('monogramFont').innerHTML=groupFontsByCategory(monogramEligibleFonts()).map(([role,fonts])=>`<optgroup label="${escapeHtml(fontCategoryLabel(role))}">${fonts.map(f=>`<option value="${f.id}">${escapeHtml(f.family)}</option>`).join('')}</optgroup>`).join('')}
 function populateMonogramStoneSizeOptions(){el('monogramStoneSize').innerHTML=listStoneSizes().map(s=>`<option value="${s.diameterMm}">${escapeHtml(s.name)} — ${s.diameterMm.toFixed(1)} mm</option>`).join('')}
 function updateMonogramColorSwatch(){const c=STONE_COLORS[el('monogramColor').value];el('monogramColorSwatch').style.background=c?c.previewColor:'transparent'}
 // MONO-010: mirrors populateMonogramStoneSizeOptions()/populateStoneColorOptions()/
@@ -5134,7 +5139,11 @@ function buildMonogramRequest(validated){
     frameOptions.stoneSizeMm=parseFloat(el('monogramFrameStoneSize').value);
     frameOptions.color=el('monogramFrameColor').value;
   }
-  return{frameId:validated.frameId,layoutId:validated.layoutId,letters:validated.letters,fontId:validated.fontId,providerId:resolveFontProviderId(validated.fontId),stoneSizeMm,color,frameRect,canvasMm,frameOptions};
+  // MONO-012: the generator needs the font's measured stroke-width fraction to size a single-chain
+  // OpenType letter (and to run its own eligibility gate). undefined for authored fonts, which don't
+  // read it.
+  const stemWidthRatio=fontManager?fontManager.getFont(validated.fontId)?.stemWidthRatio:undefined;
+  return{frameId:validated.frameId,layoutId:validated.layoutId,letters:validated.letters,fontId:validated.fontId,providerId:resolveFontProviderId(validated.fontId),stemWidthRatio,stoneSizeMm,color,frameRect,canvasMm,frameOptions};
 }
 // MONO-009: also refreshes frame-size bounds/default on open (out-of-range-only, same as a frame
 // switch) so a product switched while the lightbox was closed gets a chance to apply its own
