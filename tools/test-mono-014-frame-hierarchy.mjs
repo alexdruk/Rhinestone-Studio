@@ -15,7 +15,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GeometryEngine } from '../src/geometry/index.js';
-import { MonogramGenerator, MONOGRAM_LAYOUTS, MONOGRAM_GENERATOR_FAILURE_REASONS, defaultFrameStoneSizeMm } from '../src/monogram/index.js';
+import { MonogramGenerator, MONOGRAM_LAYOUTS, MONOGRAM_GENERATOR_FAILURE_REASONS, defaultFrameStoneSizeMm, singleChainHeightMm } from '../src/monogram/index.js';
 import { FontManager } from '../src/fonts/index.js';
 import { createDefaultFontProviderRegistry } from '../src/text/index.js';
 import { listStoneSizes } from '../src/renderer/StoneSizes.js';
@@ -70,6 +70,10 @@ const realGenerator = new MonogramGenerator({ geometryEngine: realEngine });
 const REAL_CANVAS_MM = { widthMm: 220, heightMm: 220 };
 const LETTER_STONE_SIZE_MM = 2.0; // SS6
 
+// Read straight from the shipped manifest -- never hardcode the ratio (test-mono-012 does hardcode
+// it inline, but here the point is that the value the generator sees is the value the app ships).
+const GREAT_VIBES_STEM_WIDTH_RATIO = manifest.fonts.find((f) => f.id === 'great-vibes-regular').stemWidthRatio;
+
 function baseRequest(overrides = {}) {
   return {
     frameId: 'circle', layoutId: MONOGRAM_LAYOUTS.SINGLE, letters: ['A'],
@@ -86,7 +90,7 @@ function baseRequest(overrides = {}) {
 // 2. frameId: 'none'
 // ============================================================================================
 
-await test("frameId 'none': emits no frame layer, matches the circle letter geometry, frame/frameHierarchy null", async () => {
+await test("frameId 'none': emits no frame layer, a larger letter fitting region than circle, frame/frameHierarchy null", async () => {
   const withNone = await realGenerator.generate(baseRequest({ frameId: 'none' }));
   const withCircle = await realGenerator.generate(baseRequest({ frameId: 'circle' }));
 
@@ -98,18 +102,20 @@ await test("frameId 'none': emits no frame layer, matches the circle letter geom
   assert.ok(!withNone.layers.some((l) => /-frame$/.test(l.id)), 'no frame-role layer id');
   assert.equal(withNone.measurements.frameStoneCount, 0);
 
-  // Letter count and per-letter stone counts identical to the circle request (authored-font stone
-  // counts are scale-invariant, so a different fitting region does not change them).
   const noneText = withNone.layers.filter((l) => l.type === 'text');
   const circleText = withCircle.layers.filter((l) => l.type === 'text');
   assert.equal(noneText.length, circleText.length, 'same letter (text) layer count');
   assert.equal(noneText.length, 1);
-  assert.deepEqual(
-    withNone.measurements.letters.map((l) => l.stoneCount),
-    withCircle.measurements.letters.map((l) => l.stoneCount),
-    'identical per-letter stone counts'
+
+  // The quantity that genuinely responds to the fitting region: 'none' fits the letter into the
+  // full 80mm frameRect, circle into the clearance-eroded inscribed region, so 'none' fits the
+  // authored letter at a strictly larger authoredScale. (Authored-font stone COUNT is
+  // scale-invariant -- scaleAuthoredTextLayout() moves positions only -- so a stoneCount equality
+  // here would pass no matter what this branch did; requestedScale is what can actually differ.)
+  assert.ok(
+    withNone.measurements.letters[0].requestedScale > withCircle.measurements.letters[0].requestedScale,
+    `expected 'none' to fit the letter larger than circle (none ${withNone.measurements.letters[0].requestedScale} vs circle ${withCircle.measurements.letters[0].requestedScale})`
   );
-  assert.equal(withNone.measurements.letterStoneCount, withCircle.measurements.letterStoneCount);
 
   assert.equal(withNone.measurements.frame, null, 'measurements.frame === null with no frame');
   assert.equal(withNone.measurements.frameHierarchy, null, 'measurements.frameHierarchy === null with no frame');
@@ -122,6 +128,46 @@ await test("frameId 'none': the interior is the frameRect itself (letters still 
     xMm: 70, yMm: 70, widthMm: 80, heightMm: 80
   });
   assert.equal(res.measurements.frameHierarchy, null);
+});
+
+await test("frameId 'none': the OpenType single-chain path -- a larger fitting region turns CHAIN_TOO_THIN into a success", async () => {
+  // Authored fonts are the one case where "No frame" cannot change the output (stone positions/count
+  // are scale-invariant), so the tests above run on the path least able to detect a defect. The
+  // OpenType single-chain path is where a larger fitting region actually changes the result -- the
+  // letter is regenerated at a larger heightMm, so its stem carries more stones. This is also the
+  // path MONO-013 builds on.
+  const openTypeRequest = {
+    fontId: 'great-vibes-regular', providerId: 'opentype',
+    stemWidthRatio: GREAT_VIBES_STEM_WIDTH_RATIO,
+    layoutId: MONOGRAM_LAYOUTS.SINGLE, letters: ['A'],
+    stoneSizeMm: 2.8,
+    frameRect: { xMm: 60, yMm: 60, widthMm: 80, heightMm: 80 },
+    canvasMm: { widthMm: 200, heightMm: 200 },
+    frameOptions: { stoneSizeMm: 4.0 }
+  };
+
+  const withCircle = await realGenerator.generate({ ...openTypeRequest, frameId: 'circle' });
+  assert.equal(withCircle.ok, false, 'circle: expected the single chain to be too thin for the eroded interior');
+  assert.equal(withCircle.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.CHAIN_TOO_THIN);
+
+  const withNone = await realGenerator.generate({ ...openTypeRequest, frameId: 'none' });
+  assert.equal(withNone.ok, true, withNone.message);
+  assert.equal(withNone.measurements.frame, null);
+  assert.equal(withNone.measurements.frameHierarchy, null);
+
+  // In the full 80mm "none" region the chain does not need to shrink: it fits at its ideal
+  // single-chain height. Asserted against the formula (not a pasted literal) because the observed
+  // value is singleChainHeightMm()'s exact double and a 16-digit equality would be fragile to a
+  // 1-ULP difference. (The MONO-014 follow-up reviewer stated 66.66666666666667 for this; the
+  // generator here produces 66.66666666666666 == SINGLE_CHAIN_STEM_RATIO*2.8/ratio exactly, one ULP
+  // below 200/3 -- a decimal-transcription-level difference, not a reconstruction difference; the
+  // stoneCount below matches the reviewer exactly.)
+  const idealHeightMm = singleChainHeightMm({ stoneSizeMm: 2.8, stemWidthRatio: GREAT_VIBES_STEM_WIDTH_RATIO });
+  assert.ok(
+    Math.abs(withNone.measurements.letters[0].fittedHeightMm - idealHeightMm) < 1e-9,
+    `fittedHeightMm ${withNone.measurements.letters[0].fittedHeightMm} should be the un-shrunk ideal single-chain height ${idealHeightMm}`
+  );
+  assert.equal(withNone.measurements.letters[0].stoneCount, 109);
 });
 
 // ============================================================================================

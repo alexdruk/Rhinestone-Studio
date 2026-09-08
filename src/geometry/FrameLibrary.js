@@ -253,13 +253,15 @@ const FRAME_DEFINITIONS = Object.freeze([
     // inside, or sample stones from, so both natural-contour fields are null and
     // MonogramGenerator.generate() branches on `frameId === 'none'` *before* any FrameLibrary
     // geometry call (resolveFrameForStoneWidth / computeFrameInterior / computeFrameFitRect), never
-    // handing those functions a null contour. `scalingLimitsMm` is still required (not decorative):
-    // app.js's updateMonogramFrameSizeBounds() / computeMonogramDefaultSizeMm() read it off the
-    // selected frame to bound the Frame Size fields even when no border will be drawn.
+    // handing those functions a null contour. `source: 'none'` (not 'shapeLibrary'/'frameLibrary')
+    // because it reuses neither module's geometry -- there is no geometry. `scalingLimitsMm` is
+    // still required (not decorative): app.js's updateMonogramFrameSizeBounds() /
+    // computeMonogramDefaultSizeMm() read it off the selected frame to bound the Frame Size fields
+    // even when no border will be drawn.
     id: 'none',
     label: 'No frame',
     category: 'geometric',
-    source: 'shapeLibrary',
+    source: 'none',
     hollow: false,
     clearanceMm: 0,
     opticalCenterOffset: NO_OPTICAL_OFFSET,

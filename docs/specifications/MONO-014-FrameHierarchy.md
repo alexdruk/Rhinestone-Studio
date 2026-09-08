@@ -32,11 +32,15 @@ A real `FRAME_DEFINITIONS` entry (`src/geometry/FrameLibrary.js`), so the picker
 `listFrames()` / `getFrameDefinition()` consumer need no special case:
 
 ```
-id: 'none', label: 'No frame', category: 'geometric', source: 'shapeLibrary',
+id: 'none', label: 'No frame', category: 'geometric', source: 'none',
 hollow: false, clearanceMm: 0, opticalCenterOffset: NO_OPTICAL_OFFSET,
 scalingLimitsMm: COMMON_SCALING_LIMITS_MM,
 generationNaturalContours: null, fittingNaturalContours: null
 ```
+
+`source: 'none'` — not `'shapeLibrary'` / `'frameLibrary'` — because the entry reuses neither
+module's geometry: it has none. `frame.source` has exactly one consumer (`tools/test-frame-library.mjs`
+test 4, "never a third system"), which is widened to allow `'none'` for this single entry.
 
 `scalingLimitsMm` is **required, not decorative**: `app.js`'s `updateMonogramFrameSizeBounds()` and
 `computeMonogramDefaultSizeMm()` both read `frame.scalingLimitsMm` off the selected frame to bound
@@ -155,8 +159,17 @@ MONO-005/006; its own milestone.
 
 `tools/test-mono-014-frame-hierarchy.mjs` — every `defaultFrameStoneSizeMm()` rung plus a
 discriminating negative control; `frameId: 'none'` through the real `MonogramGenerator` + real
-`GeometryEngine` (no frame layer, letter geometry identical to `circle`, `measurements.frame` /
-`frameHierarchy` null); `frameHierarchy` classification; the auto-shrink equal-weight filter with
-its unfiltered negative control; the request builder's `frameOptions` toggle branch (sliced).
-`tools/test-frame-library.mjs` test 1 updated for the nine-entry catalog;
-`tools/test-mono-006-monogram-ui.mjs`'s sandbox factory gains `defaultFrameStoneSizeMm`.
+`GeometryEngine` on the **authored** path (no frame layer, no frame-role id, `measurements.frame` /
+`frameHierarchy` null, and a strictly larger letter `requestedScale` than the same `circle` request —
+the quantity that actually responds to the fitting region, since authored-font stone counts are
+scale-invariant); `frameId: 'none'` on the **OpenType single-chain** path, where a larger fitting
+region genuinely changes the output — Great Vibes SS10 letters in an 80 mm frame fail `CHAIN_TOO_THIN`
+with `circle` but succeed with `none`, the chain fitting at its un-shrunk ideal height; the
+`frameRect`-is-the-interior deep-equal; `frameHierarchy` classification (dominant / subordinate /
+equal); the auto-shrink equal-weight filter with its unfiltered negative control; the request
+builder's `frameOptions` toggle branch (sliced). `tools/test-frame-library.mjs` test 1 updated for
+the nine-entry catalog and test 4 for the `source: 'none'` entry (asserting it is the only one, with
+null contours); `tools/test-mono-011-frame-stone-autoshrink.mjs`'s second case retitled — MONO-014
+made its "toggle off" premise unreachable from `app.js`, so it now guards the wrapper's own
+no-finite-frame-stone-size contract; `tools/test-mono-006-monogram-ui.mjs`'s sandbox factory gains
+`defaultFrameStoneSizeMm`.
