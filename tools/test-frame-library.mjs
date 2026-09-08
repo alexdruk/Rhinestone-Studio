@@ -43,11 +43,12 @@ function shoelaceArea(contour) {
 
 // --- 1. Every frame loads correctly, with a unique id -------------------------------------------
 
-await test('1. listFrames() returns exactly the eight geometric frames, each with a unique id', () => {
+await test('1. listFrames() returns the eight geometric frames plus MONO-014\'s "No frame", each with a unique id', () => {
   const frames = listFrames();
-  assert.equal(frames.length, GEOMETRIC_FRAME_IDS.length);
   const ids = frames.map((f) => f.id);
-  assert.deepEqual([...ids].sort(), [...GEOMETRIC_FRAME_IDS].sort());
+  // MONO-014: 'none' is a real catalog entry (null contours, hollow:false) so the Monogram picker
+  // needs no special case -- see FrameLibrary.js's own comment on that entry.
+  assert.deepEqual([...ids].sort(), [...GEOMETRIC_FRAME_IDS, 'none'].sort());
   assert.equal(new Set(ids).size, ids.length, 'every frame id must be unique');
 });
 

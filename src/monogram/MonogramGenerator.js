@@ -103,6 +103,26 @@ const ROUND_TRIP_POSITION_EPSILON_MM = 1e-6;
 const DEFAULT_FRAME_MODE = 'fill';
 const VECTOR_FILL_MODES = new Set(['outline', 'fill', 'staggered', 'radial', 'contour']);
 
+// MONO-014: the frame id that carries no border at all (a real FrameLibrary catalog entry with null
+// contours -- see FrameLibrary.js). generate() branches on this before every FrameLibrary geometry
+// call.
+const NO_FRAME_ID = 'none';
+
+// MONO-014: classify the frame's applied stone size against the letters' own. 'equal' is the state
+// the hierarchy rule forbids for the automatic path -- it is only reachable when a caller
+// deliberately passes frameOptions.stoneSizeMm equal to request.stoneSizeMm (the MONO-010 toggle
+// checked and matched by hand). app.js's automatic hierarchy always picks one catalog rung larger,
+// and generateMonogramWithFrameAutoShrink() filters the letters' own diameter out of its retry
+// candidates, so neither of those paths can produce 'equal'. Compared with an epsilon, not ===,
+// because both values are catalog floats (user-typed history, imported projects, catalog rounding)
+// and exact equality would be fragile against that drift.
+const FRAME_HIERARCHY_EPSILON_MM = 1e-6;
+function classifyFrameHierarchy(frameStoneSizeMm, letterStoneSizeMm) {
+  const deltaMm = frameStoneSizeMm - letterStoneSizeMm;
+  if (Math.abs(deltaMm) <= FRAME_HIERARCHY_EPSILON_MM) return 'equal';
+  return deltaMm > 0 ? 'dominant' : 'subordinate';
+}
+
 // MONO-012: OpenType letters are resized by regenerating at a smaller heightMm, not by a linear
 // position scale -- the outline sampler's fixed per-edge stone halo (stoneSizeMm/2) does not shrink
 // with heightMm, so one division does not land the bounding box exactly inside the slot. A few
@@ -379,6 +399,14 @@ export class MonogramGenerator {
     } catch {
       return failure(R.FRAME_NOT_FOUND, `Unknown frame id ${JSON.stringify(frameId)}.`);
     }
+    // MONO-014: "No frame" -- the letterform is the whole ornament. Every FrameLibrary geometry
+    // call below (resolveFrameForStoneWidth / computeFrameInterior / computeFrameFitRect /
+    // generatePathLayout) is guarded on this, because the 'none' definition has null contours; the
+    // requested frameRect is used as the letter-layout region directly, no frame-role layer is
+    // emitted, and the letter-vs-frame collision check is skipped (there are no frame stones).
+    // Letter fitting, the MONO-012 single-chain branch, and letter-vs-letter collision are all
+    // unchanged.
+    const isNoFrame = frameId === NO_FRAME_ID;
 
     const normalizedFrameRect = {
       xMm: frameRect.xMm, yMm: frameRect.yMm, widthMm: frameRect.widthMm, heightMm: frameRect.heightMm
@@ -423,7 +451,7 @@ export class MonogramGenerator {
     // category/etc. are still the catalog entry); `effectiveFrame` is what every geometry call below
     // uses instead.
     let effectiveFrame = frame;
-    if (frameOptions.stoneWidth === 1 || frameOptions.stoneWidth === 2) {
+    if (!isNoFrame && (frameOptions.stoneWidth === 1 || frameOptions.stoneWidth === 2)) {
       // The row offset must match the frame's own pitch, not the letters' -- a larger frame stone
       // size dedupes the second row away if offset by the (smaller) letters' requiredSpacingMm.
       const stoneWidthResult = resolveFrameForStoneWidth(frame, frameOptions.stoneWidth, frameRequiredSpacingMm, normalizedFrameRect.widthMm, normalizedFrameRect.heightMm);
@@ -437,9 +465,11 @@ export class MonogramGenerator {
     // interior at all at this stone size (independent of layout), and is layoutId/letterCount
     // structurally valid? Both failures are reported without needing a real font/letters, matching
     // this generator's own established failure-priority order (frame -> layout -> font/fitting).
-    const { boundingBox: interiorBoundingBox } = computeFrameInterior(effectiveFrame, normalizedFrameRect, requiredSpacingMm);
-    if (!interiorBoundingBox) {
-      return failure(R.FITTING_FAILED, `Frame ${JSON.stringify(frameId)}'s interior is empty for the given frameRect and stoneSizeMm ${stoneSizeMm}/gapMm ${gapMm} (frame too small for its required production clearance).`);
+    if (!isNoFrame) {
+      const { boundingBox: interiorBoundingBox } = computeFrameInterior(effectiveFrame, normalizedFrameRect, requiredSpacingMm);
+      if (!interiorBoundingBox) {
+        return failure(R.FITTING_FAILED, `Frame ${JSON.stringify(frameId)}'s interior is empty for the given frameRect and stoneSizeMm ${stoneSizeMm}/gapMm ${gapMm} (frame too small for its required production clearance).`);
+      }
     }
     const probeLayoutResult = computeMonogramLayout({ layoutId, frameInteriorRect: PROBE_BOX_MM, letterCount: letters.length });
     if (!probeLayoutResult.ok) {
@@ -536,17 +566,30 @@ export class MonogramGenerator {
     // is now driven by the letters themselves (MONO-006E) instead of the frame's own raw interior
     // bounding box (always ~1:1 for a symmetric frame), so a wide multi-letter layout genuinely
     // unlocks more of a round/diamond frame's real footprint than a forced-square region would.
-    const groupAspectRatio = computeGroupAspectRatio(letterEntries, probeLayoutResult.slots);
-    const inscribedInteriorRect = computeFrameFitRect(effectiveFrame, normalizedFrameRect, groupAspectRatio, requiredSpacingMm);
-    if (!inscribedInteriorRect) {
-      return failure(R.FITTING_FAILED, `Frame ${JSON.stringify(frameId)} has no usable rectangular interior region for the given frameRect and stoneSizeMm ${stoneSizeMm}/gapMm ${gapMm}.`);
+    let frameInteriorRect;
+    if (isNoFrame) {
+      // MONO-014: no border to inscribe a fitting rectangle inside -- the requested frameRect is the
+      // letter-layout region directly. The per-slot minGapMm floor (step 5) and the letter-vs-letter
+      // collision check (step 7) still guarantee production-legal spacing between letters.
+      frameInteriorRect = {
+        xMm: normalizedFrameRect.xMm,
+        yMm: normalizedFrameRect.yMm,
+        widthMm: normalizedFrameRect.widthMm,
+        heightMm: normalizedFrameRect.heightMm
+      };
+    } else {
+      const groupAspectRatio = computeGroupAspectRatio(letterEntries, probeLayoutResult.slots);
+      const inscribedInteriorRect = computeFrameFitRect(effectiveFrame, normalizedFrameRect, groupAspectRatio, requiredSpacingMm);
+      if (!inscribedInteriorRect) {
+        return failure(R.FITTING_FAILED, `Frame ${JSON.stringify(frameId)} has no usable rectangular interior region for the given frameRect and stoneSizeMm ${stoneSizeMm}/gapMm ${gapMm}.`);
+      }
+      frameInteriorRect = {
+        xMm: inscribedInteriorRect.xMm,
+        yMm: inscribedInteriorRect.yMm,
+        widthMm: inscribedInteriorRect.widthMm,
+        heightMm: inscribedInteriorRect.heightMm
+      };
     }
-    const frameInteriorRect = {
-      xMm: inscribedInteriorRect.xMm,
-      yMm: inscribedInteriorRect.yMm,
-      widthMm: inscribedInteriorRect.widthMm,
-      heightMm: inscribedInteriorRect.heightMm
-    };
 
     // 5. Compute the real, absolute layout slots inside that letter-shaped fitting rectangle.
     // MONO-006E: minGapMm enforces the real production clearance as an absolute mm floor on the
@@ -821,19 +864,22 @@ export class MonogramGenerator {
     // band) through GeometryEngine.generatePathLayout(), the same "place natural contours into an
     // x/y/w/h box, then outline/fill-sample" pipeline every other placed shape/path layer already
     // uses. No new geometry code: this is the one point of contact between FrameLibrary's data and
-    // the Geometry Engine.
-    const frameLayout = this._engine.generatePathLayout({
-      contours: effectiveFrame.generationNaturalContours,
-      layerId: frameLayerId,
-      xMm: normalizedFrameRect.xMm,
-      yMm: normalizedFrameRect.yMm,
-      widthMm: normalizedFrameRect.widthMm,
-      heightMm: normalizedFrameRect.heightMm,
-      stoneSizeMm: frameStoneSizeMm,
-      gapMm,
-      mode: frameMode,
-      color: frameColor
-    });
+    // the Geometry Engine. MONO-014: skipped entirely for "No frame" -- an empty stone set so the
+    // collision check and measurements below need no further branching.
+    const frameLayout = isNoFrame
+      ? { stones: [] }
+      : this._engine.generatePathLayout({
+        contours: effectiveFrame.generationNaturalContours,
+        layerId: frameLayerId,
+        xMm: normalizedFrameRect.xMm,
+        yMm: normalizedFrameRect.yMm,
+        widthMm: normalizedFrameRect.widthMm,
+        heightMm: normalizedFrameRect.heightMm,
+        stoneSizeMm: frameStoneSizeMm,
+        gapMm,
+        mode: frameMode,
+        color: frameColor
+      });
 
     // 7. Validate collisions -- reuses StoneSampler's findCrossGroupCollisions() (MONO-005A), a
     // pure collision *query* built from the same grid-hash bucket technique as
@@ -866,7 +912,7 @@ export class MonogramGenerator {
         diagnostics: { requiredSpacingMm, collisions }
       });
     }
-    if (collisions.some((c) => c.layerIdA === frameLayerId || c.layerIdB === frameLayerId)) {
+    if (!isNoFrame && collisions.some((c) => c.layerIdA === frameLayerId || c.layerIdB === frameLayerId)) {
       return failure(R.FRAME_COLLISION, 'A letter collides with the frame at the requested stone size/spacing.', {
         diagnostics: { requiredSpacingMm, collisions }
       });
@@ -880,7 +926,9 @@ export class MonogramGenerator {
     // slot drawOrder (not slotIndex) so a caller that simply appends this array to project.layers
     // gets the conventional "center letter drawn on top" paint order MONOGRAM_LAYOUTS already
     // establishes.
-    const frameLayerObj = {
+    // MONO-014: null for "No frame" -- no frame-role layer is emitted; `layers` below is the letter
+    // layers alone.
+    const frameLayerObj = isNoFrame ? null : {
       id: frameLayerId,
       type: 'path',
       visible: true,
@@ -941,7 +989,7 @@ export class MonogramGenerator {
         y: r.layerYMm
       }));
 
-    const layers = [frameLayerObj, ...letterLayerObjs];
+    const layers = isNoFrame ? [...letterLayerObjs] : [frameLayerObj, ...letterLayerObjs];
 
     const measurements = {
       frameId,
@@ -949,6 +997,18 @@ export class MonogramGenerator {
       frameRect: normalizedFrameRect,
       frameInteriorRect,
       canvasMm: normalizedCanvasMm,
+      // MONO-014: the frame's own applied spec, or null for "No frame". `frameHierarchy` records
+      // whether the frame's applied stone size is 'subordinate' | 'dominant' | 'equal' to the
+      // letters' (null with no frame). 'equal' is unreachable from app.js's automatic path (toggle
+      // unchecked) -- see classifyFrameHierarchy()'s own comment.
+      frame: isNoFrame ? null : {
+        id: frameId,
+        label: frame.label,
+        stoneSizeMm: frameStoneSizeMm,
+        stoneCount: frameLayout.stones.length,
+        mode: frameMode
+      },
+      frameHierarchy: isNoFrame ? null : classifyFrameHierarchy(frameStoneSizeMm, stoneSizeMm),
       slots: layoutResult.slots,
       letters: letterResults.map((r) => ({
         letter: r.letter,

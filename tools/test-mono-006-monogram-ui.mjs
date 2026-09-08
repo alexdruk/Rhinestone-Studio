@@ -37,7 +37,7 @@ import { STONE_COLORS } from '../src/renderer/StoneColors.js';
 import { stoneLayoutToSvg } from '../src/export/SvgExporter.js';
 import { FontManager } from '../src/fonts/index.js';
 import { createDefaultFontProviderRegistry } from '../src/text/index.js';
-import { MonogramGenerator, MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS, MONOGRAM_GENERATOR_FAILURE_REASONS, isMonogramEligibleStemWidthRatio } from '../src/monogram/index.js';
+import { MonogramGenerator, MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS, MONOGRAM_GENERATOR_FAILURE_REASONS, isMonogramEligibleStemWidthRatio, defaultFrameStoneSizeMm } from '../src/monogram/index.js';
 import { displayValueToMm, formatLengthDisplay, mmToDisplayValue, unitSuffix } from '../src/units/index.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -146,7 +146,7 @@ const sandboxFactory = new Function(
   'Lightbox', 'HistoryManager', 'SHAPE_LIBRARY_KINDS', 'el', 'listFrames', 'listStoneSizes', 'findStoneSizeByDiameterMm', 'STONE_COLORS',
   'MONOGRAM_LAYOUTS', 'MONOGRAM_LAYOUT_LETTER_COUNTS', 'MONOGRAM_GENERATOR_FAILURE_REASONS',
   'fontManager', 'initialProject', 'selectMany', 'syncSelectedControlsFromLayer', 'updateAll', 'updateHistoryUI',
-  'monogramGenerator', 'isMonogramEligibleStemWidthRatio',
+  'monogramGenerator', 'isMonogramEligibleStemWidthRatio', 'defaultFrameStoneSizeMm',
   // Every one of these is referenced only inside OTHER Lightboxes' onOpen/onClose callbacks
   // (text/shapes/import/imagetrace/shipping/settings/library/gallery) -- unrelated to Monogram, but
   // the real `const lightboxes={...}` construction is sliced verbatim (see lightboxesSrc below), so
@@ -235,7 +235,7 @@ function buildScenario({ project, monogramGenerator, fontManager = makeFakeFontM
     MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS, MONOGRAM_GENERATOR_FAILURE_REASONS,
     fontManager, resolvedProject,
     selectMany, () => {}, () => {}, () => {},
-    monogramGenerator, isMonogramEligibleStemWidthRatio,
+    monogramGenerator, isMonogramEligibleStemWidthRatio, defaultFrameStoneSizeMm,
     () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {},
     readLengthField, setLengthField, mmToDisplayValue, unitSuffix
   );

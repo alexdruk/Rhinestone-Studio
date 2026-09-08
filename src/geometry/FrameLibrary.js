@@ -245,6 +245,27 @@ const FRAME_DEFINITIONS = Object.freeze([
     scalingLimitsMm: COMMON_SCALING_LIMITS_MM,
     generationNaturalContours: shieldFrame.generationNaturalContours,
     fittingNaturalContours: shieldFrame.fittingNaturalContours
+  },
+  {
+    // MONO-014: "No frame" is a real catalog entry, not a picker special case -- it flows through
+    // listFrames() / getFrameDefinition() / app.js's populateMonogramFrameOptions() exactly like any
+    // other choice. It has no border: there are no contours to place, erode, inscribe a fitting rect
+    // inside, or sample stones from, so both natural-contour fields are null and
+    // MonogramGenerator.generate() branches on `frameId === 'none'` *before* any FrameLibrary
+    // geometry call (resolveFrameForStoneWidth / computeFrameInterior / computeFrameFitRect), never
+    // handing those functions a null contour. `scalingLimitsMm` is still required (not decorative):
+    // app.js's updateMonogramFrameSizeBounds() / computeMonogramDefaultSizeMm() read it off the
+    // selected frame to bound the Frame Size fields even when no border will be drawn.
+    id: 'none',
+    label: 'No frame',
+    category: 'geometric',
+    source: 'shapeLibrary',
+    hollow: false,
+    clearanceMm: 0,
+    opticalCenterOffset: NO_OPTICAL_OFFSET,
+    scalingLimitsMm: COMMON_SCALING_LIMITS_MM,
+    generationNaturalContours: null,
+    fittingNaturalContours: null
   }
 ]);
 

@@ -123,7 +123,7 @@ import { mmToDisplayValue, displayValueToMm, unitSuffix, formatLengthDisplay } f
 // src/monogram/index.js barrel this milestone adds (src/monogram/** had none before -- only test
 // files imported it directly; app.js may only import permanent modules through a src/*/index.js
 // barrel, see tools/test-architecture-module-boundaries.mjs).
-import { MonogramGenerator, MONOGRAM_GENERATOR_FAILURE_REASONS, MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS, isMonogramEligibleStemWidthRatio } from './src/monogram/index.js';
+import { MonogramGenerator, MONOGRAM_GENERATOR_FAILURE_REASONS, MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS, isMonogramEligibleStemWidthRatio, defaultFrameStoneSizeMm } from './src/monogram/index.js';
 // RC-005 (Autosave & Crash Recovery): src/persistence/** is a new, pure, DOM-free module -- mirrors
 // src/library/**'s exact "storage-adapter injected, browser-global only at app.js's edge" shape.
 // It knows nothing about Project/Layer/StoneLayout; app.js is the only caller, and is the only
@@ -4979,7 +4979,12 @@ function monogramFailureMessage(result,request){
   if(reason===R.FITTING_FAILED)return `${designText} cannot fit using ${stoneSizeText} stones inside a ${frameSizeText} ${frameLabel} frame because the required production spacing exceeds the available interior${limitingFactorText}. Increase the frame size, or choose a smaller stone size.`;
   if(reason===R.BELOW_MINIMUM_SCALE)return `${designText} cannot fit using ${stoneSizeText} stones inside a ${frameSizeText} ${frameLabel} frame${limitingFactorText}. Increase the frame size, or choose a smaller stone size.`;
   if(reason===R.LETTER_COLLISION)return `Two or more letters in this${layoutLabel?` ${layoutLabel}`:''} monogram would touch at ${stoneSizeText} spacing in a ${frameSizeText} ${frameLabel} frame. Increase the frame size, choose a different layout, or choose a smaller stone size.`;
-  if(reason===R.FRAME_COLLISION)return `A letter would touch the frame in this${layoutLabel?` ${layoutLabel}`:''} monogram at ${stoneSizeText} spacing in a ${frameSizeText} ${frameLabel} frame. Increase the frame size, or choose a smaller stone size.`;
+  // MONO-014: with automatic hierarchy the frame stones default one rung larger than the letters',
+  // and generateMonogramWithFrameAutoShrink() no longer retries into a frame stone size equal to
+  // the letters' -- so a colliding dominant frame with SS6 letters has no legal smaller candidate
+  // and this failure is now reachable where MONO-011 would previously have retried into equal
+  // weight. The message must offer the real fixes: a larger frame, smaller stones, or no frame.
+  if(reason===R.FRAME_COLLISION)return `A letter would touch the frame in this${layoutLabel?` ${layoutLabel}`:''} monogram at ${stoneSizeText} spacing in a ${frameSizeText} ${frameLabel} frame. Increase the frame size, choose a smaller stone size, or set the frame to "No frame".`;
   // MONO-008: the generator's own message already names the frame/stone-width context -- no
   // request-specific data to add here, unlike the reasons above.
   if(reason===R.STONE_WIDTH_UNAVAILABLE)return result.message;
@@ -5130,14 +5135,20 @@ function buildMonogramRequest(validated){
   const frameOptions=frameStyle==='outline-1'?{mode:'outline',stoneWidth:1}
     :frameStyle==='outline-2'?{mode:'outline',stoneWidth:2}
     :{};
-  // MONO-010: only set when the toggle is checked -- unchecked must leave frameOptions exactly as
-  // it was before this milestone (no stoneSizeMm/color keys at all), so the generator's own
-  // frameOptions.stoneSizeMm ?? stoneSizeMm / frameOptions.color ?? resolvedColor fallbacks still
-  // apply unchanged. This is the one place that makes "toggle off" byte-identical to pre-milestone
-  // behavior.
+  // MONO-014: the toggle now selects between two modes, not "custom vs pre-MONO-010 default".
+  //  - checked: the visible #monogramFrameStoneSize/#monogramFrameColor fields drive the frame
+  //    exactly as the user set them (this is the only path that can produce an equal-weight frame,
+  //    and only if the user deliberately matches the letters' size).
+  //  - unchecked: automatic hierarchy. defaultFrameStoneSizeMm() (src/monogram/FrameHierarchy.js)
+  //    picks the frame's stone size one catalog rung above the letters' so the ring is clearly
+  //    dominant, never equal weight. Color is still left unset here, so the generator's
+  //    frameOptions.color ?? resolvedColor fallback applies. See
+  //    docs/specifications/MONO-014-FrameHierarchy.md.
   if(el('monogramFrameStoneToggle').checked){
     frameOptions.stoneSizeMm=parseFloat(el('monogramFrameStoneSize').value);
     frameOptions.color=el('monogramFrameColor').value;
+  }else{
+    frameOptions.stoneSizeMm=defaultFrameStoneSizeMm(stoneSizeMm);
   }
   // MONO-012: the generator needs the font's measured stroke-width fraction to size a single-chain
   // OpenType letter (and to run its own eligibility gate). undefined for authored fonts, which don't
@@ -5145,10 +5156,29 @@ function buildMonogramRequest(validated){
   const stemWidthRatio=fontManager?fontManager.getFont(validated.fontId)?.stemWidthRatio:undefined;
   return{frameId:validated.frameId,layoutId:validated.layoutId,letters:validated.letters,fontId:validated.fontId,providerId:resolveFontProviderId(validated.fontId),stemWidthRatio,stoneSizeMm,color,frameRect,canvasMm,frameOptions};
 }
+// MONO-014: true once the user has picked a frame themselves during this lightbox session, which
+// suppresses applyMonogramDefaultFrameForFont()'s per-font default. Set in #monogramFrame's change
+// handler, reset every time the lightbox opens (onMonogramOpen()).
+let monogramFrameUserChosen=false;
+// MONO-014: a non-authored (OpenType script) font is itself the ornament, so default it to "No
+// frame" -- the ring would just compete with the letterform. Authored (rhinestone) fonts default
+// to circle. Skipped once the user has chosen a frame this session. #monogramFrame is set
+// programmatically here, so updateMonogramFrameSizeBounds() is called directly (a bare .value
+// assignment fires no 'change' event).
+function applyMonogramDefaultFrameForFont(){
+  if(monogramFrameUserChosen)return;
+  const fontId=el('monogramFont').value;
+  if(!fontId||!fontManager||!fontManager.hasFont(fontId))return;
+  const font=fontManager.getFont(fontId);
+  const desiredFrame=font.providerId==='rhinestone'?'circle':'none';
+  if(el('monogramFrame').value===desiredFrame)return;
+  el('monogramFrame').value=desiredFrame;
+  updateMonogramFrameSizeBounds();
+}
 // MONO-009: also refreshes frame-size bounds/default on open (out-of-range-only, same as a frame
 // switch) so a product switched while the lightbox was closed gets a chance to apply its own
 // safe-area default on next open, rather than only on frame-change/units-change/boot.
-function onMonogramOpen(){clearMonogramValidation();updateMonogramFrameSizeBounds();updateMonogramGenerateButtonState()}
+function onMonogramOpen(){monogramFrameUserChosen=false;clearMonogramValidation();updateMonogramFrameSizeBounds();updateMonogramGenerateButtonState()}
 // MONO-011: UI-layer-only auto-shrink retry loop. MonogramGenerator.generate() keeps its "never
 // auto-corrects" doctrine (see its own doc comment) -- this wrapper is the thing that decides to
 // retry, and it only ever adjusts frameOptions.stoneSizeMm (never the shared letters' stoneSizeMm,
@@ -5163,7 +5193,20 @@ async function generateMonogramWithFrameAutoShrink(request){
   }
   const requestedFrameStoneSizeMm=request.frameOptions&&request.frameOptions.stoneSizeMm;
   if(!Number.isFinite(requestedFrameStoneSizeMm))return{result:firstResult,appliedFrameStoneSizeMm:null};
-  const candidates=listStoneSizes().map(s=>s.diameterMm).filter(d=>d<requestedFrameStoneSizeMm).sort((a,b)=>b-a);
+  // MONO-014: never retry into a frame stone size equal to the letters' own -- that is the
+  // equal-weight state the hierarchy rule forbids, and auto-shrink is never an explicit user choice,
+  // so it must not produce equal weight in EITHER toggle mode. Filtered unconditionally. Compared
+  // with an epsilon rather than !== because both sides are catalog floats (typed history, imported
+  // projects, catalog rounding) and exact equality would be fragile against that drift. Consequence
+  // (correct, not hidden): with SS6 letters there is no catalog size below 2.0 mm, so a colliding
+  // dominant frame exhausts its candidates and fails -- monogramFailureMessage()'s FRAME_COLLISION
+  // branch surfaces the larger-frame / smaller-stones / "No frame" fixes.
+  const EQUAL_WEIGHT_EPSILON_MM=1e-6;
+  const letterStoneSizeMm=request.stoneSizeMm;
+  const candidates=listStoneSizes().map(s=>s.diameterMm)
+    .filter(d=>d<requestedFrameStoneSizeMm)
+    .filter(d=>!(Number.isFinite(letterStoneSizeMm)&&Math.abs(d-letterStoneSizeMm)<=EQUAL_WEIGHT_EPSILON_MM))
+    .sort((a,b)=>b-a);
   for(const candidate of candidates){
     const retryResult=await monogramGenerator.generate({...request,frameOptions:{...request.frameOptions,stoneSizeMm:candidate}});
     if(retryResult.ok)return{result:retryResult,appliedFrameStoneSizeMm:candidate};
@@ -5207,11 +5250,11 @@ async function generateMonogram(){
   updateAll(true);
   lightboxes.monogram.close();
   if(appliedFrameStoneSizeMm!=null){
-    // MONO-010's boot-sync block (`el('monogramFrameStoneSize').value=el('monogramStoneSize').value`)
-    // establishes the convention that this control reflects the frame stone size actually in use --
-    // keep that true after an auto-shrink too, and always surface the adjustment to the user rather
-    // than letting it happen silently (per MONO-011's own scope: never silent).
-    el('monogramFrameStoneSize').value=String(appliedFrameStoneSizeMm);
+    // MONO-014: no write-back into #monogramFrameStoneSize. Under MONO-010 that write was coherent
+    // because the applied size only ever came from that visible field; now the field is hidden
+    // whenever the toggle is unchecked (updateMonogramFrameStoneControlsVisibility()) -- the
+    // automatic-hierarchy path -- so the write would target a control the user cannot see. The
+    // adjustment is still surfaced in the status line (MONO-011: never silent).
     el('status').textContent=`Generated monogram (${result.layers.length} layer${result.layers.length===1?'':'s'}). Frame stones reduced to ${formatStoneSizeLabel(appliedFrameStoneSizeMm)} to fit.`;
   }else{
     el('status').textContent=`Generated monogram (${result.layers.length} layer${result.layers.length===1?'':'s'}).`;
@@ -5228,10 +5271,10 @@ el('monogramFrameColor').value=el('monogramColor').value;
 updateMonogramColorSwatch();updateMonogramFrameColorSwatch();updateMonogramFrameSizeBounds();updateMonogramLetterCountHint();
 updateMonogramFrameStoneControlsVisibility();
 if(fontManager)populateMonogramFontOptions();
-el('monogramFrame').addEventListener('change',()=>{updateMonogramFrameSizeBounds();updateMonogramGenerateButtonState()});
+el('monogramFrame').addEventListener('change',()=>{monogramFrameUserChosen=true;updateMonogramFrameSizeBounds();updateMonogramGenerateButtonState()});
 el('monogramLayout').addEventListener('change',()=>{updateMonogramLetterCountHint();updateMonogramGenerateButtonState()});
 el('monogramLetters').addEventListener('input',()=>updateMonogramGenerateButtonState());
-el('monogramFont').addEventListener('change',()=>updateMonogramGenerateButtonState());
+el('monogramFont').addEventListener('change',()=>{applyMonogramDefaultFrameForFont();updateMonogramGenerateButtonState()});
 el('monogramColor').addEventListener('change',()=>{updateMonogramColorSwatch();updateMonogramGenerateButtonState()});
 el('monogramWidth').addEventListener('input',()=>{stashTypedLengthField('monogramWidth');updateMonogramGenerateButtonState()});
 el('monogramHeight').addEventListener('input',()=>{stashTypedLengthField('monogramHeight');updateMonogramGenerateButtonState()});
