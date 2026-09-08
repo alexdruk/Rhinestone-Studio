@@ -28,7 +28,7 @@
  */
 
 import { getFrameDefinition, computeFrameInterior, computeFrameFitRect, resolveFrameForStoneWidth } from '../geometry/FrameLibrary.js';
-import { computeMonogramLayout, MONOGRAM_LAYOUT_FAILURE_REASONS } from './MonogramLayouts.js';
+import { computeMonogramLayout, MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_FAILURE_REASONS } from './MonogramLayouts.js';
 import {
   Stone,
   DEFAULT_STONE_COLOR,
@@ -353,7 +353,10 @@ export class MonogramGenerator {
       // MONO-012: the font's measured stroke-width fraction (assets/fonts/manifest.json's
       // stemWidthRatio, surfaced onto the FontManager record). Required only for a non-authored
       // (OpenType) font -- authored stone-center fonts have no vector stem and never read it.
-      stemWidthRatio
+      stemWidthRatio,
+      // MONO-013: negative "overlap" in mm for the 'script' layout only. Optional, default 0.
+      // Ignored by every other layout. Validated inside the script branch below.
+      interlockMm
     } = request || {};
     const R = MONOGRAM_GENERATOR_FAILURE_REASONS;
 
@@ -509,6 +512,22 @@ export class MonogramGenerator {
       if (!isMonogramEligibleStemWidthRatio(stemWidthRatio)) {
         return failure(R.INVALID_FONT, `Font ${JSON.stringify(fontId)} has a measured stemWidthRatio of ${stemWidthRatio}, above the ${MONOGRAM_MAX_STEM_WIDTH_RATIO} maximum for a single-chain monogram letter that still clears the readability floor. Choose a thinner-stemmed font.`);
       }
+    }
+
+    // MONO-013: the 'script' layout is a completely separate branch -- one interlocked string, not
+    // per-letter slots. It reuses everything computed above (frame resolution, effectiveFrame,
+    // interior sanity check, the authored/OpenType detect probe, the eligibility gate) but replaces
+    // steps 3-8. The four pre-existing layouts never reach it, so their output is byte-identical to
+    // before this milestone.
+    if (layoutId === MONOGRAM_LAYOUTS.SCRIPT) {
+      return this._generateScriptMonogram({
+        R, frame, frameId, isNoFrame, effectiveFrame,
+        normalizedFrameRect, normalizedCanvasMm, resolvedColor,
+        stoneSizeMm, gapMm, requiredSpacingMm,
+        frameStoneSizeMm, frameRequiredSpacingMm, frameOptions,
+        fontId, providerId, letters, layoutId, fontIsAuthored, stemWidthRatio,
+        interlockMm
+      });
     }
 
     // 3. Generate every letter's natural (unscaled) layout up front -- MONO-006E: "the frame should
@@ -1035,6 +1054,365 @@ export class MonogramGenerator {
     const diagnostics = {
       productionSpacingMm: requiredSpacingMm,
       frameStoneSizeMm,
+      collisions: { letterCollision: false, frameCollision: false },
+      roundTripVerified: true
+    };
+
+    return { ok: true, layers, measurements, diagnostics };
+  }
+
+  /**
+   * MONO-013: generate a connected-script monogram as ONE interlocked mark. Separate branch from
+   * generate()'s per-letter path (which is left byte-identical for the four other layouts).
+   *
+   * Instead of placing each letter in a disjoint slot with a mandatory production gap, the letters
+   * are set as one string via the font's own advances/kerning plus a negative `interlockMm`
+   * letter-spacing "overlap". GeometryEngine._buildLineContours() applies that spacing at the pen
+   * advance (line 591); _textPolygons() (line ~470) flattens every character's contours into one
+   * flat array; generateTextLayout() then makes ONE sampleShapeFillPoints() call over the whole set
+   * (line ~206), dispatching to StoneSampler.sampleMultiContourOutlinePoints() (line ~1492) whose
+   * RC-002 cross-contour dedup already resolves swashes that cross. There is no cross-layer
+   * dedupeStonesByRadius() step because there is only one layer.
+   *
+   * Clearance (MONO-013 production decision): a single sampling call enforces only
+   * `minSeparationMm = stoneSizeMm` between any two stones, not the `stoneSizeMm + gapMm` the
+   * per-letter path gets from feeding findCrossGroupCollisions() a synthetic
+   * `d = stoneSizeMm + gapMm` for cross-*layer* pairs (that check skips same-layer pairs outright,
+   * StoneSampler.js:481). So a fitted script mark can legally have a closest pair between
+   * `stoneSizeMm` and `stoneSizeMm + gapMm` apart. That is accepted and expected for an interlocked
+   * mark — letters are meant to touch — and is measured into `measurements.minStoneDistanceMm`, not
+   * gated. Only a value BELOW `stoneSizeMm - 1e-6` (which the sampler is supposed to make
+   * impossible) is a hard failure.
+   *
+   * @param {object} ctx pre-resolved context from generate() — see the call site.
+   * @returns {Promise<{ok:boolean, reason?:string, message?:string, layers:object[]|null, measurements:object|null, diagnostics:object|null}>}
+   */
+  async _generateScriptMonogram(ctx) {
+    const {
+      R, frame, frameId, isNoFrame, effectiveFrame,
+      normalizedFrameRect, normalizedCanvasMm, resolvedColor,
+      stoneSizeMm, gapMm, requiredSpacingMm,
+      frameStoneSizeMm, frameRequiredSpacingMm, frameOptions,
+      fontId, providerId, letters, layoutId, fontIsAuthored, stemWidthRatio
+    } = ctx;
+
+    // Authored (stone-center) fonts have no vector stem to form a chain and no outline for swashes
+    // to cross — the script layout is outline-only. INVALID_FONT, like MONO-012's other font
+    // rejections, naming the font id.
+    if (fontIsAuthored) {
+      return failure(R.INVALID_FONT, `Font ${JSON.stringify(fontId)} supplies authored stone centers; the ${JSON.stringify(layoutId)} monogram layout requires an outline (OpenType) font.`);
+    }
+
+    // interlockMm: optional, default 0. Valid range [-(stoneSizeMm + gapMm), 0]. Positive values
+    // spread letters apart (the opposite of this milestone) and are rejected. The lower bound is
+    // exactly -pitchMm because the emitted layer persists interlockMm as `layer.letterSpacing`, and
+    // app.js's letterSpacingBoundsMm() sets minMm = -pitchMm while writeSelectedControlsToLayer()
+    // clamps layer.letterSpacing to that on every text-control write with NO undo entry
+    // (app.js:605-612 / :2175 — READ-006's own documented silent-clamp behaviour). A value below
+    // -pitchMm would un-interlock the mark the first time the user touched any text control. See
+    // docs/specifications/MONO-013-Interlock.md.
+    const interlockFloorMm = -(stoneSizeMm + gapMm);
+    const interlockMm = (ctx.interlockMm === undefined || ctx.interlockMm === null) ? 0 : ctx.interlockMm;
+    if (typeof interlockMm !== 'number' || !Number.isFinite(interlockMm) || interlockMm > 0 || interlockMm < interlockFloorMm) {
+      return failure(R.INVALID_INPUT, `interlockMm must be a number in [${interlockFloorMm}, 0] (0 = letters set at their natural advances, ${interlockFloorMm} = one stone pitch of overlap); got ${JSON.stringify(ctx.interlockMm)}.`);
+    }
+
+    const joinedText = letters.join('');
+    const letterLayerId = `monogram-${frameId}-${layoutId}-letter-0`;
+    const idealHeightMm = singleChainHeightMm({ stoneSizeMm, stemWidthRatio });
+
+    // Natural (un-shrunk) mark, at the ideal single-chain height, with the overlap already applied.
+    // Used for the frame-fit aspect ratio and recorded as measurements.letters[0].naturalBoundingBox.
+    let naturalLayout;
+    try {
+      naturalLayout = await this._engine.generateTextLayout({
+        text: joinedText, fontId, providerId, layerId: letterLayerId,
+        heightMm: idealHeightMm, stoneSizeMm, gapMm, mode: 'outline',
+        color: resolvedColor, curveEnabled: false, letterSpacingMm: interlockMm
+      });
+    } catch (error) {
+      return failure(R.INVALID_FONT, `Failed to generate the string ${JSON.stringify(joinedText)} with font ${JSON.stringify(fontId)}: ${error.message}`);
+    }
+    const naturalBoundingBox = naturalLayout.getBoundingBox();
+    if (!naturalBoundingBox) {
+      return failure(R.FITTING_FAILED, `The string ${JSON.stringify(joinedText)} produced no stones for font ${JSON.stringify(fontId)}.`);
+    }
+
+    // Frame interior region: the requested rect directly for "No frame", otherwise the clearance-
+    // eroded rectangle inscribed in the frame's true interior (same computeFrameFitRect() call the
+    // per-letter path uses at step 4), shaped to the mark's own natural aspect ratio.
+    let frameInteriorRect;
+    if (isNoFrame) {
+      frameInteriorRect = {
+        xMm: normalizedFrameRect.xMm, yMm: normalizedFrameRect.yMm,
+        widthMm: normalizedFrameRect.widthMm, heightMm: normalizedFrameRect.heightMm
+      };
+    } else {
+      const rawAspect = (naturalBoundingBox.widthMm > 0 && naturalBoundingBox.heightMm > 0)
+        ? naturalBoundingBox.widthMm / naturalBoundingBox.heightMm
+        : 1;
+      const aspect = Math.min(MAX_GROUP_ASPECT_RATIO, Math.max(MIN_GROUP_ASPECT_RATIO, rawAspect));
+      const inscribed = computeFrameFitRect(effectiveFrame, normalizedFrameRect, aspect, requiredSpacingMm);
+      if (!inscribed) {
+        return failure(R.FITTING_FAILED, `Frame ${JSON.stringify(frameId)} has no usable rectangular interior region for the given frameRect and stoneSizeMm ${stoneSizeMm}/gapMm ${gapMm}.`);
+      }
+      frameInteriorRect = { xMm: inscribed.xMm, yMm: inscribed.yMm, widthMm: inscribed.widthMm, heightMm: inscribed.heightMm };
+    }
+
+    const layoutResult = computeMonogramLayout({ layoutId, frameInteriorRect, letterCount: letters.length, minGapMm: requiredSpacingMm });
+    if (!layoutResult.ok) {
+      const reason = layoutResult.reason === MONOGRAM_LAYOUT_FAILURE_REASONS.UNKNOWN_LAYOUT ? R.LAYOUT_NOT_FOUND
+        : layoutResult.reason === MONOGRAM_LAYOUT_FAILURE_REASONS.UNSUPPORTED_LETTER_COUNT ? R.UNSUPPORTED_LETTER_COUNT
+        : layoutResult.reason === MONOGRAM_LAYOUT_FAILURE_REASONS.INSUFFICIENT_SPACE ? R.FITTING_FAILED
+        : R.INVALID_INPUT;
+      return failure(reason, layoutResult.message);
+    }
+    const slot = layoutResult.slots[0];
+
+    // Shrink-only fit of the whole interlocked string into the single slot — identical iteration
+    // shape to MONO-012's per-letter OpenType loop (regenerate at a smaller heightMm, halo-aware
+    // shrink ratio, never grow past the ideal single-chain height). fittedLayout/fittedBox always
+    // correspond to the current fitHeightMm at loop exit.
+    const haloMm = stoneSizeMm;
+    let fitHeightMm = idealHeightMm;
+    let fittedLayout = null;
+    let fittedBox = null;
+    for (let iter = 0; iter < MAX_OPENTYPE_FIT_ITERATIONS; iter++) {
+      try {
+        fittedLayout = await this._engine.generateTextLayout({
+          text: joinedText, fontId, providerId, layerId: letterLayerId,
+          heightMm: fitHeightMm, stoneSizeMm, gapMm, mode: 'outline',
+          color: resolvedColor, curveEnabled: false, letterSpacingMm: interlockMm
+        });
+      } catch (error) {
+        return failure(R.INVALID_FONT, `The string ${JSON.stringify(joinedText)} could not be generated with font ${JSON.stringify(fontId)} at heightMm ${fitHeightMm}: ${error.message}`);
+      }
+      fittedBox = fittedLayout.getBoundingBox();
+      if (!fittedBox) {
+        return failure(R.FITTING_FAILED, `The string ${JSON.stringify(joinedText)} produced no stones for font ${JSON.stringify(fontId)}.`);
+      }
+      if (iter === MAX_OPENTYPE_FIT_ITERATIONS - 1) break;
+      const shrinkCandidates = [];
+      if (fittedBox.widthMm - haloMm > 0) shrinkCandidates.push((slot.targetRect.widthMm - haloMm) / (fittedBox.widthMm - haloMm));
+      if (fittedBox.heightMm - haloMm > 0) shrinkCandidates.push((slot.targetRect.heightMm - haloMm) / (fittedBox.heightMm - haloMm));
+      if (shrinkCandidates.length === 0) {
+        shrinkCandidates.push(slot.targetRect.widthMm / fittedBox.widthMm, slot.targetRect.heightMm / fittedBox.heightMm);
+      }
+      const shrink = Math.min(...shrinkCandidates);
+      if (shrink >= 1) break;
+      fitHeightMm *= Math.max(shrink, 1e-3);
+    }
+
+    // Shrinking to fit drags R (heightMm / stoneSizeMm) and the stem-stone count down. If the
+    // fitted mark no longer reads as a continuous chain, fail — naming whichever bound bound (same
+    // logic as MONO-012's per-letter CHAIN_TOO_THIN), and naming the string, not a letter/slot.
+    const achievedStemStones = stemStones({ heightMm: fitHeightMm, stoneSizeMm, stemWidthRatio });
+    const minStones = minChainStones({ stemWidthRatio });
+    const floorStones = MIN_HEIGHT_TO_STONE_RATIO * stemWidthRatio;
+    if (achievedStemStones < minStones) {
+      const boundName = floorStones >= SINGLE_CHAIN_MIN_RATIO
+        ? `the readability floor (${minStones.toFixed(3)} stones across the stem)`
+        : `the single-chain minimum (${SINGLE_CHAIN_MIN_RATIO.toFixed(2)} stones across the stem)`;
+      return failure(R.CHAIN_TOO_THIN, `The interlocked string ${JSON.stringify(joinedText)}: font ${JSON.stringify(fontId)} with ${stoneSizeMm} mm stones fits this frame only at ${achievedStemStones.toFixed(3)} stones across the stem, below ${boundName}. Use a smaller stone size, a larger frame, or fewer letters.`, {
+        diagnostics: {
+          string: joinedText, achievedStemStones, minChainStones: minStones,
+          fittedHeightMm: fitHeightMm, stoneSizeMm, stemWidthRatio,
+          boundThatBound: floorStones >= SINGLE_CHAIN_MIN_RATIO ? 'readability-floor' : 'single-chain-minimum'
+        }
+      });
+    }
+
+    // Round-trip contract check (adapted from the authored branch's step-7 check to the one call):
+    // regenerate the string through the normal generateTextLayout() path with the exact persisted
+    // fields and confirm it reproduces the fitted geometry. Deterministic, so a mismatch is a real
+    // implementation bug, reported as INTERNAL_CONTRACT_MISMATCH.
+    let roundTripLayout;
+    try {
+      roundTripLayout = await this._engine.generateTextLayout({
+        text: joinedText, fontId, providerId, layerId: letterLayerId,
+        heightMm: fitHeightMm, stoneSizeMm, gapMm, mode: 'outline',
+        color: resolvedColor, curveEnabled: false, letterSpacingMm: interlockMm
+      });
+    } catch (error) {
+      return failure(R.INTERNAL_CONTRACT_MISMATCH, `The interlocked string ${JSON.stringify(joinedText)}: regenerating through the normal GeometryEngine.generateTextLayout() path failed: ${error.message}`);
+    }
+    const mismatch = describeRoundTripMismatch(fittedLayout, roundTripLayout);
+    if (mismatch) {
+      return failure(R.INTERNAL_CONTRACT_MISMATCH, `The interlocked string ${JSON.stringify(joinedText)}: regenerating through the normal GeometryEngine.generateTextLayout() path did not reproduce the fitted geometry (${mismatch}).`, {
+        diagnostics: { string: joinedText }
+      });
+    }
+
+    // Place the mark: translate the fitted stones onto the slot's own centre (the real absolute
+    // positions a live renderer produces), and compute the persistable layer x/y under the real
+    // text-layer placement contract (canvas-centered + this offset).
+    const targetCenterXMm = slot.targetRect.xMm + slot.targetRect.widthMm / 2;
+    const targetCenterYMm = slot.targetRect.yMm + slot.targetRect.heightMm / 2;
+    const { xMm: layerXMm, yMm: layerYMm } = computeTextLayerPositionForTargetCenterMm({
+      targetCenterXMm, targetCenterYMm,
+      canvasWidthMm: normalizedCanvasMm.widthMm, canvasHeightMm: normalizedCanvasMm.heightMm
+    });
+    const deltaXMm = targetCenterXMm - fittedBox.center.xMm;
+    const deltaYMm = targetCenterYMm - fittedBox.center.yMm;
+    const finalStones = fittedLayout.stones.map((stone) => new Stone({
+      xMm: stone.xMm + deltaXMm,
+      yMm: stone.yMm + deltaYMm,
+      sizeMm: stone.sizeMm,
+      color: stone.color,
+      layerId: stone.layerId,
+      index: stone.index,
+      metadata: stone.metadata
+    }));
+
+    // Frame layer (skipped for "No frame") + frame-vs-mark collision. There is one letter group, so
+    // there is no letter-vs-letter check.
+    const frameLayerId = `monogram-${frameId}-${layoutId}-frame`;
+    const frameMode = (frameOptions.stoneWidth === 1 || frameOptions.stoneWidth === 2)
+      ? 'outline'
+      : (VECTOR_FILL_MODES.has(frameOptions.mode) ? frameOptions.mode : DEFAULT_FRAME_MODE);
+    const frameColor = (typeof frameOptions.color === 'string' && frameOptions.color.length > 0)
+      ? frameOptions.color
+      : resolvedColor;
+    const frameLayout = isNoFrame
+      ? { stones: [] }
+      : this._engine.generatePathLayout({
+        contours: effectiveFrame.generationNaturalContours,
+        layerId: frameLayerId,
+        xMm: normalizedFrameRect.xMm,
+        yMm: normalizedFrameRect.yMm,
+        widthMm: normalizedFrameRect.widthMm,
+        heightMm: normalizedFrameRect.heightMm,
+        stoneSizeMm: frameStoneSizeMm,
+        gapMm,
+        mode: frameMode,
+        color: frameColor
+      });
+
+    if (!isNoFrame) {
+      const collisionRecords = finalStones
+        .map((s) => ({ x: s.xMm, y: s.yMm, d: requiredSpacingMm, layerId: s.layerId }))
+        .concat(frameLayout.stones.map((s) => ({ x: s.xMm, y: s.yMm, d: frameRequiredSpacingMm, layerId: s.layerId })));
+      const collisions = findCrossGroupCollisions(collisionRecords);
+      if (collisions.some((c) => c.layerIdA === frameLayerId || c.layerIdB === frameLayerId)) {
+        return failure(R.FRAME_COLLISION, `The interlocked string collides with the frame at the requested stone size/spacing.`, {
+          diagnostics: { requiredSpacingMm, collisions }
+        });
+      }
+    }
+
+    // Clearance measurement — measure, do not gate. See this method's own doc comment.
+    let minStoneDistanceMm = Infinity;
+    let closestPair = null;
+    for (let a = 0; a < finalStones.length; a++) {
+      for (let b = a + 1; b < finalStones.length; b++) {
+        const dx = finalStones[a].xMm - finalStones[b].xMm;
+        const dy = finalStones[a].yMm - finalStones[b].yMm;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < minStoneDistanceMm) { minStoneDistanceMm = dist; closestPair = [a, b]; }
+      }
+    }
+    if (finalStones.length >= 2 && minStoneDistanceMm < stoneSizeMm - 1e-6) {
+      const [a, b] = closestPair;
+      return failure(R.INTERNAL_CONTRACT_MISMATCH, `The interlocked string ${JSON.stringify(joinedText)}: two stones are ${minStoneDistanceMm.toFixed(6)} mm apart, below the sampler's ${stoneSizeMm} mm minimum separation. Closest pair: (${finalStones[a].xMm}, ${finalStones[a].yMm}) and (${finalStones[b].xMm}, ${finalStones[b].yMm}).`, {
+        diagnostics: { string: joinedText, minStoneDistanceMm, closestPair }
+      });
+    }
+    if (!Number.isFinite(minStoneDistanceMm)) minStoneDistanceMm = null; // < 2 stones
+
+    // --- Build ordinary project layers -------------------------------------------------------
+    const frameLayerObj = isNoFrame ? null : {
+      id: frameLayerId,
+      type: 'path',
+      visible: true,
+      pathName: `${frame.label} Frame`,
+      contours: effectiveFrame.generationNaturalContours.map((polygon) => polygon.map((p) => ({ x: p.xMm, y: p.yMm }))),
+      x: normalizedFrameRect.xMm,
+      y: normalizedFrameRect.yMm,
+      w: normalizedFrameRect.widthMm,
+      h: normalizedFrameRect.heightMm,
+      stoneSize: frameStoneSizeMm,
+      gap: gapMm,
+      color: frameColor,
+      fillMode: frameMode
+    };
+
+    // One text layer. This is the OpenType side of generate()'s own layer builder (heightMode 'raw',
+    // no authoredScale) plus one field the per-letter OpenType path never needs: letterSpacing,
+    // which persists interlockMm so a live render reproduces the overlap.
+    const letterLayerObj = {
+      id: letterLayerId,
+      type: 'text',
+      visible: true,
+      text: joinedText,
+      font: fontId,
+      height: fitHeightMm,
+      heightMode: OPENTYPE_LETTER_HEIGHT_MODE,
+      textMode: DEFAULT_TEXT_MODE,
+      stoneSize: stoneSizeMm,
+      gap: gapMm,
+      color: resolvedColor,
+      letterSpacing: interlockMm,
+      autoFit: false,
+      curveEnabled: false,
+      curveRadiusMm: DEFAULT_CURVE_RADIUS_MM,
+      curveDirection: DEFAULT_CURVE_DIRECTION,
+      curveStartAngleDeg: DEFAULT_CURVE_START_ANGLE_DEG,
+      curveSweepAngleDeg: DEFAULT_CURVE_SWEEP_ANGLE_DEG,
+      curveAlignment: DEFAULT_CURVE_ALIGNMENT,
+      align: 'left',
+      lineSpacing: 1,
+      rotationDeg: 0,
+      x: layerXMm,
+      y: layerYMm
+    };
+
+    const layers = isNoFrame ? [letterLayerObj] : [frameLayerObj, letterLayerObj];
+
+    const measurements = {
+      frameId,
+      layoutId,
+      frameRect: normalizedFrameRect,
+      frameInteriorRect,
+      canvasMm: normalizedCanvasMm,
+      frame: isNoFrame ? null : {
+        id: frameId,
+        label: frame.label,
+        stoneSizeMm: frameStoneSizeMm,
+        stoneCount: frameLayout.stones.length,
+        mode: frameMode
+      },
+      frameHierarchy: isNoFrame ? null : classifyFrameHierarchy(frameStoneSizeMm, stoneSizeMm),
+      slots: layoutResult.slots,
+      // MONO-013: the applied overlap, and the measured (not gated) closest-pair distance in the
+      // emitted mark. minStoneDistanceMm between stoneSizeMm and stoneSizeMm+gapMm is expected.
+      interlockMm,
+      minStoneDistanceMm,
+      letters: [{
+        letter: joinedText,
+        slotIndex: 0,
+        layerId: letterLayerId,
+        requestedScale: null,
+        minimumLegalScale: null,
+        naturalMinimumSpacingMm: null,
+        requiredSpacingMm: null,
+        naturalBoundingBox: naturalBoundingBox.toJSON(),
+        scaledBoundingBox: fittedBox.toJSON(),
+        stoneCount: finalStones.length,
+        fittedHeightMm: fitHeightMm,
+        stemStones: achievedStemStones,
+        xMm: layerXMm,
+        yMm: layerYMm
+      }],
+      frameStoneCount: frameLayout.stones.length,
+      letterStoneCount: finalStones.length,
+      totalStoneCount: frameLayout.stones.length + finalStones.length
+    };
+
+    const diagnostics = {
+      productionSpacingMm: requiredSpacingMm,
+      frameStoneSizeMm,
+      interlockMm,
+      minStoneDistanceMm,
       collisions: { letterCollision: false, frameCollision: false },
       roundTripVerified: true
     };

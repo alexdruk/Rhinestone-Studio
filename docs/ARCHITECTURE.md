@@ -1422,6 +1422,24 @@ below `minChainStones()` — the larger of the 0.70 chain minimum and the readab
 `CHAIN_TOO_THIN`. Its emitted layer carries the fitted `heightMm` as a real geometry input with
 `heightMode:'raw'` and no `authoredScale`; the authored branch is unchanged.
 
+**Interlocked script (MONO-013).** A fifth layout, `MONOGRAM_LAYOUTS.SCRIPT`, treats a connected
+script font as one flowing mark rather than per-letter slots. It is the only range-based layout
+(`MONOGRAM_LAYOUT_LETTER_COUNT_RANGES`, 1–3 letters) and produces a single slot equal to the whole
+frame interior — no slot arithmetic, `minGapMm` ignored, exactly as Single. `MonogramGenerator`
+takes a **separate branch** (`_generateScriptMonogram()`, outline fonts only) that sets
+`letters.join('')` as one string via the font's own advances/kerning plus a negative `interlockMm`
+letter-spacing "overlap", then shrink-fits the whole string against that one slot with the same
+`CHAIN_TOO_THIN` gate as MONO-012. Because the whole mark is one text layer, swashes that cross are
+resolved by the single outline-sampling call's own cross-contour dedup
+(`sampleMultiContourOutlinePoints`, `minSeparationMm = stoneSizeMm`), and the enforced closest-pair
+floor is `stoneSizeMm`, not the per-letter path's `stoneSizeMm + gapMm` — an accepted production
+decision for an interlocked mark (letters are meant to touch); `measurements.minStoneDistanceMm`
+records it but does not gate on it. `interlockMm` is validated to `[-(stoneSizeMm + gapMm), 0]`;
+the negative bound is `-pitchMm` because the emitted `layer.letterSpacing` is otherwise silently
+clamped there by `writeSelectedControlsToLayer()` with no undo entry (READ-006). The
+`#monogramInterlock` "Overlap" slider is shown only for the script layout. See
+`docs/specifications/MONO-013-Interlock.md`.
+
 ---
 
 # Units

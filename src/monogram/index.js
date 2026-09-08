@@ -11,6 +11,7 @@ export {
 export {
   MONOGRAM_LAYOUTS,
   MONOGRAM_LAYOUT_LETTER_COUNTS,
+  MONOGRAM_LAYOUT_LETTER_COUNT_RANGES,
   MONOGRAM_LAYOUT_FAILURE_REASONS,
   computeMonogramLayout
 } from './MonogramLayouts.js';

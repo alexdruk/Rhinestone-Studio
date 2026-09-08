@@ -37,7 +37,7 @@ import { STONE_COLORS } from '../src/renderer/StoneColors.js';
 import { stoneLayoutToSvg } from '../src/export/SvgExporter.js';
 import { FontManager } from '../src/fonts/index.js';
 import { createDefaultFontProviderRegistry } from '../src/text/index.js';
-import { MonogramGenerator, MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS, MONOGRAM_GENERATOR_FAILURE_REASONS, isMonogramEligibleStemWidthRatio, defaultFrameStoneSizeMm } from '../src/monogram/index.js';
+import { MonogramGenerator, MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS, MONOGRAM_LAYOUT_LETTER_COUNT_RANGES, MONOGRAM_GENERATOR_FAILURE_REASONS, isMonogramEligibleStemWidthRatio, defaultFrameStoneSizeMm } from '../src/monogram/index.js';
 import { displayValueToMm, formatLengthDisplay, mmToDisplayValue, unitSuffix } from '../src/units/index.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -144,7 +144,7 @@ function installFakeDom() {
 
 const sandboxFactory = new Function(
   'Lightbox', 'HistoryManager', 'SHAPE_LIBRARY_KINDS', 'el', 'listFrames', 'listStoneSizes', 'findStoneSizeByDiameterMm', 'STONE_COLORS',
-  'MONOGRAM_LAYOUTS', 'MONOGRAM_LAYOUT_LETTER_COUNTS', 'MONOGRAM_GENERATOR_FAILURE_REASONS',
+  'MONOGRAM_LAYOUTS', 'MONOGRAM_LAYOUT_LETTER_COUNTS', 'MONOGRAM_LAYOUT_LETTER_COUNT_RANGES', 'MONOGRAM_GENERATOR_FAILURE_REASONS',
   'fontManager', 'initialProject', 'selectMany', 'syncSelectedControlsFromLayer', 'updateAll', 'updateHistoryUI',
   'monogramGenerator', 'isMonogramEligibleStemWidthRatio', 'defaultFrameStoneSizeMm',
   // Every one of these is referenced only inside OTHER Lightboxes' onOpen/onClose callbacks
@@ -155,7 +155,7 @@ const sandboxFactory = new Function(
   // tools/test-ui-import-autoswitch-regression.mjs's own stub list).
   'relocateFieldGroups', 'updateObjectTemplateDetail', 'updateImageTraceSections',
   'syncShippingFieldsFromState', 'syncSettingsFieldsFromState', 'onLibraryOpen', 'onGalleryOpen',
-  'readLengthField', 'setLengthField', 'mmToDisplayValue', 'unitSuffix',
+  'readLengthField', 'setLengthField', 'mmToDisplayValue', 'unitSuffix', 'formatLengthDisplay',
   `
   ${shapeLayerTypesSrc}
   ${resolveFontProviderIdSrc}
@@ -232,12 +232,12 @@ function buildScenario({ project, monogramGenerator, fontManager = makeFakeFontM
   function setLengthField(id, mm) { el(id).value = formatLengthDisplay(mm, resolvedProject.units); }
   const sandbox = sandboxFactory(
     Lightbox, HistoryManager, SHAPE_LIBRARY_KINDS, el, listFrames, listStoneSizes, findStoneSizeByDiameterMm, STONE_COLORS,
-    MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS, MONOGRAM_GENERATOR_FAILURE_REASONS,
+    MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS, MONOGRAM_LAYOUT_LETTER_COUNT_RANGES, MONOGRAM_GENERATOR_FAILURE_REASONS,
     fontManager, resolvedProject,
     selectMany, () => {}, () => {}, () => {},
     monogramGenerator, isMonogramEligibleStemWidthRatio, defaultFrameStoneSizeMm,
     () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {},
-    readLengthField, setLengthField, mmToDisplayValue, unitSuffix
+    readLengthField, setLengthField, mmToDisplayValue, unitSuffix, formatLengthDisplay
   );
   return sandbox;
 }
@@ -291,7 +291,7 @@ await test('2a. Frame options are populated from the real FrameLibrary.listFrame
   }
 });
 
-await test('2b. Layout options cover exactly the four MONOGRAM_LAYOUTS ids', () => {
+await test('2b. Layout options cover every MONOGRAM_LAYOUTS id', () => {
   const s = buildScenario({ monogramGenerator: makeStubMonogramGenerator(fakeSuccessResult([])) });
   s.populateMonogramLayoutOptions();
   const html = el('monogramLayout').innerHTML;

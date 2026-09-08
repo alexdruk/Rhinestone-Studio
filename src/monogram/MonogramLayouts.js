@@ -11,6 +11,17 @@
  * same plain {xMm,yMm,widthMm,heightMm} box shape FrameLibrary.js's own resolve/compute functions
  * already accept or return (e.g. computeFrameFitRect()'s result) — that keeps this module usable
  * with FrameLibrary's output without importing FrameLibrary itself.
+ *
+ * MONO-013 (the 'script' layout): every other layout here divides the frame interior into disjoint
+ * per-letter rectangular slots and hands MonogramGenerator a mandatory inter-slot gap so two
+ * adjacent letters can never touch. For a connected script font that is the wrong model — the
+ * Etsy-style monograms this product chases are one flowing mark whose swashes deliberately cross.
+ * The 'script' layout therefore performs no slot arithmetic at all: it returns a single slot equal
+ * to the whole frame interior, and MonogramGenerator sets the letters as one string via the font's
+ * own advances/kerning plus a negative letter-spacing "overlap" control, deduped in a single
+ * sampling call (see MonogramGenerator's script branch and GeometryEngine._buildLineContours()).
+ * Because there is only one slot there is no inter-slot gap to floor, so `minGapMm` is ignored,
+ * exactly as the Single layout already ignores it.
  */
 
 // Layout identifiers. A future UI/generator branches on these values, never on label text.
@@ -18,16 +29,31 @@ export const MONOGRAM_LAYOUTS = Object.freeze({
   SINGLE: 'single',
   TWO_LETTER: 'two-letter',
   TRADITIONAL_THREE: 'traditional-three',
-  EQUAL_THREE: 'equal-three'
+  EQUAL_THREE: 'equal-three',
+  // MONO-013: connected-script monogram — one interlocked mark, not per-letter slots. See the
+  // module doc comment above.
+  SCRIPT: 'script'
 });
 
 // The exact letter count each layout supports. computeMonogramLayout() rejects any other count
 // for a given layoutId as MONOGRAM_LAYOUT_FAILURE_REASONS.UNSUPPORTED_LETTER_COUNT.
+// MONO-013: the 'script' layout deliberately does NOT appear here — it accepts a RANGE of letter
+// counts, expressed in MONOGRAM_LAYOUT_LETTER_COUNT_RANGES below, which a single exact integer
+// cannot represent. computeMonogramLayout() consults the range map first and falls through to this
+// exact-count map for every other layout.
 export const MONOGRAM_LAYOUT_LETTER_COUNTS = Object.freeze({
   [MONOGRAM_LAYOUTS.SINGLE]: 1,
   [MONOGRAM_LAYOUTS.TWO_LETTER]: 2,
   [MONOGRAM_LAYOUTS.TRADITIONAL_THREE]: 3,
   [MONOGRAM_LAYOUTS.EQUAL_THREE]: 3
+});
+
+// MONO-013: layouts that accept an inclusive [min, max] range of letter counts rather than one
+// exact count. Only the 'script' layout is range-based (one interlocked mark reads fine at 1, 2 or
+// 3 letters). computeMonogramLayout() rejects an out-of-range count as
+// MONOGRAM_LAYOUT_FAILURE_REASONS.UNSUPPORTED_LETTER_COUNT, exactly like an exact-count mismatch.
+export const MONOGRAM_LAYOUT_LETTER_COUNT_RANGES = Object.freeze({
+  [MONOGRAM_LAYOUTS.SCRIPT]: Object.freeze({ min: 1, max: 3 })
 });
 
 // Reason codes computeMonogramLayout() returns on failure -- a caller branches on these, not on
@@ -65,6 +91,11 @@ export const MONOGRAM_LAYOUT_FAILURE_REASONS = Object.freeze({
 // meaningfully different baseline.
 
 const SINGLE_HEIGHT_RATIO = 1;
+
+// MONO-013: the 'script' layout's single slot fills the frame interior top to bottom, same as
+// Single. Named separately only so a future tweak to one layout's fill fraction does not silently
+// move the other.
+const SCRIPT_HEIGHT_RATIO = 1;
 
 const TWO_LETTER_WIDTH_RATIO = 0.46;
 const TWO_LETTER_HEIGHT_RATIO = 0.92;
@@ -206,6 +237,20 @@ function buildTraditionalThreeSlots(frameInteriorRect, minGapMm) {
   return rects.map((rect, i) => buildSlot(i, rect, heightRatios[i], frameInteriorRect, drawOrders[i]));
 }
 
+// MONO-013: one slot equal to the whole frame interior. No gap arithmetic, no proportional shrink,
+// no minGapMm (there is only one slot). MonogramGenerator's script branch does the interlocked-
+// string fitting against this single targetRect. Signature matches the other builders (frameInterior
+// then minGapMm) purely so LAYOUT_BUILDERS can call them all identically; minGapMm is unused.
+function buildScriptSlots(frameInteriorRect) {
+  const rect = {
+    xMm: frameInteriorRect.xMm,
+    yMm: frameInteriorRect.yMm,
+    widthMm: frameInteriorRect.widthMm,
+    heightMm: frameInteriorRect.heightMm
+  };
+  return [buildSlot(0, rect, SCRIPT_HEIGHT_RATIO, frameInteriorRect, 0)];
+}
+
 function buildEqualThreeSlots(frameInteriorRect, minGapMm) {
   const widthRatios = [EQUAL_THREE_WIDTH_RATIO, EQUAL_THREE_WIDTH_RATIO, EQUAL_THREE_WIDTH_RATIO];
   const heightRatios = [EQUAL_THREE_HEIGHT_RATIO, EQUAL_THREE_HEIGHT_RATIO, EQUAL_THREE_HEIGHT_RATIO];
@@ -218,7 +263,8 @@ const LAYOUT_BUILDERS = Object.freeze({
   [MONOGRAM_LAYOUTS.SINGLE]: buildSingleSlots,
   [MONOGRAM_LAYOUTS.TWO_LETTER]: buildTwoLetterSlots,
   [MONOGRAM_LAYOUTS.TRADITIONAL_THREE]: buildTraditionalThreeSlots,
-  [MONOGRAM_LAYOUTS.EQUAL_THREE]: buildEqualThreeSlots
+  [MONOGRAM_LAYOUTS.EQUAL_THREE]: buildEqualThreeSlots,
+  [MONOGRAM_LAYOUTS.SCRIPT]: buildScriptSlots
 });
 
 /**
@@ -255,7 +301,12 @@ export function computeMonogramLayout(request) {
   const layoutIdForResult = typeof layoutId === 'string' ? layoutId : null;
   const letterCountForResult = typeof letterCount === 'number' ? letterCount : null;
 
-  if (!Object.prototype.hasOwnProperty.call(MONOGRAM_LAYOUT_LETTER_COUNTS, layoutId)) {
+  // MONO-013: a layout is known if it has either an exact letter count OR a letter-count range.
+  const hasExactLetterCount = Object.prototype.hasOwnProperty.call(MONOGRAM_LAYOUT_LETTER_COUNTS, layoutId);
+  const letterCountRange = Object.prototype.hasOwnProperty.call(MONOGRAM_LAYOUT_LETTER_COUNT_RANGES, layoutId)
+    ? MONOGRAM_LAYOUT_LETTER_COUNT_RANGES[layoutId]
+    : null;
+  if (!hasExactLetterCount && !letterCountRange) {
     return failure(
       MONOGRAM_LAYOUT_FAILURE_REASONS.UNKNOWN_LAYOUT,
       `Unknown monogram layout id ${JSON.stringify(layoutId)}.`,
@@ -282,14 +333,25 @@ export function computeMonogramLayout(request) {
     );
   }
 
-  const requiredLetterCount = MONOGRAM_LAYOUT_LETTER_COUNTS[layoutId];
-  if (letterCount !== requiredLetterCount) {
-    return failure(
-      MONOGRAM_LAYOUT_FAILURE_REASONS.UNSUPPORTED_LETTER_COUNT,
-      `Layout ${JSON.stringify(layoutId)} requires exactly ${requiredLetterCount} letter(s), got ${letterCount}.`,
-      layoutIdForResult,
-      letterCountForResult
-    );
+  if (letterCountRange) {
+    if (letterCount < letterCountRange.min || letterCount > letterCountRange.max) {
+      return failure(
+        MONOGRAM_LAYOUT_FAILURE_REASONS.UNSUPPORTED_LETTER_COUNT,
+        `Layout ${JSON.stringify(layoutId)} supports ${letterCountRange.min}–${letterCountRange.max} letter(s), got ${letterCount}.`,
+        layoutIdForResult,
+        letterCountForResult
+      );
+    }
+  } else {
+    const requiredLetterCount = MONOGRAM_LAYOUT_LETTER_COUNTS[layoutId];
+    if (letterCount !== requiredLetterCount) {
+      return failure(
+        MONOGRAM_LAYOUT_FAILURE_REASONS.UNSUPPORTED_LETTER_COUNT,
+        `Layout ${JSON.stringify(layoutId)} requires exactly ${requiredLetterCount} letter(s), got ${letterCount}.`,
+        layoutIdForResult,
+        letterCountForResult
+      );
+    }
   }
 
   const normalizedFrameInteriorRect = {
