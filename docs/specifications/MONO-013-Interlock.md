@@ -163,6 +163,13 @@ rejected with `INVALID_FONT` — the script layout is outline-only. The emitted 
 existing deterministic convention `monogram-${frameId}-${layoutId}-letter-0`; the duplicate-id
 defect in `docs/BACKLOG.md` is its own milestone and is not touched here.
 
+`_generateScriptMonogram()` performs **no internal round-trip regeneration** — same decision, and
+same reasoning, as MONO-012's OpenType branch (`src/monogram/MonogramGenerator.js:696-702`): the
+fitted layout is already a deterministic `generateTextLayout()` call with the persisted fields, so a
+re-call only re-derives the same stones. The one field the OpenType path did not persist before
+this milestone is `letterSpacing`; `tools/test-mono-013-interlock.mjs` owns the persisted-field
+round trip that exercises it, with a named negative control that perturbs `layer.letterSpacing`.
+
 **Out of scope, deliberately:** middle-letter emphasis (the traditional larger centre initial). A
 script mark is one continuous stroke system at one size; a per-letter emphasis axis would
 reintroduce the per-letter placement this layout exists to remove. If it is ever wanted it is a

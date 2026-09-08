@@ -304,49 +304,64 @@ await test('one letter and two letters / script -> ok (range is 1-3)', async () 
 });
 
 // ---------------------------------------------------------------------------
-// 7. Round-trip: a live render of the emitted layer reproduces the generator's fitted geometry
-//    (stone count + bbox + centre), the same check MONO-012 owns for its OpenType letters.
+// 7. Persisted-field round trip -- THIS TEST is the owner of the check (there is no internal
+//    round-trip in _generateScriptMonogram(); see MonogramGenerator.js:696-702 / the MONO-012
+//    precedent it points at). A live render of the emitted layer must reproduce the generator's
+//    fitted geometry (stone count + bbox + centre) -- built ONLY from the fields on the persisted
+//    layer object, mapped the way app.js:793 maps them. letterSpacing is the field that can
+//    actually be wrong: the OpenType path never persisted it before MONO-013.
 // ---------------------------------------------------------------------------
 
 const TEXT_MODE_TO_ENGINE_MODE = { stroke: 'outline', fill: 'fill', staggered: 'staggered', radial: 'radial', contour: 'contour' };
 function engineParamsFromEmittedLayer(layer) {
+  // Mirrors app.js:793's layer -> engine mapping exactly:
+  //   letterSpacingMm: authored ? 0 : (layer.letterSpacing ?? 0)
+  // The script layout only ever emits OpenType (non-authored) layers, so `authored` is false and
+  // the persisted layer.letterSpacing is what reaches the engine.
+  const authored = false;
   return {
     text: layer.text, fontId: layer.font, providerId: 'opentype', layerId: layer.id,
     heightMm: layer.height, stoneSizeMm: layer.stoneSize, gapMm: layer.gap,
-    letterSpacingMm: layer.letterSpacing ?? 0,
+    letterSpacingMm: authored ? 0 : (layer.letterSpacing ?? 0),
     mode: TEXT_MODE_TO_ENGINE_MODE[layer.textMode] || 'outline',
     color: layer.color, curveEnabled: false
   };
 }
 
-await test('a live render of the emitted script layer reproduces the generator\'s fitted geometry (stone count + bbox + centre), with a negative control', async () => {
+await test('persisted-field round trip: a live render built from the emitted layer object reproduces the generator\'s fitted geometry, with a named negative control on layer.letterSpacing', async () => {
   const { geometryEngine, generator } = createRealGenerator();
   const result = await generator.generate(baseRequest({ frameRect: FRAME_150, interlockMm: -2.3 }));
   assert.equal(result.ok, true, result.message);
 
   const layer = result.layers.find((l) => l.type === 'text');
   const m = result.measurements.letters[0];
+
+  // Every generateTextLayout() argument comes from the persisted layer object, not a generator local.
+  assert.equal(layer.letterSpacing, -2.3, 'the emitted layer persists the interlock as layer.letterSpacing');
   const params = engineParamsFromEmittedLayer(layer);
   assert.equal(params.mode, 'outline', 'stroke textMode maps to outline (mapping, not literal)');
-  assert.equal(params.letterSpacingMm, -2.3, 'the emitted letterSpacing is forwarded to the engine');
+  assert.equal(params.letterSpacingMm, -2.3, 'app.js:793 mapping forwards layer.letterSpacing to the engine');
 
   const regen = await geometryEngine.generateTextLayout(params);
   const box = regen.getBoundingBox();
   const JSON_EPS = 1e-6;
-  assert.equal(regen.stones.length, m.stoneCount, 'stone count matches the fitted layout');
+  assert.equal(regen.stones.length, m.stoneCount, 'stone count matches measurements.letters[0]');
   assert.ok(Math.abs(box.widthMm - m.scaledBoundingBox.widthMm) < JSON_EPS, 'bbox width matches measurements');
   assert.ok(Math.abs(box.heightMm - m.scaledBoundingBox.heightMm) < JSON_EPS, 'bbox height matches measurements');
   assert.ok(Math.abs(box.minXmm - m.scaledBoundingBox.minXmm) < JSON_EPS, 'bbox minX (=> centre) matches measurements');
   assert.ok(Math.abs(box.minYmm - m.scaledBoundingBox.minYmm) < JSON_EPS, 'bbox minY (=> centre) matches measurements');
 
-  // Negative control: regenerating WITHOUT the overlap (letterSpacingMm 0) must diverge, or the
-  // round-trip is not actually exercising the interlock.
-  const noOverlap = await geometryEngine.generateTextLayout({ ...params, letterSpacingMm: 0 });
-  const noOverlapBox = noOverlap.getBoundingBox();
-  assert.ok(
-    noOverlap.stones.length !== regen.stones.length || Math.abs(noOverlapBox.widthMm - box.widthMm) > JSON_EPS,
-    'regenerating without the overlap must NOT reproduce the fitted geometry'
-  );
+  // Negative control: perturb ONE persisted field -- layer.letterSpacing set to 0 while the real
+  // interlock is -2.3 -- and require the comparison to FAIL. Two sides that can differ, and do.
+  const perturbed = engineParamsFromEmittedLayer({ ...layer, letterSpacing: 0 });
+  assert.equal(perturbed.letterSpacingMm, 0, 'control: the perturbed params carry letterSpacingMm 0');
+  const wrong = await geometryEngine.generateTextLayout(perturbed);
+  const wrongBox = wrong.getBoundingBox();
+  console.log(`    round trip:  stones ${regen.stones.length}, bboxW ${box.widthMm.toFixed(6)} mm  (letterSpacing -2.3)`);
+  console.log(`    control:     stones ${wrong.stones.length}, bboxW ${wrongBox.widthMm.toFixed(6)} mm  (letterSpacing 0)`);
+  const diverges = wrong.stones.length !== regen.stones.length || Math.abs(wrongBox.widthMm - box.widthMm) > JSON_EPS;
+  assert.ok(diverges, 'control: regenerating with layer.letterSpacing perturbed to 0 must NOT reproduce the fitted geometry');
+  assert.notEqual(wrong.stones.length, m.stoneCount, 'control: the perturbed stone count must not match measurements either');
 });
 
 // ---------------------------------------------------------------------------

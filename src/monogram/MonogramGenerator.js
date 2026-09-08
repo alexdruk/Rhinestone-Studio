@@ -1084,6 +1084,9 @@ export class MonogramGenerator {
    * gated. Only a value BELOW `stoneSizeMm - 1e-6` (which the sampler is supposed to make
    * impossible) is a hard failure.
    *
+   * No internal round-trip regeneration (see the comment at the fit loop's end and the MONO-012
+   * precedent it cites); tools/test-mono-013-interlock.mjs owns the persisted-field round trip.
+   *
    * @param {object} ctx pre-resolved context from generate() — see the call site.
    * @returns {Promise<{ok:boolean, reason?:string, message?:string, layers:object[]|null, measurements:object|null, diagnostics:object|null}>}
    */
@@ -1222,26 +1225,15 @@ export class MonogramGenerator {
       });
     }
 
-    // Round-trip contract check (adapted from the authored branch's step-7 check to the one call):
-    // regenerate the string through the normal generateTextLayout() path with the exact persisted
-    // fields and confirm it reproduces the fitted geometry. Deterministic, so a mismatch is a real
-    // implementation bug, reported as INTERNAL_CONTRACT_MISMATCH.
-    let roundTripLayout;
-    try {
-      roundTripLayout = await this._engine.generateTextLayout({
-        text: joinedText, fontId, providerId, layerId: letterLayerId,
-        heightMm: fitHeightMm, stoneSizeMm, gapMm, mode: 'outline',
-        color: resolvedColor, curveEnabled: false, letterSpacingMm: interlockMm
-      });
-    } catch (error) {
-      return failure(R.INTERNAL_CONTRACT_MISMATCH, `The interlocked string ${JSON.stringify(joinedText)}: regenerating through the normal GeometryEngine.generateTextLayout() path failed: ${error.message}`);
-    }
-    const mismatch = describeRoundTripMismatch(fittedLayout, roundTripLayout);
-    if (mismatch) {
-      return failure(R.INTERNAL_CONTRACT_MISMATCH, `The interlocked string ${JSON.stringify(joinedText)}: regenerating through the normal GeometryEngine.generateTextLayout() path did not reproduce the fitted geometry (${mismatch}).`, {
-        diagnostics: { string: joinedText }
-      });
-    }
+    // No internal round-trip regeneration here -- same decision, and same reasoning, as MONO-012's
+    // OpenType per-letter branch (MonogramGenerator.js:696-702): `fittedLayout` above IS already a
+    // plain deterministic generateTextLayout() call whose every persisted field (heightMm,
+    // stoneSize, gap, textMode 'stroke' -> outline, and MONO-013's letterSpacing = interlockMm) is
+    // exactly what a live render feeds back in, so a second call would only re-derive the same
+    // stones -- a check comparing a deterministic function's output with itself. The one persisted
+    // field the OpenType path did not carry before MONO-013 is `letterSpacing`;
+    // tools/test-mono-013-interlock.mjs owns the persisted-field round trip that actually exercises
+    // it, with a named negative control that perturbs `layer.letterSpacing`.
 
     // Place the mark: translate the fitted stones onto the slot's own centre (the real absolute
     // positions a live renderer produces), and compute the persistable layer x/y under the real
@@ -1412,9 +1404,7 @@ export class MonogramGenerator {
       productionSpacingMm: requiredSpacingMm,
       frameStoneSizeMm,
       interlockMm,
-      minStoneDistanceMm,
-      collisions: { letterCollision: false, frameCollision: false },
-      roundTripVerified: true
+      minStoneDistanceMm
     };
 
     return { ok: true, layers, measurements, diagnostics };
