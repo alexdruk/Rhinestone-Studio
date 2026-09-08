@@ -1368,9 +1368,27 @@ auto-fit would overshoot the real usable area; Plate keeps the generic-midpoint 
 **Independent frame and letter stone size/color.** The Monogram Lightbox has two separate stone-spec
 control groups: the shared `#monogramStoneSize`/`#monogramColor` fields apply to the letters, and a
 toggle-gated `#monogramFrameStoneToggle` reveals `#monogramFrameStoneSize`/`#monogramFrameColor` for
-the frame specifically. Leaving the toggle off omits `frameOptions.stoneSizeMm`/`color` entirely, so
-the generator's own fallback (frame inherits the letters' spec) applies unchanged — toggling off is
-byte-identical to the pre-feature behavior.
+the frame specifically. With the toggle checked, those fields drive the frame exactly as set (the
+only path that can make frame and letters equal-sized, and only if the user matches them by hand).
+With it unchecked, `frameOptions.color` is still omitted (the generator inherits the letters'
+color), but `frameOptions.stoneSizeMm` is now set by MONO-014's automatic hierarchy rather than left
+unset.
+
+**Frame hierarchy and "No frame" (MONO-014).** A frame is either clearly subordinate to the letters
+or clearly dominant over them — never equal weight, which reads as two elements competing.
+`src/monogram/FrameHierarchy.js`'s `defaultFrameStoneSizeMm(letterStoneSizeMm)` (pure catalog
+arithmetic) returns the next larger `listStoneSizes()` diameter; `app.js`'s request builder uses it
+for `frameOptions.stoneSizeMm` whenever `#monogramFrameStoneToggle` is unchecked, and
+`generateMonogramWithFrameAutoShrink()` unconditionally filters the letters' own diameter out of its
+retry candidates so auto-shrink can never land there either (with SS6 letters a colliding dominant
+frame then has no legal smaller candidate and fails with an actionable `FRAME_COLLISION` message —
+larger frame, smaller stones, or "No frame"). `FrameLibrary` gains a real `frameId: 'none'` catalog
+entry (null contours, `hollow: false`) so the picker needs no special case;
+`MonogramGenerator.generate()` branches on it before every FrameLibrary geometry call, emitting no
+frame layer and using `frameRect` as the letter-layout region directly.
+`measurements.frame`/`measurements.frameHierarchy` (`'subordinate' | 'dominant' | 'equal' | null`)
+record the outcome. Selecting a non-authored (OpenType script) font defaults `#monogramFrame` to
+`none` until the user picks a frame themselves that session; authored fonts default to `circle`.
 
 **"Never auto-corrects" doctrine.** `MonogramGenerator.generate()`'s own doc comment states it
 directly: *"Never auto-corrects: a letter/frame that does not fit is a structured failure, not a

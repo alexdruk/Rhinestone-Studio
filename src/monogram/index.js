@@ -15,6 +15,8 @@ export {
   computeMonogramLayout
 } from './MonogramLayouts.js';
 
+export { defaultFrameStoneSizeMm } from './FrameHierarchy.js';
+
 export {
   SINGLE_CHAIN_STEM_RATIO,
   SINGLE_CHAIN_MIN_RATIO,
