@@ -590,22 +590,27 @@ function ownedMonogramLayers(setId, { frameEdits = {}, letterEdits = {} } = {}) 
   return [frame, letter];
 }
 
-await test('MONO-020 negative control: pre-existing layers with NO monogramSetId are never removed by Generate', async () => {
+await test('MONO-020 negative control (pre-MONO-020 cohort): pre-existing monogram layers with MonogramGenerator ids a prefix-matcher WOULD catch, but no monogramSetId, are never removed by Generate', async () => {
+  // Exactly how a .rhs file saved before MONO-020 looks: MonogramGenerator's deterministic
+  // `monogram-<frame>-<layout>-...` ids, and NO monogramSetId field. A prefix-matching
+  // implementation (the one MONO-020 §5 explicitly rejects) would delete both of these. The
+  // classification requires a non-empty string monogramSetId, so it never touches them.
   const preExisting = [
-    { id: 'initial-layer', type: 'text' },
-    { id: 'circle-100', type: 'circle', cx: 10, cy: 10, r: 5 },
-    { id: 'rectangle-200', type: 'rectangle', x: 0, y: 0, w: 20, h: 20 }
+    { id: 'initial-layer', type: 'text', text: 'x', stoneSize: 2.8, gap: 0.3 },
+    { id: 'monogram-circle-single-frame', type: 'path', visible: true, pathName: 'Circle Frame', contours: [[{ x: 0, y: 0 }, { x: 80, y: 0 }, { x: 80, y: 80 }, { x: 0, y: 80 }]], x: 60, y: 60, w: 80, h: 80, stoneSize: 2.8, gap: 0.3, color: 'gold', fillMode: 'fill' },
+    { id: 'monogram-circle-single-letter-0', type: 'text', visible: true, text: 'A', font: 'rs-block', height: 25, textMode: 'stroke', stoneSize: 2.8, gap: 0.3, color: 'gold', authoredScale: 1.2, align: 'left', lineSpacing: 1, rotationDeg: 0, x: 0, y: 0 }
   ];
   const project = { canvas: { width: 200, height: 200 }, layers: preExisting.map((l) => structuredClone(l)) };
-  const preCount = project.layers.length;
+  const preIds = project.layers.map((l) => l.id);
   const s = buildScenario({ project, monogramGenerator: makeStubMonogramGenerator(() => fakeSuccessResult(fakeValidGeneratedLayers())) });
   setMonogramControls();
+  console.log(`  cohort control: pre-generation  count = ${project.layers.length}, ids = ${JSON.stringify(preIds)}`);
   await s.generateMonogram();
-  const postCount = s.getProject().layers.length;
-  console.log(`  negative control: pre-existing layer count = ${preCount}, post-generation layer count = ${postCount}`);
-  assert.equal(postCount, preCount + 2, 'the 2 generated layers are appended; nothing pre-existing is removed');
-  for (const l of preExisting) {
-    assert.ok(s.getProject().layers.some((x) => x.id === l.id), `pre-existing layer "${l.id}" must survive Generate`);
+  const postIds = s.getProject().layers.map((l) => l.id);
+  console.log(`  cohort control: post-generation count = ${postIds.length}, ids = ${JSON.stringify(postIds)}`);
+  assert.equal(postIds.length, preExisting.length + 2, 'the 2 generated layers are appended; nothing pre-existing is removed');
+  for (const id of preIds) {
+    assert.ok(postIds.includes(id), `pre-MONO-020 layer "${id}" (no monogramSetId) must survive Generate`);
   }
 });
 
@@ -710,6 +715,77 @@ await test('MONO-020 x MONO-019: regenerate, regenerate, undo, regenerate -> the
   const validated = validateProject(finalProject);
   assert.ok(validated && Array.isArray(validated.layers), 'validateProject() must accept the resulting project');
   assert.equal(new Set(ids).size, ids.length, 'every layer id is unique -- no MONO-019 collision across regenerations');
+});
+
+await test('MONO-020 released-set id collision: two sets with the SAME frameId+layoutId coexist only via the release path; MONO-019\'s per-generation counter keeps their suffixes unique even when Date.now() collides; the third generate emits BOTH status clauses', async () => {
+  const project = { canvas: { width: 200, height: 200 }, layers: [{ id: 'initial-layer', type: 'text', text: 'x', stoneSize: 2.8, gap: 0.3 }] };
+  // Same frame + layout for every generation (setMonogramControls() -> circle / single).
+  const s = buildScenario({ project, monogramGenerator: makeStubMonogramGenerator(() => fakeSuccessResult(fakeValidGeneratedLayers())) });
+  setMonogramControls();
+
+  // ---- Generate set 1 ----
+  await s.generateMonogram();
+  const set1Frame = s.getProject().layers.find((l) => l.type === 'path');
+  const set1Id = set1Frame.monogramSetId;
+
+  // ---- Edit set 1's frame in Design (Stamp tool writes stampedStones) ----
+  set1Frame.stampedStones = [{ xMm: 5, yMm: 5, sizeMm: 2.8 }];
+
+  // ---- Generate set 2 back-to-back, no artificial delay (set 1 released -> set 2 added alongside) ----
+  await s.generateMonogram();
+  assert.equal(s.getProject().layers.filter((l) => l.type === 'path').length, 2, 'set 1 kept (released), set 2 added alongside -- two sets with the same frame+layout now coexist');
+  assert.match(el('status').textContent, /^Kept your edited monogram and added a new one \(2 layers\)\.$/, 'set-2 generate: only the release clause (nothing was replaceable)');
+
+  // ---- Generate set 3 (set 2 replaceable -> removed; set 1 still released -> kept) ----
+  await s.generateMonogram();
+
+  const finalLayers = s.getProject().layers;
+  const finalIds = finalLayers.map((l) => l.id);
+  const survivingSetIds = [...new Set(finalLayers.map((l) => l.monogramSetId).filter(Boolean))];
+  const tsSegOf = (setId) => setId.split('-')[0];
+  const counterSegOf = (setId) => setId.split('-')[1];
+
+  console.log('  released-collision final id list  :', JSON.stringify(finalIds));
+  console.log('  released-collision surviving setIds:', JSON.stringify(survivingSetIds));
+  console.log(`  released-collision Date.now() segs : ${JSON.stringify(survivingSetIds.map(tsSegOf))}  (collided: ${tsSegOf(survivingSetIds[0]) === tsSegOf(survivingSetIds[1])})`);
+  console.log(`  released-collision counter segs    : ${JSON.stringify(survivingSetIds.map(counterSegOf))}`);
+
+  assert.equal(survivingSetIds.length, 2, 'exactly two monogram sets survive: the released set 1 and the new set 3');
+  assert.notEqual(survivingSetIds[0], survivingSetIds[1], 'the two surviving monogramSetId values differ');
+  assert.ok(survivingSetIds.includes(set1Id), 'the released set 1 kept its original monogramSetId (never cleared on edit)');
+  if (tsSegOf(survivingSetIds[0]) === tsSegOf(survivingSetIds[1])) {
+    assert.notEqual(counterSegOf(survivingSetIds[0]), counterSegOf(survivingSetIds[1]),
+      'Date.now() segments collided -> the MONO-019 per-generation counter is the ONLY thing keeping the two suffixes (and every layer id) unique, and it did');
+  }
+  assert.equal(new Set(finalIds).size, finalIds.length, 'every layer id in the final project is unique');
+
+  // ---- both status clauses, single message, deterministic order (Replaced before Kept) ----
+  assert.equal(el('status').textContent,
+    'Replaced the previous monogram (2 layers). Kept your edited monogram and added a new one (2 layers).',
+    'the third generate replaced set 2 AND kept the released set 1 -- both clauses in one message');
+
+  // ---- real validateProject() accepts the final released+regenerated project ----
+  const { validateProject } = await extractProjectFunctions();
+  const validated = validateProject({ version: 2, units: 'mm', canvas: { width: 200, height: 200 }, layers: structuredClone(finalLayers) });
+  assert.ok(validated && Array.isArray(validated.layers), 'validateProject() accepts the final project');
+});
+
+await test('MONO-020 monogramSetId persistence: a project whose layers carry monogramSetId passes the real validateProject() (S-200 permissive-field pass-through) and round-trips through JSON.stringify/parse unchanged', async () => {
+  const { validateProject } = await extractProjectFunctions();
+  const project = {
+    version: 2, units: 'mm', name: 'setId persistence', canvas: { width: 200, height: 200 },
+    layers: [
+      { id: 'initial-layer', type: 'text', text: 'x', stoneSize: 2.8, gap: 0.3 },
+      ...ownedMonogramLayers('persist-0')
+    ]
+  };
+  const validated = validateProject(structuredClone(project));
+  assert.ok(validated && Array.isArray(validated.layers), 'validateProject() accepts a project carrying monogramSetId');
+  for (const l of validated.layers.slice(1)) {
+    assert.equal(l.monogramSetId, 'persist-0', 'validateProject() preserves monogramSetId -- it is not stripped by the normalization gate');
+  }
+  const roundTripped = JSON.parse(JSON.stringify(project));
+  assert.deepEqual(roundTripped, project, 'the whole project survives a Save/Open (JSON stringify/parse) round trip byte-for-byte, monogramSetId included');
 });
 
 // =========================================================================================

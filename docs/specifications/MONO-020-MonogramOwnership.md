@@ -50,6 +50,21 @@ untouched letters and leave an orphan frame.
 Every `monogramSetId`-bearing set is considered, not just the most recently generated one, so a
 project that somehow holds two replaceable monograms converges to one on the next Generate.
 
+### Release is the only way two monogram sets coexist — and where MONO-019's suffix is load-bearing
+
+After MONO-020 the replace path always leaves exactly one monogram standing, so two sets can be in
+one project **only** because at least one of them was released (hand-edited in Design). Those two
+sets can have the identical `frameId` + `layoutId` — the user generates, edits, generates again
+with the same settings. `MonogramGenerator.generate()` gives both the identical base ids
+(`monogram-<frame>-<layout>-…`), so the **only** thing separating the released set's layer ids from
+the new set's is MONO-019's per-generation suffix — and, because a real user does this back to
+back, the suffix's `Date.now().toString(36)` segment is frequently identical between the two
+generations. The `monogramGenerationCounter` segment is then the sole guarantor of uniqueness for
+every layer id in the project (and for `validateProject()`'s `Duplicate layer id` gate). MONO-019's
+`counter % 36³` is not a nicety here; the release path is the case that makes it load-bearing.
+`tools/test-mono-006-monogram-ui.mjs`'s "released-set id collision" test forces exactly this — a
+`Date.now()` collision with the counter carrying uniqueness — and prints both segments.
+
 ### The type-agnostic predicate
 
 `hasDesignAuthoredEdits(layer)` (near `assignInsertionLayerIds()` in `app.js`) returns `true` if any
@@ -159,11 +174,24 @@ marker; old ones do not; that is the whole rule.
   (layer count unchanged, set 1 ids gone, set 2 ids present, history grew by exactly one); one undo
   restores set 1 via `assert.deepEqual` on the **full layer objects**; redo returns to set 2. Both
   Generate calls' `updateAll` argument lists are printed and asserted `[true, true]`.
-- **Negative control:** a project whose pre-existing layers carry no `monogramSetId` — pre- and
-  post-Generate layer counts printed, nothing pre-existing removed.
+- **Negative control (pre-MONO-020 cohort):** pre-existing layers with `MonogramGenerator`'s
+  deterministic `monogram-circle-single-frame` / `monogram-circle-single-letter-0` ids — exactly
+  what a `.rhs` saved before this milestone holds — and **no** `monogramSetId`. A prefix-matching
+  implementation (the one §5 rejects) would delete both; the classification never touches them.
+  Pre- and post-Generate counts and full id lists printed.
 - **Released set:** three separate cases — `stampedStones`, `eraseDaubs`, `naturalBoundingBoxMm` —
   each asserting the owned set survives, the new set is added alongside, total count grows, and the
   status line reports the release.
+- **Released-set id collision:** Generate → put `stampedStones` on set 1's frame → Generate (set 1
+  released, set 2 added) → Generate (set 2 replaced, set 1 kept). All three generations use the same
+  `frameId`+`layoutId`. Asserts and prints: the final id list; the two surviving `monogramSetId`
+  values and that they differ; both suffixes' `Date.now()` segments (which collide, back to back)
+  and their counter segments (which do not); that the third generate's status line carries **both**
+  clauses in one message, deterministic order (`Replaced …` then `Kept …`); and that
+  `validateProject()` accepts the final project.
+- **`monogramSetId` persistence:** a project carrying `monogramSetId` passes the real
+  `validateProject()` (which preserves the field — S-200 permissive pass-through) and round-trips
+  through `JSON.stringify`/`parse` byte-for-byte (`deepEqual` on the whole project).
 - **Partial edit:** frame edited, letters not — the whole set (including the untouched letters)
   survives. Pins set-level ownership.
 - **`duplicateLayer()`:** source assertion that it deletes `copy.monogramSetId` (no test in the
@@ -172,9 +200,12 @@ marker; old ones do not; that is the whole rule.
   that a `monogramSetId`-less layer survives the next Generate.
 - **MONO-020 × MONO-019:** regenerate, regenerate, undo, regenerate, then run the real
   `validateProject()` over the result — asserts unique ids and a valid project. The final id list
-  is printed.
+  is printed. (Uniqueness here is guaranteed by the replace path leaving one set; the
+  released-set collision test above is the one that stresses the counter.)
 
 `tools/test-mono-019-layer-ids.mjs` — `extractAssignInsertionLayerIds()` unwraps the new
-`{ layers, suffix }` return so its id-focused call sites are unchanged.
+`{ layers, suffix }` return so its id-focused call sites are unchanged; `.raw` exposes the
+un-unwrapped function for test 8, which pins the `{ layers, suffix }` shape: `suffix` a non-empty
+string, every returned layer's `monogramSetId === suffix` and `id` ending with `suffix`.
 
 No committed geometry baseline moves. `MonogramGenerator.js` is byte-identical to `develop`.
