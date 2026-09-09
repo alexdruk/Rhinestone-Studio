@@ -4,15 +4,11 @@
  * Rendering/UI display metadata only, mirroring `CrystalColors.js`'s catalog pattern exactly: a
  * `Stone`/layer only ever carries a plain millimeter number (`Stone.sizeMm`, a layer's
  * `stoneSize`) — see `src/geometry/Stone.js` and `src/geometry/GeometryEngine.js`'s
- * `stoneSizeMm` params. Geometry generation, fill sampling, and stone spacing all work in raw
- * millimeters for any positive value, mixed freely across layers; this catalog exists so the
- * stone-size picker (and the Production Sheet header) can show a commercial size name next to that
- * millimeter value, instead of forcing users to already know rhinestone industry sizing.
- *
- * MONO-015: `src/geometry/WeightSizing.js` now imports `listStoneSizes()` from here to snap a
- * probed stroke width to a standard diameter (the same import `src/monogram/FrameHierarchy.js`
- * makes). That is a one-way display-constant dependency -- this file still imports nothing from
- * `src/geometry/**` and knows nothing about sampling.
+ * `stoneSizeMm` params. Nothing in `src/geometry/**` reads this file or knows what an "SS16" is;
+ * geometry generation, fill sampling, and stone spacing already work in raw millimeters for any
+ * positive value, mixed freely across layers. This catalog exists purely so the stone-size picker
+ * (and the Production Sheet header) can show a commercial size name next to that millimeter value,
+ * instead of forcing users to already know rhinestone industry sizing.
  *
  * Diameters below are nominal, commonly-cited industry values (not calibrated to any specific
  * manufacturer's tolerance spec) — the same "decorative approximation, not manufacturer-exact"
@@ -90,6 +86,49 @@ export function findStoneSizeByDiameterMm(diameterMm, toleranceMm = DEFAULT_MATC
     }
   }
   return best && bestDiff <= toleranceMm ? best : null;
+}
+
+// The index of the catalog entry at or below `baseMm` (snapped down; a base between two catalog
+// sizes is treated as the smaller). Shared by the two MONO-015 graduated-step helpers below.
+function catalogIndexAtOrBelowMm(baseMm) {
+  let index = 0;
+  for (let k = 0; k < STONE_SIZE_LIST.length; k++) {
+    if (STONE_SIZE_LIST[k].diameterMm <= baseMm + DEFAULT_MATCH_TOLERANCE_MM) index = k;
+  }
+  return index;
+}
+
+/**
+ * MONO-015 graduated weight steps. How many catalog rungs sit above `baseMm` — i.e. the largest
+ * weight step `stoneSizesFromBaseMm()` can satisfy for this base. SS16 base → 2, SS20 base → 1,
+ * SS30 base → 0. The UI gates each step option with this before offering it.
+ */
+export function stoneSizeRungsAvailable(baseMm) {
+  return STONE_SIZE_LIST.length - 1 - catalogIndexAtOrBelowMm(baseMm);
+}
+
+/**
+ * MONO-015 graduated weight steps. The ascending mm diameters for a weight step measured `rungCount`
+ * catalog steps up from `baseMm`: `[base, base+1 rung, … base+rungCount rungs]`, length
+ * `rungCount + 1`. Step 1 → two diameters, step 2 → three. Levels are always relative to the base,
+ * never hard-coded.
+ *
+ * Throws (does not clamp) when the catalog has fewer than `rungCount` rungs above the base — the UI
+ * disables that step's option via `stoneSizeRungsAvailable()`, so reaching here for an impossible
+ * step is a caller bug, not something to silently degrade.
+ */
+export function stoneSizesFromBaseMm(baseMm, rungCount) {
+  if (!Number.isInteger(rungCount) || rungCount < 1) {
+    throw new RangeError(`stoneSizesFromBaseMm: rungCount must be a positive integer, got ${JSON.stringify(rungCount)}.`);
+  }
+  const baseIndex = catalogIndexAtOrBelowMm(baseMm);
+  if (baseIndex + rungCount > STONE_SIZE_LIST.length - 1) {
+    throw new RangeError(
+      `stoneSizesFromBaseMm: the stone catalog has no ${rungCount} rung${rungCount === 1 ? '' : 's'} above ${baseMm} mm ` +
+      `(base ${STONE_SIZE_LIST[baseIndex].name}, ${STONE_SIZE_LIST.length - 1 - baseIndex} available).`
+    );
+  }
+  return STONE_SIZE_LIST.slice(baseIndex, baseIndex + rungCount + 1).map((s) => s.diameterMm);
 }
 
 /**

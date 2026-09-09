@@ -1,24 +1,19 @@
 /**
  * MONO-015 -- weight-following stone size mapping.
  *
- * Turns a measured local stroke width (from src/geometry/StrokeWidthProbe.js) into a catalog stone
- * diameter. Pure arithmetic over the standard rhinestone catalog.
+ * Turns a measured local stroke width (from src/geometry/StrokeWidthProbe.js) into a stone diameter,
+ * picked from an ascending list of candidate diameters the caller supplies in raw millimeters.
  *
- * The catalog diameters are derived directly from src/renderer/StoneSizes.js -- a plain rendering/
- * display constant, not an engine dependency (geometry still works in raw millimeters for any
- * positive value; this module just needs to know which diameters are commercially standard), the
- * same import src/monogram/FrameHierarchy.js already makes. No hand-copied literal.
+ * Pure arithmetic. No import from src/renderer/** -- src/renderer/StoneSizes.js's own header states
+ * that nothing in src/geometry/** reads that file or knows what an "SS16" is, and that geometry
+ * works in raw millimeters for any positive value. The catalog-aware derivation of which diameters
+ * make up a "step" lives in src/renderer/StoneSizes.js (stoneSizesFromBaseMm()); this module is
+ * handed the resulting mm array and never needs to know it came from a catalog.
  */
 
-import { listStoneSizes } from '../renderer/StoneSizes.js';
-
-// Ascending (StoneSizes.js validates strictly-ascending diameterMm): SS6 / SS10 / SS16 / SS20 / SS30.
-export const WEIGHT_SIZING_CATALOG_DIAMETERS_MM = listStoneSizes().map((size) => size.diameterMm);
-
 /**
- * The stone diameter assigned to a stroke sample of local width `widthMm`: the smallest catalog
- * diameter that is >= `widthMm` (the largest catalog diameter if `widthMm` exceeds all of them),
- * then clamped into `[minMm, maxMm]`.
+ * The stone diameter assigned to a stroke sample of local width `widthMm`: the smallest entry of the
+ * ascending `sizesMm` that is `>= widthMm`, or the largest entry when `widthMm` exceeds all of them.
  *
  * Which single-chain bound this rule enforces, and which it does not:
  *
@@ -27,47 +22,32 @@ export const WEIGHT_SIZING_CATALOG_DIAMETERS_MM = listStoneSizes().map((size) =>
  *     SINGLE_CHAIN_MAX_RATIO (1.10, src/monogram/SingleChain.js:23) names the ratio at which that
  *     splitting begins; picking a stone >= the stroke width holds the ratio at or below 1.
  *
- *   - It does NOT enforce the LOWER bound. On a hairline far narrower than `minMm` the assigned
- *     stone is floored at `minMm`, so stones-across-stem there falls well below
- *     SINGLE_CHAIN_MIN_RATIO (0.70, src/monogram/SingleChain.js:22) -- the ratio the constant
- *     names as where a single chain thins into visible gaps. Weight sizing does not claim to keep
- *     the single-chain condition intact on sub-`minMm` hairlines; it keeps the stem solid where
- *     the stroke is at least `minMm` wide and floors the rest at `minMm`.
+ *   - It does NOT enforce the LOWER bound. On a hairline far narrower than `sizesMm[0]` the assigned
+ *     stone is floored at `sizesMm[0]`, so stones-across-stem there falls well below
+ *     SINGLE_CHAIN_MIN_RATIO (0.70, src/monogram/SingleChain.js:22) -- the ratio the constant names
+ *     as where a single chain thins into visible gaps. Weight sizing does not claim to keep the
+ *     single-chain condition intact on sub-`sizesMm[0]` hairlines; it keeps the stem solid where the
+ *     stroke is at least `sizesMm[0]` wide and floors the rest at `sizesMm[0]`.
  *
- * `minMm`/`maxMm` should themselves be catalog diameters for the result to stay catalog-valued
- * (weightMinSizeMm / weightMaxSizeMm are, by construction -- see app.js).
+ * `sizesMm` is validated the way MixedSizeGenerator.normalizeMixedSizeParams() validates
+ * `allowedSizesMm` -- a non-empty array of positive finite numbers -- and is assumed ascending (its
+ * only producer, normalizeMixedSizeParams()'s weight branch, guarantees that).
  *
  * @param {number} widthMm
- * @param {number} minMm
- * @param {number} maxMm
+ * @param {number[]} sizesMm Ascending candidate diameters, in millimeters.
  * @returns {number}
  */
-export function weightSizeMm(widthMm, minMm, maxMm) {
-  const catalog = WEIGHT_SIZING_CATALOG_DIAMETERS_MM;
-  let picked = catalog[catalog.length - 1];
-  for (const diameterMm of catalog) {
-    if (diameterMm >= widthMm) {
-      picked = diameterMm;
-      break;
+export function weightSizeMm(widthMm, sizesMm) {
+  if (!Array.isArray(sizesMm) || sizesMm.length === 0) {
+    throw new TypeError('weightSizeMm: sizesMm must be a non-empty ascending array of positive diameters.');
+  }
+  for (const value of sizesMm) {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+      throw new RangeError(`weightSizeMm: every sizesMm entry must be a positive finite number, got ${JSON.stringify(value)}.`);
     }
   }
-  return Math.min(Math.max(picked, minMm), maxMm);
-}
-
-/**
- * The default `weightMaxSizeMm` when a user first turns weight sizing on for a layer: two catalog
- * steps above the layer's current stone size, clamped to the catalog's largest entry. SS20 has
- * only one step above it and SS30 none, so the clamp is load-bearing, not decorative.
- *
- * @param {number} baseStoneSizeMm The layer's current stone size (weightMinSizeMm's default).
- * @returns {number}
- */
-export function defaultWeightMaxSizeMm(baseStoneSizeMm) {
-  const catalog = WEIGHT_SIZING_CATALOG_DIAMETERS_MM;
-  let baseIndex = 0;
-  for (let k = 0; k < catalog.length; k++) {
-    if (Math.abs(catalog[k] - baseStoneSizeMm) < 1e-6) { baseIndex = k; break; }
-    if (catalog[k] < baseStoneSizeMm) baseIndex = k;
+  for (const diameterMm of sizesMm) {
+    if (diameterMm >= widthMm) return diameterMm;
   }
-  return catalog[Math.min(baseIndex + 2, catalog.length - 1)];
+  return sizesMm[sizesMm.length - 1];
 }

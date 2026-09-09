@@ -55,9 +55,7 @@ export {
 } from './StrokeWidthProbe.js';
 
 export {
-  weightSizeMm,
-  defaultWeightMaxSizeMm,
-  WEIGHT_SIZING_CATALOG_DIAMETERS_MM
+  weightSizeMm
 } from './WeightSizing.js';
 
 export {

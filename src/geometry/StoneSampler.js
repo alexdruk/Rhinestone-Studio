@@ -442,8 +442,8 @@ export function dedupeStonesByRadius(stones) {
  * MONO-015 phase C -- radius-aware drop for weight-following stone size.
  *
  * `assigned` is the phase-B output: `{xMm, yMm, sizeMm}` records in contour walk order, one per
- * surviving phase-A sample, each carrying the catalog diameter weightSizeMm() assigned to the
- * local stroke width there. Phase A only guaranteed `weightMinSizeMm` centre-to-centre separation
+ * surviving phase-A sample, each carrying the diameter weightSizeMm() assigned to the local stroke
+ * width there. Phase A only guaranteed the smallest step diameter's centre-to-centre separation
  * (it sampled at that pitch and deduped at that floor); a pair where one or both stones were then
  * assigned a larger diameter can therefore now physically overlap. This pass removes exactly those
  * overlaps: for every pair whose centres are within the largest assigned diameter, it requires
@@ -454,7 +454,7 @@ export function dedupeStonesByRadius(stones) {
  * The floor is `(d1 + d2) / 2` with NO `+ gapMm`. That is the exact per-pair generalisation of the
  * scalar `minSeparationMm: stoneSizeMm` sampleShapeFillPoints() passes for uniform outline mode
  * (StoneSampler.js's 'outline' case): for two equal stones `(d + d) / 2 = d`, so when
- * weightMinSizeMm === weightMaxSizeMm this pass reduces to today's behaviour exactly. Adding a gap
+ * the step has a single diameter this pass reduces to today's behaviour exactly. Adding a gap
  * term would make weight mode stricter than uniform for no stated reason.
  *
  * NOT dedupeStonesByRadius(): every stone in one text layer carries the same `layerId`, and that

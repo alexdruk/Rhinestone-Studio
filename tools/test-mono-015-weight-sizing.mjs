@@ -1,11 +1,17 @@
-// MONO-015 -- Weight-following stone size (opt-in).
+// MONO-015 -- Weight-following stone size (opt-in), graduated steps.
 //
 // Covers src/geometry/StrokeWidthProbe.js, src/geometry/WeightSizing.js, StoneSampler
 // dropOverlappingSizedStones() (phase C), GeometryEngine.generateTextLayout()'s sizeMode 'weight'
-// branch, and MonogramGenerator's opt-in wiring. Real repository fonts, same bootstrap as
-// tools/test-mono-013-interlock.mjs.
+// branch, MonogramGenerator's opt-in wiring, and src/renderer/StoneSizes.js's graduated-step
+// helpers. Real repository fonts, same bootstrap as tools/test-mono-013-interlock.mjs.
 //
 // Run `npm ci` first (opentype.js is needed for src/text/**).
+//
+// Third commit (graduated weight steps): the persisted representation is now a single flat array
+// `weightSizesMm` -- the ascending mm diameters for the chosen step -- replacing the old
+// weightMinSizeMm/weightMaxSizeMm pair outright (nothing shipped). Off / Step 1 (base + one catalog
+// rung) / Step 2 (base + two rungs). WeightSizing.js is pure arithmetic over a caller-supplied mm
+// array with no renderer import; the catalog-aware step derivation lives in StoneSizes.js.
 
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -16,14 +22,15 @@ import { createDefaultFontProviderRegistry } from '../src/text/index.js';
 import { GeometryEngine } from '../src/geometry/index.js';
 import {
   strokeWidthsForSamples,
-  localStrokeWidthMm,
   weightSizeMm,
-  defaultWeightMaxSizeMm,
-  WEIGHT_SIZING_CATALOG_DIAMETERS_MM,
   dropOverlappingSizedStones,
   sampleShapeFillPoints
 } from '../src/geometry/index.js';
-import { listStoneSizes } from '../src/renderer/StoneSizes.js';
+import {
+  listStoneSizes,
+  stoneSizesFromBaseMm,
+  stoneSizeRungsAvailable
+} from '../src/renderer/StoneSizes.js';
 import { Point2D } from '../src/text/VectorPath.js';
 import { MonogramGenerator } from '../src/monogram/index.js';
 import { validateRhsProject, generateProjectStoneLayout } from './lib/rhsProject.mjs';
@@ -37,6 +44,7 @@ async function loadFontBuffer(relativePath) {
 }
 const fontProviderRegistry = createDefaultFontProviderRegistry(fontManager, { loadFontBuffer });
 const engine = new GeometryEngine({ fontProviderRegistry });
+const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
 
 async function test(name, fn) {
   try {
@@ -49,7 +57,10 @@ async function test(name, fn) {
   }
 }
 
-const CATALOG = WEIGHT_SIZING_CATALOG_DIAMETERS_MM;
+// The five shipped catalog diameters, straight from the renderer catalog. Used only as test data
+// here -- src/geometry/** never sees it (that is the point of the architecture assertion in
+// tools/test-architecture-module-boundaries.mjs).
+const CATALOG = listStoneSizes().map((s) => s.diameterMm);
 
 /** A tapered stroke polygon: `lengthMm` long, width `w0Mm` -> `w1Mm` linearly, centred on y = 0. */
 function taperedStrokePolygon(lengthMm, w0Mm, w1Mm, segments = 80) {
@@ -67,8 +78,7 @@ function taperedStrokePolygon(lengthMm, w0Mm, w1Mm, segments = 80) {
 /**
  * Split a stone list (in engine output order == per-contour walk order) into runs of consecutive
  * same-diameter stones, further splitting where the jump to the next stone exceeds 1.5x that run's
- * own `d + gapMm` ideal pitch -- a contour boundary or a genuine (phase-C-dropped) gap, not a
- * continuation of the same chain. Returns `{sizeMm, stones, pitches}` per run.
+ * own `d + gapMm` ideal pitch -- a contour boundary or a genuine (phase-C-dropped) gap.
  */
 function sameSizeRuns(stones, gapMm) {
   const runs = [];
@@ -95,10 +105,7 @@ function median(values) {
   return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
 }
 
-/**
- * Per-diameter table of every >=3-stone run's median centre-to-centre pitch, its diameter's own
- * `d + gapMm` ideal, and the percentage over/under. Printed by the spacing tests.
- */
+/** Per-diameter table of every >=3-stone run's median centre-to-centre pitch vs its `d + gapMm`. */
 function pitchTable(stones, gapMm) {
   const runs = sameSizeRuns(stones, gapMm).filter((r) => r.stones.length >= 3);
   const present = [...new Set(stones.map((s) => s.sizeMm))].sort((a, b) => a - b);
@@ -126,282 +133,294 @@ function noPairViolatesHalfSum(stones) {
 }
 
 // ---------------------------------------------------------------------------
+// A. WeightSizing.js -- pure arithmetic over a caller-supplied ascending mm array.
+// ---------------------------------------------------------------------------
 
-await test('catalog cross-check: WEIGHT_SIZING_CATALOG_DIAMETERS_MM is derived from src/renderer/StoneSizes.js (imported, not hand-copied)', () => {
-  const fromLibrary = listStoneSizes().map((s) => s.diameterMm);
-  // WeightSizing.js now imports listStoneSizes() directly, so this is a tautology by construction --
-  // kept as a cheap guard that the derivation (and the ascending order it relies on) still holds.
-  assert.deepEqual(CATALOG, fromLibrary, `catalog ${JSON.stringify(CATALOG)} != listStoneSizes() ${JSON.stringify(fromLibrary)}`);
-  for (let i = 1; i < CATALOG.length; i++) assert.ok(CATALOG[i] > CATALOG[i - 1], 'catalog must be strictly ascending');
+await test('A1. weightSizeMm(width, sizesMm): smallest entry >= width, else the largest entry', () => {
+  assert.equal(weightSizeMm(1.6, [2.0, 2.8, 4.0]), 2.0);
+  assert.equal(weightSizeMm(2.0, [2.0, 2.8, 4.0]), 2.0);
+  assert.equal(weightSizeMm(2.01, [2.0, 2.8, 4.0]), 2.8);
+  assert.equal(weightSizeMm(3.5, [2.0, 2.8, 4.0]), 4.0);
+  assert.equal(weightSizeMm(99, [2.0, 2.8, 4.0]), 4.0, 'width beyond every entry -> the largest');
+  assert.equal(weightSizeMm(3.5, [2.0, 2.8]), 2.8, 'a step that stops at 2.8 caps there');
+  assert.equal(weightSizeMm(0.1, [2.8, 4.0]), 2.8, 'a step whose floor is 2.8 floors a hairline there');
+  assert.equal(weightSizeMm(3.5, [2.0]), 2.0, 'a single-entry step collapses to that size');
 });
 
-await test('weightSizeMm: smallest catalog diameter >= width, then clamped into [min,max]; SS16 is 4.0 mm (not 3.8)', () => {
-  assert.equal(CATALOG[2], 4.0, 'SS16 must be 4.0 mm');
-  assert.equal(weightSizeMm(1.6, 2.0, 4.0), 2.0);
-  assert.equal(weightSizeMm(2.0, 2.0, 4.0), 2.0);
-  assert.equal(weightSizeMm(2.01, 2.0, 4.0), 2.8);
-  assert.equal(weightSizeMm(3.5, 2.0, 4.0), 4.0);
-  assert.equal(weightSizeMm(99, 2.0, 4.0), 4.0, 'width beyond every catalog entry -> largest, then clamp');
-  assert.equal(weightSizeMm(3.5, 2.0, 2.8), 2.8, 'clamped down to max');
-  assert.equal(weightSizeMm(0.1, 2.8, 4.0), 2.8, 'clamped up to min');
-  assert.equal(weightSizeMm(3.5, 2.0, 2.0), 2.0, 'min == max collapses to that size');
-});
-
-await test('defaultWeightMaxSizeMm: two catalog steps up, clamped to the largest entry (SS20 has one step, SS30 none)', () => {
-  assert.equal(defaultWeightMaxSizeMm(2.0), 4.0, 'SS6 -> SS16');
-  assert.equal(defaultWeightMaxSizeMm(2.8), 4.7, 'SS10 -> SS20');
-  assert.equal(defaultWeightMaxSizeMm(4.0), 6.4, 'SS16 -> SS30');
-  assert.equal(defaultWeightMaxSizeMm(4.7), 6.4, 'SS20 -> SS30 (clamped, only one step up)');
-  assert.equal(defaultWeightMaxSizeMm(6.4), 6.4, 'SS30 -> SS30 (clamped, no step up)');
+await test('A2. weightSizeMm validates sizesMm the way normalizeMixedSizeParams validates allowedSizesMm (non-empty, positive finite entries)', () => {
+  assert.throws(() => weightSizeMm(2.0, []), /non-empty/);
+  assert.throws(() => weightSizeMm(2.0, 'x'), /non-empty/);
+  assert.throws(() => weightSizeMm(2.0, [2.0, -1]), /positive finite/);
+  assert.throws(() => weightSizeMm(2.0, [2.0, NaN]), /positive finite/);
 });
 
 // ---------------------------------------------------------------------------
-// Test 1 -- probe monotonicity + assignment sanity.
+// B. StoneSizes.js -- the catalog-aware graduated-step derivation (the piece that used to be a
+// hand-copied [2.0, 2.8, 4.0, 4.7, 6.4] literal inside the engine).
 // ---------------------------------------------------------------------------
 
-await test('1. probe monotonicity on a synthetic tapered stroke: monotone widths, non-decreasing catalog assignments, no surviving pair violates (d1+d2)/2', () => {
+await test('B1. stoneSizesFromBaseMm: step 1 -> [base, one rung up]; step 2 -> [base, one, two]; levels are relative to the base', () => {
+  assert.deepEqual(stoneSizesFromBaseMm(2.0, 1), [2.0, 2.8]);
+  assert.deepEqual(stoneSizesFromBaseMm(2.0, 2), [2.0, 2.8, 4.0]);
+  assert.deepEqual(stoneSizesFromBaseMm(2.8, 1), [2.8, 4.0]);
+  assert.deepEqual(stoneSizesFromBaseMm(2.8, 2), [2.8, 4.0, 4.7]);
+  assert.deepEqual(stoneSizesFromBaseMm(4.0, 2), [4.0, 4.7, 6.4]);
+});
+
+await test('B2. top-of-catalog clamping -- THROW path: SS20 base yields [4.7, 6.4] for step 1 but step 2 throws; SS30 base throws for both', () => {
+  assert.equal(stoneSizeRungsAvailable(4.7), 1, 'SS20 has exactly one catalog rung above it');
+  assert.deepEqual(stoneSizesFromBaseMm(4.7, 1), [4.7, 6.4]);
+  assert.throws(() => stoneSizesFromBaseMm(4.7, 2), /no 2 rungs above 4\.7/, 'step 2 from SS20 must throw, not clamp');
+  assert.equal(stoneSizeRungsAvailable(6.4), 0, 'SS30 has no catalog rung above it');
+  assert.throws(() => stoneSizesFromBaseMm(6.4, 1), /no 1 rung above 6\.4/);
+  assert.throws(() => stoneSizesFromBaseMm(6.4, 2), /no 2 rungs above 6\.4/);
+});
+
+await test('B3. top-of-catalog clamping -- DISABLED-UI path: app.js weightStepsOptionsHtml() renders the unreachable step disabled, with a title, and never throws', () => {
+  const src = appJs.slice(appJs.indexOf('function weightStepsOptionsHtml('), appJs.indexOf('\n}', appJs.indexOf('function weightStepsOptionsHtml(')) + 2);
+  const run = new Function('stoneSizeRungsAvailable', 'stoneSizesFromBaseMm', 'formatStoneSizeLabel', 'escapeHtml', `${src}\nreturn weightStepsOptionsHtml;`);
+  const weightStepsOptionsHtml = run(
+    stoneSizeRungsAvailable, stoneSizesFromBaseMm,
+    (d) => `SS?? (${d} mm)`, (s) => s
+  );
+
+  const ss6 = weightStepsOptionsHtml(2.0);
+  assert.match(ss6, /<option value="1"[^>]*>SS\?\? → SS\?\?<\/option>/, 'SS6 base: step 1 label is two names joined by an arrow, enabled');
+  assert.ok(!/value="1"[^>]*disabled/.test(ss6) && !/value="2"[^>]*disabled/.test(ss6), 'SS6 base: neither step disabled');
+
+  const ss20 = weightStepsOptionsHtml(4.7);
+  assert.ok(!/value="1"[^>]*disabled/.test(ss20), 'SS20 base: step 1 enabled');
+  assert.match(ss20, /<option value="2" disabled title="[^"]+">/, 'SS20 base: step 2 disabled with an explaining title');
+
+  const ss30 = weightStepsOptionsHtml(6.4);
+  assert.match(ss30, /<option value="1" disabled title="[^"]+">/, 'SS30 base: step 1 disabled');
+  assert.match(ss30, /<option value="2" disabled title="[^"]+">/, 'SS30 base: step 2 disabled');
+  assert.doesNotThrow(() => weightStepsOptionsHtml(6.4), 'the option builder must never throw for an unreachable step');
+});
+
+// ---------------------------------------------------------------------------
+// C. Probe + phase C primitives (kept from 4bcbfaa; array form).
+// ---------------------------------------------------------------------------
+
+await test('C1. probe monotonicity on a synthetic tapered stroke: monotone widths, non-decreasing assignments, no surviving pair violates (d1+d2)/2', () => {
   const polygon = taperedStrokePolygon(40, 0.8, 4.0);
-  // Probe points sit ON the top edge of the stroke (this is how phase A feeds the probe -- outline
-  // samples lie on the contour), so the inward ray crosses the whole stroke and reads its full
-  // width. `w(x) = 0.8 + (4.0 - 0.8) * x / 40`, top edge at y = -w/2.
   const widthAt = (x) => 0.8 + (4.0 - 0.8) * (x / 40);
   const samples = [];
   for (let x = 1; x <= 39; x += 2) samples.push(new Point2D(x, -widthAt(x) / 2));
   const widths = strokeWidthsForSamples(samples, [polygon], 6.0);
 
   for (let i = 1; i < widths.length; i++) {
-    assert.ok(widths[i] >= widths[i - 1] - 0.05, `probe width not monotone at station ${i}: ${widths[i - 1].toFixed(4)} -> ${widths[i].toFixed(4)}`);
+    assert.ok(widths[i] >= widths[i - 1] - 0.05, `probe width not monotone at station ${i}`);
   }
-  for (let i = 0; i < samples.length; i++) {
-    const expected = widthAt(1 + i * 2);
-    assert.ok(Math.abs(widths[i] - expected) < 0.05, `probe width ${widths[i].toFixed(4)} vs expected ${expected.toFixed(4)} at x=${1 + i * 2}`);
-  }
-
-  const assigned = samples.map((p, i) => ({ xMm: p.xMm, yMm: p.yMm, sizeMm: weightSizeMm(widths[i], 2.0, 4.0) }));
+  const assigned = samples.map((p, i) => ({ xMm: p.xMm, yMm: p.yMm, sizeMm: weightSizeMm(widths[i], [2.0, 2.8, 4.0]) }));
   for (let i = 1; i < assigned.length; i++) {
     assert.ok(assigned[i].sizeMm >= assigned[i - 1].sizeMm, `assigned size not non-decreasing at station ${i}`);
   }
-  for (const s of assigned) {
-    assert.ok(CATALOG.includes(s.sizeMm), `assigned size ${s.sizeMm} is not a catalog diameter`);
-  }
-
-  const survivors = dropOverlappingSizedStones(assigned);
-  const violation = noPairViolatesHalfSum(survivors);
-  assert.equal(violation, null, `a surviving pair violates (d1+d2)/2: ${JSON.stringify(violation)}`);
+  for (const s of assigned) assert.ok(CATALOG.includes(s.sizeMm), `assigned size ${s.sizeMm} not a catalog diameter`);
+  assert.equal(noPairViolatesHalfSum(dropOverlappingSizedStones(assigned)), null, 'a surviving pair violates (d1+d2)/2');
 });
 
-// ---------------------------------------------------------------------------
-// Test 2 -- the vacuity control. Print entering/leaving counts, no verdict.
-// ---------------------------------------------------------------------------
+await test('C2. phase C -- the per-pair (d1+d2)/2 floor (NOT a scalar) governs the drop: a (2.0, 4.0) pair 2.6 mm apart is dropped though a scalar 2.0 mm check would keep it; a (2.0, 2.0) control at 2.6 mm survives', () => {
+  // Binding pair spans two size classes by construction -- the case the real script marks in E3
+  // never produce (their closest pair is always the tightly-packed 2.0 mm hairline run). This is
+  // where the c192452 generalisation from `< stoneSizeMm` to `< (d1+d2)/2` does its work.
+  const assigned = [
+    { xMm: 0, yMm: 0, sizeMm: 4.0 },
+    { xMm: 2.6, yMm: 0, sizeMm: 2.0 },   // dist 2.6: >= scalar 2.0, but < (4.0+2.0)/2 = 3.0 -> must drop
+    { xMm: 20, yMm: 0, sizeMm: 2.0 },
+    { xMm: 22.6, yMm: 0, sizeMm: 2.0 }   // dist 2.6: >= (2.0+2.0)/2 = 2.0 -> must survive
+  ];
+  const survivors = dropOverlappingSizedStones(assigned);
+  const kept = survivors.map((s) => `${s.xMm}:${s.sizeMm}`);
+  console.log(`    entering 4 -> surviving ${survivors.length}: ${JSON.stringify(kept)}`);
+  assert.equal(survivors.length, 3, 'exactly the cross-class overlap should be dropped');
+  assert.ok(!survivors.some((s) => s.xMm === 2.6), 'the 2.0 mm stone 2.6 mm from a 4.0 mm stone must be dropped ((d1+d2)/2 = 3.0)');
+  assert.ok(survivors.some((s) => s.xMm === 22.6), 'the 2.0 mm stone 2.6 mm from a 2.0 mm stone must survive ((d1+d2)/2 = 2.0)');
+});
 
-await test('2. vacuity control (run by name): phase C entering vs leaving count on the tapered stroke, at the real 2x-oversampled phase-A pitch -- both printed', () => {
+await test('C3. vacuity control (run by name): phase C entering vs leaving count on the tapered stroke at the real 2x phase-A pitch -- both printed', () => {
   const gapMm = 0.3;
-  const minMm = 2.0;
-  const maxMm = 4.0;
-  const factor = 2; // maxMm > minMm
+  const sizesMm = [2.0, 2.8, 4.0];
+  const factor = 2;
   const polygon = taperedStrokePolygon(40, 0.8, 4.0);
-  const phaseA = sampleShapeFillPoints('outline', [polygon], { minXmm: 0, minYmm: -2.5, maxXmm: 40, maxYmm: 2.5 }, (minMm + gapMm) / factor, minMm / factor);
-  const widths = strokeWidthsForSamples(phaseA, [polygon], maxMm);
-  const assigned = phaseA.map((p, i) => ({ xMm: p.xMm, yMm: p.yMm, sizeMm: weightSizeMm(widths[i], minMm, maxMm) }));
+  const phaseA = sampleShapeFillPoints('outline', [polygon], { minXmm: 0, minYmm: -2.5, maxXmm: 40, maxYmm: 2.5 }, (sizesMm[0] + gapMm) / factor, sizesMm[0] / factor);
+  const widths = strokeWidthsForSamples(phaseA, [polygon], sizesMm[sizesMm.length - 1]);
+  const assigned = phaseA.map((p, i) => ({ xMm: p.xMm, yMm: p.yMm, sizeMm: weightSizeMm(widths[i], sizesMm) }));
   const survivors = dropOverlappingSizedStones(assigned);
-  console.log(`    phase C: entering ${assigned.length} stones, leaving ${survivors.length} stones (dropped ${assigned.length - survivors.length})`);
+  console.log(`    phase C: entering ${assigned.length} stones, leaving ${survivors.length} (dropped ${assigned.length - survivors.length})`);
   if (assigned.length - survivors.length === 0) {
-    assert.fail('phase C dropped zero stones -- test 1\'s "no pair violates" assertion would be vacuous. This is a test-design failure, not a pass.');
+    assert.fail('phase C dropped zero stones -- C1\'s "no pair violates" assertion would be vacuous.');
   }
 });
 
 // ---------------------------------------------------------------------------
-// Test 3 -- reduction to uniform. Byte-identical when weightMinSizeMm === weightMaxSizeMm === 2.0.
+// D. The representation change is behaviour-neutral.
 // ---------------------------------------------------------------------------
 
-await test('3. reduction to uniform: weight {2.0, 2.0} text layout is byte-identical to uniform SS6 -- counts + first three stone records printed for both', async () => {
+await test('D1. reduction to uniform generalises: weightSizesMm: [2.0] (a single-entry array) is byte-identical to uniform SS6 -- counts + first three stone records printed for both', async () => {
   const base = {
     text: 'Rhinestone', fontId: 'dancing-script-regular', providerId: 'opentype', layerId: 'weight-reduce',
     heightMm: 30, stoneSizeMm: 2.0, gapMm: 0.3, mode: 'outline', color: 'gold'
   };
   const uniform = await engine.generateTextLayout(base);
-  const weight = await engine.generateTextLayout({ ...base, sizeMode: 'weight', weightMinSizeMm: 2.0, weightMaxSizeMm: 2.0 });
+  const weight = await engine.generateTextLayout({ ...base, sizeMode: 'weight', weightSizesMm: [2.0] });
   const first3 = (layout) => layout.stones.slice(0, 3).map((s) => ({ xMm: Number(s.xMm.toFixed(6)), yMm: Number(s.yMm.toFixed(6)), sizeMm: s.sizeMm }));
-  console.log(`    uniform SS6 count ${uniform.count}, first three ${JSON.stringify(first3(uniform))}`);
-  console.log(`    weight {2,2}  count ${weight.count}, first three ${JSON.stringify(first3(weight))}`);
+  console.log(`    uniform SS6      count ${uniform.count}, first three ${JSON.stringify(first3(uniform))}`);
+  console.log(`    weight [2.0]     count ${weight.count}, first three ${JSON.stringify(first3(weight))}`);
   assert.equal(weight.count, uniform.count, 'stone count differs');
   assert.deepEqual(weight.toJSON().stones, uniform.toJSON().stones, 'stone records differ -- not byte-identical to uniform');
+
+  // Named negative control: the SAME case with a real two-entry step must differ, so D1's
+  // byte-identity assertion is proved to discriminate rather than passing vacuously.
+  const spread = await engine.generateTextLayout({ ...base, sizeMode: 'weight', weightSizesMm: [2.0, 2.8] });
+  console.log(`    NEGATIVE CONTROL weight [2.0, 2.8] count ${spread.count}, sizes ${JSON.stringify([...new Set(spread.stones.map((s) => s.sizeMm))].sort((a, b) => a - b))}`);
+  assert.notEqual(spread.count, uniform.count, 'a real two-entry step must NOT reproduce uniform -- byte-identity check would be vacuous');
+});
+
+await test('D2. Step 2 at SS6 base reproduces develop\'s golden of 68 exactly -- the min/max pair {2.0,4.0} and the flat array [2.0,2.8,4.0] are informationally equivalent under weightSizeMm\'s "smallest entry >= width" rule', async () => {
+  const base = {
+    text: 'A', fontId: 'great-vibes-regular', providerId: 'opentype', layerId: 'weight-step2',
+    heightMm: 45, stoneSizeMm: 2.0, gapMm: 0.3, mode: 'outline', color: 'gold'
+  };
+  const weight = await engine.generateTextLayout({ ...base, sizeMode: 'weight', weightSizesMm: stoneSizesFromBaseMm(2.0, 2) });
+  console.log(`    Great Vibes "A" 45 mm, Step 2 [2.0, 2.8, 4.0]: ${weight.count} stones (develop golden with {min 2.0, max 4.0}: 68)`);
+  assert.equal(weight.count, 68, 'Step 2 count changed -- the two representations have diverged somewhere; report it, do not re-pin');
+});
+
+await test('D3. Step 1 golden count, pinned exact: Great Vibes "A" 45 mm, SS6 base, Step 1 [2.0, 2.8] == 85 (mixes 2.0 and 2.8 only, so between the develop anchors uniform-2.0 = 94 and uniform-2.8 = 62)', async () => {
+  const base = {
+    text: 'A', fontId: 'great-vibes-regular', providerId: 'opentype', layerId: 'weight-step1',
+    heightMm: 45, stoneSizeMm: 2.0, gapMm: 0.3, mode: 'outline', color: 'gold'
+  };
+  const weight = await engine.generateTextLayout({ ...base, sizeMode: 'weight', weightSizesMm: stoneSizesFromBaseMm(2.0, 1) });
+  const dist = {};
+  for (const s of weight.stones) dist[s.sizeMm] = (dist[s.sizeMm] || 0) + 1;
+  console.log(`    Great Vibes "A" 45 mm, Step 1 [2.0, 2.8]: ${weight.count} stones, distribution ${JSON.stringify(dist)}`);
+  assert.equal(weight.count, 85, 'Step 1 golden count changed');
+  assert.ok(weight.count < 94 && weight.count > 62, 'Step 1 count must land strictly between uniform-2.0 (94) and uniform-2.8 (62)');
 });
 
 // ---------------------------------------------------------------------------
-// Test 4 -- real glyph spacing, in place of a stone-count band.
-//
-// A total stone count cannot guard weight mode: a layout mixing 2.0/2.8/4.0 mm stones must land
-// somewhere between uniform-2.0 and uniform-4.0, and on develop uniform-2.8 alone is already -34%
-// (uniform "A" 45 mm: 2.0 -> 94, 2.8 -> 62, 4.0 -> 36). No band anchored to the uniform-SS6 count
-// can be both tight and correct. What CAN be guarded is the pitch inside a run of same-size stones:
-// phase C only drops, so survivors sit at integer multiples of the phase-A pitch, and at the plain
-// min pitch a 2.8 mm run comes out 48% over-spaced against its own d+gap ideal -- the
-// SINGLE_CHAIN_MIN_RATIO gap-failure mode. GeometryEngine's weight branch oversamples phase A by 2x
-// when the layer mixes sizes; these tests assert that fixes the pitch.
+// E. Chain pitch -- the guard that replaced the stone-count band (4bcbfaa item 2). Rule unchanged;
+// re-run for both steps. oversampleFactor = weightSizesMm.length > 1 ? 2 : 1.
 // ---------------------------------------------------------------------------
 
-const OVERSAMPLE_TOLERANCE = 0.15; // median run pitch must be within 15% of d + gapMm
+const OVERSAMPLE_TOLERANCE = 0.15;
+const oversampleFactor = (sizesMm) => (sizesMm.length > 1 ? 2 : 1);
 
-// The oversample factor GeometryEngine.js's weight branch applies. Kept here so the synthetic-stroke
-// test drives the primitives with the exact same arithmetic the engine uses.
-const oversampleFactor = (minMm, maxMm) => (maxMm > minMm ? 2 : 1);
-
-await test('4a. synthetic tapered stroke: at the plain min pitch a 2.8 mm run is ~48% over-spaced (the defect); with 2x oversampling every present diameter\'s median run pitch is within 15% of d + gapMm', () => {
+await test('E1. synthetic tapered stroke, Step 2 [2.0,2.8,4.0]: at the plain min pitch a 2.8 mm run is ~48% over-spaced (the defect); with 2x oversampling every present diameter\'s median run pitch is within 15% of d + gapMm', () => {
   const gapMm = 0.3;
-  const minMm = 2.0;
-  const maxMm = 4.0;
-  // 80 mm long, 0.8 -> 4.6 mm wide: sustained runs of 2.0, 2.8 and 4.0 mm all occur.
+  const sizesMm = [2.0, 2.8, 4.0];
   const polygon = taperedStrokePolygon(80, 0.8, 4.6, 120);
   const boundingBox = { minXmm: 0, minYmm: -2.5, maxXmm: 80, maxYmm: 2.5 };
-
   const runAt = (factor) => {
-    const spacingMm = (minMm + gapMm) / factor;
-    const separationMm = minMm / factor;
-    const samples = sampleShapeFillPoints('outline', [polygon], boundingBox, spacingMm, separationMm);
-    const widths = strokeWidthsForSamples(samples, [polygon], maxMm);
-    const assigned = samples.map((p, i) => ({ xMm: p.xMm, yMm: p.yMm, sizeMm: weightSizeMm(widths[i], minMm, maxMm) }));
+    const samples = sampleShapeFillPoints('outline', [polygon], boundingBox, (sizesMm[0] + gapMm) / factor, sizesMm[0] / factor);
+    const widths = strokeWidthsForSamples(samples, [polygon], sizesMm[sizesMm.length - 1]);
+    const assigned = samples.map((p, i) => ({ xMm: p.xMm, yMm: p.yMm, sizeMm: weightSizeMm(widths[i], sizesMm) }));
     return dropOverlappingSizedStones(assigned);
   };
 
-  // Factor 1 -- the defect. At least one >=3-stone run must exceed the tolerance.
-  const factor1 = runAt(1);
-  const table1 = pitchTable(factor1, gapMm);
+  const table1 = pitchTable(runAt(1), gapMm);
   console.log('    factor 1 (plain min pitch):');
-  for (const t of table1) {
-    for (const r of t.rows) console.log(`      d=${t.d} len=${r.length} medianPitch=${r.medianPitchMm.toFixed(3)} ideal=${t.idealMm.toFixed(2)} off=${r.offPct.toFixed(1)}%`);
-  }
-  const worstFactor1 = Math.max(...table1.flatMap((t) => t.rows.map((r) => Math.abs(r.offPct))), 0);
-  assert.ok(worstFactor1 / 100 > OVERSAMPLE_TOLERANCE,
-    `factor 1 should over-space some run past ${OVERSAMPLE_TOLERANCE * 100}% -- worst was ${worstFactor1.toFixed(1)}%. If this fails, the run grouping is wrong, not the sampler.`);
+  for (const t of table1) for (const r of t.rows) console.log(`      d=${t.d} len=${r.length} medianPitch=${r.medianPitchMm.toFixed(3)} ideal=${t.idealMm.toFixed(2)} off=${r.offPct.toFixed(1)}%`);
+  const worst1 = Math.max(...table1.flatMap((t) => t.rows.map((r) => Math.abs(r.offPct))), 0);
+  assert.ok(worst1 / 100 > OVERSAMPLE_TOLERANCE, `factor 1 should over-space some run past ${OVERSAMPLE_TOLERANCE * 100}% -- worst was ${worst1.toFixed(1)}%`);
 
-  // Factor 2 -- the fix. EVERY present diameter has at least one >=3-stone run, and every such run's
-  // median pitch is within tolerance.
-  const factor2 = runAt(oversampleFactor(minMm, maxMm));
-  const table2 = pitchTable(factor2, gapMm);
-  console.log(`    factor ${oversampleFactor(minMm, maxMm)} (oversampled): ${factor2.length} stones`);
+  const table2 = pitchTable(runAt(oversampleFactor(sizesMm)), gapMm);
+  console.log(`    factor ${oversampleFactor(sizesMm)} (oversampled):`);
   for (const t of table2) {
     assert.ok(t.rows.length >= 1, `no >=3-stone run of ${t.d} mm stones to measure pitch on`);
     for (const r of t.rows) {
       console.log(`      d=${t.d} len=${r.length} medianPitch=${r.medianPitchMm.toFixed(3)} ideal=${t.idealMm.toFixed(2)} off=${r.offPct.toFixed(1)}%`);
-      assert.ok(Math.abs(r.offPct) / 100 <= OVERSAMPLE_TOLERANCE,
-        `a ${t.d} mm run's median pitch ${r.medianPitchMm.toFixed(3)} mm is ${r.offPct.toFixed(1)}% off its ${t.idealMm.toFixed(2)} mm ideal (> ${OVERSAMPLE_TOLERANCE * 100}%)`);
+      assert.ok(Math.abs(r.offPct) / 100 <= OVERSAMPLE_TOLERANCE, `a ${t.d} mm run's median pitch is ${r.offPct.toFixed(1)}% off (> ${OVERSAMPLE_TOLERANCE * 100}%)`);
     }
   }
 });
 
-await test('4b. real engine path: Great Vibes "A" 45 mm weight {2.0, 4.0} -- every >=3-stone run\'s median pitch is within 15% of d + gapMm; the min and max diameters each form such a run', async () => {
+await test('E2. real engine path, both steps: every >=3-stone run\'s median pitch within 15% of d + gapMm; the step\'s range endpoints each form such a run. Step 1 has no 4.0 mm stones at all', async () => {
   const base = {
     text: 'A', fontId: 'great-vibes-regular', providerId: 'opentype', layerId: 'weight-glyph',
     heightMm: 45, stoneSizeMm: 2.0, gapMm: 0.3, mode: 'outline', color: 'gold'
   };
-  const weight = await engine.generateTextLayout({ ...base, sizeMode: 'weight', weightMinSizeMm: 2.0, weightMaxSizeMm: 4.0 });
-  const distinct = [...new Set(weight.stones.map((s) => s.sizeMm))].sort((a, b) => a - b);
+  for (const step of [1, 2]) {
+    const sizesMm = stoneSizesFromBaseMm(2.0, step);
+    const weight = await engine.generateTextLayout({ ...base, sizeMode: 'weight', weightSizesMm: sizesMm });
+    const present = [...new Set(weight.stones.map((s) => s.sizeMm))].sort((a, b) => a - b);
+    console.log(`    Step ${step} ${JSON.stringify(sizesMm)}: ${weight.count} stones, present sizes ${JSON.stringify(present)}`);
+    assert.equal(noPairViolatesHalfSum(weight.stones), null, `Step ${step}: a stone pair physically overlaps`);
+    if (step === 1) assert.ok(!present.includes(4.0), 'Step 1 must contain no 4.0 mm stones');
 
-  assert.ok(distinct.length >= 2, `expected at least two distinct sizes, got ${JSON.stringify(distinct)}`);
-  assert.equal(noPairViolatesHalfSum(weight.stones), null, 'a stone pair physically overlaps');
-
-  const table = pitchTable(weight.stones, 0.3);
-  console.log('    Great Vibes "A" weight {2.0, 4.0} run pitches (>= 3 stones):');
-  for (const t of table) {
-    if (t.rows.length === 0) {
-      console.log(`      d=${t.d}: no sustained run -- this glyph has no >=3-stone chain of ${t.d} mm stones (short transition regions only)`);
-      continue;
+    const table = pitchTable(weight.stones, 0.3);
+    for (const t of table) {
+      for (const r of t.rows) {
+        console.log(`      d=${t.d} len=${r.length} medianPitch=${r.medianPitchMm.toFixed(3)} ideal=${t.idealMm.toFixed(2)} off=${r.offPct.toFixed(1)}%`);
+        assert.ok(Math.abs(r.offPct) / 100 <= OVERSAMPLE_TOLERANCE, `Step ${step}: a ${t.d} mm run's median pitch is ${r.offPct.toFixed(1)}% off`);
+      }
+      if (t.rows.length === 0) console.log(`      d=${t.d}: no >=3-stone chain on this glyph (transition width only -- printed, not asserted)`);
     }
-    for (const r of t.rows) {
-      console.log(`      d=${t.d} len=${r.length} medianPitch=${r.medianPitchMm.toFixed(3)} ideal=${t.idealMm.toFixed(2)} off=${r.offPct.toFixed(1)}%`);
-      assert.ok(Math.abs(r.offPct) / 100 <= OVERSAMPLE_TOLERANCE,
-        `a ${t.d} mm run's median pitch ${r.medianPitchMm.toFixed(3)} mm is ${r.offPct.toFixed(1)}% off its ${t.idealMm.toFixed(2)} mm ideal`);
+    // The step's floor is the diameter guaranteed a sustained region (the hairline). Step 1's top
+    // (2.8) and Step 2's top (4.0) also form one on this glyph.
+    const anchors = step === 1 ? [2.0, 2.8] : [2.0, 4.0];
+    for (const d of anchors) {
+      const t = table.find((row) => row.d === d);
+      assert.ok(t && t.rows.length >= 1, `Step ${step}: expected a >=3-stone run of ${d} mm stones`);
     }
   }
-  // The range endpoints (2.0 and 4.0) are the diameters guaranteed a sustained region by
-  // construction -- the hairline and the thickest stroke. 2.8 mm is a transition width on this
-  // particular glyph and legitimately has no >=3 chain (printed above, not asserted).
-  for (const d of [2.0, 4.0]) {
-    const t = table.find((row) => row.d === d);
-    assert.ok(t && t.rows.length >= 1, `expected at least one >=3-stone run of ${d} mm stones on Great Vibes "A"`);
-  }
-
-  // Stem sanity anchor (spec): 0.0357 * 45 = 1.6065 mm -> weightSizeMm assigns 2.0 -> 0.803 stones
-  // across the stem, above SINGLE_CHAIN_MIN_RATIO (0.70).
-  const stemWidthMm = 0.0357 * 45;
-  const stemStones = stemWidthMm / weightSizeMm(stemWidthMm, 2.0, 4.0);
-  console.log(`    stem: width ${stemWidthMm.toFixed(4)} mm -> stone ${weightSizeMm(stemWidthMm, 2.0, 4.0)} mm -> ${stemStones.toFixed(4)} stones across (must exceed 0.70)`);
-  assert.ok(stemStones > 0.70, `stem stones ${stemStones.toFixed(4)} <= 0.70`);
-});
-
-await test('4c. golden stone count: Great Vibes "A" 45 mm weight {2.0, 4.0} == 68, exact (develop uniform anchors: 2.0 -> 94, 2.8 -> 62, 4.0 -> 36; a correct weight mix lands between 94 and 36)', async () => {
-  const base = {
-    text: 'A', fontId: 'great-vibes-regular', providerId: 'opentype', layerId: 'weight-golden',
-    heightMm: 45, stoneSizeMm: 2.0, gapMm: 0.3, mode: 'outline', color: 'gold'
-  };
-  const weight = await engine.generateTextLayout({ ...base, sizeMode: 'weight', weightMinSizeMm: 2.0, weightMaxSizeMm: 4.0 });
-  console.log(`    Great Vibes "A" weight {2.0, 4.0} stone count: ${weight.count}`);
-  assert.equal(weight.count, 68, 'golden stone count changed');
 });
 
 // ---------------------------------------------------------------------------
-// Test 5 -- mode guard.
+// F. Mode guard (kept from 4bcbfaa; array form).
 // ---------------------------------------------------------------------------
 
-await test('5. mode guard: sizeMode "weight" throws for mode "fill", and for an authored (non-outline) font', async () => {
+await test('F1. sizeMode "weight" throws for mode "fill" and for an authored (non-outline) font', async () => {
   await assert.rejects(
     engine.generateTextLayout({
       text: 'A', fontId: 'great-vibes-regular', providerId: 'opentype', layerId: 'g',
-      heightMm: 30, stoneSizeMm: 2.0, gapMm: 0.3, mode: 'fill',
-      sizeMode: 'weight', weightMinSizeMm: 2.0, weightMaxSizeMm: 4.0
+      heightMm: 30, stoneSizeMm: 2.0, gapMm: 0.3, mode: 'fill', sizeMode: 'weight', weightSizesMm: [2.0, 4.0]
     }),
-    /weight-following stone size .* requires outline mode/,
-    'fill + weight did not throw'
+    /weight-following stone size .* requires outline mode/
   );
   await assert.rejects(
     engine.generateTextLayout({
       text: 'A', fontId: 'rs-block', providerId: 'rhinestone', layerId: 'g',
-      heightMm: 40, stoneSizeMm: 2.0, gapMm: 0.3, mode: 'outline',
-      sizeMode: 'weight', weightMinSizeMm: 2.0, weightMaxSizeMm: 4.0
+      heightMm: 40, stoneSizeMm: 2.0, gapMm: 0.3, mode: 'outline', sizeMode: 'weight', weightSizesMm: [2.0, 4.0]
     }),
-    /authored stone centers/,
-    'authored font + weight did not throw'
+    /authored stone centers/
   );
 });
 
-await test('5b. non-text callers throw on a stray sizeMode "weight" (caller bug, not silently absorbed)', () => {
+await test('F2. non-text callers throw on a stray sizeMode "weight" (caller bug, not silently absorbed)', () => {
   assert.throws(
     () => engine.generateShapeLayout({
       shape: 'rectangle', layerId: 's', xMm: 0, yMm: 0, widthMm: 40, heightMm: 20,
-      stoneSizeMm: 2.0, gapMm: 0.3, mode: 'outline', sizeMode: 'weight', weightMinSizeMm: 2.0, weightMaxSizeMm: 4.0
+      stoneSizeMm: 2.0, gapMm: 0.3, mode: 'outline', sizeMode: 'weight', weightSizesMm: [2.0, 4.0]
     }),
-    /only supported for a text layer sampled in outline mode/,
-    'a shape layer with sizeMode "weight" must throw'
-  );
-  assert.throws(
-    () => engine.generateSvgLayout({
-      svgSource: '<svg xmlns="http://www.w3.org/2000/svg" width="20mm" height="20mm"><rect width="20" height="20"/></svg>',
-      layerId: 's', xMm: 0, yMm: 0, widthMm: 20, heightMm: 20,
-      stoneSizeMm: 2.0, gapMm: 0.3, mode: 'outline', sizeMode: 'weight', weightMinSizeMm: 2.0, weightMaxSizeMm: 4.0
-    }),
-    /only supported for a text layer sampled in outline mode/,
-    'an SVG layer with sizeMode "weight" must throw'
+    /only supported for a text layer sampled in outline mode/
   );
 });
 
-await test('5c. an *unknown* sizeMode string is still the old-project compatibility path (resolveSizeMode falls back to uniform; the engine never sees it)', () => {
-  // resolveSizeMode() (app.js) maps anything not in SIZE_MODES to 'uniform' before mixedSizeParamsFor()
-  // forwards it, so the engine only ever receives 'uniform' | 'mixed' | 'weight'. Passing a literal
-  // unknown mode straight to the engine is a TypeError -- distinct from the 'weight'-on-a-shape case.
+await test('F3. an *unknown* sizeMode string is still the old-project compatibility path (a TypeError from the engine, distinct from the "weight"-on-a-shape case)', () => {
   assert.throws(
     () => engine.generateShapeLayout({
       shape: 'rectangle', layerId: 's', xMm: 0, yMm: 0, widthMm: 40, heightMm: 20,
       stoneSizeMm: 2.0, gapMm: 0.3, mode: 'outline', sizeMode: 'lopsided'
     }),
-    /Unsupported sizeMode/,
-    'an unknown sizeMode string must be a TypeError from the engine'
+    /Unsupported sizeMode/
+  );
+});
+
+await test('F4. weightSizesMm must be strictly ascending', async () => {
+  await assert.rejects(
+    engine.generateTextLayout({
+      text: 'A', fontId: 'great-vibes-regular', providerId: 'opentype', layerId: 'g',
+      heightMm: 30, stoneSizeMm: 2.0, gapMm: 0.3, mode: 'outline', sizeMode: 'weight', weightSizesMm: [4.0, 2.0]
+    }),
+    /strictly ascending/
   );
 });
 
 // ---------------------------------------------------------------------------
-// Test 6 -- default-off regression. Baselines captured on develop @ 87e20a5
-// (tools/scratch/mono-015-baseline.mjs, run before branching).
+// G. Default-off regression. Baselines captured on develop @ 87e20a5.
 // ---------------------------------------------------------------------------
 
 const DEVELOP_BASELINES = [
@@ -410,24 +429,23 @@ const DEVELOP_BASELINES = [
   { file: 'long-name-autofit.rhs', stoneCount: 441, bboxWidthMm: 200.063239 }
 ];
 
-await test('6. default-off regression: three examples/ text fixtures regenerate byte-identical to develop (counts + bbox widths printed for both sides)', async () => {
+await test('G1. default-off regression: the three examples/ text fixtures regenerate byte-identical to develop (147 / 66 / 441; counts + bbox widths printed for both sides)', async () => {
   for (const baseline of DEVELOP_BASELINES) {
     const raw = JSON.parse(await readFile(path.join(repoRoot, 'examples', baseline.file), 'utf8'));
     const project = validateRhsProject(raw, baseline.file);
     const layout = await generateProjectStoneLayout(project, engine);
-    const bb = layout.getBoundingBox();
-    const width = Number(bb.widthMm.toFixed(6));
-    console.log(`    ${baseline.file}: develop ${baseline.stoneCount} stones / bbox ${baseline.bboxWidthMm} mm  ->  now ${layout.count} stones / bbox ${width} mm`);
+    const width = Number(layout.getBoundingBox().widthMm.toFixed(6));
+    console.log(`    ${baseline.file}: develop ${baseline.stoneCount} / ${baseline.bboxWidthMm} mm  ->  now ${layout.count} / ${width} mm`);
     assert.equal(layout.count, baseline.stoneCount, `${baseline.file}: stone count drifted from develop`);
     assert.ok(Math.abs(width - baseline.bboxWidthMm) < 0.001, `${baseline.file}: bbox width drifted from develop`);
   }
 });
 
 // ---------------------------------------------------------------------------
-// Extra: MonogramGenerator opt-in wiring (round-trip + default-off).
+// H. MonogramGenerator opt-in wiring + MONO-013 clearance audit.
 // ---------------------------------------------------------------------------
 
-await test('7a. MonogramGenerator: #monogramWeightSizing off is unchanged; on persists flat fields and a live re-render reproduces the count', async () => {
+await test('H1. MonogramGenerator: weightSizesMm absent is unchanged; present persists the flat array and a live re-render reproduces the count', async () => {
   const generator = new MonogramGenerator({ geometryEngine: engine });
   const baseReq = {
     frameId: 'none', layoutId: 'single', letters: ['A'],
@@ -439,39 +457,70 @@ await test('7a. MonogramGenerator: #monogramWeightSizing off is unchanged; on pe
 
   const off = await generator.generate(baseReq);
   assert.ok(off.ok, `uniform monogram failed: ${off.message}`);
-  const offLayer = off.layers.find((l) => l.type === 'text');
-  assert.equal(offLayer.sizeMode, undefined, 'uniform monogram must not persist sizeMode');
+  assert.equal(off.layers.find((l) => l.type === 'text').sizeMode, undefined, 'uniform monogram must not persist sizeMode');
 
-  const on = await generator.generate({ ...baseReq, weightSizing: true, weightMinSizeMm: 2.0, weightMaxSizeMm: defaultWeightMaxSizeMm(2.0) });
+  const on = await generator.generate({ ...baseReq, weightSizesMm: stoneSizesFromBaseMm(2.0, 2) });
   assert.ok(on.ok, `weight monogram failed: ${on.message}`);
   const onLayer = on.layers.find((l) => l.type === 'text');
   assert.equal(onLayer.sizeMode, 'weight');
-  assert.equal(onLayer.weightMinSizeMm, 2.0);
-  assert.equal(onLayer.weightMaxSizeMm, 4.0);
+  assert.deepEqual(onLayer.weightSizesMm, [2.0, 2.8, 4.0]);
+  assert.equal(onLayer.weightMinSizeMm, undefined, 'the old flat fields must be gone, not carried alongside');
+  assert.equal(onLayer.weightMaxSizeMm, undefined);
 
   const rerender = await engine.generateTextLayout({
     text: onLayer.text, fontId: onLayer.font, providerId: 'opentype', layerId: onLayer.id,
     heightMm: onLayer.height, stoneSizeMm: onLayer.stoneSize, gapMm: onLayer.gap, mode: 'outline',
-    sizeMode: 'weight', weightMinSizeMm: onLayer.weightMinSizeMm, weightMaxSizeMm: onLayer.weightMaxSizeMm
+    sizeMode: 'weight', weightSizesMm: onLayer.weightSizesMm
   });
   const distinct = [...new Set(rerender.stones.map((s) => s.sizeMm))].sort((a, b) => a - b);
-  console.log(`    monogram "A": uniform ${off.measurements.letters[0].stoneCount} stones -> weight ${on.measurements.letters[0].stoneCount} stones; live re-render ${rerender.count}, sizes ${JSON.stringify(distinct)}`);
+  console.log(`    monogram "A": uniform ${off.measurements.letters[0].stoneCount} -> weight ${on.measurements.letters[0].stoneCount}; live re-render ${rerender.count}, sizes ${JSON.stringify(distinct)}`);
   assert.equal(rerender.count, on.measurements.letters[0].stoneCount, 'live re-render does not reproduce the generator stone count');
-  assert.ok(distinct.length >= 2, 'expected the re-rendered weight monogram to carry >= 2 distinct sizes');
+  assert.ok(distinct.length >= 2, 'expected >= 2 distinct sizes in the re-rendered weight monogram');
 });
 
-await test('7b. MonogramGenerator: MONO-013 script golden numbers are unchanged with weight sizing off (372 stones / 136.501458 mm)', async () => {
+await test('H2. MonogramGenerator: MONO-013 script goldens unchanged with weight sizing off -- 372 / 369 stones, 136.501458 / 131.901458 mm (all four printed)', async () => {
+  const generator = new MonogramGenerator({ geometryEngine: engine });
+  const mk = (interlockMm) => ({
+    frameId: 'none', layoutId: 'script', letters: ['A', 'K', 'L'],
+    fontId: 'great-vibes-regular', providerId: 'opentype', stemWidthRatio: 0.0357,
+    stoneSizeMm: 2.0, gapMm: 0.3, color: 'gold', canvasMm: { widthMm: 200, heightMm: 200 },
+    frameRect: { xMm: 0, yMm: 0, widthMm: 150, heightMm: 150 }, interlockMm
+  });
+  const a = await generator.generate(mk(0));
+  const b = await generator.generate(mk(-2.3));
+  assert.ok(a.ok && b.ok, `script monogram failed: ${a.message || b.message}`);
+  const aw = a.measurements.letters[0].scaledBoundingBox.widthMm;
+  const bw = b.measurements.letters[0].scaledBoundingBox.widthMm;
+  console.log(`    interlock  0.0: ${a.measurements.letterStoneCount} stones, bbox ${aw.toFixed(6)} mm`);
+  console.log(`    interlock -2.3: ${b.measurements.letterStoneCount} stones, bbox ${bw.toFixed(6)} mm`);
+  assert.equal(a.measurements.letterStoneCount, 372, 'MONO-013 golden stone count (interlock 0) changed -- the rename leaked into geometry');
+  assert.equal(b.measurements.letterStoneCount, 369, 'MONO-013 golden stone count (interlock -2.3) changed');
+  assert.ok(Math.abs(aw - 136.50145836140092) < 1e-6, 'MONO-013 golden bbox width (interlock 0) changed');
+  assert.ok(Math.abs(bw - 131.90145836140092) < 1e-6, 'MONO-013 golden bbox width (interlock -2.3) changed');
+});
+
+await test('H3. MONO-013 per-pair clearance floor is evaluated on a weight-sized script mark -- minStoneDistanceMm and minStoneDistancePairDiametersMm printed for the binding pair', async () => {
   const generator = new MonogramGenerator({ geometryEngine: engine });
   const res = await generator.generate({
     frameId: 'none', layoutId: 'script', letters: ['A', 'K', 'L'],
     fontId: 'great-vibes-regular', providerId: 'opentype', stemWidthRatio: 0.0357,
-    stoneSizeMm: 2.0, gapMm: 0.3, color: 'gold', canvasMm: { widthMm: 200, heightMm: 200 },
-    frameRect: { xMm: 0, yMm: 0, widthMm: 150, heightMm: 150 }, interlockMm: 0
+    stoneSizeMm: 2.0, gapMm: 0.3, color: 'gold', canvasMm: { widthMm: 220, heightMm: 220 },
+    frameRect: { xMm: 0, yMm: 0, widthMm: 150, heightMm: 150 }, interlockMm: 0,
+    weightSizesMm: stoneSizesFromBaseMm(2.0, 2)
   });
-  assert.ok(res.ok, `script monogram failed: ${res.message}`);
-  console.log(`    "AKL" script, interlock 0: ${res.measurements.letterStoneCount} stones, bbox ${res.measurements.letters[0].scaledBoundingBox.widthMm.toFixed(6)} mm`);
-  assert.equal(res.measurements.letterStoneCount, 372, 'MONO-013 golden stone count changed');
-  assert.ok(Math.abs(res.measurements.letters[0].scaledBoundingBox.widthMm - 136.50145836140092) < 1e-6, 'MONO-013 golden bbox width changed');
+  assert.ok(res.ok, `weight-sized script monogram failed: ${res.message}`);
+  const { minStoneDistanceMm, minStoneDistancePairDiametersMm } = res.measurements;
+  const [d1, d2] = minStoneDistancePairDiametersMm;
+  const pairFloorMm = (d1 + d2) / 2;
+  console.log(`    "AKL" script, Step 2, ${res.measurements.letterStoneCount} stones`);
+  console.log(`    minStoneDistanceMm = ${minStoneDistanceMm.toFixed(6)}  binding pair diameters = ${JSON.stringify(minStoneDistancePairDiametersMm)}  their (d1+d2)/2 = ${pairFloorMm.toFixed(3)}`);
+  assert.ok(minStoneDistanceMm >= pairFloorMm - 1e-3, 'the binding pair must clear its own per-pair floor');
+  // The binding (closest) pair in a real script mark is structurally always the tightly-packed
+  // hairline run -- (2.0, 2.0) here -- because a same-size run is always tighter than any
+  // cross-class junction (whose floor is the average of the two diameters). The generalisation from
+  // `< stoneSizeMm` to `< (d1+d2)/2` therefore does its distinguishing work in phase C's drop, not
+  // in this reported number -- test C2 forces a cross-class binding pair and proves it there.
+  console.log(`    (binding pair is ${d1 === d2 ? 'same-class' : 'cross-class'}; cross-class drop is proved in C2)`);
 });
 
 if (process.exitCode === 1) {

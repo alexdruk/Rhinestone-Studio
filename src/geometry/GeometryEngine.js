@@ -217,13 +217,17 @@ export class GeometryEngine {
     } else if (options.weightOptions) {
       // MONO-015: weight-following stone size. Three phases, in this deliberate order (sampling at
       // the largest pitch first would leave phase C nothing to drop):
-      //   A. sample the outline at the min pitch, then oversample by 2x when the layer actually
+      //   A. sample the outline at the min pitch, then oversample by 2x when the step actually
       //      mixes sizes (see below).
-      //   B. probe the local stroke width at each survivor (capped at weightMaxSizeMm) and assign
-      //      each a catalog diameter via weightSizeMm().
-      //   C. radius-aware drop: phase A only guaranteed weightMinSizeMm/oversampleFactor separation,
-      //      and larger assigned stones need more -- dropOverlappingSizedStones() removes the
-      //      physical overlaps this creates (floor (d1+d2)/2, no gap term -- see its doc comment).
+      //   B. probe the local stroke width at each survivor (capped at the widest step diameter) and
+      //      assign each a diameter via weightSizeMm(width, sizesMm).
+      //   C. radius-aware drop: phase A only guaranteed sizesMm[0]/oversampleFactor separation, and
+      //      larger assigned stones need more -- dropOverlappingSizedStones() removes the physical
+      //      overlaps this creates (floor (d1+d2)/2, no gap term -- see its doc comment).
+      //
+      // `sizesMm` is the graduated weight step's ascending mm diameters (normalizeMixedSizeParams()
+      // weight branch): a single entry when the step is "off" / not configured, in which case this
+      // whole branch reduces to uniform output.
       //
       // Phase A oversampling. Phase C only ever drops, so a survivor sits at an integer multiple of
       // the phase-A pitch. At the plain min pitch (2.3 mm for SS6/0.3) a 2.8 mm stone assigned to a
@@ -233,20 +237,22 @@ export class GeometryEngine {
       // OutlinePoints() re-quantises at minSeparationMm, StoneSampler.js) drops the quantisation
       // step to 1.15 mm, so a 2.8 mm run lands ~3.45 mm (+11%) and a 4.0 mm run ~4.6 mm (+7%).
       //
-      // The factor is 1 when weightMinSizeMm === weightMaxSizeMm: every stone is then the same
-      // size, so phase A at the min pitch is already exact and oversampling buys nothing. Pinning
-      // it to 1 in that case keeps the reduction-to-uniform guarantee byte-identical *by
-      // construction* (identical sampleShapeFillPoints() arguments), not by luck.
-      const { minSizeMm: weightMinSizeMm, maxSizeMm: weightMaxSizeMm } = options.weightOptions;
-      const oversampleFactor = weightMaxSizeMm > weightMinSizeMm ? 2 : 1;
-      const phaseASpacingMm = (weightMinSizeMm + options.gapMm) / oversampleFactor;
-      const phaseAMinSeparationMm = weightMinSizeMm / oversampleFactor;
+      // The factor is 1 when sizesMm has a single entry: every stone is then the same size, so phase
+      // A at the min pitch is already exact and oversampling buys nothing. Pinning it to 1 in that
+      // case keeps the reduction-to-uniform guarantee byte-identical *by construction* (identical
+      // sampleShapeFillPoints() arguments), not by luck.
+      const { sizesMm } = options.weightOptions;
+      const minWeightSizeMm = sizesMm[0];
+      const maxWeightSizeMm = sizesMm[sizesMm.length - 1];
+      const oversampleFactor = sizesMm.length > 1 ? 2 : 1;
+      const phaseASpacingMm = (minWeightSizeMm + options.gapMm) / oversampleFactor;
+      const phaseAMinSeparationMm = minWeightSizeMm / oversampleFactor;
       const phaseASamples = sampleShapeFillPoints('outline', polygons, boundingBox, phaseASpacingMm, phaseAMinSeparationMm);
-      const strokeWidthsMm = strokeWidthsForSamples(phaseASamples, polygons, weightMaxSizeMm);
+      const strokeWidthsMm = strokeWidthsForSamples(phaseASamples, polygons, maxWeightSizeMm);
       const assignedStones = phaseASamples.map((point, i) => ({
         xMm: point.xMm,
         yMm: point.yMm,
-        sizeMm: weightSizeMm(strokeWidthsMm[i], weightMinSizeMm, weightMaxSizeMm)
+        sizeMm: weightSizeMm(strokeWidthsMm[i], sizesMm)
       }));
       const survivingStones = dropOverlappingSizedStones(assignedStones);
 

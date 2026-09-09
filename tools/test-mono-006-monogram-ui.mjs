@@ -32,7 +32,7 @@ import { el } from '../src/ui/index.js';
 import { HistoryManager } from '../src/history/index.js';
 import { selectMany } from '../src/editing/index.js';
 import { GeometryEngine, SHAPE_LIBRARY_KINDS, StoneLayout, listFrames } from '../src/geometry/index.js';
-import { listStoneSizes, findStoneSizeByDiameterMm } from '../src/renderer/StoneSizes.js';
+import { listStoneSizes, findStoneSizeByDiameterMm, formatStoneSizeLabel, stoneSizesFromBaseMm, stoneSizeRungsAvailable } from '../src/renderer/StoneSizes.js';
 import { STONE_COLORS } from '../src/renderer/StoneColors.js';
 import { stoneLayoutToSvg } from '../src/export/SvgExporter.js';
 import { FontManager } from '../src/fonts/index.js';
@@ -79,6 +79,9 @@ const fontCategoryLabelFnSrc = sliceLine(appJs, 'function fontCategoryLabel(role
 const groupFontsByCategorySrc = sliceLine(appJs, 'function groupFontsByCategory(fonts){', 'groupFontsByCategory()');
 const productionFontsSrc = sliceLine(appJs, 'function productionFonts(){', 'productionFonts()');
 const escapeHtmlSrc = sliceLine(appJs, 'function escapeHtml(s){', 'escapeHtml()');
+// MONO-015: updateMonogramWeightStepsVisibility() (inside the sliced Monogram section) calls this
+// graduated-step option builder, which lives outside that section.
+const weightStepsOptionsHtmlSrc = sliceBetween(appJs, 'function weightStepsOptionsHtml(baseStoneSizeMm){', '\n}', 'weightStepsOptionsHtml()', { inclusive: true });
 const populateStoneColorOptionsSrc = sliceLine(appJs, "function populateStoneColorOptions(targetId='stoneColor'){", 'populateStoneColorOptions()');
 const currentSnapshotSrc = sliceLine(appJs, 'function currentSnapshot(){', 'currentSnapshot()');
 const commitHistorySrc = sliceLine(appJs, 'function commitHistory(){', 'commitHistory()');
@@ -144,6 +147,7 @@ function installFakeDom() {
 
 const sandboxFactory = new Function(
   'Lightbox', 'HistoryManager', 'SHAPE_LIBRARY_KINDS', 'el', 'listFrames', 'listStoneSizes', 'findStoneSizeByDiameterMm', 'STONE_COLORS',
+  'formatStoneSizeLabel', 'stoneSizesFromBaseMm', 'stoneSizeRungsAvailable',
   'MONOGRAM_LAYOUTS', 'MONOGRAM_LAYOUT_LETTER_COUNTS', 'MONOGRAM_LAYOUT_LETTER_COUNT_RANGES', 'MONOGRAM_GENERATOR_FAILURE_REASONS',
   'fontManager', 'initialProject', 'selectMany', 'syncSelectedControlsFromLayer', 'updateAll', 'updateHistoryUI',
   'monogramGenerator', 'isMonogramEligibleStemWidthRatio', 'defaultFrameStoneSizeMm',
@@ -164,6 +168,7 @@ const sandboxFactory = new Function(
   ${groupFontsByCategorySrc}
   ${productionFontsSrc}
   ${escapeHtmlSrc}
+  ${weightStepsOptionsHtmlSrc}
   ${populateStoneColorOptionsSrc}
   const history=new HistoryManager({maxSize:100});
   let project=initialProject;
@@ -232,6 +237,7 @@ function buildScenario({ project, monogramGenerator, fontManager = makeFakeFontM
   function setLengthField(id, mm) { el(id).value = formatLengthDisplay(mm, resolvedProject.units); }
   const sandbox = sandboxFactory(
     Lightbox, HistoryManager, SHAPE_LIBRARY_KINDS, el, listFrames, listStoneSizes, findStoneSizeByDiameterMm, STONE_COLORS,
+    formatStoneSizeLabel, stoneSizesFromBaseMm, stoneSizeRungsAvailable,
     MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS, MONOGRAM_LAYOUT_LETTER_COUNT_RANGES, MONOGRAM_GENERATOR_FAILURE_REASONS,
     fontManager, resolvedProject,
     selectMany, () => {}, () => {}, () => {},

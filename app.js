@@ -85,14 +85,14 @@
 // pipeline stages re-run on every threshold/invert/blur/resize edit, but the (comparatively
 // expensive) browser image decode only ever runs once per distinct imageSrc value.
 import './src/browser/BrowserDependencyProbe.js';
-import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace, hitTestPathLayerRegion, computeNaturalContourTransform, applyNaturalContourTransform, isPointInsidePolygons, findOverlappingStonePairs, hasAnyOverlappingStonePair, measureStoneCrowding, solveLetterSpacingMm, TRACKING_XPITCH_LADDER, MIN_HEIGHT_TO_STONE_RATIO, PRINTABLE_MARGIN_MM, maxAutoFitWidthMm, computeTextAutoFitScale, defaultWeightMaxSizeMm } from './src/geometry/index.js';
+import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace, hitTestPathLayerRegion, computeNaturalContourTransform, applyNaturalContourTransform, isPointInsidePolygons, findOverlappingStonePairs, hasAnyOverlappingStonePair, measureStoneCrowding, solveLetterSpacingMm, TRACKING_XPITCH_LADDER, MIN_HEIGHT_TO_STONE_RATIO, PRINTABLE_MARGIN_MM, maxAutoFitWidthMm, computeTextAutoFitScale } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
 import { createDefaultFontProviderRegistry, createDefaultRhinestoneFontRegistry, BoundingBox, strokeNarrowerThanOneStone } from './src/text/index.js';
 import { renderProductionLayout, renderStoneLayout, fitTransform, chooseNiceStepMm } from './src/renderer/CanvasRenderer2D.js';
 import { createPreview3D } from './src/preview3d/index.js';
 import { circumferenceMm, frontViewFrameWidthMm, canvasXMmForRotationDeg, rotationDegForCanvasXMm, azimuthRadForCanvasXMm, wrapAngleRad } from './src/preview3d/ObjectDimensions.js';
 import { STONE_COLORS } from './src/renderer/StoneColors.js';
-import { listStoneSizes, findStoneSizeByDiameterMm, formatStoneSizeLabel, stoneSizeHeightMidpointMm, isHeightWithinStoneSizeRange, stoneSizeEntirelyExceedsPrintableHeight } from './src/renderer/StoneSizes.js';
+import { listStoneSizes, findStoneSizeByDiameterMm, formatStoneSizeLabel, stoneSizeHeightMidpointMm, isHeightWithinStoneSizeRange, stoneSizeEntirelyExceedsPrintableHeight, stoneSizesFromBaseMm, stoneSizeRungsAvailable } from './src/renderer/StoneSizes.js';
 import { stoneLayoutToSvg } from './src/export/SvgExporter.js';
 import { computeProductionSheetLayout, productionSheetToSvg, productionSheetToPdf } from './src/export/ProductionSheetExporter.js';
 import { parseSvgDocument } from './src/svg/index.js';
@@ -709,9 +709,28 @@ const MIXED_ALLOWED_SIZE_CHECKBOXES=[
 // Builds the #mixedMinSize/#mixedMaxSize <option> lists from the Stone Library, mirroring
 // populateStoneSizeOptions() exactly (same catalog, same "value is the plain mm diameter" contract)
 // -- called once at startup alongside it.
-function populateMixedSizeSelectOptions(){const optionsHtml=listStoneSizes().map(s=>`<option value="${s.diameterMm}">${escapeHtml(s.name)} — ${s.diameterMm.toFixed(1)} mm</option>`).join('');el('mixedMinSize').innerHTML=optionsHtml;el('mixedMaxSize').innerHTML=optionsHtml;
-  // MONO-015: #weightMinSize/#weightMaxSize use the identical Stone Library option list.
-  el('weightMinSize').innerHTML=optionsHtml;el('weightMaxSize').innerHTML=optionsHtml}
+function populateMixedSizeSelectOptions(){const optionsHtml=listStoneSizes().map(s=>`<option value="${s.diameterMm}">${escapeHtml(s.name)} — ${s.diameterMm.toFixed(1)} mm</option>`).join('');el('mixedMinSize').innerHTML=optionsHtml;el('mixedMaxSize').innerHTML=optionsHtml}
+// MONO-015: the graduated weight-step <select> option list (#weightSteps in the text inspector,
+// #monogramWeightSteps in the monogram lightbox). Option value is the rung count: '0' = Off,
+// '1' = base + one catalog rung, '2' = base + two rungs. Labels are built live from the base stone
+// size ("Off" / "SS6 → SS10" / "SS6 → SS10 → SS16"), and a step the catalog cannot supply from this
+// base (SS20 has one rung above it, SS30 none) is rendered disabled with an explaining title.
+function weightStepsOptionsHtml(baseStoneSizeMm){
+  const available=stoneSizeRungsAvailable(baseStoneSizeMm);
+  const html=['<option value="0">Off</option>'];
+  for(let step=1;step<=2;step++){
+    const ok=step<=available;
+    const label=ok
+      ?stoneSizesFromBaseMm(baseStoneSizeMm,step).map(d=>formatStoneSizeLabel(d).replace(/\s*\(.*\)$/,'')).join(' → ')
+      :`Step ${step} — needs ${step} larger stone size${step>1?'s':''}`;
+    const title=ok?'':` title="The stone catalog has no ${step} size${step>1?'s':''} larger than the current stone size."`;
+    html.push(`<option value="${step}"${ok?'':' disabled'}${title}>${escapeHtml(label)}</option>`);
+  }
+  return html.join('');
+}
+// The rung count a stored weightSizesMm array represents (step 1 -> 2 entries, step 2 -> 3); 0 for
+// an empty/absent array (weight mode on, step "Off").
+function weightStepForSizes(weightSizesMm){return Array.isArray(weightSizesMm)&&weightSizesMm.length>1?weightSizesMm.length-1:0}
 // S-110 (Expanded Shape Library): every shape kind that resolves through GeometryEngine's
 // generateShapeLayout()/resolveShapePolygons() -- Circle/Rectangle plus the nine new
 // ShapeLibrary.js kinds (Ellipse/Capsule/Regular Polygon/Star/Heart/Arrow/Cross/Crescent/Ring).
@@ -783,10 +802,12 @@ function shapeLayerResolveParams(layer){
 // convention). '??' fallbacks mean a layer saved before this milestone (no such fields at all)
 // forwards sizeMode:'uniform', so GeometryEngine.js's normalizeMixedSizeParams() short-circuits
 // immediately and every pre-S-200 project generates byte-identical geometry.
-// MONO-015: weightMinSizeMm/weightMaxSizeMm are flat like minSizeMm/maxSizeMm -- deliberately NOT
-// reusing S-200's fields, so a mode-switched layer round-trips unambiguously. normalizeMixedSizeParams()
-// ignores them unless sizeMode==='weight' and the caller allows weight (text layers only).
-function mixedSizeParamsFor(layer){return{sizeMode:resolveSizeMode(layer.sizeMode),allowedSizesMm:layer.allowedSizesMm??[],minSizeMm:layer.minSizeMm??null,maxSizeMm:layer.maxSizeMm??null,conservativeDetail:layer.conservativeDetail,weightMinSizeMm:layer.weightMinSizeMm??null,weightMaxSizeMm:layer.weightMaxSizeMm??null}}
+// MONO-015: weightSizesMm is a single flat array (the graduated weight step's ascending mm
+// diameters), stored the way S-200's allowedSizesMm is -- deliberately NOT reusing S-200's
+// minSizeMm/maxSizeMm, so a mode-switched layer round-trips unambiguously. normalizeMixedSizeParams()
+// ignores it unless sizeMode==='weight' and the caller allows weight (text layers only). Empty
+// default mirrors allowedSizesMm's, and reduces weight mode to uniform output.
+function mixedSizeParamsFor(layer){return{sizeMode:resolveSizeMode(layer.sizeMode),allowedSizesMm:layer.allowedSizesMm??[],minSizeMm:layer.minSizeMm??null,maxSizeMm:layer.maxSizeMm??null,conservativeDetail:layer.conservativeDetail,weightSizesMm:layer.weightSizesMm??[]}}
 // MONO-006B: every field generateTextStonesLive() passes to permanentEngine.generateTextLayout()
 // except authoredScale itself -- factored out so recoverStaleAuthoredScales() below can generate
 // the exact same *natural* (unscaled) layout to validate a persisted authoredScale against, without
@@ -2050,11 +2071,11 @@ function syncSelectedControlsFromLayer(){
   // the layer's own stoneSize when unset (a fresh Mixed-mode layer, or a legacy layer with no such
   // field), matching normalizeMixedSizeParams()'s own default derivation.
   const sizeMode=resolveSizeMode(l.sizeMode);el('sizeMode').value=sizeMode;el('mixedSizeDetailFields').style.display=sizeMode==='mixed'?'block':'none';
-  // MONO-015: weight-following stone size fields. '??' fallbacks mirror the Min/Max Size block just
-  // below -- a layer with no weight fields yet shows the defaults a first enable would apply.
+  // MONO-015: the graduated weight-step select. Options are rebuilt from this layer's own stone size
+  // (labels + which steps the catalog can supply), then set from the stored weightSizesMm.
   el('weightSizeDetailFields').style.display=sizeMode==='weight'?'block':'none';
-  setNumericSelectValue(el('weightMinSize'),l.weightMinSizeMm??l.stoneSize);
-  setNumericSelectValue(el('weightMaxSize'),l.weightMaxSizeMm??defaultWeightMaxSizeMm(l.stoneSize));
+  el('weightSteps').innerHTML=weightStepsOptionsHtml(l.stoneSize);
+  el('weightSteps').value=String(weightStepForSizes(l.weightSizesMm));
   const allowedSizesMm=Array.isArray(l.allowedSizesMm)?l.allowedSizesMm:[];
   for(const cb of MIXED_ALLOWED_SIZE_CHECKBOXES)el(cb.id).checked=allowedSizesMm.some(v=>Math.abs(v-cb.diameterMm)<0.005);
   setNumericSelectValue(el('mixedMinSize'),l.minSizeMm??l.stoneSize);setNumericSelectValue(el('mixedMaxSize'),l.maxSizeMm??l.stoneSize);
@@ -2224,14 +2245,17 @@ function writeSelectedControlsToLayer(){
   // Live disclosure like #mixedSizeDetailFields above.
   el('weightSizeDetailFields').style.display=l.sizeMode==='weight'?'block':'none';
   if(l.sizeMode==='weight'){
-    // First enable for this layer: seed the selects (which still hold a prior layer's values) from
-    // this layer's own stone size + two catalog steps up, then read them back. After that the UI is
-    // authoritative, exactly like Min/Max Size above.
-    if(l.weightMinSizeMm==null)setNumericSelectValue(el('weightMinSize'),l.stoneSize);
-    if(l.weightMaxSizeMm==null)setNumericSelectValue(el('weightMaxSize'),defaultWeightMaxSizeMm(l.stoneSize));
-    l.weightMinSizeMm=parseFloat(el('weightMinSize').value)||l.stoneSize;
-    l.weightMaxSizeMm=parseFloat(el('weightMaxSize').value)||l.stoneSize;
-    if(l.weightMinSizeMm>l.weightMaxSizeMm)l.weightMaxSizeMm=l.weightMinSizeMm;
+    // #weightSteps carries the rung count (0 = Off, 1, 2). The actual mm diameters are re-derived
+    // from this layer's own stone size on every write, so changing the stone size re-bases the step
+    // rather than leaving a stale array. First enable (no weightSizesMm yet) seeds two rungs up,
+    // clamped to what the catalog can supply from this base -- the graduated-control equivalent of
+    // the old "two catalog steps up, clamped" Widest-size default. A step beyond the catalog's reach
+    // can only be selected by the base size later shrinking the ladder, so clamp there too.
+    const available=stoneSizeRungsAvailable(l.stoneSize);
+    const step=l.weightSizesMm==null?Math.min(2,available):Math.min(parseInt(el('weightSteps').value,10)||0,available);
+    l.weightSizesMm=step>0?stoneSizesFromBaseMm(l.stoneSize,step):[];
+    el('weightSteps').innerHTML=weightStepsOptionsHtml(l.stoneSize);
+    el('weightSteps').value=String(step);
   }
   // RS-3011 Step 3b: every field write above (stoneSize/gap/color/fillMode/mixed-size) can change
   // a 'path' layer's live stone preview on the Design canvas -- rebuild it here, the one place all
@@ -3022,7 +3046,14 @@ function updateWeightSizeCapabilityUI(){
     el('sizeMode').value='uniform';
     if(l)l.sizeMode='uniform';
   }
-  el('weightSizeDetailFields').style.display=resolveSizeMode(el('sizeMode').value)==='weight'?'block':'none';
+  const weightMode=resolveSizeMode(el('sizeMode').value)==='weight';
+  el('weightSizeDetailFields').style.display=weightMode?'block':'none';
+  // Keep #weightSteps' labels and disabled options in step with the live stone size (a step the
+  // catalog can't supply from the current base shows disabled, mirroring the #sizeMode option).
+  if(weightMode&&l){
+    el('weightSteps').innerHTML=weightStepsOptionsHtml(l.stoneSize);
+    el('weightSteps').value=String(weightStepForSizes(l.weightSizesMm));
+  }
 }
 // FONT-LIB-004: the readability check the font library was missing. An audit of all 29 enabled
 // OpenType fonts through FONT-CERT-001/002's real analysis pipeline
@@ -4284,7 +4315,7 @@ el('autoFit').addEventListener('input',()=>{
   const turningOn=el('autoFit').value==='on';
   el('autoFitOnHint').style.display=(l&&l.type==='text'&&!l.autoFit&&turningOn)?'block':'none';
 });
-const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','textAlign','lineSpacing','letterSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail','weightMinSize','weightMaxSize'];
+const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','textAlign','lineSpacing','letterSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail','weightSteps'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
 // RS-2002: Browse Fonts panel wiring. Toggling/closing never touches history (it only decides
@@ -5251,13 +5282,13 @@ function buildMonogramRequest(validated){
   const stemWidthRatio=fontManager?fontManager.getFont(validated.fontId)?.stemWidthRatio:undefined;
   const request={frameId:validated.frameId,layoutId:validated.layoutId,letters:validated.letters,fontId:validated.fontId,providerId:resolveFontProviderId(validated.fontId),stemWidthRatio,stoneSizeMm,color,frameRect,canvasMm,frameOptions};
   // MONO-015: opt-in weight-following stone size for the letters. Only for OpenType fonts (the
-  // #monogramWeightSizing checkbox is hidden for authored fonts, which have no stroke outline to
-  // probe); min = the letters' stone size, max = two catalog steps up, clamped -- the same default
-  // rule a text layer's first weight enable uses.
-  if(typeof stemWidthRatio==='number'&&el('monogramWeightSizing').checked){
-    request.weightSizing=true;
-    request.weightMinSizeMm=stoneSizeMm;
-    request.weightMaxSizeMm=defaultWeightMaxSizeMm(stoneSizeMm);
+  // #monogramWeightSteps select is hidden for authored fonts, which have no stroke outline to
+  // probe). The select carries the rung count; the mm diameters are derived from the letters' own
+  // stone size, the same graduated step a text layer's inspector uses. A step the option list marks
+  // disabled is skipped here too.
+  const monogramWeightStep=parseInt(el('monogramWeightSteps').value,10)||0;
+  if(typeof stemWidthRatio==='number'&&monogramWeightStep>0&&monogramWeightStep<=stoneSizeRungsAvailable(stoneSizeMm)){
+    request.weightSizesMm=stoneSizesFromBaseMm(stoneSizeMm,monogramWeightStep);
   }
   // MONO-013: only the 'script' layout reads interlockMm. gapMm is pinned to the value the
   // generator would otherwise default to (AUTHORED_FONT_FITTING_GAP_MM) so the slider floor
@@ -5292,17 +5323,22 @@ function applyMonogramDefaultFrameForFont(){
 // MONO-009: also refreshes frame-size bounds/default on open (out-of-range-only, same as a frame
 // switch) so a product switched while the lightbox was closed gets a chance to apply its own
 // safe-area default on next open, rather than only on frame-change/units-change/boot.
-// MONO-015: the #monogramWeightSizing checkbox is meaningful only for OpenType script fonts --
-// authored fonts place stones on a fixed grid with no stroke outline. Hidden (and forced off) for
-// every other font.
-function updateMonogramWeightSizingVisibility(){
+// MONO-015: the #monogramWeightSteps select is meaningful only for OpenType script fonts --
+// authored fonts place stones on a fixed grid with no stroke outline. Hidden (and forced to Off)
+// for every other font. Its options are rebuilt from the monogram stone size (labels + which steps
+// the catalog can supply), the same graduated control the text inspector uses.
+function updateMonogramWeightStepsVisibility(){
   const fontId=el('monogramFont').value;
   const font=fontId&&fontManager&&fontManager.hasFont(fontId)?fontManager.getFont(fontId):null;
   const isOpenType=Boolean(font&&font.providerId==='opentype');
-  el('monogramWeightSizingField').style.display=isOpenType?'':'none';
-  if(!isOpenType)el('monogramWeightSizing').checked=false;
+  el('monogramWeightStepsField').style.display=isOpenType?'':'none';
+  const baseMm=parseFloat(el('monogramStoneSize').value)||2;
+  const previous=el('monogramWeightSteps').value;
+  el('monogramWeightSteps').innerHTML=weightStepsOptionsHtml(baseMm);
+  const restored=el('monogramWeightSteps').querySelector(`option[value="${previous}"]`);
+  el('monogramWeightSteps').value=(isOpenType&&restored&&!restored.disabled)?previous:'0';
 }
-function onMonogramOpen(){monogramFrameUserChosen=false;clearMonogramValidation();updateMonogramFrameSizeBounds();updateMonogramInterlockVisibility();updateMonogramWeightSizingVisibility();updateMonogramGenerateButtonState()}
+function onMonogramOpen(){monogramFrameUserChosen=false;clearMonogramValidation();updateMonogramFrameSizeBounds();updateMonogramInterlockVisibility();updateMonogramWeightStepsVisibility();updateMonogramGenerateButtonState()}
 // MONO-011: UI-layer-only auto-shrink retry loop. MonogramGenerator.generate() keeps its "never
 // auto-corrects" doctrine (see its own doc comment) -- this wrapper is the thing that decides to
 // retry, and it only ever adjusts frameOptions.stoneSizeMm (never the shared letters' stoneSizeMm,
@@ -5393,14 +5429,14 @@ populateMonogramFrameStoneSizeOptions();populateStoneColorOptions('monogramFrame
 el('monogramFrameStoneSize').value=el('monogramStoneSize').value;
 el('monogramFrameColor').value=el('monogramColor').value;
 updateMonogramColorSwatch();updateMonogramFrameColorSwatch();updateMonogramFrameSizeBounds();updateMonogramLetterCountHint();
-updateMonogramFrameStoneControlsVisibility();updateMonogramInterlockVisibility();updateMonogramWeightSizingVisibility();
+updateMonogramFrameStoneControlsVisibility();updateMonogramInterlockVisibility();updateMonogramWeightStepsVisibility();
 if(fontManager)populateMonogramFontOptions();
 el('monogramFrame').addEventListener('change',()=>{monogramFrameUserChosen=true;updateMonogramFrameSizeBounds();updateMonogramGenerateButtonState()});
 el('monogramLayout').addEventListener('change',()=>{updateMonogramLetterCountHint();updateMonogramInterlockVisibility();updateMonogramGenerateButtonState()});
-el('monogramStoneSize').addEventListener('change',()=>{if(monogramLayoutIsScript())refreshMonogramInterlockBounds();updateMonogramGenerateButtonState()});
+el('monogramStoneSize').addEventListener('change',()=>{if(monogramLayoutIsScript())refreshMonogramInterlockBounds();updateMonogramWeightStepsVisibility();updateMonogramGenerateButtonState()});
 el('monogramInterlock').addEventListener('input',()=>{updateMonogramInterlockLabel();updateMonogramGenerateButtonState()});
 el('monogramLetters').addEventListener('input',()=>updateMonogramGenerateButtonState());
-el('monogramFont').addEventListener('change',()=>{applyMonogramDefaultFrameForFont();updateMonogramWeightSizingVisibility();updateMonogramGenerateButtonState()});
+el('monogramFont').addEventListener('change',()=>{applyMonogramDefaultFrameForFont();updateMonogramWeightStepsVisibility();updateMonogramGenerateButtonState()});
 el('monogramColor').addEventListener('change',()=>{updateMonogramColorSwatch();updateMonogramGenerateButtonState()});
 el('monogramWidth').addEventListener('input',()=>{stashTypedLengthField('monogramWidth');updateMonogramGenerateButtonState()});
 el('monogramHeight').addEventListener('input',()=>{stashTypedLengthField('monogramHeight');updateMonogramGenerateButtonState()});

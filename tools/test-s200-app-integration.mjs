@@ -73,10 +73,10 @@ await test('5. mixedSizeParamsFor() forwards sizeMode:\'uniform\' for a layer wi
   const mixedSizeParamsFor = run();
   const legacyLayer = { id: 'x', type: 'rectangle', stoneSize: 4, gap: 0.3 };
   assert.deepEqual(mixedSizeParamsFor(legacyLayer), {
-    // MONO-015 added weightMinSizeMm/weightMaxSizeMm (null for a legacy layer, exactly like
-    // minSizeMm/maxSizeMm) -- normalizeMixedSizeParams() ignores them unless sizeMode==='weight'.
+    // MONO-015 added weightSizesMm (a single flat array, stored the way allowedSizesMm is; empty
+    // for a legacy layer) -- normalizeMixedSizeParams() ignores it unless sizeMode==='weight'.
     sizeMode: 'uniform', allowedSizesMm: [], minSizeMm: null, maxSizeMm: null, conservativeDetail: undefined,
-    weightMinSizeMm: null, weightMaxSizeMm: null
+    weightSizesMm: []
   });
 });
 

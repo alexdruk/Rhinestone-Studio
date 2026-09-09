@@ -56,7 +56,7 @@ function assertPositiveNumber(value, name) {
  *   other combination is a caller bug, not something to silently absorb. (An *unknown* mode string
  *   is a separate case handled by app.js's resolveSizeMode() old-project fallback, never reaching
  *   here.)
- * @returns {{sizeMode: 'uniform'|'mixed'|'weight', mixedOptions: null | {...}, weightOptions?: {minSizeMm: number, maxSizeMm: number}}}
+ * @returns {{sizeMode: 'uniform'|'mixed'|'weight', mixedOptions: null | {...}, weightOptions?: {sizesMm: number[]}}}
  */
 export function normalizeMixedSizeParams(params, stoneSizeMm, { allowWeight = false } = {}) {
   const sizeMode = params.sizeMode ?? 'uniform';
@@ -67,21 +67,24 @@ export function normalizeMixedSizeParams(params, stoneSizeMm, { allowWeight = fa
     if (!allowWeight) {
       throw new Error("MixedSizeGenerator.normalizeMixedSizeParams: sizeMode 'weight' (weight-following stone size) is only supported for a text layer sampled in outline mode.");
     }
-    // Flat on the layer, nested here at the engine boundary -- the same shape this function already
-    // produces for 'mixed'. weightMinSizeMm / weightMaxSizeMm are deliberately NOT S-200's
-    // minSizeMm / maxSizeMm (those belong to 'mixed'; sharing them would make a mode-switched layer
-    // ambiguous on round-trip). Both default to stoneSizeMm when absent, which makes weight mode
-    // reduce to uniform output.
-    const minSizeMm = params.weightMinSizeMm !== undefined && params.weightMinSizeMm !== null
-      ? assertPositiveNumber(params.weightMinSizeMm, 'weightMinSizeMm')
-      : stoneSizeMm;
-    const maxSizeMm = params.weightMaxSizeMm !== undefined && params.weightMaxSizeMm !== null
-      ? assertPositiveNumber(params.weightMaxSizeMm, 'weightMaxSizeMm')
-      : stoneSizeMm;
-    if (minSizeMm > maxSizeMm) {
-      throw new RangeError('weightMinSizeMm must not exceed weightMaxSizeMm.');
+    // MONO-015: `weightSizesMm` is a single flat array of ascending mm diameters -- the graduated
+    // weight step's stones -- stored on the layer exactly the way S-200's `allowedSizesMm` is, and
+    // validated the same way (entry-by-entry with assertPositiveNumber). Deliberately NOT S-200's
+    // minSizeMm/maxSizeMm: those belong to 'mixed', and a mode-switched layer would round-trip
+    // ambiguously if the two modes shared fields. An empty (or absent) array is the "weight on,
+    // nothing configured" / pre-config default -- it reduces to uniform output at the layer's own
+    // stone size, exactly as `{d, d}` did before this representation change.
+    const rawSizes = Array.isArray(params.weightSizesMm) ? params.weightSizesMm : [];
+    for (const value of rawSizes) {
+      assertPositiveNumber(value, 'weightSizesMm entry');
     }
-    return { sizeMode, mixedOptions: null, weightOptions: { minSizeMm, maxSizeMm } };
+    for (let k = 1; k < rawSizes.length; k++) {
+      if (rawSizes[k] <= rawSizes[k - 1]) {
+        throw new RangeError('weightSizesMm must be strictly ascending.');
+      }
+    }
+    const sizesMm = rawSizes.length ? [...rawSizes] : [stoneSizeMm];
+    return { sizeMode, mixedOptions: null, weightOptions: { sizesMm } };
   }
   if (sizeMode === 'uniform') {
     return { sizeMode, mixedOptions: null };
