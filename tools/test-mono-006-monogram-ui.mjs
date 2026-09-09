@@ -31,7 +31,7 @@ import { Lightbox } from '../src/ui/Lightbox.js';
 import { el } from '../src/ui/index.js';
 import { HistoryManager } from '../src/history/index.js';
 import { selectMany } from '../src/editing/index.js';
-import { GeometryEngine, SHAPE_LIBRARY_KINDS, StoneLayout, listFrames } from '../src/geometry/index.js';
+import { GeometryEngine, SHAPE_LIBRARY_KINDS, StoneLayout, listFrames, TRACKING_XPITCH_LADDER } from '../src/geometry/index.js';
 import { listStoneSizes, findStoneSizeByDiameterMm, formatStoneSizeLabel, stoneSizesFromBaseMm, stoneSizeRungsAvailable } from '../src/renderer/StoneSizes.js';
 import { STONE_COLORS } from '../src/renderer/StoneColors.js';
 import { stoneLayoutToSvg } from '../src/export/SvgExporter.js';
@@ -147,7 +147,7 @@ function installFakeDom() {
 
 const sandboxFactory = new Function(
   'Lightbox', 'HistoryManager', 'SHAPE_LIBRARY_KINDS', 'el', 'listFrames', 'listStoneSizes', 'findStoneSizeByDiameterMm', 'STONE_COLORS',
-  'formatStoneSizeLabel', 'stoneSizesFromBaseMm', 'stoneSizeRungsAvailable',
+  'formatStoneSizeLabel', 'stoneSizesFromBaseMm', 'stoneSizeRungsAvailable', 'TRACKING_XPITCH_LADDER',
   'MONOGRAM_LAYOUTS', 'MONOGRAM_LAYOUT_LETTER_COUNTS', 'MONOGRAM_LAYOUT_LETTER_COUNT_RANGES', 'MONOGRAM_GENERATOR_FAILURE_REASONS',
   'fontManager', 'initialProject', 'selectMany', 'syncSelectedControlsFromLayer', 'updateAll', 'updateHistoryUI',
   'monogramGenerator', 'isMonogramEligibleStemWidthRatio', 'defaultFrameStoneSizeMm',
@@ -237,7 +237,7 @@ function buildScenario({ project, monogramGenerator, fontManager = makeFakeFontM
   function setLengthField(id, mm) { el(id).value = formatLengthDisplay(mm, resolvedProject.units); }
   const sandbox = sandboxFactory(
     Lightbox, HistoryManager, SHAPE_LIBRARY_KINDS, el, listFrames, listStoneSizes, findStoneSizeByDiameterMm, STONE_COLORS,
-    formatStoneSizeLabel, stoneSizesFromBaseMm, stoneSizeRungsAvailable,
+    formatStoneSizeLabel, stoneSizesFromBaseMm, stoneSizeRungsAvailable, TRACKING_XPITCH_LADDER,
     MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS, MONOGRAM_LAYOUT_LETTER_COUNT_RANGES, MONOGRAM_GENERATOR_FAILURE_REASONS,
     fontManager, resolvedProject,
     selectMany, () => {}, () => {}, () => {},

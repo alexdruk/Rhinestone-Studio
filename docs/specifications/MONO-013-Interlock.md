@@ -2,6 +2,15 @@
 
 **Status:** implemented. Branch `feature/mono-013-interlock` off `develop` @ `b2f07b0` (local only).
 
+> **MONO-016 addendum.** The `interlockMm` request param was renamed **`letterSpacingMm`** outright
+> (no alias) and its range widened from `[-pitchMm, 0]` to `[-pitchMm, 4 × pitchMm]` — positive
+> values now spread the script letters apart rather than being rejected. The same control was
+> extended to the four slot layouts (as an additive inter-slot-gap term, range `[0, 4 × pitchMm]`).
+> `measurements.interlockMm` / `diagnostics.interlockMm` → `…letterSpacingMm`; the `#monogramInterlock`
+> "Overlap" slider → `#monogramLetterSpacing` "Letter spacing". §4 below describes the original
+> negative-only rule; the floor reasoning (why it is exactly `-pitchMm`) is unchanged. See
+> `docs/specifications/MONO-016-LetterSpacing.md`.
+
 **Authorises:** a fifth monogram layout id `MONOGRAM_LAYOUTS.SCRIPT = 'script'`; a range-based
 letter-count map (`MONOGRAM_LAYOUT_LETTER_COUNT_RANGES`) alongside the exact-count one; a separate
 `MonogramGenerator._generateScriptMonogram()` branch; an optional `interlockMm` request param;

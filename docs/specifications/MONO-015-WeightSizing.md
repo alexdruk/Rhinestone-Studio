@@ -118,7 +118,10 @@ engine produces the nested `{ sizesMm }` bundle at its own boundary, exactly the
 
 An empty (or absent) `weightSizesMm` is the "weight on, step Off / nothing configured" case: the
 engine substitutes `[stoneSizeMm]`, so the branch reduces to uniform output at the layer's own stone
-size — exactly what `{d, d}` did before this representation change. On first enable the inspector
+size — exactly what `{d, d}` did before this representation change. **This coercion is deliberate,
+not an incidental side effect of the "smallest entry ≥ width" rule:** `weight` with nothing to
+follow is a legitimate transient UI state (the user picked the mode, has not picked a step), and it
+must produce a valid uniform layout rather than throw or emit zero stones. On first enable the inspector
 seeds Step 2, clamped to what the catalog can supply from the base (the graduated equivalent of the
 old "two catalog steps up, clamped" default). The `#weightSteps` select carries the *rung count*
 (0 / 1 / 2); the mm diameters are re-derived from the layer's own stone size on every write, so
@@ -254,8 +257,26 @@ corner legitimately irregular).
   * Step 1 `[2.0, 2.8]` = **85** (between the develop anchors uniform-2.0 = 94 and uniform-2.8 = 62).
   * Step 2 `[2.0, 2.8, 4.0]` = **68** — identical to the develop golden for the old `{min 2.0,
     max 4.0}` pair. If it ever moves, the two representations have diverged; report it, do not re-pin.
+
+  **Why the wider range yields *fewer* stones (68 < 85), which would otherwise read as a bug.**
+  Step 1 and Step 2 differ in more than density. A stem in the 2.8–4.0 mm band gets a **2.8 mm**
+  stone under Step 1 — narrower than the stroke, so both contour edges of that stem survive as a
+  double chain — and a **4.0 mm** stone under Step 2, which satisfies MONO-012's single-chain
+  condition (stone ≥ stroke width) and collapses the stem to *one* chain. Step 2's larger stones on
+  the wide parts therefore replace two rows with one; the count drops even though the biggest stones
+  got bigger.
+
+* `test-mono-015-weight-sizing.mjs` test **F3** is named for the app.js `resolveSizeMode()` →
+  `uniform` old-project compatibility path but actually asserts the *engine's* own `Unsupported
+  sizeMode` throw for an unknown mode reaching it directly. Its name was corrected to say so; the
+  compatibility path itself stays covered by `test-s200-app-integration` test 3.
 * Screenshots (`docs/screenshots/mono-015/`, Mug / gold / Great Vibes "A" / layout single / frame
-  none / SS6 base): `uniform.png` **103**, `weight-step1.png` **95**, `weight-step2.png` **71**.
+  none / SS6 base): `uniform.png`, `weight-step1.png`, `weight-step2.png`. MONO-015's third commit
+  recorded `weight-step1.png` / `weight-step2.png` as pure git renames of the old
+  `weight-6-10.png` / `weight-6-16.png` — the old images relabelled, not re-rendered from the
+  shipped graduated-step code path. MONO-016 regenerated all three from the live app so the
+  committed screenshots actually come from the shipped path; see that milestone's report for the
+  as-rendered stone counts.
 
 ---
 

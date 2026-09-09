@@ -399,7 +399,7 @@ await test('F2. non-text callers throw on a stray sizeMode "weight" (caller bug,
   );
 });
 
-await test('F3. an *unknown* sizeMode string is still the old-project compatibility path (a TypeError from the engine, distinct from the "weight"-on-a-shape case)', () => {
+await test('F3. an *unknown* sizeMode string reaching the engine directly throws "Unsupported sizeMode" (distinct from the "weight"-on-a-shape case; the app.js resolveSizeMode() -> uniform old-project compatibility fallback is covered by test-s200-app-integration test 3)', () => {
   assert.throws(
     () => engine.generateShapeLayout({
       shape: 'rectangle', layerId: 's', xMm: 0, yMm: 0, widthMm: 40, heightMm: 20,
@@ -480,11 +480,11 @@ await test('H1. MonogramGenerator: weightSizesMm absent is unchanged; present pe
 
 await test('H2. MonogramGenerator: MONO-013 script goldens unchanged with weight sizing off -- 372 / 369 stones, 136.501458 / 131.901458 mm (all four printed)', async () => {
   const generator = new MonogramGenerator({ geometryEngine: engine });
-  const mk = (interlockMm) => ({
+  const mk = (letterSpacingMm) => ({
     frameId: 'none', layoutId: 'script', letters: ['A', 'K', 'L'],
     fontId: 'great-vibes-regular', providerId: 'opentype', stemWidthRatio: 0.0357,
     stoneSizeMm: 2.0, gapMm: 0.3, color: 'gold', canvasMm: { widthMm: 200, heightMm: 200 },
-    frameRect: { xMm: 0, yMm: 0, widthMm: 150, heightMm: 150 }, interlockMm
+    frameRect: { xMm: 0, yMm: 0, widthMm: 150, heightMm: 150 }, letterSpacingMm
   });
   const a = await generator.generate(mk(0));
   const b = await generator.generate(mk(-2.3));
@@ -505,7 +505,7 @@ await test('H3. MONO-013 per-pair clearance floor is evaluated on a weight-sized
     frameId: 'none', layoutId: 'script', letters: ['A', 'K', 'L'],
     fontId: 'great-vibes-regular', providerId: 'opentype', stemWidthRatio: 0.0357,
     stoneSizeMm: 2.0, gapMm: 0.3, color: 'gold', canvasMm: { widthMm: 220, heightMm: 220 },
-    frameRect: { xMm: 0, yMm: 0, widthMm: 150, heightMm: 150 }, interlockMm: 0,
+    frameRect: { xMm: 0, yMm: 0, widthMm: 150, heightMm: 150 }, letterSpacingMm: 0,
     weightSizesMm: stoneSizesFromBaseMm(2.0, 2)
   });
   assert.ok(res.ok, `weight-sized script monogram failed: ${res.message}`);
