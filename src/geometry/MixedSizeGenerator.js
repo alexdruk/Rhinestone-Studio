@@ -15,7 +15,7 @@
 import { Stone } from './Stone.js';
 import { sampleShapeFillPoints, sampleFieldByMode } from './StoneSampler.js';
 
-const SIZE_MODES = new Set(['uniform', 'mixed']);
+const SIZE_MODES = new Set(['uniform', 'mixed', 'weight']);
 
 // Deliberately biased toward the sparse end -- "intentionally conservative... do not aggressively
 // maximize stone count" (S-200 brief). See infillPitchMm() below for how this scales candidate
@@ -49,12 +49,42 @@ function assertPositiveNumber(value, name) {
  * @param {number} [params.maxSizeMm]
  * @param {number} [params.conservativeDetail] 0..1, default DEFAULT_CONSERVATIVE_DETAIL.
  * @param {number} stoneSizeMm The layer's own primary stone size (already validated by the caller).
- * @returns {{sizeMode: 'uniform'|'mixed', mixedOptions: null | {allowedSizesMm: number[], minSizeMm: number, maxSizeMm: number, conservativeDetail: number, eligibleSizesMm: number[]}}}
+ * @param {{allowWeight?: boolean}} [opts] MONO-015: whether `sizeMode: 'weight'` is legal for this
+ *   caller. Only normalizeTextParams() (text layers, outline mode) passes `true`; every other
+ *   generate*Layout() caller leaves it false, and `sizeMode: 'weight'` there is a hard error --
+ *   weight-following stone size is valid only for a text layer sampled in outline mode, so any
+ *   other combination is a caller bug, not something to silently absorb. (An *unknown* mode string
+ *   is a separate case handled by app.js's resolveSizeMode() old-project fallback, never reaching
+ *   here.)
+ * @returns {{sizeMode: 'uniform'|'mixed'|'weight', mixedOptions: null | {...}, weightOptions?: {sizesMm: number[]}}}
  */
-export function normalizeMixedSizeParams(params, stoneSizeMm) {
+export function normalizeMixedSizeParams(params, stoneSizeMm, { allowWeight = false } = {}) {
   const sizeMode = params.sizeMode ?? 'uniform';
   if (!SIZE_MODES.has(sizeMode)) {
     throw new TypeError(`Unsupported sizeMode: ${sizeMode}. Expected one of: ${[...SIZE_MODES].join(', ')}`);
+  }
+  if (sizeMode === 'weight') {
+    if (!allowWeight) {
+      throw new Error("MixedSizeGenerator.normalizeMixedSizeParams: sizeMode 'weight' (weight-following stone size) is only supported for a text layer sampled in outline mode.");
+    }
+    // MONO-015: `weightSizesMm` is a single flat array of ascending mm diameters -- the graduated
+    // weight step's stones -- stored on the layer exactly the way S-200's `allowedSizesMm` is, and
+    // validated the same way (entry-by-entry with assertPositiveNumber). Deliberately NOT S-200's
+    // minSizeMm/maxSizeMm: those belong to 'mixed', and a mode-switched layer would round-trip
+    // ambiguously if the two modes shared fields. An empty (or absent) array is the "weight on,
+    // nothing configured" / pre-config default -- it reduces to uniform output at the layer's own
+    // stone size, exactly as `{d, d}` did before this representation change.
+    const rawSizes = Array.isArray(params.weightSizesMm) ? params.weightSizesMm : [];
+    for (const value of rawSizes) {
+      assertPositiveNumber(value, 'weightSizesMm entry');
+    }
+    for (let k = 1; k < rawSizes.length; k++) {
+      if (rawSizes[k] <= rawSizes[k - 1]) {
+        throw new RangeError('weightSizesMm must be strictly ascending.');
+      }
+    }
+    const sizesMm = rawSizes.length ? [...rawSizes] : [stoneSizeMm];
+    return { sizeMode, mixedOptions: null, weightOptions: { sizesMm } };
   }
   if (sizeMode === 'uniform') {
     return { sizeMode, mixedOptions: null };

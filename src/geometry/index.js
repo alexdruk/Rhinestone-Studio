@@ -44,8 +44,19 @@ export {
   sampleFieldByMode,
   dedupeStonePoints,
   dedupeStonesByRadius,
+  dropOverlappingSizedStones,
   findCrossGroupCollisions
 } from './StoneSampler.js';
+
+// MONO-015: weight-following stone size (opt-in).
+export {
+  localStrokeWidthMm,
+  strokeWidthsForSamples
+} from './StrokeWidthProbe.js';
+
+export {
+  weightSizeMm
+} from './WeightSizing.js';
 
 export {
   computeInwardRingPolygons,

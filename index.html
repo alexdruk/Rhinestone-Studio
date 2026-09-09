@@ -872,6 +872,14 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <div class="field"><label for="monogramFrameStoneSize">Frame stone size</label><select id="monogramFrameStoneSize" title="Standard rhinestone sizes (commercial name and actual diameter)."></select></div>
           <div class="field"><label for="monogramFrameColor">Frame stone color</label><div class="color-pick-row"><select id="monogramFrameColor"></select><span id="monogramFrameColorSwatch" class="color-swatch" title="Selected color preview"></span></div></div>
         </div>
+        <!-- MONO-015: opt-in weight-following stone size for the letters. Shown only for OpenType
+             script fonts (authored fonts place stones on a fixed grid and have no stroke outline to
+             probe). Options are built live from the monogram stone size; "Off" is the unchanged
+             uniform path. -->
+        <div class="field" id="monogramWeightStepsField" style="display:none">
+          <label for="monogramWeightSteps">Weight-following stone size</label>
+          <select id="monogramWeightSteps" title="Larger stones on the wide parts of a stroke, smaller on the hairlines. Off = every letter stone is the base size. Each step adds one larger catalog size."><option value="0">Off</option></select>
+        </div>
       </div>
       <div class="field-section">
         <h3>Frame Size</h3>
@@ -1449,7 +1457,18 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 <div id="sharedMixedSizeFields">
   <div class="field-section">
     <h3>Mixed Stone Size</h3>
-    <div class="field"><label for="sizeMode">Generation mode</label><select id="sizeMode" title="Uniform: every stone in this layer is the same size. Mixed: the Geometry Engine may add smaller stones into gaps this layer's primary size can't reach."><option value="uniform" selected>Uniform</option><option value="mixed">Mixed</option></select></div>
+    <div class="field"><label for="sizeMode">Generation mode</label><select id="sizeMode" title="Uniform: every stone in this layer is the same size. Mixed: the Geometry Engine may add smaller stones into gaps this layer's primary size can't reach. Weight-following: outline text only — larger stones on wide parts of a stroke, smaller on hairlines."><option value="uniform" selected>Uniform</option><option value="mixed">Mixed</option><option value="weight">Weight-following</option></select></div>
+    <!-- MONO-015: weight-following stone size. Shown only when Generation mode is "Weight-following"
+         (which app.js allows selecting only for an outline-mode text layer). #weightSteps is a
+         graduated control: Off, or one/two catalog sizes up from this layer's stone size. Its
+         options are rebuilt live from the stone size (labels + which steps the catalog can supply). -->
+    <div id="weightSizeDetailFields" style="display:none">
+      <div class="field">
+        <label for="weightSteps">Weight steps</label>
+        <select id="weightSteps" title="Larger stones on the wide parts of a stroke, smaller on the hairlines. Off = every stone is this layer's stone size. Each step adds one larger catalog size to the range."><option value="0">Off</option></select>
+      </div>
+      <p class="hint">Only for outline-mode text. Wide parts of a stroke get a larger stone; hairlines narrower than the base stone size are floored at it, so a very thin stroke can still read as a broken chain there.</p>
+    </div>
     <div id="mixedSizeDetailFields" style="display:none">
       <div class="field">
         <label>Allowed sizes</label>

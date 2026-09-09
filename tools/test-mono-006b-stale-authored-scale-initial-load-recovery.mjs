@@ -84,7 +84,7 @@ function sliceBalanced(source, startMarker, label) {
 
 const textModeToEngineModeSrc = sliceLine(appJs, 'const TEXT_MODE_TO_ENGINE_MODE=', 'TEXT_MODE_TO_ENGINE_MODE');
 const resolveTextFillModeSrc = sliceLine(appJs, 'function resolveTextFillMode(textMode){', 'resolveTextFillMode()');
-const sizeModesSrc = sliceLine(appJs, "const SIZE_MODES=new Set(['uniform','mixed']);", 'SIZE_MODES');
+const sizeModesSrc = sliceLine(appJs, "const SIZE_MODES=new Set(['uniform','mixed','weight']);", 'SIZE_MODES');
 const resolveSizeModeSrc = sliceLine(appJs, 'function resolveSizeMode(value){', 'resolveSizeMode()');
 const mixedSizeParamsForSrc = sliceLine(appJs, 'function mixedSizeParamsFor(layer){', 'mixedSizeParamsFor()');
 const buildTextLayoutBaseParamsSrc = sliceBalanced(appJs, 'function buildTextLayoutBaseParams(layer){', 'buildTextLayoutBaseParams()');

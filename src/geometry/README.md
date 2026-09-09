@@ -386,3 +386,29 @@ the export was a different, unrelated ad hoc shape
 repository-wide search that no example, test, or application code still depends on that retired
 shape, so no versioned compatibility layer exists or is needed for it — see
 `docs/specifications/RS-0003.5D1-ProductionExportValidation.md`, "Current Repository State".
+
+## Weight-following stone size (MONO-015)
+
+`sizeMode: 'weight'` is a third, opt-in size mode for outline-mode text layers (alongside S-200's
+`'uniform'`/`'mixed'`): larger stones on the wide parts of a stroke, smaller on hairlines. It is a
+graduated control — Off, Step 1 (base + one catalog rung), Step 2 (base + two) — persisted on the
+layer as a single flat array `weightSizesMm` (the step's ascending mm diameters), stored the way
+S-200's `allowedSizesMm` is.
+
+* `StrokeWidthProbe.js` — pure geometry, no engine dependency. `localStrokeWidthMm(point,
+  inwardNormal, polygons, maxMm)` casts a ray into the shape and returns the distance to the first
+  contour crossing (capped at `maxMm`); `strokeWidthsForSamples(samples, polygons, maxMm)` derives
+  each on-contour sample's inward normal from its nearest edge (winding by signed area) and probes.
+* `WeightSizing.js` — `weightSizeMm(widthMm, sizesMm)`: the smallest entry of the ascending
+  `sizesMm` that is `>= widthMm`, else the largest entry. Pure arithmetic over a caller-supplied mm
+  array — **no import from `src/renderer/**`** (see that file's own header: geometry works in raw
+  millimeters for any positive value and never knows what an "SS16" is). The catalog-aware step
+  derivation lives in `src/renderer/StoneSizes.js`'s `stoneSizesFromBaseMm()`; the engine is handed
+  the resulting array.
+* `StoneSampler.dropOverlappingSizedStones()` — phase C: drops the later stone of every pair closer
+  than `(d1 + d2) / 2` (no gap term — reduces to the uniform `minSeparationMm: stoneSizeMm` floor
+  when the step has a single diameter). Not `dedupeStonesByRadius()`, which skips same-`layerId` pairs.
+
+`GeometryEngine.generateTextLayout()` runs phases A (sample at `sizesMm[0] + gapMm`, halved when the
+step mixes sizes), B (probe + assign) and C in that order. An empty `weightSizesMm` reduces the
+whole branch to uniform output. See `docs/specifications/MONO-015-WeightSizing.md`.

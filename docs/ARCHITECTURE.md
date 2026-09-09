@@ -1440,6 +1440,40 @@ clamped there by `writeSelectedControlsToLayer()` with no undo entry (READ-006).
 `#monogramInterlock` "Overlap" slider is shown only for the script layout. See
 `docs/specifications/MONO-013-Interlock.md`.
 
+**Weight-following stone size (MONO-015).** A third `sizeMode` for text layers, `'weight'`, opt-in
+everywhere — no existing layer, project, fixture or monogram changes behaviour unless it is
+explicitly turned on. It is valid only for a text layer sampled in outline mode; every other
+combination throws from `GeometryEngine.generateTextLayout()`, and `sizeMode: 'weight'` on a non-text
+layer throws from `normalizeMixedSizeParams()` (an unknown mode *string*, separately, still falls
+back to `'uniform'` via app.js's `resolveSizeMode()` for old-project compatibility). It is a
+**graduated** control — Off, Step 1 (base stone size + one catalog rung), Step 2 (base + two) —
+persisted as a single flat layer field `weightSizesMm`: the step's ascending mm diameters, stored
+exactly the way S-200's `allowedSizesMm` is (validated entry-by-entry, empty default). The levels
+are relative to the layer's own stone size, derived from the catalog by
+`src/renderer/StoneSizes.js`'s `stoneSizesFromBaseMm()` and clamped at the top (SS20 has one rung
+above it, SS30 none — a step the base can't supply is disabled in the UI and throws if a caller
+names it). `src/geometry/StrokeWidthProbe.js` is pure geometry — it casts an inward ray from each
+outline sample to the opposite contour edge to measure the local stroke width — and
+`src/geometry/WeightSizing.js` maps that width to the smallest step diameter `≥` it (the largest if
+it exceeds all). **The engine takes a raw mm array, not a catalog reference:** nothing in
+`src/geometry/**` imports `src/renderer/**` — per that file's own header, geometry works in raw
+millimeters for any positive value and never knows what an "SS16" is, and
+`tools/test-architecture-module-boundaries.mjs` now asserts the boundary rather than leaving it a
+comment. Picking a stone at least as wide as the stroke enforces the *upper* single-chain bound (a
+stone that wide keeps both edges collapsed onto one chain) but not the lower one: a hairline
+narrower than the step's floor is floored there and its stem can drop below the 0.70 chain minimum.
+Sampling is three phases: (A) sample the outline at the minimum pitch, halved (`(sizesMm[0] + gapMm)
+/ 2`, separation floor likewise halved) whenever the step mixes sizes — phase C only drops, so
+without oversampling a mid-catalog run comes out at 2×`d` (≈ 48 % over its `d + gap` ideal, the
+`SINGLE_CHAIN_MIN_RATIO` gap failure); the factor is 1 when `sizesMm` has a single entry, keeping
+"Off" byte-identical to uniform; (B) probe and assign per sample; (C)
+`StoneSampler.dropOverlappingSizedStones()` removes the physical overlaps the larger assigned stones
+create, per-pair floor `(d1 + d2) / 2`, dropping the later stone in walk order. Phase A must come
+first — a coarser phase A would make phase C's check unable to fire. The Monogram tool exposes it as
+one opt-in select (`#monogramWeightSteps`, OpenType fonts only); MONO-012's `CHAIN_TOO_THIN` gate
+and MONO-013's clearance assertion both generalise to divide by the per-stem / per-pair assigned
+diameter rather than a scalar. See `docs/specifications/MONO-015-WeightSizing.md`.
+
 ---
 
 # Units
