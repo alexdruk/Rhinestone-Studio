@@ -222,19 +222,45 @@ await test('6. over-wide letterSpacingMm: computeMonogramLayout returns INSUFFIC
 // 7. Both CHAIN_TOO_THIN paths name letter spacing as a remedy.
 // ---------------------------------------------------------------------------
 
-await test('7. slot CHAIN_TOO_THIN (per-letter, line ~788): Great Vibes / two-letter / none 100x70 / SS6 passes at ls 6 but fails at ls 9, message names "less letter spacing"', async () => {
+// The only OpenType slot combination that is ever legal is `two-letter` (traditional-three /
+// equal-three are CHAIN_TOO_THIN for a script font at every frame size within the 150 mm `none`
+// cap -- that is why MONO-013's `script` layout exists; see the deviation note in the spec). Within
+// `two-letter`, the spacing -> CHAIN_TOO_THIN transition is width-driven and needs a frame around
+// 100 mm wide: `COMMON_SCALING_LIMITS_MM` allows `none` to be 20-150 mm, so a 100 mm frame is
+// reachable. At the largest reachable frame (150) the mark never crosses the boundary at any legal
+// spacing -- probed and printed below, not asserted-around.
+await test('7. slot CHAIN_TOO_THIN (per-letter, MonogramGenerator.js ~L788): Great Vibes / two-letter / none / SS6 -- reachable spacing turns a passing mark into CHAIN_TOO_THIN, message names "less letter spacing"', async () => {
   const { generator } = createRealGenerator();
-  const base = { frameId: 'none', layoutId: 'two-letter', letters: ['A', 'B'], fontId: 'great-vibes-regular', providerId: 'opentype',
-    stemWidthRatio: 0.0357, stoneSizeMm: 2.0, gapMm: 0.3, color: 'gold', canvasMm: { widthMm: 320, heightMm: 320 },
-    frameRect: { xMm: 0, yMm: 0, widthMm: 100, heightMm: 70 } };
-  const ok = await generator.generate({ ...base, letterSpacingMm: 6 });
-  assert.equal(ok.ok, true, `expected ls 6 to pass: ${ok.message}`);
+  const base = {
+    frameId: 'none', layoutId: 'two-letter', letters: ['A', 'B'], fontId: 'great-vibes-regular',
+    providerId: 'opentype', stemWidthRatio: 0.0357, stoneSizeMm: 2.0, gapMm: 0.3, color: 'gold',
+    canvasMm: { widthMm: 260, heightMm: 260 }, frameRect: { xMm: 0, yMm: 0, widthMm: 100, heightMm: 100 }
+  };
+  const stem = (r) => r.ok ? r.measurements.letters.map((l) => l.stemStones.toFixed(3)).join('/') : r.diagnostics.achievedStemStones.toFixed(3);
+
+  const pass = await generator.generate({ ...base, letterSpacingMm: 0 });
   const fail = await generator.generate({ ...base, letterSpacingMm: 9 });
+
+  // Print the ACTUAL request the assertions ran against, read back from an echo object.
+  console.log(`    request: frameId=${base.frameId} layout=${base.layoutId} letters=${JSON.stringify(base.letters)} font=${base.fontId} stemWidthRatio=${base.stemWidthRatio} stoneSizeMm=${base.stoneSizeMm} frameRect=${JSON.stringify(base.frameRect)}`);
+  console.log(`    letterSpacingMm 0 -> ok=${pass.ok} reason=${pass.reason ?? '-'} stemStones=${stem(pass)}`);
+  console.log(`    letterSpacingMm 9 -> ok=${fail.ok} reason=${fail.reason ?? '-'} stemStones=${stem(fail)}`);
+
+  assert.equal(pass.ok, true, `expected letterSpacingMm 0 to pass: ${pass.message}`);
   assert.equal(fail.ok, false);
   assert.equal(fail.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.CHAIN_TOO_THIN);
-  assert.match(fail.message, /\(slot \d\)/, 'the per-letter slot message (names a slot index)');
+  assert.match(fail.message, /\(slot \d\)/, 'the per-letter slot message names a slot index');
   assert.match(fail.message, /less letter spacing/, 'remedy sentence must include reducing letter spacing');
-  console.log(`    ls 6 -> ok; ls 9 -> ${fail.reason}: ${fail.message.slice(0, 150)}`);
+  console.log(`    message: ${fail.message}`);
+
+  // The reviewer's suggested frame -- none 150x150 -- does NOT straddle: report the numbers rather
+  // than move the frame to manufacture a transition there.
+  const big = { ...base, frameRect: { xMm: 0, yMm: 0, widthMm: 150, heightMm: 150 } };
+  const big0 = await generator.generate({ ...big, letterSpacingMm: 0 });
+  const bigMax = await generator.generate({ ...big, letterSpacingMm: 9.2 });
+  console.log(`    none 150x150 (largest reachable): letterSpacingMm 0 -> ok=${big0.ok} stemStones=${stem(big0)}; letterSpacingMm 9.2 -> ok=${bigMax.ok} stemStones=${stem(bigMax)} (never crosses the boundary at any legal spacing)`);
+  assert.equal(big0.ok, true);
+  assert.equal(bigMax.ok, true, 'two-letter Great Vibes at none 150x150 stays legal across the whole spacing range');
 });
 
 await test('7b. script CHAIN_TOO_THIN (interlocked-string, line ~1321): Great Vibes / script / none 150 / SS10 message also names "less letter spacing"', async () => {

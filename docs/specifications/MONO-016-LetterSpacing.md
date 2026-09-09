@@ -149,19 +149,53 @@ monogram generation commits its own single undo step.
    for script — the asymmetry in one test.
 6. Over-wide spacing: `computeMonogramLayout()` → `INSUFFICIENT_SPACE`; the generator → `FITTING_FAILED`
    naming the spacing.
-7. Both `CHAIN_TOO_THIN` paths name letter spacing as a remedy (the slot per-letter message reached
-   by spacing that turns a passing Great Vibes `two-letter` mark into a failure; the interlocked-string
-   message at SS10).
+7. Both `CHAIN_TOO_THIN` paths name letter spacing as a remedy. The slot per-letter message
+   (`MonogramGenerator.js` ~L788) is reached on Great Vibes / `two-letter` / `none` at a ~100 mm
+   frame, letters `A,B`, SS6: `letterSpacingMm` 0 passes (stem 0.726), `letterSpacingMm` 9 fails
+   (`CHAIN_TOO_THIN`, stem 0.687) — spacing is the deciding input. The test also probes
+   `none` 150×150 and prints that it never crosses the boundary at any legal spacing (stem stays
+   0.850) rather than moving the frame to manufacture a transition there. The interlocked-string
+   message is reached on `script` at SS10.
 8. Control bounds and visibility (app.js helpers sliced and executed against a fake DOM): script
    `min` negative, slot `min` 0, both `max` = `TRACKING_XPITCH_LADDER` top rung ×
    `monogramLetterSpacingPitchMm()`; hidden for `single` / one-letter script; the slider re-clamps a
    now-illegal negative value to 0 when the layout switches script → slot.
 
-Every test input is reachable through the UI — the `none` frame's 150 mm cap
-(`COMMON_SCALING_LIMITS_MM`) is respected.
+Every test input is reachable through the UI — the `none` frame's `COMMON_SCALING_LIMITS_MM`
+(20–150 mm, both axes) is respected.
 
 `src/monogram/**` may import `src/renderer/**` — MONO-015's boundary assertion covers
 `src/geometry/**` only.
+
+---
+
+## 5a. OpenType script fonts in slot layouts
+
+An authored (stone-centre) font places stones on a fixed grid and works in every layout. An
+**OpenType script font** must form a single readable chain across each stroke, and a slot layout
+shrinks the letter to fill a per-slot rectangle — so whether it clears the `CHAIN_TOO_THIN` gate
+depends on the layout and the frame. Measured on `develop` @ `910e3c8` with the real generator:
+Great Vibes (`stemWidthRatio` 0.0357), frame `none`, SS6, `letterSpacingMm` 0, letters `A,K` for
+`two-letter` and `A,K,L` for the three-letter layouts:
+
+| layout | 150×150 | 150×100 | 120×120 | 100×70 |
+|---|---|---|---|---|
+| `two-letter` | **OK** | **OK** | chain-too-thin | chain-too-thin |
+| `traditional-three` | chain-too-thin | chain-too-thin | chain-too-thin | chain-too-thin |
+| `equal-three` | chain-too-thin | chain-too-thin | chain-too-thin | chain-too-thin |
+
+So: the **three-letter** slot layouts (`traditional-three`, `equal-three`) are unreachable for an
+OpenType script font at every frame size within the 150 mm cap — this is exactly the gap MONO-013's
+`script` layout exists to fill. **`two-letter` is reachable** at the larger frames (≈ 150 mm wide).
+Positive letter spacing narrows the slots further, so on a marginal `two-letter` frame (≈ 100 mm)
+it can push a passing mark into `CHAIN_TOO_THIN` — that is test 7's per-letter path, and the reason
+its `CHAIN_TOO_THIN` message now lists "less letter spacing".
+
+The `docs/screenshots/mono-016/slot-natural.png` / `slot-wide.png` pair is therefore
+**Great Vibes / `two-letter` / `none` 150×150 / SS6**, `letterSpacingMm` 0 and +4.6 (229 stones
+each; string bbox 130.6 → 135.2 mm, the +4.6 mm being one inter-slot gap widened by `extraGapMm`) —
+the OpenType script path MONO-016 actually changed for slot layouts, not an authored font whose
+behaviour was never in question.
 
 ---
 
