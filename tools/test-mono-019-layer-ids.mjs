@@ -69,7 +69,11 @@ function extractAssignInsertionLayerIds() {
   const m = appJs.match(/let monogramGenerationCounter=0;\nfunction assignInsertionLayerIds\(layers\)\{[\s\S]*?\n\}/);
   assert.ok(m, 'expected to find assignInsertionLayerIds() in app.js');
   // eslint-disable-next-line no-new-func
-  return new Function(`${m[0]}\nreturn assignInsertionLayerIds;`)();
+  const raw = new Function(`${m[0]}\nreturn assignInsertionLayerIds;`)();
+  // MONO-020 changed assignInsertionLayerIds() to return {layers, suffix} (the suffix is also
+  // stamped onto each layer as monogramSetId). These id-focused tests only assert on the layers
+  // array, so unwrap it here and leave the call sites below untouched.
+  return (layers) => raw(layers).layers;
 }
 
 const { validateProject, defaultProject, LAYER_ID_PATTERN } = await extractProjectFunctions();

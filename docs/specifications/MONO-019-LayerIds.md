@@ -75,6 +75,11 @@ function assignInsertionLayerIds(layers){
 Called from `generateMonogram()` as `assignInsertionLayerIds(result.layers)` immediately after the
 `!result.ok` guard and before `commitHistory()`.
 
+> **MONO-020 update.** The loop now also stamps `layer.monogramSetId = suffix` on every layer, and
+> the function returns `{ layers, suffix }` instead of the bare array, so `generateMonogram()` can
+> reference the new set's id when deciding which previous monogram to replace. The re-id rule and
+> length arithmetic below are unchanged. See `docs/specifications/MONO-020-MonogramOwnership.md`.
+
 - **One suffix per generation**, shared by every layer of the set, so the set still reads as one
   monogram in the layer list.
 - **Before the history snapshot.** `commitHistory()` snapshots the project *before* the push;

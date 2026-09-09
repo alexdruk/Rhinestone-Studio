@@ -116,8 +116,9 @@ import { mmToDisplayValue, displayValueToMm, unitSuffix, formatLengthDisplay } f
 // MONO-006 (Monogram Generator UI): the Monogram Lightbox is a plain front-end -- it never
 // generates geometry, computes layouts, fits, or detects collisions itself. All of that is
 // delegated to MonogramGenerator.generate() (MONO-005/MONO-005A), which returns ordinary project
-// layers inserted through the same commitHistory()+project.layers.push() pattern
-// insertLibraryItem() already uses, so undo/redo treats a generated monogram as one step. Frame
+// layers inserted through the same commitHistory()+project.layers.push() pattern the rest of the
+// app uses to insert a Design Library item, so undo/redo treats a generated monogram as one step
+// (MONO-020 makes that one step the removal of the previous monogram plus the new insertion). Frame
 // choices come from FrameLibrary.listFrames() (imported below alongside the geometry barrel);
 // layout ids/required letter counts come from MonogramLayouts.js. Both are imported through a new
 // src/monogram/index.js barrel this milestone adds (src/monogram/** had none before -- only test
@@ -3697,6 +3698,9 @@ async function eraseStonesWithinTest(targetLayer,withinTest){
 // the SAME dx/dy this function already applies to copy.x/copy.y (not a second offset convention);
 // a no-op for every non-'path' layer type via drawingTool's own internal lookup.
 function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();
+  // MONO-020: a deliberate duplicate is the user's copy, not the Monogram Lightbox's -- drop the
+  // set marker so the next Generate does not silently delete it as a replaceable monogram layer.
+  delete copy.monogramSetId;
   // RS-3011 Step 3b: pushed here, before drawingTool.duplicateShapeForLayer() below, instead of
   // after every branch (as before this step) -- duplicateShapeForLayer() now builds the clone's own
   // stone Group immediately via the getLayerStoneParams(newLayerId) hook, which reads project.layers,
@@ -5012,8 +5016,9 @@ el('moreOptionsBtn').onclick=()=>{
 // MonogramGenerator.generate() (constructed above as `monogramGenerator`). This section never
 // computes geometry, layout, fitting, or collisions -- it only builds a request object, calls the
 // generator, and (on success) inserts the returned ordinary layers through the exact same
-// commitHistory()+project.layers.push() pattern insertLibraryItem() already uses, so undo/redo
-// treats a generated monogram as a single step, same as inserting a Design Library item.
+// commitHistory()+project.layers.push() pattern used to insert a Design Library item, so undo/redo
+// treats a generated monogram as a single step (MONO-020: that step also removes the previous
+// replaceable monogram).
 const MONOGRAM_LAYOUT_LABELS={
   [MONOGRAM_LAYOUTS.SINGLE]:'Single',
   [MONOGRAM_LAYOUTS.TWO_LETTER]:'Two Letter',
@@ -5414,11 +5419,33 @@ async function generateMonogramWithFrameAutoShrink(request){
 // so the worst-case id (longest frame + longest layout + highest letter index) stays inside
 // LAYER_ID_PATTERN's 64-char cap -- see docs/specifications/MONO-019-LayerIds.md for the
 // arithmetic. A suffix collision would need 46656 generations inside one millisecond.
+
+// MONO-020: does this layer carry data authored by the Design workspace's own tools? Deliberately
+// does NOT branch on layer.type: text layers will gain these same five fields once Design's toolset
+// is extended to text, and this predicate must keep covering the whole monogram set without a
+// change here. The five names are exactly the Design-authored 'path' fields app.js forwards into
+// generation (the regions/stampedStones/eraseDaubs/erasedGridPositions/naturalBoundingBoxMm block
+// near validateProject()). See docs/specifications/MONO-020-MonogramOwnership.md.
+function hasDesignAuthoredEdits(layer){
+  if(!layer)return false;
+  for(const field of['regions','stampedStones','eraseDaubs','erasedGridPositions']){
+    if(Array.isArray(layer[field])&&layer[field].length>0)return true;
+  }
+  return layer.naturalBoundingBoxMm!==undefined;
+}
+
 let monogramGenerationCounter=0;
 function assignInsertionLayerIds(layers){
   const suffix=`${Date.now().toString(36)}-${(monogramGenerationCounter++%46656).toString(36)}`;
-  for(const layer of layers)layer.id=`${layer.id.replace(/^monogram-/,'mono-')}-${suffix}`;
-  return layers;
+  for(const layer of layers){
+    layer.id=`${layer.id.replace(/^monogram-/,'mono-')}-${suffix}`;
+    // MONO-020: identity only. Marks which layers came from the same generation so ownership
+    // (replace vs. release) can act on the whole set. Never parsed, never used to decide anything
+    // except set membership -- the mono- id prefix is NOT a substitute for it (SEC-001 keeps
+    // semantics out of ids).
+    layer.monogramSetId=suffix;
+  }
+  return{layers,suffix};
 }
 async function generateMonogram(){
   const validation=validateMonogramControls();
@@ -5443,27 +5470,56 @@ async function generateMonogram(){
   // MONO-019: assign collision-free layer ids before the history snapshot, the selection, or the
   // live render sees them -- so a second monogram with the same frame+layout never duplicates the
   // first's ids, and undo/redo restores exactly these ids. See assignInsertionLayerIds() above.
-  assignInsertionLayerIds(result.layers);
-  // Single undo step: one commitHistory() before pushing every generated layer, exactly like
-  // insertLibraryItem() -- HistoryManager snapshots the whole project, so undo removes (and redo
-  // restores) all of this monogram's layers together, never one layer at a time.
+  const{suffix:newMonogramSetId}=assignInsertionLayerIds(result.layers);
+  // MONO-020: one monogram per product. Every previously generated set is either REPLACEABLE (every
+  // one of its layers is still free of Design-authored edits -- Generate drops it) or RELEASED (a
+  // layer carries hand-work -- Generate leaves the whole set in place and adds the new one
+  // alongside). Silent destruction of hand-work is the failure this milestone exists to prevent.
+  // Every monogramSetId-bearing set is considered, not just the newest, so a project that somehow
+  // carries two converges to one. monogramSetId is never cleared on edit -- a released set keeps
+  // its identity for MONO-021's flatten. See docs/specifications/MONO-020-MonogramOwnership.md.
+  const priorSetIds=new Set(
+    project.layers
+      .map(l=>l.monogramSetId)
+      .filter(id=>typeof id==='string'&&id.length>0&&id!==newMonogramSetId)
+  );
+  const releasedSetIds=new Set(
+    [...priorSetIds].filter(setId=>project.layers.some(l=>l.monogramSetId===setId&&hasDesignAuthoredEdits(l)))
+  );
+  const replaceableSetIds=new Set([...priorSetIds].filter(setId=>!releasedSetIds.has(setId)));
+  const removedLayerCount=project.layers.filter(l=>replaceableSetIds.has(l.monogramSetId)).length;
+  // Single undo step: commitHistory() FIRST -- before the removal -- so the removal and the
+  // insertion are one history step, exactly the commitHistory()+project.layers.push() pattern used
+  // for inserting a Design Library item. HistoryManager snapshots the whole project, so undo/redo
+  // move the whole monogram together, never one layer at a time.
   commitHistory();
+  // Direct project.layers filter, NOT deleteLayer(): its last-layer guard and its own
+  // commitHistory() would both misfire here. The filter and the push happen in the same
+  // synchronous block, so project.layers is never observed empty.
+  if(removedLayerCount>0)project.layers=project.layers.filter(l=>!replaceableSetIds.has(l.monogramSetId));
   project.layers.push(...result.layers);
   selectedLayerIds=selectMany(result.layers.map(l=>l.id));
   selectedLayerId=result.layers[result.layers.length-1].id;
   syncSelectedControlsFromLayer();
-  updateAll(true);
+  // updateAll(true,true): forceStoneRebuild. The frame is a 'path' layer with a live Paper.js item;
+  // a direct project.layers filter bypasses drawingTool.deleteSelected() / onShapeDeleted() exactly
+  // the way the Layers-list trash icon does -- which is why deleteLayer() passes
+  // forceStoneRebuild=true. Without it, generating while Design is open leaves the old frame's shape
+  // on canvas.
+  updateAll(true,true);
   lightboxes.monogram.close();
-  if(appliedFrameStoneSizeMm!=null){
-    // MONO-014: no write-back into #monogramFrameStoneSize. Under MONO-010 that write was coherent
-    // because the applied size only ever came from that visible field; now the field is hidden
-    // whenever the toggle is unchecked (updateMonogramFrameStoneControlsVisibility()) -- the
-    // automatic-hierarchy path -- so the write would target a control the user cannot see. The
-    // adjustment is still surfaced in the status line (MONO-011: never silent).
-    el('status').textContent=`Generated monogram (${result.layers.length} layer${result.layers.length===1?'':'s'}). Frame stones reduced to ${formatStoneSizeLabel(appliedFrameStoneSizeMm)} to fit.`;
-  }else{
-    el('status').textContent=`Generated monogram (${result.layers.length} layer${result.layers.length===1?'':'s'}).`;
-  }
+  // MONO-020: compose one status line from up to three clauses -- what happened to the previous
+  // set(s), then the pre-existing frame-auto-shrink note. N in every "(N layers)" is the new
+  // monogram's layer count, the same referent the original "Generated monogram (N layers)." used.
+  // MONO-014 still holds: the auto-shrink adjustment is surfaced here and NOT written back into
+  // #monogramFrameStoneSize, which is hidden whenever the frame-stone toggle is unchecked.
+  const layerWord=n=>`${n} layer${n===1?'':'s'}`;
+  const clauses=[];
+  if(removedLayerCount>0)clauses.push(`Replaced the previous monogram (${layerWord(result.layers.length)}).`);
+  if(releasedSetIds.size>0)clauses.push(`Kept your edited monogram and added a new one (${layerWord(result.layers.length)}).`);
+  if(clauses.length===0)clauses.push(`Generated monogram (${layerWord(result.layers.length)}).`);
+  if(appliedFrameStoneSizeMm!=null)clauses.push(`Frame stones reduced to ${formatStoneSizeLabel(appliedFrameStoneSizeMm)} to fit.`);
+  el('status').textContent=clauses.join(' ');
 }
 populateMonogramFrameOptions();populateMonogramLayoutOptions();populateMonogramStoneSizeOptions();populateStoneColorOptions('monogramColor');
 populateMonogramFrameStoneSizeOptions();populateStoneColorOptions('monogramFrameColor');
