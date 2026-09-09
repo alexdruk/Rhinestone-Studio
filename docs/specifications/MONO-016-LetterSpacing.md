@@ -164,6 +164,52 @@ monogram generation commits its own single undo step.
 Every test input is reachable through the UI — the `none` frame's `COMMON_SCALING_LIMITS_MM`
 (20–150 mm, both axes) is respected.
 
+### Test 7's `letterSpacingMm 0 → 9` step, worked through
+
+Test 7's `B`-stem figures (`two-letter` `A,B` / `none` 100×100 / SS6: 0.726 at `letterSpacingMm` 0,
+0.687 at `letterSpacingMm` 9) come out of `layoutHorizontalGroup()`'s `shrink`, which is **not** a
+proportional scaling of the frame interior. Intermediates, printed from the real generator:
+
+| | `letterSpacingMm` 0 | `letterSpacingMm` 9 |
+|---|---|---|
+| `frameInteriorRect.widthMm` | 100 (frame `none` → `frameRect` verbatim, no inset) | 100 |
+| base gap `Math.max(100 × 0.04, 2.3)` | 4.0 | 4.0 |
+| gap after `+ extraGapMm` | 4.0 | 13.0 |
+| `availableForSlotsMm` (`100 − gap`) | 96.0 | 87.0 |
+| raw slot widths (`100 × 0.46` each) | 46.0 / 46.0 | 46.0 / 46.0 |
+| `rawTotalWidthMm` | 92.0 | 92.0 |
+| `shrink` = `min(1, availableForSlotsMm / rawTotalWidthMm)` | **1.0** (92 ≤ 96 — no shrink) | 87 / 92 = **0.9457** |
+| slot width each | 46.0 | 43.5 |
+| `B` fitted height (width-bound) | 40.68 mm | 38.49 mm |
+| `B` `stemStones` = `0.0357 × h / 2.0` | 0.726 | 0.687 |
+
+`TWO_LETTER_WIDTH_RATIO` is 0.46, so the two `widthRatios` sum to 0.92, not 1 — the layout keeps an
+8 % centring margin. At `letterSpacingMm` 0 the raw slot widths (92) already fit inside
+`availableForSlotsMm` (96) with 4 mm to spare, so `shrink` clamps to 1 and the slots sit at their
+raw ratio width, 46 mm — **not** at `availableForSlotsMm / 2`. Added spacing first consumes that
+4 mm of slack (no shrink at all through `letterSpacingMm` ≈ 4), then binds: from there `shrink` is
+`availableForSlotsMm / 92`, so at `letterSpacingMm` 9 it is `87 / 92` = 0.9457 and `B`'s
+width-bound height scales by the same factor, 40.68 → 38.49 mm. (The residual against an exact
+`87/92` is the halo term in the iterative OpenType fit, which subtracts one stone diameter from box
+and target before dividing.) Solving `0.726 × (96 − ls) / 92 = 0.70` for the gate crossing gives
+`ls ≈ 7.3`, matching the sweep.
+
+Every horizontal slot layout has this dead zone, because none of the `widthRatios` arrays sum to 1:
+`two-letter` sums to 0.92 (`0.46 × 2`), `traditional-three` to 0.88 (`0.24 + 0.40 + 0.24`), and
+`equal-three` to 0.90 (`0.30 × 3`). So `extraGapMm` widens the inter-slot gap with no effect on
+letter size until it has eaten `frameInteriorRect.widthMm × (1 − Σ widthRatios)` minus the base
+gap; only past that does `shrink` fall below 1 and letters start shrinking.
+
+The reconciliation this replaces computed the factor as
+`availableForSlotsMm(9) / availableForSlotsMm(0)` = `87 / 96` = 0.906, predicting `B` at 36.86 mm /
+stem 0.658. The wrong step is the denominator: the `letterSpacingMm` 0 baseline is
+`rawTotalWidthMm` (92), not `availableForSlotsMm` (96), because `shrink` is clamped to 1 there.
+With 92 the factor is 0.9457 and the numbers land on the test's 0.687. The height bound never
+re-binds — `B` is width-bound at both spacings and `A` stays at its natural single-chain height
+throughout. The reported 0.687 is at `letterSpacingMm` 9 exactly; the sweep on this frame holds
+`B` at 0.726 through `letterSpacingMm` 4, then 0.723 / 0.719 / 0.711 / 0.702 at 4.5 / 5 / 6 / 7,
+crossing the 0.70 gate between `letterSpacingMm` 7 and 7.5.
+
 `src/monogram/**` may import `src/renderer/**` — MONO-015's boundary assertion covers
 `src/geometry/**` only.
 
@@ -174,22 +220,42 @@ Every test input is reachable through the UI — the `none` frame's `COMMON_SCAL
 An authored (stone-centre) font places stones on a fixed grid and works in every layout. An
 **OpenType script font** must form a single readable chain across each stroke, and a slot layout
 shrinks the letter to fill a per-slot rectangle — so whether it clears the `CHAIN_TOO_THIN` gate
-depends on the layout and the frame. Measured on `develop` @ `910e3c8` with the real generator:
-Great Vibes (`stemWidthRatio` 0.0357), frame `none`, SS6, `letterSpacingMm` 0, letters `A,K` for
-`two-letter` and `A,K,L` for the three-letter layouts:
+depends on the layout, the frame **and the actual letters**. The wider a letter is relative to its
+slot, the more it is scaled down to fit the width bound, and the thinner its stem gets: `A` clears
+its slot at its natural height, `B` is wider and becomes width-bound, and `K` is wider still and
+thins past the gate first.
 
-| layout | 150×150 | 150×100 | 120×120 | 100×70 |
-|---|---|---|---|---|
-| `two-letter` | **OK** | **OK** | chain-too-thin | chain-too-thin |
-| `traditional-three` | chain-too-thin | chain-too-thin | chain-too-thin | chain-too-thin |
-| `equal-three` | chain-too-thin | chain-too-thin | chain-too-thin | chain-too-thin |
+Re-derived on `develop` @ `910e3c8` with the real generator — Great Vibes (`stemWidthRatio`
+0.0357), frame `none`, SS6, `letterSpacingMm` 0, `two-letter` layout. Cells are the `generate()`
+result plus the fitted stem-stone count per letter:
 
-So: the **three-letter** slot layouts (`traditional-three`, `equal-three`) are unreachable for an
-OpenType script font at every frame size within the 150 mm cap — this is exactly the gap MONO-013's
-`script` layout exists to fill. **`two-letter` is reachable** at the larger frames (≈ 150 mm wide).
-Positive letter spacing narrows the slots further, so on a marginal `two-letter` frame (≈ 100 mm)
-it can push a passing mark into `CHAIN_TOO_THIN` — that is test 7's per-letter path, and the reason
-its `CHAIN_TOO_THIN` message now lists "less letter spacing".
+| letters | 150×150 | 150×100 | 120×120 | 100×100 | 100×70 |
+|---|---|---|---|---|---|
+| `A,K` | OK 0.850/0.735 | OK 0.850/0.735 | `chain-too-thin` 0.588 | `chain-too-thin` 0.486 | `chain-too-thin` 0.486 |
+| `A,B` | OK 0.850/0.850 | OK 0.850/0.850 | OK 0.850/0.850 | OK 0.850/0.726 | OK 0.850/0.726 |
+
+Fitted heights for the `A,B` row: 47.62/47.62 mm from 150×150 through 120×120, 47.62/40.68 mm at
+100×100 and 100×70. `A` sits at its natural single-chain height (47.62 mm) and never shrinks; `B` is
+width-bound from 100 mm down. An earlier revision of this table measured `A,K` only and concluded
+`two-letter` was unreachable below 150 mm — that holds for `A,K`, not for `A,B`. **Reachability is
+a property of the letters, not just the layout and the frame.** The height column matters little
+here — `two-letter` is width-driven — but 150×100 is load-bearing for the three-letter paragraph
+below, so it stays in the table.
+
+The three-letter slot layouts are letter-dependent the same way, and weaker. With `A,K,L` both
+`traditional-three` and `equal-three` are `chain-too-thin` at every frame within the 150 mm cap.
+With a narrow set (`A,B,C`) they clear the gate only at the two ≈ 150 mm-wide frames —
+`traditional-three` 0.718/0.850/0.764 and `equal-three` 0.850/0.711/0.850 at both 150×150 and
+150×100 — and fail from 120×120 down. So a connected-script three-letter mark in a slot layout is reachable
+only for favourable letters at the largest frame; MONO-013's `script` layout, which sets the three
+letters as one interlocked mark rather than three shrunk slots, is the path the UI offers for that
+case.
+
+Positive letter spacing narrows every slot further (`extraGapMm` on the inter-slot gap), so on a
+marginal frame it can push a passing mark into `CHAIN_TOO_THIN` — that is test 7's per-letter path
+(`two-letter` `A,B` / `none` 100×100: `letterSpacingMm` 0 passes at stem 0.726, `letterSpacingMm` 9
+fails at stem 0.687; the arithmetic is worked through in §5 above), and the reason its
+`CHAIN_TOO_THIN` message now lists "less letter spacing".
 
 The `docs/screenshots/mono-016/slot-natural.png` / `slot-wide.png` pair is therefore
 **Great Vibes / `two-letter` / `none` 150×150 / SS6**, `letterSpacingMm` 0 and +4.6 (229 stones
