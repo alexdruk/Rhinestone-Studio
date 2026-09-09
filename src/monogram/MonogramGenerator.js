@@ -787,19 +787,15 @@ export class MonogramGenerator {
           : stoneSizeMm;
         const achievedStemStones = stemWidthMm / stemStoneMm;
         const minStones = minChainStones({ stemWidthRatio });
-        const floorStones = MIN_HEIGHT_TO_STONE_RATIO * stemWidthRatio;
-        if (achievedStemStones < minStones) {
-          const boundName = floorStones >= SINGLE_CHAIN_MIN_RATIO
-            ? `the readability floor (${minStones.toFixed(3)} stones across the stem)`
-            : `the single-chain minimum (${SINGLE_CHAIN_MIN_RATIO.toFixed(2)} stones across the stem)`;
-          return failure(R.CHAIN_TOO_THIN, `Letter ${JSON.stringify(letter)} (slot ${i}): font ${JSON.stringify(fontId)} with ${stoneSizeMm} mm stones fits this slot only at ${achievedStemStones.toFixed(3)} stones across the stem, below ${boundName}. Use a smaller stone size, a larger frame, less letter spacing, or a layout with fewer letters.`, {
-            diagnostics: {
-              letter, slotIndex: i, achievedStemStones, minChainStones: minStones,
-              fittedHeightMm: fitHeightMm, stoneSizeMm, stemWidthRatio,
-              boundThatBound: floorStones >= SINGLE_CHAIN_MIN_RATIO ? 'readability-floor' : 'single-chain-minimum'
-            }
-          });
-        }
+        // MONO-018: the single-chain minimum gate is HOISTED OUT of this loop. A sub-floor letter is
+        // recorded (belowFloor) and fitting continues, so on failure the BINDING (thinnest) letter
+        // is reported rather than the first sub-floor letter in slot order -- whose identity, and
+        // therefore the quoted stem figure, shifts with frame size and reads as non-monotone (the
+        // MONO-017 diagnosis; docs/specifications/MONO-018-BindingLetter.md). The gate itself runs
+        // after the loop. Every OTHER failure here -- INVALID_FONT (~L754), FITTING_FAILED (~L759)
+        // -- still fails fast; only CHAIN_TOO_THIN defers. CHAIN_TOO_THIN emits no geometry either
+        // way, so no successful layout moves.
+        const belowFloor = achievedStemStones < minStones;
 
         // No internal round-trip regeneration here (unlike the authored branch): the fitted layout
         // above IS a plain GeometryEngine.generateTextLayout() call with the request's real gap and
@@ -833,7 +829,9 @@ export class MonogramGenerator {
           requestedScale: null, layerXMm, layerYMm,
           minimumLegalScale: null, naturalMinimumSpacingMm: null, requiredSpacingMm: null,
           naturalBoundingBox, scaledBoundingBox: fittedBox,
-          isAuthored: false, fittedHeightMm: fitHeightMm, stemStoneCount: achievedStemStones
+          isAuthored: false, fittedHeightMm: fitHeightMm, stemStoneCount: achievedStemStones,
+          // MONO-018: consumed by the hoisted single-chain minimum gate after the loop.
+          belowFloor
         });
         continue;
       }
@@ -968,6 +966,50 @@ export class MonogramGenerator {
         // MONO-012: authored letters carry no single-chain fitting axis.
         isAuthored: true, fittedHeightMm: null, stemStoneCount: null
       });
+    }
+
+    // MONO-018: the single-chain minimum gate, hoisted out of the per-letter loop above. Every
+    // letter has now been fitted to its own slot; on failure report the BINDING letter -- the one
+    // whose fitted stem is thinnest -- not the first letter below the floor in slot order. Because
+    // letters shrink by different amounts to fill an identical slot, the first sub-floor letter's
+    // identity (and the stem figure quoted with it) changes with frame size, so a user shrinking
+    // the frame could see the number rise (the MONO-017 diagnosis). Ties break on the lower slot
+    // index. This branch is unreachable for authored fonts (no single-chain axis) and never runs
+    // on the success path -- CHAIN_TOO_THIN emits no geometry, so no committed baseline moves.
+    if (!fontIsAuthored) {
+      const subFloorLetters = letterResults.filter((r) => r.belowFloor);
+      if (subFloorLetters.length > 0) {
+        const minStones = minChainStones({ stemWidthRatio });
+        const floorStones = MIN_HEIGHT_TO_STONE_RATIO * stemWidthRatio;
+        const bindingLetter = subFloorLetters.reduce((worst, r) => {
+          if (r.stemStoneCount < worst.stemStoneCount) return r;
+          if (r.stemStoneCount === worst.stemStoneCount && r.slotIndex < worst.slotIndex) return r;
+          return worst;
+        });
+        const isReadabilityFloor = floorStones >= SINGLE_CHAIN_MIN_RATIO;
+        const boundName = isReadabilityFloor
+          ? `the readability floor (${minStones.toFixed(3)} stones across the stem)`
+          : `the single-chain minimum (${SINGLE_CHAIN_MIN_RATIO.toFixed(2)} stones across the stem)`;
+        // MONO-018: name the sub-floor count so the reported letter reads as the worst of several,
+        // not the only one. Omitted for a single-letter monogram, where it is always "1 of 1".
+        const countClause = letterResults.length > 1
+          ? ` ${subFloorLetters.length} of ${letterResults.length} letters fall below.`
+          : '';
+        return failure(R.CHAIN_TOO_THIN, `Letter ${JSON.stringify(bindingLetter.letter)} (slot ${bindingLetter.slotIndex}): font ${JSON.stringify(fontId)} with ${stoneSizeMm} mm stones fits this slot only at ${bindingLetter.stemStoneCount.toFixed(3)} stones across the stem, below ${boundName}.${countClause} Use a smaller stone size, a larger frame, less letter spacing, or a layout with fewer letters.`, {
+          diagnostics: {
+            letter: bindingLetter.letter, slotIndex: bindingLetter.slotIndex,
+            achievedStemStones: bindingLetter.stemStoneCount, minChainStones: minStones,
+            fittedHeightMm: bindingLetter.fittedHeightMm, stoneSizeMm, stemWidthRatio,
+            boundThatBound: isReadabilityFloor ? 'readability-floor' : 'single-chain-minimum',
+            // MONO-018: every letter's fitted stem, in slot order, so the full picture is available
+            // without re-running. Its minimum is the reported achievedStemStones.
+            allLetterStemStones: letterResults.map((r) => ({
+              letter: r.letter, slotIndex: r.slotIndex,
+              achievedStemStones: r.stemStoneCount, belowFloor: r.belowFloor
+            }))
+          }
+        });
+      }
     }
 
     // 6. Generate the frame layer -- reuses the frame's own generationNaturalContours (outer+inner

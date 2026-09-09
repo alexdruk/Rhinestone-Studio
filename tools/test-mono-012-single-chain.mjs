@@ -219,9 +219,12 @@ await test('a live render of each emitted OpenType letter reproduces the generat
 // ---------------------------------------------------------------------------
 
 await test('Great Vibes / traditional-three / 60 mm / SS10 -> CHAIN_TOO_THIN (single-chain minimum binds)', async () => {
-  // Verified with a scratch sweep: a Great Vibes capital A shrunk into Traditional Three's side slot
-  // at this frame size falls well under 0.70 stones across the stem (its readability floor would be
-  // only 0.5712, so the 0.70 chain minimum is the binding bound).
+  // Verified with a scratch sweep: all three Great Vibes capitals shrink well under 0.70 stones
+  // across the stem in Traditional Three's slots at this frame size (their readability floor would be
+  // only 0.5712, so the flat 0.70 chain minimum is the binding bound). MONO-018 hoisted the gate out
+  // of the letter loop, so the reported letter is now the thinnest-fitting one (C, slot 2, ~0.111)
+  // rather than the first sub-floor letter in slot order (A, slot 0 -- develop reported ~0.118); the
+  // assertions below pin only the reason and the bound, both unchanged.
   const { generator } = createRealGenerator();
   const result = await generator.generate({
     frameId: 'rounded-square', layoutId: 'traditional-three', letters: ['A', 'B', 'C'],
