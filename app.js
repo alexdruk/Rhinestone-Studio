@@ -5402,6 +5402,24 @@ async function generateMonogramWithFrameAutoShrink(request){
   }
   return{result:firstResult,appliedFrameStoneSizeMm:null};
 }
+// MONO-019: MonogramGenerator ids every layer from frameId + layoutId alone
+// (`monogram-<frame>-<layout>-letter-N` / `-frame`). That determinism is deliberate -- the
+// generator's output is byte-identical across MONO-012/013/015/016/018 and test-geometry-engine's
+// determinism cases -- so generating the same frame+layout twice into one project produces
+// duplicate layer ids, which validateProject()'s uniqueness check (LAYER_ID_PATTERN above)
+// rejects on the next import / autosave-recovery / save round-trip. The fix lives here, at the
+// insertion boundary, not in the generator: one Date.now()-based suffix per generation (the
+// SEC-001 id convention), shared by every layer of the set so it still reads as one monogram.
+// The `monogram-` prefix is shortened to `mono-` and the per-session counter is taken mod 36^3
+// so the worst-case id (longest frame + longest layout + highest letter index) stays inside
+// LAYER_ID_PATTERN's 64-char cap -- see docs/specifications/MONO-019-LayerIds.md for the
+// arithmetic. A suffix collision would need 46656 generations inside one millisecond.
+let monogramGenerationCounter=0;
+function assignInsertionLayerIds(layers){
+  const suffix=`${Date.now().toString(36)}-${(monogramGenerationCounter++%46656).toString(36)}`;
+  for(const layer of layers)layer.id=`${layer.id.replace(/^monogram-/,'mono-')}-${suffix}`;
+  return layers;
+}
 async function generateMonogram(){
   const validation=validateMonogramControls();
   if(!validation.ok){showMonogramValidation(validation.message);return}
@@ -5422,6 +5440,10 @@ async function generateMonogram(){
     updateMonogramGenerateButtonState();
     return;
   }
+  // MONO-019: assign collision-free layer ids before the history snapshot, the selection, or the
+  // live render sees them -- so a second monogram with the same frame+layout never duplicates the
+  // first's ids, and undo/redo restores exactly these ids. See assignInsertionLayerIds() above.
+  assignInsertionLayerIds(result.layers);
   // Single undo step: one commitHistory() before pushing every generated layer, exactly like
   // insertLibraryItem() -- HistoryManager snapshots the whole project, so undo removes (and redo
   // restores) all of this monogram's layers together, never one layer at a time.
