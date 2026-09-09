@@ -139,13 +139,13 @@ await test('negative control: raw "AKL" stone count is strictly monotone decreas
 });
 
 // ---------------------------------------------------------------------------
-// 1. interlockMm 0, 80 mm frame -> CHAIN_TOO_THIN (the interlocked "AKL" mark shrinks below the
+// 1. letterSpacingMm 0, 80 mm frame -> CHAIN_TOO_THIN (the interlocked "AKL" mark shrinks below the
 //    single-chain minimum). The message names the string, not a letter/slot.
 // ---------------------------------------------------------------------------
 
 await test('Great Vibes / script / none / 80 mm / SS6, interlock 0 -> CHAIN_TOO_THIN naming the string', async () => {
   const { generator } = createRealGenerator();
-  const result = await generator.generate(baseRequest({ interlockMm: 0 }));
+  const result = await generator.generate(baseRequest({ letterSpacingMm: 0 }));
   assert.equal(result.ok, false);
   assert.equal(result.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.CHAIN_TOO_THIN);
   assert.match(result.message, /interlocked string "AKL"/);
@@ -166,7 +166,7 @@ await test('Great Vibes / script / none / 80 mm / SS6, interlock 0 -> CHAIN_TOO_
 
 await test('Great Vibes / script / none / 150 mm / SS10 (2.8 mm), interlock 0 -> CHAIN_TOO_THIN (three-letter script is SS6-only today)', async () => {
   const { generator } = createRealGenerator();
-  const result = await generator.generate(baseRequest({ frameRect: FRAME_150, stoneSizeMm: 2.8, interlockMm: 0 }));
+  const result = await generator.generate(baseRequest({ frameRect: FRAME_150, stoneSizeMm: 2.8, letterSpacingMm: 0 }));
   assert.equal(result.ok, false);
   assert.equal(result.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.CHAIN_TOO_THIN);
   assert.match(result.message, /interlocked string "AKL"/);
@@ -176,14 +176,14 @@ await test('Great Vibes / script / none / 150 mm / SS10 (2.8 mm), interlock 0 ->
 });
 
 // ---------------------------------------------------------------------------
-// 2. interlockMm 0, 150 mm frame (the product max for 'none') -> ok, exactly one text layer,
+// 2. letterSpacingMm 0, 150 mm frame (the product max for 'none') -> ok, exactly one text layer,
 //    single-chain stem at its NATURAL 0.85 (150 mm > the 136.5 mm natural mark, so no shrink),
 //    floor clearance.
 // ---------------------------------------------------------------------------
 
 await test('Great Vibes / script / none / 150 mm / SS6, interlock 0 -> ok, one text layer, stem at natural 0.85 (no shrink), clearance >= stoneSizeMm', async () => {
   const { generator } = createRealGenerator();
-  const result = await generator.generate(baseRequest({ frameRect: FRAME_150, interlockMm: 0 }));
+  const result = await generator.generate(baseRequest({ frameRect: FRAME_150, letterSpacingMm: 0 }));
   assert.equal(result.ok, true, result.message);
 
   const textLayers = result.layers.filter((l) => l.type === 'text');
@@ -208,21 +208,21 @@ await test('Great Vibes / script / none / 150 mm / SS6, interlock 0 -> ok, one t
   assert.ok(m.stemStones >= SINGLE_CHAIN_MIN_RATIO && m.stemStones <= SINGLE_CHAIN_MAX_RATIO,
     `stemStones ${m.stemStones} within [${SINGLE_CHAIN_MIN_RATIO}, ${SINGLE_CHAIN_MAX_RATIO}]`);
   assert.equal(m.stoneCount, 372, 're-derived fitted stone-count literal');
-  assert.equal(result.measurements.interlockMm, 0);
+  assert.equal(result.measurements.letterSpacingMm, 0);
   assert.ok(result.measurements.minStoneDistanceMm >= STONE_SIZE_MM - 1e-6,
     `minStoneDistanceMm ${result.measurements.minStoneDistanceMm} >= stoneSizeMm - 1e-6`);
 });
 
 // ---------------------------------------------------------------------------
-// 3. interlockMm -2.3 (the floor), 150 mm frame -> ok, AND both: strictly fewer stones than case 2,
+// 3. letterSpacingMm -2.3 (the floor), 150 mm frame -> ok, AND both: strictly fewer stones than case 2,
 //    strictly narrower string bbox than case 2. (The negative control above already showed the
 //    measured quantity responds to the knob.)
 // ---------------------------------------------------------------------------
 
 await test('Great Vibes / script / none / 150 mm / SS6, interlock -2.3 (floor) -> ok, strictly fewer stones AND narrower bbox than interlock 0', async () => {
   const { generator } = createRealGenerator();
-  const at0 = await generator.generate(baseRequest({ frameRect: FRAME_150, interlockMm: 0 }));
-  const atFloor = await generator.generate(baseRequest({ frameRect: FRAME_150, interlockMm: -2.3 }));
+  const at0 = await generator.generate(baseRequest({ frameRect: FRAME_150, letterSpacingMm: 0 }));
+  const atFloor = await generator.generate(baseRequest({ frameRect: FRAME_150, letterSpacingMm: -2.3 }));
   assert.equal(at0.ok, true, at0.message);
   assert.equal(atFloor.ok, true, atFloor.message);
 
@@ -233,36 +233,45 @@ await test('Great Vibes / script / none / 150 mm / SS6, interlock -2.3 (floor) -
     `floor bboxW ${mF.scaledBoundingBox.widthMm} < interlock-0 bboxW ${m0.scaledBoundingBox.widthMm}`);
 
   assert.equal(mF.stoneCount, 369, 're-derived floor stone-count literal');
-  assert.equal(atFloor.measurements.interlockMm, -2.3);
+  assert.equal(atFloor.measurements.letterSpacingMm, -2.3);
   assert.equal(atFloor.layers.find((l) => l.type === 'text').letterSpacing, -2.3);
   assert.ok(atFloor.measurements.minStoneDistanceMm >= STONE_SIZE_MM - 1e-6);
 });
 
 // ---------------------------------------------------------------------------
-// 4. Out-of-range interlockMm -> INVALID_INPUT.
+// 4. Out-of-range letterSpacingMm -> INVALID_INPUT. MONO-016: the script range is now
+//    [-pitchMm, 4 x pitchMm] -- negative tightens, positive spreads. Only values outside that band
+//    are rejected (a positive value inside it is legal, unlike MONO-013's negative-only rule).
 // ---------------------------------------------------------------------------
 
-await test('interlockMm -2.4 (below the -pitchMm floor) -> INVALID_INPUT', async () => {
+await test('letterSpacingMm -2.4 (below the -pitchMm floor) -> INVALID_INPUT', async () => {
   const { generator } = createRealGenerator();
-  const result = await generator.generate(baseRequest({ frameRect: FRAME_150, interlockMm: -2.4 }));
+  const result = await generator.generate(baseRequest({ frameRect: FRAME_150, letterSpacingMm: -2.4 }));
   assert.equal(result.ok, false);
   assert.equal(result.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.INVALID_INPUT);
-  assert.match(result.message, /interlockMm/);
+  assert.match(result.message, /letterSpacingMm/);
 });
 
-await test('interlockMm 0.5 (positive -- spreading, not overlapping) -> INVALID_INPUT', async () => {
+await test('letterSpacingMm 100 (above 4 x pitchMm) -> INVALID_INPUT', async () => {
   const { generator } = createRealGenerator();
-  const result = await generator.generate(baseRequest({ frameRect: FRAME_150, interlockMm: 0.5 }));
+  const result = await generator.generate(baseRequest({ frameRect: FRAME_150, letterSpacingMm: 100 }));
   assert.equal(result.ok, false);
   assert.equal(result.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.INVALID_INPUT);
-  assert.match(result.message, /interlockMm/);
+  assert.match(result.message, /letterSpacingMm/);
 });
 
-await test('interlockMm omitted -> defaults to 0 (ok at 150 mm)', async () => {
+await test('letterSpacingMm 0.5 (positive, inside the script range) -> ok (MONO-016 widened the range; spreading is legal)', async () => {
+  const { generator } = createRealGenerator();
+  const result = await generator.generate(baseRequest({ frameRect: FRAME_150, letterSpacingMm: 0.5 }));
+  assert.equal(result.ok, true, result.message);
+  assert.equal(result.measurements.letterSpacingMm, 0.5);
+});
+
+await test('letterSpacingMm omitted -> defaults to 0 (ok at 150 mm)', async () => {
   const { generator } = createRealGenerator();
   const result = await generator.generate(baseRequest({ frameRect: FRAME_150 }));
   assert.equal(result.ok, true, result.message);
-  assert.equal(result.measurements.interlockMm, 0);
+  assert.equal(result.measurements.letterSpacingMm, 0);
 });
 
 // ---------------------------------------------------------------------------
@@ -330,7 +339,7 @@ function engineParamsFromEmittedLayer(layer) {
 
 await test('persisted-field round trip: a live render built from the emitted layer object reproduces the generator\'s fitted geometry, with a named negative control on layer.letterSpacing', async () => {
   const { geometryEngine, generator } = createRealGenerator();
-  const result = await generator.generate(baseRequest({ frameRect: FRAME_150, interlockMm: -2.3 }));
+  const result = await generator.generate(baseRequest({ frameRect: FRAME_150, letterSpacingMm: -2.3 }));
   assert.equal(result.ok, true, result.message);
 
   const layer = result.layers.find((l) => l.type === 'text');
@@ -378,7 +387,7 @@ await test('RS Block / traditional-three still generates unchanged (script branc
   });
   assert.equal(result.ok, true, result.message);
   assert.equal(result.measurements.totalStoneCount, 300);
-  assert.equal(result.measurements.interlockMm, undefined, 'non-script layouts carry no interlockMm');
+  assert.equal(result.measurements.letterSpacingMm, 0, 'slot layouts carry the applied letter spacing; 0 when none requested');
 });
 
 if (process.exitCode) {

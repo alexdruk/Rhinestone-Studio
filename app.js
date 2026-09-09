@@ -5101,34 +5101,54 @@ function updateMonogramColorSwatch(){const c=STONE_COLORS[el('monogramColor').va
 function populateMonogramFrameStoneSizeOptions(){el('monogramFrameStoneSize').innerHTML=listStoneSizes().map(s=>`<option value="${s.diameterMm}">${escapeHtml(s.name)} — ${s.diameterMm.toFixed(1)} mm</option>`).join('')}
 function updateMonogramFrameColorSwatch(){const c=STONE_COLORS[el('monogramFrameColor').value];el('monogramFrameColorSwatch').style.background=c?c.previewColor:'transparent'}
 function updateMonogramFrameStoneControlsVisibility(){el('monogramFrameStoneFields').style.display=el('monogramFrameStoneToggle').checked?'':'none'}
-// MONO-013: the 'script' layout's "Overlap" (interlockMm) control. The monogram lightbox passes the
-// generator no explicit gapMm, so it applies AUTHORED_FONT_FITTING_GAP_MM (0.3) -- mirrored here so
-// the slider's floor matches the generator's own interlockMm range of [-(stoneSize+gap), 0], and
-// buildMonogramRequest() pins request.gapMm to this same value for the script layout so the emitted
-// layer.letterSpacing stays inside app.js's own pitch-derived clamp (letterSpacingBoundsMm() /
-// writeSelectedControlsToLayer()). Mirrors refreshLetterSpacingFieldBounds() for the live text
-// control.
+// MONO-016: the shared "Letter spacing" control. One value, an asymmetric range by layout:
+//   - script:       [-pitchMm, top x pitchMm]  (glyph tracking inside the one interlocked string)
+//   - slot layouts: [0,        top x pitchMm]  (additive term on the inter-slot gap)
+// `top` is TRACKING_XPITCH_LADDER's last rung (4) -- the same ceiling letterSpacingBoundsMm() gives
+// an ordinary text layer's #letterSpacing. pitchMm here is the monogram's OWN pitch: the
+// #monogramStoneSize value plus the fixed MONOGRAM_INTERLOCK_GAP_MM (0.3), because
+// buildMonogramRequest() pins request.gapMm to that same constant for the script layout and the
+// generator's own validation uses stoneSizeMm+gapMm. Do NOT substitute letterSpacingBoundsMm() --
+// that reads the #stoneSize/#gap TEXT-layer controls, not the monogram's. A slot layout's floor is
+// 0 for a hard reason: below the production stone-to-stone clearance adjacent letters' stones
+// collide (MONO-006E); the generator rejects a negative slot request rather than clamping.
 const MONOGRAM_INTERLOCK_GAP_MM=0.3;
 function monogramLayoutIsScript(){return el('monogramLayout').value===MONOGRAM_LAYOUTS.SCRIPT}
-function monogramInterlockPitchMm(){return (parseFloat(el('monogramStoneSize').value)||2)+MONOGRAM_INTERLOCK_GAP_MM}
-function monogramInterlockMm(){
-  const floorMm=-monogramInterlockPitchMm();
-  return Math.max(floorMm,Math.min(0,parseFloat(el('monogramInterlock').value)||0));
+// The letter count this monogram will actually have: fixed by the layout for the four slot layouts,
+// or the number of letters typed for the range-based 'script' layout.
+function monogramResolvedLetterCount(){
+  const layoutId=el('monogramLayout').value;
+  const exact=MONOGRAM_LAYOUT_LETTER_COUNTS[layoutId];
+  if(exact)return exact;
+  return Array.from(el('monogramLetters').value.trim()).length;
 }
-function updateMonogramInterlockLabel(){
-  const v=monogramInterlockMm();
-  el('monogramInterlockValue').textContent=v===0?'— letters meet naturally':`${formatLengthDisplay(v,project.units,1)} ${unitSuffix(project.units)}`;
+function monogramLetterSpacingPitchMm(){return (parseFloat(el('monogramStoneSize').value)||2)+MONOGRAM_INTERLOCK_GAP_MM}
+function monogramLetterSpacingBoundsMm(){
+  const pitchMm=monogramLetterSpacingPitchMm();
+  const maxMm=TRACKING_XPITCH_LADDER[TRACKING_XPITCH_LADDER.length-1]*pitchMm;
+  return{minMm:monogramLayoutIsScript()?-pitchMm:0,maxMm};
 }
-function refreshMonogramInterlockBounds(){
-  const slider=el('monogramInterlock'),floorMm=-monogramInterlockPitchMm(),current=parseFloat(slider.value);
-  slider.min=String(floorMm);
-  slider.max='0';
-  if(!Number.isFinite(current)||current<floorMm||current>0)slider.value=String(Math.max(floorMm,Math.min(0,Number.isFinite(current)?current:0)));
-  updateMonogramInterlockLabel();
+function monogramLetterSpacingMm(){
+  const{minMm,maxMm}=monogramLetterSpacingBoundsMm();
+  return Math.max(minMm,Math.min(maxMm,parseFloat(el('monogramLetterSpacing').value)||0));
 }
-function updateMonogramInterlockVisibility(){
-  el('monogramInterlockField').style.display=monogramLayoutIsScript()?'':'none';
-  if(monogramLayoutIsScript())refreshMonogramInterlockBounds();
+function updateMonogramLetterSpacingLabel(){
+  const v=monogramLetterSpacingMm();
+  el('monogramLetterSpacingValue').textContent=v===0?'— natural spacing':`${formatLengthDisplay(v,project.units,1)} ${unitSuffix(project.units)}`;
+}
+function refreshMonogramLetterSpacingBounds(){
+  const slider=el('monogramLetterSpacing'),{minMm,maxMm}=monogramLetterSpacingBoundsMm(),current=parseFloat(slider.value);
+  slider.min=String(minMm);
+  slider.max=String(maxMm);
+  if(!Number.isFinite(current)||current<minMm||current>maxMm)slider.value=String(Math.max(minMm,Math.min(maxMm,Number.isFinite(current)?current:0)));
+  updateMonogramLetterSpacingLabel();
+}
+// Shown whenever the resolved letter count is >= 2, for ANY layout -- there is an inter-letter gap
+// to regulate. Hidden for 'single' and a one-letter script mark.
+function updateMonogramLetterSpacingVisibility(){
+  const show=monogramResolvedLetterCount()>=2;
+  el('monogramLetterSpacingField').style.display=show?'':'none';
+  if(show)refreshMonogramLetterSpacingBounds();
 }
 // MONO-009: the frame's own generic scalingLimitsMm midpoint is a size that only ever coincidentally
 // fits the current product's real printable area. For every product except Plate, default instead to
@@ -5290,14 +5310,17 @@ function buildMonogramRequest(validated){
   if(typeof stemWidthRatio==='number'&&monogramWeightStep>0&&monogramWeightStep<=stoneSizeRungsAvailable(stoneSizeMm)){
     request.weightSizesMm=stoneSizesFromBaseMm(stoneSizeMm,monogramWeightStep);
   }
-  // MONO-013: only the 'script' layout reads interlockMm. gapMm is pinned to the value the
-  // generator would otherwise default to (AUTHORED_FONT_FITTING_GAP_MM) so the slider floor
-  // (refreshMonogramInterlockBounds()) and the generator's own interlockMm range agree exactly, and
-  // so the emitted layer.letterSpacing stays inside app.js's own pitch-derived clamp. Other layouts'
-  // request objects are byte-identical to before this milestone.
+  // MONO-016: the shared "Letter spacing" value, sent whenever the control is shown (resolved letter
+  // count >= 2). Omitted otherwise so the request is byte-identical to pre-MONO-016 for a 'single' or
+  // one-letter mark. For 'script', gapMm is also pinned to the value the generator would otherwise
+  // default to (AUTHORED_FONT_FITTING_GAP_MM) so the slider bounds (refreshMonogramLetterSpacingBounds())
+  // and the generator's own pitch-derived range agree exactly, and so the emitted layer.letterSpacing
+  // stays inside app.js's own text-layer clamp (letterSpacingBoundsMm() / writeSelectedControlsToLayer()).
+  if(monogramResolvedLetterCount()>=2){
+    request.letterSpacingMm=monogramLetterSpacingMm();
+  }
   if(validated.layoutId===MONOGRAM_LAYOUTS.SCRIPT){
     request.gapMm=MONOGRAM_INTERLOCK_GAP_MM;
-    request.interlockMm=monogramInterlockMm();
   }
   return request;
 }
@@ -5338,7 +5361,7 @@ function updateMonogramWeightStepsVisibility(){
   const restored=el('monogramWeightSteps').querySelector(`option[value="${previous}"]`);
   el('monogramWeightSteps').value=(isOpenType&&restored&&!restored.disabled)?previous:'0';
 }
-function onMonogramOpen(){monogramFrameUserChosen=false;clearMonogramValidation();updateMonogramFrameSizeBounds();updateMonogramInterlockVisibility();updateMonogramWeightStepsVisibility();updateMonogramGenerateButtonState()}
+function onMonogramOpen(){monogramFrameUserChosen=false;clearMonogramValidation();updateMonogramFrameSizeBounds();updateMonogramLetterSpacingVisibility();updateMonogramWeightStepsVisibility();updateMonogramGenerateButtonState()}
 // MONO-011: UI-layer-only auto-shrink retry loop. MonogramGenerator.generate() keeps its "never
 // auto-corrects" doctrine (see its own doc comment) -- this wrapper is the thing that decides to
 // retry, and it only ever adjusts frameOptions.stoneSizeMm (never the shared letters' stoneSizeMm,
@@ -5429,13 +5452,13 @@ populateMonogramFrameStoneSizeOptions();populateStoneColorOptions('monogramFrame
 el('monogramFrameStoneSize').value=el('monogramStoneSize').value;
 el('monogramFrameColor').value=el('monogramColor').value;
 updateMonogramColorSwatch();updateMonogramFrameColorSwatch();updateMonogramFrameSizeBounds();updateMonogramLetterCountHint();
-updateMonogramFrameStoneControlsVisibility();updateMonogramInterlockVisibility();updateMonogramWeightStepsVisibility();
+updateMonogramFrameStoneControlsVisibility();updateMonogramLetterSpacingVisibility();updateMonogramWeightStepsVisibility();
 if(fontManager)populateMonogramFontOptions();
 el('monogramFrame').addEventListener('change',()=>{monogramFrameUserChosen=true;updateMonogramFrameSizeBounds();updateMonogramGenerateButtonState()});
-el('monogramLayout').addEventListener('change',()=>{updateMonogramLetterCountHint();updateMonogramInterlockVisibility();updateMonogramGenerateButtonState()});
-el('monogramStoneSize').addEventListener('change',()=>{if(monogramLayoutIsScript())refreshMonogramInterlockBounds();updateMonogramWeightStepsVisibility();updateMonogramGenerateButtonState()});
-el('monogramInterlock').addEventListener('input',()=>{updateMonogramInterlockLabel();updateMonogramGenerateButtonState()});
-el('monogramLetters').addEventListener('input',()=>updateMonogramGenerateButtonState());
+el('monogramLayout').addEventListener('change',()=>{updateMonogramLetterCountHint();updateMonogramLetterSpacingVisibility();updateMonogramGenerateButtonState()});
+el('monogramStoneSize').addEventListener('change',()=>{updateMonogramLetterSpacingVisibility();updateMonogramWeightStepsVisibility();updateMonogramGenerateButtonState()});
+el('monogramLetterSpacing').addEventListener('input',()=>{updateMonogramLetterSpacingLabel();updateMonogramGenerateButtonState()});
+el('monogramLetters').addEventListener('input',()=>{updateMonogramLetterSpacingVisibility();updateMonogramGenerateButtonState()});
 el('monogramFont').addEventListener('change',()=>{applyMonogramDefaultFrameForFont();updateMonogramWeightStepsVisibility();updateMonogramGenerateButtonState()});
 el('monogramColor').addEventListener('change',()=>{updateMonogramColorSwatch();updateMonogramGenerateButtonState()});
 el('monogramWidth').addEventListener('input',()=>{stashTypedLengthField('monogramWidth');updateMonogramGenerateButtonState()});

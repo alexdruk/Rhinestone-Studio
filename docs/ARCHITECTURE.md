@@ -1427,18 +1427,28 @@ script font as one flowing mark rather than per-letter slots. It is the only ran
 (`MONOGRAM_LAYOUT_LETTER_COUNT_RANGES`, 1–3 letters) and produces a single slot equal to the whole
 frame interior — no slot arithmetic, `minGapMm` ignored, exactly as Single. `MonogramGenerator`
 takes a **separate branch** (`_generateScriptMonogram()`, outline fonts only) that sets
-`letters.join('')` as one string via the font's own advances/kerning plus a negative `interlockMm`
-letter-spacing "overlap", then shrink-fits the whole string against that one slot with the same
+`letters.join('')` as one string via the font's own advances/kerning plus the shared letter-spacing
+control (MONO-016), then shrink-fits the whole string against that one slot with the same
 `CHAIN_TOO_THIN` gate as MONO-012. Because the whole mark is one text layer, swashes that cross are
 resolved by the single outline-sampling call's own cross-contour dedup
 (`sampleMultiContourOutlinePoints`, `minSeparationMm = stoneSizeMm`), and the enforced closest-pair
 floor is `stoneSizeMm`, not the per-letter path's `stoneSizeMm + gapMm` — an accepted production
 decision for an interlocked mark (letters are meant to touch); `measurements.minStoneDistanceMm`
-records it but does not gate on it. `interlockMm` is validated to `[-(stoneSizeMm + gapMm), 0]`;
-the negative bound is `-pitchMm` because the emitted `layer.letterSpacing` is otherwise silently
+records it but does not gate on it. See `docs/specifications/MONO-013-Interlock.md`.
+
+**Unified letter spacing (MONO-016).** MONO-013's script-only, negative-only `interlockMm` request
+param became `letterSpacingMm` — one control across every multi-letter layout, an **asymmetric
+range**: `[-pitchMm, 4 × pitchMm]` for `script` (glyph tracking inside the interlocked string,
+emitted as `layer.letterSpacing`), `[0, 4 × pitchMm]` for the four slot layouts (an additive
+`extraGapMm` term on `layoutHorizontalGroup()`'s inter-slot gap). `pitchMm` is the monogram's own
+`stoneSizeMm + gapMm`; the ceiling multiplier is `TRACKING_XPITCH_LADDER`'s top rung. Slot layouts
+cannot go negative — below the production stone-to-stone clearance (`minGapMm`, MONO-006E) adjacent
+letters' stones collide, so a negative slot request is `INVALID_INPUT`, never a silent clamp; the
+script floor stays exactly `-pitchMm` because the emitted `layer.letterSpacing` is otherwise silently
 clamped there by `writeSelectedControlsToLayer()` with no undo entry (READ-006). The
-`#monogramInterlock` "Overlap" slider is shown only for the script layout. See
-`docs/specifications/MONO-013-Interlock.md`.
+`#monogramLetterSpacing` "Letter spacing" slider is shown whenever the resolved letter count is ≥ 2.
+`measurements.letterSpacingMm` records the applied value. See
+`docs/specifications/MONO-016-LetterSpacing.md`.
 
 **Weight-following stone size (MONO-015).** A third `sizeMode` for text layers, `'weight'`, opt-in
 everywhere — no existing layer, project, fixture or monogram changes behaviour unless it is

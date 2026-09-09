@@ -36,7 +36,8 @@ import {
   AUTHORED_FONT_FITTING_GAP_MM,
   MIN_HEIGHT_TO_STONE_RATIO,
   findCrossGroupCollisions,
-  weightSizeMm
+  weightSizeMm,
+  TRACKING_XPITCH_LADDER
 } from '../geometry/index.js';
 import { computeTextLayerPositionForTargetCenterMm } from '../editing/index.js';
 // MONO-012: single-chain sizing arithmetic for OpenType script fonts. Pure arithmetic, no geometry
@@ -224,6 +225,42 @@ function failure(reason, message, extra = {}) {
   return { ok: false, reason, message, layers: null, measurements: null, diagnostics: null, ...extra };
 }
 
+// MONO-016: validate the shared "Letter spacing" request param. One value, an asymmetric range by
+// layout:
+//   - script:       [-pitchMm, topRung x pitchMm]
+//   - slot layouts: [0,        topRung x pitchMm]
+// pitchMm is the monogram's own stone pitch (stoneSizeMm + gapMm == requiredSpacingMm). topRung is
+// TRACKING_XPITCH_LADDER's last entry (4) -- the same ceiling app.js's letterSpacingBoundsMm() gives
+// an ordinary text layer's #letterSpacing and the same one the monogram slider is clamped to; only
+// that multiplier is borrowed from the ladder.
+//
+// The floor differs, and for a hard reason on each side, not aesthetics:
+//   - script: -pitchMm is EXACT because the emitted layer persists the value as `layer.letterSpacing`
+//     and app.js's writeSelectedControlsToLayer() re-clamps that to letterSpacingBoundsMm().minMm
+//     (= -pitchMm) on every text-control write with NO undo entry (READ-006's documented silent
+//     clamp, MONO-013 §4). A wider negative range would silently un-interlock the mark the first
+//     time the user touched any text control.
+//   - slot layouts: 0 because minGapMm is the real production stone-to-stone clearance (MONO-006E) --
+//     below it, stones from adjacent letters physically collide. A negative request is REJECTED here
+//     (INVALID_INPUT, naming the clearance), never silently clamped to 0; silent clamp-back is
+//     exactly what letterSpacingBoundsMm()'s own comment exists to prevent.
+// Returns { ok: true, value } or { ok: false, failure } (a structured generate() failure result).
+function resolveLetterSpacingRequest(rawValue, pitchMm, isScript, R) {
+  const value = (rawValue === undefined || rawValue === null) ? 0 : rawValue;
+  const maxMm = TRACKING_XPITCH_LADDER[TRACKING_XPITCH_LADDER.length - 1] * pitchMm;
+  const minMm = isScript ? -pitchMm : 0;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value > maxMm || value < minMm) {
+    const floorClause = isScript
+      ? `${minMm} = one stone pitch of overlap`
+      : `0 -- a slot layout cannot go below its ${pitchMm.toFixed(2)} mm production stone-to-stone clearance without adjacent letters' stones colliding`;
+    return {
+      ok: false,
+      failure: failure(R.INVALID_INPUT, `letterSpacingMm must be a number in [${minMm}, ${maxMm}] (0 = letters at their natural spacing; ${floorClause}); got ${JSON.stringify(rawValue)}.`)
+    };
+  }
+  return { ok: true, value };
+}
+
 // MONO-005A: compares the StoneLayout used for fitting/collision validation against a fresh
 // regeneration through the real GeometryEngine.generateTextLayout() path (with the persisted
 // authoredScale applied internally) -- see generate()'s round-trip check for why these are expected
@@ -323,6 +360,13 @@ export class MonogramGenerator {
    *   `[base, one rung up]` for step 1, `[base, one rung up, two rungs up]` for step 2, derived by
    *   the caller from `src/renderer/StoneSizes.js`'s `stoneSizesFromBaseMm()`. Absent or empty is
    *   the pre-MONO-015 uniform path, unchanged.
+   * @param {number} [request.letterSpacingMm] MONO-016: the shared "Letter spacing" control. Default
+   *   0 (letters at their natural spacing). One value, two implementations: for the 'script' layout
+   *   it is glyph tracking inside the interlocked string, range `[-pitchMm, 4 x pitchMm]`; for the
+   *   four slot layouts it is an additive term on the inter-slot gap, range `[0, 4 x pitchMm]` (a
+   *   slot layout cannot go negative -- below the production stone-to-stone clearance adjacent
+   *   letters' stones collide). `pitchMm = stoneSizeMm + gapMm`; an out-of-range value is
+   *   INVALID_INPUT. MONO-013 shipped this as `interlockMm` (script-only, negative-only); renamed.
    * @param {number} request.stoneSizeMm Applies uniformly to the frame and every letter.
    * @param {number} [request.gapMm] Production spacing gap, default AUTHORED_FONT_FITTING_GAP_MM.
    * @param {string} [request.color] Default DEFAULT_STONE_COLOR.
@@ -359,9 +403,16 @@ export class MonogramGenerator {
       // stemWidthRatio, surfaced onto the FontManager record). Required only for a non-authored
       // (OpenType) font -- authored stone-center fonts have no vector stem and never read it.
       stemWidthRatio,
-      // MONO-013: negative "overlap" in mm for the 'script' layout only. Optional, default 0.
-      // Ignored by every other layout. Validated inside the script branch below.
-      interlockMm,
+      // MONO-016: the shared "Letter spacing" control, in mm. Optional, default 0. One value, two
+      // implementations by layout: for 'script' it is glyph tracking inside the single interlocked
+      // string (emitted as the layer's `letterSpacing`), range [-pitchMm, 4 x pitchMm]; for the four
+      // slot layouts it is an additive term on the inter-slot gap (fed to computeMonogramLayout as
+      // `extraGapMm`), range [0, 4 x pitchMm] -- a slot layout cannot go negative because below the
+      // production stone-to-stone clearance adjacent letters' stones collide. pitchMm = stoneSizeMm +
+      // gapMm (== requiredSpacingMm). Validated per-branch below. (MONO-013 shipped this as
+      // `interlockMm`, script-only and negative-only; renamed outright, nothing shipped outside this
+      // repo.)
+      letterSpacingMm,
       // MONO-015: opt-in weight-following stone size for the letters (OpenType fonts only). Absent
       // or empty and every path below is the exact pre-MONO-015 uniform path, unchanged. When set,
       // the letter generateTextLayout() calls request sizeMode 'weight' with this flat step array
@@ -496,6 +547,16 @@ export class MonogramGenerator {
       return failure(reason, probeLayoutResult.message);
     }
 
+    // MONO-016: validate the shared "Letter spacing" control now that the layout is known to be
+    // structurally valid (frame -> layout -> spacing -> font, this module's failure-priority order).
+    // The resolved value feeds one of two sinks below: the script branch's emitted `letterSpacing`,
+    // or the slot path's computeMonogramLayout `extraGapMm`. requiredSpacingMm is the monogram's own
+    // stone pitch (stoneSizeMm + gapMm).
+    const isScriptLayout = layoutId === MONOGRAM_LAYOUTS.SCRIPT;
+    const letterSpacingResolution = resolveLetterSpacingRequest(letterSpacingMm, requiredSpacingMm, isScriptLayout, R);
+    if (!letterSpacingResolution.ok) return letterSpacingResolution.failure;
+    const resolvedLetterSpacingMm = letterSpacingResolution.value;
+
     // MONO-012: detect authored (stone-center) vs OpenType (sampled) once -- every letter shares one
     // font. Authored fonts ignore heightMm and are resized only by scaleAuthoredTextLayout()
     // (MONO-002); OpenType fonts are outline-sampled and are resized by regenerating at a smaller
@@ -533,14 +594,14 @@ export class MonogramGenerator {
     // interior sanity check, the authored/OpenType detect probe, the eligibility gate) but replaces
     // steps 3-8. The four pre-existing layouts never reach it, so their output is byte-identical to
     // before this milestone.
-    if (layoutId === MONOGRAM_LAYOUTS.SCRIPT) {
+    if (isScriptLayout) {
       return this._generateScriptMonogram({
         R, frame, frameId, isNoFrame, effectiveFrame,
         normalizedFrameRect, normalizedCanvasMm, resolvedColor,
         stoneSizeMm, gapMm, requiredSpacingMm,
         frameStoneSizeMm, frameRequiredSpacingMm, frameOptions,
         fontId, providerId, letters, layoutId, fontIsAuthored, stemWidthRatio,
-        interlockMm, weightParams
+        letterSpacingMm: resolvedLetterSpacingMm, weightParams
       });
     }
 
@@ -631,7 +692,10 @@ export class MonogramGenerator {
     // that adjacent letters (now fit to fill their own slot, see step 6 below) have production-legal
     // room between them, not merely a hope that collision detection (still fully active, step 8)
     // happens to pass.
-    const layoutResult = computeMonogramLayout({ layoutId, frameInteriorRect, letterCount: letters.length, minGapMm: requiredSpacingMm });
+    // MONO-016: extraGapMm is the shared "Letter spacing" control's slot-layout sink -- an additive
+    // term ON TOP of the minGapMm floor (validated >= 0 above). At 0 this call is byte-identical to
+    // pre-MONO-016.
+    const layoutResult = computeMonogramLayout({ layoutId, frameInteriorRect, letterCount: letters.length, minGapMm: requiredSpacingMm, extraGapMm: resolvedLetterSpacingMm });
     if (!layoutResult.ok) {
       const reason = layoutResult.reason === MONOGRAM_LAYOUT_FAILURE_REASONS.UNKNOWN_LAYOUT ? R.LAYOUT_NOT_FOUND
         : layoutResult.reason === MONOGRAM_LAYOUT_FAILURE_REASONS.UNSUPPORTED_LETTER_COUNT ? R.UNSUPPORTED_LETTER_COUNT
@@ -728,7 +792,7 @@ export class MonogramGenerator {
           const boundName = floorStones >= SINGLE_CHAIN_MIN_RATIO
             ? `the readability floor (${minStones.toFixed(3)} stones across the stem)`
             : `the single-chain minimum (${SINGLE_CHAIN_MIN_RATIO.toFixed(2)} stones across the stem)`;
-          return failure(R.CHAIN_TOO_THIN, `Letter ${JSON.stringify(letter)} (slot ${i}): font ${JSON.stringify(fontId)} with ${stoneSizeMm} mm stones fits this slot only at ${achievedStemStones.toFixed(3)} stones across the stem, below ${boundName}. Use a smaller stone size, a larger frame, or a layout with fewer letters.`, {
+          return failure(R.CHAIN_TOO_THIN, `Letter ${JSON.stringify(letter)} (slot ${i}): font ${JSON.stringify(fontId)} with ${stoneSizeMm} mm stones fits this slot only at ${achievedStemStones.toFixed(3)} stones across the stem, below ${boundName}. Use a smaller stone size, a larger frame, less letter spacing, or a layout with fewer letters.`, {
             diagnostics: {
               letter, slotIndex: i, achievedStemStones, minChainStones: minStones,
               fittedHeightMm: fitHeightMm, stoneSizeMm, stemWidthRatio,
@@ -1062,6 +1126,9 @@ export class MonogramGenerator {
       },
       frameHierarchy: isNoFrame ? null : classifyFrameHierarchy(frameStoneSizeMm, stoneSizeMm),
       slots: layoutResult.slots,
+      // MONO-016: the applied shared "Letter spacing" value. For a slot layout it was added to the
+      // inter-slot gap (computeMonogramLayout extraGapMm); 0 is the pre-MONO-016 default.
+      letterSpacingMm: resolvedLetterSpacingMm,
       letters: letterResults.map((r) => ({
         letter: r.letter,
         slotIndex: r.slotIndex,
@@ -1099,9 +1166,10 @@ export class MonogramGenerator {
    * generate()'s per-letter path (which is left byte-identical for the four other layouts).
    *
    * Instead of placing each letter in a disjoint slot with a mandatory production gap, the letters
-   * are set as one string via the font's own advances/kerning plus a negative `interlockMm`
-   * letter-spacing "overlap". GeometryEngine._buildLineContours() applies that spacing at the pen
-   * advance (line 591); _textPolygons() (line ~470) flattens every character's contours into one
+   * are set as one string via the font's own advances/kerning plus the shared `letterSpacingMm`
+   * control (MONO-016: negative tightens/interlocks, positive spreads; MONO-013 shipped this
+   * script-only and negative-only as `interlockMm`). GeometryEngine._buildLineContours() applies it
+   * at the pen advance (line 591); _textPolygons() (line ~470) flattens every character's contours into one
    * flat array; generateTextLayout() then makes ONE sampleShapeFillPoints() call over the whole set
    * (line ~206), dispatching to StoneSampler.sampleMultiContourOutlinePoints() (line ~1492) whose
    * RC-002 cross-contour dedup already resolves swashes that cross. There is no cross-layer
@@ -1133,7 +1201,14 @@ export class MonogramGenerator {
       normalizedFrameRect, normalizedCanvasMm, resolvedColor,
       stoneSizeMm, gapMm, requiredSpacingMm,
       frameStoneSizeMm, frameRequiredSpacingMm, frameOptions,
-      fontId, providerId, letters, layoutId, fontIsAuthored, stemWidthRatio, weightParams
+      fontId, providerId, letters, layoutId, fontIsAuthored, stemWidthRatio, weightParams,
+      // MONO-016: the shared "Letter spacing" value, already resolved and validated in generate()
+      // (resolveLetterSpacingRequest, script range [-pitchMm, 4 x pitchMm]). Feeds the emitted
+      // layer's `letterSpacing` and every generateTextLayout() call below. The floor is exactly
+      // -pitchMm because writeSelectedControlsToLayer() re-clamps layer.letterSpacing to
+      // letterSpacingBoundsMm().minMm on every text-control write with no undo entry -- a wider
+      // negative range would silently un-interlock the mark (READ-006 silent clamp; MONO-013 §4).
+      letterSpacingMm
     } = ctx;
 
     // Authored (stone-center) fonts have no vector stem to form a chain and no outline for swashes
@@ -1141,20 +1216,6 @@ export class MonogramGenerator {
     // rejections, naming the font id.
     if (fontIsAuthored) {
       return failure(R.INVALID_FONT, `Font ${JSON.stringify(fontId)} supplies authored stone centers; the ${JSON.stringify(layoutId)} monogram layout requires an outline (OpenType) font.`);
-    }
-
-    // interlockMm: optional, default 0. Valid range [-(stoneSizeMm + gapMm), 0]. Positive values
-    // spread letters apart (the opposite of this milestone) and are rejected. The lower bound is
-    // exactly -pitchMm because the emitted layer persists interlockMm as `layer.letterSpacing`, and
-    // app.js's letterSpacingBoundsMm() sets minMm = -pitchMm while writeSelectedControlsToLayer()
-    // clamps layer.letterSpacing to that on every text-control write with NO undo entry
-    // (app.js:605-612 / :2175 — READ-006's own documented silent-clamp behaviour). A value below
-    // -pitchMm would un-interlock the mark the first time the user touched any text control. See
-    // docs/specifications/MONO-013-Interlock.md.
-    const interlockFloorMm = -(stoneSizeMm + gapMm);
-    const interlockMm = (ctx.interlockMm === undefined || ctx.interlockMm === null) ? 0 : ctx.interlockMm;
-    if (typeof interlockMm !== 'number' || !Number.isFinite(interlockMm) || interlockMm > 0 || interlockMm < interlockFloorMm) {
-      return failure(R.INVALID_INPUT, `interlockMm must be a number in [${interlockFloorMm}, 0] (0 = letters set at their natural advances, ${interlockFloorMm} = one stone pitch of overlap); got ${JSON.stringify(ctx.interlockMm)}.`);
     }
 
     const joinedText = letters.join('');
@@ -1168,7 +1229,7 @@ export class MonogramGenerator {
       naturalLayout = await this._engine.generateTextLayout({
         text: joinedText, fontId, providerId, layerId: letterLayerId,
         heightMm: idealHeightMm, stoneSizeMm, gapMm, mode: 'outline',
-        color: resolvedColor, curveEnabled: false, letterSpacingMm: interlockMm
+        color: resolvedColor, curveEnabled: false, letterSpacingMm
       });
     } catch (error) {
       return failure(R.INVALID_FONT, `Failed to generate the string ${JSON.stringify(joinedText)} with font ${JSON.stringify(fontId)}: ${error.message}`);
@@ -1222,7 +1283,7 @@ export class MonogramGenerator {
         fittedLayout = await this._engine.generateTextLayout({
           text: joinedText, fontId, providerId, layerId: letterLayerId,
           heightMm: fitHeightMm, stoneSizeMm, gapMm, mode: 'outline',
-          color: resolvedColor, curveEnabled: false, letterSpacingMm: interlockMm,
+          color: resolvedColor, curveEnabled: false, letterSpacingMm,
           ...(weightParams || {}) // MONO-015: opt-in weight-following stone size
         });
       } catch (error) {
@@ -1261,7 +1322,7 @@ export class MonogramGenerator {
       const boundName = floorStones >= SINGLE_CHAIN_MIN_RATIO
         ? `the readability floor (${minStones.toFixed(3)} stones across the stem)`
         : `the single-chain minimum (${SINGLE_CHAIN_MIN_RATIO.toFixed(2)} stones across the stem)`;
-      return failure(R.CHAIN_TOO_THIN, `The interlocked string ${JSON.stringify(joinedText)}: font ${JSON.stringify(fontId)} with ${stoneSizeMm} mm stones fits this frame only at ${achievedStemStones.toFixed(3)} stones across the stem, below ${boundName}. Use a smaller stone size, a larger frame, or fewer letters.`, {
+      return failure(R.CHAIN_TOO_THIN, `The interlocked string ${JSON.stringify(joinedText)}: font ${JSON.stringify(fontId)} with ${stoneSizeMm} mm stones fits this frame only at ${achievedStemStones.toFixed(3)} stones across the stem, below ${boundName}. Use a smaller stone size, a larger frame, less letter spacing, or fewer letters.`, {
         diagnostics: {
           string: joinedText, achievedStemStones, minChainStones: minStones,
           fittedHeightMm: fitHeightMm, stoneSizeMm, stemWidthRatio,
@@ -1273,7 +1334,7 @@ export class MonogramGenerator {
     // No internal round-trip regeneration here -- same decision, and same reasoning, as MONO-012's
     // OpenType per-letter branch (MonogramGenerator.js:696-702): `fittedLayout` above IS already a
     // plain deterministic generateTextLayout() call whose every persisted field (heightMm,
-    // stoneSize, gap, textMode 'stroke' -> outline, and MONO-013's letterSpacing = interlockMm) is
+    // stoneSize, gap, textMode 'stroke' -> outline, and MONO-016's letterSpacing = letterSpacingMm) is
     // exactly what a live render feeds back in, so a second call would only re-derive the same
     // stones -- a check comparing a deterministic function's output with itself. The one persisted
     // field the OpenType path did not carry before MONO-013 is `letterSpacing`;
@@ -1395,7 +1456,7 @@ export class MonogramGenerator {
 
     // One text layer. This is the OpenType side of generate()'s own layer builder (heightMode 'raw',
     // no authoredScale) plus one field the per-letter OpenType path never needs: letterSpacing,
-    // which persists interlockMm so a live render reproduces the overlap.
+    // which persists letterSpacingMm so a live render reproduces the spacing.
     const letterLayerObj = {
       id: letterLayerId,
       type: 'text',
@@ -1408,7 +1469,7 @@ export class MonogramGenerator {
       stoneSize: stoneSizeMm,
       gap: gapMm,
       color: resolvedColor,
-      letterSpacing: interlockMm,
+      letterSpacing: letterSpacingMm,
       autoFit: false,
       curveEnabled: false,
       curveRadiusMm: DEFAULT_CURVE_RADIUS_MM,
@@ -1445,12 +1506,13 @@ export class MonogramGenerator {
       },
       frameHierarchy: isNoFrame ? null : classifyFrameHierarchy(frameStoneSizeMm, stoneSizeMm),
       slots: layoutResult.slots,
-      // MONO-013: the applied overlap, and the measured (not gated) closest-pair distance in the
-      // emitted mark. For a uniform mark, minStoneDistanceMm between stoneSizeMm and
-      // stoneSizeMm + gapMm is expected (letters are meant to touch). MONO-015: for a weight-sized
-      // mark read minStoneDistanceMm against minStoneDistancePairDiametersMm's own (d1 + d2) / 2,
-      // not against stoneSizeMm -- the binding pair's stones may each be larger than the step's floor.
-      interlockMm,
+      // MONO-016: the applied shared "Letter spacing" value (emitted as the layer's letterSpacing),
+      // and the measured (not gated) closest-pair distance in the emitted mark. For a uniform mark,
+      // minStoneDistanceMm between stoneSizeMm and stoneSizeMm + gapMm is expected (letters are meant
+      // to touch). MONO-015: for a weight-sized mark read minStoneDistanceMm against
+      // minStoneDistancePairDiametersMm's own (d1 + d2) / 2, not against stoneSizeMm -- the binding
+      // pair's stones may each be larger than the step's floor.
+      letterSpacingMm,
       minStoneDistanceMm,
       minStoneDistancePairDiametersMm,
       letters: [{
@@ -1477,7 +1539,7 @@ export class MonogramGenerator {
     const diagnostics = {
       productionSpacingMm: requiredSpacingMm,
       frameStoneSizeMm,
-      interlockMm,
+      letterSpacingMm,
       minStoneDistanceMm
     };
 

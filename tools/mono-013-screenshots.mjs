@@ -45,18 +45,18 @@ async function scenario(name, interlockMm) {
   await page.waitForTimeout(150);
 
   // The Overlap slider is a range input -- set value + fire 'input' explicitly.
-  await page.$eval('#monogramInterlock', (elx, v) => { elx.value = String(v); elx.dispatchEvent(new Event('input', { bubbles: true })); }, interlockMm);
+  await page.$eval('#monogramLetterSpacing', (elx, v) => { elx.value = String(v); elx.dispatchEvent(new Event('input', { bubbles: true })); }, interlockMm);
   await page.waitForTimeout(150);
 
-  const fieldVisible = await page.isVisible('#monogramInterlockField');
-  const sliderVal = await page.inputValue('#monogramInterlock');
-  const overlapLabel = (await page.textContent('#monogramInterlockValue'))?.trim();
+  const fieldVisible = await page.isVisible('#monogramLetterSpacingField');
+  const sliderVal = await page.inputValue('#monogramLetterSpacing');
+  const overlapLabel = (await page.textContent('#monogramLetterSpacingValue'))?.trim();
 
   await page.click('#monogramGenerate');
   await page.waitForTimeout(1200);
   const status = (await page.textContent('#status'))?.trim();
   const validation = (await page.textContent('#monogramValidation'))?.trim();
-  console.log(`${name}: interlockField=${fieldVisible} slider=${sliderVal} label="${overlapLabel}" status="${status}" validation="${validation}"`);
+  console.log(`${name}: letterSpacingField=${fieldVisible} slider=${sliderVal} label="${overlapLabel}" status="${status}" validation="${validation}"`);
 
   await page.locator('#layout').screenshot({ path: `${OUT}/${name}.png` });
   await ctx.close();
