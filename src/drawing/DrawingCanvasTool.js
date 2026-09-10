@@ -1481,19 +1481,36 @@ export function createDrawingTool(canvasEl, hooks = {}) {
    * SEPARATE from hitTestShapeId() above. hitTestShapeId()'s strict fill-containment is the right
    * test for Select's own click-to-pick (a click in genuinely empty space between two shapes must
    * select neither) -- but Stamp/Trace/Eraser's job is different: deciding which existing layer a
-   * manually-placed mark should belong to, for move/resize/export tracking. A shape can have a
-   * genuinely hollow/empty interior (e.g. an imported SVG with an open center) where a user still
-   * reasonably wants to place a stamp that tracks that shape -- strict fill-containment would block
-   * that outright. `shape.item.bounds.contains(point)` is Paper.js's own axis-aligned
-   * Rectangle#contains, a plain bounding-box test. Same topmost-first iteration order/reasoning as
-   * hitTestShapeId()'s own hotfix (board.listShapes() is push-ordered oldest-first; reverse-
-   * iterating visits the topmost shape first -- see that function's own doc comment).
+   * manually-placed mark should belong to, for move/resize/export tracking. A genuinely hollow/empty
+   * interior (a hand-drawn ring, an `evenodd` outline with a hole) is a 'path' layer a user still
+   * reasonably wants to place a stamp inside so it tracks that shape -- strict fill-containment would
+   * block that outright. `shape.item.bounds.contains(point)` is Paper.js's own axis-aligned
+   * Rectangle#contains, a plain bounding-box test.
+   *
+   * RS-3015: only a 'path' proxy is a valid mark target. Every OTHER proxy this method walks past --
+   * 'text' (a plain bbox rectangle over the stones, materializeTextItemFromLayer()), 'svg', 'image',
+   * 'circle', 'rectangle', shape-library -- is SKIPPED (item.data.markEligible !== true, stamped at
+   * every layerId-stamp site so the resolver never has to read project.layers), and iteration
+   * continues DOWN the stack to whatever sits under it. Without this, a mark dropped anywhere inside
+   * such a proxy's bounding box resolved that non-'path' layer and app.js's onStampPlace /
+   * onTracePlace / onEraseSweep discarded it in silence -- most visibly a stamp on a generated
+   * monogram, whose joined-string 'text' bbox proxy shadows the frame 'path' beneath it. (The
+   * pre-RS-3015 rationale above cited a hollow imported SVG accepting a stamp; that never actually
+   * worked -- an SVG layer is type 'svg', now skipped -- so the hollow-interior case is a 'path'
+   * layer only.)
+   *
+   * Same topmost-first iteration order/reasoning as hitTestShapeId()'s own hotfix (board.listShapes()
+   * is push-ordered oldest-first; reverse-iterating visits the topmost shape first -- see that
+   * function's own doc comment).
    * @param {paper.Point} point
    * @returns {string|null}
    */
   function resolveTargetLayerIdByBounds(point) {
     const shapes = board.listShapes();
     for (let i = shapes.length - 1; i >= 0; i--) {
+      // RS-3015: an ineligible proxy is transparent to mark resolution -- keep walking DOWN, never
+      // `return null` here (falling through to the 'path' layer underneath is the whole point).
+      if (shapes[i].item.data.markEligible !== true) continue;
       if (shapes[i].item.bounds.contains(point)) return shapes[i].item.data.layerId || null;
     }
     return null;
@@ -2176,6 +2193,12 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     // results, pre-Step-7 projects, anything not created via Design's draw tools).
     layer.stonesGenerated = false;
     item.data.layerId = layer.id;
+    // RS-3015: mark-tool target eligibility travels as item data so resolveTargetLayerIdByBounds()
+    // never has to ask what type a layer is (this module never reads project.layers). `layer` here
+    // is always a 'path' layer (createPathLayerFromContour() above), but the expression is written
+    // out rather than hardcoded `true` so this stamp site and syncFromProjectLayers()'s own stamp
+    // sites cannot drift apart.
+    item.data.markEligible = layer.type === 'path';
     // RS-3011 issue #4a fix: a finalized shape stops being "still drawing" -- revert to select
     // mode and select the shape just drawn, the same selectedIds/applySelectionVisuals/
     // updateResizeHandles sequence a plain click-select already uses (see onMouseDown's hit-test
@@ -4272,6 +4295,12 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       const clone = source.item.clone({ insert: true });
       clone.translate(new paper.Point(dxMm, dyMm));
       clone.data.layerId = newLayerId;
+      // RS-3015: Paper.js clone() already copied source.item.data.markEligible verbatim; re-assert
+      // it explicitly so this stamp site stays visibly in step with the others. This path only ever
+      // runs for a Design 'path' layer (a no-op for every other layer type -- see above), so this
+      // is always `true`, but it is read off the source rather than hardcoded for the same
+      // no-drift reason the other sites write out `layer.type === 'path'`.
+      clone.data.markEligible = source.item.data.markEligible === true;
       const cloneId = board.addShape(clone);
       // RS-3011 Step 3b: the clone needs its own regenerated stone Group, not a reference to
       // source's -- rebuildStoneGroupForShape() re-flattens the CLONE's own (already-translated)
@@ -4363,6 +4392,10 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       if (!newItem) return;
       if (!board.replaceShapeItem(shape.id, newItem)) return;
       newItem.data.layerId = layer.id;
+      // RS-3015: board.replaceShapeItem() swapped in a fresh item that carries no data.markEligible
+      // -- re-stamp it (this is an Outline-mode Eraser cut, so `layer` is always 'path', but write
+      // the expression, not `true`, matching the sync sites).
+      newItem.data.markEligible = layer.type === 'path';
       applySelectionVisuals();
       updateResizeHandles();
       rebuildStoneGroupForShape(shape.id);
@@ -4502,6 +4535,11 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         if (!item) continue;
         const shapeId = board.addShape(item);
         item.data.layerId = layer.id;
+        // RS-3015: the mark-tool eligibility flag every resolveTargetLayerIdByBounds() iteration
+        // now reads -- only a 'path' proxy is a valid Stamp/Trace/Eraser target; a 'text'/'svg'/
+        // 'image'/'circle'/'rectangle'/shape-library proxy is skipped so the mark falls through to
+        // whatever 'path' layer sits underneath it (e.g. a monogram's frame under its lettering).
+        item.data.markEligible = layer.type === 'path';
         // RS-3012 Step 3: a brand-new 'text' shape (Design just entered, or a text layer added while
         // already active) needs its stone Group built from getTextLayerStones(), not
         // generatePathLayout()/getLayerStoneParams() (which return no stones for a non-'path' layer).
@@ -4513,6 +4551,12 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         const layerId = shape.item.data.layerId;
         const layer = layerId && layerById.get(layerId);
         if (!layer) continue;
+        // RS-3015: keep the mark-tool eligibility flag current on the item that is already on the
+        // board. Every branch below that calls board.replaceShapeItem() swaps in a fresh item with
+        // no data.markEligible and re-stamps it there too (board.replaceShapeItem() does not carry
+        // data across) -- without both, a resized/rotated/re-materialized 'path' layer would lose
+        // the flag and stop being a valid Stamp/Trace/Eraser target.
+        shape.item.data.markEligible = layer.type === 'path';
         const b = shape.item.bounds;
         // RS-3033: whether `layer`'s own rotationDeg differs from what `shape.item` currently
         // reflects (item.data.rotationDeg, stamped by materializeShapeFromLayer() every time it
@@ -4554,6 +4598,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
             if (newItem) {
               board.replaceShapeItem(shape.id, newItem);
               newItem.data.layerId = layerId;
+              newItem.data.markEligible = layer.type === 'path'; // RS-3015 -- see loop-top comment
             }
           }
           if (boundsChanged || rotationChanged || forceStoneRebuild) rebuildStoneGroupForShape(shape.id);
@@ -4583,6 +4628,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           if (boundsChanged || rotationChanged) {
             board.replaceShapeItem(shape.id, freshItem);
             freshItem.data.layerId = layerId;
+            freshItem.data.markEligible = layer.type === 'path'; // RS-3015 -- always false here ('text')
           } else {
             freshItem.remove();
           }
@@ -4608,6 +4654,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           if (boundsChanged) {
             board.replaceShapeItem(shape.id, freshItem);
             freshItem.data.layerId = layerId;
+            freshItem.data.markEligible = layer.type === 'path'; // RS-3015 -- always false here ('circle')
           } else {
             freshItem.remove();
           }
@@ -4632,6 +4679,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
               if (newItem) {
                 board.replaceShapeItem(shape.id, newItem);
                 newItem.data.layerId = layerId;
+                newItem.data.markEligible = layer.type === 'path'; // RS-3015 -- always true here ('path')
               }
             } else {
               // A plain (never-cut, never-rotated) 'path' layer's own contours are, by construction,
@@ -4656,6 +4704,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
             if (newItem) {
               board.replaceShapeItem(shape.id, newItem);
               newItem.data.layerId = layerId;
+              newItem.data.markEligible = layer.type === 'path'; // RS-3015 -- always false here ('svg'/'image')
             }
           } else if (layer.type === 'rectangle') {
             // RS-3012 Step 5: a 'rectangle' HAS a real x/y/w/h box, so it reaches this generic branch
@@ -4666,6 +4715,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
             const newItem = buildRectangleProxyItem(layer);
             board.replaceShapeItem(shape.id, newItem);
             newItem.data.layerId = layerId;
+            newItem.data.markEligible = layer.type === 'path'; // RS-3015 -- always false here ('rectangle')
           } else {
             // RS-3032 Step A: a SHAPE_LIBRARY_KINDS layer's geometry is NOT simply its natural shape
             // stretched into the box -- GeometryEngine resolves it at the new width/height and THEN
@@ -4679,6 +4729,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
             if (newItem) {
               board.replaceShapeItem(shape.id, newItem);
               newItem.data.layerId = layerId;
+              newItem.data.markEligible = layer.type === 'path'; // RS-3015 -- always false here (shape-library)
             }
           }
         }

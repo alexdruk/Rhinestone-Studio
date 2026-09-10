@@ -230,9 +230,14 @@ await test('docs/BACKLOG.md defect rows worded as findings (not "Planned") are m
   // marker.
   //
   //   old guard:  /planned|not started/i           on three named roadmap feature rows
-  //   new guard:  /deferred to its own milestone|appears zero times|proposed, not implemented/i
+  //   new guard:  /deferred to its own milestone|appears zero times|proposed, not implemented|
+  //               silently discards a mark on a non-path layer/i
   //               on any BACKLOG row, unless the row already carries "**Resolved by"
-  const STALE_FINDING_PHRASING = /deferred to its own milestone|appears zero times|proposed, not implemented/i;
+  //
+  // RS-3015 adds the mark-tool row's phrasing to that guard, keyed to `markEligible` appearing in
+  // src/drawing/DrawingCanvasTool.js (the flag resolveTargetLayerIdByBounds() reads to skip a
+  // non-'path' proxy). The moment the fix ships the row must carry "**Resolved by" or this fails.
+  const STALE_FINDING_PHRASING = /deferred to its own milestone|appears zero times|proposed, not implemented|silently discards a mark on a non-path layer/i;
   const rows = readDoc('docs/BACKLOG.md').split('\n').filter((line) => line.startsWith('|') && line.includes('|', 1));
 
   // A machine fact per known-resolved defect: if it holds, the fix has shipped and the row must say so.
@@ -240,6 +245,8 @@ await test('docs/BACKLOG.md defect rows worded as findings (not "Planned") are m
   const montserratRetired = /"id":\s*"montserrat-regular"[\s\S]*?"enabled":\s*false/.test(manifestText);
   const appJsText = readFileSync(path.join(REPO_ROOT, 'app.js'), 'utf8');
   const letterSpacingWired = appJsText.includes('letterSpacingBoundsMm');
+  const drawingToolText = readFileSync(path.join(REPO_ROOT, 'src/drawing/DrawingCanvasTool.js'), 'utf8');
+  const markEligibleShipped = drawingToolText.includes('markEligible');
 
   for (const row of rows) {
     const isResolved = row.includes('**Resolved by');
@@ -260,6 +267,14 @@ await test('docs/BACKLOG.md defect rows worded as findings (not "Planned") are m
         'docs/BACKLOG.md letter-spacing row still reads as an open finding, but app.js has ' +
           'letterSpacingBoundsMm() (READ-006 shipped) -- give the row the "**Resolved by READ-006:**" ' +
           'treatment and correct the "appears zero times in app.js" count',
+      );
+    }
+    if (/silently discards a mark on a non-path layer/i.test(row)) {
+      assert.ok(
+        !markEligibleShipped,
+        'docs/BACKLOG.md mark-tool row still reads as an open finding, but ' +
+          'src/drawing/DrawingCanvasTool.js has markEligible (RS-3015 shipped) -- give the row the ' +
+          '"**Resolved by RS-3015:**" treatment',
       );
     }
   }

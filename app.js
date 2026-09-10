@@ -1457,9 +1457,20 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     el('status').textContent='Trace: entire stroke was outside the selection.';
   },
   onStampPlace:async({xMm,yMm,layerId})=>{
-    if(!layerId)return;
+    // RS-3015: a mark that places nothing says so, matching onStampRejected() above. Two distinct
+    // cases: (a) nothing under the click at all; (b) the click resolved a layer that isn't a 'path'
+    // layer -- after RS-3015 the resolver skips non-'path' proxies, so this is now only the narrow
+    // race where the layer was deleted or changed type between resolution and here. Neither opens a
+    // history session or mutates anything, exactly as before.
+    if(!layerId){el('status').textContent='Stamp: nothing here to place a stone on.';return;}
     const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
-    if(!targetLayer)return;
+    if(!targetLayer){
+      const owner=project.layers.find(l=>l.id===layerId);
+      el('status').textContent=owner
+        ?`Stamp: ${layerLabel(owner)} cannot hold stamped stones — only drawn shapes can.`
+        :'Stamp: nothing here to place a stone on.';
+      return;
+    }
     // Feeds absolutePolygonsToNaturalSpace() a single-point "polygon" ([[{xMm,yMm}]]) rather than
     // duplicating computeNaturalContourTransform/applyNaturalContourTransform logic here -- same
     // precedent as onPaintStroke's own call just above, just with a 1-point ring instead of a real
@@ -1506,9 +1517,20 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // byte-identical-to-before case). Only changes the status message below; every mutation/placement
   // path is otherwise untouched from RS-3011 Step 11.
   onTracePlace:async(placements,layerId,droppedCount=0)=>{
-    if(!layerId||!placements.length)return;
+    // RS-3015: same never-silent rule as onStampPlace above. `!placements.length` with a real
+    // layerId stays a silent no-op (it cannot actually reach here -- DrawingCanvasTool.js discards a
+    // <2-point or fully-filtered drag before calling this hook -- and it is not a "mark landed on
+    // the wrong layer" situation).
+    if(!layerId){el('status').textContent='Trace: nothing under the stroke to place stones on.';return;}
+    if(!placements.length)return;
     const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
-    if(!targetLayer)return;
+    if(!targetLayer){
+      const owner=project.layers.find(l=>l.id===layerId);
+      el('status').textContent=owner
+        ?`Trace: ${layerLabel(owner)} cannot hold traced stones — only drawn shapes can.`
+        :'Trace: nothing under the stroke to place stones on.';
+      return;
+    }
     // Feeds absolutePolygonsToNaturalSpace() the whole placements array as one "polygon" -- it's
     // purely a coordinate transform, so an open polyline in place of a closed ring is fine (same
     // precedent as onStampPlace's own 1-point-ring call just above).
@@ -1575,9 +1597,18 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // so an old project's eraseDaubs and a brand-new erasedGridPositions-based erase on the same layer
   // coexist correctly with no special-case code.
   onEraseSweep:async(daubsAbsoluteMm,layerId,corridorPolygonsAbsoluteMm,mode)=>{
-    if(!layerId||!daubsAbsoluteMm.length)return;
+    // RS-3015: same never-silent rule as onStampPlace above. `!daubsAbsoluteMm.length` stays a
+    // silent no-op (DrawingCanvasTool.js never calls this hook with an empty sweep).
+    if(!layerId){el('status').textContent='Eraser: nothing under the sweep to erase.';return;}
+    if(!daubsAbsoluteMm.length)return;
     const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
-    if(!targetLayer)return;
+    if(!targetLayer){
+      const owner=project.layers.find(l=>l.id===layerId);
+      el('status').textContent=owner
+        ?`Eraser: ${layerLabel(owner)} has no erasable stones — only drawn shapes do.`
+        :'Eraser: nothing under the sweep to erase.';
+      return;
+    }
     if(mode==='outline'){
       // An open Pen/freehand path has no interior to cut -- same graceful-failure precedent
       // RS-1012's own resolveLayerShapeSource()/runBooleanOp() already establish for a shape with
