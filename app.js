@@ -116,8 +116,9 @@ import { mmToDisplayValue, displayValueToMm, unitSuffix, formatLengthDisplay } f
 // MONO-006 (Monogram Generator UI): the Monogram Lightbox is a plain front-end -- it never
 // generates geometry, computes layouts, fits, or detects collisions itself. All of that is
 // delegated to MonogramGenerator.generate() (MONO-005/MONO-005A), which returns ordinary project
-// layers inserted through the same commitHistory()+project.layers.push() pattern
-// insertLibraryItem() already uses, so undo/redo treats a generated monogram as one step. Frame
+// layers inserted through the same commitHistory()+project.layers.push() pattern the rest of the
+// app uses to insert a Design Library item, so undo/redo treats a generated monogram as one step
+// (MONO-020 makes that one step the removal of the previous monogram plus the new insertion). Frame
 // choices come from FrameLibrary.listFrames() (imported below alongside the geometry barrel);
 // layout ids/required letter counts come from MonogramLayouts.js. Both are imported through a new
 // src/monogram/index.js barrel this milestone adds (src/monogram/** had none before -- only test
@@ -3697,6 +3698,10 @@ async function eraseStonesWithinTest(targetLayer,withinTest){
 // the SAME dx/dy this function already applies to copy.x/copy.y (not a second offset convention);
 // a no-op for every non-'path' layer type via drawingTool's own internal lookup.
 function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();
+  // MONO-020: a deliberate duplicate is the user's copy, not the Monogram Lightbox's -- drop the
+  // set marker (and its placement snapshot) so the next Generate does not silently delete it as a
+  // replaceable monogram layer.
+  delete copy.monogramSetId;delete copy.monogramPlacement;
   // RS-3011 Step 3b: pushed here, before drawingTool.duplicateShapeForLayer() below, instead of
   // after every branch (as before this step) -- duplicateShapeForLayer() now builds the clone's own
   // stone Group immediately via the getLayerStoneParams(newLayerId) hook, which reads project.layers,
@@ -5012,8 +5017,9 @@ el('moreOptionsBtn').onclick=()=>{
 // MonogramGenerator.generate() (constructed above as `monogramGenerator`). This section never
 // computes geometry, layout, fitting, or collisions -- it only builds a request object, calls the
 // generator, and (on success) inserts the returned ordinary layers through the exact same
-// commitHistory()+project.layers.push() pattern insertLibraryItem() already uses, so undo/redo
-// treats a generated monogram as a single step, same as inserting a Design Library item.
+// commitHistory()+project.layers.push() pattern used to insert a Design Library item, so undo/redo
+// treats a generated monogram as a single step (MONO-020: that step also removes the previous
+// replaceable monogram).
 const MONOGRAM_LAYOUT_LABELS={
   [MONOGRAM_LAYOUTS.SINGLE]:'Single',
   [MONOGRAM_LAYOUTS.TWO_LETTER]:'Two Letter',
@@ -5414,11 +5420,78 @@ async function generateMonogramWithFrameAutoShrink(request){
 // so the worst-case id (longest frame + longest layout + highest letter index) stays inside
 // LAYER_ID_PATTERN's 64-char cap -- see docs/specifications/MONO-019-LayerIds.md for the
 // arithmetic. A suffix collision would need 46656 generations inside one millisecond.
+
+// MONO-020: the placement fields Design's move/resize/rotate write back to -- onShapeMoved (via
+// setLayerPosition: l.x/l.y), onShapeResized (l.x/l.y/l.w/l.h), onShapeRotated (l.rotationDeg), the
+// main-canvas drag, nudgeSelection() and Align/Distribute (also setLayerPosition). Unlike Stamp/
+// Paint/Erase these gestures leave NO marker of their own, so ownership tracks them by snapshotting
+// the placement at insertion (monogramPlacement) and comparing later. Handled here as lengths
+// (unit-converted for display) vs the one angle. NOT authoredScale/heightMm/stoneSize/color/
+// weightSizesMm/letterSpacing -- those are regenerate-from-parameters knobs, changing them is not a
+// Design edit, and recoverStaleAuthoredScales() rewrites authoredScale on its own.
+const MONOGRAM_PLACEMENT_LENGTH_FIELDS=['x','y','w','h'];
+
+// Snapshot the placement a generated layer was inserted with. x/y/rotationDeg are universal layer
+// fields with a well-defined 0 default (setLayerPosition, GeometryEngine's normalizeRotationDeg,
+// buildTextLayoutBaseParams()'s `?? 0`), so snapshot them unconditionally -- a generated frame
+// carries no rotationDeg key, and without this a frame rotated in Design would go undetected. w/h
+// exist only on the box-shaped frame, never on a text letter, so snapshot those only when present.
+// This is a deliberate widening of "whichever fields it carries" for rotationDeg; see the spec.
+function captureMonogramPlacement(layer){
+  const placement={x:layer.x??0,y:layer.y??0,rotationDeg:layer.rotationDeg??0};
+  if(layer.w!==undefined)placement.w=layer.w;
+  if(layer.h!==undefined)placement.h=layer.h;
+  return placement;
+}
+
+// Has `layer` diverged from the monogram it was generated as? True if EITHER a Design-authored
+// marker fires (Stamp/Paint/Erase -- the regions/stampedStones/eraseDaubs/erasedGridPositions/
+// naturalBoundingBoxMm block app.js forwards into generation, near validateProject()) OR any
+// snapshotted placement field has moved. Deliberately NOT branched on layer.type: text layers will
+// gain the marker fields once Design's toolset reaches text (they are already movable -- 'text' is
+// in syncFromProjectLayers()'s filter), and this predicate must cover them without a change here. A
+// layer with no monogramPlacement (a pre-MONO-020 .rhs, or any layer that never had one) is not
+// "edited" on the placement basis. See docs/specifications/MONO-020-MonogramOwnership.md.
+function hasDesignAuthoredEdits(layer){
+  if(!layer)return false;
+  for(const field of['regions','stampedStones','eraseDaubs','erasedGridPositions']){
+    if(Array.isArray(layer[field])&&layer[field].length>0)return true;
+  }
+  if(layer.naturalBoundingBoxMm!==undefined)return true;
+  const placement=layer.monogramPlacement;
+  if(placement&&typeof placement==='object'){
+    // Compare at the precision the app actually persists a length/angle at, not raw float
+    // equality: writeSelectedControlsToLayer() rewrites l.x/l.y/l.rotationDeg from the #textX/
+    // #textY/#rotationDeg inputs on every ordinary control edit, and setLengthField()->
+    // readLengthField() rounds to 2 display decimals on the way through. A multi-letter monogram
+    // letter's generated x is a full-precision offset (e.g. -13.162527517437937), so a strict
+    // !== would flag "changed stone size on a monogram letter" as a placement edit. Rounding both
+    // sides to display precision makes that round-trip invisible while any real move still shows.
+    for(const field of MONOGRAM_PLACEMENT_LENGTH_FIELDS){
+      if(!(field in placement))continue;
+      if(formatLengthDisplay(layer[field]??0,project.units)!==formatLengthDisplay(placement[field],project.units))return true;
+    }
+    if('rotationDeg' in placement&&Number(layer.rotationDeg??0).toFixed(2)!==Number(placement.rotationDeg).toFixed(2))return true;
+  }
+  return false;
+}
+
 let monogramGenerationCounter=0;
 function assignInsertionLayerIds(layers){
   const suffix=`${Date.now().toString(36)}-${(monogramGenerationCounter++%46656).toString(36)}`;
-  for(const layer of layers)layer.id=`${layer.id.replace(/^monogram-/,'mono-')}-${suffix}`;
-  return layers;
+  for(const layer of layers){
+    layer.id=`${layer.id.replace(/^monogram-/,'mono-')}-${suffix}`;
+    // MONO-020: identity only. Marks which layers came from the same generation so ownership
+    // (replace vs. release) can act on the whole set. Never parsed, never used to decide anything
+    // except set membership -- the mono- id prefix is NOT a substitute for it (SEC-001 keeps
+    // semantics out of ids).
+    layer.monogramSetId=suffix;
+    // MONO-020: ownership means "unchanged since generation", so snapshot the placement now. A
+    // later Design move/resize/rotate makes hasDesignAuthoredEdits() return true and the set is
+    // released instead of replaced.
+    layer.monogramPlacement=captureMonogramPlacement(layer);
+  }
+  return{layers,suffix};
 }
 async function generateMonogram(){
   const validation=validateMonogramControls();
@@ -5443,27 +5516,59 @@ async function generateMonogram(){
   // MONO-019: assign collision-free layer ids before the history snapshot, the selection, or the
   // live render sees them -- so a second monogram with the same frame+layout never duplicates the
   // first's ids, and undo/redo restores exactly these ids. See assignInsertionLayerIds() above.
-  assignInsertionLayerIds(result.layers);
-  // Single undo step: one commitHistory() before pushing every generated layer, exactly like
-  // insertLibraryItem() -- HistoryManager snapshots the whole project, so undo removes (and redo
-  // restores) all of this monogram's layers together, never one layer at a time.
+  const{suffix:newMonogramSetId}=assignInsertionLayerIds(result.layers);
+  // MONO-020: one monogram per product. Every previously generated set is either REPLACEABLE (every
+  // one of its layers is still free of Design-authored edits -- Generate drops it) or RELEASED (a
+  // layer carries hand-work -- Generate leaves the whole set in place and adds the new one
+  // alongside). Silent destruction of hand-work is the failure this milestone exists to prevent.
+  // Every monogramSetId-bearing set is considered, not just the newest, so a project that somehow
+  // carries two converges to one. monogramSetId is never cleared on edit -- a released set keeps
+  // its identity for MONO-021's flatten. See docs/specifications/MONO-020-MonogramOwnership.md.
+  const priorSetIds=new Set(
+    project.layers
+      .map(l=>l.monogramSetId)
+      .filter(id=>typeof id==='string'&&id.length>0&&id!==newMonogramSetId)
+  );
+  const releasedSetIds=new Set(
+    [...priorSetIds].filter(setId=>project.layers.some(l=>l.monogramSetId===setId&&hasDesignAuthoredEdits(l)))
+  );
+  const replaceableSetIds=new Set([...priorSetIds].filter(setId=>!releasedSetIds.has(setId)));
+  const removedLayerCount=project.layers.filter(l=>replaceableSetIds.has(l.monogramSetId)).length;
+  // Single undo step: commitHistory() FIRST -- before the removal -- so the removal and the
+  // insertion are one history step, exactly the commitHistory()+project.layers.push() pattern used
+  // for inserting a Design Library item. HistoryManager snapshots the whole project, so undo/redo
+  // move the whole monogram together, never one layer at a time.
   commitHistory();
+  // Direct project.layers filter, NOT deleteLayer(): its last-layer guard and its own
+  // commitHistory() would both misfire here. The filter and the push happen in the same
+  // synchronous block, so project.layers is never observed empty.
+  if(removedLayerCount>0)project.layers=project.layers.filter(l=>!replaceableSetIds.has(l.monogramSetId));
   project.layers.push(...result.layers);
   selectedLayerIds=selectMany(result.layers.map(l=>l.id));
   selectedLayerId=result.layers[result.layers.length-1].id;
   syncSelectedControlsFromLayer();
-  updateAll(true);
+  // updateAll(true,true): forceStoneRebuild. The frame is a 'path' layer with a live Paper.js item;
+  // a direct project.layers filter bypasses drawingTool.deleteSelected() / onShapeDeleted() exactly
+  // the way the Layers-list trash icon does -- which is why deleteLayer() passes
+  // forceStoneRebuild=true. Without it, generating while Design is open leaves the old frame's shape
+  // on canvas.
+  updateAll(true,true);
   lightboxes.monogram.close();
-  if(appliedFrameStoneSizeMm!=null){
-    // MONO-014: no write-back into #monogramFrameStoneSize. Under MONO-010 that write was coherent
-    // because the applied size only ever came from that visible field; now the field is hidden
-    // whenever the toggle is unchecked (updateMonogramFrameStoneControlsVisibility()) -- the
-    // automatic-hierarchy path -- so the write would target a control the user cannot see. The
-    // adjustment is still surfaced in the status line (MONO-011: never silent).
-    el('status').textContent=`Generated monogram (${result.layers.length} layer${result.layers.length===1?'':'s'}). Frame stones reduced to ${formatStoneSizeLabel(appliedFrameStoneSizeMm)} to fit.`;
-  }else{
-    el('status').textContent=`Generated monogram (${result.layers.length} layer${result.layers.length===1?'':'s'}).`;
-  }
+  // MONO-020: one dedicated ownership sentence (not a concatenation of parts) for each of the four
+  // cases, then the pre-existing frame-auto-shrink note appended unchanged. N in every "(N layers)"
+  // is the new monogram's layer count -- the same referent the original "Generated monogram (N
+  // layers)." used. MONO-014 still holds: the auto-shrink adjustment is surfaced here and NOT
+  // written back into #monogramFrameStoneSize, which is hidden whenever the frame-stone toggle is
+  // unchecked.
+  const n=`${result.layers.length} layer${result.layers.length===1?'':'s'}`;
+  let ownershipMsg;
+  if(removedLayerCount>0&&releasedSetIds.size>0)ownershipMsg=`Replaced the unedited monogram and kept your edited one (${n}).`;
+  else if(removedLayerCount>0)ownershipMsg=`Replaced the previous monogram (${n}).`;
+  else if(releasedSetIds.size>0)ownershipMsg=`Kept your edited monogram and added a new one (${n}).`;
+  else ownershipMsg=`Generated monogram (${n}).`;
+  const parts=[ownershipMsg];
+  if(appliedFrameStoneSizeMm!=null)parts.push(`Frame stones reduced to ${formatStoneSizeLabel(appliedFrameStoneSizeMm)} to fit.`);
+  el('status').textContent=parts.join(' ');
 }
 populateMonogramFrameOptions();populateMonogramLayoutOptions();populateMonogramStoneSizeOptions();populateStoneColorOptions('monogramColor');
 populateMonogramFrameStoneSizeOptions();populateStoneColorOptions('monogramFrameColor');

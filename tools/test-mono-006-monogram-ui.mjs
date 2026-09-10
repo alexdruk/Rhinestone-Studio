@@ -3,9 +3,9 @@
 // Focused tests for the Monogram Lightbox added to app.js/index.html. The UI is strictly a
 // front-end -- it never computes layout, fitting, or collisions itself, only builds a request and
 // calls MonogramGenerator.generate() (MONO-005/MONO-005A), then inserts the returned ordinary
-// layers through the exact same commitHistory()+project.layers.push() pattern
-// insertLibraryItem() already uses (RS-1015), so undo/redo treats a generated monogram as one
-// step, same as inserting a Design Library item.
+// layers through the exact same commitHistory()+project.layers.push() pattern used to insert a
+// Design Library item (RS-1015), so undo/redo treats a generated monogram as one step. MONO-020
+// makes that one step "remove the previous replaceable monogram, then insert the new one".
 //
 // PART A slices and REALLY EXECUTES the actual app.js source (lightboxes construction, menu
 // wiring, lightboxForLayerType(), and the whole "Monogram Lightbox (MONO-006)" section) via
@@ -191,6 +191,10 @@ const sandboxFactory = new Function(
     populateMonogramStoneSizeOptions, populateStoneColorOptions, updateMonogramFrameSizeBounds,
     updateMonogramLetterCountHint,
     performUndo, performRedo,
+    // MONO-020 follow-up: commitHistory() (sliced from app.js) is exported so a test can reproduce
+    // onShapeMoved()'s "commitHistory() then write the field" sequence -- that hook lives in the
+    // drawingTool hooks object, not this file's Monogram Lightbox slice.
+    commitHistory,
     getProject: () => project,
     getSelectedLayerId: () => selectedLayerId,
     getSelectedLayerIds: () => selectedLayerIds,
@@ -235,16 +239,27 @@ function buildScenario({ project, monogramGenerator, fontManager = makeFakeFontM
   // initialized from) rather than a module-level project, since each scenario builds its own.
   function readLengthField(id) { return displayValueToMm(el(id).value, resolvedProject.units); }
   function setLengthField(id, mm) { el(id).value = formatLengthDisplay(mm, resolvedProject.units); }
+  // MONO-020: the 21st sandboxFactory positional is `updateAll`. Pass a recording spy instead of a
+  // bare no-op so tests can observe the argument list of each call -- generateMonogram()'s
+  // replace/release path must call updateAll(true, true) (forceStoneRebuild), the same way
+  // deleteLayer() does, because a direct project.layers filter bypasses the Design tool's own
+  // onShapeDeleted() hook. applyHistorySnapshot() (reached via performUndo/performRedo, also sliced
+  // in) calls updateAll too, so tests slice updateAllCalls around the generateMonogram() call they
+  // care about rather than trusting a global index.
+  const updateAllCalls = [];
+  const updateAllSpy = (...args) => { updateAllCalls.push(args); };
   const sandbox = sandboxFactory(
     Lightbox, HistoryManager, SHAPE_LIBRARY_KINDS, el, listFrames, listStoneSizes, findStoneSizeByDiameterMm, STONE_COLORS,
     formatStoneSizeLabel, stoneSizesFromBaseMm, stoneSizeRungsAvailable, TRACKING_XPITCH_LADDER,
     MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS, MONOGRAM_LAYOUT_LETTER_COUNT_RANGES, MONOGRAM_GENERATOR_FAILURE_REASONS,
     fontManager, resolvedProject,
-    selectMany, () => {}, () => {}, () => {},
+    selectMany, () => {}, updateAllSpy, () => {},
     monogramGenerator, isMonogramEligibleStemWidthRatio, defaultFrameStoneSizeMm,
     () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {},
     readLengthField, setLengthField, mmToDisplayValue, unitSuffix, formatLengthDisplay
   );
+  sandbox.updateAllCalls = updateAllCalls;
+  sandbox.updateAll = updateAllSpy; // exposed so a test can run "several updateAll cycles" directly
   return sandbox;
 }
 
@@ -420,10 +435,7 @@ await test('4. Generate builds a request with letters split per-character, a can
 
 // ---------- 5/6. Successful generation inserts layers as one undo step ----------
 
-await test('5/6. Successful generation inserts every returned layer, selects them, commits exactly one undo step, and a single undo/redo removes/restores all of them together', async () => {
-  const project = { canvas: { width: 200, height: 200 }, layers: [{ id: 'initial-layer', type: 'text' }] };
-  const layers = fakeGeneratedLayers();
-  const s = buildScenario({ project, monogramGenerator: makeStubMonogramGenerator(fakeSuccessResult(layers)) });
+function setMonogramControls() {
   el('monogramFrame').value = 'circle';
   el('monogramLayout').value = MONOGRAM_LAYOUTS.SINGLE;
   el('monogramFont').value = 'rs-block';
@@ -432,21 +444,49 @@ await test('5/6. Successful generation inserts every returned layer, selects the
   el('monogramLetters').value = 'A';
   el('monogramWidth').value = '80';
   el('monogramHeight').value = '80';
+}
 
+await test('5/6. First generation inserts as one undo step; a SECOND generation replaces the first (MONO-020) as one undo step; undo restores set 1 exactly, redo returns to set 2', async () => {
+  const project = { canvas: { width: 200, height: 200 }, layers: [{ id: 'initial-layer', type: 'text' }] };
+  // A fresh layer set per call, so set 1 and set 2 are distinct objects re-id'd with distinct suffixes.
+  const s = buildScenario({ project, monogramGenerator: makeStubMonogramGenerator(() => fakeSuccessResult(fakeGeneratedLayers())) });
+  s.lightboxes.monogram.open(); // opened with empty controls (onMonogramOpen bails before touching product state)
+  setMonogramControls();
+
+  // ---- First generation: insert ----
   assert.equal(s.getProject().layers.length, 1, 'sanity: one pre-existing layer before generation');
   await s.generateMonogram();
-  assert.equal(s.getProject().layers.length, 1 + layers.length, 'both generated layers should be inserted');
-  assert.deepEqual(new Set(s.getSelectedLayerIds()), new Set(layers.map((l) => l.id)), 'the generated layers should become the new selection');
-  assert.equal(s.getHistory().pastSize, 1, 'generation must commit exactly ONE undo step, never one per layer');
-  assert.equal(s.lightboxes.monogram.isOpen, false, 'the Lightbox should close after a successful generation');
+  const afterFirst = s.getProject().layers.map((l) => structuredClone(l));
+  const set1Ids = afterFirst.slice(1).map((l) => l.id);
+  assert.equal(afterFirst.length, 3, 'both generated layers inserted');
+  assert.deepEqual(new Set(s.getSelectedLayerIds()), new Set(set1Ids), 'the generated layers become the new selection');
+  assert.equal(s.getHistory().pastSize, 1, 'first generation commits exactly ONE undo step');
+  assert.equal(s.lightboxes.monogram.isOpen, false, 'the Lightbox closes after a successful generation');
+  const firstGenUpdateAll = s.updateAllCalls.at(-1);
+  console.log('  5/6 first generation  updateAll args:', JSON.stringify(firstGenUpdateAll));
+  assert.deepEqual(firstGenUpdateAll, [true, true], 'even the first generation now forces a stone rebuild (updateAll(true, true))');
 
+  // ---- Second generation: replace ---- (generateMonogram() does not require the Lightbox open)
+  setMonogramControls();
+  const callsBeforeReplace = s.updateAllCalls.length;
+  await s.generateMonogram();
+  const afterSecond = s.getProject().layers;
+  const set2Ids = afterSecond.slice(1).map((l) => l.id);
+  assert.equal(afterSecond.length, afterFirst.length, 'REPLACE, not append: layer count unchanged from after the first generation');
+  for (const id of set1Ids) assert.ok(!afterSecond.some((l) => l.id === id), `set 1 id "${id}" must be gone after replacement`);
+  for (const id of set2Ids) assert.ok(afterSecond.some((l) => l.id === id), `set 2 id "${id}" must be present`);
+  assert.equal(s.getHistory().pastSize, 2, 'the replacement grew history by exactly one step (removal + insertion together)');
+  const replaceUpdateAll = s.updateAllCalls.slice(callsBeforeReplace).at(-1);
+  console.log('  5/6 replace generation updateAll args:', JSON.stringify(replaceUpdateAll));
+  assert.deepEqual(replaceUpdateAll, [true, true], 'the replace path must call updateAll(true, true) -- forceStoneRebuild, same as deleteLayer()');
+
+  // ---- One undo restores set 1 EXACTLY (full objects, not ids/counts) ----
   s.performUndo();
-  assert.equal(s.getProject().layers.length, 1, 'a single undo must remove every generated layer together');
-  assert.equal(s.getProject().layers[0].id, 'initial-layer');
+  assert.deepEqual(s.getProject().layers, afterFirst, 'a single undo restores the post-first-generation project EXACTLY -- full layer objects');
 
+  // ---- Redo returns to set 2 ----
   s.performRedo();
-  assert.equal(s.getProject().layers.length, 1 + layers.length, 'a single redo must restore every generated layer together');
-  assert.deepEqual(s.getProject().layers.slice(1).map((l) => l.id), layers.map((l) => l.id));
+  assert.deepEqual(s.getProject().layers.slice(1).map((l) => l.id), set2Ids, 'redo returns to set 2');
 });
 
 // ---------- 7. Generator failures ----------
@@ -506,6 +546,432 @@ await test('7b. A thrown (unexpected) generator error is never shown to the user
   await s.generateMonogram();
   assert.ok(!el('monogramValidation').textContent.includes('internal stack trace'), 'a raw exception message must never reach the user');
   assert.equal(s.getProject().layers.length, 1);
+});
+
+// =========================================================================================
+// MONO-020 -- Monogram ownership: replace on generate, release on Design edit
+// =========================================================================================
+
+// validateProject() / LAYER_ID_PATTERN extraction, mirroring tools/test-mono-019-layer-ids.mjs
+// and tools/test-project-validation-security.mjs verbatim.
+async function extractProjectFunctions() {
+  const validateMatch = appJs.match(/function validateProject\(obj\)\{[\s\S]*?\n\}\n/);
+  assert.ok(validateMatch, 'expected to find validateProject() in app.js');
+  const defaultMatch = appJs.match(/function defaultProject\(\)\{[\s\S]*?\}\}\n/);
+  assert.ok(defaultMatch, 'expected to find defaultProject() in app.js');
+  const constantsStart = appJs.indexOf('const DEFAULT_TEXT_FONT_ID=');
+  const source = `${appJs.slice(constantsStart, appJs.indexOf(defaultMatch[0]) + defaultMatch[0].length)}\n${appJs.slice(appJs.indexOf('const SUPPORTED_LAYER_TYPES=new Set'), appJs.indexOf(validateMatch[0]) + validateMatch[0].length)}`;
+  const { SHAPE_LIBRARY_KINDS: kinds } = await import('../src/geometry/index.js');
+  const { getObjectTemplate, getPlateDefaults, normalizePlateParams, VESSEL_PRODUCT_IDS, getVesselDefaults, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel } = await import('../src/products/index.js');
+  // eslint-disable-next-line no-new-func
+  return new Function(
+    'getObjectTemplate', 'SHAPE_LIBRARY_KINDS', 'getPlateDefaults', 'normalizePlateParams',
+    'VESSEL_PRODUCT_IDS', 'getVesselDefaults', 'normalizeVesselParams', 'deriveLegacyVesselParams', 'computeCanvasFromVessel',
+    `${source}\nreturn { validateProject, defaultProject, LAYER_ID_PATTERN };`
+  )(getObjectTemplate, kinds, getPlateDefaults, normalizePlateParams, VESSEL_PRODUCT_IDS, getVesselDefaults, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel);
+}
+
+// A returned frame layer with real (non-empty) contours, so it survives the real validateProject().
+function fakeValidGeneratedLayers() {
+  const layers = fakeGeneratedLayers();
+  layers[0].contours = [[{ x: 0, y: 0 }, { x: 80, y: 0 }, { x: 80, y: 80 }, { x: 0, y: 80 }]];
+  return layers;
+}
+
+// The end state of "generate a monogram, then edit it in Design": a two-layer set already carrying
+// a monogramSetId and a monogramPlacement snapshot matching the layer's own x/y/w/h/rotationDeg
+// (i.e. NOT yet moved), with optional Design-authored fields dropped onto the frame and/or letter.
+function ownedMonogramLayers(setId, { frameEdits = {}, letterEdits = {} } = {}) {
+  const frame = {
+    id: `mono-circle-single-frame-${setId}`, type: 'path', visible: true, pathName: 'Circle Frame',
+    contours: [[{ x: 0, y: 0 }, { x: 80, y: 0 }, { x: 80, y: 80 }, { x: 0, y: 80 }]],
+    x: 60, y: 60, w: 80, h: 80, stoneSize: 2.8, gap: 0.3, color: 'gold', fillMode: 'fill',
+    monogramSetId: setId, monogramPlacement: { x: 60, y: 60, rotationDeg: 0, w: 80, h: 80 }, ...frameEdits
+  };
+  const letter = {
+    id: `mono-circle-single-letter-0-${setId}`, type: 'text', visible: true, text: 'A', font: 'rs-block',
+    height: 25, textMode: 'stroke', stoneSize: 2.8, gap: 0.3, color: 'gold', authoredScale: 1.2,
+    align: 'left', lineSpacing: 1, rotationDeg: 0, x: 0, y: 0,
+    monogramSetId: setId, monogramPlacement: { x: 0, y: 0, rotationDeg: 0 }, ...letterEdits
+  };
+  return [frame, letter];
+}
+
+await test('MONO-020 negative control (pre-MONO-020 cohort): pre-existing monogram layers with MonogramGenerator ids a prefix-matcher WOULD catch, but no monogramSetId, are never removed by Generate', async () => {
+  // Exactly how a .rhs file saved before MONO-020 looks: MonogramGenerator's deterministic
+  // `monogram-<frame>-<layout>-...` ids, and NO monogramSetId field. A prefix-matching
+  // implementation (the one MONO-020 §5 explicitly rejects) would delete both of these. The
+  // classification requires a non-empty string monogramSetId, so it never touches them.
+  const preExisting = [
+    { id: 'initial-layer', type: 'text', text: 'x', stoneSize: 2.8, gap: 0.3 },
+    { id: 'monogram-circle-single-frame', type: 'path', visible: true, pathName: 'Circle Frame', contours: [[{ x: 0, y: 0 }, { x: 80, y: 0 }, { x: 80, y: 80 }, { x: 0, y: 80 }]], x: 60, y: 60, w: 80, h: 80, stoneSize: 2.8, gap: 0.3, color: 'gold', fillMode: 'fill' },
+    { id: 'monogram-circle-single-letter-0', type: 'text', visible: true, text: 'A', font: 'rs-block', height: 25, textMode: 'stroke', stoneSize: 2.8, gap: 0.3, color: 'gold', authoredScale: 1.2, align: 'left', lineSpacing: 1, rotationDeg: 0, x: 0, y: 0 }
+  ];
+  const project = { canvas: { width: 200, height: 200 }, layers: preExisting.map((l) => structuredClone(l)) };
+  const preIds = project.layers.map((l) => l.id);
+  const s = buildScenario({ project, monogramGenerator: makeStubMonogramGenerator(() => fakeSuccessResult(fakeValidGeneratedLayers())) });
+  setMonogramControls();
+  console.log(`  cohort control: pre-generation  count = ${project.layers.length}, ids = ${JSON.stringify(preIds)}`);
+  await s.generateMonogram();
+  const postIds = s.getProject().layers.map((l) => l.id);
+  console.log(`  cohort control: post-generation count = ${postIds.length}, ids = ${JSON.stringify(postIds)}`);
+  assert.equal(postIds.length, preExisting.length + 2, 'the 2 generated layers are appended; nothing pre-existing is removed');
+  for (const id of preIds) {
+    assert.ok(postIds.includes(id), `pre-MONO-020 layer "${id}" (no monogramSetId) must survive Generate`);
+  }
+});
+
+await test('MONO-020 released set (stampedStones): a set whose frame carries a non-empty stampedStones array is NOT replaced; the new monogram is added alongside and the status line reports it', async () => {
+  const project = { canvas: { width: 200, height: 200 }, layers: [
+    { id: 'initial-layer', type: 'text' },
+    ...ownedMonogramLayers('abc-0', { frameEdits: { stampedStones: [{ xMm: 5, yMm: 5, sizeMm: 2.8 }] } })
+  ] };
+  const s = buildScenario({ project, monogramGenerator: makeStubMonogramGenerator(() => fakeSuccessResult(fakeValidGeneratedLayers())) });
+  setMonogramControls();
+  await s.generateMonogram();
+  const layers = s.getProject().layers;
+  assert.ok(layers.some((l) => l.id === 'mono-circle-single-frame-abc-0'), 'the released frame must stay');
+  assert.ok(layers.some((l) => l.id === 'mono-circle-single-letter-0-abc-0'), 'its letter must stay too');
+  assert.equal(layers.length, 3 + 2, 'the new monogram is added ALONGSIDE the released one -- total grows');
+  assert.match(el('status').textContent, /Kept your edited monogram and added a new one/, 'the status line reports the release');
+});
+
+await test('MONO-020 released set (eraseDaubs): a set whose frame carries a non-empty eraseDaubs array is NOT replaced; the new monogram is added alongside and the status line reports it', async () => {
+  const project = { canvas: { width: 200, height: 200 }, layers: [
+    { id: 'initial-layer', type: 'text' },
+    ...ownedMonogramLayers('abc-0', { frameEdits: { eraseDaubs: [{ xMm: 1, yMm: 1, radiusMm: 3 }] } })
+  ] };
+  const s = buildScenario({ project, monogramGenerator: makeStubMonogramGenerator(() => fakeSuccessResult(fakeValidGeneratedLayers())) });
+  setMonogramControls();
+  await s.generateMonogram();
+  const layers = s.getProject().layers;
+  assert.ok(layers.some((l) => l.id === 'mono-circle-single-frame-abc-0'), 'the released frame must stay');
+  assert.ok(layers.some((l) => l.id === 'mono-circle-single-letter-0-abc-0'), 'its letter must stay too');
+  assert.equal(layers.length, 3 + 2, 'the new monogram is added ALONGSIDE the released one -- total grows');
+  assert.match(el('status').textContent, /Kept your edited monogram and added a new one/, 'the status line reports the release');
+});
+
+await test('MONO-020 released set (naturalBoundingBoxMm): a set whose frame carries a defined naturalBoundingBoxMm is NOT replaced; the new monogram is added alongside and the status line reports it', async () => {
+  const project = { canvas: { width: 200, height: 200 }, layers: [
+    { id: 'initial-layer', type: 'text' },
+    ...ownedMonogramLayers('abc-0', { frameEdits: { naturalBoundingBoxMm: { xMm: 0, yMm: 0, widthMm: 80, heightMm: 80 } } })
+  ] };
+  const s = buildScenario({ project, monogramGenerator: makeStubMonogramGenerator(() => fakeSuccessResult(fakeValidGeneratedLayers())) });
+  setMonogramControls();
+  await s.generateMonogram();
+  const layers = s.getProject().layers;
+  assert.ok(layers.some((l) => l.id === 'mono-circle-single-frame-abc-0'), 'the released frame must stay');
+  assert.ok(layers.some((l) => l.id === 'mono-circle-single-letter-0-abc-0'), 'its letter must stay too');
+  assert.equal(layers.length, 3 + 2, 'the new monogram is added ALONGSIDE the released one -- total grows');
+  assert.match(el('status').textContent, /Kept your edited monogram and added a new one/, 'the status line reports the release');
+});
+
+await test('MONO-020 partial edit: when only the FRAME of an owned set is edited, the whole set survives -- ownership is set-level, not layer-level', async () => {
+  const project = { canvas: { width: 200, height: 200 }, layers: [
+    { id: 'initial-layer', type: 'text' },
+    // frame edited, letter carries NO Design-authored fields
+    ...ownedMonogramLayers('def-0', { frameEdits: { stampedStones: [{ xMm: 2, yMm: 2, sizeMm: 2.8 }] } })
+  ] };
+  const s = buildScenario({ project, monogramGenerator: makeStubMonogramGenerator(() => fakeSuccessResult(fakeValidGeneratedLayers())) });
+  setMonogramControls();
+  await s.generateMonogram();
+  const layers = s.getProject().layers;
+  assert.ok(layers.some((l) => l.id === 'mono-circle-single-frame-def-0'), 'the edited frame survives');
+  assert.ok(layers.some((l) => l.id === 'mono-circle-single-letter-0-def-0'),
+    'the UN-edited letter of the same set ALSO survives -- a per-layer implementation would delete it and leave an orphan frame');
+  assert.equal(layers.length, 3 + 2, 'the new monogram is added alongside the fully-preserved set');
+});
+
+await test('MONO-020 duplicateLayer() strips monogramSetId (source assertion), and a monogramSetId-less layer survives the next Generate', async () => {
+  // duplicateLayer() is not reachable from this file's sliced sandbox (the slice is the Monogram
+  // Lightbox section only). No test in the repo EXECUTES duplicateLayer() -- test-variable-stone-
+  // sizes.mjs (test 9) and test-shapes-design-consolidation.mjs (test 6) both assert on its SOURCE.
+  // Same approach here, plus a sandbox proof of the consequence.
+  assert.match(appJs, /function duplicateLayer\(id\)\{[\s\S]*?delete copy\.monogramSetId/,
+    'duplicateLayer() must delete copy.monogramSetId so a deliberate duplicate is not silently replaced by the next Generate');
+
+  const project = { canvas: { width: 200, height: 200 }, layers: [
+    { id: 'initial-layer', type: 'text' },
+    ...ownedMonogramLayers('ghi-0'),
+    // The user's manual duplicate of a monogram letter: same shape, monogramSetId stripped, fresh id.
+    { id: 'text1700000000000', type: 'text', visible: true, text: 'A copy', font: 'rs-block', height: 25, textMode: 'stroke', stoneSize: 2.8, gap: 0.3, color: 'gold', authoredScale: 1.2, align: 'left', lineSpacing: 1, rotationDeg: 0, x: 8, y: 8 }
+  ] };
+  const s = buildScenario({ project, monogramGenerator: makeStubMonogramGenerator(() => fakeSuccessResult(fakeValidGeneratedLayers())) });
+  setMonogramControls();
+  await s.generateMonogram();
+  const layers = s.getProject().layers;
+  assert.ok(!layers.some((l) => l.id === 'mono-circle-single-frame-ghi-0'), 'the un-edited owned set IS replaced');
+  assert.ok(layers.some((l) => l.id === 'text1700000000000'), 'the duplicated (monogramSetId-less) letter survives the next Generate');
+});
+
+await test('MONO-020 x MONO-019: regenerate, regenerate, undo, regenerate -> the resulting project passes the real validateProject() with unique ids', async () => {
+  const { validateProject } = await extractProjectFunctions();
+  const project = { canvas: { width: 200, height: 200 }, layers: [{ id: 'initial-layer', type: 'text', text: 'x', stoneSize: 2.8, gap: 0.3 }] };
+  const s = buildScenario({ project, monogramGenerator: makeStubMonogramGenerator(() => fakeSuccessResult(fakeValidGeneratedLayers())) });
+
+  // generateMonogram() does not require the Lightbox open; the control values persist on the fake DOM.
+  setMonogramControls();
+  await s.generateMonogram();
+  await s.generateMonogram();
+  s.performUndo();
+  await s.generateMonogram();
+
+  const ids = s.getProject().layers.map((l) => l.id);
+  console.log('  MONO-020 x MONO-019 final id list:', JSON.stringify(ids));
+  const finalProject = { version: 2, units: 'mm', canvas: { width: 200, height: 200 }, layers: structuredClone(s.getProject().layers) };
+  const validated = validateProject(finalProject);
+  assert.ok(validated && Array.isArray(validated.layers), 'validateProject() must accept the resulting project');
+  assert.equal(new Set(ids).size, ids.length, 'every layer id is unique -- no MONO-019 collision across regenerations');
+});
+
+await test('MONO-020 released-set id collision: two sets with the SAME frameId+layoutId coexist only via the release path; MONO-019\'s per-generation counter keeps their suffixes unique even when Date.now() collides; the third generate emits BOTH status clauses', async () => {
+  const project = { canvas: { width: 200, height: 200 }, layers: [{ id: 'initial-layer', type: 'text', text: 'x', stoneSize: 2.8, gap: 0.3 }] };
+  // Same frame + layout for every generation (setMonogramControls() -> circle / single).
+  const s = buildScenario({ project, monogramGenerator: makeStubMonogramGenerator(() => fakeSuccessResult(fakeValidGeneratedLayers())) });
+  setMonogramControls();
+
+  // ---- Generate set 1 ----
+  await s.generateMonogram();
+  const set1Frame = s.getProject().layers.find((l) => l.type === 'path');
+  const set1Id = set1Frame.monogramSetId;
+
+  // ---- Edit set 1's frame in Design (Stamp tool writes stampedStones) ----
+  set1Frame.stampedStones = [{ xMm: 5, yMm: 5, sizeMm: 2.8 }];
+
+  // ---- Generate set 2 back-to-back, no artificial delay (set 1 released -> set 2 added alongside) ----
+  await s.generateMonogram();
+  assert.equal(s.getProject().layers.filter((l) => l.type === 'path').length, 2, 'set 1 kept (released), set 2 added alongside -- two sets with the same frame+layout now coexist');
+  assert.match(el('status').textContent, /^Kept your edited monogram and added a new one \(2 layers\)\.$/, 'set-2 generate: only the release clause (nothing was replaceable)');
+
+  // ---- Generate set 3 (set 2 replaceable -> removed; set 1 still released -> kept) ----
+  await s.generateMonogram();
+
+  const finalLayers = s.getProject().layers;
+  const finalIds = finalLayers.map((l) => l.id);
+  const survivingSetIds = [...new Set(finalLayers.map((l) => l.monogramSetId).filter(Boolean))];
+  const tsSegOf = (setId) => setId.split('-')[0];
+  const counterSegOf = (setId) => setId.split('-')[1];
+
+  console.log('  released-collision final id list  :', JSON.stringify(finalIds));
+  console.log('  released-collision surviving setIds:', JSON.stringify(survivingSetIds));
+  console.log(`  released-collision Date.now() segs : ${JSON.stringify(survivingSetIds.map(tsSegOf))}  (collided: ${tsSegOf(survivingSetIds[0]) === tsSegOf(survivingSetIds[1])})`);
+  console.log(`  released-collision counter segs    : ${JSON.stringify(survivingSetIds.map(counterSegOf))}`);
+
+  assert.equal(survivingSetIds.length, 2, 'exactly two monogram sets survive: the released set 1 and the new set 3');
+  assert.notEqual(survivingSetIds[0], survivingSetIds[1], 'the two surviving monogramSetId values differ');
+  assert.ok(survivingSetIds.includes(set1Id), 'the released set 1 kept its original monogramSetId (never cleared on edit)');
+  if (tsSegOf(survivingSetIds[0]) === tsSegOf(survivingSetIds[1])) {
+    assert.notEqual(counterSegOf(survivingSetIds[0]), counterSegOf(survivingSetIds[1]),
+      'Date.now() segments collided -> the MONO-019 per-generation counter is the ONLY thing keeping the two suffixes (and every layer id) unique, and it did');
+  }
+  assert.equal(new Set(finalIds).size, finalIds.length, 'every layer id in the final project is unique');
+
+  // ---- the "both" ownership message (MONO-020: one dedicated sentence, not a concatenation) ----
+  assert.equal(el('status').textContent,
+    'Replaced the unedited monogram and kept your edited one (2 layers).',
+    'the third generate replaced set 2 AND kept the released set 1 -- the dedicated both-case sentence');
+
+  // ---- real validateProject() accepts the final released+regenerated project ----
+  const { validateProject } = await extractProjectFunctions();
+  const validated = validateProject({ version: 2, units: 'mm', canvas: { width: 200, height: 200 }, layers: structuredClone(finalLayers) });
+  assert.ok(validated && Array.isArray(validated.layers), 'validateProject() accepts the final project');
+});
+
+await test('MONO-020 monogramSetId + monogramPlacement persistence: a project carrying both passes the real validateProject() (S-200 permissive-field pass-through) and round-trips through JSON.stringify/parse unchanged', async () => {
+  const { validateProject } = await extractProjectFunctions();
+  const project = {
+    version: 2, units: 'mm', name: 'setId persistence', canvas: { width: 200, height: 200 },
+    layers: [
+      { id: 'initial-layer', type: 'text', text: 'x', stoneSize: 2.8, gap: 0.3 },
+      ...ownedMonogramLayers('persist-0')
+    ]
+  };
+  const validated = validateProject(structuredClone(project));
+  assert.ok(validated && Array.isArray(validated.layers), 'validateProject() accepts a project carrying monogramSetId + monogramPlacement');
+  for (const l of validated.layers.slice(1)) {
+    assert.equal(l.monogramSetId, 'persist-0', 'validateProject() preserves monogramSetId -- not stripped by the normalization gate');
+    assert.deepEqual(l.monogramPlacement, project.layers.find((p) => p.id === l.id).monogramPlacement, 'validateProject() preserves monogramPlacement unchanged');
+  }
+  const roundTripped = JSON.parse(JSON.stringify(project));
+  assert.deepEqual(roundTripped, project, 'the whole project survives a Save/Open (JSON stringify/parse) round trip byte-for-byte, monogramSetId + monogramPlacement included');
+});
+
+// ---- MONO-020 follow-up: placement-change ownership ------------------------------------------------
+//
+// onShapeMoved / onShapeResized / onShapeRotated (app.js ~1682-1730), nudgeSelection() (~2829) and
+// runAlign/runDistribute -> applyPositionDeltas -> setLayerPosition (~2569) all live in app.js
+// OUTSIDE the Monogram Lightbox section this file slices, so none of them execute in this sandbox.
+// The tests below reproduce the exact field writes those hooks perform:
+//   onShapeMoved(id, dx, dy) : setLayerPosition -> l.x += dx ; l.y += dy   (non-circle)
+//   onShapeResized(id, b)    : l.x = b.left ; l.y = b.top ; l.w = b.width ; l.h = b.height
+//   onShapeRotated(id, deg)  : l.rotationDeg = deg  (already normalised into [0,360))
+// -- with a real s.generateMonogram() first so the real captureMonogramPlacement() runs.
+
+await test('MONO-020 NO FALSE POSITIVE: re-renders, a stone-size / colour change on a monogram letter, and a selection change do NOT release the set -- the next Generate REPLACES it', async () => {
+  const project = { canvas: { width: 200, height: 200 }, layers: [{ id: 'initial-layer', type: 'text', text: 'x', stoneSize: 2.8, gap: 0.3 }] };
+  const s = buildScenario({ project, monogramGenerator: makeStubMonogramGenerator(() => fakeSuccessResult(fakeValidGeneratedLayers())) });
+  setMonogramControls();
+  await s.generateMonogram();
+
+  const frame = s.getProject().layers.find((l) => l.type === 'path');
+  const letter = s.getProject().layers.find((l) => l.type === 'text' && l.monogramSetId);
+  const setId = frame.monogramSetId;
+
+  // (a) several updateAll cycles. In this sandbox updateAll is a recording spy; engine.generate() /
+  //     recoverStaleAuthoredScales() / syncFromProjectLayers() are not sliced. recoverStaleAuthored-
+  //     Scales() only ever does `delete l.authoredScale` (grepped) -- never a placement field -- so
+  //     real cycles are safe too. Here: three no-op spy calls.
+  s.updateAll(true, true); s.updateAll(false); s.updateAll(true);
+
+  // (b) a stone-size and a colour change on the monogram LETTER through the fields
+  //     writeSelectedControlsToLayer() writes for those controls -- l.stoneSize / l.color. NOT placement.
+  letter.stoneSize = 3.8;
+  letter.color = 'silver';
+
+  // (c) a selection change: generateMonogram() re-selects anyway, and hasDesignAuthoredEdits() never
+  //     reads selection state -- it reads layer fields only.
+
+  for (const l of [frame, letter]) {
+    console.log(`  no-false-positive ${l.type.padEnd(4)} snapshot: ${JSON.stringify(l.monogramPlacement)}`);
+    console.log(`  no-false-positive ${l.type.padEnd(4)} live    : ${JSON.stringify({ x: l.x, y: l.y, w: l.w, h: l.h, rotationDeg: l.rotationDeg })}`);
+  }
+
+  await s.generateMonogram();
+  const layers = s.getProject().layers;
+  assert.ok(!layers.some((l) => l.monogramSetId === setId), 'the set was NOT edited (stone size / colour / re-render / selection only) -- it MUST be replaced');
+  assert.equal(el('status').textContent, 'Replaced the previous monogram (2 layers).', 'status: replace, not release');
+});
+
+await test('MONO-020 NO FALSE POSITIVE (display rounding): a multi-letter monogram letter\'s full-precision x, round-tripped through the controls\' setLengthField/readLengthField (2dp), is NOT a placement edit -- the set is still REPLACED', async () => {
+  // Real two-letter / equal-three layouts give letters offsets like -13.162527517437937. In the
+  // app, selecting that letter runs syncSelectedControlsFromLayer() -> setLengthField('textX', l.x)
+  // (formatLengthDisplay, 2dp), and any later control edit runs writeSelectedControlsToLayer() ->
+  // l.x = readLengthField('textX') (displayValueToMm). That silently rewrites l.x to -13.16. The
+  // predicate compares at display precision precisely so this benign round-trip is not "an edit".
+  const project = { canvas: { width: 200, height: 200 }, layers: [{ id: 'initial-layer', type: 'text', text: 'x', stoneSize: 2.8, gap: 0.3 }] };
+  const preciseX = -13.162527517437937;
+  const s = buildScenario({ project, monogramGenerator: makeStubMonogramGenerator(() => {
+    const layers = fakeValidGeneratedLayers();
+    layers[1].x = preciseX;
+    return fakeSuccessResult(layers);
+  }) });
+  setMonogramControls();
+  await s.generateMonogram();
+  const letter = s.getProject().layers.find((l) => l.type === 'text' && l.monogramSetId);
+  assert.equal(letter.monogramPlacement.x, preciseX, 'placement snapshotted the full-precision x');
+
+  const displayed = formatLengthDisplay(letter.x, 'mm');
+  letter.x = displayValueToMm(String(displayed), 'mm');
+  console.log(`  display-rounding: generated x = ${preciseX}  ->  after control round-trip = ${letter.x}  (Δ ${Math.abs(preciseX - letter.x).toExponential(2)} mm)`);
+  assert.notEqual(letter.x, preciseX, 'sanity: the round-trip really did change l.x');
+
+  await s.generateMonogram();
+  assert.ok(!s.getProject().layers.some((l) => l.monogramSetId === letter.monogramSetId),
+    'a display-rounding drift is NOT a placement edit -- the set is replaced');
+  assert.equal(el('status').textContent, 'Replaced the previous monogram (2 layers).');
+});
+
+await test('MONO-020 released by MOVE (onShapeMoved delta on the frame): the positioned set survives, the new monogram is added alongside, status reports the release', async () => {
+  const project = { canvas: { width: 200, height: 200 }, layers: [{ id: 'initial-layer', type: 'text', text: 'x', stoneSize: 2.8, gap: 0.3 }] };
+  const s = buildScenario({ project, monogramGenerator: makeStubMonogramGenerator(() => fakeSuccessResult(fakeValidGeneratedLayers())) });
+  setMonogramControls();
+  await s.generateMonogram();
+  const frame = s.getProject().layers.find((l) => l.type === 'path');
+  const setId = frame.monogramSetId;
+
+  frame.x += 12; frame.y -= 7; // onShapeMoved: setLayerPosition(l, x+dx, y+dy)
+
+  await s.generateMonogram();
+  const layers = s.getProject().layers;
+  assert.ok(layers.some((l) => l.monogramSetId === setId), 'the moved set survives -- released, not replaced');
+  assert.ok(layers.some((l) => l.type === 'path' && l.monogramSetId && l.monogramSetId !== setId), 'the new monogram is added alongside');
+  assert.equal(layers.filter((l) => l.monogramSetId).length, 4, 'two 2-layer sets coexist');
+  assert.equal(el('status').textContent, 'Kept your edited monogram and added a new one (2 layers).', 'status reports the release');
+});
+
+await test('MONO-020 released by RESIZE (onShapeResized l.x/y/w/h on the frame): the resized set survives alongside the new monogram, status reports the release', async () => {
+  const project = { canvas: { width: 200, height: 200 }, layers: [{ id: 'initial-layer', type: 'text', text: 'x', stoneSize: 2.8, gap: 0.3 }] };
+  const s = buildScenario({ project, monogramGenerator: makeStubMonogramGenerator(() => fakeSuccessResult(fakeValidGeneratedLayers())) });
+  setMonogramControls();
+  await s.generateMonogram();
+  const frame = s.getProject().layers.find((l) => l.type === 'path');
+  const setId = frame.monogramSetId;
+
+  // onShapeResized(id, boundsMm): l.x = left ; l.y = top ; l.w = width ; l.h = height
+  frame.x = 55; frame.y = 55; frame.w = 90; frame.h = 90;
+
+  await s.generateMonogram();
+  const layers = s.getProject().layers;
+  assert.ok(layers.some((l) => l.monogramSetId === setId), 'the resized set survives -- released, not replaced');
+  assert.equal(layers.filter((l) => l.monogramSetId).length, 4, 'two sets coexist');
+  assert.equal(el('status').textContent, 'Kept your edited monogram and added a new one (2 layers).', 'status reports the release');
+});
+
+await test('MONO-020 released by ROTATE (onShapeRotated l.rotationDeg on the frame -- a field the generator does not emit): the rotated set survives alongside the new monogram, status reports the release', async () => {
+  const project = { canvas: { width: 200, height: 200 }, layers: [{ id: 'initial-layer', type: 'text', text: 'x', stoneSize: 2.8, gap: 0.3 }] };
+  const s = buildScenario({ project, monogramGenerator: makeStubMonogramGenerator(() => fakeSuccessResult(fakeValidGeneratedLayers())) });
+  setMonogramControls();
+  await s.generateMonogram();
+  const frame = s.getProject().layers.find((l) => l.type === 'path');
+  const setId = frame.monogramSetId;
+  assert.equal(frame.rotationDeg, undefined, 'sanity: the generated frame has no rotationDeg key');
+  assert.equal(frame.monogramPlacement.rotationDeg, 0, 'captureMonogramPlacement() still snapshots rotationDeg: 0 for the frame');
+
+  frame.rotationDeg = 15; // onShapeRotated(id, 15)
+
+  await s.generateMonogram();
+  const layers = s.getProject().layers;
+  assert.ok(layers.some((l) => l.monogramSetId === setId), 'the rotated set survives -- released, not replaced');
+  assert.equal(layers.filter((l) => l.monogramSetId).length, 4, 'two sets coexist');
+  assert.equal(el('status').textContent, 'Kept your edited monogram and added a new one (2 layers).', 'status reports the release');
+});
+
+await test('MONO-020 a MOVED LETTER releases the whole set (frame + letters) -- the case the marker-based released-set tests cannot reach, since letters take no stamps', async () => {
+  const project = { canvas: { width: 200, height: 200 }, layers: [{ id: 'initial-layer', type: 'text', text: 'x', stoneSize: 2.8, gap: 0.3 }] };
+  const s = buildScenario({ project, monogramGenerator: makeStubMonogramGenerator(() => fakeSuccessResult(fakeValidGeneratedLayers())) });
+  setMonogramControls();
+  await s.generateMonogram();
+  const frame = s.getProject().layers.find((l) => l.type === 'path');
+  const letter = s.getProject().layers.find((l) => l.type === 'text' && l.monogramSetId);
+  const setId = frame.monogramSetId;
+
+  letter.x += 5; letter.y += 3; // the LETTER is moved, not the frame
+
+  await s.generateMonogram();
+  const layers = s.getProject().layers;
+  assert.ok(layers.some((l) => l.id === frame.id), 'the (un-moved) FRAME of the set survives too -- ownership is set-level');
+  assert.ok(layers.some((l) => l.id === letter.id), 'the moved letter survives');
+  assert.equal(layers.filter((l) => l.monogramSetId === setId).length, 2, 'the whole 2-layer set is kept');
+  assert.equal(el('status').textContent, 'Kept your edited monogram and added a new one (2 layers).', 'status reports the release');
+});
+
+await test('MONO-020 undo restores replaceability: generate, move the set (commitHistory then write), undo the move, generate again -> the set IS replaced, because the placement snapshot came back with it', async () => {
+  const project = { canvas: { width: 200, height: 200 }, layers: [{ id: 'initial-layer', type: 'text', text: 'x', stoneSize: 2.8, gap: 0.3 }] };
+  const s = buildScenario({ project, monogramGenerator: makeStubMonogramGenerator(() => fakeSuccessResult(fakeValidGeneratedLayers())) });
+  setMonogramControls();
+  await s.generateMonogram();
+  const setId = s.getProject().layers.find((l) => l.type === 'path').monogramSetId;
+
+  // onShapeMoved: commitHistory() first, then the field write.
+  s.commitHistory();
+  const movedFrame = s.getProject().layers.find((l) => l.type === 'path');
+  movedFrame.x += 25; movedFrame.y += 15;
+
+  // Confirm it WOULD be released now (the move is live).
+  await s.generateMonogram();
+  assert.ok(s.getProject().layers.some((l) => l.monogramSetId === setId), 'with the move live, the set is released');
+  // Undo the second generate, then undo the move.
+  s.performUndo();
+  s.performUndo();
+  const restoredFrame = s.getProject().layers.find((l) => l.monogramSetId === setId && l.type === 'path');
+  assert.equal(restoredFrame.x, 60, 'undo restored the frame x');
+  assert.equal(restoredFrame.y, 60, 'undo restored the frame y');
+  assert.deepEqual(restoredFrame.monogramPlacement, { x: 60, y: 60, rotationDeg: 0, w: 80, h: 80 }, 'the placement snapshot came back with the undo, matching the restored x/y');
+
+  await s.generateMonogram();
+  const layers = s.getProject().layers;
+  assert.ok(!layers.some((l) => l.monogramSetId === setId), 'after undoing the move, the set is replaceable again -- it IS replaced');
+  assert.equal(el('status').textContent, 'Replaced the previous monogram (2 layers).', 'status: replace');
 });
 
 // =========================================================================================

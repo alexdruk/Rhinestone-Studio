@@ -63,13 +63,23 @@ async function extractProjectFunctions() {
   )(getObjectTemplate, SHAPE_LIBRARY_KINDS, getPlateDefaults, normalizePlateParams, VESSEL_PRODUCT_IDS, getVesselDefaults, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel);
 }
 
-// The MONO-019 re-id helper, sliced from app.js's Monogram Lightbox section and executed as-is. It
-// touches no browser globals -- only Date -- so it runs unmodified in Node.
+// The MONO-019 re-id helper, sliced from app.js's Monogram Lightbox section and executed as-is.
+// MONO-020: assignInsertionLayerIds() now also calls captureMonogramPlacement(), so the slice
+// starts at the MONOGRAM_PLACEMENT_LENGTH_FIELDS const and runs through the re-id function. Only
+// Date is touched at call time (hasDesignAuthoredEdits(), also caught in the slice, references
+// formatLengthDisplay/project but is never called here), so it still runs unmodified in Node.
 function extractAssignInsertionLayerIds() {
-  const m = appJs.match(/let monogramGenerationCounter=0;\nfunction assignInsertionLayerIds\(layers\)\{[\s\S]*?\n\}/);
-  assert.ok(m, 'expected to find assignInsertionLayerIds() in app.js');
+  const m = appJs.match(/const MONOGRAM_PLACEMENT_LENGTH_FIELDS=\[[^\]]*\];[\s\S]*?\nlet monogramGenerationCounter=0;\nfunction assignInsertionLayerIds\(layers\)\{[\s\S]*?\n\}/);
+  assert.ok(m, 'expected to find captureMonogramPlacement()/assignInsertionLayerIds() in app.js');
   // eslint-disable-next-line no-new-func
-  return new Function(`${m[0]}\nreturn assignInsertionLayerIds;`)();
+  const raw = new Function(`${m[0]}\nreturn assignInsertionLayerIds;`)();
+  // MONO-020 changed assignInsertionLayerIds() to return {layers, suffix} (the suffix is also
+  // stamped onto each layer as monogramSetId). These id-focused tests only assert on the layers
+  // array, so unwrap it here and leave the call sites below untouched. `.raw` exposes the
+  // un-unwrapped function for MONO-020's return-shape test (test 8).
+  const wrapped = (layers) => raw(layers).layers;
+  wrapped.raw = raw;
+  return wrapped;
 }
 
 const { validateProject, defaultProject, LAYER_ID_PATTERN } = await extractProjectFunctions();
@@ -288,6 +298,22 @@ await test('7. Two monograms in one project keep separate layerIds on their ston
   const sameLayerRecordsB = recordsB.map((r) => ({ ...r, layerId: recordsA[0].layerId }));
   const notDeduped = dedupeStonesByRadius([...recordsA, ...sameLayerRecordsB]);
   assert.equal(notDeduped.length, recordsA.length + sameLayerRecordsB.length, 'sanity: sharing a layerId makes RC-004 skip every pair -- so the assertion above is not vacuous');
+});
+
+await test('8. MONO-020 return shape: assignInsertionLayerIds() returns { layers, suffix } -- suffix is a non-empty string, and every returned layer carries monogramSetId === suffix and an id ending with suffix', async () => {
+  const raw = assignInsertionLayerIds.raw; // the un-unwrapped {layers, suffix} function
+  const input = (await generateOk(authoredRequest())).layers;
+  const out = raw(input);
+
+  assert.ok(out && typeof out === 'object' && !Array.isArray(out), 'returns an object, not the bare layers array');
+  assert.ok(Array.isArray(out.layers) && out.layers.length > 0, 'out.layers is a non-empty array');
+  assert.equal(typeof out.suffix, 'string', 'out.suffix is a string');
+  assert.ok(out.suffix.length > 0, 'out.suffix is non-empty');
+
+  for (const layer of out.layers) {
+    assert.equal(layer.monogramSetId, out.suffix, `layer ${layer.id}: monogramSetId must === suffix`);
+    assert.ok(layer.id.endsWith(out.suffix), `layer id ${layer.id} must end with the suffix ${out.suffix}`);
+  }
 });
 
 console.log('MONO-019 (duplicate monogram layer ids) tests passed.');
