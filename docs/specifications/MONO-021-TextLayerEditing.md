@@ -20,13 +20,21 @@ Commit sequence:
 1. `MONO-021: specify Design tool support on text layers` — this document + the `docs/BACKLOG.md`
    changes in §12. No code.
 2. `MONO-021: apply stamped and erased stones to text layers` — the frozen-box transform, the
-   engine application block in `generateTextLayout()`, tests.
-3. `MONO-021: recolour text layer stones inside paint regions` — `_applyTextRegions()`, the Paint
-   inspector control gating, tests.
-4. `MONO-021: resolve marks and paint targets on text proxies` — mark eligibility, the proximity
-   resolver, disc paint candidates, bbox culling, `markStones` refresh, tests.
-5. `MONO-021: accept text layers in every Design tool hook` — the `app.js` hooks including the
-   corridor-erase branch, tests.
+   engine application block in `generateTextLayout()`, tests. (+ correction:
+   `MONO-021: centre text layers on their pre-edit bounds` — the `generateTextStonesLive()` placement fix.)
+3. `MONO-021: recolour text layer stones inside paint regions` — `_applyTextRegions()`, tests.
+   (+ correction: `MONO-021: revert the pre-gesture paint panel gating` — the Paint target is not
+   the selected layer, so there is no correct *pre-gesture* signal to gate the panel on; reporting
+   colour-only moves to commit 5, after the target resolves.)
+4. `MONO-021: text layers become mark targets` — `tagMarkTarget()` widened to `'path'` or `'text'`,
+   `item.data.markStones` on the text proxy, the proximity resolver
+   (`TEXT_MARK_PROXIMITY_FACTOR = 1.0`), `markStones` refresh at every rebuild site, the RS-3015
+   doc/comment corrections, tests. **Not** `onPaintStroke`/disc candidates — see the split note in §6.
+5. `MONO-021: accept text layers in every Design tool hook` — the three mark hooks widened, the
+   corridor-erase text branch, disc paint candidates + bbox culling, the `onPaintStroke` text branch
+   + colour-only status message, the four edit fields into `generateTextStonesLive()`'s call
+   directly (never `buildTextLayoutBaseParams()`, per `recoverStaleAuthoredScales()`),
+   `refreshStoneGroupForLayer()` text dispatch, tests.
 
 Corrections land as follow-up commits, never amends.
 
@@ -323,6 +331,21 @@ text proxy and to refresh that proxy's `markStones` (§6.3).
 
 ## 6. Design canvas — mark and paint target resolution
 
+### 6.0 The commit-4 / commit-5 split
+
+`absolutePolygonsToNaturalSpace()` (`PaintRegionSelection.js`) opens with `pathLayer.contours.map(…)`
+— a `TypeError` for a text layer. `onPaintStroke` hands its resolved target straight to that
+function. So the moment a text layer becomes a Paint *candidate* (disc geometry in
+`resolvePaintTargetTwoPass()`), `onPaintStroke` must also have its text branch, or Paint on a letter
+throws. Those two ship together, in **commit 5**.
+
+Stamp is not symmetrical: `onStampPlace` does
+`.find(l => l.id === layerId && l.type === 'path')`, gets `undefined` for a text layerId, and
+reports "cannot hold stamped stones" with no mutation — a safe no-op. So **commit 4** makes text a
+*mark* target (Stamp/Trace/Eraser resolution) without wiring any hook; the observable effect is a
+click on a letter's beads that used to place a stone on the frame beneath now refuses instead.
+Commit 5 makes the refusal into an actual edit.
+
 ### 6.1 Eligibility
 
 `tagMarkTarget()` (`DrawingCanvasTool.js`) defaults `markEligible` to `layer.type === 'path'`.
@@ -353,19 +376,35 @@ So a text proxy resolves by proximity to a real bead:
 
 ### 6.3 `markStones` goes stale
 
-It must be refreshed wherever a text layer's stone Group is rebuilt. Every stone-Group rebuild site
-found (re-grepped at implementation time, reported in the commit message):
+It must be refreshed wherever a text layer's stone Group is rebuilt. The refresh lives in **one**
+place — `rebuildTextStoneGroupForShape(shapeId, stones)` (`DrawingCanvasTool.js`), the single
+function through which a text proxy's stones ever change — which sets
+`shape.item.data.markStones` from its `stones` argument before building the sprite Group.
+`materializeTextItemFromLayer()` also sets it on the fresh proxy. Every rebuild site
+(re-grepped at implementation time) then covers `markStones` for free:
 
-- `materializeTextItemFromLayer()` — initial stamp.
-- `refreshStoneGroupForLayer()` — the write-through hook the tool hooks call after a mutation.
-- `syncFromProjectLayers()`'s text-branch rebuild path (the `boundsChanged || forceStoneRebuild`
-  re-materialize and the in-place stone-refresh).
-- `rebuildAllStoneGroups()` (zoom-bucket change) — rebuilds the Group but not the proxy; the proxy's
-  `markStones` is unaffected by zoom, so this is confirmed a non-issue and noted.
-- `duplicateShapeForLayer()` — a duplicated text layer starts with no edits (`duplicateLayer` strips
-  `stampedStones` etc. per MONO-020); its `markStones` is just the base stones.
+| Site | Reaches a text proxy? | markStones refresh |
+|---|---|---|
+| `materializeTextItemFromLayer()` | yes — the proxy builder | sets it directly |
+| `rebuildTextStoneGroupForShape()` | yes — the one stone-change point | sets it directly |
+| `rebuildAllStoneGroups()` (zoom bucket) | dispatches to `rebuildTextStoneGroupForShape` for `isTextProxy` | via the above (zoom doesn't move beads, but the refresh is harmless and keeps one code path) |
+| `onMouseUp` drag/rotate commit | dispatches to `rebuildTextStoneGroupForShape` | via the above |
+| `syncFromProjectLayers()` new-layer branch | `materializeTextItemFromLayer` + `rebuildTextStoneGroupForShape` | both |
+| `syncFromProjectLayers()` existing-text branch | re-materializes (bounds/rotation change) + `rebuildTextStoneGroupForShape` (gated `boundsChanged \|\| rotationChanged \|\| forceStoneRebuild`) | both — see the gap note below |
+| `rebuildStoneGroupForShape()` | no — `getLayerStoneParams()` returns null for non-`path` | n/a |
+| `refreshShapeGeometryForLayer()` | no — Outline-eraser contour cut, `path` only | n/a |
+| `refreshStoneGroupForLayer()` | **not today** — always calls the `path` rebuild; the tool hooks that call it are `path`-only until commit 5 | **commit 5** widens it to dispatch text → `rebuildTextStoneGroupForShape`, at which point the hooks route text edits through it |
+| `duplicateShapeForLayer()` | **no** — `app.js`'s `duplicateLayer()` only calls it for `XYWH_SHAPE_TYPES`; a duplicated *text* layer is re-materialized by the next `syncFromProjectLayers()` tick instead | n/a |
 
-### 6.4 Paint target resolution
+**Gap (commit 5's to close):** `syncFromProjectLayers()`'s existing-text branch only rebuilds the
+Group when the proxy's *bounds* change. A stamp added inside the letter's bbox, or a Paint recolour,
+does not move the bounds — so after commit 5 the tool hooks must call `refreshStoneGroupForLayer()`
+(which commit 5 makes dispatch to `rebuildTextStoneGroupForShape` unconditionally) for the immediate
+refresh, exactly as the `path` hooks already do.
+
+### 6.4 Paint target resolution — commit 5
+
+(Ships with `onPaintStroke`'s text branch, per §6.0.)
 
 `resolvePaintTargetTwoPass()` (`app.js`) filters candidates to `l.type === 'path'` and builds each
 candidate's `polygons` from `resolvePathPolygons()`. A text layer has no contours, so it needs

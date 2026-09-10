@@ -12,6 +12,7 @@ import {
   absolutePointsToFrozenBoxSpace
 } from '../src/geometry/index.js';
 import { computeTextPlacementOffsetMm } from '../src/editing/index.js';
+import { MonogramGenerator } from '../src/monogram/index.js';
 
 // MONO-021 commit 2 -- Design-tool edits (Stamp / Trace / Eraser) on a text layer, applied inside
 // GeometryEngine.generateTextLayout() through the frozen-box transform. Calls the real, unmodified
@@ -427,6 +428,72 @@ await test('22. rs-block (authored font) -- a region recolours base stones in pl
   assert.equal(painted.count, bare.count);
   assert.deepEqual(painted.stones.map(stoneKey), bare.stones.map(stoneKey), 'positions/sizes unchanged for an authored font too');
   assert.ok(painted.stones.some((s) => s.color === 'ruby'), 'some authored stones recoloured');
+});
+
+// ---------------------------------------------------------------------------------------------
+// MONO-021 commit 4 -- the proximity mark resolver discriminates. Negative control 2 from the
+// milestone prompt: on a real framed script monogram, grid-sample the frame box and print the
+// percentage of points that resolve to the letter under the NEW proximity test vs the OLD
+// item.bounds.contains() test. The two containment rules are replicated here exactly as
+// markProxyContainsPoint() (DrawingCanvasTool.js) implements them -- within
+// TEXT_MARK_PROXIMITY_FACTOR (1.0) * bead diameter of a centre, vs inside the bead AABB.
+// ---------------------------------------------------------------------------------------------
+
+await test('23. NEGATIVE CONTROL: on a framed "QW" script monogram, the proximity resolver claims a tiny fraction of the frame box vs the bbox test', async () => {
+  const engine = createEngine();
+  const generator = new MonogramGenerator({ geometryEngine: engine });
+  const canvasMm = { widthMm: 220, heightMm: 220 };
+  const result = await generator.generate({
+    frameId: 'circle', layoutId: 'script', letters: ['Q', 'W'],
+    fontId: 'great-vibes-regular', providerId: 'opentype', stemWidthRatio: 0.0357,
+    stoneSizeMm: 2.0, gapMm: 0.3, color: 'gold', canvasMm,
+    frameRect: { xMm: 0, yMm: 0, widthMm: 150, heightMm: 150 }
+  });
+  assert.equal(result.ok, true, result.message);
+  const frame = result.layers.find((l) => l.type === 'path');
+  const letter = result.layers.find((l) => l.type === 'text');
+
+  // Regenerate the letter's stones exactly as the live app renders them: generateTextLayout() then
+  // app.js's computeTextPlacementOffset().
+  const raw = await engine.generateTextLayout({
+    text: letter.text, fontId: letter.font, providerId: 'opentype', layerId: letter.id,
+    heightMm: letter.height, stoneSizeMm: letter.stoneSize, gapMm: letter.gap ?? 0, mode: 'outline', color: letter.color
+  });
+  const bb = raw.getBoundingBox();
+  const { offsetXMm, offsetYMm } = computeTextPlacementOffsetMm({ boundingBoxMm: bb, xMm: letter.x, yMm: letter.y, canvasWidthMm: canvasMm.widthMm, canvasHeightMm: canvasMm.heightMm });
+  const beads = raw.stones.map((s) => ({ x: s.xMm + offsetXMm, y: s.yMm + offsetYMm, d: s.sizeMm }));
+  assert.equal(beads.length, 279, `expected 279 letter beads, got ${beads.length}`);
+
+  // letter-bead AABB (the OLD item.bounds.contains() test)
+  let mnx = Infinity, mny = Infinity, mxx = -Infinity, mxy = -Infinity;
+  for (const b of beads) { mnx = Math.min(mnx, b.x - b.d / 2); mny = Math.min(mny, b.y - b.d / 2); mxx = Math.max(mxx, b.x + b.d / 2); mxy = Math.max(mxy, b.y + b.d / 2); }
+  const bboxWmm = mxx - mnx, bboxHmm = mxy - mny;
+
+  const PROXIMITY_FACTOR = 1.0;
+  const inBbox = (x, y) => x >= mnx && x <= mxx && y >= mny && y <= mxy;
+  const nearBead = (x, y) => beads.some((b) => {
+    const r = PROXIMITY_FACTOR * b.d;
+    return (x - b.x) ** 2 + (y - b.y) ** 2 <= r * r;
+  });
+
+  // grid over the frame box (the basis for the "25.8% of the frame box" figure)
+  const fx0 = frame.x, fy0 = frame.y, fw = frame.w, fh = frame.h;
+  const STEP = 1.0; // mm
+  let total = 0, bboxHits = 0, proxHits = 0;
+  for (let x = fx0; x <= fx0 + fw; x += STEP) {
+    for (let y = fy0; y <= fy0 + fh; y += STEP) {
+      total += 1;
+      if (inBbox(x, y)) bboxHits += 1;
+      if (nearBead(x, y)) proxHits += 1;
+    }
+  }
+  const bboxPct = (100 * bboxHits / total);
+  const proxPct = (100 * proxHits / total);
+  console.log(`   letter bead bbox: ${bboxWmm.toFixed(1)} x ${bboxHmm.toFixed(1)} mm   frame box: ${fw} x ${fh} mm`);
+  console.log(`   passing: proximity test resolves ${proxPct.toFixed(1)}% of the frame box to the letter`);
+  console.log(`   control: old item.bounds.contains() test resolves ${bboxPct.toFixed(1)}% of the frame box to the letter (prompt author: 25.8%)`);
+  assert.ok(bboxPct > 20 && bboxPct < 32, `bbox figure ${bboxPct.toFixed(1)}% is in the ~25.8% range the prompt reports`);
+  assert.ok(proxPct < bboxPct / 2, `proximity (${proxPct.toFixed(1)}%) must be dramatically smaller than bbox (${bboxPct.toFixed(1)}%)`);
 });
 
 if (process.exitCode === 1) {
