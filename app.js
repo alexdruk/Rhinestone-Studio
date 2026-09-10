@@ -5926,12 +5926,18 @@ function updateDrawToolButtons(){
   el('traceColor').style.display=showTraceStyle?'':'none';
   if(showTraceStyle){setLengthField('traceSizeMm',traceSettings.sizeMm);setLengthField('traceGapMm',traceSettings.gapMm);el('traceColor').value=traceSettings.color}
   const showPaintStyle=active&&mode==='paint';
-  el('paintSizeField').style.display=showPaintStyle?'':'none';
+  // MONO-021: Paint on a text layer is COLOUR ONLY -- _applyTextRegions() recolours base stones in
+  // place and never re-grids, so a stored stoneSizeMm/gapMm does nothing. Hide those two fields
+  // (keep #paintColor) rather than offer a control that silently no-ops. Gated on the currently
+  // selected layer's type -- the same signal seedPaintStyleIfNeeded() already reads to seed
+  // paintSettings, and the target Paint will actually hit until a lasso resolves one.
+  const showPaintSizeGap=showPaintStyle&&selectedLayer().type!=='text';
+  el('paintSizeField').style.display=showPaintSizeGap?'':'none';
   el('paintSizeField').title=`Paint stone size (${unitSuffix(project.units)})`;
-  el('paintSizeMm').style.display=showPaintStyle?'':'none';
-  el('paintGapField').style.display=showPaintStyle?'':'none';
+  el('paintSizeMm').style.display=showPaintSizeGap?'':'none';
+  el('paintGapField').style.display=showPaintSizeGap?'':'none';
   el('paintGapField').title=`Paint stone gap (${unitSuffix(project.units)})`;
-  el('paintGapMm').style.display=showPaintStyle?'':'none';
+  el('paintGapMm').style.display=showPaintSizeGap?'':'none';
   el('paintColorField').style.display=showPaintStyle?'':'none';
   el('paintColor').style.display=showPaintStyle?'':'none';
   if(showPaintStyle){setLengthField('paintSizeMm',paintSettings.sizeMm);setLengthField('paintGapMm',paintSettings.gapMm);el('paintColor').value=paintSettings.color}

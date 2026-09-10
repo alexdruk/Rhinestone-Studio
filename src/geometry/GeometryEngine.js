@@ -315,10 +315,10 @@ export class GeometryEngine {
     // text layer -- and the committed baselines -- generates byte-identically.
     //
     // Order of application mirrors generatePathLayout() (regions -> erased positions -> stamped
-    // stones): erased positions suppress base stones but never a stamp (a stamp erased in Design is
-    // spliced out of `stampedStones` by the caller instead); stamped stones are appended last with
-    // their own identity. Paint regions (colour-only, _applyTextRegions()) slot in first -- MONO-021
-    // commit 3.
+    // stones): a Paint region recolours base stones in place; erased positions then suppress base
+    // stones (recoloured or not) but never a stamp (a stamp erased in Design is spliced out of
+    // `stampedStones` by the caller instead); stamped stones are appended last with their own
+    // identity, so a region never recolours them.
     const baseBoundingBox = new StoneLayout({ layerId: options.layerId, stones }).getBoundingBox();
     const baseBoundingBoxMm = baseBoundingBox
       ? {
@@ -331,7 +331,7 @@ export class GeometryEngine {
       }
       : null;
 
-    const hasTextEdits = options.erasedGridPositions.length > 0 || options.stampedStones.length > 0;
+    const hasTextEdits = options.regions.length > 0 || options.erasedGridPositions.length > 0 || options.stampedStones.length > 0;
     if (hasTextEdits && baseBoundingBoxMm) {
       // The frozen box is app.js's `layer.naturalBoundingBoxMm`, captured once at the first edit. A
       // degenerate box (zero width/height) or a text layout with no base stones yields a null
@@ -339,6 +339,14 @@ export class GeometryEngine {
       // generatePathLayout() gives a null contour transform on empty contours. Never throws.
       const transform = computeFrozenBoxTransform(options.naturalBoundingBoxMm ?? baseBoundingBoxMm, baseBoundingBoxMm);
       if (transform) {
+        // Paint regions: colour-only. Rewrites `color` on a base stone whose centre falls inside a
+        // region contour (placed through the same frozen-box transform), and does nothing else --
+        // see _applyTextRegions()'s own doc comment for the measured reasons it never re-grids.
+        // Runs FIRST so a recoloured stone can still be erased below, and BEFORE stamps are appended
+        // so a region never touches a stamp.
+        if (options.regions.length > 0) {
+          stones = this._applyTextRegions(stones, options.regions, transform);
+        }
         // Erased positions: each stored entry is a snapshotted base-stone position (bugfix: the
         // permanent-dead-zone replacement for a live radius test -- see generatePathLayout()'s own
         // erasedGridPositions block). Point-radius match against ERASED_POSITION_EPSILON_MM (a
@@ -1508,6 +1516,74 @@ export class GeometryEngine {
       layerId: stone.layerId,
       index
     }));
+  }
+
+  /**
+   * MONO-021: applies a 'text' layer's `regions` (Paint) on top of its base stones -- COLOUR ONLY.
+   *
+   * Unlike _applyPathRegions() above (which drops the base stones inside a region and re-samples the
+   * region's own independent grid at its own stoneSizeMm/gapMm/fillMode), this places nothing,
+   * removes nothing and moves nothing. It only rewrites `color` on a base stone whose centre falls
+   * inside a region contour. Same length in, same length out; every xMm/yMm/sizeMm is carried
+   * through untouched.
+   *
+   * Colour-only is a measured decision, not a limitation (see docs/specifications/
+   * MONO-021-TextLayerEditing.md Section 2.1). On the script "QW" / Great Vibes / SS6 / 279-bead
+   * chain, with a 25 mm lasso over 36 beads:
+   *   - Re-sampling through the real shipped _applyPathRegions() with a genuine regions[] entry
+   *     removed 35 beads and placed 0 -- and 0 at the ORIGINAL stone size too. _applyPathRegions()
+   *     clips region candidates to points inside the shape polygons, and on a stroke one stone wide
+   *     almost none survive that clip: the painted stretch goes blank, it does not merely degrade.
+   *   - Restyling those 36 beads to 3.2 mm in place (positions untouched) gives 53 overlapping
+   *     pairs, worst penetration 1.163 mm -- an unmanufacturable design.
+   * Chain thinning would make a size change work, but needs the touching threshold (the shipped
+   * chain already holds neighbour pairs at 2.093 mm, tighter than stoneSize+gap) -- its own
+   * milestone. So a text region's stoneSizeMm/gapMm/fillMode are stored in the .rhs for schema
+   * uniformity with a path region (so hasDesignAuthoredEdits() and the save format need no branch)
+   * but are deliberately ignored here -- nothing is re-gridded, so there is no pitch to honour. The
+   * Paint inspector hides the stone-size and gap controls for a text target rather than offering a
+   * control that does nothing.
+   *
+   * `region.contour` is placed through the SAME frozen-box transform (computeFrozenBoxTransform())
+   * every other edit on this layer uses, so a region tracks the letter's move/resize/font-size
+   * change. Region priority matches _applyPathRegions(): a plain forward loop, so a later region in
+   * the array wins over an earlier one for a stone they both cover. A region with a null `color`
+   * (the normalizer's default when none was given) is skipped -- it recolours nothing.
+   *
+   * Like the other three text-layer edit fields, `regions` is forwarded into generateTextLayout()
+   * by generateTextStonesLive() DIRECTLY (alongside authoredScale), never through
+   * buildTextLayoutBaseParams(): recoverStaleAuthoredScales() (app.js) shares that builder and must
+   * keep regenerating the pure natural layout to validate a persisted authoredScale against, with
+   * no region in play.
+   *
+   * @param {Stone[]} baseStones
+   * @param {{contour: {xMm:number,yMm:number}[], color: string|null}[]} regions normalized text
+   *   regions (stoneSizeMm/gapMm/fillMode are present on each but not read here)
+   * @param {{xMm:number,yMm:number,scaleX:number,scaleY:number}} transform the frozen-box transform
+   *   (never null here -- the caller has already guarded it)
+   * @returns {Stone[]} same count, same positions, same sizes; only `color` inside a region differs
+   */
+  _applyTextRegions(baseStones, regions, transform) {
+    const placedRegions = regions.map((region) => ({
+      polygons: [applyNaturalContourTransform(region.contour, transform)],
+      color: region.color
+    }));
+    return baseStones.map((stone, index) => {
+      let color = stone.color;
+      for (const region of placedRegions) {
+        if (region.color && isPointInsidePolygons(new Point2D(stone.xMm, stone.yMm), region.polygons)) {
+          color = region.color;
+        }
+      }
+      return new Stone({
+        xMm: stone.xMm,
+        yMm: stone.yMm,
+        sizeMm: stone.sizeMm,
+        color,
+        layerId: stone.layerId,
+        index
+      });
+    });
   }
 
   /**

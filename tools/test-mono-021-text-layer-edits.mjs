@@ -58,6 +58,15 @@ function frozenBoxOf(layout) {
 function storedRelative(pointAbs, box) {
   return { xMm: pointAbs.xMm - box.minXmm, yMm: pointAbs.yMm - box.minYmm };
 }
+// A (0,0)-rooted rectangular region contour covering the left `fracX` of a frozen box of the given
+// span, tall enough to clear it -- i.e. the region absolutely covers every base stone whose x is in
+// the left `fracX` of the letter.
+function leftHalfRegionContour(box, fracX = 0.5, color = 'red') {
+  const w = (box.maxXmm - box.minXmm) * fracX;
+  const h = (box.maxYmm - box.minYmm) + 20;
+  return { contour: [{ xMm: -5, yMm: -10 }, { xMm: w, yMm: -10 }, { xMm: w, yMm: h }, { xMm: -5, yMm: h }], stoneSizeMm: 3.2, gapMm: 0.3, color, fillMode: 'fill' };
+}
+function stoneKey(s) { return `${s.xMm.toFixed(6)},${s.yMm.toFixed(6)},${s.sizeMm}`; }
 
 // ---------------------------------------------------------------------------------------------
 // computeFrozenBoxTransform / absolutePointsToFrozenBoxSpace -- pure geometry
@@ -285,6 +294,120 @@ await test('15. NEGATIVE CONTROL: canvas placement uses the pre-edit box -- a fa
   console.log(`   control: base stones move ${oldMove.toFixed(3)} mm under the old getBoundingBox() placement`);
   assert.ok(newMove < 1e-9, 'no base stone moves when placement uses the pre-edit box');
   assert.ok(oldMove > 5, 'the old placement moved every base stone -- proves the assertion can fail');
+});
+
+// ---------------------------------------------------------------------------------------------
+// MONO-021 commit 3 -- Paint regions on a text layer (colour-only, _applyTextRegions).
+// ---------------------------------------------------------------------------------------------
+
+await test('16. NEGATIVE CONTROL: a region-only edit (stamped/erased empty) applies; an empty regions array is a no-op', async () => {
+  const engine = createEngine();
+  const bare = await engine.generateTextLayout(GREAT_VIBES);
+  const box = frozenBoxOf(bare);
+
+  const regionOnly = await engine.generateTextLayout({ ...GREAT_VIBES, naturalBoundingBoxMm: box, stampedStones: [], erasedGridPositions: [], regions: [leftHalfRegionContour(box, 0.5, 'ruby')] });
+  const emptyRegions = await engine.generateTextLayout({ ...GREAT_VIBES, naturalBoundingBoxMm: box, regions: [] });
+
+  const recoloured = regionOnly.stones.filter((s) => s.color === 'ruby').length;
+  console.log(`   passing: region-only edit -> ${recoloured} of ${regionOnly.count} stones recoloured to 'ruby'`);
+  console.log(`   control: empty regions array -> ${emptyRegions.stones.filter((s) => s.color === 'ruby').length} recoloured, count ${emptyRegions.count} == bare ${bare.count}`);
+  assert.ok(recoloured > 0, 'a region-only edit must apply -- proves hasTextEdits includes regions');
+  assert.equal(emptyRegions.count, bare.count);
+  assert.deepEqual(emptyRegions.toJSON().stones, bare.toJSON().stones, 'empty regions array is byte-identical to no regions field');
+});
+
+await test('17. NEGATIVE CONTROL: _applyTextRegions changes color and nothing else -- count, every position, every size unchanged; the same assertion on a PATH layer shows positions changing', async () => {
+  const engine = createEngine();
+  const bare = await engine.generateTextLayout(GREAT_VIBES);
+  const box = frozenBoxOf(bare);
+  const region = leftHalfRegionContour(box, 0.5, 'ruby');
+  const painted = await engine.generateTextLayout({ ...GREAT_VIBES, naturalBoundingBoxMm: box, regions: [region] });
+
+  assert.equal(painted.count, bare.count, 'count unchanged');
+  const beforeKeys = bare.stones.map(stoneKey);
+  const afterKeys = painted.stones.map(stoneKey);
+  assert.deepEqual(afterKeys, beforeKeys, 'every position and size byte-identical before/after the region');
+  const recoloured = painted.stones.filter((s, i) => s.color !== bare.stones[i].color);
+  assert.ok(recoloured.length > 0 && recoloured.every((s) => s.color === 'ruby'), `only color changed, only to 'ruby' (${recoloured.length} stones)`);
+  console.log(`   passing (text): count ${bare.count} -> ${painted.count}, positions/sizes identical, ${recoloured.length} stones recoloured, 0 moved`);
+
+  // CONTROL: the same assertion form on a PATH layer -- _applyPathRegions() re-grids, so positions DO change.
+  const square = [{ xMm: 0, yMm: 0 }, { xMm: 30, yMm: 0 }, { xMm: 30, yMm: 30 }, { xMm: 0, yMm: 30 }];
+  const pathBare = engine.generatePathLayout({ contours: [square], layerId: 'P', xMm: 0, yMm: 0, widthMm: 30, heightMm: 30, stoneSizeMm: 2, gapMm: 0.3, mode: 'fill', color: 'gold' });
+  const pathPainted = engine.generatePathLayout({ contours: [square], layerId: 'P', xMm: 0, yMm: 0, widthMm: 30, heightMm: 30, stoneSizeMm: 2, gapMm: 0.3, mode: 'fill', color: 'gold', regions: [{ contour: [{ xMm: 0, yMm: 0 }, { xMm: 15, yMm: 0 }, { xMm: 15, yMm: 30 }, { xMm: 0, yMm: 30 }], stoneSizeMm: 3.5, gapMm: 0.3, color: 'ruby', fillMode: 'fill' }] });
+  const pathMoved = JSON.stringify(pathBare.stones.map(stoneKey)) !== JSON.stringify(pathPainted.stones.map(stoneKey));
+  console.log(`   control (path): count ${pathBare.count} -> ${pathPainted.count}, positions changed: ${pathMoved}`);
+  assert.ok(pathMoved, 'a path region re-grids -- proves the "positions unchanged" assertion can fail');
+});
+
+await test('18. NEGATIVE CONTROL: a region never affects baseBoundingBoxMm -- byte-identical to the bare layout; control: a far stamp moves getBoundingBox()', async () => {
+  const engine = createEngine();
+  const bare = await engine.generateTextLayout(GREAT_VIBES);
+  const box = frozenBoxOf(bare);
+
+  const painted = await engine.generateTextLayout({ ...GREAT_VIBES, naturalBoundingBoxMm: box, regions: [leftHalfRegionContour(box, 0.6, 'ruby')] });
+  const farStamp = await engine.generateTextLayout({ ...GREAT_VIBES, naturalBoundingBoxMm: box, stampedStones: [{ id: 's1', xMm: (box.maxXmm - box.minXmm) + 40, yMm: 0, sizeMm: 2.0, color: 'gold' }] });
+
+  console.log(`   passing: painted.baseBoundingBoxMm == bare.baseBoundingBoxMm : ${JSON.stringify(painted.baseBoundingBoxMm) === JSON.stringify(bare.baseBoundingBoxMm)}`);
+  console.log(`   control: far stamp grows getBoundingBox().maxXmm by ${(farStamp.getBoundingBox().maxXmm - bare.getBoundingBox().maxXmm).toFixed(3)} mm`);
+  assert.deepEqual(painted.baseBoundingBoxMm, bare.baseBoundingBoxMm);
+  assert.ok(farStamp.getBoundingBox().maxXmm - bare.getBoundingBox().maxXmm > 30);
+});
+
+await test('19. region priority -- a later region in the array wins over an earlier one for a stone they both cover', async () => {
+  const engine = createEngine();
+  const bare = await engine.generateTextLayout(GREAT_VIBES);
+  const box = frozenBoxOf(bare);
+  // Two overlapping full-width regions: first 'ruby', then 'emerald'. Every covered stone ends 'emerald'.
+  const r1 = leftHalfRegionContour(box, 1.2, 'ruby');
+  const r2 = leftHalfRegionContour(box, 1.2, 'emerald');
+  const painted = await engine.generateTextLayout({ ...GREAT_VIBES, naturalBoundingBoxMm: box, regions: [r1, r2] });
+  const emerald = painted.stones.filter((s) => s.color === 'emerald').length;
+  const ruby = painted.stones.filter((s) => s.color === 'ruby').length;
+  console.log(`   later region wins: emerald ${emerald}, ruby ${ruby} (expect ruby 0)`);
+  assert.ok(emerald > 0 && ruby === 0);
+});
+
+await test('20. a region with a null color recolours nothing', async () => {
+  const engine = createEngine();
+  const bare = await engine.generateTextLayout(GREAT_VIBES);
+  const box = frozenBoxOf(bare);
+  const r = leftHalfRegionContour(box, 0.6);
+  r.color = null;
+  const painted = await engine.generateTextLayout({ ...GREAT_VIBES, naturalBoundingBoxMm: box, regions: [r] });
+  assert.deepEqual(painted.toJSON().stones, bare.toJSON().stones, 'null-color region is a no-op on stone data');
+});
+
+await test('21. order regions -> erased -> stamped: a recoloured base stone can still be erased; a stamp is never recoloured', async () => {
+  const engine = createEngine();
+  const bare = await engine.generateTextLayout(GREAT_VIBES);
+  const box = frozenBoxOf(bare);
+  const leftStone = [...bare.stones].sort((a, b) => a.xMm - b.xMm)[0]; // leftmost -- inside the left-half region
+
+  const painted = await engine.generateTextLayout({
+    ...GREAT_VIBES,
+    naturalBoundingBoxMm: box,
+    regions: [leftHalfRegionContour(box, 0.5, 'ruby')],
+    erasedGridPositions: [storedRelative(leftStone, box)],
+    stampedStones: [{ id: 's1', xMm: 2, yMm: 2, sizeMm: 2.0, color: 'gold' }] // inside the region area
+  });
+
+  // the recoloured leftmost base stone is erased
+  assert.ok(!painted.stones.some((s) => Math.hypot(s.xMm - leftStone.xMm, s.yMm - leftStone.yMm) < 1e-6), 'a recoloured base stone is still erasable');
+  // the stamp keeps its own colour even though it sits inside the region footprint
+  const stampAbs = { xMm: box.minXmm + 2, yMm: box.minYmm + 2 };
+  const stamp = painted.stones.find((s) => Math.hypot(s.xMm - stampAbs.xMm, s.yMm - stampAbs.yMm) < 1e-6);
+  assert.ok(stamp && stamp.color === 'gold', `stamp inside the region keeps its own colour (got ${stamp && stamp.color})`);
+});
+
+await test('22. rs-block (authored font) -- a region recolours base stones in place, no throw, positions unchanged', async () => {
+  const engine = createEngine();
+  const bare = await engine.generateTextLayout(RS_BLOCK);
+  const box = frozenBoxOf(bare);
+  const painted = await engine.generateTextLayout({ ...RS_BLOCK, naturalBoundingBoxMm: box, regions: [leftHalfRegionContour(box, 0.5, 'ruby')] });
+  assert.equal(painted.count, bare.count);
+  assert.deepEqual(painted.stones.map(stoneKey), bare.stones.map(stoneKey), 'positions/sizes unchanged for an authored font too');
+  assert.ok(painted.stones.some((s) => s.color === 'ruby'), 'some authored stones recoloured');
 });
 
 if (process.exitCode === 1) {
