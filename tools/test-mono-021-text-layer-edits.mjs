@@ -66,6 +66,12 @@ function leftHalfRegionContour(box, fracX = 0.5, color = 'red') {
   const h = (box.maxYmm - box.minYmm) + 20;
   return { contour: [{ xMm: -5, yMm: -10 }, { xMm: w, yMm: -10 }, { xMm: w, yMm: h }, { xMm: -5, yMm: h }], stoneSizeMm: 3.2, gapMm: 0.3, color, fillMode: 'fill' };
 }
+// A (0,0)-rooted region covering the vertical strip of the frozen box between x fractions [x0, x1].
+function xStripRegionContour(box, x0, x1, color) {
+  const w = box.maxXmm - box.minXmm;
+  const h = (box.maxYmm - box.minYmm) + 20;
+  return { contour: [{ xMm: x0 * w, yMm: -10 }, { xMm: x1 * w, yMm: -10 }, { xMm: x1 * w, yMm: h }, { xMm: x0 * w, yMm: h }], stoneSizeMm: 3.2, gapMm: 0.3, color, fillMode: 'fill' };
+}
 function stoneKey(s) { return `${s.xMm.toFixed(6)},${s.yMm.toFixed(6)},${s.sizeMm}`; }
 
 // ---------------------------------------------------------------------------------------------
@@ -354,18 +360,31 @@ await test('18. NEGATIVE CONTROL: a region never affects baseBoundingBoxMm -- by
   assert.ok(farStamp.getBoundingBox().maxXmm - bare.getBoundingBox().maxXmm > 30);
 });
 
-await test('19. region priority -- a later region in the array wins over an earlier one for a stone they both cover', async () => {
+await test('19. region priority -- for a PARTIAL overlap, later region wins the both-covered stones and the earlier-only stones stay the earlier colour', async () => {
   const engine = createEngine();
   const bare = await engine.generateTextLayout(GREAT_VIBES);
   const box = frozenBoxOf(bare);
-  // Two overlapping full-width regions: first 'ruby', then 'emerald'. Every covered stone ends 'emerald'.
-  const r1 = leftHalfRegionContour(box, 1.2, 'ruby');
-  const r2 = leftHalfRegionContour(box, 1.2, 'emerald');
-  const painted = await engine.generateTextLayout({ ...GREAT_VIBES, naturalBoundingBoxMm: box, regions: [r1, r2] });
-  const emerald = painted.stones.filter((s) => s.color === 'emerald').length;
-  const ruby = painted.stones.filter((s) => s.color === 'ruby').length;
-  console.log(`   later region wins: emerald ${emerald}, ruby ${ruby} (expect ruby 0)`);
-  assert.ok(emerald > 0 && ruby === 0);
+  const w = box.maxXmm - box.minXmm;
+  // r1 'ruby' = x fraction [0.10, 0.60]; r2 'emerald' = x fraction [0.40, 0.90] (applied after r1).
+  //   both-covered  : x in [0.40, 0.60]  -> must be emerald
+  //   ruby-only     : x in [0.10, 0.40)  -> must stay ruby
+  //   neither       : x < 0.10 or x > 0.90 -> must stay the original colour
+  const painted = await engine.generateTextLayout({
+    ...GREAT_VIBES, naturalBoundingBoxMm: box,
+    regions: [xStripRegionContour(box, 0.10, 0.60, 'ruby'), xStripRegionContour(box, 0.40, 0.90, 'emerald')]
+  });
+  const frac = (s) => (s.xMm - box.minXmm) / w;
+  let bothEmerald = 0, bothWrong = 0, rubyOnly = 0, rubyOnlyWrong = 0, neither = 0, neitherWrong = 0;
+  painted.stones.forEach((s, i) => {
+    const f = frac(s), orig = bare.stones[i].color;
+    if (f >= 0.40 && f <= 0.60) { s.color === 'emerald' ? bothEmerald++ : bothWrong++; }
+    else if (f >= 0.10 && f < 0.40) { s.color === 'ruby' ? rubyOnly++ : rubyOnlyWrong++; }
+    else if (f < 0.10 || f > 0.90) { s.color === orig ? neither++ : neitherWrong++; }
+  });
+  console.log(`   both-covered -> emerald: ${bothEmerald} (wrong ${bothWrong}) | ruby-only -> ruby: ${rubyOnly} (wrong ${rubyOnlyWrong}) | neither -> unchanged: ${neither} (wrong ${neitherWrong})`);
+  assert.ok(bothEmerald > 0 && bothWrong === 0, 'every both-covered stone is emerald (later region wins)');
+  assert.ok(rubyOnly > 0 && rubyOnlyWrong === 0, 'every earlier-only stone stays ruby -- priority is not just coverage');
+  assert.ok(neither > 0 && neitherWrong === 0, 'stones outside both regions are untouched');
 });
 
 await test('20. a region with a null color recolours nothing', async () => {

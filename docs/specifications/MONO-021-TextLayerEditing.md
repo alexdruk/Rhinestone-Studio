@@ -426,8 +426,10 @@ passing value **and** the control value are printed:
    frame box; the proximity figure must be dramatically smaller. Both printed.
 3. **Paint recolours and does nothing else.** Print base stone count and every stone's position and
    size before and after a region is applied. Count, positions, sizes unchanged; only `color` inside
-   the region differs. Control: the same assertion against a *path* layer, which must show positions
-   changing.
+   the region differs. Control: the same assertion form against a *path* layer, which must show
+   positions changing — this proves only that the "positions unchanged" assertion *can* fail. It is
+   **not** evidence for the §2.1 "0 placed" figure (a different geometry, and it drops-and-resamples
+   rather than placing zero); that figure stays a standalone measurement, unre-derived here.
 4. **Outline erase removes only what the corridor covers.** Print counts inside and outside the
    corridor, before and after. Control: an empty corridor removes nothing.
 5. **Edits track placement.** Move an edited text layer by a known offset; print a stamp's absolute
