@@ -23,8 +23,9 @@ stone size — left two, three, four overlapping monograms stacked on the canvas
 to be found and deleted by hand from the Layers list.
 
 "One monogram per product" is the intent. But a blunt "delete the old one every time" destroys
-hand-work: a user who generates a monogram, then opens Design and paints extra stones onto the
-frame or erases part of a letter, must not have that silently wiped by the next Generate.
+work the user put in by hand: a user who generates a monogram, then opens Design and drags it into
+position, resizes the frame, or rotates the whole set, must not have that silently wiped by the
+next Generate.
 
 ## 2. The ownership model
 
@@ -117,12 +118,35 @@ therefore compares `formatLengthDisplay(current, project.units)` against
 benign round-trip is invisible, every real move still shows. The `test-mono-006` "NO FALSE
 POSITIVE (display rounding)" test pins this with the observed value.
 
-**Neither half branches on `layer.type`.** Today only `path` layers carry the marker fields, so in
-practice it is the frame that a stamp releases — but a **letter is already movable in Design**
-(`'text'` is in `syncFromProjectLayers()`'s filter), so the placement half releases a set the
-moment a letter is dragged, and that is the *only* kind of edit a letter can carry until Design's
-Paint/Stamp/Erase toolset is extended to text. When it is, those same marker field names will
-appear on `text` layers and this predicate covers them **without modification**.
+**Neither half branches on `layer.type`.** In practice today it is a **placement change** — a
+move, resize or rotate — that releases a set. The marker half currently releases nothing through
+the UI: as of the MONO-020 merge a stamp, paint daub or erase cannot be applied to a generated
+monogram frame at all (see "Reachability of the marker half" below, and the `docs/BACKLOG.md`
+row). The marker half stays in the predicate regardless — it is correct and costs nothing to
+evaluate, and it starts firing the moment that defect is fixed. A **letter is already movable in
+Design** (`'text'` is in `syncFromProjectLayers()`'s filter), so the placement half releases a set
+the moment a letter is dragged, and that is the *only* kind of edit a letter can carry until
+Design's Paint/Stamp/Erase toolset is extended to text. When it is, those same marker field names
+will appear on `text` layers and this predicate covers them **without modification**.
+
+### Reachability of the marker half
+
+Observed in the browser after the MONO-020 merge — recorded here as behaviour, with no cause
+diagnosed:
+
+- The **Stamp** tool places nothing anywhere on a generated monogram frame, and reports nothing.
+- The **Select** tool cannot select a generated monogram frame in Design — clicking it selects
+  nothing.
+- With the monogram's letter layers deleted, leaving only the frame, Stamp works on the frame
+  normally.
+- Stamp, Paint and Erase all work normally on an ordinary Design-drawn path layer.
+
+So the **marker half** of the predicate — `regions` / `stampedStones` / `eraseDaubs` /
+`erasedGridPositions` / `naturalBoundingBoxMm` — cannot be produced on a monogram through the UI
+today. Every release currently comes from the **placement half**. The marker half is kept in the
+predicate deliberately: it is correct, it costs nothing to evaluate, and it becomes effective the
+moment the mark tools can reach a monogram frame. The defect is filed as a P0 row in
+`docs/BACKLOG.md` (found by MONO-020A).
 
 ### Why release-on-edit, not clear-on-edit
 
@@ -227,7 +251,11 @@ marker; old ones do not; that is the whole rule.
   reproducing the exact field writes `onShapeMoved` / `onShapeResized` / `onShapeRotated` perform
   (those hooks are outside this file's slice) after a real `generateMonogram()` — the set is
   released. Plus **a moved *letter*** releases the whole set (frame + letters) — the case the
-  marker tests can't reach, since letters take no stamps.
+  marker tests can't reach, since letters take no stamps. (And, as of the MONO-020 merge, the
+  three marker cases above build an input state that cannot be produced through the UI on a
+  monogram at all — see "Reachability of the marker half" and the `docs/BACKLOG.md` P0 row — so
+  the placement half is the only half these tests exercise against a state a user can create
+  today. The marker assertions are kept for when that is fixed.)
 - **NO FALSE POSITIVE:** generate, then apply things that are *not* edits — several `updateAll`
   cycles, a stone-size and colour change on a monogram letter, a selection change — and assert the
   set is still **replaced**, with the placement snapshot vs live values printed side by side. A

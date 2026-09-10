@@ -621,6 +621,10 @@ await test('MONO-020 negative control (pre-MONO-020 cohort): pre-existing monogr
   }
 });
 
+// MONO-020A: this input state cannot currently be produced through the UI on a monogram -- observed
+// after the MONO-020 merge, Stamp places nothing on a generated monogram frame (and shows no status
+// message), and Select cannot select the frame at all. The assertion below is correct and is kept
+// for when that is fixed. Symptom only, no cause. See the P0 row in docs/BACKLOG.md.
 await test('MONO-020 released set (stampedStones): a set whose frame carries a non-empty stampedStones array is NOT replaced; the new monogram is added alongside and the status line reports it', async () => {
   const project = { canvas: { width: 200, height: 200 }, layers: [
     { id: 'initial-layer', type: 'text' },
@@ -636,6 +640,10 @@ await test('MONO-020 released set (stampedStones): a set whose frame carries a n
   assert.match(el('status').textContent, /Kept your edited monogram and added a new one/, 'the status line reports the release');
 });
 
+// MONO-020A: this input state cannot currently be produced through the UI on a monogram -- observed
+// after the MONO-020 merge, Stamp places nothing on a generated monogram frame (and shows no status
+// message), and Select cannot select the frame at all. The assertion below is correct and is kept
+// for when that is fixed. Symptom only, no cause. See the P0 row in docs/BACKLOG.md.
 await test('MONO-020 released set (eraseDaubs): a set whose frame carries a non-empty eraseDaubs array is NOT replaced; the new monogram is added alongside and the status line reports it', async () => {
   const project = { canvas: { width: 200, height: 200 }, layers: [
     { id: 'initial-layer', type: 'text' },
@@ -651,6 +659,10 @@ await test('MONO-020 released set (eraseDaubs): a set whose frame carries a non-
   assert.match(el('status').textContent, /Kept your edited monogram and added a new one/, 'the status line reports the release');
 });
 
+// MONO-020A: this input state cannot currently be produced through the UI on a monogram -- observed
+// after the MONO-020 merge, Stamp places nothing on a generated monogram frame (and shows no status
+// message), and Select cannot select the frame at all. The assertion below is correct and is kept
+// for when that is fixed. Symptom only, no cause. See the P0 row in docs/BACKLOG.md.
 await test('MONO-020 released set (naturalBoundingBoxMm): a set whose frame carries a defined naturalBoundingBoxMm is NOT replaced; the new monogram is added alongside and the status line reports it', async () => {
   const project = { canvas: { width: 200, height: 200 }, layers: [
     { id: 'initial-layer', type: 'text' },
