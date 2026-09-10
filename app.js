@@ -1444,17 +1444,42 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   isPointInActiveSelection,
   // RS-3012 Step 1: fires instead of onStampPlace when a click resolves outside the active
   // selection's own boundary -- no history session, no stone placed, matching decided item 2's
-  // "reject with feedback" contract (never silent, never "allow anyway").
-  onStampRejected:()=>{
+  // "reject with feedback" contract (never silent, never "allow anyway"). RS-3015: `reason` is
+  // always 'outside-selection' today (Stamp's no-target / ineligible / non-'path' cases are all
+  // messaged by onStampPlace itself, which is always called) -- the argument exists only so the
+  // three reject hooks share a shape; the message is unchanged.
+  onStampRejected:(reason)=>{
     el('status').textContent='Stamp: click is outside the current selection.';
   },
-  // RS-3012 Step 1: fires instead of onTracePlace when EVERY point of a committed Trace drag falls
-  // outside the active selection's own boundary (the filtered placements list is empty) -- no
-  // history session, no stones placed. Deliberately distinct from today's pre-existing "fewer than 2
-  // buffered points" silent discard (DrawingCanvasTool.js's own trace mouseup branch) -- that discard
-  // has no message; a selection-caused empty result must not be silent, per decided item 2.
-  onTraceRejected:()=>{
+  // RS-3012 Step 1 / RS-3015: fires instead of onTracePlace for any committed Trace drag that
+  // resolves nothing usable -- no history session, no stones placed. Each `reason` is its own
+  // status message (see DrawingCanvasTool.js's onTraceRejected contract):
+  //  - 'no-target'        nothing eligible under the stroke at all
+  //  - 'ineligible'       a shape was under it, but only drawn ('path') shapes can hold marks
+  //  - 'no-stones'        a real drawn shape whose stones aren't generated yet -- point at the
+  //                       Generate Stones button, NOT at "this can't hold stones"; layerId names it
+  //  - 'outside-selection' RS-3012's case, exact wording kept (regression control in the tests)
+  // Still deliberately distinct from DrawingCanvasTool.js's pre-existing "fewer than 2 buffered
+  // points" / "no spaced points" silent discards, which have no message and stay that way.
+  onTraceRejected:(reason,layerId)=>{
+    if(reason==='no-target'){el('status').textContent='Trace: nothing under the stroke to trace along.';return;}
+    if(reason==='ineligible'){el('status').textContent='Trace: that layer cannot take traced marks — only drawn shapes can.';return;}
+    if(reason==='no-stones'){
+      const owner=layerId&&project.layers.find(l=>l.id===layerId);
+      el('status').textContent=owner
+        ?`Trace: press Generate Stones on ${layerLabel(owner)} before tracing along it.`
+        :'Trace: press Generate Stones on this shape before tracing along it.';
+      return;
+    }
     el('status').textContent='Trace: entire stroke was outside the selection.';
+  },
+  // RS-3015: Eraser's counterpart to onTraceRejected -- fires instead of onEraseSweep when a sweep
+  // resolves no eligible target. Two reasons only ('no-stones' is Trace's alone -- Eraser targets
+  // the 'path' layer regardless, and onEraseSweep below already says "Nothing to erase" for one
+  // holding no stones).
+  onEraseRejected:(reason)=>{
+    if(reason==='ineligible'){el('status').textContent='Eraser: that layer has no erasable marks — only drawn shapes do.';return;}
+    el('status').textContent='Eraser: nothing under the sweep to erase.';
   },
   onStampPlace:async({xMm,yMm,layerId})=>{
     // RS-3015: a mark that places nothing says so, matching onStampRejected() above. Two distinct
@@ -1517,20 +1542,16 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // byte-identical-to-before case). Only changes the status message below; every mutation/placement
   // path is otherwise untouched from RS-3011 Step 11.
   onTracePlace:async(placements,layerId,droppedCount=0)=>{
-    // RS-3015: same never-silent rule as onStampPlace above. `!placements.length` with a real
-    // layerId stays a silent no-op (it cannot actually reach here -- DrawingCanvasTool.js discards a
-    // <2-point or fully-filtered drag before calling this hook -- and it is not a "mark landed on
-    // the wrong layer" situation).
-    if(!layerId){el('status').textContent='Trace: nothing under the stroke to place stones on.';return;}
+    // RS-3015: layerId here is always a real 'path' layer with generated stones -- every other
+    // outcome (no target, ineligible proxy, stones-not-generated, wholly-out-of-selection) fires
+    // onTraceRejected instead, so this hook no longer needs a null-layerId or a non-'path' branch.
+    // `!placements.length` with a real layerId stays a silent no-op (DrawingCanvasTool.js already
+    // discards a <2-point / fully-filtered drag before calling this hook). `if(!targetLayer)` stays
+    // only as a defensive guard against the narrow race where the layer was deleted between
+    // resolution and here.
     if(!placements.length)return;
     const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
-    if(!targetLayer){
-      const owner=project.layers.find(l=>l.id===layerId);
-      el('status').textContent=owner
-        ?`Trace: ${layerLabel(owner)} cannot hold traced stones — only drawn shapes can.`
-        :'Trace: nothing under the stroke to place stones on.';
-      return;
-    }
+    if(!targetLayer)return;
     // Feeds absolutePolygonsToNaturalSpace() the whole placements array as one "polygon" -- it's
     // purely a coordinate transform, so an open polyline in place of a closed ring is fine (same
     // precedent as onStampPlace's own 1-point-ring call just above).
@@ -1597,18 +1618,14 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // so an old project's eraseDaubs and a brand-new erasedGridPositions-based erase on the same layer
   // coexist correctly with no special-case code.
   onEraseSweep:async(daubsAbsoluteMm,layerId,corridorPolygonsAbsoluteMm,mode)=>{
-    // RS-3015: same never-silent rule as onStampPlace above. `!daubsAbsoluteMm.length` stays a
-    // silent no-op (DrawingCanvasTool.js never calls this hook with an empty sweep).
-    if(!layerId){el('status').textContent='Eraser: nothing under the sweep to erase.';return;}
+    // RS-3015: layerId here is always a real 'path' layer -- a no-target / ineligible-proxy sweep
+    // fires onEraseRejected instead, so this hook no longer needs a null-layerId branch.
+    // `!daubsAbsoluteMm.length` stays a silent no-op (DrawingCanvasTool.js never calls this hook
+    // with an empty sweep). `if(!targetLayer)` stays as a defensive race guard (the layer was
+    // deleted or changed type between resolution and here).
     if(!daubsAbsoluteMm.length)return;
     const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
-    if(!targetLayer){
-      const owner=project.layers.find(l=>l.id===layerId);
-      el('status').textContent=owner
-        ?`Eraser: ${layerLabel(owner)} has no erasable stones — only drawn shapes do.`
-        :'Eraser: nothing under the sweep to erase.';
-      return;
-    }
+    if(!targetLayer)return;
     if(mode==='outline'){
       // An open Pen/freehand path has no interior to cut -- same graceful-failure precedent
       // RS-1012's own resolveLayerShapeSource()/runBooleanOp() already establish for a shape with

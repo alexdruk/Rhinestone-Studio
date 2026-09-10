@@ -12,13 +12,19 @@ generated monogram frame."
 
 ## Status
 
-**Shipped.** Two commits on `feature/rs-3015-mark-eligibility` off `develop` @ `ef1abba`
+**Shipped.** Three commits on `feature/rs-3015-mark-eligibility` off `develop` @ `ef1abba`
 (the MONO-020A merge). Local only — Sasha merges and pushes.
 
   1. `RS-3015: diagnose the mark-tool target defect and correct the BACKLOG row` — this document
      plus the `docs/BACKLOG.md` row rewrite. No source changes.
   2. `RS-3015: skip non-path layers in mark target resolution and report rejected marks` — the
-     implementation.
+     resolver skip + `markEligible` flag + `onStampPlace`'s messaging.
+  3. `RS-3015: report Trace and Eraser marks that resolve nothing` — the correction below (§4B
+     revised). Commit 2's `if(!layerId)` branches in `app.js`'s `onTracePlace` / `onEraseSweep`
+     were **unreachable** — `DrawingCanvasTool.js`'s own `onMouseUp` discards a resolved-nothing
+     Trace/Eraser gesture *before* those hooks fire. This commit gives Trace/Eraser their own
+     reason-carrying reject hooks, adds a single `tagMarkTarget()` tagging helper, and removes the
+     dead branches.
 
 ---
 
@@ -27,16 +33,20 @@ generated monogram frame."
 Stamp, Trace and Eraser all resolve *which existing layer a manually-placed mark belongs to*
 through one function:
 
-- `resolveTargetLayerIdByBounds(point)` — `src/drawing/DrawingCanvasTool.js:1494`. Reverse-iterates
+- `resolveMarkTargetByBounds(point)` — `src/drawing/DrawingCanvasTool.js`. Reverse-iterates
   `board.listShapes()` (push-ordered oldest-first, so reverse visits topmost-first) and returns
-  `shapes[i].item.data.layerId` for the **first** shape whose **axis-aligned bounding box**
-  (`item.bounds.contains(point)`, Paper.js's own `Rectangle#contains`) contains the point, else
-  `null`.
-  - `resolveStampTargetLayerId(point)` — `:1513` — delegates straight to it.
-  - `resolveTraceTargetLayerId(points)` — `:1527` — builds a temp path from the drag's buffered
-    points and resolves its `bounds.center`.
-  - `resolveEraserTargetLayerId(points)` — `:1550` — calls `resolveTargetLayerIdByBounds` per
-    buffered point, first non-null wins (RS-3014 Step 5).
+  `{ layerId, blockedByIneligible }` for the **first** shape whose **axis-aligned bounding box**
+  (`item.bounds.contains(point)`, Paper.js's own `Rectangle#contains`) contains the point AND
+  carries `item.data.markEligible === true`, else `{ layerId: null, blockedByIneligible }`.
+  `blockedByIneligible` is `true` when some shape's bounds *did* contain the point but it was
+  skipped for `markEligible !== true` — the module knows an ineligible shape was there without
+  ever learning its type.
+  - `resolveTargetLayerIdByBounds(point)` — the bare-`layerId` form; `resolveStampTargetLayerId()`
+    delegates straight to it (Stamp always calls `onStampPlace`, `layerId` may be null).
+  - `resolveTraceTarget(points)` — builds a temp path from the drag's buffered points and resolves
+    its `bounds.center` through `resolveMarkTargetByBounds`.
+  - `resolveEraserTarget(points)` — calls `resolveMarkTargetByBounds` per buffered point, first
+    non-null wins (RS-3014 Step 5); `blockedByIneligible` is sticky across the walk.
 
 This is **deliberately separate** from `hitTestShapeId()` (`:1461`), Select's own click-to-pick,
 which uses strict fill containment (`item.contains(point)`) plus a stroke-proximity fallback. Select
@@ -112,55 +122,82 @@ the "a mark just off the shape works, a mark on it does nothing" contrast unusua
 
 ---
 
-## 4. The two corrections
+## 4. The corrections
 
-### A. Mark eligibility travels as item data
+### A. Mark eligibility travels as item data (commits 2–3)
 
 `DrawingCanvasTool` never reads `project.layers` (enforced by
 `tools/test-architecture-module-boundaries.mjs`). The resolver must not ask a layer's type; it
 reads a flag stamped at sync time.
 
-Every site that stamps `item.data.layerId` onto a board item also stamps
-`item.data.markEligible = <that layer>.type === 'path'`:
+Commit 2 stamped `item.data.markEligible = <that layer>.type === 'path'` next to every one of the
+**twelve** `item.data.layerId` writes. Commit 3 replaces all twelve with one module-private helper,
+`tagMarkTarget(item, layer)`, that sets `layerId` and `markEligible` together — `board.replace-
+ShapeItem()` carries no `data` across, so every item swap must re-set both, and twelve hand-written
+copies of `layer.type === 'path'` guarantee drift. The twelve: `commitFinalizedShape`; the
+`syncFromProjectLayers` brand-new-proxy loop; the `syncFromProjectLayers` reconcile loop-top (which
+re-asserts on every synced layer, every tick); its seven reconciliation branches (each swaps in a
+fresh item via `board.replaceShapeItem()` after a bounds / rotation / content change);
+`refreshShapeGeometryForLayer` (an Outline-mode Eraser cut); and `duplicateShapeForLayer` — the one
+exception, which has no `layer` object and runs for *every* `XYWH_SHAPE_TYPES` layer (not just
+`'path'`, contrary to commit 2's comment), so the clone inherits the **source proxy's** own flag.
 
-- `DrawingCanvasTool.js:2178` — `commitFinalizedShape` (a freshly drawn shape; always `'path'`, but
-  the expression is written out, not hardcoded `true`, so it cannot drift from the sync sites).
-- `DrawingCanvasTool.js:4504` — `syncFromProjectLayers`, the brand-new-proxy loop.
-- `DrawingCanvasTool.js:4365` — `refreshShapeGeometryForLayer` (an Outline-mode Eraser cut
-  re-materializes a `'path'` item).
-- `DrawingCanvasTool.js:4274` — `duplicateShapeForLayer` (Paper.js `clone()` already copies
-  `data.markEligible`; re-asserted explicitly so the site stays visibly in step).
-- `DrawingCanvasTool.js:4556 / 4585 / 4610 / 4634 / 4658 / 4668 / 4681` — the seven
-  `syncFromProjectLayers` reconciliation branches, each of which swaps in a fresh item via
-  `board.replaceShapeItem()` after a bounds / rotation / content change. `board.replaceShapeItem()`
-  does **not** carry `data` across from the old item, so without these a resized / rotated /
-  re-materialized `'path'` layer would silently lose its `markEligible` flag and stop being a valid
-  mark target — the reason the two sites the diagnosis first named were not enough.
+`tagMarkTarget()`'s doc comment states the resolver is **fail-closed**: `markEligible !== true` is
+skipped, so a future stamp site that sets `layerId` but forgets the helper turns a genuinely drawn
+`'path'` shape into a silent mark-rejecter, indistinguishable from empty canvas.
 
-`resolveTargetLayerIdByBounds()` then **skips** any shape whose `item.data.markEligible !== true`
-and keeps iterating to the shape below it. It does **not** return `null` on hitting an ineligible
-shape — falling through to the frame underneath is the entire point.
+`resolveMarkTargetByBounds()` then **skips** any shape whose `item.data.markEligible !== true` and
+keeps iterating to the shape below it. It does **not** return `null` on hitting an ineligible
+shape — falling through to the frame underneath is the entire point — but it does remember that an
+ineligible shape covered the point (`blockedByIneligible`), so a subsequent all-the-way-down miss
+can be reported as `'ineligible'` rather than `'no-target'`.
 
 `hitTestShapeId()` is untouched: Select still hits every shape.
 
-The function's doc comment previously justified bounding-box containment with "an imported SVG with
+The resolver's doc comment previously justified bounding-box containment with "an imported SVG with
 an open center where a user still wants to place a stamp." That case can no longer reach the
-resolver — an SVG layer is `'svg'`, not `'path'`, so it is now skipped. The comment is corrected to
-say the bounding-box test still matters for a genuinely hollow **`'path'`** layer (a hand-drawn
-ring, an `evenodd` outline with a hole).
+resolver — an SVG layer is `'svg'`, not `'path'`, so it is now skipped. The comment now says the
+bounding-box test still matters for a genuinely hollow **`'path'`** layer (a hand-drawn ring, an
+`evenodd` outline with a hole).
 
-### B. The silent discard goes
+### B. The silent discard goes — all three tools (commits 2–3)
 
-`onStampPlace`, `onTracePlace` and `onEraseSweep` now write a status message instead of returning
-in silence, matching `onStampRejected()`'s contract. Two distinct situations, two distinct
-messages:
+Commit 2 rewrote `app.js`'s `onStampPlace` / `onTracePlace` / `onEraseSweep` to write a status
+message instead of returning in silence. But for **Trace and Eraser** that was dead code:
+`DrawingCanvasTool.js`'s own `onMouseUp` resolves the target and discards a resolved-nothing
+gesture *before* `onTracePlace` / `onEraseSweep` is ever called, so commit 2's `if(!layerId){…}`
+branches there were unreachable, as was `onTracePlace`'s non-`'path'` branch (`getLayerStoneParams`
+returns `null` for a non-`'path'` layer, killing the gesture at `!styleParams` upstream). Correction
+A made it worse: after A, a Trace/Eraser gesture over an unframed monogram falls *through* the
+ineligible proxy to nothing, resolves null, and is discarded silently.
 
-- **No target at all** (`layerId` is `null`) — nothing under the gesture.
-- **Target resolved but not a `'path'` layer** — after correction A this is a narrow race (the
-  layer was deleted or changed type between resolution and the handler), but it is still named
-  rather than swallowed: the message names the layer via `layerLabel(l)`.
+Commit 3 moves the reporting into `DrawingCanvasTool.js`'s `onMouseUp`:
 
-No history session and no mutation in either case, exactly as before.
+- **Stamp** is unchanged — `onStampPlace` is always called (`layerId` may be null) and already
+  messages the null and non-`'path'`-race cases. `onStampRejected` gains a `reason` argument for
+  signature parity; its one value is `'outside-selection'` and its message is unchanged.
+- **Trace**: `onTraceRejected(reason, layerId)`. `reason` is one of —
+  - `'no-target'` — nothing eligible under the stroke at all.
+  - `'ineligible'` — a shape *was* under it, but only drawn (`'path'`) shapes hold marks. Known
+    from `resolveTraceTarget()`'s `blockedByIneligible`, **not** from any layer type.
+  - `'no-stones'` — a real `'path'` layer whose stones are not generated yet. After correction A a
+    non-null `layerId` here is necessarily `'path'`, so a null `styleParams` can only mean
+    `stonesGenerated === false`; the message points at the **Generate Stones** button, not at "this
+    layer can't hold stones", and `layerId` is passed so `app.js` can name the layer.
+  - `'outside-selection'` — RS-3012's case, its exact wording kept.
+- **Eraser**: new hook `onEraseRejected(reason)` — `'no-target'` or `'ineligible'` only. Eraser has
+  no `'no-stones'`: it targets the `'path'` layer regardless, and `onEraseSweep` already reports
+  "Nothing to erase on \<layer\>" for one that holds no stones.
+
+`app.js` maps each `reason` to its own `el('status').textContent`, following `onStampRejected`'s
+convention. Commit 2's now-unreachable branches (`onTracePlace`'s `if(!layerId)` and its non-`'path'`
+branch, `onEraseSweep`'s `if(!layerId)`) are deleted; `onEraseSweep`'s non-`'path'` branch — commit
+2's twin of `onTracePlace`'s — is reduced to the same bare `if(!targetLayer)return;` race guard.
+No history session and no mutation in any rejection path, exactly as before.
+
+`tools/test-rs3015-mark-target-eligibility.mjs` gains six gesture-driven cases (each drives a real
+Trace/Eraser `mousedown → mousedrag* → mouseup` through `paper.tool` and asserts both the `reason`
+and the exact `el('status')` string, the latter by executing `app.js`'s own handler source).
 
 ---
 
