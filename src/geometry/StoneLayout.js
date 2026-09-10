@@ -29,11 +29,12 @@ export class StoneLayout {
    * @param {{minXmm:number,minYmm:number,maxXmm:number,maxYmm:number,widthMm:number,heightMm:number}|null} [params.baseBoundingBoxMm]
    *   MONO-021: the bounding box of a text layer's BASE stones -- the stones generateTextLayout()
    *   produced BEFORE any Design-tool edit (Stamp/Trace/Paint) was applied. app.js's
-   *   generateTextStonesLive() centres a text layer on the canvas from this box, not from
-   *   getBoundingBox(), so a stamp placed outside the letter does not shift the whole letter (the
-   *   same circular-bounds hazard computeFrozenBoxTransform()'s own trap describes). Additive and
-   *   optional: null for every non-text layout, every text layout with no edits applied, and every
-   *   layout produced before this field existed.
+   *   generateTextStonesLive() feeds this box (not getBoundingBox()) to computeTextPlacementOffset()
+   *   and computeAutoFitScale(), so a stamp placed outside the letter does not grow the box that
+   *   auto-centres / auto-fits the whole letter on the canvas -- the same circular-bounds hazard
+   *   computeFrozenBoxTransform()'s own trap describes. Set on EVERY text layout, edited or not
+   *   (the centring fix needs it on unedited layers too, where it is identical to getBoundingBox());
+   *   null for every non-text layout and every layout produced before this field existed.
    */
   constructor({ layerId, stones = [], sourceMode = null, outlineStats = null, baseBoundingBoxMm = null } = {}) {
     if (typeof layerId !== 'string' || layerId.length === 0) {

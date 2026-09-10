@@ -160,17 +160,23 @@ base stones' bounds, computed *before* any edit is applied. Using post-edit boun
 circular — a stamp placed outside the letter grows the box, which silently moves every other edit on
 the layer.
 
-The box→box transform lives next to its siblings in `src/geometry/PaintRegionSelection.js`
-(`absolutePolygonsToNaturalSpace()`, `computeNaturalContourTransform()`). No second
+The two helpers split across the two files **exactly as `computeNaturalContourTransform()` (forward,
+in `GeometryEngine.js`) and `absolutePolygonsToNaturalSpace()` (app-facing inverse, in
+`PaintRegionSelection.js`) already do** — `PaintRegionSelection.js` imports *from* `GeometryEngine.js`,
+never the reverse, and `generateTextLayout()` needs the forward helper directly, so putting the
+forward helper in `PaintRegionSelection.js` would create an import cycle. No second
 coordinate-conversion implementation is written anywhere. New helpers:
 
-- `computeFrozenBoxTransform(frozenBoxMm, currentBoundsMm)` → `{xMm, yMm, scaleX, scaleY}` in the
-  shape `applyNaturalContourTransform()` already consumes (`p → xMm + p.xMm * scaleX`), so a
-  `(0,0)`-rooted stored edit maps straight onto the current base-stone bounds.
-- `absolutePointsToFrozenBoxSpace(pointsAbsoluteMm, frozenBoxMm, currentBoundsMm)` — the inverse,
-  the text counterpart of `absolutePolygonsToNaturalSpace()`, used by the `app.js` hooks to convert
-  an absolute click / lasso into stored `(0,0)`-rooted form. At the first edit, `currentBoundsMm`
-  *is* `frozenBoxMm`, so this reduces to `absolute − boxMin`.
+- `computeFrozenBoxTransform(frozenBoxMm, currentBoundsMm)` — **`src/geometry/GeometryEngine.js`,
+  next to `computeNaturalContourTransform()`.** Returns `{xMm, yMm, scaleX, scaleY}` in the shape
+  `applyNaturalContourTransform()` already consumes (`p → xMm + p.xMm * scaleX`), so a `(0,0)`-rooted
+  stored edit maps straight onto the current base-stone bounds. Returns `null` for a missing or
+  degenerate (zero-width/height) box.
+- `absolutePointsToFrozenBoxSpace(pointsAbsoluteMm, frozenBoxMm, currentBoundsMm)` —
+  **`src/geometry/PaintRegionSelection.js`, next to `absolutePolygonsToNaturalSpace()`.** The
+  inverse, the text counterpart of `absolutePolygonsToNaturalSpace()`, used by the `app.js` hooks to
+  convert an absolute click / lasso into stored `(0,0)`-rooted form. At the first edit,
+  `currentBoundsMm` *is* `frozenBoxMm`, so this reduces to `absolute − boxMin`.
 
 ### 3.2 Rotation
 
@@ -245,19 +251,43 @@ letter — that bounding box grows and the whole letter shifts on the canvas, an
 This is the same circular-bounds hazard as §3.1's trap, in a second place.
 
 Fix: `generateTextLayout()` exposes the **base** (pre-edit) stone bounding box on its returned
-`StoneLayout` as an additive optional field (`baseBoundingBoxMm`, in the spirit of `outlineStats`).
+`StoneLayout` as an additive field (`baseBoundingBoxMm`, in the spirit of `outlineStats`), a plain
+`{minXmm,minYmm,maxXmm,maxYmm,widthMm,heightMm}` object at full precision. It is set on **every**
+text layout (edited or not — for an unedited layer it equals `getBoundingBox()`, and the centring
+fix needs it there too); `null` for every non-text layout and every pre-milestone layout.
 `generateTextStonesLive()` uses `result.baseBoundingBoxMm ?? result.getBoundingBox()` for the
-placement offset and the auto-fit width, so placement and auto-fit stay anchored to the letter, not
-to the stamps. Absent/null on every pre-milestone layout and every non-text layer — no behaviour
-change there.
+`computeTextPlacementOffset()` box and `result.baseBoundingBoxMm?.widthMm ?? result.widthMm` for the
+`computeAutoFitScale()` width, so placement and auto-fit stay anchored to the letter, not to the
+stamps. `computeTextPlacementOffsetMm()` (`src/editing/TextPlacement.js`) reads only
+`.widthMm`/`.minXmm`/`.heightMm`/`.minYmm`, all present on the plain object, so this is a drop-in
+with no adapter. `app.js:2788`'s *other* `computeTextPlacementOffset()` call is fed
+`resolveTextPolygons()`'s glyph-outline box, which never sees edits, and is left unchanged.
 
 ### 5.2 `generateTextStonesLive()` forwards the four fields
 
 `generateTextStonesLive()` (`app.js`) must forward `regions` / `stampedStones` /
-`erasedGridPositions` / `naturalBoundingBoxMm` into `generateTextLayout()` (via
-`buildTextLayoutBaseParams()`). This is the identical wiring-gap fix RS-3011 Steps 10b/12/13 made
+`erasedGridPositions` / `naturalBoundingBoxMm` into `generateTextLayout()`. They are added to the
+call's `base` object **directly in `generateTextStonesLive()`**, alongside `authoredScale` — **not**
+in `buildTextLayoutBaseParams()`, which MONO-006B's own comment reserves for "the exact same
+*natural* layout" `recoverStaleAuthoredScales()` regenerates to validate a persisted `authoredScale`
+against; that check must see the pure text layout, without a stamp shifting its bounding-box centre.
+This is the identical wiring-gap fix RS-3011 Steps 10b/12/13 made
 for `generatePathStonesLive()`. **This exact step has been forgotten three times in this codebase
 for three different fields.** Without it an edit is stored on disk and never renders.
+
+### 5.2a Other text-layer bounding-box consumers — audited, unchanged
+
+Every consumer of a text layer's stone bounding box (`getBoundingBox()` / `.widthMm` / `.heightMm` /
+`.baseBoundingBoxMm`), and the call on each:
+
+| Site | What it measures | Call |
+|---|---|---|
+| `generateTextStonesLive()` `computeTextPlacementOffset` + `computeAutoFitScale` | canvas centring / auto-fit of the **letter** | **fixed** — use `baseBoundingBoxMm` (§5.1) |
+| `app.js` font-preview (`fitTransform(layout.getBoundingBox(), …)`) | fit a synthetic `font-preview:<id>` layer that never carries edits | no change — box == base |
+| `app.js` status bar (`layout.widthMm × layout.heightMm`) | extent of the **whole project** (`engine.generate()`'s `'project'` layout, which has no `baseBoundingBoxMm`) | no change — should include everything |
+| `getLayerBBox(l)` — text branch | on-canvas **extent** of the layer, from the global `layout.stones` filter (selection box, alignment, distribute, snap targets) | no change — this measures rendered output, is not a placement *input*, so no circular dependency; a stamp that sticks out legitimately widens the selection box that then moves with the layer |
+| `fitTextToShape()` (`app.js:2782`/`2788`/`4627`/`4635`) | glyph outline via `resolveTextPolygons()` | no change — never sees edits |
+| `recoverStaleAuthoredScales()` (`app.js:861`) → `scaleAuthoredTextLayout()` | legality of a persisted `authoredScale` against the **pure natural** layout | no change **here**, but §5.2 keeps the edit fields out of `buildTextLayoutBaseParams()` precisely so this call keeps seeing the pure layout |
 
 ### 5.3 `getLayerStoneParams()` — no change
 

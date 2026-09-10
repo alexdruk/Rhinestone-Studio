@@ -886,7 +886,15 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  async generateTextStonesLive(layer,project,{includeStats=false}={}){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text||!isFontKnown(layer.font))return includeStats?{stones:[],outlineStats:null}:[];const base={...buildTextLayoutBaseParams(layer),
   // MONO-005A: see resolveAuthoredScale()'s own doc comment. No effect on sampled/OpenType text --
   // GeometryEngine only ever reads authoredScale inside its authored-stone-center branch.
-  authoredScale:resolveAuthoredScale(layer)};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const{scale}=computeAutoFitScale(layer,project,result.widthMm);if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
+  authoredScale:resolveAuthoredScale(layer)};let result=await this.permanentEngine.generateTextLayout(base);
+  // MONO-021: auto-fit and canvas-centering both measure the letter, not the letter PLUS any
+  // Design-tool edits. generateTextLayout() now appends stamped stones (which can sit outside the
+  // letter) into result.stones, so result.widthMm / result.getBoundingBox() would grow with a
+  // stamp and re-centre / shrink the whole letter on the canvas -- the exact circular-bounds trap
+  // computeFrozenBoxTransform()'s own doc comment describes. result.baseBoundingBoxMm is the box of
+  // the BASE stones only (pre-edit); it is non-null exactly when getBoundingBox() is, and for an
+  // unedited layer the two are identical, so `?? result.getBoundingBox()` is a no-op there.
+  if(layer.autoFit){const{scale}=computeAutoFitScale(layer,project,result.baseBoundingBoxMm?.widthMm??result.widthMm);if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.baseBoundingBoxMm??result.getBoundingBox();
   // RS-1009: text layers previously had no position field -- stones were always centered on the
   // canvas. layer.x/layer.y (mm, default 0) are a further offset applied on top of that same
   // auto-centered base position, so pre-RS-1009 Project JSON (no x/y on its text layers) renders

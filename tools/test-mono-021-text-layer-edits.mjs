@@ -11,6 +11,7 @@ import {
   applyNaturalContourTransform,
   absolutePointsToFrozenBoxSpace
 } from '../src/geometry/index.js';
+import { computeTextPlacementOffsetMm } from '../src/editing/index.js';
 
 // MONO-021 commit 2 -- Design-tool edits (Stamp / Trace / Eraser) on a text layer, applied inside
 // GeometryEngine.generateTextLayout() through the frozen-box transform. Calls the real, unmodified
@@ -250,6 +251,40 @@ await test('14. degenerate -- a text layout with zero base stones plus edits doe
   } else {
     console.log('   (space produced stones on this font; degenerate path not exercised here)');
   }
+});
+
+// ---------------------------------------------------------------------------------------------
+// The canvas-placement fix (correction commit) -- generateTextStonesLive() centres a text layer
+// from result.baseBoundingBoxMm, not result.getBoundingBox(). Reproduced here at module level via
+// computeTextPlacementOffsetMm() (the exact function app.js's computeTextPlacementOffset() wraps),
+// since the bug sits DOWNSTREAM of the engine and test 5's byte-identical engine assertion cannot
+// see it.
+// ---------------------------------------------------------------------------------------------
+
+await test('15. NEGATIVE CONTROL: canvas placement uses the pre-edit box -- a far stamp moves no base stone; the old getBoundingBox()-based placement moved every one', async () => {
+  const engine = createEngine();
+  const canvas = { canvasWidthMm: 220, canvasHeightMm: 220 };
+  const bare = await engine.generateTextLayout(GREAT_VIBES);
+  const box = frozenBoxOf(bare);
+  const farStamp = { id: 's1', xMm: (box.maxXmm - box.minXmm) + 40, yMm: 0, sizeMm: 2.0, color: 'gold' };
+  const edited = await engine.generateTextLayout({ ...GREAT_VIBES, naturalBoundingBoxMm: box, stampedStones: [farStamp] });
+
+  // Reproduces generateTextStonesLive()'s centring: offset from computeTextPlacementOffsetMm(bbox),
+  // then stone.xMm + offset. Compared over the BASE stones only (indices 0..bare.count-1).
+  const place = (layout, bbox) => {
+    const { offsetXMm, offsetYMm } = computeTextPlacementOffsetMm({ boundingBoxMm: bbox, xMm: 0, yMm: 0, ...canvas });
+    return layout.stones.slice(0, bare.count).map((s) => ({ x: s.xMm + offsetXMm, y: s.yMm + offsetYMm }));
+  };
+  const maxMove = (a, b) => a.reduce((m, p, i) => Math.max(m, Math.hypot(p.x - b[i].x, p.y - b[i].y)), 0);
+
+  const barePlaced = place(bare, bare.baseBoundingBoxMm);
+  const newMove = maxMove(barePlaced, place(edited, edited.baseBoundingBoxMm));
+  const oldMove = maxMove(barePlaced, place(edited, edited.getBoundingBox()));
+
+  console.log(`   passing: base stones move ${newMove.toExponential(2)} mm under the pre-edit-box (baseBoundingBoxMm) placement`);
+  console.log(`   control: base stones move ${oldMove.toFixed(3)} mm under the old getBoundingBox() placement`);
+  assert.ok(newMove < 1e-9, 'no base stone moves when placement uses the pre-edit box');
+  assert.ok(oldMove > 5, 'the old placement moved every base stone -- proves the assertion can fail');
 });
 
 if (process.exitCode === 1) {
