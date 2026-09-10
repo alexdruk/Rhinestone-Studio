@@ -26,8 +26,16 @@ export class StoneLayout {
    *   sampleMultiContourOutlinePoints() considered vs. how many survived dedup/backfill. Additive
    *   and optional: null/absent for every non-outline layout and every layout produced before this
    *   field existed, so older saved projects and every pre-existing caller are unaffected.
+   * @param {{minXmm:number,minYmm:number,maxXmm:number,maxYmm:number,widthMm:number,heightMm:number}|null} [params.baseBoundingBoxMm]
+   *   MONO-021: the bounding box of a text layer's BASE stones -- the stones generateTextLayout()
+   *   produced BEFORE any Design-tool edit (Stamp/Trace/Paint) was applied. app.js's
+   *   generateTextStonesLive() centres a text layer on the canvas from this box, not from
+   *   getBoundingBox(), so a stamp placed outside the letter does not shift the whole letter (the
+   *   same circular-bounds hazard computeFrozenBoxTransform()'s own trap describes). Additive and
+   *   optional: null for every non-text layout, every text layout with no edits applied, and every
+   *   layout produced before this field existed.
    */
-  constructor({ layerId, stones = [], sourceMode = null, outlineStats = null } = {}) {
+  constructor({ layerId, stones = [], sourceMode = null, outlineStats = null, baseBoundingBoxMm = null } = {}) {
     if (typeof layerId !== 'string' || layerId.length === 0) {
       throw new TypeError('StoneLayout requires a non-empty layerId.');
     }
@@ -36,6 +44,7 @@ export class StoneLayout {
     this.sourceMode = sourceMode;
     this.stones = stones.map((stone) => (stone instanceof Stone ? stone : Stone.fromJSON(stone)));
     this.outlineStats = outlineStats;
+    this.baseBoundingBoxMm = baseBoundingBoxMm;
   }
 
   get count() {
@@ -86,6 +95,17 @@ export class StoneLayout {
     if (this.outlineStats) {
       json.outlineStats = { ...this.outlineStats };
     }
+    if (this.baseBoundingBoxMm) {
+      const b = this.baseBoundingBoxMm;
+      json.baseBoundingBoxMm = {
+        minXmm: roundForJson(b.minXmm),
+        minYmm: roundForJson(b.minYmm),
+        maxXmm: roundForJson(b.maxXmm),
+        maxYmm: roundForJson(b.maxYmm),
+        widthMm: roundForJson(b.widthMm),
+        heightMm: roundForJson(b.heightMm)
+      };
+    }
     return json;
   }
 
@@ -97,7 +117,8 @@ export class StoneLayout {
       layerId: value.layerId,
       sourceMode: value.sourceMode ?? null,
       stones: value.stones ?? [],
-      outlineStats: value.outlineStats ?? null
+      outlineStats: value.outlineStats ?? null,
+      baseBoundingBoxMm: value.baseBoundingBoxMm ?? null
     });
   }
 }

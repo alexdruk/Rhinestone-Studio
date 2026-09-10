@@ -4,7 +4,8 @@ export {
   TEXT_SCALE_FAILURE_REASONS,
   AUTHORED_FONT_FITTING_GAP_MM,
   computeNaturalContourTransform,
-  applyNaturalContourTransform
+  applyNaturalContourTransform,
+  computeFrozenBoxTransform
 } from './GeometryEngine.js';
 
 export {
@@ -119,6 +120,7 @@ export {
 export {
   selectPaintTarget,
   absolutePolygonsToNaturalSpace,
+  absolutePointsToFrozenBoxSpace,
   hitTestPathLayerRegion
 } from './PaintRegionSelection.js';
 

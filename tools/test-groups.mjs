@@ -202,6 +202,7 @@ export const GROUPS = {
     'test-s200-mixed-stone-sizes.mjs',
     'test-rs3011-step10a-region-data-model.mjs',
     'test-rs3011-step10b-paint-target-selection.mjs',
+    'test-mono-021-text-layer-edits.mjs',
   ],
   'stone-layout': [
     'test-stone-color.mjs',
