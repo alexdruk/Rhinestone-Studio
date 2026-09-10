@@ -1442,13 +1442,18 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // comment above, near resolvePaintTargetTwoPass) referenced here by shorthand so
   // deleteCurrentSelection()'s new 'draft' branch can call the exact same test.
   isPointInActiveSelection,
-  // RS-3012 Step 1: fires instead of onStampPlace when a click resolves outside the active
-  // selection's own boundary -- no history session, no stone placed, matching decided item 2's
-  // "reject with feedback" contract (never silent, never "allow anyway"). RS-3015: `reason` is
-  // always 'outside-selection' today (Stamp's no-target / ineligible / non-'path' cases are all
-  // messaged by onStampPlace itself, which is always called) -- the argument exists only so the
-  // three reject hooks share a shape; the message is unchanged.
+  // RS-3012 Step 1 / RS-3015: fires instead of onStampPlace when a Stamp click resolves nothing
+  // placeable -- no history session, no stone placed, matching decided item 2's "reject with
+  // feedback" contract (never silent, never "allow anyway"). Two reasons, one string each (the same
+  // distinction Trace/Eraser make):
+  //  - 'outside-selection' the click is outside the active selection -- RS-3012's exact wording kept
+  //  - 'ineligible'        the click landed inside a shape that can't take marks (a text / SVG /
+  //                        image / circle / rectangle / shape-library proxy) with no drawn shape
+  //                        beneath it -- worded for Stamp
+  // Stamp's "nothing under the click at all" case is NOT routed here: onStampPlace is still called
+  // with a null layerId and messages it there ("Stamp: nothing here to place a stone on.").
   onStampRejected:(reason)=>{
+    if(reason==='ineligible'){el('status').textContent='Stamp: that layer cannot hold stamped stones — only drawn shapes can.';return;}
     el('status').textContent='Stamp: click is outside the current selection.';
   },
   // RS-3012 Step 1 / RS-3015: fires instead of onTracePlace for any committed Trace drag that

@@ -12,7 +12,7 @@ generated monogram frame."
 
 ## Status
 
-**Shipped.** Three commits on `feature/rs-3015-mark-eligibility` off `develop` @ `ef1abba`
+**Shipped.** Four commits on `feature/rs-3015-mark-eligibility` off `develop` @ `ef1abba`
 (the MONO-020A merge). Local only — Sasha merges and pushes.
 
   1. `RS-3015: diagnose the mark-tool target defect and correct the BACKLOG row` — this document
@@ -25,6 +25,11 @@ generated monogram frame."
      Trace/Eraser gesture *before* those hooks fire. This commit gives Trace/Eraser their own
      reason-carrying reject hooks, adds a single `tagMarkTarget()` tagging helper, and removes the
      dead branches.
+  4. `RS-3015: report a Stamp click on an ineligible layer` — Stamp was still reporting
+     `'no-target'` for an `'ineligible'` hit, because commit 3 was told to freeze
+     `resolveStampTargetLayerId()`'s signature. Stamp's `onMouseDown` now reads
+     `resolveMarkTargetByBounds()`'s full result and calls `onStampRejected('ineligible')`; the
+     "nothing under the click at all" path is unchanged.
 
 ---
 
@@ -171,12 +176,18 @@ returns `null` for a non-`'path'` layer, killing the gesture at `!styleParams` u
 A made it worse: after A, a Trace/Eraser gesture over an unframed monogram falls *through* the
 ineligible proxy to nothing, resolves null, and is discarded silently.
 
-Commit 3 moves the reporting into `DrawingCanvasTool.js`'s `onMouseUp`:
+Commits 3–4 move the reporting into `DrawingCanvasTool.js`'s `onMouseUp`:
 
-- **Stamp** is unchanged — `onStampPlace` is always called (`layerId` may be null) and already
-  messages the null and non-`'path'`-race cases. `onStampRejected` gains a `reason` argument for
-  signature parity; its one value is `'outside-selection'` and its message is unchanged.
-- **Trace**: `onTraceRejected(reason, layerId)`. `reason` is one of —
+- **Stamp** (commit 4): `onStampRejected(reason)`, `reason` one of `'ineligible'` /
+  `'outside-selection'`. Stamp's `onMouseDown` reads `resolveMarkTargetByBounds()`'s full result;
+  when `layerId` is null but `blockedByIneligible` is true it calls `onStampRejected('ineligible')`
+  instead of `onStampPlace` with a null `layerId`. A click with nothing under it at all is
+  **unchanged** — `onStampPlace` is still called with `layerId: null` (Stamp's ghost-preview
+  architecture needs the always-call contract, unlike Trace/Eraser) and `app.js` messages the null
+  there. `'outside-selection'` keeps RS-3012's exact string. (Commit 3 froze
+  `resolveStampTargetLayerId()`'s signature and left Stamp reporting `'no-target'` for an ineligible
+  hit; commit 4 corrects that — Stamp now makes the same distinction Trace/Eraser do.)
+- **Trace** (commit 3): `onTraceRejected(reason, layerId)`. `reason` is one of —
   - `'no-target'` — nothing eligible under the stroke at all.
   - `'ineligible'` — a shape *was* under it, but only drawn (`'path'`) shapes hold marks. Known
     from `resolveTraceTarget()`'s `blockedByIneligible`, **not** from any layer type.
@@ -195,9 +206,17 @@ branch, `onEraseSweep`'s `if(!layerId)`) are deleted; `onEraseSweep`'s non-`'pat
 2's twin of `onTracePlace`'s — is reduced to the same bare `if(!targetLayer)return;` race guard.
 No history session and no mutation in any rejection path, exactly as before.
 
-`tools/test-rs3015-mark-target-eligibility.mjs` gains six gesture-driven cases (each drives a real
-Trace/Eraser `mousedown → mousedrag* → mouseup` through `paper.tool` and asserts both the `reason`
-and the exact `el('status')` string, the latter by executing `app.js`'s own handler source).
+`tools/test-rs3015-mark-target-eligibility.mjs` gains gesture-driven cases (each drives a real
+`mousedown → mousedrag* → mouseup` — or a plain Stamp `mousedown` — through `paper.tool` and asserts
+both the `reason` and the exact `el('status')` string, the latter by executing `app.js`'s own
+`onStampRejected` / `onTraceRejected` / `onEraseRejected` / `layerLabel` source), plus a regression
+case per tool proving a mark over an ineligible proxy that HAS a `'path'` beneath it still falls
+through to the path.
+
+Neither Stamp's nor the Eraser's **ghost-preview** hover (`updateStampGhostItem` /
+`updateEraserGhostItem`) changes: both resolve through `resolveStampTargetLayerId()` (the bare-id
+wrapper), which already falls through ineligible proxies, and a hover has no status line — firing a
+rejection message on every `mousemove` would be wrong. Only the committed click reports.
 
 ---
 

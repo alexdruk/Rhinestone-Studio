@@ -104,8 +104,8 @@ const tool = createDrawingTool(canvas, {
   resolveSvgPolygons: () => null,
   getTextLayerStones: (id) => textStonesByLayerId[id] || [],
   isPointInActiveSelection: (p, sel) => activeSelectionAllows(p, sel),
-  onStampPlace: ({ layerId }) => { stampCalls.push(layerId); },
-  onStampRejected: (reason) => { stampCalls.push(`__rejected__:${reason}`); },
+  onStampPlace: ({ layerId }) => { stampCalls.push({ kind: 'place', layerId }); },
+  onStampRejected: (reason) => { stampCalls.push({ kind: 'reject', reason }); },
   onTracePlace: (placements, layerId, droppedCount = 0) => { traceHook = { kind: 'place', count: placements.length, layerId, droppedCount }; },
   onTraceRejected: (reason, layerId) => { traceHook = { kind: 'reject', reason, layerId }; },
   onEraseSweep: (daubs, layerId, corridors, mode) => { eraseHook = { kind: 'sweep', daubs: daubs.length, layerId, mode }; },
@@ -131,15 +131,21 @@ function sync(layers, textStones = {}) {
 }
 const layerIdOfShape = (shapeId) => (tool.debugShapes.find((s) => s.id === shapeId) || {}).layerId || null;
 
-// Resolve a Stamp target at (xMm,yMm) exactly as a Stamp click does.
-function resolveStampTargetLayerId(xMm, yMm) {
+// A REAL Stamp click: Stamp mode, mousedown, mouseup. Returns what reached the hooks --
+// { kind:'place', layerId } (layerId may be null) or { kind:'reject', reason }.
+function runStampClick(xMm, yMm) {
   tool.setMode('stamp');
   stampCalls = [];
   emit('mousedown', xMm, yMm);
+  emit('mouseup', xMm, yMm);
   tool.setMode('select');
   assert.equal(stampCalls.length, 1, `expected exactly one onStampPlace/onStampRejected at (${xMm}, ${yMm})`);
-  const only = stampCalls[0];
-  return typeof only === 'string' && only.startsWith('__rejected__') ? only : (only || null);
+  return stampCalls[0];
+}
+// Thin wrapper for the cases that only care about the resolved 'path' id.
+function resolveStampTargetLayerId(xMm, yMm) {
+  const hook = runStampClick(xMm, yMm);
+  return hook.kind === 'reject' ? `__rejected__:${hook.reason}` : (hook.layerId || null);
 }
 
 // A REAL Trace drag: Trace mode, mousedown, N thinned mousedrag samples (>1mm apart -- the
@@ -208,6 +214,9 @@ const traceRejectStatus = buildRejectStatusFn(
 );
 const eraseRejectStatus = buildRejectStatusFn(
   'onEraseRejected:(reason)=>{', '(reason)', [], [],
+);
+const stampRejectStatus = buildRejectStatusFn(
+  'onStampRejected:(reason)=>{', '(reason)', [], [],
 );
 
 let passed = 0;
@@ -310,14 +319,48 @@ await runTest('a Stamp on a real generated monogram resolves the frame path, not
 });
 
 // =============================================================================================
-// 3. No eligible shape at all -> Stamp resolves null (kept from commit 2).
-//    Reachability: the user deleted a monogram's frame, keeping the lettering, and clicks Stamp.
+// 3a. Stamp over one ineligible shape, nothing beneath -> reason 'ineligible' + its status string.
+//     (commit 4 -- Stamp now makes the same distinction Trace/Eraser do; commit 3 froze
+//     resolveStampTargetLayerId()'s signature and left Stamp reporting the wrong thing here.)
+//     Reachability: the user deletes a monogram's frame, keeping the lettering, and clicks Stamp on
+//     it -- or clicks Stamp on any lone 'text'/'svg'/'image'/'circle'/'rectangle' layer.
 // =============================================================================================
-await runTest('a board with no path layer resolves null for Stamp (nothing to place a mark on)', () => {
+await runTest('Stamp over an ineligible shape with nothing beneath -> reason "ineligible" + its status string', () => {
   sync([textLayer()], { 'text-over': textOverPathStones });
-  const resolved = resolveStampTargetLayerId(P.x, P.y);
-  console.log(`    no-eligible-shape -- Stamp resolved layerId = ${JSON.stringify(resolved)}`);
-  assert.equal(resolved, null, 'no path proxy under the point -> null');
+  const hook = runStampClick(P.x, P.y);
+  assert.deepEqual(hook, { kind: 'reject', reason: 'ineligible' },
+    'a Stamp click wholly over a non-path proxy rejects as "ineligible" (NOT onStampPlace with null)');
+  const status = stampRejectStatus(hook.reason);
+  console.log(`    Stamp/ineligible -- reason = ${JSON.stringify(hook.reason)} ; status = ${JSON.stringify(status)}`);
+  assert.equal(status, 'Stamp: that layer cannot hold stamped stones — only drawn shapes can.');
+});
+
+// =============================================================================================
+// 3b. Stamp over a genuinely empty board -> today's null-layerId path, UNCHANGED.
+//     onStampPlace is still called with layerId null (not a reject) -- Stamp's always-call contract.
+//     Reachability: the user picks Stamp and clicks blank canvas.
+// =============================================================================================
+await runTest('Stamp over an empty board -> onStampPlace(layerId:null), unchanged (not a reject)', () => {
+  sync([]);
+  const hook = runStampClick(40, 40);
+  assert.deepEqual(hook, { kind: 'place', layerId: null },
+    'nothing under the click at all -> onStampPlace with a null layerId, exactly as before commit 4');
+  console.log(`    Stamp/empty-board -- hook = ${JSON.stringify(hook)} (app.js onStampPlace messages the null)`);
+});
+
+// =============================================================================================
+// 3c. Stamp over an ineligible shape that HAS a path beneath it -> still places on the path.
+//     NAMED CONTROL: if Stamp started rejecting instead of falling through, this is what fails.
+//     Reachability: the user clicks Stamp on a generated monogram's lettering (frame 'path' below).
+// =============================================================================================
+await runTest('Stamp over an ineligible proxy WITH a path beneath -> still places on the path (regression / named control)', () => {
+  sync([pathLayer(), textLayer()], { 'text-over': textOverPathStones });
+  const hook = runStampClick(P.x, P.y);
+  assert.deepEqual(hook, { kind: 'place', layerId: 'path-A' },
+    'the click falls THROUGH the ineligible text proxy and places on the path -- no rejection');
+  const selectHit = layerIdOfShape(tool.debugHitTestShapeId(P.x, P.y));
+  console.log(`    Stamp/ineligible-over-path -- hook = ${JSON.stringify(hook)} ; Select at same point = ${JSON.stringify(selectHit)}`);
+  assert.equal(selectHit, 'text-over', 'Select still picks the topmost (text) proxy -- mark resolver differs on purpose');
 });
 
 // =============================================================================================
@@ -418,10 +461,15 @@ await runTest('Trace entirely outside an active selection -> reason "outside-sel
   }
 });
 
-// 10. All four Trace status strings are distinct, and both Eraser strings are distinct (the
-//     collapse this whole plumbing exists to prevent).
-await runTest('every Trace reason and every Eraser reason maps to a DISTINCT status string', () => {
+// 10. Every reason maps to a DISTINCT status string, per tool AND across all three tools' reject
+//     hooks (the collapse this whole plumbing exists to prevent). Stamp's set: 'ineligible' +
+//     'outside-selection'.
+await runTest('every Stamp / Trace / Eraser reason maps to a DISTINCT status string', () => {
   projectRef.layers = [pathLayer()];
+  const stampStrings = [
+    stampRejectStatus('ineligible'),
+    stampRejectStatus('outside-selection'),
+  ];
   const traceStrings = [
     traceRejectStatus('no-target'),
     traceRejectStatus('ineligible'),
@@ -429,10 +477,16 @@ await runTest('every Trace reason and every Eraser reason maps to a DISTINCT sta
     traceRejectStatus('outside-selection'),
   ];
   const eraseStrings = [eraseRejectStatus('no-target'), eraseRejectStatus('ineligible')];
-  console.log(`    Trace strings: ${JSON.stringify(traceStrings, null, 0)}`);
+  console.log(`    Stamp strings:  ${JSON.stringify(stampStrings, null, 0)}`);
+  console.log(`    Trace strings:  ${JSON.stringify(traceStrings, null, 0)}`);
   console.log(`    Eraser strings: ${JSON.stringify(eraseStrings, null, 0)}`);
+  assert.equal(new Set(stampStrings).size, 2, 'two distinct Stamp status strings');
   assert.equal(new Set(traceStrings).size, 4, 'four distinct Trace status strings');
   assert.equal(new Set(eraseStrings).size, 2, 'two distinct Eraser status strings');
+  // Each tool's 'ineligible' names its own tool and is not shared with another tool's string.
+  const allIneligible = [stampStrings[0], traceStrings[1], eraseStrings[1]];
+  assert.equal(new Set(allIneligible).size, 3, "each tool's 'ineligible' message is its own");
+  assert.ok(stampStrings[0].startsWith('Stamp:') && traceStrings[1].startsWith('Trace:') && eraseStrings[1].startsWith('Eraser:'));
 });
 
 // =============================================================================================
