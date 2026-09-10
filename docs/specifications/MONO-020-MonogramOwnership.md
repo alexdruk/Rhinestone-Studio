@@ -5,9 +5,10 @@ merge (`cff7959`). Local only — not pushed.
 
 **Authorises:** the Monogram Lightbox owning the layer set it generated, so a second Generate
 *replaces* the previous monogram instead of stacking a new one on top of it — but only while that
-set is untouched. The moment the user edits a monogram layer in the Design workspace, the set is
-*released*: the next Generate leaves it in place and adds the new monogram alongside. No change to
-`MonogramGenerator.js`. No geometry change — no screenshots.
+set is **unchanged since generation**. The moment the user changes a monogram layer in the Design
+workspace — Stamp/Paint/Erase, *or* a move / resize / rotate — the set is *released*: the next
+Generate leaves it in place and adds the new monogram alongside. No change to `MonogramGenerator.js`.
+No geometry change — no screenshots.
 
 Builds directly on MONO-019's `assignInsertionLayerIds()` (the shared per-generation suffix is now
 also the set identity).
@@ -40,8 +41,11 @@ At Generate time, every set already in the project (grouped by `monogramSetId`) 
 
 | classification | condition | what Generate does |
 |---|---|---|
-| **replaceable** | *every* layer carrying that `monogramSetId` is free of Design-authored data | removed before the new monogram is inserted |
-| **released** | *any* layer carrying that `monogramSetId` has Design-authored data | left exactly where it is; the new monogram is inserted alongside it |
+| **replaceable** | *every* layer carrying that `monogramSetId` is unchanged since generation | removed before the new monogram is inserted |
+| **released** | *any* layer carrying that `monogramSetId` has changed since generation | left exactly where it is; the new monogram is inserted alongside it |
+
+"Changed since generation" means **either** a Design-authored data marker (Stamp/Paint/Erase)
+**or** a placement change (move / resize / rotate) — see the predicate section below.
 
 Classification is **set-level, not layer-level**. If the frame of a set is edited but its letters
 are not, the whole set — frame *and* letters — is released. A per-layer rule would delete the
@@ -67,8 +71,10 @@ every layer id in the project (and for `validateProject()`'s `Duplicate layer id
 
 ### The type-agnostic predicate
 
-`hasDesignAuthoredEdits(layer)` (near `assignInsertionLayerIds()` in `app.js`) returns `true` if any
-of these arrays is non-empty, or `naturalBoundingBoxMm` is defined:
+`hasDesignAuthoredEdits(layer)` (near `assignInsertionLayerIds()` in `app.js`) returns `true` if
+**either** half fires.
+
+**Marker half** — any of these arrays is non-empty, or `naturalBoundingBoxMm` is defined:
 
 - `regions` — Paint tool (RS-3011 Step 10b)
 - `stampedStones` — Stamp tool (RS-3011 Step 12)
@@ -79,11 +85,44 @@ of these arrays is non-empty, or `naturalBoundingBoxMm` is defined:
 These are exactly the five Design-authored `path` fields `app.js` already forwards into geometry
 generation (the `params` object built in `generatePathStonesLive()`).
 
-The predicate **deliberately does not branch on `layer.type`.** Today only `path` layers carry
-these fields, so in practice it is the frame layer that gets released. But when Design's toolset is
-extended to text layers (Paint/Stamp/Erase on letters), those same field names will appear on
-`text` layers, and this predicate must cover them **without modification**. Keying on field
-presence rather than layer type is what makes that true.
+**Placement half** — any snapshotted `monogramPlacement` field differs from the layer's current
+value. Move / resize / rotate — `onShapeMoved` → `setLayerPosition` (`l.x`/`l.y`), `onShapeResized`
+(`l.x`/`l.y`/`l.w`/`l.h`), `onShapeRotated` (`l.rotationDeg`), plus `nudgeSelection()` and
+Align/Distribute — write these fields and, unlike Stamp/Paint/Erase, leave **no marker of their
+own**. Without this half, "generate → drag the monogram into position → generate again" silently
+deletes the positioned set. So at insertion `assignInsertionLayerIds()` records
+`layer.monogramPlacement` = `captureMonogramPlacement(layer)`:
+
+- `x`, `y`, `rotationDeg` — always (they are universal layer fields with a well-defined `0`
+  default). In particular a generated **frame carries no `rotationDeg` key**, so snapshotting only
+  "the fields it carries" would miss a frame rotation entirely — this is a deliberate widening.
+- `w`, `h` — only when present (the box-shaped frame has them; a text letter never does).
+
+**Excluded from the snapshot:** `authoredScale`, `heightMm`, `stoneSize`/`stoneSizeMm`, `color`,
+`weightSizesMm`, `letterSpacing`. Those are *regenerate-from-parameters* concepts — changing a
+letter's stone size or colour through the ordinary controls is not a Design edit, it's a parameter
+the next Generate would re-apply anyway. `recoverStaleAuthoredScales()` also rewrites
+`authoredScale` on its own (grepped: it only ever does `delete l.authoredScale`, never a placement
+field), so a plain re-render must not look like an edit.
+
+**Comparison is at display precision, not raw float equality.** `writeSelectedControlsToLayer()`
+rewrites `l.x`/`l.y`/`l.rotationDeg` from the `#textX`/`#textY`/`#rotationDeg` inputs on *every*
+ordinary control edit of a selected text layer, and `setLengthField()` → `readLengthField()` rounds
+to 2 display decimals on the way through. A multi-letter monogram letter's generated `x` is a
+full-precision offset (real value observed: `-13.162527517437937`), so selecting that letter and
+changing its stone size rewrites `l.x` to `-13.16` — a ~0.0025 mm drift. A strict `!==` would flag
+that as a placement edit and release the set, breaking the milestone's core promise. The predicate
+therefore compares `formatLengthDisplay(current, project.units)` against
+`formatLengthDisplay(recorded, project.units)` for lengths (and `.toFixed(2)` for the angle): the
+benign round-trip is invisible, every real move still shows. The `test-mono-006` "NO FALSE
+POSITIVE (display rounding)" test pins this with the observed value.
+
+**Neither half branches on `layer.type`.** Today only `path` layers carry the marker fields, so in
+practice it is the frame that a stamp releases — but a **letter is already movable in Design**
+(`'text'` is in `syncFromProjectLayers()`'s filter), so the placement half releases a set the
+moment a letter is dragged, and that is the *only* kind of edit a letter can carry until Design's
+Paint/Stamp/Erase toolset is extended to text. When it is, those same marker field names will
+appear on `text` layers and this predicate covers them **without modification**.
 
 ### Why release-on-edit, not clear-on-edit
 
@@ -110,7 +149,7 @@ Between `assignInsertionLayerIds()` and the `project.layers.push(...)`:
 1. `assignInsertionLayerIds()` now returns `{ layers, suffix }`; `suffix` is the new set's
    `monogramSetId`.
 2. Partition the existing `project.layers` by `monogramSetId` into released / replaceable, using
-   `hasDesignAuthoredEdits()`.
+   `hasDesignAuthoredEdits()` (marker **or** placement).
 3. **`commitHistory()` first — before the removal** — so the removal *and* the insertion land in a
    single undo step. `HistoryManager` snapshots the whole project; one undo restores the previous
    monogram exactly, one redo re-applies the replacement.
@@ -127,15 +166,15 @@ Between `assignInsertionLayerIds()` and the `project.layers.push(...)`:
 
 ### Status line
 
-One line, composed from up to three clauses (the third is the pre-existing MONO-011/MONO-014
-frame-auto-shrink note):
+One dedicated sentence per case — **not** a concatenation of parts — then the pre-existing
+MONO-011/MONO-014 frame-auto-shrink note appended unchanged:
 
-| situation | status line |
+| situation | status sentence |
 |---|---|
 | nothing removed, nothing released | `Generated monogram (N layers).` |
 | a replaceable set was removed | `Replaced the previous monogram (N layers).` |
 | a set was released | `Kept your edited monogram and added a new one (N layers).` |
-| both happened in one Generate | both sentences, in that order |
+| both in one Generate | `Replaced the unedited monogram and kept your edited one (N layers).` |
 | frame stones auto-shrank | ` Frame stones reduced to <size> to fit.` appended |
 
 `N` is the new monogram's layer count in every case — the same referent the original
@@ -143,18 +182,20 @@ frame-auto-shrink note):
 
 ## 4. `duplicateLayer()`
 
-`duplicateLayer()` clones a layer via `JSON.parse(JSON.stringify(l))`, which copies
-`monogramSetId`. One added statement — `delete copy.monogramSetId` — drops it from the clone: a
+`duplicateLayer()` clones a layer via `JSON.parse(JSON.stringify(l))`, which copies both
+`monogramSetId` and `monogramPlacement`. One added statement —
+`delete copy.monogramSetId; delete copy.monogramPlacement` — drops them from the clone: a
 deliberate duplicate is the *user's* copy, not the Lightbox's, and must survive the next Generate
 rather than being silently removed as a replaceable monogram layer.
 
 ## 5. Pre-MONO-020 projects, and why the id prefix is not the marker
 
-Monogram layers in `.rhs` files saved before MONO-020 carry **no `monogramSetId`**. The
-classification in §2 requires a non-empty string `monogramSetId`, so those layers are neither
-replaceable nor released — they are invisible to the ownership logic and Generate stays purely
-additive for them. That cohort degrades to exactly the current behaviour. This is deliberate: there
-is no migration and no retroactive ownership.
+Monogram layers in `.rhs` files saved before MONO-020 carry **no `monogramSetId`** (and no
+`monogramPlacement`). The classification in §2 requires a non-empty string `monogramSetId`, so those
+layers are neither replaceable nor released — they are invisible to the ownership logic and Generate
+stays purely additive for them. A layer with no `monogramPlacement` is likewise not "moved" on that
+basis alone. That cohort degrades to exactly the current behaviour. This is deliberate: there is no
+migration and no retroactive ownership.
 
 Matching on the `mono-` id prefix to catch that cohort is **explicitly rejected.** Layer ids are
 identity, constrained by SEC-001's `LAYER_ID_PATTERN` (`/^[A-Za-z0-9_-]{1,64}$/`); putting
@@ -179,9 +220,23 @@ marker; old ones do not; that is the whole rule.
   what a `.rhs` saved before this milestone holds — and **no** `monogramSetId`. A prefix-matching
   implementation (the one §5 rejects) would delete both; the classification never touches them.
   Pre- and post-Generate counts and full id lists printed.
-- **Released set:** three separate cases — `stampedStones`, `eraseDaubs`, `naturalBoundingBoxMm` —
-  each asserting the owned set survives, the new set is added alongside, total count grows, and the
-  status line reports the release.
+- **Released set (marker):** three separate cases — `stampedStones`, `eraseDaubs`,
+  `naturalBoundingBoxMm` — each asserting the owned set survives, the new set is added alongside,
+  total count grows, and the status line reports the release.
+- **Released set (placement):** move / resize / rotate the frame — three separate cases, each
+  reproducing the exact field writes `onShapeMoved` / `onShapeResized` / `onShapeRotated` perform
+  (those hooks are outside this file's slice) after a real `generateMonogram()` — the set is
+  released. Plus **a moved *letter*** releases the whole set (frame + letters) — the case the
+  marker tests can't reach, since letters take no stamps.
+- **NO FALSE POSITIVE:** generate, then apply things that are *not* edits — several `updateAll`
+  cycles, a stone-size and colour change on a monogram letter, a selection change — and assert the
+  set is still **replaced**, with the placement snapshot vs live values printed side by side. A
+  second variant round-trips a full-precision letter `x` through
+  `formatLengthDisplay`/`displayValueToMm` (the `writeSelectedControlsToLayer()` path) and asserts
+  the ~0.0025 mm drift is *not* a placement edit.
+- **Undo restores replaceability:** generate, move the set (`commitHistory()` then the write),
+  undo, generate again — the set is replaced, because the placement snapshot came back with the
+  undo.
 - **Released-set id collision:** Generate → put `stampedStones` on set 1's frame → Generate (set 1
   released, set 2 added) → Generate (set 2 replaced, set 1 kept). All three generations use the same
   `frameId`+`layoutId`. Asserts and prints: the final id list; the two surviving `monogramSetId`
@@ -189,8 +244,8 @@ marker; old ones do not; that is the whole rule.
   and their counter segments (which do not); that the third generate's status line carries **both**
   clauses in one message, deterministic order (`Replaced …` then `Kept …`); and that
   `validateProject()` accepts the final project.
-- **`monogramSetId` persistence:** a project carrying `monogramSetId` passes the real
-  `validateProject()` (which preserves the field — S-200 permissive pass-through) and round-trips
+- **`monogramSetId` + `monogramPlacement` persistence:** a project carrying both passes the real
+  `validateProject()` (which preserves them — S-200 permissive pass-through) and round-trips
   through `JSON.stringify`/`parse` byte-for-byte (`deepEqual` on the whole project).
 - **Partial edit:** frame edited, letters not — the whole set (including the untouched letters)
   survives. Pins set-level ownership.
@@ -203,9 +258,11 @@ marker; old ones do not; that is the whole rule.
   is printed. (Uniqueness here is guaranteed by the replace path leaving one set; the
   released-set collision test above is the one that stresses the counter.)
 
-`tools/test-mono-019-layer-ids.mjs` — `extractAssignInsertionLayerIds()` unwraps the new
-`{ layers, suffix }` return so its id-focused call sites are unchanged; `.raw` exposes the
-un-unwrapped function for test 8, which pins the `{ layers, suffix }` shape: `suffix` a non-empty
-string, every returned layer's `monogramSetId === suffix` and `id` ending with `suffix`.
+`tools/test-mono-019-layer-ids.mjs` — the slice now starts at `MONOGRAM_PLACEMENT_LENGTH_FIELDS`
+and includes `captureMonogramPlacement()` (which `assignInsertionLayerIds()` calls);
+`extractAssignInsertionLayerIds()` unwraps the new `{ layers, suffix }` return so its id-focused
+call sites are unchanged, and `.raw` exposes the un-unwrapped function for test 8, which pins the
+`{ layers, suffix }` shape: `suffix` a non-empty string, every returned layer's
+`monogramSetId === suffix` and `id` ending with `suffix`.
 
 No committed geometry baseline moves. `MonogramGenerator.js` is byte-identical to `develop`.

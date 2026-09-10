@@ -3699,8 +3699,9 @@ async function eraseStonesWithinTest(targetLayer,withinTest){
 // a no-op for every non-'path' layer type via drawingTool's own internal lookup.
 function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();
   // MONO-020: a deliberate duplicate is the user's copy, not the Monogram Lightbox's -- drop the
-  // set marker so the next Generate does not silently delete it as a replaceable monogram layer.
-  delete copy.monogramSetId;
+  // set marker (and its placement snapshot) so the next Generate does not silently delete it as a
+  // replaceable monogram layer.
+  delete copy.monogramSetId;delete copy.monogramPlacement;
   // RS-3011 Step 3b: pushed here, before drawingTool.duplicateShapeForLayer() below, instead of
   // after every branch (as before this step) -- duplicateShapeForLayer() now builds the clone's own
   // stone Group immediately via the getLayerStoneParams(newLayerId) hook, which reads project.layers,
@@ -5420,18 +5421,59 @@ async function generateMonogramWithFrameAutoShrink(request){
 // LAYER_ID_PATTERN's 64-char cap -- see docs/specifications/MONO-019-LayerIds.md for the
 // arithmetic. A suffix collision would need 46656 generations inside one millisecond.
 
-// MONO-020: does this layer carry data authored by the Design workspace's own tools? Deliberately
-// does NOT branch on layer.type: text layers will gain these same five fields once Design's toolset
-// is extended to text, and this predicate must keep covering the whole monogram set without a
-// change here. The five names are exactly the Design-authored 'path' fields app.js forwards into
-// generation (the regions/stampedStones/eraseDaubs/erasedGridPositions/naturalBoundingBoxMm block
-// near validateProject()). See docs/specifications/MONO-020-MonogramOwnership.md.
+// MONO-020: the placement fields Design's move/resize/rotate write back to -- onShapeMoved (via
+// setLayerPosition: l.x/l.y), onShapeResized (l.x/l.y/l.w/l.h), onShapeRotated (l.rotationDeg), the
+// main-canvas drag, nudgeSelection() and Align/Distribute (also setLayerPosition). Unlike Stamp/
+// Paint/Erase these gestures leave NO marker of their own, so ownership tracks them by snapshotting
+// the placement at insertion (monogramPlacement) and comparing later. Handled here as lengths
+// (unit-converted for display) vs the one angle. NOT authoredScale/heightMm/stoneSize/color/
+// weightSizesMm/letterSpacing -- those are regenerate-from-parameters knobs, changing them is not a
+// Design edit, and recoverStaleAuthoredScales() rewrites authoredScale on its own.
+const MONOGRAM_PLACEMENT_LENGTH_FIELDS=['x','y','w','h'];
+
+// Snapshot the placement a generated layer was inserted with. x/y/rotationDeg are universal layer
+// fields with a well-defined 0 default (setLayerPosition, GeometryEngine's normalizeRotationDeg,
+// buildTextLayoutBaseParams()'s `?? 0`), so snapshot them unconditionally -- a generated frame
+// carries no rotationDeg key, and without this a frame rotated in Design would go undetected. w/h
+// exist only on the box-shaped frame, never on a text letter, so snapshot those only when present.
+// This is a deliberate widening of "whichever fields it carries" for rotationDeg; see the spec.
+function captureMonogramPlacement(layer){
+  const placement={x:layer.x??0,y:layer.y??0,rotationDeg:layer.rotationDeg??0};
+  if(layer.w!==undefined)placement.w=layer.w;
+  if(layer.h!==undefined)placement.h=layer.h;
+  return placement;
+}
+
+// Has `layer` diverged from the monogram it was generated as? True if EITHER a Design-authored
+// marker fires (Stamp/Paint/Erase -- the regions/stampedStones/eraseDaubs/erasedGridPositions/
+// naturalBoundingBoxMm block app.js forwards into generation, near validateProject()) OR any
+// snapshotted placement field has moved. Deliberately NOT branched on layer.type: text layers will
+// gain the marker fields once Design's toolset reaches text (they are already movable -- 'text' is
+// in syncFromProjectLayers()'s filter), and this predicate must cover them without a change here. A
+// layer with no monogramPlacement (a pre-MONO-020 .rhs, or any layer that never had one) is not
+// "edited" on the placement basis. See docs/specifications/MONO-020-MonogramOwnership.md.
 function hasDesignAuthoredEdits(layer){
   if(!layer)return false;
   for(const field of['regions','stampedStones','eraseDaubs','erasedGridPositions']){
     if(Array.isArray(layer[field])&&layer[field].length>0)return true;
   }
-  return layer.naturalBoundingBoxMm!==undefined;
+  if(layer.naturalBoundingBoxMm!==undefined)return true;
+  const placement=layer.monogramPlacement;
+  if(placement&&typeof placement==='object'){
+    // Compare at the precision the app actually persists a length/angle at, not raw float
+    // equality: writeSelectedControlsToLayer() rewrites l.x/l.y/l.rotationDeg from the #textX/
+    // #textY/#rotationDeg inputs on every ordinary control edit, and setLengthField()->
+    // readLengthField() rounds to 2 display decimals on the way through. A multi-letter monogram
+    // letter's generated x is a full-precision offset (e.g. -13.162527517437937), so a strict
+    // !== would flag "changed stone size on a monogram letter" as a placement edit. Rounding both
+    // sides to display precision makes that round-trip invisible while any real move still shows.
+    for(const field of MONOGRAM_PLACEMENT_LENGTH_FIELDS){
+      if(!(field in placement))continue;
+      if(formatLengthDisplay(layer[field]??0,project.units)!==formatLengthDisplay(placement[field],project.units))return true;
+    }
+    if('rotationDeg' in placement&&Number(layer.rotationDeg??0).toFixed(2)!==Number(placement.rotationDeg).toFixed(2))return true;
+  }
+  return false;
 }
 
 let monogramGenerationCounter=0;
@@ -5444,6 +5486,10 @@ function assignInsertionLayerIds(layers){
     // except set membership -- the mono- id prefix is NOT a substitute for it (SEC-001 keeps
     // semantics out of ids).
     layer.monogramSetId=suffix;
+    // MONO-020: ownership means "unchanged since generation", so snapshot the placement now. A
+    // later Design move/resize/rotate makes hasDesignAuthoredEdits() return true and the set is
+    // released instead of replaced.
+    layer.monogramPlacement=captureMonogramPlacement(layer);
   }
   return{layers,suffix};
 }
@@ -5508,18 +5554,21 @@ async function generateMonogram(){
   // on canvas.
   updateAll(true,true);
   lightboxes.monogram.close();
-  // MONO-020: compose one status line from up to three clauses -- what happened to the previous
-  // set(s), then the pre-existing frame-auto-shrink note. N in every "(N layers)" is the new
-  // monogram's layer count, the same referent the original "Generated monogram (N layers)." used.
-  // MONO-014 still holds: the auto-shrink adjustment is surfaced here and NOT written back into
-  // #monogramFrameStoneSize, which is hidden whenever the frame-stone toggle is unchecked.
-  const layerWord=n=>`${n} layer${n===1?'':'s'}`;
-  const clauses=[];
-  if(removedLayerCount>0)clauses.push(`Replaced the previous monogram (${layerWord(result.layers.length)}).`);
-  if(releasedSetIds.size>0)clauses.push(`Kept your edited monogram and added a new one (${layerWord(result.layers.length)}).`);
-  if(clauses.length===0)clauses.push(`Generated monogram (${layerWord(result.layers.length)}).`);
-  if(appliedFrameStoneSizeMm!=null)clauses.push(`Frame stones reduced to ${formatStoneSizeLabel(appliedFrameStoneSizeMm)} to fit.`);
-  el('status').textContent=clauses.join(' ');
+  // MONO-020: one dedicated ownership sentence (not a concatenation of parts) for each of the four
+  // cases, then the pre-existing frame-auto-shrink note appended unchanged. N in every "(N layers)"
+  // is the new monogram's layer count -- the same referent the original "Generated monogram (N
+  // layers)." used. MONO-014 still holds: the auto-shrink adjustment is surfaced here and NOT
+  // written back into #monogramFrameStoneSize, which is hidden whenever the frame-stone toggle is
+  // unchecked.
+  const n=`${result.layers.length} layer${result.layers.length===1?'':'s'}`;
+  let ownershipMsg;
+  if(removedLayerCount>0&&releasedSetIds.size>0)ownershipMsg=`Replaced the unedited monogram and kept your edited one (${n}).`;
+  else if(removedLayerCount>0)ownershipMsg=`Replaced the previous monogram (${n}).`;
+  else if(releasedSetIds.size>0)ownershipMsg=`Kept your edited monogram and added a new one (${n}).`;
+  else ownershipMsg=`Generated monogram (${n}).`;
+  const parts=[ownershipMsg];
+  if(appliedFrameStoneSizeMm!=null)parts.push(`Frame stones reduced to ${formatStoneSizeLabel(appliedFrameStoneSizeMm)} to fit.`);
+  el('status').textContent=parts.join(' ');
 }
 populateMonogramFrameOptions();populateMonogramLayoutOptions();populateMonogramStoneSizeOptions();populateStoneColorOptions('monogramColor');
 populateMonogramFrameStoneSizeOptions();populateStoneColorOptions('monogramFrameColor');

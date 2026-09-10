@@ -63,11 +63,14 @@ async function extractProjectFunctions() {
   )(getObjectTemplate, SHAPE_LIBRARY_KINDS, getPlateDefaults, normalizePlateParams, VESSEL_PRODUCT_IDS, getVesselDefaults, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel);
 }
 
-// The MONO-019 re-id helper, sliced from app.js's Monogram Lightbox section and executed as-is. It
-// touches no browser globals -- only Date -- so it runs unmodified in Node.
+// The MONO-019 re-id helper, sliced from app.js's Monogram Lightbox section and executed as-is.
+// MONO-020: assignInsertionLayerIds() now also calls captureMonogramPlacement(), so the slice
+// starts at the MONOGRAM_PLACEMENT_LENGTH_FIELDS const and runs through the re-id function. Only
+// Date is touched at call time (hasDesignAuthoredEdits(), also caught in the slice, references
+// formatLengthDisplay/project but is never called here), so it still runs unmodified in Node.
 function extractAssignInsertionLayerIds() {
-  const m = appJs.match(/let monogramGenerationCounter=0;\nfunction assignInsertionLayerIds\(layers\)\{[\s\S]*?\n\}/);
-  assert.ok(m, 'expected to find assignInsertionLayerIds() in app.js');
+  const m = appJs.match(/const MONOGRAM_PLACEMENT_LENGTH_FIELDS=\[[^\]]*\];[\s\S]*?\nlet monogramGenerationCounter=0;\nfunction assignInsertionLayerIds\(layers\)\{[\s\S]*?\n\}/);
+  assert.ok(m, 'expected to find captureMonogramPlacement()/assignInsertionLayerIds() in app.js');
   // eslint-disable-next-line no-new-func
   const raw = new Function(`${m[0]}\nreturn assignInsertionLayerIds;`)();
   // MONO-020 changed assignInsertionLayerIds() to return {layers, suffix} (the suffix is also
