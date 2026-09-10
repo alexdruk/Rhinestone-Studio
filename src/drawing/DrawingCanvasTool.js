@@ -985,7 +985,7 @@ function materializeCircleItemFromLayer(layer) {
  * (shouldn't happen post-Step-1, but mirrors this file's existing null-layerId guards) is skipped,
  * never passed through as undefined.
  * @param {HTMLCanvasElement} canvasEl
- * @param {{getStoneDefaults?:()=>{stoneSize?:number,gap?:number,color?:string}, onShapeCommitted?:(layer:object)=>void, openHistorySession?:()=>void, closeHistorySession?:()=>void, onShapeMoved?:(layerId:string,dxMm:number,dyMm:number)=>void, onShapeResized?:(layerId:string,boundsMm:{left:number,top:number,width:number,height:number})=>void, onShapeRotated?:(layerId:string,rotationDeg:number)=>void, onShapeDeleted?:(layerId:string)=>(boolean|void), onSelectionChanged?:(layerIds:string[])=>void, onViewportChanged?:()=>void, onPaintStroke?:(lassoPolygons:{xMm:number,yMm:number}[][])=>void, onStampPlace?:(placement:{xMm:number,yMm:number,layerId:string|null})=>void, onTracePlace?:(placements:{xMm:number,yMm:number}[],layerId:string,droppedCount?:number)=>void, onEraseSweep?:(daubsAbsoluteMm:{xMm:number,yMm:number}[],layerId:string,corridorPolygonsAbsoluteMm:{xMm:number,yMm:number}[][],mode:('stones'|'outline'))=>void, resolveSelectionTarget?:(polygonAbsoluteMm:{xMm:number,yMm:number}[][])=>({layerId:string,contours:{xMm:number,yMm:number}[][]}|{precisionError:true}|null), hitTestRegion?:(pointAbsoluteMm:{xMm:number,yMm:number},marginMm:number)=>({layerId:string,regionId:string,polygon:{xMm:number,yMm:number}[]}|null), onActiveSelectionChanged?:()=>void, isPointInActiveSelection?:(pointAbsoluteMm:{xMm:number,yMm:number},selection:*)=>boolean, onStampRejected?:()=>void, onTraceRejected?:()=>void, onSelectionTargetPrecisionError?:()=>void}} [hooks] onShapeDeleted returning exactly `false` means the deletion was blocked (e.g. a last-layer guard) -- the shape stays in `board.shapes` too, everything else treats a non-`false` return as success. RS-3011 Step 10b: onPaintStroke(lassoPolygons) fires once a Paint lasso release produces a usable stroke (>= PAINT_MIN_LASSO_POINTS) -- lassoPolygons is exactly one closed ring, absolute project-mm, this module's own coordinate space (Paper.js project units already equal this app's millimeters, per this file's own header comment). Target selection, region creation, and every project.layers mutation happen entirely in app.js -- this hook is this module's only involvement in Paint beyond the pointer interaction and live preview. RS-3011 Step 12: onStampPlace(placement) fires once per Stamp click -- xMm/yMm is the click point, absolute project-mm, this module's own coordinate space; layerId is the project.layers id resolved via resolveStampTargetLayerId() (the SAME hitTestShapeId() Select's own click-to-pick-a-shape branch uses), or null if the click hit no shape. Passing the already-resolved layerId (rather than a bare point, unlike onPaintStroke) avoids a second, duplicate hit-test implementation living in app.js -- app.js still owns the absolute-to-natural-space coordinate conversion and every project.layers mutation, discarding silently when layerId is null, mirroring Paint's own "no target -> discard" precedent. RS-3011 Step 11: onTracePlace(placements, layerId) fires once per committed Trace drag that resolved a real target AND produced at least one spaced point -- placements is the full list of stones to place, absolute project-mm, this module's own coordinate space, already spaced by src/geometry/lineStampSpacing.js's placeStonesAlongPath(); layerId is always a real project.layers id here (never null -- a null/no-target resolution discards the whole drag silently before this hook is ever called, unlike onStampPlace's own "always call, layerId may be null" contract, since there is no per-point ghost-preview equivalent for Trace that would need the null case). app.js still owns the absolute-to-natural-space conversion and every project.layers mutation, mirroring onStampPlace's own architecture split, just plural. RS-3011 Step 13: onEraseSweep(daubsAbsoluteMm, layerId) fires once per committed Eraser click/drag sweep that resolved a real target -- daubsAbsoluteMm is every buffered point from the gesture (one for a plain click, one per TRACE_MIN_SAMPLE_DISTANCE_MM-thinned sample along a drag, same thinning as Trace's own placements), absolute project-mm, this module's own coordinate space, NOT yet spaced/filtered in any way (a daub is a raw brush touch, not a stone placement); layerId is always a real project.layers id here, same "never null" contract as onTracePlace's own (resolved via resolveEraserTargetLayerId() -- RS-3014 Step 5: per-point resolution against every buffered point in drag order, first real match wins, NOT Trace's own single-aggregate-bounding-box-center approach, since an edge-hugging Eraser drag's own aggregate center too easily sits outside the target shape even when the sweep itself clearly touches it; degenerates correctly to the click point itself for a single-point click). This module deliberately has no opinion on daub radius -- that's app.js's own eraserSettings.radiusMm (a tool setting, not read from any layer field), attached per point only once app.js owns the coordinate conversion, mirroring onTracePlace/onStampPlace's own architecture split. RS-3014 Step 3 (Dual-mode Eraser): corridorPolygonsAbsoluteMm is the SAME sweep's buffered points already turned into one or more closed, filled rings via buildEraserCorridorPolygons() (capsule-per-segment, unioned with Paper.js's own PathItem#unite()) -- absolute project-mm, this module's own coordinate space, same convention as daubsAbsoluteMm itself; only meaningful to Outline mode (app.js's own combineShapeSources() cut), a 'stones' gesture ignores it and keeps using daubsAbsoluteMm exactly as before. `mode` is this module's own eraserMode value (see setEraserMode()) captured at the START of this gesture (onMouseDown), NOT read live from app.js's eraserSettings.mode at the moment this hook fires -- a mode switch mid-drag must not retroactively change what an already-in-flight sweep does, so app.js must branch on the mode this parameter reports, never its own live eraserSettings.mode, when deciding how to apply a given sweep. RS-3013 Step 1: resolveSelectionTarget(polygonAbsoluteMm) is Select's rectangle-drag/Lasso's own drag calling app.js's shared resolvePaintTargetTwoPass() (the same selectPaintTarget() choreography onPaintStroke's own architecture already runs) to find which 'path' layer, if any, the drawn rectangle/lasso overlaps most -- returns {layerId, contours} or null, mirroring onPaintStroke's own "no target -> discard" contract; this module stores the result as an in-memory activeSelection draft, never a real region (that stays Paint's job alone). Bugfix: a third possible return shape, {precisionError:true} (app.js's own PAINT_TARGET_PRECISION_ERROR sentinel), fires when the stroke/rectangle DID overlap a candidate but selectPaintTarget()'s own boolean intersection couldn't be computed at a safe precision -- this module's own onMouseUp 'selectRect'/'lasso' branches duck-type on `.precisionError` and call the new onSelectionTargetPrecisionError() hook instead of treating it as either a real target or a genuine no-overlap null. hitTestRegion(pointAbsoluteMm, marginMm) is Select/Lasso's own click-to-select-an-existing-region hit-test -- app.js delegates to hitTestPathLayerRegion() (src/geometry/PaintRegionSelection.js) since a region lives in project.layers[].regions, data this module never touches directly; marginMm is already converted from screen-px by this module's own REGION_HIT_MARGIN_PX / paper.view.zoom. RS-3013 Step 2: onRegionMoved(layerId, regionId, dxMm, dyMm) fires once, at mouseup only, when a real (non-zero-offset) drag on a selected region's own footprint commits -- dxMm/dyMm is the drag's total offset, absolute project-mm; app.js translates the region's current polygon by that offset and writes it back through the SAME absolutePolygonsToNaturalSpace() (src/geometry/PaintRegionSelection.js) onPaintStroke's own region creation already uses. Returns the region's updated absolute-mm polygon on success (this module rebuilds activeSelectionItem's outline from that returned polygon, never from wherever the live per-frame preview translation left it, so the two can't drift), or null if the region/layer no longer exists. RS-3013 Step 5: onActiveSelectionChanged() fires with no arguments every time setActiveSelection() (the one place `activeSelection` is ever reassigned) settles on a new value -- a region click, a region losing selection, a draft rect/lasso selection, or a clear. Not fired during a live region-move drag's own per-frame preview (that path mutates activeSelectionItem directly via Paper.js translate(), bypassing setActiveSelection() entirely, per that function's own doc comment) -- app.js's Inspector-resync handler can treat every firing as a discrete, settled change worth reacting to. RS-3012 Step 1: isPointInActiveSelection(pointAbsoluteMm, selection) is Stamp/Trace's own selection-boundary test, called with the click/drag point (absolute project-mm, this module's own coordinate space) and this module's own live `activeSelection` value (passed through explicitly rather than re-read by app.js, since the caller -- this module -- already has it in scope); returns true (no constraint) for a null selection, and for a real one resolves EITHER a 'region' selection's current absolute polygon (project.layers[].regions data, resolved app.js-side the same way hitTestRegion/onRegionMoved above already do) OR a 'draft' selection's own boundsOrContour directly (already absolute-mm, no project.layers lookup needed) -- a hard interior test, no margin/tolerance, unlike hitTestRegion's own forgiving click-tolerance. onStampRejected() fires in place of onStampPlace when a Stamp click resolves outside the active selection's own boundary -- no history entry, no stone placed; app.js turns this into a status message. onTraceRejected() fires in place of onTracePlace when EVERY point of a committed Trace drag's own spaced placements list falls outside the active selection's own boundary (this module filters placements itself before calling onTracePlace, so a PARTIAL rejection instead reaches onTracePlace as a shorter placements list plus the new droppedCount 3rd argument above) -- no history entry, no stones placed; app.js turns this into a status message distinct from today's pre-existing, message-less "fewer than 2 buffered points" discard. Bugfix: onSelectionTargetPrecisionError() fires in place of resolveSelectionTarget()'s own normal result-handling in the 'selectRect'/'lasso' onMouseUp branches when that call returns the {precisionError:true} sentinel described above -- no draft selection created, no history entry; app.js turns this into a status message distinct from both onStampRejected/onTraceRejected's own and the existing "no target -> discard" case.
+ * @param {{getStoneDefaults?:()=>{stoneSize?:number,gap?:number,color?:string}, onShapeCommitted?:(layer:object)=>void, openHistorySession?:()=>void, closeHistorySession?:()=>void, onShapeMoved?:(layerId:string,dxMm:number,dyMm:number)=>void, onShapeResized?:(layerId:string,boundsMm:{left:number,top:number,width:number,height:number})=>void, onShapeRotated?:(layerId:string,rotationDeg:number)=>void, onShapeDeleted?:(layerId:string)=>(boolean|void), onSelectionChanged?:(layerIds:string[])=>void, onViewportChanged?:()=>void, onPaintStroke?:(lassoPolygons:{xMm:number,yMm:number}[][])=>void, onStampPlace?:(placement:{xMm:number,yMm:number,layerId:string|null})=>void, onTracePlace?:(placements:{xMm:number,yMm:number}[],layerId:string,droppedCount?:number)=>void, onEraseSweep?:(daubsAbsoluteMm:{xMm:number,yMm:number}[],layerId:string,corridorPolygonsAbsoluteMm:{xMm:number,yMm:number}[][],mode:('stones'|'outline'))=>void, resolveSelectionTarget?:(polygonAbsoluteMm:{xMm:number,yMm:number}[][])=>({layerId:string,contours:{xMm:number,yMm:number}[][]}|{precisionError:true}|null), hitTestRegion?:(pointAbsoluteMm:{xMm:number,yMm:number},marginMm:number)=>({layerId:string,regionId:string,polygon:{xMm:number,yMm:number}[]}|null), onActiveSelectionChanged?:()=>void, isPointInActiveSelection?:(pointAbsoluteMm:{xMm:number,yMm:number},selection:*)=>boolean, onStampRejected?:(reason:('ineligible'|'outside-selection'))=>void, onTraceRejected?:(reason:('no-target'|'ineligible'|'no-stones'|'outside-selection'),layerId?:string)=>void, onEraseRejected?:(reason:('no-target'|'ineligible'))=>void, onSelectionTargetPrecisionError?:()=>void}} [hooks] onShapeDeleted returning exactly `false` means the deletion was blocked (e.g. a last-layer guard) -- the shape stays in `board.shapes` too, everything else treats a non-`false` return as success. RS-3011 Step 10b: onPaintStroke(lassoPolygons) fires once a Paint lasso release produces a usable stroke (>= PAINT_MIN_LASSO_POINTS) -- lassoPolygons is exactly one closed ring, absolute project-mm, this module's own coordinate space (Paper.js project units already equal this app's millimeters, per this file's own header comment). Target selection, region creation, and every project.layers mutation happen entirely in app.js -- this hook is this module's only involvement in Paint beyond the pointer interaction and live preview. RS-3011 Step 12: onStampPlace(placement) fires once per Stamp click -- xMm/yMm is the click point, absolute project-mm, this module's own coordinate space; layerId is the project.layers id resolved via resolveStampTargetLayerId() (the SAME hitTestShapeId() Select's own click-to-pick-a-shape branch uses), or null if the click hit no shape. Passing the already-resolved layerId (rather than a bare point, unlike onPaintStroke) avoids a second, duplicate hit-test implementation living in app.js -- app.js still owns the absolute-to-natural-space coordinate conversion and every project.layers mutation, discarding silently when layerId is null, mirroring Paint's own "no target -> discard" precedent. RS-3011 Step 11: onTracePlace(placements, layerId) fires once per committed Trace drag that resolved a real target AND produced at least one spaced point -- placements is the full list of stones to place, absolute project-mm, this module's own coordinate space, already spaced by src/geometry/lineStampSpacing.js's placeStonesAlongPath(); layerId is always a real 'path' project.layers id here whose stones are generated (never null -- RS-3015: a no-target / ineligible-proxy / stones-not-generated-yet resolution now fires onTraceRejected(reason[,layerId]) instead of this hook, and a fully-out-of-selection drag fires onTraceRejected('outside-selection'), so this hook is never handed a null or a non-'path' or a stones-pending layer). app.js still owns the absolute-to-natural-space conversion and every project.layers mutation, mirroring onStampPlace's own architecture split, just plural. RS-3011 Step 13: onEraseSweep(daubsAbsoluteMm, layerId) fires once per committed Eraser click/drag sweep that resolved a real target -- daubsAbsoluteMm is every buffered point from the gesture (one for a plain click, one per TRACE_MIN_SAMPLE_DISTANCE_MM-thinned sample along a drag, same thinning as Trace's own placements), absolute project-mm, this module's own coordinate space, NOT yet spaced/filtered in any way (a daub is a raw brush touch, not a stone placement); layerId is always a real 'path' project.layers id here, same "never null" contract as onTracePlace's own (resolved via resolveEraserTarget() -- RS-3014 Step 5: per-point resolution against every buffered point in drag order, first real match wins, NOT Trace's own single-aggregate-bounding-box-center approach, since an edge-hugging Eraser drag's own aggregate center too easily sits outside the target shape even when the sweep itself clearly touches it; degenerates correctly to the click point itself for a single-point click). RS-3015: a no-target or ineligible-proxy resolution now fires onEraseRejected(reason) instead of this hook, so a null layerId never reaches here. This module deliberately has no opinion on daub radius -- that's app.js's own eraserSettings.radiusMm (a tool setting, not read from any layer field), attached per point only once app.js owns the coordinate conversion, mirroring onTracePlace/onStampPlace's own architecture split. RS-3014 Step 3 (Dual-mode Eraser): corridorPolygonsAbsoluteMm is the SAME sweep's buffered points already turned into one or more closed, filled rings via buildEraserCorridorPolygons() (capsule-per-segment, unioned with Paper.js's own PathItem#unite()) -- absolute project-mm, this module's own coordinate space, same convention as daubsAbsoluteMm itself; only meaningful to Outline mode (app.js's own combineShapeSources() cut), a 'stones' gesture ignores it and keeps using daubsAbsoluteMm exactly as before. `mode` is this module's own eraserMode value (see setEraserMode()) captured at the START of this gesture (onMouseDown), NOT read live from app.js's eraserSettings.mode at the moment this hook fires -- a mode switch mid-drag must not retroactively change what an already-in-flight sweep does, so app.js must branch on the mode this parameter reports, never its own live eraserSettings.mode, when deciding how to apply a given sweep. RS-3013 Step 1: resolveSelectionTarget(polygonAbsoluteMm) is Select's rectangle-drag/Lasso's own drag calling app.js's shared resolvePaintTargetTwoPass() (the same selectPaintTarget() choreography onPaintStroke's own architecture already runs) to find which 'path' layer, if any, the drawn rectangle/lasso overlaps most -- returns {layerId, contours} or null, mirroring onPaintStroke's own "no target -> discard" contract; this module stores the result as an in-memory activeSelection draft, never a real region (that stays Paint's job alone). Bugfix: a third possible return shape, {precisionError:true} (app.js's own PAINT_TARGET_PRECISION_ERROR sentinel), fires when the stroke/rectangle DID overlap a candidate but selectPaintTarget()'s own boolean intersection couldn't be computed at a safe precision -- this module's own onMouseUp 'selectRect'/'lasso' branches duck-type on `.precisionError` and call the new onSelectionTargetPrecisionError() hook instead of treating it as either a real target or a genuine no-overlap null. hitTestRegion(pointAbsoluteMm, marginMm) is Select/Lasso's own click-to-select-an-existing-region hit-test -- app.js delegates to hitTestPathLayerRegion() (src/geometry/PaintRegionSelection.js) since a region lives in project.layers[].regions, data this module never touches directly; marginMm is already converted from screen-px by this module's own REGION_HIT_MARGIN_PX / paper.view.zoom. RS-3013 Step 2: onRegionMoved(layerId, regionId, dxMm, dyMm) fires once, at mouseup only, when a real (non-zero-offset) drag on a selected region's own footprint commits -- dxMm/dyMm is the drag's total offset, absolute project-mm; app.js translates the region's current polygon by that offset and writes it back through the SAME absolutePolygonsToNaturalSpace() (src/geometry/PaintRegionSelection.js) onPaintStroke's own region creation already uses. Returns the region's updated absolute-mm polygon on success (this module rebuilds activeSelectionItem's outline from that returned polygon, never from wherever the live per-frame preview translation left it, so the two can't drift), or null if the region/layer no longer exists. RS-3013 Step 5: onActiveSelectionChanged() fires with no arguments every time setActiveSelection() (the one place `activeSelection` is ever reassigned) settles on a new value -- a region click, a region losing selection, a draft rect/lasso selection, or a clear. Not fired during a live region-move drag's own per-frame preview (that path mutates activeSelectionItem directly via Paper.js translate(), bypassing setActiveSelection() entirely, per that function's own doc comment) -- app.js's Inspector-resync handler can treat every firing as a discrete, settled change worth reacting to. RS-3012 Step 1: isPointInActiveSelection(pointAbsoluteMm, selection) is Stamp/Trace's own selection-boundary test, called with the click/drag point (absolute project-mm, this module's own coordinate space) and this module's own live `activeSelection` value (passed through explicitly rather than re-read by app.js, since the caller -- this module -- already has it in scope); returns true (no constraint) for a null selection, and for a real one resolves EITHER a 'region' selection's current absolute polygon (project.layers[].regions data, resolved app.js-side the same way hitTestRegion/onRegionMoved above already do) OR a 'draft' selection's own boundsOrContour directly (already absolute-mm, no project.layers lookup needed) -- a hard interior test, no margin/tolerance, unlike hitTestRegion's own forgiving click-tolerance. onStampRejected(reason) fires in place of onStampPlace when a Stamp click either resolves outside the active selection's own boundary (reason 'outside-selection', RS-3012) or resolves no eligible target while landing inside an ineligible proxy's bounds (reason 'ineligible', RS-3015 -- the same distinction Trace/Eraser make, known from resolveMarkTargetByBounds()'s blockedByIneligible, never from a layer type) -- no history entry, no stone placed; app.js turns each into its own status message. Stamp's remaining "nothing under the click at all" case is NOT a reject: onStampPlace is still called with layerId null (Stamp's ghost-preview architecture needs the always-call contract, unlike Trace/Eraser), and app.js messages the null there. onTraceRejected(reason, layerId) fires in place of onTracePlace for every committed Trace drag that resolves nothing usable -- no history entry, no stones placed; app.js turns each reason into its own status message. reason is: 'no-target' (no eligible shape under the stroke at all), 'ineligible' (a shape WAS under it but markEligible filtered it -- the module knows this from resolveTraceTarget()'s blockedByIneligible, never from a layer type), 'no-stones' (a real 'path' layer whose stones aren't generated yet -- getLayerStoneParams returned null and after RS-3015's markEligible filter a non-null layerId here is necessarily 'path', so that can only mean stonesGenerated===false; layerId is passed so app.js can name it), or 'outside-selection' (RS-3012: EVERY point of the drag's spaced placements list fell outside the active selection -- this module filters placements itself, so a PARTIAL rejection instead reaches onTracePlace as a shorter placements list plus the droppedCount 3rd argument above; distinct from today's pre-existing, message-less "fewer than 2 buffered points" / "no spaced points" discards, which stay silent). onEraseRejected(reason) is Eraser's counterpart -- reason is 'no-target' or 'ineligible' only (Eraser has no 'no-stones': it targets the 'path' layer regardless, and app.js's onEraseSweep already reports "nothing to erase" when it holds no stones). Bugfix: onSelectionTargetPrecisionError() fires in place of resolveSelectionTarget()'s own normal result-handling in the 'selectRect'/'lasso' onMouseUp branches when that call returns the {precisionError:true} sentinel described above -- no draft selection created, no history entry; app.js turns this into a status message distinct from both onStampRejected/onTraceRejected's own and the existing "no target -> discard" case.
  */
 export function createDrawingTool(canvasEl, hooks = {}) {
   const {
@@ -1042,14 +1042,18 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     // never touched directly here -- same architecture split as hitTestRegion/resolveSelectionTarget
     // above.
     isPointInActiveSelection = () => true,
-    // RS-3012 Step 1: fires in place of onStampPlace when a click resolves outside the active
-    // selection's own boundary -- see this function's own hooks-param doc comment above for the
-    // exact contract.
+    // RS-3012 Step 1 / RS-3015: fires in place of onStampPlace when a Stamp click resolves outside
+    // the active selection ('outside-selection') or resolves no eligible target while inside an
+    // ineligible proxy ('ineligible') -- see this function's own hooks-param doc comment above.
     onStampRejected = () => {},
-    // RS-3012 Step 1: fires in place of onTracePlace when a committed Trace drag's every point falls
-    // outside the active selection's own boundary -- see this function's own hooks-param doc comment
-    // above for the exact contract.
+    // RS-3012 Step 1 / RS-3015: fires in place of onTracePlace for any committed Trace drag that
+    // resolves nothing usable -- reason is 'no-target' | 'ineligible' | 'no-stones' |
+    // 'outside-selection', layerId is passed for 'no-stones'. See this function's own hooks-param
+    // doc comment above for the exact contract.
     onTraceRejected = () => {},
+    // RS-3015: Eraser's counterpart to onTraceRejected -- fires in place of onEraseSweep when a
+    // sweep resolves no eligible target ('no-target') or only ineligible proxies ('ineligible').
+    onEraseRejected = () => {},
     // Bugfix (BooleanPrecisionError at the gesture boundary): fires in place of the normal
     // resolveSelectionTarget()-result handling in the 'selectRect'/'lasso' onMouseUp branches below,
     // when that call's return value is the PAINT_TARGET_PRECISION_ERROR sentinel (a plain
@@ -1477,36 +1481,86 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   /**
    * RS-3011 Part B: the project.layers id of whichever finalized shape's BOUNDING BOX (not fill
    * containment) `point` falls inside, topmost-first, or null -- the target-resolution hit-test for
-   * Stamp/Trace/Eraser (resolveStampTargetLayerId/resolveTraceTargetLayerId below), deliberately
+   * Stamp/Trace/Eraser (resolveStampTargetLayerId/resolveTraceTarget/resolveEraserTarget below), deliberately
    * SEPARATE from hitTestShapeId() above. hitTestShapeId()'s strict fill-containment is the right
    * test for Select's own click-to-pick (a click in genuinely empty space between two shapes must
    * select neither) -- but Stamp/Trace/Eraser's job is different: deciding which existing layer a
-   * manually-placed mark should belong to, for move/resize/export tracking. A shape can have a
-   * genuinely hollow/empty interior (e.g. an imported SVG with an open center) where a user still
-   * reasonably wants to place a stamp that tracks that shape -- strict fill-containment would block
-   * that outright. `shape.item.bounds.contains(point)` is Paper.js's own axis-aligned
-   * Rectangle#contains, a plain bounding-box test. Same topmost-first iteration order/reasoning as
-   * hitTestShapeId()'s own hotfix (board.listShapes() is push-ordered oldest-first; reverse-
-   * iterating visits the topmost shape first -- see that function's own doc comment).
+   * manually-placed mark should belong to, for move/resize/export tracking. A genuinely hollow/empty
+   * interior (a hand-drawn ring, an `evenodd` outline with a hole) is a 'path' layer a user still
+   * reasonably wants to place a stamp inside so it tracks that shape -- strict fill-containment would
+   * block that outright. `shape.item.bounds.contains(point)` is Paper.js's own axis-aligned
+   * Rectangle#contains, a plain bounding-box test.
+   *
+   * RS-3015: only a 'path' proxy is a valid mark target. Every OTHER proxy this method walks past --
+   * 'text' (a plain bbox rectangle over the stones, materializeTextItemFromLayer()), 'svg', 'image',
+   * 'circle', 'rectangle', shape-library -- is SKIPPED (item.data.markEligible !== true, stamped at
+   * every layerId-stamp site so the resolver never has to read project.layers), and iteration
+   * continues DOWN the stack to whatever sits under it. Without this, a mark dropped anywhere inside
+   * such a proxy's bounding box resolved that non-'path' layer and app.js's onStampPlace /
+   * onTracePlace / onEraseSweep discarded it in silence -- most visibly a stamp on a generated
+   * monogram, whose joined-string 'text' bbox proxy shadows the frame 'path' beneath it. (The
+   * pre-RS-3015 rationale above cited a hollow imported SVG accepting a stamp; that never actually
+   * worked -- an SVG layer is type 'svg', now skipped -- so the hollow-interior case is a 'path'
+   * layer only.) The silence is gone too: Stamp / Trace / Eraser all fire
+   * onStampRejected/onTraceRejected/onEraseRejected with a reason ('ineligible' when a shape was
+   * under the mark but skipped), and Stamp's onStampPlace still messages the "nothing there at all"
+   * null.
+   *
+   * This bare-id form is now only the ghost-preview hovers' (updateStampGhostItem,
+   * updateEraserGhostItem -- a hover just shows/hides a preview circle, it has no reason to
+   * distinguish 'ineligible' from 'no-target'). Every COMMITTED gesture -- Stamp's onMouseDown as
+   * well as Trace/Eraser's onMouseUp -- calls resolveMarkTargetByBounds() directly for the
+   * {layerId, blockedByIneligible} miss reason.
+   *
+   * Same topmost-first iteration order/reasoning as hitTestShapeId()'s own hotfix (board.listShapes()
+   * is push-ordered oldest-first; reverse-iterating visits the topmost shape first -- see that
+   * function's own doc comment).
    * @param {paper.Point} point
    * @returns {string|null}
    */
   function resolveTargetLayerIdByBounds(point) {
+    return resolveMarkTargetByBounds(point).layerId;
+  }
+
+  /**
+   * RS-3015: resolveTargetLayerIdByBounds() with the reason for a miss attached. Same topmost-first
+   * walk, same markEligible skip -- but also reports whether SOME shape's bounding box did contain
+   * the point and was only skipped for markEligible !== true. app.js turns that into an "it can't
+   * take marks" status message that is distinct from "nothing was there at all"; the module itself
+   * still never learns what a layer TYPE is (markEligible is stamped at sync time from
+   * layer.type === 'path', so reading it here is not the same as reading project.layers).
+   * @param {paper.Point} point
+   * @returns {{layerId: (string|null), blockedByIneligible: boolean}}
+   */
+  function resolveMarkTargetByBounds(point) {
     const shapes = board.listShapes();
+    let blockedByIneligible = false;
     for (let i = shapes.length - 1; i >= 0; i--) {
-      if (shapes[i].item.bounds.contains(point)) return shapes[i].item.data.layerId || null;
+      const contains = shapes[i].item.bounds.contains(point);
+      // RS-3015: an ineligible proxy is transparent to mark resolution -- keep walking DOWN, never
+      // `return` here (falling through to the 'path' layer underneath is the whole point). Remember
+      // that one DID cover the point, so a subsequent all-the-way-to-the-bottom miss can be
+      // reported as 'ineligible' rather than 'no-target'.
+      if (shapes[i].item.data.markEligible !== true) {
+        if (contains) blockedByIneligible = true;
+        continue;
+      }
+      if (contains) return { layerId: shapes[i].item.data.layerId || null, blockedByIneligible };
     }
-    return null;
+    return { layerId: null, blockedByIneligible };
   }
 
   /**
    * RS-3011 Step 12: the project.layers id of whichever finalized shape `point` resolves against,
-   * or null -- shared by the Stamp ghost preview (updateStampGhostItem), the Eraser ghost preview
-   * (updateEraserGhostItem), and the actual placement (onMouseDown's own 'stamp' branch) so all
-   * three agree on exactly the same target for the exact same point. RS-3011 Part B: delegates to
-   * resolveTargetLayerIdByBounds() above (bounding-box containment) rather than hitTestShapeId()
-   * (strict fill containment) -- see that function's own doc comment for why target resolution
-   * needs the looser test.
+   * or null -- shared by the Stamp ghost preview (updateStampGhostItem) and the Eraser ghost
+   * preview (updateEraserGhostItem) so both agree on exactly the same target for the exact same
+   * point. RS-3011 Part B: delegates to resolveTargetLayerIdByBounds() above (bounding-box
+   * containment) rather than hitTestShapeId() (strict fill containment) -- see that function's own
+   * doc comment for why target resolution needs the looser test. RS-3015: the committed Stamp
+   * click (onMouseDown's 'stamp' branch) no longer uses this -- it calls resolveMarkTargetByBounds()
+   * directly, like Trace/Eraser, so it can report 'ineligible' vs 'no-target'. The ghost hovers
+   * keep the bare-id form: a preview circle only needs "is there a stone-bearing 'path' here or
+   * not", with no status message either way.
    * @param {paper.Point} point
    * @returns {string|null}
    */
@@ -1515,44 +1569,70 @@ export function createDrawingTool(canvasEl, hooks = {}) {
   }
 
   /**
-   * RS-3011 Step 11: the project.layers id of whichever finalized shape a just-drawn Trace path's
-   * own bounding-box CENTER resolves against, or null -- resolved at release (not drag-start),
-   * mirroring drawleather's own LineStampTool.ts approach (build a temp path from the buffered
-   * points, hit-test its bounds.center, discard the temp path). Reuses resolveStampTargetLayerId()
-   * above (itself built on resolveTargetLayerIdByBounds() -- RS-3011 Part B) rather than a second
-   * hit-test implementation, same precedent Step 12's own resolveStampTargetLayerId() established.
+   * RS-3011 Step 11: whichever finalized shape a just-drawn Trace path's own bounding-box CENTER
+   * resolves against -- resolved at release (not drag-start), mirroring drawleather's own
+   * LineStampTool.ts approach (build a temp path from the buffered points, hit-test its
+   * bounds.center, discard the temp path). RS-3015: returns resolveMarkTargetByBounds()'s
+   * {layerId, blockedByIneligible} shape so onMouseUp can tell app.js WHY a null layerId came back
+   * (an ineligible proxy covered the point vs. nothing was there), instead of discarding in silence.
    * @param {paper.Point[]} points buffered project-mm points from the current Trace drag.
-   * @returns {string|null}
+   * @returns {{layerId: (string|null), blockedByIneligible: boolean}}
    */
-  function resolveTraceTargetLayerId(points) {
+  function resolveTraceTarget(points) {
     const tempPath = new paper.Path({ segments: points });
-    const layerId = resolveStampTargetLayerId(tempPath.bounds.center);
+    const target = resolveMarkTargetByBounds(tempPath.bounds.center);
     tempPath.remove();
-    return layerId;
+    return target;
   }
 
   /**
-   * RS-3014 Step 5: the project.layers id of whichever finalized shape ANY point of the just-swept
-   * Eraser drag resolves against (first match wins, in drag order), or null -- deliberately NOT
-   * resolveTraceTargetLayerId() above. Trace's aggregate-bounding-box-center approach is correct for
-   * its own use case (a line usually drawn well inside its target shape), but Eraser's primary use
-   * case is erasing ALONG an edge -- a drag that hugs a boundary very often has its own aggregate
-   * bounds.center sitting right on, or just outside, that boundary, even though the sweep clearly
-   * touches the shape. When that single center point misses, onMouseUp's own `if (!layerId ...)
-   * return;` guard silently discards the WHOLE gesture -- no cut, no stone removal, no error. Do NOT
-   * "simplify" this back to reusing resolveTraceTargetLayerId() -- per-point resolution is the fix,
-   * not an equivalent shortcut. Reuses resolveTargetLayerIdByBounds() (already shared by
-   * Stamp/Trace) rather than a new hit-test implementation, just called per-point instead of once on
-   * an aggregate center; same topmost-first, first-real-match-wins precedent as hitTestShapeId().
+   * RS-3014 Step 5: whichever finalized shape ANY point of the just-swept Eraser drag resolves
+   * against (first match wins, in drag order) -- deliberately NOT resolveTraceTarget() above.
+   * Trace's aggregate-bounding-box-center approach is correct for its own use case (a line usually
+   * drawn well inside its target shape), but Eraser's primary use case is erasing ALONG an edge --
+   * a drag that hugs a boundary very often has its own aggregate bounds.center sitting right on, or
+   * just outside, that boundary, even though the sweep clearly touches the shape. When that single
+   * center point misses, the WHOLE gesture used to be discarded silently -- no cut, no stone
+   * removal, no error. Do NOT "simplify" this back to reusing resolveTraceTarget() -- per-point
+   * resolution is the fix, not an equivalent shortcut. RS-3015: same {layerId, blockedByIneligible}
+   * shape as resolveTraceTarget(); blockedByIneligible is sticky across the per-point walk so an
+   * ineligible proxy touched anywhere in the sweep is reported even if the final result is null.
    * @param {paper.Point[]} points buffered project-mm points from the current Eraser drag.
-   * @returns {string|null}
+   * @returns {{layerId: (string|null), blockedByIneligible: boolean}}
    */
-  function resolveEraserTargetLayerId(points) {
+  function resolveEraserTarget(points) {
+    let blockedByIneligible = false;
     for (const point of points) {
-      const layerId = resolveTargetLayerIdByBounds(point);
-      if (layerId) return layerId;
+      const target = resolveMarkTargetByBounds(point);
+      if (target.blockedByIneligible) blockedByIneligible = true;
+      if (target.layerId) return { layerId: target.layerId, blockedByIneligible };
     }
-    return null;
+    return { layerId: null, blockedByIneligible };
+  }
+
+  /**
+   * RS-3015: stamp a board item with BOTH the project.layers id it proxies AND the mark-tool
+   * eligibility flag resolveMarkTargetByBounds() reads -- always the two together. `board.replace-
+   * ShapeItem()` (src/drawing/DrawingBoard.js) carries no `data` across, so every item swap has to
+   * re-set both; hand-writing `markEligible = layer.type === 'path'` at each of the twelve stamp
+   * sites drifts. Every site that stamps `layerId` onto a board item goes through here.
+   *
+   * The resolver is FAIL-CLOSED -- resolveMarkTargetByBounds() skips anything whose
+   * `markEligible !== true` -- so a site that sets `layerId` but forgets this helper turns a
+   * genuinely drawn 'path' shape into a silent mark-rejecter, indistinguishable from empty canvas.
+   * That is the trap the next stamp site's author needs warned about.
+   *
+   * Only a 'path' layer is mark-eligible. Pass the raw project.layers `layer` object; the one
+   * exception is duplicateShapeForLayer(), which has no layer object and inherits the source
+   * proxy's own flag instead (a duplicated 'path' stays eligible; a duplicated rectangle / svg /
+   * image / shape-library stays not) -- it passes `{ id, markEligible }` explicitly.
+   * @param {paper.Item} item
+   * @param {{id:string, type?:string, markEligible?:boolean}} layer
+   */
+  function tagMarkTarget(item, layer) {
+    item.data.layerId = layer.id;
+    item.data.markEligible =
+      typeof layer.markEligible === 'boolean' ? layer.markEligible : layer.type === 'path';
   }
 
   /**
@@ -2175,7 +2255,11 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     // read site of this field treats it as missing/true for backward compatibility (Boolean Ops
     // results, pre-Step-7 projects, anything not created via Design's draw tools).
     layer.stonesGenerated = false;
-    item.data.layerId = layer.id;
+    // RS-3015: mark-tool target eligibility travels as item data so resolveMarkTargetByBounds()
+    // never has to ask what type a layer is (this module never reads project.layers). tagMarkTarget()
+    // sets layerId + markEligible together at every stamp site so they cannot drift -- see its own
+    // doc comment for the fail-closed trap.
+    tagMarkTarget(item, layer);
     // RS-3011 issue #4a fix: a finalized shape stops being "still drawing" -- revert to select
     // mode and select the shape just drawn, the same selectedIds/applySelectionVisuals/
     // updateResizeHandles sequence a plain click-select already uses (see onMouseDown's hit-test
@@ -2606,13 +2690,26 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         // activeSelection is null, byte-identical to before this step.
         const stampPointMm = { xMm: event.point.x, yMm: event.point.y };
         if (activeSelection && !isPointInActiveSelection(stampPointMm, activeSelection)) {
-          onStampRejected();
+          onStampRejected('outside-selection');
+          return;
+        }
+        // RS-3015: Stamp now reads resolveMarkTargetByBounds()'s FULL result, matching Trace/Eraser.
+        // A click that resolves no eligible target but DID land inside an ineligible proxy's bounds
+        // (a 'text'/'svg'/... shape, filtered by markEligible) rejects as 'ineligible' -- known from
+        // blockedByIneligible, never from a layer type. A click with nothing under it at all keeps
+        // the pre-existing path: onStampPlace is still called with layerId null (app.js messages it),
+        // byte-identical to before, since Stamp -- unlike Trace/Eraser -- has always called
+        // onStampPlace for the null case (its ghost-preview architecture needs the always-call
+        // contract). A resolved layerId is handed straight through as before.
+        const stampTarget = resolveMarkTargetByBounds(event.point);
+        if (!stampTarget.layerId && stampTarget.blockedByIneligible) {
+          onStampRejected('ineligible');
           return;
         }
         onStampPlace({
           xMm: event.point.x,
           yMm: event.point.y,
-          layerId: resolveStampTargetLayerId(event.point)
+          layerId: stampTarget.layerId
         });
         return;
       }
@@ -3666,15 +3763,31 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         interactionKind = null;
         if (points.length < 2) return;
         const closed = !!(event && event.modifiers && event.modifiers.shift);
-        const layerId = resolveTraceTargetLayerId(points);
+        const traceTarget = resolveTraceTarget(points);
+        const layerId = traceTarget.layerId;
         const styleParams = layerId ? getLayerStoneParams(layerId) : null;
-        // No target, or the resolved layer isn't a stone-bearing 'path' layer (getLayerStoneParams's
-        // own null return already covers both "not type==='path'" and "stonesGenerated===false") --
-        // discard silently, matching Stamp/Paint's own "no target -> discard" precedent. RS-3014
-        // Step 1: styleParams itself is now ONLY that existence gate -- the actual spacing comes
-        // from Trace's own independent traceSizeMm/traceGapMm (set via setTraceStyle()), not the
-        // target layer's current stoneSize/gap.
-        if (!layerId || !styleParams) return;
+        // RS-3015: a Trace drag that resolves nothing usable is no longer discarded in silence --
+        // app.js turns each reason into its own status message (see onTraceRejected's hooks-param
+        // doc comment). Three distinct outcomes here:
+        //  - no eligible shape under the stroke at all                      -> 'no-target'
+        //  - a shape WAS under it but markEligible filtered it (a non-'path' proxy)
+        //    -- known from traceTarget.blockedByIneligible, never from a layer type this module
+        //    must not read                                                  -> 'ineligible'
+        //  - a real 'path' layer whose stones aren't generated yet: getLayerStoneParams returns
+        //    null, and after RS-3015's markEligible filter a non-null layerId here is necessarily
+        //    a 'path' layer, so null styleParams can ONLY mean stonesGenerated === false
+        //                                                                    -> 'no-stones'
+        // RS-3014 Step 1: styleParams is ONLY that existence gate -- the actual spacing comes from
+        // Trace's own independent traceSizeMm/traceGapMm (set via setTraceStyle()), not the target
+        // layer's current stoneSize/gap.
+        if (!layerId) {
+          onTraceRejected(traceTarget.blockedByIneligible ? 'ineligible' : 'no-target');
+          return;
+        }
+        if (!styleParams) {
+          onTraceRejected('no-stones', layerId);
+          return;
+        }
         const stepMm = traceSizeMm + traceGapMm;
         const spacingPath = new paper.Path({ segments: points });
         if (closed) spacingPath.closed = true;
@@ -3689,7 +3802,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         if (activeSelection) {
           const filteredPlacements = placements.filter((p) => isPointInActiveSelection(p, activeSelection));
           if (filteredPlacements.length === 0) {
-            onTraceRejected();
+            onTraceRejected('outside-selection');
             return;
           }
           onTracePlace(filteredPlacements, layerId, placements.length - filteredPlacements.length);
@@ -3704,7 +3817,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         // no placeStonesAlongPath() spacing pass; every buffered point becomes one daub verbatim,
         // handed to app.js's onEraseSweep() as-is (this module has no opinion on daub radius, see
         // the onEraseSweep hook's own doc comment). RS-3014 Step 5: target resolution uses
-        // resolveEraserTargetLayerId() (per-point, first-match-wins), NOT resolveTraceTargetLayerId()
+        // resolveEraserTarget() (per-point, first-match-wins), NOT resolveTraceTarget()
         // -- see that function's own doc comment for why Eraser's edge-hugging-drag use case needs
         // per-point resolution instead of Trace's single-aggregate-center approach. Unlike
         // Paint/every other draw preset, `mode` is deliberately left at 'eraser' (decision 7:
@@ -3718,10 +3831,20 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         erasePoints = [];
         interactionKind = null;
         if (points.length === 0) return;
-        const layerId = resolveEraserTargetLayerId(points);
-        // No target -> discard the WHOLE gesture silently (decision 6), matching Stamp/Paint/
-        // Trace's own "no target -> discard" precedent.
-        if (!layerId) return;
+        const eraserTarget = resolveEraserTarget(points);
+        const layerId = eraserTarget.layerId;
+        // RS-3015: a sweep that resolves nothing is no longer discarded in silence (decision 6's
+        // "no target -> discard" precedent kept its no-mutation behaviour but dropped its message).
+        //  - an ineligible proxy (a non-'path' 'text'/'svg'/... bbox) covered the sweep somewhere
+        //    -- known from eraserTarget.blockedByIneligible, never from a layer type -> 'ineligible'
+        //  - nothing eligible anywhere along the sweep                                 -> 'no-target'
+        // There is no Trace-style 'no-stones' here: Eraser targets the 'path' layer regardless of
+        // whether its stones are generated, and app.js's onEraseSweep already says "nothing to
+        // erase on <layer>" when it holds none.
+        if (!layerId) {
+          onEraseRejected(eraserTarget.blockedByIneligible ? 'ineligible' : 'no-target');
+          return;
+        }
         const daubsAbsoluteMm = points.map((p) => ({ xMm: p.x, yMm: p.y }));
         // RS-3014 Step 3: corridor polygon(s) for Outline mode -- see buildEraserCorridorPolygons()'s
         // own doc comment. Built unconditionally (cheap, and 'stones' gestures simply ignore it) so
@@ -4271,7 +4394,13 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       if (!source) return;
       const clone = source.item.clone({ insert: true });
       clone.translate(new paper.Point(dxMm, dyMm));
-      clone.data.layerId = newLayerId;
+      // RS-3015: no `layer` object here (this module never reads project.layers), and
+      // duplicateShapeForLayer() runs for every XYWH_SHAPE_TYPES layer, not just 'path' (app.js's
+      // duplicateLayer()) -- so the clone inherits the SOURCE proxy's own flag: a duplicated 'path'
+      // stays a valid mark target, a duplicated rectangle / svg / image / shape-library stays not.
+      // Paper.js clone() already copied data.markEligible, but tagMarkTarget() re-asserts it (with
+      // data.layerId) so this stamp site stays visibly in step with the other eleven.
+      tagMarkTarget(clone, { id: newLayerId, markEligible: source.item.data.markEligible === true });
       const cloneId = board.addShape(clone);
       // RS-3011 Step 3b: the clone needs its own regenerated stone Group, not a reference to
       // source's -- rebuildStoneGroupForShape() re-flattens the CLONE's own (already-translated)
@@ -4362,7 +4491,9 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       const newItem = materializeShapeFromLayer(layer);
       if (!newItem) return;
       if (!board.replaceShapeItem(shape.id, newItem)) return;
-      newItem.data.layerId = layer.id;
+      // RS-3015: board.replaceShapeItem() swapped in a fresh item carrying no `data` -- tagMarkTarget()
+      // re-stamps layerId + markEligible together (Outline-mode Eraser cut, so `layer` is 'path').
+      tagMarkTarget(newItem, layer);
       applySelectionVisuals();
       updateResizeHandles();
       rebuildStoneGroupForShape(shape.id);
@@ -4501,7 +4632,11 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         const item = materializeForLayer(layer);
         if (!item) continue;
         const shapeId = board.addShape(item);
-        item.data.layerId = layer.id;
+        // RS-3015: only a 'path' proxy is a valid Stamp/Trace/Eraser target; a 'text'/'svg'/'image'/
+        // 'circle'/'rectangle'/shape-library proxy is skipped by resolveMarkTargetByBounds() so a
+        // mark falls through to whatever 'path' layer sits under it (a monogram frame under its
+        // lettering). tagMarkTarget() stamps layerId + that flag together.
+        tagMarkTarget(item, layer);
         // RS-3012 Step 3: a brand-new 'text' shape (Design just entered, or a text layer added while
         // already active) needs its stone Group built from getTextLayerStones(), not
         // generatePathLayout()/getLayerStoneParams() (which return no stones for a non-'path' layer).
@@ -4513,6 +4648,12 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         const layerId = shape.item.data.layerId;
         const layer = layerId && layerById.get(layerId);
         if (!layer) continue;
+        // RS-3015: re-assert the mark-tool eligibility flag on the item already on the board, every
+        // reconcile tick, for every shape whose layer still exists. Every branch below that calls
+        // board.replaceShapeItem() swaps in a fresh (data-less) item and calls tagMarkTarget() there
+        // too -- without both, a resized/rotated/re-materialized 'path' layer would lose the flag and
+        // stop being a valid Stamp/Trace/Eraser target.
+        tagMarkTarget(shape.item, layer);
         const b = shape.item.bounds;
         // RS-3033: whether `layer`'s own rotationDeg differs from what `shape.item` currently
         // reflects (item.data.rotationDeg, stamped by materializeShapeFromLayer() every time it
@@ -4553,7 +4694,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
             const newItem = materializeShapeFromLayer(layer);
             if (newItem) {
               board.replaceShapeItem(shape.id, newItem);
-              newItem.data.layerId = layerId;
+              tagMarkTarget(newItem, layer); // RS-3015 -- fresh item carries no data; see loop-top comment
             }
           }
           if (boundsChanged || rotationChanged || forceStoneRebuild) rebuildStoneGroupForShape(shape.id);
@@ -4582,7 +4723,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
             Math.abs(b.height - fb.height) > 1e-6;
           if (boundsChanged || rotationChanged) {
             board.replaceShapeItem(shape.id, freshItem);
-            freshItem.data.layerId = layerId;
+            tagMarkTarget(freshItem, layer); // RS-3015 -- always markEligible:false here ('text')
           } else {
             freshItem.remove();
           }
@@ -4607,7 +4748,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
             Math.abs(b.height - fb.height) > 1e-6;
           if (boundsChanged) {
             board.replaceShapeItem(shape.id, freshItem);
-            freshItem.data.layerId = layerId;
+            tagMarkTarget(freshItem, layer); // RS-3015 -- always markEligible:false here ('circle')
           } else {
             freshItem.remove();
           }
@@ -4631,7 +4772,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
               const newItem = materializeShapeFromLayer(layer);
               if (newItem) {
                 board.replaceShapeItem(shape.id, newItem);
-                newItem.data.layerId = layerId;
+                tagMarkTarget(newItem, layer); // RS-3015 -- always markEligible:true here ('path')
               }
             } else {
               // A plain (never-cut, never-rotated) 'path' layer's own contours are, by construction,
@@ -4655,7 +4796,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
             const newItem = materializeSvgImageItemFromLayer(layer, resolveSvgPolygons);
             if (newItem) {
               board.replaceShapeItem(shape.id, newItem);
-              newItem.data.layerId = layerId;
+              tagMarkTarget(newItem, layer); // RS-3015 -- always markEligible:false here ('svg'/'image')
             }
           } else if (layer.type === 'rectangle') {
             // RS-3012 Step 5: a 'rectangle' HAS a real x/y/w/h box, so it reaches this generic branch
@@ -4665,7 +4806,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
             // rebuilds the cheap proxy, the same reasoning as 'svg'/'image' directly above.
             const newItem = buildRectangleProxyItem(layer);
             board.replaceShapeItem(shape.id, newItem);
-            newItem.data.layerId = layerId;
+            tagMarkTarget(newItem, layer); // RS-3015 -- always markEligible:false here ('rectangle')
           } else {
             // RS-3032 Step A: a SHAPE_LIBRARY_KINDS layer's geometry is NOT simply its natural shape
             // stretched into the box -- GeometryEngine resolves it at the new width/height and THEN
@@ -4678,7 +4819,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
             const newItem = materializeShapeLibraryItemFromLayer(layer, resolveShapeLibraryPolygons);
             if (newItem) {
               board.replaceShapeItem(shape.id, newItem);
-              newItem.data.layerId = layerId;
+              tagMarkTarget(newItem, layer); // RS-3015 -- always markEligible:false here (shape-library)
             }
           }
         }
