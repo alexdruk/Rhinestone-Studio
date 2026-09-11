@@ -263,13 +263,14 @@ await test('7. slot CHAIN_TOO_THIN (per-letter, MonogramGenerator.js ~L788): Gre
   assert.equal(bigMax.ok, true, 'two-letter Great Vibes at none 150x150 stays legal across the whole spacing range');
 });
 
-await test('7b. script CHAIN_TOO_THIN (interlocked-string, line ~1321): Great Vibes / script / none 150 / SS10 message also names "less letter spacing"', async () => {
+await test('7b. script CHAIN_TOO_THIN (interlocked-string, line ~1321): Great Vibes / script / none 150 / SS10 fails as expected', async () => {
   const { generator } = createRealGenerator();
   const r = await generator.generate(layoutCase('script', { stoneSizeMm: 2.8, letterSpacingMm: 0 }));
   assert.equal(r.ok, false);
   assert.equal(r.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.CHAIN_TOO_THIN);
   assert.match(r.message, /interlocked string/);
-  assert.match(r.message, /less letter spacing/);
+  // MONO-022: the message no longer names "less letter spacing" here -- letterSpacingMm is 0 in
+  // this request, so that remedy would not actually help; see buildChainTooThinRemedies().
   console.log(`    ${r.message}`);
 });
 
