@@ -220,6 +220,14 @@ const RESIZE_MIN_DIM_MM = 2;
 // stored box. 20mm is comfortably click-able at Design's typical zoom, same order of magnitude as
 // this app's default text height (25mm).
 const TEXT_PLACEHOLDER_SIZE_MM = 20;
+// MONO-021: a mark (Stamp/Trace/Eraser) resolves a 'text' proxy by PROXIMITY to a real bead, not
+// by the proxy's axis-aligned bounding box -- a script letter's bbox is ~25% of a 150mm frame box,
+// so a bbox test would shadow the frame beneath it across a quarter of the frame. A point is
+// "on the lettering" when it lies within TEXT_MARK_PROXIMITY_FACTOR * (that bead's diameter) of
+// some bead centre. 1.0 == one full stone diameter: at SS6 that is 2mm, which keeps a chain
+// continuous (Great Vibes' bead pitch is 2.093-2.587mm, so the midpoint between neighbours falls
+// inside) while leaving the frame ring reachable everywhere a bead is not.
+const TEXT_MARK_PROXIMITY_FACTOR = 1.0;
 // RS-3033: rotate handle's own constants, mirroring app.js's own ROTATE_HANDLE_GAP_MM/
 // ROTATE_HANDLE_RADIUS_PX/drawRotateHandle() styling exactly, for visual consistency between
 // Design's own rotate handle and the main app.js system's -- ROTATE_HANDLE_GAP_MM is a genuine mm
@@ -912,6 +920,13 @@ function materializeTextItemFromLayer(layer, getTextLayerStones) {
   item.data.pivotYMm = bounds.center.y;
   item.data.noResizeHandles = true;
   item.data.isTextProxy = true;
+  // MONO-021: the mark tools (Stamp/Trace/Eraser) resolve a 'text' proxy by proximity to a real
+  // bead, not by this bbox rectangle -- so the actual bead positions (absolute project-mm {x,y,d},
+  // exactly the shape getTextLayerStones() returns) travel as item data. resolveMarkTargetByBounds()
+  // reads it; rebuildTextStoneGroupForShape() refreshes it whenever the stones change (a stale set
+  // is the failure mode here). An empty list on a text layer with no stones yet is correct -- there
+  // is nothing to place a mark near, so the proxy is transparent to marks, same as before MONO-021.
+  item.data.markStones = stones.map((s) => ({ x: s.x, y: s.y, d: s.d }));
   return item;
 }
 
@@ -1489,19 +1504,23 @@ export function createDrawingTool(canvasEl, hooks = {}) {
    * interior (a hand-drawn ring, an `evenodd` outline with a hole) is a 'path' layer a user still
    * reasonably wants to place a stamp inside so it tracks that shape -- strict fill-containment would
    * block that outright. `shape.item.bounds.contains(point)` is Paper.js's own axis-aligned
-   * Rectangle#contains, a plain bounding-box test.
+   * Rectangle#contains, a plain bounding-box test -- applied to every proxy EXCEPT a 'text' one
+   * (MONO-021, see below).
    *
-   * RS-3015: only a 'path' proxy is a valid mark target. Every OTHER proxy this method walks past --
-   * 'text' (a plain bbox rectangle over the stones, materializeTextItemFromLayer()), 'svg', 'image',
-   * 'circle', 'rectangle', shape-library -- is SKIPPED (item.data.markEligible !== true, stamped at
-   * every layerId-stamp site so the resolver never has to read project.layers), and iteration
-   * continues DOWN the stack to whatever sits under it. Without this, a mark dropped anywhere inside
-   * such a proxy's bounding box resolved that non-'path' layer and app.js's onStampPlace /
-   * onTracePlace / onEraseSweep discarded it in silence -- most visibly a stamp on a generated
-   * monogram, whose joined-string 'text' bbox proxy shadows the frame 'path' beneath it. (The
-   * pre-RS-3015 rationale above cited a hollow imported SVG accepting a stamp; that never actually
-   * worked -- an SVG layer is type 'svg', now skipped -- so the hollow-interior case is a 'path'
-   * layer only.) The silence is gone too: Stamp / Trace / Eraser all fire
+   * RS-3015 / MONO-021: a 'path' OR a 'text' proxy is a valid mark target; 'svg' / 'image' /
+   * 'circle' / 'rectangle' / shape-library are SKIPPED (item.data.markEligible !== true, stamped at
+   * every layerId-stamp site so the resolver never has to read project.layers) and iteration
+   * continues DOWN the stack to whatever sits under it. A 'text' proxy does NOT resolve by its bbox
+   * rectangle -- markProxyContainsPoint() tests PROXIMITY to a real bead (item.data.markStones,
+   * within TEXT_MARK_PROXIMITY_FACTOR * bead diameter of a centre). A script letter's bbox is ~25%
+   * of a 150mm frame box, so a bbox test would shadow the frame `path` beneath the lettering across
+   * a quarter of the frame; proximity keeps a click that missed every bead falling through to the
+   * frame. RS-3015 originally made text ineligible for exactly that shadowing reason and MONO-021
+   * replaces the blanket skip with the proximity test -- the letters themselves are now editable
+   * (docs/specifications/MONO-021-TextLayerEditing.md). A miss still reports 'ineligible' when SOME
+   * skipped ('svg'/'image'/...) proxy covered the point; a 'text' proxy whose beads the point missed
+   * is transparent, not a blocker, so it does not set blockedByIneligible.
+   * The silence is gone too: Stamp / Trace / Eraser all fire
    * onStampRejected/onTraceRejected/onEraseRejected with a reason ('ineligible' when a shape was
    * under the mark but skipped), and Stamp's onStampPlace still messages the "nothing there at all"
    * null.
@@ -1532,11 +1551,35 @@ export function createDrawingTool(canvasEl, hooks = {}) {
    * @param {paper.Point} point
    * @returns {{layerId: (string|null), blockedByIneligible: boolean}}
    */
+  // MONO-021: "does `point` land on this proxy" for mark resolution. A 'text' proxy (item.data.
+  // markStones is an array -- set by materializeTextItemFromLayer() / rebuildTextStoneGroupForShape())
+  // resolves by proximity to a real bead: within TEXT_MARK_PROXIMITY_FACTOR * that bead's diameter
+  // of its centre. Every other proxy keeps the plain axis-aligned bounds test (a genuinely
+  // hollow/empty 'path' interior is still a valid target -- see resolveMarkTargetByBounds()'s doc
+  // comment). An empty markStones array is a real answer: the text layer has no beads, so nothing
+  // is "on the lettering" and the proxy is transparent -- iteration falls through to whatever's
+  // beneath, same as a pre-MONO-021 ineligible text proxy.
+  function markProxyContainsPoint(item, point) {
+    const markStones = item.data.markStones;
+    if (!Array.isArray(markStones)) {
+      return item.bounds.contains(point);
+    }
+    for (const stone of markStones) {
+      const reachMm = TEXT_MARK_PROXIMITY_FACTOR * stone.d;
+      const dx = point.x - stone.x;
+      const dy = point.y - stone.y;
+      if (dx * dx + dy * dy <= reachMm * reachMm) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   function resolveMarkTargetByBounds(point) {
     const shapes = board.listShapes();
     let blockedByIneligible = false;
     for (let i = shapes.length - 1; i >= 0; i--) {
-      const contains = shapes[i].item.bounds.contains(point);
+      const contains = markProxyContainsPoint(shapes[i].item, point);
       // RS-3015: an ineligible proxy is transparent to mark resolution -- keep walking DOWN, never
       // `return` here (falling through to the 'path' layer underneath is the whole point). Remember
       // that one DID cover the point, so a subsequent all-the-way-to-the-bottom miss can be
@@ -1545,9 +1588,13 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         if (contains) blockedByIneligible = true;
         continue;
       }
-      if (contains) return { layerId: shapes[i].item.data.layerId || null, blockedByIneligible };
+      // MONO-021: isTextTarget is true when the resolved proxy is a 'text' one (item.data.markStones
+      // is an array). onMouseUp's Trace branch reads it to skip the getLayerStoneParams() 'no-stones'
+      // gate (that hook is 'path'-only) -- a text proxy only resolves here when the proximity test
+      // matched a real bead, so a resolved text target always has base stones by construction.
+      if (contains) return { layerId: shapes[i].item.data.layerId || null, blockedByIneligible, isTextTarget: Array.isArray(shapes[i].item.data.markStones) };
     }
-    return { layerId: null, blockedByIneligible };
+    return { layerId: null, blockedByIneligible, isTextTarget: false };
   }
 
   /**
@@ -1605,9 +1652,9 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     for (const point of points) {
       const target = resolveMarkTargetByBounds(point);
       if (target.blockedByIneligible) blockedByIneligible = true;
-      if (target.layerId) return { layerId: target.layerId, blockedByIneligible };
+      if (target.layerId) return { layerId: target.layerId, blockedByIneligible, isTextTarget: target.isTextTarget };
     }
-    return { layerId: null, blockedByIneligible };
+    return { layerId: null, blockedByIneligible, isTextTarget: false };
   }
 
   /**
@@ -1622,17 +1669,20 @@ export function createDrawingTool(canvasEl, hooks = {}) {
    * genuinely drawn 'path' shape into a silent mark-rejecter, indistinguishable from empty canvas.
    * That is the trap the next stamp site's author needs warned about.
    *
-   * Only a 'path' layer is mark-eligible. Pass the raw project.layers `layer` object; the one
-   * exception is duplicateShapeForLayer(), which has no layer object and inherits the source
-   * proxy's own flag instead (a duplicated 'path' stays eligible; a duplicated rectangle / svg /
-   * image / shape-library stays not) -- it passes `{ id, markEligible }` explicitly.
+   * A 'path' OR a 'text' layer is mark-eligible (MONO-021 widened this from 'path' only). A 'path'
+   * layer resolves by bounding box; a 'text' layer resolves by proximity to a real bead
+   * (markProxyContainsPoint() / item.data.markStones -- set by materializeTextItemFromLayer(), not
+   * here, since this helper has no stone list). svg / image / circle / rectangle / shape-library
+   * stay ineligible. Pass the raw project.layers `layer` object; the one exception is
+   * duplicateShapeForLayer(), which has no layer object and inherits the source proxy's own flag
+   * instead -- it passes `{ id, markEligible }` explicitly.
    * @param {paper.Item} item
    * @param {{id:string, type?:string, markEligible?:boolean}} layer
    */
   function tagMarkTarget(item, layer) {
     item.data.layerId = layer.id;
     item.data.markEligible =
-      typeof layer.markEligible === 'boolean' ? layer.markEligible : layer.type === 'path';
+      typeof layer.markEligible === 'boolean' ? layer.markEligible : (layer.type === 'path' || layer.type === 'text');
   }
 
   /**
@@ -2462,6 +2512,12 @@ export function createDrawingTool(canvasEl, hooks = {}) {
    * to flatten and must never trigger a second call into the font engine (see
    * materializeTextItemFromLayer()'s own doc comment for why). A no-op if the shape no longer
    * exists, mirroring rebuildStoneGroupForShape()'s own convention.
+   * MONO-021: this is the ONE place a text proxy's stones change, so it also refreshes
+   * item.data.markStones -- the bead cloud resolveMarkTargetByBounds() tests a Stamp/Trace/Eraser
+   * point against. Every caller (rebuildAllStoneGroups on a zoom bucket change, the drag/rotate
+   * commit in onMouseUp, syncFromProjectLayers, refreshStoneGroupForLayer, duplicateShapeForLayer)
+   * therefore keeps markStones in step for free; a stale set is the failure mode for the mark
+   * tools on text.
    * @param {string} shapeId
    * @param {{x:number,y:number,d:number,color:string}[]} stones
    */
@@ -2471,6 +2527,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
       removeStoneGroupForShape(shapeId);
       return;
     }
+    shape.item.data.markStones = stones.map((s) => ({ x: s.x, y: s.y, d: s.d }));
     const layerId = shape.item.data.layerId;
     const group = buildStoneSpriteGroup(stones, layerId);
     group.insertBelow(shape.item);
@@ -3784,7 +3841,11 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           onTraceRejected(traceTarget.blockedByIneligible ? 'ineligible' : 'no-target');
           return;
         }
-        if (!styleParams) {
+        // MONO-021: getLayerStoneParams() is 'path'-only (returns null for a 'text' layer), so a
+        // null here means 'no-stones' ONLY for a path target. A text target resolved by bead
+        // proximity always has base stones -- app.js's onTracePlace does its own frozen-box
+        // conversion and needs no styleParams.
+        if (!styleParams && !traceTarget.isTextTarget) {
           onTraceRejected('no-stones', layerId);
           return;
         }
@@ -4425,6 +4486,18 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     refreshStoneGroupForLayer(layerId) {
       const shape = findShapeByLayerId(layerId);
       if (!shape) return;
+      // MONO-021: a text proxy's stones never come from generatePathLayout() -- rebuildStoneGroup-
+      // ForShape() would ask getLayerStoneParams() (null for a text layer) and drop the Group.
+      // Dispatch to rebuildTextStoneGroupForShape() instead, UNCONDITIONALLY: syncFromProjectLayers()
+      // only rebuilds a text Group when the proxy's BOUNDS change, and a stamp-on-a-bead / erase /
+      // Paint recolour moves no bounds -- so app.js's text mark/paint hooks call this after
+      // updateAll() for the immediate on-canvas refresh (and to re-home item.data.markStones), the
+      // same way the 'path' hooks already call it. getTextLayerStones() reads the just-regenerated
+      // `layout` global, so the caller must have awaited updateAll() first.
+      if (shape.item.data.isTextProxy) {
+        rebuildTextStoneGroupForShape(shape.id, getTextLayerStones(layerId) || []);
+        return;
+      }
       rebuildStoneGroupForShape(shape.id);
     },
 
@@ -4632,10 +4705,12 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         const item = materializeForLayer(layer);
         if (!item) continue;
         const shapeId = board.addShape(item);
-        // RS-3015: only a 'path' proxy is a valid Stamp/Trace/Eraser target; a 'text'/'svg'/'image'/
-        // 'circle'/'rectangle'/shape-library proxy is skipped by resolveMarkTargetByBounds() so a
-        // mark falls through to whatever 'path' layer sits under it (a monogram frame under its
-        // lettering). tagMarkTarget() stamps layerId + that flag together.
+        // RS-3015 / MONO-021: a 'path' or a 'text' proxy is a valid Stamp/Trace/Eraser target
+        // (a 'path' by bbox, a 'text' by bead proximity -- markProxyContainsPoint()); an 'svg' /
+        // 'image' / 'circle' / 'rectangle' / shape-library proxy is skipped by
+        // resolveMarkTargetByBounds() so a mark falls through to whatever 'path' layer sits under
+        // it. tagMarkTarget() stamps layerId + that flag together; materializeTextItemFromLayer()
+        // (via materializeForLayer above) has already put the bead cloud on item.data.markStones.
         tagMarkTarget(item, layer);
         // RS-3012 Step 3: a brand-new 'text' shape (Design just entered, or a text layer added while
         // already active) needs its stone Group built from getTextLayerStones(), not
@@ -4723,7 +4798,7 @@ export function createDrawingTool(canvasEl, hooks = {}) {
             Math.abs(b.height - fb.height) > 1e-6;
           if (boundsChanged || rotationChanged) {
             board.replaceShapeItem(shape.id, freshItem);
-            tagMarkTarget(freshItem, layer); // RS-3015 -- always markEligible:false here ('text')
+            tagMarkTarget(freshItem, layer); // RS-3015/MONO-021 -- markEligible:true here ('text'); markStones already set by materializeTextItemFromLayer()
           } else {
             freshItem.remove();
           }
@@ -4828,6 +4903,24 @@ export function createDrawingTool(canvasEl, hooks = {}) {
 
       applySelectionVisuals();
       updateResizeHandles();
+    },
+
+    /**
+     * MONO-021 QA/verification-only, read-only -- the on-canvas stone Group's sprite count and the
+     * mark-resolution bead cloud for a text (or any) proxy, so a test can prove a Stamp on a bead
+     * INSIDE the letter's bounds (no bounds change -> syncFromProjectLayers()'s gate does not fire)
+     * still renders and still refreshes item.data.markStones. Same precedent as debugGrid/debugShapes.
+     * @param {string} layerId
+     * @returns {{stoneGroupCount:number, markStones:{x:number,y:number,d:number}[]}|null}
+     */
+    debugStoneState(layerId) {
+      const shape = findShapeByLayerId(layerId);
+      if (!shape) return null;
+      const group = stoneGroups.get(shape.id);
+      return {
+        stoneGroupCount: group ? group.children.length : 0,
+        markStones: Array.isArray(shape.item.data.markStones) ? shape.item.data.markStones.map((s) => ({ ...s })) : null
+      };
     },
 
     /**

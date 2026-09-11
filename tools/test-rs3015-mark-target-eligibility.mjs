@@ -2,12 +2,18 @@
 // mark tools no longer discard a resolved-nothing gesture in silence.
 //
 // resolveMarkTargetByBounds() (src/drawing/DrawingCanvasTool.js) reverse-iterates
-// board.listShapes() and returns { layerId, blockedByIneligible } for the topmost proxy whose
-// AXIS-ALIGNED BOUNDS contain the point AND whose item.data.markEligible === true.
+// board.listShapes() and returns { layerId, blockedByIneligible } for the topmost proxy that
+// CONTAINS the point AND carries item.data.markEligible === true.
 // syncFromProjectLayers() puts a proxy on that board for every 'path' / 'svg' / 'image' / 'text' /
-// 'circle' / 'rectangle' / shape-library layer; tagMarkTarget() stamps markEligible = (type ===
-// 'path') at every one of the twelve layerId-stamp sites, so a mark dropped on a non-'path' proxy
-// falls THROUGH it to whatever 'path' layer sits underneath (a monogram frame under its lettering).
+// 'circle' / 'rectangle' / shape-library layer.
+//
+// MONO-021 update: tagMarkTarget() now stamps markEligible for a 'path' OR a 'text' layer, and
+// "contains" is no longer one rule -- a 'path' proxy still resolves by its axis-aligned bounds, but
+// a 'text' proxy resolves by PROXIMITY to a real bead (markProxyContainsPoint() /
+// item.data.markStones, within TEXT_MARK_PROXIMITY_FACTOR * bead diameter of a centre). So a mark
+// aimed AT a letter's beads now resolves that letter; a mark that misses every bead (the frame ring,
+// the gap between two letters, a letter's counter) still falls through to the 'path' beneath. 'svg'
+// / 'image' / 'circle' / 'rectangle' / shape-library stay ineligible and transparent as before.
 //
 // commit e4957e4 wired Stamp's messaging (onStampPlace is always called, layerId may be null). This
 // file's third commit wires Trace and Eraser: DrawingCanvasTool.js's own onMouseUp discards a
@@ -246,25 +252,35 @@ const boxStones = (lo, hi) => [
   { x: lo, y: lo, d: 2, color: 'gold' }, { x: hi, y: lo, d: 2, color: 'gold' },
   { x: lo, y: hi, d: 2, color: 'gold' }, { x: hi, y: hi, d: 2, color: 'gold' },
 ];
+// MONO-021: a genuinely mark-INELIGIBLE layer (unlike 'text', which is now eligible). A 'circle'
+// proxy resolves by its axis-aligned bounds and carries markEligible:false, so a mark wholly over
+// it with nothing beneath rejects as 'ineligible' -- the case tests 3a/4/7 need now that a 'text'
+// proxy no longer does.
+const circleLayer = (over = {}) => ({
+  id: 'circle-over', type: 'circle', visible: true, cx: 120, cy: 120, r: 30,
+  stoneSize: 2, gap: 0.3, color: 'gold', ...over,
+});
 const textOverPathStones = boxStones(106, 154);
 const P = { x: 120, y: 120 };
 
 // =============================================================================================
 // 1. Named negative control -- Stamp, one point, two boards, both resolved ids printed.
 // =============================================================================================
-await runTest('negative control: path alone resolves to the path; text-over-path also resolves to the path (skips the text proxy)', () => {
+await runTest('negative control: path alone resolves to the path; a click that misses every text bead falls through to the path beneath', () => {
   sync([pathLayer()]);
   const aId = resolveStampTargetLayerId(P.x, P.y);
 
+  // The text proxy's beads sit at the 4 corners of a (106,154) box; P (120,120) is ~20mm from the
+  // nearest, so the proximity test (MONO-021) misses every bead and the text proxy is transparent.
   sync([pathLayer(), textLayer()], { 'text-over': textOverPathStones });
   const bId = resolveStampTargetLayerId(P.x, P.y);
 
   console.log(`    negative control -- board A (path alone): resolved layerId = ${JSON.stringify(aId)}`);
-  console.log(`    negative control -- board B (text over path): resolved layerId = ${JSON.stringify(bId)}`);
-  console.log('    (before RS-3015, board B would have resolved "text-over"; after, "path-A")');
+  console.log(`    negative control -- board B (text over path, click between the beads): resolved layerId = ${JSON.stringify(bId)}`);
+  console.log('    (before RS-3015: "text-over" by bbox; RS-3015: "path-A" by blanket skip; MONO-021: "path-A" because the click missed every bead)');
 
   assert.equal(aId, 'path-A', 'board A: a lone path resolves to itself (resolver still works)');
-  assert.equal(bId, 'path-A', 'board B: the mark falls through the ineligible text proxy to the path');
+  assert.equal(bId, 'path-A', 'board B: the click missed every text bead, so it falls through to the path');
 
   const selectHit = layerIdOfShape(tool.debugHitTestShapeId(P.x, P.y));
   console.log(`    Select (hitTestShapeId) at the same point resolves layerId = ${JSON.stringify(selectHit)}`);
@@ -284,7 +300,7 @@ const fontProviderRegistry = createDefaultFontProviderRegistry(fontManager, { lo
 const realEngine = new GeometryEngine({ fontProviderRegistry });
 const realGenerator = new MonogramGenerator({ geometryEngine: realEngine });
 
-await runTest('a Stamp on a real generated monogram resolves the frame path, not the letter text layer', async () => {
+await runTest('MONO-021: a Stamp ON a monogram letter bead resolves the letter; a Stamp in the frame ring (no bead) still resolves the frame', async () => {
   const result = await realGenerator.generate({
     frameId: 'circle', layoutId: MONOGRAM_LAYOUTS.SINGLE, letters: ['A'],
     fontId: 'rs-block', providerId: 'rhinestone', stoneSizeMm: 2.0, color: 'gold',
@@ -311,28 +327,64 @@ await runTest('a Stamp on a real generated monogram resolves the frame path, not
   const letterStones = raw.stones.map((st) => ({ x: st.xMm - gx + cx, y: st.yMm - gy + cy, d: st.sizeMm, color: st.color }));
 
   sync([framePathLayer, letterTextLayer], { [letterTextLayer.id]: letterStones });
-  const selectHit = layerIdOfShape(tool.debugHitTestShapeId(cx, cy));
-  assert.equal(selectHit, letterTextLayer.id, 'Select picks the letter text proxy at the frame centre');
-  const resolved = resolveStampTargetLayerId(cx, cy);
-  console.log(`    monogram -- Select resolves ${JSON.stringify(selectHit)}; mark resolver resolves ${JSON.stringify(resolved)} (frame = ${JSON.stringify(framePathLayer.id)})`);
-  assert.equal(resolved, framePathLayer.id, 'the stamp falls through the letter text proxy to the frame path');
+
+  // (a) a click landing exactly on a letter bead centre resolves the LETTER.
+  const bead = letterStones[Math.floor(letterStones.length / 2)];
+  const onBead = resolveStampTargetLayerId(bead.x, bead.y);
+
+  // (b) a click well inside the frame but far from every letter bead (>1 bead diameter) resolves
+  //     the FRAME -- the proximity test misses the lettering and falls through.
+  const minLetterDistFrom = (x, y) => Math.min(...letterStones.map((s) => Math.hypot(s.x - x, s.y - y)));
+  const ringX = fr.xMm + 4, ringY = cy; // 4mm inside the left frame edge
+  assert.ok(minLetterDistFrom(ringX, ringY) > 4, 'the ring probe point is clear of every letter bead');
+  const inRing = resolveStampTargetLayerId(ringX, ringY);
+
+  console.log(`    monogram -- click on a letter bead -> ${JSON.stringify(onBead)} (letter = ${JSON.stringify(letterTextLayer.id)})`);
+  console.log(`    monogram -- click in the frame ring, no bead -> ${JSON.stringify(inRing)} (frame = ${JSON.stringify(framePathLayer.id)})`);
+  console.log('    (RS-3015: BOTH resolved the frame -- text was a blanket skip. MONO-021: the on-bead click resolves the letter.)');
+
+  assert.equal(onBead, letterTextLayer.id, 'MONO-021: a Stamp on a letter bead resolves the letter, not the frame');
+  assert.equal(inRing, framePathLayer.id, 'a Stamp that misses every bead still falls through to the frame path');
+});
+
+// =============================================================================================
+// MONO-021: item.data.markStones must not go stale -- a re-sync with moved stones re-homes the
+// bead cloud, so a resolve at the OLD bead position stops hitting the letter and a resolve at the
+// NEW position starts. rebuildTextStoneGroupForShape() (the one place text stones change) is where
+// the refresh lives, so every sync path gets it for free.
+// =============================================================================================
+await runTest('MONO-021: a re-sync with moved text stones refreshes item.data.markStones (no stale bead cloud)', () => {
+  const A = [{ x: 120, y: 120, d: 2, color: 'gold' }, { x: 124, y: 120, d: 2, color: 'gold' }];
+  sync([textLayer()], { 'text-over': A });
+  const atOldBefore = resolveStampTargetLayerId(120, 120);
+
+  const B = A.map((s) => ({ ...s, x: s.x + 50 })); // whole cloud shifted +50mm in x
+  sync([textLayer()], { 'text-over': B });
+  const atOldAfter = resolveStampTargetLayerId(120, 120);
+  const atNewAfter = resolveStampTargetLayerId(170, 120);
+
+  console.log(`    markStones staleness -- at old bead (120,120): before=${JSON.stringify(atOldBefore)} after=${JSON.stringify(atOldAfter)} ; at new bead (170,120) after=${JSON.stringify(atNewAfter)}`);
+  assert.equal(atOldBefore, 'text-over', 'before the move, a click on the bead resolves the text layer');
+  assert.equal(atOldAfter, null, 'after the move, the OLD position no longer hits the letter -- markStones was refreshed, not stale');
+  assert.equal(atNewAfter, 'text-over', 'after the move, the NEW bead position resolves the text layer');
 });
 
 // =============================================================================================
 // 3a. Stamp over one ineligible shape, nothing beneath -> reason 'ineligible' + its status string.
 //     (commit 4 -- Stamp now makes the same distinction Trace/Eraser do; commit 3 froze
 //     resolveStampTargetLayerId()'s signature and left Stamp reporting the wrong thing here.)
-//     Reachability: the user deletes a monogram's frame, keeping the lettering, and clicks Stamp on
-//     it -- or clicks Stamp on any lone 'text'/'svg'/'image'/'circle'/'rectangle' layer.
+//     Reachability: the user clicks Stamp on any lone 'svg'/'image'/'circle'/'rectangle'/
+//     shape-library layer. (MONO-021: NOT a lone 'text' layer -- that is now mark-eligible; a click
+//     on its lettering resolves the text layer, a click that misses every bead is transparent.)
 // =============================================================================================
 await runTest('Stamp over an ineligible shape with nothing beneath -> reason "ineligible" + its status string', () => {
-  sync([textLayer()], { 'text-over': textOverPathStones });
-  const hook = runStampClick(P.x, P.y);
+  sync([circleLayer()]);
+  const hook = runStampClick(120, 120);
   assert.deepEqual(hook, { kind: 'reject', reason: 'ineligible' },
     'a Stamp click wholly over a non-path proxy rejects as "ineligible" (NOT onStampPlace with null)');
   const status = stampRejectStatus(hook.reason);
   console.log(`    Stamp/ineligible -- reason = ${JSON.stringify(hook.reason)} ; status = ${JSON.stringify(status)}`);
-  assert.equal(status, 'Stamp: that layer cannot hold stamped stones — only drawn shapes can.');
+  assert.equal(status, 'Stamp: that layer cannot hold stamped stones — only drawn shapes and text can.');
 });
 
 // =============================================================================================
@@ -349,17 +401,19 @@ await runTest('Stamp over an empty board -> onStampPlace(layerId:null), unchange
 });
 
 // =============================================================================================
-// 3c. Stamp over an ineligible shape that HAS a path beneath it -> still places on the path.
-//     NAMED CONTROL: if Stamp started rejecting instead of falling through, this is what fails.
-//     Reachability: the user clicks Stamp on a generated monogram's lettering (frame 'path' below).
+// 3c. Stamp over a text proxy, clicking BETWEEN its beads, with a path beneath -> places on the path.
+//     NAMED CONTROL: if the proximity test regressed to a bbox test (or Stamp started rejecting a
+//     missed-bead click instead of falling through), this is what fails.
+//     Reachability: the user clicks Stamp inside a monogram's lettering bbox but in a gap between
+//     the letters, with the frame 'path' below.
 // =============================================================================================
-await runTest('Stamp over an ineligible proxy WITH a path beneath -> still places on the path (regression / named control)', () => {
+await runTest('Stamp between a text proxy\'s beads WITH a path beneath -> falls through to the path (regression / named control)', () => {
   sync([pathLayer(), textLayer()], { 'text-over': textOverPathStones });
   const hook = runStampClick(P.x, P.y);
   assert.deepEqual(hook, { kind: 'place', layerId: 'path-A' },
-    'the click falls THROUGH the ineligible text proxy and places on the path -- no rejection');
+    'the click missed every text bead (proximity), so it falls THROUGH to the path -- no rejection');
   const selectHit = layerIdOfShape(tool.debugHitTestShapeId(P.x, P.y));
-  console.log(`    Stamp/ineligible-over-path -- hook = ${JSON.stringify(hook)} ; Select at same point = ${JSON.stringify(selectHit)}`);
+  console.log(`    Stamp/between-beads-over-path -- hook = ${JSON.stringify(hook)} ; Select at same point = ${JSON.stringify(selectHit)}`);
   assert.equal(selectHit, 'text-over', 'Select still picks the topmost (text) proxy -- mark resolver differs on purpose');
 });
 
@@ -369,17 +423,18 @@ await runTest('Stamp over an ineligible proxy WITH a path beneath -> still place
 // =============================================================================================
 
 // 4. Trace over one ineligible shape, nothing beneath.
-//    Reachability: the user picks Trace and drags along a monogram's lettering (a 'text' proxy) --
-//    or any lone 'text'/'svg'/'image'/'circle'/'rectangle' layer -- with no drawn shape under it.
+//    Reachability: the user picks Trace and drags across any lone 'svg'/'image'/'circle'/
+//    'rectangle'/shape-library layer with no drawn shape under it. (MONO-021: a Trace along a
+//    monogram's lettering now resolves the letter -- see the proximity tests above.)
 await runTest('Trace over an ineligible shape with nothing beneath -> reason "ineligible" + its status string', () => {
-  sync([textLayer()], { 'text-over': boxStones(100, 150) });
+  sync([circleLayer()]);
   const hook = runTraceGesture([{ x: 108, y: 120 }, { x: 120, y: 122 }, { x: 138, y: 124 }]);
   assert.deepEqual(hook, { kind: 'reject', reason: 'ineligible', layerId: undefined },
     'a Trace drag wholly over a non-path proxy rejects as "ineligible", no layerId');
   projectRef.layers = currentLayers;
   const status = traceRejectStatus(hook.reason, hook.layerId);
   console.log(`    Trace/ineligible -- reason = ${JSON.stringify(hook.reason)} ; status = ${JSON.stringify(status)}`);
-  assert.equal(status, 'Trace: that layer cannot take traced marks — only drawn shapes can.');
+  assert.equal(status, 'Trace: that layer cannot take traced marks — only drawn shapes and text can.');
 });
 
 // 5. Trace over an empty board.
@@ -411,15 +466,17 @@ await runTest('Trace over a path layer with stonesGenerated:false -> reason "no-
 });
 
 // 7. Eraser over one ineligible shape, nothing beneath.
-//    Reachability: the user picks Eraser and clicks/sweeps on a lone 'text'/'svg'/'image' layer.
+//    Reachability: the user picks Eraser and clicks/sweeps on a lone 'svg'/'image'/'circle'/
+//    'rectangle'/shape-library layer. (MONO-021: an Eraser over a monogram's lettering resolves
+//    the letter -- see the proximity tests above.)
 await runTest('Eraser over an ineligible shape with nothing beneath -> reason "ineligible" + its status string', () => {
-  sync([textLayer()], { 'text-over': boxStones(100, 150) });
+  sync([circleLayer()]);
   const hook = runEraserGesture([{ x: 122, y: 124 }]);
   assert.deepEqual(hook, { kind: 'reject', reason: 'ineligible' },
     'an Eraser sweep wholly over a non-path proxy rejects as "ineligible"');
   const status = eraseRejectStatus(hook.reason);
   console.log(`    Eraser/ineligible -- reason = ${JSON.stringify(hook.reason)} ; status = ${JSON.stringify(status)}`);
-  assert.equal(status, 'Eraser: that layer has no erasable marks — only drawn shapes do.');
+  assert.equal(status, 'Eraser: that layer has no erasable marks — only drawn shapes and text do.');
 });
 
 // 8. Eraser over an empty board.

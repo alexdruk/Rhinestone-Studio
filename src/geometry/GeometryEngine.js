@@ -307,7 +307,94 @@ export class GeometryEngine {
       sourceMode = options.mode;
     }
 
-    return new StoneLayout({ layerId: options.layerId, sourceMode, stones });
+    // MONO-021: Design-tool edits (Stamp / Trace / Eraser) on a text layer. `stones` above is the
+    // BASE text layout; its footprint bounding box is the "current base-stone bounds" the frozen-box
+    // transform maps stored edits onto -- captured HERE, BEFORE any edit is applied, because feeding
+    // post-edit bounds would make the map circular (see computeFrozenBoxTransform()'s own trap).
+    // The whole block is a STRICT no-op when every edit field is absent/empty, so every pre-MONO-021
+    // text layer -- and the committed baselines -- generates byte-identically.
+    //
+    // Order of application mirrors generatePathLayout() (regions -> erased positions -> stamped
+    // stones): a Paint region recolours base stones in place; erased positions then suppress base
+    // stones (recoloured or not) but never a stamp (a stamp erased in Design is spliced out of
+    // `stampedStones` by the caller instead); stamped stones are appended last with their own
+    // identity, so a region never recolours them.
+    const baseBoundingBox = new StoneLayout({ layerId: options.layerId, stones }).getBoundingBox();
+    const baseBoundingBoxMm = baseBoundingBox
+      ? {
+        minXmm: baseBoundingBox.minXmm,
+        minYmm: baseBoundingBox.minYmm,
+        maxXmm: baseBoundingBox.maxXmm,
+        maxYmm: baseBoundingBox.maxYmm,
+        widthMm: baseBoundingBox.widthMm,
+        heightMm: baseBoundingBox.heightMm
+      }
+      : null;
+
+    const hasTextEdits = options.regions.length > 0 || options.erasedGridPositions.length > 0 || options.stampedStones.length > 0;
+    if (hasTextEdits && baseBoundingBoxMm) {
+      // The frozen box is app.js's `layer.naturalBoundingBoxMm`, captured once at the first edit. A
+      // degenerate box (zero width/height) or a text layout with no base stones yields a null
+      // transform, and every edit is then silently skipped -- the same graceful degradation
+      // generatePathLayout() gives a null contour transform on empty contours. Never throws.
+      const transform = computeFrozenBoxTransform(options.naturalBoundingBoxMm ?? baseBoundingBoxMm, baseBoundingBoxMm);
+      if (transform) {
+        // Paint regions: colour-only. Rewrites `color` on a base stone whose centre falls inside a
+        // region contour (placed through the same frozen-box transform), and does nothing else --
+        // see _applyTextRegions()'s own doc comment for the measured reasons it never re-grids.
+        // Runs FIRST so a recoloured stone can still be erased below, and BEFORE stamps are appended
+        // so a region never touches a stamp.
+        if (options.regions.length > 0) {
+          stones = this._applyTextRegions(stones, options.regions, transform);
+        }
+        // Erased positions: each stored entry is a snapshotted base-stone position (bugfix: the
+        // permanent-dead-zone replacement for a live radius test -- see generatePathLayout()'s own
+        // erasedGridPositions block). Point-radius match against ERASED_POSITION_EPSILON_MM (a
+        // transform round-trip float-noise tolerance, orders of magnitude below any real stone
+        // pitch), applied strictly BEFORE stamps are appended so it can only ever suppress a base
+        // stone, never a stamp.
+        if (options.erasedGridPositions.length > 0) {
+          const placedErased = options.erasedGridPositions.map((pos) => {
+            const [placed] = applyNaturalContourTransform([{ xMm: pos.xMm, yMm: pos.yMm }], transform);
+            return placed;
+          });
+          const survivors = stones.filter((stone) => !placedErased.some((pos) => {
+            const dx = stone.xMm - pos.xMm;
+            const dy = stone.yMm - pos.yMm;
+            return dx * dx + dy * dy <= ERASED_POSITION_EPSILON_MM * ERASED_POSITION_EPSILON_MM;
+          }));
+          stones = survivors.map((stone, index) => new Stone({
+            xMm: stone.xMm,
+            yMm: stone.yMm,
+            sizeMm: stone.sizeMm,
+            color: stone.color,
+            layerId: stone.layerId,
+            index
+          }));
+        }
+        // Stamped stones (Stamp + Trace): one manually-placed Stone per entry, appended on top with
+        // its own sizeMm/color, placed through the same frozen-box transform every other Stone on
+        // this layer went through so a stamp tracks the letter's move/resize/font-size change for
+        // free. No interior test, no masking of nearby stones -- a stamp is a decoration, matching
+        // generatePathLayout()'s own stampedStones block exactly.
+        if (options.stampedStones.length > 0) {
+          const stampedStoneObjects = options.stampedStones.map((stamp, i) => {
+            const [placed] = applyNaturalContourTransform([{ xMm: stamp.xMm, yMm: stamp.yMm }], transform);
+            return new Stone({
+              xMm: placed.xMm,
+              yMm: placed.yMm,
+              sizeMm: stamp.sizeMm,
+              color: stamp.color,
+              layerId: options.layerId,
+              index: stones.length + i
+            });
+          });
+          stones = stones.concat(stampedStoneObjects);
+        }
+      }
+    }
+
+    return new StoneLayout({ layerId: options.layerId, sourceMode, stones, baseBoundingBoxMm });
   }
 
   /**
@@ -1432,6 +1519,74 @@ export class GeometryEngine {
   }
 
   /**
+   * MONO-021: applies a 'text' layer's `regions` (Paint) on top of its base stones -- COLOUR ONLY.
+   *
+   * Unlike _applyPathRegions() above (which drops the base stones inside a region and re-samples the
+   * region's own independent grid at its own stoneSizeMm/gapMm/fillMode), this places nothing,
+   * removes nothing and moves nothing. It only rewrites `color` on a base stone whose centre falls
+   * inside a region contour. Same length in, same length out; every xMm/yMm/sizeMm is carried
+   * through untouched.
+   *
+   * Colour-only is a measured decision, not a limitation (see docs/specifications/
+   * MONO-021-TextLayerEditing.md Section 2.1). On the script "QW" / Great Vibes / SS6 / 279-bead
+   * chain, with a 25 mm lasso over 36 beads:
+   *   - Re-sampling through the real shipped _applyPathRegions() with a genuine regions[] entry
+   *     removed 35 beads and placed 0 -- and 0 at the ORIGINAL stone size too. _applyPathRegions()
+   *     clips region candidates to points inside the shape polygons, and on a stroke one stone wide
+   *     almost none survive that clip: the painted stretch goes blank, it does not merely degrade.
+   *   - Restyling those 36 beads to 3.2 mm in place (positions untouched) gives 53 overlapping
+   *     pairs, worst penetration 1.163 mm -- an unmanufacturable design.
+   * Chain thinning would make a size change work, but needs the touching threshold (the shipped
+   * chain already holds neighbour pairs at 2.093 mm, tighter than stoneSize+gap) -- its own
+   * milestone. So a text region's stoneSizeMm/gapMm/fillMode are stored in the .rhs for schema
+   * uniformity with a path region (so hasDesignAuthoredEdits() and the save format need no branch)
+   * but are deliberately ignored here -- nothing is re-gridded, so there is no pitch to honour. The
+   * Paint inspector hides the stone-size and gap controls for a text target rather than offering a
+   * control that does nothing.
+   *
+   * `region.contour` is placed through the SAME frozen-box transform (computeFrozenBoxTransform())
+   * every other edit on this layer uses, so a region tracks the letter's move/resize/font-size
+   * change. Region priority matches _applyPathRegions(): a plain forward loop, so a later region in
+   * the array wins over an earlier one for a stone they both cover. A region with a null `color`
+   * (the normalizer's default when none was given) is skipped -- it recolours nothing.
+   *
+   * Like the other three text-layer edit fields, `regions` is forwarded into generateTextLayout()
+   * by generateTextStonesLive() DIRECTLY (alongside authoredScale), never through
+   * buildTextLayoutBaseParams(): recoverStaleAuthoredScales() (app.js) shares that builder and must
+   * keep regenerating the pure natural layout to validate a persisted authoredScale against, with
+   * no region in play.
+   *
+   * @param {Stone[]} baseStones
+   * @param {{contour: {xMm:number,yMm:number}[], color: string|null}[]} regions normalized text
+   *   regions (stoneSizeMm/gapMm/fillMode are present on each but not read here)
+   * @param {{xMm:number,yMm:number,scaleX:number,scaleY:number}} transform the frozen-box transform
+   *   (never null here -- the caller has already guarded it)
+   * @returns {Stone[]} same count, same positions, same sizes; only `color` inside a region differs
+   */
+  _applyTextRegions(baseStones, regions, transform) {
+    const placedRegions = regions.map((region) => ({
+      polygons: [applyNaturalContourTransform(region.contour, transform)],
+      color: region.color
+    }));
+    return baseStones.map((stone, index) => {
+      let color = stone.color;
+      for (const region of placedRegions) {
+        if (region.color && isPointInsidePolygons(new Point2D(stone.xMm, stone.yMm), region.polygons)) {
+          color = region.color;
+        }
+      }
+      return new Stone({
+        xMm: stone.xMm,
+        yMm: stone.yMm,
+        sizeMm: stone.sizeMm,
+        color,
+        layerId: stone.layerId,
+        index
+      });
+    });
+  }
+
+  /**
    * Resolve a 'path' layer's flattened polygon contours in absolute millimeters, without sampling
    * stones — RS-1012's boolean-input entry point for chaining a *previous* boolean result into
    * another Boolean Operation, mirroring resolveShapePolygons()/resolveSvgPolygons()/resolveTextPolygons().
@@ -1531,6 +1686,55 @@ export function applyNaturalContourTransform(contour, transform) {
   ));
 }
 
+/**
+ * MONO-021: the text-layer counterpart of computeNaturalContourTransform() above. A 'path' layer
+ * roots its natural space in its own (0,0)-rooted `contours`; a 'text' layer has no `contours` and
+ * no w/h box, so its Design-tool edits (Stamp/Trace/Eraser/Paint) are rooted in a FROZEN BOX -- the
+ * axis-aligned bounding box of the layer's BASE text stones (the stones generateTextLayout()
+ * produces before any edit is applied), captured ONCE by app.js at the first edit and never
+ * rewritten. That is the exact RS-3014 Step 3 pattern computeNaturalContourTransform()'s
+ * `naturalBoundingBoxMm` param already implements for a cut path layer.
+ *
+ * Edits are stored (0,0)-rooted relative to that frozen box (stored point = absolute-at-edit-time
+ * minus the box's own min corner), exactly as a path layer's edits are stored relative to its
+ * (0,0)-rooted contours. This returns the affine box->box map that places a stored edit onto the
+ * layer's CURRENT base-stone bounds, in the same { xMm, yMm, scaleX, scaleY } shape
+ * applyNaturalContourTransform() already consumes (`p -> xMm + p.xMm * scaleX`).
+ *
+ * TRAP: `currentBoundsMm` must ALWAYS be the base stones' bounds computed BEFORE any edit is
+ * applied. Feeding post-edit bounds makes the map circular -- a stamp placed outside the letter
+ * grows the box, which silently moves every other edit on the layer.
+ *
+ * Lives next to computeNaturalContourTransform() (not in PaintRegionSelection.js alongside its
+ * app-facing inverse absolutePointsToFrozenBoxSpace()) for the same reason
+ * computeNaturalContourTransform() itself does: PaintRegionSelection.js imports FROM GeometryEngine.js,
+ * never the reverse, and generateTextLayout() needs this forward helper directly.
+ *
+ * @param {{minXmm:number,minYmm:number,maxXmm:number,maxYmm:number}|null|undefined} frozenBoxMm
+ * @param {{minXmm:number,minYmm:number,maxXmm:number,maxYmm:number}|null|undefined} currentBoundsMm
+ * @returns {{xMm:number,yMm:number,scaleX:number,scaleY:number}|null} null when either box is
+ *   absent or degenerate (zero width or height) -- generateTextLayout() then silently skips every
+ *   edit, the same graceful degradation generatePathLayout() gives a null contour transform.
+ */
+export function computeFrozenBoxTransform(frozenBoxMm, currentBoundsMm) {
+  if (!frozenBoxMm || !currentBoundsMm) {
+    return null;
+  }
+  const frozenWidthMm = frozenBoxMm.maxXmm - frozenBoxMm.minXmm;
+  const frozenHeightMm = frozenBoxMm.maxYmm - frozenBoxMm.minYmm;
+  if (!(frozenWidthMm > 0) || !(frozenHeightMm > 0)) {
+    return null;
+  }
+  const currentWidthMm = currentBoundsMm.maxXmm - currentBoundsMm.minXmm;
+  const currentHeightMm = currentBoundsMm.maxYmm - currentBoundsMm.minYmm;
+  return {
+    xMm: currentBoundsMm.minXmm,
+    yMm: currentBoundsMm.minYmm,
+    scaleX: currentWidthMm / frozenWidthMm,
+    scaleY: currentHeightMm / frozenHeightMm
+  };
+}
+
 function normalizeTextParams(params) {
   if (typeof params.text !== 'string' || params.text.length === 0) {
     throw new TypeError('GeometryEngine.generateTextLayout requires non-empty text.');
@@ -1614,7 +1818,19 @@ function normalizeTextParams(params) {
     ...curve,
     // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.
     // MONO-015: text layers are the only caller allowed to opt into sizeMode 'weight'.
-    ...normalizeMixedSizeParams(params, stoneSizeMm, { allowWeight: true })
+    ...normalizeMixedSizeParams(params, stoneSizeMm, { allowWeight: true }),
+    // MONO-021: Design-tool edits on a text layer -- the SAME four optional fields, SAME shapes and
+    // SAME (0,0)-rooted natural-space convention a 'path' layer already carries. Reuses the path
+    // normalizers verbatim (do not clone them): a normalizer's "generatePathLayout" error-message
+    // prefix is internal and the validation is identical. Absent/empty on every text layer
+    // predating this milestone -> a strict no-op in generateTextLayout()'s edit-application block,
+    // so pre-MONO-021 output (and the frozen baselines) is byte-identical. The natural space is
+    // rooted in `naturalBoundingBoxMm` (the frozen box) rather than `contours` -- a text layer has
+    // neither `contours` nor a w/h box; see computeFrozenBoxTransform()'s own doc comment.
+    regions: normalizePathRegions(params.regions),
+    stampedStones: normalizePathStampedStones(params.stampedStones),
+    erasedGridPositions: normalizePathErasedGridPositions(params.erasedGridPositions),
+    naturalBoundingBoxMm: normalizeNaturalBoundingBoxMm(params.naturalBoundingBoxMm)
   };
 }
 

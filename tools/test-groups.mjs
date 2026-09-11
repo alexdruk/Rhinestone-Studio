@@ -202,6 +202,7 @@ export const GROUPS = {
     'test-s200-mixed-stone-sizes.mjs',
     'test-rs3011-step10a-region-data-model.mjs',
     'test-rs3011-step10b-paint-target-selection.mjs',
+    'test-mono-021-text-layer-edits.mjs',
   ],
   'stone-layout': [
     'test-stone-color.mjs',
@@ -313,6 +314,7 @@ export const GROUPS = {
     'test-rs3012-step5-rectangle-select.mjs',
     'test-maint-003-materializer-contract.mjs',
     'test-rs3015-mark-target-eligibility.mjs',
+    'test-mono-021-mark-hooks.mjs',
   ],
   ui: [
     'test-ui-shell-structure.mjs',

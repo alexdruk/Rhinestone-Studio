@@ -85,7 +85,7 @@
 // pipeline stages re-run on every threshold/invert/blur/resize edit, but the (comparatively
 // expensive) browser image decode only ever runs once per distinct imageSrc value.
 import './src/browser/BrowserDependencyProbe.js';
-import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace, hitTestPathLayerRegion, computeNaturalContourTransform, applyNaturalContourTransform, isPointInsidePolygons, findOverlappingStonePairs, hasAnyOverlappingStonePair, measureStoneCrowding, solveLetterSpacingMm, TRACKING_XPITCH_LADDER, MIN_HEIGHT_TO_STONE_RATIO, PRINTABLE_MARGIN_MM, maxAutoFitWidthMm, computeTextAutoFitScale } from './src/geometry/index.js';
+import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace, absolutePointsToFrozenBoxSpace, hitTestPathLayerRegion, computeNaturalContourTransform, applyNaturalContourTransform, computeFrozenBoxTransform, isPointInsidePolygons, findOverlappingStonePairs, hasAnyOverlappingStonePair, measureStoneCrowding, solveLetterSpacingMm, TRACKING_XPITCH_LADDER, MIN_HEIGHT_TO_STONE_RATIO, PRINTABLE_MARGIN_MM, maxAutoFitWidthMm, computeTextAutoFitScale } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
 import { createDefaultFontProviderRegistry, createDefaultRhinestoneFontRegistry, BoundingBox, strokeNarrowerThanOneStone } from './src/text/index.js';
 import { renderProductionLayout, renderStoneLayout, fitTransform, chooseNiceStepMm } from './src/renderer/CanvasRenderer2D.js';
@@ -886,7 +886,23 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  async generateTextStonesLive(layer,project,{includeStats=false}={}){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text||!isFontKnown(layer.font))return includeStats?{stones:[],outlineStats:null}:[];const base={...buildTextLayoutBaseParams(layer),
   // MONO-005A: see resolveAuthoredScale()'s own doc comment. No effect on sampled/OpenType text --
   // GeometryEngine only ever reads authoredScale inside its authored-stone-center branch.
-  authoredScale:resolveAuthoredScale(layer)};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const{scale}=computeAutoFitScale(layer,project,result.widthMm);if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
+  authoredScale:resolveAuthoredScale(layer),
+  // MONO-021: the four Design-tool edit fields go into generateTextLayout()'s call HERE, directly,
+  // alongside authoredScale -- NOT in buildTextLayoutBaseParams(). MONO-006B reserves that builder
+  // for the pure NATURAL layout recoverStaleAuthoredScales() regenerates to validate a persisted
+  // authoredScale against; a stamp shifting its bounding-box centre must never reach that check.
+  // This is the identical wiring-gap fix RS-3011 Steps 10b/12/13 made for generatePathStonesLive()
+  // -- without these four lines an edit is stored on disk and never rendered. Absent/empty on every
+  // pre-MONO-021 text layer, where generateTextLayout()'s edit-application block is a strict no-op.
+  regions:layer.regions,stampedStones:layer.stampedStones,erasedGridPositions:layer.erasedGridPositions,naturalBoundingBoxMm:layer.naturalBoundingBoxMm};let result=await this.permanentEngine.generateTextLayout(base);
+  // MONO-021: auto-fit and canvas-centering both measure the letter, not the letter PLUS any
+  // Design-tool edits. generateTextLayout() now appends stamped stones (which can sit outside the
+  // letter) into result.stones, so result.widthMm / result.getBoundingBox() would grow with a
+  // stamp and re-centre / shrink the whole letter on the canvas -- the exact circular-bounds trap
+  // computeFrozenBoxTransform()'s own doc comment describes. result.baseBoundingBoxMm is the box of
+  // the BASE stones only (pre-edit); it is non-null exactly when getBoundingBox() is, and for an
+  // unedited layer the two are identical, so `?? result.getBoundingBox()` is a no-op there.
+  if(layer.autoFit){const{scale}=computeAutoFitScale(layer,project,result.baseBoundingBoxMm?.widthMm??result.widthMm);if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.baseBoundingBoxMm??result.getBoundingBox();
   // RS-1009: text layers previously had no position field -- stones were always centered on the
   // canvas. layer.x/layer.y (mm, default 0) are a further offset applied on top of that same
   // auto-centered base position, so pre-RS-1009 Project JSON (no x/y on its text layers) renders
@@ -1146,6 +1162,67 @@ let paintStyleSeeded=false;
 // DrawingCanvasTool.js can recognize it without importing anything from this module, matching this
 // codebase's existing resolveSelectionTarget/hitTestRegion plain-object-contract convention).
 const PAINT_TARGET_PRECISION_ERROR=Object.freeze({precisionError:true});
+// MONO-021: a 'text' layer's Design-tool edits (Stamp/Trace/Eraser/Paint) are rooted in a FROZEN
+// BOX -- the AABB of the layer's BASE stones in GeometryEngine's own pre-app.js-offset space -- and
+// are stored on the layer (0,0)-rooted relative to it (see computeFrozenBoxTransform()'s own doc
+// comment). The three mark hooks + onPaintStroke each need two things to convert an absolute
+// canvas-mm click / lasso into that stored form: the layer's CURRENT base-stone bounds (engine
+// space), and the same auto-centre + layer.x/y offset generateTextStonesLive() adds to every
+// rendered stone. This recomputes both -- plus the base stones themselves -- by regenerating the
+// layer's base layout exactly as generateTextStonesLive() does (buildTextLayoutBaseParams() +
+// authoredScale + the autoFit re-gen), MINUS the four edit fields: the base stones must be the
+// PRE-edit set or the frozen-box map goes circular (§3.1's trap). One extra engine call per
+// committed gesture, never per frame. Returns null for a layer that produces no base stones (empty
+// text / unknown font / failed manifest) -- the caller then reports the edit as unplaceable.
+async function resolveTextLayerEditContext(layer){
+  if(!permanentEngine||!permanentEngine.canGenerateText||!layer.text||!isFontKnown(layer.font))return null;
+  const base={...buildTextLayoutBaseParams(layer),authoredScale:resolveAuthoredScale(layer)};
+  let result;
+  try{
+    result=await permanentEngine.generateTextLayout(base);
+    if(layer.autoFit){
+      const{scale}=computeAutoFitScale(layer,project,result.baseBoundingBoxMm?.widthMm??result.widthMm);
+      if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await permanentEngine.generateTextLayout({...base,heightMm:scaledHeight});}
+    }
+  }catch(error){console.error('MONO-021: text layer edit-context generation failed',error);return null;}
+  const bb=result.baseBoundingBoxMm??result.getBoundingBox();
+  if(!bb)return null;
+  const{offsetX,offsetY}=computeTextPlacementOffset(bb,layer,project);
+  return{
+    baseBoundingBoxMm:{minXmm:bb.minXmm,minYmm:bb.minYmm,maxXmm:bb.maxXmm,maxYmm:bb.maxYmm},
+    offsetXMm:offsetX,offsetYMm:offsetY,
+    baseStones:result.stones.map(s=>({xMm:s.xMm,yMm:s.yMm,sizeMm:s.sizeMm}))
+  };
+}
+// MONO-021: an absolute canvas-mm point -> the (0,0)-rooted-to-the-frozen-box stored form the four
+// 'text' edit fields use. Subtracts the render offset (absolute -> engine space), then inverts the
+// box->box map via absolutePointsToFrozenBoxSpace() (never a second scale/translate). `frozenBoxMm`
+// is layer.naturalBoundingBoxMm (undefined until the first edit -- then ctx.baseBoundingBoxMm is
+// passed for both args and the map is a pure translation). Returns null when the box is degenerate.
+function textEditPointToStored(pointAbsoluteMm,ctx,frozenBoxMm){
+  const enginePoint={xMm:pointAbsoluteMm.xMm-ctx.offsetXMm,yMm:pointAbsoluteMm.yMm-ctx.offsetYMm};
+  const [ring]=absolutePointsToFrozenBoxSpace([[enginePoint]],frozenBoxMm??ctx.baseBoundingBoxMm,ctx.baseBoundingBoxMm);
+  return ring?ring[0]:null;
+}
+// MONO-021: same conversion for a whole polygon/point-list (Trace's spaced points, an Eraser
+// corridor ring, a Paint lasso contour) -- absolute canvas mm -> engine space -> frozen-box space.
+function textEditPolygonToStored(polygonAbsoluteMm,ctx,frozenBoxMm){
+  const enginePolygon=polygonAbsoluteMm.map(p=>({xMm:p.xMm-ctx.offsetXMm,yMm:p.yMm-ctx.offsetYMm}));
+  const [ring]=absolutePointsToFrozenBoxSpace([enginePolygon],frozenBoxMm??ctx.baseBoundingBoxMm,ctx.baseBoundingBoxMm);
+  return ring||null;
+}
+// MONO-021: a text layer's stone Group on Design's canvas is rebuilt by syncFromProjectLayers()
+// ONLY when the proxy's BOUNDS change -- a stamp on a bead, an erase, or a Paint recolour moves no
+// bounds. So a text edit must first regenerate the global layout, THEN force an unconditional
+// text-proxy rebuild via refreshStoneGroupForLayer() (which MONO-021 makes dispatch to
+// rebuildTextStoneGroupForShape for a text proxy). Order matters: getTextLayerStones() inside the
+// rebuild reads the shared `layout` global, so updateAll() must run first. The 'path' hooks call
+// refresh BEFORE updateAll because rebuildStoneGroupForShape re-runs generatePathLayout() from live
+// project data instead.
+async function commitTextLayerEditRefresh(targetLayer){
+  await updateAll(true);
+  drawingTool.refreshStoneGroupForLayer(targetLayer.id);
+}
 // RS-3013 Step 1: the target-shape resolution Paint's own onPaintStroke below needs (best-overlap-
 // by-area, two-pass: a fallback-spacing pass to pick a winner, then that winner's own stoneSize+gap
 // for a precise intersection) is the EXACT SAME resolution Select's rectangle-drag and Lasso's own
@@ -1157,6 +1234,41 @@ const PAINT_TARGET_PRECISION_ERROR=Object.freeze({precisionError:true});
 // PAINT_TARGET_PRECISION_ERROR sentinel above instead of null when either selectPaintTarget() call
 // throws BooleanPrecisionError -- any other error type is rethrown unchanged, this function only
 // ever absorbs this one specific, known error class.
+// MONO-021: a regular 16-gon at a bead's own radius -- one per rendered stone becomes a 'text'
+// layer's Paint candidate geometry in resolvePaintTargetTwoPass(), since a text layer has no
+// `contours`. The discs ARE the letter's true physical footprint, which is what selectPaintTarget()
+// intersects a lasso against.
+function beadDiscPolygon(cxMm,cyMm,rMm){
+  const out=[];
+  for(let i=0;i<16;i++){const a=(i/16)*Math.PI*2;out.push({xMm:cxMm+rMm*Math.cos(a),yMm:cyMm+rMm*Math.sin(a)});}
+  return out;
+}
+function pointsAABB(points){
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  for(const p of points){if(p.xMm<minX)minX=p.xMm;if(p.yMm<minY)minY=p.yMm;if(p.xMm>maxX)maxX=p.xMm;if(p.yMm>maxY)maxY=p.yMm;}
+  return{minX,minY,maxX,maxY};
+}
+function aabbOverlap(a,b){return a.minX<=b.maxX&&b.minX<=a.maxX&&a.minY<=b.maxY&&b.minY<=a.maxY;}
+// MONO-021 latency fix: the bead-proximity pre-test below needs a point-to-lasso-boundary distance,
+// not just containment -- see the comment at its call site in resolvePaintTargetTwoPass() for why.
+function pointToSegmentDistanceMm(p,a,b){
+  const dx=b.xMm-a.xMm,dy=b.yMm-a.yMm;
+  const lenSq=dx*dx+dy*dy;
+  if(lenSq===0)return Math.hypot(p.xMm-a.xMm,p.yMm-a.yMm);
+  let t=((p.xMm-a.xMm)*dx+(p.yMm-a.yMm)*dy)/lenSq;
+  if(t<0)t=0;else if(t>1)t=1;
+  return Math.hypot(p.xMm-(a.xMm+t*dx),p.yMm-(a.yMm+t*dy));
+}
+function distanceToPolygonsMm(point,polygons){
+  let min=Infinity;
+  for(const poly of polygons){
+    for(let i=0;i<poly.length;i++){
+      const d=pointToSegmentDistanceMm(point,poly[i],poly[(i+1)%poly.length]);
+      if(d<min)min=d;
+    }
+  }
+  return min;
+}
 function resolvePaintTargetTwoPass(polygonsAbsoluteMm){
   if(!permanentEngine)return null;
   const candidates=project.layers.filter(l=>l.type==='path'&&l.visible!==false).map(l=>({
@@ -1171,6 +1283,35 @@ function resolvePaintTargetTwoPass(polygonsAbsoluteMm){
       layerId:l.id,xMm:l.x,yMm:l.y,widthMm:l.w,heightMm:l.h,naturalBoundingBoxMm:l.naturalBoundingBoxMm
     }).polygons
   }));
+  // MONO-021: 'text' candidates -- one 16-gon disc per rendered bead, read straight off the last
+  // generated `layout` (this is a sync function; onPaintStroke's own async text branch does the
+  // frozen-box conversion afterward). CULLED by a cheap axis-aligned bbox overlap against the lasso
+  // BEFORE selectPaintTarget()'s boolean pass: a 279-disc intersection measured 142-184 ms on a hit
+  // and ~591 ms on a full miss (prompt author), so a lasso nowhere near the lettering must never
+  // reach it.
+  const lassoBox=pointsAABB(polygonsAbsoluteMm.flat());
+  for(const l of project.layers){
+    if(l.type!=='text'||l.visible===false)continue;
+    const beads=(layout?layout.stones:[]).filter(s=>s.layerId===l.id);
+    if(beads.length===0)continue;
+    const bb=getLayerBBox(l); // text branch: bead extent from StoneLayout.getBoundingBox() (already half-stone padded)
+    if(!aabbOverlap(lassoBox,{minX:bb.x,minY:bb.y,maxX:bb.x2,maxY:bb.y2}))continue;
+    // Latency fix: the bbox cull above can't catch a NEAR-miss -- a lasso that lands inside the
+    // letter's bbox but touches no bead (the counter of a Q, the gap between two letters) -- and
+    // that case measured 842-896 ms building+intersecting a full disc set for a target the stroke
+    // never actually reaches. A lasso that touches no bead cannot recolour a single stone (the
+    // discs below are the only geometry selectPaintTarget() intersects), so the candidate is dead
+    // before that call ever runs. A bead "touches" the lasso when its centre is either inside the
+    // lasso polygon, or within its own radius of the lasso's boundary -- the second clause is
+    // required: a lasso smaller than a bead, sitting entirely inside that bead, contains no bead
+    // centre at all, so containment alone would wrongly cull a legitimate paint.
+    const touchesABead=beads.some(b=>{
+      const c={xMm:b.xMm,yMm:b.yMm};
+      return isPointInsidePolygons(c,polygonsAbsoluteMm)||distanceToPolygonsMm(c,polygonsAbsoluteMm)<=b.sizeMm/2;
+    });
+    if(!touchesABead)continue;
+    candidates.push({layerId:l.id,polygons:beads.map(b=>beadDiscPolygon(b.xMm,b.yMm,b.sizeMm/2))});
+  }
   // First pass: which candidate does the stroke/rectangle overlap most? The exact grid resolution
   // barely matters for THIS decision (only for the stored contour's precision, refined below once
   // the target is known) -- the currently-selected layer's own stone spacing is a reasonable,
@@ -1195,7 +1336,7 @@ function resolvePaintTargetTwoPass(polygonsAbsoluteMm){
   // doc comment.
   let result;
   try{
-    result=selectPaintTarget(polygonsAbsoluteMm,[targetCandidate],{targetSpacingMm:targetLayer.stoneSize+targetLayer.gap});
+    result=selectPaintTarget(polygonsAbsoluteMm,[targetCandidate],{targetSpacingMm:(targetLayer.stoneSize||2)+(targetLayer.gap||0.3)});
   }catch(error){
     if(!(error instanceof BooleanPrecisionError))throw error;
     return PAINT_TARGET_PRECISION_ERROR;
@@ -1303,7 +1444,13 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // onShapeCommitted() above always calls it.
   onPaintStroke:async(lassoPolygons)=>{
     updateDrawToolButtons();
+    // MONO-021 QA-only timing hook -- same "never used to drive any application logic" precedent
+    // as window.__drawingTool/window.__project/window.__preview3D above, added solely so the
+    // gesture-latency figures the milestone spec requires can be measured against a real pointer
+    // gesture instead of a synthetic direct call.
+    const __t0=performance.now();
     const resolved=resolvePaintTargetTwoPass(lassoPolygons);
+    window.__lastPaintResolveMs=performance.now()-__t0;
     // Bugfix: distinct from the "genuinely overlaps nothing" case right below -- this stroke DID
     // overlap a candidate, but the intersection couldn't be computed at a safe precision (see
     // PAINT_TARGET_PRECISION_ERROR's own doc comment). No region created, no history entry, same
@@ -1313,9 +1460,40 @@ const drawingTool=createDrawingTool(layoutCanvas,{
       el('status').textContent='Paint: this stroke is too small/precise for a shape this large — try a bigger area.';
       return;
     }
-    if(!resolved){console.info('Paint: lasso overlaps no path layer, discarding stroke.');return;}
+    if(!resolved){console.info('Paint: lasso overlaps no path or text layer, discarding stroke.');return;}
     const targetLayer=project.layers.find(l=>l.id===resolved.layerId);
     if(!targetLayer)return;
+    if(targetLayer.type==='text'){
+      // MONO-021: Paint on a 'text' layer is COLOUR-ONLY (see _applyTextRegions()'s own doc comment
+      // and spec §2.1 for the measured reasons -- a resample empties a one-stone-wide stroke, an
+      // in-place size change overlaps). The region carries the same {stoneSizeMm,gapMm,fillMode}
+      // shape a path region does for .rhs uniformity, but the engine stores and ignores them.
+      // The lasso intersection contour is converted through the frozen-box transform, not
+      // absolutePolygonsToNaturalSpace() (which opens with pathLayer.contours.map -- a TypeError
+      // for a text layer, which is exactly why this branch and the disc candidates in
+      // resolvePaintTargetTwoPass() ship together, per §6.0).
+      const ctx=await resolveTextLayerEditContext(targetLayer);
+      if(!ctx){el('status').textContent=`Paint: ${layerLabel(targetLayer)} has no stones to recolour.`;return;}
+      const storedContours=resolved.contours
+        .map(ring=>textEditPolygonToStored(ring,ctx,targetLayer.naturalBoundingBoxMm))
+        .filter(Boolean);
+      if(storedContours.length===0)return;
+      const newRegions=storedContours.map((contour,index)=>({
+        id:'region'+Date.now()+index,
+        contour,
+        stoneSizeMm:paintSettings.sizeMm,
+        gapMm:paintSettings.gapMm,
+        color:paintSettings.color,
+        fillMode:'fill'
+      }));
+      commitHistory();
+      if(!targetLayer.naturalBoundingBoxMm)targetLayer.naturalBoundingBoxMm={...ctx.baseBoundingBoxMm};
+      if(!Array.isArray(targetLayer.regions))targetLayer.regions=[];
+      targetLayer.regions.push(...newRegions);
+      await commitTextLayerEditRefresh(targetLayer);
+      el('status').textContent=`Recoloured ${newRegions.length} area${newRegions.length===1?'':'s'} on ${layerLabel(targetLayer)} — Paint on text is colour only.`;
+      return;
+    }
     // RS-3011 Step 10b DECISION (Sasha delegated, confirmed during scoping): a lasso crossing a
     // concave notch or a hole can genuinely intersect its target in multiple disjoint pieces --
     // create ONE region per disjoint contour rather than keeping only the largest piece or
@@ -1447,20 +1625,21 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // feedback" contract (never silent, never "allow anyway"). Two reasons, one string each (the same
   // distinction Trace/Eraser make):
   //  - 'outside-selection' the click is outside the active selection -- RS-3012's exact wording kept
-  //  - 'ineligible'        the click landed inside a shape that can't take marks (a text / SVG /
-  //                        image / circle / rectangle / shape-library proxy) with no drawn shape
-  //                        beneath it -- worded for Stamp
+  //  - 'ineligible'        the click landed inside a shape that can't take marks (an SVG / image /
+  //                        circle / rectangle / shape-library proxy) with no drawn shape or text
+  //                        layer beneath it -- worded for Stamp. MONO-021: a 'text' proxy IS a mark
+  //                        target now (resolved by bead proximity), so it is no longer in this list.
   // Stamp's "nothing under the click at all" case is NOT routed here: onStampPlace is still called
   // with a null layerId and messages it there ("Stamp: nothing here to place a stone on.").
   onStampRejected:(reason)=>{
-    if(reason==='ineligible'){el('status').textContent='Stamp: that layer cannot hold stamped stones — only drawn shapes can.';return;}
+    if(reason==='ineligible'){el('status').textContent='Stamp: that layer cannot hold stamped stones — only drawn shapes and text can.';return;}
     el('status').textContent='Stamp: click is outside the current selection.';
   },
   // RS-3012 Step 1 / RS-3015: fires instead of onTracePlace for any committed Trace drag that
   // resolves nothing usable -- no history session, no stones placed. Each `reason` is its own
   // status message (see DrawingCanvasTool.js's onTraceRejected contract):
   //  - 'no-target'        nothing eligible under the stroke at all
-  //  - 'ineligible'       a shape was under it, but only drawn ('path') shapes can hold marks
+  //  - 'ineligible'       a shape was under it, but only drawn ('path') shapes and 'text' layers can hold marks
   //  - 'no-stones'        a real drawn shape whose stones aren't generated yet -- point at the
   //                       Generate Stones button, NOT at "this can't hold stones"; layerId names it
   //  - 'outside-selection' RS-3012's case, exact wording kept (regression control in the tests)
@@ -1468,7 +1647,7 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // points" / "no spaced points" silent discards, which have no message and stay that way.
   onTraceRejected:(reason,layerId)=>{
     if(reason==='no-target'){el('status').textContent='Trace: nothing under the stroke to trace along.';return;}
-    if(reason==='ineligible'){el('status').textContent='Trace: that layer cannot take traced marks — only drawn shapes can.';return;}
+    if(reason==='ineligible'){el('status').textContent='Trace: that layer cannot take traced marks — only drawn shapes and text can.';return;}
     if(reason==='no-stones'){
       const owner=layerId&&project.layers.find(l=>l.id===layerId);
       el('status').textContent=owner
@@ -1480,51 +1659,61 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   },
   // RS-3015: Eraser's counterpart to onTraceRejected -- fires instead of onEraseSweep when a sweep
   // resolves no eligible target. Two reasons only ('no-stones' is Trace's alone -- Eraser targets
-  // the 'path' layer regardless, and onEraseSweep below already says "Nothing to erase" for one
-  // holding no stones).
+  // the 'path' or 'text' layer regardless, and onEraseSweep below already says "Nothing to erase"
+  // for one holding no stones).
   onEraseRejected:(reason)=>{
-    if(reason==='ineligible'){el('status').textContent='Eraser: that layer has no erasable marks — only drawn shapes do.';return;}
+    if(reason==='ineligible'){el('status').textContent='Eraser: that layer has no erasable marks — only drawn shapes and text do.';return;}
     el('status').textContent='Eraser: nothing under the sweep to erase.';
   },
   onStampPlace:async({xMm,yMm,layerId})=>{
-    // RS-3015: a mark that places nothing says so, matching onStampRejected() above. Two distinct
-    // cases: (a) nothing under the click at all; (b) the click resolved a layer that isn't a 'path'
-    // layer -- after RS-3015 the resolver skips non-'path' proxies, so this is now only the narrow
-    // race where the layer was deleted or changed type between resolution and here. Neither opens a
-    // history session or mutates anything, exactly as before.
+    // RS-3015 / MONO-021: a mark that places nothing says so, matching onStampRejected() above.
+    // Cases: (a) nothing under the click at all; (b) the click resolved a layer that is neither
+    // 'path' nor 'text' -- after RS-3015 the resolver skips ineligible proxies, so this is now only
+    // the narrow race where the layer was deleted or changed type between resolution and here.
     if(!layerId){el('status').textContent='Stamp: nothing here to place a stone on.';return;}
-    const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
+    const targetLayer=project.layers.find(l=>l.id===layerId&&(l.type==='path'||l.type==='text'));
     if(!targetLayer){
       const owner=project.layers.find(l=>l.id===layerId);
       el('status').textContent=owner
-        ?`Stamp: ${layerLabel(owner)} cannot hold stamped stones — only drawn shapes can.`
+        ?`Stamp: ${layerLabel(owner)} cannot hold stamped stones — only drawn shapes and text can.`
         :'Stamp: nothing here to place a stone on.';
       return;
     }
-    // Feeds absolutePolygonsToNaturalSpace() a single-point "polygon" ([[{xMm,yMm}]]) rather than
-    // duplicating computeNaturalContourTransform/applyNaturalContourTransform logic here -- same
-    // precedent as onPaintStroke's own call just above, just with a 1-point ring instead of a real
-    // lasso contour. Returns [] (not a per-point null) when targetLayer has no placeable transform
-    // (empty contours) -- guarded the same way a missing target is above.
-    const naturalPolygons=absolutePolygonsToNaturalSpace([[{xMm,yMm}]],targetLayer);
-    if(naturalPolygons.length===0)return;
-    const naturalPoint=naturalPolygons[0][0];
-    const stamp={
-      id:'stamp'+Date.now(),
-      xMm:naturalPoint.xMm,
-      yMm:naturalPoint.yMm,
-      // RS-3014 Step 1: sizeMm/color now come from Stamp's own independent stampSettings, seeded
-      // from the target layer's stoneSize/color the first time Stamp is used this session (see
-      // seedStampStyleIfNeeded() below) and left alone afterward, superseding RS-3011 Step 12's
-      // "read the target layer's CURRENT fields at click time" convention.
-      sizeMm:stampSettings.sizeMm,
-      color:stampSettings.color
-    };
-    commitHistory();
+    let stamp;
+    if(targetLayer.type==='text'){
+      // MONO-021: convert the absolute click through the frozen-box transform (see
+      // resolveTextLayerEditContext / textEditPointToStored). naturalBoundingBoxMm is captured from
+      // the CURRENT base-stone bounds on the first edit of any kind -- inside commitHistory() so an
+      // undo removes it too.
+      const ctx=await resolveTextLayerEditContext(targetLayer);
+      if(!ctx){el('status').textContent=`Stamp: ${layerLabel(targetLayer)} has no stones to place a stamp against.`;return;}
+      const stored=textEditPointToStored({xMm,yMm},ctx,targetLayer.naturalBoundingBoxMm);
+      if(!stored)return;
+      stamp={id:'stamp'+Date.now(),xMm:stored.xMm,yMm:stored.yMm,sizeMm:stampSettings.sizeMm,color:stampSettings.color};
+      commitHistory();
+      if(!targetLayer.naturalBoundingBoxMm)targetLayer.naturalBoundingBoxMm={...ctx.baseBoundingBoxMm};
+    }else{
+      // Feeds absolutePolygonsToNaturalSpace() a single-point "polygon" ([[{xMm,yMm}]]) rather than
+      // duplicating computeNaturalContourTransform/applyNaturalContourTransform logic here -- same
+      // precedent as onPaintStroke's own call just above, just with a 1-point ring instead of a real
+      // lasso contour. Returns [] (not a per-point null) when targetLayer has no placeable transform
+      // (empty contours) -- guarded the same way a missing target is above.
+      const naturalPolygons=absolutePolygonsToNaturalSpace([[{xMm,yMm}]],targetLayer);
+      if(naturalPolygons.length===0)return;
+      const naturalPoint=naturalPolygons[0][0];
+      // RS-3014 Step 1: sizeMm/color come from Stamp's own independent stampSettings, seeded from
+      // the target layer's stoneSize/color the first time Stamp is used this session.
+      stamp={id:'stamp'+Date.now(),xMm:naturalPoint.xMm,yMm:naturalPoint.yMm,sizeMm:stampSettings.sizeMm,color:stampSettings.color};
+      commitHistory();
+    }
     if(!Array.isArray(targetLayer.stampedStones))targetLayer.stampedStones=[];
     targetLayer.stampedStones.push(stamp);
-    drawingTool.refreshStoneGroupForLayer(targetLayer.id);
-    await updateAll(true);
+    if(targetLayer.type==='text'){
+      await commitTextLayerEditRefresh(targetLayer);
+    }else{
+      drawingTool.refreshStoneGroupForLayer(targetLayer.id);
+      await updateAll(true);
+    }
     el('status').textContent=`Placed a stone on ${layerLabel(targetLayer)}.`;
   },
   // RS-3011 Step 11: Trace's own finalize hook -- fires once per committed drag (see
@@ -1555,14 +1744,26 @@ const drawingTool=createDrawingTool(layoutCanvas,{
     // only as a defensive guard against the narrow race where the layer was deleted between
     // resolution and here.
     if(!placements.length)return;
-    const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
+    const targetLayer=project.layers.find(l=>l.id===layerId&&(l.type==='path'||l.type==='text'));
     if(!targetLayer)return;
-    // Feeds absolutePolygonsToNaturalSpace() the whole placements array as one "polygon" -- it's
-    // purely a coordinate transform, so an open polyline in place of a closed ring is fine (same
-    // precedent as onStampPlace's own 1-point-ring call just above).
-    const naturalPolygons=absolutePolygonsToNaturalSpace([placements],targetLayer);
-    if(naturalPolygons.length===0)return;
-    const naturalPoints=naturalPolygons[0];
+    let naturalPoints;
+    let textCtx=null;
+    if(targetLayer.type==='text'){
+      // MONO-021: same frozen-box conversion Stamp uses -- textEditPolygonToStored() for the whole
+      // spaced-point list at once (a plain coordinate transform, so an open polyline is fine).
+      textCtx=await resolveTextLayerEditContext(targetLayer);
+      if(!textCtx){el('status').textContent=`Trace: ${layerLabel(targetLayer)} has no stones to trace along.`;return;}
+      const stored=textEditPolygonToStored(placements.map(p=>({xMm:p.xMm,yMm:p.yMm})),textCtx,targetLayer.naturalBoundingBoxMm);
+      if(!stored)return;
+      naturalPoints=stored;
+    }else{
+      // Feeds absolutePolygonsToNaturalSpace() the whole placements array as one "polygon" -- it's
+      // purely a coordinate transform, so an open polyline in place of a closed ring is fine (same
+      // precedent as onStampPlace's own 1-point-ring call just above).
+      const naturalPolygons=absolutePolygonsToNaturalSpace([placements],targetLayer);
+      if(naturalPolygons.length===0)return;
+      naturalPoints=naturalPolygons[0];
+    }
     const stamps=naturalPoints.map((p,index)=>({
       id:'stamp'+Date.now()+'-'+index,
       xMm:p.xMm,
@@ -1575,10 +1776,15 @@ const drawingTool=createDrawingTool(layoutCanvas,{
       color:traceSettings.color
     }));
     commitHistory();
+    if(targetLayer.type==='text'&&!targetLayer.naturalBoundingBoxMm)targetLayer.naturalBoundingBoxMm={...textCtx.baseBoundingBoxMm};
     if(!Array.isArray(targetLayer.stampedStones))targetLayer.stampedStones=[];
     targetLayer.stampedStones.push(...stamps);
-    drawingTool.refreshStoneGroupForLayer(targetLayer.id);
-    await updateAll(true);
+    if(targetLayer.type==='text'){
+      await commitTextLayerEditRefresh(targetLayer);
+    }else{
+      drawingTool.refreshStoneGroupForLayer(targetLayer.id);
+      await updateAll(true);
+    }
     el('status').textContent=droppedCount>0
       ?`Traced ${stamps.length} stone${stamps.length===1?'':'s'} (${droppedCount} outside selection, skipped).`
       :`Traced ${stamps.length} stone${stamps.length===1?'':'s'} on ${layerLabel(targetLayer)}.`;
@@ -1623,14 +1829,63 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // so an old project's eraseDaubs and a brand-new erasedGridPositions-based erase on the same layer
   // coexist correctly with no special-case code.
   onEraseSweep:async(daubsAbsoluteMm,layerId,corridorPolygonsAbsoluteMm,mode)=>{
-    // RS-3015: layerId here is always a real 'path' layer -- a no-target / ineligible-proxy sweep
-    // fires onEraseRejected instead, so this hook no longer needs a null-layerId branch.
+    // RS-3015 / MONO-021: layerId here is always a real 'path' or 'text' layer -- a no-target /
+    // ineligible-proxy sweep fires onEraseRejected instead, so this hook needs no null-layerId branch.
     // `!daubsAbsoluteMm.length` stays a silent no-op (DrawingCanvasTool.js never calls this hook
     // with an empty sweep). `if(!targetLayer)` stays as a defensive race guard (the layer was
     // deleted or changed type between resolution and here).
     if(!daubsAbsoluteMm.length)return;
-    const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
+    const targetLayer=project.layers.find(l=>l.id===layerId&&(l.type==='path'||l.type==='text'));
     if(!targetLayer)return;
+    if(targetLayer.type==='text'){
+      // MONO-021: a text layer has no fill to reflow and no `contours` to cut, so BOTH eraser modes
+      // apply the sweep as a shape-defined suppression of BASE stones -- 'stones' mode by the daub
+      // radius (eraserSettings.radiusMm), 'outline' mode by the swept corridor polygons -- writing
+      // the exact two fields Stones mode already writes on a path layer: a base stone inside the
+      // sweep is snapshotted into erasedGridPositions (frozen-box space), a stamped stone inside it
+      // is spliced out of stampedStones. NOTHING is ever added to eraseDaubs (path-only, legacy) and
+      // no contour is cut (§2.2: cutting a boundary would reflow the fill and move untouched beads,
+      // the exact defect that disqualified Flatten).
+      const ctx=await resolveTextLayerEditContext(targetLayer);
+      if(!ctx){el('status').textContent=`Nothing to erase on ${layerLabel(targetLayer)}.`;return;}
+      const frozenBoxMm=targetLayer.naturalBoundingBoxMm??ctx.baseBoundingBoxMm;
+      const fbTransform=computeFrozenBoxTransform(frozenBoxMm,ctx.baseBoundingBoxMm);
+      // "inside the sweep" -- tested in the engine's pre-offset space, where the base stones and the
+      // forward-placed stamped stones both live. Corridor polygons / daub points are absolute
+      // canvas mm, so subtract the render offset first.
+      let withinSweep;
+      if(mode==='outline'){
+        const engineCorridors=(corridorPolygonsAbsoluteMm||[]).map(ring=>ring.map(p=>({xMm:p.xMm-ctx.offsetXMm,yMm:p.yMm-ctx.offsetYMm})));
+        if(engineCorridors.length===0){el('status').textContent=`Nothing to erase on ${layerLabel(targetLayer)}.`;return;}
+        withinSweep=(xMm,yMm)=>isPointInsidePolygons({xMm,yMm},engineCorridors);
+      }else{
+        const rMm=eraserSettings.radiusMm;
+        const engineDaubs=daubsAbsoluteMm.map(d=>({xMm:d.xMm-ctx.offsetXMm,yMm:d.yMm-ctx.offsetYMm}));
+        withinSweep=(xMm,yMm)=>engineDaubs.some(d=>{const dx=xMm-d.xMm,dy=yMm-d.yMm;return dx*dx+dy*dy<=rMm*rMm;});
+      }
+      const newlyErased=ctx.baseStones
+        .filter(s=>withinSweep(s.xMm,s.yMm))
+        .map(s=>{const [ring]=absolutePointsToFrozenBoxSpace([[{xMm:s.xMm,yMm:s.yMm}]],frozenBoxMm,ctx.baseBoundingBoxMm);return ring?ring[0]:null;})
+        .filter(Boolean);
+      const existingStamps=targetLayer.stampedStones||[];
+      const survivingStamps=existingStamps.filter(stamp=>{
+        if(!fbTransform)return true;
+        const [placed]=applyNaturalContourTransform([{xMm:stamp.xMm,yMm:stamp.yMm}],fbTransform);
+        return!withinSweep(placed.xMm,placed.yMm);
+      });
+      const removed=newlyErased.length+(existingStamps.length-survivingStamps.length);
+      if(removed===0){el('status').textContent=`Nothing to erase on ${layerLabel(targetLayer)}.`;return;}
+      commitHistory();
+      if(!targetLayer.naturalBoundingBoxMm)targetLayer.naturalBoundingBoxMm={...ctx.baseBoundingBoxMm};
+      targetLayer.stampedStones=survivingStamps;
+      if(newlyErased.length>0){
+        if(!Array.isArray(targetLayer.erasedGridPositions))targetLayer.erasedGridPositions=[];
+        targetLayer.erasedGridPositions.push(...newlyErased.map(p=>({xMm:p.xMm,yMm:p.yMm})));
+      }
+      await commitTextLayerEditRefresh(targetLayer);
+      el('status').textContent=`Erased on ${layerLabel(targetLayer)}.`;
+      return;
+    }
     if(mode==='outline'){
       // An open Pen/freehand path has no interior to cut -- same graceful-failure precedent
       // RS-1012's own resolveLayerShapeSource()/runBooleanOp() already establish for a shape with
