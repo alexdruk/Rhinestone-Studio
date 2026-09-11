@@ -1249,6 +1249,26 @@ function pointsAABB(points){
   return{minX,minY,maxX,maxY};
 }
 function aabbOverlap(a,b){return a.minX<=b.maxX&&b.minX<=a.maxX&&a.minY<=b.maxY&&b.minY<=a.maxY;}
+// MONO-021 latency fix: the bead-proximity pre-test below needs a point-to-lasso-boundary distance,
+// not just containment -- see the comment at its call site in resolvePaintTargetTwoPass() for why.
+function pointToSegmentDistanceMm(p,a,b){
+  const dx=b.xMm-a.xMm,dy=b.yMm-a.yMm;
+  const lenSq=dx*dx+dy*dy;
+  if(lenSq===0)return Math.hypot(p.xMm-a.xMm,p.yMm-a.yMm);
+  let t=((p.xMm-a.xMm)*dx+(p.yMm-a.yMm)*dy)/lenSq;
+  if(t<0)t=0;else if(t>1)t=1;
+  return Math.hypot(p.xMm-(a.xMm+t*dx),p.yMm-(a.yMm+t*dy));
+}
+function distanceToPolygonsMm(point,polygons){
+  let min=Infinity;
+  for(const poly of polygons){
+    for(let i=0;i<poly.length;i++){
+      const d=pointToSegmentDistanceMm(point,poly[i],poly[(i+1)%poly.length]);
+      if(d<min)min=d;
+    }
+  }
+  return min;
+}
 function resolvePaintTargetTwoPass(polygonsAbsoluteMm){
   if(!permanentEngine)return null;
   const candidates=project.layers.filter(l=>l.type==='path'&&l.visible!==false).map(l=>({
@@ -1276,6 +1296,20 @@ function resolvePaintTargetTwoPass(polygonsAbsoluteMm){
     if(beads.length===0)continue;
     const bb=getLayerBBox(l); // text branch: bead extent from StoneLayout.getBoundingBox() (already half-stone padded)
     if(!aabbOverlap(lassoBox,{minX:bb.x,minY:bb.y,maxX:bb.x2,maxY:bb.y2}))continue;
+    // Latency fix: the bbox cull above can't catch a NEAR-miss -- a lasso that lands inside the
+    // letter's bbox but touches no bead (the counter of a Q, the gap between two letters) -- and
+    // that case measured 842-896 ms building+intersecting a full disc set for a target the stroke
+    // never actually reaches. A lasso that touches no bead cannot recolour a single stone (the
+    // discs below are the only geometry selectPaintTarget() intersects), so the candidate is dead
+    // before that call ever runs. A bead "touches" the lasso when its centre is either inside the
+    // lasso polygon, or within its own radius of the lasso's boundary -- the second clause is
+    // required: a lasso smaller than a bead, sitting entirely inside that bead, contains no bead
+    // centre at all, so containment alone would wrongly cull a legitimate paint.
+    const touchesABead=beads.some(b=>{
+      const c={xMm:b.xMm,yMm:b.yMm};
+      return isPointInsidePolygons(c,polygonsAbsoluteMm)||distanceToPolygonsMm(c,polygonsAbsoluteMm)<=b.sizeMm/2;
+    });
+    if(!touchesABead)continue;
     candidates.push({layerId:l.id,polygons:beads.map(b=>beadDiscPolygon(b.xMm,b.yMm,b.sizeMm/2))});
   }
   // First pass: which candidate does the stroke/rectangle overlap most? The exact grid resolution
@@ -1410,7 +1444,13 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // onShapeCommitted() above always calls it.
   onPaintStroke:async(lassoPolygons)=>{
     updateDrawToolButtons();
+    // MONO-021 QA-only timing hook -- same "never used to drive any application logic" precedent
+    // as window.__drawingTool/window.__project/window.__preview3D above, added solely so the
+    // gesture-latency figures the milestone spec requires can be measured against a real pointer
+    // gesture instead of a synthetic direct call.
+    const __t0=performance.now();
     const resolved=resolvePaintTargetTwoPass(lassoPolygons);
+    window.__lastPaintResolveMs=performance.now()-__t0;
     // Bugfix: distinct from the "genuinely overlaps nothing" case right below -- this stroke DID
     // overlap a candidate, but the intersection couldn't be computed at a safe precision (see
     // PAINT_TARGET_PRECISION_ERROR's own doc comment). No region created, no history entry, same
