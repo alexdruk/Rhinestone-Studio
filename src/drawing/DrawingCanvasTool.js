@@ -1588,9 +1588,13 @@ export function createDrawingTool(canvasEl, hooks = {}) {
         if (contains) blockedByIneligible = true;
         continue;
       }
-      if (contains) return { layerId: shapes[i].item.data.layerId || null, blockedByIneligible };
+      // MONO-021: isTextTarget is true when the resolved proxy is a 'text' one (item.data.markStones
+      // is an array). onMouseUp's Trace branch reads it to skip the getLayerStoneParams() 'no-stones'
+      // gate (that hook is 'path'-only) -- a text proxy only resolves here when the proximity test
+      // matched a real bead, so a resolved text target always has base stones by construction.
+      if (contains) return { layerId: shapes[i].item.data.layerId || null, blockedByIneligible, isTextTarget: Array.isArray(shapes[i].item.data.markStones) };
     }
-    return { layerId: null, blockedByIneligible };
+    return { layerId: null, blockedByIneligible, isTextTarget: false };
   }
 
   /**
@@ -1648,9 +1652,9 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     for (const point of points) {
       const target = resolveMarkTargetByBounds(point);
       if (target.blockedByIneligible) blockedByIneligible = true;
-      if (target.layerId) return { layerId: target.layerId, blockedByIneligible };
+      if (target.layerId) return { layerId: target.layerId, blockedByIneligible, isTextTarget: target.isTextTarget };
     }
-    return { layerId: null, blockedByIneligible };
+    return { layerId: null, blockedByIneligible, isTextTarget: false };
   }
 
   /**
@@ -3837,7 +3841,11 @@ export function createDrawingTool(canvasEl, hooks = {}) {
           onTraceRejected(traceTarget.blockedByIneligible ? 'ineligible' : 'no-target');
           return;
         }
-        if (!styleParams) {
+        // MONO-021: getLayerStoneParams() is 'path'-only (returns null for a 'text' layer), so a
+        // null here means 'no-stones' ONLY for a path target. A text target resolved by bead
+        // proximity always has base stones -- app.js's onTracePlace does its own frozen-box
+        // conversion and needs no styleParams.
+        if (!styleParams && !traceTarget.isTextTarget) {
           onTraceRejected('no-stones', layerId);
           return;
         }
@@ -4478,6 +4486,18 @@ export function createDrawingTool(canvasEl, hooks = {}) {
     refreshStoneGroupForLayer(layerId) {
       const shape = findShapeByLayerId(layerId);
       if (!shape) return;
+      // MONO-021: a text proxy's stones never come from generatePathLayout() -- rebuildStoneGroup-
+      // ForShape() would ask getLayerStoneParams() (null for a text layer) and drop the Group.
+      // Dispatch to rebuildTextStoneGroupForShape() instead, UNCONDITIONALLY: syncFromProjectLayers()
+      // only rebuilds a text Group when the proxy's BOUNDS change, and a stamp-on-a-bead / erase /
+      // Paint recolour moves no bounds -- so app.js's text mark/paint hooks call this after
+      // updateAll() for the immediate on-canvas refresh (and to re-home item.data.markStones), the
+      // same way the 'path' hooks already call it. getTextLayerStones() reads the just-regenerated
+      // `layout` global, so the caller must have awaited updateAll() first.
+      if (shape.item.data.isTextProxy) {
+        rebuildTextStoneGroupForShape(shape.id, getTextLayerStones(layerId) || []);
+        return;
+      }
       rebuildStoneGroupForShape(shape.id);
     },
 
@@ -4883,6 +4903,24 @@ export function createDrawingTool(canvasEl, hooks = {}) {
 
       applySelectionVisuals();
       updateResizeHandles();
+    },
+
+    /**
+     * MONO-021 QA/verification-only, read-only -- the on-canvas stone Group's sprite count and the
+     * mark-resolution bead cloud for a text (or any) proxy, so a test can prove a Stamp on a bead
+     * INSIDE the letter's bounds (no bounds change -> syncFromProjectLayers()'s gate does not fire)
+     * still renders and still refreshes item.data.markStones. Same precedent as debugGrid/debugShapes.
+     * @param {string} layerId
+     * @returns {{stoneGroupCount:number, markStones:{x:number,y:number,d:number}[]}|null}
+     */
+    debugStoneState(layerId) {
+      const shape = findShapeByLayerId(layerId);
+      if (!shape) return null;
+      const group = stoneGroups.get(shape.id);
+      return {
+        stoneGroupCount: group ? group.children.length : 0,
+        markStones: Array.isArray(shape.item.data.markStones) ? shape.item.data.markStones.map((s) => ({ ...s })) : null
+      };
     },
 
     /**

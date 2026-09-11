@@ -384,7 +384,7 @@ await runTest('Stamp over an ineligible shape with nothing beneath -> reason "in
     'a Stamp click wholly over a non-path proxy rejects as "ineligible" (NOT onStampPlace with null)');
   const status = stampRejectStatus(hook.reason);
   console.log(`    Stamp/ineligible -- reason = ${JSON.stringify(hook.reason)} ; status = ${JSON.stringify(status)}`);
-  assert.equal(status, 'Stamp: that layer cannot hold stamped stones — only drawn shapes can.');
+  assert.equal(status, 'Stamp: that layer cannot hold stamped stones — only drawn shapes and text can.');
 });
 
 // =============================================================================================
@@ -434,7 +434,7 @@ await runTest('Trace over an ineligible shape with nothing beneath -> reason "in
   projectRef.layers = currentLayers;
   const status = traceRejectStatus(hook.reason, hook.layerId);
   console.log(`    Trace/ineligible -- reason = ${JSON.stringify(hook.reason)} ; status = ${JSON.stringify(status)}`);
-  assert.equal(status, 'Trace: that layer cannot take traced marks — only drawn shapes can.');
+  assert.equal(status, 'Trace: that layer cannot take traced marks — only drawn shapes and text can.');
 });
 
 // 5. Trace over an empty board.
@@ -476,7 +476,7 @@ await runTest('Eraser over an ineligible shape with nothing beneath -> reason "i
     'an Eraser sweep wholly over a non-path proxy rejects as "ineligible"');
   const status = eraseRejectStatus(hook.reason);
   console.log(`    Eraser/ineligible -- reason = ${JSON.stringify(hook.reason)} ; status = ${JSON.stringify(status)}`);
-  assert.equal(status, 'Eraser: that layer has no erasable marks — only drawn shapes do.');
+  assert.equal(status, 'Eraser: that layer has no erasable marks — only drawn shapes and text do.');
 });
 
 // 8. Eraser over an empty board.

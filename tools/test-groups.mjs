@@ -314,6 +314,7 @@ export const GROUPS = {
     'test-rs3012-step5-rectangle-select.mjs',
     'test-maint-003-materializer-contract.mjs',
     'test-rs3015-mark-target-eligibility.mjs',
+    'test-mono-021-mark-hooks.mjs',
   ],
   ui: [
     'test-ui-shell-structure.mjs',
