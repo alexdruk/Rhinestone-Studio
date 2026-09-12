@@ -14,9 +14,16 @@
 // CHAIN_TOO_THIN test in this repo (test-mono-012/013/016/018) -- there is no exported hook to call
 // them directly, and the message text IS the product surface.
 //
+// MONO-022 correction round: `diagnostics.remedies` -- the kebab-case remedy codes
+// (`docs/specifications/MONO-022-ReachableRemedies.md`'s "remedies diagnostics contract") -- was
+// added so callers (and tests) can assert the reachable set directly instead of regex-matching
+// prose. It is generated from the same list `formatChainTooThinRemedyClause()` renders, so the
+// codes and the sentence can never drift apart. Every other diagnostics field is unchanged from the
+// original MONO-022 landing (`ca1525e`) -- see test 4's BASELINE_* comparison.
+//
 // Real repository fonts + frames, same bootstrap as tools/test-mono-013-interlock.mjs.
 // Baseline (pre-MONO-022, develop @ d0e4bfb) reason/diagnostics captured via `git stash` for both
-// call sites -- see BASELINE_* below -- to prove this milestone is message-composition-only.
+// call sites -- see BASELINE_* below.
 
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -158,11 +165,14 @@ await test('3. the oval (FrameLibrary.js:173, maxWidthMm 180) sized to 150 mm wi
 });
 
 // ---------------------------------------------------------------------------
-// 4. Only the message changed -- reason and structured diagnostics are byte-identical to develop.
+// 4. `reason` and every pre-existing diagnostics field are byte-identical to develop; the only
+//    structured addition is `diagnostics.remedies` (added in the MONO-022 correction round below --
+//    see docs/specifications/MONO-022-ReachableRemedies.md), asserted separately.
 // ---------------------------------------------------------------------------
 
 // Captured via `git stash` against develop @ d0e4bfb (pre-MONO-022 MonogramGenerator.js) for both
-// call sites, using the exact requests scriptReq()/perLetterReq() build above.
+// call sites, using the exact requests scriptReq()/perLetterReq() build above. These are every field
+// MonogramGenerator.js emitted before MONO-022; `remedies` did not exist yet.
 const BASELINE_SCRIPT_REASON = 'chain-too-thin';
 const BASELINE_SCRIPT_DIAGNOSTICS = {
   string: 'QWE', achievedStemStones: 0.679105894192281, minChainStones: 0.7,
@@ -180,27 +190,40 @@ const BASELINE_PERLETTER_DIAGNOSTICS = {
     { letter: 'L', slotIndex: 2, achievedStemStones: 0.4859978761666227, belowFloor: true }
   ]
 };
+// Both scriptReq() and perLetterReq() are circle / SS6 / spacing-0 / 3-letter requests: 'remove-frame'
+// (a frame is present) and 'fewer-letters' (3 > 1) reachable; 'smaller-stone-size' (SS6 is already
+// smallest), 'larger-frame' (the circle is already at its 150 mm cap) and 'less-letter-spacing'
+// (spacing is already 0) are not.
+const EXPECTED_REMEDIES = ['remove-frame', 'fewer-letters'];
 
-await test('4a. script branch: reason and diagnostics are byte-identical to the pre-MONO-022 baseline; only `message` differs', async () => {
+await test('4a. script branch: every pre-MONO-022 diagnostics field is byte-identical to develop; `remedies` is the one addition', async () => {
   const { generator } = createRealGenerator();
   const result = await generator.generate(scriptReq());
   console.log(`    baseline reason: ${BASELINE_SCRIPT_REASON}`);
   console.log(`    now      reason: ${result.reason}`);
   assert.equal(result.reason, BASELINE_SCRIPT_REASON);
+  const { remedies, ...withoutRemedies } = result.diagnostics;
   console.log(`    baseline diagnostics: ${JSON.stringify(BASELINE_SCRIPT_DIAGNOSTICS)}`);
-  console.log(`    now      diagnostics: ${JSON.stringify(result.diagnostics)}`);
-  assert.deepEqual(result.diagnostics, BASELINE_SCRIPT_DIAGNOSTICS);
+  console.log(`    now (minus remedies): ${JSON.stringify(withoutRemedies)}`);
+  assert.deepEqual(withoutRemedies, BASELINE_SCRIPT_DIAGNOSTICS);
+  console.log(`    expected remedies: ${JSON.stringify(EXPECTED_REMEDIES)}`);
+  console.log(`    actual   remedies: ${JSON.stringify(remedies)}`);
+  assert.deepEqual(remedies, EXPECTED_REMEDIES);
 });
 
-await test('4b. per-letter branch: reason and diagnostics are byte-identical to the pre-MONO-022 baseline; only `message` differs', async () => {
+await test('4b. per-letter branch: every pre-MONO-022 diagnostics field is byte-identical to develop; `remedies` is the one addition', async () => {
   const { generator } = createRealGenerator();
   const result = await generator.generate(perLetterReq());
   console.log(`    baseline reason: ${BASELINE_PERLETTER_REASON}`);
   console.log(`    now      reason: ${result.reason}`);
   assert.equal(result.reason, BASELINE_PERLETTER_REASON);
+  const { remedies, ...withoutRemedies } = result.diagnostics;
   console.log(`    baseline diagnostics: ${JSON.stringify(BASELINE_PERLETTER_DIAGNOSTICS)}`);
-  console.log(`    now      diagnostics: ${JSON.stringify(result.diagnostics)}`);
-  assert.deepEqual(result.diagnostics, BASELINE_PERLETTER_DIAGNOSTICS);
+  console.log(`    now (minus remedies): ${JSON.stringify(withoutRemedies)}`);
+  assert.deepEqual(withoutRemedies, BASELINE_PERLETTER_DIAGNOSTICS);
+  console.log(`    expected remedies: ${JSON.stringify(EXPECTED_REMEDIES)}`);
+  console.log(`    actual   remedies: ${JSON.stringify(remedies)}`);
+  assert.deepEqual(remedies, EXPECTED_REMEDIES);
 });
 
 // ---------------------------------------------------------------------------
@@ -215,7 +238,7 @@ await test('5. the "QWE" / Great Vibes / circle / SS6 / 150 mm reproduction case
 });
 
 if (process.exitCode) {
-  console.error('\nMONO-022 chain-remedies tests FAILED.');
+  console.error('\nMONO-022 reachable-remedies tests FAILED.');
 } else {
-  console.log('\nAll MONO-022 chain-remedies tests passed.');
+  console.log('\nAll MONO-022 reachable-remedies tests passed.');
 }

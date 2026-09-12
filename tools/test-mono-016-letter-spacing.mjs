@@ -263,15 +263,21 @@ await test('7. slot CHAIN_TOO_THIN (per-letter, MonogramGenerator.js ~L788): Gre
   assert.equal(bigMax.ok, true, 'two-letter Great Vibes at none 150x150 stays legal across the whole spacing range');
 });
 
-await test('7b. script CHAIN_TOO_THIN (interlocked-string, line ~1321): Great Vibes / script / none 150 / SS10 fails as expected', async () => {
+await test('7b. script CHAIN_TOO_THIN (interlocked-string, line ~1321): Great Vibes / script / none 150 / SS10 names exactly the reachable remedies', async () => {
   const { generator } = createRealGenerator();
+  // none frame (no frame to remove), letterSpacingMm 0 (already at its floor), SS10 (a smaller
+  // rung, SS6, exists below it), 3 letters (fewer letters is reachable) -- so only
+  // 'smaller-stone-size' and 'fewer-letters' should be reachable; 'remove-frame' and
+  // 'less-letter-spacing' must be absent regardless of the message wording.
   const r = await generator.generate(layoutCase('script', { stoneSizeMm: 2.8, letterSpacingMm: 0 }));
   assert.equal(r.ok, false);
   assert.equal(r.reason, MONOGRAM_GENERATOR_FAILURE_REASONS.CHAIN_TOO_THIN);
   assert.match(r.message, /interlocked string/);
-  // MONO-022: the message no longer names "less letter spacing" here -- letterSpacingMm is 0 in
-  // this request, so that remedy would not actually help; see buildChainTooThinRemedies().
-  console.log(`    ${r.message}`);
+  const expected = ['smaller-stone-size', 'fewer-letters'];
+  console.log(`    expected diagnostics.remedies: ${JSON.stringify(expected)}`);
+  console.log(`    actual   diagnostics.remedies: ${JSON.stringify(r.diagnostics && r.diagnostics.remedies)}`);
+  console.log(`    message: ${r.message}`);
+  assert.deepEqual(r.diagnostics.remedies, expected, 'MONO-022: assert the structured remedy codes, not the prose');
 });
 
 // ---------------------------------------------------------------------------

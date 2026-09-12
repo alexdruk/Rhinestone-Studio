@@ -271,22 +271,30 @@ function resolveLetterSpacingRequest(rawValue, pitchMm, isScript, R) {
 // the needle in the failing request. A frame already at its scalingLimitsMm cap, or SS6 already
 // being the smallest catalog rung, made "a larger frame" / "a smaller stone size" false in exactly
 // the configuration a user needed real help with -- and omitted the one remedy that reliably does
-// work: removing the frame entirely. buildChainTooThinRemedies() computes only the remedies that are
-// reachable from the failing request, in gain order (removing the frame first: MONO-022's own
+// work: removing the frame entirely. buildChainTooThinRemedies() returns only the remedy codes that
+// are reachable from the failing request, in gain order (removing the frame first: MONO-022's own
 // measurement on the reproduction case found it the largest single gain of the five, 0 -> 365
-// stones); formatChainTooThinRemedyClause() turns that list into the sentence.
-const REMOVE_FRAME_REMEDY = 'remove the frame';
+// stones); these codes are both the `diagnostics.remedies` contract (docs/specifications/MONO-022-
+// ReachableRemedies.md) and the source formatChainTooThinRemedyClause() renders into the sentence --
+// one list, so the prose and the structured detail can never drift apart.
+const CHAIN_TOO_THIN_REMEDY_PHRASES = {
+  'remove-frame': 'remove the frame',
+  'smaller-stone-size': 'a smaller stone size',
+  'larger-frame': 'a larger frame',
+  'less-letter-spacing': 'less letter spacing',
+  'fewer-letters': 'fewer letters'
+};
 
 function buildChainTooThinRemedies({ isNoFrame, effectiveFrame, normalizedFrameRect, stoneSizeMm, letterSpacingMm, letterCount }) {
   const remedies = [];
-  if (!isNoFrame) remedies.push(REMOVE_FRAME_REMEDY);
-  if (listStoneSizes().some((size) => size.diameterMm < stoneSizeMm)) remedies.push('a smaller stone size');
+  if (!isNoFrame) remedies.push('remove-frame');
+  if (listStoneSizes().some((size) => size.diameterMm < stoneSizeMm)) remedies.push('smaller-stone-size');
   const limits = effectiveFrame && effectiveFrame.scalingLimitsMm;
   if (limits && (normalizedFrameRect.widthMm < limits.maxWidthMm || normalizedFrameRect.heightMm < limits.maxHeightMm)) {
-    remedies.push('a larger frame');
+    remedies.push('larger-frame');
   }
-  if (letterSpacingMm > 0) remedies.push('less letter spacing');
-  if (letterCount > 1) remedies.push('fewer letters');
+  if (letterSpacingMm > 0) remedies.push('less-letter-spacing');
+  if (letterCount > 1) remedies.push('fewer-letters');
   return remedies;
 }
 
@@ -296,14 +304,14 @@ function joinWithOr(items) {
   return `${items.slice(0, -1).join(', ')}, or ${items[items.length - 1]}`;
 }
 
-function formatChainTooThinRemedyClause(remedies) {
-  if (remedies.length === 0) {
+function formatChainTooThinRemedyClause(remedyCodes) {
+  if (remedyCodes.length === 0) {
     return 'No production remedy is available for this configuration.';
   }
-  const removeFrame = remedies.includes(REMOVE_FRAME_REMEDY);
-  const rest = remedies.filter((r) => r !== REMOVE_FRAME_REMEDY);
+  const removeFrame = remedyCodes.includes('remove-frame');
+  const rest = remedyCodes.filter((code) => code !== 'remove-frame').map((code) => CHAIN_TOO_THIN_REMEDY_PHRASES[code]);
   const parts = [];
-  if (removeFrame) parts.push('remove the frame');
+  if (removeFrame) parts.push(CHAIN_TOO_THIN_REMEDY_PHRASES['remove-frame']);
   if (rest.length > 0) parts.push(`use ${joinWithOr(rest)}`);
   const joined = parts.length === 1 ? parts[0] : `${parts[0]}, or ${parts[1]}`;
   return `${joined.charAt(0).toUpperCase()}${joined.slice(1)}.`;
@@ -1043,16 +1051,18 @@ export class MonogramGenerator {
           : '';
         // MONO-022: only the remedies actually reachable from this request -- see
         // buildChainTooThinRemedies()'s own doc comment.
-        const remedyClause = formatChainTooThinRemedyClause(buildChainTooThinRemedies({
+        const remedies = buildChainTooThinRemedies({
           isNoFrame, effectiveFrame, normalizedFrameRect, stoneSizeMm,
           letterSpacingMm: resolvedLetterSpacingMm, letterCount: letterResults.length
-        }));
+        });
+        const remedyClause = formatChainTooThinRemedyClause(remedies);
         return failure(R.CHAIN_TOO_THIN, `Letter ${JSON.stringify(bindingLetter.letter)} (slot ${bindingLetter.slotIndex}) is too thin to read as a continuous chain: font ${JSON.stringify(fontId)} with ${stoneSizeMm} mm stones.${countClause} ${remedyClause} (${bindingLetter.stemStoneCount.toFixed(3)} stones across the stem; ${minStones.toFixed(3)} needed to clear ${boundLabel}.)`, {
           diagnostics: {
             letter: bindingLetter.letter, slotIndex: bindingLetter.slotIndex,
             achievedStemStones: bindingLetter.stemStoneCount, minChainStones: minStones,
             fittedHeightMm: bindingLetter.fittedHeightMm, stoneSizeMm, stemWidthRatio,
             boundThatBound: isReadabilityFloor ? 'readability-floor' : 'single-chain-minimum',
+            remedies,
             // MONO-018: every letter's fitted stem, in slot order, so the full picture is available
             // without re-running. Its minimum is the reported achievedStemStones.
             allLetterStemStones: letterResults.map((r) => ({
@@ -1417,15 +1427,17 @@ export class MonogramGenerator {
       const boundLabel = isReadabilityFloor ? 'the readability floor' : 'the single-chain minimum';
       // MONO-022: only the remedies actually reachable from this request -- see
       // buildChainTooThinRemedies()'s own doc comment.
-      const remedyClause = formatChainTooThinRemedyClause(buildChainTooThinRemedies({
+      const remedies = buildChainTooThinRemedies({
         isNoFrame, effectiveFrame, normalizedFrameRect, stoneSizeMm,
         letterSpacingMm, letterCount: letters.length
-      }));
+      });
+      const remedyClause = formatChainTooThinRemedyClause(remedies);
       return failure(R.CHAIN_TOO_THIN, `The interlocked string ${JSON.stringify(joinedText)} is too thin to read as a continuous chain: font ${JSON.stringify(fontId)} with ${stoneSizeMm} mm stones. ${remedyClause} (${achievedStemStones.toFixed(3)} stones across the stem; ${minStones.toFixed(3)} needed to clear ${boundLabel}.)`, {
         diagnostics: {
           string: joinedText, achievedStemStones, minChainStones: minStones,
           fittedHeightMm: fitHeightMm, stoneSizeMm, stemWidthRatio,
-          boundThatBound: isReadabilityFloor ? 'readability-floor' : 'single-chain-minimum'
+          boundThatBound: isReadabilityFloor ? 'readability-floor' : 'single-chain-minimum',
+          remedies
         }
       });
     }
