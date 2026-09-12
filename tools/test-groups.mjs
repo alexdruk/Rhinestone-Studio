@@ -364,6 +364,13 @@ export const GROUPS = {
     'test-mono-007-010-coverage.mjs',
     'test-mono-010-frame-stone-width-spacing.mjs',
     'test-mono-011-frame-stone-autoshrink.mjs',
+    'test-mono-012-single-chain.mjs',
+    'test-mono-013-interlock.mjs',
+    'test-mono-014-frame-hierarchy.mjs',
+    'test-mono-015-weight-sizing.mjs',
+    'test-mono-016-letter-spacing.mjs',
+    'test-mono-018-binding-letter.mjs',
+    'test-mono-022-reachable-remedies.mjs',
   ],
   // Full fixture-driven regression sweep (examples/*.rhs against committed baselines) -- expensive
   // relative to a fast dev loop, but exactly what merge/release/CI validation wants.

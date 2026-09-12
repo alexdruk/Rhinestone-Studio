@@ -40,6 +40,10 @@ import {
   TRACKING_XPITCH_LADDER
 } from '../geometry/index.js';
 import { computeTextLayerPositionForTargetCenterMm } from '../editing/index.js';
+// MONO-022: CHAIN_TOO_THIN's remedy list needs to know whether a smaller catalog rung exists below
+// the failing stoneSizeMm. src/monogram/FrameHierarchy.js:16 already crosses this same
+// geometry/monogram boundary to read the catalog (MONO-014), so this import path is precedented.
+import { listStoneSizes } from '../renderer/StoneSizes.js';
 // MONO-012: single-chain sizing arithmetic for OpenType script fonts. Pure arithmetic, no geometry
 // or sampling -- see SingleChain.js's own doc comment.
 import {
@@ -259,6 +263,58 @@ function resolveLetterSpacingRequest(rawValue, pitchMm, isScript, R) {
     };
   }
   return { ok: true, value };
+}
+
+// MONO-022: both CHAIN_TOO_THIN sites (the per-letter branch below and _generateScriptMonogram())
+// used to close with the same fixed sentence -- "Use a smaller stone size, a larger frame, less
+// letter spacing, or fewer letters" -- regardless of whether any given remedy could actually move
+// the needle in the failing request. A frame already at its scalingLimitsMm cap, or SS6 already
+// being the smallest catalog rung, made "a larger frame" / "a smaller stone size" false in exactly
+// the configuration a user needed real help with -- and omitted the one remedy that reliably does
+// work: removing the frame entirely. buildChainTooThinRemedies() returns only the remedy codes that
+// are reachable from the failing request, in gain order (removing the frame first: MONO-022's own
+// measurement on the reproduction case found it the largest single gain of the five, 0 -> 365
+// stones); these codes are both the `diagnostics.remedies` contract (docs/specifications/MONO-022-
+// ReachableRemedies.md) and the source formatChainTooThinRemedyClause() renders into the sentence --
+// one list, so the prose and the structured detail can never drift apart.
+const CHAIN_TOO_THIN_REMEDY_PHRASES = {
+  'remove-frame': 'remove the frame',
+  'smaller-stone-size': 'a smaller stone size',
+  'larger-frame': 'a larger frame',
+  'less-letter-spacing': 'less letter spacing',
+  'fewer-letters': 'fewer letters'
+};
+
+function buildChainTooThinRemedies({ isNoFrame, effectiveFrame, normalizedFrameRect, stoneSizeMm, letterSpacingMm, letterCount }) {
+  const remedies = [];
+  if (!isNoFrame) remedies.push('remove-frame');
+  if (listStoneSizes().some((size) => size.diameterMm < stoneSizeMm)) remedies.push('smaller-stone-size');
+  const limits = effectiveFrame && effectiveFrame.scalingLimitsMm;
+  if (limits && (normalizedFrameRect.widthMm < limits.maxWidthMm || normalizedFrameRect.heightMm < limits.maxHeightMm)) {
+    remedies.push('larger-frame');
+  }
+  if (letterSpacingMm > 0) remedies.push('less-letter-spacing');
+  if (letterCount > 1) remedies.push('fewer-letters');
+  return remedies;
+}
+
+function joinWithOr(items) {
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return `${items[0]} or ${items[1]}`;
+  return `${items.slice(0, -1).join(', ')}, or ${items[items.length - 1]}`;
+}
+
+function formatChainTooThinRemedyClause(remedyCodes) {
+  if (remedyCodes.length === 0) {
+    return 'No production remedy is available for this configuration.';
+  }
+  const removeFrame = remedyCodes.includes('remove-frame');
+  const rest = remedyCodes.filter((code) => code !== 'remove-frame').map((code) => CHAIN_TOO_THIN_REMEDY_PHRASES[code]);
+  const parts = [];
+  if (removeFrame) parts.push(CHAIN_TOO_THIN_REMEDY_PHRASES['remove-frame']);
+  if (rest.length > 0) parts.push(`use ${joinWithOr(rest)}`);
+  const joined = parts.length === 1 ? parts[0] : `${parts[0]}, or ${parts[1]}`;
+  return `${joined.charAt(0).toUpperCase()}${joined.slice(1)}.`;
 }
 
 // MONO-005A: compares the StoneLayout used for fitting/collision validation against a fresh
@@ -987,20 +1043,26 @@ export class MonogramGenerator {
           return worst;
         });
         const isReadabilityFloor = floorStones >= SINGLE_CHAIN_MIN_RATIO;
-        const boundName = isReadabilityFloor
-          ? `the readability floor (${minStones.toFixed(3)} stones across the stem)`
-          : `the single-chain minimum (${SINGLE_CHAIN_MIN_RATIO.toFixed(2)} stones across the stem)`;
+        const boundLabel = isReadabilityFloor ? 'the readability floor' : 'the single-chain minimum';
         // MONO-018: name the sub-floor count so the reported letter reads as the worst of several,
         // not the only one. Omitted for a single-letter monogram, where it is always "1 of 1".
         const countClause = letterResults.length > 1
           ? ` ${subFloorLetters.length} of ${letterResults.length} letters fall below.`
           : '';
-        return failure(R.CHAIN_TOO_THIN, `Letter ${JSON.stringify(bindingLetter.letter)} (slot ${bindingLetter.slotIndex}): font ${JSON.stringify(fontId)} with ${stoneSizeMm} mm stones fits this slot only at ${bindingLetter.stemStoneCount.toFixed(3)} stones across the stem, below ${boundName}.${countClause} Use a smaller stone size, a larger frame, less letter spacing, or a layout with fewer letters.`, {
+        // MONO-022: only the remedies actually reachable from this request -- see
+        // buildChainTooThinRemedies()'s own doc comment.
+        const remedies = buildChainTooThinRemedies({
+          isNoFrame, effectiveFrame, normalizedFrameRect, stoneSizeMm,
+          letterSpacingMm: resolvedLetterSpacingMm, letterCount: letterResults.length
+        });
+        const remedyClause = formatChainTooThinRemedyClause(remedies);
+        return failure(R.CHAIN_TOO_THIN, `Letter ${JSON.stringify(bindingLetter.letter)} (slot ${bindingLetter.slotIndex}) is too thin to read as a continuous chain: font ${JSON.stringify(fontId)} with ${stoneSizeMm} mm stones.${countClause} ${remedyClause} (${bindingLetter.stemStoneCount.toFixed(3)} stones across the stem; ${minStones.toFixed(3)} needed to clear ${boundLabel}.)`, {
           diagnostics: {
             letter: bindingLetter.letter, slotIndex: bindingLetter.slotIndex,
             achievedStemStones: bindingLetter.stemStoneCount, minChainStones: minStones,
             fittedHeightMm: bindingLetter.fittedHeightMm, stoneSizeMm, stemWidthRatio,
             boundThatBound: isReadabilityFloor ? 'readability-floor' : 'single-chain-minimum',
+            remedies,
             // MONO-018: every letter's fitted stem, in slot order, so the full picture is available
             // without re-running. Its minimum is the reported achievedStemStones.
             allLetterStemStones: letterResults.map((r) => ({
@@ -1361,14 +1423,21 @@ export class MonogramGenerator {
     const minStones = minChainStones({ stemWidthRatio });
     const floorStones = MIN_HEIGHT_TO_STONE_RATIO * stemWidthRatio;
     if (achievedStemStones < minStones) {
-      const boundName = floorStones >= SINGLE_CHAIN_MIN_RATIO
-        ? `the readability floor (${minStones.toFixed(3)} stones across the stem)`
-        : `the single-chain minimum (${SINGLE_CHAIN_MIN_RATIO.toFixed(2)} stones across the stem)`;
-      return failure(R.CHAIN_TOO_THIN, `The interlocked string ${JSON.stringify(joinedText)}: font ${JSON.stringify(fontId)} with ${stoneSizeMm} mm stones fits this frame only at ${achievedStemStones.toFixed(3)} stones across the stem, below ${boundName}. Use a smaller stone size, a larger frame, less letter spacing, or fewer letters.`, {
+      const isReadabilityFloor = floorStones >= SINGLE_CHAIN_MIN_RATIO;
+      const boundLabel = isReadabilityFloor ? 'the readability floor' : 'the single-chain minimum';
+      // MONO-022: only the remedies actually reachable from this request -- see
+      // buildChainTooThinRemedies()'s own doc comment.
+      const remedies = buildChainTooThinRemedies({
+        isNoFrame, effectiveFrame, normalizedFrameRect, stoneSizeMm,
+        letterSpacingMm, letterCount: letters.length
+      });
+      const remedyClause = formatChainTooThinRemedyClause(remedies);
+      return failure(R.CHAIN_TOO_THIN, `The interlocked string ${JSON.stringify(joinedText)} is too thin to read as a continuous chain: font ${JSON.stringify(fontId)} with ${stoneSizeMm} mm stones. ${remedyClause} (${achievedStemStones.toFixed(3)} stones across the stem; ${minStones.toFixed(3)} needed to clear ${boundLabel}.)`, {
         diagnostics: {
           string: joinedText, achievedStemStones, minChainStones: minStones,
           fittedHeightMm: fitHeightMm, stoneSizeMm, stemWidthRatio,
-          boundThatBound: floorStones >= SINGLE_CHAIN_MIN_RATIO ? 'readability-floor' : 'single-chain-minimum'
+          boundThatBound: isReadabilityFloor ? 'readability-floor' : 'single-chain-minimum',
+          remedies
         }
       });
     }
