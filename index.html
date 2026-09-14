@@ -540,6 +540,11 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
                held at release closes the path into a loop) -- same rail-button/aria-pressed
                convention as Stamp/every other persistent tool above. -->
           <button class="icon-btn" id="railTraceToggle" title="Trace -- drag to draw a path, stones are spaced evenly along it (hold Shift at release to close the loop) (T)" aria-pressed="false">〰️ Trace</button>
+          <!-- RS-3035: click the canvas to create a new text layer centered on that point and open the Text
+               Lightbox for editing. A one-shot creation tool (reverts to Select on commit, like Rect/Pen),
+               NOT a repeatable-touch tool like Stamp/Trace/Eraser around it -- see CLICK_TO_PLACE_MODES in
+               DrawingCanvasTool.js, which it deliberately does not join. -->
+          <button class="icon-btn" id="railTextToggle" title="Text -- click on the canvas to place a new text layer there and open the Text panel (Y)" aria-pressed="false">🅣 Text</button>
           <!-- RS-3011 Step 13: click or drag to remove any stone (any of the three sources -- base
                fill, Paint regions, Stamp/Trace stampedStones) within the brush radius -- same
                rail-button/aria-pressed convention as Stamp/Trace above. Its own radius control

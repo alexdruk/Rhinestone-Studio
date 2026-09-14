@@ -210,7 +210,7 @@ const ARROW_KEY_DELTAS={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDo
 // already taken, X reads as a "cross out/remove" mnemonic.
 // RS-3013 Step 1: L=Lasso (confirmed free elsewhere in the global keydown handler below) --
 // V/B/R/E/S/G/P/F/M/T/X are all already taken, L is the natural mnemonic for "Lasso" itself.
-const DRAW_TOOL_SHORTCUT_KEYS={v:'select',l:'lasso',b:'freehand',r:'rect',e:'ellipse',s:'slot',g:'polygon',p:'pen',f:'paint',m:'stamp',t:'trace',x:'eraser'};
+const DRAW_TOOL_SHORTCUT_KEYS={v:'select',l:'lasso',b:'freehand',r:'rect',e:'ellipse',s:'slot',g:'polygon',p:'pen',f:'paint',m:'stamp',t:'trace',x:'eraser',y:'text'};
 // RS-1005: pixels-per-mm used only when rasterizing the Production Sheet SVG to PNG. Fixed and
 // documented (not derived from devicePixelRatio/viewport fit) so the PNG's pixel dimensions are
 // always a clean, undistorted multiple of the page's mm size -- never a fit-to-viewport scale.
@@ -1715,6 +1715,26 @@ const drawingTool=createDrawingTool(layoutCanvas,{
       await updateAll(true);
     }
     el('status').textContent=`Placed a stone on ${layerLabel(targetLayer)}.`;
+  },
+  // RS-3035: the Design Text tool's own commit hook. Mirrors the Design SVG import handler's
+  // push-then-updateAll-then-selectShapeForLayer sequence (see #designImportSvgFile's own change
+  // listener and selectShapeForLayer()'s doc comment): a layer pushed into project.layers from
+  // outside DrawingCanvasTool's own draw flow only becomes selectable on the Design canvas once
+  // updateAll()'s syncFromProjectLayers() has materialized it into a real board.shapes item.
+  // The Lightbox is opened directly, NOT through revealDualWorkspaceForLightbox() -- that helper's
+  // first act is setDrawMode(false), which would throw the user straight out of Design. Opening it
+  // bare, the way #menuShipping/#menuSettings/#menuHelp already do, leaves Design active underneath;
+  // the overlay is .non-modal (pointer-events:none except the panel itself) and header-draggable, so
+  // the canvas stays fully usable behind it.
+  onTextPlace:async({xMm,yMm})=>{
+    const layer=await addText({atAbsoluteMm:{xMm,yMm}});
+    drawingTool.selectShapeForLayer(layer.id);
+    updateDrawToolButtons();
+    lightboxes.text.open();
+    const contentField=el('text');
+    contentField.focus();
+    contentField.select();
+    el('status').textContent='Added text layer at the click point — edit it in the Text panel.';
   },
   // RS-3011 Step 11: Trace's own finalize hook -- fires once per committed drag (see
   // DrawingCanvasTool.js's own onTracePlace doc comment for the exact (placements,layerId) contract;
@@ -4335,7 +4355,7 @@ window.addEventListener('keydown',e=>{
   // to the project.layers deleteLayer() path below.
   if(drawingTool.isActive){
     if(e.key==='Delete'||e.key==='Backspace'){
-      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;
+      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT'||t==='TEXTAREA')return;
       e.preventDefault();
       deleteCurrentSelection();
     }
@@ -4355,7 +4375,7 @@ window.addEventListener('keydown',e=>{
     // exact same setDrawTool() the rail buttons use, no new dispatch path. Guarded like
     // Delete/Backspace above so typing in the Slot width field never gets hijacked.
     if(!mod&&!e.altKey&&!e.shiftKey&&DRAW_TOOL_SHORTCUT_KEYS[key]){
-      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;
+      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT'||t==='TEXTAREA')return;
       e.preventDefault();
       setDrawTool(DRAW_TOOL_SHORTCUT_KEYS[key]);
     }
@@ -4365,7 +4385,7 @@ window.addEventListener('keydown',e=>{
     // #eraserRadiusMm itself (or any other field) is never hijacked. The first of the two required
     // radius-adjustment paths; #eraserRadiusMm's own oninput handler is the second.
     if((e.key==='['||e.key===']')&&drawingTool.mode==='eraser'){
-      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;
+      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT'||t==='TEXTAREA')return;
       e.preventDefault();
       eraserSettings.radiusMm=Math.max(0.5,eraserSettings.radiusMm+(e.key===']'?0.5:-0.5));
       drawingTool.setEraserRadiusMm(eraserSettings.radiusMm);
@@ -4377,17 +4397,17 @@ window.addEventListener('keydown',e=>{
     // hijacked. Matching keyup listener (below, outside this isActive block since a key can be
     // released after focus/mode changes) ends the hold.
     if(e.code==='Space'&&!e.repeat){
-      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;
+      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT'||t==='TEXTAREA')return;
       e.preventDefault();
       drawingTool.setSpaceHeld(true);
     }
     return;
   }
-  if(e.key==='Delete'||e.key==='Backspace'){const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;deleteLayer(selectedLayerId)}
+  if(e.key==='Delete'||e.key==='Backspace'){const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT'||t==='TEXTAREA')return;deleteLayer(selectedLayerId)}
   // RS-1009: arrow keys nudge the current multi-selection by a named mm step (NUDGE_STEP_MM,
   // src/editing/EditingConstants.js); Shift+Arrow uses the larger step. Guarded exactly like
   // Delete/Backspace above so typing in a text/number field or using a <select> is never hijacked.
-  if(ARROW_KEY_DELTAS[e.key]){const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;e.preventDefault();const step=e.shiftKey?NUDGE_STEP_LARGE_MM:NUDGE_STEP_MM;const[ux,uy]=ARROW_KEY_DELTAS[e.key];nudgeSelection(ux*step,uy*step)}
+  if(ARROW_KEY_DELTAS[e.key]){const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT'||t==='TEXTAREA')return;e.preventDefault();const step=e.shiftKey?NUDGE_STEP_LARGE_MM:NUDGE_STEP_MM;const[ux,uy]=ARROW_KEY_DELTAS[e.key];nudgeSelection(ux*step,uy*step)}
 });
 // RS-3010 Design Step B: ends the spacebar-held temporary pan started by the keydown handler
 // above. Deliberately not gated on document.activeElement -- releasing a key while focus already
@@ -4820,15 +4840,25 @@ async function createShapeLayer(kind,extraFieldsOverride={},displayLabelOverride
 // text" with no entry point. Mirrors createShapeLayer()'s exact pattern/defaults (matching
 // defaultProject()'s own initial text layer's field set), including the same single-other-selected-
 // layer auto-fit hook, symmetric to createShapeLayer()'s.
-async function addText(){
+async function addText({atAbsoluteMm=null}={}){
   const l=selectedLayer();
   const other=singleOtherSelectedLayer();
-  const fitPartnerShape=(other&&FITTABLE_SHAPE_TYPES.has(other.type))?other:null;
+  const fitPartnerShape=(!atAbsoluteMm&&other&&FITTABLE_SHAPE_TYPES.has(other.type))?other:null;
   commitHistory();
   // READ-008: born at exactly the MIN_HEIGHT_TO_STONE_RATIO floor for the inherited stone diameter,
   // never the old fixed 25 mm (which was below the floor for any stone >= ~1.6 mm).
   const inheritedStoneSize=l.stoneSize||2.8;
   const layer={id:'text'+Date.now(),type:'text',visible:true,text:'New Text',font:TEXT_ENGINE_FONT_IDS.has(l.font)?l.font:DEFAULT_TEXT_FONT_ID,height:inheritedStoneSize*MIN_HEIGHT_TO_STONE_RATIO,heightMode:'capHeight',textMode:'stroke',stoneSize:inheritedStoneSize,gap:l.gap||.3,color:l.color||'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,letterSpacing:0,x:0,y:0};
+  // RS-3035: the Design Text tool hands over an absolute canvas point; a text layer stores x/y as
+  // an offset from the canvas center, so convert through the shared inverse rather than re-deriving
+  // the algebra (src/editing/TextPlacement.js, already imported at line 108).
+  if(atAbsoluteMm){
+    const{xMm,yMm}=computeTextLayerPositionForTargetCenterMm({
+      targetCenterXMm:atAbsoluteMm.xMm,targetCenterYMm:atAbsoluteMm.yMm,
+      canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height
+    });
+    layer.x=xMm;layer.y=yMm;
+  }
   project.layers.push(layer);
   selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);
   let statusText='Added text layer';
@@ -4840,6 +4870,7 @@ async function addText(){
   syncSelectedControlsFromLayer();
   await updateAll(true);
   el('status').textContent=statusText;
+  return layer;
 }
 // S-110: Smart Text-to-Shape Fitting. A pure "compute a fit plan" function -- it never mutates
 // textLayer itself (matching runBooleanOp()'s own "validate everything, only mutate on success"
@@ -6134,6 +6165,7 @@ function updateDrawToolButtons(){
   el('railPaintToggle').setAttribute('aria-pressed',String(active&&mode==='paint'));
   el('railStampToggle').setAttribute('aria-pressed',String(active&&mode==='stamp'));
   el('railTraceToggle').setAttribute('aria-pressed',String(active&&mode==='trace'));
+  el('railTextToggle').setAttribute('aria-pressed',String(active&&mode==='text'));
   el('railEraserToggle').setAttribute('aria-pressed',String(active&&mode==='eraser'));
   // RS-3011 Step 13 decision 4a: eraserRadiusField/eraserRadiusMm's own visibility toggle, same
   // active-and-mode-matches idiom as drawSlotWidthField/drawSlotWidthMm above (two sibling
@@ -6256,6 +6288,7 @@ el('railPenToggle').onclick=()=>setDrawTool('pen');
 el('railPaintToggle').onclick=()=>setDrawTool('paint');
 el('railStampToggle').onclick=()=>setDrawTool('stamp');
 el('railTraceToggle').onclick=()=>setDrawTool('trace');
+el('railTextToggle').onclick=()=>setDrawTool('text');
 el('railEraserToggle').onclick=()=>setDrawTool('eraser');
 // RS-3015: visible shortcut-key badges on the rail buttons above -- reads DRAW_TOOL_SHORTCUT_KEYS
 // (rather than hardcoding letters here) so the badge can never drift out of sync with the actual
@@ -6266,6 +6299,7 @@ function initDrawToolShortcutBadges(){
   const idsByMode={railSelectToggle:'select',railLassoToggle:'lasso',railDrawToggle:'freehand',
     railRectToggle:'rect',railEllipseToggle:'ellipse',railSlotToggle:'slot',railPolygonToggle:'polygon',
     railPenToggle:'pen',railPaintToggle:'paint',railStampToggle:'stamp',railTraceToggle:'trace',
+    railTextToggle:'text',
     railEraserToggle:'eraser'};
   for(const id in idsByMode){
     const key=modeToKey[idsByMode[id]];
