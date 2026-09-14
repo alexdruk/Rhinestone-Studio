@@ -298,7 +298,8 @@ const manifest = JSON.parse(await readFile(new URL('../assets/fonts/manifest.jso
 await test('19. the SS10 prototype remains manifest-unregistered even though TXT-101B\'s RS Block is now manifest-registered (see tools/test-rs-block.mjs)', () => {
   const manager = new FontManager(manifest);
   assert.equal(manager.hasFont('rs-block-prototype-ss10'), false);
-  assert.equal(manager.listFonts({ includeDisabled: true }).length, 15);
+  // 15 through FONT-PORTFOLIO-001; FONT-LIB-002 added 17 more static OpenType instances -- 32.
+  assert.equal(manager.listFonts({ includeDisabled: true }).length, 32);
   // The two originally pre-existing font ids (predating any rhinestone work) are still untouched.
   for (const id of ['courier-prime-regular', 'great-vibes-regular']) {
     assert.ok(manager.hasFont(id));

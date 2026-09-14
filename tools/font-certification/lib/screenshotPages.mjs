@@ -17,8 +17,13 @@ import path from 'node:path';
  * @param {string} options.profileDir Persistent Playwright profile directory, unique per run so
  *   concurrent/repeated invocations never collide.
  * @param {{ width: number, height: number }} [options.viewport]
+ * @param {string} [options.channel] READ-004: optional Playwright browser channel (e.g. 'chrome').
+ *   Left undefined by every pre-READ-004 caller, so `launchPersistentContext` receives
+ *   `channel: undefined` and behaves exactly as before; passed only when the bundled Chromium build
+ *   is unavailable on the host (Playwright has no mac13 Chromium download) and system Chrome must be
+ *   used instead.
  */
-export async function screenshotPages({ dir, pages, profileDir, viewport = { width: 1600, height: 1000 } }) {
+export async function screenshotPages({ dir, pages, profileDir, viewport = { width: 1600, height: 1000 }, channel }) {
   const { chromium } = await import('playwright');
 
   const server = await new Promise((resolve) => {
@@ -41,7 +46,8 @@ export async function screenshotPages({ dir, pages, profileDir, viewport = { wid
   const context = await chromium.launchPersistentContext(profileDir, {
     headless: true,
     deviceScaleFactor: 2,
-    viewport
+    viewport,
+    channel
   });
 
   try {

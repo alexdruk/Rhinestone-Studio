@@ -85,14 +85,14 @@
 // pipeline stages re-run on every threshold/invert/blur/resize edit, but the (comparatively
 // expensive) browser image decode only ever runs once per distinct imageSrc value.
 import './src/browser/BrowserDependencyProbe.js';
-import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace, hitTestPathLayerRegion, computeNaturalContourTransform, applyNaturalContourTransform, isPointInsidePolygons, findOverlappingStonePairs, hasAnyOverlappingStonePair, measureStoneCrowding } from './src/geometry/index.js';
+import { GeometryEngine as PermanentGeometryEngine, Stone, StoneLayout, combineManyShapeSources, combineShapeSources, BooleanPrecisionError, contourAreaAbs, MIN_CELL_SIZE_MM, SHAPE_LIBRARY_KINDS, FITTABLE_SHAPE_TYPES, computeInscribedRect, computeShapeFitScale, computeContainingShapeScale, dedupeStonesByRadius, listFrames, selectPaintTarget, absolutePolygonsToNaturalSpace, absolutePointsToFrozenBoxSpace, hitTestPathLayerRegion, computeNaturalContourTransform, applyNaturalContourTransform, computeFrozenBoxTransform, isPointInsidePolygons, findOverlappingStonePairs, hasAnyOverlappingStonePair, measureStoneCrowding, solveLetterSpacingMm, TRACKING_XPITCH_LADDER, MIN_HEIGHT_TO_STONE_RATIO, PRINTABLE_MARGIN_MM, maxAutoFitWidthMm, computeTextAutoFitScale } from './src/geometry/index.js';
 import { FontManager } from './src/fonts/index.js';
-import { createDefaultFontProviderRegistry, createDefaultRhinestoneFontRegistry, BoundingBox } from './src/text/index.js';
+import { createDefaultFontProviderRegistry, createDefaultRhinestoneFontRegistry, BoundingBox, strokeNarrowerThanOneStone } from './src/text/index.js';
 import { renderProductionLayout, renderStoneLayout, fitTransform, chooseNiceStepMm } from './src/renderer/CanvasRenderer2D.js';
 import { createPreview3D } from './src/preview3d/index.js';
 import { circumferenceMm, frontViewFrameWidthMm, canvasXMmForRotationDeg, rotationDegForCanvasXMm, azimuthRadForCanvasXMm, wrapAngleRad } from './src/preview3d/ObjectDimensions.js';
 import { STONE_COLORS } from './src/renderer/StoneColors.js';
-import { listStoneSizes, findStoneSizeByDiameterMm, formatStoneSizeLabel, stoneSizeHeightMidpointMm, isHeightWithinStoneSizeRange, stoneSizeEntirelyExceedsPrintableHeight } from './src/renderer/StoneSizes.js';
+import { listStoneSizes, findStoneSizeByDiameterMm, formatStoneSizeLabel, stoneSizeHeightMidpointMm, isHeightWithinStoneSizeRange, stoneSizeEntirelyExceedsPrintableHeight, stoneSizesFromBaseMm, stoneSizeRungsAvailable } from './src/renderer/StoneSizes.js';
 import { stoneLayoutToSvg } from './src/export/SvgExporter.js';
 import { computeProductionSheetLayout, productionSheetToSvg, productionSheetToPdf } from './src/export/ProductionSheetExporter.js';
 import { parseSvgDocument } from './src/svg/index.js';
@@ -116,14 +116,15 @@ import { mmToDisplayValue, displayValueToMm, unitSuffix, formatLengthDisplay } f
 // MONO-006 (Monogram Generator UI): the Monogram Lightbox is a plain front-end -- it never
 // generates geometry, computes layouts, fits, or detects collisions itself. All of that is
 // delegated to MonogramGenerator.generate() (MONO-005/MONO-005A), which returns ordinary project
-// layers inserted through the same commitHistory()+project.layers.push() pattern
-// insertLibraryItem() already uses, so undo/redo treats a generated monogram as one step. Frame
+// layers inserted through the same commitHistory()+project.layers.push() pattern the rest of the
+// app uses to insert a Design Library item, so undo/redo treats a generated monogram as one step
+// (MONO-020 makes that one step the removal of the previous monogram plus the new insertion). Frame
 // choices come from FrameLibrary.listFrames() (imported below alongside the geometry barrel);
 // layout ids/required letter counts come from MonogramLayouts.js. Both are imported through a new
 // src/monogram/index.js barrel this milestone adds (src/monogram/** had none before -- only test
 // files imported it directly; app.js may only import permanent modules through a src/*/index.js
 // barrel, see tools/test-architecture-module-boundaries.mjs).
-import { MonogramGenerator, MONOGRAM_GENERATOR_FAILURE_REASONS, MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS } from './src/monogram/index.js';
+import { MonogramGenerator, MONOGRAM_GENERATOR_FAILURE_REASONS, MONOGRAM_LAYOUTS, MONOGRAM_LAYOUT_LETTER_COUNTS, MONOGRAM_LAYOUT_LETTER_COUNT_RANGES, isMonogramEligibleStemWidthRatio, defaultFrameStoneSizeMm } from './src/monogram/index.js';
 // RC-005 (Autosave & Crash Recovery): src/persistence/** is a new, pure, DOM-free module -- mirrors
 // src/library/**'s exact "storage-adapter injected, browser-global only at app.js's edge" shape.
 // It knows nothing about Project/Layer/StoneLayout; app.js is the only caller, and is the only
@@ -157,7 +158,9 @@ import { createDrawingTool, FLATTEN_TOLERANCE_MM, flattenPathToContours, createP
 // organized into categories (script/serif/sans-serif/display/monogram/decorative/block/
 // handwritten/monospace, stored in each font's existing `role` field), and replaced the
 // hardcoded TEXT_ENGINE_FONT_IDS Set below with one derived from fontManager.listFonts() once the
-// manifest loads -- previously every new bundled font needed a matching app.js edit here, the exact
+// manifest loads (FONT-LIB-005: with includeDisabled:true, so the set means "every id the text
+// engine accepts" and a disabled-but-renderable font stays duplicable -- see the load site) --
+// previously every new bundled font needed a matching app.js edit here, the exact
 // "second font list" duplication docs/specifications/RS-2000A-PostMVPAudit.md flagged, and the
 // manifest's `enabled` flag gated nothing real. The #font <select> (inside the Text Lightbox) is
 // now populated at startup from the same fontManager.listFonts() call, grouped into <optgroup>s and
@@ -207,7 +210,7 @@ const ARROW_KEY_DELTAS={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDo
 // already taken, X reads as a "cross out/remove" mnemonic.
 // RS-3013 Step 1: L=Lasso (confirmed free elsewhere in the global keydown handler below) --
 // V/B/R/E/S/G/P/F/M/T/X are all already taken, L is the natural mnemonic for "Lasso" itself.
-const DRAW_TOOL_SHORTCUT_KEYS={v:'select',l:'lasso',b:'freehand',r:'rect',e:'ellipse',s:'slot',g:'polygon',p:'pen',f:'paint',m:'stamp',t:'trace',x:'eraser'};
+const DRAW_TOOL_SHORTCUT_KEYS={v:'select',l:'lasso',b:'freehand',r:'rect',e:'ellipse',s:'slot',g:'polygon',p:'pen',f:'paint',m:'stamp',t:'trace',x:'eraser',y:'text'};
 // RS-1005: pixels-per-mm used only when rasterizing the Production Sheet SVG to PNG. Fixed and
 // documented (not derived from devicePixelRatio/viewport fit) so the PNG's pixel dimensions are
 // always a clean, undistorted multiple of the page's mm size -- never a fit-to-viewport scale.
@@ -273,7 +276,7 @@ function updateStoneColorSwatch(){const c=STONE_COLORS[el('stoneColor').value];e
 // in app.js: category is font.role, family is font.family, both straight from the manifest.
 const FONT_CATEGORY_LABELS={script:'Script','sans-serif':'Sans Serif',serif:'Serif',display:'Display',monogram:'Monogram',decorative:'Decorative',block:'Block',handwritten:'Handwritten',monospace:'Monospace',rhinestone:'Production Fonts','rounded-sans':'Rounded Sans'};
 function fontCategoryLabel(role){return FONT_CATEGORY_LABELS[role]||(role?role.charAt(0).toUpperCase()+role.slice(1):'Other')}
-function groupFontsByCategory(fonts){const groups=new Map();for(const f of fonts){const key=f.role||'display';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(f)}for(const list of groups.values())list.sort((a,b)=>a.family.localeCompare(b.family));return[...groups.entries()].sort((a,b)=>fontCategoryLabel(a[0]).localeCompare(fontCategoryLabel(b[0])))}
+function groupFontsByCategory(fonts){const groups=new Map();for(const f of fonts){const key=f.role||'display';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(f)}for(const list of groups.values())list.sort((a,b)=>a.family.localeCompare(b.family)||(a.weight||400)-(b.weight||400)||a.style.localeCompare(b.style));return[...groups.entries()].sort((a,b)=>fontCategoryLabel(a[0]).localeCompare(fontCategoryLabel(b[0])))}
 // A font family name safe to drop into a CSS font-family value / HTML style attribute. Every
 // bundled family name is plain ASCII with no quotes (see assets/fonts/manifest.json), but this
 // strips quote characters defensively rather than assuming that stays true forever.
@@ -297,15 +300,19 @@ function populateFontCategoryFilterOptions(){if(!fontManager)return;const catego
 // alphabetically within each group -- mirrors populateStoneColorOptions()'s existing pattern.
 // Disabled fonts (just the RobotoMono placeholder today) are never listed, matching
 // TEXT_ENGINE_FONT_IDS above.
-// FONT-002: only Production Fonts (providerId 'rhinestone') are offered here -- OpenType fonts stay
-// fully registered/enabled (existing projects keep loading/rendering/exporting unchanged, see
-// resolveFontProviderId() below) but are no longer offered as a *pick* for new/other text layers.
-// FONT-DECISION-001: an OpenType font can also earn a place here by clearing this project's
-// human-and-metric rhinestone legibility bar (manifest `rhinestoneValidated:true`) -- unvalidated
-// legacy OpenType fonts remain hidden exactly as FONT-002 decided.
-// A layer that already uses one is handled by ensureFontOptionForLayer(), not by listing it here.
-function productionFonts(){return fontManager?fontManager.listFonts().filter(f=>f.providerId==='rhinestone'||f.rhinestoneValidated===true):[]}
-function populateFontOptions(){if(!fontManager)return;el('font').innerHTML=groupFontsByCategory(productionFonts()).map(([role,fonts])=>`<optgroup label="${escapeHtml(fontCategoryLabel(role))}">${fonts.map(f=>`<option value="${f.id}" style="font-family:'${cssFontFamily(f.family)}'">${escapeHtml(f.family)}</option>`).join('')}</optgroup>`).join('')}
+// FONT-002 originally offered only the authored Production Fonts (providerId 'rhinestone');
+// FONT-DECISION-001 additionally let an OpenType font in once it carried `rhinestoneValidated:true`.
+// FONT-LIB-002 opens the gate fully: the picker now offers every font with `enabled:true` in the
+// manifest (plus the authored providerId:'rhinestone' fonts, which are enabled too). FONT-DECISION-001
+// already established that an untransformed OpenType font is the production approach, so any enabled
+// OpenType font is a legitimate pick. `rhinestoneValidated` is kept but demoted to a display-only
+// signal -- it drives the library row's ✓ "Rated legible" badge, nothing more. `unsupportedStoneSizes`
+// still drives per-font stone-size gating (updateStoneSizePrintableCapabilityUI()), unchanged.
+// Disabled records (just the RobotoMono placeholder today) are still never listed -- listFonts()
+// filters them out. A layer already using a disabled/unknown font is handled by
+// ensureFontOptionForLayer(), not by listing it here.
+function productionFonts(){return fontManager?fontManager.listFonts().filter(f=>f.providerId==='rhinestone'||f.enabled===true):[]}
+function populateFontOptions(){if(!fontManager)return;el('font').innerHTML=groupFontsByCategory(productionFonts()).map(([role,fonts])=>`<optgroup label="${escapeHtml(fontCategoryLabel(role))}">${fonts.map(f=>`<option value="${f.id}" style="font-family:'${cssFontFamily(f.family)}'">${escapeHtml(f.family+(f.style&&f.style!=='Regular'?' '+f.style:''))}</option>`).join('')}</optgroup>`).join('')}
 // FONT-002: a native <select> silently falls back to value='' if no <option> matches -- without
 // this, a layer already using a legacy (hidden-from-the-list) font would desync #font's displayed
 // value from l.font, and the very next edit's writeSelectedControlsToLayer() (l.font=el('font').value)
@@ -331,6 +338,26 @@ function ensureFontOptionForLayer(fontId){
     // layer.font exactly, even though this id can't be resolved to real geometry.
     option.textContent=`Unavailable font (${fontId})`;
   }
+  select.appendChild(option);
+}
+// READ-006A: Staggered/Radial/Contour were retired as TEXT fill styles (index.html dropped their
+// #textMode <option>s). TEXT_MODE_TO_ENGINE_MODE still maps all five, so a project saved with one of
+// the retired values still renders byte-identically -- but a native <select> would fall back to
+// value='' with no matching <option>, and the next writeSelectedControlsToLayer() (l.textMode=
+// el('textMode').value) would silently rewrite that layer's real mode. Mirrors
+// ensureFontOptionForLayer() above exactly: called from syncSelectedControlsFromLayer() right before
+// el('textMode').value=... is set, the injected option is tagged [data-retired-option] and replaced
+// (never accumulated) on every call, so switching selection away never leaves a stale entry.
+const RETIRED_TEXT_MODES=new Set(['staggered','radial','contour']);
+const RETIRED_TEXT_MODE_LABELS={staggered:'Staggered Fill',radial:'Radial Fill',contour:'Contour Fill'};
+function ensureTextModeOptionForLayer(textMode){
+  const select=el('textMode');
+  const stale=select.querySelector('option[data-retired-option]');
+  if(stale)stale.remove();
+  if(!RETIRED_TEXT_MODES.has(textMode)||select.querySelector(`option[value="${textMode}"]`))return;
+  const option=document.createElement('option');
+  option.value=textMode;option.dataset.retiredOption='1';
+  option.textContent=`${RETIRED_TEXT_MODE_LABELS[textMode]} (retired)`;
   select.appendChild(option);
 }
 // Favorites are a client-side browsing preference, not project data -- stored in localStorage,
@@ -406,13 +433,86 @@ async function populateFontPreviewCanvases(container){
     await yieldToMainThread();
   }
 }
-function fontLibraryRowHtml(f,currentFontId){const isFav=favoriteFontIds.has(f.id);return`<div class="font-library-row"><button type="button" class="font-fav${isFav?' active':''}" data-fav-font="${f.id}" title="${isFav?'Remove from favorites':'Add to favorites'}" aria-pressed="${isFav}">${isFav?'★':'☆'}</button><button type="button" class="font-library-item" data-pick-font="${f.id}" role="option" aria-selected="${f.id===currentFontId}"><canvas class="font-preview-canvas" data-preview-font="${f.id}" width="160" height="36" aria-hidden="true"></canvas><span class="font-library-item-meta"><span class="font-library-item-name">${escapeHtml(f.family)}</span><span class="font-library-item-category">${escapeHtml(fontCategoryLabel(f.role))}</span></span></button></div>`}
+// FONT-LIB-002: collapses a flat font list to one entry per family. `styles` is that family's
+// records lightest-weight first; `rep` is the family's Regular (or its lowest weight when there is
+// no Regular) -- the style used for the row's preview and for a plain click on the row's name.
+function fontFamilyEntries(fonts){
+  const byFamily=new Map();
+  for(const f of fonts){if(!byFamily.has(f.family))byFamily.set(f.family,[]);byFamily.get(f.family).push(f)}
+  const entries=[];
+  for(const[family,styles]of byFamily){
+    styles.sort((a,b)=>(a.weight||400)-(b.weight||400)||a.style.localeCompare(b.style));
+    const rep=styles.find(s=>s.style==='Regular')||styles[0];
+    entries.push({family,role:rep.role,styles,rep});
+  }
+  return entries;
+}
+// FONT-LIB-003: the lowest-weight *enabled* font in the same family as `font` whose weight is
+// strictly heavier than `font`'s -- i.e. the concrete "try a bolder weight" candidate the crowding
+// hint (updateStoneSizeOverlapCapabilityUI()) offers for a thin-stroke text layer. Returns null when
+// the family is single-weight or `font` is already its heaviest enabled style. Companion to
+// fontFamilyEntries() above, which already sorts a family's styles lightest-first.
+function findBolderSibling(fontManager,font){
+  if(!fontManager||!font)return null;
+  const heavier=fontManager.listFonts().filter(f=>f.family===font.family&&f.enabled===true&&(f.weight||400)>(font.weight||400));
+  if(heavier.length===0)return null;
+  heavier.sort((a,b)=>(a.weight||400)-(b.weight||400)||a.style.localeCompare(b.style));
+  return heavier[0];
+}
+// One Browse Fonts panel row for a whole family. `activeId` (defaults to the family's rep) is the
+// style whose id the row's name-click and favorite star act on, and the one the inline style
+// <select> starts on -- Recently Used / Favorites pass the specific style id that earned the pin.
+// A family with >1 style gets that compact <select>; a single-style family gets none. The preview
+// canvas always renders the family's rep style (its Regular / lowest weight). rhinestoneValidated
+// only shows a muted "Rated legible" badge now (FONT-LIB-002) -- it no longer gates the picker.
+function fontLibraryRowHtml(entry,currentFontId,activeId){
+  const active=(activeId&&entry.styles.find(s=>s.id===activeId))||entry.rep;
+  const isFav=favoriteFontIds.has(active.id);
+  const selected=entry.styles.some(s=>s.id===currentFontId);
+  const badge=active.rhinestoneValidated===true?`<span class="font-rated-badge" title="Cleared Rhinestone Studio's human + metric stone-dot legibility review (FONT-DECISION-001 / FONT-PORTFOLIO-001).">✓ Rated legible</span>`:'';
+  const styleSelect=entry.styles.length>1?`<select class="font-style-select" data-style-select="${escapeHtml(entry.family)}" aria-label="${escapeHtml(entry.family)} style">${entry.styles.map(s=>`<option value="${s.id}"${s.id===active.id?' selected':''}>${escapeHtml(s.style)}</option>`).join('')}</select>`:'';
+  const subtitle=`${escapeHtml(fontCategoryLabel(entry.role))}${entry.styles.length>1?` · ${entry.styles.length} styles`:''}`;
+  return`<div class="font-library-row"><button type="button" class="font-fav${isFav?' active':''}" data-fav-font="${active.id}" title="${isFav?'Remove from favorites':'Add to favorites'}" aria-pressed="${isFav}">${isFav?'★':'☆'}</button><button type="button" class="font-library-item" data-pick-font="${active.id}" role="option" aria-selected="${selected}"><canvas class="font-preview-canvas" data-preview-font="${entry.rep.id}" width="160" height="36" aria-hidden="true"></canvas><span class="font-library-item-meta"><span class="font-library-item-name">${escapeHtml(entry.family)}</span>${badge}<span class="font-library-item-category">${subtitle}</span></span></button>${styleSelect}</div>`;
+}
 // Renders the Browse Fonts panel's list: pinned "Recently Used" then "Favorites" groups (each only
-// among fonts matching the current search/category filter), then every category group in
-// alphabetical order, then kicks off (without awaiting) filling in every row's live rhinestone
-// preview. Re-run on every search keystroke, category change, and favorite toggle; cheap at this
-// catalog size (12 fonts today) since preview generation itself is cached.
-function renderFontLibraryList(){if(!fontManager)return;const list=el('fontLibraryList');const query=fontSearchQuery.trim().toLowerCase();const fonts=productionFonts().filter(f=>(!fontCategoryFilterValue||f.role===fontCategoryFilterValue)&&(!query||f.family.toLowerCase().includes(query)||fontCategoryLabel(f.role).toLowerCase().includes(query)));if(fonts.length===0){list.innerHTML='<div class="font-library-empty">No fonts match your search.</div>';return}const currentFontId=el('font').value;const recents=recentFontIds.map(id=>fonts.find(f=>f.id===id)).filter(Boolean);const favorites=fonts.filter(f=>favoriteFontIds.has(f.id)).sort((a,b)=>a.family.localeCompare(b.family));let html='';if(recents.length)html+=`<div class="font-library-group">Recently Used</div>${recents.map(f=>fontLibraryRowHtml(f,currentFontId)).join('')}`;if(favorites.length)html+=`<div class="font-library-group">Favorites</div>${favorites.map(f=>fontLibraryRowHtml(f,currentFontId)).join('')}`;for(const[role,group]of groupFontsByCategory(fonts))html+=`<div class="font-library-group">${escapeHtml(fontCategoryLabel(role))}</div>${group.map(f=>fontLibraryRowHtml(f,currentFontId)).join('')}`;list.innerHTML=html;populateFontPreviewCanvases(list).catch(error=>console.error('Font preview rendering failed',error))}
+// among fonts matching the current search/category filter, and keeping per-style granularity), then
+// every family in one flat alphabetical list under a single "All fonts" header, then kicks off
+// (without awaiting) filling in every row's live rhinestone preview. Re-run on every search
+// keystroke, category change, favorite toggle, and style pick; preview generation is cached so
+// re-renders stay cheap.
+function renderFontLibraryList(){
+  if(!fontManager)return;
+  const list=el('fontLibraryList');
+  const query=fontSearchQuery.trim().toLowerCase();
+  const fonts=productionFonts().filter(f=>(!fontCategoryFilterValue||f.role===fontCategoryFilterValue)&&(!query||f.family.toLowerCase().includes(query)||f.style.toLowerCase().includes(query)||fontCategoryLabel(f.role).toLowerCase().includes(query)));
+  if(fonts.length===0){list.innerHTML='<div class="font-library-empty">No fonts match your search.</div>';return}
+  const currentFontId=el('font').value;
+  const entries=fontFamilyEntries(fonts);
+  const entryByFamily=new Map(entries.map(e=>[e.family,e]));
+  const entryForId=id=>{const f=fonts.find(x=>x.id===id);return f?entryByFamily.get(f.family):null};
+  const seenRecent=new Set();
+  const recents=recentFontIds.map(id=>{const e=entryForId(id);if(!e||seenRecent.has(id))return null;seenRecent.add(id);return{entry:e,activeId:id}}).filter(Boolean);
+  const favorites=[];
+  for(const e of entries)for(const s of e.styles)if(favoriteFontIds.has(s.id))favorites.push({entry:e,activeId:s.id});
+  favorites.sort((a,b)=>a.entry.family.localeCompare(b.entry.family));
+  let html='';
+  if(recents.length)html+=`<div class="font-library-group">Recently Used</div>${recents.map(r=>fontLibraryRowHtml(r.entry,currentFontId,r.activeId)).join('')}`;
+  if(favorites.length)html+=`<div class="font-library-group">Favorites</div>${favorites.map(r=>fontLibraryRowHtml(r.entry,currentFontId,r.activeId)).join('')}`;
+  // FONT-LIB-006: one flat alphabetical list under a single always-present "All fonts" header, in
+  // place of the previous eleven per-category headers. The panel's own #fontCategoryFilter and the
+  // fontCategoryLabel() match in the fonts filter above already slice the list by category -- the
+  // category headers were a third mechanism for the same job, and an expensive one: 11 headers for
+  // 28 family rows inside a 280px-max scroll viewport (index.html), six of them introducing a single
+  // font. The one "All fonts" header stays (unconditionally -- a header that is always there is
+  // easier to reason about than a conditional one, and the label is accurate whether or not
+  // Recently Used / Favorites precede it): without it the Favorites section has no terminator and
+  // the full family list reads as a continuation of Favorites. fontFamilyEntries() returns entries
+  // in manifest order, so sort here.
+  const sortedEntries=[...entries].sort((a,b)=>a.family.localeCompare(b.family));
+  html+=`<div class="font-library-group">All fonts</div>${sortedEntries.map(e=>fontLibraryRowHtml(e,currentFontId)).join('')}`;
+  list.innerHTML=html;
+  populateFontPreviewCanvases(list).catch(error=>console.error('Font preview rendering failed',error));
+}
 function openFontLibraryPanel(){el('fontLibraryPanel').hidden=false;el('fontLibraryBtn').setAttribute('aria-expanded','true');fontSearchQuery='';el('fontSearch').value='';renderFontLibraryList();el('fontSearch').focus()}
 function closeFontLibraryPanel(){el('fontLibraryPanel').hidden=true;el('fontLibraryBtn').setAttribute('aria-expanded','false')}
 // Writes the picked font into the one real #font control and replays the exact 'input'+'change'
@@ -429,29 +529,32 @@ function toggleFavoriteFont(fontId){if(favoriteFontIds.has(fontId))favoriteFontI
 // below applies this to already-generated stones; resolveLayerShapeSource()'s text branch applies
 // the exact same formula to already-generated *polygons* (RS-1012 boolean input), so both stay in
 // sync by construction instead of by duplicated arithmetic.
-// S-107: the minimum heightMm/spacingMm ratio auto-fit will shrink text to. spacingMm (stoneSize+gap)
-// is the fixed physical stone pitch -- unlike heightMm, it never scales down here, because a stone's
-// size is a real catalog rhinestone (see src/renderer/StoneSizes.js), not a continuously-adjustable
-// display value; shrinking it during auto-fit would silently produce a non-orderable size. Below
-// this ratio there are too few stones across a glyph's shrunk stroke width for the letterform to
-// read as anything but a blurred row of dots (confirmed empirically -- see
-// docs/specifications/S-107-LongTextReadability.md's audit). Auto-fit still shrinks heightMm as much
-// as it can within this floor; only text so long it would need to shrink past the floor now overflows
-// maxWidth instead of collapsing into illegible stone soup.
-const MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO=6;
-// Computes the heightMm scale factor generateTextStonesLive()/resolveLayerShapeSource() apply for
-// auto-fit text, given that text's straight (unscaled) measured widthMm. Shared by both call sites
-// so their auto-fit decisions can never drift apart (mirrors computeTextPlacementOffset() above).
-// `scale` is 1 (no change) whenever auto-fit is off, the text already fits, or heightMm/spacingMm is
-// degenerate -- this arithmetic is byte-identical to before this milestone's follow-up.
+// READ-008: the minimum height-to-stone-diameter ratio (layer.height / layer.stoneSize, always the
+// raw engine height -- never a cap-height-mode display value) that auto-fit and Fit Text to Shape
+// will shrink text to. Measured against stone diameter ALONE, not stoneSize+gap: gap is user-editable
+// and has nothing to do with legibility, so a floor expressed in stone pitch silently drifts every
+// time the user edits gap (S-107's original basis -- see docs/specifications/READ-007-RatioFloorEvidence.md
+// for the correction). stoneSize itself never scales down here -- it is a real catalog rhinestone
+// (src/renderer/StoneSizes.js), not a continuously-adjustable display value, and shrinking it during
+// auto-fit would silently produce a non-orderable size. Below this ratio there are too few stones
+// across a glyph's shrunk stroke width for the letterform to read as anything but a blurred row of
+// dots. Auto-fit still shrinks heightMm as much as it can within this floor; only text so long it
+// would need to shrink past the floor overflows maxWidth instead of collapsing into stone soup.
+//
+// Value 16: READ-007's calibration set cannot locate a boundary below ratio 20 -- every ratio under
+// 20 is a uniform zero-cost floor there, so it cannot distinguish 15 from 20 (READ-007 §8). 16 is
+// chosen on independent evidence: StoneSizes.js's five supportedHeightRangeMm minima imply ratios of
+// 17.50 / 16.07 / 16.25 / 17.02 / 16.56 (SS6..SS30) -- five independently derived minima converging
+// on 16-17.5, and a floor of 20 would put SS30's entire validated range permanently in warning.
+// 16-20 remains an unresolved band; see docs/specifications/READ-008-RatioFloor.md.
+// READ-009: MIN_HEIGHT_TO_STONE_RATIO and the auto-fit scale math above now live in
+// src/geometry/TextAutoFit.js so the Gallery fixture bridge's own auto-fit path
+// (src/gallery/RhsFixtureBridge.js's generateTextStonesForLayer()) shares the same floor instead of
+// silently reimplementing fit-to-width with no legibility guarantee.
 function computeAutoFitScale(layer,project,measuredWidthMm){
-  if(!layer.autoFit||!(measuredWidthMm>0))return{scale:1};
-  const maxWidth=project.canvas.width-10;
-  if(measuredWidthMm<=maxWidth)return{scale:1};
-  const fitScale=maxWidth/measuredWidthMm;
-  const spacingMm=(layer.stoneSize||0)+(layer.gap||0);
-  const minScale=spacingMm>0&&layer.height>0?(spacingMm*MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO)/layer.height:fitScale;
-  return{scale:Math.min(1,Math.max(fitScale,minScale))};
+  if(!layer.autoFit)return{scale:1};
+  return computeTextAutoFitScale({measuredWidthMm,maxWidthMm:maxAutoFitWidthMm(project.canvas.width),
+    heightMm:layer.height,stoneSizeMm:layer.stoneSize});
 }
 // TXT-104 step 2: solves the em-square heightMm generateTextLayout() must be called with so that a
 // font's rendered capital letters come out to desiredCapHeightMm, per the design doc's section 3.1
@@ -499,6 +602,28 @@ function computeLetterHeightBoundsMm(fontId){
 function refreshHeightFieldBounds(){
   el('height').min=mmToDisplayValue(RAW_ENGINE_HEIGHT_MM_MIN,project.units);
   el('height').max=mmToDisplayValue(RAW_ENGINE_HEIGHT_MM_MAX,project.units);
+}
+// READ-006: #letterSpacing's bounds are derived from pitchMm (stoneSize + gap), not fixed literals.
+// TRACKING_XPITCH_LADDER's top rung is 4 x pitchMm -- 20.0mm at SS20, 26.8mm at SS30 (where even the
+// 3x rung is 20.1mm) -- so a fixed [-2,20] cap would let the "Separate letters" button, which writes
+// l.letterSpacing directly, have its own solved value silently clamped back down by the next
+// tracked-control write with no undo entry. max = top rung x pitchMm; min = -pitchMm.
+//
+// pitchMm is read from the #stoneSize/#gap CONTROLS, not layer.stoneSize/layer.gap: in
+// writeSelectedControlsToLayer() the text branch clamps l.letterSpacing *before* the shared tail
+// block writes l.stoneSize/l.gap, so the layer's pitch is still stale there. Same "read the
+// controls, not the possibly-stale layer" convention mixedSizeEligibleIds() documents; the
+// fallbacks match that tail block's own (parseFloat(...)||2 / readLengthField('gap')||.3).
+function letterSpacingBoundsMm(){
+  const pitchMm=(parseFloat(el('stoneSize').value)||2)+(readLengthField('gap')||.3);
+  return{minMm:-pitchMm,maxMm:TRACKING_XPITCH_LADDER[TRACKING_XPITCH_LADDER.length-1]*pitchMm};
+}
+function refreshLetterSpacingFieldBounds(){
+  const l=selectedLayer();
+  if(!l||l.type!=='text')return;
+  const{minMm,maxMm}=letterSpacingBoundsMm();
+  el('letterSpacing').min=mmToDisplayValue(minMm,project.units);
+  el('letterSpacing').max=mmToDisplayValue(maxMm,project.units);
 }
 // TXT-104 step 4b: the read/display half of #letterHeight's bidirectional sync with #height -- called
 // from updateTextFontCapabilityUI() (the one place guaranteed to run after every source of a #height
@@ -564,7 +689,10 @@ function resolveImageFillMode(value){return IMAGE_FILL_MODES.has(value)?value:'f
 // may additively fill gaps with smaller stones). Mirrors resolveVectorFillMode()'s own "unrecognized
 // or missing value falls back to the pre-milestone default" convention, so every project saved
 // before this milestone (no sizeMode field on any layer) generates byte-identical geometry.
-const SIZE_MODES=new Set(['uniform','mixed']);
+// MONO-015 adds 'weight' (weight-following stone size). resolveSizeMode() still falls back to
+// 'uniform' for any unrecognized/missing value, so a pre-MONO-015 project is untouched; app.js
+// only ever offers 'weight' for an outline-mode text layer (updateWeightSizeCapabilityUI()).
+const SIZE_MODES=new Set(['uniform','mixed','weight']);
 function resolveSizeMode(value){return SIZE_MODES.has(value)?value:'uniform'}
 // The Mixed Stone Size inspector section's five Allowed Sizes checkboxes are static markup (see
 // index.html's #sharedMixedSizeFields comment for why, vs. #stoneSize's dynamically populated
@@ -583,6 +711,27 @@ const MIXED_ALLOWED_SIZE_CHECKBOXES=[
 // populateStoneSizeOptions() exactly (same catalog, same "value is the plain mm diameter" contract)
 // -- called once at startup alongside it.
 function populateMixedSizeSelectOptions(){const optionsHtml=listStoneSizes().map(s=>`<option value="${s.diameterMm}">${escapeHtml(s.name)} — ${s.diameterMm.toFixed(1)} mm</option>`).join('');el('mixedMinSize').innerHTML=optionsHtml;el('mixedMaxSize').innerHTML=optionsHtml}
+// MONO-015: the graduated weight-step <select> option list (#weightSteps in the text inspector,
+// #monogramWeightSteps in the monogram lightbox). Option value is the rung count: '0' = Off,
+// '1' = base + one catalog rung, '2' = base + two rungs. Labels are built live from the base stone
+// size ("Off" / "SS6 → SS10" / "SS6 → SS10 → SS16"), and a step the catalog cannot supply from this
+// base (SS20 has one rung above it, SS30 none) is rendered disabled with an explaining title.
+function weightStepsOptionsHtml(baseStoneSizeMm){
+  const available=stoneSizeRungsAvailable(baseStoneSizeMm);
+  const html=['<option value="0">Off</option>'];
+  for(let step=1;step<=2;step++){
+    const ok=step<=available;
+    const label=ok
+      ?stoneSizesFromBaseMm(baseStoneSizeMm,step).map(d=>formatStoneSizeLabel(d).replace(/\s*\(.*\)$/,'')).join(' → ')
+      :`Step ${step} — needs ${step} larger stone size${step>1?'s':''}`;
+    const title=ok?'':` title="The stone catalog has no ${step} size${step>1?'s':''} larger than the current stone size."`;
+    html.push(`<option value="${step}"${ok?'':' disabled'}${title}>${escapeHtml(label)}</option>`);
+  }
+  return html.join('');
+}
+// The rung count a stored weightSizesMm array represents (step 1 -> 2 entries, step 2 -> 3); 0 for
+// an empty/absent array (weight mode on, step "Off").
+function weightStepForSizes(weightSizesMm){return Array.isArray(weightSizesMm)&&weightSizesMm.length>1?weightSizesMm.length-1:0}
 // S-110 (Expanded Shape Library): every shape kind that resolves through GeometryEngine's
 // generateShapeLayout()/resolveShapePolygons() -- Circle/Rectangle plus the nine new
 // ShapeLibrary.js kinds (Ellipse/Capsule/Regular Polygon/Star/Heart/Arrow/Cross/Crescent/Ring).
@@ -654,7 +803,12 @@ function shapeLayerResolveParams(layer){
 // convention). '??' fallbacks mean a layer saved before this milestone (no such fields at all)
 // forwards sizeMode:'uniform', so GeometryEngine.js's normalizeMixedSizeParams() short-circuits
 // immediately and every pre-S-200 project generates byte-identical geometry.
-function mixedSizeParamsFor(layer){return{sizeMode:resolveSizeMode(layer.sizeMode),allowedSizesMm:layer.allowedSizesMm??[],minSizeMm:layer.minSizeMm??null,maxSizeMm:layer.maxSizeMm??null,conservativeDetail:layer.conservativeDetail}}
+// MONO-015: weightSizesMm is a single flat array (the graduated weight step's ascending mm
+// diameters), stored the way S-200's allowedSizesMm is -- deliberately NOT reusing S-200's
+// minSizeMm/maxSizeMm, so a mode-switched layer round-trips unambiguously. normalizeMixedSizeParams()
+// ignores it unless sizeMode==='weight' and the caller allows weight (text layers only). Empty
+// default mirrors allowedSizesMm's, and reduces weight mode to uniform output.
+function mixedSizeParamsFor(layer){return{sizeMode:resolveSizeMode(layer.sizeMode),allowedSizesMm:layer.allowedSizesMm??[],minSizeMm:layer.minSizeMm??null,maxSizeMm:layer.maxSizeMm??null,conservativeDetail:layer.conservativeDetail,weightSizesMm:layer.weightSizesMm??[]}}
 // MONO-006B: every field generateTextStonesLive() passes to permanentEngine.generateTextLayout()
 // except authoredScale itself -- factored out so recoverStaleAuthoredScales() below can generate
 // the exact same *natural* (unscaled) layout to validate a persisted authoredScale against, without
@@ -663,6 +817,10 @@ function buildTextLayoutBaseParams(layer){const fontId=layer.font;const authored
   // TXT-102: '??' fallbacks so a pre-TXT-102 saved project (no align/lineSpacing/rotationDeg on its
   // text layers) renders byte-identical -- 'left'/1/0 are exactly GeometryEngine's own defaults.
   align:layer.align??'left',lineSpacing:layer.lineSpacing??1,rotationDeg:layer.rotationDeg??0,
+  // READ-006: added inter-glyph tracking, mm. Zeroed for authored stone fonts exactly like
+  // curveEnabled above -- expectedComponentCount() has no outline to work from for rs-block/rs-modern
+  // (spec §4.5). '??' fallback so a pre-READ-006 project is byte-identical.
+  letterSpacingMm:authored?0:(layer.letterSpacing??0),
   // S-200: see mixedSizeParamsFor()'s own doc comment.
   ...mixedSizeParamsFor(layer)}}
 class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=permanentEngine}
@@ -728,7 +886,23 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  async generateTextStonesLive(layer,project,{includeStats=false}={}){if(!this.permanentEngine||!this.permanentEngine.canGenerateText||!layer.text||!isFontKnown(layer.font))return includeStats?{stones:[],outlineStats:null}:[];const base={...buildTextLayoutBaseParams(layer),
   // MONO-005A: see resolveAuthoredScale()'s own doc comment. No effect on sampled/OpenType text --
   // GeometryEngine only ever reads authoredScale inside its authored-stone-center branch.
-  authoredScale:resolveAuthoredScale(layer)};let result=await this.permanentEngine.generateTextLayout(base);if(layer.autoFit){const{scale}=computeAutoFitScale(layer,project,result.widthMm);if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.getBoundingBox();
+  authoredScale:resolveAuthoredScale(layer),
+  // MONO-021: the four Design-tool edit fields go into generateTextLayout()'s call HERE, directly,
+  // alongside authoredScale -- NOT in buildTextLayoutBaseParams(). MONO-006B reserves that builder
+  // for the pure NATURAL layout recoverStaleAuthoredScales() regenerates to validate a persisted
+  // authoredScale against; a stamp shifting its bounding-box centre must never reach that check.
+  // This is the identical wiring-gap fix RS-3011 Steps 10b/12/13 made for generatePathStonesLive()
+  // -- without these four lines an edit is stored on disk and never rendered. Absent/empty on every
+  // pre-MONO-021 text layer, where generateTextLayout()'s edit-application block is a strict no-op.
+  regions:layer.regions,stampedStones:layer.stampedStones,erasedGridPositions:layer.erasedGridPositions,naturalBoundingBoxMm:layer.naturalBoundingBoxMm};let result=await this.permanentEngine.generateTextLayout(base);
+  // MONO-021: auto-fit and canvas-centering both measure the letter, not the letter PLUS any
+  // Design-tool edits. generateTextLayout() now appends stamped stones (which can sit outside the
+  // letter) into result.stones, so result.widthMm / result.getBoundingBox() would grow with a
+  // stamp and re-centre / shrink the whole letter on the canvas -- the exact circular-bounds trap
+  // computeFrozenBoxTransform()'s own doc comment describes. result.baseBoundingBoxMm is the box of
+  // the BASE stones only (pre-edit); it is non-null exactly when getBoundingBox() is, and for an
+  // unedited layer the two are identical, so `?? result.getBoundingBox()` is a no-op there.
+  if(layer.autoFit){const{scale}=computeAutoFitScale(layer,project,result.baseBoundingBoxMm?.widthMm??result.widthMm);if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await this.permanentEngine.generateTextLayout({...base,heightMm:scaledHeight})}}const bb=result.baseBoundingBoxMm??result.getBoundingBox();
   // RS-1009: text layers previously had no position field -- stones were always centered on the
   // canvas. layer.x/layer.y (mm, default 0) are a further offset applied on top of that same
   // auto-centered base position, so pre-RS-1009 Project JSON (no x/y on its text layers) renders
@@ -816,7 +990,10 @@ const DEFAULT_PROJECT_NAME='Untitled Project';
 // FONT-002: stoneSize/gap default to RS Block's own recommendedStoneSizeMm/recommendedGapMm (2.8/0.3)
 // now that it's the default font, matching the family's own authored pitch (PITCH_MM=3.1 in
 // families/rsBlock.js) instead of the generic pre-FONT-002 2/0.3.
-function defaultProject(){const vessel=getVesselDefaults('mug');return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,product:'mug',canvas:computeCanvasFromVessel(vessel),cupColor:'#1f3556',wrap:'front',plate:getPlateDefaults(),vessel,layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:25,heightMode:'capHeight',textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0}]}}
+// READ-008: height 25 -> 45 so the stored value is ratio-coherent with the 2.8 mm default stone
+// (45/2.8 = 16.07, just above MIN_HEIGHT_TO_STONE_RATIO). RS Block is authored, so heightMm is a
+// no-op for it -- identical width and stone count at 25, 45 and 60 -- and this changes no output.
+function defaultProject(){const vessel=getVesselDefaults('mug');return{version:2,units:'mm',name:DEFAULT_PROJECT_NAME,product:'mug',canvas:computeCanvasFromVessel(vessel),cupColor:'#1f3556',wrap:'front',plate:getPlateDefaults(),vessel,layers:[{id:'text',type:'text',visible:true,text:'Vitalina Serbin',font:DEFAULT_TEXT_FONT_ID,height:45,heightMode:'capHeight',textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,letterSpacing:0,x:0,y:0}]}}
 // RS-0003.5D1: validates an imported Project JSON file against the exact ad hoc project/layer
 // shape #exportProject already produces (JSON.stringify(project)). Throws a specific Error
 // describing the first problem found instead of silently accepting a malformed project; the
@@ -925,7 +1102,12 @@ function validateProject(obj){
 // Modern/RS Script never depend on network success.
 const rhinestoneFontRegistry=createDefaultRhinestoneFontRegistry();
 let fontProviderRegistry=null,permanentEngineError=null,fontManager=null;
-try{fontManager=await FontManager.fromUrl('./assets/fonts/manifest.json');fontProviderRegistry=createDefaultFontProviderRegistry(fontManager,{rhinestoneFontRegistry});TEXT_ENGINE_FONT_IDS=new Set(fontManager.listFonts().map(f=>f.id))}catch(error){permanentEngineError=error;console.error('Font manifest failed to load; text layers will render empty until this is resolved. Shape layers are unaffected.',error)}
+try{fontManager=await FontManager.fromUrl('./assets/fonts/manifest.json');fontProviderRegistry=createDefaultFontProviderRegistry(fontManager,{rhinestoneFontRegistry});TEXT_ENGINE_FONT_IDS=new Set(fontManager.listFonts({includeDisabled:true}).map(f=>f.id))}catch(error){permanentEngineError=error;console.error('Font manifest failed to load; text layers will render empty until this is resolved. Shape layers are unaffected.',error)}
+// FONT-LIB-005: includeDisabled:true here, so TEXT_ENGINE_FONT_IDS is exactly "every font id the
+// text engine will accept" -- identical to fontManager.hasFont()/isFontKnown(). A disabled font
+// (montserrat-regular, retired as an unmanufacturable hairline) still renders in existing projects,
+// so a layer that renders must stay duplicable: addText() at the "font:TEXT_ENGINE_FONT_IDS.has(...)"
+// call site would otherwise silently rewrite an inherited Montserrat layer to the default font.
 // TXT-101A: given a fontId already known-valid against TEXT_ENGINE_FONT_IDS (see the fallback
 // pattern at every generateTextStonesLive()/resolveLayerShapeSource()/fitTextToShape() call site),
 // resolves which FontProviderRegistry provider should render it. Falls back to 'opentype' (the
@@ -980,6 +1162,67 @@ let paintStyleSeeded=false;
 // DrawingCanvasTool.js can recognize it without importing anything from this module, matching this
 // codebase's existing resolveSelectionTarget/hitTestRegion plain-object-contract convention).
 const PAINT_TARGET_PRECISION_ERROR=Object.freeze({precisionError:true});
+// MONO-021: a 'text' layer's Design-tool edits (Stamp/Trace/Eraser/Paint) are rooted in a FROZEN
+// BOX -- the AABB of the layer's BASE stones in GeometryEngine's own pre-app.js-offset space -- and
+// are stored on the layer (0,0)-rooted relative to it (see computeFrozenBoxTransform()'s own doc
+// comment). The three mark hooks + onPaintStroke each need two things to convert an absolute
+// canvas-mm click / lasso into that stored form: the layer's CURRENT base-stone bounds (engine
+// space), and the same auto-centre + layer.x/y offset generateTextStonesLive() adds to every
+// rendered stone. This recomputes both -- plus the base stones themselves -- by regenerating the
+// layer's base layout exactly as generateTextStonesLive() does (buildTextLayoutBaseParams() +
+// authoredScale + the autoFit re-gen), MINUS the four edit fields: the base stones must be the
+// PRE-edit set or the frozen-box map goes circular (§3.1's trap). One extra engine call per
+// committed gesture, never per frame. Returns null for a layer that produces no base stones (empty
+// text / unknown font / failed manifest) -- the caller then reports the edit as unplaceable.
+async function resolveTextLayerEditContext(layer){
+  if(!permanentEngine||!permanentEngine.canGenerateText||!layer.text||!isFontKnown(layer.font))return null;
+  const base={...buildTextLayoutBaseParams(layer),authoredScale:resolveAuthoredScale(layer)};
+  let result;
+  try{
+    result=await permanentEngine.generateTextLayout(base);
+    if(layer.autoFit){
+      const{scale}=computeAutoFitScale(layer,project,result.baseBoundingBoxMm?.widthMm??result.widthMm);
+      if(scale<1){const scaledHeight=Math.max(1,layer.height*scale);result=await permanentEngine.generateTextLayout({...base,heightMm:scaledHeight});}
+    }
+  }catch(error){console.error('MONO-021: text layer edit-context generation failed',error);return null;}
+  const bb=result.baseBoundingBoxMm??result.getBoundingBox();
+  if(!bb)return null;
+  const{offsetX,offsetY}=computeTextPlacementOffset(bb,layer,project);
+  return{
+    baseBoundingBoxMm:{minXmm:bb.minXmm,minYmm:bb.minYmm,maxXmm:bb.maxXmm,maxYmm:bb.maxYmm},
+    offsetXMm:offsetX,offsetYMm:offsetY,
+    baseStones:result.stones.map(s=>({xMm:s.xMm,yMm:s.yMm,sizeMm:s.sizeMm}))
+  };
+}
+// MONO-021: an absolute canvas-mm point -> the (0,0)-rooted-to-the-frozen-box stored form the four
+// 'text' edit fields use. Subtracts the render offset (absolute -> engine space), then inverts the
+// box->box map via absolutePointsToFrozenBoxSpace() (never a second scale/translate). `frozenBoxMm`
+// is layer.naturalBoundingBoxMm (undefined until the first edit -- then ctx.baseBoundingBoxMm is
+// passed for both args and the map is a pure translation). Returns null when the box is degenerate.
+function textEditPointToStored(pointAbsoluteMm,ctx,frozenBoxMm){
+  const enginePoint={xMm:pointAbsoluteMm.xMm-ctx.offsetXMm,yMm:pointAbsoluteMm.yMm-ctx.offsetYMm};
+  const [ring]=absolutePointsToFrozenBoxSpace([[enginePoint]],frozenBoxMm??ctx.baseBoundingBoxMm,ctx.baseBoundingBoxMm);
+  return ring?ring[0]:null;
+}
+// MONO-021: same conversion for a whole polygon/point-list (Trace's spaced points, an Eraser
+// corridor ring, a Paint lasso contour) -- absolute canvas mm -> engine space -> frozen-box space.
+function textEditPolygonToStored(polygonAbsoluteMm,ctx,frozenBoxMm){
+  const enginePolygon=polygonAbsoluteMm.map(p=>({xMm:p.xMm-ctx.offsetXMm,yMm:p.yMm-ctx.offsetYMm}));
+  const [ring]=absolutePointsToFrozenBoxSpace([enginePolygon],frozenBoxMm??ctx.baseBoundingBoxMm,ctx.baseBoundingBoxMm);
+  return ring||null;
+}
+// MONO-021: a text layer's stone Group on Design's canvas is rebuilt by syncFromProjectLayers()
+// ONLY when the proxy's BOUNDS change -- a stamp on a bead, an erase, or a Paint recolour moves no
+// bounds. So a text edit must first regenerate the global layout, THEN force an unconditional
+// text-proxy rebuild via refreshStoneGroupForLayer() (which MONO-021 makes dispatch to
+// rebuildTextStoneGroupForShape for a text proxy). Order matters: getTextLayerStones() inside the
+// rebuild reads the shared `layout` global, so updateAll() must run first. The 'path' hooks call
+// refresh BEFORE updateAll because rebuildStoneGroupForShape re-runs generatePathLayout() from live
+// project data instead.
+async function commitTextLayerEditRefresh(targetLayer){
+  await updateAll(true);
+  drawingTool.refreshStoneGroupForLayer(targetLayer.id);
+}
 // RS-3013 Step 1: the target-shape resolution Paint's own onPaintStroke below needs (best-overlap-
 // by-area, two-pass: a fallback-spacing pass to pick a winner, then that winner's own stoneSize+gap
 // for a precise intersection) is the EXACT SAME resolution Select's rectangle-drag and Lasso's own
@@ -991,6 +1234,41 @@ const PAINT_TARGET_PRECISION_ERROR=Object.freeze({precisionError:true});
 // PAINT_TARGET_PRECISION_ERROR sentinel above instead of null when either selectPaintTarget() call
 // throws BooleanPrecisionError -- any other error type is rethrown unchanged, this function only
 // ever absorbs this one specific, known error class.
+// MONO-021: a regular 16-gon at a bead's own radius -- one per rendered stone becomes a 'text'
+// layer's Paint candidate geometry in resolvePaintTargetTwoPass(), since a text layer has no
+// `contours`. The discs ARE the letter's true physical footprint, which is what selectPaintTarget()
+// intersects a lasso against.
+function beadDiscPolygon(cxMm,cyMm,rMm){
+  const out=[];
+  for(let i=0;i<16;i++){const a=(i/16)*Math.PI*2;out.push({xMm:cxMm+rMm*Math.cos(a),yMm:cyMm+rMm*Math.sin(a)});}
+  return out;
+}
+function pointsAABB(points){
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  for(const p of points){if(p.xMm<minX)minX=p.xMm;if(p.yMm<minY)minY=p.yMm;if(p.xMm>maxX)maxX=p.xMm;if(p.yMm>maxY)maxY=p.yMm;}
+  return{minX,minY,maxX,maxY};
+}
+function aabbOverlap(a,b){return a.minX<=b.maxX&&b.minX<=a.maxX&&a.minY<=b.maxY&&b.minY<=a.maxY;}
+// MONO-021 latency fix: the bead-proximity pre-test below needs a point-to-lasso-boundary distance,
+// not just containment -- see the comment at its call site in resolvePaintTargetTwoPass() for why.
+function pointToSegmentDistanceMm(p,a,b){
+  const dx=b.xMm-a.xMm,dy=b.yMm-a.yMm;
+  const lenSq=dx*dx+dy*dy;
+  if(lenSq===0)return Math.hypot(p.xMm-a.xMm,p.yMm-a.yMm);
+  let t=((p.xMm-a.xMm)*dx+(p.yMm-a.yMm)*dy)/lenSq;
+  if(t<0)t=0;else if(t>1)t=1;
+  return Math.hypot(p.xMm-(a.xMm+t*dx),p.yMm-(a.yMm+t*dy));
+}
+function distanceToPolygonsMm(point,polygons){
+  let min=Infinity;
+  for(const poly of polygons){
+    for(let i=0;i<poly.length;i++){
+      const d=pointToSegmentDistanceMm(point,poly[i],poly[(i+1)%poly.length]);
+      if(d<min)min=d;
+    }
+  }
+  return min;
+}
 function resolvePaintTargetTwoPass(polygonsAbsoluteMm){
   if(!permanentEngine)return null;
   const candidates=project.layers.filter(l=>l.type==='path'&&l.visible!==false).map(l=>({
@@ -1005,6 +1283,35 @@ function resolvePaintTargetTwoPass(polygonsAbsoluteMm){
       layerId:l.id,xMm:l.x,yMm:l.y,widthMm:l.w,heightMm:l.h,naturalBoundingBoxMm:l.naturalBoundingBoxMm
     }).polygons
   }));
+  // MONO-021: 'text' candidates -- one 16-gon disc per rendered bead, read straight off the last
+  // generated `layout` (this is a sync function; onPaintStroke's own async text branch does the
+  // frozen-box conversion afterward). CULLED by a cheap axis-aligned bbox overlap against the lasso
+  // BEFORE selectPaintTarget()'s boolean pass: a 279-disc intersection measured 142-184 ms on a hit
+  // and ~591 ms on a full miss (prompt author), so a lasso nowhere near the lettering must never
+  // reach it.
+  const lassoBox=pointsAABB(polygonsAbsoluteMm.flat());
+  for(const l of project.layers){
+    if(l.type!=='text'||l.visible===false)continue;
+    const beads=(layout?layout.stones:[]).filter(s=>s.layerId===l.id);
+    if(beads.length===0)continue;
+    const bb=getLayerBBox(l); // text branch: bead extent from StoneLayout.getBoundingBox() (already half-stone padded)
+    if(!aabbOverlap(lassoBox,{minX:bb.x,minY:bb.y,maxX:bb.x2,maxY:bb.y2}))continue;
+    // Latency fix: the bbox cull above can't catch a NEAR-miss -- a lasso that lands inside the
+    // letter's bbox but touches no bead (the counter of a Q, the gap between two letters) -- and
+    // that case measured 842-896 ms building+intersecting a full disc set for a target the stroke
+    // never actually reaches. A lasso that touches no bead cannot recolour a single stone (the
+    // discs below are the only geometry selectPaintTarget() intersects), so the candidate is dead
+    // before that call ever runs. A bead "touches" the lasso when its centre is either inside the
+    // lasso polygon, or within its own radius of the lasso's boundary -- the second clause is
+    // required: a lasso smaller than a bead, sitting entirely inside that bead, contains no bead
+    // centre at all, so containment alone would wrongly cull a legitimate paint.
+    const touchesABead=beads.some(b=>{
+      const c={xMm:b.xMm,yMm:b.yMm};
+      return isPointInsidePolygons(c,polygonsAbsoluteMm)||distanceToPolygonsMm(c,polygonsAbsoluteMm)<=b.sizeMm/2;
+    });
+    if(!touchesABead)continue;
+    candidates.push({layerId:l.id,polygons:beads.map(b=>beadDiscPolygon(b.xMm,b.yMm,b.sizeMm/2))});
+  }
   // First pass: which candidate does the stroke/rectangle overlap most? The exact grid resolution
   // barely matters for THIS decision (only for the stored contour's precision, refined below once
   // the target is known) -- the currently-selected layer's own stone spacing is a reasonable,
@@ -1029,7 +1336,7 @@ function resolvePaintTargetTwoPass(polygonsAbsoluteMm){
   // doc comment.
   let result;
   try{
-    result=selectPaintTarget(polygonsAbsoluteMm,[targetCandidate],{targetSpacingMm:targetLayer.stoneSize+targetLayer.gap});
+    result=selectPaintTarget(polygonsAbsoluteMm,[targetCandidate],{targetSpacingMm:(targetLayer.stoneSize||2)+(targetLayer.gap||0.3)});
   }catch(error){
     if(!(error instanceof BooleanPrecisionError))throw error;
     return PAINT_TARGET_PRECISION_ERROR;
@@ -1137,7 +1444,13 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // onShapeCommitted() above always calls it.
   onPaintStroke:async(lassoPolygons)=>{
     updateDrawToolButtons();
+    // MONO-021 QA-only timing hook -- same "never used to drive any application logic" precedent
+    // as window.__drawingTool/window.__project/window.__preview3D above, added solely so the
+    // gesture-latency figures the milestone spec requires can be measured against a real pointer
+    // gesture instead of a synthetic direct call.
+    const __t0=performance.now();
     const resolved=resolvePaintTargetTwoPass(lassoPolygons);
+    window.__lastPaintResolveMs=performance.now()-__t0;
     // Bugfix: distinct from the "genuinely overlaps nothing" case right below -- this stroke DID
     // overlap a candidate, but the intersection couldn't be computed at a safe precision (see
     // PAINT_TARGET_PRECISION_ERROR's own doc comment). No region created, no history entry, same
@@ -1147,9 +1460,40 @@ const drawingTool=createDrawingTool(layoutCanvas,{
       el('status').textContent='Paint: this stroke is too small/precise for a shape this large — try a bigger area.';
       return;
     }
-    if(!resolved){console.info('Paint: lasso overlaps no path layer, discarding stroke.');return;}
+    if(!resolved){console.info('Paint: lasso overlaps no path or text layer, discarding stroke.');return;}
     const targetLayer=project.layers.find(l=>l.id===resolved.layerId);
     if(!targetLayer)return;
+    if(targetLayer.type==='text'){
+      // MONO-021: Paint on a 'text' layer is COLOUR-ONLY (see _applyTextRegions()'s own doc comment
+      // and spec §2.1 for the measured reasons -- a resample empties a one-stone-wide stroke, an
+      // in-place size change overlaps). The region carries the same {stoneSizeMm,gapMm,fillMode}
+      // shape a path region does for .rhs uniformity, but the engine stores and ignores them.
+      // The lasso intersection contour is converted through the frozen-box transform, not
+      // absolutePolygonsToNaturalSpace() (which opens with pathLayer.contours.map -- a TypeError
+      // for a text layer, which is exactly why this branch and the disc candidates in
+      // resolvePaintTargetTwoPass() ship together, per §6.0).
+      const ctx=await resolveTextLayerEditContext(targetLayer);
+      if(!ctx){el('status').textContent=`Paint: ${layerLabel(targetLayer)} has no stones to recolour.`;return;}
+      const storedContours=resolved.contours
+        .map(ring=>textEditPolygonToStored(ring,ctx,targetLayer.naturalBoundingBoxMm))
+        .filter(Boolean);
+      if(storedContours.length===0)return;
+      const newRegions=storedContours.map((contour,index)=>({
+        id:'region'+Date.now()+index,
+        contour,
+        stoneSizeMm:paintSettings.sizeMm,
+        gapMm:paintSettings.gapMm,
+        color:paintSettings.color,
+        fillMode:'fill'
+      }));
+      commitHistory();
+      if(!targetLayer.naturalBoundingBoxMm)targetLayer.naturalBoundingBoxMm={...ctx.baseBoundingBoxMm};
+      if(!Array.isArray(targetLayer.regions))targetLayer.regions=[];
+      targetLayer.regions.push(...newRegions);
+      await commitTextLayerEditRefresh(targetLayer);
+      el('status').textContent=`Recoloured ${newRegions.length} area${newRegions.length===1?'':'s'} on ${layerLabel(targetLayer)} — Paint on text is colour only.`;
+      return;
+    }
     // RS-3011 Step 10b DECISION (Sasha delegated, confirmed during scoping): a lasso crossing a
     // concave notch or a hole can genuinely intersect its target in multiple disjoint pieces --
     // create ONE region per disjoint contour rather than keeping only the largest piece or
@@ -1276,49 +1620,121 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // comment above, near resolvePaintTargetTwoPass) referenced here by shorthand so
   // deleteCurrentSelection()'s new 'draft' branch can call the exact same test.
   isPointInActiveSelection,
-  // RS-3012 Step 1: fires instead of onStampPlace when a click resolves outside the active
-  // selection's own boundary -- no history session, no stone placed, matching decided item 2's
-  // "reject with feedback" contract (never silent, never "allow anyway").
-  onStampRejected:()=>{
+  // RS-3012 Step 1 / RS-3015: fires instead of onStampPlace when a Stamp click resolves nothing
+  // placeable -- no history session, no stone placed, matching decided item 2's "reject with
+  // feedback" contract (never silent, never "allow anyway"). Two reasons, one string each (the same
+  // distinction Trace/Eraser make):
+  //  - 'outside-selection' the click is outside the active selection -- RS-3012's exact wording kept
+  //  - 'ineligible'        the click landed inside a shape that can't take marks (an SVG / image /
+  //                        circle / rectangle / shape-library proxy) with no drawn shape or text
+  //                        layer beneath it -- worded for Stamp. MONO-021: a 'text' proxy IS a mark
+  //                        target now (resolved by bead proximity), so it is no longer in this list.
+  // Stamp's "nothing under the click at all" case is NOT routed here: onStampPlace is still called
+  // with a null layerId and messages it there ("Stamp: nothing here to place a stone on.").
+  onStampRejected:(reason)=>{
+    if(reason==='ineligible'){el('status').textContent='Stamp: that layer cannot hold stamped stones — only drawn shapes and text can.';return;}
     el('status').textContent='Stamp: click is outside the current selection.';
   },
-  // RS-3012 Step 1: fires instead of onTracePlace when EVERY point of a committed Trace drag falls
-  // outside the active selection's own boundary (the filtered placements list is empty) -- no
-  // history session, no stones placed. Deliberately distinct from today's pre-existing "fewer than 2
-  // buffered points" silent discard (DrawingCanvasTool.js's own trace mouseup branch) -- that discard
-  // has no message; a selection-caused empty result must not be silent, per decided item 2.
-  onTraceRejected:()=>{
+  // RS-3012 Step 1 / RS-3015: fires instead of onTracePlace for any committed Trace drag that
+  // resolves nothing usable -- no history session, no stones placed. Each `reason` is its own
+  // status message (see DrawingCanvasTool.js's onTraceRejected contract):
+  //  - 'no-target'        nothing eligible under the stroke at all
+  //  - 'ineligible'       a shape was under it, but only drawn ('path') shapes and 'text' layers can hold marks
+  //  - 'no-stones'        a real drawn shape whose stones aren't generated yet -- point at the
+  //                       Generate Stones button, NOT at "this can't hold stones"; layerId names it
+  //  - 'outside-selection' RS-3012's case, exact wording kept (regression control in the tests)
+  // Still deliberately distinct from DrawingCanvasTool.js's pre-existing "fewer than 2 buffered
+  // points" / "no spaced points" silent discards, which have no message and stay that way.
+  onTraceRejected:(reason,layerId)=>{
+    if(reason==='no-target'){el('status').textContent='Trace: nothing under the stroke to trace along.';return;}
+    if(reason==='ineligible'){el('status').textContent='Trace: that layer cannot take traced marks — only drawn shapes and text can.';return;}
+    if(reason==='no-stones'){
+      const owner=layerId&&project.layers.find(l=>l.id===layerId);
+      el('status').textContent=owner
+        ?`Trace: press Generate Stones on ${layerLabel(owner)} before tracing along it.`
+        :'Trace: press Generate Stones on this shape before tracing along it.';
+      return;
+    }
     el('status').textContent='Trace: entire stroke was outside the selection.';
   },
+  // RS-3015: Eraser's counterpart to onTraceRejected -- fires instead of onEraseSweep when a sweep
+  // resolves no eligible target. Two reasons only ('no-stones' is Trace's alone -- Eraser targets
+  // the 'path' or 'text' layer regardless, and onEraseSweep below already says "Nothing to erase"
+  // for one holding no stones).
+  onEraseRejected:(reason)=>{
+    if(reason==='ineligible'){el('status').textContent='Eraser: that layer has no erasable marks — only drawn shapes and text do.';return;}
+    el('status').textContent='Eraser: nothing under the sweep to erase.';
+  },
   onStampPlace:async({xMm,yMm,layerId})=>{
-    if(!layerId)return;
-    const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
-    if(!targetLayer)return;
-    // Feeds absolutePolygonsToNaturalSpace() a single-point "polygon" ([[{xMm,yMm}]]) rather than
-    // duplicating computeNaturalContourTransform/applyNaturalContourTransform logic here -- same
-    // precedent as onPaintStroke's own call just above, just with a 1-point ring instead of a real
-    // lasso contour. Returns [] (not a per-point null) when targetLayer has no placeable transform
-    // (empty contours) -- guarded the same way a missing target is above.
-    const naturalPolygons=absolutePolygonsToNaturalSpace([[{xMm,yMm}]],targetLayer);
-    if(naturalPolygons.length===0)return;
-    const naturalPoint=naturalPolygons[0][0];
-    const stamp={
-      id:'stamp'+Date.now(),
-      xMm:naturalPoint.xMm,
-      yMm:naturalPoint.yMm,
-      // RS-3014 Step 1: sizeMm/color now come from Stamp's own independent stampSettings, seeded
-      // from the target layer's stoneSize/color the first time Stamp is used this session (see
-      // seedStampStyleIfNeeded() below) and left alone afterward, superseding RS-3011 Step 12's
-      // "read the target layer's CURRENT fields at click time" convention.
-      sizeMm:stampSettings.sizeMm,
-      color:stampSettings.color
-    };
-    commitHistory();
+    // RS-3015 / MONO-021: a mark that places nothing says so, matching onStampRejected() above.
+    // Cases: (a) nothing under the click at all; (b) the click resolved a layer that is neither
+    // 'path' nor 'text' -- after RS-3015 the resolver skips ineligible proxies, so this is now only
+    // the narrow race where the layer was deleted or changed type between resolution and here.
+    if(!layerId){el('status').textContent='Stamp: nothing here to place a stone on.';return;}
+    const targetLayer=project.layers.find(l=>l.id===layerId&&(l.type==='path'||l.type==='text'));
+    if(!targetLayer){
+      const owner=project.layers.find(l=>l.id===layerId);
+      el('status').textContent=owner
+        ?`Stamp: ${layerLabel(owner)} cannot hold stamped stones — only drawn shapes and text can.`
+        :'Stamp: nothing here to place a stone on.';
+      return;
+    }
+    let stamp;
+    if(targetLayer.type==='text'){
+      // MONO-021: convert the absolute click through the frozen-box transform (see
+      // resolveTextLayerEditContext / textEditPointToStored). naturalBoundingBoxMm is captured from
+      // the CURRENT base-stone bounds on the first edit of any kind -- inside commitHistory() so an
+      // undo removes it too.
+      const ctx=await resolveTextLayerEditContext(targetLayer);
+      if(!ctx){el('status').textContent=`Stamp: ${layerLabel(targetLayer)} has no stones to place a stamp against.`;return;}
+      const stored=textEditPointToStored({xMm,yMm},ctx,targetLayer.naturalBoundingBoxMm);
+      if(!stored)return;
+      stamp={id:'stamp'+Date.now(),xMm:stored.xMm,yMm:stored.yMm,sizeMm:stampSettings.sizeMm,color:stampSettings.color};
+      commitHistory();
+      if(!targetLayer.naturalBoundingBoxMm)targetLayer.naturalBoundingBoxMm={...ctx.baseBoundingBoxMm};
+    }else{
+      // Feeds absolutePolygonsToNaturalSpace() a single-point "polygon" ([[{xMm,yMm}]]) rather than
+      // duplicating computeNaturalContourTransform/applyNaturalContourTransform logic here -- same
+      // precedent as onPaintStroke's own call just above, just with a 1-point ring instead of a real
+      // lasso contour. Returns [] (not a per-point null) when targetLayer has no placeable transform
+      // (empty contours) -- guarded the same way a missing target is above.
+      const naturalPolygons=absolutePolygonsToNaturalSpace([[{xMm,yMm}]],targetLayer);
+      if(naturalPolygons.length===0)return;
+      const naturalPoint=naturalPolygons[0][0];
+      // RS-3014 Step 1: sizeMm/color come from Stamp's own independent stampSettings, seeded from
+      // the target layer's stoneSize/color the first time Stamp is used this session.
+      stamp={id:'stamp'+Date.now(),xMm:naturalPoint.xMm,yMm:naturalPoint.yMm,sizeMm:stampSettings.sizeMm,color:stampSettings.color};
+      commitHistory();
+    }
     if(!Array.isArray(targetLayer.stampedStones))targetLayer.stampedStones=[];
     targetLayer.stampedStones.push(stamp);
-    drawingTool.refreshStoneGroupForLayer(targetLayer.id);
-    await updateAll(true);
+    if(targetLayer.type==='text'){
+      await commitTextLayerEditRefresh(targetLayer);
+    }else{
+      drawingTool.refreshStoneGroupForLayer(targetLayer.id);
+      await updateAll(true);
+    }
     el('status').textContent=`Placed a stone on ${layerLabel(targetLayer)}.`;
+  },
+  // RS-3035: the Design Text tool's own commit hook. Mirrors the Design SVG import handler's
+  // push-then-updateAll-then-selectShapeForLayer sequence (see #designImportSvgFile's own change
+  // listener and selectShapeForLayer()'s doc comment): a layer pushed into project.layers from
+  // outside DrawingCanvasTool's own draw flow only becomes selectable on the Design canvas once
+  // updateAll()'s syncFromProjectLayers() has materialized it into a real board.shapes item.
+  // The Lightbox is opened directly, NOT through revealDualWorkspaceForLightbox() -- that helper's
+  // first act is setDrawMode(false), which would throw the user straight out of Design. Opening it
+  // bare, the way #menuShipping/#menuSettings/#menuHelp already do, leaves Design active underneath;
+  // the overlay is .non-modal (pointer-events:none except the panel itself) and header-draggable, so
+  // the canvas stays fully usable behind it.
+  onTextPlace:async({xMm,yMm})=>{
+    const layer=await addText({atAbsoluteMm:{xMm,yMm}});
+    drawingTool.selectShapeForLayer(layer.id);
+    updateDrawToolButtons();
+    lightboxes.text.open();
+    const contentField=el('text');
+    contentField.focus();
+    contentField.select();
+    el('status').textContent='Added text layer at the click point — edit it in the Text panel.';
   },
   // RS-3011 Step 11: Trace's own finalize hook -- fires once per committed drag (see
   // DrawingCanvasTool.js's own onTracePlace doc comment for the exact (placements,layerId) contract;
@@ -1340,15 +1756,34 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // byte-identical-to-before case). Only changes the status message below; every mutation/placement
   // path is otherwise untouched from RS-3011 Step 11.
   onTracePlace:async(placements,layerId,droppedCount=0)=>{
-    if(!layerId||!placements.length)return;
-    const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
+    // RS-3015: layerId here is always a real 'path' layer with generated stones -- every other
+    // outcome (no target, ineligible proxy, stones-not-generated, wholly-out-of-selection) fires
+    // onTraceRejected instead, so this hook no longer needs a null-layerId or a non-'path' branch.
+    // `!placements.length` with a real layerId stays a silent no-op (DrawingCanvasTool.js already
+    // discards a <2-point / fully-filtered drag before calling this hook). `if(!targetLayer)` stays
+    // only as a defensive guard against the narrow race where the layer was deleted between
+    // resolution and here.
+    if(!placements.length)return;
+    const targetLayer=project.layers.find(l=>l.id===layerId&&(l.type==='path'||l.type==='text'));
     if(!targetLayer)return;
-    // Feeds absolutePolygonsToNaturalSpace() the whole placements array as one "polygon" -- it's
-    // purely a coordinate transform, so an open polyline in place of a closed ring is fine (same
-    // precedent as onStampPlace's own 1-point-ring call just above).
-    const naturalPolygons=absolutePolygonsToNaturalSpace([placements],targetLayer);
-    if(naturalPolygons.length===0)return;
-    const naturalPoints=naturalPolygons[0];
+    let naturalPoints;
+    let textCtx=null;
+    if(targetLayer.type==='text'){
+      // MONO-021: same frozen-box conversion Stamp uses -- textEditPolygonToStored() for the whole
+      // spaced-point list at once (a plain coordinate transform, so an open polyline is fine).
+      textCtx=await resolveTextLayerEditContext(targetLayer);
+      if(!textCtx){el('status').textContent=`Trace: ${layerLabel(targetLayer)} has no stones to trace along.`;return;}
+      const stored=textEditPolygonToStored(placements.map(p=>({xMm:p.xMm,yMm:p.yMm})),textCtx,targetLayer.naturalBoundingBoxMm);
+      if(!stored)return;
+      naturalPoints=stored;
+    }else{
+      // Feeds absolutePolygonsToNaturalSpace() the whole placements array as one "polygon" -- it's
+      // purely a coordinate transform, so an open polyline in place of a closed ring is fine (same
+      // precedent as onStampPlace's own 1-point-ring call just above).
+      const naturalPolygons=absolutePolygonsToNaturalSpace([placements],targetLayer);
+      if(naturalPolygons.length===0)return;
+      naturalPoints=naturalPolygons[0];
+    }
     const stamps=naturalPoints.map((p,index)=>({
       id:'stamp'+Date.now()+'-'+index,
       xMm:p.xMm,
@@ -1361,10 +1796,15 @@ const drawingTool=createDrawingTool(layoutCanvas,{
       color:traceSettings.color
     }));
     commitHistory();
+    if(targetLayer.type==='text'&&!targetLayer.naturalBoundingBoxMm)targetLayer.naturalBoundingBoxMm={...textCtx.baseBoundingBoxMm};
     if(!Array.isArray(targetLayer.stampedStones))targetLayer.stampedStones=[];
     targetLayer.stampedStones.push(...stamps);
-    drawingTool.refreshStoneGroupForLayer(targetLayer.id);
-    await updateAll(true);
+    if(targetLayer.type==='text'){
+      await commitTextLayerEditRefresh(targetLayer);
+    }else{
+      drawingTool.refreshStoneGroupForLayer(targetLayer.id);
+      await updateAll(true);
+    }
     el('status').textContent=droppedCount>0
       ?`Traced ${stamps.length} stone${stamps.length===1?'':'s'} (${droppedCount} outside selection, skipped).`
       :`Traced ${stamps.length} stone${stamps.length===1?'':'s'} on ${layerLabel(targetLayer)}.`;
@@ -1409,9 +1849,63 @@ const drawingTool=createDrawingTool(layoutCanvas,{
   // so an old project's eraseDaubs and a brand-new erasedGridPositions-based erase on the same layer
   // coexist correctly with no special-case code.
   onEraseSweep:async(daubsAbsoluteMm,layerId,corridorPolygonsAbsoluteMm,mode)=>{
-    if(!layerId||!daubsAbsoluteMm.length)return;
-    const targetLayer=project.layers.find(l=>l.id===layerId&&l.type==='path');
+    // RS-3015 / MONO-021: layerId here is always a real 'path' or 'text' layer -- a no-target /
+    // ineligible-proxy sweep fires onEraseRejected instead, so this hook needs no null-layerId branch.
+    // `!daubsAbsoluteMm.length` stays a silent no-op (DrawingCanvasTool.js never calls this hook
+    // with an empty sweep). `if(!targetLayer)` stays as a defensive race guard (the layer was
+    // deleted or changed type between resolution and here).
+    if(!daubsAbsoluteMm.length)return;
+    const targetLayer=project.layers.find(l=>l.id===layerId&&(l.type==='path'||l.type==='text'));
     if(!targetLayer)return;
+    if(targetLayer.type==='text'){
+      // MONO-021: a text layer has no fill to reflow and no `contours` to cut, so BOTH eraser modes
+      // apply the sweep as a shape-defined suppression of BASE stones -- 'stones' mode by the daub
+      // radius (eraserSettings.radiusMm), 'outline' mode by the swept corridor polygons -- writing
+      // the exact two fields Stones mode already writes on a path layer: a base stone inside the
+      // sweep is snapshotted into erasedGridPositions (frozen-box space), a stamped stone inside it
+      // is spliced out of stampedStones. NOTHING is ever added to eraseDaubs (path-only, legacy) and
+      // no contour is cut (§2.2: cutting a boundary would reflow the fill and move untouched beads,
+      // the exact defect that disqualified Flatten).
+      const ctx=await resolveTextLayerEditContext(targetLayer);
+      if(!ctx){el('status').textContent=`Nothing to erase on ${layerLabel(targetLayer)}.`;return;}
+      const frozenBoxMm=targetLayer.naturalBoundingBoxMm??ctx.baseBoundingBoxMm;
+      const fbTransform=computeFrozenBoxTransform(frozenBoxMm,ctx.baseBoundingBoxMm);
+      // "inside the sweep" -- tested in the engine's pre-offset space, where the base stones and the
+      // forward-placed stamped stones both live. Corridor polygons / daub points are absolute
+      // canvas mm, so subtract the render offset first.
+      let withinSweep;
+      if(mode==='outline'){
+        const engineCorridors=(corridorPolygonsAbsoluteMm||[]).map(ring=>ring.map(p=>({xMm:p.xMm-ctx.offsetXMm,yMm:p.yMm-ctx.offsetYMm})));
+        if(engineCorridors.length===0){el('status').textContent=`Nothing to erase on ${layerLabel(targetLayer)}.`;return;}
+        withinSweep=(xMm,yMm)=>isPointInsidePolygons({xMm,yMm},engineCorridors);
+      }else{
+        const rMm=eraserSettings.radiusMm;
+        const engineDaubs=daubsAbsoluteMm.map(d=>({xMm:d.xMm-ctx.offsetXMm,yMm:d.yMm-ctx.offsetYMm}));
+        withinSweep=(xMm,yMm)=>engineDaubs.some(d=>{const dx=xMm-d.xMm,dy=yMm-d.yMm;return dx*dx+dy*dy<=rMm*rMm;});
+      }
+      const newlyErased=ctx.baseStones
+        .filter(s=>withinSweep(s.xMm,s.yMm))
+        .map(s=>{const [ring]=absolutePointsToFrozenBoxSpace([[{xMm:s.xMm,yMm:s.yMm}]],frozenBoxMm,ctx.baseBoundingBoxMm);return ring?ring[0]:null;})
+        .filter(Boolean);
+      const existingStamps=targetLayer.stampedStones||[];
+      const survivingStamps=existingStamps.filter(stamp=>{
+        if(!fbTransform)return true;
+        const [placed]=applyNaturalContourTransform([{xMm:stamp.xMm,yMm:stamp.yMm}],fbTransform);
+        return!withinSweep(placed.xMm,placed.yMm);
+      });
+      const removed=newlyErased.length+(existingStamps.length-survivingStamps.length);
+      if(removed===0){el('status').textContent=`Nothing to erase on ${layerLabel(targetLayer)}.`;return;}
+      commitHistory();
+      if(!targetLayer.naturalBoundingBoxMm)targetLayer.naturalBoundingBoxMm={...ctx.baseBoundingBoxMm};
+      targetLayer.stampedStones=survivingStamps;
+      if(newlyErased.length>0){
+        if(!Array.isArray(targetLayer.erasedGridPositions))targetLayer.erasedGridPositions=[];
+        targetLayer.erasedGridPositions.push(...newlyErased.map(p=>({xMm:p.xMm,yMm:p.yMm})));
+      }
+      await commitTextLayerEditRefresh(targetLayer);
+      el('status').textContent=`Erased on ${layerLabel(targetLayer)}.`;
+      return;
+    }
     if(mode==='outline'){
       // An open Pen/freehand path has no interior to cut -- same graceful-failure precedent
       // RS-1012's own resolveLayerShapeSource()/runBooleanOp() already establish for a shape with
@@ -1891,10 +2385,13 @@ function syncSelectedControlsFromLayer(){
   if(showStarFields){el('shapePoints').value=l.points??5;el('shapeInnerRadius').value=l.innerRadiusRatio??0.5}
   if(showRingField)el('shapeRingInner').value=l.innerRatio??0.5;
   if(l.type==='image')el('imageFillMode').value=resolveImageFillMode(l.fillMode);
-  if(isText){el('text').value=l.text;ensureFontOptionForLayer(l.font);el('font').value=l.font;setLengthField('height',l.height);el('heightAutoAdjustedHint').style.display='none';el('autoFit').value=l.autoFit?'on':'off';el('autoFitOnHint').style.display='none';el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';setLengthField('curveRadiusMm',l.curveRadiusMm??40);el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??180;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';setLengthField('textX',l.x||0);setLengthField('textY',l.y||0);
+  if(isText){el('text').value=l.text;ensureFontOptionForLayer(l.font);el('font').value=l.font;setLengthField('height',l.height);el('heightAutoAdjustedHint').style.display='none';el('autoFit').value=l.autoFit?'on':'off';el('autoFitOnHint').style.display='none';ensureTextModeOptionForLayer(l.textMode);el('textMode').value=l.textMode||'stroke';el('curveEnabled').value=l.curveEnabled?'on':'off';setLengthField('curveRadiusMm',l.curveRadiusMm??40);el('curveDirection').value=l.curveDirection||'outside';el('curveStartAngleDeg').value=l.curveStartAngleDeg??0;el('curveSweepAngleDeg').value=l.curveSweepAngleDeg??180;el('curveAlignment').value=l.curveAlignment||'center';el('curveControls').style.display=l.curveEnabled?'block':'none';setLengthField('textX',l.x||0);setLengthField('textY',l.y||0);
   // TXT-102: '??'/'||' fallbacks so a pre-TXT-102 project (no align/lineSpacing/rotationDeg stored)
   // displays GeometryEngine's own defaults, matching this line's existing curve-field convention.
-  el('textAlign').value=l.align||'left';el('lineSpacing').value=l.lineSpacing??1;el('rotationDeg').value=l.rotationDeg??0}else{setLengthField('shapeX',l.type==='circle'?l.cx:l.x);setLengthField('shapeY',l.type==='circle'?l.cy:l.y);setLengthField('shapeW',l.type==='circle'?l.r:l.w);setLengthField('shapeH',l.type==='circle'?'':l.h);el('shapeWLabel').textContent=(l.type==='circle'?'Radius':'Width')+' ('+unitSuffix(project.units)+')';el('shapeHField').style.display=l.type==='circle'?'none':'';el('shapeRotationDeg').value=l.rotationDeg??0;if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);setLengthField('gap',l.gap);el('stoneColor').value=l.color;
+  el('textAlign').value=l.align||'left';el('lineSpacing').value=l.lineSpacing??1;el('rotationDeg').value=l.rotationDeg??0;
+  // READ-006: '??' fallback so a pre-READ-006 layer displays 0. The hint is written by
+  // #separateLettersBtn and cleared on selection change, exactly like #heightAutoAdjustedHint.
+  setLengthField('letterSpacing',l.letterSpacing??0);el('letterSpacingHint').style.display='none'}else{setLengthField('shapeX',l.type==='circle'?l.cx:l.x);setLengthField('shapeY',l.type==='circle'?l.cy:l.y);setLengthField('shapeW',l.type==='circle'?l.r:l.w);setLengthField('shapeH',l.type==='circle'?'':l.h);el('shapeWLabel').textContent=(l.type==='circle'?'Radius':'Width')+' ('+unitSuffix(project.units)+')';el('shapeHField').style.display=l.type==='circle'?'none':'';el('shapeRotationDeg').value=l.rotationDeg??0;if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);setLengthField('gap',l.gap);el('stoneColor').value=l.color;
   // S-200: Mixed Stone Size -- applies uniformly to every layer type, same as stoneSize/gap/color
   // just above. allowedSizesMm is only ever catalog values (see MIXED_ALLOWED_SIZE_CHECKBOXES'
   // doc comment), so each checkbox is simply checked when its own diameter is present in the
@@ -1903,6 +2400,11 @@ function syncSelectedControlsFromLayer(){
   // the layer's own stoneSize when unset (a fresh Mixed-mode layer, or a legacy layer with no such
   // field), matching normalizeMixedSizeParams()'s own default derivation.
   const sizeMode=resolveSizeMode(l.sizeMode);el('sizeMode').value=sizeMode;el('mixedSizeDetailFields').style.display=sizeMode==='mixed'?'block':'none';
+  // MONO-015: the graduated weight-step select. Options are rebuilt from this layer's own stone size
+  // (labels + which steps the catalog can supply), then set from the stored weightSizesMm.
+  el('weightSizeDetailFields').style.display=sizeMode==='weight'?'block':'none';
+  el('weightSteps').innerHTML=weightStepsOptionsHtml(l.stoneSize);
+  el('weightSteps').value=String(weightStepForSizes(l.weightSizesMm));
   const allowedSizesMm=Array.isArray(l.allowedSizesMm)?l.allowedSizesMm:[];
   for(const cb of MIXED_ALLOWED_SIZE_CHECKBOXES)el(cb.id).checked=allowedSizesMm.some(v=>Math.abs(v-cb.diameterMm)<0.005);
   setNumericSelectValue(el('mixedMinSize'),l.minSizeMm??l.stoneSize);setNumericSelectValue(el('mixedMaxSize'),l.maxSizeMm??l.stoneSize);
@@ -2028,7 +2530,12 @@ function writeSelectedControlsToLayer(){
   // TXT-102: align/lineSpacing mirror curveAlignment/curveRadiusMm's own clamp-on-write convention
   // just above -- lineSpacing clamped to the same [0.5,3] range the #lineSpacing input itself allows,
   // rotationDeg normalized into [0,360) exactly like GeometryEngine's own normalizeRotationDeg().
-  l.align=el('textAlign').value;l.lineSpacing=Math.max(0.5,Math.min(3,parseFloat(el('lineSpacing').value)||1));l.rotationDeg=(((parseFloat(el('rotationDeg').value)||0)%360)+360)%360}else if(l.type==='circle'){l.cx=readLengthField('shapeX')||105;l.cy=readLengthField('shapeY')||45;l.r=Math.max(1,readLengthField('shapeW')||18);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(l.type==='rectangle'){l.x=readLengthField('shapeX')||65;l.y=readLengthField('shapeY')||30;l.w=Math.max(1,readLengthField('shapeW')||80);l.h=Math.max(1,readLengthField('shapeH')||30);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(SHAPE_LIBRARY_KINDS.has(l.type)){
+  l.align=el('textAlign').value;l.lineSpacing=Math.max(0.5,Math.min(3,parseFloat(el('lineSpacing').value)||1));l.rotationDeg=(((parseFloat(el('rotationDeg').value)||0)%360)+360)%360;
+  // READ-006: clamped to the pitch-derived bounds letterSpacingBoundsMm() computes from the
+  // #stoneSize/#gap controls (NOT l.stoneSize/l.gap -- those are written by the shared tail block
+  // below, after this line) -- the SAME values refreshLetterSpacingFieldBounds() writes onto
+  // #letterSpacing's min/max. Same clamp-on-write convention as lineSpacing just above.
+  const lsBounds=letterSpacingBoundsMm();l.letterSpacing=Math.max(lsBounds.minMm,Math.min(lsBounds.maxMm,readLengthField('letterSpacing')||0))}else if(l.type==='circle'){l.cx=readLengthField('shapeX')||105;l.cy=readLengthField('shapeY')||45;l.r=Math.max(1,readLengthField('shapeW')||18);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(l.type==='rectangle'){l.x=readLengthField('shapeX')||65;l.y=readLengthField('shapeY')||30;l.w=Math.max(1,readLengthField('shapeW')||80);l.h=Math.max(1,readLengthField('shapeH')||30);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}else if(SHAPE_LIBRARY_KINDS.has(l.type)){
   // S-110: every new shape kind shares Rectangle's x/y/w/h + Fill Style write-back, plus its own
   // configurable extra fields (Regular Polygon/Star/Ring only).
   l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||60);l.h=Math.max(1,readLengthField('shapeH')||60);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value);
@@ -2056,6 +2563,29 @@ function writeSelectedControlsToLayer(){
   l.minSizeMm=parseFloat(el('mixedMinSize').value)||null;
   l.maxSizeMm=parseFloat(el('mixedMaxSize').value)||null;
   l.conservativeDetail=Math.max(0,Math.min(1,parseFloat(el('conservativeDetail').value)||0));
+  // MONO-015: weight-following stone size. It is valid only for an outline-mode text layer with an
+  // OpenType font -- GeometryEngine.generateTextLayout() throws otherwise. Coerce back to uniform
+  // here (the authoritative write path) so a font/#textMode change on a weight layer never leaves
+  // the engine mid-generation with an illegal combination. updateWeightSizeCapabilityUI() disables
+  // the <option> for the same cases; this is the belt-and-braces write-side guard.
+  if(l.sizeMode==='weight'&&(l.type!=='text'||isAuthoredStoneFontId(l.font)||resolveTextFillMode(l.textMode)!=='outline')){
+    l.sizeMode='uniform';el('sizeMode').value='uniform';
+  }
+  // Live disclosure like #mixedSizeDetailFields above.
+  el('weightSizeDetailFields').style.display=l.sizeMode==='weight'?'block':'none';
+  if(l.sizeMode==='weight'){
+    // #weightSteps carries the rung count (0 = Off, 1, 2). The actual mm diameters are re-derived
+    // from this layer's own stone size on every write, so changing the stone size re-bases the step
+    // rather than leaving a stale array. First enable (no weightSizesMm yet) seeds two rungs up,
+    // clamped to what the catalog can supply from this base -- the graduated-control equivalent of
+    // the old "two catalog steps up, clamped" Widest-size default. A step beyond the catalog's reach
+    // can only be selected by the base size later shrinking the ladder, so clamp there too.
+    const available=stoneSizeRungsAvailable(l.stoneSize);
+    const step=l.weightSizesMm==null?Math.min(2,available):Math.min(parseInt(el('weightSteps').value,10)||0,available);
+    l.weightSizesMm=step>0?stoneSizesFromBaseMm(l.stoneSize,step):[];
+    el('weightSteps').innerHTML=weightStepsOptionsHtml(l.stoneSize);
+    el('weightSteps').value=String(step);
+  }
   // RS-3011 Step 3b: every field write above (stoneSize/gap/color/fillMode/mixed-size) can change
   // a 'path' layer's live stone preview on the Design canvas -- rebuild it here, the one place all
   // of those writes have already landed on `l`. A no-op for every other layer type, and a no-op for
@@ -2156,8 +2686,13 @@ async function updateAll(skipWrite=false,forceStoneRebuild=false){if(!skipWrite)
   // XYWH_SHAPE_TYPES box model the others share. RS-3012 Step 4: widened a final time to include
   // 'circle' -- like 'text' it has no x/y/w/h box (cx/cy/r data model, deliberately not migrated), so
   // syncFromProjectLayers() takes its own dedicated code path for it too; the resize write-back below
-  // (onShapeResized) converts the reported bounds back to l.r.
-  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'||SHAPE_LIBRARY_KINDS.has(l.type)||l.type==='svg'||l.type==='image'||l.type==='text'||l.type==='circle'),forceStoneRebuild)}else{drawLayout()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}
+  // (onShapeResized) converts the reported bounds back to l.r. RS-3012 Step 5: widened once more to
+  // include 'rectangle' -- a first-class layer type (SUPPORTED_LAYER_TYPES/XYWH_SHAPE_TYPES) that was
+  // simply never listed here, so it was the one layer type still unselectable in Design. Unlike
+  // 'circle' it IS a plain x/y/w/h/rotationDeg box, so it needs no new interaction machinery at all --
+  // syncFromProjectLayers() materializes it as a rotated rectangle proxy and every drag/resize/rotate
+  // reuses the shared XYWH machinery (onShapeResized's generic l.x/y/w/h write-back covers it too).
+  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'||SHAPE_LIBRARY_KINDS.has(l.type)||l.type==='svg'||l.type==='image'||l.type==='text'||l.type==='circle'||l.type==='rectangle'),forceStoneRebuild)}else{drawLayout()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}
 // RS-3011 freehand-close-and-clear-all-layers fix: deleting the last remaining layer no longer
 // blocks (see deleteLayer()) -- the per-row trash icon and the sidebar "Delete selected layer"
 // button are therefore never disabled for layer count anymore.
@@ -2513,7 +3048,10 @@ async function resolveLayerShapeSource(layer){
     // shape to combine" here rather than letting that throw surface, so runBooleanOp()'s existing
     // missing-shape message (extended below to name Production Fonts) is what the user sees.
     if(isAuthoredStoneFontId(fontId))return null;
-    const base={text:layer.text,fontId,providerId:resolveFontProviderId(fontId),layerId:layer.id,heightMm:layer.height,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};
+    // READ-006 (spec §3.1 item 4): this branch builds its OWN params for resolveTextPolygons(), so
+    // letterSpacingMm has to be forwarded here too or a tracked text layer resolves untracked
+    // polygons in boolean ops. '??' fallback so a pre-READ-006 layer is byte-identical.
+    const base={text:layer.text,fontId,providerId:resolveFontProviderId(fontId),layerId:layer.id,heightMm:layer.height,letterSpacingMm:layer.letterSpacing??0,curveEnabled:Boolean(layer.curveEnabled),curveRadiusMm:layer.curveRadiusMm,curveDirection:layer.curveDirection,curveStartAngleDeg:layer.curveStartAngleDeg,curveSweepAngleDeg:layer.curveSweepAngleDeg,curveAlignment:layer.curveAlignment};
     let resolved=await permanentEngine.resolveTextPolygons(base);
     if(layer.autoFit&&resolved.boundingBox){
       const{scale}=computeAutoFitScale(layer,project,resolved.boundingBox.widthMm);
@@ -2639,8 +3177,14 @@ function updateEditingUI(){const n=selectedLayerIds.size;el('selectionSummary').
   if(!fitDisabled)clearFitTextToShapeError();
   updateTextFontCapabilityUI();
   updateMixedSizeCapabilityUI();
+  updateWeightSizeCapabilityUI();
   updateStoneSizePrintableCapabilityUI();
   updateStoneSizeOverlapCapabilityUI();
+  // FONT-LIB-004: deliberately last, and NOT between updateTextFontCapabilityUI() and
+  // updateMixedSizeCapabilityUI() -- tools/test-rs2012-text-gap-mixed-size-ux.mjs asserts those two
+  // stay adjacent. Order is otherwise irrelevant here: this reads only the layer's own
+  // height/stoneSize/font and touches only its own warning element.
+  updateTextHeightReadabilityUI();
 }
 // FONT-002: keeps every Text Lightbox control that doesn't apply to the selected layer's font
 // (Fill Style, Text height/Auto fit, Curved text) in a disabled/hidden + explained state, and shows
@@ -2652,12 +3196,20 @@ function updateTextFontCapabilityUI(){
   const fontId=isText?l.font:null;
   const known=isText&&isFontKnown(fontId);
   const authored=known&&isAuthoredStoneFontId(fontId);
-  // FONT-DECISION-001: a known, non-authored font can still be one of productionFonts()'s offered
-  // picks (rhinestoneValidated:true) -- only a font that's neither authored nor offered is "legacy".
+  // FONT-LIB-002: the picker now offers every enabled OpenType font, so "legacy" no longer tracks
+  // "unvalidated". A font is legacy only if it is neither authored nor `enabled` in the manifest --
+  // i.e. a project references a font id whose record has been disabled (or a still-known but retired
+  // font). `validated` stays as its own separate flag: it no longer gates the picker, but TXT-104's
+  // capHeight letter-height mode below still keys off it (a rhinestoneValidated font is the one that
+  // carries capHeightRatio).
   const validated=known&&!authored&&fontManager.getFont(fontId).rhinestoneValidated===true;
-  const legacy=known&&!authored&&!validated;
+  const legacy=known&&!authored&&fontManager.getFont(fontId).enabled!==true;
   const unknown=isText&&!known;
   el('textModeField').style.display=authored?'none':'block';
+  // READ-006A: the selected text layer still carries one of the three retired fill styles
+  // (Staggered/Radial/Contour). #textMode shows it via ensureTextModeOptionForLayer()'s injected
+  // "(retired)" option; this hint explains the state. Nothing is auto-switched.
+  el('retiredTextModeHint').style.display=(isText&&RETIRED_TEXT_MODES.has(l.textMode))?'block':'none';
   // TXT-104 step 4b: a capHeight-mode layer on a validated (capHeightRatio-bearing) font displays
   // #letterHeight -- a derived view of #height in real cap-height mm -- instead of raw #height
   // itself; every other combination (raw mode, authored font, legacy/unknown font) keeps showing
@@ -2670,6 +3222,7 @@ function updateTextFontCapabilityUI(){
   el('heightField').style.display=showLetterHeight?'none':'block';
   el('letterHeightField').style.display=showLetterHeight?'block':'none';
   refreshHeightFieldBounds();
+  refreshLetterSpacingFieldBounds();
   if(showLetterHeight){
     const bounds=computeLetterHeightBoundsMm(fontId);
     el('letterHeight').min=mmToDisplayValue(bounds.minMm,project.units);el('letterHeight').max=mmToDisplayValue(bounds.maxMm,project.units);
@@ -2697,6 +3250,12 @@ function updateTextFontCapabilityUI(){
   // control untouched with zero architectural changes.
   el('gap').disabled=authored;
   el('gapFixedHint').style.display=authored?'block':'none';
+  // READ-006: an authored stone font has no vector outline for expectedComponentCount() to work
+  // from, so the ladder solve is undefined for it (spec §4.5) -- disable the field and the button
+  // and explain why, exactly like #gap/#gapFixedHint just above.
+  el('letterSpacing').disabled=authored;
+  el('separateLettersBtn').disabled=authored;
+  el('letterSpacingFixedHint').style.display=authored?'block':'none';
   // RS-3011 Step 7: "Generate Stones" only for a Design-drawn 'path' layer whose stones are still
   // deferred -- hidden for every other layer type/state (including a path layer that already has
   // stones), matching #gapFixedHint's own per-layer-type/state visibility toggle just above.
@@ -2799,6 +3358,137 @@ function updateMixedSizeCapabilityUI(){
     hint.classList.remove('visible');hint.textContent='';
   }
 }
+// MONO-015: weight-following stone size is valid only for an outline-mode text layer with an
+// OpenType (non-authored) font -- GeometryEngine.generateTextLayout() throws for any other
+// combination. This disables the #sizeMode <option> (same disable+explain idiom the 'mixed' option
+// already uses) for every other selection, and reverts a layer that is somehow already on 'weight'
+// back to 'uniform' -- safe and silent, since a non-eligible layer's weight output would just throw.
+function updateWeightSizeCapabilityUI(){
+  const l=selectedLayer();
+  const eligible=Boolean(l&&l.type==='text'&&!isAuthoredStoneFontId(l.font)&&resolveTextFillMode(l.textMode)==='outline');
+  const weightOption=el('sizeMode').querySelector('option[value="weight"]');
+  if(weightOption){
+    weightOption.disabled=!eligible;
+    weightOption.title=eligible?'':'Weight-following stone size is only available for outline-mode text with an OpenType font.';
+  }
+  if(!eligible&&resolveSizeMode(el('sizeMode').value)==='weight'){
+    el('sizeMode').value='uniform';
+    if(l)l.sizeMode='uniform';
+  }
+  const weightMode=resolveSizeMode(el('sizeMode').value)==='weight';
+  el('weightSizeDetailFields').style.display=weightMode?'block':'none';
+  // Keep #weightSteps' labels and disabled options in step with the live stone size (a step the
+  // catalog can't supply from the current base shows disabled, mirroring the #sizeMode option).
+  if(weightMode&&l){
+    el('weightSteps').innerHTML=weightStepsOptionsHtml(l.stoneSize);
+    el('weightSteps').value=String(weightStepForSizes(l.weightSizesMm));
+  }
+}
+// FONT-LIB-004: the readability check the font library was missing. An audit of all 29 enabled
+// OpenType fonts through FONT-CERT-001/002's real analysis pipeline
+// (tools/font-certification/audit-manifest-readability.mjs) found ZERO font/stone-size combinations
+// that fail at each size's own validated default height -- but a broad, font-independent collapse
+// as soon as the height-to-stone-diameter ratio drops too low. Readability here is governed by that
+// ratio, not by which font is selected, so the right gate is this one height check rather than
+// per-font `unsupportedStoneSizes` entries (which stay exactly as FONT-PORTFOLIO-001's human raters
+// set them -- see that milestone's own spec).
+// READ-008: rebased from the catalog size's supportedHeightRangeMm[0] (which never fired for a
+// non-catalog stone diameter -- findStoneSizeByDiameterMm() returned null and the check was skipped
+// entirely) to the shared MIN_HEIGHT_TO_STONE_RATIO floor, so it now fires at ANY stone diameter.
+// applyStoneSizeHeightAutoSet() already enforces the catalog range on a *stone size* change; this
+// covers every other route to an out-of-range height (a direct #height edit, a loaded project, an
+// Auto Fit shrink, TXT-104's capHeight conversion). Warning only, never a clamp -- see index.html's
+// own comment on #heightBelowReadableWarning for why.
+// FONT-LIB-004: shared predicate -- non-null when `layer` is a text layer whose height sits below
+// the MIN_HEIGHT_TO_STONE_RATIO floor for its current stone diameter. Used by BOTH the height
+// warning below and updateStoneSizeOverlapCapabilityUI()'s crowding hint, which suppresses its own
+// font-blaming message whenever this is true (the height is the root cause there; naming the font
+// would send the user after a fix that cannot work -- see the crowding hint's own comment).
+function textHeightBelowReadableMinimum(layer){
+  // Authored Production Fonts (RS Block/RS Modern) are a fixed size with their own baked-in stone
+  // pitch -- this ratio floor is an OpenType-sizing concept that does not apply to them (same
+  // exclusion #textModeField/#gapFixedHint already make).
+  if(!layer||layer.type!=='text'||isAuthoredStoneFontId(layer.font))return null;
+  const stoneSizeMm=layer.stoneSize;
+  const heightMm=layer.height;
+  if(!Number.isFinite(stoneSizeMm)||stoneSizeMm<=0||!Number.isFinite(heightMm))return null;
+  const minHeightMm=stoneSizeMm*MIN_HEIGHT_TO_STONE_RATIO;
+  return heightMm<minHeightMm?{stoneSizeMm,heightMm,minHeightMm}:null;
+}
+// READ-010: textHeightBelowReadableMinimum()'s only two callers before this milestone
+// (updateTextHeightReadabilityUI() and updateStoneSizeOverlapCapabilityUI()) both read a single
+// layer -- selectedLayer() or target.layer -- so the warning it feeds is scoped to whichever layer
+// happens to be selected. A project can hold several below-floor text layers with none of them
+// selected, in which case neither call site ever fires and the condition is invisible right up to
+// export. This is the project-wide counterpart: same predicate, applied across every layer, so a
+// caller that needs to know "does this PROJECT have a problem" (not "is the SELECTED layer fine")
+// has one. Reuses textHeightBelowReadableMinimum() verbatim -- no second copy of the floor test.
+// Visible layers only: a hidden layer contributes no stones to the production sheet.
+function textLayersBelowReadableMinimum(){
+  return project.layers
+    .filter(l=>l.visible)
+    .map(l=>{const hit=textHeightBelowReadableMinimum(l);return hit?{...hit,layer:l}:null})
+    .filter(Boolean);
+}
+// READ-003: shared predicate, beside textHeightBelowReadableMinimum() -- non-null when `layer` is a
+// text layer whose font's dominant stroke, at the layer's current height, is physically narrower
+// than a single stone AND the layer fills the letter interior with stones.
+//
+// This is Layer 1 of the readability program in
+// docs/specifications/READ-000-readability-architecture.md -- the live physical-impossibility check
+// that needs no baked data (Layer 3 / READ-006 will later supersede FONT-LIB-004's height rule with
+// font- and mode-aware readability floors on this same warning surface).
+//
+// READ-004 moved the arithmetic and the mode gate out to src/text/StrokeWidthGate.js
+// (strokeNarrowerThanOneStone()) so signal A of the offline recognition harness and this live
+// warning share one source of truth -- see that module's doc for the impossibility argument, why
+// only the interior-fill modes count, and every case that returns null. This wrapper does only what
+// the shared function cannot: resolve the layer's font and fill mode, skip authored/unknown fonts,
+// and build the user-facing label.
+//
+// When it does fire it is the STRONGEST readability signal -- geometry, not a quality judgement (see
+// the precedence note on updateTextHeightReadabilityUI()). O(1): no geometry at runtime.
+function textStrokeNarrowerThanOneStone(layer){
+  if(!layer||layer.type!=='text'||isAuthoredStoneFontId(layer.font)||!isFontKnown(layer.font))return null;
+  const font=fontManager.getFont(layer.font);
+  const hit=strokeNarrowerThanOneStone({
+    stemWidthRatio:font.stemWidthRatio,
+    heightMm:layer.height,
+    stoneSizeMm:layer.stoneSize,
+    mode:resolveTextFillMode(layer.textMode)
+  });
+  if(!hit)return null;
+  const fontLabel=font.style&&font.style!=='Regular'?`${font.family} ${font.style}`:font.family;
+  return{stemWidthMm:hit.stemWidthMm,stoneSizeMm:hit.stoneSizeMm,fontLabel};
+}
+// Both readability signals share the single #heightBelowReadableWarning element, and exactly one
+// message shows. Precedence, strongest first:
+//   1. READ-003  stroke narrower than one stone   (physically impossible to render)
+//   2. FONT-LIB-004  height below the MIN_HEIGHT_TO_STONE_RATIO floor for this stone diameter
+// FONT-LIB-003's crowding hint is the weakest and defers to whichever of these is active (see
+// updateStoneSizeOverlapCapabilityUI()). Warning, not a clamp -- an existing project may already
+// hold such a layer, and the fix (taller text or smaller stones) belongs to the user.
+function updateTextHeightReadabilityUI(){
+  const warning=el('heightBelowReadableWarning');
+  const layer=selectedLayer();
+  const stroke=textStrokeNarrowerThanOneStone(layer);
+  const below=stroke?null:textHeightBelowReadableMinimum(layer);
+  const u=unitSuffix(project.units);
+  let message='';
+  if(stroke){
+    message=`${stroke.fontLabel}'s strokes are about ${formatLengthDisplay(stroke.stemWidthMm,project.units,2)} ${u} wide at this height — narrower than one ${formatLengthDisplay(stroke.stoneSizeMm,project.units,1)} ${u} stone, so stones would overhang the letters on both sides. Use a taller text height or a smaller stone size.`;
+  }else if(below){
+    message=`At ${formatLengthDisplay(below.stoneSizeMm,project.units,1)} ${u} stones, text this short (${formatLengthDisplay(below.heightMm,project.units,1)} ${u}) won't read clearly — ${formatLengthDisplay(below.minHeightMm,project.units,1)} ${u} or taller is the minimum for this stone diameter. Use a taller text height or a smaller stone size.`;
+  }
+  warning.textContent=message;
+  warning.classList.toggle('visible',Boolean(message));
+  // READ-010: the fix-to-floor affordance only ever targets the FONT-LIB-004 height message. It is
+  // hidden for READ-003's stroke message on purpose -- that one means the font's stroke is
+  // physically too thin at ANY height for this stone size, so a "set height to X" button would
+  // promise a fix that doesn't actually clear the warning.
+  el('heightFixToFloorHint').style.display=below?'block':'none';
+  if(below)el('heightFixToFloorBtn').textContent=`Set height to ${formatLengthDisplay(below.minHeightMm,project.units,1)} ${u}`;
+}
 // FONT-DECISION-001 (Studio Integration follow-up): disables + dims + explains (via title) every
 // #stoneSize <option> whose entire FONT-DECISION-001-validated supportedHeightRangeMm (StoneSizes.js)
 // is taller than the currently-selected object shape can print, mirroring
@@ -2824,6 +3514,17 @@ function updateStoneSizePrintableCapabilityUI(){
   const template=currentObjectTemplate();
   const safe=isText?getSafeAreaRectMm(template,project.canvas.width,project.canvas.height):null;
   const font=isText&&isFontKnown(l.font)?fontManager.getFont(l.font):null;
+  // FONT-PITCH-001: an authored Production Font (isAuthoredStoneFontId) places every stone on a
+  // fixed grid (rsBlock.js / rsModern.js PITCH_MM = 3.1mm), so a size disabled by the font gate is
+  // disabled for a physical-spacing reason, not the FONT-PORTFOLIO-001 readability reason -- the two
+  // want different tooltips. `3.1` is a literal here on purpose: app.js must not reach into
+  // src/text/rhinestoneFont/families/ for one constant, and tools/test-font-pitch-001-authored-stone-
+  // sizes.mjs is what keeps this string and rsBlock.js's PITCH_MM aligned. The safe sizes are read
+  // from the catalog (every size the font does NOT list), never hand-typed.
+  const authoredPitchFont=Boolean(font&&isAuthoredStoneFontId(l.font));
+  const authoredSafeSizeNames=authoredPitchFont
+    ?listStoneSizes().filter(s=>!font.unsupportedStoneSizes.includes(s.id)).map(s=>s.name).join(' or ')
+    :'';
   for(const size of listStoneSizes()){
     const option=el('stoneSize').querySelector(`option[value="${size.diameterMm}"]`);
     if(!option)continue;
@@ -2833,7 +3534,9 @@ function updateStoneSizePrintableCapabilityUI(){
     option.title=exceedsShape
       ?`${size.name} needs ${size.supportedHeightRangeMm[0]}-${size.supportedHeightRangeMm[1]}mm height — doesn't fit this ${template.displayName}'s printable area (${safe.heightMm.toFixed(0)}mm available).`
       :unsupportedByFont
-        ?`${size.name} isn't recommended with ${font.family} — readability testing showed poor results at this size (pending a height-calibration fix).`
+        ?(authoredPitchFont
+          ?`${size.name} stones are ${size.diameterMm}mm, wider than ${font.family}'s fixed 3.1mm stone grid — they would overlap. Use ${authoredSafeSizeNames}.`
+          :`${size.name} isn't recommended with ${font.family} — readability testing showed poor results at this size (pending a height-calibration fix).`)
         :'';
   }
 }
@@ -2895,10 +3598,11 @@ function clearStoneSizeOverlapUI(){
   el('stoneSize').classList.remove('overlap-invalid');
   el('stoneSizeOverlapWarning').classList.remove('visible');el('stoneSizeOverlapWarning').textContent='';
   el('stoneSizeCrowdingHint').style.display='none';el('stoneSizeCrowdingHint').textContent='';
+  lastStoneSizeAvailabilityTargetKey=undefined; // PERF-005: force a fresh sweep next time a target exists again
 }
-// Guarded by a monotonic token (same convention updateAll()'s own generationToken uses) since this
-// runs the real Live generation pipeline (async for text) -- a fast keystroke-to-keystroke edit must
-// never let a stale, slower-to-resolve check overwrite a newer one's result.
+// PERF-005: `stoneSizeOverlapCheckToken` also guards updateStoneSizeOptionAvailabilityUI() below --
+// both run the real Live generation pipeline and must never let a stale, slower-to-resolve check
+// overwrite a newer one's result.
 let stoneSizeOverlapCheckToken=0;
 // Crowding/attrition warning thresholds (Prompt 4), calibrated against Prompt 3's measureStoneCrowding()
 // sweep and the three screenshot regimes (healthy / crowded-not-overlapping / genuinely-overlapping)
@@ -2906,47 +3610,89 @@ let stoneSizeOverlapCheckToken=0;
 // packing is legitimate, so this only fires for the denser end of the sweep's observed range.
 const STONE_SIZE_CROWDING_FRACTION_THRESHOLD=0.25;
 const STONE_SIZE_ATTRITION_RATIO_THRESHOLD=0.75;
+// PERF-005: which target (layer id + region id, or null) updateStoneSizeOptionAvailabilityUI()
+// last actually swept every stone size for -- lets updateStoneSizeOverlapCapabilityUI() below skip
+// re-running that sweep on every keystroke of an unrelated control (font, fill mode, height, text,
+// ...) and only re-run it when the selection itself changed, or #stoneSize is about to be opened
+// (see its own 'focus' listener). A stale sweep just leaves the *other* options' disabled/title
+// state slightly behind until the next legitimate trigger -- never wrong about the option the user
+// currently has selected, which the cheap per-call path below always keeps fresh.
+let lastStoneSizeAvailabilityTargetKey=undefined;
+function stoneSizeTargetKey(target){return target?`${target.layer.id}:${target.region?target.region.id:''}`:null}
+// PERF-005: the expensive half of the old updateStoneSizeOverlapCapabilityUI() -- generates a
+// candidate layout for every *other* catalog stone size (not just the current one) purely to decide
+// which #stoneSize <option>s should be disabled (would-overlap) and their tooltip. This used to run
+// unconditionally on every HISTORY_TRACKED_CONTROL_IDS edit (font pick, fill-mode change, height
+// edit, ...); it's now called only when the selection actually changed (see
+// updateStoneSizeOverlapCapabilityUI() below) or when #stoneSize is about to be opened, cutting the
+// per-keystroke cost of switching fonts/fill on an already-selected layer from up to 6 full Live
+// generations down to 1.
+async function updateStoneSizeOptionAvailabilityUI(target,currentSizeMm){
+  const token=++stoneSizeOverlapCheckToken;
+  const select=el('stoneSize');
+  const diametersToCheck=new Set(listStoneSizes().map(s=>s.diameterMm));
+  diametersToCheck.delete(currentSizeMm); // the current size's own overlap state is the cheap path's job, not this sweep's
+  for(const diameterMm of diametersToCheck){
+    const{stones}=await stonesForCandidateStoneSize(target,diameterMm,project);
+    if(token!==stoneSizeOverlapCheckToken)return;
+    const overlaps=hasAnyOverlappingStonePair(stones.map(s=>({xMm:s.x,yMm:s.y,sizeMm:s.d})));
+    const size=listStoneSizes().find(s=>s.diameterMm===diameterMm);
+    const option=select.querySelector(`option[value="${diameterMm}"]`);
+    if(!option||!size)continue;
+    // updateStoneSizePrintableCapabilityUI() (called just before this function, see
+    // updateEditingUI()) always runs first and unconditionally resets every option's .disabled --
+    // so option.disabled read here is exactly that gate's own fresh verdict, not a stale leftover
+    // from this function's own previous pass. Only add overlap-disabling on top of it.
+    const otherGateDisabled=option.disabled;
+    option.disabled=otherGateDisabled||overlaps;
+    if(!otherGateDisabled)option.title=overlaps?`${size.name} would overlap on the current shape.`:'';
+  }
+  lastStoneSizeAvailabilityTargetKey=stoneSizeTargetKey(target);
+}
+// FONT-LIB-003: the crowding hint's *firing* (thresholds, measureStoneCrowding(), outlineStats
+// attrition -- all above) is unchanged. Only its wording changes for a text layer: instead of the
+// generic "try a smaller size", it names the layer's font family and, when that family has a
+// heavier enabled sibling than the current style (findBolderSibling()), suggests that bolder weight
+// by name -- plus "a larger stone size" and "a taller letter height", both of which scale a thin
+// stroke up proportionally. All still informational only (dense packing is sometimes intentional):
+// no button, no auto-apply. Non-text layers (shape/path/svg/image) keep the original generic wording.
+// PERF-005: this now generates exactly one candidate layout (the current stone size) per call,
+// instead of one per catalog stone size -- see updateStoneSizeOptionAvailabilityUI() above for the
+// other options' disabled/title state, which is swept separately and less often.
 async function updateStoneSizeOverlapCapabilityUI(){
   const target=currentStoneSizeTarget();
   if(!target){clearStoneSizeOverlapUI();return}
   const token=++stoneSizeOverlapCheckToken;
   const select=el('stoneSize'),warning=el('stoneSizeOverlapWarning');
   const currentSizeMm=target.region?target.region.stoneSizeMm:target.layer.stoneSize;
-  const diametersToCheck=new Set(listStoneSizes().map(s=>s.diameterMm));
-  diametersToCheck.add(currentSizeMm);
-  const overlapBySize=new Map();
-  // Captured only for currentSizeMm's own iteration -- the crowding/attrition warning below is about
-  // the user's actual current selection, not a per-option gate like the disable loop just below.
-  let currentStones=null,currentOutlineStats=null;
-  for(const diameterMm of diametersToCheck){
-    const{stones,outlineStats}=await stonesForCandidateStoneSize(target,diameterMm,project);
-    if(token!==stoneSizeOverlapCheckToken)return;
-    overlapBySize.set(diameterMm,hasAnyOverlappingStonePair(stones.map(s=>({xMm:s.x,yMm:s.y,sizeMm:s.d}))));
-    if(diameterMm===currentSizeMm){currentStones=stones;currentOutlineStats=outlineStats}
-  }
-  for(const size of listStoneSizes()){
-    const option=select.querySelector(`option[value="${size.diameterMm}"]`);
-    if(!option)continue;
-    const isCurrent=size.diameterMm===currentSizeMm;
-    if(isCurrent)continue;
-    // updateStoneSizePrintableCapabilityUI() (called just before this function, see
-    // updateEditingUI()) always runs first and unconditionally resets every option's .disabled --
-    // so option.disabled read here is exactly that gate's own fresh verdict, not a stale leftover
-    // from this function's own previous pass. Only add overlap-disabling on top of it.
-    const otherGateDisabled=option.disabled;
-    const overlaps=overlapBySize.get(size.diameterMm);
-    option.disabled=otherGateDisabled||overlaps;
-    if(!otherGateDisabled)option.title=overlaps?`${size.name} would overlap on the current shape.`:'';
-  }
-  const currentOverlaps=overlapBySize.get(currentSizeMm)||false;
+  const{stones:currentStones,outlineStats:currentOutlineStats}=await stonesForCandidateStoneSize(target,currentSizeMm,project);
+  if(token!==stoneSizeOverlapCheckToken)return;
+  const currentOverlaps=hasAnyOverlappingStonePair(currentStones.map(s=>({xMm:s.x,yMm:s.y,sizeMm:s.d})));
   select.classList.toggle('overlap-invalid',currentOverlaps);
-  warning.textContent=currentOverlaps?"This stone size isn't suitable for this shape — it won't form a uniform figure.":'';
+  // FONT-PITCH-001: same firing condition and .overlap-invalid behaviour for every layer, but a text
+  // layer on an authored Production Font overlaps because the font's stones sit on a fixed 3.1mm grid
+  // (rsBlock.js / rsModern.js PITCH_MM) -- not because the figure won't tile on this shape. The generic
+  // message would send the user after a shape change that cannot fix it, so word this case for the
+  // real cause. Non-authored layers keep the original wording untouched.
+  const authoredTextPitchOverlap=currentOverlaps&&target.layer&&target.layer.type==='text'&&isAuthoredStoneFontId(target.layer.font);
+  warning.textContent=currentOverlaps
+    ?(authoredTextPitchOverlap
+      ?"This Production Font places every stone on a fixed 3.1mm grid — a wider stone size overlaps its neighbours. Choose a smaller stone size; changing the shape won't help."
+      :"This stone size isn't suitable for this shape — it won't form a uniform figure.")
+    :'';
   warning.classList.toggle('visible',currentOverlaps);
+  // PERF-005: the other catalog sizes' disabled/title state only needs refreshing when the
+  // selection itself changed since the last sweep -- an edit to font/fill/height/etc. on the same
+  // already-selected layer reuses whatever the last sweep found, which #stoneSize's own 'focus'
+  // listener (below) also refreshes right before the user actually opens the dropdown.
+  if(stoneSizeTargetKey(target)!==lastStoneSizeAvailabilityTargetKey){
+    updateStoneSizeOptionAvailabilityUI(target,currentSizeMm).catch(error=>console.error('Stone size availability sweep failed',error));
+  }
   // Crowding/attrition warning: informational only, for the CURRENT size only (not a per-option gate
-  // like the disable loop above) -- dense packing is sometimes exactly what the user wants (pavé), so
-  // this never disables an option. Skipped entirely whenever currentOverlaps is already true: genuine
-  // overlap is the more severe, actionable problem, and showing both at once is noise, not more
-  // information.
+  // like updateStoneSizeOptionAvailabilityUI() above) -- dense packing is sometimes exactly what the
+  // user wants (pavé), so this never disables an option. Skipped entirely whenever currentOverlaps is
+  // already true: genuine overlap is the more severe, actionable problem, and showing both at once is
+  // noise, not more information.
   const crowdingHint=el('stoneSizeCrowdingHint');
   let crowded=false;
   if(!currentOverlaps){
@@ -2955,8 +3701,48 @@ async function updateStoneSizeOverlapCapabilityUI(){
     const attritionRatio=currentOutlineStats?currentOutlineStats.keptCount/currentOutlineStats.rawSampleCount:1;
     crowded=crowding.fractionBelowHalfGap>STONE_SIZE_CROWDING_FRACTION_THRESHOLD||attritionRatio<STONE_SIZE_ATTRITION_RATIO_THRESHOLD;
   }
-  crowdingHint.textContent=crowded?'This stone size may pack tightly on this shape — try a smaller size for more even spacing.':'';
-  crowdingHint.style.display=crowded?'block':'none';
+  const genericCrowdingText='This stone size may pack tightly on this shape — try a smaller size for more even spacing.';
+  let crowdingText='';
+  if(crowded){
+    // Text-layer case (FONT-LIB-003, reworded by FONT-LIB-004): name the font family, and suggest a
+    // bolder sibling weight when one exists. Falls back to the generic wording for a text layer
+    // whose font id can't be resolved (legacy/unknown font) and for every non-text layer type.
+    //
+    // Precedence: suppressed entirely when a stronger readability signal already owns
+    // #heightBelowReadableWarning -- READ-003 stroke-narrower-than-one-stone
+    // (textStrokeNarrowerThanOneStone()) or FONT-LIB-004 height-below-validated-minimum
+    // (textHeightBelowReadableMinimum()). FONT-LIB-004's audit showed crowding in the height regime
+    // is driven by the height-to-stone-diameter ratio, NOT the font (a bold geometric sans crowds at
+    // 15mm/SS16 exactly as a fine script does), and READ-003's stroke case is a geometric
+    // impossibility no font switch fixes -- so naming the font in either regime misattributes the
+    // cause. #heightBelowReadableWarning is already on screen saying the accurate thing, and two
+    // warnings blaming two different causes is worse than one correct one. Same mutual-exclusivity
+    // idiom this function already applies for currentOverlaps above.
+    const layer=target.layer;
+    const strongerSignalActive=Boolean(textStrokeNarrowerThanOneStone(layer))||Boolean(textHeightBelowReadableMinimum(layer));
+    const font=!strongerSignalActive&&layer&&layer.type==='text'&&layer.font&&fontManager&&fontManager.hasFont(layer.font)?fontManager.getFont(layer.font):null;
+    if(strongerSignalActive){
+      crowdingText='';
+    }else if(font){
+      // Wording (FONT-LIB-004): describes the stroke rather than the typeface ("strokes are narrow
+      // at this stone size", not "Great Vibes is thin"). At a height already inside the validated
+      // range the font's own stroke geometry genuinely is the differentiator, so naming it is fair
+      // -- but the phrasing should point at the fixable property rather than read as a verdict on
+      // the font, and should present all three remedies as equals rather than leading with a font
+      // switch.
+      const bolder=findBolderSibling(fontManager,font);
+      crowdingText=bolder
+        ? `${font.family} ${font.style}'s strokes are narrow at this stone size — a heavier weight (${font.family} ${bolder.style}), a larger stone size, or a taller letter height would each give more even coverage.`
+        : `${font.family}'s strokes are narrow at this stone size — a larger stone size or a taller letter height would give more even coverage.`;
+    }else{
+      crowdingText=genericCrowdingText;
+    }
+  }
+  crowdingHint.textContent=crowdingText;
+  // FONT-LIB-004: keyed off crowdingText, not `crowded` -- the height-root-cause branch above
+  // deliberately produces an empty message while `crowded` is still true, and an empty but *shown*
+  // <p> would render as a stray blank gap in the Lightbox.
+  crowdingHint.style.display=crowdingText?'block':'none';
 }
 // RS-0003.5D2: SELECTION_HANDLE_SIZE_PX enlarges the resize handles slightly (was a bare 10px
 // square) and a white halo is stroked behind the dashed outline so the selection reads clearly
@@ -3240,6 +4026,10 @@ async function eraseStonesWithinTest(targetLayer,withinTest){
 // the SAME dx/dy this function already applies to copy.x/copy.y (not a second offset convention);
 // a no-op for every non-'path' layer type via drawingTool's own internal lookup.
 function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)return;commitHistory();const copy=JSON.parse(JSON.stringify(l));copy.id=l.type+Date.now();
+  // MONO-020: a deliberate duplicate is the user's copy, not the Monogram Lightbox's -- drop the
+  // set marker (and its placement snapshot) so the next Generate does not silently delete it as a
+  // replaceable monogram layer.
+  delete copy.monogramSetId;delete copy.monogramPlacement;
   // RS-3011 Step 3b: pushed here, before drawingTool.duplicateShapeForLayer() below, instead of
   // after every branch (as before this step) -- duplicateShapeForLayer() now builds the clone's own
   // stone Group immediately via the getLayerStoneParams(newLayerId) hook, which reads project.layers,
@@ -3258,7 +4048,7 @@ function duplicateLayer(id){const l=project.layers.find(x=>x.id===id);if(!l)retu
 function deleteLayer(id){
   commitHistory();
   if(project.layers.length<=1){
-    const blank={id:'text'+Date.now(),type:'text',visible:true,text:'',font:DEFAULT_TEXT_FONT_ID,height:25,heightMode:'capHeight',textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0};
+    const blank={id:'text'+Date.now(),type:'text',visible:true,text:'',font:DEFAULT_TEXT_FONT_ID,height:45,heightMode:'capHeight',textMode:'stroke',stoneSize:2.8,gap:.3,color:'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,letterSpacing:0,x:0,y:0};
     project.layers=[blank];
     selectedLayerId=blank.id;selectedLayerIds=selectOnly(selectedLayerId);syncSelectedControlsFromLayer();updateAll(true,true);return true
   }
@@ -3565,7 +4355,7 @@ window.addEventListener('keydown',e=>{
   // to the project.layers deleteLayer() path below.
   if(drawingTool.isActive){
     if(e.key==='Delete'||e.key==='Backspace'){
-      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;
+      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT'||t==='TEXTAREA')return;
       e.preventDefault();
       deleteCurrentSelection();
     }
@@ -3585,7 +4375,7 @@ window.addEventListener('keydown',e=>{
     // exact same setDrawTool() the rail buttons use, no new dispatch path. Guarded like
     // Delete/Backspace above so typing in the Slot width field never gets hijacked.
     if(!mod&&!e.altKey&&!e.shiftKey&&DRAW_TOOL_SHORTCUT_KEYS[key]){
-      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;
+      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT'||t==='TEXTAREA')return;
       e.preventDefault();
       setDrawTool(DRAW_TOOL_SHORTCUT_KEYS[key]);
     }
@@ -3595,7 +4385,7 @@ window.addEventListener('keydown',e=>{
     // #eraserRadiusMm itself (or any other field) is never hijacked. The first of the two required
     // radius-adjustment paths; #eraserRadiusMm's own oninput handler is the second.
     if((e.key==='['||e.key===']')&&drawingTool.mode==='eraser'){
-      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;
+      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT'||t==='TEXTAREA')return;
       e.preventDefault();
       eraserSettings.radiusMm=Math.max(0.5,eraserSettings.radiusMm+(e.key===']'?0.5:-0.5));
       drawingTool.setEraserRadiusMm(eraserSettings.radiusMm);
@@ -3607,17 +4397,17 @@ window.addEventListener('keydown',e=>{
     // hijacked. Matching keyup listener (below, outside this isActive block since a key can be
     // released after focus/mode changes) ends the hold.
     if(e.code==='Space'&&!e.repeat){
-      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;
+      const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT'||t==='TEXTAREA')return;
       e.preventDefault();
       drawingTool.setSpaceHeld(true);
     }
     return;
   }
-  if(e.key==='Delete'||e.key==='Backspace'){const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;deleteLayer(selectedLayerId)}
+  if(e.key==='Delete'||e.key==='Backspace'){const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT'||t==='TEXTAREA')return;deleteLayer(selectedLayerId)}
   // RS-1009: arrow keys nudge the current multi-selection by a named mm step (NUDGE_STEP_MM,
   // src/editing/EditingConstants.js); Shift+Arrow uses the larger step. Guarded exactly like
   // Delete/Backspace above so typing in a text/number field or using a <select> is never hijacked.
-  if(ARROW_KEY_DELTAS[e.key]){const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT')return;e.preventDefault();const step=e.shiftKey?NUDGE_STEP_LARGE_MM:NUDGE_STEP_MM;const[ux,uy]=ARROW_KEY_DELTAS[e.key];nudgeSelection(ux*step,uy*step)}
+  if(ARROW_KEY_DELTAS[e.key]){const t=document.activeElement?.tagName;if(t==='INPUT'||t==='SELECT'||t==='TEXTAREA')return;e.preventDefault();const step=e.shiftKey?NUDGE_STEP_LARGE_MM:NUDGE_STEP_MM;const[ux,uy]=ARROW_KEY_DELTAS[e.key];nudgeSelection(ux*step,uy*step)}
 });
 // RS-3010 Design Step B: ends the spacebar-held temporary pan started by the keydown handler
 // above. Deliberately not gated on document.activeElement -- releasing a key while focus already
@@ -3703,6 +4493,17 @@ el('stoneSize').addEventListener('input',()=>{
   if(!size)return;
   applyStoneSizeHeightAutoSet(l,size);
 });
+// PERF-005: updateStoneSizeOptionAvailabilityUI()'s per-option-disabled sweep is otherwise only
+// re-run when the selection itself changes (see updateStoneSizeOverlapCapabilityUI()) -- this
+// refreshes it right before the user actually opens the dropdown, so an edit made to the selected
+// layer since the last sweep (font, fill mode, height, ...) is reflected by the time they pick a
+// size, without paying that sweep's cost on every one of those other edits.
+el('stoneSize').addEventListener('focus',()=>{
+  const target=currentStoneSizeTarget();
+  if(!target)return;
+  const currentSizeMm=target.region?target.region.stoneSizeMm:target.layer.stoneSize;
+  updateStoneSizeOptionAvailabilityUI(target,currentSizeMm).catch(error=>console.error('Stone size availability sweep failed',error));
+});
 // Marks this layer's height as a deliberate manual choice so the Stone size listener above stops
 // silently overriding it on future changes (as long as it stays valid for the newly-selected size).
 // Only a genuine user edit of #height reaches this -- programmatic value assignment (e.g. the
@@ -3749,6 +4550,22 @@ el('heightModeToggleBtn').addEventListener('click',()=>{
   l.heightMode=l.heightMode==='capHeight'?'raw':'capHeight';
   updateAll(true);
 });
+// READ-010: writes the ratio floor -- NOT applyStoneSizeHeightAutoSet()'s catalog
+// supportedHeightRangeMm midpoint -- into #height, then dispatches 'input' then 'change' on it, the
+// same pattern #letterHeight's own listener uses above. That inherits heightManuallyEdited marking,
+// history tracking, and regeneration for free; this handler itself never mutates l.height directly
+// and never calls commitHistory(). ceilToDisplayPrecisionMm() guards the round-trip through
+// setLengthField()/readLengthField() so the written value never displays a hair below the floor it
+// was meant to clear.
+el('heightFixToFloorBtn').addEventListener('click',()=>{
+  const l=selectedLayer();
+  if(!l||l.type!=='text')return;
+  const below=textHeightBelowReadableMinimum(l);
+  if(!below)return;
+  setLengthField('height',ceilToDisplayPrecisionMm(below.minHeightMm,project.units));
+  el('height').dispatchEvent(new Event('input'));
+  el('height').dispatchEvent(new Event('change'));
+});
 // RS-3011 Step 7: one-time gate release -- once pressed, stonesGenerated flips to true and this
 // layer regenerates live on every subsequent edit forever after, exactly like any other path layer
 // (no code re-suppresses it). Mirrors onPaintStroke()'s own commitHistory()/mutate/
@@ -3762,6 +4579,63 @@ el('generateStonesBtn').addEventListener('click',async()=>{
   drawingTool.refreshStoneGroupForLayer(l.id);
   await updateAll(true);
 });
+// READ-006: the one-shot letter-spacing solve (docs/specifications/READ-006-LetterSpacing.md §4, §5).
+// NOT a HISTORY_TRACKED_CONTROL_IDS id -- it is a discrete action that commits its own history entry
+// before mutating, exactly like #objectType's change listener (commitHistory() then mutate then
+// updateAll()), never the continuous-session pattern. Contour mode takes ~2s (spec §2.1); the busy
+// state is expected. Three outcomes per spec §4.2/§4.4: apply, refuse under Auto Fit, or never
+// separated -- the last two write only the hint and leave l.letterSpacing/l.height untouched.
+el('separateLettersBtn').addEventListener('click',async()=>{
+  const l=selectedLayer();
+  if(!l||l.type!=='text'||isAuthoredStoneFontId(l.font))return;
+  const btn=el('separateLettersBtn'),hint=el('letterSpacingHint'),u=unitSuffix(project.units);
+  const restore=()=>{btn.disabled=false;btn.textContent='Separate letters'};
+  btn.disabled=true;btn.textContent='Separating…';hint.style.display='none';
+  let res;
+  try{
+    // Matches the validated experiment (spec §4.1): generateTextLayout() directly, Auto Fit off,
+    // the SAME permanentEngine. buildTextLayoutBaseParams() supplies text/font/provider/height/
+    // stoneSize/gap/mode; solveLetterSpacingMm() overrides letterSpacingMm per ladder rung.
+    const pitchMm=(l.stoneSize||0)+(l.gap||0);
+    res=await solveLetterSpacingMm({engine:permanentEngine,layerParams:buildTextLayoutBaseParams(l),pitchMm});
+  }catch(error){
+    console.error('Separate letters failed',error);
+    restore();
+    hint.textContent='Could not work out a letter spacing for this text.';hint.style.display='block';
+    return;
+  }
+  restore();
+  // Outcome 3 (spec §4.4): no rung reached the 0.95 target. Apply nothing -- clamping to 4x pitch
+  // and presenting it as a fix would be a false guarantee (2 of the 24 calibration cases hit this).
+  if(!res.separationAchieved){
+    hint.textContent='These letters can’t be separated at this text height and font. Try a taller text height, a different font, or a smaller stone size.';
+    hint.style.display='block';
+    return;
+  }
+  const zeroWidthMm=res.untrackedWidthMm;
+  const trackedWidthMm=res.widthMm;
+  const spacingText=`${formatLengthDisplay(res.letterSpacingMm,project.units,2)} ${u}`;
+  // Outcome 2 (spec §4.2): with Auto Fit on, the solved spacing would push the measured width past
+  // canvas.width - 10. Auto Fit converts that added width into lost height -- the very quantity
+  // separation exists to protect -- so apply nothing and name the remedies that change the
+  // comparison. Copy modelled on textTooLongDetailMessage().
+  const widthLimitMm=project.canvas.width-10;
+  if(res.letterSpacingMm>0&&l.autoFit&&trackedWidthMm!=null&&trackedWidthMm>widthLimitMm){
+    const shortfallMm=trackedWidthMm-widthLimitMm;
+    hint.textContent=`Separating the letters needs ${spacingText} of spacing, making this text ${formatLengthDisplay(trackedWidthMm,project.units,1)} ${u} wide -- ${formatLengthDisplay(shortfallMm,project.units,1)} ${u} more than fits with Auto Fit on. Turn Auto Fit off and shorten the text, or drop a stone size.`;
+    hint.style.display='block';
+    return;
+  }
+  // Outcome 1 (spec §4.4): solved and it fits. One undoable edit; the hint states the new spacing,
+  // the new width, and the growth over the untracked (zero-spacing) width.
+  commitHistory();
+  l.letterSpacing=res.letterSpacingMm;
+  await updateAll(true);
+  setLengthField('letterSpacing',l.letterSpacing);
+  const growthPct=(zeroWidthMm>0&&trackedWidthMm!=null)?((trackedWidthMm-zeroWidthMm)/zeroWidthMm*100):null;
+  hint.textContent=`Letter spacing set to ${spacingText}. This text is now ${formatLengthDisplay(trackedWidthMm,project.units,1)} ${u} wide`+(growthPct!=null?`, ${growthPct>=0?'+':''}${growthPct.toFixed(0)}% over the untracked width.`:'.');
+  hint.style.display='block';
+});
 // Auto Fit now defaults to Off for new layers (Text height reflects the actual rendered size), so
 // switching it back On is a deliberate, easy-to-miss trade-off -- Auto Fit can shrink text below the
 // height needed for reliable readability at the selected stone size. Surfaced every time the operator
@@ -3774,7 +4648,7 @@ el('autoFit').addEventListener('input',()=>{
   const turningOn=el('autoFit').value==='on';
   el('autoFitOnHint').style.display=(l&&l.type==='text'&&!l.autoFit&&turningOn)?'block':'none';
 });
-const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','textAlign','lineSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail'];
+const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','textAlign','lineSpacing','letterSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail','weightSteps'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
 // RS-2002: Browse Fonts panel wiring. Toggling/closing never touches history (it only decides
@@ -3784,6 +4658,9 @@ el('fontLibraryBtn').addEventListener('click',()=>{if(el('fontLibraryPanel').hid
 el('fontSearch').addEventListener('input',()=>{fontSearchQuery=el('fontSearch').value;renderFontLibraryList()});
 el('fontCategoryFilter').addEventListener('change',()=>{fontCategoryFilterValue=el('fontCategoryFilter').value;renderFontLibraryList()});
 el('fontLibraryList').addEventListener('click',e=>{const favBtn=e.target.closest('[data-fav-font]');if(favBtn){toggleFavoriteFont(favBtn.dataset.favFont);return}const pickBtn=e.target.closest('[data-pick-font]');if(pickBtn)pickFont(pickBtn.dataset.pickFont)});
+// FONT-LIB-002: choosing a weight/style from a family row's inline <select> applies it exactly like
+// clicking the row's name -- pickFont() replays #font's input+change and closes the panel.
+el('fontLibraryList').addEventListener('change',e=>{const styleSel=e.target.closest('[data-style-select]');if(styleSel)pickFont(styleSel.value)});
 // TXT-101A: "Recently Used" also tracks picks made directly from the native <select> (not just the
 // Browse Fonts panel) -- a second, independent listener on the same 'change' event
 // HISTORY_TRACKED_CONTROL_IDS already listens to above, not a replacement for it.
@@ -3963,12 +4840,25 @@ async function createShapeLayer(kind,extraFieldsOverride={},displayLabelOverride
 // text" with no entry point. Mirrors createShapeLayer()'s exact pattern/defaults (matching
 // defaultProject()'s own initial text layer's field set), including the same single-other-selected-
 // layer auto-fit hook, symmetric to createShapeLayer()'s.
-async function addText(){
+async function addText({atAbsoluteMm=null}={}){
   const l=selectedLayer();
   const other=singleOtherSelectedLayer();
-  const fitPartnerShape=(other&&FITTABLE_SHAPE_TYPES.has(other.type))?other:null;
+  const fitPartnerShape=(!atAbsoluteMm&&other&&FITTABLE_SHAPE_TYPES.has(other.type))?other:null;
   commitHistory();
-  const layer={id:'text'+Date.now(),type:'text',visible:true,text:'New Text',font:TEXT_ENGINE_FONT_IDS.has(l.font)?l.font:DEFAULT_TEXT_FONT_ID,height:25,heightMode:'capHeight',textMode:'stroke',stoneSize:l.stoneSize||2.8,gap:l.gap||.3,color:l.color||'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,x:0,y:0};
+  // READ-008: born at exactly the MIN_HEIGHT_TO_STONE_RATIO floor for the inherited stone diameter,
+  // never the old fixed 25 mm (which was below the floor for any stone >= ~1.6 mm).
+  const inheritedStoneSize=l.stoneSize||2.8;
+  const layer={id:'text'+Date.now(),type:'text',visible:true,text:'New Text',font:TEXT_ENGINE_FONT_IDS.has(l.font)?l.font:DEFAULT_TEXT_FONT_ID,height:inheritedStoneSize*MIN_HEIGHT_TO_STONE_RATIO,heightMode:'capHeight',textMode:'stroke',stoneSize:inheritedStoneSize,gap:l.gap||.3,color:l.color||'gold',autoFit:false,curveEnabled:false,curveRadiusMm:40,curveDirection:'outside',curveStartAngleDeg:0,curveSweepAngleDeg:180,curveAlignment:'center',align:'left',lineSpacing:1,rotationDeg:0,letterSpacing:0,x:0,y:0};
+  // RS-3035: the Design Text tool hands over an absolute canvas point; a text layer stores x/y as
+  // an offset from the canvas center, so convert through the shared inverse rather than re-deriving
+  // the algebra (src/editing/TextPlacement.js, already imported at line 108).
+  if(atAbsoluteMm){
+    const{xMm,yMm}=computeTextLayerPositionForTargetCenterMm({
+      targetCenterXMm:atAbsoluteMm.xMm,targetCenterYMm:atAbsoluteMm.yMm,
+      canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height
+    });
+    layer.x=xMm;layer.y=yMm;
+  }
   project.layers.push(layer);
   selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);
   let statusText='Added text layer';
@@ -3980,6 +4870,7 @@ async function addText(){
   syncSelectedControlsFromLayer();
   await updateAll(true);
   el('status').textContent=statusText;
+  return layer;
 }
 // S-110: Smart Text-to-Shape Fitting. A pure "compute a fit plan" function -- it never mutates
 // textLayer itself (matching runBooleanOp()'s own "validate everything, only mutate on success"
@@ -3989,8 +4880,9 @@ async function addText(){
 // (unscaled) size via the same resolveTextPolygons() call generateTextStonesLive()/
 // resolveLayerShapeSource()'s text branch already use, finds the largest inscribed rectangle of the
 // text's own aspect ratio via ShapeFit.computeInscribedRect(), then the required scale via
-// ShapeFit.computeShapeFitScale() -- reusing S-107's own MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO
-// legibility floor so the two features can never disagree on "how small is too small". Never
+// ShapeFit.computeShapeFitScale() -- reusing S-107's own MIN_HEIGHT_TO_STONE_RATIO legibility floor
+// (READ-008: height / stone diameter, gap excluded) so the two features can never disagree on "how
+// small is too small". Never
 // touches font/stoneSize/gap/fillMode/color/curve fields, and never converts curved text to
 // straight text (aborts instead, with a specific message).
 async function fitTextToShape(textLayer,shapeLayer){
@@ -4031,10 +4923,9 @@ async function fitTextToShape(textLayer,shapeLayer){
   if(!inscribed||!(inscribed.widthMm>0)){
     return{ok:false,reason:'no-region',message:`"${layerLabel(shapeLayer)}" has no usable region to fit text into.`};
   }
-  const spacingMm=(textLayer.stoneSize||0)+(textLayer.gap||0);
   const scaleResult=computeShapeFitScale({
     currentHeightMm:textLayer.height,measuredWidthMm:measured.boundingBox.widthMm,measuredHeightMm:measured.boundingBox.heightMm,
-    spacingMm,targetWidthMm:inscribed.widthMm,targetHeightMm:inscribed.heightMm,minHeightToSpacingRatio:MIN_AUTOFIT_HEIGHT_TO_SPACING_RATIO
+    stoneSizeMm:textLayer.stoneSize||0,targetWidthMm:inscribed.widthMm,targetHeightMm:inscribed.heightMm,minHeightToStoneRatio:MIN_HEIGHT_TO_STONE_RATIO
   });
   if(!scaleResult.ok){
     return{ok:false,reason:'legibility',message:`This text can’t fit inside "${layerLabel(shapeLayer)}" at the current stone size and gap without becoming unreadable. Its previous size and position were kept. Try a smaller stone size/gap, shorter text, or a larger shape.`};
@@ -4274,15 +5165,38 @@ el('exportCombined').onclick=()=>{if(!layout){el('status').textContent='Export f
 // pattern for Gap/Crystal color) -- see docs/specifications/RS-1005-ProductionSheetGenerator.md for
 // this function's pre-existing fields and docs/specifications/S-112-RoundDinnerPlate.md for the
 // plate-specific additions.
+// READ-010: WARN AND PROCEED, never a block. The MIN_HEIGHT_TO_STONE_RATIO floor is font-blind and
+// its 16-20 ratio band is still unresolved (see the comment above that constant in
+// src/geometry/TextAutoFit.js) -- gating a shop's actual production-sheet export on a rule the
+// program itself calls provisional would be the wrong trade, so this only ever writes into
+// #prodSheetValidation; no caller disables an export button or returns early because of it.
+// updateTextHeightReadabilityUI() already warns about this, but only for whichever layer happens to
+// be selected (see textLayersBelowReadableMinimum()'s own comment on that gap) -- this itemizes
+// every offending VISIBLE layer in the project by name, so the operator sees the whole sheet's
+// picture before printing, not just whatever they last had selected.
+function updateProdSheetReadabilityValidation(){
+  const validation=el('prodSheetValidation');
+  const hits=textLayersBelowReadableMinimum();
+  const u=unitSuffix(project.units);
+  let message='';
+  if(hits.length){
+    const items=hits.map(({layer,heightMm,minHeightMm})=>`"${layerLabel(layer)}" (${formatLengthDisplay(heightMm,project.units,1)} ${u}, needs ${formatLengthDisplay(minHeightMm,project.units,1)} ${u} or taller)`).join('; ');
+    message=`${hits.length} text layer${hits.length===1?'':'s'} on this sheet ${hits.length===1?'is':'are'} below the readability minimum for its stone size: ${items}. This will still export — consider a taller height or a smaller stone size before printing.`;
+  }
+  validation.textContent=message;
+  validation.classList.toggle('visible',Boolean(message));
+}
 function currentProductionSheetOptions(){const t=currentObjectTemplate(),isPlate=t.preview.kind==='plate';const plateFields=isPlate?{plateDesignTarget:getPlateDesignTargetMeta(project.plate.designTarget).name,plateOuterDiameterMm:project.plate.outerDiameterMm,plateInnerWellDiameterMm:project.plate.innerWellDiameterMm,plateRimWidthMm:computeRimWidthMm(project.plate.outerDiameterMm,project.plate.innerWellDiameterMm),plateOverallHeightMm:project.plate.overallHeightMm,plateWeightGrams:PLATE_ROUND_DINNER_DEFINITION.weightGrams.average,plateColorName:getPlateColor(project.plate.colorId).name}:{};return{projectName:project.name,objectType:t.displayName,productionWidthMm:project.canvas.width,productionHeightMm:project.canvas.height,gapMm:[...new Set(project.layers.filter(l=>l.visible).map(l=>l.gap))],pageSize:el('prodSheetPageSize').value,marginMm:readLengthField('prodSheetMargin')||0,mirror:el('prodSheetMirror').value==='on',registrationMarks:el('prodSheetRegMarks').value==='on',units:project.units,...plateFields}}
-el('exportProdSheetSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-production-sheet.svg','image/svg+xml',productionSheetToSvg(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
-el('exportProdSheetPDF').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-production-sheet.pdf','application/pdf',productionSheetToPdf(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+// READ-010's readability floor is warn-only: a throw inside updateProdSheetReadabilityValidation()'s sweep must be caught and reported via the existing #status catch, not escape uncaught and silently disable the export button -- so the call sits inside try, after the !layout guard.
+el('exportProdSheetSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{updateProdSheetReadabilityValidation();download('rhinestone-production-sheet.svg','image/svg+xml',productionSheetToSvg(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+el('exportProdSheetPDF').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{updateProdSheetReadabilityValidation();download('rhinestone-production-sheet.pdf','application/pdf',productionSheetToPdf(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 // PNG has no dedicated src/export/** module (matching #exportPNG/#exportCup's existing "capture,
 // not a standalone exporter" precedent): it rasterizes the already-generated production-sheet SVG
 // via an offscreen Image+canvas at a fixed PRODUCTION_SHEET_PNG_DPI, so the raster's pixel
 // dimensions are always an undistorted multiple of the page's mm size -- never fit-to-viewport
 // scaled the way the on-screen 2D canvas is.
 el('exportProdSheetPNG').onclick=async()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{
+  updateProdSheetReadabilityValidation();
   const options=currentProductionSheetOptions();
   const svgMarkup=productionSheetToSvg(layout,options);
   const{pageWidthMm,pageHeightMm}=computeProductionSheetLayout(layout,options);
@@ -4350,7 +5264,10 @@ const lightboxes={
   importBox:new Lightbox('lightboxImport',{primary:true,onOpen(){activeFieldLightbox='import';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
   imagetrace:new Lightbox('lightboxImageTrace',{primary:true,onOpen(){activeFieldLightbox='imagetrace';relocateFieldGroups();updateImageTraceSections()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
   exportBox:new Lightbox('lightboxExport',{primary:true}),
-  prodSheet:new Lightbox('lightboxProdSheet',{primary:true}),
+  // READ-010: onOpen re-runs the project-wide readability sweep every time the lightbox opens, so it
+  // can never go stale from an edit made while it was closed (matching shipping/settings' own
+  // onOpen-refresh idiom just below).
+  prodSheet:new Lightbox('lightboxProdSheet',{primary:true,onOpen(){updateProdSheetReadabilityValidation()}}),
   shipping:new Lightbox('lightboxShipping',{primary:true,onOpen(){syncShippingFieldsFromState(project.units)}}),
   settings:new Lightbox('lightboxSettings',{primary:true,onOpen(){syncSettingsFieldsFromState()}}),
   help:new Lightbox('lightboxHelp',{primary:true}),
@@ -4439,13 +5356,16 @@ el('moreOptionsBtn').onclick=()=>{
 // MonogramGenerator.generate() (constructed above as `monogramGenerator`). This section never
 // computes geometry, layout, fitting, or collisions -- it only builds a request object, calls the
 // generator, and (on success) inserts the returned ordinary layers through the exact same
-// commitHistory()+project.layers.push() pattern insertLibraryItem() already uses, so undo/redo
-// treats a generated monogram as a single step, same as inserting a Design Library item.
+// commitHistory()+project.layers.push() pattern used to insert a Design Library item, so undo/redo
+// treats a generated monogram as a single step (MONO-020: that step also removes the previous
+// replaceable monogram).
 const MONOGRAM_LAYOUT_LABELS={
   [MONOGRAM_LAYOUTS.SINGLE]:'Single',
   [MONOGRAM_LAYOUTS.TWO_LETTER]:'Two Letter',
   [MONOGRAM_LAYOUTS.TRADITIONAL_THREE]:'Traditional Three',
-  [MONOGRAM_LAYOUTS.EQUAL_THREE]:'Equal Three'
+  [MONOGRAM_LAYOUTS.EQUAL_THREE]:'Equal Three',
+  // MONO-013: connected-script monogram -- one interlocked mark, 1-3 letters.
+  [MONOGRAM_LAYOUTS.SCRIPT]:'Script'
 };
 const MONOGRAM_FAILURE_MESSAGES={
   [MONOGRAM_GENERATOR_FAILURE_REASONS.INVALID_INPUT]:'Check the Monogram settings and try again.',
@@ -4453,6 +5373,7 @@ const MONOGRAM_FAILURE_MESSAGES={
   [MONOGRAM_GENERATOR_FAILURE_REASONS.LAYOUT_NOT_FOUND]:'The selected layout is not available.',
   [MONOGRAM_GENERATOR_FAILURE_REASONS.UNSUPPORTED_LETTER_COUNT]:'The number of letters does not match the selected layout.',
   [MONOGRAM_GENERATOR_FAILURE_REASONS.INVALID_FONT]:'The selected font cannot be used for Monogram generation. Choose a different production font.',
+  [MONOGRAM_GENERATOR_FAILURE_REASONS.CHAIN_TOO_THIN]:'A letter is too small to read as a continuous bead chain at this stone size. Use a smaller stone size, a larger frame, or a layout with fewer letters.',
   [MONOGRAM_GENERATOR_FAILURE_REASONS.INTERNAL_CONTRACT_MISMATCH]:'Monogram generation failed unexpectedly. Please try again.'
 };
 // MONO-006C/MONO-006E: item 7 ("better fitting diagnostics") -- for the sizing/spacing failure
@@ -4489,10 +5410,18 @@ function monogramFailureMessage(result,request){
   if(reason===R.FITTING_FAILED)return `${designText} cannot fit using ${stoneSizeText} stones inside a ${frameSizeText} ${frameLabel} frame because the required production spacing exceeds the available interior${limitingFactorText}. Increase the frame size, or choose a smaller stone size.`;
   if(reason===R.BELOW_MINIMUM_SCALE)return `${designText} cannot fit using ${stoneSizeText} stones inside a ${frameSizeText} ${frameLabel} frame${limitingFactorText}. Increase the frame size, or choose a smaller stone size.`;
   if(reason===R.LETTER_COLLISION)return `Two or more letters in this${layoutLabel?` ${layoutLabel}`:''} monogram would touch at ${stoneSizeText} spacing in a ${frameSizeText} ${frameLabel} frame. Increase the frame size, choose a different layout, or choose a smaller stone size.`;
-  if(reason===R.FRAME_COLLISION)return `A letter would touch the frame in this${layoutLabel?` ${layoutLabel}`:''} monogram at ${stoneSizeText} spacing in a ${frameSizeText} ${frameLabel} frame. Increase the frame size, or choose a smaller stone size.`;
+  // MONO-014: with automatic hierarchy the frame stones default one rung larger than the letters',
+  // and generateMonogramWithFrameAutoShrink() no longer retries into a frame stone size equal to
+  // the letters' -- so a colliding dominant frame with SS6 letters has no legal smaller candidate
+  // and this failure is now reachable where MONO-011 would previously have retried into equal
+  // weight. The message must offer the real fixes: a larger frame, smaller stones, or no frame.
+  if(reason===R.FRAME_COLLISION)return `A letter would touch the frame in this${layoutLabel?` ${layoutLabel}`:''} monogram at ${stoneSizeText} spacing in a ${frameSizeText} ${frameLabel} frame. Increase the frame size, choose a smaller stone size, or set the frame to "No frame".`;
   // MONO-008: the generator's own message already names the frame/stone-width context -- no
   // request-specific data to add here, unlike the reasons above.
   if(reason===R.STONE_WIDTH_UNAVAILABLE)return result.message;
+  // MONO-012: the generator's CHAIN_TOO_THIN message already names the font, stone size, achieved
+  // stem-stone ratio, which bound bound, and a concrete suggestion -- surface it verbatim.
+  if(reason===R.CHAIN_TOO_THIN&&result.message)return result.message;
   return MONOGRAM_FAILURE_MESSAGES[reason]||'Monogram generation failed. Please check your settings and try again.';
 }
 // Frame choices come straight from FrameLibrary.listFrames() -- adding a frame there needs no
@@ -4500,15 +5429,16 @@ function monogramFailureMessage(result,request){
 // "index.html hardcodes no <option>, the catalog is the only source" convention.
 function populateMonogramFrameOptions(){el('monogramFrame').innerHTML=listFrames().map(f=>`<option value="${f.id}">${escapeHtml(f.label)}</option>`).join('')}
 function populateMonogramLayoutOptions(){el('monogramLayout').innerHTML=Object.values(MONOGRAM_LAYOUTS).map(id=>`<option value="${id}">${escapeHtml(MONOGRAM_LAYOUT_LABELS[id]||id)}</option>`).join('')}
-// Authored (stoneCenters-based) fonts only, never OpenType/sampled fonts, per this milestone's own
-// requirement -- MonogramGenerator only supports authored fonts (see its own "invalid-font"
-// rejection), so this deliberately filters providerId==='rhinestone' directly rather than reusing
-// productionFonts() (FONT-DECISION-001 widened that shared helper to also include validated
-// OpenType fonts for the ordinary #font picker, which MonogramGenerator cannot use). A dedicated
-// #monogramFont select (not the shared #font element) so this Lightbox never participates in
-// relocateFieldGroups().
-function authoredProductionFonts(){return fontManager?fontManager.listFonts().filter(f=>f.providerId==='rhinestone'):[]}
-function populateMonogramFontOptions(){if(!fontManager)return;el('monogramFont').innerHTML=groupFontsByCategory(authoredProductionFonts()).map(([role,fonts])=>`<optgroup label="${escapeHtml(fontCategoryLabel(role))}">${fonts.map(f=>`<option value="${f.id}">${escapeHtml(f.family)}</option>`).join('')}</optgroup>`).join('')}
+// MONO-012: the fonts the Monogram tool can use -- every authored (stoneCenters-based) font, plus
+// every enabled OpenType font whose measured stemWidthRatio is thin enough that a single-chain
+// letter still clears the readability floor (isMonogramEligibleStemWidthRatio(), stone-size-
+// independent). Gating the picker here -- rather than exempting textLayersBelowReadableMinimum()
+// from monogram letters -- makes a below-floor monogram structurally unreachable, so the floor never
+// needs an opinion about monograms. Deliberately NOT productionFonts(): that helper offers every
+// enabled OpenType font, most of which are too thick-stemmed for a chain. A dedicated #monogramFont
+// select (not the shared #font element) so this Lightbox never participates in relocateFieldGroups().
+function monogramEligibleFonts(){return fontManager?fontManager.listFonts().filter(f=>f.providerId==='rhinestone'||isMonogramEligibleStemWidthRatio(f.stemWidthRatio)):[]}
+function populateMonogramFontOptions(){if(!fontManager)return;el('monogramFont').innerHTML=groupFontsByCategory(monogramEligibleFonts()).map(([role,fonts])=>`<optgroup label="${escapeHtml(fontCategoryLabel(role))}">${fonts.map(f=>`<option value="${f.id}">${escapeHtml(f.family)}</option>`).join('')}</optgroup>`).join('')}
 function populateMonogramStoneSizeOptions(){el('monogramStoneSize').innerHTML=listStoneSizes().map(s=>`<option value="${s.diameterMm}">${escapeHtml(s.name)} — ${s.diameterMm.toFixed(1)} mm</option>`).join('')}
 function updateMonogramColorSwatch(){const c=STONE_COLORS[el('monogramColor').value];el('monogramColorSwatch').style.background=c?c.previewColor:'transparent'}
 // MONO-010: mirrors populateMonogramStoneSizeOptions()/populateStoneColorOptions()/
@@ -4516,6 +5446,55 @@ function updateMonogramColorSwatch(){const c=STONE_COLORS[el('monogramColor').va
 function populateMonogramFrameStoneSizeOptions(){el('monogramFrameStoneSize').innerHTML=listStoneSizes().map(s=>`<option value="${s.diameterMm}">${escapeHtml(s.name)} — ${s.diameterMm.toFixed(1)} mm</option>`).join('')}
 function updateMonogramFrameColorSwatch(){const c=STONE_COLORS[el('monogramFrameColor').value];el('monogramFrameColorSwatch').style.background=c?c.previewColor:'transparent'}
 function updateMonogramFrameStoneControlsVisibility(){el('monogramFrameStoneFields').style.display=el('monogramFrameStoneToggle').checked?'':'none'}
+// MONO-016: the shared "Letter spacing" control. One value, an asymmetric range by layout:
+//   - script:       [-pitchMm, top x pitchMm]  (glyph tracking inside the one interlocked string)
+//   - slot layouts: [0,        top x pitchMm]  (additive term on the inter-slot gap)
+// `top` is TRACKING_XPITCH_LADDER's last rung (4) -- the same ceiling letterSpacingBoundsMm() gives
+// an ordinary text layer's #letterSpacing. pitchMm here is the monogram's OWN pitch: the
+// #monogramStoneSize value plus the fixed MONOGRAM_INTERLOCK_GAP_MM (0.3), because
+// buildMonogramRequest() pins request.gapMm to that same constant for the script layout and the
+// generator's own validation uses stoneSizeMm+gapMm. Do NOT substitute letterSpacingBoundsMm() --
+// that reads the #stoneSize/#gap TEXT-layer controls, not the monogram's. A slot layout's floor is
+// 0 for a hard reason: below the production stone-to-stone clearance adjacent letters' stones
+// collide (MONO-006E); the generator rejects a negative slot request rather than clamping.
+const MONOGRAM_INTERLOCK_GAP_MM=0.3;
+function monogramLayoutIsScript(){return el('monogramLayout').value===MONOGRAM_LAYOUTS.SCRIPT}
+// The letter count this monogram will actually have: fixed by the layout for the four slot layouts,
+// or the number of letters typed for the range-based 'script' layout.
+function monogramResolvedLetterCount(){
+  const layoutId=el('monogramLayout').value;
+  const exact=MONOGRAM_LAYOUT_LETTER_COUNTS[layoutId];
+  if(exact)return exact;
+  return Array.from(el('monogramLetters').value.trim()).length;
+}
+function monogramLetterSpacingPitchMm(){return (parseFloat(el('monogramStoneSize').value)||2)+MONOGRAM_INTERLOCK_GAP_MM}
+function monogramLetterSpacingBoundsMm(){
+  const pitchMm=monogramLetterSpacingPitchMm();
+  const maxMm=TRACKING_XPITCH_LADDER[TRACKING_XPITCH_LADDER.length-1]*pitchMm;
+  return{minMm:monogramLayoutIsScript()?-pitchMm:0,maxMm};
+}
+function monogramLetterSpacingMm(){
+  const{minMm,maxMm}=monogramLetterSpacingBoundsMm();
+  return Math.max(minMm,Math.min(maxMm,parseFloat(el('monogramLetterSpacing').value)||0));
+}
+function updateMonogramLetterSpacingLabel(){
+  const v=monogramLetterSpacingMm();
+  el('monogramLetterSpacingValue').textContent=v===0?'— natural spacing':`${formatLengthDisplay(v,project.units,1)} ${unitSuffix(project.units)}`;
+}
+function refreshMonogramLetterSpacingBounds(){
+  const slider=el('monogramLetterSpacing'),{minMm,maxMm}=monogramLetterSpacingBoundsMm(),current=parseFloat(slider.value);
+  slider.min=String(minMm);
+  slider.max=String(maxMm);
+  if(!Number.isFinite(current)||current<minMm||current>maxMm)slider.value=String(Math.max(minMm,Math.min(maxMm,Number.isFinite(current)?current:0)));
+  updateMonogramLetterSpacingLabel();
+}
+// Shown whenever the resolved letter count is >= 2, for ANY layout -- there is an inter-letter gap
+// to regulate. Hidden for 'single' and a one-letter script mark.
+function updateMonogramLetterSpacingVisibility(){
+  const show=monogramResolvedLetterCount()>=2;
+  el('monogramLetterSpacingField').style.display=show?'':'none';
+  if(show)refreshMonogramLetterSpacingBounds();
+}
 // MONO-009: the frame's own generic scalingLimitsMm midpoint is a size that only ever coincidentally
 // fits the current product's real printable area. For every product except Plate, default instead to
 // that product's safe area (getSafeAreaRectMm) shrunk by the operator-configurable #monogramSizeMarginMm,
@@ -4583,7 +5562,15 @@ function applyMonogramSizeMargin(){
 // a visible hint and the input's maxlength; the same count is re-checked in
 // validateMonogramControls() below before Generate is ever allowed to call the generator.
 function updateMonogramLetterCountHint(){
-  const count=MONOGRAM_LAYOUT_LETTER_COUNTS[el('monogramLayout').value];
+  const layoutId=el('monogramLayout').value;
+  // MONO-013: the 'script' layout accepts a RANGE of letter counts (1-3), not one exact count.
+  const range=MONOGRAM_LAYOUT_LETTER_COUNT_RANGES[layoutId];
+  if(range){
+    el('monogramLetterCountHint').textContent=`This layout uses ${range.min}–${range.max} letters.`;
+    el('monogramLetters').maxLength=range.max;
+    return;
+  }
+  const count=MONOGRAM_LAYOUT_LETTER_COUNTS[layoutId];
   el('monogramLetterCountHint').textContent=count?`This layout uses exactly ${count} letter${count===1?'':'s'}.`:'';
   if(count)el('monogramLetters').maxLength=count;
 }
@@ -4605,6 +5592,9 @@ function validateMonogramControls(){
   if(!fontId)return{ok:false,message:'Choose a font. Only production fonts are offered here.'};
   if(lettersRaw.length===0)return{ok:false,message:'Enter at least one letter.'};
   const letters=Array.from(lettersRaw);
+  // MONO-013: the 'script' layout is range-based (1-3); every other layout is exact-count.
+  const range=MONOGRAM_LAYOUT_LETTER_COUNT_RANGES[layoutId];
+  if(range&&(letters.length<range.min||letters.length>range.max))return{ok:false,message:`This layout uses ${range.min}–${range.max} letters (got ${letters.length}).`};
   const requiredCount=MONOGRAM_LAYOUT_LETTER_COUNTS[layoutId];
   if(requiredCount&&letters.length!==requiredCount)return{ok:false,message:`This layout requires exactly ${requiredCount} letter${requiredCount===1?'':'s'} (got ${letters.length}).`};
   if(!Number.isFinite(widthMm)||widthMm<=0||!Number.isFinite(heightMm)||heightMm<=0)return{ok:false,message:'Frame width and height must be greater than zero.'};
@@ -4636,21 +5626,87 @@ function buildMonogramRequest(validated){
   const frameOptions=frameStyle==='outline-1'?{mode:'outline',stoneWidth:1}
     :frameStyle==='outline-2'?{mode:'outline',stoneWidth:2}
     :{};
-  // MONO-010: only set when the toggle is checked -- unchecked must leave frameOptions exactly as
-  // it was before this milestone (no stoneSizeMm/color keys at all), so the generator's own
-  // frameOptions.stoneSizeMm ?? stoneSizeMm / frameOptions.color ?? resolvedColor fallbacks still
-  // apply unchanged. This is the one place that makes "toggle off" byte-identical to pre-milestone
-  // behavior.
+  // MONO-014: the toggle now selects between two modes, not "custom vs pre-MONO-010 default".
+  //  - checked: the visible #monogramFrameStoneSize/#monogramFrameColor fields drive the frame
+  //    exactly as the user set them (this is the only path that can produce an equal-weight frame,
+  //    and only if the user deliberately matches the letters' size).
+  //  - unchecked: automatic hierarchy. defaultFrameStoneSizeMm() (src/monogram/FrameHierarchy.js)
+  //    picks the frame's stone size one catalog rung above the letters' so the ring is clearly
+  //    dominant, never equal weight. Color is still left unset here, so the generator's
+  //    frameOptions.color ?? resolvedColor fallback applies. See
+  //    docs/specifications/MONO-014-FrameHierarchy.md.
   if(el('monogramFrameStoneToggle').checked){
     frameOptions.stoneSizeMm=parseFloat(el('monogramFrameStoneSize').value);
     frameOptions.color=el('monogramFrameColor').value;
+  }else{
+    frameOptions.stoneSizeMm=defaultFrameStoneSizeMm(stoneSizeMm);
   }
-  return{frameId:validated.frameId,layoutId:validated.layoutId,letters:validated.letters,fontId:validated.fontId,providerId:resolveFontProviderId(validated.fontId),stoneSizeMm,color,frameRect,canvasMm,frameOptions};
+  // MONO-012: the generator needs the font's measured stroke-width fraction to size a single-chain
+  // OpenType letter (and to run its own eligibility gate). undefined for authored fonts, which don't
+  // read it.
+  const stemWidthRatio=fontManager?fontManager.getFont(validated.fontId)?.stemWidthRatio:undefined;
+  const request={frameId:validated.frameId,layoutId:validated.layoutId,letters:validated.letters,fontId:validated.fontId,providerId:resolveFontProviderId(validated.fontId),stemWidthRatio,stoneSizeMm,color,frameRect,canvasMm,frameOptions};
+  // MONO-015: opt-in weight-following stone size for the letters. Only for OpenType fonts (the
+  // #monogramWeightSteps select is hidden for authored fonts, which have no stroke outline to
+  // probe). The select carries the rung count; the mm diameters are derived from the letters' own
+  // stone size, the same graduated step a text layer's inspector uses. A step the option list marks
+  // disabled is skipped here too.
+  const monogramWeightStep=parseInt(el('monogramWeightSteps').value,10)||0;
+  if(typeof stemWidthRatio==='number'&&monogramWeightStep>0&&monogramWeightStep<=stoneSizeRungsAvailable(stoneSizeMm)){
+    request.weightSizesMm=stoneSizesFromBaseMm(stoneSizeMm,monogramWeightStep);
+  }
+  // MONO-016: the shared "Letter spacing" value, sent whenever the control is shown (resolved letter
+  // count >= 2). Omitted otherwise so the request is byte-identical to pre-MONO-016 for a 'single' or
+  // one-letter mark. For 'script', gapMm is also pinned to the value the generator would otherwise
+  // default to (AUTHORED_FONT_FITTING_GAP_MM) so the slider bounds (refreshMonogramLetterSpacingBounds())
+  // and the generator's own pitch-derived range agree exactly, and so the emitted layer.letterSpacing
+  // stays inside app.js's own text-layer clamp (letterSpacingBoundsMm() / writeSelectedControlsToLayer()).
+  if(monogramResolvedLetterCount()>=2){
+    request.letterSpacingMm=monogramLetterSpacingMm();
+  }
+  if(validated.layoutId===MONOGRAM_LAYOUTS.SCRIPT){
+    request.gapMm=MONOGRAM_INTERLOCK_GAP_MM;
+  }
+  return request;
+}
+// MONO-014: true once the user has picked a frame themselves during this lightbox session, which
+// suppresses applyMonogramDefaultFrameForFont()'s per-font default. Set in #monogramFrame's change
+// handler, reset every time the lightbox opens (onMonogramOpen()).
+let monogramFrameUserChosen=false;
+// MONO-014: a non-authored (OpenType script) font is itself the ornament, so default it to "No
+// frame" -- the ring would just compete with the letterform. Authored (rhinestone) fonts default
+// to circle. Skipped once the user has chosen a frame this session. #monogramFrame is set
+// programmatically here, so updateMonogramFrameSizeBounds() is called directly (a bare .value
+// assignment fires no 'change' event).
+function applyMonogramDefaultFrameForFont(){
+  if(monogramFrameUserChosen)return;
+  const fontId=el('monogramFont').value;
+  if(!fontId||!fontManager||!fontManager.hasFont(fontId))return;
+  const font=fontManager.getFont(fontId);
+  const desiredFrame=font.providerId==='rhinestone'?'circle':'none';
+  if(el('monogramFrame').value===desiredFrame)return;
+  el('monogramFrame').value=desiredFrame;
+  updateMonogramFrameSizeBounds();
 }
 // MONO-009: also refreshes frame-size bounds/default on open (out-of-range-only, same as a frame
 // switch) so a product switched while the lightbox was closed gets a chance to apply its own
 // safe-area default on next open, rather than only on frame-change/units-change/boot.
-function onMonogramOpen(){clearMonogramValidation();updateMonogramFrameSizeBounds();updateMonogramGenerateButtonState()}
+// MONO-015: the #monogramWeightSteps select is meaningful only for OpenType script fonts --
+// authored fonts place stones on a fixed grid with no stroke outline. Hidden (and forced to Off)
+// for every other font. Its options are rebuilt from the monogram stone size (labels + which steps
+// the catalog can supply), the same graduated control the text inspector uses.
+function updateMonogramWeightStepsVisibility(){
+  const fontId=el('monogramFont').value;
+  const font=fontId&&fontManager&&fontManager.hasFont(fontId)?fontManager.getFont(fontId):null;
+  const isOpenType=Boolean(font&&font.providerId==='opentype');
+  el('monogramWeightStepsField').style.display=isOpenType?'':'none';
+  const baseMm=parseFloat(el('monogramStoneSize').value)||2;
+  const previous=el('monogramWeightSteps').value;
+  el('monogramWeightSteps').innerHTML=weightStepsOptionsHtml(baseMm);
+  const restored=el('monogramWeightSteps').querySelector(`option[value="${previous}"]`);
+  el('monogramWeightSteps').value=(isOpenType&&restored&&!restored.disabled)?previous:'0';
+}
+function onMonogramOpen(){monogramFrameUserChosen=false;clearMonogramValidation();updateMonogramFrameSizeBounds();updateMonogramLetterSpacingVisibility();updateMonogramWeightStepsVisibility();updateMonogramGenerateButtonState()}
 // MONO-011: UI-layer-only auto-shrink retry loop. MonogramGenerator.generate() keeps its "never
 // auto-corrects" doctrine (see its own doc comment) -- this wrapper is the thing that decides to
 // retry, and it only ever adjusts frameOptions.stoneSizeMm (never the shared letters' stoneSizeMm,
@@ -4665,7 +5721,20 @@ async function generateMonogramWithFrameAutoShrink(request){
   }
   const requestedFrameStoneSizeMm=request.frameOptions&&request.frameOptions.stoneSizeMm;
   if(!Number.isFinite(requestedFrameStoneSizeMm))return{result:firstResult,appliedFrameStoneSizeMm:null};
-  const candidates=listStoneSizes().map(s=>s.diameterMm).filter(d=>d<requestedFrameStoneSizeMm).sort((a,b)=>b-a);
+  // MONO-014: never retry into a frame stone size equal to the letters' own -- that is the
+  // equal-weight state the hierarchy rule forbids, and auto-shrink is never an explicit user choice,
+  // so it must not produce equal weight in EITHER toggle mode. Filtered unconditionally. Compared
+  // with an epsilon rather than !== because both sides are catalog floats (typed history, imported
+  // projects, catalog rounding) and exact equality would be fragile against that drift. Consequence
+  // (correct, not hidden): with SS6 letters there is no catalog size below 2.0 mm, so a colliding
+  // dominant frame exhausts its candidates and fails -- monogramFailureMessage()'s FRAME_COLLISION
+  // branch surfaces the larger-frame / smaller-stones / "No frame" fixes.
+  const EQUAL_WEIGHT_EPSILON_MM=1e-6;
+  const letterStoneSizeMm=request.stoneSizeMm;
+  const candidates=listStoneSizes().map(s=>s.diameterMm)
+    .filter(d=>d<requestedFrameStoneSizeMm)
+    .filter(d=>!(Number.isFinite(letterStoneSizeMm)&&Math.abs(d-letterStoneSizeMm)<=EQUAL_WEIGHT_EPSILON_MM))
+    .sort((a,b)=>b-a);
   for(const candidate of candidates){
     const retryResult=await monogramGenerator.generate({...request,frameOptions:{...request.frameOptions,stoneSizeMm:candidate}});
     if(retryResult.ok)return{result:retryResult,appliedFrameStoneSizeMm:candidate};
@@ -4677,6 +5746,91 @@ async function generateMonogramWithFrameAutoShrink(request){
     }
   }
   return{result:firstResult,appliedFrameStoneSizeMm:null};
+}
+// MONO-019: MonogramGenerator ids every layer from frameId + layoutId alone
+// (`monogram-<frame>-<layout>-letter-N` / `-frame`). That determinism is deliberate -- the
+// generator's output is byte-identical across MONO-012/013/015/016/018 and test-geometry-engine's
+// determinism cases -- so generating the same frame+layout twice into one project produces
+// duplicate layer ids, which validateProject()'s uniqueness check (LAYER_ID_PATTERN above)
+// rejects on the next import / autosave-recovery / save round-trip. The fix lives here, at the
+// insertion boundary, not in the generator: one Date.now()-based suffix per generation (the
+// SEC-001 id convention), shared by every layer of the set so it still reads as one monogram.
+// The `monogram-` prefix is shortened to `mono-` and the per-session counter is taken mod 36^3
+// so the worst-case id (longest frame + longest layout + highest letter index) stays inside
+// LAYER_ID_PATTERN's 64-char cap -- see docs/specifications/MONO-019-LayerIds.md for the
+// arithmetic. A suffix collision would need 46656 generations inside one millisecond.
+
+// MONO-020: the placement fields Design's move/resize/rotate write back to -- onShapeMoved (via
+// setLayerPosition: l.x/l.y), onShapeResized (l.x/l.y/l.w/l.h), onShapeRotated (l.rotationDeg), the
+// main-canvas drag, nudgeSelection() and Align/Distribute (also setLayerPosition). Unlike Stamp/
+// Paint/Erase these gestures leave NO marker of their own, so ownership tracks them by snapshotting
+// the placement at insertion (monogramPlacement) and comparing later. Handled here as lengths
+// (unit-converted for display) vs the one angle. NOT authoredScale/heightMm/stoneSize/color/
+// weightSizesMm/letterSpacing -- those are regenerate-from-parameters knobs, changing them is not a
+// Design edit, and recoverStaleAuthoredScales() rewrites authoredScale on its own.
+const MONOGRAM_PLACEMENT_LENGTH_FIELDS=['x','y','w','h'];
+
+// Snapshot the placement a generated layer was inserted with. x/y/rotationDeg are universal layer
+// fields with a well-defined 0 default (setLayerPosition, GeometryEngine's normalizeRotationDeg,
+// buildTextLayoutBaseParams()'s `?? 0`), so snapshot them unconditionally -- a generated frame
+// carries no rotationDeg key, and without this a frame rotated in Design would go undetected. w/h
+// exist only on the box-shaped frame, never on a text letter, so snapshot those only when present.
+// This is a deliberate widening of "whichever fields it carries" for rotationDeg; see the spec.
+function captureMonogramPlacement(layer){
+  const placement={x:layer.x??0,y:layer.y??0,rotationDeg:layer.rotationDeg??0};
+  if(layer.w!==undefined)placement.w=layer.w;
+  if(layer.h!==undefined)placement.h=layer.h;
+  return placement;
+}
+
+// Has `layer` diverged from the monogram it was generated as? True if EITHER a Design-authored
+// marker fires (Stamp/Paint/Erase -- the regions/stampedStones/eraseDaubs/erasedGridPositions/
+// naturalBoundingBoxMm block app.js forwards into generation, near validateProject()) OR any
+// snapshotted placement field has moved. Deliberately NOT branched on layer.type: text layers will
+// gain the marker fields once Design's toolset reaches text (they are already movable -- 'text' is
+// in syncFromProjectLayers()'s filter), and this predicate must cover them without a change here. A
+// layer with no monogramPlacement (a pre-MONO-020 .rhs, or any layer that never had one) is not
+// "edited" on the placement basis. See docs/specifications/MONO-020-MonogramOwnership.md.
+function hasDesignAuthoredEdits(layer){
+  if(!layer)return false;
+  for(const field of['regions','stampedStones','eraseDaubs','erasedGridPositions']){
+    if(Array.isArray(layer[field])&&layer[field].length>0)return true;
+  }
+  if(layer.naturalBoundingBoxMm!==undefined)return true;
+  const placement=layer.monogramPlacement;
+  if(placement&&typeof placement==='object'){
+    // Compare at the precision the app actually persists a length/angle at, not raw float
+    // equality: writeSelectedControlsToLayer() rewrites l.x/l.y/l.rotationDeg from the #textX/
+    // #textY/#rotationDeg inputs on every ordinary control edit, and setLengthField()->
+    // readLengthField() rounds to 2 display decimals on the way through. A multi-letter monogram
+    // letter's generated x is a full-precision offset (e.g. -13.162527517437937), so a strict
+    // !== would flag "changed stone size on a monogram letter" as a placement edit. Rounding both
+    // sides to display precision makes that round-trip invisible while any real move still shows.
+    for(const field of MONOGRAM_PLACEMENT_LENGTH_FIELDS){
+      if(!(field in placement))continue;
+      if(formatLengthDisplay(layer[field]??0,project.units)!==formatLengthDisplay(placement[field],project.units))return true;
+    }
+    if('rotationDeg' in placement&&Number(layer.rotationDeg??0).toFixed(2)!==Number(placement.rotationDeg).toFixed(2))return true;
+  }
+  return false;
+}
+
+let monogramGenerationCounter=0;
+function assignInsertionLayerIds(layers){
+  const suffix=`${Date.now().toString(36)}-${(monogramGenerationCounter++%46656).toString(36)}`;
+  for(const layer of layers){
+    layer.id=`${layer.id.replace(/^monogram-/,'mono-')}-${suffix}`;
+    // MONO-020: identity only. Marks which layers came from the same generation so ownership
+    // (replace vs. release) can act on the whole set. Never parsed, never used to decide anything
+    // except set membership -- the mono- id prefix is NOT a substitute for it (SEC-001 keeps
+    // semantics out of ids).
+    layer.monogramSetId=suffix;
+    // MONO-020: ownership means "unchanged since generation", so snapshot the placement now. A
+    // later Design move/resize/rotate makes hasDesignAuthoredEdits() return true and the set is
+    // released instead of replaced.
+    layer.monogramPlacement=captureMonogramPlacement(layer);
+  }
+  return{layers,suffix};
 }
 async function generateMonogram(){
   const validation=validateMonogramControls();
@@ -4698,26 +5852,62 @@ async function generateMonogram(){
     updateMonogramGenerateButtonState();
     return;
   }
-  // Single undo step: one commitHistory() before pushing every generated layer, exactly like
-  // insertLibraryItem() -- HistoryManager snapshots the whole project, so undo removes (and redo
-  // restores) all of this monogram's layers together, never one layer at a time.
+  // MONO-019: assign collision-free layer ids before the history snapshot, the selection, or the
+  // live render sees them -- so a second monogram with the same frame+layout never duplicates the
+  // first's ids, and undo/redo restores exactly these ids. See assignInsertionLayerIds() above.
+  const{suffix:newMonogramSetId}=assignInsertionLayerIds(result.layers);
+  // MONO-020: one monogram per product. Every previously generated set is either REPLACEABLE (every
+  // one of its layers is still free of Design-authored edits -- Generate drops it) or RELEASED (a
+  // layer carries hand-work -- Generate leaves the whole set in place and adds the new one
+  // alongside). Silent destruction of hand-work is the failure this milestone exists to prevent.
+  // Every monogramSetId-bearing set is considered, not just the newest, so a project that somehow
+  // carries two converges to one. monogramSetId is never cleared on edit -- a released set keeps
+  // its identity for MONO-021's flatten. See docs/specifications/MONO-020-MonogramOwnership.md.
+  const priorSetIds=new Set(
+    project.layers
+      .map(l=>l.monogramSetId)
+      .filter(id=>typeof id==='string'&&id.length>0&&id!==newMonogramSetId)
+  );
+  const releasedSetIds=new Set(
+    [...priorSetIds].filter(setId=>project.layers.some(l=>l.monogramSetId===setId&&hasDesignAuthoredEdits(l)))
+  );
+  const replaceableSetIds=new Set([...priorSetIds].filter(setId=>!releasedSetIds.has(setId)));
+  const removedLayerCount=project.layers.filter(l=>replaceableSetIds.has(l.monogramSetId)).length;
+  // Single undo step: commitHistory() FIRST -- before the removal -- so the removal and the
+  // insertion are one history step, exactly the commitHistory()+project.layers.push() pattern used
+  // for inserting a Design Library item. HistoryManager snapshots the whole project, so undo/redo
+  // move the whole monogram together, never one layer at a time.
   commitHistory();
+  // Direct project.layers filter, NOT deleteLayer(): its last-layer guard and its own
+  // commitHistory() would both misfire here. The filter and the push happen in the same
+  // synchronous block, so project.layers is never observed empty.
+  if(removedLayerCount>0)project.layers=project.layers.filter(l=>!replaceableSetIds.has(l.monogramSetId));
   project.layers.push(...result.layers);
   selectedLayerIds=selectMany(result.layers.map(l=>l.id));
   selectedLayerId=result.layers[result.layers.length-1].id;
   syncSelectedControlsFromLayer();
-  updateAll(true);
+  // updateAll(true,true): forceStoneRebuild. The frame is a 'path' layer with a live Paper.js item;
+  // a direct project.layers filter bypasses drawingTool.deleteSelected() / onShapeDeleted() exactly
+  // the way the Layers-list trash icon does -- which is why deleteLayer() passes
+  // forceStoneRebuild=true. Without it, generating while Design is open leaves the old frame's shape
+  // on canvas.
+  updateAll(true,true);
   lightboxes.monogram.close();
-  if(appliedFrameStoneSizeMm!=null){
-    // MONO-010's boot-sync block (`el('monogramFrameStoneSize').value=el('monogramStoneSize').value`)
-    // establishes the convention that this control reflects the frame stone size actually in use --
-    // keep that true after an auto-shrink too, and always surface the adjustment to the user rather
-    // than letting it happen silently (per MONO-011's own scope: never silent).
-    el('monogramFrameStoneSize').value=String(appliedFrameStoneSizeMm);
-    el('status').textContent=`Generated monogram (${result.layers.length} layer${result.layers.length===1?'':'s'}). Frame stones reduced to ${formatStoneSizeLabel(appliedFrameStoneSizeMm)} to fit.`;
-  }else{
-    el('status').textContent=`Generated monogram (${result.layers.length} layer${result.layers.length===1?'':'s'}).`;
-  }
+  // MONO-020: one dedicated ownership sentence (not a concatenation of parts) for each of the four
+  // cases, then the pre-existing frame-auto-shrink note appended unchanged. N in every "(N layers)"
+  // is the new monogram's layer count -- the same referent the original "Generated monogram (N
+  // layers)." used. MONO-014 still holds: the auto-shrink adjustment is surfaced here and NOT
+  // written back into #monogramFrameStoneSize, which is hidden whenever the frame-stone toggle is
+  // unchecked.
+  const n=`${result.layers.length} layer${result.layers.length===1?'':'s'}`;
+  let ownershipMsg;
+  if(removedLayerCount>0&&releasedSetIds.size>0)ownershipMsg=`Replaced the unedited monogram and kept your edited one (${n}).`;
+  else if(removedLayerCount>0)ownershipMsg=`Replaced the previous monogram (${n}).`;
+  else if(releasedSetIds.size>0)ownershipMsg=`Kept your edited monogram and added a new one (${n}).`;
+  else ownershipMsg=`Generated monogram (${n}).`;
+  const parts=[ownershipMsg];
+  if(appliedFrameStoneSizeMm!=null)parts.push(`Frame stones reduced to ${formatStoneSizeLabel(appliedFrameStoneSizeMm)} to fit.`);
+  el('status').textContent=parts.join(' ');
 }
 populateMonogramFrameOptions();populateMonogramLayoutOptions();populateMonogramStoneSizeOptions();populateStoneColorOptions('monogramColor');
 populateMonogramFrameStoneSizeOptions();populateStoneColorOptions('monogramFrameColor');
@@ -4728,12 +5918,14 @@ populateMonogramFrameStoneSizeOptions();populateStoneColorOptions('monogramFrame
 el('monogramFrameStoneSize').value=el('monogramStoneSize').value;
 el('monogramFrameColor').value=el('monogramColor').value;
 updateMonogramColorSwatch();updateMonogramFrameColorSwatch();updateMonogramFrameSizeBounds();updateMonogramLetterCountHint();
-updateMonogramFrameStoneControlsVisibility();
+updateMonogramFrameStoneControlsVisibility();updateMonogramLetterSpacingVisibility();updateMonogramWeightStepsVisibility();
 if(fontManager)populateMonogramFontOptions();
-el('monogramFrame').addEventListener('change',()=>{updateMonogramFrameSizeBounds();updateMonogramGenerateButtonState()});
-el('monogramLayout').addEventListener('change',()=>{updateMonogramLetterCountHint();updateMonogramGenerateButtonState()});
-el('monogramLetters').addEventListener('input',()=>updateMonogramGenerateButtonState());
-el('monogramFont').addEventListener('change',()=>updateMonogramGenerateButtonState());
+el('monogramFrame').addEventListener('change',()=>{monogramFrameUserChosen=true;updateMonogramFrameSizeBounds();updateMonogramGenerateButtonState()});
+el('monogramLayout').addEventListener('change',()=>{updateMonogramLetterCountHint();updateMonogramLetterSpacingVisibility();updateMonogramGenerateButtonState()});
+el('monogramStoneSize').addEventListener('change',()=>{updateMonogramLetterSpacingVisibility();updateMonogramWeightStepsVisibility();updateMonogramGenerateButtonState()});
+el('monogramLetterSpacing').addEventListener('input',()=>{updateMonogramLetterSpacingLabel();updateMonogramGenerateButtonState()});
+el('monogramLetters').addEventListener('input',()=>{updateMonogramLetterSpacingVisibility();updateMonogramGenerateButtonState()});
+el('monogramFont').addEventListener('change',()=>{applyMonogramDefaultFrameForFont();updateMonogramWeightStepsVisibility();updateMonogramGenerateButtonState()});
 el('monogramColor').addEventListener('change',()=>{updateMonogramColorSwatch();updateMonogramGenerateButtonState()});
 el('monogramWidth').addEventListener('input',()=>{stashTypedLengthField('monogramWidth');updateMonogramGenerateButtonState()});
 el('monogramHeight').addEventListener('input',()=>{stashTypedLengthField('monogramHeight');updateMonogramGenerateButtonState()});
@@ -4973,6 +6165,7 @@ function updateDrawToolButtons(){
   el('railPaintToggle').setAttribute('aria-pressed',String(active&&mode==='paint'));
   el('railStampToggle').setAttribute('aria-pressed',String(active&&mode==='stamp'));
   el('railTraceToggle').setAttribute('aria-pressed',String(active&&mode==='trace'));
+  el('railTextToggle').setAttribute('aria-pressed',String(active&&mode==='text'));
   el('railEraserToggle').setAttribute('aria-pressed',String(active&&mode==='eraser'));
   // RS-3011 Step 13 decision 4a: eraserRadiusField/eraserRadiusMm's own visibility toggle, same
   // active-and-mode-matches idiom as drawSlotWidthField/drawSlotWidthMm above (two sibling
@@ -5095,6 +6288,7 @@ el('railPenToggle').onclick=()=>setDrawTool('pen');
 el('railPaintToggle').onclick=()=>setDrawTool('paint');
 el('railStampToggle').onclick=()=>setDrawTool('stamp');
 el('railTraceToggle').onclick=()=>setDrawTool('trace');
+el('railTextToggle').onclick=()=>setDrawTool('text');
 el('railEraserToggle').onclick=()=>setDrawTool('eraser');
 // RS-3015: visible shortcut-key badges on the rail buttons above -- reads DRAW_TOOL_SHORTCUT_KEYS
 // (rather than hardcoding letters here) so the badge can never drift out of sync with the actual
@@ -5105,6 +6299,7 @@ function initDrawToolShortcutBadges(){
   const idsByMode={railSelectToggle:'select',railLassoToggle:'lasso',railDrawToggle:'freehand',
     railRectToggle:'rect',railEllipseToggle:'ellipse',railSlotToggle:'slot',railPolygonToggle:'polygon',
     railPenToggle:'pen',railPaintToggle:'paint',railStampToggle:'stamp',railTraceToggle:'trace',
+    railTextToggle:'text',
     railEraserToggle:'eraser'};
   for(const id in idsByMode){
     const key=modeToKey[idsByMode[id]];
@@ -5545,6 +6740,23 @@ el('settingsApply').onclick=()=>{
 // changes. #stoneSize (fixed named sizes, not a free-typed length) is permanently excluded.
 function setLengthField(id,mm){el(id).value=formatLengthDisplay(mm,project.units);el(id).dataset.mmValue=String(mm)}
 function readLengthField(id){return displayValueToMm(el(id).value,project.units)}
+// READ-010: setLengthField()/readLengthField() round-trip a value through formatLengthDisplay()'s
+// fixed-decimals rounding in the DISPLAY unit, then re-parse from that rounded .value -- they never
+// consult the dataset.mmValue stash on read. formatLengthDisplay() rounds to the nearest 2 decimals,
+// which can round DOWN (e.g. a floor of 44.803mm displays as "44.80", which reads back as 44.80mm --
+// still below the 44.803mm floor it was meant to clear). Any caller that writes a target mm value
+// through setLengthField() and needs the read-back to land AT OR ABOVE that value (not just close to
+// it) must round the display-unit value up first, which is exactly what this does: convert to the
+// display unit, round UP at the same 2-decimal precision setLengthField()/formatLengthDisplay() use,
+// then convert back to mm. The epsilon subtracted before Math.ceil() keeps a value that is already
+// exact at 2 decimals (modulo float noise from the mm<->inch conversion) from being bumped up an
+// unnecessary extra step.
+function ceilToDisplayPrecisionMm(mm,units,decimals=2){
+  const displayValue=mmToDisplayValue(mm,units);
+  const factor=10**decimals;
+  const roundedUpDisplay=Math.ceil(displayValue*factor-1e-9)/factor;
+  return displayValueToMm(roundedUpDisplay,units);
+}
 // RS-3025: called from each of the eight length fields' own 'input' listeners so a value the
 // operator just typed also gets an exact-mm stash, computed from the raw typed value in the
 // current display unit -- before any display-side rounding -- so it survives later Units round

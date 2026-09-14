@@ -217,7 +217,7 @@ await test('13. createShapeLayer()/addText() each auto-fit only when exactly one
   assert.match(createShapeSrc, /FITTABLE_SHAPE_TYPES\.has\(kind\)/);
   assert.match(createShapeSrc, /fitTextToShape\(fitPartnerText,layer\)/);
 
-  const addTextSrc = extractBlock(appJs, /async function addText\(\)\{[\s\S]*?\n\}/, 'function addText()');
+  const addTextSrc = extractBlock(appJs, /async function addText\([^)]*\)\{[\s\S]*?\n\}/, 'function addText()');
   assert.match(addTextSrc, /singleOtherSelectedLayer\(\)/);
   assert.match(addTextSrc, /FITTABLE_SHAPE_TYPES\.has\(other\.type\)/);
   assert.match(addTextSrc, /fitTextToShape\(layer,fitPartnerShape\)/);

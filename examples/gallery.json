@@ -15,7 +15,7 @@
       "file": "vitalina-serbin.rhs",
       "title": "Two-Word Name, Auto-Fit",
       "category": "Names",
-      "description": "A longer two-word name that exercises the auto-fit rescale pass so it always fits the canvas.",
+      "description": "A longer two-word name with Auto Fit enabled; comfortably within the canvas already, so the rescale pass never actually engages.",
       "difficulty": "intermediate",
       "tags": ["names", "block-font", "outline-mode", "autofit"]
     },
@@ -31,7 +31,7 @@
       "file": "long-name-autofit.rhs",
       "title": "Long Name, Wide Wrap",
       "category": "Names",
-      "description": "A long two-word name at a height that forces auto-fit rescaling, on a dark navy cup with a wide wrap.",
+      "description": "A single name set at a height that forces auto-fit rescaling, on a dark navy cup with a wide wrap.",
       "difficulty": "intermediate",
       "tags": ["names", "block-font", "autofit", "dark-cup", "wide-wrap"]
     },
@@ -135,7 +135,7 @@
       "file": "long-script-name.rhs",
       "title": "Long Script Name",
       "category": "Names",
-      "description": "A long three-word name in Great Vibes script at a height that forces auto-fit, wide wrap, cream cup.",
+      "description": "A two-word name in Great Vibes script at a height that forces auto-fit, wide wrap, cream cup.",
       "difficulty": "intermediate",
       "tags": ["names", "script-font", "autofit", "light-cup", "wide-wrap"]
     },

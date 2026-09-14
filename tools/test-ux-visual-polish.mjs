@@ -11,9 +11,8 @@ import { fileURLToPath } from 'node:url';
 //   - The #stoneSize dropdown blank-selection bug is fixed by setNumericSelectValue(), verified
 //     both structurally and by actually executing the extracted function against the real
 //     index.html option values.
-//   - CupRenderer's handle attachment sweeps/fades continuously with rotation (no discrete side
-//     flip / jump), never throws across a full rotation sweep, and CupRenderer/CanvasRenderer2D
-//     remain StoneLayout-only (no Project/Layer/layer-type/GeometryEngine reference).
+//   - CanvasRenderer2D remains StoneLayout-only (no Project/Layer/layer-type/GeometryEngine
+//     reference).
 //   - app.js's selection-drawing gained a contrast halo and larger handles.
 //   - Geometry counts/bounds produced by the permanent GeometryEngine for the default project's
 //     text layer are unchanged (this milestone touches no geometry code).
@@ -24,10 +23,8 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
 const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
 const indexHtml = await readFile(path.join(repoRoot, 'index.html'), 'utf8');
-const cupRendererSource = await readFile(path.join(repoRoot, 'src/renderer/CupRenderer.js'), 'utf8');
 const canvasRenderer2DSource = await readFile(path.join(repoRoot, 'src/renderer/CanvasRenderer2D.js'), 'utf8');
 
-const { renderCup } = await import('../src/renderer/CupRenderer.js');
 const { Stone } = await import('../src/geometry/Stone.js');
 const { StoneLayout } = await import('../src/geometry/StoneLayout.js');
 const { stoneLayoutToSvg } = await import('../src/export/SvgExporter.js');
@@ -49,30 +46,6 @@ async function test(name, fn) {
 function makeLayout(stoneParams, layerId = 'layer-1') {
   const stones = stoneParams.map((p, index) => new Stone({ layerId, index, ...p }));
   return new StoneLayout({ layerId, stones });
-}
-
-// Records only the calls that are unique/meaningful for a given assertion; everything else is a
-// no-op, matching the dependency-free fake-canvas convention already used by
-// tools/test-render-export-pipeline.mjs.
-function createFakeCtx() {
-  const bezierCalls = [];
-  const gradientStub = { addColorStop() {} };
-  const target = {
-    createLinearGradient() { return gradientStub; },
-    createRadialGradient() { return gradientStub; },
-    bezierCurveTo(...args) { bezierCalls.push(args); }
-  };
-  const ctx = new Proxy(target, {
-    get(obj, prop) {
-      if (prop in obj) return obj[prop];
-      return () => {};
-    },
-    set(obj, prop, value) {
-      obj[prop] = value;
-      return true;
-    }
-  });
-  return { ctx, bezierCalls };
 }
 
 // RS-1006 superseded this milestone's own hand-tuned CUP_ROTATION_SENSITIVITY pixel-drag handler
@@ -150,54 +123,13 @@ await test('5. drawSelection() includes a contrast halo pass and a named, enlarg
   );
 });
 
-await test('6. CupRenderer/CanvasRenderer2D never reference GeometryEngine or call geometry generation (the project.layers/layer-type purity check itself lives in tools/test-render-export-pipeline.mjs check 8, which covers the same two files plus SvgExporter.js)', () => {
+await test('6. CanvasRenderer2D never references GeometryEngine or calls geometry generation (the project.layers/layer-type purity check itself lives in tools/test-render-export-pipeline.mjs check 8, which covers the same file plus SvgExporter.js)', () => {
   for (const [name, source] of [
-    ['CupRenderer.js', cupRendererSource],
     ['CanvasRenderer2D.js', canvasRenderer2DSource]
   ]) {
     assert.ok(!/GeometryEngine/.test(source), `${name} must not reference GeometryEngine`);
     assert.ok(!/generateTextLayout|generateShapeLayout/.test(source), `${name} must not call geometry generation`);
   }
-});
-
-await test('7. renderCup never throws across a full rotation sweep, at both zoom extremes, for every wrap mode', () => {
-  const layout = makeLayout([
-    { xMm: 0, yMm: 0, sizeMm: 2, color: 'gold' },
-    { xMm: 10, yMm: 3, sizeMm: 2, color: 'silver' },
-    { xMm: -8, yMm: -4, sizeMm: 2, color: 'jet' }
-  ]);
-  for (const zoom of [0.7, 1.4]) {
-    for (const wrap of ['front', 'wide', 'half', 'full']) {
-      for (let deg = -180; deg <= 180; deg += 15) {
-        const { ctx } = createFakeCtx();
-        assert.doesNotThrow(() => renderCup(ctx, layout, {
-          widthPx: 480, heightPx: 380, dpr: 1, cupColor: '#1f3556', wrap, rotationDeg: deg, zoom
-        }), `renderCup threw at wrap=${wrap} rotationDeg=${deg} zoom=${zoom}`);
-      }
-    }
-  }
-});
-
-await test('8. the handle attachment sweeps continuously with rotation (no discrete side-flip jump)', () => {
-  const layout = makeLayout([{ xMm: 0, yMm: 0, sizeMm: 2, color: 'gold' }]);
-  const samples = [];
-  for (let deg = -180; deg <= 180; deg += 5) {
-    const { ctx, bezierCalls } = createFakeCtx();
-    renderCup(ctx, layout, { widthPx: 480, heightPx: 380, dpr: 1, cupColor: '#1f3556', wrap: 'front', rotationDeg: deg, zoom: 1 });
-    // The handle is the only shape in renderCup that calls bezierCurveTo; its first call's last
-    // two arguments are the bottom wall-attachment point (attachBotX, attachBotY).
-    if (bezierCalls.length > 0) samples.push({ deg, x: bezierCalls[0][4] });
-  }
-  assert.ok(samples.length > 10, 'expected the handle to be drawn (visible) for a meaningful portion of the sweep');
-  let maxJump = 0;
-  for (let i = 1; i < samples.length; i++) {
-    if (samples[i].deg - samples[i - 1].deg > 5.5) continue; // skip gaps where the handle faded out entirely
-    maxJump = Math.max(maxJump, Math.abs(samples[i].x - samples[i - 1].x));
-  }
-  // The previous implementation's discrete side flip moved the attachment point by roughly the
-  // cup's half-width (tens of pixels) in a single 5deg step, right at rotationDeg=+-90deg, while
-  // fully visible. A continuous sweep should never move more than a few pixels per 5deg step.
-  assert.ok(maxJump < 25, `expected no single-step jump in the handle's wall-attachment x, got max ${maxJump}px between consecutive 5deg samples`);
 });
 
 await test('9. geometry counts/bounds from the permanent GeometryEngine are unchanged for the default project\'s text layer (this milestone touches no geometry code)', async () => {

@@ -130,13 +130,16 @@ await test('generateMonogramWithFrameAutoShrink() retries a FRAME_COLLISION down
   }
 });
 
-await test('generateMonogramWithFrameAutoShrink() leaves a non-frame failure (toggle off / no frameOptions.stoneSizeMm) untouched, with zero retries', async () => {
+await test('generateMonogramWithFrameAutoShrink() returns a request with no finite frameOptions.stoneSizeMm untouched, with zero retries', async () => {
   const counting = makeCountingGenerator(realGenerator);
   const wrapper = buildWrapper(counting);
   // Same frame/layout/font/letters as the colliding case, but a frame too small even for the
   // letter alone to legally scale into -- probed to fail BELOW_MINIMUM_SCALE regardless of frame
-  // stone size, and frameOptions is empty (toggle-off equivalent: no frameOptions.stoneSizeMm at
-  // all, exactly what buildMonogramRequest() produces when #monogramFrameStoneToggle is unchecked).
+  // stone size, and frameOptions is empty (no frameOptions.stoneSizeMm at all). MONO-014 made this
+  // unreachable from app.js -- buildMonogramRequest() now always sets frameOptions.stoneSizeMm (the
+  // visible field when the toggle is checked, defaultFrameStoneSizeMm() when it is not) -- so this
+  // case now guards the wrapper's own "no finite requested frame stone size => nothing to shrink"
+  // contract rather than a UI state.
   const request = {
     frameId: 'square', layoutId: MONOGRAM_LAYOUTS.SINGLE, letters: ['A'], fontId: 'rs-block', providerId: 'rhinestone',
     stoneSizeMm: LETTER_STONE_SIZE_MM, color: 'gold',

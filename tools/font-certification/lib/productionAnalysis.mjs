@@ -11,6 +11,7 @@ import { FontManager } from '../../../src/fonts/index.js';
 import { FontProviderRegistry, OpenTypeProvider } from '../../../src/text/index.js';
 import { GeometryEngine } from '../../../src/geometry/GeometryEngine.js';
 import { STONE_SIZE_BY_ID } from '../../../src/renderer/StoneSizes.js';
+import { countClusters, CLUSTER_GAP_MULTIPLIER } from '../../../src/geometry/index.js';
 import { chamferDistance } from './shapeSimilarity.mjs';
 import { STONE_SIZE_IDS, CONFUSABLE_PAIRS, PRODUCTION_REVIEW_GLYPHS, PRODUCTION_REVIEW_WORDS } from './requiredCharacters.mjs';
 
@@ -37,7 +38,6 @@ export const SPECIMEN_HEIGHT_MM_BY_SIZE = Object.fromEntries(
 );
 
 export const PRODUCTION_GAP_MM = 0.3; // matches defaultProject()'s own default gap (app.js)
-const CLUSTER_GAP_MULTIPLIER = 1.6; // stones within (pitch * this) of each other are one connected cluster
 const ISOLATION_MULTIPLIER = 2.5; // a stone farther than (pitch * this) from its nearest neighbor is "isolated"
 const SIMILARITY_CHAMFER_THRESHOLD = 0.09; // normalized (unit-height) units; see chamferDistance()
 
@@ -77,25 +77,6 @@ function pairwiseStats(stones, spacingMm) {
   };
 }
 
-function countClusters(stones, thresholdMm) {
-  const n = stones.length;
-  if (n === 0) return 0;
-  const parent = Array.from({ length: n }, (_, i) => i);
-  const find = (x) => (parent[x] === x ? x : (parent[x] = find(parent[x])));
-  const union = (a, b) => {
-    const ra = find(a);
-    const rb = find(b);
-    if (ra !== rb) parent[ra] = rb;
-  };
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      const d = Math.hypot(stones[i].xMm - stones[j].xMm, stones[i].yMm - stones[j].yMm);
-      if (d <= thresholdMm) union(i, j);
-    }
-  }
-  return new Set(Array.from({ length: n }, (_, i) => find(i))).size;
-}
-
 export function normalizedStonePoints(stones) {
   if (stones.length === 0) return [];
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -117,28 +98,44 @@ export function normalizedStonePoints(stones) {
  * arbitrary glyphs/phrases rather than the fixed PRODUCTION_REVIEW_GLYPHS/WORDS corpus -- reuse
  * this one measurement function against the real, unmodified pipeline instead of re-deriving it.
  */
-export async function analyzeOne(engine, fontId, text, stoneSizeId, heightMm) {
+export async function analyzeOne(engine, fontId, text, stoneSizeId, heightMm, { mode = 'outline', gapMm = PRODUCTION_GAP_MM, curve = null, providerId = undefined, letterSpacingMm = undefined } = {}) {
   const stoneSizeMm = STONE_SIZE_BY_ID[stoneSizeId].diameterMm;
-  const pitchMm = stoneSizeMm + PRODUCTION_GAP_MM;
+  const pitchMm = stoneSizeMm + gapMm;
   let layout = null;
   let error = null;
   try {
     layout = await engine.generateTextLayout({
       text,
       fontId,
+      // READ-005a: authored rhinestone fonts (rs-block/rs-modern) resolve to the OpenType provider
+      // and throw unless the caller names their provider, exactly as app.js's
+      // buildTextLayoutBaseParams() does via resolveFontProviderId(). When providerId is undefined
+      // this key is `providerId: undefined`, which normalizeTextParams() folds to null — byte-
+      // identical to omitting it, so every pre-existing call site is unaffected.
+      providerId,
       layerId: 'font-cert-001',
       heightMm,
       stoneSizeMm,
-      gapMm: PRODUCTION_GAP_MM,
-      mode: 'outline',
-      color: 'gold'
+      gapMm,
+      // READ-005 tracking experiment: added inter-glyph spacing, in mm. `analyzeOne()` built its
+      // own params object and never forwarded this, so callers passing it were silently ignored.
+      // When undefined, normalizeTextParams() folds it to 0 (assertFiniteNumber(x ?? 0)) — byte-
+      // identical to omitting it, so every pre-existing call site is unaffected.
+      letterSpacingMm,
+      mode,
+      color: 'gold',
+      // READ-004: curve, when non-null, spreads the exact curve fields app.js's
+      // buildTextLayoutBaseParams() passes (curveEnabled/curveRadiusMm/curveDirection/
+      // curveStartAngleDeg/curveSweepAngleDeg/curveAlignment). Omitted entirely when null so
+      // straight text is byte-identical to before.
+      ...(curve ?? {})
     });
   } catch (err) {
     error = err.message;
   }
 
   if (error) {
-    return { text, stoneSizeId, stoneSizeMm, heightMm, error, stoneCount: 0 };
+    return { text, stoneSizeId, stoneSizeMm, heightMm, mode, gapMm, error, stoneCount: 0 };
   }
 
   const stones = layout.stones.map((s) => ({ xMm: s.xMm, yMm: s.yMm, sizeMm: s.sizeMm }));
@@ -152,6 +149,8 @@ export async function analyzeOne(engine, fontId, text, stoneSizeId, heightMm) {
     stoneSizeId,
     stoneSizeMm,
     heightMm,
+    mode,
+    gapMm,
     error: null,
     stoneCount: stones.length,
     boundingBoxMm: boundingBox ? { widthMm: boundingBox.widthMm, heightMm: boundingBox.heightMm } : null,
@@ -176,7 +175,7 @@ export async function analyzeOne(engine, fontId, text, stoneSizeId, heightMm) {
  *   SPECIMEN_HEIGHT_MM_BY_SIZE's ratio-derived heights when omitted, so existing FONT-CERT-001/002 call
  *   sites are unaffected -- this parameter is purely additive.
  */
-export async function runProductionAnalysis(candidateAbsolutePath, { heightMmBySize } = {}) {
+export async function runProductionAnalysis(candidateAbsolutePath, { heightMmBySize, mode = 'outline', providerId = undefined } = {}) {
   const { engine, fontId } = await buildCandidateEngine(candidateAbsolutePath);
   const resolvedHeightMmBySize = { ...SPECIMEN_HEIGHT_MM_BY_SIZE, ...heightMmBySize };
 
@@ -184,7 +183,7 @@ export async function runProductionAnalysis(candidateAbsolutePath, { heightMmByS
   for (const char of PRODUCTION_REVIEW_GLYPHS) {
     const bySize = new Map();
     for (const sizeId of STONE_SIZE_IDS) {
-      bySize.set(sizeId, await analyzeOne(engine, fontId, char, sizeId, resolvedHeightMmBySize[sizeId]));
+      bySize.set(sizeId, await analyzeOne(engine, fontId, char, sizeId, resolvedHeightMmBySize[sizeId], { mode, providerId }));
     }
     glyphResults.set(char, bySize);
   }
@@ -193,7 +192,7 @@ export async function runProductionAnalysis(candidateAbsolutePath, { heightMmByS
   for (const word of PRODUCTION_REVIEW_WORDS) {
     const bySize = new Map();
     for (const sizeId of STONE_SIZE_IDS) {
-      bySize.set(sizeId, await analyzeOne(engine, fontId, word, sizeId, resolvedHeightMmBySize[sizeId]));
+      bySize.set(sizeId, await analyzeOne(engine, fontId, word, sizeId, resolvedHeightMmBySize[sizeId], { mode, providerId }));
     }
     wordResults.set(word, bySize);
   }

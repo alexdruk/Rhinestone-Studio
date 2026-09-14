@@ -30,7 +30,7 @@
  * could. It only filters already-generated positions by proximity; it invents no stone position.
  */
 
-import { Stone, StoneLayout, dedupeStonesByRadius } from '../geometry/index.js';
+import { Stone, StoneLayout, dedupeStonesByRadius, maxAutoFitWidthMm, computeTextAutoFitScale } from '../geometry/index.js';
 import { STONE_COLORS } from '../renderer/StoneColors.js';
 
 // RS-2000: svg/image/path join text/circle/rectangle, extending this schema to match every layer
@@ -409,9 +409,13 @@ async function generateTextStonesForLayer(layer, canvas, permanentEngine) {
   let result = await permanentEngine.generateTextLayout(base);
 
   if (layer.autoFit) {
-    const maxWidth = canvas.width - 10;
-    if (result.widthMm > maxWidth && result.widthMm > 0) {
-      const scale = maxWidth / result.widthMm;
+    const { scale } = computeTextAutoFitScale({
+      measuredWidthMm: result.widthMm,
+      maxWidthMm: maxAutoFitWidthMm(canvas.width),
+      heightMm: layer.heightMm,
+      stoneSizeMm: layer.stoneSizeMm
+    });
+    if (scale < 1) {
       const scaledHeight = Math.max(1, layer.heightMm * scale);
       result = await permanentEngine.generateTextLayout({ ...base, heightMm: scaledHeight });
     }

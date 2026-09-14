@@ -9,7 +9,8 @@
       "path": "assets/fonts/CourierPrime-Regular.ttf",
       "role": "monospace",
       "enabled": true,
-      "notes": "Typewriter-style monospace. Bundled since RS-0003.4; kept enabled as the project default font id (courier-prime-regular)."
+      "notes": "Typewriter-style monospace. Bundled since RS-0003.4; kept enabled as the project default font id (courier-prime-regular).",
+      "stemWidthRatio": 0.0537
     },
     {
       "id": "great-vibes-regular",
@@ -19,7 +20,8 @@
       "path": "assets/fonts/GreatVibes-Regular.ttf",
       "role": "script",
       "enabled": true,
-      "notes": "Flowing calligraphic script. Bundled since RS-0003.4."
+      "notes": "Flowing calligraphic script. Bundled since RS-0003.4.",
+      "stemWidthRatio": 0.0357
     },
     {
       "id": "pt-serif-regular",
@@ -29,17 +31,19 @@
       "path": "assets/fonts/PTSerif-Regular.ttf",
       "role": "serif",
       "enabled": true,
-      "notes": "RS-2002: classic, highly readable book-style serif. Static instance (no variable axes) -- 359 KB, deliberately chosen over the much larger variable-font Merriweather build for faster loading."
+      "notes": "RS-2002: classic, highly readable book-style serif. Static instance (no variable axes) -- 359 KB, deliberately chosen over the much larger variable-font Merriweather build for faster loading.",
+      "stemWidthRatio": 0.0565
     },
     {
       "id": "montserrat-regular",
       "family": "Montserrat",
-      "style": "Regular",
-      "weight": 400,
+      "style": "Thin",
+      "weight": 100,
       "path": "assets/fonts/Montserrat-Regular.ttf",
       "role": "sans-serif",
-      "enabled": true,
-      "notes": "RS-2002: clean geometric sans-serif with excellent readability at small stone sizes; one of the most recognized/requested Google Fonts sans-serifs."
+      "enabled": false,
+      "notes": "RS-2002: chosen as a clean geometric sans-serif -- one of the most recognized/requested Google Fonts sans-serifs. FONT-LIB-005: retired from the picker (enabled:false). The bundled file is Google's official VARIABLE Montserrat (byte-identical to ofl/montserrat/Montserrat[wght].ttf), whose wght axis is min/default/max 100/100/900 -- so opentype.js renders its default instance, which is Thin (usWeightClass=100, full name 'Montserrat Thin'). This is not a mis-bundled static; there is no static Montserrat-Regular.ttf in google/fonts. stemWidthMm = 0.0145 * heightMm, so the smallest stone (SS6, 2.0mm) needs heightMm >= 138, but a mug's printableHeightMm is 85 (0.0145 * 85 = 1.23mm) -- it trips READ-003's stroke-narrower-than-one-stone gate at every reachable height and stone size. Producing a true Regular means instancing the VF at wght=400, which needs Python fontTools (a second language in a Node-only toolchain) for one binary; Poppins already covers the modern-sans role at 400/600/700. The .ttf is retained deliberately, tracked and unchanged: fontManager.listFonts() keeps disabled records so saved projects that use Montserrat keep rendering byte-identically. style/weight corrected to Thin/100 to match the file; id/family/path/role/stemWidthRatio unchanged (family stays 'Montserrat' for sibling grouping; stemWidthRatio is frozen READ-011 data).",
+      "stemWidthRatio": 0.0145
     },
     {
       "id": "playfair-display-regular",
@@ -49,7 +53,8 @@
       "path": "assets/fonts/PlayfairDisplay-Regular.ttf",
       "role": "display",
       "enabled": true,
-      "notes": "RS-2002: high-contrast elegant display serif for headline-style text."
+      "notes": "RS-2002: high-contrast elegant display serif for headline-style text.",
+      "stemWidthRatio": 0.0568
     },
     {
       "id": "cinzel-regular",
@@ -59,7 +64,8 @@
       "path": "assets/fonts/Cinzel-Regular.ttf",
       "role": "monogram",
       "enabled": true,
-      "notes": "RS-2002: classic Roman capitals styling, well suited to monogram/initial layouts and engraved-look designs."
+      "notes": "RS-2002: classic Roman capitals styling, well suited to monogram/initial layouts and engraved-look designs.",
+      "stemWidthRatio": 0.0398
     },
     {
       "id": "lobster-regular",
@@ -69,7 +75,8 @@
       "path": "assets/fonts/Lobster-Regular.ttf",
       "role": "decorative",
       "enabled": true,
-      "notes": "RS-2002: bold decorative display face with a friendly, retro-signage character."
+      "notes": "RS-2002: bold decorative display face with a friendly, retro-signage character.",
+      "stemWidthRatio": 0.0871
     },
     {
       "id": "anton-regular",
@@ -83,7 +90,8 @@
       "unsupportedStoneSizes": ["ss30"],
       "notes": "RS-2002: ultra-bold condensed block sans for maximum impact/legibility at a distance. FONT-PORTFOLIO-001: cleared this project's human rhinestone legibility bar (71% Readable overall across SS6/10/16/20/30) -- registered rhinestoneValidated:true alongside Baloo2Variable. SS30 disabled (unsupportedStoneSizes) -- human rating collapsed to 38% Readable at that size specifically; see docs/specifications/FONT-DIAG-001-StoneSamplerSensitivityInvestigation.md's still-unresolved FONT-POLICY-001 recommendation for the root cause (SS30's own narrow/tall height ceiling, not this font's outline).",
       "capHeightRatio": 0.8594,
-      "xHeightRatio": 0.7329
+      "xHeightRatio": 0.7329,
+      "stemWidthRatio": 0.1225
     },
     {
       "id": "caveat-regular",
@@ -93,7 +101,8 @@
       "path": "assets/fonts/Caveat-Regular.ttf",
       "role": "handwritten",
       "enabled": true,
-      "notes": "RS-2002: casual handwritten style with clean, simple outlines that hold up well as rhinestone outlines."
+      "notes": "RS-2002: casual handwritten style with clean, simple outlines that hold up well as rhinestone outlines.",
+      "stemWidthRatio": 0.0443
     },
     {
       "id": "roboto-mono-regular",
@@ -114,7 +123,8 @@
       "role": "rhinestone",
       "enabled": true,
       "providerId": "rhinestone",
-      "notes": "FONT-002: the default Production Font (src/text/rhinestoneFont/families/rsBlock.js) -- every stone position is individually hand-authored, not sampled from a vector outline. `path` is a documentation-only identifier, not a real font file -- RhinestoneFontProvider generates glyph geometry from authored stone centers at runtime and never fetches/parses it (see injectFontFaceRules() in app.js, which only declares @font-face rules for providerId:'opentype' entries). The diagnostic-only RS Block Prototype (SS10) remains intentionally unregistered here."
+      "unsupportedStoneSizes": ["ss16", "ss20", "ss30"],
+      "notes": "FONT-002: the default Production Font (src/text/rhinestoneFont/families/rsBlock.js) -- every stone position is individually hand-authored, not sampled from a vector outline. `path` is a documentation-only identifier, not a real font file -- RhinestoneFontProvider generates glyph geometry from authored stone centers at runtime and never fetches/parses it (see injectFontFaceRules() in app.js, which only declares @font-face rules for providerId:'opentype' entries). The diagnostic-only RS Block Prototype (SS10) remains intentionally unregistered here. FONT-PITCH-001: SS16/SS20/SS30 are excluded because every stone is authored on a fixed 3.1 mm grid (rsBlock.js PITCH_MM) and a stone wider than that pitch overlaps its own neighbour -- this is a physical-spacing limit, not a readability judgement."
     },
     {
       "id": "rs-modern",
@@ -125,7 +135,8 @@
       "role": "rhinestone",
       "enabled": true,
       "providerId": "rhinestone",
-      "notes": "FONT-002: the second Production Font (src/text/rhinestoneFont/families/rsModern.js) -- a distinct geometric/grotesque style (no serifs, single-story a/g, round bowls) at the same authored pitch as RS Block. `path` is a documentation-only identifier, not a real font file -- see rs-block's own note above for why."
+      "unsupportedStoneSizes": ["ss16", "ss20", "ss30"],
+      "notes": "FONT-002: the second Production Font (src/text/rhinestoneFont/families/rsModern.js) -- a distinct geometric/grotesque style (no serifs, single-story a/g, round bowls) at the same authored pitch as RS Block. `path` is a documentation-only identifier, not a real font file -- see rs-block's own note above for why. FONT-PITCH-001: SS16/SS20/SS30 are excluded because every stone is authored on a fixed 3.1 mm grid (rsModern.js PITCH_MM) and a stone wider than that pitch overlaps its own neighbour -- this is a physical-spacing limit, not a readability judgement."
     },
     {
       "id": "baloo2-variable-regular",
@@ -140,7 +151,8 @@
       "unsupportedStoneSizes": [],
       "notes": "FONT-DECISION-001: the first OpenType/StoneSampler font to clear this project's human-and-metric rhinestone legibility bar -- untransformed (baseline, not the rejected fatten/enlarge-generated variant), rated Readable/Not Sure with zero Unreadable across 48 human-rated items (85.4% Readable) spanning SS6/SS16/SS20 and 16 phrases (12 longform + 4 required), corroborated by 100% vision-transcription exact match and flat clusterCount/zero collisionCount at all 5 stone sizes. See docs/specifications/FONT-DECISION-001-VisionStandardLongformCorpusAndRaterTool.md Part E. FONT-PORTFOLIO-001: also rated at the two remaining sizes (SS10 94%, SS30 94% Readable) -- the only one of the 4-font portfolio with no size disabled (unsupportedStoneSizes: []).",
       "capHeightRatio": 0.618,
-      "xHeightRatio": 0.475
+      "xHeightRatio": 0.475,
+      "stemWidthRatio": 0.0542
     },
     {
       "id": "sacramento-regular",
@@ -155,7 +167,8 @@
       "unsupportedStoneSizes": ["ss30"],
       "notes": "FONT-PORTFOLIO-001: monoline connected script, cleared this project's human rhinestone legibility bar at an overall 58% Readable across SS6/10/16/20/30 -- registered as a production font distinct from the earlier, since-rejected procedurally-transformed 'Sacramento Rhinestone' experiment (FONT-GEN-001/FONT-CAL-001/FONT-CAL-002/FONT-VIS-001, never manifest-registered). SS30 disabled (unsupportedStoneSizes) -- human rating collapsed to 13% Readable at that size specifically; see FONT-DIAG-001's still-open FONT-POLICY-001 recommendation (SS30's own height ceiling, not this font's outline).",
       "capHeightRatio": 0.7783,
-      "xHeightRatio": 0.3291
+      "xHeightRatio": 0.3291,
+      "stemWidthRatio": 0.0279
     },
     {
       "id": "dancing-script-regular",
@@ -170,7 +183,212 @@
       "unsupportedStoneSizes": ["ss30"],
       "notes": "FONT-PORTFOLIO-001: casual connected script, cleared this project's human rhinestone legibility bar at an overall 61% Readable across SS6/10/16/20/30. SS30 disabled (unsupportedStoneSizes) -- human rating collapsed to 6% Readable at that size specifically; see FONT-DIAG-001's still-open FONT-POLICY-001 recommendation (SS30's own height ceiling, not this font's outline). Raters also flagged one narrow, size-independent defect (\"8th\" misread as \"86h\") present at all 5 sizes -- tracked but not size-gated, since it does not correlate with stone size the way the SS30 collapse does.",
       "capHeightRatio": 0.807,
-      "xHeightRatio": 0.391
+      "xHeightRatio": 0.391,
+      "stemWidthRatio": 0.0417
+    },
+    {
+      "id": "pacifico-regular",
+      "family": "Pacifico",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Pacifico-Regular.ttf",
+      "role": "script",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: bold, rounded surf-style brush script. OFL. Static instance.",
+      "stemWidthRatio": 0.0883
+    },
+    {
+      "id": "alex-brush-regular",
+      "family": "Alex Brush",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/AlexBrush-Regular.ttf",
+      "role": "script",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: fine-tipped calligraphic signature brush script. OFL. Static instance.",
+      "stemWidthRatio": 0.0309
+    },
+    {
+      "id": "allura-regular",
+      "family": "Allura",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Allura-Regular.ttf",
+      "role": "script",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: flowing monoline formal script. OFL. Static instance.",
+      "stemWidthRatio": 0.0302
+    },
+    {
+      "id": "satisfy-regular",
+      "family": "Satisfy",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Satisfy-Regular.ttf",
+      "role": "script",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: casual angled brush script. Apache-2.0 (upstream apache/satisfy). Static instance.",
+      "stemWidthRatio": 0.0568
+    },
+    {
+      "id": "kaushan-script-regular",
+      "family": "Kaushan Script",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/KaushanScript-Regular.ttf",
+      "role": "script",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: energetic dry-brush script with a slight upward slant. OFL. Static instance.",
+      "stemWidthRatio": 0.0722
+    },
+    {
+      "id": "yellowtail-regular",
+      "family": "Yellowtail",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Yellowtail-Regular.ttf",
+      "role": "script",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: bold retro connected brush script. Apache-2.0 (upstream apache/yellowtail). Static instance.",
+      "stemWidthRatio": 0.0616
+    },
+    {
+      "id": "cookie-regular",
+      "family": "Cookie",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Cookie-Regular.ttf",
+      "role": "script",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: tidy upright semi-connected script. OFL. Static instance.",
+      "stemWidthRatio": 0.0456
+    },
+    {
+      "id": "parisienne-regular",
+      "family": "Parisienne",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Parisienne-Regular.ttf",
+      "role": "script",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: delicate vintage penmanship script. OFL. Static instance.",
+      "stemWidthRatio": 0.0303
+    },
+    {
+      "id": "mr-dafoe-regular",
+      "family": "Mr Dafoe",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/MrDafoe-Regular.ttf",
+      "role": "script",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: 1950s advertising-style connected penmanship script. OFL. Static instance.",
+      "stemWidthRatio": 0.062
+    },
+    {
+      "id": "bebas-neue-regular",
+      "family": "Bebas Neue",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/BebasNeue-Regular.ttf",
+      "role": "block",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: tall all-caps condensed sans display block. OFL. Static instance.",
+      "stemWidthRatio": 0.0783
+    },
+    {
+      "id": "righteous-regular",
+      "family": "Righteous",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Righteous-Regular.ttf",
+      "role": "display",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: geometric Art-Deco-flavoured display sans. OFL. Static instance.",
+      "stemWidthRatio": 0.1018
+    },
+    {
+      "id": "lilita-one-regular",
+      "family": "Lilita One",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/LilitaOne-Regular.ttf",
+      "role": "display",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: chunky rounded poster display face. OFL. Static instance.",
+      "stemWidthRatio": 0.1355
+    },
+    {
+      "id": "abril-fatface-regular",
+      "family": "Abril Fatface",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/AbrilFatface-Regular.ttf",
+      "role": "display",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: high-contrast Didone headline display serif. OFL. Static instance.",
+      "stemWidthRatio": 0.1172
+    },
+    {
+      "id": "poppins-regular",
+      "family": "Poppins",
+      "style": "Regular",
+      "weight": 400,
+      "path": "assets/fonts/Poppins-Regular.ttf",
+      "role": "sans-serif",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: geometric monoline sans, Regular weight. OFL. Static instance.",
+      "stemWidthRatio": 0.0635
+    },
+    {
+      "id": "poppins-semibold",
+      "family": "Poppins",
+      "style": "SemiBold",
+      "weight": 600,
+      "path": "assets/fonts/Poppins-SemiBold.ttf",
+      "role": "sans-serif",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: geometric monoline sans, SemiBold weight. OFL. Static instance.",
+      "stemWidthRatio": 0.0968
+    },
+    {
+      "id": "poppins-bold",
+      "family": "Poppins",
+      "style": "Bold",
+      "weight": 700,
+      "path": "assets/fonts/Poppins-Bold.ttf",
+      "role": "sans-serif",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: geometric monoline sans, Bold weight. OFL. Static instance.",
+      "stemWidthRatio": 0.1173
+    },
+    {
+      "id": "lobster-two-bold",
+      "family": "Lobster Two",
+      "style": "Bold",
+      "weight": 700,
+      "path": "assets/fonts/LobsterTwo-Bold.ttf",
+      "role": "decorative",
+      "enabled": true,
+      "unsupportedStoneSizes": [],
+      "notes": "FONT-LIB-002: refined retro-signage script display, Bold weight. OFL. Static instance.",
+      "stemWidthRatio": 0.0875
     }
   ]
 }

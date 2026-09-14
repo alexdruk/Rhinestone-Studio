@@ -1,9 +1,19 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+
+async function jsFilesUnder(dir) {
+  const out = [];
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...await jsFilesUnder(full));
+    else if (entry.isFile() && entry.name.endsWith('.js')) out.push(full);
+  }
+  return out;
+}
 
 async function test(name, fn) {
   try {
@@ -105,6 +115,32 @@ await test('app.js only imports the browser probe, permanent-module barrels (src
   // request. Check for actual CDN hostnames instead.
   const cdnHostPattern = /\b(unpkg\.com|cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|jspm\.dev|esm\.sh|skypack\.dev)\b/;
   assert.ok(!cdnHostPattern.test(appJs), 'app.js must not reference a public CDN URL');
+});
+
+await test('no file under src/geometry/** imports from src/renderer/**', async () => {
+  // src/renderer/StoneSizes.js's own header states that nothing in src/geometry/** reads that file
+  // or knows what an "SS16" is, and that geometry works in raw millimeters for any positive value.
+  // This was only ever a comment; MONO-015's first attempt briefly broke it (WeightSizing.js
+  // importing listStoneSizes()) and editing the comment was the only thing that "allowed" it. This
+  // assertion is the real guard. The catalog-aware derivation lives in src/renderer/StoneSizes.js
+  // (stoneSizesFromBaseMm()); the engine is handed a raw mm array and never imports the renderer.
+  const geometryFiles = await jsFilesUnder(path.join(repoRoot, 'src/geometry'));
+  const importRe = /(?:import|export)\b[^'"]*?from\s*['"]([^'"]+)['"]/g;
+  const offenders = [];
+  for (const file of geometryFiles) {
+    const src = await readFile(file, 'utf8');
+    let m;
+    while ((m = importRe.exec(src))) {
+      const spec = m[1];
+      const resolved = spec.startsWith('.')
+        ? path.relative(repoRoot, path.resolve(path.dirname(file), spec))
+        : spec;
+      if (resolved.split(path.sep).join('/').includes('src/renderer/')) {
+        offenders.push(`${path.relative(repoRoot, file)} -> ${spec}`);
+      }
+    }
+  }
+  assert.deepEqual(offenders, [], `src/geometry/** must not import from src/renderer/**:\n${offenders.join('\n')}`);
 });
 
 console.log('App module migration tests passed.');

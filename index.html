@@ -119,6 +119,8 @@ button.icon-btn[aria-pressed="true"][data-shortcut]::after{background:var(--colo
 .font-library-item-meta{display:flex;flex-direction:column;min-width:0;margin-left:10px}
 .font-library-item-name{font-size:13px;font-weight:600;color:var(--color-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .font-library-item-category{font-size:11px;color:var(--color-text-muted)}
+.font-rated-badge{font-size:10px;font-weight:600;color:var(--color-text-muted);letter-spacing:.02em}
+.font-style-select{flex:0 0 auto;max-width:104px;font-size:12px;padding:2px 4px;align-self:center}
 
 /* ============================== Top menu ============================== */
 .topbar{
@@ -538,6 +540,11 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
                held at release closes the path into a loop) -- same rail-button/aria-pressed
                convention as Stamp/every other persistent tool above. -->
           <button class="icon-btn" id="railTraceToggle" title="Trace -- drag to draw a path, stones are spaced evenly along it (hold Shift at release to close the loop) (T)" aria-pressed="false">〰️ Trace</button>
+          <!-- RS-3035: click the canvas to create a new text layer centered on that point and open the Text
+               Lightbox for editing. A one-shot creation tool (reverts to Select on commit, like Rect/Pen),
+               NOT a repeatable-touch tool like Stamp/Trace/Eraser around it -- see CLICK_TO_PLACE_MODES in
+               DrawingCanvasTool.js, which it deliberately does not join. -->
+          <button class="icon-btn" id="railTextToggle" title="Text -- click on the canvas to place a new text layer there and open the Text panel (Y)" aria-pressed="false">🅣 Text</button>
           <!-- RS-3011 Step 13: click or drag to remove any stone (any of the three sources -- base
                fill, Paint regions, Stamp/Trace stampedStones) within the brush radius -- same
                rail-button/aria-pressed convention as Stamp/Trace above. Its own radius control
@@ -705,13 +712,19 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
             <p class="hint" id="legacyFontHint" style="display:none">This text uses a legacy font. It still renders, edits, and exports correctly, but isn't offered for new picks — switch to a Production Font (RS Block / RS Modern) for the native rhinestone-dot workflow.</p>
             <p class="validation-message" id="unknownFontHint" role="alert" style="display:none">This text uses a font that's not available. Its text and settings are preserved, but it won't render until a compatible font is restored.</p></div>
             <div class="field" id="textModeField"><label for="textMode">Fill Style</label><select id="textMode" title="How rhinestones are arranged across this text.">
+              <!-- READ-006A: Staggered/Radial/Contour retired as TEXT fill styles (product owner's
+                   call from the READ-005 calibration). The identical options in #svgMode/#shapeFillMode/
+                   #imageFillMode are deliberately left in place -- shapes/SVG/images were never rated.
+                   A project saved with a retired textMode still renders exactly as before: nothing was
+                   dropped from TEXT_MODE_TO_ENGINE_MODE, and ensureTextModeOptionForLayer() re-injects
+                   a "(retired)" option so #textMode can still display that layer's real mode. -->
               <option value="stroke" selected>Outline - stones follow the letters</option>
               <option value="fill">Grid Fill - even rows and columns</option>
-              <option value="staggered">Staggered Fill - offset rows, tighter packing</option>
-              <option value="radial">Radial Fill - rings out from the center</option>
-              <option value="contour">Contour Fill - rings that follow the letters inward</option>
             </select></div>
           </div>
+          <!-- READ-006A: shown by updateTextFontCapabilityUI() only while the selected text layer's
+               textMode is one of the three retired values. Same p.hint style as #autoFitOnHint. -->
+          <p class="hint" id="retiredTextModeHint" style="display:none">This fill style is no longer offered for new designs. This text still renders exactly as it was saved. Switching it to Outline or Grid Fill is one-way — the retired style can't be picked again afterwards.</p>
           <div class="field-row">
             <div class="field"><label for="textAlign">Alignment</label><select id="textAlign" title="How multiple lines align relative to each other. No effect on single-line text.">
               <option value="left" selected>Left</option>
@@ -719,7 +732,13 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
               <option value="right">Right</option>
             </select></div>
             <div class="field"><label for="lineSpacing">Line spacing</label><input id="lineSpacing" type="number" min="0.5" max="3" step="0.1" value="1"></div>
+            <div class="field"><label for="letterSpacing" data-unit-label="Letter spacing">Letter spacing (mm)</label><input id="letterSpacing" type="number" min="-2" max="20" step="0.1" data-mm-step="0.1" value="0"></div>
           </div>
+          <!-- READ-006: one-shot ladder solve (docs/specifications/READ-006-LetterSpacing.md §4).
+               Contour mode takes ~2s -- the busy state is expected, not a bug. -->
+          <button type="button" class="btn sm" id="separateLettersBtn" title="Find the smallest added letter spacing that pulls this text's letters apart, and write it into the field above">Separate letters</button>
+          <p class="hint" id="letterSpacingHint" style="display:none"></p>
+          <p class="hint" id="letterSpacingFixedHint" style="display:none">Letter spacing is built into this font.</p>
           <div id="fontLibraryPanel" class="font-library-panel" hidden>
             <div class="font-library-toolbar">
               <input type="text" id="fontSearch" placeholder="Search fonts by name or category…" aria-label="Search fonts">
@@ -734,7 +753,33 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           </div>
           <p class="hint" id="textSizeFixedHint" style="display:none">Production Fonts are a fixed size — pick a different font for a different scale.</p>
           <p class="hint" id="heightAutoAdjustedHint" style="display:none"></p>
-          <p class="hint" id="autoFitOnHint" style="display:none">Auto Fit shrinks text to stay within the printable area, which can override the height needed for reliable readability at your selected stone size.</p>
+          <!-- FONT-LIB-004: text height is the dominant readability variable, not the font. The app
+               already knows each stone size's FONT-DECISION-001-validated supportedHeightRangeMm and
+               auto-sets/snaps to it on a *stone size* change (applyStoneSizeHeightAutoSet()), but a
+               direct #height edit was never checked against it -- so SS6 at 15mm rendered
+               unreadable output with no feedback at all. This warns whenever the current height is
+               below the current stone size's validated minimum, whatever route it got there
+               (manual edit, capHeight-mode conversion, loaded project, Auto Fit shrink). Deliberately
+               a warning, not a clamp: an existing project may already hold an out-of-range height,
+               and a deliberately tiny accent word is a legitimate (if fragile) choice -- the same
+               "explain, never silently override" stance #stoneSizeCrowdingHint takes.
+               READ-003: this same element also carries the stronger, font-specific
+               stroke-narrower-than-one-stone warning (textStrokeNarrowerThanOneStone()), which takes
+               precedence over the height message when both apply. Exactly one message ever shows.
+               That check is Layer 1 of the readability program in
+               docs/specifications/READ-000-readability-architecture.md; Layer 3 (READ-006) will
+               later replace FONT-LIB-004's font-blind height rule here with font- and mode-aware
+               readability floors. -->
+          <p class="validation-message" id="heightBelowReadableWarning" role="alert"></p>
+          <!-- READ-010: fix-to-floor affordance for the FONT-LIB-004 height message above. Shown only
+               when `below` is truthy and `stroke` is not (updateTextHeightReadabilityUI()) -- READ-003's
+               stroke message means no height increase alone can fix it, so this stays hidden then.
+               Writes the ratio floor (stone diameter × MIN_HEIGHT_TO_STONE_RATIO), not
+               applyStoneSizeHeightAutoSet()'s catalog supportedHeightRangeMm midpoint -- the minimum
+               change that clears the warning on screen, not a jump to the catalog's own recommended
+               range. See docs/specifications/READ-010-WarnOnlyFloor.md. -->
+          <p class="hint" id="heightFixToFloorHint" style="display:none"><button type="button" class="btn sm" id="heightFixToFloorBtn"></button></p>
+          <p class="hint" id="autoFitOnHint" style="display:none">Auto Fit shrinks text to stay within the printable area, but never below the minimum height needed for reliable readability at your selected stone size -- very long text may extend past the printable area instead of shrinking further.</p>
           <p class="hint" id="heightModeToggleHint" style="display:none"><button type="button" class="btn sm" id="heightModeToggleBtn"></button></p>
         </div>
         <div class="field-section">
@@ -810,6 +855,10 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <h3>Letters</h3>
         <div class="field"><label for="monogramLetters">Letters</label><input id="monogramLetters" type="text" maxlength="3" title="One character per slot in the selected layout."></div>
         <p class="hint" id="monogramLetterCountHint"></p>
+        <div class="field" id="monogramLetterSpacingField" style="display:none">
+          <label for="monogramLetterSpacing">Letter spacing <span id="monogramLetterSpacingValue" class="hint"></span></label>
+          <input id="monogramLetterSpacing" type="range" min="-2.3" max="9.2" step="0.1" value="0" title="Space between the monogram letters. 0 = natural spacing. Negative tightens them (a script mark interlocks, down to one stone pitch of overlap); positive spreads them apart. Slot layouts cannot go below 0.">
+        </div>
       </div>
       <div class="field-section">
         <h3>Font</h3>
@@ -827,6 +876,14 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <div class="field-row" id="monogramFrameStoneFields" style="display:none">
           <div class="field"><label for="monogramFrameStoneSize">Frame stone size</label><select id="monogramFrameStoneSize" title="Standard rhinestone sizes (commercial name and actual diameter)."></select></div>
           <div class="field"><label for="monogramFrameColor">Frame stone color</label><div class="color-pick-row"><select id="monogramFrameColor"></select><span id="monogramFrameColorSwatch" class="color-swatch" title="Selected color preview"></span></div></div>
+        </div>
+        <!-- MONO-015: opt-in weight-following stone size for the letters. Shown only for OpenType
+             script fonts (authored fonts place stones on a fixed grid and have no stroke outline to
+             probe). Options are built live from the monogram stone size; "Off" is the unchanged
+             uniform path. -->
+        <div class="field" id="monogramWeightStepsField" style="display:none">
+          <label for="monogramWeightSteps">Weight-following stone size</label>
+          <select id="monogramWeightSteps" title="Larger stones on the wide parts of a stroke, smaller on the hairlines. Off = every letter stone is the base size. Each step adds one larger catalog size."><option value="0">Off</option></select>
         </div>
       </div>
       <div class="field-section">
@@ -1365,7 +1422,11 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
        in updateStoneSizeOverlapCapabilityUI()) -- dense packing is sometimes exactly what the user
        wants (pave), so this never disables an option, and is mutually exclusive with the overlap
        warning above (genuine overlap is the more severe, actionable problem). Uses the .hint idiom,
-       not .validation-message -- this is a suggestion, not an error. -->
+       not .validation-message -- this is a suggestion, not an error.
+       FONT-LIB-003: for a text layer the message is font-aware -- it names the font family and, when
+       the family has a heavier enabled sibling than the current style, suggests that bolder weight by
+       name, alongside "a larger stone size" and "a taller letter height". Non-text layers keep the
+       generic "try a smaller size" wording. Still informational only: no switch-font button. -->
   <p class="hint" id="stoneSizeCrowdingHint" style="display:none"></p>
   <!-- RS-2012: shown instead of relying on #gap's disabled look alone -- an authored Rhinestone
        font (RS Block/RS Modern) bakes spacing into its stone positions, so Gap has no effect for it
@@ -1401,7 +1462,18 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 <div id="sharedMixedSizeFields">
   <div class="field-section">
     <h3>Mixed Stone Size</h3>
-    <div class="field"><label for="sizeMode">Generation mode</label><select id="sizeMode" title="Uniform: every stone in this layer is the same size. Mixed: the Geometry Engine may add smaller stones into gaps this layer's primary size can't reach."><option value="uniform" selected>Uniform</option><option value="mixed">Mixed</option></select></div>
+    <div class="field"><label for="sizeMode">Generation mode</label><select id="sizeMode" title="Uniform: every stone in this layer is the same size. Mixed: the Geometry Engine may add smaller stones into gaps this layer's primary size can't reach. Weight-following: outline text only — larger stones on wide parts of a stroke, smaller on hairlines."><option value="uniform" selected>Uniform</option><option value="mixed">Mixed</option><option value="weight">Weight-following</option></select></div>
+    <!-- MONO-015: weight-following stone size. Shown only when Generation mode is "Weight-following"
+         (which app.js allows selecting only for an outline-mode text layer). #weightSteps is a
+         graduated control: Off, or one/two catalog sizes up from this layer's stone size. Its
+         options are rebuilt live from the stone size (labels + which steps the catalog can supply). -->
+    <div id="weightSizeDetailFields" style="display:none">
+      <div class="field">
+        <label for="weightSteps">Weight steps</label>
+        <select id="weightSteps" title="Larger stones on the wide parts of a stroke, smaller on the hairlines. Off = every stone is this layer's stone size. Each step adds one larger catalog size to the range."><option value="0">Off</option></select>
+      </div>
+      <p class="hint">Only for outline-mode text. Wide parts of a stroke get a larger stone; hairlines narrower than the base stone size are floored at it, so a very thin stroke can still read as a broken chain there.</p>
+    </div>
     <div id="mixedSizeDetailFields" style="display:none">
       <div class="field">
         <label>Allowed sizes</label>

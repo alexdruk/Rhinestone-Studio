@@ -4,7 +4,8 @@ export {
   TEXT_SCALE_FAILURE_REASONS,
   AUTHORED_FONT_FITTING_GAP_MM,
   computeNaturalContourTransform,
-  applyNaturalContourTransform
+  applyNaturalContourTransform,
+  computeFrozenBoxTransform
 } from './GeometryEngine.js';
 
 export {
@@ -32,6 +33,8 @@ export {
   sampleFillPoints,
   sampleFieldFillPoints,
   isPointInsidePolygons,
+  groupPolygonsIntoComponents,
+  radialStepCount,
   sampleStaggeredFillPoints,
   sampleStaggeredFieldFillPoints,
   sampleRadialFillPoints,
@@ -42,11 +45,25 @@ export {
   sampleFieldByMode,
   dedupeStonePoints,
   dedupeStonesByRadius,
+  dropOverlappingSizedStones,
   findCrossGroupCollisions
 } from './StoneSampler.js';
 
+// MONO-015: weight-following stone size (opt-in).
+export {
+  localStrokeWidthMm,
+  strokeWidthsForSamples
+} from './StrokeWidthProbe.js';
+
+export {
+  weightSizeMm
+} from './WeightSizing.js';
+
 export {
   computeInwardRingPolygons,
+  splitSliverRuns,
+  loopIsElongated,
+  ELONGATION_MIN_ISOPERIMETRIC,
   ContourFillPrecisionError
 } from './ContourRingSampler.js';
 
@@ -84,6 +101,13 @@ export {
 } from './ShapeFit.js';
 
 export {
+  MIN_HEIGHT_TO_STONE_RATIO,
+  PRINTABLE_MARGIN_MM,
+  maxAutoFitWidthMm,
+  computeTextAutoFitScale
+} from './TextAutoFit.js';
+
+export {
   listFrames,
   getFrameDefinition,
   resolveGenerationContours,
@@ -96,5 +120,17 @@ export {
 export {
   selectPaintTarget,
   absolutePolygonsToNaturalSpace,
+  absolutePointsToFrozenBoxSpace,
   hitTestPathLayerRegion
 } from './PaintRegionSelection.js';
+
+export {
+  countClusters,
+  overlapComponentCount,
+  expectedComponentCount,
+  separationBand,
+  solveLetterSpacingMm,
+  CLUSTER_GAP_MULTIPLIER,
+  SEPARATION_TARGET,
+  TRACKING_XPITCH_LADDER
+} from './GlyphSeparation.js';

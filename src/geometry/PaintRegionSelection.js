@@ -28,7 +28,7 @@
  */
 
 import { combineShapeSources, contourAreaAbs, MIN_CELL_SIZE_MM } from './PathBoolean.js';
-import { computeNaturalContourTransform, applyNaturalContourTransform } from './GeometryEngine.js';
+import { computeNaturalContourTransform, applyNaturalContourTransform, computeFrozenBoxTransform } from './GeometryEngine.js';
 import { isPointInsidePolygons } from './StoneSampler.js';
 
 // combineShapeSources()'s own marching-squares tracer already discards any contour whose area
@@ -124,6 +124,44 @@ export function absolutePolygonsToNaturalSpace(polygonsAbsoluteMm, pathLayer) {
   };
 
   return polygonsAbsoluteMm.map((polygon) => applyNaturalContourTransform(polygon, inverseTransform));
+}
+
+/**
+ * MONO-021: the text-layer counterpart of absolutePolygonsToNaturalSpace() above, and the inverse
+ * of GeometryEngine.computeFrozenBoxTransform(). A 'text' layer's Design-tool edits (Stamp / Trace /
+ * Eraser / Paint) are rooted in a FROZEN BOX -- the AABB of its base text stones, captured once at
+ * the first edit -- because a text layer has no `contours` to root a natural space in (see
+ * computeFrozenBoxTransform()'s own doc comment). This converts an absolute-mm click / lasso / daub
+ * back into the (0,0)-rooted-relative-to-the-frozen-box form the four new `'text'` layer fields
+ * store, by inverting that exact box->box map -- never a second, independently-derived scale/
+ * translate, the same reason absolutePolygonsToNaturalSpace() insists on reusing
+ * computeNaturalContourTransform().
+ *
+ * At the FIRST edit on a layer, `currentBoundsMm` is captured as `frozenBoxMm` itself, so the map
+ * is a pure translation (scale 1) and this reduces to `absolute - frozenBox.min` -- exactly the
+ * (0,0)-rooted convention. On a LATER edit the layer already carries a frozen box while its base
+ * stones may have moved/resized, so the stored form is `(absolute - currentBounds.min) *
+ * (frozenSize / currentSize)`, which computeFrozenBoxTransform()'s forward map then places back.
+ *
+ * @param {{xMm:number,yMm:number}[][]} pointsAbsoluteMm  one or more polygons/point-lists, absolute mm
+ * @param {{minXmm:number,minYmm:number,maxXmm:number,maxYmm:number}|null|undefined} frozenBoxMm
+ *   the layer's `naturalBoundingBoxMm` (absent on the first edit -- pass `currentBoundsMm` for both)
+ * @param {{minXmm:number,minYmm:number,maxXmm:number,maxYmm:number}|null|undefined} currentBoundsMm
+ *   the AABB of the layer's CURRENT base text stones, computed before any edit is applied
+ * @returns {{xMm:number,yMm:number}[][]} empty when the box->box map is degenerate (no base stones)
+ */
+export function absolutePointsToFrozenBoxSpace(pointsAbsoluteMm, frozenBoxMm, currentBoundsMm) {
+  const transform = computeFrozenBoxTransform(frozenBoxMm, currentBoundsMm);
+  if (!transform) {
+    return [];
+  }
+  const inverseTransform = {
+    xMm: -transform.xMm / transform.scaleX,
+    yMm: -transform.yMm / transform.scaleY,
+    scaleX: 1 / transform.scaleX,
+    scaleY: 1 / transform.scaleY
+  };
+  return pointsAbsoluteMm.map((polygon) => applyNaturalContourTransform(polygon, inverseTransform));
 }
 
 function distanceToSegmentMm(point, a, b) {

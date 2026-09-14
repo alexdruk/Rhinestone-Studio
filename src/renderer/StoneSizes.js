@@ -88,6 +88,49 @@ export function findStoneSizeByDiameterMm(diameterMm, toleranceMm = DEFAULT_MATC
   return best && bestDiff <= toleranceMm ? best : null;
 }
 
+// The index of the catalog entry at or below `baseMm` (snapped down; a base between two catalog
+// sizes is treated as the smaller). Shared by the two MONO-015 graduated-step helpers below.
+function catalogIndexAtOrBelowMm(baseMm) {
+  let index = 0;
+  for (let k = 0; k < STONE_SIZE_LIST.length; k++) {
+    if (STONE_SIZE_LIST[k].diameterMm <= baseMm + DEFAULT_MATCH_TOLERANCE_MM) index = k;
+  }
+  return index;
+}
+
+/**
+ * MONO-015 graduated weight steps. How many catalog rungs sit above `baseMm` — i.e. the largest
+ * weight step `stoneSizesFromBaseMm()` can satisfy for this base. SS16 base → 2, SS20 base → 1,
+ * SS30 base → 0. The UI gates each step option with this before offering it.
+ */
+export function stoneSizeRungsAvailable(baseMm) {
+  return STONE_SIZE_LIST.length - 1 - catalogIndexAtOrBelowMm(baseMm);
+}
+
+/**
+ * MONO-015 graduated weight steps. The ascending mm diameters for a weight step measured `rungCount`
+ * catalog steps up from `baseMm`: `[base, base+1 rung, … base+rungCount rungs]`, length
+ * `rungCount + 1`. Step 1 → two diameters, step 2 → three. Levels are always relative to the base,
+ * never hard-coded.
+ *
+ * Throws (does not clamp) when the catalog has fewer than `rungCount` rungs above the base — the UI
+ * disables that step's option via `stoneSizeRungsAvailable()`, so reaching here for an impossible
+ * step is a caller bug, not something to silently degrade.
+ */
+export function stoneSizesFromBaseMm(baseMm, rungCount) {
+  if (!Number.isInteger(rungCount) || rungCount < 1) {
+    throw new RangeError(`stoneSizesFromBaseMm: rungCount must be a positive integer, got ${JSON.stringify(rungCount)}.`);
+  }
+  const baseIndex = catalogIndexAtOrBelowMm(baseMm);
+  if (baseIndex + rungCount > STONE_SIZE_LIST.length - 1) {
+    throw new RangeError(
+      `stoneSizesFromBaseMm: the stone catalog has no ${rungCount} rung${rungCount === 1 ? '' : 's'} above ${baseMm} mm ` +
+      `(base ${STONE_SIZE_LIST[baseIndex].name}, ${STONE_SIZE_LIST.length - 1 - baseIndex} available).`
+    );
+  }
+  return STONE_SIZE_LIST.slice(baseIndex, baseIndex + rungCount + 1).map((s) => s.diameterMm);
+}
+
 /**
  * Formats a millimeter diameter for display, e.g. "SS16 (4.0 mm)" when it matches a catalog
  * entry, or "4.2 mm" (no commercial name) for a custom value. Used by the stone-size picker and

@@ -85,8 +85,8 @@ top of it:
   script (equivalent to `node tools/run-tests.mjs --group <name>`) — every subsystem
   `tools/test-groups.mjs` defines is independently runnable this way; see that file for the full
   list. Use the group(s) covering the area you're touching.
-- **Tier 3 — `npm run test:full`** (`--all`, every `tools/test-*.mjs` file, including the two
-  `EXCLUDED_FROM_DEFAULT` legacy `CupRenderer.js` suites). CI (`.github/workflows/ci.yml`) runs this
+- **Tier 3 — `npm run test:full`** (`--all`, every `tools/test-*.mjs` file, including the
+  `EXCLUDED_FROM_DEFAULT` heavy files). CI (`.github/workflows/ci.yml`) runs this
   on every push and pull request. Also required before merge approval, any shared-architecture
   change, and release validation.
 

@@ -82,6 +82,12 @@ function makeEnv() {
     'listStoneSizes', 'getSafeAreaRectMm', 'stoneSizeEntirelyExceedsPrintableHeight',
     'isFontKnown', 'fontManager',
     `
+    // FONT-PITCH-001: updateStoneSizePrintableCapabilityUI() now branches the font-gate tooltip on
+    // isAuthoredStoneFontId(). Reproduce app.js's own two one-liners here (fontManager is in scope)
+    // so the sliced source executes -- this suite only exercises non-authored fonts, so the branch
+    // always resolves to the FONT-PORTFOLIO-001 wording it already asserts.
+    function resolveFontProviderId(fontId){return fontManager&&fontManager.hasFont(fontId)?fontManager.getFont(fontId).providerId:'opentype'}
+    function isAuthoredStoneFontId(fontId){return resolveFontProviderId(fontId)==='rhinestone'}
     ${updateStoneSizePrintableCapabilityUISrc}
     return { updateStoneSizePrintableCapabilityUI };
     `

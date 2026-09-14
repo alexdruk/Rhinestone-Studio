@@ -46,6 +46,10 @@ Run:
 npm test
 ```
 
+Note: some tools are intentionally hand-run and excluded from `npm test` — e.g.
+`tools/measure-instanced-stone-performance.mjs`, a perf diagnostic with zero citations
+elsewhere by design (MAINT-005). Don't flag it as an orphan on that basis alone.
+
 Expected:
 
 ```text

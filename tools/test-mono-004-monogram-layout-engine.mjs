@@ -3,6 +3,7 @@ import {
   computeMonogramLayout,
   MONOGRAM_LAYOUTS,
   MONOGRAM_LAYOUT_LETTER_COUNTS,
+  MONOGRAM_LAYOUT_LETTER_COUNT_RANGES,
   MONOGRAM_LAYOUT_FAILURE_REASONS
 } from '../src/monogram/MonogramLayouts.js';
 
@@ -10,6 +11,16 @@ import {
 // contract: every supported layout produces ordered, deterministic slots inside a caller-supplied
 // frame interior rectangle, with no GeometryEngine/FrameLibrary/authored-font involvement. This
 // file only exercises layout geometry, never text/letter generation.
+
+// MONO-013: a representative (letterCount, expected slot count) for any layout -- an exact-count
+// layout maps a letter to a slot 1:1; the range-based 'script' layout always produces one slot
+// whatever the (in-range) letter count.
+function representativeLetterCase(layoutId) {
+  const range = MONOGRAM_LAYOUT_LETTER_COUNT_RANGES[layoutId];
+  if (range) return { letterCount: range.min, expectedSlots: 1 };
+  const exact = MONOGRAM_LAYOUT_LETTER_COUNTS[layoutId];
+  return { letterCount: exact, expectedSlots: exact };
+}
 
 async function test(name, fn) {
   try {
@@ -187,7 +198,7 @@ await test('4. equal-three layout produces three equal, evenly spaced slots', ()
 
 await test('5. deterministic repeated calls produce identical slots for every layout', () => {
   for (const layoutId of Object.values(MONOGRAM_LAYOUTS)) {
-    const letterCount = MONOGRAM_LAYOUT_LETTER_COUNTS[layoutId];
+    const { letterCount } = representativeLetterCase(layoutId);
     const first = computeMonogramLayout({ layoutId, frameInteriorRect: REALISTIC_FRAME_INTERIOR_RECT, letterCount });
     const second = computeMonogramLayout({ layoutId, frameInteriorRect: REALISTIC_FRAME_INTERIOR_RECT, letterCount });
 
@@ -269,7 +280,10 @@ await test('10. a valid but unsupported letter count for the given layout is rej
     { layoutId: MONOGRAM_LAYOUTS.TWO_LETTER, letterCount: 1 },
     { layoutId: MONOGRAM_LAYOUTS.TWO_LETTER, letterCount: 3 },
     { layoutId: MONOGRAM_LAYOUTS.TRADITIONAL_THREE, letterCount: 2 },
-    { layoutId: MONOGRAM_LAYOUTS.EQUAL_THREE, letterCount: 4 }
+    { layoutId: MONOGRAM_LAYOUTS.EQUAL_THREE, letterCount: 4 },
+    // MONO-013: the 'script' layout is range-based [1,3] -- a count outside the range is
+    // UNSUPPORTED_LETTER_COUNT, exactly like an exact-count mismatch.
+    { layoutId: MONOGRAM_LAYOUTS.SCRIPT, letterCount: 4 }
   ];
 
   for (const { layoutId, letterCount } of cases) {
@@ -284,11 +298,11 @@ await test('10. a valid but unsupported letter count for the given layout is rej
 
 await test('11. every entry in MONOGRAM_LAYOUTS produces a well-formed successful result', () => {
   for (const layoutId of Object.values(MONOGRAM_LAYOUTS)) {
-    const letterCount = MONOGRAM_LAYOUT_LETTER_COUNTS[layoutId];
+    const { letterCount, expectedSlots } = representativeLetterCase(layoutId);
     const result = computeMonogramLayout({ layoutId, frameInteriorRect: REALISTIC_FRAME_INTERIOR_RECT, letterCount });
 
     assert.equal(result.ok, true, `layout ${layoutId}: ${result.message}`);
-    assert.equal(result.slots.length, letterCount);
+    assert.equal(result.slots.length, expectedSlots);
     assert.equal(result.layoutId, layoutId);
     assert.equal(result.letterCount, letterCount);
 

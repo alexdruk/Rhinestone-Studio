@@ -11,6 +11,20 @@ export {
 export {
   MONOGRAM_LAYOUTS,
   MONOGRAM_LAYOUT_LETTER_COUNTS,
+  MONOGRAM_LAYOUT_LETTER_COUNT_RANGES,
   MONOGRAM_LAYOUT_FAILURE_REASONS,
   computeMonogramLayout
 } from './MonogramLayouts.js';
+
+export { defaultFrameStoneSizeMm } from './FrameHierarchy.js';
+
+export {
+  SINGLE_CHAIN_STEM_RATIO,
+  SINGLE_CHAIN_MIN_RATIO,
+  SINGLE_CHAIN_MAX_RATIO,
+  MONOGRAM_MAX_STEM_WIDTH_RATIO,
+  singleChainHeightMm,
+  stemStones,
+  minChainStones,
+  isMonogramEligibleStemWidthRatio
+} from './SingleChain.js';

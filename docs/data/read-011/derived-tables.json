@@ -1,0 +1,2354 @@
+{
+  "meta": {
+    "milestone": "READ-011D",
+    "generatedBy": "tools/font-certification/analyze-ratings.mjs",
+    "inputs": [
+      "docs/data/read-011/ratings.csv",
+      "docs/data/read-011/render-key.json",
+      "assets/fonts/manifest.json"
+    ],
+    "causeTags": [
+      "inaccurate",
+      "tooClose",
+      "tooManyStones",
+      "ugly",
+      "extraStones"
+    ],
+    "duplicateKeyFields": [
+      "fontId",
+      "mode",
+      "ratio",
+      "stoneSizeId",
+      "text",
+      "letterSpacingMm"
+    ],
+    "achievedTrackingDefinition": "letterSpacingMm > 0",
+    "spanMinPositions": 15,
+    "regimePools": {
+      "monoline": [
+        "alex-brush-regular",
+        "allura-regular",
+        "cinzel-regular",
+        "great-vibes-regular",
+        "montserrat-regular",
+        "parisienne-regular",
+        "sacramento-regular"
+      ],
+      "transitional": [
+        "baloo2-variable-regular",
+        "caveat-regular",
+        "cookie-regular",
+        "courier-prime-regular",
+        "dancing-script-regular",
+        "mr-dafoe-regular",
+        "playfair-display-regular",
+        "pt-serif-regular",
+        "satisfy-regular",
+        "yellowtail-regular"
+      ],
+      "massed": [
+        "abril-fatface-regular",
+        "anton-regular",
+        "bebas-neue-regular",
+        "kaushan-script-regular",
+        "lilita-one-regular",
+        "lobster-regular",
+        "lobster-two-bold",
+        "pacifico-regular",
+        "poppins-bold",
+        "poppins-regular",
+        "poppins-semibold",
+        "righteous-regular"
+      ]
+    },
+    "regimeMedianStemWidthRatio": {
+      "monoline": 0.0303,
+      "transitional": 0.055349999999999996,
+      "massed": 0.09255
+    },
+    "cutGrids": {
+      "stonesAcrossStem": [
+        0.6,
+        0.8,
+        1,
+        1.2,
+        1.4,
+        1.6,
+        1.8,
+        2
+      ],
+      "ratio": [
+        16,
+        17.5,
+        19,
+        20.5,
+        22
+      ]
+    },
+    "clearanceRule": {
+      "minSellableRatePctAtOrAbove": 60,
+      "minMarginPctOverBelow": 20,
+      "minRatedRowsAtOrAbove": 12
+    },
+    "selectionToleranceStones": 0.25,
+    "comparisonFigure": "READ-005 session 1: 13/15 sellable self-consistency"
+  },
+  "session3": {
+    "rowCount": 147,
+    "unratedRows": {
+      "count": 0,
+      "rows": []
+    },
+    "marginals": {
+      "readable": {
+        "yes": 109,
+        "struggle": 25,
+        "no": 13
+      },
+      "sellable": {
+        "no": 102,
+        "yes": 45
+      }
+    },
+    "duplicateGroups": {
+      "count": 20,
+      "sizes": {
+        "2": 19,
+        "3": 1
+      },
+      "primaryPopulation": 126,
+      "droppedRows": 21,
+      "byKind": {
+        "main/repeats pair": 14,
+        "main/main collision": 5,
+        "triple": 1
+      },
+      "groups": [
+        {
+          "key": "parisienne-regular|outline|20.5|ss10|Vitalina|6.2",
+          "fontId": "parisienne-regular",
+          "mode": "outline",
+          "ratio": 20.5,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 6.2,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "111a00be",
+          "memberSlugs": [
+            "111a00be",
+            "9f709566"
+          ],
+          "presentationIndices": [
+            1,
+            34
+          ],
+          "presentationSpan": 33,
+          "sheetPositions": [
+            1,
+            33
+          ],
+          "sheetSpan": 32,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "separation"
+          ],
+          "trackingContrastPresent": false,
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "pt-serif-regular|fill|20.5|ss10|Emmanuel|0",
+          "fontId": "pt-serif-regular",
+          "mode": "fill",
+          "ratio": 20.5,
+          "stoneSizeId": "ss10",
+          "text": "Emmanuel",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "46439e3b",
+          "memberSlugs": [
+            "46439e3b",
+            "d5f09d4f"
+          ],
+          "presentationIndices": [
+            10,
+            54
+          ],
+          "presentationSpan": 44,
+          "sheetPositions": [
+            10,
+            51
+          ],
+          "sheetSpan": 41,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "separation"
+          ],
+          "trackingContrastPresent": false,
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "great-vibes-regular|fill|17.5|ss10|Emmanuel|0",
+          "fontId": "great-vibes-regular",
+          "mode": "fill",
+          "ratio": 17.5,
+          "stoneSizeId": "ss10",
+          "text": "Emmanuel",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "3cd2b867",
+          "memberSlugs": [
+            "3cd2b867",
+            "4242ebe8"
+          ],
+          "presentationIndices": [
+            12,
+            125
+          ],
+          "presentationSpan": 113,
+          "sheetPositions": [
+            12,
+            117
+          ],
+          "sheetSpan": 105,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "none"
+          ],
+          "trackingContrastPresent": false,
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "abril-fatface-regular|fill|22|ss10|Vitalina|0",
+          "fontId": "abril-fatface-regular",
+          "mode": "fill",
+          "ratio": 22,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 0,
+          "size": 3,
+          "kind": "triple",
+          "hasSeededRepeat": true,
+          "primarySlug": "fea9f594",
+          "memberSlugs": [
+            "fea9f594",
+            "a9a0afaf",
+            "1195a2d9"
+          ],
+          "presentationIndices": [
+            15,
+            83,
+            86
+          ],
+          "presentationSpan": 71,
+          "sheetPositions": [
+            15,
+            78,
+            81
+          ],
+          "sheetSpan": 66,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "none",
+            "separation"
+          ],
+          "trackingContrastPresent": true,
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "mr-dafoe-regular|fill|22|ss10|Emmanuel|12.4",
+          "fontId": "mr-dafoe-regular",
+          "mode": "fill",
+          "ratio": 22,
+          "stoneSizeId": "ss10",
+          "text": "Emmanuel",
+          "letterSpacingMm": 12.4,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "a64ffc5c",
+          "memberSlugs": [
+            "a64ffc5c",
+            "49833813"
+          ],
+          "presentationIndices": [
+            24,
+            127
+          ],
+          "presentationSpan": 103,
+          "sheetPositions": [
+            24,
+            119
+          ],
+          "sheetSpan": 95,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "separation"
+          ],
+          "trackingContrastPresent": false,
+          "allMembersRated": true,
+          "readableSame": false,
+          "sellableSame": true,
+          "bothSame": false
+        },
+        {
+          "key": "montserrat-regular|outline|19|ss10|Vitalina|0",
+          "fontId": "montserrat-regular",
+          "mode": "outline",
+          "ratio": 19,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "797e9a4b",
+          "memberSlugs": [
+            "797e9a4b",
+            "0a031013"
+          ],
+          "presentationIndices": [
+            27,
+            93
+          ],
+          "presentationSpan": 66,
+          "sheetPositions": [
+            26,
+            87
+          ],
+          "sheetSpan": 61,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "none"
+          ],
+          "trackingContrastPresent": false,
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": false,
+          "bothSame": false
+        },
+        {
+          "key": "allura-regular|fill|22|ss10|Vitalina|0",
+          "fontId": "allura-regular",
+          "mode": "fill",
+          "ratio": 22,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/main collision",
+          "hasSeededRepeat": false,
+          "primarySlug": "ac96316d",
+          "memberSlugs": [
+            "ac96316d",
+            "be012103"
+          ],
+          "presentationIndices": [
+            30,
+            103
+          ],
+          "presentationSpan": 73,
+          "sheetPositions": [
+            29,
+            97
+          ],
+          "sheetSpan": 68,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "none",
+            "separation"
+          ],
+          "trackingContrastPresent": true,
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "dancing-script-regular|outline|16|ss10|Vitalina|0",
+          "fontId": "dancing-script-regular",
+          "mode": "outline",
+          "ratio": 16,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "1b7ebcb0",
+          "memberSlugs": [
+            "1b7ebcb0",
+            "d0d643d8"
+          ],
+          "presentationIndices": [
+            31,
+            158
+          ],
+          "presentationSpan": 127,
+          "sheetPositions": [
+            30,
+            146
+          ],
+          "sheetSpan": 116,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "none"
+          ],
+          "trackingContrastPresent": false,
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "dancing-script-regular|outline|22|ss10|Emmanuel|0",
+          "fontId": "dancing-script-regular",
+          "mode": "outline",
+          "ratio": 22,
+          "stoneSizeId": "ss10",
+          "text": "Emmanuel",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "e5c08736",
+          "memberSlugs": [
+            "e5c08736",
+            "ebd38fcf"
+          ],
+          "presentationIndices": [
+            32,
+            157
+          ],
+          "presentationSpan": 125,
+          "sheetPositions": [
+            31,
+            145
+          ],
+          "sheetSpan": 114,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "none"
+          ],
+          "trackingContrastPresent": false,
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": false,
+          "bothSame": false
+        },
+        {
+          "key": "courier-prime-regular|outline|17.5|ss10|Vitalina|0",
+          "fontId": "courier-prime-regular",
+          "mode": "outline",
+          "ratio": 17.5,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/main collision",
+          "hasSeededRepeat": false,
+          "primarySlug": "3bf95b5a",
+          "memberSlugs": [
+            "3bf95b5a",
+            "9afe431e"
+          ],
+          "presentationIndices": [
+            38,
+            41
+          ],
+          "presentationSpan": 3,
+          "sheetPositions": [
+            37,
+            39
+          ],
+          "sheetSpan": 2,
+          "spansUnderMinPositions": true,
+          "trackingTargets": [
+            "none",
+            "separation"
+          ],
+          "trackingContrastPresent": true,
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "poppins-semibold|fill|17.5|ss10|Emmanuel|0",
+          "fontId": "poppins-semibold",
+          "mode": "fill",
+          "ratio": 17.5,
+          "stoneSizeId": "ss10",
+          "text": "Emmanuel",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "849cd728",
+          "memberSlugs": [
+            "849cd728",
+            "dc1ad7e7"
+          ],
+          "presentationIndices": [
+            45,
+            96
+          ],
+          "presentationSpan": 51,
+          "sheetPositions": [
+            43,
+            90
+          ],
+          "sheetSpan": 47,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "none"
+          ],
+          "trackingContrastPresent": false,
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "baloo2-variable-regular|outline|22|ss10|Vitalina|0",
+          "fontId": "baloo2-variable-regular",
+          "mode": "outline",
+          "ratio": 22,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/main collision",
+          "hasSeededRepeat": false,
+          "primarySlug": "1619d7f4",
+          "memberSlugs": [
+            "1619d7f4",
+            "53003dc9"
+          ],
+          "presentationIndices": [
+            48,
+            136
+          ],
+          "presentationSpan": 88,
+          "sheetPositions": [
+            46,
+            126
+          ],
+          "sheetSpan": 80,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "none",
+            "separation"
+          ],
+          "trackingContrastPresent": true,
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": false,
+          "bothSame": false
+        },
+        {
+          "key": "cinzel-regular|outline|22|ss10|Vitalina|0",
+          "fontId": "cinzel-regular",
+          "mode": "outline",
+          "ratio": 22,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/main collision",
+          "hasSeededRepeat": false,
+          "primarySlug": "e0e41947",
+          "memberSlugs": [
+            "e0e41947",
+            "20683b08"
+          ],
+          "presentationIndices": [
+            50,
+            124
+          ],
+          "presentationSpan": 74,
+          "sheetPositions": [
+            47,
+            116
+          ],
+          "sheetSpan": 69,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "none",
+            "separation"
+          ],
+          "trackingContrastPresent": true,
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "cookie-regular|fill|19|ss10|Vitalina|0",
+          "fontId": "cookie-regular",
+          "mode": "fill",
+          "ratio": 19,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/main collision",
+          "hasSeededRepeat": false,
+          "primarySlug": "7e6a3886",
+          "memberSlugs": [
+            "7e6a3886",
+            "6547773b"
+          ],
+          "presentationIndices": [
+            59,
+            72
+          ],
+          "presentationSpan": 13,
+          "sheetPositions": [
+            56,
+            68
+          ],
+          "sheetSpan": 12,
+          "spansUnderMinPositions": true,
+          "trackingTargets": [
+            "none",
+            "separation"
+          ],
+          "trackingContrastPresent": true,
+          "allMembersRated": true,
+          "readableSame": false,
+          "sellableSame": true,
+          "bothSame": false
+        },
+        {
+          "key": "lobster-regular|fill|16|ss10|Emmanuel|4.65",
+          "fontId": "lobster-regular",
+          "mode": "fill",
+          "ratio": 16,
+          "stoneSizeId": "ss10",
+          "text": "Emmanuel",
+          "letterSpacingMm": 4.65,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "b1a26343",
+          "memberSlugs": [
+            "b1a26343",
+            "1eddf88c"
+          ],
+          "presentationIndices": [
+            68,
+            149
+          ],
+          "presentationSpan": 81,
+          "sheetPositions": [
+            64,
+            138
+          ],
+          "sheetSpan": 74,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "separation"
+          ],
+          "trackingContrastPresent": false,
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "bebas-neue-regular|outline|22|ss10|Vitalina|0",
+          "fontId": "bebas-neue-regular",
+          "mode": "outline",
+          "ratio": 22,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "ee9577a4",
+          "memberSlugs": [
+            "ee9577a4",
+            "a2a84b3f"
+          ],
+          "presentationIndices": [
+            82,
+            104
+          ],
+          "presentationSpan": 22,
+          "sheetPositions": [
+            77,
+            98
+          ],
+          "sheetSpan": 21,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "none"
+          ],
+          "trackingContrastPresent": false,
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "lilita-one-regular|outline|20.5|ss10|Emmanuel|0",
+          "fontId": "lilita-one-regular",
+          "mode": "outline",
+          "ratio": 20.5,
+          "stoneSizeId": "ss10",
+          "text": "Emmanuel",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "22f3e71f",
+          "memberSlugs": [
+            "22f3e71f",
+            "f55191b6"
+          ],
+          "presentationIndices": [
+            87,
+            146
+          ],
+          "presentationSpan": 59,
+          "sheetPositions": [
+            82,
+            135
+          ],
+          "sheetSpan": 53,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "none"
+          ],
+          "trackingContrastPresent": false,
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "poppins-bold|fill|20.5|ss10|Vitalina|0",
+          "fontId": "poppins-bold",
+          "mode": "fill",
+          "ratio": 20.5,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "d29601c0",
+          "memberSlugs": [
+            "d29601c0",
+            "e770929f"
+          ],
+          "presentationIndices": [
+            89,
+            156
+          ],
+          "presentationSpan": 67,
+          "sheetPositions": [
+            84,
+            144
+          ],
+          "sheetSpan": 60,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "separation"
+          ],
+          "trackingContrastPresent": false,
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "parisienne-regular|fill|17.5|ss10|Vitalina|0",
+          "fontId": "parisienne-regular",
+          "mode": "fill",
+          "ratio": 17.5,
+          "stoneSizeId": "ss10",
+          "text": "Vitalina",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "0649e9ba",
+          "memberSlugs": [
+            "0649e9ba",
+            "fa3d9880"
+          ],
+          "presentationIndices": [
+            119,
+            137
+          ],
+          "presentationSpan": 18,
+          "sheetPositions": [
+            111,
+            127
+          ],
+          "sheetSpan": 16,
+          "spansUnderMinPositions": false,
+          "trackingTargets": [
+            "separation"
+          ],
+          "trackingContrastPresent": false,
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        },
+        {
+          "key": "poppins-semibold|fill|22|ss10|Emmanuel|0",
+          "fontId": "poppins-semibold",
+          "mode": "fill",
+          "ratio": 22,
+          "stoneSizeId": "ss10",
+          "text": "Emmanuel",
+          "letterSpacingMm": 0,
+          "size": 2,
+          "kind": "main/repeats pair",
+          "hasSeededRepeat": true,
+          "primarySlug": "9f8aa133",
+          "memberSlugs": [
+            "9f8aa133",
+            "86130e4a"
+          ],
+          "presentationIndices": [
+            133,
+            141
+          ],
+          "presentationSpan": 8,
+          "sheetPositions": [
+            123,
+            130
+          ],
+          "sheetSpan": 7,
+          "spansUnderMinPositions": true,
+          "trackingTargets": [
+            "none"
+          ],
+          "trackingContrastPresent": false,
+          "allMembersRated": true,
+          "readableSame": true,
+          "sellableSame": true,
+          "bothSame": true
+        }
+      ]
+    },
+    "selfConsistency": {
+      "n": 20,
+      "fullyRatedGroups": 20,
+      "readableAgreement": 18,
+      "sellableAgreement": 17,
+      "bothAgreement": 15,
+      "seededRepeatsUnderMinPositions": {
+        "count": 1,
+        "groups": [
+          {
+            "key": "poppins-semibold|fill|22|ss10|Emmanuel|0",
+            "primarySlug": "9f8aa133",
+            "sheetSpan": 7
+          }
+        ]
+      },
+      "groupsUnderMinPositions": {
+        "count": 3,
+        "groups": [
+          {
+            "key": "courier-prime-regular|outline|17.5|ss10|Vitalina|0",
+            "primarySlug": "3bf95b5a",
+            "sheetSpan": 2,
+            "kind": "main/main collision",
+            "isDegenerateTrackingCell": true
+          },
+          {
+            "key": "cookie-regular|fill|19|ss10|Vitalina|0",
+            "primarySlug": "7e6a3886",
+            "sheetSpan": 12,
+            "kind": "main/main collision",
+            "isDegenerateTrackingCell": true
+          },
+          {
+            "key": "poppins-semibold|fill|22|ss10|Emmanuel|0",
+            "primarySlug": "9f8aa133",
+            "sheetSpan": 7,
+            "kind": "main/repeats pair",
+            "isDegenerateTrackingCell": false
+          }
+        ]
+      }
+    },
+    "degenerateTrackingCells": {
+      "count": 6,
+      "cells": [
+        {
+          "key": "abril-fatface-regular|fill|22|ss10|Vitalina|0",
+          "fontId": "abril-fatface-regular",
+          "mode": "fill",
+          "ratio": 22,
+          "primarySlug": "fea9f594",
+          "memberSlugs": [
+            "fea9f594",
+            "a9a0afaf",
+            "1195a2d9"
+          ],
+          "trackingTargets": [
+            "none",
+            "separation"
+          ]
+        },
+        {
+          "key": "allura-regular|fill|22|ss10|Vitalina|0",
+          "fontId": "allura-regular",
+          "mode": "fill",
+          "ratio": 22,
+          "primarySlug": "ac96316d",
+          "memberSlugs": [
+            "ac96316d",
+            "be012103"
+          ],
+          "trackingTargets": [
+            "none",
+            "separation"
+          ]
+        },
+        {
+          "key": "courier-prime-regular|outline|17.5|ss10|Vitalina|0",
+          "fontId": "courier-prime-regular",
+          "mode": "outline",
+          "ratio": 17.5,
+          "primarySlug": "3bf95b5a",
+          "memberSlugs": [
+            "3bf95b5a",
+            "9afe431e"
+          ],
+          "trackingTargets": [
+            "none",
+            "separation"
+          ]
+        },
+        {
+          "key": "baloo2-variable-regular|outline|22|ss10|Vitalina|0",
+          "fontId": "baloo2-variable-regular",
+          "mode": "outline",
+          "ratio": 22,
+          "primarySlug": "1619d7f4",
+          "memberSlugs": [
+            "1619d7f4",
+            "53003dc9"
+          ],
+          "trackingTargets": [
+            "none",
+            "separation"
+          ]
+        },
+        {
+          "key": "cinzel-regular|outline|22|ss10|Vitalina|0",
+          "fontId": "cinzel-regular",
+          "mode": "outline",
+          "ratio": 22,
+          "primarySlug": "e0e41947",
+          "memberSlugs": [
+            "e0e41947",
+            "20683b08"
+          ],
+          "trackingTargets": [
+            "none",
+            "separation"
+          ]
+        },
+        {
+          "key": "cookie-regular|fill|19|ss10|Vitalina|0",
+          "fontId": "cookie-regular",
+          "mode": "fill",
+          "ratio": 19,
+          "primarySlug": "7e6a3886",
+          "memberSlugs": [
+            "7e6a3886",
+            "6547773b"
+          ],
+          "trackingTargets": [
+            "none",
+            "separation"
+          ]
+        }
+      ]
+    },
+    "achievedTracking": {
+      "definition": "letterSpacingMm > 0",
+      "primaryPopulation": 126,
+      "tracked": 31,
+      "untracked": 95,
+      "byMode": {
+        "outline": {
+          "tracked": 23,
+          "untracked": 40
+        },
+        "fill": {
+          "tracked": 8,
+          "untracked": 55
+        }
+      },
+      "ratedLevel": {
+        "population": 147,
+        "tracked": 34,
+        "untracked": 113,
+        "trackedByMode": {
+          "outline": 24,
+          "fill": 10
+        }
+      },
+      "intentSeparationResolvedToZeroMm": {
+        "total": 33,
+        "byMode": {
+          "outline": 7,
+          "fill": 26
+        },
+        "ofSeparationEntriesByMode": {
+          "outline": 31,
+          "fill": 36
+        }
+      },
+      "courierPrimeFailedEntry": {
+        "slug": "1191f008",
+        "trackingTarget": "separation",
+        "letterSpacingMm": 0,
+        "inPrimaryPopulation": true,
+        "countedAs": "untracked"
+      }
+    },
+    "floorByStones": {
+      "form": "A — single constant",
+      "cutVariable": "stonesAcrossStem = ratio × stemWidthRatio",
+      "scopedBy": "mode × achievedTracking",
+      "candidates": [
+        0.6,
+        0.8,
+        1,
+        1.2,
+        1.4,
+        1.6,
+        1.8,
+        2
+      ],
+      "scopes": {
+        "outline|tracked": {
+          "population": 23,
+          "rated": 23,
+          "byCandidate": {
+            "1": {
+              "rowsBelow": 12,
+              "sellableBelow": 7,
+              "rowsAtOrAbove": 11,
+              "sellableAtOrAbove": 7,
+              "ratedBelow": 12,
+              "ratedAtOrAbove": 11
+            },
+            "2": {
+              "rowsBelow": 21,
+              "sellableBelow": 14,
+              "rowsAtOrAbove": 2,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 21,
+              "ratedAtOrAbove": 2
+            },
+            "0.6": {
+              "rowsBelow": 5,
+              "sellableBelow": 3,
+              "rowsAtOrAbove": 18,
+              "sellableAtOrAbove": 11,
+              "ratedBelow": 5,
+              "ratedAtOrAbove": 18
+            },
+            "0.8": {
+              "rowsBelow": 9,
+              "sellableBelow": 6,
+              "rowsAtOrAbove": 14,
+              "sellableAtOrAbove": 8,
+              "ratedBelow": 9,
+              "ratedAtOrAbove": 14
+            },
+            "1.2": {
+              "rowsBelow": 13,
+              "sellableBelow": 8,
+              "rowsAtOrAbove": 10,
+              "sellableAtOrAbove": 6,
+              "ratedBelow": 13,
+              "ratedAtOrAbove": 10
+            },
+            "1.4": {
+              "rowsBelow": 16,
+              "sellableBelow": 9,
+              "rowsAtOrAbove": 7,
+              "sellableAtOrAbove": 5,
+              "ratedBelow": 16,
+              "ratedAtOrAbove": 7
+            },
+            "1.6": {
+              "rowsBelow": 18,
+              "sellableBelow": 11,
+              "rowsAtOrAbove": 5,
+              "sellableAtOrAbove": 3,
+              "ratedBelow": 18,
+              "ratedAtOrAbove": 5
+            },
+            "1.8": {
+              "rowsBelow": 19,
+              "sellableBelow": 12,
+              "rowsAtOrAbove": 4,
+              "sellableAtOrAbove": 2,
+              "ratedBelow": 19,
+              "ratedAtOrAbove": 4
+            }
+          }
+        },
+        "outline|untracked": {
+          "population": 40,
+          "rated": 40,
+          "byCandidate": {
+            "1": {
+              "rowsBelow": 21,
+              "sellableBelow": 3,
+              "rowsAtOrAbove": 19,
+              "sellableAtOrAbove": 12,
+              "ratedBelow": 21,
+              "ratedAtOrAbove": 19
+            },
+            "2": {
+              "rowsBelow": 34,
+              "sellableBelow": 12,
+              "rowsAtOrAbove": 6,
+              "sellableAtOrAbove": 3,
+              "ratedBelow": 34,
+              "ratedAtOrAbove": 6
+            },
+            "0.6": {
+              "rowsBelow": 6,
+              "sellableBelow": 1,
+              "rowsAtOrAbove": 34,
+              "sellableAtOrAbove": 14,
+              "ratedBelow": 6,
+              "ratedAtOrAbove": 34
+            },
+            "0.8": {
+              "rowsBelow": 14,
+              "sellableBelow": 1,
+              "rowsAtOrAbove": 26,
+              "sellableAtOrAbove": 14,
+              "ratedBelow": 14,
+              "ratedAtOrAbove": 26
+            },
+            "1.2": {
+              "rowsBelow": 26,
+              "sellableBelow": 7,
+              "rowsAtOrAbove": 14,
+              "sellableAtOrAbove": 8,
+              "ratedBelow": 26,
+              "ratedAtOrAbove": 14
+            },
+            "1.4": {
+              "rowsBelow": 28,
+              "sellableBelow": 8,
+              "rowsAtOrAbove": 12,
+              "sellableAtOrAbove": 7,
+              "ratedBelow": 28,
+              "ratedAtOrAbove": 12
+            },
+            "1.6": {
+              "rowsBelow": 29,
+              "sellableBelow": 9,
+              "rowsAtOrAbove": 11,
+              "sellableAtOrAbove": 6,
+              "ratedBelow": 29,
+              "ratedAtOrAbove": 11
+            },
+            "1.8": {
+              "rowsBelow": 31,
+              "sellableBelow": 9,
+              "rowsAtOrAbove": 9,
+              "sellableAtOrAbove": 6,
+              "ratedBelow": 31,
+              "ratedAtOrAbove": 9
+            }
+          }
+        },
+        "fill|tracked": {
+          "population": 8,
+          "rated": 8,
+          "byCandidate": {
+            "1": {
+              "rowsBelow": 2,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 6,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 2,
+              "ratedAtOrAbove": 6
+            },
+            "2": {
+              "rowsBelow": 8,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 0,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 8,
+              "ratedAtOrAbove": 0
+            },
+            "0.6": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 8,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 0,
+              "ratedAtOrAbove": 8
+            },
+            "0.8": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 8,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 0,
+              "ratedAtOrAbove": 8
+            },
+            "1.2": {
+              "rowsBelow": 3,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 5,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 3,
+              "ratedAtOrAbove": 5
+            },
+            "1.4": {
+              "rowsBelow": 7,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 1,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 7,
+              "ratedAtOrAbove": 1
+            },
+            "1.6": {
+              "rowsBelow": 7,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 1,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 7,
+              "ratedAtOrAbove": 1
+            },
+            "1.8": {
+              "rowsBelow": 8,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 0,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 8,
+              "ratedAtOrAbove": 0
+            }
+          }
+        },
+        "fill|untracked": {
+          "population": 55,
+          "rated": 55,
+          "byCandidate": {
+            "1": {
+              "rowsBelow": 33,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 22,
+              "sellableAtOrAbove": 8,
+              "ratedBelow": 33,
+              "ratedAtOrAbove": 22
+            },
+            "2": {
+              "rowsBelow": 46,
+              "sellableBelow": 4,
+              "rowsAtOrAbove": 9,
+              "sellableAtOrAbove": 4,
+              "ratedBelow": 46,
+              "ratedAtOrAbove": 9
+            },
+            "0.6": {
+              "rowsBelow": 13,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 42,
+              "sellableAtOrAbove": 8,
+              "ratedBelow": 13,
+              "ratedAtOrAbove": 42
+            },
+            "0.8": {
+              "rowsBelow": 23,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 32,
+              "sellableAtOrAbove": 8,
+              "ratedBelow": 23,
+              "ratedAtOrAbove": 32
+            },
+            "1.2": {
+              "rowsBelow": 38,
+              "sellableBelow": 1,
+              "rowsAtOrAbove": 17,
+              "sellableAtOrAbove": 7,
+              "ratedBelow": 38,
+              "ratedAtOrAbove": 17
+            },
+            "1.4": {
+              "rowsBelow": 41,
+              "sellableBelow": 1,
+              "rowsAtOrAbove": 14,
+              "sellableAtOrAbove": 7,
+              "ratedBelow": 41,
+              "ratedAtOrAbove": 14
+            },
+            "1.6": {
+              "rowsBelow": 43,
+              "sellableBelow": 2,
+              "rowsAtOrAbove": 12,
+              "sellableAtOrAbove": 6,
+              "ratedBelow": 43,
+              "ratedAtOrAbove": 12
+            },
+            "1.8": {
+              "rowsBelow": 44,
+              "sellableBelow": 3,
+              "rowsAtOrAbove": 11,
+              "sellableAtOrAbove": 5,
+              "ratedBelow": 44,
+              "ratedAtOrAbove": 11
+            }
+          }
+        }
+      }
+    },
+    "floorByRatio": {
+      "form": "B — three class steps",
+      "cutVariable": "ratio",
+      "scopedBy": "stemRegime × mode × achievedTracking",
+      "candidates": [
+        16,
+        17.5,
+        19,
+        20.5,
+        22
+      ],
+      "scopes": {
+        "monoline|outline|tracked": {
+          "population": 9,
+          "rated": 9,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 9,
+              "sellableAtOrAbove": 6,
+              "ratedBelow": 0,
+              "ratedAtOrAbove": 9
+            },
+            "19": {
+              "rowsBelow": 4,
+              "sellableBelow": 2,
+              "rowsAtOrAbove": 5,
+              "sellableAtOrAbove": 4,
+              "ratedBelow": 4,
+              "ratedAtOrAbove": 5
+            },
+            "22": {
+              "rowsBelow": 8,
+              "sellableBelow": 5,
+              "rowsAtOrAbove": 1,
+              "sellableAtOrAbove": 1,
+              "ratedBelow": 8,
+              "ratedAtOrAbove": 1
+            },
+            "17.5": {
+              "rowsBelow": 2,
+              "sellableBelow": 1,
+              "rowsAtOrAbove": 7,
+              "sellableAtOrAbove": 5,
+              "ratedBelow": 2,
+              "ratedAtOrAbove": 7
+            },
+            "20.5": {
+              "rowsBelow": 6,
+              "sellableBelow": 3,
+              "rowsAtOrAbove": 3,
+              "sellableAtOrAbove": 3,
+              "ratedBelow": 6,
+              "ratedAtOrAbove": 3
+            }
+          }
+        },
+        "monoline|outline|untracked": {
+          "population": 12,
+          "rated": 12,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 12,
+              "sellableAtOrAbove": 1,
+              "ratedBelow": 0,
+              "ratedAtOrAbove": 12
+            },
+            "19": {
+              "rowsBelow": 4,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 8,
+              "sellableAtOrAbove": 1,
+              "ratedBelow": 4,
+              "ratedAtOrAbove": 8
+            },
+            "22": {
+              "rowsBelow": 10,
+              "sellableBelow": 1,
+              "rowsAtOrAbove": 2,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 10,
+              "ratedAtOrAbove": 2
+            },
+            "17.5": {
+              "rowsBelow": 2,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 10,
+              "sellableAtOrAbove": 1,
+              "ratedBelow": 2,
+              "ratedAtOrAbove": 10
+            },
+            "20.5": {
+              "rowsBelow": 8,
+              "sellableBelow": 1,
+              "rowsAtOrAbove": 4,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 8,
+              "ratedAtOrAbove": 4
+            }
+          }
+        },
+        "monoline|fill|tracked": {
+          "population": 0,
+          "rated": 0,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 0,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 0,
+              "ratedAtOrAbove": 0
+            },
+            "19": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 0,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 0,
+              "ratedAtOrAbove": 0
+            },
+            "22": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 0,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 0,
+              "ratedAtOrAbove": 0
+            },
+            "17.5": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 0,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 0,
+              "ratedAtOrAbove": 0
+            },
+            "20.5": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 0,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 0,
+              "ratedAtOrAbove": 0
+            }
+          }
+        },
+        "monoline|fill|untracked": {
+          "population": 21,
+          "rated": 21,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 21,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 0,
+              "ratedAtOrAbove": 21
+            },
+            "19": {
+              "rowsBelow": 8,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 13,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 8,
+              "ratedAtOrAbove": 13
+            },
+            "22": {
+              "rowsBelow": 18,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 3,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 18,
+              "ratedAtOrAbove": 3
+            },
+            "17.5": {
+              "rowsBelow": 4,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 17,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 4,
+              "ratedAtOrAbove": 17
+            },
+            "20.5": {
+              "rowsBelow": 14,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 7,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 14,
+              "ratedAtOrAbove": 7
+            }
+          }
+        },
+        "transitional|outline|tracked": {
+          "population": 6,
+          "rated": 6,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 6,
+              "sellableAtOrAbove": 3,
+              "ratedBelow": 0,
+              "ratedAtOrAbove": 6
+            },
+            "19": {
+              "rowsBelow": 3,
+              "sellableBelow": 1,
+              "rowsAtOrAbove": 3,
+              "sellableAtOrAbove": 2,
+              "ratedBelow": 3,
+              "ratedAtOrAbove": 3
+            },
+            "22": {
+              "rowsBelow": 5,
+              "sellableBelow": 2,
+              "rowsAtOrAbove": 1,
+              "sellableAtOrAbove": 1,
+              "ratedBelow": 5,
+              "ratedAtOrAbove": 1
+            },
+            "17.5": {
+              "rowsBelow": 2,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 4,
+              "sellableAtOrAbove": 3,
+              "ratedBelow": 2,
+              "ratedAtOrAbove": 4
+            },
+            "20.5": {
+              "rowsBelow": 4,
+              "sellableBelow": 2,
+              "rowsAtOrAbove": 2,
+              "sellableAtOrAbove": 1,
+              "ratedBelow": 4,
+              "ratedAtOrAbove": 2
+            }
+          }
+        },
+        "transitional|outline|untracked": {
+          "population": 14,
+          "rated": 14,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 14,
+              "sellableAtOrAbove": 6,
+              "ratedBelow": 0,
+              "ratedAtOrAbove": 14
+            },
+            "19": {
+              "rowsBelow": 4,
+              "sellableBelow": 1,
+              "rowsAtOrAbove": 10,
+              "sellableAtOrAbove": 5,
+              "ratedBelow": 4,
+              "ratedAtOrAbove": 10
+            },
+            "22": {
+              "rowsBelow": 12,
+              "sellableBelow": 5,
+              "rowsAtOrAbove": 2,
+              "sellableAtOrAbove": 1,
+              "ratedBelow": 12,
+              "ratedAtOrAbove": 2
+            },
+            "17.5": {
+              "rowsBelow": 2,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 12,
+              "sellableAtOrAbove": 6,
+              "ratedBelow": 2,
+              "ratedAtOrAbove": 12
+            },
+            "20.5": {
+              "rowsBelow": 9,
+              "sellableBelow": 2,
+              "rowsAtOrAbove": 5,
+              "sellableAtOrAbove": 4,
+              "ratedBelow": 9,
+              "ratedAtOrAbove": 5
+            }
+          }
+        },
+        "transitional|fill|tracked": {
+          "population": 5,
+          "rated": 5,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 5,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 0,
+              "ratedAtOrAbove": 5
+            },
+            "19": {
+              "rowsBelow": 2,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 3,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 2,
+              "ratedAtOrAbove": 3
+            },
+            "22": {
+              "rowsBelow": 3,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 2,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 3,
+              "ratedAtOrAbove": 2
+            },
+            "17.5": {
+              "rowsBelow": 1,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 4,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 1,
+              "ratedAtOrAbove": 4
+            },
+            "20.5": {
+              "rowsBelow": 3,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 2,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 3,
+              "ratedAtOrAbove": 2
+            }
+          }
+        },
+        "transitional|fill|untracked": {
+          "population": 16,
+          "rated": 16,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 16,
+              "sellableAtOrAbove": 1,
+              "ratedBelow": 0,
+              "ratedAtOrAbove": 16
+            },
+            "19": {
+              "rowsBelow": 6,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 10,
+              "sellableAtOrAbove": 1,
+              "ratedBelow": 6,
+              "ratedAtOrAbove": 10
+            },
+            "22": {
+              "rowsBelow": 14,
+              "sellableBelow": 1,
+              "rowsAtOrAbove": 2,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 14,
+              "ratedAtOrAbove": 2
+            },
+            "17.5": {
+              "rowsBelow": 3,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 13,
+              "sellableAtOrAbove": 1,
+              "ratedBelow": 3,
+              "ratedAtOrAbove": 13
+            },
+            "20.5": {
+              "rowsBelow": 10,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 6,
+              "sellableAtOrAbove": 1,
+              "ratedBelow": 10,
+              "ratedAtOrAbove": 6
+            }
+          }
+        },
+        "massed|outline|tracked": {
+          "population": 8,
+          "rated": 8,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 8,
+              "sellableAtOrAbove": 5,
+              "ratedBelow": 0,
+              "ratedAtOrAbove": 8
+            },
+            "19": {
+              "rowsBelow": 4,
+              "sellableBelow": 2,
+              "rowsAtOrAbove": 4,
+              "sellableAtOrAbove": 3,
+              "ratedBelow": 4,
+              "ratedAtOrAbove": 4
+            },
+            "22": {
+              "rowsBelow": 6,
+              "sellableBelow": 3,
+              "rowsAtOrAbove": 2,
+              "sellableAtOrAbove": 2,
+              "ratedBelow": 6,
+              "ratedAtOrAbove": 2
+            },
+            "17.5": {
+              "rowsBelow": 2,
+              "sellableBelow": 1,
+              "rowsAtOrAbove": 6,
+              "sellableAtOrAbove": 4,
+              "ratedBelow": 2,
+              "ratedAtOrAbove": 6
+            },
+            "20.5": {
+              "rowsBelow": 6,
+              "sellableBelow": 3,
+              "rowsAtOrAbove": 2,
+              "sellableAtOrAbove": 2,
+              "ratedBelow": 6,
+              "ratedAtOrAbove": 2
+            }
+          }
+        },
+        "massed|outline|untracked": {
+          "population": 14,
+          "rated": 14,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 14,
+              "sellableAtOrAbove": 8,
+              "ratedBelow": 0,
+              "ratedAtOrAbove": 14
+            },
+            "19": {
+              "rowsBelow": 4,
+              "sellableBelow": 2,
+              "rowsAtOrAbove": 10,
+              "sellableAtOrAbove": 6,
+              "ratedBelow": 4,
+              "ratedAtOrAbove": 10
+            },
+            "22": {
+              "rowsBelow": 12,
+              "sellableBelow": 7,
+              "rowsAtOrAbove": 2,
+              "sellableAtOrAbove": 1,
+              "ratedBelow": 12,
+              "ratedAtOrAbove": 2
+            },
+            "17.5": {
+              "rowsBelow": 2,
+              "sellableBelow": 1,
+              "rowsAtOrAbove": 12,
+              "sellableAtOrAbove": 7,
+              "ratedBelow": 2,
+              "ratedAtOrAbove": 12
+            },
+            "20.5": {
+              "rowsBelow": 8,
+              "sellableBelow": 3,
+              "rowsAtOrAbove": 6,
+              "sellableAtOrAbove": 5,
+              "ratedBelow": 8,
+              "ratedAtOrAbove": 6
+            }
+          }
+        },
+        "massed|fill|tracked": {
+          "population": 3,
+          "rated": 3,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 3,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 0,
+              "ratedAtOrAbove": 3
+            },
+            "19": {
+              "rowsBelow": 2,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 1,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 2,
+              "ratedAtOrAbove": 1
+            },
+            "22": {
+              "rowsBelow": 3,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 0,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 3,
+              "ratedAtOrAbove": 0
+            },
+            "17.5": {
+              "rowsBelow": 2,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 1,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 2,
+              "ratedAtOrAbove": 1
+            },
+            "20.5": {
+              "rowsBelow": 3,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 0,
+              "sellableAtOrAbove": 0,
+              "ratedBelow": 3,
+              "ratedAtOrAbove": 0
+            }
+          }
+        },
+        "massed|fill|untracked": {
+          "population": 18,
+          "rated": 18,
+          "byCandidate": {
+            "16": {
+              "rowsBelow": 0,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 18,
+              "sellableAtOrAbove": 7,
+              "ratedBelow": 0,
+              "ratedAtOrAbove": 18
+            },
+            "19": {
+              "rowsBelow": 6,
+              "sellableBelow": 1,
+              "rowsAtOrAbove": 12,
+              "sellableAtOrAbove": 6,
+              "ratedBelow": 6,
+              "ratedAtOrAbove": 12
+            },
+            "22": {
+              "rowsBelow": 15,
+              "sellableBelow": 5,
+              "rowsAtOrAbove": 3,
+              "sellableAtOrAbove": 2,
+              "ratedBelow": 15,
+              "ratedAtOrAbove": 3
+            },
+            "17.5": {
+              "rowsBelow": 2,
+              "sellableBelow": 0,
+              "rowsAtOrAbove": 16,
+              "sellableAtOrAbove": 7,
+              "ratedBelow": 2,
+              "ratedAtOrAbove": 16
+            },
+            "20.5": {
+              "rowsBelow": 11,
+              "sellableBelow": 3,
+              "rowsAtOrAbove": 7,
+              "sellableAtOrAbove": 4,
+              "ratedBelow": 11,
+              "ratedAtOrAbove": 7
+            }
+          }
+        }
+      }
+    },
+    "sizeInvariance": {
+      "pairs": [
+        {
+          "fontId": "montserrat-regular",
+          "mode": "fill",
+          "ratio": 19,
+          "bigSlug": "14303d54",
+          "bigStoneSizeId": "ss20",
+          "bigSellable": "no",
+          "bigRated": true,
+          "ss10Slug": "012f6961",
+          "ss10Sellable": "no",
+          "ss10Rated": true
+        },
+        {
+          "fontId": "montserrat-regular",
+          "mode": "outline",
+          "ratio": 19,
+          "bigSlug": "212a2249",
+          "bigStoneSizeId": "ss16",
+          "bigSellable": "no",
+          "bigRated": true,
+          "ss10Slug": "797e9a4b",
+          "ss10Sellable": "yes",
+          "ss10Rated": true
+        },
+        {
+          "fontId": "cookie-regular",
+          "mode": "fill",
+          "ratio": 19,
+          "bigSlug": "24e680ff",
+          "bigStoneSizeId": "ss20",
+          "bigSellable": "no",
+          "bigRated": true,
+          "ss10Slug": "7e6a3886",
+          "ss10Sellable": "no",
+          "ss10Rated": true
+        },
+        {
+          "fontId": "montserrat-regular",
+          "mode": "outline",
+          "ratio": 19,
+          "bigSlug": "51695ce6",
+          "bigStoneSizeId": "ss20",
+          "bigSellable": "no",
+          "bigRated": true,
+          "ss10Slug": "797e9a4b",
+          "ss10Sellable": "yes",
+          "ss10Rated": true
+        },
+        {
+          "fontId": "lilita-one-regular",
+          "mode": "fill",
+          "ratio": 19,
+          "bigSlug": "7098c1a0",
+          "bigStoneSizeId": "ss16",
+          "bigSellable": "no",
+          "bigRated": true,
+          "ss10Slug": "348c42c4",
+          "ss10Sellable": "no",
+          "ss10Rated": true
+        },
+        {
+          "fontId": "cookie-regular",
+          "mode": "outline",
+          "ratio": 19,
+          "bigSlug": "771ec772",
+          "bigStoneSizeId": "ss16",
+          "bigSellable": "no",
+          "bigRated": true,
+          "ss10Slug": "b7c73f2a",
+          "ss10Sellable": "no",
+          "ss10Rated": true
+        },
+        {
+          "fontId": "montserrat-regular",
+          "mode": "fill",
+          "ratio": 19,
+          "bigSlug": "abea0f8d",
+          "bigStoneSizeId": "ss16",
+          "bigSellable": "no",
+          "bigRated": true,
+          "ss10Slug": "012f6961",
+          "ss10Sellable": "no",
+          "ss10Rated": true
+        },
+        {
+          "fontId": "lilita-one-regular",
+          "mode": "fill",
+          "ratio": 19,
+          "bigSlug": "ced67b56",
+          "bigStoneSizeId": "ss20",
+          "bigSellable": "yes",
+          "bigRated": true,
+          "ss10Slug": "348c42c4",
+          "ss10Sellable": "no",
+          "ss10Rated": true
+        },
+        {
+          "fontId": "cookie-regular",
+          "mode": "fill",
+          "ratio": 19,
+          "bigSlug": "d966692a",
+          "bigStoneSizeId": "ss16",
+          "bigSellable": "no",
+          "bigRated": true,
+          "ss10Slug": "7e6a3886",
+          "ss10Sellable": "no",
+          "ss10Rated": true
+        },
+        {
+          "fontId": "lilita-one-regular",
+          "mode": "outline",
+          "ratio": 19,
+          "bigSlug": "dd901001",
+          "bigStoneSizeId": "ss20",
+          "bigSellable": "no",
+          "bigRated": true,
+          "ss10Slug": "dc04ba8c",
+          "ss10Sellable": "no",
+          "ss10Rated": true
+        },
+        {
+          "fontId": "lilita-one-regular",
+          "mode": "outline",
+          "ratio": 19,
+          "bigSlug": "e081b242",
+          "bigStoneSizeId": "ss16",
+          "bigSellable": "no",
+          "bigRated": true,
+          "ss10Slug": "dc04ba8c",
+          "ss10Sellable": "no",
+          "ss10Rated": true
+        },
+        {
+          "fontId": "cookie-regular",
+          "mode": "outline",
+          "ratio": 19,
+          "bigSlug": "f2a42979",
+          "bigStoneSizeId": "ss20",
+          "bigSellable": "no",
+          "bigRated": true,
+          "ss10Slug": "b7c73f2a",
+          "ss10Sellable": "no",
+          "ss10Rated": true
+        }
+      ],
+      "perSize": {
+        "ss10": {
+          "n": 6,
+          "rated": 6,
+          "sellable": 1
+        },
+        "ss16": {
+          "n": 6,
+          "rated": 6,
+          "sellable": 0
+        },
+        "ss20": {
+          "n": 6,
+          "rated": 6,
+          "sellable": 1
+        }
+      }
+    },
+    "trackingContrast": {
+      "note": "between-font contrast only; tracking is unpaired (spec §2). Not a McNemar-style paired test.",
+      "scopedBy": "mode × achievedTracking",
+      "scopes": {
+        "outline|tracked": {
+          "n": 23,
+          "rated": 23,
+          "sellable": 14,
+          "sellablePct": 60.9
+        },
+        "outline|untracked": {
+          "n": 40,
+          "rated": 40,
+          "sellable": 15,
+          "sellablePct": 37.5
+        },
+        "fill|tracked": {
+          "n": 8,
+          "rated": 8,
+          "sellable": 0,
+          "sellablePct": 0
+        },
+        "fill|untracked": {
+          "n": 55,
+          "rated": 55,
+          "sellable": 8,
+          "sellablePct": 14.5
+        }
+      }
+    },
+    "trackingContrastByIntent": {
+      "note": "sensitivity table on trackingTarget (intent), not achieved spacing (spec §4).",
+      "scopedBy": "mode × trackingTarget",
+      "scopes": {
+        "outline|none": {
+          "n": 35,
+          "rated": 35,
+          "sellable": 10,
+          "sellablePct": 28.6
+        },
+        "outline|separation": {
+          "n": 28,
+          "rated": 28,
+          "sellable": 19,
+          "sellablePct": 67.9
+        },
+        "fill|none": {
+          "n": 34,
+          "rated": 34,
+          "sellable": 3,
+          "sellablePct": 8.8
+        },
+        "fill|separation": {
+          "n": 29,
+          "rated": 29,
+          "sellable": 5,
+          "sellablePct": 17.2
+        }
+      }
+    },
+    "separationShortfall": {
+      "count": 5,
+      "allOutline": true,
+      "rows": [
+        {
+          "slug": "1191f008",
+          "fontId": "courier-prime-regular",
+          "mode": "outline",
+          "ratio": 19,
+          "separationRatioBefore": 0.8,
+          "separationRatioAfter": 0.8,
+          "letterSpacingMm": 0,
+          "inPrimaryPopulation": true,
+          "countedAs": "untracked",
+          "sellable": "yes"
+        },
+        {
+          "slug": "549af2ba",
+          "fontId": "lobster-two-bold",
+          "mode": "outline",
+          "ratio": 17.5,
+          "separationRatioBefore": 0.3,
+          "separationRatioAfter": 0.9,
+          "letterSpacingMm": 6.2,
+          "inPrimaryPopulation": true,
+          "countedAs": "tracked",
+          "sellable": "yes"
+        },
+        {
+          "slug": "60bbb91f",
+          "fontId": "lobster-two-bold",
+          "mode": "outline",
+          "ratio": 22,
+          "separationRatioBefore": 0.1,
+          "separationRatioAfter": 0.9,
+          "letterSpacingMm": 9.3,
+          "inPrimaryPopulation": true,
+          "countedAs": "tracked",
+          "sellable": "yes"
+        },
+        {
+          "slug": "614fee96",
+          "fontId": "sacramento-regular",
+          "mode": "outline",
+          "ratio": 16,
+          "separationRatioBefore": 0.3,
+          "separationRatioAfter": 0.8,
+          "letterSpacingMm": 6.2,
+          "inPrimaryPopulation": true,
+          "countedAs": "tracked",
+          "sellable": "yes"
+        },
+        {
+          "slug": "f5f6731f",
+          "fontId": "pt-serif-regular",
+          "mode": "outline",
+          "ratio": 16,
+          "separationRatioBefore": 0.6,
+          "separationRatioAfter": 0.8,
+          "letterSpacingMm": 1.55,
+          "inPrimaryPopulation": true,
+          "countedAs": "tracked",
+          "sellable": "no"
+        }
+      ]
+    },
+    "rejectionCauses": {
+      "population": 102,
+      "noNote": 35,
+      "noTagMatch": 3,
+      "multiTag": 3,
+      "perTag": {
+        "inaccurate": {
+          "n": 44,
+          "populationSharePct": 43.1
+        },
+        "tooClose": {
+          "n": 18,
+          "populationSharePct": 17.6
+        },
+        "tooManyStones": {
+          "n": 2,
+          "populationSharePct": 2
+        },
+        "ugly": {
+          "n": 0,
+          "populationSharePct": 0
+        },
+        "extraStones": {
+          "n": 3,
+          "populationSharePct": 2.9
+        }
+      },
+      "distinctNotes": [
+        {
+          "note": "\"V\"  and \"n\" are inaccurate",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "\"V\" and \"a\" are inaccurate",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "\"V\" is inaccurate",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "\"i\" cross \"t\"",
+          "tags": []
+        },
+        {
+          "note": "extra stones , inaccurate",
+          "tags": [
+            "inaccurate",
+            "extraStones"
+          ]
+        },
+        {
+          "note": "extra stones below i, l",
+          "tags": [
+            "extraStones"
+          ]
+        },
+        {
+          "note": "inaccuarate",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "inaccuare",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "inaccuarte",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "inaccurate",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "inaccurate\n",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "inaccurate, extra stones below l, i ...",
+          "tags": [
+            "inaccurate",
+            "extraStones"
+          ]
+        },
+        {
+          "note": "inaccuratre",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "inacurate",
+          "tags": []
+        },
+        {
+          "note": "letters are inaccurate",
+          "tags": [
+            "inaccurate"
+          ]
+        },
+        {
+          "note": "letters are too close to each other",
+          "tags": [
+            "tooClose"
+          ]
+        },
+        {
+          "note": "letters are too small",
+          "tags": []
+        },
+        {
+          "note": "not equal spacing",
+          "tags": [
+            "tooClose"
+          ]
+        },
+        {
+          "note": "too close",
+          "tags": [
+            "tooClose"
+          ]
+        },
+        {
+          "note": "too close\n",
+          "tags": [
+            "tooClose"
+          ]
+        },
+        {
+          "note": "too close, inaccurate letters",
+          "tags": [
+            "inaccurate",
+            "tooClose"
+          ]
+        },
+        {
+          "note": "too many stones",
+          "tags": [
+            "tooManyStones"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -329,9 +329,9 @@ await test('22. RS Block is manifest-registered as a production font (FONT-002 d
   assert.equal(manager.getFont(FONT_ID).family, 'RS Block');
   assert.equal(manager.getFont(FONT_ID).providerId, 'rhinestone');
   assert.equal(manager.getFont(FONT_ID).enabled, true);
-  // FONT-002 added a second Production Font (rs-modern) alongside RS Block, so the manifest total
-  // grew by one (9 OpenType incl. the disabled RobotoMono placeholder, + rs-block, + rs-modern).
-  assert.equal(manager.listFonts({ includeDisabled: true }).length, 15);
+  // Manifest total: 15 through FONT-PORTFOLIO-001, then FONT-LIB-002 added 17 more static OpenType
+  // instances -- 32. (This test only cares that rs-block itself is still registered and enabled.)
+  assert.equal(manager.listFonts({ includeDisabled: true }).length, 32);
   for (const id of ['courier-prime-regular', 'great-vibes-regular', 'anton-regular']) {
     assert.ok(manager.hasFont(id), `expected pre-existing font id "${id}" to still resolve`);
   }

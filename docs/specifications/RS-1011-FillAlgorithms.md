@@ -124,23 +124,40 @@ Concretely, `src/geometry/ContourRingSampler.js` adds:
 
 1. **A distance-to-boundary field**, built once per `sampleContourFillPoints()`/
    `sampleContourFieldFillPoints()` call, over a grid whose cell size is `spacingMm/8` (clamped
-   `0.05-1mm`, identical clamping shape to `PathBoolean.js`'s `MIN/MAX_CELL_SIZE_MM`), via a
-   standard two-pass chamfer (1, sqrt(2)) approximate-Euclidean distance transform. Grid cells
-   outside the shape (per the same `isPointInsidePolygons()`/field-threshold test every other mode
-   uses) seed distance `0`; this correctly treats a hole's interior as "outside" too, for free —
-   Contour Fill preserves holes without any hole-specific code, the same way Grid/fill mode already
-   does via the even-odd rule.
+   `0.05-1mm`, identical clamping shape to `PathBoolean.js`'s `MIN/MAX_CELL_SIZE_MM`), via a standard
+   two-pass chamfer (1, sqrt(2)) approximate-Euclidean distance transform. Grid cells outside the
+   shape (per the same `isPointInsidePolygons()`/field-threshold test every other mode uses) seed
+   distance `0`; an inside cell orthogonally adjacent to an outside cell is seeded with its
+   *measured* sub-cell distance to the boundary (READ-001: `insideAt` bisected along the axis to each
+   outside neighbour, smallest crossing wins — a flat `cellSizeMm/2` seed still translates the whole
+   ring by up to half a cell when the boundary lands on a grid line; see
+   `docs/specifications/READ-001-ContourCentreline.md`). This correctly treats a hole's interior as
+   "outside" too, for free — Contour Fill preserves holes without any hole-specific code, the same
+   way Grid/fill mode already does via the even-odd rule.
 2. **Ring `k`'s polygon(s)** are the distance field's `>= k * spacingMm` iso-contour, traced with the
    same 16-case marching-squares table `PathBoolean.js` uses (a well-understood, standard algorithm —
    this module does not import `PathBoolean.js`'s private tracer, see "Why a new tracer, not a
-   shared one" below), with saddle cases resolved by bilinear-interpolating the four corner distance
-   values at the cell center (appropriate for a smooth scalar field; simpler and cheaper than
-   `PathBoolean.js`'s re-sample-the-source approach, which does not apply here since there is no
-   second source to re-sample).
+   shared one" below). Each cell-edge crossing is placed by **linear interpolation of the two node
+   distance values** (READ-001 — previously the fixed cell-edge midpoint, a half-cell inward bias);
+   saddle cases (5, 10) are still resolved by the bilinear cell-centre value (appropriate for a
+   smooth scalar field; simpler and cheaper than `PathBoolean.js`'s re-sample-the-source approach,
+   which does not apply here since there is no second source to re-sample).
 3. Rings stop the first time a threshold produces zero contours — safe because the distance field's
    maximum is finite and monotonically bounds every larger threshold to empty too (also capped by a
    hard `MAX_RING_COUNT` fail-safe, see Precision and Fail-Safes).
-4. Each ring polygon is walked at `spacingMm` arc-length steps with the *existing*
+4. Each ring polygon — and each boundary contour — is first passed through `splitSliverRuns()`
+   (READ-001): the loop is resampled to ≤ `spacingMm/4` vertex spacing (so a coarse polygon — a
+   Rect/Slot/sparse SVG path — can be analysed at all; a no-op for a marching-squares ring), then
+   where its two branches close up below one `spacingMm`, detected by an **arc-length** proximity
+   gate, that run collapses to a single line of medial-axis midpoints instead of two near-coincident
+   rows that dedupe would cull in arbitrary walk order. A stroke **terminal** — a short non-slivered
+   run (arc length < `2·spacingMm`) flanked by slivered runs, which the arc-length gate cannot pair —
+   is absorbed into the collapse as one centreline point at its arc-length midpoint, so the loop
+   becomes a single tip-to-tip open centreline rather than leaving an outline stub a half-width
+   off-centre at each end. `sampleContourFillPoints()` computes the
+   rings *before* densifying the boundary, so a pathological shape/pitch still fails with
+   `ContourFillPrecisionError` rather than allocating. Every resulting piece (closed rings, open
+   centrelines) is then walked at `spacingMm` arc-length steps with the *existing*
    `sampleOutlinePoints()` — Contour Fill introduces no second "walk a polygon at even spacing"
    algorithm.
 5. The vector sampler's outermost ring (`k=0`) is not raster-traced at all — it is the *exact*,
@@ -154,9 +171,13 @@ Concretely, `src/geometry/ContourRingSampler.js` adds:
 6. All points (outline/first ring plus every inward ring) are passed through a shared
    `dedupeStonePoints()` grid-hash proximity filter (same bucketed-neighbor-check shape as the
    pre-existing, already-shipped `app.js` cross-layer `dedupe()`), dropping any point within
-   `spacingMm * 0.5` of one already kept. This is what "avoid duplicate stones where contours
-   converge" means concretely: where two rings (or one ring's own near-self-intersection at a pinch
-   point) land almost on top of each other, only one survives.
+   `stoneSizeMm` of one already kept (READ-001: the physical constraint is literal stone overlap,
+   not the gap-inclusive pitch; flooring at the full `spacingMm` culled sub-pitch lanes wholesale
+   where contour branches converge — the same reasoning RC-002 applied to outline mode.
+   `stoneSizeMm` is threaded from every `GeometryEngine` call site through `sampleShapeFillPoints()`
+   / `sampleFieldByMode()`, defaulting to `spacingMm` when a caller omits it). This is what "avoid
+   duplicate stones where contours converge" means concretely: where two rings (or one ring's own
+   near-self-intersection at a pinch point) land almost on top of each other, only one survives.
 
 `dedupeStonePoints()` is also applied, as a defensive second layer, to Radial Fill's output (polar
 sampling can occasionally place two rings' stones closer than the nominal pitch near a shape's
@@ -226,16 +247,20 @@ that option for Image Trace layers rather than offering a control that would thr
 ## Precision and Fail-Safes
 
 * `ContourRingSampler.js` clamps its distance-field cell size the same way `PathBoolean.js` clamps its
-  boolean-combine grid (`0.05-1mm`, `spacingMm/8` ideal) and enforces the same shape of hard cell-count
-  budget (4,000,000 cells) before allocating — a design whose shape or detail level would need an
-  unreasonably fine grid throws a `ContourFillPrecisionError` with an actionable message ("try a
-  larger stone size/gap, or simplify the shape") instead of freezing the tab.
+  boolean-combine grid (`0.05-1mm`, `spacingMm/8` ideal) and enforces the same shape of hard
+  cell-count budget (4,000,000 cells) before allocating — a design whose shape or detail level would
+  need an unreasonably fine grid throws a `ContourFillPrecisionError` with an actionable message
+  ("try a larger stone size/gap, or simplify the shape") instead of freezing the tab. READ-001's
+  sub-cell boundary localisation removed the need for a finer grid, so the divisor and this budget
+  are unchanged from RS-1011.
 * Ring count is bounded twice: naturally, by the distance field's own finite, computed maximum
   (rings stop the moment one threshold is empty); and by a hard `MAX_RING_COUNT` (1000) fail-safe
   against any unexpected non-monotonic edge case.
 * `dedupeStonePoints()` guarantees Contour/Radial Fill never emit two stones closer than
-  `spacingMm * 0.5` to each other, measured directly (see `tools/test-fill-algorithms.mjs`), not
-  merely visually inspected.
+  `stoneSizeMm` (READ-001; `spacingMm` when the caller omits `stoneSizeMm`) — measured directly (see
+  `tools/test-fill-algorithms.mjs` and `tools/test-read-001-contour-centreline.mjs`), not merely
+  visually inspected. Grid and Staggered Fill keep the full `spacingMm` floor (their lattice
+  placement makes sub-pitch pairs impossible anyway).
 * Every new sampler validates `spacingMm > 0` and returns `[]` for a null/empty bounding box, exactly
   matching every pre-existing sampler in `StoneSampler.js` — no new failure mode was invented, no
   existing one was removed.
@@ -269,8 +294,10 @@ support."
 
 * Radial Fill's center is not user-configurable (see above) — a future milestone could add an
   explicit override if a real design need for an off-center radial pattern surfaces.
-* Contour Fill's distance transform is an approximate (chamfer) Euclidean distance, not exact; error
-  is bounded by the grid cell size (`spacingMm/8`, i.e. well under 12.5% of one stone pitch) and is
-  measured directly in `tools/test-fill-algorithms.mjs`, not just asserted.
+* Contour Fill's distance transform is an approximate (chamfer) Euclidean distance, not exact; with
+  READ-001's interpolated crossings and sub-cell boundary localisation the residual ring-placement
+  error is within ±0.012mm of nominal per branch at `spacingMm/8`, measured directly in
+  `tools/test-read-001-contour-centreline.mjs` (and `tools/test-fill-algorithms.mjs`), not just
+  asserted.
 * Grid Fill retains its pre-existing axis-aligned-only orientation (no rotation control) — unchanged
   from before this milestone, not a regression.

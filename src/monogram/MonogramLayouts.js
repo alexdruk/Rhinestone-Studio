@@ -11,6 +11,23 @@
  * same plain {xMm,yMm,widthMm,heightMm} box shape FrameLibrary.js's own resolve/compute functions
  * already accept or return (e.g. computeFrameFitRect()'s result) — that keeps this module usable
  * with FrameLibrary's output without importing FrameLibrary itself.
+ *
+ * MONO-013 (the 'script' layout): every other layout here divides the frame interior into disjoint
+ * per-letter rectangular slots and hands MonogramGenerator a mandatory inter-slot gap so two
+ * adjacent letters can never touch. For a connected script font that is the wrong model — the
+ * Etsy-style monograms this product chases are one flowing mark whose swashes deliberately cross.
+ * The 'script' layout therefore performs no slot arithmetic at all: it returns a single slot equal
+ * to the whole frame interior, and MonogramGenerator sets the letters as one string via the font's
+ * own advances/kerning plus a negative letter-spacing "overlap" control, deduped in a single
+ * sampling call (see MonogramGenerator's script branch and GeometryEngine._buildLineContours()).
+ * Because there is only one slot there is no inter-slot gap to floor, so `minGapMm` is ignored,
+ * exactly as the Single layout already ignores it.
+ *
+ * MONO-016 (the shared "Letter spacing" control): the four slot layouts additionally accept an
+ * `extraGapMm` term added on top of the floored inter-slot gap -- a user-controlled additive spread.
+ * The 'script' layout ignores `extraGapMm` for the same reason it ignores `minGapMm` (one slot, no
+ * inter-slot gap); for a connected script mark the equivalent control instead rides through as the
+ * emitted layer's `letterSpacing` (see MonogramGenerator's script branch).
  */
 
 // Layout identifiers. A future UI/generator branches on these values, never on label text.
@@ -18,16 +35,31 @@ export const MONOGRAM_LAYOUTS = Object.freeze({
   SINGLE: 'single',
   TWO_LETTER: 'two-letter',
   TRADITIONAL_THREE: 'traditional-three',
-  EQUAL_THREE: 'equal-three'
+  EQUAL_THREE: 'equal-three',
+  // MONO-013: connected-script monogram — one interlocked mark, not per-letter slots. See the
+  // module doc comment above.
+  SCRIPT: 'script'
 });
 
 // The exact letter count each layout supports. computeMonogramLayout() rejects any other count
 // for a given layoutId as MONOGRAM_LAYOUT_FAILURE_REASONS.UNSUPPORTED_LETTER_COUNT.
+// MONO-013: the 'script' layout deliberately does NOT appear here — it accepts a RANGE of letter
+// counts, expressed in MONOGRAM_LAYOUT_LETTER_COUNT_RANGES below, which a single exact integer
+// cannot represent. computeMonogramLayout() consults the range map first and falls through to this
+// exact-count map for every other layout.
 export const MONOGRAM_LAYOUT_LETTER_COUNTS = Object.freeze({
   [MONOGRAM_LAYOUTS.SINGLE]: 1,
   [MONOGRAM_LAYOUTS.TWO_LETTER]: 2,
   [MONOGRAM_LAYOUTS.TRADITIONAL_THREE]: 3,
   [MONOGRAM_LAYOUTS.EQUAL_THREE]: 3
+});
+
+// MONO-013: layouts that accept an inclusive [min, max] range of letter counts rather than one
+// exact count. Only the 'script' layout is range-based (one interlocked mark reads fine at 1, 2 or
+// 3 letters). computeMonogramLayout() rejects an out-of-range count as
+// MONOGRAM_LAYOUT_FAILURE_REASONS.UNSUPPORTED_LETTER_COUNT, exactly like an exact-count mismatch.
+export const MONOGRAM_LAYOUT_LETTER_COUNT_RANGES = Object.freeze({
+  [MONOGRAM_LAYOUTS.SCRIPT]: Object.freeze({ min: 1, max: 3 })
 });
 
 // Reason codes computeMonogramLayout() returns on failure -- a caller branches on these, not on
@@ -65,6 +97,11 @@ export const MONOGRAM_LAYOUT_FAILURE_REASONS = Object.freeze({
 // meaningfully different baseline.
 
 const SINGLE_HEIGHT_RATIO = 1;
+
+// MONO-013: the 'script' layout's single slot fills the frame interior top to bottom, same as
+// Single. Named separately only so a future tweak to one layout's fill fraction does not silently
+// move the other.
+const SCRIPT_HEIGHT_RATIO = 1;
 
 const TWO_LETTER_WIDTH_RATIO = 0.46;
 const TWO_LETTER_HEIGHT_RATIO = 0.92;
@@ -113,6 +150,16 @@ function failure(reason, message, layoutId, letterCount) {
  *   room between their bounding boxes, rather than relying on collision detection to reject an
  *   undersized ratio-only gap after the fact.
  *
+ * @param {number} [extraGapMm] MONO-016: an absolute mm term ADDED to the floored inter-slot gap
+ *   (`Math.max(frameInteriorRect.widthMm * gapRatio, minGapMm) + extraGapMm`). This is the shared
+ *   "Letter spacing" control's slot-layout implementation: unlike `minGapMm` (a floor), it always
+ *   widens the gap by exactly its value. It is never negative on a slot layout -- MonogramGenerator
+ *   rejects a negative request as INVALID_INPUT rather than passing it here, because below the
+ *   `minGapMm` production clearance adjacent letters' stones physically collide. `extraGapMm`
+ *   defaults to 0, and 0 is byte-identical to pre-MONO-016 for every layout. When the widened gaps
+ *   leave the ratio-derived slot widths no room, the same proportional `shrink` and the same
+ *   `null` return (reported as INSUFFICIENT_SPACE) already handle it -- no new reason code.
+ *
  *   When honoring minGapMm in full would leave the ratio-derived slot widths no room to fit
  *   (their sum plus every gap would exceed frameInteriorRect's own width), every slot's width is
  *   shrunk *proportionally* -- never its height, and never its ratio relative to the other slots,
@@ -125,8 +172,8 @@ function failure(reason, message, layoutId, letterCount) {
  *   the caller must treat that as a genuine, reported failure, never silently overflow past the
  *   interior.
  */
-function layoutHorizontalGroup(frameInteriorRect, widthRatios, heightRatios, gapRatio, minGapMm = 0) {
-  const gapMm = Math.max(frameInteriorRect.widthMm * gapRatio, minGapMm);
+function layoutHorizontalGroup(frameInteriorRect, widthRatios, heightRatios, gapRatio, minGapMm = 0, extraGapMm = 0) {
+  const gapMm = Math.max(frameInteriorRect.widthMm * gapRatio, minGapMm) + extraGapMm;
   const totalGapMm = gapMm * (widthRatios.length - 1);
   const availableForSlotsMm = frameInteriorRect.widthMm - totalGapMm;
   if (!(availableForSlotsMm > 0)) return null;
@@ -176,10 +223,10 @@ function buildSingleSlots(frameInteriorRect) {
   return [buildSlot(0, rect, SINGLE_HEIGHT_RATIO, frameInteriorRect, 0)];
 }
 
-function buildTwoLetterSlots(frameInteriorRect, minGapMm) {
+function buildTwoLetterSlots(frameInteriorRect, minGapMm, extraGapMm) {
   const widthRatios = [TWO_LETTER_WIDTH_RATIO, TWO_LETTER_WIDTH_RATIO];
   const heightRatios = [TWO_LETTER_HEIGHT_RATIO, TWO_LETTER_HEIGHT_RATIO];
-  const rects = layoutHorizontalGroup(frameInteriorRect, widthRatios, heightRatios, TWO_LETTER_GAP_RATIO, minGapMm);
+  const rects = layoutHorizontalGroup(frameInteriorRect, widthRatios, heightRatios, TWO_LETTER_GAP_RATIO, minGapMm, extraGapMm);
   if (!rects) return null;
   return rects.map((rect, i) => buildSlot(i, rect, heightRatios[i], frameInteriorRect, i));
 }
@@ -189,7 +236,7 @@ function buildTwoLetterSlots(frameInteriorRect, minGapMm) {
 // (0, 1) and the enlarged center slot last (2), so a renderer drawing in ascending drawOrder paints
 // the smaller side letters first and the dominant center letter on top of them, the conventional
 // traditional-three-letter monogram look.
-function buildTraditionalThreeSlots(frameInteriorRect, minGapMm) {
+function buildTraditionalThreeSlots(frameInteriorRect, minGapMm, extraGapMm) {
   const widthRatios = [
     TRADITIONAL_THREE_SIDE_WIDTH_RATIO,
     TRADITIONAL_THREE_CENTER_WIDTH_RATIO,
@@ -200,16 +247,33 @@ function buildTraditionalThreeSlots(frameInteriorRect, minGapMm) {
     TRADITIONAL_THREE_CENTER_HEIGHT_RATIO,
     TRADITIONAL_THREE_SIDE_HEIGHT_RATIO
   ];
-  const rects = layoutHorizontalGroup(frameInteriorRect, widthRatios, heightRatios, TRADITIONAL_THREE_GAP_RATIO, minGapMm);
+  const rects = layoutHorizontalGroup(frameInteriorRect, widthRatios, heightRatios, TRADITIONAL_THREE_GAP_RATIO, minGapMm, extraGapMm);
   if (!rects) return null;
   const drawOrders = [0, 2, 1]; // left, center, right -> center (index 1) drawn last
   return rects.map((rect, i) => buildSlot(i, rect, heightRatios[i], frameInteriorRect, drawOrders[i]));
 }
 
-function buildEqualThreeSlots(frameInteriorRect, minGapMm) {
+// MONO-013: one slot equal to the whole frame interior. No gap arithmetic, no proportional shrink,
+// no minGapMm (there is only one slot). MonogramGenerator's script branch does the interlocked-
+// string fitting against this single targetRect. Signature matches the other builders (frameInterior
+// then minGapMm then extraGapMm) purely so LAYOUT_BUILDERS can call them all identically; both are
+// unused. MONO-016: extraGapMm is ignored here for the same reason minGapMm is -- there is no
+// inter-slot gap; the script mark's spacing control rides through as the emitted layer's
+// letterSpacing instead.
+function buildScriptSlots(frameInteriorRect) {
+  const rect = {
+    xMm: frameInteriorRect.xMm,
+    yMm: frameInteriorRect.yMm,
+    widthMm: frameInteriorRect.widthMm,
+    heightMm: frameInteriorRect.heightMm
+  };
+  return [buildSlot(0, rect, SCRIPT_HEIGHT_RATIO, frameInteriorRect, 0)];
+}
+
+function buildEqualThreeSlots(frameInteriorRect, minGapMm, extraGapMm) {
   const widthRatios = [EQUAL_THREE_WIDTH_RATIO, EQUAL_THREE_WIDTH_RATIO, EQUAL_THREE_WIDTH_RATIO];
   const heightRatios = [EQUAL_THREE_HEIGHT_RATIO, EQUAL_THREE_HEIGHT_RATIO, EQUAL_THREE_HEIGHT_RATIO];
-  const rects = layoutHorizontalGroup(frameInteriorRect, widthRatios, heightRatios, EQUAL_THREE_GAP_RATIO, minGapMm);
+  const rects = layoutHorizontalGroup(frameInteriorRect, widthRatios, heightRatios, EQUAL_THREE_GAP_RATIO, minGapMm, extraGapMm);
   if (!rects) return null;
   return rects.map((rect, i) => buildSlot(i, rect, heightRatios[i], frameInteriorRect, i));
 }
@@ -218,16 +282,20 @@ const LAYOUT_BUILDERS = Object.freeze({
   [MONOGRAM_LAYOUTS.SINGLE]: buildSingleSlots,
   [MONOGRAM_LAYOUTS.TWO_LETTER]: buildTwoLetterSlots,
   [MONOGRAM_LAYOUTS.TRADITIONAL_THREE]: buildTraditionalThreeSlots,
-  [MONOGRAM_LAYOUTS.EQUAL_THREE]: buildEqualThreeSlots
+  [MONOGRAM_LAYOUTS.EQUAL_THREE]: buildEqualThreeSlots,
+  [MONOGRAM_LAYOUTS.SCRIPT]: buildScriptSlots
 });
 
 /**
  * Computes the ordered slot geometry for a monogram layout. Pure function of its inputs: no DOM,
  * no randomness, no shared mutable state, so identical arguments always produce identical slots.
  *
- * @param {{layoutId:string, frameInteriorRect:{xMm:number,yMm:number,widthMm:number,heightMm:number}, letterCount:number, minGapMm?:number}} request
+ * @param {{layoutId:string, frameInteriorRect:{xMm:number,yMm:number,widthMm:number,heightMm:number}, letterCount:number, minGapMm?:number, extraGapMm?:number}} request
  *   MONO-006E: `minGapMm` (default 0) is an absolute mm floor on the gap between adjacent slots --
  *   see layoutHorizontalGroup()'s own doc comment. Ignored (no gap to enforce) by the Single layout.
+ *   MONO-016: `extraGapMm` (default 0, never negative) is an absolute mm term ADDED on top of the
+ *   floored gap -- the shared "Letter spacing" control's slot-layout sink. Ignored by the Single
+ *   and Script layouts (no inter-slot gap).
  * @returns {{
  *   ok: boolean,
  *   reason?: string,
@@ -251,11 +319,18 @@ export function computeMonogramLayout(request) {
   const letterCount = request && typeof request === 'object' ? request.letterCount : undefined;
   const minGapMmRaw = request && typeof request === 'object' ? request.minGapMm : undefined;
   const minGapMm = Number.isFinite(minGapMmRaw) && minGapMmRaw > 0 ? minGapMmRaw : 0;
+  const extraGapMmRaw = request && typeof request === 'object' ? request.extraGapMm : undefined;
+  const extraGapMm = Number.isFinite(extraGapMmRaw) && extraGapMmRaw > 0 ? extraGapMmRaw : 0;
 
   const layoutIdForResult = typeof layoutId === 'string' ? layoutId : null;
   const letterCountForResult = typeof letterCount === 'number' ? letterCount : null;
 
-  if (!Object.prototype.hasOwnProperty.call(MONOGRAM_LAYOUT_LETTER_COUNTS, layoutId)) {
+  // MONO-013: a layout is known if it has either an exact letter count OR a letter-count range.
+  const hasExactLetterCount = Object.prototype.hasOwnProperty.call(MONOGRAM_LAYOUT_LETTER_COUNTS, layoutId);
+  const letterCountRange = Object.prototype.hasOwnProperty.call(MONOGRAM_LAYOUT_LETTER_COUNT_RANGES, layoutId)
+    ? MONOGRAM_LAYOUT_LETTER_COUNT_RANGES[layoutId]
+    : null;
+  if (!hasExactLetterCount && !letterCountRange) {
     return failure(
       MONOGRAM_LAYOUT_FAILURE_REASONS.UNKNOWN_LAYOUT,
       `Unknown monogram layout id ${JSON.stringify(layoutId)}.`,
@@ -282,14 +357,25 @@ export function computeMonogramLayout(request) {
     );
   }
 
-  const requiredLetterCount = MONOGRAM_LAYOUT_LETTER_COUNTS[layoutId];
-  if (letterCount !== requiredLetterCount) {
-    return failure(
-      MONOGRAM_LAYOUT_FAILURE_REASONS.UNSUPPORTED_LETTER_COUNT,
-      `Layout ${JSON.stringify(layoutId)} requires exactly ${requiredLetterCount} letter(s), got ${letterCount}.`,
-      layoutIdForResult,
-      letterCountForResult
-    );
+  if (letterCountRange) {
+    if (letterCount < letterCountRange.min || letterCount > letterCountRange.max) {
+      return failure(
+        MONOGRAM_LAYOUT_FAILURE_REASONS.UNSUPPORTED_LETTER_COUNT,
+        `Layout ${JSON.stringify(layoutId)} supports ${letterCountRange.min}–${letterCountRange.max} letter(s), got ${letterCount}.`,
+        layoutIdForResult,
+        letterCountForResult
+      );
+    }
+  } else {
+    const requiredLetterCount = MONOGRAM_LAYOUT_LETTER_COUNTS[layoutId];
+    if (letterCount !== requiredLetterCount) {
+      return failure(
+        MONOGRAM_LAYOUT_FAILURE_REASONS.UNSUPPORTED_LETTER_COUNT,
+        `Layout ${JSON.stringify(layoutId)} requires exactly ${requiredLetterCount} letter(s), got ${letterCount}.`,
+        layoutIdForResult,
+        letterCountForResult
+      );
+    }
   }
 
   const normalizedFrameInteriorRect = {
@@ -299,11 +385,11 @@ export function computeMonogramLayout(request) {
     heightMm: frameInteriorRect.heightMm
   };
 
-  const slots = LAYOUT_BUILDERS[layoutId](normalizedFrameInteriorRect, minGapMm);
+  const slots = LAYOUT_BUILDERS[layoutId](normalizedFrameInteriorRect, minGapMm, extraGapMm);
   if (!slots) {
     return failure(
       MONOGRAM_LAYOUT_FAILURE_REASONS.INSUFFICIENT_SPACE,
-      `Layout ${JSON.stringify(layoutId)} cannot fit ${letterCount} letter(s) inside a ${normalizedFrameInteriorRect.widthMm.toFixed(1)}×${normalizedFrameInteriorRect.heightMm.toFixed(1)}mm region while keeping ${minGapMm.toFixed(2)}mm of required spacing between letters.`,
+      `Layout ${JSON.stringify(layoutId)} cannot fit ${letterCount} letter(s) inside a ${normalizedFrameInteriorRect.widthMm.toFixed(1)}×${normalizedFrameInteriorRect.heightMm.toFixed(1)}mm region while keeping ${(minGapMm + extraGapMm).toFixed(2)}mm of required spacing between letters.`,
       layoutIdForResult,
       letterCountForResult
     );

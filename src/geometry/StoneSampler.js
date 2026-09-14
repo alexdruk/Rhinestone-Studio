@@ -6,8 +6,8 @@
  * placement. They contain no font, rendering, or export concerns.
  */
 
-import { Point2D } from '../text/VectorPath.js';
-import { computeInwardRingPolygons } from './ContourRingSampler.js';
+import { Point2D, BoundingBox } from '../text/VectorPath.js';
+import { computeInwardRingPolygons, splitSliverRuns } from './ContourRingSampler.js';
 import { groupCongruentContours, applyRigidTransform } from './CongruentContours.js';
 
 // Outline-mode uniform-perimeter spacing: the actual per-contour walk step that makes
@@ -144,14 +144,49 @@ export function sampleFillPoints(polygons, boundingBox, spacingMm) {
  * Even-odd point-in-polygon test across multiple polygons, so glyph holes
  * (inner contours) correctly subtract from outer contours.
  *
+ * PERF-006: a grid fill (sampleFillPoints() and the other fill-mode loops in this file) calls this
+ * once per candidate point against the *same* `polygons` array every time -- for a large/dense fill
+ * of a multi-contour shape (many characters, or a shape assembled from many parts), that's grid
+ * points times total vertices across every contour, most of which can never match (a candidate far
+ * to the side of one letter's contour still ran that letter's whole ray-cast loop before this fix --
+ * this matters more in X than Y for text specifically, since the glyphs in one line of text mostly
+ * share a Y range but are spread out horizontally). Each contour's bounding box is cheap to
+ * precompute once and cache by the `polygons` array's own identity (a WeakMap self-invalidates once
+ * that array is no longer referenced, and this pipeline never mutates a polygon's points in place
+ * after construction -- see Point2D's own translate()/scale(), which return new instances -- so
+ * caching by reference is safe: the same array reference always holds the same coordinates for as
+ * long as it's reachable). A point outside a contour's bounding box cannot cross any of that
+ * contour's edges under the ray-cast test below, so skipping it can never change the even-odd
+ * result -- this is a pure reject, not an approximation.
+ *
  * @param {Point2D} point
  * @param {Point2D[][]} polygons
  * @returns {boolean}
  */
+const polygonBoundsCache = new WeakMap(); // polygons (Point2D[][]) -> {minX, maxX, minY, maxY}[], same order/length as polygons
+function getPolygonBounds(polygons) {
+  let bounds = polygonBoundsCache.get(polygons);
+  if (bounds) return bounds;
+  bounds = polygons.map((polygon) => {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const v of polygon) {
+      if (v.xMm < minX) minX = v.xMm;
+      if (v.xMm > maxX) maxX = v.xMm;
+      if (v.yMm < minY) minY = v.yMm;
+      if (v.yMm > maxY) maxY = v.yMm;
+    }
+    return { minX, maxX, minY, maxY };
+  });
+  polygonBoundsCache.set(polygons, bounds);
+  return bounds;
+}
 export function isPointInsidePolygons(point, polygons) {
   let inside = false;
-  for (const polygon of polygons) {
-    if (isPointInsidePolygon(point, polygon)) {
+  const bounds = getPolygonBounds(polygons);
+  for (let i = 0; i < polygons.length; i++) {
+    const b = bounds[i];
+    if (point.xMm < b.minX || point.xMm > b.maxX || point.yMm < b.minY || point.yMm > b.maxY) continue; // pure reject, see doc comment above
+    if (isPointInsidePolygon(point, polygons[i])) {
       inside = !inside;
     }
   }
@@ -175,6 +210,106 @@ function isPointInsidePolygon(point, polygon) {
   }
 
   return inside;
+}
+
+/**
+ * READ-002 Part A: group a flat contour list into connected components by even-odd nesting.
+ *
+ * Returns `Point2D[][][]` -- an array of components, each an array of contours: one outer contour
+ * followed by its holes, exactly the `[outer, ...holes]` shape sampleContourFillPoints() /
+ * isPointInsidePolygons() already expect for one glyph or one shape part.
+ *
+ * The unit is a **connected component by even-odd nesting**, deliberately NOT a character:
+ *
+ *  - An `i`'s dot and its stem become separate components, so each gets its own radial anchor -- a
+ *    per-character anchor would sit in the empty space between the two.
+ *  - An `a`'s counter stays a hole of its outer contour, so the even-odd `isPointInsidePolygons()`
+ *    semantics are preserved with no hole-specific code, exactly as sampleContourFillPoints()
+ *    already relies on.
+ *  - Grouping is derivable from the polygons already passed in, so this change stays entirely
+ *    inside StoneSampler.js. A true per-character unit would need glyph identity threaded from
+ *    GeometryEngine._buildLineContours() through _textPolygons() into the sampler, and would fix
+ *    text only.
+ *  - It generalises to SVG imports and multi-part shape layers at no extra cost.
+ *
+ * Algorithm:
+ *  1. Compute each contour's bounding box once.
+ *  2. `depth[i]` = the number of contours `j !== i` whose bounding box contains contour `i`'s
+ *     bounding box AND for which `isPointInsidePolygons(polygons[i][0], [polygons[j]])` is true. The
+ *     bounding-box test is a prefilter only; the point test decides.
+ *  3. Even `depth` is an outer and starts a component. Components are emitted in ascending order of
+ *     their outer contour's index in `polygons`, so the output is deterministic.
+ *  4. Odd `depth` is a hole, attached to the containing even-depth contour with the smallest
+ *     bounding-box area. An odd-depth contour with no containing outer (should not occur; defensive)
+ *     becomes its own component rather than being dropped.
+ *
+ * @param {Point2D[][]} polygons
+ * @returns {Point2D[][][]}
+ */
+export function groupPolygonsIntoComponents(polygons) {
+  const n = polygons.length;
+  if (n === 0) return [];
+
+  const bounds = polygons.map((polygon) => {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const v of polygon) {
+      if (v.xMm < minX) minX = v.xMm;
+      if (v.xMm > maxX) maxX = v.xMm;
+      if (v.yMm < minY) minY = v.yMm;
+      if (v.yMm > maxY) maxY = v.yMm;
+    }
+    return { minX, maxX, minY, maxY, areaMm2: Math.max(0, maxX - minX) * Math.max(0, maxY - minY) };
+  });
+
+  const bboxContains = (outer, inner) =>
+    outer.minX <= inner.minX && outer.maxX >= inner.maxX &&
+    outer.minY <= inner.minY && outer.maxY >= inner.maxY;
+
+  // containers[i] = indices j !== i that geometrically contain contour i (bbox prefilter, then the
+  // deciding point-in-polygon test).
+  const containers = polygons.map((polygon, i) => {
+    const inside = [];
+    if (polygon.length > 0) {
+      for (let j = 0; j < n; j++) {
+        if (j === i) continue;
+        if (!bboxContains(bounds[j], bounds[i])) continue;
+        if (isPointInsidePolygons(polygon[0], [polygons[j]])) inside.push(j);
+      }
+    }
+    return inside;
+  });
+
+  const depth = containers.map((c) => c.length);
+  const isOuter = depth.map((d) => d % 2 === 0);
+
+  const components = [];
+  const componentByOuterIndex = new Map();
+  for (let i = 0; i < n; i++) {
+    if (!isOuter[i]) continue;
+    const contours = [polygons[i]];
+    components.push(contours);
+    componentByOuterIndex.set(i, contours);
+  }
+
+  for (let i = 0; i < n; i++) {
+    if (isOuter[i]) continue;
+    let bestOuter = -1;
+    let bestAreaMm2 = Infinity;
+    for (const j of containers[i]) {
+      if (!isOuter[j]) continue;
+      if (bounds[j].areaMm2 < bestAreaMm2) {
+        bestAreaMm2 = bounds[j].areaMm2;
+        bestOuter = j;
+      }
+    }
+    if (bestOuter === -1) {
+      components.push([polygons[i]]); // defensive: an odd-depth contour with no containing outer
+    } else {
+      componentByOuterIndex.get(bestOuter).push(polygons[i]);
+    }
+  }
+
+  return components;
 }
 
 /**
@@ -284,6 +419,73 @@ export function dedupeStonesByRadius(stones) {
           const ddx = stone.x - other.x;
           const ddy = stone.y - other.y;
           const minSeparationMm = (stone.d + other.d) / 2;
+          if (ddx * ddx + ddy * ddy < minSeparationMm * minSeparationMm) {
+            overlaps = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!overlaps) {
+      kept.push(stone);
+      const key = `${gx},${gy}`;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(stone);
+    }
+  }
+
+  return kept;
+}
+
+/**
+ * MONO-015 phase C -- radius-aware drop for weight-following stone size.
+ *
+ * `assigned` is the phase-B output: `{xMm, yMm, sizeMm}` records in contour walk order, one per
+ * surviving phase-A sample, each carrying the diameter weightSizeMm() assigned to the local stroke
+ * width there. Phase A only guaranteed the smallest step diameter's centre-to-centre separation
+ * (it sampled at that pitch and deduped at that floor); a pair where one or both stones were then
+ * assigned a larger diameter can therefore now physically overlap. This pass removes exactly those
+ * overlaps: for every pair whose centres are within the largest assigned diameter, it requires
+ * `dist >= (d1 + d2) / 2` and, where that fails, drops the LATER stone in walk order (first of any
+ * overlapping pair wins, matching dedupeStonePoints()/dedupeStonesByRadius()). It never moves a
+ * stone.
+ *
+ * The floor is `(d1 + d2) / 2` with NO `+ gapMm`. That is the exact per-pair generalisation of the
+ * scalar `minSeparationMm: stoneSizeMm` sampleShapeFillPoints() passes for uniform outline mode
+ * (StoneSampler.js's 'outline' case): for two equal stones `(d + d) / 2 = d`, so when
+ * the step has a single diameter this pass reduces to today's behaviour exactly. Adding a gap
+ * term would make weight mode stricter than uniform for no stated reason.
+ *
+ * NOT dedupeStonesByRadius(): every stone in one text layer carries the same `layerId`, and that
+ * function skips same-`layerId` pairs unconditionally (StoneSampler.js:379-385), so applied within
+ * a single layer it is a no-op on every pair. This pass compares every pair regardless of layerId.
+ *
+ * @param {{xMm:number,yMm:number,sizeMm:number}[]} assigned
+ * @returns {{xMm:number,yMm:number,sizeMm:number}[]}
+ */
+export function dropOverlappingSizedStones(assigned) {
+  if (assigned.length === 0) {
+    return assigned;
+  }
+
+  const cellSizeMm = Math.max(...assigned.map((s) => s.sizeMm));
+  const buckets = new Map();
+  const kept = [];
+
+  for (const stone of assigned) {
+    const gx = Math.floor(stone.xMm / cellSizeMm);
+    const gy = Math.floor(stone.yMm / cellSizeMm);
+    let overlaps = false;
+
+    for (let dy = -1; dy <= 1 && !overlaps; dy++) {
+      for (let dx = -1; dx <= 1 && !overlaps; dx++) {
+        const bucket = buckets.get(`${gx + dx},${gy + dy}`);
+        if (!bucket) continue;
+        for (const other of bucket) {
+          const ddx = stone.xMm - other.xMm;
+          const ddy = stone.yMm - other.yMm;
+          const minSeparationMm = (stone.sizeMm + other.sizeMm) / 2;
           if (ddx * ddx + ddy * ddy < minSeparationMm * minSeparationMm) {
             overlaps = true;
             break;
@@ -1073,16 +1275,13 @@ function sampleMultiContourOutlinePointsWithCornerProtection(polygons, contourSa
   return result;
 }
 
-// RS-1011: dedupeStonePoints()'s minimum-distance floor for Contour/Radial Fill, as a fraction of
-// the stone pitch. This is 1.0 -- the *full* pitch, not a discount -- deliberately: StoneSampler.js
-// only ever receives the combined spacingMm (stoneSizeMm + gapMm), never the two values separately,
-// so there is no safe smaller floor that is guaranteed non-overlapping for every stoneSize/gap
-// split a user could configure (e.g. a small gap would let a fractional floor like 0.9*spacingMm
-// fall below stoneSizeMm itself -- literal physical overlap). Every other mode's target minimum
-// spacing is already exactly spacingMm; Contour/Radial Fill hold to the same one number, per "use
-// the existing stone pitch convention, do not invent a second spacing formula" -- see
-// docs/specifications/RS-1011-FillAlgorithms.md, "Precision and Fail-Safes".
-const DEDUPE_FRACTION_OF_SPACING = 1.0;
+// READ-001: dedupeStonePoints()'s minimum-distance floor for Contour/Radial Fill. The physical
+// constraint is literal stone-on-stone overlap -- the sum of two same-size stones' radii, i.e.
+// stoneSizeMm -- not the gap-inclusive pitch. Both samplers take an optional `stoneSizeMm`
+// (defaulting to `spacingMm`, the pre-READ-001 full-pitch floor) and pass it straight through as
+// this floor. Flooring at the full pitch culled sub-pitch rings wholesale where contour branches
+// converge on an elongated region (see docs/specifications/READ-001-ContourCentreline.md); this
+// mirrors sampleMultiContourOutlinePoints()'s RC-002 move to the same stoneSizeMm floor.
 
 /**
  * Fill the interior of one or more polygons with a hexagonal ("staggered") point arrangement:
@@ -1147,24 +1346,81 @@ function boundingBoxFarthestCornerDistanceMm(boundingBox, center) {
 // spacingMm in a straight line. Chord length for n equally-spaced points is `2*r*sin(pi/n)`, a
 // function that decreases as n increases; solving `2*r*sin(pi/n) = spacingMm` for n and flooring
 // picks the *largest* n (most points) whose chord still meets or exceeds spacingMm.
-function radialStepCount(radiusMm, spacingMm) {
+//
+// READ-002 Part C: floor with a small absolute epsilon. At `r === spacingMm` the half-chord ratio is
+// exactly 0.5 and the exact answer is exactly 6, because `2r*sin(pi/6) = r = spacingMm`. But
+// `Math.asin(0.5)` rounds a half-ulp above `pi/6`, so `Math.PI / Math.asin(0.5)` evaluates to
+// `5.999999999999999` and a bare floor returns 5 -- a 3.527mm chord where 3.000mm was intended,
+// 17.6% over-spaced, on the innermost ring of every radial field ever produced. k = 2..20 were
+// checked and are unchanged by the `+ 1e-9` epsilon; the worst-case chord shortfall it can
+// introduce is ~1e-9 relative, far below any physical tolerance.
+export function radialStepCount(radiusMm, spacingMm) {
   const halfChordRatio = Math.min(1, spacingMm / (2 * radiusMm));
-  return Math.max(1, Math.floor(Math.PI / Math.asin(halfChordRatio)));
+  return Math.max(1, Math.floor(Math.PI / Math.asin(halfChordRatio) + 1e-9));
+}
+
+// READ-002 Part B: the raw concentric-ring candidate points (center first, then each ring's
+// arc-length-even points) for one anchor. No point-in-polygon filtering or dedupe here -- callers
+// apply those. Factored out of sampleRadialFillPoints() so the single-component path stays
+// byte-identical to the pre-READ-002 code while the multi-component path reuses the identical ring
+// geometry per component.
+function radialCandidatePoints(center, maxRadiusMm, spacingMm) {
+  const points = [center];
+  for (let radiusMm = spacingMm; radiusMm <= maxRadiusMm; radiusMm += spacingMm) {
+    const stepCount = radialStepCount(radiusMm, spacingMm);
+    for (let step = 0; step < stepCount; step++) {
+      const angleRad = (step / stepCount) * 2 * Math.PI;
+      points.push(new Point2D(
+        center.xMm + radiusMm * Math.cos(angleRad),
+        center.yMm + radiusMm * Math.sin(angleRad)
+      ));
+    }
+  }
+  return points;
 }
 
 /**
  * Fill the interior of one or more polygons with concentric rings of points spaced radially and
- * along each ring's own arc-length by spacingMm, centered on the shape's own bounding-box center
- * (see docs/specifications/RS-1011-FillAlgorithms.md, "Radial Fill" -- always well-defined, so no
- * per-layer center override field is needed). One stone sits at the exact center when the center
- * point itself is inside the shape.
+ * along each ring's own arc-length by spacingMm (see docs/specifications/RS-1011-FillAlgorithms.md,
+ * "Radial Fill", and docs/specifications/READ-002-RadialPerGlyph.md). One stone sits at each
+ * anchor when the anchor itself is inside the shape.
+ *
+ * READ-002 Part B: the pattern's scale is set by distance from the anchor, so a single whole-layout
+ * anchor makes a multi-part shape (an eight-letter word, an SVG with disjoint pieces) render as a
+ * bullseye at its middle and as near-straight rows at its edges -- one mode, two behaviours in one
+ * layout. So the contours are grouped into connected components (groupPolygonsIntoComponents()) and
+ * each component rays out from its own bounding-box centre.
+ *
+ *  - Exactly one component: the `boundingBox` argument is used exactly as before READ-002 and the
+ *    original code path runs unchanged. This guarantees every existing single-component caller
+ *    (Circle, Rectangle, Slot, Polygon, single-glyph text, a one-piece SVG) stays byte-identical
+ *    (modulo the one extra innermost-ring stone Part C adds).
+ *  - Two or more components: each rays out from its own box's centre and farthest-corner radius; a
+ *    candidate is kept only if it is inside BOTH its own component AND the global `polygons` set.
+ *    The global test preserves today's even-odd `isPointInsidePolygons()` semantics bit-for-bit;
+ *    the component test stops one component's rings bleeding into another.
+ *
+ * The combined candidate set is deduped once via `dedupeStonePoints(points, stoneSizeMm)` -- the
+ * READ-001 `stoneSizeMm` floor, unchanged, including across components (no separate cross-component
+ * floor). That floor guarantees no pair of stones is ever closer than one stone diameter, same-
+ * component or cross-component alike. The *gap* between stones of two different components is NOT
+ * guaranteed: per-component anchors are independent, so two adjacent glyphs' facing edge stones can
+ * land arbitrarily close, down to zero gap (measured worst case across an 8-font x 10-string x
+ * 4-size sweep: 1.0025x the stone diameter). This is the first time Radial Fill produces sub-pitch
+ * spacing at all -- a single whole-layout anchor previously made min NN >= spacingMm structurally.
+ * Same class as contour's post-READ-001 2.57mm-at-2.5mm neighbour. See
+ * docs/specifications/READ-002-RadialPerGlyph.md.
+ *
+ * `sampleRadialFieldFillPoints()` (image/raster layers) has the same single-anchor defect but needs
+ * raster connected-component labelling on a density field -- out of scope, see docs/BACKLOG.md.
  *
  * @param {Point2D[][]} polygons
  * @param {import('../text/VectorPath.js').BoundingBox|null} boundingBox
  * @param {number} spacingMm
+ * @param {number} [stoneSizeMm] READ-001: dedupe floor -- see DEDUPE note above. Defaults to spacingMm.
  * @returns {Point2D[]}
  */
-export function sampleRadialFillPoints(polygons, boundingBox, spacingMm) {
+export function sampleRadialFillPoints(polygons, boundingBox, spacingMm, stoneSizeMm = spacingMm) {
   if (spacingMm <= 0) {
     throw new RangeError('sampleRadialFillPoints requires a positive spacingMm.');
   }
@@ -1172,29 +1428,33 @@ export function sampleRadialFillPoints(polygons, boundingBox, spacingMm) {
     return [];
   }
 
-  const center = boundingBoxCenter(boundingBox);
-  const maxRadiusMm = boundingBoxFarthestCornerDistanceMm(boundingBox, center);
-  const points = [];
+  const components = groupPolygonsIntoComponents(polygons);
 
-  if (isPointInsidePolygons(center, polygons)) {
-    points.push(center);
+  if (components.length <= 1) {
+    // Single component (or an empty polygon set): use the caller's boundingBox exactly as today.
+    const center = boundingBoxCenter(boundingBox);
+    const maxRadiusMm = boundingBoxFarthestCornerDistanceMm(boundingBox, center);
+    const points = radialCandidatePoints(center, maxRadiusMm, spacingMm)
+      .filter((candidate) => isPointInsidePolygons(candidate, polygons));
+    return dedupeStonePoints(points, stoneSizeMm);
   }
 
-  for (let radiusMm = spacingMm; radiusMm <= maxRadiusMm; radiusMm += spacingMm) {
-    const stepCount = radialStepCount(radiusMm, spacingMm);
-    for (let step = 0; step < stepCount; step++) {
-      const angleRad = (step / stepCount) * 2 * Math.PI;
-      const candidate = new Point2D(
-        center.xMm + radiusMm * Math.cos(angleRad),
-        center.yMm + radiusMm * Math.sin(angleRad)
-      );
-      if (isPointInsidePolygons(candidate, polygons)) {
+  const points = [];
+  for (const componentContours of components) {
+    const componentBox = BoundingBox.fromPoints(componentContours.flat());
+    if (!componentBox) {
+      continue;
+    }
+    const center = boundingBoxCenter(componentBox);
+    const maxRadiusMm = boundingBoxFarthestCornerDistanceMm(componentBox, center);
+    for (const candidate of radialCandidatePoints(center, maxRadiusMm, spacingMm)) {
+      if (isPointInsidePolygons(candidate, componentContours) && isPointInsidePolygons(candidate, polygons)) {
         points.push(candidate);
       }
     }
   }
 
-  return dedupeStonePoints(points, spacingMm * DEDUPE_FRACTION_OF_SPACING);
+  return dedupeStonePoints(points, stoneSizeMm);
 }
 
 /**
@@ -1204,12 +1464,19 @@ export function sampleRadialFillPoints(polygons, boundingBox, spacingMm) {
  * hole-specific code -- the same even-odd isPointInsidePolygons() every other mode uses defines
  * "inside" for the distance transform too, so a hole's interior seeds as "outside" automatically.
  *
+ * READ-001: both the shape's own boundary contour(s) and every traced inward ring are passed
+ * through splitSliverRuns() (minSeparationMm = spacingMm) before sampling -- where a loop's opposing
+ * branches close up on an elongated region (a letter stroke), that run collapses to a single line
+ * of medial-axis points instead of two near-coincident rows that dedupe would then cull in
+ * arbitrary walk order. Collapsing the boundary contour is what centres a sub-pitch stroke.
+ *
  * @param {Point2D[][]} polygons
  * @param {import('../text/VectorPath.js').BoundingBox|null} boundingBox
  * @param {number} spacingMm
+ * @param {number} [stoneSizeMm] READ-001: dedupe floor -- see the DEDUPE note above. Defaults to spacingMm.
  * @returns {Point2D[]}
  */
-export function sampleContourFillPoints(polygons, boundingBox, spacingMm) {
+export function sampleContourFillPoints(polygons, boundingBox, spacingMm, stoneSizeMm = spacingMm) {
   if (spacingMm <= 0) {
     throw new RangeError('sampleContourFillPoints requires a positive spacingMm.');
   }
@@ -1222,18 +1489,31 @@ export function sampleContourFillPoints(polygons, boundingBox, spacingMm) {
   // already documents and avoids, reachable here too because a shape's placement size and a fine
   // stone pitch are independent of each other.
   const points = [];
-  for (const polygon of polygons) {
-    for (const point of sampleOutlinePoints(polygon, spacingMm, { closed: true })) points.push(point);
-  }
+  const sampleLoopWithCollapse = (loopVertices) => {
+    for (const piece of splitSliverRuns(loopVertices, spacingMm)) {
+      const piecePolygon = piece.points.map((p) => new Point2D(p.xMm, p.yMm));
+      if (piecePolygon.length === 1) {
+        points.push(piecePolygon[0]);
+        continue;
+      }
+      for (const point of sampleOutlinePoints(piecePolygon, spacingMm, { closed: piece.closed })) points.push(point);
+    }
+  };
 
+  // Inward rings first: computeInwardRingPolygons() throws ContourFillPrecisionError for a
+  // pathological shape/pitch combination, and it must do so before splitSliverRuns() densifies the
+  // (possibly huge, coarse) boundary polygon for that same input (READ-001 Finding 2).
   const insideAt = (xMm, yMm) => isPointInsidePolygons(new Point2D(xMm, yMm), polygons);
   const rings = computeInwardRingPolygons({ insideAt, boundingBox, spacingMm, startOffsetMm: spacingMm });
+
+  for (const polygon of polygons) {
+    sampleLoopWithCollapse(polygon);
+  }
   for (const ring of rings) {
-    const ringPolygon = ring.map((p) => new Point2D(p.xMm, p.yMm));
-    for (const point of sampleOutlinePoints(ringPolygon, spacingMm, { closed: true })) points.push(point);
+    sampleLoopWithCollapse(ring);
   }
 
-  return dedupeStonePoints(points, spacingMm * DEDUPE_FRACTION_OF_SPACING);
+  return dedupeStonePoints(points, stoneSizeMm);
 }
 
 /**
@@ -1247,10 +1527,12 @@ export function sampleContourFillPoints(polygons, boundingBox, spacingMm) {
  * @param {Point2D[][]} polygons
  * @param {import('../text/VectorPath.js').BoundingBox|null} boundingBox
  * @param {number} spacingMm
- * @param {number} [stoneSizeMm] RC-002: outline mode's cross-contour overlap floor (see
- *   sampleMultiContourOutlinePoints()). Only 'outline' reads this; every other mode ignores it.
- *   Defaults to spacingMm (the pre-RC-002 floor) when omitted, so callers that only care about
- *   fill/staggered/radial/contour modes need not pass it.
+ * @param {number} [stoneSizeMm] Physical stone diameter, used as an overlap floor by 'outline'
+ *   (RC-002 cross-contour, see sampleMultiContourOutlinePoints()) and, since READ-001, by 'radial'
+ *   and 'contour' (their post-sampling dedupeStonePoints() floor -- the physical constraint is
+ *   literal stone overlap, not the gap-inclusive pitch). 'fill' and 'staggered' place points on a
+ *   grid, never on converging lanes, and ignore it. Defaults to spacingMm (the pre-READ-001 floor)
+ *   when omitted.
  * @param {boolean} [closed] RS-3011: whether `polygons` form closed loops. Only 'outline' reads
  *   this; every other mode's contours are always closed by construction. Defaults to true, so
  *   every pre-existing caller (Rect/Ellipse/Slot/Polygon, text, SVG's fill-mode branch) is
@@ -1270,8 +1552,8 @@ export function sampleShapeFillPoints(mode, polygons, boundingBox, spacingMm, st
   switch (mode) {
     case 'fill': return sampleFillPoints(polygons, boundingBox, spacingMm);
     case 'staggered': return sampleStaggeredFillPoints(polygons, boundingBox, spacingMm);
-    case 'radial': return sampleRadialFillPoints(polygons, boundingBox, spacingMm);
-    case 'contour': return sampleContourFillPoints(polygons, boundingBox, spacingMm);
+    case 'radial': return sampleRadialFillPoints(polygons, boundingBox, spacingMm, stoneSizeMm);
+    case 'contour': return sampleContourFillPoints(polygons, boundingBox, spacingMm, stoneSizeMm);
     case 'outline':
     default:
       return sampleMultiContourOutlinePoints(polygons, spacingMm, { closed, minSeparationMm: stoneSizeMm, cornerFlagsByContour }, stats);
@@ -1386,9 +1668,10 @@ export function sampleStaggeredFieldFillPoints(field, { xMm, yMm, widthMm, heigh
  * @param {number} placement.widthMm
  * @param {number} placement.heightMm
  * @param {number} spacingMm
+ * @param {number} [stoneSizeMm] READ-001: dedupe floor. Defaults to spacingMm.
  * @returns {Point2D[]}
  */
-export function sampleRadialFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm) {
+export function sampleRadialFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm, stoneSizeMm = spacingMm) {
   if (spacingMm <= 0) {
     throw new RangeError('sampleRadialFieldFillPoints requires a positive spacingMm.');
   }
@@ -1417,7 +1700,7 @@ export function sampleRadialFieldFillPoints(field, { xMm, yMm, widthMm, heightMm
     }
   }
 
-  return dedupeStonePoints(points, spacingMm * DEDUPE_FRACTION_OF_SPACING);
+  return dedupeStonePoints(points, stoneSizeMm);
 }
 
 /**
@@ -1435,9 +1718,10 @@ export function sampleRadialFieldFillPoints(field, { xMm, yMm, widthMm, heightMm
  * @param {number} placement.widthMm
  * @param {number} placement.heightMm
  * @param {number} spacingMm
+ * @param {number} [stoneSizeMm] READ-001: dedupe floor -- see the DEDUPE note above. Defaults to spacingMm.
  * @returns {Point2D[]}
  */
-export function sampleContourFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm) {
+export function sampleContourFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm, stoneSizeMm = spacingMm) {
   if (spacingMm <= 0) {
     throw new RangeError('sampleContourFieldFillPoints requires a positive spacingMm.');
   }
@@ -1449,14 +1733,23 @@ export function sampleContourFieldFillPoints(field, { xMm, yMm, widthMm, heightM
   const boundingBox = { minXmm: 0, minYmm: 0, maxXmm: widthMm, maxYmm: heightMm };
   const rings = computeInwardRingPolygons({ insideAt, boundingBox, spacingMm, startOffsetMm: spacingMm / 2 });
 
-  // One-by-one, not spread -- see sampleContourFillPoints()'s identical safeguard above.
+  // One-by-one, not spread -- see sampleContourFillPoints()'s identical safeguard above. Each ring
+  // goes through splitSliverRuns() (READ-001) so a narrow neck in the density mask collapses to its
+  // medial axis rather than a doubled row.
   const points = [];
   for (const ring of rings) {
-    const placedRing = ring.map((p) => new Point2D(xMm + p.xMm, yMm + p.yMm));
-    for (const point of sampleOutlinePoints(placedRing, spacingMm, { closed: true })) points.push(point);
+    const placedRing = ring.map((p) => ({ xMm: xMm + p.xMm, yMm: yMm + p.yMm }));
+    for (const piece of splitSliverRuns(placedRing, spacingMm)) {
+      const piecePolygon = piece.points.map((p) => new Point2D(p.xMm, p.yMm));
+      if (piecePolygon.length === 1) {
+        points.push(piecePolygon[0]);
+        continue;
+      }
+      for (const point of sampleOutlinePoints(piecePolygon, spacingMm, { closed: piece.closed })) points.push(point);
+    }
   }
 
-  return dedupeStonePoints(points, spacingMm * DEDUPE_FRACTION_OF_SPACING);
+  return dedupeStonePoints(points, stoneSizeMm);
 }
 
 /**
@@ -1469,13 +1762,16 @@ export function sampleContourFieldFillPoints(field, { xMm, yMm, widthMm, heightM
  * @param {{widthPx: number, heightPx: number, data: Uint8ClampedArray}} field
  * @param {object} placement
  * @param {number} spacingMm
+ * @param {number} [stoneSizeMm] READ-001: dedupe floor forwarded to the 'radial' and 'contour'
+ *   field samplers (the physical overlap constraint is stoneSizeMm, not the gap-inclusive pitch).
+ *   'fill'/'staggered' ignore it. Defaults to spacingMm.
  * @returns {Point2D[]}
  */
-export function sampleFieldByMode(mode, field, placement, spacingMm) {
+export function sampleFieldByMode(mode, field, placement, spacingMm, stoneSizeMm = spacingMm) {
   switch (mode) {
     case 'staggered': return sampleStaggeredFieldFillPoints(field, placement, spacingMm);
-    case 'radial': return sampleRadialFieldFillPoints(field, placement, spacingMm);
-    case 'contour': return sampleContourFieldFillPoints(field, placement, spacingMm);
+    case 'radial': return sampleRadialFieldFillPoints(field, placement, spacingMm, stoneSizeMm);
+    case 'contour': return sampleContourFieldFillPoints(field, placement, spacingMm, stoneSizeMm);
     case 'fill':
     default:
       return sampleFieldFillPoints(field, placement, spacingMm);

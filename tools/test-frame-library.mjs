@@ -43,11 +43,12 @@ function shoelaceArea(contour) {
 
 // --- 1. Every frame loads correctly, with a unique id -------------------------------------------
 
-await test('1. listFrames() returns exactly the eight geometric frames, each with a unique id', () => {
+await test('1. listFrames() returns the eight geometric frames plus MONO-014\'s "No frame", each with a unique id', () => {
   const frames = listFrames();
-  assert.equal(frames.length, GEOMETRIC_FRAME_IDS.length);
   const ids = frames.map((f) => f.id);
-  assert.deepEqual([...ids].sort(), [...GEOMETRIC_FRAME_IDS].sort());
+  // MONO-014: 'none' is a real catalog entry (null contours, hollow:false) so the Monogram picker
+  // needs no special case -- see FrameLibrary.js's own comment on that entry.
+  assert.deepEqual([...ids].sort(), [...GEOMETRIC_FRAME_IDS, 'none'].sort());
   assert.equal(new Set(ids).size, ids.length, 'every frame id must be unique');
 });
 
@@ -73,9 +74,9 @@ await test('3. getFrameDefinition() returns each frame by id and throws a specif
   assert.throws(() => getFrameDefinition('bogus-frame'), TypeError);
 });
 
-await test('4. every geometric frame reuses either ShapeLibrary or FrameLibrary geometry, never a third system', () => {
+await test('4. every geometric frame reuses ShapeLibrary or FrameLibrary geometry (or, for "No frame", none), never a third system', () => {
   for (const frame of listFrames()) {
-    assert.ok(['shapeLibrary', 'frameLibrary'].includes(frame.source), `${frame.id}: unexpected source "${frame.source}"`);
+    assert.ok(['shapeLibrary', 'frameLibrary', 'none'].includes(frame.source), `${frame.id}: unexpected source "${frame.source}"`);
   }
   // Circle/Oval/Diamond are direct reuse of existing ShapeLibrary.js generators (Ring, Polygon).
   assert.equal(getFrameDefinition('circle').source, 'shapeLibrary');
@@ -84,6 +85,13 @@ await test('4. every geometric frame reuses either ShapeLibrary or FrameLibrary 
   // Square/Rounded Square needed new geometry (no rounded-rectangle generator existed anywhere).
   assert.equal(getFrameDefinition('square').source, 'frameLibrary');
   assert.equal(getFrameDefinition('rounded-square').source, 'frameLibrary');
+  // MONO-014: 'none' reuses neither module -- it has no geometry at all. It is the only entry
+  // carrying source 'none', and it is the only entry whose natural-contour fields are null;
+  // declaring 'shapeLibrary' here would make this test assert something untrue about the catalog.
+  const noneEntries = listFrames().filter((f) => f.source === 'none');
+  assert.deepEqual(noneEntries.map((f) => f.id), ['none'], "'none' must be the only entry with source 'none'");
+  assert.equal(getFrameDefinition('none').generationNaturalContours, null);
+  assert.equal(getFrameDefinition('none').fittingNaturalContours, null);
 });
 
 // --- 2. Generation contour validity ---------------------------------------------------------------

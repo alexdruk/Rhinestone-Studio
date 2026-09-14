@@ -101,7 +101,7 @@ export function buildSourceReportHtml({
   <h1>FONT-SOURCE-001 &mdash; ${escapeHtml(catalogEntry.displayName)} Review</h1>
   <div class="meta">
     Source: <code>${escapeHtml(candidateRelativePath)}</code> &middot; Category: ${escapeHtml(catalogEntry.category)} (${escapeHtml(catalogEntry.styleNote)})
-    ${catalogEntry.variableFont ? '&middot; Variable font, evaluated at default (Regular/400) instance' : ''}
+    ${catalogEntry.variableFont ? '&middot; Variable font, evaluated at its default instance (whatever weight the file\'s wght axis defaults to)' : ''}
     &middot; Generated ${escapeHtml(generatedAt)}
   </div>
 

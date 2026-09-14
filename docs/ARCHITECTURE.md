@@ -2,10 +2,9 @@
 
 Version: 2.0
 
-Last synchronized with the live repository at commit `aac458b` (`develop`), the ARCH-REVIEW-001
-full architecture and codebase review, immediately prior to RC-008's Version 1.0 release-closure
-audit. Where this document and the repository disagree, the repository is the source of truth —
-see `docs/AI_ENGINEER.md`.
+Last synchronized with the live repository at commit `f263a30` (`feature/maint-005-release-hygiene`),
+the MAINT-005 v1.2.0 release-hygiene sync. Where this document and the repository disagree, the
+repository is the source of truth — see `docs/AI_ENGINEER.md`.
 
 ---
 
@@ -197,13 +196,12 @@ Responsibilities
 
 The renderer never computes geometry.
 
-**Implementation status:** `src/renderer/CanvasRenderer2D.js` (2D production canvas) and
-`src/renderer/CupRenderer.js` (cup/mug preview) both consume only `StoneLayout` and plain
-viewport/display options — neither references `Project`, `Layer`, or a layer `type`. Both are 2D
-Canvas-2D-API renderers. As of RS-1006, a real 3D/WebGL renderer exists in `src/preview3d/**` (see
-below) — `CupRenderer.js` is no longer wired into the live app's Object Preview panel, but is kept
-unmodified and still exercised by its own pre-existing test suites, matching this codebase's
-established "do not remove a module while a test still exercises it" precedent. Layer-aware
+**Implementation status:** `src/renderer/CanvasRenderer2D.js` (2D production canvas) consumes only
+`StoneLayout` and plain viewport/display options — it references neither `Project`, `Layer`, nor a
+layer `type`. It is a 2D Canvas-2D-API renderer. As of RS-1006, the Object Preview panel is a real
+3D/WebGL renderer, `src/preview3d/**` (see below). `src/renderer/CupRenderer.js`, the 2D Canvas
+cup/mug preview `src/preview3d/**` replaced, was confirmed unreachable from the live app (MAINT-004
+audit) and removed, along with its two dedicated test suites. Layer-aware
 interaction (selection outline/handles, drag/resize) is intentionally kept in `app.js`, not in these
 modules, since it requires layer awareness the renderer contract deliberately excludes.
 
@@ -310,8 +308,9 @@ Exporters never generate geometry.
 string-generation exporter with no DOM/Canvas dependency — implemented and consuming only
 `StoneLayout`. "Generated Layout JSON" export uses `StoneLayout.toJSON()` directly (no separate
 exporter module needed); its schema is documented in `src/geometry/README.md`. "PNG" export is
-`canvas.toBlob()` against whichever canvas `CanvasRenderer2D`/`CupRenderer` last drew — a real
-export of the rendered `StoneLayout`, but implemented as a render-then-capture step rather than a
+`canvas.toBlob()` against whichever canvas `CanvasRenderer2D`/the `src/preview3d/**` 3D preview
+last drew — a real export of the rendered `StoneLayout`, but implemented as a render-then-capture
+step rather than a
 standalone `src/export/**` module. DXF export and Stone Reports do not exist yet.
 
 As of RS-1005, a **Production Sheet** export exists: `src/export/ProductionSheetExporter.js`
@@ -384,7 +383,7 @@ Manufacturing always remains millimeters.
 **Implementation status:** true everywhere in `src/geometry/**`, `src/text/**`, and
 `src/renderer/**`/`src/export/**` — all internal fields are named with an explicit `Mm` suffix
 (`xMm`, `heightMm`, `stoneSizeMm`, ...), and pixel conversion happens only inside
-`CanvasRenderer2D.fitTransform()` / `CupRenderer`'s local transform math.
+`CanvasRenderer2D.fitTransform()` / the `src/preview3d/**` 3D preview's own transform math.
 
 ---
 
@@ -722,7 +721,7 @@ Project JSON import, and Project JSON export.
 # Current Implementation
 
 This section describes how the principles above are actually realized in the live browser
-application as of RS-0003.5C2, and is expected to change as future milestones land. The
+application as of `f263a30`, and is expected to change as future milestones land. The
 normative principles above this section do not change; this section is the map from principle to
 code.
 
@@ -768,7 +767,7 @@ flowchart TD
         PermGE["GeometryEngine\nsrc/geometry/GeometryEngine.js"]
         PerLayerSL["StoneLayout (per layer)\nsrc/geometry/StoneLayout.js"]
         R2D["CanvasRenderer2D\nsrc/renderer/CanvasRenderer2D.js"]
-        RCup["CupRenderer\nsrc/renderer/CupRenderer.js"]
+        P3D["3D preview\nsrc/preview3d/**"]
         Svg["SvgExporter\nsrc/export/SvgExporter.js"]
     end
 
@@ -781,7 +780,7 @@ flowchart TD
     MergeDedupe --> MergedSL
 
     MergedSL --> R2D --> LayoutCanvas["layoutCanvas"]
-    MergedSL --> RCup --> CupCanvas["cupCanvas"]
+    MergedSL --> P3D --> CupCanvas["cupCanvas"]
     MergedSL --> Svg --> SVGOut["2D SVG export"]
     MergedSL --> LayoutJSON["Generated Layout JSON\n(StoneLayout.toJSON())"]
     LayoutCanvas --> PNG2D["2D PNG export"]
@@ -833,7 +832,7 @@ default export so `OpenTypeProvider.js` itself needs no browser-specific branch.
 ```mermaid
 flowchart TD
     Layer["Text layer params\ntext, font, height, textMode, stoneSize, gap, color, autoFit"]
-    Resolve["app.js generateTextStonesLive()\nresolve fontId (courier-prime-regular /\ngreat-vibes-regular only, else default),\nmode = textMode==='fill' ? 'fill' : 'outline'"]
+    Resolve["app.js generateTextStonesLive()\nresolve fontId (any enabled manifest font\nor authored RS font; else default),\nmode = textMode==='fill' ? 'fill' : 'outline'"]
     PermGen["GeometryEngine.generateTextLayout()"]
     PerChar["per character:\nFontProviderRegistry.getTextPath()"]
     OTP["OpenTypeProvider\nparse font (cached per fontId),\ncharToGlyph + kerning"]
@@ -926,15 +925,15 @@ flowchart TD
     MergedSL -->|"stoneLayoutToSvg()"| SVGOut["Export: 2D SVG\n(one <circle> per stone)"]
     MergedSL -->|"renderProductionLayout()"| LayoutCanvas["layoutCanvas (drawn)"]
     LayoutCanvas -->|"canvas.toBlob('image/png')"| PNG2D["Export: 2D PNG"]
-    MergedSL -->|"renderCup()"| CupCanvasEl["cupCanvas (drawn)"]
+    MergedSL -->|"preview3D.update()"| CupCanvasEl["cupCanvas (drawn)"]
     CupCanvasEl -->|"canvas.toBlob('image/png')"| PNGCup["Export: Cup PNG"]
 ```
 
 All five export buttons share one `download()`/`exportCanvas()` helper in `app.js` that creates an
 object URL and clicks a synthetic `<a download>` element. None of the exporters mutate the
 `StoneLayout` or the project object they read from. "PNG" exports are not driven by a dedicated
-`src/export/**` PNG module — they capture whatever `CanvasRenderer2D`/`CupRenderer` most recently
-drew onto the two `<canvas>` elements, so a PNG export is only correct if it runs after the
+`src/export/**` PNG module — they capture whatever `CanvasRenderer2D`/the `src/preview3d/**` 3D
+preview most recently drew onto the two `<canvas>` elements, so a PNG export is only correct if it runs after the
 corresponding render call in the same `updateAll()` pass (true today, since both happen
 synchronously in sequence).
 
@@ -1023,15 +1022,19 @@ No other legacy/dead code is currently known in the application.
    generates stone positions" — but it means the permanent engine has no native multi-layer
    aggregation API, and `StoneLayout`'s single-`layerId` constructor is worked around with a
    `'project'` sentinel rather than a real multi-layer representation.
-2. **The font manifest's `enabled` flag does not gate what can actually be loaded.**
-   `assets/fonts/manifest.json` marks all three registered fonts (`courier-prime-regular`,
-   `roboto-mono-regular`, `great-vibes-regular`) as `"enabled": false`, but
-   `FontManager.getFont()` — which `OpenTypeProvider` calls — does not check `enabled` (only
-   `listFonts()`/`listFamilies()`/`getDefaultFont()` do). `app.js` calls `getFont()` directly by
-   id, so the two fonts it actually offers (`courier-prime-regular`, `great-vibes-regular`) load
-   and render live text despite being marked disabled. `roboto-mono-regular`'s font file
-   (`assets/fonts/RobotoMono-Regular.ttf`) is a 14-byte placeholder stub, not a real font — it is
-   unreferenced by `app.js` today, but would throw from `opentype.parse()` if ever selected.
+2. **The font manifest's `enabled` flag gates the picker but not `FontManager.getFont()`.** As of
+   FONT-LIB-002 the font picker (`app.js`'s `productionFonts()`, which builds both the `#font`
+   `<select>` and the Browse Fonts panel) offers every `assets/fonts/manifest.json` record with
+   `"enabled": true`, plus the authored `providerId: 'rhinestone'` fonts (RS Block / RS Modern) —
+   FONT-002 had restricted it to the authored fonts and FONT-DECISION-001 re-admitted OpenType fonts
+   only with `"rhinestoneValidated": true`; that flag is now display-only (the library row's ✓
+   "Rated legible" badge), while `unsupportedStoneSizes` still gates individual stone sizes per font.
+   But `FontManager.getFont()` — which `OpenTypeProvider` calls — still does not check `enabled`
+   (only `listFonts()`/`listFamilies()`/`getDefaultFont()` do), so a project that references a
+   since-disabled font id still resolves and renders live text. The only shipped disabled record is
+   `roboto-mono-regular`, whose file (`assets/fonts/RobotoMono-Regular.ttf`) is an intentionally
+   unparsable 14-byte stub kept for `tools/test-opentype-provider.mjs`; it is unreferenced by
+   `app.js` and would throw from `opentype.parse()` if ever selected.
 3. **No Validation Engine, DXF export, or manufacturing reports exist yet.** These remain future
    milestones per "Future Direction" below, not regressions. (The product-plugin system and the
    3D/WebGL renderer, previously also listed here as not-yet-built, were implemented by RS-1004 and
@@ -1145,7 +1148,10 @@ Planned milestones include
   "Exporters" above — but a dedicated Stone Report/manufacturing-report document does not)
 - DXF export — not started
 - Mouse editing — **done** for circle/rectangle shapes (drag to move, handle-drag to resize);
-  text layers gained a manual `x`/`y` offset as of RS-1009, still not drag-repositionable directly
+  text layers gained a manual `x`/`y` offset as of RS-1009 and became drag-repositionable (move
+  and rotate; resize-by-drag still doesn't apply — font size stays Inspector-controlled) via
+  Design's Select tool as of RS-3012 Step 3 (`src/drawing/DrawingCanvasTool.js`'s
+  `materializeTextItemFromLayer()`, `app.js`'s `onShapeMoved` hook)
 - Undo/Redo — **done** (`src/history/HistoryManager.js`, live since RS-1002; unlimited,
   configurably bounded undo/redo over every editing operation, keyboard shortcuts, toolbar buttons,
   dirty-state tracking)
@@ -1223,7 +1229,7 @@ boolean-geometry grid resolution (`targetSpacingMm` in `resolvePaintTargetTwoPas
 concern RS-3014 deliberately left alone, unrelated to a region's stored decoration.
 
 **Selection beyond shapes (RS-3012).** Design's click-to-select / drag / resize / rotate began
-(RS-3010/3011) as a shape-only interaction. RS-3012 extended it, across four shipped steps, to the
+(RS-3010/3011) as a shape-only interaction. RS-3012 extended it, across five shipped steps, to the
 remaining layer types and to the two placement tools:
 
 - **Step 1 — Stamp and Trace respect the selection boundary.** When an `activeSelection` (a region,
@@ -1281,18 +1287,59 @@ remaining layer types and to the two placement tools:
   which know circle's `cx`/`cy`). Like `text`, a circle has no `x`/`y`/`w`/`h` box, so
   `syncFromProjectLayers()` gives it its own reconciliation branch, diffing a freshly re-materialized
   proxy's bounds.
+- **Step 5 — `rectangle` layers join Select.** `rectangle` is a first-class layer type
+  (`SUPPORTED_LAYER_TYPES` / `XYWH_SHAPE_TYPES` / `VECTOR_FILL_MODE_TYPES`, and `GeometryEngine`'s
+  `SHAPE_TYPES`) that Gallery `.rhs` fixtures build and that occurs across several `examples/*.rhs` —
+  it was simply never added to the call-site filter, so it was the one layer type still unselectable
+  in Design while every layer beside it selected normally. Unlike `circle` it needs *no* new
+  interaction machinery: a rectangle is a plain `x`/`y`/`w`/`h`/`rotationDeg` box, so click / drag /
+  resize / rotate reuse `hitTestShapeId()` / `rotatedHandlePositionsFor()` / `onShapeMoved` /
+  `onShapeResized` / `onShapeRotated` unchanged, and `onShapeResized`'s own generic `l.x/y/w/h`
+  write-back covers a rectangle resize with no new branch. The proxy — a rotated rectangle path — is
+  built by `buildRectangleProxyItem()`, the *same* builder extracted from the rectangle fallback
+  `materializeSvgImageItemFromLayer()` already used for an `image` layer and for an unresolvable
+  `svg`, so there is exactly one copy of that construction. It sets no `item.data` flags: neither
+  `noResizeHandles` (Step 3) nor `noRotateHandle` / `isCircleProxy` (Step 4) — the box model holds
+  exactly. Because it *has* a stored `x`/`y`/`w`/`h` box, it takes the same generic
+  bounds-comparison branch in `syncFromProjectLayers()` that `path` / `svg` / `image` use, not
+  `text` / `circle`'s dedicated re-materialize-and-diff branch.
 
 At each step `app.js`'s `syncFromProjectLayers()` call-site filter widened to carry the new types
-(`l.type==='svg'||l.type==='image'||l.type==='text'||l.type==='circle'` alongside `'path'` and
-`SHAPE_LIBRARY_KINDS`), and `syncFromProjectLayers()` dispatches each type to its own materializer.
+(`l.type==='svg'||l.type==='image'||l.type==='text'||l.type==='circle'||l.type==='rectangle'`
+alongside `'path'` and `SHAPE_LIBRARY_KINDS`), and `syncFromProjectLayers()` dispatches each type to
+its own materializer.
+
+**Text tool on the Design rail (RS-3035).** Following RS-3012/RS-3013/RS-3014's pattern of folding
+more of the app's editing surface into Design, RS-3035 added a `text` draw-tool `mode` — a rail
+button between Trace and Eraser — that places a brand-new `text` layer at the click point and opens
+the existing Text Lightbox for editing, without leaving Design. Unlike Stamp/Trace/Eraser it is
+deliberately **not** added to `CLICK_TO_PLACE_MODES`: it is a one-shot creation tool like Rect/Pen,
+reverting `mode` to `'select'` immediately on commit (before `DrawingCanvasTool.js`'s own
+`onTextPlace` hook fires, mirroring `commitFinalizedShape()`'s own ordering), so there is no
+lingering "active" state for Escape's idle-revert to close. It also has no selection-boundary
+semantics (unlike RS-3012 Step 1's Stamp/Trace gate): a text layer is free-standing, belonging to no
+shape, so it is excluded from `isSelectionAwareMode` and a click anywhere — empty canvas or inside an
+existing shape — is the same operation. `app.js`'s `addText()` gained an optional
+`{atAbsoluteMm}` parameter, converting the click point to the layer's stored `x`/`y` offset via the
+same `computeTextLayerPositionForTargetCenterMm()` (`src/editing/TextPlacement.js`) the Lightbox's
+own `+ Add Text` fit-to-shape path uses; passing `atAbsoluteMm` also suppresses that button's
+co-selected-shape auto-fit, since an explicitly-placed text should never jump to a different
+position. The Lightbox is opened directly rather than through `revealDualWorkspaceForLightbox()`
+(whose first act, `setDrawMode(false)`, would exit Design) — see
+`docs/specifications/RS-3035-DesignTextTool.md` for the full rationale, plus a `TEXTAREA` gap this
+milestone found in the keyboard-shortcut input guards (`#text`'s own field was never excluded,
+so typing in it could fire draw-tool shortcuts).
 
 **Known test-coverage gap: `DrawingCanvasTool.js` interaction layer.** Almost none of Design's core
-interaction layer (`src/drawing/DrawingCanvasTool.js`) has committed regression tests. The only
+interaction layer (`src/drawing/DrawingCanvasTool.js`) has committed regression tests. The
 `tools/*.mjs` test files that exercise `src/drawing/` at all are
-`test-rs3011-step8-svg-import-flattening.mjs`, `test-stone-sprite-cache.mjs`, and
-`test-rs3012-step4-circle-select.mjs` — covering SVG-import flattening, stone-sprite caching, and
-circle-select respectively, not the interaction layer's other tools. There is explicitly zero
-committed coverage for: the Pen (Bezier) tool and its four follow-up fixes; the mode-toggle bug
+`test-rs3011-step8-svg-import-flattening.mjs`, `test-stone-sprite-cache.mjs`,
+`test-rs3012-step4-circle-select.mjs`, `test-rs3012-step5-rectangle-select.mjs`, and
+`test-maint-003-materializer-contract.mjs` — covering SVG-import flattening, stone-sprite caching,
+circle- and rectangle-select, and (MAINT-003) the layer-in / proxy-out contract of all six of
+`syncFromProjectLayers()`'s materializers respectively, not the interaction layer's other tools.
+The materializer layer is now covered; the remaining gap is the interaction layer proper. There is
+explicitly zero committed coverage for: the Pen (Bezier) tool and its four follow-up fixes; the mode-toggle bug
 fix; the Eraser tool (RS-3011 Step 13 plus five RS-3014 follow-ups); RS-3013's region-editing
 gestures *as Design UI operations* (move / copy / delete / spec-edit — the underlying region data
 model itself *is* covered by the geometry-layer tests around `GeometryEngine._applyPathRegions()`
@@ -1344,9 +1391,27 @@ auto-fit would overshoot the real usable area; Plate keeps the generic-midpoint 
 **Independent frame and letter stone size/color.** The Monogram Lightbox has two separate stone-spec
 control groups: the shared `#monogramStoneSize`/`#monogramColor` fields apply to the letters, and a
 toggle-gated `#monogramFrameStoneToggle` reveals `#monogramFrameStoneSize`/`#monogramFrameColor` for
-the frame specifically. Leaving the toggle off omits `frameOptions.stoneSizeMm`/`color` entirely, so
-the generator's own fallback (frame inherits the letters' spec) applies unchanged — toggling off is
-byte-identical to the pre-feature behavior.
+the frame specifically. With the toggle checked, those fields drive the frame exactly as set (the
+only path that can make frame and letters equal-sized, and only if the user matches them by hand).
+With it unchecked, `frameOptions.color` is still omitted (the generator inherits the letters'
+color), but `frameOptions.stoneSizeMm` is now set by MONO-014's automatic hierarchy rather than left
+unset.
+
+**Frame hierarchy and "No frame" (MONO-014).** A frame is either clearly subordinate to the letters
+or clearly dominant over them — never equal weight, which reads as two elements competing.
+`src/monogram/FrameHierarchy.js`'s `defaultFrameStoneSizeMm(letterStoneSizeMm)` (pure catalog
+arithmetic) returns the next larger `listStoneSizes()` diameter; `app.js`'s request builder uses it
+for `frameOptions.stoneSizeMm` whenever `#monogramFrameStoneToggle` is unchecked, and
+`generateMonogramWithFrameAutoShrink()` unconditionally filters the letters' own diameter out of its
+retry candidates so auto-shrink can never land there either (with SS6 letters a colliding dominant
+frame then has no legal smaller candidate and fails with an actionable `FRAME_COLLISION` message —
+larger frame, smaller stones, or "No frame"). `FrameLibrary` gains a real `frameId: 'none'` catalog
+entry (null contours, `hollow: false`) so the picker needs no special case;
+`MonogramGenerator.generate()` branches on it before every FrameLibrary geometry call, emitting no
+frame layer and using `frameRect` as the letter-layout region directly.
+`measurements.frame`/`measurements.frameHierarchy` (`'subordinate' | 'dominant' | 'equal' | null`)
+record the outcome. Selecting a non-authored (OpenType script) font defaults `#monogramFrame` to
+`none` until the user picks a frame themselves that session; authored fonts default to `circle`.
 
 **"Never auto-corrects" doctrine.** `MonogramGenerator.generate()`'s own doc comment states it
 directly: *"Never auto-corrects: a letter/frame that does not fit is a structured failure, not a
@@ -1364,6 +1429,84 @@ independent `generate()` call — the wrapper decides *to* retry; the generator 
 itself. A successful auto-shrink is always surfaced to the user in the status bar ("Frame stones
 reduced to … to fit"), never applied silently.
 
+**Thin-stemmed OpenType script fonts (MONO-012).** The picker (`monogramEligibleFonts()`, renamed
+from `authoredProductionFonts()`) now offers, alongside the two authored `providerId:'rhinestone'`
+fonts, every enabled OpenType font thin enough that a single-chain letter still clears the
+readability floor. `src/monogram/SingleChain.js` is pure sizing arithmetic: in outline mode a stroke
+sampled at ≈0.85 stone diameters wide (`singleChainHeightMm()`) fills in as one continuous bead
+chain instead of a hollow double outline. Because a single-chain letter's height-to-stone ratio is
+`0.85 / stemWidthRatio` regardless of stone size, eligibility is one stone-size-independent gate:
+`stemWidthRatio ≤ 0.85 / MIN_HEIGHT_TO_STONE_RATIO` (`MONOGRAM_MAX_STEM_WIDTH_RATIO`, derived — it
+must track the floor, unlike `StemRegime.js`'s deliberately-fixed class boundaries). Gating the
+picker keeps a below-floor monogram structurally unreachable, so the floor never needs a monogram
+exemption. In `MonogramGenerator.generate()`, an eligible OpenType letter is sized by regenerating
+at a smaller `heightMm` (never a position scale) until it fits its slot; if fitting has to shrink it
+below `minChainStones()` — the larger of the 0.70 chain minimum and the readability floor — it fails
+`CHAIN_TOO_THIN`. Its emitted layer carries the fitted `heightMm` as a real geometry input with
+`heightMode:'raw'` and no `authoredScale`; the authored branch is unchanged.
+
+**Interlocked script (MONO-013).** A fifth layout, `MONOGRAM_LAYOUTS.SCRIPT`, treats a connected
+script font as one flowing mark rather than per-letter slots. It is the only range-based layout
+(`MONOGRAM_LAYOUT_LETTER_COUNT_RANGES`, 1–3 letters) and produces a single slot equal to the whole
+frame interior — no slot arithmetic, `minGapMm` ignored, exactly as Single. `MonogramGenerator`
+takes a **separate branch** (`_generateScriptMonogram()`, outline fonts only) that sets
+`letters.join('')` as one string via the font's own advances/kerning plus the shared letter-spacing
+control (MONO-016), then shrink-fits the whole string against that one slot with the same
+`CHAIN_TOO_THIN` gate as MONO-012. Because the whole mark is one text layer, swashes that cross are
+resolved by the single outline-sampling call's own cross-contour dedup
+(`sampleMultiContourOutlinePoints`, `minSeparationMm = stoneSizeMm`), and the enforced closest-pair
+floor is `stoneSizeMm`, not the per-letter path's `stoneSizeMm + gapMm` — an accepted production
+decision for an interlocked mark (letters are meant to touch); `measurements.minStoneDistanceMm`
+records it but does not gate on it. See `docs/specifications/MONO-013-Interlock.md`.
+
+**Unified letter spacing (MONO-016).** MONO-013's script-only, negative-only `interlockMm` request
+param became `letterSpacingMm` — one control across every multi-letter layout, an **asymmetric
+range**: `[-pitchMm, 4 × pitchMm]` for `script` (glyph tracking inside the interlocked string,
+emitted as `layer.letterSpacing`), `[0, 4 × pitchMm]` for the four slot layouts (an additive
+`extraGapMm` term on `layoutHorizontalGroup()`'s inter-slot gap). `pitchMm` is the monogram's own
+`stoneSizeMm + gapMm`; the ceiling multiplier is `TRACKING_XPITCH_LADDER`'s top rung. Slot layouts
+cannot go negative — below the production stone-to-stone clearance (`minGapMm`, MONO-006E) adjacent
+letters' stones collide, so a negative slot request is `INVALID_INPUT`, never a silent clamp; the
+script floor stays exactly `-pitchMm` because the emitted `layer.letterSpacing` is otherwise silently
+clamped there by `writeSelectedControlsToLayer()` with no undo entry (READ-006). The
+`#monogramLetterSpacing` "Letter spacing" slider is shown whenever the resolved letter count is ≥ 2.
+`measurements.letterSpacingMm` records the applied value. See
+`docs/specifications/MONO-016-LetterSpacing.md`.
+
+**Weight-following stone size (MONO-015).** A third `sizeMode` for text layers, `'weight'`, opt-in
+everywhere — no existing layer, project, fixture or monogram changes behaviour unless it is
+explicitly turned on. It is valid only for a text layer sampled in outline mode; every other
+combination throws from `GeometryEngine.generateTextLayout()`, and `sizeMode: 'weight'` on a non-text
+layer throws from `normalizeMixedSizeParams()` (an unknown mode *string*, separately, still falls
+back to `'uniform'` via app.js's `resolveSizeMode()` for old-project compatibility). It is a
+**graduated** control — Off, Step 1 (base stone size + one catalog rung), Step 2 (base + two) —
+persisted as a single flat layer field `weightSizesMm`: the step's ascending mm diameters, stored
+exactly the way S-200's `allowedSizesMm` is (validated entry-by-entry, empty default). The levels
+are relative to the layer's own stone size, derived from the catalog by
+`src/renderer/StoneSizes.js`'s `stoneSizesFromBaseMm()` and clamped at the top (SS20 has one rung
+above it, SS30 none — a step the base can't supply is disabled in the UI and throws if a caller
+names it). `src/geometry/StrokeWidthProbe.js` is pure geometry — it casts an inward ray from each
+outline sample to the opposite contour edge to measure the local stroke width — and
+`src/geometry/WeightSizing.js` maps that width to the smallest step diameter `≥` it (the largest if
+it exceeds all). **The engine takes a raw mm array, not a catalog reference:** nothing in
+`src/geometry/**` imports `src/renderer/**` — per that file's own header, geometry works in raw
+millimeters for any positive value and never knows what an "SS16" is, and
+`tools/test-architecture-module-boundaries.mjs` now asserts the boundary rather than leaving it a
+comment. Picking a stone at least as wide as the stroke enforces the *upper* single-chain bound (a
+stone that wide keeps both edges collapsed onto one chain) but not the lower one: a hairline
+narrower than the step's floor is floored there and its stem can drop below the 0.70 chain minimum.
+Sampling is three phases: (A) sample the outline at the minimum pitch, halved (`(sizesMm[0] + gapMm)
+/ 2`, separation floor likewise halved) whenever the step mixes sizes — phase C only drops, so
+without oversampling a mid-catalog run comes out at 2×`d` (≈ 48 % over its `d + gap` ideal, the
+`SINGLE_CHAIN_MIN_RATIO` gap failure); the factor is 1 when `sizesMm` has a single entry, keeping
+"Off" byte-identical to uniform; (B) probe and assign per sample; (C)
+`StoneSampler.dropOverlappingSizedStones()` removes the physical overlaps the larger assigned stones
+create, per-pair floor `(d1 + d2) / 2`, dropping the later stone in walk order. Phase A must come
+first — a coarser phase A would make phase C's check unable to fire. The Monogram tool exposes it as
+one opt-in select (`#monogramWeightSteps`, OpenType fonts only); MONO-012's `CHAIN_TOO_THIN` gate
+and MONO-013's clearance assertion both generalise to divide by the per-stem / per-pair assigned
+diameter rather than a scalar. See `docs/specifications/MONO-015-WeightSizing.md`.
+
 ---
 
 # Units
@@ -1379,7 +1522,7 @@ Manufacturing always remains millimeters.
 **Implementation status:** true everywhere in `src/geometry/**`, `src/text/**`, and
 `src/renderer/**`/`src/export/**` — all internal fields are named with an explicit `Mm` suffix
 (`xMm`, `heightMm`, `stoneSizeMm`, ...), and pixel conversion happens only inside
-`CanvasRenderer2D.fitTransform()` / `CupRenderer`'s local transform math.
+`CanvasRenderer2D.fitTransform()` / the `src/preview3d/**` 3D preview's own transform math.
 
 **RS-3018+ display-unit system.** As of RS-3018, `project.units` (`'mm'` or `'in'`, default `'mm'`,
 validated in `validateProject()`) is a display preference — which unit a freely-typed length field

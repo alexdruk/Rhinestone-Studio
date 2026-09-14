@@ -23,19 +23,31 @@ test('FontManager loads deterministic manifest', () => {
   // rs-block (providerId:'rhinestone') -- 11. FONT-002 added rs-modern alongside it as the second
   // Production Font -- 12. FONT-DECISION-001 added baloo2-variable-regular (providerId:'opentype',
   // rhinestoneValidated:true) -- 13. FONT-PORTFOLIO-001 added sacramento-regular and
-  // dancing-script-regular (also rhinestoneValidated:true) -- 15 total.
-  assert.equal(manager.listFonts({ includeDisabled: true }).length, 15);
+  // dancing-script-regular (also rhinestoneValidated:true) -- 15. FONT-LIB-002 added 17 more static
+  // OpenType instances (9 script families, Bebas Neue, Righteous, Lilita One, Abril Fatface,
+  // Poppins Regular/SemiBold/Bold, Lobster Two Bold) -- 32 total.
+  assert.equal(manager.listFonts({ includeDisabled: true }).length, 32);
 });
 
-test('FontManager enables every bundled font except the RobotoMono placeholder', () => {
+test('FontManager enables every bundled font except the RobotoMono placeholder and the retired Montserrat', () => {
   const manager = new FontManager(manifest);
   // RS-2000A flagged that the manifest's `enabled` flag previously gated nothing real -- app.js
   // loaded fonts by hardcoded id regardless of it. RS-2002 makes `enabled` the actual gate the
   // live app derives its font list from (see app.js's TEXT_ENGINE_FONT_IDS), so this manifest-level
-  // invariant matters now: everything except the known-corrupt placeholder must be enabled.
-  assert.equal(manager.listFonts().length, 14);
-  assert.equal(manager.listFonts({ includeDisabled: true }).length - manager.listFonts().length, 1);
+  // invariant matters now.
+  // FONT-LIB-005: two records are now disabled, for different reasons -- roboto-mono-regular (a
+  // 14-byte non-font stub) and montserrat-regular (the bundled file is Google's variable Montserrat
+  // whose wght axis defaults to 100, i.e. Thin; 0.0145 * 85mm mug printable height = 1.23mm, below
+  // the 2.0mm smallest stone, so it is unmanufacturable at any reachable height). The .ttf is
+  // retained so saved projects keep rendering -- see the "still KNOWN" assertion below.
+  assert.equal(manager.listFonts().length, 30);
+  assert.equal(manager.listFonts({ includeDisabled: true }).length - manager.listFonts().length, 2);
   assert.equal(manager.getFont('roboto-mono-regular').enabled, false);
+  assert.equal(manager.getFont('montserrat-regular').enabled, false);
+  // The saved-project guarantee: montserrat-regular stays a KNOWN font record even though it is no
+  // longer offered, so an existing Montserrat text layer still resolves and renders byte-identically.
+  assert.equal(manager.hasFont('montserrat-regular'), true);
+  assert.equal(manager.getFont('montserrat-regular').family, 'Montserrat');
 });
 
 test('FontManager defaults providerId to "opentype" for every bundled record, and the field still works generically for a future rhinestone-tagged record', () => {
@@ -113,7 +125,7 @@ test('FontManager rejects duplicate ids', () => {
 test('FontManager serializes without mutation', () => {
   const manager = new FontManager(manifest);
   const json = manager.toJSON();
-  assert.equal(json.fonts.length, 15);
+  assert.equal(json.fonts.length, 32);
   json.fonts[0].family = 'Changed';
   assert.equal(manager.getFont(DEFAULT_FONT_ID).family, 'Courier Prime');
 });

@@ -1,13 +1,5 @@
 node_modules/
-dist/
-build/
-coverage/
 .git/
 *.zip
-Archive.zip
 .DS_Store
-exports/
-release/
-releases/
-screenshots/generated/
-tests/output/
+tools/font-certification/output/
