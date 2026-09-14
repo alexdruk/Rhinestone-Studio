@@ -197,6 +197,9 @@ export const GROUPS = {
     'test-rs3011-step10a-region-data-model.mjs',
     'test-rs3011-step10b-paint-target-selection.mjs',
     'test-mono-021-text-layer-edits.mjs',
+    // PERF-006 (MAINT-004 registration): pure spatial-geometry algorithm --
+    // isPointInsidePolygons()'s cache in StoneSampler.js.
+    'test-perf-006-point-in-polygon-cache.mjs',
   ],
   'stone-layout': [
     'test-stone-color.mjs',
@@ -242,6 +245,11 @@ export const GROUPS = {
     // renders as Montserrat Thin, an unmanufacturable hairline). Manifest/arithmetic/hash checks
     // that the .ttf is retained for saved projects while the font leaves productionFonts().
     'test-font-lib-005-montserrat-retired.mjs',
+    // FONT-LIB-003/004 (MAINT-004 registration): the #stoneSizeCrowdingHint packing-density warning
+    // and the #heightBelowReadableWarning legibility warning -- own distinct app.js functions/DOM
+    // elements but both encode the READ-003 stroke-gate precedence rule against their own warning.
+    'test-font-lib-003-crowding-hint.mjs',
+    'test-font-lib-004-height-readability.mjs',
   ],
   shapes: [
     'test-shape-fit.mjs',
@@ -257,6 +265,9 @@ export const GROUPS = {
     'test-object-dimensions.mjs',
     'test-product-plate-round-dinner.mjs',
     'test-product-vessel-dimensions.mjs',
+    // Also in `ui` (deliberate dual membership, MAINT-004): each gates a product/font-data
+    // constraint (shape-fit eligibility; per-font SS30 stone-size support) through the UI surface
+    // that displays it, so both groups genuinely apply.
     'test-font-decision-001-stone-size-ux.mjs',
     'test-font-portfolio-001-stone-size-gating.mjs',
   ],
@@ -307,6 +318,9 @@ export const GROUPS = {
     'test-maint-003-materializer-contract.mjs',
     'test-rs3015-mark-target-eligibility.mjs',
     'test-mono-021-mark-hooks.mjs',
+    // PERF-005 (MAINT-004 registration): app.js's live-editing UI responsiveness -- the
+    // stone-size-picker overlap-capability re-sweep call-count fix.
+    'test-perf-005-stone-size-lazy-sweep.mjs',
   ],
   ui: [
     'test-ui-shell-structure.mjs',
@@ -316,6 +330,7 @@ export const GROUPS = {
     'test-ui-import-autoswitch-regression.mjs',
     'test-text-position-workflow.mjs',
     'test-ux-visual-polish.mjs',
+    // Also in `products` (deliberate dual membership, MAINT-004) -- see the comment there.
     'test-font-decision-001-stone-size-ux.mjs',
     'test-font-portfolio-001-stone-size-gating.mjs',
     'test-auto-fit-default-toggle-warning.mjs',
@@ -323,6 +338,9 @@ export const GROUPS = {
     // companion to test-text-position-workflow.mjs's B17-B21 (computeAutoFitScale() itself) and
     // test-auto-fit-default-toggle-warning.mjs (the Auto Fit control) directly above.
     'test-read-008-ratio-floor.mjs',
+    // READ-010 (MAINT-004 registration): Production Sheet validation UI -- project-wide warn-only
+    // sweep + fix-to-floor button/hint. Matches test-read-008-ratio-floor.mjs's placement here.
+    'test-read-010-warn-only-floor.mjs',
     // app.js UI-layer wiring/behaviour: pure mm<->inch display helpers (RS-3018) and the bare-DOM
     // length-field mm stash that stops Units toggles drifting (RS-3025); the manual Text-height
     // field clamp (TXT-103); S-200 Mixed Stone Size UI wiring + editing lifecycle; and the RS-2012
@@ -362,6 +380,9 @@ export const GROUPS = {
     'test-mono-015-weight-sizing.mjs',
     'test-mono-016-letter-spacing.mjs',
     'test-mono-018-binding-letter.mjs',
+    // MONO-019 (MAINT-004 registration): real MonogramGenerator/FrameLibrary duplicate-layer-id
+    // fix, same bootstrap as test-mono-018-binding-letter.mjs.
+    'test-mono-019-layer-ids.mjs',
     'test-mono-022-reachable-remedies.mjs',
   ],
   // Full fixture-driven regression sweep (examples/*.rhs against committed baselines) -- expensive
