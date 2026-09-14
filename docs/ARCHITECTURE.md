@@ -1307,6 +1307,27 @@ At each step `app.js`'s `syncFromProjectLayers()` call-site filter widened to ca
 alongside `'path'` and `SHAPE_LIBRARY_KINDS`), and `syncFromProjectLayers()` dispatches each type to
 its own materializer.
 
+**Text tool on the Design rail (RS-3035).** Following RS-3012/RS-3013/RS-3014's pattern of folding
+more of the app's editing surface into Design, RS-3035 added a `text` draw-tool `mode` — a rail
+button between Trace and Eraser — that places a brand-new `text` layer at the click point and opens
+the existing Text Lightbox for editing, without leaving Design. Unlike Stamp/Trace/Eraser it is
+deliberately **not** added to `CLICK_TO_PLACE_MODES`: it is a one-shot creation tool like Rect/Pen,
+reverting `mode` to `'select'` immediately on commit (before `DrawingCanvasTool.js`'s own
+`onTextPlace` hook fires, mirroring `commitFinalizedShape()`'s own ordering), so there is no
+lingering "active" state for Escape's idle-revert to close. It also has no selection-boundary
+semantics (unlike RS-3012 Step 1's Stamp/Trace gate): a text layer is free-standing, belonging to no
+shape, so it is excluded from `isSelectionAwareMode` and a click anywhere — empty canvas or inside an
+existing shape — is the same operation. `app.js`'s `addText()` gained an optional
+`{atAbsoluteMm}` parameter, converting the click point to the layer's stored `x`/`y` offset via the
+same `computeTextLayerPositionForTargetCenterMm()` (`src/editing/TextPlacement.js`) the Lightbox's
+own `+ Add Text` fit-to-shape path uses; passing `atAbsoluteMm` also suppresses that button's
+co-selected-shape auto-fit, since an explicitly-placed text should never jump to a different
+position. The Lightbox is opened directly rather than through `revealDualWorkspaceForLightbox()`
+(whose first act, `setDrawMode(false)`, would exit Design) — see
+`docs/specifications/RS-3035-DesignTextTool.md` for the full rationale, plus a `TEXTAREA` gap this
+milestone found in the keyboard-shortcut input guards (`#text`'s own field was never excluded,
+so typing in it could fire draw-tool shortcuts).
+
 **Known test-coverage gap: `DrawingCanvasTool.js` interaction layer.** Almost none of Design's core
 interaction layer (`src/drawing/DrawingCanvasTool.js`) has committed regression tests. The
 `tools/*.mjs` test files that exercise `src/drawing/` at all are

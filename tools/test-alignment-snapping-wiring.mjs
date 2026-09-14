@@ -153,7 +153,7 @@ await test('9. align/distribute run through the pure src/editing/AlignmentEngine
 
 await test('10. arrow keys nudge the selection by a named step (Shift uses the larger step), typing in a field is never hijacked, and each key press is one undo entry', () => {
   assert.match(appJs, /const ARROW_KEY_DELTAS=\{ArrowLeft:\[-1,0\],ArrowRight:\[1,0\],ArrowUp:\[0,-1\],ArrowDown:\[0,1\]\};/);
-  assert.match(appJs, /if\(ARROW_KEY_DELTAS\[e\.key\]\)\{const t=document\.activeElement\?\.tagName;if\(t==='INPUT'\|\|t==='SELECT'\)return;e\.preventDefault\(\);const step=e\.shiftKey\?NUDGE_STEP_LARGE_MM:NUDGE_STEP_MM;/);
+  assert.match(appJs, /if\(ARROW_KEY_DELTAS\[e\.key\]\)\{const t=document\.activeElement\?\.tagName;if\(t==='INPUT'\|\|t==='SELECT'\|\|t==='TEXTAREA'\)return;e\.preventDefault\(\);const step=e\.shiftKey\?NUDGE_STEP_LARGE_MM:NUDGE_STEP_MM;/);
   assert.match(appJs, /function nudgeSelection\(dxMm,dyMm\)\{if\(selectedLayerIds\.size===0\)return;commitHistory\(\);/, 'expected nudgeSelection to commit history exactly once per call');
 });
 
