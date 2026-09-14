@@ -9,12 +9,6 @@
 // see docs/specifications/CI-001-RealTestExecution.md for the audit. Every excluded file is still
 // runnable directly, via a filename filter, or via `npm run test:full` (`--all`).
 export const EXCLUDED_FROM_DEFAULT = [
-  // Legacy src/renderer/CupRenderer.js suites, superseded by src/preview3d/** (RS-1006);
-  // CupRenderer.js is no longer wired into the live Object Preview panel. Kept runnable, not
-  // deleted, per the repository's "do not remove a module while a test still exercises it"
-  // precedent — test:full only.
-  'test-cup-rotation-stabilization.mjs',
-  'test-object-preview-renderer.mjs',
   // READ-003: test 5 re-measures stemWidthRatio for all 29 in-scope fonts (interior grid sampling
   // over 62 glyphs each, ~75s) to prove the manifest has not drifted from the real font files.
   // Too heavy for the default loop; run via `npm run test:full` or an explicit filter.
@@ -23,6 +17,16 @@ export const EXCLUDED_FROM_DEFAULT = [
   // (full font pipeline, ~44 ladder sweeps). Guards the extracted solver + detects GlyphSeparation.js
   // drift; too heavy for the default loop.
   'test-read-011c-tracking-solver-regression.mjs',
+  // MAINT-004: 11 of 11 assertions are wiring-guard (regex/substring match on app.js/index.html/
+  // package.json; nothing executes). Real Gallery correctness is fully covered by
+  // test-gallery.mjs (KEEP, unaffected, still in the `gallery` group and the default suite).
+  'test-gallery-integration.mjs',
+  // MAINT-004: 8 of 8 assertions are wiring-guard -- pure regex against composeCombinedPreviewCanvas()'s
+  // source text and #exportCombined markup; never actually calls the function.
+  'test-export-combined-preview-png.mjs',
+  // MAINT-004: 12 of 12 assertions are wiring-guard -- source-text pattern matches only; the real
+  // translate math is already fully covered by test-move-drag-translate.mjs (KEEP, unaffected).
+  'test-move-drag-fast-path-wiring.mjs',
 ];
 
 // Named groups, organized around stable subsystems (MAINT-001 — Test Suite Consolidation) rather
@@ -203,6 +207,9 @@ export const GROUPS = {
     'test-rs3011-step10a-region-data-model.mjs',
     'test-rs3011-step10b-paint-target-selection.mjs',
     'test-mono-021-text-layer-edits.mjs',
+    // PERF-006 (MAINT-004 registration): pure spatial-geometry algorithm --
+    // isPointInsidePolygons()'s cache in StoneSampler.js.
+    'test-perf-006-point-in-polygon-cache.mjs',
   ],
   'stone-layout': [
     'test-stone-color.mjs',
@@ -248,6 +255,11 @@ export const GROUPS = {
     // renders as Montserrat Thin, an unmanufacturable hairline). Manifest/arithmetic/hash checks
     // that the .ttf is retained for saved projects while the font leaves productionFonts().
     'test-font-lib-005-montserrat-retired.mjs',
+    // FONT-LIB-003/004 (MAINT-004 registration): the #stoneSizeCrowdingHint packing-density warning
+    // and the #heightBelowReadableWarning legibility warning -- own distinct app.js functions/DOM
+    // elements but both encode the READ-003 stroke-gate precedence rule against their own warning.
+    'test-font-lib-003-crowding-hint.mjs',
+    'test-font-lib-004-height-readability.mjs',
   ],
   shapes: [
     'test-shape-fit.mjs',
@@ -263,6 +275,9 @@ export const GROUPS = {
     'test-object-dimensions.mjs',
     'test-product-plate-round-dinner.mjs',
     'test-product-vessel-dimensions.mjs',
+    // Also in `ui` (deliberate dual membership, MAINT-004): each gates a product/font-data
+    // constraint (shape-fit eligibility; per-font SS30 stone-size support) through the UI surface
+    // that displays it, so both groups genuinely apply.
     'test-font-decision-001-stone-size-ux.mjs',
     'test-font-portfolio-001-stone-size-gating.mjs',
   ],
@@ -285,8 +300,6 @@ export const GROUPS = {
   ],
   renderers: [
     'test-render-export-pipeline.mjs',
-    'test-object-preview-renderer.mjs',
-    'test-cup-rotation-stabilization.mjs',
     'test-object-geometry-builder.mjs',
     'test-crystal-appearance.mjs',
     'test-crystal-stone-renderer.mjs',
@@ -315,6 +328,9 @@ export const GROUPS = {
     'test-maint-003-materializer-contract.mjs',
     'test-rs3015-mark-target-eligibility.mjs',
     'test-mono-021-mark-hooks.mjs',
+    // PERF-005 (MAINT-004 registration): app.js's live-editing UI responsiveness -- the
+    // stone-size-picker overlap-capability re-sweep call-count fix.
+    'test-perf-005-stone-size-lazy-sweep.mjs',
   ],
   ui: [
     'test-ui-shell-structure.mjs',
@@ -324,6 +340,7 @@ export const GROUPS = {
     'test-ui-import-autoswitch-regression.mjs',
     'test-text-position-workflow.mjs',
     'test-ux-visual-polish.mjs',
+    // Also in `products` (deliberate dual membership, MAINT-004) -- see the comment there.
     'test-font-decision-001-stone-size-ux.mjs',
     'test-font-portfolio-001-stone-size-gating.mjs',
     'test-auto-fit-default-toggle-warning.mjs',
@@ -331,6 +348,9 @@ export const GROUPS = {
     // companion to test-text-position-workflow.mjs's B17-B21 (computeAutoFitScale() itself) and
     // test-auto-fit-default-toggle-warning.mjs (the Auto Fit control) directly above.
     'test-read-008-ratio-floor.mjs',
+    // READ-010 (MAINT-004 registration): Production Sheet validation UI -- project-wide warn-only
+    // sweep + fix-to-floor button/hint. Matches test-read-008-ratio-floor.mjs's placement here.
+    'test-read-010-warn-only-floor.mjs',
     // app.js UI-layer wiring/behaviour: pure mm<->inch display helpers (RS-3018) and the bare-DOM
     // length-field mm stash that stops Units toggles drifting (RS-3025); the manual Text-height
     // field clamp (TXT-103); S-200 Mixed Stone Size UI wiring + editing lifecycle; and the RS-2012
@@ -370,6 +390,9 @@ export const GROUPS = {
     'test-mono-015-weight-sizing.mjs',
     'test-mono-016-letter-spacing.mjs',
     'test-mono-018-binding-letter.mjs',
+    // MONO-019 (MAINT-004 registration): real MonogramGenerator/FrameLibrary duplicate-layer-id
+    // fix, same bootstrap as test-mono-018-binding-letter.mjs.
+    'test-mono-019-layer-ids.mjs',
     'test-mono-022-reachable-remedies.mjs',
   ],
   // Full fixture-driven regression sweep (examples/*.rhs against committed baselines) -- expensive

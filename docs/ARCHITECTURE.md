@@ -197,13 +197,12 @@ Responsibilities
 
 The renderer never computes geometry.
 
-**Implementation status:** `src/renderer/CanvasRenderer2D.js` (2D production canvas) and
-`src/renderer/CupRenderer.js` (cup/mug preview) both consume only `StoneLayout` and plain
-viewport/display options — neither references `Project`, `Layer`, or a layer `type`. Both are 2D
-Canvas-2D-API renderers. As of RS-1006, a real 3D/WebGL renderer exists in `src/preview3d/**` (see
-below) — `CupRenderer.js` is no longer wired into the live app's Object Preview panel, but is kept
-unmodified and still exercised by its own pre-existing test suites, matching this codebase's
-established "do not remove a module while a test still exercises it" precedent. Layer-aware
+**Implementation status:** `src/renderer/CanvasRenderer2D.js` (2D production canvas) consumes only
+`StoneLayout` and plain viewport/display options — it references neither `Project`, `Layer`, nor a
+layer `type`. It is a 2D Canvas-2D-API renderer. As of RS-1006, the Object Preview panel is a real
+3D/WebGL renderer, `src/preview3d/**` (see below). `src/renderer/CupRenderer.js`, the 2D Canvas
+cup/mug preview `src/preview3d/**` replaced, was confirmed unreachable from the live app (MAINT-004
+audit) and removed, along with its two dedicated test suites. Layer-aware
 interaction (selection outline/handles, drag/resize) is intentionally kept in `app.js`, not in these
 modules, since it requires layer awareness the renderer contract deliberately excludes.
 
@@ -310,8 +309,9 @@ Exporters never generate geometry.
 string-generation exporter with no DOM/Canvas dependency — implemented and consuming only
 `StoneLayout`. "Generated Layout JSON" export uses `StoneLayout.toJSON()` directly (no separate
 exporter module needed); its schema is documented in `src/geometry/README.md`. "PNG" export is
-`canvas.toBlob()` against whichever canvas `CanvasRenderer2D`/`CupRenderer` last drew — a real
-export of the rendered `StoneLayout`, but implemented as a render-then-capture step rather than a
+`canvas.toBlob()` against whichever canvas `CanvasRenderer2D`/the `src/preview3d/**` 3D preview
+last drew — a real export of the rendered `StoneLayout`, but implemented as a render-then-capture
+step rather than a
 standalone `src/export/**` module. DXF export and Stone Reports do not exist yet.
 
 As of RS-1005, a **Production Sheet** export exists: `src/export/ProductionSheetExporter.js`
@@ -384,7 +384,7 @@ Manufacturing always remains millimeters.
 **Implementation status:** true everywhere in `src/geometry/**`, `src/text/**`, and
 `src/renderer/**`/`src/export/**` — all internal fields are named with an explicit `Mm` suffix
 (`xMm`, `heightMm`, `stoneSizeMm`, ...), and pixel conversion happens only inside
-`CanvasRenderer2D.fitTransform()` / `CupRenderer`'s local transform math.
+`CanvasRenderer2D.fitTransform()` / the `src/preview3d/**` 3D preview's own transform math.
 
 ---
 
@@ -768,7 +768,7 @@ flowchart TD
         PermGE["GeometryEngine\nsrc/geometry/GeometryEngine.js"]
         PerLayerSL["StoneLayout (per layer)\nsrc/geometry/StoneLayout.js"]
         R2D["CanvasRenderer2D\nsrc/renderer/CanvasRenderer2D.js"]
-        RCup["CupRenderer\nsrc/renderer/CupRenderer.js"]
+        P3D["3D preview\nsrc/preview3d/**"]
         Svg["SvgExporter\nsrc/export/SvgExporter.js"]
     end
 
@@ -781,7 +781,7 @@ flowchart TD
     MergeDedupe --> MergedSL
 
     MergedSL --> R2D --> LayoutCanvas["layoutCanvas"]
-    MergedSL --> RCup --> CupCanvas["cupCanvas"]
+    MergedSL --> P3D --> CupCanvas["cupCanvas"]
     MergedSL --> Svg --> SVGOut["2D SVG export"]
     MergedSL --> LayoutJSON["Generated Layout JSON\n(StoneLayout.toJSON())"]
     LayoutCanvas --> PNG2D["2D PNG export"]
@@ -926,15 +926,15 @@ flowchart TD
     MergedSL -->|"stoneLayoutToSvg()"| SVGOut["Export: 2D SVG\n(one <circle> per stone)"]
     MergedSL -->|"renderProductionLayout()"| LayoutCanvas["layoutCanvas (drawn)"]
     LayoutCanvas -->|"canvas.toBlob('image/png')"| PNG2D["Export: 2D PNG"]
-    MergedSL -->|"renderCup()"| CupCanvasEl["cupCanvas (drawn)"]
+    MergedSL -->|"preview3D.update()"| CupCanvasEl["cupCanvas (drawn)"]
     CupCanvasEl -->|"canvas.toBlob('image/png')"| PNGCup["Export: Cup PNG"]
 ```
 
 All five export buttons share one `download()`/`exportCanvas()` helper in `app.js` that creates an
 object URL and clicks a synthetic `<a download>` element. None of the exporters mutate the
 `StoneLayout` or the project object they read from. "PNG" exports are not driven by a dedicated
-`src/export/**` PNG module — they capture whatever `CanvasRenderer2D`/`CupRenderer` most recently
-drew onto the two `<canvas>` elements, so a PNG export is only correct if it runs after the
+`src/export/**` PNG module — they capture whatever `CanvasRenderer2D`/the `src/preview3d/**` 3D
+preview most recently drew onto the two `<canvas>` elements, so a PNG export is only correct if it runs after the
 corresponding render call in the same `updateAll()` pass (true today, since both happen
 synchronously in sequence).
 
@@ -1520,7 +1520,7 @@ Manufacturing always remains millimeters.
 **Implementation status:** true everywhere in `src/geometry/**`, `src/text/**`, and
 `src/renderer/**`/`src/export/**` — all internal fields are named with an explicit `Mm` suffix
 (`xMm`, `heightMm`, `stoneSizeMm`, ...), and pixel conversion happens only inside
-`CanvasRenderer2D.fitTransform()` / `CupRenderer`'s local transform math.
+`CanvasRenderer2D.fitTransform()` / the `src/preview3d/**` 3D preview's own transform math.
 
 **RS-3018+ display-unit system.** As of RS-3018, `project.units` (`'mm'` or `'in'`, default `'mm'`,
 validated in `validateProject()`) is a display preference — which unit a freely-typed length field
