@@ -8372,3 +8372,96 @@ list. That imprecision doesn't change the outcome here since the method only nee
 distinguish zero hits from nonzero, but a future pass should key on the relative import
 specifier (`./geometry/index.js`, `./editing/index.js`, ...) rather than the bare basename
 if a precise per-barrel importer list is ever needed.
+
+---
+
+## Decisions
+
+Five verdicts on items Section A left `UNDECIDED`, plus three findings from closing out
+this audit.
+
+1. **`docs/screenshots/mono-013/` and `mono-014/` — DELETE.** Their only citation is the
+   script that writes them; `mono-013-screenshots.mjs`/`mono-014-screenshots.mjs` each set
+   `OUT` to their own directory (Section A Class 1). Rule to record: a screenshot cited by a
+   spec is documentation and stays (which is why `mono-015` and `mono-016` stay — both cited
+   by path in their own spec's prose); a screenshot cited only by its own generator is
+   regenerable output and goes.
+
+2. **`tools/mono-013-screenshots.mjs` and `tools/mono-014-screenshots.mjs` — KEEP,
+   tracked.** They carry real preconditions in their headers and the MONO-013 one records
+   the `CHAIN_TOO_THIN` review decision. Correction to the audit brief: do **not** widen the
+   `tools/` ignore globs to catch `*-screenshots.mjs`. These are legitimate tracked tools,
+   and ignoring them would create tracked-but-ignored shadowing that is currently clean
+   (Section B confirms `git ls-files --cached -i --exclude-standard` is empty).
+
+3. **`docs/data/read-005/f-ladder.json` — KEEP, reversing the earlier `UNDECIDED` lean
+   toward deletion.** Nothing reads it directly, but `docs/data/read-005/README.md` lines
+   99–100 make it the provenance root for `calibration-key.json` and `tracking-key.json`,
+   which tests DO read (`tools/test-read-011c-tracking-solver-regression.mjs:40`,
+   `tools/test-read-005-derived-tables.mjs`, `tools/test-read-011d-session3.mjs`), and line
+   113 carries its SHA-256 in the manifest. Carrying 7.0M is cheaper than keeping a checksum
+   manifest whose subject no longer exists.
+
+4. **`tools/measure-instanced-stone-performance.mjs` — KEEP.** Zero citations is expected
+   for a hand-run perf harness (Section A Class 5). Recorded as such at
+   `docs/testing/QA-Internal.md` so it stops resurfacing as an orphan every audit.
+
+5. **`tools/font-generator/` — KEEP for this release.** Deleting a 30-file subsystem with
+   its own test directory is a product decision, not hygiene (Section A Class 6). Filed in
+   `docs/BACKLOG.md` as its own item, carrying the evidence already gathered.
+
+### Finding — release version
+
+`v1.1.0` is already tagged, and `package.json` still declares `1.1.0`. Verified directly
+rather than trusting the audit brief's figures:
+
+```
+$ git tag -l
+baseline-working-ui
+v0.5.0-architecture-complete
+v1.0.0
+v1.0.1
+v1.1.0
+
+$ git rev-list v1.1.0..HEAD --count
+152
+
+$ grep -n version package.json
+3:  "version": "1.1.0",
+```
+
+`v1.1.0` resolves to `e26356a` (`git log -1 --format='%h %ad %s' --date=short v1.1.0` →
+`e26356a 2026-08-27 Merge develop into main: Version 1.1.0 release (doc-consistency
+follow-up)`).
+
+The commit count disagrees with the brief's "150 commits beyond it" — `git rev-list
+v1.1.0..HEAD --count` returns **152**, not 150. Per this task's instructions, that
+disagreement is reported rather than silently reconciled toward either number.
+
+Diagnosed rather than left unexplained: `git rev-list v1.1.0..develop --count` returns
+exactly **150**, matching the audit brief and this report's own earlier "150 commits"
+measurement (Section C) precisely — `develop` is where that figure came from. `HEAD` is
+this feature branch, `feature/maint-005-release-hygiene`, and it sits 2 commits ahead of
+`develop` at the point this check runs: `d010269` (MAINT-005 commit 1, the audit report)
+and `83d8dc6` (MAINT-005 commit 2, the class 9 sweep) — this milestone's own first two
+commits, made earlier in this same sequence. `git log --oneline $(git merge-base HEAD
+develop)..HEAD` confirms exactly those two and no others. 150 + 2 = 152. The underlying
+fact the brief was asserting — over a hundred commits of unreleased `src/**` work sitting
+on `develop` since `v1.1.0`, headed by a full READ-*/FONT-LIB-*/MONO-01x-02x program, with
+no Release Record entry — is unchanged and independently confirmed at 150 on `develop`
+itself; the 152 is this task's own branch, not a correction to that fact.
+
+**RELEASE VERSION: this release is v1.2.0, not v1.1.0.** `v1.1.0` is already tagged and
+`package.json` has not moved past it despite 150 commits of unreleased work on `develop`.
+Version bump to `1.2.0` is MAINT-005 commit 8.
+
+### Finding — class 9 is advisory
+
+Class 9 (Section A, completed in Section D) remains advisory. No `src/` deletion is
+authorized by this milestone — the completed sweep found zero `NO IMPORTERS` candidates
+beyond `src/tests/README.md`, already scoped into commit 4 below.
+
+### Finding — `.claudeignore`
+
+`.claudeignore` carries the same dead boilerplate as `.gitignore` (the ten never-real
+lines identified in Section B) and is trimmed in commit 5.
