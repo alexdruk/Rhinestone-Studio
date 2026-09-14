@@ -17,6 +17,16 @@ export const EXCLUDED_FROM_DEFAULT = [
   // (full font pipeline, ~44 ladder sweeps). Guards the extracted solver + detects GlyphSeparation.js
   // drift; too heavy for the default loop.
   'test-read-011c-tracking-solver-regression.mjs',
+  // MAINT-004: 11 of 11 assertions are wiring-guard (regex/substring match on app.js/index.html/
+  // package.json; nothing executes). Real Gallery correctness is fully covered by
+  // test-gallery.mjs (KEEP, unaffected, still in the `gallery` group and the default suite).
+  'test-gallery-integration.mjs',
+  // MAINT-004: 8 of 8 assertions are wiring-guard -- pure regex against composeCombinedPreviewCanvas()'s
+  // source text and #exportCombined markup; never actually calls the function.
+  'test-export-combined-preview-png.mjs',
+  // MAINT-004: 12 of 12 assertions are wiring-guard -- source-text pattern matches only; the real
+  // translate math is already fully covered by test-move-drag-translate.mjs (KEEP, unaffected).
+  'test-move-drag-fast-path-wiring.mjs',
 ];
 
 // Named groups, organized around stable subsystems (MAINT-001 — Test Suite Consolidation) rather
