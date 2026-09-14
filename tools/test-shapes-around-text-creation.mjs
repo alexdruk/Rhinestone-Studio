@@ -166,7 +166,7 @@ await test('8. fitTextToShape()/applyTextFitPlan()/addText() are untouched by S-
   // Byte-identical to the S-110 implementation (no reference to the new shape-around-text helpers).
   const fitTextToShapeFn = extractBlock(appJs, /async function fitTextToShape\(textLayer,shapeLayer\)\{[\s\S]*?\n\}/, 'fitTextToShape()');
   assert.doesNotMatch(fitTextToShapeFn, /computeShapeAroundText|shapeAroundTextFitsPrintableArea|referenceShapeLayer/);
-  const addTextFn = extractBlock(appJs, /async function addText\(\)\{[\s\S]*?\n\}/, 'addText()');
+  const addTextFn = extractBlock(appJs, /async function addText\([^)]*\)\{[\s\S]*?\n\}/, 'addText()');
   assert.doesNotMatch(addTextFn, /computeShapeAroundText|shapeAroundTextFitsPrintableArea|referenceShapeLayer/, 'addText() (create text while a shape is selected) is a different workflow, unaffected by S-110A');
 });
 

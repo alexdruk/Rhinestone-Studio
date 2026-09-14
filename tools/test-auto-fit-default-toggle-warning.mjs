@@ -43,8 +43,11 @@ async function test(name, fn) {
 function sliceBalanced(source, startMarker, label) {
   const start = source.indexOf(startMarker);
   assert.ok(start !== -1, `expected to find "${startMarker}" (${label}) in app.js`);
-  const braceStart = source.indexOf('{', start);
-  assert.ok(braceStart !== -1, `expected an opening brace after "${startMarker}" (${label})`);
+  // RS-3035: take the body brace from the marker's own trailing `{` rather than searching forward
+  // for the first one -- addText()'s signature now contains a destructuring brace
+  // (`{atAbsoluteMm=null}={}`) that a forward search would latch onto instead of the body.
+  const braceStart = start + startMarker.length - 1;
+  assert.equal(source[braceStart], '{', `marker "${startMarker}" (${label}) must end with its body's opening brace`);
   let depth = 0;
   for (let i = braceStart; i < source.length; i += 1) {
     if (source[i] === '{') depth += 1;
@@ -75,7 +78,7 @@ function extractArrowBody(source, startMarker, label) {
 }
 
 const defaultProjectSrc = sliceBalanced(appJs, 'function defaultProject(){', 'defaultProject()');
-const addTextSrc = sliceBalanced(appJs, 'async function addText(){', 'addText()');
+const addTextSrc = sliceBalanced(appJs, 'async function addText({atAbsoluteMm=null}={}){', 'addText()');
 const autoFitListenerBody = extractArrowBody(appJs, "el('autoFit').addEventListener('input',()=>{", "#autoFit toggle listener");
 
 // ---------- (a) defaultProject()'s initial text layer defaults to Auto Fit Off ----------
