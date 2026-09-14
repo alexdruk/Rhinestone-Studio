@@ -24,7 +24,6 @@ const { StoneLayout } = await import('../src/geometry/StoneLayout.js');
 const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
 const indexHtml = await readFile(path.join(repoRoot, 'index.html'), 'utf8');
 const canvasRenderer2DSource = await readFile(path.join(repoRoot, 'src/renderer/CanvasRenderer2D.js'), 'utf8');
-const cupRendererSource = await readFile(path.join(repoRoot, 'src/renderer/CupRenderer.js'), 'utf8');
 const svgExporterSource = await readFile(path.join(repoRoot, 'src/export/SvgExporter.js'), 'utf8');
 
 async function test(name, fn) {
@@ -166,7 +165,6 @@ await test('9. stoneLayoutToSvg() throws a clear TypeError for invalid input', (
 await test('10. renderer/exporter modules never reference GeometryEngine (no exporter/renderer regenerates geometry)', () => {
   for (const [name, source] of [
     ['CanvasRenderer2D.js', canvasRenderer2DSource],
-    ['CupRenderer.js', cupRendererSource],
     ['SvgExporter.js', svgExporterSource]
   ]) {
     assert.ok(!/GeometryEngine/.test(source), `${name} must not reference GeometryEngine`);

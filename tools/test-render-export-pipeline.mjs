@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// RS-0003.5C2 — verifies the 2D canvas renderer, cup renderer, and SVG exporter extracted out of
+// RS-0003.5C2 — verifies the 2D canvas renderer and SVG exporter extracted out of
 // app.js consume only StoneLayout (never a layer type or project.layers), and that app.js is
 // actually wired to call them instead of containing inline stone-drawing/SVG-string logic. The
 // renderer/exporter behavioral checks use a minimal fake CanvasRenderingContext2D (records arc()
@@ -13,14 +13,12 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
 const { drawStone, fitTransform, drawGrid, renderStoneLayout, renderProductionLayout } =
   await import('../src/renderer/CanvasRenderer2D.js');
-const { renderCup } = await import('../src/renderer/CupRenderer.js');
 const { stoneLayoutToSvg } = await import('../src/export/SvgExporter.js');
 const { Stone } = await import('../src/geometry/Stone.js');
 const { StoneLayout } = await import('../src/geometry/StoneLayout.js');
 
 const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
 const canvasRenderer2DSource = await readFile(path.join(repoRoot, 'src/renderer/CanvasRenderer2D.js'), 'utf8');
-const cupRendererSource = await readFile(path.join(repoRoot, 'src/renderer/CupRenderer.js'), 'utf8');
 const svgExporterSource = await readFile(path.join(repoRoot, 'src/export/SvgExporter.js'), 'utf8');
 
 async function test(name, fn) {
@@ -67,10 +65,6 @@ await test('1. CanvasRenderer2D exports drawStone, fitTransform, drawGrid, rende
   assert.equal(typeof renderProductionLayout, 'function');
 });
 
-await test('2. CupRenderer exports renderCup', () => {
-  assert.equal(typeof renderCup, 'function');
-});
-
 await test('3. SvgExporter exports stoneLayoutToSvg', () => {
   assert.equal(typeof stoneLayoutToSvg, 'function');
 });
@@ -111,26 +105,6 @@ await test('5. fitTransform computes the expected scale and offset for a known b
   assert.equal(oy, 300 / 2 - (0 + 50 / 2) * expectedS);
 });
 
-await test('6. renderCup runs without throwing for "front" and every wrapped mode, and draws one stone per input in "front" mode', () => {
-  const layout = makeLayout([
-    { xMm: 0, yMm: 0, sizeMm: 2, color: 'gold' },
-    { xMm: 10, yMm: 0, sizeMm: 2, color: 'gold' },
-    { xMm: 20, yMm: 5, sizeMm: 2, color: 'silver' },
-    { xMm: -10, yMm: -5, sizeMm: 2, color: 'jet' },
-    { xMm: 5, yMm: 8, sizeMm: 2, color: 'rose' }
-  ]);
-  const baseOptions = { widthPx: 500, heightPx: 400, dpr: 1, cupColor: '#1f3556', rotationDeg: 0, zoom: 1 };
-
-  const { ctx: frontCtx, arcCalls: frontArcs } = createFakeCtx();
-  renderCup(frontCtx, layout, { ...baseOptions, wrap: 'front' });
-  assert.equal(frontArcs.length, layout.count, 'front wrap must draw exactly one stone-arc per input Stone (no culling)');
-
-  for (const wrap of ['wide', 'half', 'full']) {
-    const { ctx } = createFakeCtx();
-    assert.doesNotThrow(() => renderCup(ctx, layout, { ...baseOptions, wrap }), `renderCup threw for wrap: ${wrap}`);
-  }
-});
-
 await test('7. stoneLayoutToSvg produces a well-formed SVG with one <circle> per stone', () => {
   const layout = makeLayout([
     { xMm: 1.23456, yMm: 4.5, sizeMm: 2, color: 'gold' },
@@ -149,7 +123,6 @@ await test('7. stoneLayoutToSvg produces a well-formed SVG with one <circle> per
 await test('8. neither renderer nor the SVG exporter references a layer type or project.layers', () => {
   for (const [name, source] of [
     ['CanvasRenderer2D.js', canvasRenderer2DSource],
-    ['CupRenderer.js', cupRendererSource],
     ['SvgExporter.js', svgExporterSource]
   ]) {
     assert.ok(!/project\.layers/.test(source), `${name} must not reference project.layers`);
@@ -166,10 +139,8 @@ await test('9. app.js imports the renderer/exporter modules and no longer contai
   assert.match(appJs, /import\s*\{\s*renderProductionLayout\s*,\s*renderStoneLayout\s*,\s*fitTransform\s*,\s*chooseNiceStepMm\s*\}\s*from\s*['"]\.\/src\/renderer\/CanvasRenderer2D\.js['"]/);
   // RS-1006: app.js no longer imports renderCup/CupRenderer.js for its live Object Preview panel --
   // it was replaced by the real 3D preview (src/preview3d/**, imported via its own barrel module).
-  // CupRenderer.js itself is untouched and still covered by its own dedicated test suites (see
-  // tools/test-object-preview-renderer.mjs / tools/test-cup-rotation-stabilization.mjs), which is
-  // exactly what test 2 above (CupRenderer exports renderCup) and test 8 above (neither renderer
-  // references a layer type) both still exercise directly against the module, unmodified.
+  // MAINT-004 confirmed CupRenderer.js was unreachable from the live app and removed it, along
+  // with the renderCup-specific tests this file and test-ux-visual-polish.mjs used to carry.
   assert.match(appJs, /import\s*\{\s*createPreview3D\s*\}\s*from\s*['"]\.\/src\/preview3d\/index\.js['"]/);
   assert.match(appJs, /import\s*\{\s*STONE_COLORS\s*\}\s*from\s*['"]\.\/src\/renderer\/StoneColors\.js['"]/);
   assert.match(appJs, /import\s*\{\s*stoneLayoutToSvg\s*\}\s*from\s*['"]\.\/src\/export\/SvgExporter\.js['"]/);

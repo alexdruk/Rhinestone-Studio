@@ -18,25 +18,7 @@ const { s, ox, oy } = renderProductionLayout(ctx, layout, { widthPx, heightPx, p
 ```
 
 Lower-level pieces (`drawStone`, `fitTransform`, `drawGrid`, `renderStoneLayout`) are exported
-individually for reuse — `CupRenderer.js` reuses `drawStone`.
-
-## Cup Preview Renderer (RS-0003.5C2)
-
-`CupRenderer.js` draws the cup body, handle, and the `StoneLayout` projected onto it (front label
-or wrapped, depending on `wrap`). Same rule: no layer/type awareness, only `StoneLayout` plus
-plain display options.
-
-```js
-import { renderCup } from './src/renderer/CupRenderer.js';
-
-renderCup(ctx, layout, {
-  widthPx, heightPx, dpr,
-  cupColor: '#1f3556', // hex
-  wrap: 'front',        // 'front' | 'wide' | 'half' | 'full'
-  rotationDeg: 0,
-  zoom: 1
-});
-```
+individually for reuse.
 
 ## Crystal Color Catalog (RS-1007, supersedes RS-0003.5C2)
 
@@ -50,9 +32,9 @@ always agree. These are decorative approximations, not calibrated to any specifi
 commercial color line.
 
 `StoneColors.js` is now a one-line compatibility shim re-exporting the same `STONE_COLORS`
-(id-keyed) map from `CrystalColors.js`, so every existing consumer — both renderers
-(`CanvasRenderer2D.js`, `CupRenderer.js` via `drawStone`), `src/export/SvgExporter.js`,
-`src/export/ProductionSheetExporter.js`, and `app.js` — keeps working unchanged. The 7 ids that
+(id-keyed) map from `CrystalColors.js`, so every existing consumer — `CanvasRenderer2D.js`,
+`src/export/SvgExporter.js`, `src/export/ProductionSheetExporter.js`, and `app.js` — keeps
+working unchanged. The 7 ids that
 existed before RS-1007 (`crystal`, `gold`, `silver`, `jet`, `rose`, `sapphire`, `emerald`) keep
 byte-identical `fill`/`stroke`/`shine`/`accent` values.
 

@@ -9,12 +9,6 @@
 // see docs/specifications/CI-001-RealTestExecution.md for the audit. Every excluded file is still
 // runnable directly, via a filename filter, or via `npm run test:full` (`--all`).
 export const EXCLUDED_FROM_DEFAULT = [
-  // Legacy src/renderer/CupRenderer.js suites, superseded by src/preview3d/** (RS-1006);
-  // CupRenderer.js is no longer wired into the live Object Preview panel. Kept runnable, not
-  // deleted, per the repository's "do not remove a module while a test still exercises it"
-  // precedent — test:full only.
-  'test-cup-rotation-stabilization.mjs',
-  'test-object-preview-renderer.mjs',
   // READ-003: test 5 re-measures stemWidthRatio for all 29 in-scope fonts (interior grid sampling
   // over 62 glyphs each, ~75s) to prove the manifest has not drifted from the real font files.
   // Too heavy for the default loop; run via `npm run test:full` or an explicit filter.
@@ -285,8 +279,6 @@ export const GROUPS = {
   ],
   renderers: [
     'test-render-export-pipeline.mjs',
-    'test-object-preview-renderer.mjs',
-    'test-cup-rotation-stabilization.mjs',
     'test-object-geometry-builder.mjs',
     'test-crystal-appearance.mjs',
     'test-crystal-stone-renderer.mjs',
