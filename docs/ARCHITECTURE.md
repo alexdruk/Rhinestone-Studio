@@ -2,10 +2,9 @@
 
 Version: 2.0
 
-Last synchronized with the live repository at commit `aac458b` (`develop`), the ARCH-REVIEW-001
-full architecture and codebase review, immediately prior to RC-008's Version 1.0 release-closure
-audit. Where this document and the repository disagree, the repository is the source of truth —
-see `docs/AI_ENGINEER.md`.
+Last synchronized with the live repository at commit `f263a30` (`feature/maint-005-release-hygiene`),
+the MAINT-005 v1.2.0 release-hygiene sync. Where this document and the repository disagree, the
+repository is the source of truth — see `docs/AI_ENGINEER.md`.
 
 ---
 
@@ -722,7 +721,7 @@ Project JSON import, and Project JSON export.
 # Current Implementation
 
 This section describes how the principles above are actually realized in the live browser
-application as of RS-0003.5C2, and is expected to change as future milestones land. The
+application as of `f263a30`, and is expected to change as future milestones land. The
 normative principles above this section do not change; this section is the map from principle to
 code.
 
@@ -1149,7 +1148,10 @@ Planned milestones include
   "Exporters" above — but a dedicated Stone Report/manufacturing-report document does not)
 - DXF export — not started
 - Mouse editing — **done** for circle/rectangle shapes (drag to move, handle-drag to resize);
-  text layers gained a manual `x`/`y` offset as of RS-1009, still not drag-repositionable directly
+  text layers gained a manual `x`/`y` offset as of RS-1009 and became drag-repositionable (move
+  and rotate; resize-by-drag still doesn't apply — font size stays Inspector-controlled) via
+  Design's Select tool as of RS-3012 Step 3 (`src/drawing/DrawingCanvasTool.js`'s
+  `materializeTextItemFromLayer()`, `app.js`'s `onShapeMoved` hook)
 - Undo/Redo — **done** (`src/history/HistoryManager.js`, live since RS-1002; unlimited,
   configurably bounded undo/redo over every editing operation, keyboard shortcuts, toolbar buttons,
   dirty-state tracking)

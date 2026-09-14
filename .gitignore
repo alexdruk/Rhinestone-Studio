@@ -1,83 +1,41 @@
-# Dependencies
 node_modules/
 
-# Build outputs
-dist/
-build/
-coverage/
-
-# Logs
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 
-# OS files
 .DS_Store
 Thumbs.db
 
-# IDE/editor
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# Environment/local config
 .env
 .env.local
 .env.*.local
 
-# Generated exports and QA output
-exports/
-release/
-releases/
-screenshots/generated/
-tests/output/
-golden-output/
-tmp/
-
-# Archives
 *.zip
 *.tar.gz
 
-# Python helper caches
 __pycache__/
 *.pyc
 
-# FONT-CAL-001: temporary experimental candidate fonts (must never become production assets --
-# only the JSON measurements and the experiment report they support are committed)
-tools/font-cal-001/output/fonts/
-
-# READ-004/READ-005: the recognition-harness output tree -- probe records (resumable across
-# sessions), generated contact-sheet HTML/PNGs, and Playwright profile dirs. The app only ever
-# consumes the baked floors READ-005 derives from these; the intermediate artifacts are never tracked.
+# READ-004/READ-005 recognition-harness output: probe records, generated contact
+# sheets, Playwright profile dirs. The app consumes only the baked floors derived
+# from these; the intermediates are never tracked.
 tools/font-certification/output/
 
-# ---------------------------------------------------------------------------
-# Scratch + one-off verification artifacts -- never tracked
-# ---------------------------------------------------------------------------
-# Per-milestone spikes, ad hoc live-browser Playwright verification scripts, and
-# their screenshot folders are working aids, not repo artifacts. Findings get
-# written up in docs/ or reported to the user; the scripts and images never get
-# committed.
-#
-# This section used to be ~85 individual lines -- one per milestone -- which
-# meant every new milestone had to remember to add its own line. Once one
-# didn't, and four scratch scripts got tracked by mistake. The globs below cover
-# the whole class, so that mistake is now structurally impossible.
-#
-# Do NOT add new per-milestone lines. Instead:
-#   - put scratch spikes / verification scripts under  tools/scratch/   (all ignored), or
-#   - name the script       tools/<milestone>-verify.mjs
-#     and its screenshots   tools/<milestone>-...-screenshots/          (both ignored below)
+# Scratch and one-off verification artifacts, never tracked. This section replaced
+# ~85 per-milestone lines; one was once forgotten and four scratch scripts got
+# tracked by mistake. Do NOT add new per-milestone lines. Put spikes under
+# tools/scratch/, or name a script tools/<milestone>-verify.mjs with screenshots
+# in tools/<milestone>-...-screenshots/.
 tools/scratch/
 tools/*-verify.mjs
 tools/*-verification.mjs
 tools/*-screenshots/
 
-# Pre-convention one-offs whose names fit neither glob. Kept explicit; do not
-# imitate these names -- new scratch work goes under tools/scratch/.
+# Pre-convention one-offs fitting neither glob. Do not imitate these names.
 tools/rc-014-font-spotcheck.mjs
 tools/rs-3011-step4-flash-check.mjs
 tools/rs-3011-step4-flash-check-heavy.mjs
-tools/rs2013-instanced-stone-harness-screenshot.mjs
