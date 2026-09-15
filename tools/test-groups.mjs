@@ -288,6 +288,8 @@ export const GROUPS = {
     'test-svg-parser.mjs',
     'test-svg-integration.mjs',
     'test-production-export-validation.mjs',
+    // RS-3036: DXF cutting-template export (StoneLayout -> mm DXF, per-color layers).
+    'test-rs3036-dxf-exporter.mjs',
     'test-production-sheet-exporter.mjs',
     'test-pdf-document.mjs',
     'test-export-combined-preview-png.mjs',
