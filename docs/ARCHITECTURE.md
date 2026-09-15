@@ -311,7 +311,8 @@ exporter module needed); its schema is documented in `src/geometry/README.md`. "
 `canvas.toBlob()` against whichever canvas `CanvasRenderer2D`/the `src/preview3d/**` 3D preview
 last drew — a real export of the rendered `StoneLayout`, but implemented as a render-then-capture
 step rather than a
-standalone `src/export/**` module. DXF export and Stone Reports do not exist yet.
+standalone `src/export/**` module. DXF export now exists as `src/export/DxfExporter.js`
+(RS-3036); Stone Reports do not.
 
 As of RS-1005, a **Production Sheet** export exists: `src/export/ProductionSheetExporter.js`
 (`computeProductionSheetLayout()`, `productionSheetToSvg()`, `productionSheetToPdf()`) turns the
@@ -1035,7 +1036,7 @@ No other legacy/dead code is currently known in the application.
    `roboto-mono-regular`, whose file (`assets/fonts/RobotoMono-Regular.ttf`) is an intentionally
    unparsable 14-byte stub kept for `tools/test-opentype-provider.mjs`; it is unreferenced by
    `app.js` and would throw from `opentype.parse()` if ever selected.
-3. **No Validation Engine, DXF export, or manufacturing reports exist yet.** These remain future
+3. **No Validation Engine or manufacturing reports exist yet.** These remain future
    milestones per "Future Direction" below, not regressions. (The product-plugin system and the
    3D/WebGL renderer, previously also listed here as not-yet-built, were implemented by RS-1004 and
    RS-1006 respectively — see the "Product Plugins" and "Renderer" sections above.)
@@ -1146,7 +1147,7 @@ Planned milestones include
   above)
 - Manufacturing reports — not started (a Production Sheet export exists as of RS-1005 — see
   "Exporters" above — but a dedicated Stone Report/manufacturing-report document does not)
-- DXF export — not started
+- DXF export — **done** (`src/export/DxfExporter.js`, RS-3036)
 - Mouse editing — **done** for circle/rectangle shapes (drag to move, handle-drag to resize);
   text layers gained a manual `x`/`y` offset as of RS-1009 and became drag-repositionable (move
   and rotate; resize-by-drag still doesn't apply — font size stays Inspector-controlled) via

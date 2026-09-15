@@ -22,6 +22,25 @@ carries per-stone. The per-stone `<circle>` string itself is `stoneCircleSvg(sto
 yOffsetMm)` (RS-1005) — `stoneLayoutToSvg()` calls it at offset `0,0`; `ProductionSheetExporter.js`
 reuses the same helper when placing stones inside a larger page.
 
+## DXF Exporter (RS-3036)
+
+`DxfExporter.js` serializes a `StoneLayout` as a millimeter-scale DXF cutting template. Pure
+string generation via `@tarikjabiri/dxf` — no DOM dependency, no layer/type awareness.
+
+```js
+import { stoneLayoutToDxf } from './src/export/DxfExporter.js';
+
+const dxf = stoneLayoutToDxf(layout, { widthMm: project.canvas.width, heightMm: project.canvas.height });
+```
+
+`stoneLayoutToDxf()` throws a `TypeError` under the same conditions as `stoneLayoutToSvg()` (missing
+`stones` array, or non-positive-finite `widthMm`/`heightMm`). The document has a `CANVAS` layer
+holding a single closed boundary polyline, and one additional layer per distinct stone color —
+named via `dxfLayerNameForColor(colorId)` (e.g. `'gold'` -> `'STONES_GOLD'`) — holding a circle per
+stone at its exact diameter (no cut offset) and position. Coordinates are Y-flipped
+(`heightMm - stone.yMm`) because DXF is Y-up while `StoneLayout` is Y-down. Units are millimeters
+(`$INSUNITS = 4`).
+
 ## Production Sheet Exporter (RS-1005)
 
 `ProductionSheetExporter.js` turns a `StoneLayout` plus plain display metadata into a one-page,
