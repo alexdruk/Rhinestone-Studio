@@ -213,17 +213,17 @@ await test('13. app.js defines and wires a Project JSON import path with validat
 });
 
 await test('14. every export button handler guards on layout readiness and is wrapped in try/catch', () => {
-  for (const id of ['exportLayout', 'exportSVG', 'exportPNG', 'exportCup', 'exportCombined']) {
+  for (const id of ['exportLayout', 'exportDXF', 'exportSVG', 'exportPNG', 'exportCup', 'exportCombined']) {
     const re = new RegExp(`el\\('${id}'\\)\\.onclick=\\(\\)=>\\{if\\(!layout\\)\\{[^}]*return\\}try\\{`);
     assert.match(appJs, re, `expected #${id} handler to guard on !layout before a try block`);
   }
   assert.match(appJs, /el\('exportProject'\)\.onclick=\(\)=>\{try\{/, 'expected #exportProject handler to be wrapped in try/catch');
-  // Every one of the five original export handlers, RS-1005's three Production Sheet handlers
-  // (exportProdSheetSVG/PNG/PDF), and S-106's exportCombined handler must catch and report failures
-  // via #status.
+  // Every one of the five original export handlers, RS-3036's DXF handler, RS-1005's three
+  // Production Sheet handlers (exportProdSheetSVG/PNG/PDF), and S-106's exportCombined handler
+  // must catch and report failures via #status.
   const exportSection = appJs.slice(appJs.indexOf("el('exportProject')"), appJs.indexOf('let cupDrag'));
   const catchCount = (exportSection.match(/catch\(error\)\{el\('status'\)\.textContent=`Export failed:/g) || []).length;
-  assert.equal(catchCount, 9, 'expected all 5 original + 3 Production Sheet + 1 Combined Preview export handlers to report failures via #status');
+  assert.equal(catchCount, 10, 'expected all 5 original + 1 DXF + 3 Production Sheet + 1 Combined Preview export handlers to report failures via #status');
 });
 
 await test('15. index.html exposes the import controls app.js expects', () => {

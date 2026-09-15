@@ -204,7 +204,7 @@ await test('9. Image Trace, Export, Production Sheet, Shipping, Settings, and He
   assert.ok(traceBody.includes('id="imageTracePositionSlot"') && traceBody.includes('id="imageTraceStoneSlot"'));
 
   const exportBody = extractElementHtml(indexHtml, 'lightboxExport');
-  for (const id of ['exportProject', 'exportLayout', 'exportSVG', 'exportPNG', 'exportCup']) {
+  for (const id of ['exportProject', 'exportLayout', 'exportDXF', 'exportSVG', 'exportPNG', 'exportCup']) {
     assert.ok(exportBody.includes(`id="${id}"`), `expected the Export Lightbox to contain #${id}`);
   }
   assert.ok(/Project data/.test(exportBody) && /Production geometry/.test(exportBody) && /Visual previews/.test(exportBody));
