@@ -157,7 +157,7 @@ const sandboxFactory = new Function(
   // they must be supplied for the module-level S-105 exclusivity logic in src/ui/Lightbox.js to be
   // able to close a stale open Lightbox from an earlier scenario without throwing (same precedent as
   // tools/test-ui-import-autoswitch-regression.mjs's own stub list).
-  'relocateFieldGroups', 'updateObjectTemplateDetail', 'updateImageTraceSections',
+  'relocateFieldGroups', 'updateObjectTemplateDetail', 'renderImageStudio',
   'syncShippingFieldsFromState', 'syncSettingsFieldsFromState', 'onLibraryOpen', 'onGalleryOpen',
   'readLengthField', 'setLengthField', 'mmToDisplayValue', 'unitSuffix', 'formatLengthDisplay',
   `

@@ -184,6 +184,7 @@ function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', 
   const writeSelectedControlsToLayer = record('writeSelectedControlsToLayer');
   const renderLayerUI = record('renderLayerUI');
   const drawLayout = record('drawLayout');
+  const renderImageStudio = record('renderImageStudio');
   const drawCup = record('drawCup');
   const updateStats = record('updateStats');
   const updateHistoryUI = record('updateHistoryUI');
@@ -201,7 +202,7 @@ function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', 
   const updateAllSrc = extractFunctionBody(appJs, 'async function updateAll(skipWrite=false,forceStoneRebuild=false){', 'updateAll()');
   const factory = new Function(
     'writeSelectedControlsToLayer', 'engine', 'project', 'el', 'permanentEngineError', 'console',
-    'renderLayerUI', 'drawLayout', 'drawCup', 'updateStats', 'updateHistoryUI', 'updateEditingUI',
+    'renderLayerUI', 'drawLayout', 'renderImageStudio', 'drawCup', 'updateStats', 'updateHistoryUI', 'updateEditingUI',
     'updateViewButtons', 'updateTextOutsidePrintableWarning', 'scheduleAutosave', 'drawingTool', 'devicePixelRatio',
     // RS-3032 Step A: updateAll()'s own body now references the real, module-level SHAPE_LIBRARY_KINDS
     // (its Design-canvas sync call site is widened to also cover shape-library layers) -- injected
@@ -217,7 +218,7 @@ function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', 
   );
   const { updateAll, bumpGenerationToken } = factory(
     writeSelectedControlsToLayer, engine, project, el, permanentEngineError, fakeConsole,
-    renderLayerUI, drawLayout, drawCup, updateStats, updateHistoryUI, updateEditingUI,
+    renderLayerUI, drawLayout, renderImageStudio, drawCup, updateStats, updateHistoryUI, updateEditingUI,
     updateViewButtons, updateTextOutsidePrintableWarning, scheduleAutosave, drawingTool, 1,
     SHAPE_LIBRARY_KINDS
   );
@@ -226,7 +227,11 @@ function runUpdateAll({ skipWrite = false, buildGenerate, statusText = 'Ready', 
   return { run: () => updateAll(skipWrite), calls, tailCalls, getStatus: () => statusValue, consoleErrors, getSyncFromProjectLayersArg: () => syncFromProjectLayersArg };
 }
 
-const SUCCESS_TAIL_ORDER = ['renderLayerUI', 'drawLayout', 'drawCup', 'updateStats', 'updateHistoryUI', 'updateEditingUI', 'updateViewButtons', 'updateTextOutsidePrintableWarning', 'scheduleAutosave'];
+// IMG-007 added renderImageStudio() to this tail, sitting AFTER the drawingTool.isActive if/else
+// (not inside either branch), so the RS-3010 drawing-active test below now proves it runs in both
+// branches: its flatMap only swaps 'drawLayout' for the two drawingTool calls and leaves
+// 'renderImageStudio' in place right after them, unchanged.
+const SUCCESS_TAIL_ORDER = ['renderLayerUI', 'drawLayout', 'renderImageStudio', 'drawCup', 'updateStats', 'updateHistoryUI', 'updateEditingUI', 'updateViewButtons', 'updateTextOutsidePrintableWarning', 'scheduleAutosave'];
 
 await test('a successful regeneration draws/updates stats/history/warnings and only then schedules autosave, in the required order', async () => {
   const { run, calls, getStatus } = runUpdateAll({ buildGenerate: () => async () => ({ count: 3 }) });

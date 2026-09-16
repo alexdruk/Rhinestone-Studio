@@ -41,6 +41,8 @@ built on.
    replacement for it.
 7. **IMG-007 — Studio UX.** Full Image Trace Lightbox UX for every capability IMG-002 through
    IMG-006 added (color layer list, organic/edge/brightness controls, check & fix trigger/report).
+   IMG-007 was executed before IMG-002 as the studio shell; later milestones fill its placeholder
+   groups — IDs are not renumbered.
 8. **IMG-008 — Vector-first SVG.** An SVG export path for image-derived layers that emits vector
    shapes reflecting the traced structure, rather than only per-stone circles.
 

@@ -73,7 +73,7 @@ const MENU_ITEMS = [
   { id: 'menuText', label: 'Text', lightbox: 'lightboxText', revealsDualWorkspace: true },
   { id: 'menuShapes', label: 'Shapes', lightbox: 'lightboxShapes', revealsDualWorkspace: true },
   { id: 'menuImport', label: 'Import', lightbox: 'lightboxImport', revealsDualWorkspace: true },
-  { id: 'menuImageTrace', label: 'Image Trace', lightbox: 'lightboxImageTrace', revealsDualWorkspace: true },
+  { id: 'menuImageTrace', label: 'Image', lightbox: 'lightboxImageTrace', revealsDualWorkspace: true },
   { id: 'menuExport', label: 'Export', lightbox: 'lightboxExport', revealsDualWorkspace: true },
   { id: 'menuProdSheet', label: 'Production Sheet', lightbox: 'lightboxProdSheet', revealsDualWorkspace: true },
   { id: 'menuShipping', label: 'Shipping', lightbox: 'lightboxShipping', revealsDualWorkspace: false },
@@ -109,7 +109,10 @@ await test('3. every top-menu button opens exactly its documented Lightbox, and 
     assert.match(appJs, re, `expected #${id} to open a Lightbox${revealsDualWorkspace ? ', revealing Dual Workspace first' : ''}`);
     const matches = indexHtml.match(new RegExp(`id="${lightbox}"`, 'g')) || [];
     assert.equal(matches.length, 1, `expected exactly one #${lightbox}`);
-    assert.match(indexHtml, new RegExp(`<div class="lightbox-overlay(?: [\\w-]+)?" id="${lightbox}">`), `expected #${lightbox} to be a lightbox-overlay`);
+    // IMG-007: lightboxImageTrace's overlay now carries a second modifier class ("dock-left",
+    // alongside "non-modal") -- widened from "at most one" to "zero or more" additional classes so
+    // this still matches every Lightbox overlay, not just single-modifier ones.
+    assert.match(indexHtml, new RegExp(`<div class="lightbox-overlay(?: [\\w-]+)*" id="${lightbox}">`), `expected #${lightbox} to be a lightbox-overlay`);
   }
 });
 
@@ -195,7 +198,7 @@ await test('8. Import Lightbox has two clearly separated tabs: SVG Import and Pr
 
 await test('9. Image Trace, Export, Production Sheet, Shipping, Settings, and Help Lightboxes each expose their documented content', () => {
   const traceBody = extractElementHtml(indexHtml, 'lightboxImageTrace');
-  for (const id of ['importImage', 'importImageFile', 'imgPreviewThreshold', 'imgPreviewInvert', 'imgPreviewBlur', 'imgPreviewMaxWidth', 'imgPreviewMaxHeight', 'imageImportPreviewCanvas', 'imageImportStoneCount', 'imageImportCancel', 'imageImportCommit']) {
+  for (const id of ['importImage', 'importImageFile', 'imageStudioRemove', 'imageStudioView', 'imageStudioCanvas', 'imageStudioStats', 'imageStudioGroupColors', 'imageStudioGroupOrganic', 'imageStudioGroupEdges', 'imageStudioGroupCheckFix', 'imageStudioGroupBrightness']) {
     assert.ok(traceBody.includes(`id="${id}"`), `expected the Image Trace Lightbox to contain #${id}`);
   }
   for (const id of ['imgThreshold', 'imgInvert', 'imgBlurRadius', 'imgMaxWidth', 'imgMaxHeight']) {
