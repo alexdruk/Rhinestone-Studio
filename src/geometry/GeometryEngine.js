@@ -22,7 +22,7 @@
 
 import { BoundingBox, Point2D, createCircleVectorPath, createRectangleVectorPath } from '../text/VectorPath.js';
 import { flattenContourToPolygon, flattenContourToPolygonWithCornerFlags, translateContour, detectPolygonCornerFlags } from './ContourGeometry.js';
-import { sampleOutlinePoints, sampleMultiContourOutlinePoints, sampleShapeFillPoints, sampleFieldByMode, isPointInsidePolygons, dropOverlappingSizedStones, fieldLabelAt } from './StoneSampler.js';
+import { sampleOutlinePoints, sampleMultiContourOutlinePoints, sampleShapeFillPoints, sampleFieldByMode, isPointInsidePolygons, dropOverlappingSizedStones, fieldLabelAt, NO_LABEL } from './StoneSampler.js';
 // MONO-015 (weight-following stone size): local stroke-width probe + catalog size mapping.
 import { strokeWidthsForSamples } from './StrokeWidthProbe.js';
 import { weightSizeMm } from './WeightSizing.js';
@@ -44,11 +44,6 @@ import { SHAPE_LIBRARY_KINDS, createShapeNaturalContours } from './ShapeLibrary.
 // generateMixedSizeInfillStones() are the only S-200 entry points this module calls -- see
 // MixedSizeGenerator.js's own doc comment for why the algorithm itself lives there, not here.
 import { normalizeMixedSizeParams, generateMixedSizeInfillPoints, generateMixedSizeInfillStones } from './MixedSizeGenerator.js';
-
-// IMG-002: mirrors src/image/ColorQuantize.js's own NO_LABEL (value 255) -- kept as a separate,
-// hand-matched constant here, the same "each normalizer owns its own copy" convention
-// IMAGE_TRANSPARENT_MODES below already established, rather than importing src/image's copy.
-const NO_LABEL = 255;
 
 // RS-1011: 'fill' is unchanged in meaning/output from before this milestone (a regular grid --
 // "Grid Fill" is only a clearer UI label for the same stored value); staggered/radial/contour are

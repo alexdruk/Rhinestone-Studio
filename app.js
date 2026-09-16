@@ -709,11 +709,31 @@ const IMAGE_COLOR_PALETTE=Object.values(STONE_COLORS).map(c=>({id:c.id,hex:c.pre
 // than caching a row->nearestId mapping between the two, which could drift stale if e.g. threshold
 // changed between renders. Returns null (no quantization) for colorCount<=1 or before the source
 // image has been decoded/cached at least once.
+// IMG-002 follow-up: quantization (median-cut + 8 k-means passes) has a measured real cost at larger
+// working resolutions -- +312ms at 1000x1000, +218ms at 2000x2000, +575ms at 4000x4000, all measured
+// on top of the shipped 400px default. This function alone already runs up to three times per
+// updateAll() (writeSelectedControlsToLayer(), generateImageLayout()'s own prepareImageField() call
+// inside the engine, and renderImageStudio()), and #imgThreshold is a range input firing on every
+// 'input' event while dragging -- so imageColorFieldCache below caches the last couple of results,
+// keyed on every param quantizeColors()' own output depends on: imageSrc (which image), threshold/
+// invert/blurRadiusPx/maxWidthPx/maxHeightPx/transparent (which determine the density/R/G/B fields
+// it reads), and colorCount (how many clusters it produces). Omitting any one of these from the key
+// would let an edit to that param silently reuse a stale quantization. Deliberately NOT cached inside
+// src/image or src/geometry -- prepareImageField() itself stays pure and uncached, the same as every
+// other pure pipeline stage; this is app.js's own UI-latency concern, not the engine's.
+const imageColorFieldCache=new Map();
 function computeImageColorField(layer){
   if(!layer||layer.type!=='image'||(layer.colorCount||1)<=1)return null;
   const buffer=imageBufferCache.get(layer.imageSrc);
   if(!buffer)return null;
-  return prepareImageField(buffer,{threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),colorCount:layer.colorCount,palette:IMAGE_COLOR_PALETTE});
+  const transparent=resolveImageTransparentMode(layer.transparent);
+  const key=[layer.imageSrc,layer.threshold,layer.invert,layer.blurRadiusPx,layer.maxWidthPx,layer.maxHeightPx,transparent,layer.colorCount].join('|');
+  const cached=imageColorFieldCache.get(key);
+  if(cached)return cached;
+  const field=prepareImageField(buffer,{threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent,colorCount:layer.colorCount,palette:IMAGE_COLOR_PALETTE});
+  imageColorFieldCache.set(key,field);
+  if(imageColorFieldCache.size>2)imageColorFieldCache.delete(imageColorFieldCache.keys().next().value);
+  return field;
 }
 // S-200 (Mixed Stone-Size Layouts): Generation Mode -- 'uniform' (every stone in the layer is the
 // same size, unchanged pre-S-200 behavior) or 'mixed' (GeometryEngine.js's MixedSizeGenerator.js
@@ -2591,15 +2611,19 @@ function writeSelectedControlsToLayer(){
     const colorMap={...l.colorMap};
     for(let i=0;i<colorField.colorGroups.length;i++){
       const pickEl=el(`imgColorPick${i}`);
-      // IMG-002: a row's <select> only reflects a real (default-or-override) value once
-      // renderImageStudio() has populated it at least once (dataset.synced, set there) --
-      // reading it back any earlier would capture the browser's own arbitrary first-<option>
+      // IMG-002: a row's <select> only reflects a real (default-or-override) value for THIS layer
+      // once renderImageStudio() has populated it for l.id at least once (dataset.syncedLayer, set
+      // there). Reading it back before that would capture the browser's own arbitrary first-<option>
       // default (identical across every row, since every row is populated from the same catalog
       // list) and silently collapse every cluster onto that one color the moment colorCount first
-      // grows past whatever has ever been rendered. Skipping an unsynced row leaves l.colorMap
-      // untouched for it; the renderImageStudio() call later in this same updateAll() populates
-      // and marks it, so the next edit reads back correctly.
-      if(!pickEl||pickEl.dataset.synced!=='1')continue;
+      // grows past whatever has ever been rendered. IMG-002 follow-up: keyed by layer id, not a bare
+      // '1' flag -- renderImageStudio() early-returns while the Studio Lightbox is closed, so a flag
+      // that only meant "synced once, for whichever layer was selected back then" would survive a
+      // layer switch made with the Lightbox closed and let this loop write the PREVIOUS layer's
+      // stale picks into the NEWLY selected layer's colorMap. Skipping a row not synced for l.id
+      // leaves l.colorMap untouched for it; the renderImageStudio() call later in this same
+      // updateAll() populates and marks it, so the next edit reads back correctly.
+      if(!pickEl||pickEl.dataset.syncedLayer!==l.id)continue;
       colorMap[colorField.colorGroups[i].nearestId]=pickEl.value;
     }
     l.colorMap=colorMap;
@@ -6096,9 +6120,11 @@ async function renderImageStudio(){
     el(`imgColorShare${i}`).textContent=`${Math.round(group.pixelShare*100)}%`;
     const pickEl=el(`imgColorPick${i}`);
     pickEl.value=(l.colorMap&&l.colorMap[group.nearestId])||group.nearestId;
-    // IMG-002: marks this row's select as holding a real value -- see writeSelectedControlsToLayer()'s
-    // own doc comment for why the write-back trusts a row's DOM value only once this has run.
-    pickEl.dataset.synced='1';
+    // IMG-002 follow-up: marks this row's select as holding a real value FOR THIS LAYER (l.id, not a
+    // bare '1') -- see writeSelectedControlsToLayer()'s own doc comment for why the write-back must
+    // trust a row's DOM value only once it has been synced for the currently selected layer
+    // specifically, not merely synced at some point for whichever layer was selected earlier.
+    pickEl.dataset.syncedLayer=l.id;
   }
   const drawColors=()=>{
     if(!colorField||!colorField.labels){drawTemplate();return}

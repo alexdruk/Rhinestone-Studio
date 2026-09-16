@@ -5,14 +5,18 @@ import {
 } from '../src/image/index.js';
 import {
   quantizeColors,
-  FIELD_ON_THRESHOLD as COLOR_QUANTIZE_FIELD_ON_THRESHOLD
+  FIELD_ON_THRESHOLD as COLOR_QUANTIZE_FIELD_ON_THRESHOLD,
+  NO_LABEL as COLOR_QUANTIZE_NO_LABEL
 } from '../src/image/ColorQuantize.js';
 import {
   createGeometryEngine,
   fieldLabelAt,
   findCrossGroupCollisions
 } from '../src/geometry/index.js';
-import { FIELD_ON_THRESHOLD as GEOMETRY_FIELD_ON_THRESHOLD } from '../src/geometry/StoneSampler.js';
+import {
+  FIELD_ON_THRESHOLD as GEOMETRY_FIELD_ON_THRESHOLD,
+  NO_LABEL as GEOMETRY_NO_LABEL
+} from '../src/geometry/StoneSampler.js';
 
 // IMG-002 -- unit tests for the color quantizer (src/image/ColorQuantize.js), its wiring into
 // prepareImageField() (src/image/ImageFieldPipeline.js), and GeometryEngine.generateImageLayout()'s
@@ -175,9 +179,11 @@ await test('4. byte-identity vs. develop: colorCount omitted, generateImageLayou
   assert.deepEqual(result.stones.map((s) => ({ xMm: s.xMm, yMm: s.yMm, sizeMm: s.sizeMm, color: s.color, index: s.index })), expected);
 });
 
-await test('5. FIELD_ON_THRESHOLD parity: src/geometry/StoneSampler.js and src/image/ColorQuantize.js agree', () => {
+await test('5. FIELD_ON_THRESHOLD and NO_LABEL parity: src/geometry/StoneSampler.js and src/image/ColorQuantize.js agree', () => {
   assert.equal(GEOMETRY_FIELD_ON_THRESHOLD, COLOR_QUANTIZE_FIELD_ON_THRESHOLD);
   assert.equal(COLOR_QUANTIZE_FIELD_ON_THRESHOLD, 128);
+  assert.equal(GEOMETRY_NO_LABEL, COLOR_QUANTIZE_NO_LABEL);
+  assert.equal(COLOR_QUANTIZE_NO_LABEL, 255);
 });
 
 await test('6. per mode: colorCount:3 and colorCount:1 produce identical (xMm, yMm, sizeMm, index) sequences -- only color differs', () => {
@@ -202,7 +208,23 @@ await test('7. findCrossGroupCollisions() over colorCount:3 stones, grouped into
   const engine = createGeometryEngine({});
   const multi = engine.generateImageLayout({ ...BASE_PARAMS, imageBuffer: buffer, mode: 'fill', colorCount: 3, palette: PALETTE });
   assert.ok(multi.stones.length > 0);
-  const flatStones = multi.stones.map((s) => ({ x: s.xMm, y: s.yMm, d: s.sizeMm, layerId: s.color }));
+  // d = stoneSizeMm + gapMm (the sampling pitch), per the spec's own Test Plan wording -- not
+  // s.sizeMm (the physical stone diameter). The per-mask-sampling regression this case exists to
+  // catch produced a 3.143 mm cross-color center distance at stone size 3.0 / pitch 3.3: legal at
+  // d = sizeMm (min separation 3.0) but illegal at d = pitch (min separation 3.3). See
+  // docs/specifications/IMG-002-ColorLayers.md decision 1.
+  //
+  // The 1e-9mm slack below is float noise, not tolerance for a real violation: findCrossGroupCollisions()'s
+  // threshold is a strict `<` on (a.d+b.d)/2, and the accumulated grid walk (`localXMm += spacingMm`
+  // in sampleFieldFillPoints()) lands adjacent same-row points at this fixture's 1.8mm pitch up to
+  // ~3e-15mm off the nominal value -- two stones exactly one pitch apart are legal, not a collision,
+  // but land marginally under 1.8 by float accumulation and false-positive under a bare `<` test.
+  // 1e-9 is roughly six orders of magnitude above accumulated double-precision error at millimeter
+  // magnitudes, and nine below any physically meaningful overlap, so it can only ever absorb float
+  // noise, never mask a real spacing violation -- the historical regression above was 0.157mm inside
+  // the pitch, eight orders of magnitude clear of this slack.
+  const collisionDiameterMm = BASE_PARAMS.stoneSizeMm + BASE_PARAMS.gapMm - 1e-9;
+  const flatStones = multi.stones.map((s) => ({ x: s.xMm, y: s.yMm, d: collisionDiameterMm, layerId: s.color }));
   assert.deepEqual(findCrossGroupCollisions(flatStones), []);
 });
 
@@ -251,16 +273,27 @@ await test('9. nearestId uniqueness: two clusters whose nearest catalog entry co
   assert.equal(small.nearestId, 'distant', 'expected the smaller cluster to fall through to its next-nearest unclaimed entry');
 });
 
-await test('10. NO_LABEL unreachability: across all four modes, with and without sizeMode:"mixed", zero stones (base or infill) resolve to NO_LABEL', () => {
+await test('10. NO_LABEL unreachability: across all four modes, with and without sizeMode:"mixed", zero stones (base or infill) resolve to NO_LABEL; mixed always adds infill', () => {
   const buffer = threeBandBuffer(BAND_SIZE_PX, BAND_SIZE_PX);
   const engine = createGeometryEngine({});
-  const mixedOptions = { sizeMode: 'mixed', allowedSizesMm: [1.5, 1.0, 0.6], minSizeMm: 0.6, maxSizeMm: 1.5, conservativeDetail: 1.0 };
+  // stoneSizeMm:3 (not BASE_PARAMS's 1.5) -- at 1.5 with this fixture, mixed mode's own eligible
+  // gaps are already almost fully covered by the primary pitch, so its own infill pass adds nearly
+  // nothing (measured against develop's engine: Fill +0, Staggered +0, Radial +2, Contour +0) and
+  // an empty-infill regression here would have gone undetected. At 3 the primary pitch leaves real
+  // gaps for infill to fill (measured: Fill +16, Staggered +5, Radial +26, Contour +11), so the
+  // strictly-greater assertion below actually exercises the infill path it's meant to guard.
+  const TEST_STONE_SIZE_MM = 3;
+  const mixedOptions = { sizeMode: 'mixed', allowedSizesMm: [3, 0.6], minSizeMm: 0.6, maxSizeMm: 3, conservativeDetail: 1.0 };
 
   for (const mode of ['fill', 'staggered', 'radial', 'contour']) {
+    const baseModeParams = { ...BASE_PARAMS, imageBuffer: buffer, mode, colorCount: 3, palette: PALETTE, stoneSizeMm: TEST_STONE_SIZE_MM };
+    let uniformCount = null;
     for (const mixed of [false, true]) {
-      const params = { ...BASE_PARAMS, imageBuffer: buffer, mode, colorCount: 3, palette: PALETTE, ...(mixed ? mixedOptions : {}) };
+      const params = { ...baseModeParams, ...(mixed ? mixedOptions : {}) };
       const result = engine.generateImageLayout(params);
       assert.ok(result.stones.length > 0, `mode ${mode} mixed=${mixed}: expected stones`);
+      if (!mixed) uniformCount = result.stones.length;
+      else assert.ok(result.stones.length > uniformCount, `mode ${mode}: expected mixed infill to strictly add stones over uniform (uniform=${uniformCount}, mixed=${result.stones.length})`);
 
       const field = prepareImageField(buffer, {
         threshold: params.threshold, invert: params.invert, blurRadiusPx: params.blurRadiusPx,

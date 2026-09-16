@@ -1622,11 +1622,13 @@ function fieldPixelOn(field, localXMm, localYMm, widthMm, heightMm) {
   return field.data[pixelY * field.widthPx + pixelX] >= FIELD_ON_THRESHOLD;
 }
 
-// IMG-002: mirrors src/image/ColorQuantize.js's own NO_LABEL (value 255) -- kept as a separate,
-// hand-matched module-private constant here, the same "each module owns its own copy" convention
-// GeometryEngine.js's IMAGE_TRANSPARENT_MODES already established, rather than importing
-// src/image's copy (StoneSampler.js has no src/image dependency and this milestone adds none).
-const NO_LABEL = 255;
+// IMG-002 follow-up: mirrors src/image/ColorQuantize.js's own NO_LABEL (value 255) -- exported (not
+// module-private) so GeometryEngine.js imports this copy instead of hand-declaring a third one, and
+// so tools/test-img-002-color-layers.mjs's FIELD_ON_THRESHOLD-parity case can also assert this stays
+// equal to ColorQuantize.js's copy. Two hand-matched copies across the src/image/src/geometry
+// boundary (this one and ColorQuantize.js's, StoneSampler.js has no src/image dependency and this
+// milestone adds none), both test-pinned, instead of three with one unreachable from any test.
+export const NO_LABEL = 255;
 
 /**
  * Look up a field's per-pixel color label at an absolute (xMm, yMm) -- the exported counterpart to

@@ -249,7 +249,12 @@ regeneration every other Studio control already does. The "Colours" `#imageStudi
   other case call `prepareImageField()` with no `colorCount`; `colorGroups` is added only when
   `colorCount > 1`, which no IMG-001 test exercises, so the six-key shape it asserts is unaffected.
 * `src/geometry/StoneSampler.js` — new exported `fieldLabelAt(field, placement, xMm, yMm)`, beside the
-  module-private `fieldPixelOn()` (`:1614`) it reuses the pixel-resolution formula from.
+  module-private `fieldPixelOn()` (`:1614`) it reuses the pixel-resolution formula from. Its own
+  `FIELD_ON_THRESHOLD` gains an `export` keyword (was module-private) so
+  `tools/test-img-002-color-layers.mjs` can assert parity against `ColorQuantize.js`'s hand-matched
+  copy. Follow-up: `NO_LABEL` is now also exported here (not module-private) — `GeometryEngine.js`
+  imports this copy instead of hand-declaring its own third one, and the parity test asserts it
+  against `ColorQuantize.js`'s copy too, closing the one hand-matched copy that had no test pinning it.
 * `src/geometry/index.js` — exports `fieldLabelAt` alongside the existing `StoneSampler.js` export
   list.
 * `src/geometry/GeometryEngine.js` — `normalizeImageParams()` (`:2221`) gains `colorCount`/`palette`/
@@ -260,7 +265,16 @@ regeneration every other Studio control already does. The "Colours" `#imageStudi
 * `app.js` — new Studio Colours controls and their readback (`:2551` branch,
   `HISTORY_TRACKED_CONTROL_IDS` at `:4660`), fresh-import `colorCount: 1` default (`:5098` block),
   `#imageStudioGroupColors` joins `IMAGE_STUDIO_LIVE_GROUP_IDS` (`:5976`), `renderImageStudio()`
-  (`:5977`) renders the Colours group and the new "Colours" view.
+  (`:5977`) renders the Colours group and the new "Colours" view. `generateImageStonesLive()`
+  forwards `colorCount`/`palette`/`colorMap` into `generateImageLayout()` alongside every other
+  stored param — the one call site that produces the real, everywhere-consumed `StoneLayout` for an
+  image layer (2D canvas, exports, Production Sheet), so Studio Colours edits reach production output,
+  not only the Studio's own preview. Follow-up: `computeImageColorField()` gains a module-level
+  `imageColorFieldCache` (beside `imageBufferCache`), keyed on `imageSrc` plus every param
+  `quantizeColors()`'s output depends on (`threshold`/`invert`/`blurRadiusPx`/`maxWidthPx`/
+  `maxHeightPx`/`transparent`/`colorCount`) — quantization otherwise re-runs up to three times per
+  `updateAll()` and `#imgThreshold` fires on every drag `input` event; capped at 2 entries. Not cached
+  inside `src/image`/`src/geometry`, which stay pure and uncached.
 * `index.html` — `#imageStudioGroupColors` (`:1170`) filled in; new `#imgColorCount`,
   `#imgColorGroup0`..`#imgColorGroup7`, `#imgColorReset`, "Colours" `#imageStudioView` radio.
 * `tools/test-img-002-color-layers.mjs` (new).
