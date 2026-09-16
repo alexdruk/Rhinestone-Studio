@@ -275,6 +275,22 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 .lightbox-overlay.non-modal .lightbox{pointer-events:auto}
 .lightbox{background:var(--color-surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);width:640px;max-width:100%;max-height:calc(100vh - 64px);display:flex;flex-direction:column;overflow:hidden}
 .lightbox.wide{width:760px}
+/* IMG-007: Image -> Strass studio shell. A wider three-column layout (left controls / center
+   canvas / right stats) replacing the single-column .lightbox-body default -- see
+   docs/specifications/IMG-007-StudioShell.md. */
+.lightbox.studio{width:1400px;height:calc(100vh - 64px)}
+.lightbox.studio .lightbox-body{display:grid;grid-template-columns:360px minmax(0,1fr) 260px;gap:var(--space-5);overflow:hidden}
+.lightbox.studio .lightbox-body>*{min-height:0;overflow-y:auto}
+.lightbox-overlay.dock-left{justify-content:flex-start}
+#imageStudioControls details[inert]{opacity:.5}
+#imageStudioCanvasColumn{display:flex;flex-direction:column;gap:var(--space-3);height:100%}
+#imageStudioCanvas{flex:1;min-height:0;width:100%;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-bg)}
+.view-toggle{display:flex;gap:var(--space-3);font-size:var(--font-size-xs);color:var(--color-text-muted)}
+.view-toggle label{display:flex;align-items:center;gap:4px;cursor:pointer}
+#imageStudioStats dl{margin:0}
+#imageStudioStats dt{font-size:var(--font-size-xs);color:var(--color-text-muted);margin-top:var(--space-4)}
+#imageStudioStats dt:first-child{margin-top:0}
+#imageStudioStats dd{margin:0;font-size:var(--font-size-sm);font-weight:700;word-break:break-word}
 /* S-105: every Lightbox is movable by dragging its header (src/ui/Lightbox.js). cursor:grab signals
    the affordance. touch-action:none stops the browser's own gesture handling (trackpad/touch pan
    or scroll) from intercepting the pointer sequence before the header's own pointerdown/pointermove
@@ -387,7 +403,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
     <button class="topmenu-btn" id="menuMonogram" title="Generate a monogram from a frame, layout, and letters"><span class="glyph">🄼</span>Monogram</button>
     <button class="topmenu-btn" id="menuGallery" title="Gallery is temporarily unavailable while product scope is reduced (S-103). All Gallery designs and code remain intact." disabled aria-disabled="true"><span class="glyph">✨</span>Gallery<span class="topmenu-badge">Coming Soon</span></button>
     <button class="topmenu-btn" id="menuImport" title="Import an SVG or a Project JSON file"><span class="glyph">⇪</span>Import</button>
-    <button class="topmenu-btn" id="menuImageTrace" title="Trace a PNG/JPG/WebP image into stones"><span class="glyph">🖼</span>Image Trace</button>
+    <button class="topmenu-btn" id="menuImageTrace" title="Trace a PNG/JPG/WebP image into stones"><span class="glyph">🖼</span>Image</button>
     <button class="topmenu-btn" id="menuExport" title="Export project, layout, SVG, or PNG"><span class="glyph">⬇</span>Export</button>
     <button class="topmenu-btn" id="menuProdSheet" title="Generate a manufacturing production sheet"><span class="glyph">🖨</span>Production Sheet</button>
     <button class="topmenu-btn" id="menuShipping" title="Shipping and handling notes"><span class="glyph">📦</span>Shipping &amp; Handling</button>
@@ -1114,43 +1130,20 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
 </div>
 
 <!-- ---------- IMAGE TRACE ---------- -->
-<div class="lightbox-overlay non-modal" id="lightboxImageTrace">
-  <div class="lightbox" role="dialog" aria-modal="false" aria-labelledby="lightboxImageTraceTitle" tabindex="-1">
-    <header class="lightbox-header"><h2 id="lightboxImageTraceTitle">Image Trace</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
+<div class="lightbox-overlay non-modal dock-left" id="lightboxImageTrace">
+  <div class="lightbox studio" role="dialog" aria-modal="false" aria-labelledby="lightboxImageTraceTitle" tabindex="-1">
+    <header class="lightbox-header"><h2 id="lightboxImageTraceTitle">Image → Strass</h2><button class="lightbox-close" data-lightbox-close aria-label="Close">✕</button></header>
     <div class="lightbox-body">
-      <div id="imageTraceNewSection">
-        <div class="field-section">
-          <h3>Source image</h3>
+      <div id="imageStudioControls">
+        <details class="advanced-section" id="imageStudioGroupSource" open>
+          <summary>Source</summary>
           <div class="drop-zone">PNG, JPG/JPEG, or WebP.<br><button id="importImage" class="btn sm" style="margin-top:8px">Choose image file…</button></div>
           <input id="importImageFile" type="file" accept="image/png,image/jpeg,image/webp" style="display:none">
-        </div>
-        <div id="imageImportPanel" style="display:none">
-          <div class="field-section">
-            <h3>Preview</h3>
-            <div class="preview-box"><canvas id="imageImportPreviewCanvas" width="1" height="1"></canvas><div id="imageImportStoneCount" class="stone-count">— stones (approx.)</div></div>
-          </div>
-          <div class="field-section">
-            <h3>Trace parameters</h3>
-            <div class="field"><label for="imgPreviewThreshold">Threshold (0-255)</label><input id="imgPreviewThreshold" type="range" min="0" max="255" step="1" value="128"></div>
-            <div class="field-row-3">
-              <div class="field"><label for="imgPreviewInvert">Invert</label><select id="imgPreviewInvert"><option value="off" selected>Off</option><option value="on">On</option></select></div>
-              <div class="field"><label for="imgPreviewTransparent" title="How pixels with a transparent source background are treated.">Transparency</label><select id="imgPreviewTransparent"><option value="white">Flatten to white</option><option value="ignore" selected>Ignore transparent areas</option></select></div>
-              <div class="field"><label for="imgPreviewBlur">Blur radius (px)</label><input id="imgPreviewBlur" type="number" min="0" max="50" step="1" value="0"></div>
-            </div>
-            <div class="field-row">
-              <div class="field"><label for="imgPreviewMaxWidth">Maximum width (px)</label><input id="imgPreviewMaxWidth" type="number" min="8" max="2000" step="1" value="400"></div>
-              <div class="field"><label for="imgPreviewMaxHeight">Maximum height (px)</label><input id="imgPreviewMaxHeight" type="number" min="8" max="2000" step="1" value="400"></div>
-            </div>
-          </div>
-          <footer class="lightbox-footer" style="margin:0 calc(-1 * var(--space-5)) calc(-1 * var(--space-5));">
-            <button class="btn" id="imageImportCancel">Cancel</button>
-            <button class="btn primary" id="imageImportCommit">Import</button>
-          </footer>
-        </div>
-      </div>
-      <div id="imageTraceEditSection" style="display:none">
-        <div class="field-section">
-          <h3>Edit selected image layer</h3>
+          <p class="hint" id="imageStudioFileName"></p>
+          <button id="imageStudioRemove" class="btn sm">Remove image</button>
+        </details>
+        <details class="advanced-section" id="imageStudioGroupTrace" open>
+          <summary>Trace</summary>
           <div id="imageControls">
             <div class="field"><label for="imgThreshold">Threshold (0-255)</label><input id="imgThreshold" type="range" min="0" max="255" step="1" value="128"></div>
             <div class="field-row-3">
@@ -1163,26 +1156,57 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
               <div class="field"><label for="imgMaxHeight">Maximum height (px)</label><input id="imgMaxHeight" type="number" min="8" max="2000" step="1" value="400"></div>
             </div>
           </div>
-          <div class="field-section">
-            <h3>Fill Style</h3>
-            <select id="imageFillMode" title="How rhinestones are arranged across the traced image. Image Trace has no outline option -- it is built from a pixel pattern, not an edge.">
-              <option value="fill" selected>Grid Fill - even rows and columns</option>
-              <option value="staggered">Staggered Fill - offset rows, tighter packing</option>
-              <option value="radial">Radial Fill - rings out from the center</option>
-              <option value="contour">Contour Fill - rings that follow the traced shape inward</option>
-            </select>
-          </div>
-          <div class="field-section">
-            <h3>Position &amp; size</h3>
-            <div id="imageTracePositionSlot" class="field-slot"></div>
-          </div>
-          <div class="field-section">
-            <h3>Stones</h3>
-            <div id="imageTraceStoneSlot" class="field-slot"></div>
-            <div id="imageTraceMixedSizeSlot" class="field-slot"></div>
-          </div>
-          <p class="hint">Images can also be edited by mouse in the 2D canvas: drag to move, drag blue handles to resize, press <span class="kbd">Delete</span> to remove.</p>
+          <div class="field"><label for="imageFillMode">Fill style</label><select id="imageFillMode" title="How rhinestones are arranged across the traced image. Image Trace has no outline option -- it is built from a pixel pattern, not an edge."><option value="fill" selected>Grid Fill - even rows and columns</option><option value="staggered">Staggered Fill - offset rows, tighter packing</option><option value="radial">Radial Fill - rings out from the center</option><option value="contour">Contour Fill - rings that follow the traced shape inward</option></select></div>
+        </details>
+        <details class="advanced-section" id="imageStudioGroupPosition" open>
+          <summary>Position &amp; size</summary>
+          <div id="imageTracePositionSlot" class="field-slot"></div>
+        </details>
+        <details class="advanced-section" id="imageStudioGroupStones" open>
+          <summary>Stones</summary>
+          <div id="imageTraceStoneSlot" class="field-slot"></div>
+          <div id="imageTraceMixedSizeSlot" class="field-slot"></div>
+        </details>
+        <details class="advanced-section" id="imageStudioGroupColors">
+          <summary>Colours</summary>
+          <p class="hint">Coming in IMG-002</p>
+        </details>
+        <details class="advanced-section" id="imageStudioGroupOrganic">
+          <summary>Organic</summary>
+          <p class="hint">Coming in IMG-003</p>
+        </details>
+        <details class="advanced-section" id="imageStudioGroupEdges">
+          <summary>Edges</summary>
+          <p class="hint">Coming in IMG-004</p>
+        </details>
+        <details class="advanced-section" id="imageStudioGroupCheckFix">
+          <summary>Check &amp; fix</summary>
+          <p class="hint">Coming in IMG-005</p>
+        </details>
+        <details class="advanced-section" id="imageStudioGroupBrightness">
+          <summary>Brightness</summary>
+          <p class="hint">Coming in IMG-006</p>
+        </details>
+        <p class="hint">Images can also be edited by mouse in the 2D canvas: drag to move, drag blue handles to resize, press <span class="kbd">Delete</span> to remove.</p>
+      </div>
+      <div id="imageStudioCanvasColumn">
+        <div id="imageStudioView" class="view-toggle" role="radiogroup" aria-label="Canvas view">
+          <label><input type="radio" name="imageStudioView" value="source">Source</label>
+          <label><input type="radio" name="imageStudioView" value="mask">Mask</label>
+          <label><input type="radio" name="imageStudioView" value="template" checked>Template</label>
+          <label><input type="radio" name="imageStudioView" value="overlay">Overlay</label>
         </div>
+        <canvas id="imageStudioCanvas"></canvas>
+        <p class="hint" id="imageStudioEmpty">Choose an image to begin.</p>
+      </div>
+      <div id="imageStudioStats">
+        <dl>
+          <dt>Image</dt><dd id="imageStudioStatImage">—</dd>
+          <dt>Stones</dt><dd id="imageStudioStatCount">—</dd>
+          <dt>Sizes</dt><dd id="imageStudioStatSizes">—</dd>
+          <dt>Colours</dt><dd id="imageStudioStatColors">—</dd>
+          <dt>Bounding box</dt><dd id="imageStudioStatBox">—</dd>
+        </dl>
       </div>
     </div>
     <footer class="lightbox-footer">

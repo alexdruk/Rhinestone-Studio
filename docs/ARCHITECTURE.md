@@ -640,7 +640,7 @@ every layer type.
 close, focus trap, Escape-to-close, backdrop click, ARIA) with zero knowledge of `Project`/`Layer`/
 `StoneLayout`/layer type — the same "pure, consumed only through its barrel" shape every other
 permanent module already has (`src/editing/**`, `src/history/**`, ...). `app.js` is the only
-caller: it constructs one `Lightbox` per dialog (Text, Shapes, Import, Image Trace, Export,
+caller: it constructs one `Lightbox` per dialog (Text, Shapes, Import, Image Trace (titled Image → Strass since IMG-007), Export,
 Production Sheet, Shipping & Handling, Settings, Help) and wires each to its top-menu button.
 
 Every control that existed before UI-001 keeps its exact DOM `id` and its exact `app.js` wiring —

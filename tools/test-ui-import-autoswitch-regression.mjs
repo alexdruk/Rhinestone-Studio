@@ -147,7 +147,7 @@ function installFakeDom() {
 
 const sandboxFactory = new Function(
   'Lightbox', 'SHAPE_LIBRARY_KINDS',
-  'relocateFieldGroups', 'updateAll', 'updateObjectTemplateDetail', 'updateImageTraceSections',
+  'relocateFieldGroups', 'updateAll', 'updateObjectTemplateDetail', 'renderImageStudio',
   'syncShippingFieldsFromState', 'syncSettingsFieldsFromState', 'onLibraryOpen', 'onGalleryOpen',
   `
   ${activeFieldLightboxDeclSrc}

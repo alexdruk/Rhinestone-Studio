@@ -2698,7 +2698,7 @@ async function updateAll(skipWrite=false,forceStoneRebuild=false){if(!skipWrite)
   // 'circle' it IS a plain x/y/w/h/rotationDeg box, so it needs no new interaction machinery at all --
   // syncFromProjectLayers() materializes it as a rotated rectangle proxy and every drag/resize/rotate
   // reuses the shared XYWH machinery (onShapeResized's generic l.x/y/w/h write-back covers it too).
-  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'||SHAPE_LIBRARY_KINDS.has(l.type)||l.type==='svg'||l.type==='image'||l.type==='text'||l.type==='circle'||l.type==='rectangle'),forceStoneRebuild)}else{drawLayout()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}
+  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'||SHAPE_LIBRARY_KINDS.has(l.type)||l.type==='svg'||l.type==='image'||l.type==='text'||l.type==='circle'||l.type==='rectangle'),forceStoneRebuild)}else{drawLayout();renderImageStudio()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}
 // RS-3011 freehand-close-and-clear-all-layers fix: deleting the last remaining layer no longer
 // blocks (see deleteLayer()) -- the per-row trash icon and the sidebar "Delete selected layer"
 // button are therefore never disabled for layer count anymore.
@@ -5072,47 +5072,16 @@ el('importSvg').onclick=()=>el('importSvgFile').click();
 // new layer still runs through generate() -> generateSvgStonesLive() -> permanentEngine.generateSvgLayout().
 el('importSvgFile').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{const svgSource=await file.text();const parsed=parseSvgDocument(svgSource);const maxW=project.canvas.width-20,maxH=project.canvas.height-20;let w=parsed.naturalWidthMm,h=parsed.naturalHeightMm;if(w>maxW||h>maxH){const s=Math.min(maxW/w,maxH/h);w*=s;h*=s}const x=(project.canvas.width-w)/2,y=(project.canvas.height-h)/2;const base=selectedLayer();const layer={id:'svg'+Date.now(),type:'svg',visible:true,svgSource,svgName:file.name,x,y,w,h,mode:'outline',stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold',rotationDeg:0};commitHistory();project.layers.push(layer);selectedLayerId=layer.id;selectedLayerIds=selectOnly(layer.id);syncSelectedControlsFromLayer();await updateAll(true);const warningNote=parsed.warnings.length?` (${parsed.warnings.length} element(s) skipped, see console)`:'';if(parsed.warnings.length)console.warn('SVG import warnings for',file.name,parsed.warnings);el('status').textContent=`Imported ${file.name}: ${parsed.shapes.length} shape(s)${warningNote}`}catch(error){console.error('SVG import failed',error);el('status').textContent=`SVG import failed: ${error.message}`}});
 // RS-1008: Image Trace import. Unlike SVG import (which commits a layer directly on file select),
-// this opens a "preview before commit" panel first -- the milestone brief's own required control --
-// since threshold/invert/blur/resize meaningfully change the traced result and are worth seeing
-// before adding a layer. pendingImageImport holds the decoded buffer + persisted data: URL +
-// default placement between file-select and Import/Cancel; nothing is written to `project` until
-// Import is clicked.
-let pendingImageImport=null;
+// this creates the layer immediately on file selection, at the six trace params' documented
+// defaults (see computeDefaultImagePlacement() for placement) -- see docs/specifications/
+// IMG-007-StudioShell.md. The Studio's own Trace group lets the operator adjust the six params
+// afterward, live against the real layer (no separate pre-commit preview state to keep in sync).
 function computeDefaultImagePlacement(naturalWidthPx,naturalHeightPx){
   const PX_PER_MM=96/25.4; // CSS px/inch, the same fallback src/svg/** uses for unitless SVG sizing
   const maxW=project.canvas.width-20,maxH=project.canvas.height-20;
   let w=naturalWidthPx/PX_PER_MM,h=naturalHeightPx/PX_PER_MM;
   if(w>maxW||h>maxH){const s=Math.min(maxW/w,maxH/h);w*=s;h*=s}
   return{x:(project.canvas.width-w)/2,y:(project.canvas.height-h)/2,w,h}
-}
-function currentImagePreviewParams(){
-  return{
-    threshold:Math.max(0,Math.min(255,parseIntOr(el('imgPreviewThreshold').value,DEFAULT_IMAGE_THRESHOLD))),
-    invert:el('imgPreviewInvert').value==='on',
-    transparent:resolveImageTransparentMode(el('imgPreviewTransparent').value),
-    blurRadiusPx:Math.max(0,parseIntOr(el('imgPreviewBlur').value,0)),
-    maxWidthPx:Math.max(8,parseIntOr(el('imgPreviewMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX)),
-    maxHeightPx:Math.max(8,parseIntOr(el('imgPreviewMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX))
-  }
-}
-// RS-1008A: recomputes the live density preview canvas (prepareImageField() -- src/image/**'s
-// pure field-preparation only, never a re-decode) and an approximate stone count (via the real
-// permanent engine's generateImageLayout(), the exact code path a real commit uses, with a
-// throwaway 'preview' layerId). This stays fast enough to call on every slider 'input' event even
-// at the full documented working resolution.
-function updateImagePreview(){
-  if(!pendingImageImport)return;
-  const{threshold,invert,transparent,blurRadiusPx,maxWidthPx,maxHeightPx}=currentImagePreviewParams();
-  const field=prepareImageField(pendingImageImport.buffer,{threshold,invert,transparent,blurRadiusPx,maxWidthPx,maxHeightPx});
-  const canvas=el('imageImportPreviewCanvas');
-  canvas.width=field.widthPx;canvas.height=field.heightPx;
-  canvas.getContext('2d').putImageData(new ImageData(maskFieldToRgba(field),field.widthPx,field.heightPx),0,0);
-  const base=selectedLayer();
-  const{x,y,w,h}=pendingImageImport.placement;
-  try{
-    const result=permanentEngine.generateImageLayout({imageBuffer:pendingImageImport.buffer,layerId:'preview',xMm:x,yMm:y,widthMm:w,heightMm:h,stoneSizeMm:base.stoneSize||2,gapMm:base.gap||.3,color:base.color||'gold',threshold,invert,transparent,blurRadiusPx,maxWidthPx,maxHeightPx});
-    el('imageImportStoneCount').textContent=`${result.count} stones (approx.)`;
-  }catch(error){console.error('Image preview trace failed',error);el('imageImportStoneCount').textContent='—'}
 }
 el('importImage').onclick=()=>el('importImageFile').click();
 el('importImageFile').addEventListener('change',async e=>{
@@ -5122,32 +5091,18 @@ el('importImageFile').addEventListener('change',async e=>{
     const buffer=await decodeImageFileToBuffer(file);
     const dataUrl=await readFileAsDataUrl(file);
     imageBufferCache.set(dataUrl,buffer);
-    pendingImageImport={buffer,dataUrl,fileName:file.name,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,placement:computeDefaultImagePlacement(buffer.widthPx,buffer.heightPx)};
-    el('imgPreviewThreshold').value=DEFAULT_IMAGE_THRESHOLD;el('imgPreviewInvert').value='off';el('imgPreviewTransparent').value='ignore';el('imgPreviewBlur').value=0;el('imgPreviewMaxWidth').value=DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgPreviewMaxHeight').value=DEFAULT_IMAGE_MAX_DIMENSION_PX;
-    updateImagePreview();
-    el('imageImportPanel').style.display='block';
-    el('status').textContent=`Previewing ${file.name} (${buffer.widthPx}×${buffer.heightPx}px)`;
+    const{x,y,w,h}=computeDefaultImagePlacement(buffer.widthPx,buffer.heightPx);
+    const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:dataUrl,imageName:file.name,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,x,y,w,h,threshold:DEFAULT_IMAGE_THRESHOLD,invert:false,transparent:'ignore',blurRadiusPx:0,maxWidthPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,maxHeightPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,stoneSize:selectedLayer().stoneSize||2,gap:selectedLayer().gap||.3,color:selectedLayer().color||'gold',rotationDeg:0};
+    commitHistory();
+    project.layers.push(layer);
+    selectedLayerId=layer.id;
+    selectedLayerIds=selectOnly(layer.id);
+    syncSelectedControlsFromLayer();
+    await updateAll(true);
+    el('status').textContent=`Imported ${file.name}`;
   }catch(error){console.error('Image import failed',error);el('status').textContent=`Image import failed: ${error.message}`}
 });
-for(const id of['imgPreviewThreshold','imgPreviewInvert','imgPreviewTransparent','imgPreviewBlur','imgPreviewMaxWidth','imgPreviewMaxHeight'])el(id).addEventListener('input',updateImagePreview);
-el('imageImportCancel').onclick=()=>{pendingImageImport=null;el('imageImportPanel').style.display='none';el('status').textContent='Image import cancelled'};
-el('imageImportCommit').onclick=async()=>{
-  if(!pendingImageImport)return;
-  const{threshold,invert,transparent,blurRadiusPx,maxWidthPx,maxHeightPx}=currentImagePreviewParams();
-  const base=selectedLayer();
-  const{x,y,w,h}=pendingImageImport.placement;
-  const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:pendingImageImport.dataUrl,imageName:pendingImageImport.fileName,naturalWidthPx:pendingImageImport.naturalWidthPx,naturalHeightPx:pendingImageImport.naturalHeightPx,x,y,w,h,threshold,invert,transparent,blurRadiusPx,maxWidthPx,maxHeightPx,stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold',rotationDeg:0};
-  const importedName=layer.imageName;
-  commitHistory();
-  project.layers.push(layer);
-  selectedLayerId=layer.id;
-  selectedLayerIds=selectOnly(layer.id);
-  pendingImageImport=null;
-  el('imageImportPanel').style.display='none';
-  syncSelectedControlsFromLayer();
-  await updateAll(true);
-  el('status').textContent=`Imported ${importedName}`;
-};
+el('imageStudioRemove').onclick=()=>{if(selectedLayer().type==='image')deleteLayer(selectedLayer().id)};
 el('exportProject').onclick=()=>{try{download('rhinestone-project.json','application/json',JSON.stringify(project,null,2));cleanProjectJson=JSON.stringify(project);updateHistoryUI();
   // RC-005: a manual Save/Export is now the authoritative saved copy -- clear the autosave
   // recovery slot so a later refresh never reports "restored unsaved changes" for work that was
@@ -5270,7 +5225,7 @@ const lightboxes={
   text:new Lightbox('lightboxText',{primary:true,onOpen(){activeFieldLightbox='text';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
   shapes:new Lightbox('lightboxShapes',{primary:true,onOpen(){activeFieldLightbox='shapes';relocateFieldGroups();updateObjectTemplateDetail()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
   importBox:new Lightbox('lightboxImport',{primary:true,onOpen(){activeFieldLightbox='import';relocateFieldGroups()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
-  imagetrace:new Lightbox('lightboxImageTrace',{primary:true,onOpen(){activeFieldLightbox='imagetrace';relocateFieldGroups();updateImageTraceSections()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
+  imagetrace:new Lightbox('lightboxImageTrace',{primary:true,onOpen(){activeFieldLightbox='imagetrace';relocateFieldGroups();renderImageStudio()},onClose(){activeFieldLightbox=null;relocateFieldGroups();updateAll(true)}}),
   exportBox:new Lightbox('lightboxExport',{primary:true}),
   // READ-010: onOpen re-runs the project-wide readability sweep every time the lightbox opens, so it
   // can never go stale from an edit made while it was closed (matching shipping/settings' own
@@ -6005,16 +5960,71 @@ function setImportTab(tab){
 el('importTabSvg').onclick=()=>setImportTab('svg');
 el('importTabProject').onclick=()=>setImportTab('project');
 
-// ---- Image Trace Lightbox: "new trace" vs "edit selected image layer" sections. Reuses the
-// pre-existing pendingImageImport state and imageImportCommit/imageImportCancel handlers verbatim
-// -- these two listeners only decide which section of the same dialog is visible. ----
-function updateImageTraceSections(){
-  const isImageLayer=selectedLayer().type==='image'&&!pendingImageImport;
-  el('imageTraceEditSection').style.display=isImageLayer?'block':'none';
-  el('imageTraceNewSection').style.display=pendingImageImport||!isImageLayer?'block':'none';
+// ---- Image Studio: four-view canvas (source/mask/template/overlay) + stats column for the
+// selected image layer. No-op unless the Image Studio Lightbox is open. See docs/specifications/
+// IMG-007-StudioShell.md. ----
+const imageStudioImageElements=new Map();
+function loadStudioImageElement(src){
+  let img=imageStudioImageElements.get(src);
+  if(!img){img=new Image();img.src=src;imageStudioImageElements.set(src,img)}
+  return img;
 }
-el('imageImportCommit').addEventListener('click',updateImageTraceSections);
-el('imageImportCancel').addEventListener('click',updateImageTraceSections);
+const IMAGE_STUDIO_LIVE_GROUP_IDS=['imageStudioGroupTrace','imageStudioGroupPosition','imageStudioGroupStones'];
+async function renderImageStudio(){
+  if(!lightboxes.imagetrace.isOpen)return;
+  const l=selectedLayer();
+  const canvas=el('imageStudioCanvas'),ctx=canvas.getContext('2d');
+  if(!l||l.type!=='image'){
+    el('imageStudioEmpty').hidden=false;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    el('imageStudioFileName').textContent='';
+    for(const id of['imageStudioStatImage','imageStudioStatCount','imageStudioStatSizes','imageStudioStatColors','imageStudioStatBox'])el(id).textContent='—';
+    for(const id of IMAGE_STUDIO_LIVE_GROUP_IDS)el(id).inert=true;
+    el('imageStudioRemove').disabled=true;
+    return;
+  }
+  el('imageStudioEmpty').hidden=true;
+  for(const id of IMAGE_STUDIO_LIVE_GROUP_IDS)el(id).inert=false;
+  el('imageStudioRemove').disabled=false;
+  el('imageStudioFileName').textContent=l.imageName||'';
+  const bbox={minXmm:l.x,minYmm:l.y,widthMm:l.w,heightMm:l.h};
+  const colEl=el('imageStudioCanvasColumn'),dpr=Math.max(1,window.devicePixelRatio||1);
+  const cssW=colEl.clientWidth,cssH=colEl.clientHeight;
+  canvas.width=Math.max(1,Math.round(cssW*dpr));canvas.height=Math.max(1,Math.round(cssH*dpr));
+  const t=fitTransform(bbox,canvas.width,canvas.height,16*dpr);
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const stones=(layout?.stones||[]).filter(s=>s.layerId===l.id);
+  const templateLayout=new StoneLayout({layerId:l.id,stones});
+  const drawSource=()=>new Promise(resolve=>{
+    const img=loadStudioImageElement(l.imageSrc);
+    const draw=()=>{ctx.drawImage(img,t.ox+l.x*t.s,t.oy+l.y*t.s,l.w*t.s,l.h*t.s);resolve()};
+    if(img.complete&&img.naturalWidth)draw();else{img.onload=draw;img.onerror=resolve}
+  });
+  const drawMask=async()=>{
+    let buffer=imageBufferCache.get(l.imageSrc);
+    if(!buffer){buffer=await decodeDataUrlToBuffer(l.imageSrc);imageBufferCache.set(l.imageSrc,buffer)}
+    const field=prepareImageField(buffer,{threshold:l.threshold,invert:l.invert,blurRadiusPx:l.blurRadiusPx,maxWidthPx:l.maxWidthPx,maxHeightPx:l.maxHeightPx,transparent:resolveImageTransparentMode(l.transparent)});
+    const scratch=document.createElement('canvas');scratch.width=field.widthPx;scratch.height=field.heightPx;
+    scratch.getContext('2d').putImageData(new ImageData(maskFieldToRgba(field),field.widthPx,field.heightPx),0,0);
+    ctx.drawImage(scratch,t.ox+l.x*t.s,t.oy+l.y*t.s,l.w*t.s,l.h*t.s);
+  };
+  const drawTemplate=()=>renderStoneLayout(ctx,templateLayout,t);
+  const view=el('imageStudioView').querySelector('input:checked')?.value||'template';
+  if(view==='source')await drawSource();
+  else if(view==='mask')await drawMask();
+  else if(view==='template')drawTemplate();
+  else{ctx.globalAlpha=.35;await drawSource();ctx.globalAlpha=1;drawTemplate()}
+  el('imageStudioStatImage').textContent=`${l.imageName||''} — ${l.naturalWidthPx}×${l.naturalHeightPx}px`;
+  el('imageStudioStatCount').textContent=String(stones.length);
+  const sizeCounts=new Map();
+  for(const s of stones)sizeCounts.set(s.sizeMm,(sizeCounts.get(s.sizeMm)||0)+1);
+  el('imageStudioStatSizes').textContent=[...sizeCounts.entries()].sort((a,b)=>a[0]-b[0]).map(([size,count])=>`${formatStoneSizeLabel(size)} × ${count}`).join(', ')||'—';
+  const colorCounts=new Map();
+  for(const s of stones)colorCounts.set(s.color,(colorCounts.get(s.color)||0)+1);
+  el('imageStudioStatColors').textContent=[...colorCounts.entries()].map(([color,count])=>`${STONE_COLORS[color]?.name||color} × ${count}`).join(', ')||'—';
+  el('imageStudioStatBox').textContent=`${formatLengthDisplay(l.w,project.units,1)}×${formatLengthDisplay(l.h,project.units,1)} ${unitSuffix(project.units)}`;
+}
+el('imageStudioView').addEventListener('change',renderImageStudio);
 
 // ---- Workspace view mode (UI-001B: Dual Workspace). Three modes: 'dual' (2D Canvas and Object
 // Preview shown together -- the default desktop layout), '2d' (2D Canvas only), 'preview' (Object
