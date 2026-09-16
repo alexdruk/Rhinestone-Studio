@@ -2698,7 +2698,10 @@ async function updateAll(skipWrite=false,forceStoneRebuild=false){if(!skipWrite)
   // 'circle' it IS a plain x/y/w/h/rotationDeg box, so it needs no new interaction machinery at all --
   // syncFromProjectLayers() materializes it as a rotated rectangle proxy and every drag/resize/rotate
   // reuses the shared XYWH machinery (onShapeResized's generic l.x/y/w/h write-back covers it too).
-  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'||SHAPE_LIBRARY_KINDS.has(l.type)||l.type==='svg'||l.type==='image'||l.type==='text'||l.type==='circle'||l.type==='rectangle'),forceStoneRebuild)}else{drawLayout();renderImageStudio()}drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}
+  drawingTool.syncFromProjectLayers(project.layers.filter(l=>l.type==='path'||SHAPE_LIBRARY_KINDS.has(l.type)||l.type==='svg'||l.type==='image'||l.type==='text'||l.type==='circle'||l.type==='rectangle'),forceStoneRebuild)}else{drawLayout()}
+  // IMG-007: renderImageStudio() must run regardless of which branch above ran -- the Image Studio
+  // Lightbox is non-modal, so Design can be entered (drawingTool.isActive) while it stays open.
+  renderImageStudio();drawCup();updateStats();updateHistoryUI();updateEditingUI();updateViewButtons();updateTextOutsidePrintableWarning();scheduleAutosave();if(permanentEngineError)el('status').textContent=`Font manifest failed to load (${permanentEngineError.message}); text layers are empty. Shape layers are unaffected.`}
 // RS-3011 freehand-close-and-clear-all-layers fix: deleting the last remaining layer no longer
 // blocks (see deleteLayer()) -- the per-row trash icon and the sidebar "Delete selected layer"
 // button are therefore never disabled for layer count anymore.
@@ -5964,6 +5967,7 @@ el('importTabProject').onclick=()=>setImportTab('project');
 // selected image layer. No-op unless the Image Studio Lightbox is open. See docs/specifications/
 // IMG-007-StudioShell.md. ----
 const imageStudioImageElements=new Map();
+let imageStudioRenderToken=0;
 function loadStudioImageElement(src){
   let img=imageStudioImageElements.get(src);
   if(!img){img=new Image();img.src=src;imageStudioImageElements.set(src,img)}
@@ -5971,6 +5975,7 @@ function loadStudioImageElement(src){
 }
 const IMAGE_STUDIO_LIVE_GROUP_IDS=['imageStudioGroupTrace','imageStudioGroupPosition','imageStudioGroupStones'];
 async function renderImageStudio(){
+  const token=++imageStudioRenderToken;
   if(!lightboxes.imagetrace.isOpen)return;
   const l=selectedLayer();
   const canvas=el('imageStudioCanvas'),ctx=canvas.getContext('2d');
@@ -5988,21 +5993,25 @@ async function renderImageStudio(){
   el('imageStudioRemove').disabled=false;
   el('imageStudioFileName').textContent=l.imageName||'';
   const bbox={minXmm:l.x,minYmm:l.y,widthMm:l.w,heightMm:l.h};
-  const colEl=el('imageStudioCanvasColumn'),dpr=Math.max(1,window.devicePixelRatio||1);
-  const cssW=colEl.clientWidth,cssH=colEl.clientHeight;
-  canvas.width=Math.max(1,Math.round(cssW*dpr));canvas.height=Math.max(1,Math.round(cssH*dpr));
+  const dpr=Math.max(1,window.devicePixelRatio||1);
+  canvas.width=Math.max(1,Math.round(canvas.clientWidth*dpr));canvas.height=Math.max(1,Math.round(canvas.clientHeight*dpr));
   const t=fitTransform(bbox,canvas.width,canvas.height,16*dpr);
   ctx.clearRect(0,0,canvas.width,canvas.height);
   const stones=(layout?.stones||[]).filter(s=>s.layerId===l.id);
   const templateLayout=new StoneLayout({layerId:l.id,stones});
+  // Resolves with the loaded <img> without drawing it -- the overlay branch below needs the load
+  // awaited to complete BEFORE it touches ctx.globalAlpha, so the alpha set/draw/reset sequence can
+  // stay fully synchronous (no await between them) and never leak a .35 alpha into the next render.
   const drawSource=()=>new Promise(resolve=>{
     const img=loadStudioImageElement(l.imageSrc);
-    const draw=()=>{ctx.drawImage(img,t.ox+l.x*t.s,t.oy+l.y*t.s,l.w*t.s,l.h*t.s);resolve()};
-    if(img.complete&&img.naturalWidth)draw();else{img.onload=draw;img.onerror=resolve}
+    if(img.complete&&img.naturalWidth){resolve(img);return}
+    img.onload=()=>resolve(img);img.onerror=()=>resolve(img);
   });
+  const paintSource=img=>ctx.drawImage(img,t.ox+l.x*t.s,t.oy+l.y*t.s,l.w*t.s,l.h*t.s);
   const drawMask=async()=>{
     let buffer=imageBufferCache.get(l.imageSrc);
     if(!buffer){buffer=await decodeDataUrlToBuffer(l.imageSrc);imageBufferCache.set(l.imageSrc,buffer)}
+    if(token!==imageStudioRenderToken)return;
     const field=prepareImageField(buffer,{threshold:l.threshold,invert:l.invert,blurRadiusPx:l.blurRadiusPx,maxWidthPx:l.maxWidthPx,maxHeightPx:l.maxHeightPx,transparent:resolveImageTransparentMode(l.transparent)});
     const scratch=document.createElement('canvas');scratch.width=field.widthPx;scratch.height=field.heightPx;
     scratch.getContext('2d').putImageData(new ImageData(maskFieldToRgba(field),field.widthPx,field.heightPx),0,0);
@@ -6010,10 +6019,21 @@ async function renderImageStudio(){
   };
   const drawTemplate=()=>renderStoneLayout(ctx,templateLayout,t);
   const view=el('imageStudioView').querySelector('input:checked')?.value||'template';
-  if(view==='source')await drawSource();
-  else if(view==='mask')await drawMask();
-  else if(view==='template')drawTemplate();
-  else{ctx.globalAlpha=.35;await drawSource();ctx.globalAlpha=1;drawTemplate()}
+  if(view==='source'){
+    const img=await drawSource();
+    if(token!==imageStudioRenderToken)return;
+    paintSource(img);
+  }else if(view==='mask'){
+    await drawMask();
+    if(token!==imageStudioRenderToken)return;
+  }else if(view==='template'){
+    drawTemplate();
+  }else{
+    const img=await drawSource();
+    if(token!==imageStudioRenderToken)return;
+    ctx.globalAlpha=.35;paintSource(img);ctx.globalAlpha=1;
+    drawTemplate();
+  }
   el('imageStudioStatImage').textContent=`${l.imageName||''} — ${l.naturalWidthPx}×${l.naturalHeightPx}px`;
   el('imageStudioStatCount').textContent=String(stones.length);
   const sizeCounts=new Map();

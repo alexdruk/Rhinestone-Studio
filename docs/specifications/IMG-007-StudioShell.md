@@ -73,10 +73,14 @@ non-modal-Lightbox invariant is unchanged. Its `.lightbox` gains a `.studio` cla
   Production Sheet header already use), per-color counts, and the layer's bounding box in the
   project's current display units.
 
-`renderImageStudio()` (app.js) is a no-op unless `lightboxes.imagetrace.isOpen`. It runs from the
-Lightbox's `onOpen`, from `updateAll()` right after `drawLayout()`, and on `#imageStudioView`
-`change` — the same three trigger points `updateImageTraceSections()` (the function it replaces) used
-to run from, so every existing call site keeps working with no new wiring elsewhere.
+`renderImageStudio()` (app.js) is a no-op unless `lightboxes.imagetrace.isOpen`. The function it
+replaces, `updateImageTraceSections()`, ran from only two places: the Lightbox's `onOpen`, and the
+`imageImportCommit`/`imageImportCancel` click listeners (both deleted by this milestone, along with
+the rest of the pre-commit preview panel). `renderImageStudio()` instead runs from `onOpen`, from
+`updateAll()` after the drawing-mode `if`/`else` (so it refreshes whether or not `drawingTool` owns
+`layoutCanvas` — see the IMG-007 follow-up), and on `#imageStudioView` `change` — two of these three
+call sites are new, added because the studio's live four-view canvas needs to repaint on triggers the
+old toggle-two-sections function never had to care about.
 
 ## Out of Scope
 
@@ -102,6 +106,5 @@ to run from, so every existing call site keeps working with no new wiring elsewh
   `sandboxFactory` parameter lists reference `renderImageStudio` instead of
   `updateImageTraceSections`, matching the app.js rename (both slice the real
   `const lightboxes={...}` source verbatim, so the identifier has to exist as a supplied parameter).
-* `docs/specifications/IMG-007-StudioShell.md` (this file), `docs/specifications/
-  IMG-001-ImageToStrass.md` (one sentence appended to roadmap item 7), `docs/ARCHITECTURE.md` (one
+* `docs/specifications/IMG-007-StudioShell.md` (this file), `docs/specifications/IMG-001-ImageToStrass.md` (one sentence appended to roadmap item 7), `docs/ARCHITECTURE.md` (one
   clause noting the Image Trace dialog's title change).
