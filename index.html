@@ -1167,9 +1167,18 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <div id="imageTraceStoneSlot" class="field-slot"></div>
           <div id="imageTraceMixedSizeSlot" class="field-slot"></div>
         </details>
-        <details class="advanced-section" id="imageStudioGroupColors">
+        <details class="advanced-section" id="imageStudioGroupColors" open>
           <summary>Colours</summary>
-          <p class="hint">Coming in IMG-002</p>
+          <div class="field"><label for="imgColorCount">Number of colours</label><select id="imgColorCount"><option value="1" selected>1 (single colour)</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option></select></div>
+          <div class="field" id="imgColorGroup0" hidden><label>Colour 1 <span id="imgColorShare0" class="hint">—</span></label><div class="color-pick-row"><span id="imgColorSwatch0" class="color-swatch" title="Detected colour"></span><select id="imgColorPick0"></select></div></div>
+          <div class="field" id="imgColorGroup1" hidden><label>Colour 2 <span id="imgColorShare1" class="hint">—</span></label><div class="color-pick-row"><span id="imgColorSwatch1" class="color-swatch" title="Detected colour"></span><select id="imgColorPick1"></select></div></div>
+          <div class="field" id="imgColorGroup2" hidden><label>Colour 3 <span id="imgColorShare2" class="hint">—</span></label><div class="color-pick-row"><span id="imgColorSwatch2" class="color-swatch" title="Detected colour"></span><select id="imgColorPick2"></select></div></div>
+          <div class="field" id="imgColorGroup3" hidden><label>Colour 4 <span id="imgColorShare3" class="hint">—</span></label><div class="color-pick-row"><span id="imgColorSwatch3" class="color-swatch" title="Detected colour"></span><select id="imgColorPick3"></select></div></div>
+          <div class="field" id="imgColorGroup4" hidden><label>Colour 5 <span id="imgColorShare4" class="hint">—</span></label><div class="color-pick-row"><span id="imgColorSwatch4" class="color-swatch" title="Detected colour"></span><select id="imgColorPick4"></select></div></div>
+          <div class="field" id="imgColorGroup5" hidden><label>Colour 6 <span id="imgColorShare5" class="hint">—</span></label><div class="color-pick-row"><span id="imgColorSwatch5" class="color-swatch" title="Detected colour"></span><select id="imgColorPick5"></select></div></div>
+          <div class="field" id="imgColorGroup6" hidden><label>Colour 7 <span id="imgColorShare6" class="hint">—</span></label><div class="color-pick-row"><span id="imgColorSwatch6" class="color-swatch" title="Detected colour"></span><select id="imgColorPick6"></select></div></div>
+          <div class="field" id="imgColorGroup7" hidden><label>Colour 8 <span id="imgColorShare7" class="hint">—</span></label><div class="color-pick-row"><span id="imgColorSwatch7" class="color-swatch" title="Detected colour"></span><select id="imgColorPick7"></select></div></div>
+          <button id="imgColorReset" class="btn sm">Reset colour overrides</button>
         </details>
         <details class="advanced-section" id="imageStudioGroupOrganic">
           <summary>Organic</summary>
@@ -1193,6 +1202,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <div id="imageStudioView" class="view-toggle" role="radiogroup" aria-label="Canvas view">
           <label><input type="radio" name="imageStudioView" value="source">Source</label>
           <label><input type="radio" name="imageStudioView" value="mask">Mask</label>
+          <label><input type="radio" name="imageStudioView" value="colors">Colours</label>
           <label><input type="radio" name="imageStudioView" value="template" checked>Template</label>
           <label><input type="radio" name="imageStudioView" value="overlay">Overlay</label>
         </div>

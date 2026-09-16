@@ -66,8 +66,22 @@ share one `widthPx`/`heightPx` pair (the post-resize working resolution `data` h
   match `data`). Reserved for IMG-006 (brightness-driven stone sizes).
 * `alpha` — a strict 0/255 coverage mask (255 = opaque-enough source pixel), box-averaged down to
   `data`'s resolution then re-thresholded back to 0/255 (never a continuous average).
-* `labels` — reserved `null` until IMG-002 (color quantization populates one quantized-color index
-  per pixel here).
+* `labels` (IMG-002) — `null` unless `colorCount > 1`, in which case a `Uint8ClampedArray` (same
+  resolution as `data`) holding one quantized-color index (`0..K-1`) per pixel, or `255` (`NO_LABEL`)
+  for a pixel `data` itself already excludes (below `FIELD_ON_THRESHOLD`).
+* `colorGroups` (IMG-002) — present only when `colorCount > 1` (and therefore `labels` is non-null):
+  `[{rgb: [r,g,b], pixelShare, nearestId}]`, one entry per label value, `nearestId` the CIE76
+  Lab-nearest entry in the `palette` the caller supplied. `colorCount` omitted or `1` keeps the field
+  at exactly IMG-001's six keys -- `colorGroups` is absent, not `null`.
+
+`prepareImageField()` takes two more params for this (`ColorQuantize.js`, new, pure -- no
+`src/geometry/**`/`src/renderer/**` import, the catalog palette a cluster resolves against arrives as
+plain `[{id, hex}]` data): `colorCount` (integer 1-8, default 1) and `palette` (required when
+`colorCount > 1`). `colorCount > 1` composites R/G/B onto white per channel (the same alpha-onto-white
+rationale `toGrayscale()` already uses) and resizes each to the working resolution exactly like
+`data`/`luminance`/`alpha`, then clusters eligible pixels (`data >= FIELD_ON_THRESHOLD`) via median cut
+over a 5-bit-per-channel RGB histogram followed by 8 fixed weighted k-means passes over the histogram's
+bins -- deterministic, see `docs/specifications/IMG-002-ColorLayers.md`.
 
 ## Transparency policy (IMG-001)
 
@@ -119,7 +133,12 @@ source bytes produces the exact same pixel buffer.
   `GeometryEngine.generateImageLayout()` call. Returns the multi-channel field described above.
 * `TRANSPARENT_MODES`, `DEFAULT_TRANSPARENT_MODE` (IMG-001) — the `transparent` param's valid values
   (`'white'`/`'ignore'`) and its default (`'white'`).
+* `quantizeColors` (IMG-002, `ColorQuantize.js`) — the color quantizer `prepareImageField()` calls
+  internally when `colorCount > 1`; also directly testable/callable on its own `{r, g, b, data,
+  colorCount, palette}` shape.
 * `maskFieldToRgba` — pure field-to-RGBA conversion for the "Preview before commit" panel.
+* `labelsFieldToRgba` (IMG-002) — pure `field.labels` + per-label hex fills -> RGBA conversion, for
+  the Image Studio's "Colours" preview view.
 * `SUPPORTED_IMAGE_MIME_TYPES`, `MAX_SOURCE_DIMENSION_PX`, `isSupportedImageFile`,
   `decodeImageFileToBuffer`, `readFileAsDataUrl`, `decodeDataUrlToBuffer` — the browser-only decode
   boundary (`isSupportedImageFile` is pure).
