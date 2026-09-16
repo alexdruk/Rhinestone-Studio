@@ -108,6 +108,11 @@ All four arrays share one `widthPx`/`heightPx` pair — the same post-resize wor
 `sampleFieldByMode()` call, and the "preview before commit" density canvas) read only `data` and
 gain no new behavior; they are unmodified by this milestone.
 
+IMG-002 populates `labels` (in place of this milestone's reserved `null`) and adds a seventh field
+key, `colorGroups`, whenever its caller passes `colorCount > 1` — see
+`docs/specifications/IMG-002-ColorLayers.md` for the full contract; every caller that omits
+`colorCount` (every caller this milestone has) keeps receiving exactly the six-key shape above.
+
 ### Why `luminance` never depends on `transparent`
 
 `luminance` is documented above as "the 0-255 grayscale before threshold" — i.e. `toGrayscale()`'s
