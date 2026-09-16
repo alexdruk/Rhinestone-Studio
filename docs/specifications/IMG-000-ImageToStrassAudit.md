@@ -31,7 +31,13 @@ clone. For each, it states whether the function is reused as-is, extended, or by
   proximity filter used by Radial/Contour Fill and by every mixed-size infill path. **Reused as-is.**
   IMG-002's per-color layers are disjoint by color already (no cross-color overlap by construction,
   since each color's field only samples its own hue's pixels), but same-color multi-mode composition
-  (a future milestone) could reuse this directly if it ever needs to merge two point sets.
+  (a future milestone) could reuse this directly if it ever needs to merge two point sets. Per
+  IMG-002's own milestone brief, this "disjoint by color already" framing holds only for the
+  lattice-placement modes (Fill/Staggered/Radial); IMG-002 does not sample each color's field
+  independently but instead labels one shared sampled point set after the fact, because per-mask
+  sampling diverges from union sampling under Contour (measured: 194 vs 235 stones on a two-color
+  wavy boundary, with a 3.143 mm minimum cross-color center distance against a 3.3 mm pitch — see
+  `IMG-002-ColorLayers.md` decision 1).
 * **`dropOverlappingSizedStones(assigned)`** — `src/geometry/StoneSampler.js:467`, called from
   `GeometryEngine.js:257` inside its own mixed-size-assignment path. **Reused as-is** by IMG-006
   (brightness-driven sizes): once brightness assigns a candidate size per point, this is the same
@@ -42,7 +48,10 @@ clone. For each, it states whether the function is reused as-is, extended, or by
   validate collisions across independently-generated groups. **Reused as-is** by IMG-002: once each
   color's stones are generated as an independent group (mirroring how `MonogramGenerator.js` treats
   per-letter groups), this is the existing "prove no two groups collide" check — no second collision
-  algorithm needed.
+  algorithm needed. IMG-002 still generates one independent stone group per color, so this per-group
+  collision check remains the right tool, but each group's points come from partitioning one shared
+  `sampleFieldByMode()` call rather than from per-color field sampling — see `IMG-002-ColorLayers.md`
+  decision 1 for why per-mask sampling was rejected.
 * **`generateMixedSizeInfillStones` / `generateMixedSizeInfillPoints`** —
   `src/geometry/MixedSizeGenerator.js:255` / `:228`. S-200's additive infill pass, already accepts a
   `{ kind: 'field', field, placement }` source (used today by `generateImageLayout()`'s own Mixed
