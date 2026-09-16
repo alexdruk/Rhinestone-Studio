@@ -142,4 +142,57 @@ await test('7. transparent rejects an unrecognized value', () => {
   assert.throws(() => prepareImageField(buffer, { maxWidthPx: 4, maxHeightPx: 4, transparent: 'bogus' }), /transparent/);
 });
 
+await test('8. alpha stays strictly 0/255 after a real downscale, even when the transparent/opaque edge lands mid-output-cell', () => {
+  // 10x1 source, alpha=0 for columns 0-5 (transparent) and alpha=255 for columns 6-9 (opaque).
+  // Downscaling to maxWidthPx:4 (scale 4/10 = 0.4) maps source columns [5,6] onto one output cell
+  // (resizeField()'s own sx0/sx1 box math: output x=2 -> sx0=floor(2/0.4)=5, sx1=floor(3/0.4)-1=6) --
+  // exactly one transparent (col 5) and one opaque (col 6) source pixel share that output cell, so
+  // its raw box-averaged alpha is (0+255)/2 = 128 (an intermediate value, not 0/255) before
+  // toCoverageMask() re-thresholds it. maxHeightPx:4 with a 1px-tall source never triggers a height
+  // downscale (scale is bounded by the width ratio), so this stays a clean 1-D case.
+  const pixels = Array.from({ length: 10 }, (_, x) => (x < 6 ? [10, 10, 10, 0] : [10, 10, 10, 255]));
+  const buffer = createImageBuffer({ widthPx: 10, heightPx: 1, data: rgba(pixels) });
+
+  const field = prepareImageField(buffer, { threshold: 128, maxWidthPx: 4, maxHeightPx: 4 });
+
+  assert.equal(field.widthPx, 4);
+  assert.equal(field.heightPx, 1);
+  assert.equal(field.data.length, field.widthPx * field.heightPx);
+  assert.equal(field.luminance.length, field.widthPx * field.heightPx);
+  assert.equal(field.alpha.length, field.widthPx * field.heightPx);
+  // Measured directly: the raw (pre-toCoverageMask) box-averaged alpha at the mid-cell output pixel
+  // (index 2) is 128 -- confirmed by calling resizeField(extractAlphaChannel(buffer), 4, 4) directly
+  // before toCoverageMask() runs. field.alpha itself must never expose that intermediate value.
+  assert.ok(Array.from(field.alpha).every((v) => v === 0 || v === 255), `alpha must be strictly 0/255, got ${Array.from(field.alpha)}`);
+  assert.deepEqual(Array.from(field.alpha), [0, 0, 255, 255]);
+});
+
+await test('9. byte-identity vs. the pre-IMG-001 pipeline with blurRadiusPx > 0 AND a real downscale', () => {
+  // Reference values derived by running develop's (pre-IMG-001) src/image/ImageFieldPipeline.js
+  // directly: `git show develop:src/image/ImageFieldPipeline.js` was copied next to the current
+  // Grayscale/Threshold/Invert/Blur/Resize/ImageBuffer modules (byte-identical between develop and
+  // this branch's parent commit 2e1121f, confirmed via `git diff 2e1121f develop -- src/image/`
+  // producing no output) and its prepareImageField() was called with this exact buffer/params,
+  // captured, and discarded (the scratch file was never committed). Output:
+  //   old.widthPx/heightPx: 3 3
+  //   old.data: [7,33,5,33,154,22,5,22,3]
+  // The buffer: an 8x8 opaque image, a 3x3 black blob (rows/cols 2-4) on white, threshold:128,
+  // invert:false, blurRadiusPx:1, maxWidthPx/maxHeightPx:3 (a real downscale from 8x8).
+  const pixels = [];
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      const inBlob = x >= 2 && x <= 4 && y >= 2 && y <= 4;
+      pixels.push(inBlob ? [0, 0, 0, 255] : [255, 255, 255, 255]);
+    }
+  }
+  const buffer = createImageBuffer({ widthPx: 8, heightPx: 8, data: rgba(pixels) });
+  const params = { threshold: 128, invert: false, blurRadiusPx: 1, maxWidthPx: 3, maxHeightPx: 3 };
+
+  const field = prepareImageField(buffer, { ...params, transparent: 'white' });
+
+  assert.equal(field.widthPx, 3);
+  assert.equal(field.heightPx, 3);
+  assert.deepEqual(Array.from(field.data), [7, 33, 5, 33, 154, 22, 5, 22, 3]);
+});
+
 console.log('IMG-001 field/transparency tests passed.');

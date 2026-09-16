@@ -145,15 +145,25 @@ record that the exception existed and was corrected, not merely avoided from the
 
 As of RS-1008A, `GeometryEngine.js` gained `generateImageLayout()`: it processes an already-decoded
 `imageBuffer` via `src/image/index.js`'s `prepareImageField()` (grayscale → threshold → optional
-invert → optional blur → optional resize, producing a neutral density field — the raster
-counterpart to `src/svg/**`'s vector `Contour`s) and samples it with the new
-`StoneSampler.sampleFieldFillPoints()` (grid-walk-and-keep-if-on-field, the raster counterpart to
-`sampleFillPoints()`'s grid-walk-and-keep-if-inside-polygon). `src/image/**` now has zero
-dependency on `src/geometry/**` and never constructs a `Stone`/`StoneLayout` — mirroring `src/svg/**`'s
-existing "only produces neutral input, GeometryEngine is the only caller that turns it into stones"
-rule exactly. `generateImageLayout()` is synchronous (no font provider to await), like
-`generateShapeLayout()`/`generateSvgLayout()`. See
-`docs/specifications/RS-1008A-ImageTraceArchitectureCorrection.md`.
+invert → optional transparency mask → optional blur → optional resize, producing a neutral
+multi-channel field — the raster counterpart to `src/svg/**`'s vector `Contour`s) and samples the
+field's `data` channel with the new `StoneSampler.sampleFieldFillPoints()`
+(grid-walk-and-keep-if-on-field, the raster counterpart to `sampleFillPoints()`'s
+grid-walk-and-keep-if-inside-polygon). As of IMG-001, `prepareImageField()` returns
+`{widthPx, heightPx, data, luminance, alpha, labels}`: `data` is the same binary/blurred density
+`sampleFieldFillPoints()` has always sampled (byte-identical to before IMG-001 for every existing
+caller); `luminance` is the pre-threshold grayscale, reserved for a future brightness-driven
+stone-size milestone; `alpha` is a strict 0/255 coverage mask; `labels` is reserved `null` for a
+future color-quantization milestone. The new transparency mask stage (`transparent: 'white'|'ignore'`
+param, default `'white'`) sits between invert and blur: `'ignore'` forces any pixel whose source
+alpha is below the coverage threshold off in `data`, regardless of luminance, so a saved project
+with no `transparent` field (every project saved before IMG-001) still generates byte-identical
+geometry. `src/image/**` now has zero dependency on `src/geometry/**` and never constructs a
+`Stone`/`StoneLayout` — mirroring `src/svg/**`'s existing "only produces neutral input, GeometryEngine
+is the only caller that turns it into stones" rule exactly. `generateImageLayout()` is synchronous
+(no font provider to await), like `generateShapeLayout()`/`generateSvgLayout()`. See
+`docs/specifications/RS-1008A-ImageTraceArchitectureCorrection.md` and
+`docs/specifications/IMG-001-ImageToStrass.md`.
 
 ---
 
@@ -741,7 +751,7 @@ code.
 | Browser compatibility | `src/browser/**` | `src/text/**`, `src/fonts/**`, `src/geometry/**` (proves resolution), `opentype.js` |
 | Undo/redo history (RS-1002) | `src/history/**` | nothing else in `src/**` (pure JSON-snapshot bookkeeping; no `Project`/`Layer`/`StoneLayout`/DOM dependency) |
 | Object templates (RS-1004) | `src/products/**` | nothing else in `src/**` (pure data + validation; never referenced by `src/geometry/**` or `src/renderer/**`, only consumed by `app.js` as plain display-option data) |
-| Bitmap image trace (RS-1008, corrected RS-1008A) | `src/image/**` | nothing else in `src/**` (pure field-preparation only: grayscale/threshold/invert/blur/resize -> a neutral density field; zero dependency on `src/geometry/**`, mirroring `src/svg/**`) |
+| Bitmap image trace (RS-1008, corrected RS-1008A, extended IMG-001) | `src/image/**` | nothing else in `src/**` (pure field-preparation only: grayscale/threshold/invert/optional transparency mask/blur/resize -> a neutral multi-channel field `{data, luminance, alpha, labels}`; zero dependency on `src/geometry/**`, mirroring `src/svg/**`) |
 | Alignment, distribution, snapping, selection (RS-1009; `selectMany` added RS-1010) | `src/editing/**` | nothing else in `src/**` (pure mm-geometry and `Set<string>` selection helpers only; zero dependency on `src/geometry/**`/`src/renderer/**`/`src/export/**`/`Project`/`Layer`/`StoneLayout`) |
 | Lightbox/dialog controller (UI-001) | `src/ui/**` | nothing else in `src/**` (pure DOM dialog behavior only: open/close, focus trap, Escape, backdrop click, ARIA; zero dependency on `Project`/`Layer`/`StoneLayout`/layer type) |
 | Orchestration | `app.js` | every barrel module above, plus `src/svg/index.js` (pre-import validation only, not stone generation), `src/history/index.js` (undo/redo), `src/products/index.js` (RS-1004, object templates), `src/image/index.js` (RS-1008, image field preparation only as of RS-1008A), `src/editing/index.js` (RS-1009, alignment/snapping/selection decisions only, never geometry), and `src/ui/index.js` (UI-001, dialog open/close/focus behavior only, never geometry) |

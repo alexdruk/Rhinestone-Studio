@@ -139,9 +139,41 @@ permissive default, following this codebase's established S-200/RS-1011 preceden
 * Any image layer with no `transparent` field at all (every project saved before this milestone)
   resolves to `'white'` at every read site, via `resolveImageTransparentMode()`'s own
   missing/invalid → `'white'` fallback — so a saved project regenerates byte-identical geometry.
-* A freshly imported image defaults its Lightbox toggle to `'ignore'` (the more useful default for
-  new imports — most transparent-background source art should not trace its background), which is
-  what gets written onto the new layer at commit time unless the user changes it first.
+* A freshly imported image defaults its Lightbox toggle to `'ignore'`, which is what gets written
+  onto the new layer at commit time unless the user changes it first.
+
+### Measured behavior: when `'ignore'` actually differs from `'white'`
+
+Re-derived directly against the real `toGrayscale()`/`applyThreshold()` (an exhaustive sweep over a
+5-level-per-channel RGB grid × every `alpha` `0`-`127`, plus the analytic worst case) rather than
+assumed: **at `threshold: 128` (the shipped default) with `invert` off, `'ignore'` changes nothing.**
+`toGrayscale()`'s alpha-onto-white compositing (`luminosity·a + 255·(1-a)`) already maps every pixel
+with `alpha < 128` to a composited luminance `>= 128` — the minimum any such pixel can reach is
+exactly `128`, achieved only by an opaque-leaning black pixel at `alpha: 127`
+(`255 - 127 = 128`) — and `applyThreshold()`'s strict "`luminance < threshold`" foreground rule
+already treats `128` as background at `threshold: 128`. So the `'ignore'` masking step never has
+anything left to override at the default threshold with invert off; confirmed by exhaustive sweep
+(zero foreground classifications among 16,000 `(r,g,b,alpha)` combinations) and directly through
+`prepareImageField()` itself.
+
+`'ignore'` only diverges from `'white'` when:
+
+* **`invert` is on** — invert flips every background pixel, including every transparent one, to
+  foreground; `'ignore'` then forces the transparent ones back off. Measured: a fully transparent
+  pixel (`alpha: 0`) at `threshold: 128`, `invert: true` produces `data: 255` (traced) under
+  `'white'` and `data: 0` (excluded) under `'ignore'`.
+* **`threshold` is raised above `128`** — once `threshold > 128`, a transparent pixel whose
+  composited luminance falls in `[128, threshold)` becomes foreground under plain thresholding even
+  without invert; `'ignore'` still excludes it. Measured: the boundary pixel (black, `alpha: 127`,
+  composited luminance `128`) produces `data: 255` under `'white'` at `threshold: 129` and `data: 0`
+  under `'ignore'`, while at `threshold: 128` the two agree (`data: 0` both).
+
+The default stays `'ignore'`, not because it changes anything at the shipped default threshold with
+invert off, but because it is the correct policy the moment a user inverts or raises the threshold
+above `128` — both routine Image Trace adjustments — and because it becomes load-bearing for
+IMG-002's color quantization: a transparent pixel must never be assigned a quantized color or stone
+regardless of what its alpha-on-white luminance happens to composite to, and `'ignore'` is what
+makes that guarantee hold from the start rather than being retrofitted once IMG-002 lands.
 
 Exposed as a two-option control (`imgTransparent` in the edit panel, `imgPreviewTransparent` in the
 import-preview panel — both next to their respective Invert control) in the Image Trace Lightbox.
