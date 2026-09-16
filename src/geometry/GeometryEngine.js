@@ -53,6 +53,12 @@ const SAMPLE_MODES = new Set(['outline', 'fill', 'staggered', 'radial', 'contour
 // normalizeImageParams() below and generateImageLayout()'s doc comment.
 const IMAGE_SAMPLE_MODES = new Set(['fill', 'staggered', 'radial', 'contour']);
 const DEFAULT_MODE = 'outline';
+// IMG-001: mirrors src/image/ImageFieldPipeline.js's own TRANSPARENT_MODES/DEFAULT_TRANSPARENT_MODE
+// -- kept as a separate, hand-matched constant here (the same "each normalizer owns its own enum"
+// convention SAMPLE_MODES/IMAGE_SAMPLE_MODES already use) rather than importing src/image's copy,
+// since this is GeometryEngine's own params-side validation, not a re-export.
+const IMAGE_TRANSPARENT_MODES = new Set(['white', 'ignore']);
+const DEFAULT_IMAGE_TRANSPARENT_MODE = 'white';
 // S-110: SHAPE_LIBRARY_KINDS (Ellipse/Capsule/Regular Polygon/Star/Heart/Arrow/Cross/Crescent/Ring)
 // join Circle/Rectangle here -- every one of them is a generateShapeLayout()/resolveShapePolygons()
 // shape, not a new engine method.
@@ -1149,6 +1155,10 @@ export class GeometryEngine {
    * @param {number} [params.blurRadiusPx]
    * @param {number} params.maxWidthPx
    * @param {number} params.maxHeightPx
+   * @param {'white'|'ignore'} [params.transparent] Default 'white' (IMG-001) -- 'white' flattens
+   *   alpha onto white before thresholding (the pre-IMG-001, only-ever behavior); 'ignore' forces
+   *   any pixel whose source alpha is below the coverage threshold off in the generated field,
+   *   regardless of luminance. See docs/specifications/IMG-001-ImageToStrass.md.
    * @returns {StoneLayout}
    */
   generateImageLayout(params = {}) {
@@ -1159,7 +1169,8 @@ export class GeometryEngine {
       invert: options.invert,
       blurRadiusPx: options.blurRadiusPx,
       maxWidthPx: options.maxWidthPx,
-      maxHeightPx: options.maxHeightPx
+      maxHeightPx: options.maxHeightPx,
+      transparent: options.transparent
     });
 
     const placement = { xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm };
@@ -2241,6 +2252,14 @@ function normalizeImageParams(params) {
   const widthMm = assertPositiveNumber(params.widthMm, 'widthMm');
   const heightMm = assertPositiveNumber(params.heightMm, 'heightMm');
 
+  // IMG-001: default 'white' matches this method's previous, only, always-flatten-onto-white
+  // behavior exactly, so every pre-existing call site (and every image layer saved before this
+  // milestone, which has no stored transparent field) generates byte-identical geometry.
+  const transparent = params.transparent ?? DEFAULT_IMAGE_TRANSPARENT_MODE;
+  if (!IMAGE_TRANSPARENT_MODES.has(transparent)) {
+    throw new TypeError(`Unsupported image transparency policy: ${transparent}. Expected one of: ${[...IMAGE_TRANSPARENT_MODES].join(', ')}`);
+  }
+
   return {
     imageBuffer: params.imageBuffer,
     layerId: params.layerId,
@@ -2257,6 +2276,7 @@ function normalizeImageParams(params) {
     blurRadiusPx: params.blurRadiusPx,
     maxWidthPx: params.maxWidthPx,
     maxHeightPx: params.maxHeightPx,
+    transparent,
     // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.
     ...normalizeMixedSizeParams(params, stoneSizeMm)
   };

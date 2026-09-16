@@ -657,6 +657,7 @@ function computeTextPlacementOffset(boundingBox,layer,project){
 // directly, so no translation table is needed for them.
 const VECTOR_FILL_MODES=new Set(['outline','fill','staggered','radial','contour']);
 const IMAGE_FILL_MODES=new Set(['fill','staggered','radial','contour']);
+const IMAGE_TRANSPARENT_MODES=new Set(['white','ignore']);
 const TEXT_MODE_TO_ENGINE_MODE={stroke:'outline',fill:'fill',staggered:'staggered',radial:'radial',contour:'contour'};
 // MONO-005A: layer.authoredScale is a new, optional, additive text-layer field -- GeometryEngine's
 // own normalizeTextParams() validates it strictly (throws for non-finite/non-positive), but this
@@ -685,6 +686,10 @@ function invalidateAuthoredScaleForGeometryChange(layer,changedField){
 function resolveTextFillMode(textMode){return TEXT_MODE_TO_ENGINE_MODE[textMode]||'outline'}
 function resolveVectorFillMode(value){return VECTOR_FILL_MODES.has(value)?value:'outline'}
 function resolveImageFillMode(value){return IMAGE_FILL_MODES.has(value)?value:'fill'}
+// IMG-001: 'white' (flatten alpha onto white, the pre-IMG-001 only behavior) or 'ignore' (alpha<128
+// pixels never become stones, regardless of luminance). Missing/invalid -> 'white', matching every
+// other resolve*() fallback's permissive-default convention -- see IMG-001-ImageToStrass.md.
+function resolveImageTransparentMode(value){return IMAGE_TRANSPARENT_MODES.has(value)?value:'white'}
 // S-200 (Mixed Stone-Size Layouts): Generation Mode -- 'uniform' (every stone in the layer is the
 // same size, unchanged pre-S-200 behavior) or 'mixed' (GeometryEngine.js's MixedSizeGenerator.js
 // may additively fill gaps with smaller stones). Mirrors resolveVectorFillMode()'s own "unrecognized
@@ -923,7 +928,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // generateImageLayout() itself is synchronous, like generateShapeLayout()). imageBufferCache means
  // the (comparatively expensive) browser image decode only re-runs the first time a given imageSrc
  // is seen; every subsequent call here only re-runs the permanent engine's pure/fast pipeline.
- async generateImageStonesLive(layer,{includeStats=false}={}){if(!this.permanentEngine||!layer.imageSrc)return includeStats?{stones:[],outlineStats:null}:[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveImageFillMode(layer.fillMode),color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null}:stones}
+ async generateImageStonesLive(layer,{includeStats=false}={}){if(!this.permanentEngine||!layer.imageSrc)return includeStats?{stones:[],outlineStats:null}:[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveImageFillMode(layer.fillMode),color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null}:stones}
  // RS-1012: 'path' layers (Boolean Operation results) go through the permanent engine's
  // generatePathLayout(), mirroring generateSvgStonesLive()/generateShapeStonesLive() above --
  // layer.contours is already plain (0,0)-rooted polygon data (no parsing step, unlike SVG).
@@ -2392,7 +2397,7 @@ function syncSelectedControlsFromLayer(){
   el('textAlign').value=l.align||'left';el('lineSpacing').value=l.lineSpacing??1;el('rotationDeg').value=l.rotationDeg??0;
   // READ-006: '??' fallback so a pre-READ-006 layer displays 0. The hint is written by
   // #separateLettersBtn and cleared on selection change, exactly like #heightAutoAdjustedHint.
-  setLengthField('letterSpacing',l.letterSpacing??0);el('letterSpacingHint').style.display='none'}else{setLengthField('shapeX',l.type==='circle'?l.cx:l.x);setLengthField('shapeY',l.type==='circle'?l.cy:l.y);setLengthField('shapeW',l.type==='circle'?l.r:l.w);setLengthField('shapeH',l.type==='circle'?'':l.h);el('shapeWLabel').textContent=(l.type==='circle'?'Radius':'Width')+' ('+unitSuffix(project.units)+')';el('shapeHField').style.display=l.type==='circle'?'none':'';el('shapeRotationDeg').value=l.rotationDeg??0;if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);setLengthField('gap',l.gap);el('stoneColor').value=l.color;
+  setLengthField('letterSpacing',l.letterSpacing??0);el('letterSpacingHint').style.display='none'}else{setLengthField('shapeX',l.type==='circle'?l.cx:l.x);setLengthField('shapeY',l.type==='circle'?l.cy:l.y);setLengthField('shapeW',l.type==='circle'?l.r:l.w);setLengthField('shapeH',l.type==='circle'?'':l.h);el('shapeWLabel').textContent=(l.type==='circle'?'Radius':'Width')+' ('+unitSuffix(project.units)+')';el('shapeHField').style.display=l.type==='circle'?'none':'';el('shapeRotationDeg').value=l.rotationDeg??0;if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgTransparent').value=resolveImageTransparentMode(l.transparent);el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);setLengthField('gap',l.gap);el('stoneColor').value=l.color;
   // S-200: Mixed Stone Size -- applies uniformly to every layer type, same as stoneSize/gap/color
   // just above. allowedSizesMm is only ever catalog values (see MIXED_ALLOWED_SIZE_CHECKBOXES'
   // doc comment), so each checkbox is simply checked when its own diameter is present in the
@@ -2543,7 +2548,7 @@ function writeSelectedControlsToLayer(){
   if(l.type==='polygon')l.sides=Math.max(3,Math.min(12,parseIntOr(el('shapeSides').value,6)));
   if(l.type==='star'){l.points=Math.max(3,Math.min(12,parseIntOr(el('shapePoints').value,5)));l.innerRadiusRatio=Math.max(0.1,Math.min(0.9,parseFloat(el('shapeInnerRadius').value)||0.5))}
   if(l.type==='ring')l.innerRatio=Math.max(0.1,Math.min(0.9,parseFloat(el('shapeRingInner').value)||0.5));
-}else if(l.type==='svg'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||10);l.h=Math.max(1,readLengthField('shapeH')||10);l.mode=resolveVectorFillMode(el('svgMode').value)}else if(l.type==='image'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||10);l.h=Math.max(1,readLengthField('shapeH')||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.fillMode=resolveImageFillMode(el('imageFillMode').value)}else if(l.type==='path'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(2,readLengthField('shapeW')||10);l.h=Math.max(2,readLengthField('shapeH')||10);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}
+}else if(l.type==='svg'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||10);l.h=Math.max(1,readLengthField('shapeH')||10);l.mode=resolveVectorFillMode(el('svgMode').value)}else if(l.type==='image'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||10);l.h=Math.max(1,readLengthField('shapeH')||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.transparent=resolveImageTransparentMode(el('imgTransparent').value);l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.fillMode=resolveImageFillMode(el('imageFillMode').value)}else if(l.type==='path'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(2,readLengthField('shapeW')||10);l.h=Math.max(2,readLengthField('shapeH')||10);l.fillMode=resolveVectorFillMode(el('shapeFillMode').value)}
   const nextStoneSize=parseFloat(el('stoneSize').value)||2;if(nextStoneSize!==l.stoneSize)invalidateAuthoredScaleForGeometryChange(l,'stoneSize');l.stoneSize=nextStoneSize;
   const nextGap=readLengthField('gap')||.3;if(nextGap!==l.gap)invalidateAuthoredScaleForGeometryChange(l,'gap');l.gap=nextGap;
   l.color=el('stoneColor').value;
@@ -3068,7 +3073,7 @@ async function resolveLayerShapeSource(layer){
     if(!layer.imageSrc||!(layer.w>0)||!(layer.h>0))return null;
     let buffer=imageBufferCache.get(layer.imageSrc);
     if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}
-    const field=prepareImageField(buffer,{threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx});
+    const field=prepareImageField(buffer,{threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent)});
     return{kind:'field',field,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h};
   }
   return null;
@@ -4649,7 +4654,7 @@ el('autoFit').addEventListener('input',()=>{
   const turningOn=el('autoFit').value==='on';
   el('autoFitOnHint').style.display=(l&&l.type==='text'&&!l.autoFit&&turningOn)?'block':'none';
 });
-const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','textAlign','lineSpacing','letterSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail','weightSteps'];
+const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgTransparent','imgBlurRadius','imgMaxWidth','imgMaxHeight','textX','textY','textAlign','lineSpacing','letterSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail','weightSteps'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
 // RS-2002: Browse Fonts panel wiring. Toggling/closing never touches history (it only decides
@@ -5084,6 +5089,7 @@ function currentImagePreviewParams(){
   return{
     threshold:Math.max(0,Math.min(255,parseIntOr(el('imgPreviewThreshold').value,DEFAULT_IMAGE_THRESHOLD))),
     invert:el('imgPreviewInvert').value==='on',
+    transparent:resolveImageTransparentMode(el('imgPreviewTransparent').value),
     blurRadiusPx:Math.max(0,parseIntOr(el('imgPreviewBlur').value,0)),
     maxWidthPx:Math.max(8,parseIntOr(el('imgPreviewMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX)),
     maxHeightPx:Math.max(8,parseIntOr(el('imgPreviewMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX))
@@ -5096,15 +5102,15 @@ function currentImagePreviewParams(){
 // at the full documented working resolution.
 function updateImagePreview(){
   if(!pendingImageImport)return;
-  const{threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx}=currentImagePreviewParams();
-  const field=prepareImageField(pendingImageImport.buffer,{threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx});
+  const{threshold,invert,transparent,blurRadiusPx,maxWidthPx,maxHeightPx}=currentImagePreviewParams();
+  const field=prepareImageField(pendingImageImport.buffer,{threshold,invert,transparent,blurRadiusPx,maxWidthPx,maxHeightPx});
   const canvas=el('imageImportPreviewCanvas');
   canvas.width=field.widthPx;canvas.height=field.heightPx;
   canvas.getContext('2d').putImageData(new ImageData(maskFieldToRgba(field),field.widthPx,field.heightPx),0,0);
   const base=selectedLayer();
   const{x,y,w,h}=pendingImageImport.placement;
   try{
-    const result=permanentEngine.generateImageLayout({imageBuffer:pendingImageImport.buffer,layerId:'preview',xMm:x,yMm:y,widthMm:w,heightMm:h,stoneSizeMm:base.stoneSize||2,gapMm:base.gap||.3,color:base.color||'gold',threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx});
+    const result=permanentEngine.generateImageLayout({imageBuffer:pendingImageImport.buffer,layerId:'preview',xMm:x,yMm:y,widthMm:w,heightMm:h,stoneSizeMm:base.stoneSize||2,gapMm:base.gap||.3,color:base.color||'gold',threshold,invert,transparent,blurRadiusPx,maxWidthPx,maxHeightPx});
     el('imageImportStoneCount').textContent=`${result.count} stones (approx.)`;
   }catch(error){console.error('Image preview trace failed',error);el('imageImportStoneCount').textContent='—'}
 }
@@ -5117,20 +5123,20 @@ el('importImageFile').addEventListener('change',async e=>{
     const dataUrl=await readFileAsDataUrl(file);
     imageBufferCache.set(dataUrl,buffer);
     pendingImageImport={buffer,dataUrl,fileName:file.name,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,placement:computeDefaultImagePlacement(buffer.widthPx,buffer.heightPx)};
-    el('imgPreviewThreshold').value=DEFAULT_IMAGE_THRESHOLD;el('imgPreviewInvert').value='off';el('imgPreviewBlur').value=0;el('imgPreviewMaxWidth').value=DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgPreviewMaxHeight').value=DEFAULT_IMAGE_MAX_DIMENSION_PX;
+    el('imgPreviewThreshold').value=DEFAULT_IMAGE_THRESHOLD;el('imgPreviewInvert').value='off';el('imgPreviewTransparent').value='ignore';el('imgPreviewBlur').value=0;el('imgPreviewMaxWidth').value=DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgPreviewMaxHeight').value=DEFAULT_IMAGE_MAX_DIMENSION_PX;
     updateImagePreview();
     el('imageImportPanel').style.display='block';
     el('status').textContent=`Previewing ${file.name} (${buffer.widthPx}×${buffer.heightPx}px)`;
   }catch(error){console.error('Image import failed',error);el('status').textContent=`Image import failed: ${error.message}`}
 });
-for(const id of['imgPreviewThreshold','imgPreviewInvert','imgPreviewBlur','imgPreviewMaxWidth','imgPreviewMaxHeight'])el(id).addEventListener('input',updateImagePreview);
+for(const id of['imgPreviewThreshold','imgPreviewInvert','imgPreviewTransparent','imgPreviewBlur','imgPreviewMaxWidth','imgPreviewMaxHeight'])el(id).addEventListener('input',updateImagePreview);
 el('imageImportCancel').onclick=()=>{pendingImageImport=null;el('imageImportPanel').style.display='none';el('status').textContent='Image import cancelled'};
 el('imageImportCommit').onclick=async()=>{
   if(!pendingImageImport)return;
-  const{threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx}=currentImagePreviewParams();
+  const{threshold,invert,transparent,blurRadiusPx,maxWidthPx,maxHeightPx}=currentImagePreviewParams();
   const base=selectedLayer();
   const{x,y,w,h}=pendingImageImport.placement;
-  const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:pendingImageImport.dataUrl,imageName:pendingImageImport.fileName,naturalWidthPx:pendingImageImport.naturalWidthPx,naturalHeightPx:pendingImageImport.naturalHeightPx,x,y,w,h,threshold,invert,blurRadiusPx,maxWidthPx,maxHeightPx,stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold',rotationDeg:0};
+  const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:pendingImageImport.dataUrl,imageName:pendingImageImport.fileName,naturalWidthPx:pendingImageImport.naturalWidthPx,naturalHeightPx:pendingImageImport.naturalHeightPx,x,y,w,h,threshold,invert,transparent,blurRadiusPx,maxWidthPx,maxHeightPx,stoneSize:base.stoneSize||2,gap:base.gap||.3,color:base.color||'gold',rotationDeg:0};
   const importedName=layer.imageName;
   commitHistory();
   project.layers.push(layer);

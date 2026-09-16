@@ -19,6 +19,12 @@ export {
 } from './Invert.js';
 
 export {
+  extractAlphaChannel,
+  toCoverageMask,
+  ALPHA_COVERAGE_THRESHOLD
+} from './Alpha.js';
+
+export {
   blurMask
 } from './Blur.js';
 
@@ -27,7 +33,9 @@ export {
 } from './Resize.js';
 
 export {
-  prepareImageField
+  prepareImageField,
+  TRANSPARENT_MODES,
+  DEFAULT_TRANSPARENT_MODE
 } from './ImageFieldPipeline.js';
 
 export {
