@@ -36,20 +36,39 @@ per-stone `color`, exactly what every exporter already reads (`docs/specificatio
    Structure below) calls `fieldLabelAt(field, placement, stone.xMm, stone.yMm)` and takes its color
    from that label's group; only `Stone.color` changes from today's output.
 
-   Measured, not assumed: across nine field shapes (disc, annulus, C-shape, two blobs, comb, spiral,
-   coarse 24px checker, pixel noise, thin cross) and all four modes, with the placement box offset to
-   `(10, 7)` mm (not the origin — the same non-origin condition that motivated `fieldLabelAt()` above),
-   zero sampled points landed on a pixel below `FIELD_ON_THRESHOLD`. This is expected, not a
-   coincidence: `sampleFieldByMode()` only ever emits a point where its own on/off test already
-   passed, so `fieldLabelAt()` reading the same field at the same coordinates always lands on an "on"
-   pixel too — one that was clustered (assigned a real label between `0` and `K-1`) whenever
-   `colorCount > 1`, since the quantizer clusters every `data`-eligible pixel (decision 2). S-200
-   infill points inherit this guarantee because they are produced by the same `sampleFieldByMode()`-
-   driven field test (`generateMixedSizeInfillPoints()`'s `source: { kind: 'field', field, placement }`
-   — see Structure below). `NO_LABEL` at a sampled point is therefore unreachable in practice, but
-   `fieldLabelAt()` returning it is still handled defensively: such a stone falls back to the layer's
-   own `color` (the same value `colorCount:1` stones already use), rather than throwing or silently
-   mis-coloring.
+   The label lookup itself runs only when `colorCount > 1` and `field.labels` is non-null; with
+   `colorCount` omitted or `1` — the default path for every pre-IMG-002 project — every stone takes
+   `options.color` exactly as today, and `fieldLabelAt()` is never called.
+
+   Measured, not assumed — and split by mode, because the two families reach "on-field" by different
+   means. **Fill/Staggered/Radial are guaranteed by construction**: `sampleFieldFillPoints()`
+   (`src/geometry/StoneSampler.js:1590`), `sampleStaggeredFieldFillPoints()` (`:1636`), and
+   `sampleRadialFieldFillPoints()` (`:1674`) each push a point only after its own `fieldPixelOn()` (or,
+   for `sampleFieldFillPoints()`, the identical inline formula) test returns true — verified by reading
+   all three. **Contour is NOT guaranteed by construction**: `sampleContourFieldFillPoints()`
+   (`src/geometry/StoneSampler.js:1724`) uses `fieldPixelOn()` only as the `insideAt` predicate passed
+   to `computeInwardRingPolygons()`; the points actually pushed come from
+   `sampleOutlinePoints(piecePolygon, spacingMm, {closed})` walking each traced ring's edges, with no
+   per-point field test — an interpolated point along a ring edge could in principle land off-field if
+   the ring tracing were coarse relative to the field's own resolution.
+
+   For Contour, the zero-off-field result is therefore an empirical property of how finely
+   `computeInwardRingPolygons()` traces its rings relative to the field, not a construction guarantee,
+   and it was verified at that empirical strength: nine hand-built shapes (disc, annulus, C-shape, two
+   blobs, comb, spiral, coarse 24px checker, pixel noise, thin cross) across all four modes at a
+   `(10, 7)` mm offset placement box; then, for Contour specifically, star/spikes/thin-arms/thin-ring
+   shapes swept across 40/80/200px field resolutions and four stone sizes, plus 120 randomized
+   multi-blob fields (4-8 overlapping discs, 24-96px) across five stone sizes, totaling 26,237 Contour
+   stones — zero off-field points in every run.
+
+   This empirical (rather than proven) status is exactly why the `NO_LABEL` fallback above is retained
+   rather than replaced with an assertion that would fail loudly the day a run produces an off-field
+   point: such a stone falls back to `options.color` (the same value `colorCount:1` stones already
+   use), rather than throwing or silently mis-coloring. A future sampler that emits interpolated points
+   without per-point field testing does not inherit this property and must re-establish it before
+   relying on the fallback staying dead code — IMG-004's anticipated edge-weighted sampler is the named
+   candidate, since edge-biased placement is likely to interpolate along detected edges the same way
+   Contour interpolates along traced rings.
 
    Per-mask sampling — running `sampleFieldByMode()` once per color against a color-restricted field
    — was rejected. Re-derived directly rather than assumed: on a three-color disc in a 60×60 mm box at
@@ -170,16 +189,19 @@ prepareImageField(imageBuffer, {..., colorCount, palette})
 
 GeometryEngine.generateImageLayout({..., colorCount, palette, colorMap})
   -> sampleFieldByMode() unchanged, one call, produces the same point set as colorCount:1
-  -> each base stone's label looked up via fieldLabelAt(field, placement, stone.xMm, stone.yMm)
-  -> Stone.color = label===NO_LABEL ? layer.color : (colorMap[group.nearestId] ?? group.nearestId)
-     (NO_LABEL is unreachable in practice per decision 1's measured sweep; the fallback is defensive)
+  -> colorCount === 1 or field.labels === null: every stone takes options.color, no lookup performed
+  -> colorCount > 1 and field.labels non-null: each base stone's label looked up via
+     fieldLabelAt(field, placement, stone.xMm, stone.yMm)
+  -> Stone.color = label===NO_LABEL ? options.color : (colorMap[group.nearestId] ?? group.nearestId)
+     (NO_LABEL is empirically unreachable -- by construction for Fill/Staggered/Radial, by measurement
+     for Contour; see decision 1 -- so the fallback stays defensive rather than an assertion)
   -> S-200 infill: generateMixedSizeInfillPoints() called directly (GeometryEngine.js, new call site),
      not generateMixedSizeInfillStones() -- its Stone-wrapping convenience takes only one `color`
      argument (MixedSizeGenerator.js:255) and cannot carry per-point color. generateImageLayout()
      builds infill Stones itself from the returned points, the same direct-call pattern
      generateTextLayout() already uses for its own per-point needs (GeometryEngine.js:293; see
-     MixedSizeGenerator.js:246's own doc comment for why), applying the identical fieldLabelAt() +
-     colorMap lookup as base stones. MixedSizeGenerator.js itself needs no change.
+     MixedSizeGenerator.js:246's own doc comment for why), applying the identical colorCount-gated
+     fieldLabelAt() + colorMap lookup as base stones. MixedSizeGenerator.js itself needs no change.
   -> findCrossGroupCollisions() available for tests to prove per-color groups never overlap
 ```
 
