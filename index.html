@@ -1132,8 +1132,9 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <div class="field-section">
             <h3>Trace parameters</h3>
             <div class="field"><label for="imgPreviewThreshold">Threshold (0-255)</label><input id="imgPreviewThreshold" type="range" min="0" max="255" step="1" value="128"></div>
-            <div class="field-row">
+            <div class="field-row-3">
               <div class="field"><label for="imgPreviewInvert">Invert</label><select id="imgPreviewInvert"><option value="off" selected>Off</option><option value="on">On</option></select></div>
+              <div class="field"><label for="imgPreviewTransparent" title="How pixels with a transparent source background are treated.">Transparency</label><select id="imgPreviewTransparent"><option value="white">Flatten to white</option><option value="ignore" selected>Ignore transparent areas</option></select></div>
               <div class="field"><label for="imgPreviewBlur">Blur radius (px)</label><input id="imgPreviewBlur" type="number" min="0" max="50" step="1" value="0"></div>
             </div>
             <div class="field-row">
@@ -1152,8 +1153,9 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
           <h3>Edit selected image layer</h3>
           <div id="imageControls">
             <div class="field"><label for="imgThreshold">Threshold (0-255)</label><input id="imgThreshold" type="range" min="0" max="255" step="1" value="128"></div>
-            <div class="field-row">
+            <div class="field-row-3">
               <div class="field"><label for="imgInvert">Invert</label><select id="imgInvert"><option value="off" selected>Off</option><option value="on">On</option></select></div>
+              <div class="field"><label for="imgTransparent" title="How pixels with a transparent source background are treated.">Transparency</label><select id="imgTransparent"><option value="white" selected>Flatten to white</option><option value="ignore">Ignore transparent areas</option></select></div>
               <div class="field"><label for="imgBlurRadius">Blur radius (px)</label><input id="imgBlurRadius" type="number" min="0" max="50" step="1" value="0"></div>
             </div>
             <div class="field-row">
