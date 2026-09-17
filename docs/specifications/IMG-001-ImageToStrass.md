@@ -28,7 +28,8 @@ built on.
    Reuses `findCrossGroupCollisions()` to prove the per-color groups never overlap.
 3. **IMG-003 — Organic generator.** A non-grid placement mode for a more natural, hand-set look
    (distinct from Grid/Staggered/Radial/Contour Fill's existing regular patterns). Uses a persisted
-   per-layer seed (see Architectural Rules) so regeneration is deterministic.
+   per-layer seed (see Architectural Rules) so regeneration is deterministic. **Specified** in
+   `docs/specifications/IMG-003-OrganicPlacement.md` — implementation not yet landed.
 4. **IMG-004 — Edge awareness.** Bias placement/density near detected edges in the source image, for
    crisper silhouettes on high-contrast source art. Likely needs a new, edge-weighted sampler — the
    one place this roadmap anticipates new sampling code, not reuse.

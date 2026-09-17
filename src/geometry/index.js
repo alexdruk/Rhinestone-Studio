@@ -41,6 +41,7 @@ export {
   sampleRadialFieldFillPoints,
   sampleContourFillPoints,
   sampleContourFieldFillPoints,
+  sampleOrganicFieldFillPoints,
   sampleShapeFillPoints,
   sampleFieldByMode,
   dedupeStonePoints,
@@ -67,6 +68,10 @@ export {
   ELONGATION_MIN_ISOPERIMETRIC,
   ContourFillPrecisionError
 } from './ContourRingSampler.js';
+
+export {
+  samplePoissonDiskPoints
+} from './OrganicSampler.js';
 
 export {
   groupCongruentContours,

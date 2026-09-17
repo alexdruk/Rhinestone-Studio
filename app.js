@@ -663,7 +663,7 @@ function computeTextPlacementOffset(boundingBox,layer,project){
 // #textMode value); every other layer type's stored value already equals the engine's own mode name
 // directly, so no translation table is needed for them.
 const VECTOR_FILL_MODES=new Set(['outline','fill','staggered','radial','contour']);
-const IMAGE_FILL_MODES=new Set(['fill','staggered','radial','contour']);
+const IMAGE_FILL_MODES=new Set(['fill','staggered','radial','contour','organic']);
 const IMAGE_TRANSPARENT_MODES=new Set(['white','ignore']);
 const TEXT_MODE_TO_ENGINE_MODE={stroke:'outline',fill:'fill',staggered:'staggered',radial:'radial',contour:'contour'};
 // MONO-005A: layer.authoredScale is a new, optional, additive text-layer field -- GeometryEngine's
@@ -693,6 +693,12 @@ function invalidateAuthoredScaleForGeometryChange(layer,changedField){
 function resolveTextFillMode(textMode){return TEXT_MODE_TO_ENGINE_MODE[textMode]||'outline'}
 function resolveVectorFillMode(value){return VECTOR_FILL_MODES.has(value)?value:'outline'}
 function resolveImageFillMode(value){return IMAGE_FILL_MODES.has(value)?value:'fill'}
+// IMG-003: layer.seed/layer.spread -- read-site permissive defaults, the same precedent
+// layer.transparent (IMG-001) and layer.colorCount (IMG-002) already established. Default seed is a
+// fixed 1 (not random), so a pre-IMG-003 layer with no stored seed/spread regenerates identically to
+// a fresh Organic-mode layer -- see docs/specifications/IMG-003-OrganicPlacement.md decision 3.
+function resolveImageSeed(value){return Number.isInteger(value)&&value>=0?value:1}
+function resolveImageSpread(value){return typeof value==='number'&&Number.isFinite(value)&&value>=1?value:1}
 // IMG-001: 'white' (flatten alpha onto white, the pre-IMG-001 only behavior) or 'ignore' (alpha<128
 // pixels never become stones, regardless of luminance). Missing/invalid -> 'white', matching every
 // other resolve*() fallback's permissive-default convention -- see IMG-001-ImageToStrass.md.
@@ -2452,7 +2458,7 @@ function syncSelectedControlsFromLayer(){
   el('textAlign').value=l.align||'left';el('lineSpacing').value=l.lineSpacing??1;el('rotationDeg').value=l.rotationDeg??0;
   // READ-006: '??' fallback so a pre-READ-006 layer displays 0. The hint is written by
   // #separateLettersBtn and cleared on selection change, exactly like #heightAutoAdjustedHint.
-  setLengthField('letterSpacing',l.letterSpacing??0);el('letterSpacingHint').style.display='none'}else{setLengthField('shapeX',l.type==='circle'?l.cx:l.x);setLengthField('shapeY',l.type==='circle'?l.cy:l.y);setLengthField('shapeW',l.type==='circle'?l.r:l.w);setLengthField('shapeH',l.type==='circle'?'':l.h);el('shapeWLabel').textContent=(l.type==='circle'?'Radius':'Width')+' ('+unitSuffix(project.units)+')';el('shapeHField').style.display=l.type==='circle'?'none':'';el('shapeRotationDeg').value=l.rotationDeg??0;if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgTransparent').value=resolveImageTransparentMode(l.transparent);el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgColorCount').value=l.colorCount??1}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);setLengthField('gap',l.gap);el('stoneColor').value=l.color;
+  setLengthField('letterSpacing',l.letterSpacing??0);el('letterSpacingHint').style.display='none'}else{setLengthField('shapeX',l.type==='circle'?l.cx:l.x);setLengthField('shapeY',l.type==='circle'?l.cy:l.y);setLengthField('shapeW',l.type==='circle'?l.r:l.w);setLengthField('shapeH',l.type==='circle'?'':l.h);el('shapeWLabel').textContent=(l.type==='circle'?'Radius':'Width')+' ('+unitSuffix(project.units)+')';el('shapeHField').style.display=l.type==='circle'?'none':'';el('shapeRotationDeg').value=l.rotationDeg??0;if(l.type==='svg')el('svgMode').value=resolveVectorFillMode(l.mode);if(l.type==='image'){el('imgThreshold').value=l.threshold??DEFAULT_IMAGE_THRESHOLD;el('imgInvert').value=l.invert?'on':'off';el('imgTransparent').value=resolveImageTransparentMode(l.transparent);el('imgBlurRadius').value=l.blurRadiusPx??0;el('imgMaxWidth').value=l.maxWidthPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgMaxHeight').value=l.maxHeightPx??DEFAULT_IMAGE_MAX_DIMENSION_PX;el('imgColorCount').value=l.colorCount??1;el('imgSeed').value=resolveImageSeed(l.seed);el('imgSpread').value=resolveImageSpread(l.spread)}}ensureStoneSizeOption(el('stoneSize'),l.stoneSize);setNumericSelectValue(el('stoneSize'),l.stoneSize);setLengthField('gap',l.gap);el('stoneColor').value=l.color;
   // S-200: Mixed Stone Size -- applies uniformly to every layer type, same as stoneSize/gap/color
   // just above. allowedSizesMm is only ever catalog values (see MIXED_ALLOWED_SIZE_CHECKBOXES'
   // doc comment), so each checkbox is simply checked when its own diameter is present in the
@@ -2604,6 +2610,8 @@ function writeSelectedControlsToLayer(){
   if(l.type==='star'){l.points=Math.max(3,Math.min(12,parseIntOr(el('shapePoints').value,5)));l.innerRadiusRatio=Math.max(0.1,Math.min(0.9,parseFloat(el('shapeInnerRadius').value)||0.5))}
   if(l.type==='ring')l.innerRatio=Math.max(0.1,Math.min(0.9,parseFloat(el('shapeRingInner').value)||0.5));
 }else if(l.type==='svg'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||10);l.h=Math.max(1,readLengthField('shapeH')||10);l.mode=resolveVectorFillMode(el('svgMode').value)}else if(l.type==='image'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||10);l.h=Math.max(1,readLengthField('shapeH')||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.transparent=resolveImageTransparentMode(el('imgTransparent').value);l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.fillMode=resolveImageFillMode(el('imageFillMode').value);
+  // IMG-003: seed/spread, resolved the same permissive way every other optional image param is.
+  l.seed=resolveImageSeed(parseIntOr(el('imgSeed').value,1));l.spread=resolveImageSpread(parseFloat(el('imgSpread').value));
   // IMG-002: colorCount first (colorMap's own write below depends on the NEW colorCount, not
   // whatever it was before this edit); computeImageColorField() re-quantizes from l's own
   // now-current params, so each visible row's nearestId is resolved fresh rather than trusted from
@@ -4740,7 +4748,7 @@ el('autoFit').addEventListener('input',()=>{
   const turningOn=el('autoFit').value==='on';
   el('autoFitOnHint').style.display=(l&&l.type==='text'&&!l.autoFit&&turningOn)?'block':'none';
 });
-const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgTransparent','imgBlurRadius','imgMaxWidth','imgMaxHeight','imgColorCount','imgColorPick0','imgColorPick1','imgColorPick2','imgColorPick3','imgColorPick4','imgColorPick5','imgColorPick6','imgColorPick7','imgColorReset','textX','textY','textAlign','lineSpacing','letterSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail','weightSteps'];
+const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgTransparent','imgBlurRadius','imgMaxWidth','imgMaxHeight','imgColorCount','imgSeed','imgSpread','imgColorPick0','imgColorPick1','imgColorPick2','imgColorPick3','imgColorPick4','imgColorPick5','imgColorPick6','imgColorPick7','imgColorReset','textX','textY','textAlign','lineSpacing','letterSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail','weightSteps'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
 // RS-2002: Browse Fonts panel wiring. Toggling/closing never touches history (it only decides
@@ -5178,7 +5186,7 @@ el('importImageFile').addEventListener('change',async e=>{
     const dataUrl=await readFileAsDataUrl(file);
     imageBufferCache.set(dataUrl,buffer);
     const{x,y,w,h}=computeDefaultImagePlacement(buffer.widthPx,buffer.heightPx);
-    const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:dataUrl,imageName:file.name,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,x,y,w,h,threshold:DEFAULT_IMAGE_THRESHOLD,invert:false,transparent:'ignore',blurRadiusPx:0,maxWidthPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,maxHeightPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,stoneSize:selectedLayer().stoneSize||2,gap:selectedLayer().gap||.3,color:selectedLayer().color||'gold',rotationDeg:0,colorCount:1};
+    const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:dataUrl,imageName:file.name,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,x,y,w,h,threshold:DEFAULT_IMAGE_THRESHOLD,invert:false,transparent:'ignore',blurRadiusPx:0,maxWidthPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,maxHeightPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,stoneSize:selectedLayer().stoneSize||2,gap:selectedLayer().gap||.3,color:selectedLayer().color||'gold',rotationDeg:0,colorCount:1,seed:1,spread:1};
     commitHistory();
     project.layers.push(layer);
     selectedLayerId=layer.id;
@@ -5198,6 +5206,10 @@ el('imageStudioRemove').onclick=()=>{if(selectedLayer().type==='image')deleteLay
 // (correctly, per its own IMG-002 comment) reads every already-synced row's still-showing-the-old-
 // override <select> value straight back into l.colorMap, undoing this reset before it ever renders.
 el('imgColorReset').onclick=()=>{const l=selectedLayer();if(!l||l.type!=='image')return;commitHistory();l.colorMap={};updateAll(true)};
+// IMG-003: re-rolls the Organic placement without touching any other param -- a discrete action that
+// commits its own history entry, the same reason #imgColorReset does above, rather than the generic
+// HISTORY_TRACKED_CONTROL_IDS input/change session coalescing.
+el('imgShuffle').onclick=()=>{const l=selectedLayer();if(!l||l.type!=='image')return;commitHistory();l.seed=resolveImageSeed(l.seed)+1;updateAll(true)};
 el('exportProject').onclick=()=>{try{download('rhinestone-project.json','application/json',JSON.stringify(project,null,2));cleanProjectJson=JSON.stringify(project);updateHistoryUI();
   // RC-005: a manual Save/Export is now the authoritative saved copy -- clear the autosave
   // recovery slot so a later refresh never reports "restored unsaved changes" for work that was
@@ -6065,7 +6077,7 @@ function loadStudioImageElement(src){
   if(!img){img=new Image();img.src=src;imageStudioImageElements.set(src,img)}
   return img;
 }
-const IMAGE_STUDIO_LIVE_GROUP_IDS=['imageStudioGroupTrace','imageStudioGroupPosition','imageStudioGroupStones','imageStudioGroupColors'];
+const IMAGE_STUDIO_LIVE_GROUP_IDS=['imageStudioGroupTrace','imageStudioGroupPosition','imageStudioGroupStones','imageStudioGroupColors','imageStudioGroupOrganic'];
 async function renderImageStudio(){
   const token=++imageStudioRenderToken;
   if(!lightboxes.imagetrace.isOpen)return;
@@ -6084,6 +6096,15 @@ async function renderImageStudio(){
   for(const id of IMAGE_STUDIO_LIVE_GROUP_IDS)el(id).inert=false;
   el('imageStudioRemove').disabled=false;
   el('imageStudioFileName').textContent=l.imageName||'';
+  // IMG-003: Organic's own controls only matter once Organic is the selected fill style -- disabled
+  // with an explanatory title otherwise, the same treatment #stoneColor gets while colorCount>1
+  // (IMG-002 decision 4).
+  const isOrganic=resolveImageFillMode(l.fillMode)==='organic';
+  const organicDisabledTitle=isOrganic?'':'Only used when Fill style is set to Organic.';
+  for(const id of['imgSeed','imgShuffle','imgSpread']){el(id).disabled=!isOrganic;el(id).title=organicDisabledTitle}
+  el('imgSeed').value=resolveImageSeed(l.seed);
+  el('imgSpread').value=resolveImageSpread(l.spread);
+  el('imgSpreadValue').textContent=String(resolveImageSpread(l.spread));
   const bbox={minXmm:l.x,minYmm:l.y,widthMm:l.w,heightMm:l.h};
   const dpr=Math.max(1,window.devicePixelRatio||1);
   canvas.width=Math.max(1,Math.round(canvas.clientWidth*dpr));canvas.height=Math.max(1,Math.round(canvas.clientHeight*dpr));
