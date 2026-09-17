@@ -121,7 +121,9 @@ instances (`docs/specifications/IMG-000-ImageToStrassAudit.md`, "Exporters").
 
 7. **Studio: `#imageStudioGroupEdges` (`index.html:1190`) becomes live.** `#imgEdgeWidth` (a length input,
    mm) and `#imgEdgeThinning` (a range input, `min="0"` `max="3"` `step="0.1"`), with a hint "Only used
-   when Fill style is Edge". Both join `IMAGE_STUDIO_LIVE_GROUP_IDS` (`app.js:6080`) and
+   when Fill style is Edge". `imageStudioGroupEdges` must be added to `IMAGE_STUDIO_LIVE_GROUP_IDS`
+   (`app.js:6080`), exactly as `imageStudioGroupOrganic` was added in IMG-003 — otherwise
+   `renderImageStudio()` leaves the group inert. Only `imgEdgeWidth`/`imgEdgeThinning` join
    `HISTORY_TRACKED_CONTROL_IDS` (`app.js:4751`); the sync/readback sites gain `edgeWidthMm`/`edgeThinning`
    reads and writes at `app.js:2461` and `app.js:2614` (the same pair `seed`/`spread` already use). The
    enable/disable block (`app.js:6102`-`:6106`) changes its `isOrganic` gate from "mode is organic" to
@@ -184,10 +186,11 @@ instances (`docs/specifications/IMG-000-ImageToStrassAudit.md`, "Exporters").
    119, 111, 113. Disc, 6mm, thinning 0: 182 stones, positionally identical to Organic (thinning 0 makes
    `radiusAt` constant at `base` everywhere, i.e. plain Organic).
 
-   Frame: organic 202, grid 288, contour 272 (`stoneSizeMm` 2.7) — the same fixture and pitch
-   `docs/specifications/IMG-003-OrganicPlacement.md`'s own measured-figures section used, reproduced here
-   as the baseline the edge counts below are read against. Edge: 3mm/1 → 115/97, 3mm/2 → 91/86, 6mm/1 →
-   171/171, 6mm/2 → 171/171 (the convergence decision 8 describes above).
+   Frame: organic 202, grid 288, contour 272 (`stoneSizeMm` 2.7). The frame fixture is new in IMG-004 —
+   it does not come from `docs/specifications/IMG-003-OrganicPlacement.md`'s measured-figures section,
+   which only ever used the disc fixture; the 202/288/272 baselines above were measured for the first
+   time in this milestone, using the `frame()` generator given above. Edge: 3mm/1 → 115/97, 3mm/2 →
+   91/86, 6mm/1 → 171/171, 6mm/2 → 171/171 (the convergence decision 8 describes above).
 
    If a later measurement disagrees with any figure in this section, stop and report the disagreement —
    do not adjust either side to make them match.
@@ -214,8 +217,7 @@ GeometryEngine.generateImageLayout({..., mode: 'edge', seed, spread, edgeWidthMm
                spacingMm, seed, spread, radiusAt, maxRadiusMm}) -- the same module, same function,
                generalized in decision 2, not a new sampler
             -> offsets the returned local points by placement.xMm/yMm before returning
-  -> every emitted point already on-field (structural, same as Organic) -> fieldLabelAt()'s NO_LABEL
-     fallback stays dead code for edge under IMG-002's color-labeling path
+  -> every emitted point already on-field (structural, same as Organic)
   -> S-200 infill (if options.mixedOptions set): generateMixedSizeInfillPoints() called with the same
      {seed, spread, edgeThinning} via samplerOptions -- same seed, different (smaller) pitch, same
      structural on-field guarantee
@@ -246,7 +248,7 @@ stats, exactly like every other Studio control's live-regeneration path.
 * `#imageStudioGroupCheckFix`/`Brightness` — IMG-005/IMG-006 placeholders, stay closed and inert.
 * `src/gallery/RhsFixtureBridge.js`'s `generateImageStonesForLayer()` (`:483`-`:504`) — it does not
   forward `seed`/`spread` today (`docs/specifications/IMG-003-OrganicPlacement.md`, Out of Scope), and
-  gains no forwarding of `edgeWidthMm`/`edgeThinning`/`edgeThinning` either, the same omission for the
+  gains no forwarding of `edgeWidthMm`/`edgeThinning` either, the same omission for the
   same reason: `.rhs` fixtures only need `'edge'` to be a *valid* `fillMode` for schema validation, and a
   fixture using it falls back to `generateImageLayout()`'s own defaults (6mm / thinning 1).
 * Any project-schema version bump or `validateProject()` change — see decision 6.
@@ -266,7 +268,7 @@ stats, exactly like every other Studio control's live-regeneration path.
   `sampleFieldByMode()` (`:1838`) gains an `'edge'` case dispatching to it, beside the existing `'organic'`
   case (`:1843`).
 * `src/geometry/index.js` — `sampleEdgeFieldFillPoints` joins the `StoneSampler.js` re-export list
-  `sampleOrganicFieldFillPoints` already sits in (`:74` neighborhood).
+  `sampleOrganicFieldFillPoints` already sits in (`:44`).
 * `src/geometry/GeometryEngine.js` — `IMAGE_SAMPLE_MODES` (`:56`) gains `'edge'`; `normalizeImageParams()`
   (`:2257`) gains `edgeWidthMm`/`edgeThinning` beside `seed`/`spread` (`:2327`-`:2328` neighborhood);
   `generateImageLayout()` converts `edgeWidthMm` to `edgeBandPx` at its `prepareImageField()` call site
@@ -275,9 +277,9 @@ stats, exactly like every other Studio control's live-regeneration path.
   `resolveImageEdgeThinning()` beside `resolveImageSeed()`/`resolveImageSpread()` (`:700`-`:701`
   neighborhood); sync at `:2461` and readback at `:2614` gain `edgeWidthMm`/`edgeThinning`;
   `HISTORY_TRACKED_CONTROL_IDS` (`:4751`) gains `imgEdgeWidth`/`imgEdgeThinning`;
-  `IMAGE_STUDIO_LIVE_GROUP_IDS` (`:6080`) is unchanged (`imageStudioGroupEdges` already needs no new
-  container entry — it is filled in, not newly listed, since the group itself already renders once
-  `renderImageStudio()` stops treating it as an inert placeholder); the enable/disable block
+  `IMAGE_STUDIO_LIVE_GROUP_IDS` (`:6080`) gains `imageStudioGroupEdges`, exactly as
+  `imageStudioGroupOrganic` was added in IMG-003 — without it the group stays inert regardless of the
+  enable/disable block below; the enable/disable block
   (`:6102`-`:6106`) widens `isOrganic` to "organic or edge" and adds a new `isEdge` gate for the two new
   controls.
 * `index.html` — `#imageFillMode` (`:1159`) gains a sixth `<option value="edge">`;
@@ -334,9 +336,12 @@ stats, exactly like every other Studio control's live-regeneration path.
 4. Seed band: disc, 6mm, thinning 1, seeds 1–8 reproduce 113/115/117/117/117/119/111/113 exactly.
 5. The frame table (decision 8) — organic/grid/contour baselines plus all four edge cells, including the
    171/171 convergence at 6mm thinning 1 vs. thinning 2.
-6. Minimum-pairwise-distance invariant: for every accepted point in every disc cell, no other accepted
-   point lies closer than `max(rc, rNeighbour)` for their respective stored radii — checked via an
-   exhaustive pairwise scan, not sampled.
+6. Minimum-pairwise-distance invariant: since `samplePoissonDiskPoints()` returns only `{xMm, yMm}` and
+   its return shape does not change, the test recomputes each point's `rc` itself from `field.edge` at
+   that point's pixel, using the same `radiusAt` formula (`base * (1 + edgeThinning * (1 - edgeAt /
+   255))`), then checks every pair via exhaustive scan against `max(rc_i, rc_j)`. Separately, in every
+   disc cell, asserts the observed minimum pairwise distance is `>= pitch`, matching the table's last
+   column.
 7. Zero off-field stones: every accepted point's own pixel is at/above `FIELD_ON_THRESHOLD`, checked via a
    local copy of `fieldPixelOn()`'s lookup convention, across the disc and frame fixtures.
 8. `edgeChannel()`'s monotonic-deque max filter equals a naive O(`width*height*radius²`) max filter at
