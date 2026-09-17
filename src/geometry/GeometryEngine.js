@@ -53,7 +53,9 @@ const SAMPLE_MODES = new Set(['outline', 'fill', 'staggered', 'radial', 'contour
 // normalizeImageParams() below and generateImageLayout()'s doc comment.
 // IMG-003: 'organic' is a fifth image-only mode -- a Bridson Poisson-disk sample, still no vector
 // perimeter to walk, so it joins this set (not SAMPLE_MODES above).
-const IMAGE_SAMPLE_MODES = new Set(['fill', 'staggered', 'radial', 'contour', 'organic']);
+// IMG-004: 'edge' is a sixth image-only mode, reusing the same generalized Poisson-disk sampler with
+// a per-point radius keyed to detected edges -- see docs/specifications/IMG-004-EdgeAwareness.md.
+const IMAGE_SAMPLE_MODES = new Set(['fill', 'staggered', 'radial', 'contour', 'organic', 'edge']);
 const DEFAULT_MODE = 'outline';
 // IMG-001: mirrors src/image/ImageFieldPipeline.js's own TRANSPARENT_MODES/DEFAULT_TRANSPARENT_MODE
 // -- kept as a separate, hand-matched constant here (the same "each normalizer owns its own enum"
@@ -1149,12 +1151,16 @@ export class GeometryEngine {
    * @param {number} params.heightMm Placement height.
    * @param {number} params.stoneSizeMm
    * @param {number} [params.gapMm]
-   * @param {'fill'|'staggered'|'radial'|'contour'} [params.mode] Default 'fill' -- a raster density
-   *   field has no vector perimeter, so 'outline' is not supported (see RS-1011).
+   * @param {'fill'|'staggered'|'radial'|'contour'|'organic'|'edge'} [params.mode] Default 'fill' -- a
+   *   raster density field has no vector perimeter, so 'outline' is not supported (see RS-1011).
    * @param {string} [params.color]
    * @param {number} [params.threshold] 0-255, default 128.
    * @param {boolean} [params.invert]
    * @param {number} [params.blurRadiusPx]
+   * @param {number} [params.edgeWidthMm] IMG-004: edge band width in mm, > 0, default 6. Converted
+   *   to `edgeBandPx` for prepareImageField(); read only by the 'edge' mode.
+   * @param {number} [params.edgeThinning] IMG-004: interior thinning multiplier, >= 0, default 1;
+   *   read only by the 'edge' mode.
    * @param {number} params.maxWidthPx
    * @param {number} params.maxHeightPx
    * @param {'white'|'ignore'} [params.transparent] Default 'white' (IMG-001) -- 'white' flattens
@@ -1173,10 +1179,12 @@ export class GeometryEngine {
   generateImageLayout(params = {}) {
     const options = normalizeImageParams(params);
 
+    const edgeBandPx = Math.round(options.edgeWidthMm * options.maxWidthPx / options.widthMm);
     const field = prepareImageField(options.imageBuffer, {
       threshold: options.threshold,
       invert: options.invert,
       blurRadiusPx: options.blurRadiusPx,
+      edgeBandPx,
       maxWidthPx: options.maxWidthPx,
       maxHeightPx: options.maxHeightPx,
       transparent: options.transparent,
@@ -1186,7 +1194,7 @@ export class GeometryEngine {
 
     const placement = { xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm };
     const spacingMm = options.stoneSizeMm + options.gapMm;
-    const points = sampleFieldByMode(options.mode, field, placement, spacingMm, options.stoneSizeMm, { seed: options.seed, spread: options.spread });
+    const points = sampleFieldByMode(options.mode, field, placement, spacingMm, options.stoneSizeMm, { seed: options.seed, spread: options.spread, edgeThinning: options.edgeThinning });
 
     // IMG-002: the label lookup only ever runs when a quantized palette is actually in play -- every
     // colorCount:1 (or omitted) call, and every pre-IMG-002 saved image layer, skips it entirely and
@@ -1224,7 +1232,7 @@ export class GeometryEngine {
         mixedOptions: options.mixedOptions,
         gapMm: options.gapMm,
         baseStones: stones,
-        samplerOptions: { seed: options.seed, spread: options.spread }
+        samplerOptions: { seed: options.seed, spread: options.spread, edgeThinning: options.edgeThinning }
       });
       const startIndex = stones.length;
       const infillStones = infillPoints.map((point, i) => new Stone({
@@ -2326,6 +2334,11 @@ function normalizeImageParams(params) {
     // throwing, matching every other optional layer field this method defaults this way.
     seed: Number.isInteger(params.seed) && params.seed >= 0 ? params.seed : 1,
     spread: typeof params.spread === 'number' && Number.isFinite(params.spread) && params.spread >= 1 ? params.spread : 1,
+    // IMG-004: read-site permissive defaults, the same precedent seed/spread (IMG-003) already
+    // established -- no validateProject() change, no project version bump. Invalid values
+    // (non-positive edgeWidthMm, negative edgeThinning) fall back to 6/1.
+    edgeWidthMm: typeof params.edgeWidthMm === 'number' && Number.isFinite(params.edgeWidthMm) && params.edgeWidthMm > 0 ? params.edgeWidthMm : 6,
+    edgeThinning: typeof params.edgeThinning === 'number' && Number.isFinite(params.edgeThinning) && params.edgeThinning >= 0 ? params.edgeThinning : 1,
     // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.
     ...normalizeMixedSizeParams(params, stoneSizeMm)
   };

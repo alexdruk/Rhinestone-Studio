@@ -3,7 +3,10 @@
  *
  * Runs the documented pipeline's bitmap-processing stages in order — grayscale -> threshold ->
  * optional invert -> optional transparency mask -> optional blur -> optional resize — and returns
- * the resulting multi-channel field ({widthPx, heightPx, data, luminance, alpha, labels}). This
+ * the resulting multi-channel field ({widthPx, heightPx, data, luminance, alpha, edge, labels}).
+ * `edge` (IMG-004) is the Sobel-magnitude edge channel of `data` at working resolution, computed
+ * unconditionally via src/image/Edge.js's edgeChannel(); it is read only by the 'edge' image sample
+ * mode. This
  * module never constructs a Stone or StoneLayout and never imports src/geometry/**: it prepares
  * image-derived input only, mirroring how src/svg/** only produces neutral Contours. The permanent
  * src/geometry/GeometryEngine.js (generateImageLayout()) is the only caller that turns this field
@@ -17,6 +20,7 @@ import { toGrayscale } from './Grayscale.js';
 import { applyThreshold, THRESHOLD_MIN, THRESHOLD_MAX, DEFAULT_THRESHOLD } from './Threshold.js';
 import { invertMask } from './Invert.js';
 import { blurMask } from './Blur.js';
+import { edgeChannel } from './Edge.js';
 import { resizeField } from './Resize.js';
 import { extractAlphaChannel, toCoverageMask, ALPHA_COVERAGE_THRESHOLD } from './Alpha.js';
 import { createField } from './ImageBuffer.js';
@@ -49,6 +53,11 @@ function normalizeParams(params) {
     throw new RangeError('blurRadiusPx must be a non-negative integer.');
   }
 
+  const edgeBandPx = params.edgeBandPx ?? 0;
+  if (!Number.isInteger(edgeBandPx) || edgeBandPx < 0) {
+    throw new RangeError('edgeBandPx must be a non-negative integer.');
+  }
+
   const maxWidthPx = Math.round(assertPositiveNumber(params.maxWidthPx, 'maxWidthPx'));
   const maxHeightPx = Math.round(assertPositiveNumber(params.maxHeightPx, 'maxHeightPx'));
 
@@ -71,7 +80,7 @@ function normalizeParams(params) {
     palette = params.palette;
   }
 
-  return { threshold, invert, blurRadiusPx, maxWidthPx, maxHeightPx, transparent, colorCount, palette };
+  return { threshold, invert, blurRadiusPx, edgeBandPx, maxWidthPx, maxHeightPx, transparent, colorCount, palette };
 }
 
 // IMG-001: forces every pixel whose native-resolution alpha is below the coverage threshold to 0
@@ -110,17 +119,20 @@ function compositeChannelOntoWhite(imageBuffer, channelOffset) {
  * @param {number} [params.threshold] 0-255, default 128.
  * @param {boolean} [params.invert]
  * @param {number} [params.blurRadiusPx]
+ * @param {number} [params.edgeBandPx] Non-negative integer, default 0. Band radius (px) for the
+ *   IMG-004 `edge` channel's max filter; 0 returns the raw Sobel magnitude.
  * @param {number} params.maxWidthPx
  * @param {number} params.maxHeightPx
  * @param {'white'|'ignore'} [params.transparent] Default 'white' -- see IMG-001-ImageToStrass.md.
  * @param {number} [params.colorCount] Integer 1-8, default 1. >1 runs the IMG-002 quantizer.
  * @param {{id: string, hex: string}[]} [params.palette] Required when colorCount > 1.
  * @returns {{widthPx: number, heightPx: number, data: Uint8ClampedArray, luminance:
- *   Uint8ClampedArray, alpha: Uint8ClampedArray, labels: (Uint8ClampedArray|null), colorGroups?:
- *   {rgb: number[], pixelShare: number, nearestId: string}[]}} the resulting multi-channel field.
- *   data/luminance/alpha/labels all share the returned widthPx/heightPx. `colorGroups` is present
- *   only when colorCount > 1 (and therefore labels is non-null); `colorCount` omitted or 1 returns
- *   exactly the six IMG-001 keys, `colorGroups` absent.
+ *   Uint8ClampedArray, alpha: Uint8ClampedArray, edge: Uint8ClampedArray, labels:
+ *   (Uint8ClampedArray|null), colorGroups?: {rgb: number[], pixelShare: number, nearestId: string}[]}}
+ *   the resulting multi-channel field. data/luminance/alpha/edge/labels all share the returned
+ *   widthPx/heightPx. `colorGroups` is present only when colorCount > 1 (and therefore labels is
+ *   non-null); `colorCount` omitted or 1 returns exactly the seven IMG-001/IMG-004 keys,
+ *   `colorGroups` absent.
  */
 export function prepareImageField(imageBuffer, params = {}) {
   const options = normalizeParams(params);
@@ -140,6 +152,7 @@ export function prepareImageField(imageBuffer, params = {}) {
 
   const luminance = resizeField(luminanceNative, options.maxWidthPx, options.maxHeightPx);
   const alpha = toCoverageMask(resizeField(alphaNative, options.maxWidthPx, options.maxHeightPx));
+  const edge = edgeChannel(data, options.edgeBandPx);
 
   const field = {
     widthPx: data.widthPx,
@@ -147,6 +160,7 @@ export function prepareImageField(imageBuffer, params = {}) {
     data: data.data,
     luminance: luminance.data,
     alpha: alpha.data,
+    edge: edge.data,
     labels: null
   };
 

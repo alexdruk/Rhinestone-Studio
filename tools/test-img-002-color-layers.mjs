@@ -135,10 +135,12 @@ await test('2. region-correct labels: three flat color regions each get one cons
   assert.equal(new Set([redLabel, greenLabel, blueLabel]).size, 3, 'expected three distinct region labels');
 });
 
-await test('3. colorCount omitted: labels stays null and the field keeps exactly IMG-001\'s six-key shape (colorGroups absent)', () => {
+await test('3. colorCount omitted: labels stays null and the field keeps exactly the seven-key IMG-001/IMG-004 shape (colorGroups absent)', () => {
   const buffer = threeRegionTransparentQuadrantBuffer();
   const field = prepareImageField(buffer, { threshold: 128, maxWidthPx: 4, maxHeightPx: 4, transparent: 'ignore' });
-  assert.deepEqual(new Set(Object.keys(field)), new Set(['widthPx', 'heightPx', 'data', 'luminance', 'alpha', 'labels']));
+  // IMG-004: field.edge is computed unconditionally alongside data/luminance/alpha -- see
+  // docs/specifications/IMG-004-EdgeAwareness.md decision 4.
+  assert.deepEqual(new Set(Object.keys(field)), new Set(['widthPx', 'heightPx', 'data', 'luminance', 'alpha', 'edge', 'labels']));
   assert.equal(field.labels, null);
 });
 

@@ -33,6 +33,16 @@ const MAX_ATTEMPTS = 30;
  * this implements (candidate test order, active-point selection, the island re-seed scan, and why
  * each of those choices is pinned rather than left to the implementer).
  *
+ * Variable-radius mode (IMG-004, decision 2): when `radiusAt(localXMm, localYMm) -> number` is
+ * supplied (with a required `maxRadiusMm` upper bound), each accepted point stores its own radius
+ * instead of sharing one module-wide radius. Acceptance rejects a candidate when its distance to a
+ * neighbour is below the *larger* of the candidate's own intended radius and the neighbour's
+ * already-committed radius, and the neighbourhood search widens to `ceil(maxRadiusMm / cell)` cells
+ * so a neighbour with a large stored radius is never missed. The active-point annulus draw uses the
+ * active point's own stored radius rather than a single shared one. With `radiusAt` omitted, every
+ * one of these reduces to exactly the original fixed-radius arithmetic -- one radius, a 2-cell
+ * reach, `d = r * (1 + rand())` -- so this is a strict generalization, not a new code path.
+ *
  * @param {object} args
  * @param {(localXMm: number, localYMm: number) => boolean} args.insideAt
  * @param {number} args.widthMm Placement box width (must be positive).
@@ -40,24 +50,42 @@ const MAX_ATTEMPTS = 30;
  * @param {number} args.spacingMm Minimum center distance floor before `spread` is applied (must be positive).
  * @param {number} [args.seed] Integer PRNG seed. Default 1.
  * @param {number} [args.spread] Multiplier >= 1 widening the minimum center distance. Default 1.
+ * @param {(localXMm: number, localYMm: number) => number} [args.radiusAt] Per-point radius function.
+ *   When given, `maxRadiusMm` is required. Default null (fixed radius `spacingMm * max(1, spread)`).
+ * @param {number} [args.maxRadiusMm] Upper bound on `radiusAt`'s output. Required when `radiusAt` is given.
  * @returns {{xMm: number, yMm: number}[]} Accepted points, in acceptance order, local mm.
  */
-export function samplePoissonDiskPoints({ insideAt, widthMm, heightMm, spacingMm, seed = 1, spread = 1 }) {
+export function samplePoissonDiskPoints({
+  insideAt,
+  widthMm,
+  heightMm,
+  spacingMm,
+  seed = 1,
+  spread = 1,
+  radiusAt = null,
+  maxRadiusMm = null
+}) {
   if (spacingMm <= 0) {
     throw new RangeError('samplePoissonDiskPoints requires a positive spacingMm.');
+  }
+  if (radiusAt && !(maxRadiusMm > 0)) {
+    throw new RangeError('samplePoissonDiskPoints requires a positive maxRadiusMm when radiusAt is given.');
   }
   if (widthMm <= 0 || heightMm <= 0) {
     return [];
   }
 
   const rand = mulberry32(seed);
-  const r = spacingMm * Math.max(1, spread);
-  const cell = r / Math.sqrt(2);
+  const rMin = spacingMm * Math.max(1, spread);
+  const rTop = radiusAt ? maxRadiusMm : rMin;
+  const cell = rMin / Math.sqrt(2);
+  const reach = Math.ceil(rTop / cell);
   const cols = Math.ceil(widthMm / cell);
   const rows = Math.ceil(heightMm / cell);
   const grid = new Int32Array(cols * rows).fill(-1);
 
   const points = [];
+  const radii = [];
   const active = [];
 
   const cellOf = (x, y) => [
@@ -65,12 +93,12 @@ export function samplePoissonDiskPoints({ insideAt, widthMm, heightMm, spacingMm
     Math.min(rows - 1, Math.floor(y / cell))
   ];
 
-  const farEnough = (x, y) => {
+  const farEnough = (x, y, rc) => {
     const [cx, cy] = cellOf(x, y);
-    const minGx = Math.max(0, cx - 2);
-    const maxGx = Math.min(cols - 1, cx + 2);
-    const minGy = Math.max(0, cy - 2);
-    const maxGy = Math.min(rows - 1, cy + 2);
+    const minGx = Math.max(0, cx - reach);
+    const maxGx = Math.min(cols - 1, cx + reach);
+    const minGy = Math.max(0, cy - reach);
+    const maxGy = Math.min(rows - 1, cy + reach);
     for (let gy = minGy; gy <= maxGy; gy++) {
       for (let gx = minGx; gx <= maxGx; gx++) {
         const pointIndex = grid[gy * cols + gx];
@@ -78,7 +106,8 @@ export function samplePoissonDiskPoints({ insideAt, widthMm, heightMm, spacingMm
         const p = points[pointIndex];
         const dx = p.xMm - x;
         const dy = p.yMm - y;
-        if (dx * dx + dy * dy < r * r) return false;
+        const rr = Math.max(rc, radii[pointIndex]);
+        if (dx * dx + dy * dy < rr * rr) return false;
       }
     }
     return true;
@@ -87,9 +116,11 @@ export function samplePoissonDiskPoints({ insideAt, widthMm, heightMm, spacingMm
   const tryAccept = (x, y) => {
     if (!(x >= 0 && y >= 0 && x <= widthMm && y <= heightMm)) return false;
     if (!insideAt(x, y)) return false;
-    if (!farEnough(x, y)) return false;
+    const rc = radiusAt ? radiusAt(x, y) : rMin;
+    if (!farEnough(x, y, rc)) return false;
     const index = points.length;
     points.push({ xMm: x, yMm: y });
+    radii.push(rc);
     const [cx, cy] = cellOf(x, y);
     grid[cy * cols + cx] = index;
     active.push(index);
@@ -102,10 +133,11 @@ export function samplePoissonDiskPoints({ insideAt, widthMm, heightMm, spacingMm
     while (active.length > 0) {
       const ai = Math.floor(rand() * active.length);
       const p = points[active[ai]];
+      const rp = radii[active[ai]];
       let accepted = false;
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         const ang = rand() * 2 * Math.PI;
-        const d = r * (1 + rand());
+        const d = rp * (1 + rand());
         const x = p.xMm + d * Math.cos(ang);
         const y = p.yMm + d * Math.sin(ang);
         if (tryAccept(x, y)) {
