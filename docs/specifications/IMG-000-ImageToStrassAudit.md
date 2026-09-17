@@ -23,7 +23,11 @@ clone. For each, it states whether the function is reused as-is, extended, or by
   IMG-001's multi-channel field (below) is additive and changes no sampler behavior. IMG-002/IMG-006
   will build additional single-channel fields (per-color masks, a size-selector field) and pass them
   through this same dispatcher/sampler family — no new sampler is anticipated before IMG-004 (edge
-  awareness), which may need a fifth, edge-weighted sampler as new code.
+  awareness), which may need a fifth, edge-weighted sampler as new code. **IMG-003 specifies a fifth
+  sampler ahead of that framing** (`docs/specifications/IMG-003-OrganicPlacement.md`) — a Bridson
+  Poisson-disk `'organic'` mode, scoped to image-only placement, not the vector-shape `SAMPLE_MODES`
+  set this audit's samplers also serve — so IMG-004's own "may need a fifth, edge-weighted sampler"
+  framing (`IMG-001-ImageToStrass.md` roadmap item 4) is now about a sixth.
 
 ## Overlap and dedup
 
