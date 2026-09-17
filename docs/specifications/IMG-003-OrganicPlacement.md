@@ -35,13 +35,17 @@ change, no `StoneLayout`/`Stone` schema change — an organic-mode image layer's
    splits from `StoneSampler.js`.** The pure geometry generator lives in a new sibling module,
    `src/geometry/OrganicSampler.js`, exporting:
    ```js
-   samplePoissonDiskPoints({ insideAt, widthMm, heightMm, spacingMm, stoneSizeMm = spacingMm, seed = 1, spread = 1 })
+   samplePoissonDiskPoints({ insideAt, widthMm, heightMm, spacingMm, seed = 1, spread = 1 })
    ```
    working in LOCAL mm (0,0-rooted) — the same convention `computeInwardRingPolygons({ insideAt,
    boundingBox, spacingMm, startOffsetMm })` already uses for its own `boundingBox: { minXmm: 0,
    minYmm: 0, maxXmm: widthMm, maxYmm: heightMm }` contract (`src/geometry/StoneSampler.js:1768`).
    `insideAt(localXMm, localYMm) -> boolean` is supplied by the caller — `samplePoissonDiskPoints()`
-   never reads `field.data` and carries no `FIELD_ON_THRESHOLD` of its own.
+   never reads `field.data` and carries no `FIELD_ON_THRESHOLD` of its own. It takes no `stoneSizeMm`:
+   the algorithm never reads it — the only spacing floor is `r = spacingMm * max(1, spread)` (below),
+   and there is deliberately no `dedupeStonePoints()` pass, which is the one place
+   `sampleRadialFieldFillPoints()`/`sampleContourFieldFillPoints()` actually use their own
+   `stoneSizeMm` (`src/geometry/StoneSampler.js:1738`/`:1787`).
 
    The field-aware counterpart, `sampleOrganicFieldFillPoints(field, placement, spacingMm, stoneSizeMm,
    {seed, spread})`, is exported from `src/geometry/StoneSampler.js` itself (not `OrganicSampler.js`)
@@ -49,19 +53,24 @@ change, no `StoneLayout`/`Stone` schema change — an organic-mode image layer's
    `const insideAt = (localXMm, localYMm) => fieldPixelOn(field, localXMm, localYMm, widthMm,
    heightMm);` — read verbatim from `sampleContourFieldFillPoints()`'s own identical construction just
    above its `computeInwardRingPolygons()` call (`src/geometry/StoneSampler.js:1767`) — calls
-   `samplePoissonDiskPoints({ insideAt, widthMm, heightMm, spacingMm, stoneSizeMm, seed, spread })`,
-   then offsets each returned local point by `placement.xMm`/`placement.yMm` before returning, the
-   same way `sampleContourFieldFillPoints()` offsets each ring
+   `samplePoissonDiskPoints({ insideAt, widthMm, heightMm, spacingMm, seed, spread })`, then offsets
+   each returned local point by `placement.xMm`/`placement.yMm` before returning, the same way
+   `sampleContourFieldFillPoints()` offsets each ring
    (`const placedRing = ring.map((p) => ({ xMm: xMm + p.xMm, yMm: yMm + p.yMm }));`, `:1776`).
+   `sampleOrganicFieldFillPoints()` keeps `stoneSizeMm` in its own parameter list only for dispatcher-
+   signature symmetry — `sampleFieldByMode()` passes `stoneSizeMm` positionally to every mode — and
+   deliberately does **not** forward it to `samplePoissonDiskPoints()`. This is written out so a later
+   reader does not "fix" the wrapper by threading a parameter the sampler has no use for.
 
-   `samplePoissonDiskPoints()` is re-exported from `src/geometry/index.js` beside the
-   `ContourRingSampler.js` block (`:69`) — the same "nothing else in `src/**`" ownership
-   `docs/ARCHITECTURE.md`'s new row (beside `:749`) records, naming `StoneSampler.js` as its only
-   caller; `sampleOrganicFieldFillPoints()` joins the existing `StoneSampler.js` re-export list
-   `sampleContourFieldFillPoints` already sits in. This deliberately avoids a third hand-matched
-   `FIELD_ON_THRESHOLD` copy across the `src/image`/`src/geometry` boundary —
-   `docs/specifications/IMG-002-ColorLayers.md`'s "Files Touched" section already records why there
-   are exactly two such copies today (`StoneSampler.js`'s own `FIELD_ON_THRESHOLD` and
+   `samplePoissonDiskPoints()` will be re-exported from `src/geometry/index.js` beside the
+   `ContourRingSampler.js` block (`:69`) — the same "nothing else in `src/**`" ownership the
+   implementation step's own `docs/ARCHITECTURE.md` module-table row will record (beside `:749`; see
+   Files Touched for why that row does not land in this spec-authoring commit), naming
+   `StoneSampler.js` as its only caller; `sampleOrganicFieldFillPoints()` will join the existing
+   `StoneSampler.js` re-export list `sampleContourFieldFillPoints` already sits in. This deliberately
+   avoids a third hand-matched `FIELD_ON_THRESHOLD` copy across the `src/image`/`src/geometry`
+   boundary — `docs/specifications/IMG-002-ColorLayers.md`'s "Files Touched" section already records
+   why there are exactly two such copies today (`StoneSampler.js`'s own `FIELD_ON_THRESHOLD` and
    `src/image/ColorQuantize.js`'s hand-matched copy of it), not three; a design that had
    `samplePoissonDiskPoints()` take `field` directly and test pixels itself would have needed its own
    third copy of that threshold, with no test pinning it the way the existing two are pinned. Taking
@@ -297,9 +306,11 @@ GeometryEngine.generateImageLayout({..., mode: 'organic', seed, spread})
             -> builds insideAt(localXMm, localYMm) from the module-private fieldPixelOn(), exactly
                as sampleContourFieldFillPoints() already does for computeInwardRingPolygons()
             -> delegates to OrganicSampler.js's samplePoissonDiskPoints({insideAt, widthMm,
-               heightMm, spacingMm, stoneSizeMm, seed, spread}) (new module; imported by
-               StoneSampler.js only) -- pure Bridson Poisson-disk sample in local mm, on-field by
-               construction via insideAt at every acceptance, never a post-hoc prune -- see decision 2
+               heightMm, spacingMm, seed, spread}) -- no stoneSizeMm; the wrapper accepts it only
+               for dispatcher-signature symmetry and does not forward it, see decision 2 -- (new
+               module; imported by StoneSampler.js only) -- pure Bridson Poisson-disk sample in
+               local mm, on-field by construction via insideAt at every acceptance, never a
+               post-hoc prune
             -> offsets the returned local points by placement.xMm/yMm before returning
   -> every emitted point already on-field -> fieldLabelAt()'s NO_LABEL fallback (IMG-002 color
      labeling) stays dead code for organic, same as Fill/Staggered/Radial
@@ -336,7 +347,7 @@ every other Studio control's live-regeneration path.
   `docs/BACKLOG.md`'s "Deferred technical follow-ups" table, naming IMG-003 as the origin and IMG-006
   as where it gets decided.
 * `src/gallery/RhsFixtureBridge.js`'s fixture-rendering helper, `generateImageStonesForLayer()`
-  (`:485`-`:502`) — it does not forward `seed`/`spread` into `generateImageLayout()`'s params, the same
+  (`:483`-`:504`) — it does not forward `seed`/`spread` into `generateImageLayout()`'s params, the same
   omission that already exists there for IMG-002's `colorCount`/`palette`/`colorMap` (none of those
   three appear anywhere in `src/gallery/RhsFixtureBridge.js` either — grep-confirmed). `.rhs` fixtures
   only need `'organic'` to be a *valid* `fillMode` value for schema validation; a fixture rendered
@@ -347,8 +358,8 @@ every other Studio control's live-regeneration path.
 ## Files Touched
 
 * `src/geometry/OrganicSampler.js` (new) — `samplePoissonDiskPoints({insideAt, widthMm, heightMm,
-  spacingMm, stoneSizeMm, seed, spread})`, local-mm, field-agnostic; private `mulberry32()` copy; no
-  `src/renderer`/`src/image` imports.
+  spacingMm, seed, spread})` (no `stoneSizeMm` — see decision 2), local-mm, field-agnostic; private
+  `mulberry32()` copy; no `src/renderer`/`src/image` imports.
 * `src/geometry/StoneSampler.js` — imports `samplePoissonDiskPoints` from `OrganicSampler.js` (`:10`
   neighborhood, beside the existing `ContourRingSampler.js` import); gains its own new exported
   `sampleOrganicFieldFillPoints(field, placement, spacingMm, stoneSizeMm, {seed, spread})`, the
@@ -365,12 +376,13 @@ every other Studio control's live-regeneration path.
 * `src/geometry/MixedSizeGenerator.js` — `generateMixedSizeInfillPoints()` (`:228`) gains the optional
   `samplerOptions` argument, forwarded at its `sampleFieldByMode()` call site (`:237`) with `pitchMm`
   now passed explicitly as the fifth argument.
-* `docs/ARCHITECTURE.md` — new module-table row for `src/geometry/OrganicSampler.js`, beside the
-  existing `ContourRingSampler.js` row (`:749`), added in this spec-authoring step and explicitly
-  marked "specified, not yet implemented" — this document's own header states it reflects "the actual
-  state of the implementation," and `src/geometry/OrganicSampler.js` does not exist in code yet, so
-  the row is worded as a forward reference rather than a normal entry; it should be reworded to a
-  normal, unmarked row (or simply confirmed unchanged) once the file actually lands.
+* `docs/ARCHITECTURE.md` — **not touched by this spec-authoring commit.** The implementation step
+  (once `src/geometry/OrganicSampler.js` actually exists) adds a normal, unmarked module-table row
+  beside the existing `ContourRingSampler.js` row (`:749`), with the same "nothing else in `src/**`"
+  ownership statement, naming `StoneSampler.js` as its only caller — this document's own header states
+  it reflects "the actual state of the implementation," so a row for code that does not exist yet does
+  not belong here even labeled as a forward reference; adding one was tried and reverted in this
+  branch's history (see `docs/ARCHITECTURE.md`'s untouched state at `develop@3878f65`).
 * `src/gallery/RhsFixtureBridge.js` — `SUPPORTED_IMAGE_FILL_MODES` (`:49`) gains `'organic'`; its check
   (`:228`) and `resolveImageFillMode()` (`:530`) need no other change (the check and resolver both work
   against the set by reference).
