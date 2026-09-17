@@ -701,7 +701,10 @@ function resolveImageTransparentMode(value){return IMAGE_TRANSPARENT_MODES.has(v
 // against -- built once from STONE_COLORS (the same re-exported CRYSTAL_COLORS catalog data
 // populateStoneColorOptions() already crosses the src/renderer -> app.js boundary with), in the
 // same catalog order. src/image/** and src/geometry/** never see CrystalColors.js directly.
-const IMAGE_COLOR_PALETTE=Object.values(STONE_COLORS).map(c=>({id:c.id,hex:c.previewColor}));
+// Constants in this region of app.js must not evaluate imports at load time, because several test
+// harnesses new Function()-evaluate this span.
+let imageColorPaletteCache=null;
+function imageColorPalette(){if(!imageColorPaletteCache)imageColorPaletteCache=Object.values(STONE_COLORS).map(c=>({id:c.id,hex:c.previewColor}));return imageColorPaletteCache}
 // IMG-002: recomputes the quantized color field (labels + colorGroups) for an image layer, purely
 // from its own already-cached decoded buffer and its own stored params -- deterministic, so this is
 // safe to call both when populating the Studio's Colours rows/view (renderImageStudio()) and when
@@ -730,7 +733,7 @@ function computeImageColorField(layer){
   const key=[layer.imageSrc,layer.threshold,layer.invert,layer.blurRadiusPx,layer.maxWidthPx,layer.maxHeightPx,transparent,layer.colorCount].join('|');
   const cached=imageColorFieldCache.get(key);
   if(cached)return cached;
-  const field=prepareImageField(buffer,{threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent,colorCount:layer.colorCount,palette:IMAGE_COLOR_PALETTE});
+  const field=prepareImageField(buffer,{threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent,colorCount:layer.colorCount,palette:imageColorPalette()});
   imageColorFieldCache.set(key,field);
   if(imageColorFieldCache.size>2)imageColorFieldCache.delete(imageColorFieldCache.keys().next().value);
   return field;
@@ -978,9 +981,9 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // canvas, exports, Production Sheet), so it must carry the same quantized-color params
  // renderImageStudio()'s own preview-only prepareImageField() calls use, or Studio Colours edits
  // would only ever affect the Studio's own preview, never the actual production layout. palette is
- // IMAGE_COLOR_PALETTE unconditionally (cheap to pass even when colorCount is 1, where the engine
+ // imageColorPalette() unconditionally (cheap to pass even when colorCount is 1, where the engine
  // never reads it).
- async generateImageStonesLive(layer,{includeStats=false}={}){if(!this.permanentEngine||!layer.imageSrc)return includeStats?{stones:[],outlineStats:null}:[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveImageFillMode(layer.fillMode),color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),colorCount:layer.colorCount??1,palette:IMAGE_COLOR_PALETTE,colorMap:layer.colorMap??{},...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null}:stones}
+ async generateImageStonesLive(layer,{includeStats=false}={}){if(!this.permanentEngine||!layer.imageSrc)return includeStats?{stones:[],outlineStats:null}:[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveImageFillMode(layer.fillMode),color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),colorCount:layer.colorCount??1,palette:imageColorPalette(),colorMap:layer.colorMap??{},...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null}:stones}
  // RS-1012: 'path' layers (Boolean Operation results) go through the permanent engine's
  // generatePathLayout(), mirroring generateSvgStonesLive()/generateShapeStonesLive() above --
  // layer.contours is already plain (0,0)-rooted polygon data (no parsing step, unlike SVG).
