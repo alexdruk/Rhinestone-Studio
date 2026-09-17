@@ -120,6 +120,7 @@ export const GROUPS = {
     // (which makes grep/git treat the file as binary). A permanent codebase-level rule, same
     // category as the module-boundary guards above.
     'test-source-hygiene.mjs',
+    'test-browser-baseline.mjs',
   ],
   // Gallery is disabled in the public UI, but its catalog/wiring logic is still protected — both
   // files here already run as part of core/integration, so this group is a complete,
@@ -417,6 +418,7 @@ export const GROUPS = {
   fast: [
     'test-architecture-module-boundaries.mjs',
     'test-browser-dependency-loading.mjs',
+    'test-browser-baseline.mjs',
     'test-module-graph-exports.mjs',
     'test-project-model-consolidation.mjs',
     'test-geometry-engine.mjs',

@@ -1,10 +1,10 @@
 /**
  * Round Dinner Plate product definition (S-112).
  *
- * The approved product-definition input (plate-round-dinner.json, kept verbatim under
+ * The approved product-definition input (plate-round-dinner.js, kept verbatim under
  * src/products/definitions/) is the single source of truth for plate dimension ranges/defaults,
  * color options, and design-target metadata -- per docs/ARCHITECTURE.md's "Product Plugins"
- * principle, this module only turns that JSON into small, validated, plain-data helpers. It never
+ * principle, this module only turns that data into small, validated, plain-data helpers. It never
  * generates a StoneLayout and has no dependency on GeometryEngine/StoneLayout/the DOM/Three.js --
  * the same "pure data + validation" contract src/products/ObjectTemplate.js already follows.
  *
@@ -13,7 +13,7 @@
  * into plain dimensions; src/preview3d/ObjectGeometryBuilder.js revolves those dimensions into a
  * THREE.LatheGeometry profile. Nothing here decides how the plate is rendered.
  */
-import PLATE_ROUND_DINNER_DEFINITION from './definitions/plate-round-dinner.json' with { type: 'json' };
+import PLATE_ROUND_DINNER_DEFINITION from './definitions/plate-round-dinner.js';
 
 export { PLATE_ROUND_DINNER_DEFINITION };
 

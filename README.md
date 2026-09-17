@@ -62,6 +62,29 @@ npm run dev
 # open http://localhost:5173
 ```
 
+### Supported browsers
+
+Chrome 103+ (see `docs/specifications/MAINT-007-BrowserBaseline.md` for the
+minimum-baseline rationale and what it covers).
+
+### Older Macs (e.g. macOS Sierra)
+
+`npm run dev` shells out to `python3`, which isn't available on some older
+macOS installs (Sierra lacks it, but ships Python 2 built in).
+
+With Node available on that Mac, run the two commands below, then open
+http://localhost:5173.
+
+```bash
+npm ci --omit=dev
+python -m SimpleHTTPServer 5173
+```
+
+Without Node on that Mac, run `npm ci --omit=dev` on another machine and
+copy the whole project folder, including `node_modules`, over to the old
+Mac. On the old Mac, run only `python -m SimpleHTTPServer 5173`, then open
+http://localhost:5173.
+
 Run the automated test suite (plain Node scripts under `tools/test-*.mjs`, no browser required):
 
 ```bash

@@ -454,7 +454,7 @@ GeometryEngine
 
 `src/products/VesselProductDefinition.js` (mirroring the Round Dinner Plate's own
 `PlateProductDefinition.js`, S-112) supplies per-product mm ranges/defaults from JSON
-(`src/products/definitions/vessel-standard-{mug,tumbler,bottle}.json`); `computeCanvasFromVessel()`
+(`src/products/definitions/vessel-standard-{mug,tumbler,bottle}.js`); `computeCanvasFromVessel()`
 is the one place `project.canvas` is derived from live vessel params, called only when a fresh
 project is created, the object type is switched, or the operator edits a vessel dimension field —
 never during project load. A legacy project (saved before RS-2010, no `project.vessel`) keeps its
