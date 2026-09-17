@@ -45,11 +45,15 @@ clone. For each, it states whether the function is reused as-is, extended, or by
   sampling diverges from union sampling under Contour (measured: 194 vs 235 stones on a two-color
   wavy boundary, with a 3.143 mm minimum cross-color center distance against a 3.3 mm pitch — see
   `IMG-002-ColorLayers.md` decision 1).
-* **`dropOverlappingSizedStones(assigned)`** — `src/geometry/StoneSampler.js:467`, called from
-  `GeometryEngine.js:257` inside its own mixed-size-assignment path. **Reused as-is** by IMG-006
-  (brightness-driven sizes): once brightness assigns a candidate size per point, this is the same
-  "assign then drop overlaps" shape IMG-006 needs — see `GeometryEngine.js:225` and its own doc
-  comment for the two-pass rationale.
+* **`dropOverlappingSizedStones(assigned)`** — `src/geometry/StoneSampler.js:583`, called from
+  `GeometryEngine.js:267` inside its own mixed-size-assignment path. **Reused as-is, but not as the
+  shaping mechanism** for IMG-006 (brightness-driven sizes): IMG-006 samples every fill mode once at
+  the *largest* candidate size's pitch and assigns each survivor a size from its own measured
+  luminance, calling this function afterward only as a safety net expected to drop nothing —
+  measured (`docs/specifications/IMG-006-BrightnessSizes.md` section 6) to differ from MONO-015's own
+  "sample small, assign, drop" shape, which leaves per-band coverage roughly constant instead of
+  graduated when applied to brightness. See `GeometryEngine.js:227`-`:279` for MONO-015's own two-pass
+  rationale.
 * **`findCrossGroupCollisions(stones)`** — `src/geometry/StoneSampler.js:529`, exported from
   `src/geometry/index.js:49`, used by `src/monogram/MonogramGenerator.js` (e.g. `:1122`, `:1504`) to
   validate collisions across independently-generated groups. **Reused as-is** by IMG-002: once each
