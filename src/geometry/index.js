@@ -46,6 +46,7 @@ export {
   sampleShapeFillPoints,
   sampleFieldByMode,
   dedupeStonePoints,
+  nudgeOrDropStonePoints,
   dedupeStonesByRadius,
   dropOverlappingSizedStones,
   findCrossGroupCollisions,

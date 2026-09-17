@@ -35,8 +35,13 @@ export class StoneLayout {
    *   computeFrozenBoxTransform()'s own trap describes. Set on EVERY text layout, edited or not
    *   (the centring fix needs it on unedited layers too, where it is identical to getBoundingBox());
    *   null for every non-text layout and every layout produced before this field existed.
+   * @param {{violationsFound: number, repaired: number, dropped: number}|null} [params.checkFixStats]
+   *   IMG-005: same-layer spacing repair accounting for a Contour/Radial image layout's base stones
+   *   -- see nudgeOrDropStonePoints() (StoneSampler.js). Additive and optional, following the exact
+   *   outlineStats precedent above: null/absent for every non-Contour/Radial image layout and every
+   *   layout produced before this field existed.
    */
-  constructor({ layerId, stones = [], sourceMode = null, outlineStats = null, baseBoundingBoxMm = null } = {}) {
+  constructor({ layerId, stones = [], sourceMode = null, outlineStats = null, baseBoundingBoxMm = null, checkFixStats = null } = {}) {
     if (typeof layerId !== 'string' || layerId.length === 0) {
       throw new TypeError('StoneLayout requires a non-empty layerId.');
     }
@@ -46,6 +51,7 @@ export class StoneLayout {
     this.stones = stones.map((stone) => (stone instanceof Stone ? stone : Stone.fromJSON(stone)));
     this.outlineStats = outlineStats;
     this.baseBoundingBoxMm = baseBoundingBoxMm;
+    this.checkFixStats = checkFixStats;
   }
 
   get count() {
@@ -96,6 +102,9 @@ export class StoneLayout {
     if (this.outlineStats) {
       json.outlineStats = { ...this.outlineStats };
     }
+    if (this.checkFixStats) {
+      json.checkFixStats = { ...this.checkFixStats };
+    }
     if (this.baseBoundingBoxMm) {
       const b = this.baseBoundingBoxMm;
       json.baseBoundingBoxMm = {
@@ -119,7 +128,8 @@ export class StoneLayout {
       sourceMode: value.sourceMode ?? null,
       stones: value.stones ?? [],
       outlineStats: value.outlineStats ?? null,
-      baseBoundingBoxMm: value.baseBoundingBoxMm ?? null
+      baseBoundingBoxMm: value.baseBoundingBoxMm ?? null,
+      checkFixStats: value.checkFixStats ?? null
     });
   }
 }

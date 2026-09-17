@@ -36,7 +36,10 @@ built on.
    `docs/specifications/IMG-004-EdgeAwareness.md`: the "new sampling code" turned out to be a
    generalization of IMG-003's own `samplePoissonDiskPoints()` (a `radiusAt` hook), not a new sampler.
 5. **IMG-005 — Check & fix.** A validation pass over a generated image layout that repairs spacing
-   violations without ever violating the manufacturing floor (see Architectural Rules).
+   violations without ever violating the manufacturing floor (see Architectural Rules). Scoped to
+   image layers only — vector Contour/Radial (shape/SVG/path/text layers) share the identical
+   `sampleShapeFillPoints()` dedupe-floor defect and are explicitly out of scope; see
+   `docs/specifications/IMG-005-CheckAndFix.md`, "Out of Scope".
 6. **IMG-006 — Brightness sizes.** Map measured per-point brightness (from IMG-001's `luminance`
    channel) to a stone size from `StoneSizes.js`'s existing catalog, assigned via the existing
    "assign then `dropOverlappingSizedStones()`" shape `GeometryEngine.js` already uses for Mixed
