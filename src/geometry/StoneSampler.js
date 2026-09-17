@@ -1563,7 +1563,9 @@ export function sampleShapeFillPoints(mode, polygons, boundingBox, spacingMm, st
 // Density field "on" (RS-1008A): a field value at/above this level counts as foreground for
 // sampleFieldFillPoints(), the same 0-255 density scale Blur.js/Threshold.js already use
 // (thresholded/uninverted 0/1 masks rescale to 0/255, so 128 is the natural midpoint cutoff).
-const FIELD_ON_THRESHOLD = 128;
+// Exported (IMG-002) so tools/test-img-002-color-layers.mjs can assert this stays equal to
+// src/image/ColorQuantize.js's own hand-matched copy of the same value.
+export const FIELD_ON_THRESHOLD = 128;
 
 /**
  * Fill a placement box with a regular grid of points spaced spacingMm apart, keeping only points
@@ -1618,6 +1620,39 @@ function fieldPixelOn(field, localXMm, localYMm, widthMm, heightMm) {
   const pixelX = Math.min(field.widthPx - 1, Math.max(0, Math.floor((localXMm / widthMm) * field.widthPx)));
   const pixelY = Math.min(field.heightPx - 1, Math.max(0, Math.floor((localYMm / heightMm) * field.heightPx)));
   return field.data[pixelY * field.widthPx + pixelX] >= FIELD_ON_THRESHOLD;
+}
+
+// IMG-002 follow-up: mirrors src/image/ColorQuantize.js's own NO_LABEL (value 255) -- exported (not
+// module-private) so GeometryEngine.js imports this copy instead of hand-declaring a third one, and
+// so tools/test-img-002-color-layers.mjs's FIELD_ON_THRESHOLD-parity case can also assert this stays
+// equal to ColorQuantize.js's copy. Two hand-matched copies across the src/image/src/geometry
+// boundary (this one and ColorQuantize.js's, StoneSampler.js has no src/image dependency and this
+// milestone adds none), both test-pinned, instead of three with one unreachable from any test.
+export const NO_LABEL = 255;
+
+/**
+ * Look up a field's per-pixel color label at an absolute (xMm, yMm) -- the exported counterpart to
+ * the module-private fieldPixelOn() above, reusing its exact clamped floor((local/extentMm)*extentPx)
+ * pixel-resolution formula so the two always agree pixel-for-pixel on which cell a coordinate falls
+ * into. Returns NO_LABEL when the resolved pixel is off-field or field.labels is null.
+ *
+ * @param {{widthPx: number, heightPx: number, labels: (Uint8ClampedArray|null)}} field
+ * @param {{xMm: number, yMm: number, widthMm: number, heightMm: number}} placement
+ * @param {number} xMm Absolute X (a Stone's own xMm).
+ * @param {number} yMm Absolute Y (a Stone's own yMm).
+ * @returns {number} The label byte (0..K-1), or NO_LABEL.
+ */
+export function fieldLabelAt(field, placement, xMm, yMm) {
+  if (!field.labels) return NO_LABEL;
+  const { xMm: placementXMm, yMm: placementYMm, widthMm, heightMm } = placement;
+  const localXMm = xMm - placementXMm;
+  const localYMm = yMm - placementYMm;
+  if (localXMm < 0 || localYMm < 0 || localXMm > widthMm || localYMm > heightMm) {
+    return NO_LABEL;
+  }
+  const pixelX = Math.min(field.widthPx - 1, Math.max(0, Math.floor((localXMm / widthMm) * field.widthPx)));
+  const pixelY = Math.min(field.heightPx - 1, Math.max(0, Math.floor((localYMm / heightMm) * field.heightPx)));
+  return field.labels[pixelY * field.widthPx + pixelX];
 }
 
 /**

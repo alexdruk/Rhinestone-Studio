@@ -20,6 +20,7 @@ import { blurMask } from './Blur.js';
 import { resizeField } from './Resize.js';
 import { extractAlphaChannel, toCoverageMask, ALPHA_COVERAGE_THRESHOLD } from './Alpha.js';
 import { createField } from './ImageBuffer.js';
+import { quantizeColors } from './ColorQuantize.js';
 
 // IMG-001: 'white' is the pre-IMG-001 default and the only behavior every existing caller/saved
 // project has ever seen -- alpha is flattened onto white by toGrayscale() and no masking step runs.
@@ -56,7 +57,21 @@ function normalizeParams(params) {
     throw new RangeError(`transparent must be one of: ${[...TRANSPARENT_MODES].join(', ')}.`);
   }
 
-  return { threshold, invert, blurRadiusPx, maxWidthPx, maxHeightPx, transparent };
+  // IMG-002: colorCount omitted or 1 keeps this milestone's colorGroups/quantizer entirely out of
+  // the picture -- see prepareImageField()'s own doc comment.
+  const colorCount = params.colorCount ?? 1;
+  if (!Number.isInteger(colorCount) || colorCount < 1 || colorCount > 8) {
+    throw new RangeError('colorCount must be an integer in [1, 8].');
+  }
+  let palette = null;
+  if (colorCount > 1) {
+    if (!Array.isArray(params.palette) || params.palette.length === 0) {
+      throw new TypeError('palette is required (a non-empty [{id, hex}] array) when colorCount > 1.');
+    }
+    palette = params.palette;
+  }
+
+  return { threshold, invert, blurRadiusPx, maxWidthPx, maxHeightPx, transparent, colorCount, palette };
 }
 
 // IMG-001: forces every pixel whose native-resolution alpha is below the coverage threshold to 0
@@ -73,6 +88,22 @@ function maskOutTransparent(mask, alphaNative) {
   return createField({ widthPx: mask.widthPx, heightPx: mask.heightPx, data: out });
 }
 
+// IMG-002: alpha-composites one RGBA channel onto white, at native resolution -- the same
+// alpha-onto-white rationale toGrayscale() (Grayscale.js) already uses for its luminosity blend,
+// applied per-channel instead of luminosity-combined, so R/G/B can be clustered in their own right.
+function compositeChannelOntoWhite(imageBuffer, channelOffset) {
+  const { widthPx, heightPx, data } = imageBuffer;
+  const pixelCount = widthPx * heightPx;
+  const out = new Uint8ClampedArray(pixelCount);
+  for (let i = 0; i < pixelCount; i++) {
+    const offset = i * 4;
+    const c = data[offset + channelOffset];
+    const a = data[offset + 3] / 255;
+    out[i] = c * a + 255 * (1 - a);
+  }
+  return createField({ widthPx, heightPx, data: out });
+}
+
 /**
  * @param {{widthPx: number, heightPx: number, data: Uint8ClampedArray}} imageBuffer RGBA source.
  * @param {object} params
@@ -82,9 +113,14 @@ function maskOutTransparent(mask, alphaNative) {
  * @param {number} params.maxWidthPx
  * @param {number} params.maxHeightPx
  * @param {'white'|'ignore'} [params.transparent] Default 'white' -- see IMG-001-ImageToStrass.md.
+ * @param {number} [params.colorCount] Integer 1-8, default 1. >1 runs the IMG-002 quantizer.
+ * @param {{id: string, hex: string}[]} [params.palette] Required when colorCount > 1.
  * @returns {{widthPx: number, heightPx: number, data: Uint8ClampedArray, luminance:
- *   Uint8ClampedArray, alpha: Uint8ClampedArray, labels: null}} the resulting multi-channel field.
- *   data/luminance/alpha all share the returned widthPx/heightPx.
+ *   Uint8ClampedArray, alpha: Uint8ClampedArray, labels: (Uint8ClampedArray|null), colorGroups?:
+ *   {rgb: number[], pixelShare: number, nearestId: string}[]}} the resulting multi-channel field.
+ *   data/luminance/alpha/labels all share the returned widthPx/heightPx. `colorGroups` is present
+ *   only when colorCount > 1 (and therefore labels is non-null); `colorCount` omitted or 1 returns
+ *   exactly the six IMG-001 keys, `colorGroups` absent.
  */
 export function prepareImageField(imageBuffer, params = {}) {
   const options = normalizeParams(params);
@@ -105,7 +141,7 @@ export function prepareImageField(imageBuffer, params = {}) {
   const luminance = resizeField(luminanceNative, options.maxWidthPx, options.maxHeightPx);
   const alpha = toCoverageMask(resizeField(alphaNative, options.maxWidthPx, options.maxHeightPx));
 
-  return {
+  const field = {
     widthPx: data.widthPx,
     heightPx: data.heightPx,
     data: data.data,
@@ -113,4 +149,20 @@ export function prepareImageField(imageBuffer, params = {}) {
     alpha: alpha.data,
     labels: null
   };
+
+  if (options.colorCount > 1) {
+    const rNative = compositeChannelOntoWhite(imageBuffer, 0);
+    const gNative = compositeChannelOntoWhite(imageBuffer, 1);
+    const bNative = compositeChannelOntoWhite(imageBuffer, 2);
+    const r = resizeField(rNative, options.maxWidthPx, options.maxHeightPx);
+    const g = resizeField(gNative, options.maxWidthPx, options.maxHeightPx);
+    const b = resizeField(bNative, options.maxWidthPx, options.maxHeightPx);
+    const { labels, colorGroups } = quantizeColors({
+      r: r.data, g: g.data, b: b.data, data: field.data, colorCount: options.colorCount, palette: options.palette
+    });
+    field.labels = labels;
+    field.colorGroups = colorGroups;
+  }
+
+  return field;
 }

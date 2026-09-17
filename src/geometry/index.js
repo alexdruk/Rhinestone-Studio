@@ -46,7 +46,8 @@ export {
   dedupeStonePoints,
   dedupeStonesByRadius,
   dropOverlappingSizedStones,
-  findCrossGroupCollisions
+  findCrossGroupCollisions,
+  fieldLabelAt
 } from './StoneSampler.js';
 
 // MONO-015: weight-following stone size (opt-in).

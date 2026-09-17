@@ -39,7 +39,12 @@ export {
 } from './ImageFieldPipeline.js';
 
 export {
-  maskFieldToRgba
+  quantizeColors
+} from './ColorQuantize.js';
+
+export {
+  maskFieldToRgba,
+  labelsFieldToRgba
 } from './ImagePreviewRender.js';
 
 export {

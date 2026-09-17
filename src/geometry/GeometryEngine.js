@@ -22,7 +22,7 @@
 
 import { BoundingBox, Point2D, createCircleVectorPath, createRectangleVectorPath } from '../text/VectorPath.js';
 import { flattenContourToPolygon, flattenContourToPolygonWithCornerFlags, translateContour, detectPolygonCornerFlags } from './ContourGeometry.js';
-import { sampleOutlinePoints, sampleMultiContourOutlinePoints, sampleShapeFillPoints, sampleFieldByMode, isPointInsidePolygons, dropOverlappingSizedStones } from './StoneSampler.js';
+import { sampleOutlinePoints, sampleMultiContourOutlinePoints, sampleShapeFillPoints, sampleFieldByMode, isPointInsidePolygons, dropOverlappingSizedStones, fieldLabelAt, NO_LABEL } from './StoneSampler.js';
 // MONO-015 (weight-following stone size): local stroke-width probe + catalog size mapping.
 import { strokeWidthsForSamples } from './StrokeWidthProbe.js';
 import { weightSizeMm } from './WeightSizing.js';
@@ -1159,6 +1159,13 @@ export class GeometryEngine {
    *   alpha onto white before thresholding (the pre-IMG-001, only-ever behavior); 'ignore' forces
    *   any pixel whose source alpha is below the coverage threshold off in the generated field,
    *   regardless of luminance. See docs/specifications/IMG-001-ImageToStrass.md.
+   * @param {number} [params.colorCount] Integer 1-8, default 1 (IMG-002). >1 quantizes the traced
+   *   image's colors and labels each stone by its own pixel's cluster, instead of every stone taking
+   *   `color` uniformly.
+   * @param {{id: string, hex: string}[]} [params.palette] Required when colorCount > 1 -- the
+   *   catalog each cluster's `nearestId` resolves against.
+   * @param {object} [params.colorMap] `nearestId -> overrideId`, default {}. See
+   *   docs/specifications/IMG-002-ColorLayers.md decision 3.
    * @returns {StoneLayout}
    */
   generateImageLayout(params = {}) {
@@ -1170,35 +1177,61 @@ export class GeometryEngine {
       blurRadiusPx: options.blurRadiusPx,
       maxWidthPx: options.maxWidthPx,
       maxHeightPx: options.maxHeightPx,
-      transparent: options.transparent
+      transparent: options.transparent,
+      colorCount: options.colorCount,
+      palette: options.palette
     });
 
     const placement = { xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm };
     const spacingMm = options.stoneSizeMm + options.gapMm;
     const points = sampleFieldByMode(options.mode, field, placement, spacingMm, options.stoneSizeMm);
 
+    // IMG-002: the label lookup only ever runs when a quantized palette is actually in play -- every
+    // colorCount:1 (or omitted) call, and every pre-IMG-002 saved image layer, skips it entirely and
+    // every stone takes options.color exactly as before this milestone (decision 1's byte-identity
+    // guarantee). fieldLabelAt() takes each stone's own ABSOLUTE xMm/yMm (not the sampled point's
+    // local coordinates) -- see docs/specifications/IMG-002-ColorLayers.md decision 1.
+    const labeled = options.colorCount > 1 && field.labels !== null;
+    const colorAt = (xMm, yMm) => {
+      if (!labeled) return options.color;
+      const label = fieldLabelAt(field, placement, xMm, yMm);
+      if (label === NO_LABEL) return options.color;
+      const group = field.colorGroups[label];
+      return options.colorMap[group.nearestId] ?? group.nearestId;
+    };
+
     let stones = points.map((point, index) => new Stone({
       xMm: point.xMm,
       yMm: point.yMm,
       sizeMm: options.stoneSizeMm,
-      color: options.color,
+      color: colorAt(point.xMm, point.yMm),
       layerId: options.layerId,
       index
     }));
 
-    // S-200 (Mixed Stone-Size Layouts): additive infill pass over the same density field, see
-    // MixedSizeGenerator.js.
+    // S-200 (Mixed Stone-Size Layouts): additive infill pass over the same density field. Built
+    // directly from generateMixedSizeInfillPoints() (not the generateMixedSizeInfillStones()
+    // convenience wrapper the shape/svg/path layer types use above/below) because that wrapper's
+    // single `color` argument (MixedSizeGenerator.js) cannot carry a per-point IMG-002 label lookup
+    // -- see docs/specifications/IMG-002-ColorLayers.md, Structure. startIndex still continues from
+    // the base stones' own length, exactly as generateMixedSizeInfillStones() would have produced.
     if (options.mixedOptions) {
-      const infillStones = generateMixedSizeInfillStones({
+      const infillPoints = generateMixedSizeInfillPoints({
         mode: options.mode,
         source: { kind: 'field', field, placement },
         mixedOptions: options.mixedOptions,
         gapMm: options.gapMm,
-        baseStones: stones,
-        layerId: options.layerId,
-        color: options.color,
-        startIndex: stones.length
+        baseStones: stones
       });
+      const startIndex = stones.length;
+      const infillStones = infillPoints.map((point, i) => new Stone({
+        xMm: point.xMm,
+        yMm: point.yMm,
+        sizeMm: point.sizeMm,
+        color: colorAt(point.xMm, point.yMm),
+        layerId: options.layerId,
+        index: startIndex + i
+      }));
       stones = stones.concat(infillStones);
     }
 
@@ -2277,6 +2310,13 @@ function normalizeImageParams(params) {
     maxWidthPx: params.maxWidthPx,
     maxHeightPx: params.maxHeightPx,
     transparent,
+    // IMG-002: permissive defaults, no validation beyond this -- src/image/ImageFieldPipeline.js's
+    // own normalizeParams() is where colorCount/palette are actually range-/shape-checked (it throws
+    // when colorCount > 1 has no palette); this is the same "read-site permissive default, no
+    // validateProject() change" precedent layer.transparent (IMG-001) already established.
+    colorCount: params.colorCount ?? 1,
+    palette: params.palette ?? null,
+    colorMap: params.colorMap ?? {},
     // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.
     ...normalizeMixedSizeParams(params, stoneSizeMm)
   };

@@ -144,7 +144,10 @@ await test('12. writeSelectedControlsToLayer() writes fillMode back for circle/r
   assert.match(appJs, /l\.r=Math\.max\(1,readLengthField\('shapeW'\)\|\|18\);l\.fillMode=resolveVectorFillMode\(el\('shapeFillMode'\)\.value\)/, 'circle');
   assert.match(appJs, /l\.h=Math\.max\(1,readLengthField\('shapeH'\)\|\|30\);l\.fillMode=resolveVectorFillMode\(el\('shapeFillMode'\)\.value\)/, 'rectangle');
   assert.match(appJs, /l\.mode=resolveVectorFillMode\(el\('svgMode'\)\.value\)/, 'svg');
-  assert.match(appJs, /l\.fillMode=resolveImageFillMode\(el\('imageFillMode'\)\.value\)\}else if\(l\.type==='path'\)/, 'image');
+  // Anchored on the preceding write (like the other three cases above), not the branch end --
+  // IMG-002's colorCount/colorMap write-back now sits between the fillMode write and the branch
+  // end, and the guard's real subject is the fillMode write itself, not what follows it.
+  assert.match(appJs, /l\.maxHeightPx=Math\.max\(8,parseIntOr\(el\('imgMaxHeight'\)\.value,DEFAULT_IMAGE_MAX_DIMENSION_PX\)\);l\.fillMode=resolveImageFillMode\(el\('imageFillMode'\)\.value\)/, 'image');
 });
 
 await test('13. #shapeFillMode/#imageFillMode are history-tracked controls (undo/redo coalescing), like #textMode/#svgMode already are', () => {
