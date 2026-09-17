@@ -78,9 +78,15 @@ instances (`docs/specifications/IMG-000-ImageToStrassAudit.md`, "Exporters").
 4. **`prepareImageField()` (`src/image/ImageFieldPipeline.js:125`) computes `field.edge` unconditionally**,
    at working resolution, after resize — i.e. from the same `data.data` the returned `field.data` is built
    from (`ImageFieldPipeline.js:139` computes `data`; the `field` object literal at `:144`-`:150` gains an
-   `edge` key alongside `data`/`luminance`/`alpha`/`labels`), with `bandRadiusPx = params.edgeBandPx`. New
-   `normalizeParams()` (`ImageFieldPipeline.js:39`) validation: `edgeBandPx` an integer `>= 0`, default `0`
-   — the same integer-non-negative shape `blurRadiusPx` already validates (`:46`-`:49`). The four lattice
+   `edge` key alongside `data`/`luminance`/`alpha`/`labels`). **Follow-up correction:** the band radius
+   passed to `edgeChannel()` is `bandRadiusPx = Math.round(params.edgeBandFraction * data.widthPx)` —
+   computed from `data`'s own real post-resize `widthPx`, not a pixel count handed straight through — see
+   decision 6 below for why a pixel count doesn't survive `resizeField()`'s downscale-only behavior.
+   `edgeChannel()`'s own signature (`field, bandRadiusPx`) is unchanged: this conversion is
+   `prepareImageField()`'s job, not `Edge.js`'s. New `normalizeParams()` (`ImageFieldPipeline.js:39`)
+   validation: `edgeBandFraction` a non-negative finite number, default `0` — the same non-negative shape
+   `blurRadiusPx` validates (as an integer, `:46`-`:49`), except a fraction rather than a pixel count. The
+   four lattice
    samplers (Fill/Staggered/Radial/Contour) and plain Organic never read `field.edge` — grep-confirmed
    (`field.edge` appears nowhere in `sampleFillPoints`/`sampleStaggeredFieldFillPoints`/
    `sampleRadialFieldFillPoints`/`sampleContourFieldFillPoints`/`sampleOrganicFieldFillPoints`) — and this
@@ -112,12 +118,20 @@ instances (`docs/specifications/IMG-000-ImageToStrassAudit.md`, "Exporters").
    decision 3): `edgeWidthMm` (number > 0, default `6`) and `edgeThinning` (number ≥ 0, default `1`).
    `normalizeImageParams()` (`src/geometry/GeometryEngine.js:2257`) gains `edgeWidthMm`/`edgeThinning`,
    defaulted the same permissive way `seed`/`spread` already are, immediately beside those two lines
-   (`:2327`-`:2328`). `generateImageLayout()` converts `edgeWidthMm` to `edgeBandPx = round(edgeWidthMm *
-   maxWidthPx / widthMm)` for `prepareImageField()` at its existing `prepareImageField()` call site
-   (`GeometryEngine.js:1176`), forwarding `{ seed, spread, edgeThinning }` in both the `sampleFieldByMode()`
-   call (`:1189`) and the S-200 infill `samplerOptions` (`:1227`). `app.js` gains
-   `resolveImageEdgeWidth()`/`resolveImageEdgeThinning()` beside `resolveImageSeed()`/`resolveImageSpread()`
-   (`app.js:700`-`:701`).
+   (`:2327`-`:2328`). **Follow-up correction (band-width fix):** `generateImageLayout()` converts
+   `edgeWidthMm` to a *dimensionless fraction*, `edgeBandFraction = edgeWidthMm / widthMm`, not a pixel
+   count — the original `edgeBandPx = round(edgeWidthMm * maxWidthPx / widthMm)` formula was wrong,
+   because `resizeField()` (`src/image/Resize.js`) is downscale-only and aspect-preserving: the working
+   field's real `widthPx` is `round(nativeWidthPx * min(1, maxWidthPx/nativeWidthPx,
+   maxHeightPx/nativeHeightPx))`, which is not reliably `maxWidthPx` (native resolution may already be
+   smaller than the requested cap, or `heightPx` may be the binding dimension) — so two calls with the
+   same `edgeWidthMm`/`widthMm` but different `maxWidthPx` could get a different band radius even when
+   the real working field is identically sized, and a call whose native image was smaller than
+   `maxWidthPx` got a systematically too-wide band. The fraction is passed to `prepareImageField()` at its
+   existing `prepareImageField()` call site (`GeometryEngine.js:1176`) as `edgeBandFraction`, forwarding
+   `{ seed, spread, edgeThinning }` in both the `sampleFieldByMode()` call (`:1189`) and the S-200 infill
+   `samplerOptions` (`:1227`). `app.js` gains `resolveImageEdgeWidth()`/`resolveImageEdgeThinning()`
+   beside `resolveImageSeed()`/`resolveImageSpread()` (`app.js:700`-`:701`).
 
 7. **Studio: `#imageStudioGroupEdges` (`index.html:1190`) becomes live.** `#imgEdgeWidth` (a length input,
    mm) and `#imgEdgeThinning` (a range input, `min="0"` `max="3"` `step="0.1"`), with a hint "Only used
@@ -195,6 +209,19 @@ instances (`docs/specifications/IMG-000-ImageToStrassAudit.md`, "Exporters").
    If a later measurement disagrees with any figure in this section, stop and report the disagreement —
    do not adjust either side to make them match.
 
+   **Two follow-up notes on the band radius, from the band-width fix above.** `edgeChannel()`'s max
+   filter uses the same pixel radius `W` for both its horizontal and vertical passes — isotropic in
+   pixel space — but `edgeBandFraction` is calibrated against `widthMm`/`widthPx` only (decision 6). So
+   the band is exactly `edgeWidthMm` wide along the x axis; along y it is that same pixel radius
+   reinterpreted through `heightMm`/`heightPx`'s own (possibly different) mm-per-pixel scale, which
+   differs from x's whenever the field's pixel aspect ratio doesn't match the placement's mm aspect
+   ratio — an anisotropic placement therefore gets an elliptical band in mm, not a circular one. And a
+   band radius large enough to saturate a small field degenerates Edge to Organic: once the max filter's
+   window fully covers the field, every pixel reads the field's single maximum Sobel value, so
+   `field.edge` becomes uniformly `255` and `radiusAt` collapses to the floor `base` everywhere
+   (measured: a 16×16px field with a real edge present, band radius 20px → every one of its 256 pixels
+   reads `255`).
+
 ## Structure
 
 Data flow, extending IMG-003's field-and-sampler contract:
@@ -202,9 +229,11 @@ Data flow, extending IMG-003's field-and-sampler contract:
 ```
 GeometryEngine.generateImageLayout({..., mode: 'edge', seed, spread, edgeWidthMm, edgeThinning})
   -> normalizeImageParams(): edgeWidthMm/edgeThinning permissively defaulted to 6/1 (beside seed/spread)
-  -> edgeBandPx = round(edgeWidthMm * maxWidthPx / widthMm)
-  -> prepareImageField(imageBuffer, {..., edgeBandPx})
-       -> field.edge = edgeChannel(field.data-at-working-resolution, edgeBandPx)  -- src/image/Edge.js,
+  -> edgeBandFraction = edgeWidthMm / widthMm  -- dimensionless, not a pixel count (band-width fix)
+  -> prepareImageField(imageBuffer, {..., edgeBandFraction})
+       -> bandRadiusPx = round(edgeBandFraction * data.widthPx)  -- against data's own real post-resize
+          widthPx, not the requested maxWidthPx (resizeField() is downscale-only/aspect-preserving)
+       -> field.edge = edgeChannel(field.data-at-working-resolution, bandRadiusPx)  -- src/image/Edge.js,
           no src/geometry import, unread by the four lattice samplers and plain Organic
   -> sampleFieldByMode('edge', field, placement, spacingMm, stoneSizeMm, {seed, spread, edgeThinning})
        -> dispatches to StoneSampler.js's own sampleEdgeFieldFillPoints(field, placement, ...)
@@ -257,9 +286,11 @@ stats, exactly like every other Studio control's live-regeneration path.
 
 * `src/image/Edge.js` (new) — `edgeChannel(field, bandRadiusPx)`: Sobel magnitude + monotonic-deque max
   filter, pure, field-in/field-out; no `src/geometry` import.
-* `src/image/ImageFieldPipeline.js` — `normalizeParams()` (`:39`) gains `edgeBandPx`; `prepareImageField()`
-  (`:125`) computes `field.edge` unconditionally via `edgeChannel()` at its `data` construction site
-  (`:139`-`:150` neighborhood); its own `@returns` doc comment (`:118`-`:123`) gains the `edge` key.
+* `src/image/ImageFieldPipeline.js` — `normalizeParams()` (`:39`) gains `edgeBandFraction`;
+  `prepareImageField()` (`:125`) computes `field.edge` unconditionally via `edgeChannel()` at its `data`
+  construction site (`:139`-`:150` neighborhood), converting `edgeBandFraction` to a real pixel radius
+  against `data`'s own post-resize `widthPx` right there (band-width fix); its own `@returns` doc
+  comment (`:118`-`:123`) gains the `edge` key.
 * `src/geometry/OrganicSampler.js` — `samplePoissonDiskPoints()` (`:45`) gains optional `radiusAt`/
   `maxRadiusMm` params; `farEnough()` (`:68`-`:85`) and the annulus draw (`:108`) generalize to per-point
   stored radii, reducing to today's exact arithmetic when `radiusAt` is omitted (decision 2).
@@ -271,8 +302,9 @@ stats, exactly like every other Studio control's live-regeneration path.
   `sampleOrganicFieldFillPoints` already sits in (`:44`).
 * `src/geometry/GeometryEngine.js` — `IMAGE_SAMPLE_MODES` (`:56`) gains `'edge'`; `normalizeImageParams()`
   (`:2257`) gains `edgeWidthMm`/`edgeThinning` beside `seed`/`spread` (`:2327`-`:2328` neighborhood);
-  `generateImageLayout()` converts `edgeWidthMm` to `edgeBandPx` at its `prepareImageField()` call site
-  (`:1176`) and forwards `edgeThinning` at `:1189` and `:1227` (both already forward `seed`/`spread`).
+  `generateImageLayout()` converts `edgeWidthMm` to `edgeBandFraction = edgeWidthMm / widthMm` at its
+  `prepareImageField()` call site (`:1176`, band-width fix) and forwards `edgeThinning` at `:1189` and
+  `:1227` (both already forward `seed`/`spread`).
 * `app.js` — `IMAGE_FILL_MODES` (`:666`) gains `'edge'`; new `resolveImageEdgeWidth()`/
   `resolveImageEdgeThinning()` beside `resolveImageSeed()`/`resolveImageSpread()` (`:700`-`:701`
   neighborhood); sync at `:2461` and readback at `:2614` gain `edgeWidthMm`/`edgeThinning`;
@@ -281,7 +313,14 @@ stats, exactly like every other Studio control's live-regeneration path.
   `imageStudioGroupOrganic` was added in IMG-003 — without it the group stays inert regardless of the
   enable/disable block below; the enable/disable block
   (`:6102`-`:6106`) widens `isOrganic` to "organic or edge" and adds a new `isEdge` gate for the two new
-  controls.
+  controls. **Follow-up correction (app-path fix):** `generateImageStonesLive()` (`:994`), the only
+  call site of `generateImageLayout()` in `app.js`, is the params object every live render and every
+  Studio preview actually goes through — it was missing `seed`/`spread`/`edgeWidthMm`/`edgeThinning`
+  entirely (an IMG-003 defect that predates this milestone: `layer.seed`/`layer.spread` never reached
+  the engine from app.js, so the Organic Seed/Spread controls have never had any real effect on a saved
+  project's actual stones), so it now reads all four via the existing `resolveImageSeed()`/
+  `resolveImageSpread()`/`resolveImageEdgeWidth()`/`resolveImageEdgeThinning()`. The new-image-layer
+  literal (`:5191`) also gains `edgeWidthMm:6,edgeThinning:1` beside its existing `seed:1,spread:1`.
 * `index.html` — `#imageFillMode` (`:1159`) gains a sixth `<option value="edge">`;
   `#imageStudioGroupEdges` (`:1190`) filled in with `#imgEdgeWidth`/`#imgEdgeThinning`.
 * `tools/test-img-004-edge-awareness.mjs` (new).
@@ -346,8 +385,8 @@ stats, exactly like every other Studio control's live-regeneration path.
    local copy of `fieldPixelOn()`'s lookup convention, across the disc and frame fixtures.
 8. `edgeChannel()`'s monotonic-deque max filter equals a naive O(`width*height*radius²`) max filter at
    five spot pixels on a 64×64 random field, radius 5.
-9. `prepareImageField()` returns an `edge` key of the working (post-resize) size; `edgeBandPx: 0` yields
-   the raw Sobel magnitude (all-zero on a uniform field, since a constant field has zero gradient
+9. `prepareImageField()` returns an `edge` key of the working (post-resize) size; `edgeBandFraction: 0`
+   yields the raw Sobel magnitude (all-zero on a uniform field, since a constant field has zero gradient
    everywhere).
 10. Round-trip: `edgeWidthMm`/`edgeThinning` persist through `normalizeImageParams()`; invalid values
     (non-positive `edgeWidthMm`, negative `edgeThinning`) fall back to `6`/`1`.
@@ -356,6 +395,16 @@ stats, exactly like every other Studio control's live-regeneration path.
 12. The four lattice modes and plain Organic produce identical output whether or not `field.edge` is
     present on the field passed to `sampleFieldByMode()` — proves the addition disturbs nothing about the
     five existing modes.
+13. **Band-width fix.** The same 200×100 source at `maxWidthPx: 400` and at `maxWidthPx: 200` (same
+    `edgeWidthMm`, native width 200px so neither request actually downscales it) produces byte-identical
+    `generateImageLayout()` stone output — the check that actually responds to the pre-fix bug, since a
+    coarser check (comparing only stone counts) could coincidentally match even with a shifted band.
+14. **App-path guard.** `generateImageStonesLive()`'s (`app.js:994`) params object is checked, via a
+    brace-balanced source-text extraction of its own body (the same convention
+    `tools/test-autosave-recovery-wiring.mjs` uses), to actually include `seed:`/`spread:`/
+    `edgeWidthMm:`/`edgeThinning:` — engine-level tests 1-13 above cannot catch a defect where app.js
+    simply never reads a layer field into the params object it hands the engine (see `docs/BACKLOG.md`'s
+    new row on exactly this class of defect).
 
 Report the raw per-test list above in this section, not a pass/fail count, per this repo's testing policy
 for shared-architecture milestones.
