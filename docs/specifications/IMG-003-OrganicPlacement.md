@@ -144,18 +144,50 @@ change, no `StoneLayout`/`Stone` schema change — an organic-mode image layer's
    fallback stays dead code for Organic under IMG-002's color-labeling path, the same as it already
    does for Fill/Staggered/Radial.
 
-   **Measured figures** (measured on a 200px disc in a 60×60 mm box at a `(10, 7)` mm placement offset,
-   `spread: 1` unless noted):
-   | pitch (mm) | organic | grid | staggered | contour | measured min centre distance (mm) |
-   |---|---|---|---|---|---|
-   | 3.0 | 182 | 256 | 298 | 255 | 3.003 |
-   | 4.3 | 90 | 120 | 142 | 121 | 4.317 |
-   | 2.2 | 317 | 477 | 548 | 479 | 2.202 |
+   **Measured figures.** The Test Plan's reference fixture is a single hard-edged disc, built directly
+   as a `{widthPx, heightPx, data}` density field -- bypassing `prepareImageField()` entirely, no RGBA
+   buffer, no blur, no antialiasing -- so every sampler under comparison below reads the identical
+   pixel grid:
+   ```js
+   function disc(n) {
+     const d = new Uint8ClampedArray(n * n);
+     for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+       const dx = x - n / 2 + 0.5, dy = y - n / 2 + 0.5;
+       d[y * n + x] = dx * dx + dy * dy < (n * 0.45) ** 2 ? 255 : 0;
+     }
+     return { widthPx: n, heightPx: n, data: d };
+   }
+   ```
+   `n = 200`, placement `{ xMm: 10, yMm: 7, widthMm: 60, heightMm: 60 }`, `spread: 1` unless noted. The
+   radius is `0.45 * n = 90px`, with pixel-centre offsets (`x - n / 2 + 0.5`, `y - n / 2 + 0.5`) -- this
+   is deliberately **not** `tools/test-s200-mixed-stone-sizes.mjs`'s own disc-fixture convention
+   (`radius = n / 2 - 2 = 98px`, integer pixel corners, no `+ 0.5`), which is the obvious wrong guess to
+   reach for here and shifts every count in the table below: organic 206, grid 304, staggered 352 at
+   pitch 3.0 on that convention instead of this one.
 
-   Zero off-field points in every run. Seeds 1 through 20 (same disc, same pitch) give 174 to 186
-   stones. Spread 1 / 1.25 / 1.5 / 2 / 3 gives 182 / 111 / 78 / 45 / 22 stones, with the measured minimum
-   centre distance landing at `3 × spread` mm each time (i.e. `r` itself, confirming the acceptance
-   check is the actual binding constraint, not an artifact of one measurement). 368 stones over a
+   `stoneSizeMm` matters for one of the four columns: grid/staggered read only `spacingMm`; contour
+   forwards its own `stoneSizeMm` on to `dedupeStonePoints()` (`src/geometry/StoneSampler.js:1787`), so
+   its count moves with `stoneSizeMm` independently of `spacingMm` -- at pitch 3.0 this fixture gives
+   255 at `stoneSizeMm: 2.7` (a 0.3mm gap) but 128 at `stoneSizeMm: 3.0` (no gap); organic takes no
+   `stoneSizeMm` at all (decision 2's own signature), so its count depends on `spacingMm` alone.
+
+   | pitch (mm) | stoneSizeMm (contour only) | organic | grid | staggered | contour |
+   |---|---|---|---|---|---|
+   | 3.0 | 2.7 | 182 | 256 | 298 | 255 |
+   | 4.3 | 4.0 | 90 | 120 | 142 | 121 |
+   | 2.2 | 1.9 | 317 | 477 | 548 | 479 |
+
+   Zero off-field points in every run. Measured minimum centre distance for organic at each of the
+   three rows above, from an exhaustive pairwise scan (not the grid-bucketed nearest-neighbour scan an
+   earlier pass of this document used, which missed the true minimum on two of the three rows and
+   reported 3.003 / 4.317 / 2.202): 3.001 / 4.304 / 2.202 mm. Seeds 1 through 20 (same disc, same
+   pitch) give 174 to 186 stones. Spread 1 / 1.25 / 1.5 / 2 / 3 gives 182 / 111 / 78 / 45 / 22 stones,
+   with the exhaustive measured minimum centre distance landing at or just above the floor
+   `r = 3 × spread` mm, within 0.03mm, at each spread: 3.001 / 3.753 / 4.501 / 6.011 / 9.025 --
+   confirming the acceptance check is the actual binding constraint, not an artifact of one
+   measurement, without overclaiming exact equality to `r` (a Poisson-disk process can only ever land
+   at or above its own floor, never below it, and an exhaustive scan over enough points will generally
+   find some pair sitting a little above the floor rather than exactly on it). 368 stones over a
    200×120 mm placement at pitch 2.2 mm complete in 22 ms.
 
    Organic at a given pitch carries roughly 60% of Staggered's stone count at that same pitch — stated
@@ -436,19 +468,29 @@ every other Studio control's live-regeneration path.
 `tools/test-img-003-organic-placement.mjs` (new, registered in `tools/test-groups.mjs`'s `core` and
 `geometry` groups immediately after `test-img-002-color-layers.mjs`):
 
+* Reference fixture: the test file builds decision 2's own `disc()` generator inline, verbatim, with a
+  comment naming it the IMG-003 reference fixture and pointing at decision 2 -- not a re-derived
+  approximation of it. Every count assertion below (the pitch table, the seed range, the spread
+  counts) is exact equality against this exact fixture; the minimum-centre-distance figures decision 2
+  records (3.001/4.304/2.202 mm, and 3.001/3.753/4.501/6.011/9.025 mm across spread) are recorded
+  evidence of how close an exhaustive scan lands to the floor, not assertions in their own right -- the
+  actual assertion is the inequality below.
 * Determinism: `sampleOrganicFieldFillPoints()` run twice with the same field/placement/spacing/seed
   produces `deepEqual` point lists (same order, same coordinates).
 * Different seeds (1..20) on the same fixture/pitch each produce a point count within the measured
   174–186 range (decision 2) and pairwise-distinct point lists.
 * Minimum-distance invariant: for every accepted point, no other accepted point lies within
-  `spacingMm * max(1, spread)` mm (checked directly against the full output, not sampled).
+  `spacingMm * max(1, spread)` mm, i.e. every pairwise distance is `>= r` (checked directly against the
+  full output via an exhaustive pairwise scan, not sampled, and not asserted equal to decision 2's
+  recorded decimals -- see the fixture bullet above).
 * On-field invariant: every accepted point's own pixel is at/above `FIELD_ON_THRESHOLD` — zero
   exceptions, across the disc fixture and at least one disconnected multi-island fixture (proving the
   full-scan re-seed step actually reaches every island).
 * Disconnected islands: a fixture with two or more field regions with no on-pixel path between them
   gets points in every region, not only the region containing the first active point.
 * `spread` scaling: spread 1 / 1.25 / 1.5 / 2 / 3 on the same fixture/pitch/seed reproduces the
-  182/111/78/45/22 counts and the `3 × spread` mm measured minimum centre distance from decision 2.
+  182/111/78/45/22 counts exactly; each spread's own measured minimum centre distance is asserted as
+  `>= r` (`r = spacingMm * max(1, spread)`), not equality to decision 2's recorded decimals.
 * `sampleFieldByMode('organic', ...)` dispatches to `sampleOrganicFieldFillPoints()` with
   `samplerOptions` forwarded.
 * Byte-identity vs. `develop`: for each of Fill/Staggered/Radial/Contour, `generateImageLayout()`'s
