@@ -13,14 +13,15 @@ The roadmap's own framing of the mechanism — "assigned via the existing 'assig
 `IMG-000`'s audit (`docs/specifications/IMG-000-ImageToStrassAudit.md:48`-`:52`) both describe
 IMG-006 as reusing MONO-015's weight-following shape (`GeometryEngine.js:227`-`:279`): sample at
 the *smallest* candidate pitch, probe/assign a size per surviving point, then drop overlaps created
-by the larger assigned sizes. **This is not what IMG-006 does, and section 6 below measures why.**
-MONO-015 samples small because its per-point signal (local stroke width, `StrokeWidthProbe.js`) is
-only meaningful *between* the outline's own edges — there is no coarser pitch at which to sample it
-without missing narrow strokes entirely, and the whole point is to recover stem width the primary
-outline pass already threw away. Brightness has no such requirement: luminance is defined at every
-pixel regardless of sampling density, so nothing is gained by oversampling and then discarding most
-of the samples via `dropOverlappingSizedStones()` — and section 6's measurement shows the discard
-is not even conservative: a bigger stone drops more neighbours, so the "sample small, assign, drop"
+by the larger assigned sizes. **This is not what IMG-006 does, and the Test Plan (measured
+baselines) below measures why.** MONO-015 samples small because its per-point signal (local stroke
+width, `StrokeWidthProbe.js`) is only meaningful *between* the outline's own edges — there is no
+coarser pitch at which to sample it without missing narrow strokes entirely, and the whole point is
+to recover stem width the primary outline pass already threw away. Brightness has no such
+requirement: luminance is defined at every pixel regardless of sampling density, so nothing is
+gained by oversampling and then discarding most of the samples via `dropOverlappingSizedStones()` —
+and the Test Plan (measured baselines)'s own measurement shows the discard is not even conservative:
+a bigger stone drops more neighbours, so the "sample small, assign, drop"
 shape leaves per-band coverage roughly *constant* across brightness levels instead of graduated,
 which defeats the entire purpose of a brightness-to-size mapping. IMG-006 instead samples at the
 *largest* rung's pitch — every stone the sampler places is already spaced far enough apart to hold
@@ -53,17 +54,18 @@ set, exactly as it already does for MONO-015 (`GeometryEngine.js:267`).
 This drops (structurally, not by luck) zero points in every mode: the sampler's own floor already
 guarantees no two points land closer than `spacingMm = maxSizeMm + gapMm` apart (staggered/organic/
 edge enforce this as their own placement floor; contour/radial enforce it via `IMG-005`'s
-`nudgeOrDropStonePoints()`, `StoneSampler.js:333`-`:372`, floor `stoneSizeMm + gapMm`). The
+`nudgeOrDropStonePoints()`, `StoneSampler.js:399`-`:487`, floor `stoneSizeMm + gapMm`). The
 strictest pairwise touching threshold `dropOverlappingSizedStones()` can ever apply is two points
 both assigned the largest size, `(maxSizeMm + maxSizeMm) / 2 = maxSizeMm` — strictly less than the
 sampler's own `maxSizeMm + gapMm` separation (`gapMm > 0` in every layer this milestone applies to;
 `gapMm = 0` is not a real product configuration, see Compatibility). Every other pairing (one or
 both stones smaller than `maxSizeMm`) has an even smaller threshold against the same
-`maxSizeMm + gapMm` floor. Section 6 measures zero drops on the fixture across all six modes,
-confirming the structural argument rather than resting on it alone.
+`maxSizeMm + gapMm` floor. The Test Plan (measured baselines) measures zero drops on the fixture
+across all six modes, confirming the structural argument rather than resting on it alone.
 
-**Why not the MONO-015 shape (measured).** The scratch script pinned in section 7, re-run as the
-"Control row," reproduces the roadmap's literal shape: sample `fill` at the *smallest* rung's pitch
+**Why not the MONO-015 shape (measured).** The scratch script pinned in the Test Plan (measured
+baselines), re-run as the "Control row," reproduces the roadmap's literal shape: sample `fill` at
+the *smallest* rung's pitch
 (`2.3` mm = `2.0 + 0.3`), assign each of the resulting 676 points a size from its own luminance, then
 drop. `dropOverlappingSizedStones()` removes 299 of the 676 (44%) — overwhelmingly the larger
 assigned stones, since a 4.0 mm stone at a 2.3 mm-pitched neighbourhood collides with far more
@@ -162,16 +164,24 @@ Per-point ink, `ink(lum, threshold, invert) ∈ [0,1]`:
 
 Rung index into the ascending `sizesMm`: `min(n - 1, floor(ink * n))`, `n = sizesMm.length`. Darker
 (`ink` closer to `1`) maps to a higher index, i.e. a **larger** assigned stone — the halftone
-convention section 7's measured coverage table confirms (dark thirds measure the highest coverage
-in every mode).
+convention the Test Plan (measured baselines)'s coverage table confirms (dark thirds measure the
+highest coverage in every mode).
 
 Luminance is read through a new exported `fieldLuminanceAt(field, placement, xMm, yMm)` in
-`StoneSampler.js`, placed beside `fieldLabelAt()` (`:1778`-`:1789`) and built to mirror it exactly:
-same absolute-coordinate `{xMm, yMm}` contract, same off-field bounds check, same clamped
-`Math.floor((localMm / extentMm) * extentPx)` pixel arithmetic, reading `field.luminance` in place
-of `field.labels`. This guarantees a stone's assigned size is read from the *same* pixel its
-on-field (`field.data`) test used — the identical pixel-parity guarantee `fieldEdgeAt()`
-(`:1749`-`:1756`) already states for `field.edge` against `field.data`.
+`StoneSampler.js`, placed beside `fieldLabelAt()` (`:1778`-`:1789`) and built to mirror its
+coordinate/pixel arithmetic exactly: same absolute-coordinate `{xMm, yMm}` contract, same
+off-field bounds check, same clamped `Math.floor((localMm / extentMm) * extentPx)` pixel
+arithmetic, reading `field.luminance` in place of `field.labels`. This guarantees a stone's
+assigned size is read from the *same* pixel its on-field (`field.data`) test used — the identical
+pixel-parity guarantee `fieldEdgeAt()` (`:1749`-`:1756`) already states for `field.edge` against
+`field.data`. Its off-field return value follows `fieldEdgeAt()`'s own convention instead of
+`fieldLabelAt()`'s: a plain sentinel `0`, not a dedicated out-of-band value like `NO_LABEL` (`255`)
+— `field.luminance` has no reserved "not a real reading" byte the way labels do, and `0` is the
+same choice `fieldEdgeAt()` already makes for an absent/off-field edge reading (`:1752`-`:1756`,
+`index >= 0 ? field.edge[index] : 0`). In practice this branch is unreachable: `fieldLuminanceAt()`
+is only ever called (decision 1) for a point `sampleFieldByMode()` already produced, which is
+on-field by construction — the sentinel exists only for defensive parity with `fieldLabelAt()`'s
+own off-field contract, not because a real call ever hits it.
 
 **Rejected alternative — normalizing to the on-pixel luminance range (auto-levels).** Rescaling
 `ink` against the image's own observed min/max luminance (rather than the fixed `threshold`/`255`
@@ -218,10 +228,15 @@ IMG-006</p>` line, gaining:
   beside `weightStepsOptionsHtml()` (`app.js:781`-`:793`). It reuses that function's label-building
   idiom (`stoneSizesFromBaseMm(baseStoneSizeMm, step).map(d =>
   formatStoneSizeLabel(d).replace(/\s*\(.*\)$/, '')).join(' → ')`) but loops
-  `step = 1..(STONE_SIZE_LIST.length - 1)` instead of `weightStepsOptionsHtml()`'s hardcoded
-  `1..2` — brightness sizing has no product reason to cap at two extra rungs the way the
-  weight-following step deliberately does, and decision 1's mechanism has no `SINGLE_CHAIN`-style
-  ratio concern that would motivate a cap. Selecting a step writes both `layer.sizeMode`
+  `step = 1..stoneSizeRungsAvailable(baseStoneSizeMm)` — the same call
+  `weightStepsOptionsHtml()` itself already makes to derive `available` (`app.js:782`,
+  `const available=stoneSizeRungsAvailable(baseStoneSizeMm);`) — instead of
+  `weightStepsOptionsHtml()`'s own hardcoded `1..2` loop bound (`app.js` has no `STONE_SIZE_LIST`
+  import of its own; `stoneSizeRungsAvailable()` is the existing exported function that already
+  encapsulates the catalog's length for this exact purpose). Brightness sizing has no product
+  reason to cap at two extra rungs the way the weight-following step deliberately does, and
+  decision 1's mechanism has no `SINGLE_CHAIN`-style ratio concern that would motivate a cap.
+  Selecting a step writes both `layer.sizeMode`
   (`'brightness'` for any step `> 0`, `'uniform'` for `Off`) and re-derives `layer.brightnessSizesMm
   = stoneSizesFromBaseMm(l.stoneSize, step)` on every stone-size change too, exactly as the weight
   readback (`app.js:2675`-`:2684`) does for `weightSizesMm`.
@@ -417,8 +432,9 @@ GeometryEngine.generateImageLayout({..., sizeMode: 'brightness', brightnessSizes
 after `test-img-005-check-and-fix.mjs`):
 
 **Fixture**, given verbatim as the code block the test file copies (per this repo's "pin the
-fixture, not just the numbers" convention, `docs/specifications/IMG-004-EdgeAwareness.md` decision
-8 / `IMG-005`'s own Test Plan):
+fixture, not just the numbers" convention, established by the IMG-003 follow-up commit `8c82dea`
+— `docs/specifications/IMG-003-OrganicPlacement.md` decision 2, "Measured figures" — and continued
+by `IMG-005`'s own Test Plan):
 
 ```js
 const N = 200, W = 60, H = 60, GAP = 0.3, SIZES = [2.0, 2.8, 4.0], THRESH = 200;
@@ -456,20 +472,47 @@ disagreement — do not adjust either side to make them match.
    `lum`/`threshold` pairs for `invert` off and on, including both divisor-guard cases
    (`threshold === 0` for `invert` off, `threshold === 255` for `invert` on) returning `0` rather
    than throwing or returning `NaN`/`Infinity`.
-2. **`fieldLuminanceAt()` pixel parity with `fieldLabelAt()`.** For a field carrying both `labels`
-   and `luminance`, both functions resolve the identical pixel index for the same `(xMm, yMm)` —
-   asserted by comparing their internal pixel-coordinate arithmetic against a shared set of
-   absolute points, including off-field points (both return their own "not found" sentinel).
+2. **`fieldLuminanceAt()` pixel parity with `fieldLabelAt()`, on a field built so a pass could not
+   satisfy this vacuously.** A dedicated `10 × 10` field whose `labels` array is a `Uint8ClampedArray`
+   holding index values `0..99` and whose `luminance` array holds `100 + index` (so a correct,
+   coordinate-matched read is distinguishable from a mis-indexed one by construction — a bug that
+   read the wrong pixel would return a value 100 off from the right one, not silently pass). At
+   least twelve absolute `(xMm, yMm)` points, eight on-field and four off-field (outside
+   `placement`'s box, at least one on each side — left/right/above/below), assert:
+   - On-field: `fieldLuminanceAt(field, placement, x, y) === fieldLabelAt(field, placement, x, y) + 100`.
+   - Off-field: `fieldLabelAt(...) === NO_LABEL` (`255`) and `fieldLuminanceAt(...) === 0` — the
+     documented sentinel (decision 3), not `NO_LABEL`, not `undefined`, not a thrown error.
 3. **Zero drops in all six modes**, on the fixture above, at `maxPitch`: `dropOverlappingSizedStones()`
    removes exactly `0` points in `fill`/`staggered`/`radial`/`contour`/`organic`/`edge`.
-4. **Per-mode assigned counts and coverage** match the table above exactly, for all six modes.
+4. **Per-mode assigned counts and coverage**, checked so a near-miss cannot pass silently: assigned
+   counts compare with exact equality (`===`) against the table above; coverage compares by
+   rounding the computed value to three decimals and comparing against the table's own literals —
+   `0.733`, `0.287`, `0.183`, etc. — which the test file carries **inline, as literal numbers**,
+   not recomputed from the fixture at test time (recomputing them would make this a tautology: the
+   test would always agree with whatever the code currently produces).
 5. **Control-row measurement** (the rejected "sample small, assign, drop" shape, `fill` only) matches
    676 assigned / 299 dropped / 0.681/0.467/0.579 coverage — pinned as a permanent regression guard
    on the rejected-mechanism comparison, not as a recommendation to build it.
-6. **Byte-identity guard.** For every one of the six modes, `sizeMode: 'uniform'` (or omitted) with
-   `brightnessThinning: 0` (or omitted) reproduces the exact same stone set as the pinned `IMG-003`/
-   `IMG-004`/`IMG-005` baselines those milestones' own test files already assert — this milestone's
-   test file re-asserts `deepEqual` against those same fixtures rather than re-deriving new ones.
+6. **Byte-identity guard, against literal counts already pinned elsewhere in the repo — not numbers
+   this milestone produces.** For every one of the six modes, calling `generateImageLayout()` with
+   `sizeMode: 'uniform'` (or omitted) and `brightnessThinning: 0` (or omitted) against the exact
+   fixtures those three milestones' own test files already pin reproduces their exact literal
+   counts, copied here (not recomputed) so this test can assert against them directly:
+   - `tools/test-img-003-organic-placement.mjs:100` — disc, pitch 3.0 mm / `stoneSizeMm` 2.7:
+     `grid` (fill) `256`, `staggered` `298`, `organic` `182`, `contour` `256`.
+   - `tools/test-img-003-organic-placement.mjs:102` — disc, pitch 2.2 mm / `stoneSizeMm` 1.9:
+     `contour` `480`.
+   - `tools/test-img-004-edge-awareness.mjs:172` — frame fixture: `contour.length` `274`
+     (`'frame contour baseline'`).
+   - `tools/test-img-005-check-and-fix.mjs:78` (`NO_VIOLATION_BASELINE.disc`) — `fill` `256`,
+     `staggered` `298`, `organic` `182`, `edge` `48`.
+   - `tools/test-img-005-check-and-fix.mjs:74` (`PRE_FIX_BASELINE.disc.radial.count`) — `radial` `245`.
+
+   Every number above is quoted from the cited file's own current source (re-grepped immediately
+   before writing this Test Plan — see the Anchor verification note), not derived by this
+   milestone's own test file, so the guard fails if this milestone's byte-identical path diverges
+   from the exact code those pinned counts already characterize, rather than merely agreeing with
+   whatever this milestone's own fixture happens to produce.
 7. **`sizeMode: 'brightness'` throws from every non-image `generate*Layout()`** — `generateTextLayout()`,
    `generateShapeLayout()`, `generateSvgLayout()`, `generatePathLayout()`, each called with
    `sizeMode: 'brightness'` and a valid `brightnessSizesMm`, all throw the same
@@ -503,7 +546,7 @@ matched; the two stale `IMG-000` citations (`StoneSampler.js:467`, `GeometryEngi
 confirmed stale against the actual current lines (`:583`, `:267`) and are corrected in Files
 Touched.
 
-Section 7's figures were reproduced exactly, not adjusted to fit: a scratch script at
+The Test Plan (measured baselines)'s figures were reproduced exactly, not adjusted to fit: a scratch script at
 `tools/scratch/img-006-brightness-sizes-check.mjs` (gitignored, per `.gitignore`'s `tools/scratch/`
 convention — not tracked) built the fixture verbatim, sampled all six modes at
 `maxPitch = 4.3` via the real `sampleFieldByMode()`, assigned sizes via the ink rule against the
@@ -512,3 +555,24 @@ real `field.luminance` (reading it with the exact `fieldLabelAt()`-style pixel a
 and computed per-band coverage. Every one of the six per-mode rows and the control row matched the
 brief's figures exactly (`assigned`/`dropped`/coverage to three decimal places) on the first run —
 no disagreement to report.
+
+**Follow-up corrections (this revision).** Three citations in the previous revision were wrong and
+are fixed here: `nudgeOrDropStonePoints()` was cited at `StoneSampler.js:333`-`:372`, which is
+`dedupeStonePoints()` — re-grepped, `nudgeOrDropStonePoints()` is actually the function immediately
+following it, `:399`-`:487`; every internal reference to "section 6"/"section 7" for the measured
+figures was wrong (this document's own section 6 is Studio UX, not the figures, which live under
+Test Plan) and is now written as "the Test Plan (measured baselines)"; and the "pin the fixture, not
+just the numbers" convention was mis-attributed to `IMG-004-EdgeAwareness.md` decision 8 (the
+narrow-interior behaviour note, unrelated) — re-checked against the actual commit history, the
+convention originates with the IMG-003 follow-up commit `8c82dea` (`docs/specifications/
+IMG-003-OrganicPlacement.md` decision 2, "Measured figures"), corrected above. The same two
+"section N" cross-references were also corrected in the two amended docs,
+`IMG-000-ImageToStrassAudit.md` and `IMG-001-ImageToStrass.md`. Test Plan items 2, 4, and 6 were
+also tightened against being satisfiable vacuously — item 2's field now carries index-derived
+`labels`/`luminance` values a coordinate-mismatched read cannot silently agree with, item 4 now
+specifies exact-equality assigned counts and inline literal coverage figures rather than a bare
+"matches the table," and item 6 now quotes the literal pinned stone counts already committed in
+`tools/test-img-003-organic-placement.mjs:100`/`:102`, `tools/test-img-004-edge-awareness.mjs:172`,
+and `tools/test-img-005-check-and-fix.mjs:74`/`:78` (re-grepped against this branch's actual tip
+immediately before writing this revision) rather than asserting a `deepEqual` this milestone's own
+test file would also have to construct the right side of.

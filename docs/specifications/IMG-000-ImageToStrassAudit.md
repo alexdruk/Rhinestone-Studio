@@ -50,10 +50,10 @@ clone. For each, it states whether the function is reused as-is, extended, or by
   shaping mechanism** for IMG-006 (brightness-driven sizes): IMG-006 samples every fill mode once at
   the *largest* candidate size's pitch and assigns each survivor a size from its own measured
   luminance, calling this function afterward only as a safety net expected to drop nothing —
-  measured (`docs/specifications/IMG-006-BrightnessSizes.md` section 6) to differ from MONO-015's own
-  "sample small, assign, drop" shape, which leaves per-band coverage roughly constant instead of
-  graduated when applied to brightness. See `GeometryEngine.js:227`-`:279` for MONO-015's own two-pass
-  rationale.
+  measured (`docs/specifications/IMG-006-BrightnessSizes.md`, Test Plan "measured baselines") to
+  differ from MONO-015's own "sample small, assign, drop" shape, which leaves per-band coverage
+  roughly constant instead of graduated when applied to brightness. See `GeometryEngine.js:227`-`:279`
+  for MONO-015's own two-pass rationale.
 * **`findCrossGroupCollisions(stones)`** — `src/geometry/StoneSampler.js:529`, exported from
   `src/geometry/index.js:49`, used by `src/monogram/MonogramGenerator.js` (e.g. `:1122`, `:1504`) to
   validate collisions across independently-generated groups. **Reused as-is** by IMG-002: once each

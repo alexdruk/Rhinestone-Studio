@@ -45,8 +45,9 @@ built on.
    at the *largest* candidate size's pitch and each surviving point is assigned a size from its own
    measured luminance, with `dropOverlappingSizedStones()` running only as a safety net expected to
    drop nothing — not MONO-015's "sample small, assign, drop" shape (measured to leave per-band
-   coverage roughly constant instead of graduated; see `docs/specifications/IMG-006-BrightnessSizes.md`
-   section 6) — and a different mechanism from S-200's additive infill, not a replacement for it.
+   coverage roughly constant instead of graduated; see `docs/specifications/IMG-006-BrightnessSizes.md`,
+   Test Plan "measured baselines") — and a different mechanism from S-200's additive infill, not a
+   replacement for it.
 7. **IMG-007 — Studio UX.** Full Image Trace Lightbox UX for every capability IMG-002 through
    IMG-006 added (color layer list, organic/edge/brightness controls, check & fix trigger/report).
    IMG-007 was executed before IMG-002 as the studio shell; later milestones fill its placeholder
