@@ -27,7 +27,10 @@ clone. For each, it states whether the function is reused as-is, extended, or by
   sampler ahead of that framing** (`docs/specifications/IMG-003-OrganicPlacement.md`) — a Bridson
   Poisson-disk `'organic'` mode, scoped to image-only placement, not the vector-shape `SAMPLE_MODES`
   set this audit's samplers also serve — so IMG-004's own "may need a fifth, edge-weighted sampler"
-  framing (`IMG-001-ImageToStrass.md` roadmap item 4) is now about a sixth.
+  framing (`IMG-001-ImageToStrass.md` roadmap item 4) is now about a sixth. **IMG-004 reuses that same
+  sampler again** (`docs/specifications/IMG-004-EdgeAwareness.md`) — a sixth `'edge'` mode built by
+  generalizing `samplePoissonDiskPoints()`'s single fixed radius into a per-point `radiusAt()` hook, not
+  by adding a sixth sampler.
 
 ## Overlap and dedup
 
