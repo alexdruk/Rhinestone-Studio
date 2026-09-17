@@ -1201,7 +1201,12 @@ export class GeometryEngine {
 
     const placement = { xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm };
     const spacingMm = options.stoneSizeMm + options.gapMm;
-    const points = sampleFieldByMode(options.mode, field, placement, spacingMm, options.stoneSizeMm, { seed: options.seed, spread: options.spread, edgeThinning: options.edgeThinning });
+    // IMG-005: a same-layer spacing repair pass, only meaningful for Contour/Radial -- see
+    // docs/specifications/IMG-005-CheckAndFix.md, decision 2. Null for every other mode.
+    const checkFixStats = (options.mode === 'contour' || options.mode === 'radial')
+      ? { violationsFound: 0, repaired: 0, dropped: 0 }
+      : null;
+    const points = sampleFieldByMode(options.mode, field, placement, spacingMm, options.stoneSizeMm, { seed: options.seed, spread: options.spread, edgeThinning: options.edgeThinning, gapMm: options.gapMm, checkFixStats });
 
     // IMG-002: the label lookup only ever runs when a quantized palette is actually in play -- every
     // colorCount:1 (or omitted) call, and every pre-IMG-002 saved image layer, skips it entirely and
@@ -1253,7 +1258,7 @@ export class GeometryEngine {
       stones = stones.concat(infillStones);
     }
 
-    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones });
+    return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones, checkFixStats });
   }
 
   /**

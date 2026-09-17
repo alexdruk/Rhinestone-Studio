@@ -991,7 +991,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // would only ever affect the Studio's own preview, never the actual production layout. palette is
  // imageColorPalette() unconditionally (cheap to pass even when colorCount is 1, where the engine
  // never reads it).
- async generateImageStonesLive(layer,{includeStats=false}={}){if(!this.permanentEngine||!layer.imageSrc)return includeStats?{stones:[],outlineStats:null}:[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveImageFillMode(layer.fillMode),color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),colorCount:layer.colorCount??1,palette:imageColorPalette(),colorMap:layer.colorMap??{},seed:resolveImageSeed(layer.seed),spread:resolveImageSpread(layer.spread),edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm),edgeThinning:resolveImageEdgeThinning(layer.edgeThinning),...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null}:stones}
+ async generateImageStonesLive(layer,{includeStats=false}={}){if(!this.permanentEngine||!layer.imageSrc)return includeStats?{stones:[],outlineStats:null}:[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveImageFillMode(layer.fillMode),color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),colorCount:layer.colorCount??1,palette:imageColorPalette(),colorMap:layer.colorMap??{},seed:resolveImageSeed(layer.seed),spread:resolveImageSpread(layer.spread),edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm),edgeThinning:resolveImageEdgeThinning(layer.edgeThinning),...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null}:stones}
  // RS-1012: 'path' layers (Boolean Operation results) go through the permanent engine's
  // generatePathLayout(), mirroring generateSvgStonesLive()/generateShapeStonesLive() above --
  // layer.contours is already plain (0,0)-rooted polygon data (no parsing step, unlike SVG).
@@ -6197,6 +6197,18 @@ async function renderImageStudio(){
   for(const s of stones)colorCounts.set(s.color,(colorCounts.get(s.color)||0)+1);
   el('imageStudioStatColors').textContent=[...colorCounts.entries()].map(([color,count])=>`${STONE_COLORS[color]?.name||color} × ${count}`).join(', ')||'—';
   el('imageStudioStatBox').textContent=`${formatLengthDisplay(l.w,project.units,1)}×${formatLengthDisplay(l.h,project.units,1)} ${unitSuffix(project.units)}`;
+  // IMG-005: its own additional generateImageStonesLive() call, the same "preview-only... calls"
+  // pattern the Mask/Source drawMask()/drawSource() above already establish -- the cached global
+  // layout carries no per-call checkFixStats, so the report needs a fresh regenerate.
+  const checkFixResult=await engine.generateImageStonesLive(l,{includeStats:true});
+  if(token!==imageStudioRenderToken)return;
+  const checkFixStats=checkFixResult.checkFixStats;
+  const checkFixEl=el('imageStudioStatCheckFix');
+  if((mode==='contour'||mode==='radial')&&checkFixStats){
+    checkFixEl.textContent=checkFixStats.violationsFound===0?'No spacing violations found.':`${checkFixStats.violationsFound} spacing violations found, ${checkFixStats.repaired} repaired, ${checkFixStats.dropped} dropped`;
+  }else{
+    checkFixEl.textContent='Only applies to Contour Fill and Radial Fill.';
+  }
 }
 el('imageStudioView').addEventListener('change',renderImageStudio);
 

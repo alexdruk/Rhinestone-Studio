@@ -372,6 +372,121 @@ export function dedupeStonePoints(points, minDistanceMm) {
 }
 
 /**
+ * IMG-005: same bucket-hash scan shape as dedupeStonePoints() above, generalized to attempt one
+ * repositioning nudge before dropping a too-close candidate, and floored at the true manufacturing
+ * floor `stoneSizeMm + gapMm` rather than dedupeStonePoints()'s `stoneSizeMm`-only floor.
+ *
+ * For each candidate, in input order: if no kept point in its 3x3 cell neighborhood is closer than
+ * `stoneSizeMm + gapMm`, keep it as-is. Otherwise find the single nearest offending kept point. If
+ * it sits at zero distance from the candidate, drop the candidate immediately (the nudge direction
+ * is undefined). Otherwise move the candidate directly away from that nearest point to exactly
+ * `stoneSizeMm + gapMm` from it, and re-validate the nudged position from scratch: `insideAt()` must
+ * accept it, and its own (recomputed) 3x3 cell neighborhood must clear the same floor against every
+ * kept point found there. On success the nudged position is kept (a new Point2D, not the original
+ * candidate); on failure the candidate is dropped. Single-shot -- no retry, no relaxation, matching
+ * dedupeStonePoints()'s own scan-order-dependent, no-backtracking posture.
+ *
+ * See docs/specifications/IMG-005-CheckAndFix.md, decision 1.
+ *
+ * @param {Point2D[]} points Already-placed (absolute project-mm) candidate points.
+ * @param {(xMm: number, yMm: number) => boolean} insideAt Placement-aware on-field test.
+ * @param {number} stoneSizeMm
+ * @param {number} gapMm
+ * @param {{violationsFound: number, repaired: number, dropped: number}|null} [stats] Mutable
+ *   accumulator, incremented in place; violationsFound === repaired + dropped always.
+ * @returns {Point2D[]}
+ */
+export function nudgeOrDropStonePoints(points, insideAt, stoneSizeMm, gapMm, stats = null) {
+  const floorMm = stoneSizeMm + gapMm;
+  if (!(floorMm > 0) || points.length === 0) {
+    return points;
+  }
+
+  const cellSizeMm = floorMm;
+  const floorSqMm = floorMm * floorMm;
+  const buckets = new Map();
+  const kept = [];
+
+  const cellOf = (xMm, yMm) => ({ gx: Math.floor(xMm / cellSizeMm), gy: Math.floor(yMm / cellSizeMm) });
+
+  const nearestOffender = (xMm, yMm) => {
+    const { gx, gy } = cellOf(xMm, yMm);
+    let nearest = null;
+    let nearestDistSqMm = Infinity;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const bucket = buckets.get(`${gx + dx},${gy + dy}`);
+        if (!bucket) continue;
+        for (const other of bucket) {
+          const ddx = xMm - other.xMm;
+          const ddy = yMm - other.yMm;
+          const distSqMm = ddx * ddx + ddy * ddy;
+          if (distSqMm < floorSqMm && distSqMm < nearestDistSqMm) {
+            nearestDistSqMm = distSqMm;
+            nearest = other;
+          }
+        }
+      }
+    }
+    return nearest;
+  };
+
+  const clearOfAllKept = (xMm, yMm) => {
+    const { gx, gy } = cellOf(xMm, yMm);
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const bucket = buckets.get(`${gx + dx},${gy + dy}`);
+        if (!bucket) continue;
+        for (const other of bucket) {
+          const ddx = xMm - other.xMm;
+          const ddy = yMm - other.yMm;
+          if (ddx * ddx + ddy * ddy < floorSqMm) return false;
+        }
+      }
+    }
+    return true;
+  };
+
+  const keep = (point) => {
+    kept.push(point);
+    const { gx, gy } = cellOf(point.xMm, point.yMm);
+    const key = `${gx},${gy}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(point);
+  };
+
+  for (const point of points) {
+    const nearest = nearestOffender(point.xMm, point.yMm);
+    if (!nearest) {
+      keep(point);
+      continue;
+    }
+
+    if (stats) stats.violationsFound++;
+
+    const ddx = point.xMm - nearest.xMm;
+    const ddy = point.yMm - nearest.yMm;
+    const distMm = Math.hypot(ddx, ddy);
+    if (!(distMm > 0)) {
+      if (stats) stats.dropped++;
+      continue;
+    }
+
+    const nudgedXMm = nearest.xMm + (ddx / distMm) * floorMm;
+    const nudgedYMm = nearest.yMm + (ddy / distMm) * floorMm;
+
+    if (insideAt(nudgedXMm, nudgedYMm) && clearOfAllKept(nudgedXMm, nudgedYMm)) {
+      keep(new Point2D(nudgedXMm, nudgedYMm));
+      if (stats) stats.repaired++;
+    } else {
+      if (stats) stats.dropped++;
+    }
+  }
+
+  return kept;
+}
+
+/**
  * RC-004: drop any stone whose center lands within the physically-correct "touching" distance of
  * an already-kept stone *from a different layer* -- the sum of the two stones' own radii, i.e.
  * `(a.d + b.d) / 2` -- scanning in input order (first of any overlapping pair wins, matching
@@ -1722,9 +1837,13 @@ export function sampleStaggeredFieldFillPoints(field, { xMm, yMm, widthMm, heigh
  * @param {number} placement.heightMm
  * @param {number} spacingMm
  * @param {number} [stoneSizeMm] READ-001: dedupe floor. Defaults to spacingMm.
+ * @param {number} [gapMm] IMG-005: manufacturing gap added on top of stoneSizeMm for the repair
+ *   pass's true floor. Defaults to 0 (reduces to dedupeStonePoints()'s own stoneSizeMm-only floor).
+ * @param {{violationsFound: number, repaired: number, dropped: number}|null} [checkFixStats]
+ *   IMG-005: mutable accumulator forwarded to nudgeOrDropStonePoints(). Defaults to null.
  * @returns {Point2D[]}
  */
-export function sampleRadialFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm, stoneSizeMm = spacingMm) {
+export function sampleRadialFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm, stoneSizeMm = spacingMm, gapMm = 0, checkFixStats = null) {
   if (spacingMm <= 0) {
     throw new RangeError('sampleRadialFieldFillPoints requires a positive spacingMm.');
   }
@@ -1753,7 +1872,12 @@ export function sampleRadialFieldFillPoints(field, { xMm, yMm, widthMm, heightMm
     }
   }
 
-  return dedupeStonePoints(points, stoneSizeMm);
+  // IMG-005: a second, placement-aware insideAt -- fieldPixelOn() above is called with LOCAL
+  // coordinates throughout this function; nudgeOrDropStonePoints() validates already-placed
+  // (absolute) points, so it needs the placement's own xMm/yMm subtracted back out. See
+  // docs/specifications/IMG-005-CheckAndFix.md, decision 1, "Coordinate-space note".
+  const insideAtPlaced = (absXMm, absYMm) => fieldPixelOn(field, absXMm - xMm, absYMm - yMm, widthMm, heightMm);
+  return nudgeOrDropStonePoints(points, insideAtPlaced, stoneSizeMm, gapMm, checkFixStats);
 }
 
 /**
@@ -1772,9 +1896,13 @@ export function sampleRadialFieldFillPoints(field, { xMm, yMm, widthMm, heightMm
  * @param {number} placement.heightMm
  * @param {number} spacingMm
  * @param {number} [stoneSizeMm] READ-001: dedupe floor -- see the DEDUPE note above. Defaults to spacingMm.
+ * @param {number} [gapMm] IMG-005: manufacturing gap added on top of stoneSizeMm for the repair
+ *   pass's true floor. Defaults to 0 (reduces to dedupeStonePoints()'s own stoneSizeMm-only floor).
+ * @param {{violationsFound: number, repaired: number, dropped: number}|null} [checkFixStats]
+ *   IMG-005: mutable accumulator forwarded to nudgeOrDropStonePoints(). Defaults to null.
  * @returns {Point2D[]}
  */
-export function sampleContourFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm, stoneSizeMm = spacingMm) {
+export function sampleContourFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm, stoneSizeMm = spacingMm, gapMm = 0, checkFixStats = null) {
   if (spacingMm <= 0) {
     throw new RangeError('sampleContourFieldFillPoints requires a positive spacingMm.');
   }
@@ -1802,7 +1930,12 @@ export function sampleContourFieldFillPoints(field, { xMm, yMm, widthMm, heightM
     }
   }
 
-  return dedupeStonePoints(points, stoneSizeMm);
+  // IMG-005: a second, placement-aware insideAt -- the insideAt closure above is defined in LOCAL
+  // coordinates for computeInwardRingPolygons()'s use; nudgeOrDropStonePoints()
+  // validates already-placed (absolute) points, so it needs the placement's own xMm/yMm subtracted
+  // back out. See docs/specifications/IMG-005-CheckAndFix.md, decision 1, "Coordinate-space note".
+  const insideAtPlaced = (absXMm, absYMm) => fieldPixelOn(field, absXMm - xMm, absYMm - yMm, widthMm, heightMm);
+  return nudgeOrDropStonePoints(points, insideAtPlaced, stoneSizeMm, gapMm, checkFixStats);
 }
 
 /**
@@ -1883,16 +2016,17 @@ export function sampleEdgeFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }
  *   field samplers (the physical overlap constraint is stoneSizeMm, not the gap-inclusive pitch).
  *   'fill'/'staggered' ignore it, and 'organic'/'edge' never read it at all (see
  *   sampleOrganicFieldFillPoints()'s own doc comment). Defaults to spacingMm.
- * @param {object|null} [samplerOptions] IMG-003/IMG-004: `{seed, spread, edgeThinning}`, read only by
- *   the 'organic' ({seed, spread}) and 'edge' ({seed, spread, edgeThinning}) cases. Every other case
- *   ignores it, so this parameter is purely additive.
+ * @param {object|null} [samplerOptions] IMG-003/IMG-004/IMG-005: `{seed, spread, edgeThinning,
+ *   gapMm, checkFixStats}`, read only by the 'organic' ({seed, spread}), 'edge' ({seed, spread,
+ *   edgeThinning}), and 'radial'/'contour' ({gapMm, checkFixStats}) cases. Every other case ignores
+ *   it, so this parameter is purely additive.
  * @returns {Point2D[]}
  */
 export function sampleFieldByMode(mode, field, placement, spacingMm, stoneSizeMm = spacingMm, samplerOptions = null) {
   switch (mode) {
     case 'staggered': return sampleStaggeredFieldFillPoints(field, placement, spacingMm);
-    case 'radial': return sampleRadialFieldFillPoints(field, placement, spacingMm, stoneSizeMm);
-    case 'contour': return sampleContourFieldFillPoints(field, placement, spacingMm, stoneSizeMm);
+    case 'radial': return sampleRadialFieldFillPoints(field, placement, spacingMm, stoneSizeMm, samplerOptions?.gapMm ?? 0, samplerOptions?.checkFixStats ?? null);
+    case 'contour': return sampleContourFieldFillPoints(field, placement, spacingMm, stoneSizeMm, samplerOptions?.gapMm ?? 0, samplerOptions?.checkFixStats ?? null);
     case 'organic': return sampleOrganicFieldFillPoints(field, placement, spacingMm, stoneSizeMm, samplerOptions || {});
     case 'edge': return sampleEdgeFieldFillPoints(field, placement, spacingMm, stoneSizeMm, samplerOptions || {});
     case 'fill':
