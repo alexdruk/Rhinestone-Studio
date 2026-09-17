@@ -123,4 +123,8 @@ await test('no scanned file contains JS/CSS syntax newer than Chrome 103', async
   assert.deepEqual(allOffenders, [], `found Chrome-103-incompatible syntax:\n${allOffenders.join('\n')}`);
 });
 
-console.log(`Browser baseline (Chrome 103) guard passed -- scanned ${scannedFiles.length} files.`);
+if (process.exitCode === 1) {
+  console.log(`Browser baseline (Chrome 103) guard FAILED -- scanned ${scannedFiles.length} files.`);
+} else {
+  console.log(`Browser baseline (Chrome 103) guard passed -- scanned ${scannedFiles.length} files.`);
+}

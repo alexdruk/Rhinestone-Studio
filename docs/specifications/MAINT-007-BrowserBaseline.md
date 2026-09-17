@@ -60,5 +60,6 @@ It is registered in `tools/test-groups.mjs`'s `architecture` and `fast` groups.
   but no such usage exists today, so it wasn't built.
 - **CSS nesting** (`&` selectors) — not scanned; not present in this codebase's CSS today, and a
   reliable pattern would need real CSS parsing rather than a regex.
-- Any Chrome-103+ feature not in the pattern list above (this is a targeted guard against the
-  specific gaps this audit found, not an exhaustive compatibility linter).
+- Any Chrome-103+ feature not in the pattern list above (this is a targeted guard: the pre-merge
+  scan found only the import-attribute syntax; the other patterns are preventive, not an
+  exhaustive compatibility linter).
