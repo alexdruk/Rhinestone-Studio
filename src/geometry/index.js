@@ -42,6 +42,7 @@ export {
   sampleContourFillPoints,
   sampleContourFieldFillPoints,
   sampleOrganicFieldFillPoints,
+  sampleEdgeFieldFillPoints,
   sampleShapeFillPoints,
   sampleFieldByMode,
   dedupeStonePoints,

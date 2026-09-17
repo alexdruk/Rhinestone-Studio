@@ -3,7 +3,15 @@
  *
  * Runs the documented pipeline's bitmap-processing stages in order — grayscale -> threshold ->
  * optional invert -> optional transparency mask -> optional blur -> optional resize — and returns
- * the resulting multi-channel field ({widthPx, heightPx, data, luminance, alpha, labels}). This
+ * the resulting multi-channel field ({widthPx, heightPx, data, luminance, alpha, edge, labels}).
+ * `edge` (IMG-004) is the Sobel-magnitude edge channel of `data` at working resolution, computed
+ * unconditionally via src/image/Edge.js's edgeChannel(); its band radius (`edgeBandFraction`) is
+ * expressed as a fraction of the working field's own post-resize widthPx, converted to a real pixel
+ * radius against `data.widthPx` right before that call -- not a pixel count passed straight through,
+ * since resizeField() is downscale-only and aspect-preserving (a caller-supplied pixel radius sized
+ * against the requested maxWidthPx would be wrong whenever the source is already smaller than
+ * maxWidthPx, or heightPx is the binding dimension). `edge` is read only by the 'edge' image sample
+ * mode. This
  * module never constructs a Stone or StoneLayout and never imports src/geometry/**: it prepares
  * image-derived input only, mirroring how src/svg/** only produces neutral Contours. The permanent
  * src/geometry/GeometryEngine.js (generateImageLayout()) is the only caller that turns this field
@@ -17,6 +25,7 @@ import { toGrayscale } from './Grayscale.js';
 import { applyThreshold, THRESHOLD_MIN, THRESHOLD_MAX, DEFAULT_THRESHOLD } from './Threshold.js';
 import { invertMask } from './Invert.js';
 import { blurMask } from './Blur.js';
+import { edgeChannel } from './Edge.js';
 import { resizeField } from './Resize.js';
 import { extractAlphaChannel, toCoverageMask, ALPHA_COVERAGE_THRESHOLD } from './Alpha.js';
 import { createField } from './ImageBuffer.js';
@@ -49,6 +58,16 @@ function normalizeParams(params) {
     throw new RangeError('blurRadiusPx must be a non-negative integer.');
   }
 
+  // IMG-004 follow-up: a dimensionless fraction of the working field's own post-resize widthPx,
+  // not a pixel count -- resizeField() is downscale-only and aspect-preserving, so a caller-supplied
+  // pixel radius sized against the requested maxWidthPx would be wrong whenever the source is already
+  // smaller than maxWidthPx or heightPx is the binding dimension. prepareImageField() converts this to
+  // a real pixel radius itself, against `data.widthPx` (see its own call site below).
+  const edgeBandFraction = params.edgeBandFraction ?? 0;
+  if (typeof edgeBandFraction !== 'number' || !Number.isFinite(edgeBandFraction) || edgeBandFraction < 0) {
+    throw new RangeError('edgeBandFraction must be a non-negative finite number.');
+  }
+
   const maxWidthPx = Math.round(assertPositiveNumber(params.maxWidthPx, 'maxWidthPx'));
   const maxHeightPx = Math.round(assertPositiveNumber(params.maxHeightPx, 'maxHeightPx'));
 
@@ -71,7 +90,7 @@ function normalizeParams(params) {
     palette = params.palette;
   }
 
-  return { threshold, invert, blurRadiusPx, maxWidthPx, maxHeightPx, transparent, colorCount, palette };
+  return { threshold, invert, blurRadiusPx, edgeBandFraction, maxWidthPx, maxHeightPx, transparent, colorCount, palette };
 }
 
 // IMG-001: forces every pixel whose native-resolution alpha is below the coverage threshold to 0
@@ -110,17 +129,22 @@ function compositeChannelOntoWhite(imageBuffer, channelOffset) {
  * @param {number} [params.threshold] 0-255, default 128.
  * @param {boolean} [params.invert]
  * @param {number} [params.blurRadiusPx]
+ * @param {number} [params.edgeBandFraction] Non-negative finite number, default 0. The IMG-004
+ *   `edge` channel's max-filter band radius, as a fraction of the working field's own post-resize
+ *   widthPx (not a pixel count -- see this file's header comment for why); converted to a real pixel
+ *   radius against `data.widthPx` below. A fraction of 0 returns the raw Sobel magnitude.
  * @param {number} params.maxWidthPx
  * @param {number} params.maxHeightPx
  * @param {'white'|'ignore'} [params.transparent] Default 'white' -- see IMG-001-ImageToStrass.md.
  * @param {number} [params.colorCount] Integer 1-8, default 1. >1 runs the IMG-002 quantizer.
  * @param {{id: string, hex: string}[]} [params.palette] Required when colorCount > 1.
  * @returns {{widthPx: number, heightPx: number, data: Uint8ClampedArray, luminance:
- *   Uint8ClampedArray, alpha: Uint8ClampedArray, labels: (Uint8ClampedArray|null), colorGroups?:
- *   {rgb: number[], pixelShare: number, nearestId: string}[]}} the resulting multi-channel field.
- *   data/luminance/alpha/labels all share the returned widthPx/heightPx. `colorGroups` is present
- *   only when colorCount > 1 (and therefore labels is non-null); `colorCount` omitted or 1 returns
- *   exactly the six IMG-001 keys, `colorGroups` absent.
+ *   Uint8ClampedArray, alpha: Uint8ClampedArray, edge: Uint8ClampedArray, labels:
+ *   (Uint8ClampedArray|null), colorGroups?: {rgb: number[], pixelShare: number, nearestId: string}[]}}
+ *   the resulting multi-channel field. data/luminance/alpha/edge/labels all share the returned
+ *   widthPx/heightPx. `colorGroups` is present only when colorCount > 1 (and therefore labels is
+ *   non-null); `colorCount` omitted or 1 returns exactly the seven IMG-001/IMG-004 keys,
+ *   `colorGroups` absent.
  */
 export function prepareImageField(imageBuffer, params = {}) {
   const options = normalizeParams(params);
@@ -140,6 +164,10 @@ export function prepareImageField(imageBuffer, params = {}) {
 
   const luminance = resizeField(luminanceNative, options.maxWidthPx, options.maxHeightPx);
   const alpha = toCoverageMask(resizeField(alphaNative, options.maxWidthPx, options.maxHeightPx));
+  // IMG-004 follow-up: bandRadiusPx is computed from data's own real post-resize widthPx, not the
+  // requested maxWidthPx -- see normalizeParams()'s edgeBandFraction comment above.
+  const bandRadiusPx = Math.round(options.edgeBandFraction * data.widthPx);
+  const edge = edgeChannel(data, bandRadiusPx);
 
   const field = {
     widthPx: data.widthPx,
@@ -147,6 +175,7 @@ export function prepareImageField(imageBuffer, params = {}) {
     data: data.data,
     luminance: luminance.data,
     alpha: alpha.data,
+    edge: edge.data,
     labels: null
   };
 

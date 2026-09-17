@@ -1614,13 +1614,30 @@ export function sampleFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, sp
   return points;
 }
 
-function fieldPixelOn(field, localXMm, localYMm, widthMm, heightMm) {
+// IMG-004: shared clamped-floor pixel-index arithmetic for fieldPixelOn() (below) and
+// fieldEdgeAt() (sampleEdgeFieldFillPoints()'s own lookup) -- factored out so the two lookups
+// cannot drift apart. Returns -1 when (localXMm, localYMm) is off the placement box.
+function fieldPixelIndex(field, localXMm, localYMm, widthMm, heightMm) {
   if (localXMm < 0 || localYMm < 0 || localXMm > widthMm || localYMm > heightMm) {
-    return false;
+    return -1;
   }
   const pixelX = Math.min(field.widthPx - 1, Math.max(0, Math.floor((localXMm / widthMm) * field.widthPx)));
   const pixelY = Math.min(field.heightPx - 1, Math.max(0, Math.floor((localYMm / heightMm) * field.heightPx)));
-  return field.data[pixelY * field.widthPx + pixelX] >= FIELD_ON_THRESHOLD;
+  return pixelY * field.widthPx + pixelX;
+}
+
+function fieldPixelOn(field, localXMm, localYMm, widthMm, heightMm) {
+  const index = fieldPixelIndex(field, localXMm, localYMm, widthMm, heightMm);
+  return index >= 0 && field.data[index] >= FIELD_ON_THRESHOLD;
+}
+
+// IMG-004: reads field.edge through the same fieldPixelIndex() lookup fieldPixelOn() uses against
+// field.data, so an edge-mode point's radius is always computed from the same pixel its on-field
+// test used. Returns 0 (no edge) when the point is off-field or the field carries no edge channel.
+function fieldEdgeAt(field, localXMm, localYMm, widthMm, heightMm) {
+  if (!field.edge) return 0;
+  const index = fieldPixelIndex(field, localXMm, localYMm, widthMm, heightMm);
+  return index >= 0 ? field.edge[index] : 0;
 }
 
 // IMG-002 follow-up: mirrors src/image/ColorQuantize.js's own NO_LABEL (value 255) -- exported (not
@@ -1818,21 +1835,57 @@ export function sampleOrganicFieldFillPoints(field, { xMm, yMm, widthMm, heightM
 }
 
 /**
+ * IMG-004's edge-aware fill -- built the same way sampleOrganicFieldFillPoints() above is built, but
+ * supplies samplePoissonDiskPoints() a `radiusAt` so points thin away from the field's detected edges
+ * (`field.edge`, from src/image/Edge.js's edgeChannel(), via prepareImageField()) instead of using one
+ * shared radius everywhere. `edgeAt = 255` (a maximal-edge pixel) gives `radiusAt = base`, i.e. full
+ * Organic density -- the manufacturing floor, never packed tighter; `edgeAt = 0` gives the maximum
+ * thinning this call allows, `base * (1 + edgeThinning)`. See
+ * docs/specifications/IMG-004-EdgeAwareness.md, decision 5.
+ *
+ * @param {{widthPx: number, heightPx: number, data: Uint8ClampedArray, edge?: Uint8ClampedArray}} field
+ * @param {object} placement
+ * @param {number} placement.xMm
+ * @param {number} placement.yMm
+ * @param {number} placement.widthMm
+ * @param {number} placement.heightMm
+ * @param {number} spacingMm
+ * @param {number} [stoneSizeMm] Unused -- kept only for dispatcher-signature symmetry. Defaults to spacingMm.
+ * @param {object} [options]
+ * @param {number} [options.seed]
+ * @param {number} [options.spread]
+ * @param {number} [options.edgeThinning] >= 0. Default 1.
+ * @returns {Point2D[]}
+ */
+export function sampleEdgeFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm, stoneSizeMm = spacingMm, { seed, spread, edgeThinning = 1 } = {}) {
+  const insideAt = (localXMm, localYMm) => fieldPixelOn(field, localXMm, localYMm, widthMm, heightMm);
+  const base = spacingMm * Math.max(1, spread);
+  const radiusAt = (localXMm, localYMm) => {
+    const edgeAt = fieldEdgeAt(field, localXMm, localYMm, widthMm, heightMm);
+    return base * (1 + edgeThinning * (1 - edgeAt / 255));
+  };
+  const maxRadiusMm = base * (1 + edgeThinning);
+  const localPoints = samplePoissonDiskPoints({ insideAt, widthMm, heightMm, spacingMm, seed, spread, radiusAt, maxRadiusMm });
+  return localPoints.map((p) => new Point2D(xMm + p.xMm, yMm + p.yMm));
+}
+
+/**
  * Dispatch to the raster sampler for a given fill mode -- the field-based counterpart to
  * sampleShapeFillPoints(), used by GeometryEngine.generateImageLayout(). There is no 'outline' case
  * (a raster density field has no vector perimeter to walk); 'fill' is the default, matching
  * generateImageLayout()'s previous, only, always-fill behavior.
  *
- * @param {'fill'|'staggered'|'radial'|'contour'|'organic'} mode
+ * @param {'fill'|'staggered'|'radial'|'contour'|'organic'|'edge'} mode
  * @param {{widthPx: number, heightPx: number, data: Uint8ClampedArray}} field
  * @param {object} placement
  * @param {number} spacingMm
  * @param {number} [stoneSizeMm] READ-001: dedupe floor forwarded to the 'radial' and 'contour'
  *   field samplers (the physical overlap constraint is stoneSizeMm, not the gap-inclusive pitch).
- *   'fill'/'staggered' ignore it, and 'organic' never reads it at all (see
+ *   'fill'/'staggered' ignore it, and 'organic'/'edge' never read it at all (see
  *   sampleOrganicFieldFillPoints()'s own doc comment). Defaults to spacingMm.
- * @param {object|null} [samplerOptions] IMG-003: `{seed, spread}`, read only by the 'organic' case.
- *   Every other case ignores it, so this parameter is purely additive.
+ * @param {object|null} [samplerOptions] IMG-003/IMG-004: `{seed, spread, edgeThinning}`, read only by
+ *   the 'organic' ({seed, spread}) and 'edge' ({seed, spread, edgeThinning}) cases. Every other case
+ *   ignores it, so this parameter is purely additive.
  * @returns {Point2D[]}
  */
 export function sampleFieldByMode(mode, field, placement, spacingMm, stoneSizeMm = spacingMm, samplerOptions = null) {
@@ -1841,6 +1894,7 @@ export function sampleFieldByMode(mode, field, placement, spacingMm, stoneSizeMm
     case 'radial': return sampleRadialFieldFillPoints(field, placement, spacingMm, stoneSizeMm);
     case 'contour': return sampleContourFieldFillPoints(field, placement, spacingMm, stoneSizeMm);
     case 'organic': return sampleOrganicFieldFillPoints(field, placement, spacingMm, stoneSizeMm, samplerOptions || {});
+    case 'edge': return sampleEdgeFieldFillPoints(field, placement, spacingMm, stoneSizeMm, samplerOptions || {});
     case 'fill':
     default:
       return sampleFieldFillPoints(field, placement, spacingMm);

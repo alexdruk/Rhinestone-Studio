@@ -223,8 +223,9 @@ export function selectNonOverlappingSizedStones(candidatePoints, baseStones, eli
  * @param {ReturnType<typeof normalizeMixedSizeParams>['mixedOptions']} args.mixedOptions
  * @param {number} args.gapMm
  * @param {{xMm:number,yMm:number,sizeMm:number}[]} args.baseStones
- * @param {object|null} [args.samplerOptions] IMG-003: `{seed, spread}`, forwarded only to
- *   sampleFieldByMode()'s 'organic' case -- see its own doc comment.
+ * @param {object|null} [args.samplerOptions] IMG-003/IMG-004: `{seed, spread}` or `{seed, spread,
+ *   edgeThinning}`, forwarded opaquely to sampleFieldByMode()'s 'organic'/'edge' cases -- see its
+ *   own doc comment.
  * @returns {{xMm:number,yMm:number,sizeMm:number}[]}
  */
 export function generateMixedSizeInfillPoints({ mode, source, mixedOptions, gapMm, baseStones, samplerOptions = null }) {

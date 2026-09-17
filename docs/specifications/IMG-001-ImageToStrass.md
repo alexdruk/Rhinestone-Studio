@@ -29,10 +29,12 @@ built on.
 3. **IMG-003 — Organic generator.** A non-grid placement mode for a more natural, hand-set look
    (distinct from Grid/Staggered/Radial/Contour Fill's existing regular patterns). Uses a persisted
    per-layer seed (see Architectural Rules) so regeneration is deterministic. **Specified** in
-   `docs/specifications/IMG-003-OrganicPlacement.md` — implementation not yet landed.
+   `docs/specifications/IMG-003-OrganicPlacement.md` — merged into develop at `2b13b51`.
 4. **IMG-004 — Edge awareness.** Bias placement/density near detected edges in the source image, for
    crisper silhouettes on high-contrast source art. Likely needs a new, edge-weighted sampler — the
-   one place this roadmap anticipates new sampling code, not reuse.
+   one place this roadmap anticipates new sampling code, not reuse. **Specified** in
+   `docs/specifications/IMG-004-EdgeAwareness.md`: the "new sampling code" turned out to be a
+   generalization of IMG-003's own `samplePoissonDiskPoints()` (a `radiusAt` hook), not a new sampler.
 5. **IMG-005 — Check & fix.** A validation pass over a generated image layout that repairs spacing
    violations without ever violating the manufacturing floor (see Architectural Rules).
 6. **IMG-006 — Brightness sizes.** Map measured per-point brightness (from IMG-001's `luminance`

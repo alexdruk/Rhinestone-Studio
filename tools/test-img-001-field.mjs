@@ -73,13 +73,15 @@ await test('1. data stays byte-identical to the pre-IMG-001 pipeline on test-ima
   assert.equal(capped.heightPx, 2);
 });
 
-await test('2. return shape is {widthPx, heightPx, data, luminance, alpha, labels}, all channels sharing one resolution', () => {
+await test('2. return shape is {widthPx, heightPx, data, luminance, alpha, edge, labels}, all channels sharing one resolution', () => {
   const buffer = halfBlackHalfWhiteOpaqueBuffer();
   const field = prepareImageField(buffer, { threshold: 128, maxWidthPx: 4, maxHeightPx: 4 });
 
-  assert.deepEqual(new Set(Object.keys(field)), new Set(['widthPx', 'heightPx', 'data', 'luminance', 'alpha', 'labels']));
+  // IMG-004: field.edge is computed unconditionally alongside data/luminance/alpha -- see
+  // docs/specifications/IMG-004-EdgeAwareness.md decision 4.
+  assert.deepEqual(new Set(Object.keys(field)), new Set(['widthPx', 'heightPx', 'data', 'luminance', 'alpha', 'edge', 'labels']));
   assert.equal(field.labels, null);
-  for (const channel of [field.data, field.luminance, field.alpha]) {
+  for (const channel of [field.data, field.luminance, field.alpha, field.edge]) {
     assert.ok(channel instanceof Uint8ClampedArray);
     assert.equal(channel.length, field.widthPx * field.heightPx);
   }

@@ -29,6 +29,10 @@ export {
 } from './Blur.js';
 
 export {
+  edgeChannel
+} from './Edge.js';
+
+export {
   resizeField
 } from './Resize.js';
 
