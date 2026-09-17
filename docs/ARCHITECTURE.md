@@ -747,6 +747,7 @@ code.
 | 2D + cup rendering | `src/renderer/**` | `src/geometry/**` (StoneLayout, Stone) |
 | Stone size library (RS-1013) | `src/renderer/StoneSizes.js` | nothing else in `src/**` (pure data + validation, exactly like `src/renderer/CrystalColors.js`; a layer's `stoneSize`/a `Stone`'s `sizeMm` stay plain millimeter numbers — `src/geometry/**` never reads this file) |
 | Contour Fill inward-ring geometry (RS-1011) | `src/geometry/ContourRingSampler.js` | nothing else in `src/**` (a distance-transform + marching-squares tracer taking a plain interior-test callback; `src/geometry/StoneSampler.js` is its only caller — see `docs/specifications/RS-1011-FillAlgorithms.md`) |
+| Organic Fill Bridson Poisson-disk sampling (IMG-003) | `src/geometry/OrganicSampler.js` | nothing else in `src/**` (a field-agnostic Poisson-disk point sampler taking a plain `insideAt()` interior-test callback, with its own private `mulberry32` PRNG copy; `src/geometry/StoneSampler.js` is its only caller — see `docs/specifications/IMG-003-OrganicPlacement.md`) |
 | Export | `src/export/**` | `src/geometry/**`, `src/renderer/StoneColors.js` |
 | Browser compatibility | `src/browser/**` | `src/text/**`, `src/fonts/**`, `src/geometry/**` (proves resolution), `opentype.js` |
 | Undo/redo history (RS-1002) | `src/history/**` | nothing else in `src/**` (pure JSON-snapshot bookkeeping; no `Project`/`Layer`/`StoneLayout`/DOM dependency) |

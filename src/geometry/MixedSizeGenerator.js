@@ -223,9 +223,11 @@ export function selectNonOverlappingSizedStones(candidatePoints, baseStones, eli
  * @param {ReturnType<typeof normalizeMixedSizeParams>['mixedOptions']} args.mixedOptions
  * @param {number} args.gapMm
  * @param {{xMm:number,yMm:number,sizeMm:number}[]} args.baseStones
+ * @param {object|null} [args.samplerOptions] IMG-003: `{seed, spread}`, forwarded only to
+ *   sampleFieldByMode()'s 'organic' case -- see its own doc comment.
  * @returns {{xMm:number,yMm:number,sizeMm:number}[]}
  */
-export function generateMixedSizeInfillPoints({ mode, source, mixedOptions, gapMm, baseStones }) {
+export function generateMixedSizeInfillPoints({ mode, source, mixedOptions, gapMm, baseStones, samplerOptions = null }) {
   if (!mixedOptions || mixedOptions.eligibleSizesMm.length === 0) {
     return [];
   }
@@ -234,7 +236,7 @@ export function generateMixedSizeInfillPoints({ mode, source, mixedOptions, gapM
   const pitchMm = infillPitchMm(smallestEligibleMm, gapMm, mixedOptions.conservativeDetail);
 
   const candidatePoints = source.kind === 'field'
-    ? sampleFieldByMode(mode, source.field, source.placement, pitchMm)
+    ? sampleFieldByMode(mode, source.field, source.placement, pitchMm, pitchMm, samplerOptions)
     : sampleShapeFillPoints(mode, source.polygons, source.boundingBox, pitchMm, smallestEligibleMm);
 
   return selectNonOverlappingSizedStones(candidatePoints, baseStones, mixedOptions.eligibleSizesMm, gapMm);

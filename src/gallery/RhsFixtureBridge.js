@@ -46,7 +46,7 @@ export const SUPPORTED_TEXT_MODES = new Set(['centerline', 'fill']);
 // Image Trace layer has no perimeter to trace an "outline" from, so it supports only the four
 // interior-sampling modes -- mirroring app.js's VECTOR_FILL_MODES/IMAGE_FILL_MODES exactly.
 export const SUPPORTED_VECTOR_FILL_MODES = new Set(['outline', 'fill', 'staggered', 'radial', 'contour']);
-export const SUPPORTED_IMAGE_FILL_MODES = new Set(['fill', 'staggered', 'radial', 'contour']);
+export const SUPPORTED_IMAGE_FILL_MODES = new Set(['fill', 'staggered', 'radial', 'contour', 'organic']);
 
 const FONT_FAMILY_TO_ID = {
   'Courier Prime': 'courier-prime-regular',

@@ -201,7 +201,7 @@ await test('9. Image Trace, Export, Production Sheet, Shipping, Settings, and He
   for (const id of ['importImage', 'importImageFile', 'imageStudioRemove', 'imageStudioView', 'imageStudioCanvas', 'imageStudioStats', 'imageStudioGroupColors', 'imageStudioGroupOrganic', 'imageStudioGroupEdges', 'imageStudioGroupCheckFix', 'imageStudioGroupBrightness']) {
     assert.ok(traceBody.includes(`id="${id}"`), `expected the Image Trace Lightbox to contain #${id}`);
   }
-  for (const id of ['imgThreshold', 'imgInvert', 'imgBlurRadius', 'imgMaxWidth', 'imgMaxHeight', 'imgColorCount', 'imgColorReset']) {
+  for (const id of ['imgThreshold', 'imgInvert', 'imgBlurRadius', 'imgMaxWidth', 'imgMaxHeight', 'imgColorCount', 'imgColorReset', 'imgSeed', 'imgShuffle', 'imgSpread']) {
     assert.ok(traceBody.includes(`id="${id}"`), `expected post-commit editing field #${id} inside the Image Trace Lightbox`);
   }
   for (let i = 0; i < 8; i++) {

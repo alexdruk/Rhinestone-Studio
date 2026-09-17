@@ -51,7 +51,9 @@ import { normalizeMixedSizeParams, generateMixedSizeInfillPoints, generateMixedS
 const SAMPLE_MODES = new Set(['outline', 'fill', 'staggered', 'radial', 'contour']);
 // RS-1011: Image Trace has no vector perimeter to walk, so 'outline' is never valid for it -- see
 // normalizeImageParams() below and generateImageLayout()'s doc comment.
-const IMAGE_SAMPLE_MODES = new Set(['fill', 'staggered', 'radial', 'contour']);
+// IMG-003: 'organic' is a fifth image-only mode -- a Bridson Poisson-disk sample, still no vector
+// perimeter to walk, so it joins this set (not SAMPLE_MODES above).
+const IMAGE_SAMPLE_MODES = new Set(['fill', 'staggered', 'radial', 'contour', 'organic']);
 const DEFAULT_MODE = 'outline';
 // IMG-001: mirrors src/image/ImageFieldPipeline.js's own TRANSPARENT_MODES/DEFAULT_TRANSPARENT_MODE
 // -- kept as a separate, hand-matched constant here (the same "each normalizer owns its own enum"
@@ -1184,7 +1186,7 @@ export class GeometryEngine {
 
     const placement = { xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm };
     const spacingMm = options.stoneSizeMm + options.gapMm;
-    const points = sampleFieldByMode(options.mode, field, placement, spacingMm, options.stoneSizeMm);
+    const points = sampleFieldByMode(options.mode, field, placement, spacingMm, options.stoneSizeMm, { seed: options.seed, spread: options.spread });
 
     // IMG-002: the label lookup only ever runs when a quantized palette is actually in play -- every
     // colorCount:1 (or omitted) call, and every pre-IMG-002 saved image layer, skips it entirely and
@@ -1221,7 +1223,8 @@ export class GeometryEngine {
         source: { kind: 'field', field, placement },
         mixedOptions: options.mixedOptions,
         gapMm: options.gapMm,
-        baseStones: stones
+        baseStones: stones,
+        samplerOptions: { seed: options.seed, spread: options.spread }
       });
       const startIndex = stones.length;
       const infillStones = infillPoints.map((point, i) => new Stone({
@@ -2317,6 +2320,12 @@ function normalizeImageParams(params) {
     colorCount: params.colorCount ?? 1,
     palette: params.palette ?? null,
     colorMap: params.colorMap ?? {},
+    // IMG-003: read-site permissive defaults, the same precedent colorCount/palette/colorMap
+    // (IMG-002) and transparent (IMG-001) already established -- no validateProject() change, no
+    // project version bump. Invalid values (non-integer seed, spread < 1) fall back to 1 rather than
+    // throwing, matching every other optional layer field this method defaults this way.
+    seed: Number.isInteger(params.seed) && params.seed >= 0 ? params.seed : 1,
+    spread: typeof params.spread === 'number' && Number.isFinite(params.spread) && params.spread >= 1 ? params.spread : 1,
     // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.
     ...normalizeMixedSizeParams(params, stoneSizeMm)
   };

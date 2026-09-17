@@ -8,6 +8,7 @@
 
 import { Point2D, BoundingBox } from '../text/VectorPath.js';
 import { computeInwardRingPolygons, splitSliverRuns } from './ContourRingSampler.js';
+import { samplePoissonDiskPoints } from './OrganicSampler.js';
 import { groupCongruentContours, applyRigidTransform } from './CongruentContours.js';
 
 // Outline-mode uniform-perimeter spacing: the actual per-contour walk step that makes
@@ -1788,25 +1789,58 @@ export function sampleContourFieldFillPoints(field, { xMm, yMm, widthMm, heightM
 }
 
 /**
+ * IMG-003's Bridson Poisson-disk ('organic') fill -- unlike Fill/Staggered/Radial/Contour above, it
+ * has no vector-sampler counterpart (there is no sampleOrganicFillPoints() for shapes/SVG/paths; see
+ * decision 1). Built the same way sampleContourFieldFillPoints() above builds its own insideAt() and
+ * delegates to ContourRingSampler.js's computeInwardRingPolygons(). Takes stoneSizeMm only for
+ * dispatcher-signature symmetry with the other three field samplers -- deliberately not forwarded to
+ * samplePoissonDiskPoints(), which never reads it (see docs/specifications/IMG-003-OrganicPlacement.md
+ * decision 2): the minimum-distance floor is `spacingMm * max(1, spread)`, enforced at acceptance
+ * time, so there is no separate dedupeStonePoints() pass here unlike Radial/Contour above.
+ *
+ * @param {{widthPx: number, heightPx: number, data: Uint8ClampedArray}} field
+ * @param {object} placement
+ * @param {number} placement.xMm
+ * @param {number} placement.yMm
+ * @param {number} placement.widthMm
+ * @param {number} placement.heightMm
+ * @param {number} spacingMm
+ * @param {number} [stoneSizeMm] Unused -- kept only for dispatcher-signature symmetry. Defaults to spacingMm.
+ * @param {object} [options]
+ * @param {number} [options.seed]
+ * @param {number} [options.spread]
+ * @returns {Point2D[]}
+ */
+export function sampleOrganicFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm, stoneSizeMm = spacingMm, { seed, spread } = {}) {
+  const insideAt = (localXMm, localYMm) => fieldPixelOn(field, localXMm, localYMm, widthMm, heightMm);
+  const localPoints = samplePoissonDiskPoints({ insideAt, widthMm, heightMm, spacingMm, seed, spread });
+  return localPoints.map((p) => new Point2D(xMm + p.xMm, yMm + p.yMm));
+}
+
+/**
  * Dispatch to the raster sampler for a given fill mode -- the field-based counterpart to
  * sampleShapeFillPoints(), used by GeometryEngine.generateImageLayout(). There is no 'outline' case
  * (a raster density field has no vector perimeter to walk); 'fill' is the default, matching
  * generateImageLayout()'s previous, only, always-fill behavior.
  *
- * @param {'fill'|'staggered'|'radial'|'contour'} mode
+ * @param {'fill'|'staggered'|'radial'|'contour'|'organic'} mode
  * @param {{widthPx: number, heightPx: number, data: Uint8ClampedArray}} field
  * @param {object} placement
  * @param {number} spacingMm
  * @param {number} [stoneSizeMm] READ-001: dedupe floor forwarded to the 'radial' and 'contour'
  *   field samplers (the physical overlap constraint is stoneSizeMm, not the gap-inclusive pitch).
- *   'fill'/'staggered' ignore it. Defaults to spacingMm.
+ *   'fill'/'staggered' ignore it, and 'organic' never reads it at all (see
+ *   sampleOrganicFieldFillPoints()'s own doc comment). Defaults to spacingMm.
+ * @param {object|null} [samplerOptions] IMG-003: `{seed, spread}`, read only by the 'organic' case.
+ *   Every other case ignores it, so this parameter is purely additive.
  * @returns {Point2D[]}
  */
-export function sampleFieldByMode(mode, field, placement, spacingMm, stoneSizeMm = spacingMm) {
+export function sampleFieldByMode(mode, field, placement, spacingMm, stoneSizeMm = spacingMm, samplerOptions = null) {
   switch (mode) {
     case 'staggered': return sampleStaggeredFieldFillPoints(field, placement, spacingMm);
     case 'radial': return sampleRadialFieldFillPoints(field, placement, spacingMm, stoneSizeMm);
     case 'contour': return sampleContourFieldFillPoints(field, placement, spacingMm, stoneSizeMm);
+    case 'organic': return sampleOrganicFieldFillPoints(field, placement, spacingMm, stoneSizeMm, samplerOptions || {});
     case 'fill':
     default:
       return sampleFieldFillPoints(field, placement, spacingMm);
