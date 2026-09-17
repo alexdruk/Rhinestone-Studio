@@ -1,4 +1,13 @@
-{
+/**
+ * Round Dinner Plate product definition data (S-112).
+ *
+ * MAINT-007: converted from a JSON module import to a plain .js module. Chrome 103
+ * (this project's minimum supported browser, see docs/specifications/MAINT-007-BrowserBaseline.md)
+ * predates the JS import-attributes syntax used for JSON modules, so the data below -- unchanged
+ * in meaning from the original plate-round-dinner.json -- is exported as a plain ES module default export
+ * instead.
+ */
+export default {
   "schemaVersion": 1,
   "id": "plate-round-dinner",
   "name": "Round Dinner Plate",
@@ -138,4 +147,4 @@
       "Center-depth and foot-ring ranges should be validated against manufacturer drawings or physical samples before production-grade modeling."
     ]
   }
-}
+};

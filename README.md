@@ -62,6 +62,23 @@ npm run dev
 # open http://localhost:5173
 ```
 
+### Supported browsers
+
+Chrome 103+ (see `docs/specifications/MAINT-007-BrowserBaseline.md` for the
+minimum-baseline rationale and what it covers).
+
+### Older Macs without python3
+
+`npm run dev` shells out to `python3`, which isn't available on some older
+macOS installs. Use Python 2's `SimpleHTTPServer` instead:
+
+```bash
+npm ci --omit=dev
+python -m SimpleHTTPServer 5173
+```
+
+then open http://localhost:5173.
+
 Run the automated test suite (plain Node scripts under `tools/test-*.mjs`, no browser required):
 
 ```bash

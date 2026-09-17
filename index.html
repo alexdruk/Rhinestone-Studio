@@ -1024,7 +1024,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
              updateObjectTemplateDetail() in app.js). Outer/inner diameter, overall height, and
              center depth are the plate's own user-adjustable mm parameters (project.plate); rim
              width and weight are read-only/derived. Ranges (min/max/step) mirror
-             src/products/definitions/plate-round-dinner.json's dimensions -- the JSON stays the
+             src/products/definitions/plate-round-dinner.js's dimensions -- the JSON stays the
              single source of truth; these attributes are read from it, not invented here. -->
         <div class="field-section" id="plateFields" style="display:none">
           <h3>Plate dimensions</h3>
@@ -1051,7 +1051,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
              vessel's own user-adjustable mm parameters (project.vessel); Top Diameter is hidden for
              the straight tumbler (forced equal to Body Diameter -- no independent taper). Printable
              height and circumference are read-only/derived. Ranges (min/max/step) mirror
-             src/products/definitions/vessel-standard-*.json's dimensions and are re-applied per
+             src/products/definitions/vessel-standard-*.js's dimensions and are re-applied per
              product by updateObjectTemplateDetail() -- the JSON stays the single source of truth. -->
         <div class="field-section" id="vesselFields" style="display:none">
           <h3>Vessel dimensions</h3>

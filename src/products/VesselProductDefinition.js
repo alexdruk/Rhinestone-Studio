@@ -2,8 +2,8 @@
  * Standard vessel (mug/tumbler/bottle) physical product definitions -- RS-2010.
  *
  * Mirrors src/products/PlateProductDefinition.js's own contract exactly, parameterized by product
- * id instead of hard-coded to one product: the JSON definitions under src/products/definitions/
- * (vessel-standard-{mug,tumbler,bottle}.json) are the single source of truth for each product's
+ * id instead of hard-coded to one product: the definitions under src/products/definitions/
+ * (vessel-standard-{mug,tumbler,bottle}.js) are the single source of truth for each product's
  * dimension ranges/defaults; this module only turns them into small, validated, plain-data helpers.
  * It never generates a StoneLayout and has no dependency on GeometryEngine/StoneLayout/the
  * DOM/Three.js -- the same "pure data + validation" contract every other src/products/** module
@@ -15,9 +15,9 @@
  * diameter -- structurally impossible for a stored value to disagree with the dimensions it comes
  * from.
  */
-import MUG_DEFINITION from './definitions/vessel-standard-mug.json' with { type: 'json' };
-import TUMBLER_DEFINITION from './definitions/vessel-standard-tumbler.json' with { type: 'json' };
-import BOTTLE_DEFINITION from './definitions/vessel-standard-bottle.json' with { type: 'json' };
+import MUG_DEFINITION from './definitions/vessel-standard-mug.js';
+import TUMBLER_DEFINITION from './definitions/vessel-standard-tumbler.js';
+import BOTTLE_DEFINITION from './definitions/vessel-standard-bottle.js';
 
 const VESSEL_DEFINITIONS = Object.freeze({
   mug: MUG_DEFINITION,
