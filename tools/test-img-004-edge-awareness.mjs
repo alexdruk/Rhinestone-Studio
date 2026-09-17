@@ -7,6 +7,7 @@ import {
 } from '../src/geometry/index.js';
 import { createImageBuffer, edgeChannel, prepareImageField } from '../src/image/index.js';
 import { FIELD_ON_THRESHOLD } from '../src/geometry/StoneSampler.js';
+import fs from 'node:fs';
 
 // IMG-004 -- unit tests for the 'edge' image fill mode (src/image/Edge.js's edgeChannel(),
 // OrganicSampler.js's variable-radius generalization, StoneSampler.js's
@@ -263,13 +264,13 @@ await test('8. edgeChannel()\'s monotonic-deque max filter equals a naive O(widt
   }
 });
 
-await test('9. prepareImageField() returns an edge key of the working (post-resize) size; edgeBandPx: 0 yields the raw Sobel magnitude (all-zero on a uniform field)', () => {
+await test('9. prepareImageField() returns an edge key of the working (post-resize) size; edgeBandFraction: 0 yields the raw Sobel magnitude (all-zero on a uniform field)', () => {
   const n = 32;
   const rgba = new Uint8ClampedArray(n * n * 4);
   for (let i = 0; i < n * n; i++) { rgba[i * 4] = 128; rgba[i * 4 + 1] = 128; rgba[i * 4 + 2] = 128; rgba[i * 4 + 3] = 255; }
   const buffer = createImageBuffer({ widthPx: n, heightPx: n, data: rgba });
 
-  const field = prepareImageField(buffer, { maxWidthPx: 16, maxHeightPx: 16, edgeBandPx: 0 });
+  const field = prepareImageField(buffer, { maxWidthPx: 16, maxHeightPx: 16, edgeBandFraction: 0 });
   assert.equal(field.edge.length, 16 * 16, 'edge key should be the working (post-resize) size');
   assert.ok(field.edge.every((v) => v === 0), 'a uniform field has zero gradient everywhere');
 });
@@ -316,8 +317,7 @@ await test('11. S-200 mixed infill in \'edge\' mode: every infill point is on-fi
   const mixed = engine.generateImageLayout({ ...params, ...mixedOptions });
   assert.ok(mixed.stones.length > uniform.stones.length, 'expected additive infill stones');
 
-  const edgeBandPx = Math.round(params.edgeWidthMm * 200 / 60);
-  const field = prepareImageField(buffer, { maxWidthPx: 200, maxHeightPx: 200, edgeBandPx });
+  const field = prepareImageField(buffer, { maxWidthPx: 200, maxHeightPx: 200, edgeBandFraction: params.edgeWidthMm / 60 });
   const placement = { xMm: 10, yMm: 7, widthMm: 60, heightMm: 60 };
   for (const s of mixed.stones) {
     const localXMm = s.xMm - placement.xMm, localYMm = s.yMm - placement.yMm;
@@ -332,6 +332,92 @@ await test('12. the four lattice modes and plain Organic produce identical outpu
     const a = sampleFieldByMode(mode, withoutEdge, DISC_PLACEMENT, PITCH_MM, 2.7, { seed: 1, spread: 1 });
     const b = sampleFieldByMode(mode, withEdge, DISC_PLACEMENT, PITCH_MM, 2.7, { seed: 1, spread: 1 });
     assert.deepEqual(a, b, `mode ${mode} disturbed by the presence of field.edge`);
+  }
+});
+
+// 200x100 (non-square) fixture for item 13 -- a filled rectangle interior, so there is a real edge
+// to detect, on a source whose native pixel width (200) sits below both maxWidthPx values under
+// test (400 and 200), so resizeField() never actually downscales it in either case (widthPx stays
+// 200 both times) -- exactly the "requested cap changes but the real working width does not" case
+// the pre-fix `edgeBandPx = edgeWidthMm * maxWidthPx / widthMm` formula got wrong.
+function rectField(w, h) {
+  const d = new Uint8ClampedArray(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const inside = x > w * 0.2 && x < w * 0.8 && y > h * 0.2 && y < h * 0.8;
+    d[y * w + x] = inside ? 255 : 0;
+  }
+  return { widthPx: w, heightPx: h, data: d };
+}
+function imageBufferFromField(field) {
+  const { widthPx, heightPx, data } = field;
+  const rgba = new Uint8ClampedArray(widthPx * heightPx * 4);
+  for (let i = 0; i < data.length; i++) {
+    const v = data[i] >= FIELD_ON_THRESHOLD ? 0 : 255;
+    rgba[i * 4] = v; rgba[i * 4 + 1] = v; rgba[i * 4 + 2] = v; rgba[i * 4 + 3] = 255;
+  }
+  return createImageBuffer({ widthPx, heightPx, data: rgba });
+}
+
+await test('13. band-width fix: a 200x100 source at maxWidthPx 400 vs. maxWidthPx 200 (same edgeWidthMm, same real working width) produces byte-identical stone output', () => {
+  // Both requested caps (400, 200) are >= the native width (200), so resizeField() never downscales
+  // in either case -- the working field is 200px wide both times. Under the pre-fix formula
+  // (edgeWidthMm * maxWidthPx / widthMm), that would still have produced a 2x-different band radius
+  // (and therefore a different stone layout) purely because maxWidthPx differed, despite the real
+  // field width being identical -- exactly the bug this fix targets. deepEqual stone positions is the
+  // check that actually responds to it (a coarser check, like just comparing stone counts, could
+  // coincidentally match even with a shifted band).
+  const buffer = imageBufferFromField(rectField(200, 100));
+  const baseParams = {
+    imageBuffer: buffer, layerId: 'img004-bandwidth', xMm: 10, yMm: 7, widthMm: 60, heightMm: 30,
+    stoneSizeMm: 2.7, gapMm: 0.3, mode: 'edge', edgeWidthMm: 6, edgeThinning: 1, seed: 1, spread: 1,
+    maxHeightPx: 300
+  };
+  const engine = createGeometryEngine({});
+  const atMax400 = engine.generateImageLayout({ ...baseParams, maxWidthPx: 400 });
+  const atMax200 = engine.generateImageLayout({ ...baseParams, maxWidthPx: 200 });
+  assert.ok(atMax400.stones.length > 0, 'expected a non-empty layout');
+  assert.equal(atMax400.stones.length, atMax200.stones.length, 'maxWidthPx should not change stone count when it does not change the real working width');
+  assert.deepEqual(
+    atMax400.stones.map((s) => ({ xMm: s.xMm, yMm: s.yMm })),
+    atMax200.stones.map((s) => ({ xMm: s.xMm, yMm: s.yMm })),
+    'maxWidthPx 400 vs. 200 produced different stone positions despite an unchanged real working width'
+  );
+});
+
+// Brace-balanced extraction of one function's body, the same convention
+// tools/test-autosave-recovery-wiring.mjs's extractFunctionBody() uses for its own app.js source-text
+// guards -- robust to the function being reformatted across lines, unlike a fixed end-marker slice.
+// `signatureMarker` must include the function's own parameter list through its body-opening "{" --
+// generateImageStonesLive()'s destructured default param (`{includeStats=false}={}`) has its own
+// braces before the real body starts, so searching for "the next {" after just the function name
+// would stop at the wrong one.
+function extractFunctionBody(source, signatureMarker, label) {
+  const start = source.indexOf(signatureMarker);
+  assert.ok(start !== -1, `expected to find "${signatureMarker}" (${label}) in app.js`);
+  const braceStart = start + signatureMarker.length - 1;
+  assert.equal(source[braceStart], '{', `expected signatureMarker to end at ${label}'s body-opening "{"`);
+  let depth = 0;
+  for (let i = braceStart; i < source.length; i++) {
+    if (source[i] === '{') depth++;
+    else if (source[i] === '}') {
+      depth--;
+      if (depth === 0) return source.slice(start, i + 1);
+    }
+  }
+  throw new Error(`expected to find the matching closing "}" of ${label} in app.js`);
+}
+
+await test('14. app-path guard: generateImageStonesLive()\'s params object actually forwards seed/spread/edgeWidthMm/edgeThinning to generateImageLayout()', () => {
+  // Engine-level tests (1-13 above) cannot catch a defect where app.js simply never reads a layer
+  // field into the params object it hands the engine -- see docs/BACKLOG.md's new row on exactly this
+  // class of defect (layer.seed/layer.spread never reached the engine between the IMG-003 merge and
+  // this fix). Guards on app.js's own source text instead, the same convention
+  // tools/test-autosave-recovery-wiring.mjs's updateAll() tail guards use.
+  const appSrc = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
+  const body = extractFunctionBody(appSrc, 'async generateImageStonesLive(layer,{includeStats=false}={}){', 'generateImageStonesLive()');
+  assert.ok(body.includes('this.permanentEngine.generateImageLayout(params)'), 'expected generateImageStonesLive() to still call generateImageLayout(params)');
+  for (const key of ['seed:', 'spread:', 'edgeWidthMm:', 'edgeThinning:']) {
+    assert.ok(body.includes(key), `generateImageStonesLive()'s params object is missing "${key}"`);
   }
 });
 

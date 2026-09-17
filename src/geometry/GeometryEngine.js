@@ -1157,8 +1157,10 @@ export class GeometryEngine {
    * @param {number} [params.threshold] 0-255, default 128.
    * @param {boolean} [params.invert]
    * @param {number} [params.blurRadiusPx]
-   * @param {number} [params.edgeWidthMm] IMG-004: edge band width in mm, > 0, default 6. Converted
-   *   to `edgeBandPx` for prepareImageField(); read only by the 'edge' mode.
+   * @param {number} [params.edgeWidthMm] IMG-004: edge band width in mm, > 0, default 6. Converted to
+   *   a dimensionless `edgeBandFraction` (of `widthMm`) for prepareImageField(), since the working
+   *   field's post-resize pixel width is not reliably `maxWidthPx` (see generateImageLayout()'s own
+   *   comment at its prepareImageField() call site); read only by the 'edge' mode.
    * @param {number} [params.edgeThinning] IMG-004: interior thinning multiplier, >= 0, default 1;
    *   read only by the 'edge' mode.
    * @param {number} params.maxWidthPx
@@ -1179,12 +1181,17 @@ export class GeometryEngine {
   generateImageLayout(params = {}) {
     const options = normalizeImageParams(params);
 
-    const edgeBandPx = Math.round(options.edgeWidthMm * options.maxWidthPx / options.widthMm);
+    // IMG-004 follow-up: a dimensionless fraction of the placement's own widthMm, not a pixel count
+    // -- resizeField() is downscale-only and aspect-preserving (src/image/Resize.js), so the working
+    // field's actual widthPx is not reliably maxWidthPx (native resolution may already be smaller, or
+    // height may be the binding dimension). prepareImageField() converts this fraction to a pixel
+    // radius itself, from the post-resize field's own real widthPx.
+    const edgeBandFraction = options.edgeWidthMm / options.widthMm;
     const field = prepareImageField(options.imageBuffer, {
       threshold: options.threshold,
       invert: options.invert,
       blurRadiusPx: options.blurRadiusPx,
-      edgeBandPx,
+      edgeBandFraction,
       maxWidthPx: options.maxWidthPx,
       maxHeightPx: options.maxHeightPx,
       transparent: options.transparent,
