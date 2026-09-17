@@ -91,10 +91,15 @@ await test('1. determinism: sampleOrganicFieldFillPoints() run twice with identi
 });
 
 await test('2. decision 2 pitch table: organic/grid/staggered/contour counts on the reference fixture', () => {
+  // IMG-005's nudgeOrDropStonePoints() replaced dedupeStonePoints() inside sampleContourFieldFillPoints(),
+  // so a Contour count can differ from a pre-IMG-005 pin at the same floor even with gapMm omitted --
+  // it may now keep a nudged point the old drop-only dedupe would have removed. The pitch-3.0 and
+  // pitch-2.2 rows below are that (255->256, 479->480), not a regression; the pitch-4.3 row is
+  // unchanged because it had no violations to repair either way.
   const rows = [
-    { pitch: 3.0, stoneSizeMm: 2.7, organic: 182, grid: 256, staggered: 298, contour: 255 },
+    { pitch: 3.0, stoneSizeMm: 2.7, organic: 182, grid: 256, staggered: 298, contour: 256 },
     { pitch: 4.3, stoneSizeMm: 4.0, organic: 90, grid: 120, staggered: 142, contour: 121 },
-    { pitch: 2.2, stoneSizeMm: 1.9, organic: 317, grid: 477, staggered: 548, contour: 479 }
+    { pitch: 2.2, stoneSizeMm: 1.9, organic: 317, grid: 477, staggered: 548, contour: 480 }
   ];
   for (const row of rows) {
     const organic = sampleFieldByMode('organic', DISC_FIELD, DISC_PLACEMENT, row.pitch);

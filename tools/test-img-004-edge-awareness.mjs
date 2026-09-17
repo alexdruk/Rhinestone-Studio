@@ -166,7 +166,10 @@ await test('5. frame table: organic/grid/contour baselines plus all four edge ce
   const contour = sampleFieldByMode('contour', FRAME_FIELD, DISC_PLACEMENT, PITCH_MM, 2.7);
   assert.equal(organic.length, 202, 'frame organic baseline');
   assert.equal(grid.length, 288, 'frame grid baseline');
-  assert.equal(contour.length, 272, 'frame contour baseline');
+  // IMG-005's nudgeOrDropStonePoints() replaced dedupeStonePoints() inside sampleContourFieldFillPoints(),
+  // so this Contour count can differ from a pre-IMG-005 pin at the same floor even with gapMm omitted --
+  // it may now keep a nudged point the old drop-only dedupe would have removed. 272->274 is that, not a regression.
+  assert.equal(contour.length, 274, 'frame contour baseline');
 
   const rows = [
     { edgeWidthMm: 3, edgeThinning: 1, count: 115, edge255: 97 },
