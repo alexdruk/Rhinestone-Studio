@@ -367,8 +367,11 @@ recomputed at test time.
    yields raw contour counts 2, 32, 2 respectively; without `label`, 3. A `null` clip source gives
    output deep-equal to a self-union for all four calls.
 3. **`resolveImagePolygons()` on `logo`, `colorCount:1`.** One region, `colorId` equal to the
-   `color` passed (`'crystal'` when omitted), 3 contours, 657 vertices in total, contour areas
-   (to 0.1 mm², in returned order) 2713.7, 81.9, 835.1.
+   `color` passed (`null` when omitted, since `normalizeImageParams()` defaults `color` to `null`
+   — `GeometryEngine.js:2361` — not to a color id; `regionPathSvg()` still falls back to
+   `STONE_COLORS.crystal` for fill/stroke on a `null`/unknown `colorId`, so the rendered path is
+   unaffected), 3 contours, 657 vertices in total, contour areas (to 0.1 mm², in returned order)
+   2713.7, 81.9, 835.1.
 4. **`resolveImagePolygons()` on `logo`, `colorCount:3`.** Three regions in label order:
    `siam` 2 contours (287 vertices; 1278.5, 118.6 mm²), `citrine` 1 contour (99 vertices;
    118.6 mm²), `sapphire` 2 contours (516 vertices; 2713.7, 2198.7 mm²). The 31 citrine fragments

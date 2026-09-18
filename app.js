@@ -3235,7 +3235,7 @@ function resolveImageExportRegions(project){
   for(const layer of project.layers){
     if(!layer.visible||layer.type!=='image'||!layer.imageSrc||!(layer.w>0)||!(layer.h>0))continue;
     const buffer=imageBufferCache.get(layer.imageSrc);
-    if(!buffer)throw new Error(`Image layer "${layer.name}" is not decoded yet.`);
+    if(!buffer)throw new Error(`Image layer "${layer.imageName}" is not decoded yet.`);
     const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),colorCount:layer.colorCount??1,palette:imageColorPalette(),colorMap:layer.colorMap??{},edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm)};
     const{regions:layerRegions}=permanentEngine.resolveImagePolygons(params);
     for(const region of layerRegions){regions.push({layerId:layer.id,colorId:region.colorId,contours:region.contours})}

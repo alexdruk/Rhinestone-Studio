@@ -205,15 +205,22 @@ await test('5. The area floor on photo -- raw vs. kept contour counts', () => {
 
   const threeColor = engine.resolveImagePolygons(baseImageParams(photoBuffer(), 3));
   assert.equal(threeColor.regions.length, 3);
-  const keptCounts = threeColor.regions.map((r) => r.contours.length);
-  assert.deepEqual(keptCounts.sort((a, b) => a - b), [2, 7, 7]);
 
   const labeledField = prepareImageField(photoBuffer(), { threshold: 128, maxWidthPx: N, maxHeightPx: N, colorCount: 3, palette: PALETTE });
   const labeledSource = { kind: 'field', field: labeledField, xMm: 0, yMm: 0, widthMm: W, heightMm: H };
-  const rawPerLabel = [0, 1, 2].map((label) =>
-    combineShapeSources({ ...labeledSource, label }, null, 'union', { targetSpacingMm: STONE + GAP }).contours.length
-  );
-  assert.deepEqual(rawPerLabel.sort((a, b) => a - b), [182, 405, 559]);
+  // Ordered per-label, not sorted -- pins each label's own raw and kept count individually rather
+  // than discarding the label-to-count mapping via a sort.
+  const expectedByLabel = [
+    { colorId: 'citrine', keptContours: 2, rawContours: 182 },
+    { colorId: 'siam', keptContours: 7, rawContours: 405 },
+    { colorId: 'crystal', keptContours: 7, rawContours: 559 }
+  ];
+  expectedByLabel.forEach((expected, label) => {
+    assert.equal(threeColor.regions[label].colorId, expected.colorId, `label ${label} colorId`);
+    assert.equal(threeColor.regions[label].contours.length, expected.keptContours, `label ${label} kept contour count`);
+    const rawForLabel = combineShapeSources({ ...labeledSource, label }, null, 'union', { targetSpacingMm: STONE + GAP });
+    assert.equal(rawForLabel.contours.length, expected.rawContours, `label ${label} raw contour count`);
+  });
 });
 
 function measureIoU(field, contours, label, widthMm, heightMm) {
@@ -281,13 +288,18 @@ await test('7. Document structure with options.regions', () => {
   }
 
   assert.equal((groupedSvg.match(/<path\b/g) || []).length, 3);
-  for (const pathMatch of groupedSvg.matchAll(/<path\b[^>]*fill-rule="evenodd"[^>]*\/>/g)) {
-    assert.ok(pathMatch[0].includes('fill-rule="evenodd"'));
-  }
+  assert.equal((groupedSvg.match(/<path\b[^>]*fill-rule="evenodd"[^>]*\/>/g) || []).length, 3);
+
   const siamPathMatch = groupedSvg.match(/<g data-layer="img1" data-color="siam">(<path[^>]*\/>)<\/g>/);
   assert.ok(siamPathMatch, 'expected a siam region <g><path/></g>');
   const siamZCount = (siamPathMatch[1].match(/Z/g) || []).length;
   assert.equal(siamZCount, 2, 'siam has 2 contours, so its path d should contain exactly two Z');
+  // Pins the fill/fill-opacity/stroke/stroke-width/fill-rule attribute cluster as one literal
+  // (the `d` attribute's own value is excluded -- it is the traced polyline itself, already
+  // covered by siamZCount above and by items 4/6's contour-count/vertex/area/IoU assertions).
+  const siamAttrsTail = siamPathMatch[1].match(/ fill="[^"]*" fill-opacity="[^"]*" stroke="[^"]*" stroke-width="[^"]*" fill-rule="[^"]*"\/>$/);
+  assert.ok(siamAttrsTail, 'expected the siam path to end with its fill/stroke attribute cluster');
+  assert.equal(siamAttrsTail[0], ' fill="#9b1c1c" fill-opacity="0.35" stroke="#4a0d0d" stroke-width="0.12" fill-rule="evenodd"/>');
 
   const stoneGroupColors = [...groupedSvg.matchAll(/<g data-layer="img1" data-color="([a-z]+)" data-size="2\.800">/g)].map((m) => m[1]);
   assert.deepEqual(stoneGroupColors, ['citrine', 'sapphire', 'siam']);
@@ -296,6 +308,18 @@ await test('7. Document structure with options.regions', () => {
   const groupedCircleAttrs = [...groupedSvg.matchAll(/<circle[^>]*\/>/g)].map((m) => m[0]);
   assert.deepEqual(new Set(legacyCircleAttrs), new Set(groupedCircleAttrs));
   assert.equal(legacyCircleAttrs.length, groupedCircleAttrs.length);
+
+  // The Set comparison above is order-insensitive; separately confirm each group's circles keep
+  // their relative order from the legacy document (spec decision 2: "circles keep their relative
+  // order from stoneLayout.stones").
+  const legacyIndexOf = new Map(legacyCircleAttrs.map((c, i) => [c, i]));
+  for (const color of stoneGroupColors) {
+    const groupMatch = groupedSvg.match(new RegExp(`<g data-layer="img1" data-color="${color}" data-size="2\\.800">([\\s\\S]*?)<\\/g>`));
+    assert.ok(groupMatch, `expected a stone group for ${color}`);
+    const indices = [...groupMatch[1].matchAll(/<circle[^>]*\/>/g)].map((m) => legacyIndexOf.get(m[0]));
+    const ascending = [...indices].sort((a, b) => a - b);
+    assert.deepEqual(indices, ascending, `${color} group circles must appear in the legacy document's relative order`);
+  }
 });
 
 await test('8. Colour-rule factoring is a pure move: generateImageLayout() stone breakdown, measured on pristine develop@49b3b26', () => {
