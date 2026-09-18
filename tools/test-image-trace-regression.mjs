@@ -55,7 +55,10 @@ await test('2. app.js\'s generateImageStonesLive() calls the permanent engine\'s
 await test('3. GeometryEngine.js defines generateImageLayout() and calls sampleFieldFillPoints()/prepareImageField(), not a reimplemented sampler', async () => {
   const geometryEngineSrc = await readFile(path.join(repoRoot, 'src', 'geometry', 'GeometryEngine.js'), 'utf8');
   assert.match(geometryEngineSrc, /generateImageLayout\s*\(/, 'expected a generateImageLayout method');
-  assert.match(geometryEngineSrc, /import\s*\{\s*prepareImageField\s*\}\s*from\s*['"]\.\.\/image\/index\.js['"]/, 'expected GeometryEngine.js to import prepareImageField from src/image/index.js');
+  // IMG-006: braces widened to allow other named imports alongside prepareImageField (e.g.
+  // DEFAULT_THRESHOLD) -- this asserts prepareImageField is imported from src/image/index.js at
+  // all, not that it is the only name in the brace list.
+  assert.match(geometryEngineSrc, /import\s*\{[^}]*\bprepareImageField\b[^}]*\}\s*from\s*['"]\.\.\/image\/index\.js['"]/, 'expected GeometryEngine.js to import prepareImageField from src/image/index.js');
   assert.match(geometryEngineSrc, /sampleFieldFillPoints\s*\(/, 'expected generateImageLayout to call sampleFieldFillPoints');
   assert.match(geometryEngineSrc, /new Stone\(/, 'expected generateImageLayout to construct real Stone instances (via the shared stones.map(...) code already used by every other generate*Layout method)');
 });
