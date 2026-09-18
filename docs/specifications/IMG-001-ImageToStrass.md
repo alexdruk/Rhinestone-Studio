@@ -53,7 +53,10 @@ built on.
    IMG-007 was executed before IMG-002 as the studio shell; later milestones fill its placeholder
    groups — IDs are not renumbered.
 8. **IMG-008 — Vector-first SVG.** An SVG export path for image-derived layers that emits vector
-   shapes reflecting the traced structure, rather than only per-stone circles.
+   shapes reflecting the traced structure, rather than only per-stone circles. Settled by
+   `docs/specifications/IMG-008-VectorFirstSvg.md`: per-colour silhouettes traced from the layer's
+   own working field, floored at one stone footprint, emitted under the stones in the same 2D SVG
+   export.
 
 Milestone numbers are fixed by this roadmap; scope within each is subject to refinement by its own
 milestone brief when reached (per `docs/MILESTONE_WORKFLOW.md`).

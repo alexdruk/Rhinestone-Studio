@@ -176,7 +176,12 @@ function sampleSource(source, xMm, yMm) {
   if (localXMm < 0 || localYMm < 0 || localXMm > source.widthMm || localYMm > source.heightMm) return 0;
   const pixelX = Math.min(field.widthPx - 1, Math.max(0, Math.floor((localXMm / source.widthMm) * field.widthPx)));
   const pixelY = Math.min(field.heightPx - 1, Math.max(0, Math.floor((localYMm / source.heightMm) * field.heightPx)));
-  return field.data[pixelY * field.widthPx + pixelX] >= FIELD_ON_THRESHOLD ? 1 : 0;
+  const index = pixelY * field.widthPx + pixelX;
+  if (field.data[index] < FIELD_ON_THRESHOLD) return 0;
+  // IMG-008: an optional per-label mask restriction (Vector-first SVG's per-colour region tracing) --
+  // absent for every pre-existing caller, so this is a no-op there.
+  if (source.label !== undefined && field.labels[index] !== source.label) return 0;
+  return 1;
 }
 
 function combineValues(subjectValue, clipValue, operation) {
@@ -192,7 +197,11 @@ function combineValues(subjectValue, clipValue, operation) {
 /**
  * Combine two shape sources with a single boolean operation.
  *
- * @param {{kind:'polygons',polygons:{xMm:number,yMm:number}[][]}|{kind:'field',field:object,xMm:number,yMm:number,widthMm:number,heightMm:number}} subjectSource
+ * @param {{kind:'polygons',polygons:{xMm:number,yMm:number}[][]}|{kind:'field',field:object,xMm:number,yMm:number,widthMm:number,heightMm:number,label?:number}} subjectSource
+ *   A 'field' source's optional `label` (IMG-008) restricts sampling to pixels whose
+ *   `field.labels` entry equals it, in addition to the ordinary `field.data` on-test -- used to
+ *   trace one quantized image layer's colour label at a time. Omitted (the default), sampling is
+ *   unaffected -- byte-identical to before this option existed.
  * @param {*} clipSource Same shape as subjectSource.
  * @param {'union'|'subtract'|'intersect'|'xor'} operation
  * @param {object} [options]
