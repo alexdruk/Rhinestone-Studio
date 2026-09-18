@@ -15,7 +15,7 @@
 import { Stone } from './Stone.js';
 import { sampleShapeFillPoints, sampleFieldByMode } from './StoneSampler.js';
 
-const SIZE_MODES = new Set(['uniform', 'mixed', 'weight']);
+const SIZE_MODES = new Set(['uniform', 'mixed', 'weight', 'brightness']);
 
 // Deliberately biased toward the sparse end -- "intentionally conservative... do not aggressively
 // maximize stone count" (S-200 brief). See infillPitchMm() below for how this scales candidate
@@ -49,16 +49,17 @@ function assertPositiveNumber(value, name) {
  * @param {number} [params.maxSizeMm]
  * @param {number} [params.conservativeDetail] 0..1, default DEFAULT_CONSERVATIVE_DETAIL.
  * @param {number} stoneSizeMm The layer's own primary stone size (already validated by the caller).
- * @param {{allowWeight?: boolean}} [opts] MONO-015: whether `sizeMode: 'weight'` is legal for this
- *   caller. Only normalizeTextParams() (text layers, outline mode) passes `true`; every other
- *   generate*Layout() caller leaves it false, and `sizeMode: 'weight'` there is a hard error --
- *   weight-following stone size is valid only for a text layer sampled in outline mode, so any
- *   other combination is a caller bug, not something to silently absorb. (An *unknown* mode string
- *   is a separate case handled by app.js's resolveSizeMode() old-project fallback, never reaching
- *   here.)
- * @returns {{sizeMode: 'uniform'|'mixed'|'weight', mixedOptions: null | {...}, weightOptions?: {sizesMm: number[]}}}
+ * @param {{allowWeight?: boolean, allowBrightness?: boolean}} [opts] MONO-015: whether
+ *   `sizeMode: 'weight'` is legal for this caller. Only normalizeTextParams() (text layers, outline
+ *   mode) passes `true`; every other generate*Layout() caller leaves it false, and
+ *   `sizeMode: 'weight'` there is a hard error -- weight-following stone size is valid only for a
+ *   text layer sampled in outline mode, so any other combination is a caller bug, not something to
+ *   silently absorb. IMG-006: `allowBrightness` is the same guard for `sizeMode: 'brightness'`; only
+ *   normalizeImageParams() (image layers) passes `true`. (An *unknown* mode string is a separate case
+ *   handled by app.js's resolveSizeMode() old-project fallback, never reaching here.)
+ * @returns {{sizeMode: 'uniform'|'mixed'|'weight'|'brightness', mixedOptions: null | {...}, weightOptions?: {sizesMm: number[]}, brightnessOptions?: {sizesMm: number[]}}}
  */
-export function normalizeMixedSizeParams(params, stoneSizeMm, { allowWeight = false } = {}) {
+export function normalizeMixedSizeParams(params, stoneSizeMm, { allowWeight = false, allowBrightness = false } = {}) {
   const sizeMode = params.sizeMode ?? 'uniform';
   if (!SIZE_MODES.has(sizeMode)) {
     throw new TypeError(`Unsupported sizeMode: ${sizeMode}. Expected one of: ${[...SIZE_MODES].join(', ')}`);
@@ -85,6 +86,27 @@ export function normalizeMixedSizeParams(params, stoneSizeMm, { allowWeight = fa
     }
     const sizesMm = rawSizes.length ? [...rawSizes] : [stoneSizeMm];
     return { sizeMode, mixedOptions: null, weightOptions: { sizesMm } };
+  }
+  if (sizeMode === 'brightness') {
+    if (!allowBrightness) {
+      throw new Error("MixedSizeGenerator.normalizeMixedSizeParams: sizeMode 'brightness' (brightness-driven stone size) is only supported for an image layer.");
+    }
+    // IMG-006: `brightnessSizesMm` is a single flat array of ascending mm diameters -- the same
+    // "graduated step's own sizes, stored flat, validated entry-by-entry" shape `weightSizesMm` above
+    // already established, not S-200's minSizeMm/maxSizeMm/allowedSizesMm (those belong to 'mixed').
+    // An empty (or absent) array is the "brightness on, nothing configured" default -- it reduces to
+    // uniform output at the layer's own stone size.
+    const rawSizes = Array.isArray(params.brightnessSizesMm) ? params.brightnessSizesMm : [];
+    for (const value of rawSizes) {
+      assertPositiveNumber(value, 'brightnessSizesMm entry');
+    }
+    for (let k = 1; k < rawSizes.length; k++) {
+      if (rawSizes[k] <= rawSizes[k - 1]) {
+        throw new RangeError('brightnessSizesMm must be strictly ascending.');
+      }
+    }
+    const sizesMm = rawSizes.length ? [...rawSizes] : [stoneSizeMm];
+    return { sizeMode, mixedOptions: null, brightnessOptions: { sizesMm } };
   }
   if (sizeMode === 'uniform') {
     return { sizeMode, mixedOptions: null };

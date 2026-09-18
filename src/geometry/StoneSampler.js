@@ -1755,6 +1755,35 @@ function fieldEdgeAt(field, localXMm, localYMm, widthMm, heightMm) {
   return index >= 0 ? field.edge[index] : 0;
 }
 
+// IMG-006: per-point "ink" (darkness, [0,1]) derived from a raw 0..255 luminance reading against
+// threshold/invert -- decision 3's formula. `invert` off darkens toward `threshold` (0 at/above
+// threshold, 1 at lum 0); `invert` on darkens toward 255 (0 at/below threshold, 1 at lum 255). Both
+// branches guard their own divisor (threshold 0 for invert off, threshold 255 for invert on) by
+// returning 0 rather than dividing by zero. Shared by GeometryEngine.generateImageLayout()'s
+// per-assigned-point rung lookup (against the absolute fieldLuminanceAt() below) and this module's
+// own local-coordinate fieldInkAt() (organic/edge radiusAt) -- one formula, two coordinate systems,
+// the same relationship fieldPixelOn()/fieldLabelAt() already have to each other.
+export function ink(lum, threshold, invert) {
+  if (!invert) {
+    if (threshold === 0) return 0;
+    return Math.min(1, Math.max(0, (threshold - lum) / threshold));
+  }
+  if (threshold === 255) return 0;
+  return Math.min(1, Math.max(0, (lum - threshold) / (255 - threshold)));
+}
+
+// IMG-006: local-coordinate ink() lookup against field.luminance, mirroring fieldEdgeAt()'s own
+// local-coordinate/off-field convention -- 0 (no thinning) off-field or when the field carries no
+// luminance channel. Used only by sampleOrganicFieldFillPoints()/sampleEdgeFieldFillPoints()'s own
+// radiusAt(); only ever called for an already-on-field point (insideAt() gates first there), so the
+// off-field branch is defensive parity, not a real code path.
+function fieldInkAt(field, localXMm, localYMm, widthMm, heightMm, threshold, invert) {
+  if (!field.luminance) return 0;
+  const index = fieldPixelIndex(field, localXMm, localYMm, widthMm, heightMm);
+  if (index < 0) return 0;
+  return ink(field.luminance[index], threshold, invert);
+}
+
 // IMG-002 follow-up: mirrors src/image/ColorQuantize.js's own NO_LABEL (value 255) -- exported (not
 // module-private) so GeometryEngine.js imports this copy instead of hand-declaring a third one, and
 // so tools/test-img-002-color-layers.mjs's FIELD_ON_THRESHOLD-parity case can also assert this stays
@@ -1786,6 +1815,37 @@ export function fieldLabelAt(field, placement, xMm, yMm) {
   const pixelX = Math.min(field.widthPx - 1, Math.max(0, Math.floor((localXMm / widthMm) * field.widthPx)));
   const pixelY = Math.min(field.heightPx - 1, Math.max(0, Math.floor((localYMm / heightMm) * field.heightPx)));
   return field.labels[pixelY * field.widthPx + pixelX];
+}
+
+/**
+ * Look up a field's raw per-pixel luminance (0..255) at an absolute (xMm, yMm) -- IMG-006's
+ * fieldLabelAt() counterpart for field.luminance. Mirrors its exact coordinate/pixel arithmetic so a
+ * stone's assigned brightness size is read from the same pixel its on-field (field.data) test used.
+ * Returns the sentinel `0` when the resolved pixel is off-field or field.luminance is null --
+ * matching fieldEdgeAt()'s own off-field convention (a plain 0, not a dedicated out-of-band value)
+ * rather than fieldLabelAt()'s NO_LABEL: field.luminance has no reserved "not a real reading" byte
+ * the way labels do. In practice this branch is unreachable: this is only ever called (see
+ * GeometryEngine.generateImageLayout()) for a point sampleFieldByMode() already produced, which is
+ * on-field by construction -- the sentinel exists only for defensive parity with fieldLabelAt()'s
+ * own off-field contract.
+ *
+ * @param {{widthPx: number, heightPx: number, luminance: (Uint8ClampedArray|null)}} field
+ * @param {{xMm: number, yMm: number, widthMm: number, heightMm: number}} placement
+ * @param {number} xMm Absolute X (a Stone's own xMm).
+ * @param {number} yMm Absolute Y (a Stone's own yMm).
+ * @returns {number} 0..255, or the sentinel 0 off-field/no channel.
+ */
+export function fieldLuminanceAt(field, placement, xMm, yMm) {
+  if (!field.luminance) return 0;
+  const { xMm: placementXMm, yMm: placementYMm, widthMm, heightMm } = placement;
+  const localXMm = xMm - placementXMm;
+  const localYMm = yMm - placementYMm;
+  if (localXMm < 0 || localYMm < 0 || localXMm > widthMm || localYMm > heightMm) {
+    return 0;
+  }
+  const pixelX = Math.min(field.widthPx - 1, Math.max(0, Math.floor((localXMm / widthMm) * field.widthPx)));
+  const pixelY = Math.min(field.heightPx - 1, Math.max(0, Math.floor((localYMm / heightMm) * field.heightPx)));
+  return field.luminance[pixelY * field.widthPx + pixelX];
 }
 
 /**
@@ -1959,11 +2019,28 @@ export function sampleContourFieldFillPoints(field, { xMm, yMm, widthMm, heightM
  * @param {object} [options]
  * @param {number} [options.seed]
  * @param {number} [options.spread]
+ * @param {number} [options.brightnessThinning] IMG-006: >= 0, default 0 (no thinning). See decision
+ *   2/3 -- multiplies the base radius by `(1 + brightnessThinning * (1 - ink))`. `0` (the default,
+ *   and every pre-IMG-006 layer) is byte-identical to before this milestone *by construction*: the
+ *   call below omits `radiusAt`/`maxRadiusMm` entirely rather than passing one that would evaluate
+ *   to the same constant, since samplePoissonDiskPoints()'s variable-radius path computes its own
+ *   neighbourhood reach differently and would risk drifting from the original fixed-radius path.
+ * @param {number} [options.threshold] Only read when `brightnessThinning` is truthy.
+ * @param {boolean} [options.invert] Only read when `brightnessThinning` is truthy.
  * @returns {Point2D[]}
  */
-export function sampleOrganicFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm, stoneSizeMm = spacingMm, { seed, spread } = {}) {
+export function sampleOrganicFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm, stoneSizeMm = spacingMm, { seed, spread, brightnessThinning = 0, threshold, invert } = {}) {
   const insideAt = (localXMm, localYMm) => fieldPixelOn(field, localXMm, localYMm, widthMm, heightMm);
-  const localPoints = samplePoissonDiskPoints({ insideAt, widthMm, heightMm, spacingMm, seed, spread });
+  let localPoints;
+  if (brightnessThinning) {
+    const base = spacingMm * Math.max(1, spread);
+    const radiusAt = (localXMm, localYMm) =>
+      base * (1 + brightnessThinning * (1 - fieldInkAt(field, localXMm, localYMm, widthMm, heightMm, threshold, invert)));
+    const maxRadiusMm = base * (1 + brightnessThinning);
+    localPoints = samplePoissonDiskPoints({ insideAt, widthMm, heightMm, spacingMm, seed, spread, radiusAt, maxRadiusMm });
+  } else {
+    localPoints = samplePoissonDiskPoints({ insideAt, widthMm, heightMm, spacingMm, seed, spread });
+  }
   return localPoints.map((p) => new Point2D(xMm + p.xMm, yMm + p.yMm));
 }
 
@@ -1988,16 +2065,40 @@ export function sampleOrganicFieldFillPoints(field, { xMm, yMm, widthMm, heightM
  * @param {number} [options.seed]
  * @param {number} [options.spread]
  * @param {number} [options.edgeThinning] >= 0. Default 1.
+ * @param {number} [options.brightnessThinning] IMG-006: >= 0, default 0 (no thinning). Multiplies
+ *   the existing edge-factor radius by a second `(1 + brightnessThinning * (1 - ink))` factor (see
+ *   sampleOrganicFieldFillPoints()'s own doc comment for the ink formula). `0` (the default) makes
+ *   this factor exactly `1` everywhere, so this mode already going through `radiusAt` unconditionally
+ *   (unlike Organic) means byte-identity holds by simple multiplicative neutrality, with no
+ *   conditional call shape needed here.
+ * @param {number} [options.threshold] Only meaningfully read when `brightnessThinning` is truthy.
+ * @param {boolean} [options.invert] Only meaningfully read when `brightnessThinning` is truthy.
  * @returns {Point2D[]}
  */
-export function sampleEdgeFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm, stoneSizeMm = spacingMm, { seed, spread, edgeThinning = 1 } = {}) {
+export function sampleEdgeFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }, spacingMm, stoneSizeMm = spacingMm, { seed, spread, edgeThinning = 1, brightnessThinning = 0, threshold, invert } = {}) {
   const insideAt = (localXMm, localYMm) => fieldPixelOn(field, localXMm, localYMm, widthMm, heightMm);
   const base = spacingMm * Math.max(1, spread);
-  const radiusAt = (localXMm, localYMm) => {
-    const edgeAt = fieldEdgeAt(field, localXMm, localYMm, widthMm, heightMm);
-    return base * (1 + edgeThinning * (1 - edgeAt / 255));
-  };
-  const maxRadiusMm = base * (1 + edgeThinning);
+  // IMG-006: the ink factor is only ever computed when brightnessThinning is truthy -- NOT folded
+  // unconditionally into radiusAt as `* (1 + brightnessThinning * (1 - ink))`. brightnessThinning: 0
+  // makes that factor mathematically 1 when `ink` is a real number, but `threshold`/`invert` are
+  // legitimately undefined on every call that never opted into brightness thinning (including a
+  // direct StoneSampler.js caller, not just GeometryEngine's own resolved defaults) -- and
+  // `0 * (1 - NaN)` is `NaN`, not `0`, which would corrupt radiusAt (and therefore
+  // samplePoissonDiskPoints()'s farEnough() floor) silently. Skipping the computation entirely below
+  // this threshold keeps the pre-IMG-006 formula byte-identical *by construction*, not by relying on
+  // multiplication-by-zero neutrality.
+  const radiusAt = brightnessThinning
+    ? (localXMm, localYMm) => {
+      const edgeAt = fieldEdgeAt(field, localXMm, localYMm, widthMm, heightMm);
+      const edgeFactor = 1 + edgeThinning * (1 - edgeAt / 255);
+      const inkFactor = 1 + brightnessThinning * (1 - fieldInkAt(field, localXMm, localYMm, widthMm, heightMm, threshold, invert));
+      return base * edgeFactor * inkFactor;
+    }
+    : (localXMm, localYMm) => {
+      const edgeAt = fieldEdgeAt(field, localXMm, localYMm, widthMm, heightMm);
+      return base * (1 + edgeThinning * (1 - edgeAt / 255));
+    };
+  const maxRadiusMm = brightnessThinning ? base * (1 + edgeThinning) * (1 + brightnessThinning) : base * (1 + edgeThinning);
   const localPoints = samplePoissonDiskPoints({ insideAt, widthMm, heightMm, spacingMm, seed, spread, radiusAt, maxRadiusMm });
   return localPoints.map((p) => new Point2D(xMm + p.xMm, yMm + p.yMm));
 }
@@ -2016,10 +2117,11 @@ export function sampleEdgeFieldFillPoints(field, { xMm, yMm, widthMm, heightMm }
  *   field samplers (the physical overlap constraint is stoneSizeMm, not the gap-inclusive pitch).
  *   'fill'/'staggered' ignore it, and 'organic'/'edge' never read it at all (see
  *   sampleOrganicFieldFillPoints()'s own doc comment). Defaults to spacingMm.
- * @param {object|null} [samplerOptions] IMG-003/IMG-004/IMG-005: `{seed, spread, edgeThinning,
- *   gapMm, checkFixStats}`, read only by the 'organic' ({seed, spread}), 'edge' ({seed, spread,
- *   edgeThinning}), and 'radial'/'contour' ({gapMm, checkFixStats}) cases. Every other case ignores
- *   it, so this parameter is purely additive.
+ * @param {object|null} [samplerOptions] IMG-003/IMG-004/IMG-005/IMG-006: `{seed, spread,
+ *   edgeThinning, gapMm, checkFixStats, brightnessThinning, threshold, invert}`, read only by the
+ *   'organic' ({seed, spread, brightnessThinning, threshold, invert}), 'edge' ({seed, spread,
+ *   edgeThinning, brightnessThinning, threshold, invert}), and 'radial'/'contour' ({gapMm,
+ *   checkFixStats}) cases. Every other case ignores it, so this parameter is purely additive.
  * @returns {Point2D[]}
  */
 export function sampleFieldByMode(mode, field, placement, spacingMm, stoneSizeMm = spacingMm, samplerOptions = null) {
