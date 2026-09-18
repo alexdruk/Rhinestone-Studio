@@ -108,8 +108,9 @@ Three things this settles:
 ### 1. Two routes, chosen by the image, not by the operator
 
 `computeSubjectMask(imageBuffer, options)` returns
-`{ mask, route, backgroundRgb }` where `mask` is a native-resolution 0/255 field of the same shape
-`applyThreshold()` returns.
+`{ mask, route, backgroundRgb }` where `mask` is a native-resolution 0/1 field of the same shape
+`applyThreshold()` returns (not 0/255 — `invertMask()` flips `0<->1`, and `blurMask()`'s radius-0
+path rescales `0/1 -> 0/255` itself; either would silently corrupt a 0/255 input).
 
 * **Alpha route**, taken when more than 1% of pixels have alpha below
   `ALPHA_COVERAGE_THRESHOLD` (`src/image/Alpha.js:15`, already 128): the mask is exactly
@@ -179,7 +180,7 @@ the pristine tip.
 2. `src/image/SubjectMask.js` (new) — `computeSubjectMask()`,
    `DEFAULT_SUBJECT_TOLERANCE_DE`, `SUBJECT_ALPHA_PRESENCE_FRACTION` (0.01).
 3. `src/image/ImageFieldPipeline.js` — `maskMode` through `normalizeParams()`, the one-line mask
-   choice at `:154`.
+   choice at `:155`.
 4. `src/image/index.js` — export `computeSubjectMask` and the two constants.
 5. `app.js` — `resolveImageMaskMode()`; `maskMode` added to all five sites in decision 6; the
    import factory (`:5278`); `HISTORY_TRACKED_CONTROL_IDS` (`:4840`).
@@ -259,8 +260,12 @@ implementation (items 2-6, 8-9).
 3. **Route selection.** The alpha variant reports `route: 'alpha'`; the opaque variant reports
    `route: 'background'` with `backgroundRgb` equal to `[246, 246, 246]`. A variant with exactly
    0.5% transparent pixels takes the background route; one with 2% takes the alpha route.
-4. **Tolerance insensitivity.** ΔE 8, 12 and 20 give identical coverage on the opaque variant, and
-   ΔE 2 does not (pinning that the parameter is wired through at all rather than ignored).
+4. **Tolerance insensitivity.** ΔE 8, 12 and 20 give identical coverage on the opaque wing variant
+   (its minimum subject-to-background distance is ≈ΔE 23.9, so no tested tolerance below that changes
+   anything on this fixture — ΔE 2 included). A separate, dedicated 40×40 fixture — a 245-gray
+   background, a 10×10 red interior square, ringed by a one-pixel-wide 233-gray fringe touching the
+   square (≈ΔE 4.19 from the background) — shows ΔE 2 including the fringe (coverage 144) while ΔE 8,
+   12 and 20 exclude it (coverage 100), proving the parameter is wired through rather than ignored.
 5. **Largest-component reduction.** A variant with a detached 3×3 speckle of subject colour in the
    corner yields the same coverage as the clean variant, and a variant with an enclosed
    background-coloured hole in a wing yields coverage below the clean variant by that hole's exact
@@ -276,6 +281,15 @@ implementation (items 2-6, 8-9).
 9. **App-path source-text guard.** `app.js` contains `function resolveImageMaskMode(`, and each of
    the five sites in decision 6 contains `maskMode:` or `imgMaskMode` as appropriate; `index.html`
    contains `id="imgMaskMode"`; `HISTORY_TRACKED_CONTROL_IDS` contains `'imgMaskMode'`.
+10. **Engine end-to-end.** On the opaque wing variant, at `stoneSizeMm: 2`, `gapMm: 0.3`,
+    `mode: 'fill'`, `threshold: 128`, `maxWidthPx`/`maxHeightPx: 400`, `xMm`/`yMm: 0`,
+    `widthMm`/`heightMm: 60`: `generateImageLayout()` gives `69` stones at `maskMode: 'threshold'`
+    and `196` at `'subject'`; `resolveImagePolygons()` gives `5` contours at `'threshold'` and `1` at
+    `'subject'`. This is the only item that exercises `GeometryEngine.js`'s two `maskMode` forwards
+    (`generateImageLayout()`'s and `resolveImagePolygons()`'s own `prepareImageField()` calls) —
+    nothing else in this suite or the default 153-test suite calls the engine with
+    `maskMode: 'subject'` and checks its effect, so items 1-9 alone would pass unchanged with either
+    forward deleted.
 
 Pre-existing tests to re-grep before running the suite, since they pin literal source shapes near
 what this milestone changes: the three `extractFunctionBody()` guards on `generateImageStonesLive()`

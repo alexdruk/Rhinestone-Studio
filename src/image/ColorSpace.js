@@ -12,6 +12,20 @@ function srgbToLinear(c) {
   return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
 }
 
+// IMG-009 perf follow-up: computeSubjectMask()'s background route calls rgbToLab() once per native
+// pixel (1870x1900 = ~3.55M calls measured at ~1075ms vs. ~147ms for threshold mode on the same
+// image). Every one of those calls passes real 0-255 channel bytes, so srgbToLinear() is called with
+// only 256 possible inputs -- precomputing it once at module load and reading the table for integer
+// 0-255 inputs is bit-identical (the table is populated by calling this exact function once per
+// value, not an approximation), not just close. Non-integer/out-of-range inputs (none in this
+// module's own callers, but rgbToLab() is a public export) still take the direct computation path.
+const SRGB_TO_LINEAR_LUT = new Float64Array(256);
+for (let i = 0; i < 256; i++) SRGB_TO_LINEAR_LUT[i] = srgbToLinear(i);
+
+function srgbToLinearFast(c) {
+  return (Number.isInteger(c) && c >= 0 && c <= 255) ? SRGB_TO_LINEAR_LUT[c] : srgbToLinear(c);
+}
+
 const D65_WHITE = [0.95047, 1.0, 1.08883];
 
 function labF(t) {
@@ -20,9 +34,9 @@ function labF(t) {
 }
 
 export function rgbToLab(r, g, b) {
-  const rl = srgbToLinear(r);
-  const gl = srgbToLinear(g);
-  const bl = srgbToLinear(b);
+  const rl = srgbToLinearFast(r);
+  const gl = srgbToLinearFast(g);
+  const bl = srgbToLinearFast(b);
   const x = rl * 0.4124564 + gl * 0.3575761 + bl * 0.1804375;
   const y = rl * 0.2126729 + gl * 0.7151522 + bl * 0.0721750;
   const z = rl * 0.0193339 + gl * 0.1191920 + bl * 0.9503041;

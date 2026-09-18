@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { createImageBuffer, prepareImageField, computeSubjectMask } from '../src/image/index.js';
 import { quantizeColors } from '../src/image/ColorQuantize.js';
 import { rgbToLab } from '../src/image/ColorSpace.js';
+import { createGeometryEngine } from '../src/geometry/index.js';
 
 // IMG-009 -- unit tests for the subject-mask operator: SubjectMask.js's computeSubjectMask() (alpha
 // route, background route + largest-4-connected-component reduction), ImageFieldPipeline.js's
@@ -296,4 +297,34 @@ await test('9. App-path source-text guard: resolveImageMaskMode(), the five deci
   assert.ok(historyTrackedEnd !== -1, 'expected to find the closing "];" of HISTORY_TRACKED_CONTROL_IDS in app.js');
   const historyTrackedSrc = appJs.slice(historyTrackedStart, historyTrackedEnd);
   assert.ok(historyTrackedSrc.includes("'imgMaskMode'"), 'HISTORY_TRACKED_CONTROL_IDS is missing imgMaskMode');
+});
+
+// ---- Item 10: engine end-to-end -- maskMode actually reaches generateImageLayout()/resolveImagePolygons() ----
+// Item 9's source-text guard proves app.js forwards maskMode: into the params objects it hands the
+// engine; it does NOT prove the engine does anything with it. GeometryEngine.js's normalizeImageParams()
+// builds an explicit whitelisted options object (no catch-all spread) and both generateImageLayout()'s
+// and resolveImagePolygons()'s own prepareImageField() calls forward maskMode by hand -- drop either
+// forward and every other test in this file (and all 153 in the default suite) still passes, since
+// none of them call the engine with maskMode: 'subject' and check its effect. This item does.
+await test('10. Engine end-to-end: generateImageLayout()/resolveImagePolygons() actually produce different output for maskMode "threshold" vs "subject" on the opaque wing variant', () => {
+  const engine = createGeometryEngine();
+  const baseParams = (maskMode) => ({
+    imageBuffer: opaqueBuffer,
+    layerId: 'L1',
+    xMm: 0, yMm: 0, widthMm: 60, heightMm: 60,
+    stoneSizeMm: 2, gapMm: 0.3, mode: 'fill', color: 'jet',
+    threshold: 128, maxWidthPx: 400, maxHeightPx: 400,
+    maskMode
+  });
+
+  const thresholdLayout = engine.generateImageLayout(baseParams('threshold'));
+  const subjectLayout = engine.generateImageLayout(baseParams('subject'));
+  assert.equal(thresholdLayout.stones.length, 69, 'generateImageLayout() maskMode:"threshold" stone count');
+  assert.equal(subjectLayout.stones.length, 196, 'generateImageLayout() maskMode:"subject" stone count');
+
+  const thresholdPolygons = engine.resolveImagePolygons(baseParams('threshold'));
+  const subjectPolygons = engine.resolveImagePolygons(baseParams('subject'));
+  const contourCount = (result) => result.regions.reduce((sum, r) => sum + r.contours.length, 0);
+  assert.equal(contourCount(thresholdPolygons), 5, 'resolveImagePolygons() maskMode:"threshold" contour count');
+  assert.equal(contourCount(subjectPolygons), 1, 'resolveImagePolygons() maskMode:"subject" contour count');
 });
