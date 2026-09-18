@@ -1180,6 +1180,10 @@ export class GeometryEngine {
    *   catalog each cluster's `nearestId` resolves against.
    * @param {object} [params.colorMap] `nearestId -> overrideId`, default {}. See
    *   docs/specifications/IMG-002-ColorLayers.md decision 3.
+   * @param {'threshold'|'subject'} [params.maskMode] Default 'threshold' (IMG-009). 'subject' calls
+   *   src/image/SubjectMask.js's computeSubjectMask() instead of applyThreshold() for the mask this
+   *   field's `data`/blur/resize/colorCount all run on. See
+   *   docs/specifications/IMG-009-SubjectMask.md.
    * @returns {StoneLayout}
    */
   generateImageLayout(params = {}) {
@@ -1200,7 +1204,8 @@ export class GeometryEngine {
       maxHeightPx: options.maxHeightPx,
       transparent: options.transparent,
       colorCount: options.colorCount,
-      palette: options.palette
+      palette: options.palette,
+      maskMode: options.maskMode
     });
 
     const placement = { xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm };
@@ -1347,7 +1352,8 @@ export class GeometryEngine {
       maxHeightPx: options.maxHeightPx,
       transparent: options.transparent,
       colorCount: options.colorCount,
-      palette: options.palette
+      palette: options.palette,
+      maskMode: options.maskMode
     });
 
     const targetSpacingMm = options.stoneSizeMm + options.gapMm;
@@ -2442,6 +2448,13 @@ function normalizeImageParams(params) {
     throw new TypeError(`Unsupported image transparency policy: ${transparent}. Expected one of: ${[...IMAGE_TRANSPARENT_MODES].join(', ')}`);
   }
 
+  // IMG-009: mirrors src/image/ImageFieldPipeline.js's own read-site-permissive maskMode resolution
+  // (never a throw, unlike `transparent` above) -- 'threshold' unless the value is exactly 'subject'.
+  // Forwarded into this method's own prepareImageField() calls below so the live stone-generation and
+  // resolveImagePolygons() (Boolean/SVG-export tracing) paths actually honor a layer's maskMode, not
+  // just the field-preparation module itself. See docs/specifications/IMG-009-SubjectMask.md decision 3.
+  const maskMode = params.maskMode === 'subject' ? 'subject' : 'threshold';
+
   return {
     imageBuffer: params.imageBuffer,
     layerId: params.layerId,
@@ -2466,6 +2479,7 @@ function normalizeImageParams(params) {
     colorCount: params.colorCount ?? 1,
     palette: params.palette ?? null,
     colorMap: params.colorMap ?? {},
+    maskMode,
     // IMG-003: read-site permissive defaults, the same precedent colorCount/palette/colorMap
     // (IMG-002) and transparent (IMG-001) already established -- no validateProject() change, no
     // project version bump. Invalid values (non-integer seed, spread < 1) fall back to 1 rather than

@@ -61,6 +61,15 @@ built on.
 Milestone numbers are fixed by this roadmap; scope within each is subject to refinement by its own
 milestone brief when reached (per `docs/MILESTONE_WORKFLOW.md`).
 
+### Post-Roadmap Milestones
+
+9. **IMG-009 — Subject mask.** A second masking operator, `computeSubjectMask()`, alongside the
+   original `applyThreshold()`: photographic subjects routinely span luminances both above and below
+   any single threshold, a failure this roadmap's original eight milestones never addressed because
+   it is a defect in the masking operator itself, not something IMG-002 through IMG-008's own scope
+   (color, organic placement, edge awareness, check & fix, brightness, Studio UX, vector export) could
+   fix by refinement. Settled by `docs/specifications/IMG-009-SubjectMask.md`.
+
 ## Architectural Rules (govern all eight milestones)
 
 * **`src/image/**` stays pure and never imports `src/geometry/**`.** It prepares neutral,

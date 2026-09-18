@@ -16,6 +16,10 @@
  * identical (r, g, b, data, palette, colorCount) always produce a deepEqual result.
  */
 
+// IMG-009: rgbToLab()/cie76Distance() moved to ColorSpace.js (a pure move, byte-identical), since
+// SubjectMask.js needs the same conversion for its own background-distance test.
+import { rgbToLab, cie76Distance } from './ColorSpace.js';
+
 // Density field "on" threshold -- src/image/** does not import src/geometry/**, so this is a
 // deliberate, kept-in-sync-by-test copy of StoneSampler.js's own FIELD_ON_THRESHOLD (value 128).
 // See tools/test-img-002-color-layers.mjs's "FIELD_ON_THRESHOLD parity" case.
@@ -26,38 +30,6 @@ export const FIELD_ON_THRESHOLD = 128;
 export const NO_LABEL = 255;
 
 const CHANNEL_KEYS = ['r5', 'g5', 'b5'];
-
-// ---- sRGB -> CIE Lab (D65), for CIE76 nearest-palette-entry distance ----------------------------
-
-function srgbToLinear(c) {
-  const v = c / 255;
-  return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
-}
-
-const D65_WHITE = [0.95047, 1.0, 1.08883];
-
-function labF(t) {
-  const delta = 6 / 29;
-  return t > delta * delta * delta ? Math.cbrt(t) : t / (3 * delta * delta) + 4 / 29;
-}
-
-function rgbToLab(r, g, b) {
-  const rl = srgbToLinear(r);
-  const gl = srgbToLinear(g);
-  const bl = srgbToLinear(b);
-  const x = rl * 0.4124564 + gl * 0.3575761 + bl * 0.1804375;
-  const y = rl * 0.2126729 + gl * 0.7151522 + bl * 0.0721750;
-  const z = rl * 0.0193339 + gl * 0.1191920 + bl * 0.9503041;
-  const fx = labF(x / D65_WHITE[0]);
-  const fy = labF(y / D65_WHITE[1]);
-  const fz = labF(z / D65_WHITE[2]);
-  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
-}
-
-// CIE76: plain Euclidean distance in Lab space.
-function cie76Distance(labA, labB) {
-  return Math.hypot(labA[0] - labB[0], labA[1] - labB[1], labA[2] - labB[2]);
-}
 
 function parseHexColor(hex) {
   const h = String(hex).replace('#', '');

@@ -30,6 +30,7 @@ import { resizeField } from './Resize.js';
 import { extractAlphaChannel, toCoverageMask, ALPHA_COVERAGE_THRESHOLD } from './Alpha.js';
 import { createField } from './ImageBuffer.js';
 import { quantizeColors } from './ColorQuantize.js';
+import { computeSubjectMask } from './SubjectMask.js';
 
 // IMG-001: 'white' is the pre-IMG-001 default and the only behavior every existing caller/saved
 // project has ever seen -- alpha is flattened onto white by toGrayscale() and no masking step runs.
@@ -90,7 +91,14 @@ function normalizeParams(params) {
     palette = params.palette;
   }
 
-  return { threshold, invert, blurRadiusPx, edgeBandFraction, maxWidthPx, maxHeightPx, transparent, colorCount, palette };
+  // IMG-009: read-site permissive default, like every other optional layer-derived param above --
+  // 'threshold' unless the value is exactly 'subject', never a throw. This is what makes every saved
+  // project (no stored maskMode) and every caller predating this milestone (four existing test files,
+  // resolveLayerShapeSource()) resolve to 'threshold' and stay byte-identical -- see
+  // docs/specifications/IMG-009-SubjectMask.md decision 3.
+  const maskMode = params.maskMode === 'subject' ? 'subject' : 'threshold';
+
+  return { threshold, invert, blurRadiusPx, edgeBandFraction, maxWidthPx, maxHeightPx, transparent, colorCount, palette, maskMode };
 }
 
 // IMG-001: forces every pixel whose native-resolution alpha is below the coverage threshold to 0
@@ -138,6 +146,9 @@ function compositeChannelOntoWhite(imageBuffer, channelOffset) {
  * @param {'white'|'ignore'} [params.transparent] Default 'white' -- see IMG-001-ImageToStrass.md.
  * @param {number} [params.colorCount] Integer 1-8, default 1. >1 runs the IMG-002 quantizer.
  * @param {{id: string, hex: string}[]} [params.palette] Required when colorCount > 1.
+ * @param {'threshold'|'subject'} [params.maskMode] Default 'threshold' -- which operator produces
+ *   the on/off mask `data`/blur/resize/colorCount all run on. 'subject' calls SubjectMask.js's
+ *   computeSubjectMask() instead of applyThreshold(); see docs/specifications/IMG-009-SubjectMask.md.
  * @returns {{widthPx: number, heightPx: number, data: Uint8ClampedArray, luminance:
  *   Uint8ClampedArray, alpha: Uint8ClampedArray, edge: Uint8ClampedArray, labels:
  *   (Uint8ClampedArray|null), colorGroups?: {rgb: number[], pixelShare: number, nearestId: string}[]}}
@@ -152,7 +163,9 @@ export function prepareImageField(imageBuffer, params = {}) {
   const luminanceNative = toGrayscale(imageBuffer);
   const alphaNative = extractAlphaChannel(imageBuffer);
 
-  let mask = applyThreshold(luminanceNative, options.threshold);
+  let mask = options.maskMode === 'subject'
+    ? computeSubjectMask(imageBuffer, {}).mask
+    : applyThreshold(luminanceNative, options.threshold);
   if (options.invert) {
     mask = invertMask(mask);
   }

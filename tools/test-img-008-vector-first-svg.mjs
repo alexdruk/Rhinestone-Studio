@@ -357,7 +357,7 @@ await test('9. App-path source-text guard: resolveImageExportRegions() and the e
   const body = extractFunctionBody(appSrc, 'function resolveImageExportRegions(project){', 'resolveImageExportRegions()');
   for (const needle of [
     'threshold:', 'invert:', 'blurRadiusPx:', 'maxWidthPx:', 'maxHeightPx:',
-    'transparent:resolveImageTransparentMode(', 'colorCount:', 'palette:imageColorPalette()',
+    'transparent:resolveImageTransparentMode(', 'maskMode:', 'colorCount:', 'palette:imageColorPalette()',
     'colorMap:', 'edgeWidthMm:resolveImageEdgeWidth(', 'stoneSizeMm:', 'gapMm:',
     'permanentEngine.resolveImagePolygons(', 'imageBufferCache.get('
   ]) {

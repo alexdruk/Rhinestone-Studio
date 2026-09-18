@@ -158,7 +158,17 @@ future color-quantization milestone. The new transparency mask stage (`transpare
 param, default `'white'`) sits between invert and blur: `'ignore'` forces any pixel whose source
 alpha is below the coverage threshold off in `data`, regardless of luminance, so a saved project
 with no `transparent` field (every project saved before IMG-001) still generates byte-identical
-geometry. `src/image/**` now has zero dependency on `src/geometry/**` and never constructs a
+geometry. As of IMG-009, the mask `data`/blur/resize/color-quantization all run on is chosen by a
+`maskMode` param (default `'threshold'`, resolved everywhere through one `resolveImageMaskMode()`):
+`'threshold'` is `Threshold.js`'s original `applyThreshold()` (keeps a pixel when its luminance is
+below a cutoff — correct for a logo or black text on white); `'subject'` is
+`SubjectMask.js`'s new `computeSubjectMask()` (keeps a pixel when it is part of the photographed
+subject, via alpha coverage when the image already carries real transparency, otherwise via CIE76
+Lab distance from a border-sampled background color, reduced to its largest 4-connected component —
+correct for a photograph of a coloured object on a background, the case `applyThreshold()` cannot
+handle at any threshold value). Every project saved before IMG-009 has no `maskMode` and resolves to
+`'threshold'`, generating byte-identical geometry; see `docs/specifications/IMG-009-SubjectMask.md`.
+`src/image/**` now has zero dependency on `src/geometry/**` and never constructs a
 `Stone`/`StoneLayout` — mirroring `src/svg/**`'s existing "only produces neutral input, GeometryEngine
 is the only caller that turns it into stones" rule exactly. `generateImageLayout()` is synchronous
 (no font provider to await), like `generateShapeLayout()`/`generateSvgLayout()`. See
