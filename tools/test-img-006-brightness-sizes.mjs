@@ -320,3 +320,86 @@ await test("9. App-path source-text guards: generateImageStonesLive()'s params f
   assert.ok(historyTrackedSrc.includes("'imgBrightnessSteps'"), 'HISTORY_TRACKED_CONTROL_IDS is missing imgBrightnessSteps');
   assert.ok(historyTrackedSrc.includes("'imgBrightnessThinning'"), 'HISTORY_TRACKED_CONTROL_IDS is missing imgBrightnessThinning');
 });
+
+function thirdCounts(points) {
+  let dark = 0, bright = 0;
+  for (const p of points) {
+    if (p.xMm < 20) dark++;
+    else if (p.xMm >= 40) bright++;
+  }
+  return { dark, bright, total: points.length };
+}
+
+await test('10. brightnessThinning thins Organic and Edge density in bright regions', () => {
+  // Measured directly against this fixture at maxPitch, sampleFieldByMode() called with
+  // brightnessThinning alone varying (seed 1, spread 1, edgeThinning 1, threshold THRESH,
+  // invert false held fixed) -- pinned as inline literals so a later regression cannot merely
+  // re-agree with whatever the code then produces.
+  const BT_DENSITY = {
+    organic: {
+      0: { total: 137, dark: 48, bright: 48 },
+      1: { total: 69, dark: 33, bright: 15 },
+      3: { total: 34, dark: 24, bright: 3 }
+    },
+    edge: {
+      0: { total: 40, dark: 13, bright: 15 },
+      1: { total: 20, dark: 11, bright: 5 },
+      3: { total: 9, dark: 7, bright: 0 }
+    }
+  };
+  for (const mode of ['organic', 'edge']) {
+    const measured = {};
+    for (const bt of [0, 1, 3]) {
+      const points = sampleFieldByMode(mode, field, placement, maxPitchMm, maxSizeMm, { seed: 1, spread: 1, edgeThinning: 1, threshold: THRESH, invert: false, brightnessThinning: bt });
+      const counts = thirdCounts(points);
+      const expected = BT_DENSITY[mode][bt];
+      assert.equal(counts.total, expected.total, `${mode} brightnessThinning ${bt} total`);
+      assert.equal(counts.dark, expected.dark, `${mode} brightnessThinning ${bt} dark third [0,20)`);
+      assert.equal(counts.bright, expected.bright, `${mode} brightnessThinning ${bt} bright third [40,60)`);
+      measured[bt] = counts;
+    }
+    assert.ok(measured[1].total < measured[0].total, `${mode}: total point count should strictly decrease from brightnessThinning 0 to 1`);
+    assert.ok(measured[3].total < measured[1].total, `${mode}: total point count should strictly decrease from brightnessThinning 1 to 3`);
+    const darkFractionLost = (measured[0].dark - measured[3].dark) / measured[0].dark;
+    const brightFractionLost = (measured[0].bright - measured[3].bright) / measured[0].bright;
+    assert.ok(
+      brightFractionLost > darkFractionLost,
+      `${mode}: bright third should lose a strictly larger fraction of its points than dark third at brightnessThinning 3 vs 0 (bright lost ${brightFractionLost}, dark lost ${darkFractionLost})`
+    );
+  }
+});
+
+await test("11. Invert path end to end (fill): brightness assigns the largest rung in the bright third, inverting item 4's coverage ordering", () => {
+  const engine = createGeometryEngine();
+  // threshold: 200 (item 4's own value) is unusable here -- Threshold.js's mask is "on" for
+  // lum < threshold, so this fixture's "every pixel on" state at threshold 200 inverts to "every
+  // pixel off" under invert: true (nothing left to sample: lum is never >= 200 on this
+  // 0..199-valued gradient). threshold: 0 instead gives an "all on" mask under invert: true
+  // (lum < 0 is never true pre-invert, so NOT false = on everywhere post-invert) while still
+  // exercising ink()'s real invert-on branch with no divisor-guard degeneracy
+  // (lum / (255 - 0), not the threshold === 255 guard case).
+  const layout = engine.generateImageLayout({
+    imageBuffer: createImageBuffer({ widthPx: N, heightPx: N, data: d }),
+    layerId: 'img1',
+    xMm: 0, yMm: 0, widthMm: W, heightMm: H,
+    stoneSizeMm: SIZES[0], gapMm: GAP,
+    mode: 'fill',
+    threshold: 0, invert: true,
+    maxWidthPx: N, maxHeightPx: N,
+    sizeMode: 'brightness',
+    brightnessSizesMm: SIZES
+  });
+  assert.equal(layout.stones.length, 196, 'invert fill assigned count');
+  const invertCoverage = coverage(layout.stones);
+  assert.deepEqual(invertCoverage, [0.183, 0.252, 0.509], 'invert fill coverage');
+  const [darkCov, midCov, brightCov] = invertCoverage;
+  assert.ok(
+    darkCov < midCov && midCov < brightCov,
+    `coverage should strictly increase dark -> mid -> bright under invert (got ${JSON.stringify(invertCoverage)}), the mirror of item 4's non-invert fill row (dark 0.733 > mid 0.287 > bright 0.183)`
+  );
+  const maxRungMm = SIZES[SIZES.length - 1];
+  const darkStones = layout.stones.filter((s) => s.xMm < 20);
+  const brightStones = layout.stones.filter((s) => s.xMm >= 40);
+  assert.equal(darkStones.some((s) => s.sizeMm === maxRungMm), false, 'the largest rung should not appear in the dark third under invert');
+  assert.equal(brightStones.some((s) => s.sizeMm === maxRungMm), true, 'the largest rung should appear in the bright third under invert');
+});

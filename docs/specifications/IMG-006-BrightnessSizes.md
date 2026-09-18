@@ -542,6 +542,51 @@ disagreement — do not adjust either side to make them match.
    includes `brightnessSizesMm` (through the `mixedSizeParamsFor()` spread) and
    `brightnessThinning`; `HISTORY_TRACKED_CONTROL_IDS` literally includes `'imgBrightnessSteps'` and
    `'imgBrightnessThinning'`.
+10. **`brightnessThinning` thins Organic and Edge density in bright regions** -- items 1-9 above
+    only ever exercise `brightnessThinning: 0` or omitted, so nothing in the Test Plan up to this
+    point proves the density-thinning half of decision 2 does anything when actually turned on; the
+    NaN defect found during implementation (Anchor verification note, "Implementation revision")
+    lived in exactly this untested path. On the same fixture at `maxPitch`, `sampleFieldByMode()` is
+    called directly for `organic` and `edge` with `brightnessThinning` at `0`, `1`, and `3` (all else
+    equal: `seed: 1, spread: 1, edgeThinning: 1, threshold: THRESH, invert: false`), and total point
+    count and each mode's dark-third (`[0,20)` mm) / bright-third (`[40,60)` mm) point count are
+    measured and pinned as inline literals:
+
+    | mode | brightnessThinning | total | dark `[0,20)` | bright `[40,60)` |
+    |---|---|---|---|---|
+    | organic | 0 | 137 | 48 | 48 |
+    | organic | 1 | 69 | 33 | 15 |
+    | organic | 3 | 34 | 24 | 3 |
+    | edge | 0 | 40 | 13 | 15 |
+    | edge | 1 | 20 | 11 | 5 |
+    | edge | 3 | 9 | 7 | 0 |
+
+    Total point count is asserted strictly monotonically decreasing in `brightnessThinning` for both
+    modes (organic `137 > 69 > 34`; edge `40 > 20 > 9`), and the bright third is asserted to lose a
+    strictly larger fraction of its own points than the dark third does, `brightnessThinning: 3`
+    versus `0` (organic: bright loses `(48-3)/48 = 0.9375` against dark's `(48-24)/48 = 0.5`; edge:
+    bright loses `(15-0)/15 = 1.0` against dark's `(13-7)/13 ≈ 0.4615`) -- both hold on first
+    measurement, so no adjustment to the assertion was needed.
+11. **Invert path end to end (`fill`)**. `threshold: 200` (item 4's own value) cannot test `invert:
+    true` on this fixture: `Threshold.js`'s mask is "on" for `lum < threshold`, and this fixture's
+    `lum` never reaches 200 (`lum = x`, `x` up to `N-1 = 199`), so the mask is already "every pixel
+    on" at `invert: false` -- inverting it under `invert: true` at the *same* threshold gives "every
+    pixel off," zero stones, and nothing to assert. `threshold: 0` sidesteps this without changing
+    the fixture: `lum < 0` is never true, so the pre-invert mask is "every pixel off," and inverting
+    it gives "every pixel on" again -- the same full-coverage mask item 4's `fill` row samples,
+    while also landing `ink()` in its real invert-on branch (`lum / (255 - 0)`, not the
+    `threshold === 255` divisor-guard case). A brightness `fill` layer built this way (`invert:
+    true`, `threshold: 0`, otherwise identical to item 4's `fill` row) is measured and pinned:
+    `196` stones (matching item 4's own `fill` count exactly -- the mask covers the identical region
+    either way, only which pixels are "bright" changes), coverage `0.183 / 0.252 / 0.509` --
+    monotonically *increasing* dark-to-bright, the mirror of item 4's `fill` row (`0.733 / 0.287 /
+    0.183`, monotonically decreasing). Additionally asserted directly: the largest rung
+    (`SIZES[-1]`, `4.0` mm) appears zero times among dark-third (`[0,20)` mm) stones and at least
+    once among bright-third (`[40,60)` mm) stones -- confirmed by measurement (dark third is `2.0`
+    mm only; bright third holds `28` stones at `4.0` mm alongside `42` at `2.8` mm) before being
+    pinned as a boolean assertion rather than a literal count, since the exact per-size split is
+    incidental to what this item is checking (invert flips *which* third gets the largest rung, not
+    the split's own numbers).
 
 Report the raw per-test list above in this section, not a pass/fail count, per this repo's testing
 policy for shared-architecture milestones.
@@ -619,4 +664,8 @@ block never wrote `l.brightnessThinning` back from `#imgBrightnessThinning` at a
 `resolveImageBrightnessThinning()`'s read-site default existed), so the slider's own edits never
 reached a saved layer — added alongside `l.edgeThinning`'s own write. Both were caught by browser
 verification (a real image upload through the Image Studio, not just the unit tests) before this
-milestone shipped.
+milestone shipped. Test Plan items 1-9 as originally written left the density-thinning half of
+decision 2 (`brightnessThinning` above `0`) and the `invert: true` assignment path completely
+untested — every assertion up to that point pinned `brightnessThinning` at `0` or omitted it, which
+is exactly the class of gap the NaN defect above lived in; items 10 and 11 (added in a follow-up
+commit) close it.
