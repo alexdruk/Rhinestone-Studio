@@ -360,41 +360,58 @@ GeometryEngine.generateImageLayout({..., sizeMode: 'brightness', brightnessSizes
 
 ## Files Touched
 
-* `src/geometry/StoneSampler.js` — new exported `fieldLuminanceAt(field, placement, xMm, yMm)`
-  beside `fieldLabelAt()` (`:1778`); a private local-coordinate ink helper beside
-  `fieldPixelOn()`/`fieldEdgeAt()` (`:1744`-`:1756`); `sampleOrganicFieldFillPoints()` (`:1964`) and
-  `sampleEdgeFieldFillPoints()` (`:1993`) gain `brightnessThinning`/`threshold`/`invert` reads from
-  their existing options bag and a `radiusAt` multiplier (organic currently has none at all —
-  gains one; edge's existing `radiusAt`, `:1996`-`:1998`, gains the extra factor).
+* `src/geometry/StoneSampler.js` — new exported `ink(lum, threshold, invert)` (`:1766`, decision 3's
+  formula, beside `fieldEdgeAt()`) shared by the assignment pass below and by a new private
+  local-coordinate `fieldInkAt()` helper (`:1780`, beside `fieldPixelOn()`/`fieldEdgeAt()`,
+  `:1744`-`:1756`, unchanged); new exported `fieldLuminanceAt(field, placement, xMm, yMm)` (`:1838`,
+  beside `fieldLabelAt()`, now at `:1807`). `sampleOrganicFieldFillPoints()` (`:2032`) and
+  `sampleEdgeFieldFillPoints()` (`:2078`) gain `brightnessThinning`/`threshold`/`invert` reads from
+  their existing options bag and a `radiusAt` multiplier: organic (previously no `radiusAt` at all)
+  builds and passes one only when `brightnessThinning` is truthy — omitting `radiusAt`/`maxRadiusMm`
+  entirely otherwise, not passing one that would evaluate to the pre-milestone constant, since
+  `samplePoissonDiskPoints()`'s variable-radius path computes its own neighbourhood reach
+  differently; edge's existing unconditional `radiusAt` gains the extra multiplicative factor
+  directly (mathematically neutral at `brightnessThinning: 0`).
 * `src/geometry/MixedSizeGenerator.js` — `SIZE_MODES` (`:18`) gains `'brightness'`;
-  `normalizeMixedSizeParams()` (`:61`) gains the `allowBrightness` option and a `brightness` branch
-  mirroring the existing `weight` branch (`:66`-`:87`).
+  `normalizeMixedSizeParams()` (`:62`) gains the `allowBrightness` option and a `brightness` branch
+  (`:90`-`:110`) mirroring the existing `weight` branch.
 * `src/geometry/GeometryEngine.js` — `normalizeImageParams()`'s `normalizeMixedSizeParams()` call
-  (`:2355`) gains `{ allowBrightness: true }`; `normalizeImageParams()`'s return object (`:2319`
-  -`:2356`) gains `brightnessThinning` via the same read-site-permissive-default pattern
-  `edgeThinning` uses (`:2353`); `generateImageLayout()` (`:1181`-`:1262`) gains the
+  (`:2413`) gains `{ allowBrightness: true }`; `normalizeImageParams()`'s return object gains
+  `brightnessThinning` (`:2405`-`:2410`) via the same read-site-permissive-default pattern
+  `edgeThinning` uses; `generateImageLayout()` (`:1181`-`:1313`) gains the
   `isBrightness`/`sampleStoneSizeMm` branch (Structure, above) around its existing `spacingMm`/
-  `sampleFieldByMode()`/stone-building lines (`:1202`-`:1232`).
+  `sampleFieldByMode()`/stone-building lines, plus a `resolvedThreshold`/`resolvedInvert` resolution
+  (the same default `prepareImageField()` applies internally, `DEFAULT_THRESHOLD` now imported from
+  `../image/index.js`) so `ink()`'s reading always agrees with the pixel field it measures rather
+  than risking an unresolved `threshold` propagating a `NaN` into the assignment pass or the
+  organic/edge radius factor.
 * `src/renderer/StoneSizes.js` — no change; `stoneSizeRungsAvailable()`/`stoneSizesFromBaseMm()`
   (`:106`/`:120`) are reused as-is, exactly as `IMG-000`'s audit already anticipated
   (`docs/specifications/IMG-000-ImageToStrassAudit.md:87`-`:91`).
-* `app.js` — `resolveImageBrightnessThinning()` beside `resolveImageEdgeThinning()` (`:703`);
-  `mixedSizeParamsFor()` (`:873`) gains `brightnessSizesMm:layer.brightnessSizesMm??[]`;
+* `app.js` — `resolveImageBrightnessThinning()` beside `resolveImageEdgeThinning()` (`:708`);
+  `mixedSizeParamsFor()` (`:897`) gains `brightnessSizesMm:layer.brightnessSizesMm??[]`;
   `brightnessStepsOptionsHtml()`/`brightnessStepForSizes()` beside `weightStepsOptionsHtml()`/
-  `weightStepForSizes()` (`:781`-`:796`); inspector readback (`:2656`, `:2670`-`:2687`) gains the
-  `brightness` coercion + re-derivation blocks; `generateImageStonesLive()` (`:994`) gains
+  `weightStepForSizes()` (`:809`-`:820`); inspector readback gains an `else if` sibling to the
+  weight coercion (`:2696`) and a `brightnessSizesMm` re-derivation block (`:2718`-`:2732`) mirroring
+  `weightSizesMm`'s own, which additionally coerces `sizeMode` back to `'uniform'` when the Studio
+  step is explicitly turned Off (a case decision 6 calls out that `weightSizesMm`'s own block, gated
+  only from the co-located `#sizeMode`, never needed); the image-layer write-back block also gains
+  `l.brightnessThinning=resolveImageBrightnessThinning(...)` alongside `l.edgeThinning` (`:2640`);
+  `generateImageStonesLive()` (`:1018`) gains
   `brightnessThinning:resolveImageBrightnessThinning(layer.brightnessThinning)` in its params
-  object; `renderImageStudio()` (near `:6110`-`:6117`) gains `#imgBrightnessSteps`/
-  `#imgBrightnessThinning` sync and adds `#imgBrightnessThinning` to the `isPoisson`-gated id list;
-  new `updateBrightnessSizeCapabilityUI()` beside `updateWeightSizeCapabilityUI()`
-  (`:3468`-`:3488`), called alongside it (`:3281`-`:3282`); `HISTORY_TRACKED_CONTROL_IDS`
-  (`:4753`) gains `'imgBrightnessSteps'`, `'imgBrightnessThinning'`.
-* `index.html` — `#sizeMode` (`:1507`) gains `<option value="brightness">`; `#imageStudioGroupBrightness`
-  (`:1200`-`:1203`) loses its placeholder hint and gains `#imgBrightnessSteps`/
-  `#imgBrightnessThinning` (decision 6).
+  object; `renderImageStudio()` (`:6174`-`:6188`) gains `#imgBrightnessSteps`/
+  `#imgBrightnessThinning` sync (plus a `#imgBrightnessThinningValue` hint span, matching
+  `#imgEdgeThinning`'s own shape) and adds `#imgBrightnessThinning` to the `isPoisson`-gated id list;
+  new `updateBrightnessSizeCapabilityUI()` beside `updateWeightSizeCapabilityUI()` (`:3540`-`:3552`),
+  called alongside it (`:3328`); new image layers' creation literal gains `sizeMode:'uniform'`
+  (`:5255`); `HISTORY_TRACKED_CONTROL_IDS` (`:4817`) gains `'imgBrightnessSteps'`,
+  `'imgBrightnessThinning'`.
+* `index.html` — `#sizeMode` (`:1508`) gains `<option value="brightness">`;
+  `#imageStudioGroupBrightness` (`:1200`-`:1203`) loses its placeholder hint and gains
+  `#imgBrightnessSteps`/`#imgBrightnessThinning` (decision 6).
 * `tools/test-img-006-brightness-sizes.mjs` (new).
 * `tools/test-groups.mjs` — registers the new test file, following `test-img-005-check-and-fix.mjs`'s
-  own registration precedent (immediately after it, in the same groups).
+  own registration precedent (immediately after it, in the same groups; `:64` and `:187`).
 * `docs/specifications/IMG-001-ImageToStrass.md` — roadmap item 6 (`:43`-`:47`) gets one sentence
   correcting the mechanism (section "Objective" above).
 * `docs/specifications/IMG-000-ImageToStrassAudit.md` — the `dropOverlappingSizedStones()` entry
@@ -576,3 +593,30 @@ specifies exact-equality assigned counts and inline literal coverage figures rat
 and `tools/test-img-005-check-and-fix.mjs:74`/`:78` (re-grepped against this branch's actual tip
 immediately before writing this revision) rather than asserting a `deepEqual` this milestone's own
 test file would also have to construct the right side of.
+
+**Implementation revision.** Built as specified; `tools/test-img-006-brightness-sizes.mjs`
+reproduced every measured-baseline figure above exactly against the real implementation (not the
+scratch script) on first run, including the control row and the six byte-identity citations, so
+none of this document's numbers needed correction. One real defect was found and fixed *during*
+implementation, before it ever landed on this branch's history in a broken state, so it is recorded
+here rather than in `docs/BACKLOG.md` (no open defect remains): decision 2's "by construction" trap
+for organic's `radiusAt` (documented above) turned out to apply to edge's own ink factor too, in a
+sharper form than anticipated. `sampleEdgeFieldFillPoints()` already went through `radiusAt`
+unconditionally pre-milestone, so multiplying in `(1 + brightnessThinning * (1 - ink))` looked safe
+at `brightnessThinning: 0` by "anything times zero is zero" — but `ink()` itself divides by
+`threshold`, and a direct `StoneSampler.js` caller that never set `threshold`/`invert` (every
+pre-IMG-006 call, and this milestone's own byte-identity guard) leaves both `undefined`, so `ink()`
+returns `NaN`, and `0 * (1 - NaN)` is `NaN`, not `0` — corrupting `radiusAt` into always-`NaN`,
+which defeats `samplePoissonDiskPoints()`'s own spacing floor entirely (measured: 400 unconstrained
+points on the Test Plan fixture instead of the pinned 40). Fixed by construction in
+`sampleEdgeFieldFillPoints()` itself (skip the ink computation entirely below the `brightnessThinning`
+threshold, the same guard organic already needed for a different reason) rather than by requiring
+every caller to pre-resolve `threshold`/`invert` — `GeometryEngine.generateImageLayout()` also
+resolves them to `prepareImageField()`'s own defaults regardless, as defence in depth for the
+`brightnessThinning > 0` case. Separately, app.js's readback needed one addition beyond the letter
+of decision 6/the Files Touched list: `writeSelectedControlsToLayer()`'s pre-existing image-layer
+block never wrote `l.brightnessThinning` back from `#imgBrightnessThinning` at all (only
+`resolveImageBrightnessThinning()`'s read-site default existed), so the slider's own edits never
+reached a saved layer — added alongside `l.edgeThinning`'s own write. Both were caught by browser
+verification (a real image upload through the Image Studio, not just the unit tests) before this
+milestone shipped.
