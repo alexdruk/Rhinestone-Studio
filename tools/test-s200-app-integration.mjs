@@ -75,8 +75,9 @@ await test('5. mixedSizeParamsFor() forwards sizeMode:\'uniform\' for a layer wi
   assert.deepEqual(mixedSizeParamsFor(legacyLayer), {
     // MONO-015 added weightSizesMm (a single flat array, stored the way allowedSizesMm is; empty
     // for a legacy layer) -- normalizeMixedSizeParams() ignores it unless sizeMode==='weight'.
+    // IMG-006 added brightnessSizesMm the same way, ignored unless sizeMode==='brightness'.
     sizeMode: 'uniform', allowedSizesMm: [], minSizeMm: null, maxSizeMm: null, conservativeDetail: undefined,
-    weightSizesMm: []
+    weightSizesMm: [], brightnessSizesMm: []
   });
 });
 

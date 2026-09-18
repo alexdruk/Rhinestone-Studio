@@ -22,14 +22,14 @@
 
 import { BoundingBox, Point2D, createCircleVectorPath, createRectangleVectorPath } from '../text/VectorPath.js';
 import { flattenContourToPolygon, flattenContourToPolygonWithCornerFlags, translateContour, detectPolygonCornerFlags } from './ContourGeometry.js';
-import { sampleOutlinePoints, sampleMultiContourOutlinePoints, sampleShapeFillPoints, sampleFieldByMode, isPointInsidePolygons, dropOverlappingSizedStones, fieldLabelAt, NO_LABEL } from './StoneSampler.js';
+import { sampleOutlinePoints, sampleMultiContourOutlinePoints, sampleShapeFillPoints, sampleFieldByMode, isPointInsidePolygons, dropOverlappingSizedStones, fieldLabelAt, NO_LABEL, fieldLuminanceAt, ink } from './StoneSampler.js';
 // MONO-015 (weight-following stone size): local stroke-width probe + catalog size mapping.
 import { strokeWidthsForSamples } from './StrokeWidthProbe.js';
 import { weightSizeMm } from './WeightSizing.js';
 import { Stone } from './Stone.js';
 import { StoneLayout } from './StoneLayout.js';
 import { parseSvgDocument } from '../svg/index.js';
-import { prepareImageField } from '../image/index.js';
+import { prepareImageField, DEFAULT_THRESHOLD } from '../image/index.js';
 import { CURVE_ALIGNMENTS, CURVE_DIRECTIONS, projectPolygonToArc } from './ArcProjection.js';
 // S-110: Expanded Shape Library. createShapeNaturalContours() (src/geometry/ShapeLibrary.js) is the
 // only place that knows the *math* for Ellipse/Capsule/Regular Polygon/Star/Heart/Arrow/Cross/
@@ -1200,13 +1200,38 @@ export class GeometryEngine {
     });
 
     const placement = { xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm };
-    const spacingMm = options.stoneSizeMm + options.gapMm;
+    // IMG-006: brightness-driven stone size samples at the largest rung's pitch, not the layer's own
+    // stoneSizeMm -- see decision 1. `brightnessOptions.sizesMm` has a single entry (reduced to
+    // [stoneSizeMm] by normalizeMixedSizeParams()) whenever brightnessSizesMm has fewer than two
+    // configured entries, so isBrightness is false and every line below is byte-identical to before
+    // this milestone.
+    const isBrightness = options.sizeMode === 'brightness' && options.brightnessOptions.sizesMm.length > 1;
+    const sampleStoneSizeMm = isBrightness
+      ? options.brightnessOptions.sizesMm[options.brightnessOptions.sizesMm.length - 1]
+      : options.stoneSizeMm;
+    const spacingMm = sampleStoneSizeMm + options.gapMm;
     // IMG-005: a same-layer spacing repair pass, only meaningful for Contour/Radial -- see
     // docs/specifications/IMG-005-CheckAndFix.md, decision 2. Null for every other mode.
     const checkFixStats = (options.mode === 'contour' || options.mode === 'radial')
       ? { violationsFound: 0, repaired: 0, dropped: 0 }
       : null;
-    const points = sampleFieldByMode(options.mode, field, placement, spacingMm, options.stoneSizeMm, { seed: options.seed, spread: options.spread, edgeThinning: options.edgeThinning, gapMm: options.gapMm, checkFixStats });
+    // IMG-006: the same threshold/invert resolution prepareImageField() applies internally to build
+    // field.data/field.luminance's mask (ImageFieldPipeline.js's normalizeParams()) -- resolved here
+    // too so ink()'s reading always agrees with the pixel field it is measuring, and so a caller that
+    // never set threshold/invert (every pre-IMG-006 call) still gets well-defined numbers rather than
+    // an undefined threshold propagating into a NaN ink() result.
+    const resolvedThreshold = options.threshold ?? DEFAULT_THRESHOLD;
+    const resolvedInvert = Boolean(options.invert);
+    const points = sampleFieldByMode(options.mode, field, placement, spacingMm, sampleStoneSizeMm, {
+      seed: options.seed,
+      spread: options.spread,
+      edgeThinning: options.edgeThinning,
+      gapMm: options.gapMm,
+      checkFixStats,
+      threshold: resolvedThreshold,
+      invert: resolvedInvert,
+      brightnessThinning: options.brightnessThinning
+    });
 
     // IMG-002: the label lookup only ever runs when a quantized palette is actually in play -- every
     // colorCount:1 (or omitted) call, and every pre-IMG-002 saved image layer, skips it entirely and
@@ -1222,14 +1247,40 @@ export class GeometryEngine {
       return options.colorMap[group.nearestId] ?? group.nearestId;
     };
 
-    let stones = points.map((point, index) => new Stone({
-      xMm: point.xMm,
-      yMm: point.yMm,
-      sizeMm: options.stoneSizeMm,
-      color: colorAt(point.xMm, point.yMm),
-      layerId: options.layerId,
-      index
-    }));
+    let stones;
+    if (isBrightness) {
+      // IMG-006 decision 1/3: assign each survivor a diameter from its own measured luminance (the
+      // same absolute pixel fieldLabelAt()/colorAt() above already reads), then run
+      // dropOverlappingSizedStones() as a structural safety net -- expected to remove nothing on this
+      // mode's own sampling floor (decision 1's spacing argument), not the mechanism that shapes the
+      // output.
+      const { sizesMm } = options.brightnessOptions;
+      const rungCount = sizesMm.length;
+      const assigned = points.map((point) => {
+        const lum = fieldLuminanceAt(field, placement, point.xMm, point.yMm);
+        const inkValue = ink(lum, resolvedThreshold, resolvedInvert);
+        const rung = Math.min(rungCount - 1, Math.floor(inkValue * rungCount));
+        return { xMm: point.xMm, yMm: point.yMm, sizeMm: sizesMm[rung] };
+      });
+      const survivingStones = dropOverlappingSizedStones(assigned);
+      stones = survivingStones.map((point, index) => new Stone({
+        xMm: point.xMm,
+        yMm: point.yMm,
+        sizeMm: point.sizeMm,
+        color: colorAt(point.xMm, point.yMm),
+        layerId: options.layerId,
+        index
+      }));
+    } else {
+      stones = points.map((point, index) => new Stone({
+        xMm: point.xMm,
+        yMm: point.yMm,
+        sizeMm: options.stoneSizeMm,
+        color: colorAt(point.xMm, point.yMm),
+        layerId: options.layerId,
+        index
+      }));
+    }
 
     // S-200 (Mixed Stone-Size Layouts): additive infill pass over the same density field. Built
     // directly from generateMixedSizeInfillPoints() (not the generateMixedSizeInfillStones()
@@ -2351,8 +2402,15 @@ function normalizeImageParams(params) {
     // (non-positive edgeWidthMm, negative edgeThinning) fall back to 6/1.
     edgeWidthMm: typeof params.edgeWidthMm === 'number' && Number.isFinite(params.edgeWidthMm) && params.edgeWidthMm > 0 ? params.edgeWidthMm : 6,
     edgeThinning: typeof params.edgeThinning === 'number' && Number.isFinite(params.edgeThinning) && params.edgeThinning >= 0 ? params.edgeThinning : 1,
+    // IMG-006: read-site permissive default, the same precedent edgeThinning (IMG-004) already
+    // established -- no validateProject() change, no project version bump. Invalid values (negative
+    // brightnessThinning) fall back to 0 (no thinning), the neutral/off value for this field -- unlike
+    // edgeThinning's 1, since brightnessThinning applies even to a plain 'uniform' image layer
+    // (decision 2) and must be a true no-op there by default.
+    brightnessThinning: typeof params.brightnessThinning === 'number' && Number.isFinite(params.brightnessThinning) && params.brightnessThinning >= 0 ? params.brightnessThinning : 0,
     // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.
-    ...normalizeMixedSizeParams(params, stoneSizeMm)
+    // IMG-006: allowBrightness -- only normalizeImageParams() (this method) passes it.
+    ...normalizeMixedSizeParams(params, stoneSizeMm, { allowBrightness: true })
   };
 }
 
