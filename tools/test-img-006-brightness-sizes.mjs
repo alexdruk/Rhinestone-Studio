@@ -11,6 +11,7 @@ import {
   NO_LABEL
 } from '../src/geometry/StoneSampler.js';
 import { createImageBuffer, prepareImageField } from '../src/image/index.js';
+import fs from 'node:fs';
 
 // IMG-006 -- unit tests for brightness-following stone size (MixedSizeGenerator.js's 'brightness'
 // sizeMode, StoneSampler.js's fieldLuminanceAt()/ink()/brightnessThinning wiring into
@@ -279,5 +280,43 @@ await test('8. brightnessSizesMm reduction to uniform (0 or 1 entries), represen
   }
 });
 
-// Test Plan item 9 (app-path source-text guards) is appended once app.js/index.html carry the
-// wiring it checks -- see IMG-006 step 3.
+// Brace-balanced extraction of one function's body, the same convention
+// tools/test-img-004-edge-awareness.mjs's own extractFunctionBody() uses for its own app.js
+// source-text guards -- robust to the function being reformatted across lines, unlike a fixed
+// end-marker slice. `signatureMarker` must include the function's own parameter list through its
+// body-opening "{".
+function extractFunctionBody(source, signatureMarker, label) {
+  const start = source.indexOf(signatureMarker);
+  assert.ok(start !== -1, `expected to find "${signatureMarker}" (${label}) in app.js`);
+  const braceStart = start + signatureMarker.length - 1;
+  assert.equal(source[braceStart], '{', `expected signatureMarker to end at ${label}'s body-opening "{"`);
+  let depth = 0;
+  for (let i = braceStart; i < source.length; i++) {
+    if (source[i] === '{') depth++;
+    else if (source[i] === '}') {
+      depth--;
+      if (depth === 0) return source.slice(start, i + 1);
+    }
+  }
+  throw new Error(`expected to find the matching closing "}" of ${label} in app.js`);
+}
+
+await test("9. App-path source-text guards: generateImageStonesLive()'s params forward brightnessSizesMm/brightnessThinning, HISTORY_TRACKED_CONTROL_IDS includes the two new control ids", () => {
+  const appSrc = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
+
+  const mixedSizeParamsForBody = extractFunctionBody(appSrc, 'function mixedSizeParamsFor(layer){', 'mixedSizeParamsFor()');
+  assert.ok(mixedSizeParamsForBody.includes('brightnessSizesMm:'), 'mixedSizeParamsFor() is missing brightnessSizesMm');
+
+  const generateImageStonesLiveBody = extractFunctionBody(appSrc, 'async generateImageStonesLive(layer,{includeStats=false}={}){', 'generateImageStonesLive()');
+  assert.ok(generateImageStonesLiveBody.includes('...mixedSizeParamsFor(layer)'), 'generateImageStonesLive() no longer spreads mixedSizeParamsFor(layer) (brightnessSizesMm would not reach the engine)');
+  assert.ok(generateImageStonesLiveBody.includes('brightnessThinning:'), 'generateImageStonesLive() is missing brightnessThinning');
+
+  const historyTrackedMarker = 'const HISTORY_TRACKED_CONTROL_IDS=[';
+  const historyTrackedStart = appSrc.indexOf(historyTrackedMarker);
+  assert.ok(historyTrackedStart !== -1, 'expected to find HISTORY_TRACKED_CONTROL_IDS in app.js');
+  const historyTrackedEnd = appSrc.indexOf('];', historyTrackedStart);
+  assert.ok(historyTrackedEnd !== -1, 'expected to find the closing "];" of HISTORY_TRACKED_CONTROL_IDS in app.js');
+  const historyTrackedSrc = appSrc.slice(historyTrackedStart, historyTrackedEnd);
+  assert.ok(historyTrackedSrc.includes("'imgBrightnessSteps'"), 'HISTORY_TRACKED_CONTROL_IDS is missing imgBrightnessSteps');
+  assert.ok(historyTrackedSrc.includes("'imgBrightnessThinning'"), 'HISTORY_TRACKED_CONTROL_IDS is missing imgBrightnessThinning');
+});

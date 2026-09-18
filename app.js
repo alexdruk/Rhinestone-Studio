@@ -701,6 +701,11 @@ function resolveImageSeed(value){return Number.isInteger(value)&&value>=0?value:
 function resolveImageSpread(value){return typeof value==='number'&&Number.isFinite(value)&&value>=1?value:1}
 function resolveImageEdgeWidth(value){return typeof value==='number'&&Number.isFinite(value)&&value>0?value:6}
 function resolveImageEdgeThinning(value){return typeof value==='number'&&Number.isFinite(value)&&value>=0?value:1}
+// IMG-006: layer.brightnessThinning -- read-site permissive default, the same precedent
+// resolveImageEdgeThinning() (IMG-004) already established, but with a 0 fallback (no thinning) not
+// 1, since brightnessThinning applies even to a plain 'uniform' image layer and must be a true
+// no-op there by default.
+function resolveImageBrightnessThinning(value){return typeof value==='number'&&Number.isFinite(value)&&value>=0?value:0}
 // IMG-001: 'white' (flatten alpha onto white, the pre-IMG-001 only behavior) or 'ignore' (alpha<128
 // pixels never become stones, regardless of luminance). Missing/invalid -> 'white', matching every
 // other resolve*() fallback's permissive-default convention -- see IMG-001-ImageToStrass.md.
@@ -754,7 +759,9 @@ function computeImageColorField(layer){
 // MONO-015 adds 'weight' (weight-following stone size). resolveSizeMode() still falls back to
 // 'uniform' for any unrecognized/missing value, so a pre-MONO-015 project is untouched; app.js
 // only ever offers 'weight' for an outline-mode text layer (updateWeightSizeCapabilityUI()).
-const SIZE_MODES=new Set(['uniform','mixed','weight']);
+// IMG-006 adds 'brightness' (brightness-following stone size), offered only for an image layer
+// (updateBrightnessSizeCapabilityUI()).
+const SIZE_MODES=new Set(['uniform','mixed','weight','brightness']);
 function resolveSizeMode(value){return SIZE_MODES.has(value)?value:'uniform'}
 // The Mixed Stone Size inspector section's five Allowed Sizes checkboxes are static markup (see
 // index.html's #sharedMixedSizeFields comment for why, vs. #stoneSize's dynamically populated
@@ -794,6 +801,23 @@ function weightStepsOptionsHtml(baseStoneSizeMm){
 // The rung count a stored weightSizesMm array represents (step 1 -> 2 entries, step 2 -> 3); 0 for
 // an empty/absent array (weight mode on, step "Off").
 function weightStepForSizes(weightSizesMm){return Array.isArray(weightSizesMm)&&weightSizesMm.length>1?weightSizesMm.length-1:0}
+// IMG-006: the graduated brightness-step <select> option list (#imgBrightnessSteps in the Image
+// Studio). Same idiom as weightStepsOptionsHtml() just above (option value is the rung count,
+// labels built live from the base stone size), but loops every rung the catalog can supply from
+// this base -- brightness sizing has no product reason to cap at two extra rungs the way the
+// weight-following step deliberately does, so every option here is always enabled.
+function brightnessStepsOptionsHtml(baseStoneSizeMm){
+  const available=stoneSizeRungsAvailable(baseStoneSizeMm);
+  const html=['<option value="0">Off</option>'];
+  for(let step=1;step<=available;step++){
+    const label=stoneSizesFromBaseMm(baseStoneSizeMm,step).map(d=>formatStoneSizeLabel(d).replace(/\s*\(.*\)$/,'')).join(' → ');
+    html.push(`<option value="${step}">${escapeHtml(label)}</option>`);
+  }
+  return html.join('');
+}
+// The rung count a stored brightnessSizesMm array represents -- same convention as
+// weightStepForSizes() above.
+function brightnessStepForSizes(brightnessSizesMm){return Array.isArray(brightnessSizesMm)&&brightnessSizesMm.length>1?brightnessSizesMm.length-1:0}
 // S-110 (Expanded Shape Library): every shape kind that resolves through GeometryEngine's
 // generateShapeLayout()/resolveShapePolygons() -- Circle/Rectangle plus the nine new
 // ShapeLibrary.js kinds (Ellipse/Capsule/Regular Polygon/Star/Heart/Arrow/Cross/Crescent/Ring).
@@ -870,7 +894,7 @@ function shapeLayerResolveParams(layer){
 // minSizeMm/maxSizeMm, so a mode-switched layer round-trips unambiguously. normalizeMixedSizeParams()
 // ignores it unless sizeMode==='weight' and the caller allows weight (text layers only). Empty
 // default mirrors allowedSizesMm's, and reduces weight mode to uniform output.
-function mixedSizeParamsFor(layer){return{sizeMode:resolveSizeMode(layer.sizeMode),allowedSizesMm:layer.allowedSizesMm??[],minSizeMm:layer.minSizeMm??null,maxSizeMm:layer.maxSizeMm??null,conservativeDetail:layer.conservativeDetail,weightSizesMm:layer.weightSizesMm??[]}}
+function mixedSizeParamsFor(layer){return{sizeMode:resolveSizeMode(layer.sizeMode),allowedSizesMm:layer.allowedSizesMm??[],minSizeMm:layer.minSizeMm??null,maxSizeMm:layer.maxSizeMm??null,conservativeDetail:layer.conservativeDetail,weightSizesMm:layer.weightSizesMm??[],brightnessSizesMm:layer.brightnessSizesMm??[]}}
 // MONO-006B: every field generateTextStonesLive() passes to permanentEngine.generateTextLayout()
 // except authoredScale itself -- factored out so recoverStaleAuthoredScales() below can generate
 // the exact same *natural* (unscaled) layout to validate a persisted authoredScale against, without
@@ -991,7 +1015,7 @@ class GeometryEngine{constructor(permanentEngine=null){this.permanentEngine=perm
  // would only ever affect the Studio's own preview, never the actual production layout. palette is
  // imageColorPalette() unconditionally (cheap to pass even when colorCount is 1, where the engine
  // never reads it).
- async generateImageStonesLive(layer,{includeStats=false}={}){if(!this.permanentEngine||!layer.imageSrc)return includeStats?{stones:[],outlineStats:null}:[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveImageFillMode(layer.fillMode),color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),colorCount:layer.colorCount??1,palette:imageColorPalette(),colorMap:layer.colorMap??{},seed:resolveImageSeed(layer.seed),spread:resolveImageSpread(layer.spread),edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm),edgeThinning:resolveImageEdgeThinning(layer.edgeThinning),...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null}:stones}
+ async generateImageStonesLive(layer,{includeStats=false}={}){if(!this.permanentEngine||!layer.imageSrc)return includeStats?{stones:[],outlineStats:null}:[];let buffer=imageBufferCache.get(layer.imageSrc);if(!buffer){buffer=await decodeDataUrlToBuffer(layer.imageSrc);imageBufferCache.set(layer.imageSrc,buffer)}const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,mode:resolveImageFillMode(layer.fillMode),color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),colorCount:layer.colorCount??1,palette:imageColorPalette(),colorMap:layer.colorMap??{},seed:resolveImageSeed(layer.seed),spread:resolveImageSpread(layer.spread),edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm),edgeThinning:resolveImageEdgeThinning(layer.edgeThinning),brightnessThinning:resolveImageBrightnessThinning(layer.brightnessThinning),...mixedSizeParamsFor(layer)};const result=this.permanentEngine.generateImageLayout(params);const stones=result.stones.map(s=>({x:s.xMm,y:s.yMm,d:s.sizeMm,color:s.color,layerId:s.layerId}));return includeStats?{stones,outlineStats:result.outlineStats??null,checkFixStats:result.checkFixStats??null}:stones}
  // RS-1012: 'path' layers (Boolean Operation results) go through the permanent engine's
  // generatePathLayout(), mirroring generateSvgStonesLive()/generateShapeStonesLive() above --
  // layer.contours is already plain (0,0)-rooted polygon data (no parsing step, unlike SVG).
@@ -2613,7 +2637,7 @@ function writeSelectedControlsToLayer(){
   if(l.type==='ring')l.innerRatio=Math.max(0.1,Math.min(0.9,parseFloat(el('shapeRingInner').value)||0.5));
 }else if(l.type==='svg'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||10);l.h=Math.max(1,readLengthField('shapeH')||10);l.mode=resolveVectorFillMode(el('svgMode').value)}else if(l.type==='image'){l.x=readLengthField('shapeX')||0;l.y=readLengthField('shapeY')||0;l.w=Math.max(1,readLengthField('shapeW')||10);l.h=Math.max(1,readLengthField('shapeH')||10);l.threshold=Math.max(0,Math.min(255,parseIntOr(el('imgThreshold').value,DEFAULT_IMAGE_THRESHOLD)));l.invert=el('imgInvert').value==='on';l.transparent=resolveImageTransparentMode(el('imgTransparent').value);l.blurRadiusPx=Math.max(0,parseIntOr(el('imgBlurRadius').value,0));l.maxWidthPx=Math.max(8,parseIntOr(el('imgMaxWidth').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.maxHeightPx=Math.max(8,parseIntOr(el('imgMaxHeight').value,DEFAULT_IMAGE_MAX_DIMENSION_PX));l.fillMode=resolveImageFillMode(el('imageFillMode').value);
   // IMG-003: seed/spread, resolved the same permissive way every other optional image param is.
-  l.seed=resolveImageSeed(parseIntOr(el('imgSeed').value,1));l.spread=resolveImageSpread(parseFloat(el('imgSpread').value));l.edgeWidthMm=resolveImageEdgeWidth(readLengthField('imgEdgeWidth'));l.edgeThinning=resolveImageEdgeThinning(parseFloat(el('imgEdgeThinning').value));
+  l.seed=resolveImageSeed(parseIntOr(el('imgSeed').value,1));l.spread=resolveImageSpread(parseFloat(el('imgSpread').value));l.edgeWidthMm=resolveImageEdgeWidth(readLengthField('imgEdgeWidth'));l.edgeThinning=resolveImageEdgeThinning(parseFloat(el('imgEdgeThinning').value));l.brightnessThinning=resolveImageBrightnessThinning(parseFloat(el('imgBrightnessThinning').value));
   // IMG-002: colorCount first (colorMap's own write below depends on the NEW colorCount, not
   // whatever it was before this edit); computeImageColorField() re-quantizes from l's own
   // now-current params, so each visible row's nearestId is resolved fresh rather than trusted from
@@ -2669,6 +2693,12 @@ function writeSelectedControlsToLayer(){
   // the <option> for the same cases; this is the belt-and-braces write-side guard.
   if(l.sizeMode==='weight'&&(l.type!=='text'||isAuthoredStoneFontId(l.font)||resolveTextFillMode(l.textMode)!=='outline')){
     l.sizeMode='uniform';el('sizeMode').value='uniform';
+  }else if(l.sizeMode==='brightness'&&l.type!=='image'){
+    // IMG-006: brightness-following stone size is valid only for an image layer --
+    // GeometryEngine.generateImageLayout() throws otherwise. Same belt-and-braces write-side guard
+    // as the weight coercion just above; updateBrightnessSizeCapabilityUI() disables the <option>
+    // for the same case.
+    l.sizeMode='uniform';el('sizeMode').value='uniform';
   }
   // Live disclosure like #mixedSizeDetailFields above.
   el('weightSizeDetailFields').style.display=l.sizeMode==='weight'?'block':'none';
@@ -2684,6 +2714,21 @@ function writeSelectedControlsToLayer(){
     l.weightSizesMm=step>0?stoneSizesFromBaseMm(l.stoneSize,step):[];
     el('weightSteps').innerHTML=weightStepsOptionsHtml(l.stoneSize);
     el('weightSteps').value=String(step);
+  }
+  if(l.sizeMode==='brightness'){
+    // IMG-006: #imgBrightnessSteps carries the rung count, same convention as #weightSteps above,
+    // but with no 2-rung cap (brightnessStepsOptionsHtml() loops every rung the catalog can supply).
+    const brightnessAvailable=stoneSizeRungsAvailable(l.stoneSize);
+    const brightnessStep=l.brightnessSizesMm==null?Math.min(2,brightnessAvailable):Math.min(parseInt(el('imgBrightnessSteps').value,10)||0,brightnessAvailable);
+    l.brightnessSizesMm=brightnessStep>0?stoneSizesFromBaseMm(l.stoneSize,brightnessStep):[];
+    // Explicitly picking "Off" in the Studio (not merely never having configured a step) turns
+    // brightness mode back off from the one control an operator actually uses for it, mirroring
+    // #sizeMode's own value -- so a layer already in brightness mode never round-trips as
+    // "brightness, but Off", which normalizeMixedSizeParams() would otherwise silently reduce to
+    // uniform output anyway (decision 2) while the inspector kept showing "Brightness-following".
+    if(brightnessStep===0){l.sizeMode='uniform';el('sizeMode').value='uniform'}
+    el('imgBrightnessSteps').innerHTML=brightnessStepsOptionsHtml(l.stoneSize);
+    el('imgBrightnessSteps').value=String(brightnessStep);
   }
   // RS-3011 Step 3b: every field write above (stoneSize/gap/color/fillMode/mixed-size) can change
   // a 'path' layer's live stone preview on the Design canvas -- rebuild it here, the one place all
@@ -3280,6 +3325,7 @@ function updateEditingUI(){const n=selectedLayerIds.size;el('selectionSummary').
   updateTextFontCapabilityUI();
   updateMixedSizeCapabilityUI();
   updateWeightSizeCapabilityUI();
+  updateBrightnessSizeCapabilityUI();
   updateStoneSizePrintableCapabilityUI();
   updateStoneSizeOverlapCapabilityUI();
   // FONT-LIB-004: deliberately last, and NOT between updateTextFontCapabilityUI() and
@@ -3484,6 +3530,24 @@ function updateWeightSizeCapabilityUI(){
   if(weightMode&&l){
     el('weightSteps').innerHTML=weightStepsOptionsHtml(l.stoneSize);
     el('weightSteps').value=String(weightStepForSizes(l.weightSizesMm));
+  }
+}
+// IMG-006: brightness-following stone size is valid only for an image layer --
+// GeometryEngine.generateImageLayout() throws sizeMode 'brightness' for every other layer type.
+// Same disable+explain idiom and coerce-back-to-uniform guard as updateWeightSizeCapabilityUI()
+// above; #imgBrightnessSteps/#imgBrightnessThinning are Studio-only controls, kept in sync by
+// renderImageStudio(), not here.
+function updateBrightnessSizeCapabilityUI(){
+  const l=selectedLayer();
+  const eligible=Boolean(l&&l.type==='image');
+  const brightnessOption=el('sizeMode').querySelector('option[value="brightness"]');
+  if(brightnessOption){
+    brightnessOption.disabled=!eligible;
+    brightnessOption.title=eligible?'':'Brightness-following stone size is only available for image layers.';
+  }
+  if(!eligible&&resolveSizeMode(el('sizeMode').value)==='brightness'){
+    el('sizeMode').value='uniform';
+    if(l)l.sizeMode='uniform';
   }
 }
 // FONT-LIB-004: the readability check the font library was missing. An audit of all 29 enabled
@@ -4750,7 +4814,7 @@ el('autoFit').addEventListener('input',()=>{
   const turningOn=el('autoFit').value==='on';
   el('autoFitOnHint').style.display=(l&&l.type==='text'&&!l.autoFit&&turningOn)?'block':'none';
 });
-const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgTransparent','imgBlurRadius','imgMaxWidth','imgMaxHeight','imgColorCount','imgSeed','imgSpread','imgEdgeWidth','imgEdgeThinning','imgColorPick0','imgColorPick1','imgColorPick2','imgColorPick3','imgColorPick4','imgColorPick5','imgColorPick6','imgColorPick7','imgColorReset','textX','textY','textAlign','lineSpacing','letterSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail','weightSteps'];
+const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgThreshold','imgInvert','imgTransparent','imgBlurRadius','imgMaxWidth','imgMaxHeight','imgColorCount','imgSeed','imgSpread','imgEdgeWidth','imgEdgeThinning','imgColorPick0','imgColorPick1','imgColorPick2','imgColorPick3','imgColorPick4','imgColorPick5','imgColorPick6','imgColorPick7','imgColorReset','textX','textY','textAlign','lineSpacing','letterSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail','weightSteps','imgBrightnessSteps','imgBrightnessThinning'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
 // RS-2002: Browse Fonts panel wiring. Toggling/closing never touches history (it only decides
@@ -5188,7 +5252,7 @@ el('importImageFile').addEventListener('change',async e=>{
     const dataUrl=await readFileAsDataUrl(file);
     imageBufferCache.set(dataUrl,buffer);
     const{x,y,w,h}=computeDefaultImagePlacement(buffer.widthPx,buffer.heightPx);
-    const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:dataUrl,imageName:file.name,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,x,y,w,h,threshold:DEFAULT_IMAGE_THRESHOLD,invert:false,transparent:'ignore',blurRadiusPx:0,maxWidthPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,maxHeightPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,stoneSize:selectedLayer().stoneSize||2,gap:selectedLayer().gap||.3,color:selectedLayer().color||'gold',rotationDeg:0,colorCount:1,seed:1,spread:1,edgeWidthMm:6,edgeThinning:1};
+    const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:dataUrl,imageName:file.name,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,x,y,w,h,threshold:DEFAULT_IMAGE_THRESHOLD,invert:false,transparent:'ignore',blurRadiusPx:0,maxWidthPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,maxHeightPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,stoneSize:selectedLayer().stoneSize||2,gap:selectedLayer().gap||.3,color:selectedLayer().color||'gold',rotationDeg:0,colorCount:1,seed:1,spread:1,edgeWidthMm:6,edgeThinning:1,sizeMode:'uniform'};
     commitHistory();
     project.layers.push(layer);
     selectedLayerId=layer.id;
@@ -6107,7 +6171,7 @@ async function renderImageStudio(){
   const isEdge=mode==='edge';
   const poissonDisabledTitle=isPoisson?'':'Only used when Fill style is set to Organic or Edge.';
   const edgeDisabledTitle=isEdge?'':'Only used when Fill style is set to Edge.';
-  for(const id of['imgSeed','imgShuffle','imgSpread']){el(id).disabled=!isPoisson;el(id).title=poissonDisabledTitle}
+  for(const id of['imgSeed','imgShuffle','imgSpread','imgBrightnessThinning']){el(id).disabled=!isPoisson;el(id).title=poissonDisabledTitle}
   for(const id of['imgEdgeWidth','imgEdgeThinning']){el(id).disabled=!isEdge;el(id).title=edgeDisabledTitle}
   el('imgSeed').value=resolveImageSeed(l.seed);
   el('imgSpread').value=resolveImageSpread(l.spread);
@@ -6115,6 +6179,13 @@ async function renderImageStudio(){
   setLengthField('imgEdgeWidth',resolveImageEdgeWidth(l.edgeWidthMm));
   el('imgEdgeThinning').value=resolveImageEdgeThinning(l.edgeThinning);
   el('imgEdgeThinningValue').textContent=String(resolveImageEdgeThinning(l.edgeThinning));
+  // IMG-006: #imgBrightnessSteps/#imgBrightnessThinning, the Studio controls for brightness-following
+  // stone size -- same "rebuild options from the live stone size, then set from the stored value"
+  // idiom #weightSteps' own sync uses (syncSelectedControlsFromLayer()).
+  el('imgBrightnessSteps').innerHTML=brightnessStepsOptionsHtml(l.stoneSize);
+  el('imgBrightnessSteps').value=String(brightnessStepForSizes(l.brightnessSizesMm));
+  el('imgBrightnessThinning').value=resolveImageBrightnessThinning(l.brightnessThinning);
+  el('imgBrightnessThinningValue').textContent=String(resolveImageBrightnessThinning(l.brightnessThinning));
   const bbox={minXmm:l.x,minYmm:l.y,widthMm:l.w,heightMm:l.h};
   const dpr=Math.max(1,window.devicePixelRatio||1);
   canvas.width=Math.max(1,Math.round(canvas.clientWidth*dpr));canvas.height=Math.max(1,Math.round(canvas.clientHeight*dpr));
