@@ -935,7 +935,7 @@ flowchart TD
 
     MergedSL -->|"StoneLayout.toJSON()"| LayoutJSON["Export: Generated Layout JSON\n{layerId, sourceMode, count,\nboundingBox, widthMm, heightMm, stones[]}"]
     ProjectObj -->|"JSON.stringify(project)"| ProjectJSON["Export: Project JSON"]
-    MergedSL -->|"stoneLayoutToSvg()"| SVGOut["Export: 2D SVG\n(one <circle> per stone)"]
+    MergedSL -->|"stoneLayoutToSvg()"| SVGOut["Export: 2D SVG\n(grouped <circle> per stone,\nIMG-008 traced regions under them)"]
     MergedSL -->|"renderProductionLayout()"| LayoutCanvas["layoutCanvas (drawn)"]
     LayoutCanvas -->|"canvas.toBlob('image/png')"| PNG2D["Export: 2D PNG"]
     MergedSL -->|"preview3D.update()"| CupCanvasEl["cupCanvas (drawn)"]

@@ -3220,6 +3220,29 @@ async function resolveLayerShapeSource(layer){
   return null;
 }
 
+// IMG-008 (Vector-first SVG): resolves every visible image layer's traced per-colour silhouette
+// regions for the 2D SVG export's underlying `<g id="regions">` paths -- see
+// docs/specifications/IMG-008-VectorFirstSvg.md decisions 3/4. Synchronous (unlike
+// resolveLayerShapeSource(), which awaits text/font resolution) because permanentEngine.resolveImagePolygons()
+// is synchronous and this only ever runs from the exportSVG handler's own synchronous try block.
+// The params object duplicates generateImageStonesLive()'s field-shaping keys on purpose -- the
+// field these regions are traced from must be the exact field the stones were sampled from, or the
+// silhouettes won't match the stones (see that function at app.js:1018 for the source of truth this
+// mirrors); a source-text guard (tools/test-img-008-vector-first-svg.mjs) pins the key set so the
+// two cannot silently drift, the IMG-003 -> IMG-006 lesson (docs/BACKLOG.md:54).
+function resolveImageExportRegions(project){
+  const regions=[];
+  for(const layer of project.layers){
+    if(!layer.visible||layer.type!=='image'||!layer.imageSrc||!(layer.w>0)||!(layer.h>0))continue;
+    const buffer=imageBufferCache.get(layer.imageSrc);
+    if(!buffer)throw new Error(`Image layer "${layer.imageName}" is not decoded yet.`);
+    const params={imageBuffer:buffer,layerId:layer.id,xMm:layer.x,yMm:layer.y,widthMm:layer.w,heightMm:layer.h,stoneSizeMm:layer.stoneSize,gapMm:layer.gap,color:layer.color,threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),colorCount:layer.colorCount??1,palette:imageColorPalette(),colorMap:layer.colorMap??{},edgeWidthMm:resolveImageEdgeWidth(layer.edgeWidthMm)};
+    const{regions:layerRegions}=permanentEngine.resolveImagePolygons(params);
+    for(const region of layerRegions){regions.push({layerId:layer.id,colorId:region.colorId,contours:region.contours})}
+  }
+  return regions;
+}
+
 function showBooleanOpsError(message){
   el('status').textContent=message;
   const validationEl=el('booleanOpsValidation');
@@ -5287,7 +5310,7 @@ el('exportProject').onclick=()=>{try{download('rhinestone-project.json','applica
   }catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportLayout').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-generated-layout.json','application/json',JSON.stringify(layout,null,2))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportDXF').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-template.dxf','application/dxf',stoneLayoutToDxf(layout,{widthMm:project.canvas.width,heightMm:project.canvas.height}))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
-el('exportSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-layout.svg','image/svg+xml',stoneLayoutToSvg(layout,{widthMm:project.canvas.width,heightMm:project.canvas.height}))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+el('exportSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{const regions=resolveImageExportRegions(project);download('rhinestone-layout.svg','image/svg+xml',stoneLayoutToSvg(layout,{widthMm:project.canvas.width,heightMm:project.canvas.height},{regions}))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportPNG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-layout.png',layoutCanvas)}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportCup').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-cup-preview.png',cupCanvas)}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportCombined').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-combined-preview.png',composeCombinedPreviewCanvas())}catch(error){el('status').textContent=`Export failed: ${error.message}`}};

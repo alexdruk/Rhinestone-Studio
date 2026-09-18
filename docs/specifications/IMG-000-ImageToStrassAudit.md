@@ -119,7 +119,10 @@ clone. For each, it states whether the function is reused as-is, extended, or by
   wanting per-size cutting layers (mirroring `ProductionSheetExporter.js`'s existing per-size
   `sizeBreakdown`, `docs/specifications/S-200-MixedStoneSizeLayouts.md`) would need to extend
   `dxfLayerNameForColor` into a `dxfLayerNameFor(color, sizeMm)` or add a second grouping key — out
-  of scope for IMG-001, noted here for IMG-006/IMG-008 to pick up.
+  of scope for IMG-001, noted here for IMG-006/IMG-008 to pick up. **IMG-008 explicitly declined**
+  (`docs/specifications/IMG-008-VectorFirstSvg.md` decision 5): it is an SVG-only milestone and
+  touches no DXF code; IMG-008's SVG stone grouping (colour then size) is left as the precedent for
+  a future standalone `RS-30xx` DXF milestone, not folded into an `IMG-` item.
 * **`ProductionSheetExporter.js`** (`computeProductionSheetLayout`/`productionSheetToSvg`/
   `productionSheetToPdf`) — already computes a `sizeBreakdown` grouped by color then size (S-200).
   **Reused as-is.** A multi-color, multi-size image layer's stones flow through the exact same

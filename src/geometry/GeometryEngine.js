@@ -30,6 +30,10 @@ import { Stone } from './Stone.js';
 import { StoneLayout } from './StoneLayout.js';
 import { parseSvgDocument } from '../svg/index.js';
 import { prepareImageField, DEFAULT_THRESHOLD } from '../image/index.js';
+// IMG-008: reuses the same marching-squares Boolean-op tracer Vector Boolean Operations use, to
+// trace per-colour silhouettes from an image layer's own working field for the SVG export's
+// underlying vector regions -- see resolveImagePolygons() and imageRegionColorId() below.
+import { combineShapeSources, contourAreaAbs } from './PathBoolean.js';
 import { CURVE_ALIGNMENTS, CURVE_DIRECTIONS, projectPolygonToArc } from './ArcProjection.js';
 // S-110: Expanded Shape Library. createShapeNaturalContours() (src/geometry/ShapeLibrary.js) is the
 // only place that knows the *math* for Ellipse/Capsule/Regular Polygon/Star/Heart/Arrow/Cross/
@@ -1243,8 +1247,7 @@ export class GeometryEngine {
       if (!labeled) return options.color;
       const label = fieldLabelAt(field, placement, xMm, yMm);
       if (label === NO_LABEL) return options.color;
-      const group = field.colorGroups[label];
-      return options.colorMap[group.nearestId] ?? group.nearestId;
+      return imageRegionColorId(options, field, label);
     };
 
     let stones;
@@ -1310,6 +1313,69 @@ export class GeometryEngine {
     }
 
     return new StoneLayout({ layerId: options.layerId, sourceMode: options.mode, stones, checkFixStats });
+  }
+
+  /**
+   * Resolve an image layer's per-colour silhouette contours in absolute millimeters, without
+   * sampling stones. IMG-008: the "traced structure" the Vector-first SVG export's `<g id="regions">`
+   * paths are built from -- see docs/specifications/IMG-008-VectorFirstSvg.md decisions 1/3. Mirrors
+   * resolveShapePolygons()/resolveSvgPolygons(): takes the same params generateImageLayout() takes,
+   * runs them through the exact same normalizeImageParams()/prepareImageField() steps so the traced
+   * field is identical to the one stones were sampled from, and produces no Stone/StoneLayout --
+   * generateImageLayout() remains the only stone producer for image layers.
+   *
+   * Traces one region per label present in `field.colorGroups` when `colorCount > 1` and the field is
+   * quantized (labels in ascending order), otherwise one region for the whole `data >= 128` mask
+   * coloured `options.color`. Every contour smaller than one stone's footprint
+   * (`Math.PI * (stoneSizeMm / 2) ** 2`) is dropped, holes included; a label left with no contours
+   * after that floor is omitted. `mode` is accepted (via normalizeImageParams()) and ignored -- these
+   * regions are traced from the working field itself, not from any particular sampling mode.
+   *
+   * @param {object} params Same params generateImageLayout() takes.
+   * @returns {{regions:{colorId:string,contours:{xMm:number,yMm:number}[][]}[], boundingBox:BoundingBox|null}}
+   */
+  resolveImagePolygons(params = {}) {
+    const options = normalizeImageParams(params);
+
+    const edgeBandFraction = options.edgeWidthMm / options.widthMm;
+    const field = prepareImageField(options.imageBuffer, {
+      threshold: options.threshold,
+      invert: options.invert,
+      blurRadiusPx: options.blurRadiusPx,
+      edgeBandFraction,
+      maxWidthPx: options.maxWidthPx,
+      maxHeightPx: options.maxHeightPx,
+      transparent: options.transparent,
+      colorCount: options.colorCount,
+      palette: options.palette
+    });
+
+    const targetSpacingMm = options.stoneSizeMm + options.gapMm;
+    const areaFloorMm2 = Math.PI * (options.stoneSizeMm / 2) ** 2;
+    const baseSource = { kind: 'field', field, xMm: options.xMm, yMm: options.yMm, widthMm: options.widthMm, heightMm: options.heightMm };
+    const traceMask = (label) => {
+      const source = label === undefined ? baseSource : { ...baseSource, label };
+      const { contours } = combineShapeSources(source, null, 'union', { targetSpacingMm });
+      return contours.filter((contour) => contourAreaAbs(contour) >= areaFloorMm2);
+    };
+
+    const regions = [];
+    if (options.colorCount > 1 && field.labels !== null) {
+      for (let label = 0; label < field.colorGroups.length; label++) {
+        const contours = traceMask(label);
+        if (contours.length === 0) continue;
+        regions.push({ colorId: imageRegionColorId(options, field, label), contours });
+      }
+    } else {
+      const contours = traceMask(undefined);
+      if (contours.length > 0) {
+        regions.push({ colorId: options.color, contours });
+      }
+    }
+
+    const allPoints = regions.flatMap((region) => region.contours).flat();
+    const boundingBox = allPoints.length > 0 ? BoundingBox.fromPoints(allPoints) : null;
+    return { regions, boundingBox };
   }
 
   /**
@@ -2318,6 +2384,15 @@ function normalizeSvgParams(params) {
     // S-200: sizeMode/mixedOptions -- see normalizeMixedSizeParams()'s own doc comment.
     ...normalizeMixedSizeParams(params, stoneSizeMm)
   };
+}
+
+// IMG-008: the single colour-resolution rule a quantized image layer's stones and its exported
+// regions both use -- factored out of generateImageLayout()'s own colorAt() closure (a pure move,
+// same override lookup) so the two cannot drift. `label` is a real index into `field.colorGroups`
+// (never NO_LABEL -- callers check that themselves before reaching here).
+function imageRegionColorId(options, field, label) {
+  const group = field.colorGroups[label];
+  return options.colorMap[group.nearestId] ?? group.nearestId;
 }
 
 // RS-1008A: threshold/invert/blurRadiusPx/maxWidthPx/maxHeightPx are validated once, inside
