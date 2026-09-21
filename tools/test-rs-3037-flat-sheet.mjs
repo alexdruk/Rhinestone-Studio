@@ -454,6 +454,46 @@ await test('13. the switch button\'s click dispatches a real change event on #ob
   assert.match(appJs, /el\('imageStudioSwitchToSheet'\)\.style\.display=currentObjectTemplate\(\)\.id==='sheet'\?'none':'inline-block'/);
 });
 
+// =================================================================================================
+// 14. #exportCup / #exportCombined -- no 3D preview to export while Flat Sheet is active
+// =================================================================================================
+
+function runExportHandler(id, templateId) {
+  const src = extractLine(appJs, `el('${id}').onclick=`, `the #${id} onclick handler`);
+  const elements = new Map();
+  function el(elId) {
+    if (!elements.has(elId)) elements.set(elId, { textContent: '', style: {} });
+    return elements.get(elId);
+  }
+  const exportCanvasCalls = [];
+  const exportCanvas = (...args) => exportCanvasCalls.push(args);
+  const currentObjectTemplate = () => ({ id: templateId });
+  const layout = { layers: [] };
+  const cupCanvas = {};
+  const composeCombinedPreviewCanvas = () => ({});
+  // eslint-disable-next-line no-new-func
+  const factory = new Function(
+    'el', 'currentObjectTemplate', 'layout', 'exportCanvas', 'cupCanvas', 'composeCombinedPreviewCanvas',
+    `${src}\nel('${id}').onclick();`
+  );
+  factory(el, currentObjectTemplate, layout, exportCanvas, cupCanvas, composeCombinedPreviewCanvas);
+  return { exportCanvasCalls, status: el('status').textContent };
+}
+
+await test('14. #exportCup/#exportCombined: no-op with a status message under sheet (exportCanvas never called), still export once under mug; both hidden while sheet is active in updateObjectTemplateDetail()', () => {
+  for (const id of ['exportCup', 'exportCombined']) {
+    const sheetResult = runExportHandler(id, 'sheet');
+    assert.equal(sheetResult.exportCanvasCalls.length, 0, `expected #${id} to never call exportCanvas() under Flat Sheet`);
+    assert.equal(sheetResult.status, 'Flat Sheet has no 3D preview to export.');
+
+    const mugResult = runExportHandler(id, 'mug');
+    assert.equal(mugResult.exportCanvasCalls.length, 1, `expected #${id} to call exportCanvas() exactly once under mug`);
+  }
+
+  assert.match(appJs, /el\('exportCup'\)\.style\.display=isSheet\?'none':'block'/);
+  assert.match(appJs, /el\('exportCombined'\)\.style\.display=isSheet\?'none':'block'/);
+});
+
 if (failureCount === 0) {
   console.log('RS-3037 (Flat Sheet) tests passed.');
 } else {
