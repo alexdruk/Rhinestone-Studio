@@ -43,6 +43,39 @@ function extractImportImageFileHandler(appJs) {
   return match[0];
 }
 
+function extractImageStudioRemoveHandler(appJs) {
+  const match = appJs.match(/el\('imageStudioRemove'\)\.onclick=\(\)=>\{[\s\S]*?\};/);
+  assert.ok(match, "expected to find el('imageStudioRemove').onclick=... in app.js");
+  return match[0];
+}
+
+function buildImageStudioRemoveHandler(source, { selectedLayer, deleteLayer, lightboxes }) {
+  const elTarget = {};
+  const el = (id) => {
+    assert.equal(id, 'imageStudioRemove', `unexpected el('${id}') in extracted source`);
+    return elTarget;
+  };
+  // eslint-disable-next-line no-new-func
+  new Function('el', 'selectedLayer', 'deleteLayer', 'lightboxes', source)(el, selectedLayer, deleteLayer, lightboxes);
+  return elTarget.onclick;
+}
+
+function makeFakeImageTraceTextLightboxes() {
+  const state = { imagetrace: false, text: false };
+  return {
+    imagetrace: {
+      get isOpen() { return state.imagetrace; },
+      open() { state.imagetrace = true; state.text = false; },
+      close() { state.imagetrace = false; }
+    },
+    text: {
+      get isOpen() { return state.text; },
+      open() { state.text = true; state.imagetrace = false; },
+      close() { state.text = false; }
+    }
+  };
+}
+
 await test('1. computeDefaultImagePlacement() scales the image to 200mm on its longer side (preserving aspect ratio), then clamps to canvas-minus-20mm and centres', async () => {
   const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
   const source = extractComputeDefaultImagePlacement(appJs);
@@ -102,6 +135,57 @@ await test('4. read-site defaults are untouched: resolveImageFillMode() still fa
   assert.equal(resolveImageFillMode(null), 'fill', 'expected resolveImageFillMode(null) to still fall back to \'fill\'');
 
   assert.match(appJs, /colorCount:layer\.colorCount\?\?1/, 'expected generateImageStonesLive() to still read colorCount:layer.colorCount??1');
+});
+
+await test("5. imageStudioRemove reopens Image → Strass after deleteLayer() triggers the S-105 auto-switch to Text", async () => {
+  const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
+  const source = extractImageStudioRemoveHandler(appJs);
+
+  const lightboxes = makeFakeImageTraceTextLightboxes();
+  const deleteLayerCalls = [];
+  const deleteLayer = (id) => {
+    deleteLayerCalls.push(id);
+    // Reproduces syncSelectedControlsFromLayer()'s S-105 auto-switch block, which deleteLayer()
+    // triggers by selecting project.layers[0] -- here that newly-selected layer is a text layer,
+    // so it opens Text (which, per the fake lightboxes' exclusivity, closes Image Trace).
+    lightboxes.text.open();
+  };
+  const onclick = buildImageStudioRemoveHandler(source, {
+    selectedLayer: () => ({ id: 'img1', type: 'image' }),
+    deleteLayer,
+    lightboxes
+  });
+
+  lightboxes.imagetrace.open();
+  onclick();
+
+  assert.deepEqual(deleteLayerCalls, ['img1'], 'expected deleteLayer() to be called with the selected image layer id');
+  assert.equal(lightboxes.imagetrace.isOpen, true, 'expected Image Trace to be reopened after the auto-switch closed it');
+  assert.equal(lightboxes.text.isOpen, false, 'expected Text to end up closed once Image Trace is reopened');
+});
+
+await test('5b. imageStudioRemove does nothing when the selected layer is not an image', async () => {
+  const appJs = await readFile(path.join(repoRoot, 'app.js'), 'utf8');
+  const source = extractImageStudioRemoveHandler(appJs);
+
+  const lightboxes = makeFakeImageTraceTextLightboxes();
+  const deleteLayerCalls = [];
+  const deleteLayer = (id) => {
+    deleteLayerCalls.push(id);
+    lightboxes.text.open();
+  };
+  const onclick = buildImageStudioRemoveHandler(source, {
+    selectedLayer: () => ({ id: 'text1', type: 'text' }),
+    deleteLayer,
+    lightboxes
+  });
+
+  lightboxes.imagetrace.open();
+  onclick();
+
+  assert.deepEqual(deleteLayerCalls, [], 'expected deleteLayer() to never be called for a non-image selected layer');
+  assert.equal(lightboxes.imagetrace.isOpen, true, 'expected Image Trace to stay open (untouched)');
+  assert.equal(lightboxes.text.isOpen, false, 'expected Text to stay closed (nothing should open)');
 });
 
 console.log('IMG-011 import defaults tests passed.');

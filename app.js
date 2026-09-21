@@ -5326,7 +5326,7 @@ el('importImageFile').addEventListener('change',async e=>{
     el('status').textContent=`Imported ${file.name}`;
   }catch(error){console.error('Image import failed',error);el('status').textContent=`Image import failed: ${error.message}`}
 });
-el('imageStudioRemove').onclick=()=>{if(selectedLayer().type==='image')deleteLayer(selectedLayer().id)};
+el('imageStudioRemove').onclick=()=>{if(selectedLayer().type!=='image')return;deleteLayer(selectedLayer().id);if(!lightboxes.imagetrace.isOpen)lightboxes.imagetrace.open()};
 // RS-3037: reuses the #objectType change handler's own reset logic (dispatching a real change
 // event) rather than duplicating it -- matches this codebase's stated preference for reuse over
 // duplication.
