@@ -10,6 +10,12 @@
 //      150x150). updateProdSheetReadabilityValidation() now also appends an itemized count via the
 //      new pure countStonesOutsideProductionArea() (src/export/ProductionSheetExporter.js).
 //
+// Follow-up fix: #prodSheetValidation is CSS-hidden (`display:none`) unless it carries the
+// "visible" class. Each catch block already calls updateProdSheetReadabilityValidation() first
+// (READ-010), which -- when there is nothing to warn about -- removes "visible" via its own
+// `classList.toggle('visible', Boolean(message))`. Writing the error text right after that left it
+// in a hidden element. Each catch block now also adds "visible" after writing the text.
+//
 // Both warnings are non-blocking -- neither ever prevents an export. See
 // docs/specifications/RS-3038-ProdSheetMessages.md.
 //
@@ -60,6 +66,8 @@ function makeClassList() {
   const set = new Set();
   return {
     contains: (c) => set.has(c),
+    add: (c) => set.add(c),
+    remove: (c) => set.delete(c),
     toggle: (c, force) => {
       const on = force === undefined ? !set.has(c) : Boolean(force);
       if (on) set.add(c); else set.delete(c);
@@ -129,12 +137,16 @@ await test('3. adds no outside-area text when every stone is inside project.canv
   assert.equal(validation.textContent, '', 'no readability hits and no outside-area hits should leave the message empty');
 });
 
-// --- 4-6. export handler catch blocks write into #prodSheetValidation ---------------------------
+// --- 4-6. export handler catch blocks write into #prodSheetValidation, visibly ------------------
 
-// Extracts and executes the real onclick handler body (not a regex pin on its text), so the catch
-// block's actual write is what's under test. `layout` is truthy (the !layout guard is not what this
-// test covers) and the underlying exporter call is stubbed to throw -- the same RangeError shape
-// ProductionSheetExporter.js's own "does not fit A4" page-fit check raises.
+// Extracts and executes the real onclick handler body (not a regex pin on its text), with the real
+// updateProdSheetReadabilityValidation() wired in (not a stub) -- so this models the actual runtime
+// sequence: the handler's own first statement runs the real readability/outside-area sweep, which
+// finds nothing to warn about (no text layers, every stone inside project.canvas) and so removes
+// "visible" via its own classList.toggle(), exactly as it would on a clean project. Only then does
+// the stubbed exporter call throw. The fake #prodSheetValidation starts with no "visible" class, so
+// a catch block that writes textContent without re-adding "visible" leaves it CSS-hidden -- the bug
+// this follow-up fixes.
 function runExportHandlerCatch(buttonId, overrides) {
   const validation = { textContent: '', classList: makeClassList() };
   const status = { textContent: '' };
@@ -143,41 +155,60 @@ function runExportHandlerCatch(buttonId, overrides) {
     if (id === 'status') return status;
     return { textContent: '', classList: makeClassList() };
   };
+  // No text layers and every stone inside a 150x150 canvas: the real sweep below produces no
+  // message at all, so classList never gains "visible" before the catch block runs.
+  const layout = makeLayout([{ xMm: 75, yMm: 75, sizeMm: 2 }]);
+  const project = { layers: [], units: 'mm', canvas: { width: 150, height: 150 } };
+
+  const projectPredicateSrc = sliceBalanced(appJs, 'function textLayersBelowReadableMinimum(){', 'textLayersBelowReadableMinimum()');
+  const prodSheetValidationSrc = sliceBalanced(appJs, 'function updateProdSheetReadabilityValidation(){', 'updateProdSheetReadabilityValidation()');
+  const validationFactory = new Function(
+    'el', 'project', 'layout', 'countStonesOutsideProductionArea', 'formatLengthDisplay', 'unitSuffix',
+    `${projectPredicateSrc}\n${prodSheetValidationSrc}\nreturn updateProdSheetReadabilityValidation;`
+  );
+  const updateProdSheetReadabilityValidation = validationFactory(el, project, layout, countStonesOutsideProductionArea, formatLengthDisplay, unitSuffix);
+
   const marker = `el('${buttonId}').onclick=`;
   const extracted = sliceBalanced(appJs, marker, `${buttonId} handler`);
   const handlerExpr = extracted.slice(marker.length);
   const paramNames = ['el', 'layout', 'updateProdSheetReadabilityValidation', 'currentProductionSheetOptions', 'download', 'productionSheetToSvg', 'productionSheetToPdf'];
-  const factory = new Function(...paramNames, `return (${handlerExpr});`);
+  const handlerFactory = new Function(...paramNames, `return (${handlerExpr});`);
   const args = {
     el,
-    layout: { stones: [] },
-    updateProdSheetReadabilityValidation: () => {},
+    layout,
+    updateProdSheetReadabilityValidation,
     currentProductionSheetOptions: () => ({}),
     download: () => {},
     productionSheetToSvg: () => { throw new RangeError("does not fit A4"); },
     productionSheetToPdf: () => { throw new RangeError("does not fit A4"); },
     ...overrides
   };
-  const handler = factory(...paramNames.map((name) => args[name]));
+  const handler = handlerFactory(...paramNames.map((name) => args[name]));
   return { handler, validation, status };
 }
 
-await test('4. #exportProdSheetSVG catch block writes "Export failed: ..." into #prodSheetValidation', async () => {
+await test('4. #exportProdSheetSVG catch block writes the error into #prodSheetValidation and makes it visible', async () => {
   const { handler, validation } = runExportHandlerCatch('exportProdSheetSVG');
+  assert.equal(validation.classList.contains('visible'), false, 'test setup: starts without the visible class');
   await handler();
-  assert.match(validation.textContent, /Export failed: does not fit A4/);
+  assert.equal(validation.textContent, 'Export failed: does not fit A4');
+  assert.ok(validation.classList.contains('visible'), 'expected the catch block to add the visible class');
 });
 
-await test('5. #exportProdSheetPNG catch block writes "Export failed: ..." into #prodSheetValidation', async () => {
+await test('5. #exportProdSheetPNG catch block writes the error into #prodSheetValidation and makes it visible', async () => {
   const { handler, validation } = runExportHandlerCatch('exportProdSheetPNG');
+  assert.equal(validation.classList.contains('visible'), false, 'test setup: starts without the visible class');
   await handler();
-  assert.match(validation.textContent, /Export failed: does not fit A4/);
+  assert.equal(validation.textContent, 'Export failed: does not fit A4');
+  assert.ok(validation.classList.contains('visible'), 'expected the catch block to add the visible class');
 });
 
-await test('6. #exportProdSheetPDF catch block writes "Export failed: ..." into #prodSheetValidation', async () => {
+await test('6. #exportProdSheetPDF catch block writes the error into #prodSheetValidation and makes it visible', async () => {
   const { handler, validation } = runExportHandlerCatch('exportProdSheetPDF');
+  assert.equal(validation.classList.contains('visible'), false, 'test setup: starts without the visible class');
   await handler();
-  assert.match(validation.textContent, /Export failed: does not fit A4/);
+  assert.equal(validation.textContent, 'Export failed: does not fit A4');
+  assert.ok(validation.classList.contains('visible'), 'expected the catch block to add the visible class');
 });
 
 console.log('RS-3038 Production Sheet messages tests passed.');

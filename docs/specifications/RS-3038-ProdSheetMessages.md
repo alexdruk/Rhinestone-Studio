@@ -19,6 +19,17 @@ Each of the three catch blocks now also writes the same `Export failed: ${error.
 `#prodSheetValidation`, the validation panel already inside the lightbox (READ-010). `#status` is
 left untouched, so every other export path's existing behavior is unaffected.
 
+**The panel is CSS-hidden unless it is visible.** `.validation-message{...display:none}` /
+`.validation-message.visible{display:block}` (`index.html`) — the same rule every other validation
+panel in the app already follows. Each catch block runs `updateProdSheetReadabilityValidation()`
+first (READ-010's existing ordering), which toggles `visible` off via its own
+`classList.toggle('visible',Boolean(message))` whenever there is nothing to warn about. Writing the
+error text right after that, without also setting the class, left the message in a hidden element —
+repro: a 200×200 Flat Sheet with every stone inside, page size A4, click PDF: nothing visible
+happens. Each catch block now also calls `.classList.add('visible')` after writing the text, so the
+error is shown regardless of what the preceding readability/outside-area sweep just did to the
+class.
+
 **Persistence.** Nothing clears `#prodSheetValidation` on its own — it is only ever written by
 `updateProdSheetReadabilityValidation()` (the readability/outside-area sweep, §2) or by a catch
 block (this fix). Since the sweep already runs first inside each handler's own `try` block (READ-010)
@@ -79,8 +90,12 @@ harness pattern `tools/test-read-010-warn-only-floor.mjs` established. Covers:
 - The real `updateProdSheetReadabilityValidation()` appends the outside-area message (naming the
   count and the W × H area) when stones lie outside `project.canvas`, and adds nothing when none do.
 - The real `#exportProdSheetSVG`/`#exportProdSheetPNG`/`#exportProdSheetPDF` catch blocks, each
-  extracted and executed for real with their exporter call stubbed to throw, write
-  `Export failed: does not fit A4` into `#prodSheetValidation`.
+  extracted and executed for real (with the real `updateProdSheetReadabilityValidation()` wired in,
+  not a stub, against a no-warning layout/project so it runs the same "nothing to warn about, remove
+  `visible`" path a clean project takes) and their exporter call stubbed to throw, write
+  `Export failed: does not fit A4` into `#prodSheetValidation` **and** leave it carrying the
+  `visible` class — the fake element starts without it, so this only passes if the catch block adds
+  it back.
 
 Two existing tests were updated on the test side only, both a direct consequence of adding
 `countStonesOutsideProductionArea` as a new export and as a new free variable inside

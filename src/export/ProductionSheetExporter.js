@@ -208,6 +208,36 @@ function resolvePageOrientation({ pageSize, marginMm, neededWidthMm, neededHeigh
   );
 }
 
+// RS-3038: how many stones fall outside the production area -- a stone's extent is its center +-
+// half its size, so this is the same "no scaling, hard fit" geometry as the page-fit check above,
+// just against project.canvas instead of the page. A 1e-6mm tolerance keeps a stone that exactly
+// touches an edge (extent === the boundary) counted as inside, immune to float noise.
+const OUTSIDE_PRODUCTION_AREA_TOLERANCE_MM = 1e-6;
+
+/**
+ * @param {import('../geometry/StoneLayout.js').StoneLayout} stoneLayout
+ * @param {number} widthMm Production area width (project.canvas.width), in millimeters.
+ * @param {number} heightMm Production area height (project.canvas.height), in millimeters.
+ * @returns {number} Count of stones not wholly inside [0,widthMm] x [0,heightMm].
+ */
+export function countStonesOutsideProductionArea(stoneLayout, widthMm, heightMm) {
+  let count = 0;
+  for (const stone of stoneLayout.stones) {
+    const half = stone.sizeMm / 2;
+    const left = stone.xMm - half;
+    const right = stone.xMm + half;
+    const top = stone.yMm - half;
+    const bottom = stone.yMm + half;
+    const inside =
+      left >= -OUTSIDE_PRODUCTION_AREA_TOLERANCE_MM &&
+      top >= -OUTSIDE_PRODUCTION_AREA_TOLERANCE_MM &&
+      right <= widthMm + OUTSIDE_PRODUCTION_AREA_TOLERANCE_MM &&
+      bottom <= heightMm + OUTSIDE_PRODUCTION_AREA_TOLERANCE_MM;
+    if (!inside) count += 1;
+  }
+  return count;
+}
+
 /**
  * Computes the full production-sheet layout: page dimensions/orientation, header text lines, the
  * centered production rect, every stone re-projected into page space (centered, optionally
@@ -239,36 +269,6 @@ function resolvePageOrientation({ pageSize, marginMm, neededWidthMm, neededHeigh
  * @param {string} [options.plateColorName]
  * @returns {object}
  */
-// RS-3038: how many stones fall outside the production area -- a stone's extent is its center +-
-// half its size, so this is the same "no scaling, hard fit" geometry as the page-fit check above,
-// just against project.canvas instead of the page. A 1e-6mm tolerance keeps a stone that exactly
-// touches an edge (extent === the boundary) counted as inside, immune to float noise.
-const OUTSIDE_PRODUCTION_AREA_TOLERANCE_MM = 1e-6;
-
-/**
- * @param {import('../geometry/StoneLayout.js').StoneLayout} stoneLayout
- * @param {number} widthMm Production area width (project.canvas.width), in millimeters.
- * @param {number} heightMm Production area height (project.canvas.height), in millimeters.
- * @returns {number} Count of stones not wholly inside [0,widthMm] x [0,heightMm].
- */
-export function countStonesOutsideProductionArea(stoneLayout, widthMm, heightMm) {
-  let count = 0;
-  for (const stone of stoneLayout.stones) {
-    const half = stone.sizeMm / 2;
-    const left = stone.xMm - half;
-    const right = stone.xMm + half;
-    const top = stone.yMm - half;
-    const bottom = stone.yMm + half;
-    const inside =
-      left >= -OUTSIDE_PRODUCTION_AREA_TOLERANCE_MM &&
-      top >= -OUTSIDE_PRODUCTION_AREA_TOLERANCE_MM &&
-      right <= widthMm + OUTSIDE_PRODUCTION_AREA_TOLERANCE_MM &&
-      bottom <= heightMm + OUTSIDE_PRODUCTION_AREA_TOLERANCE_MM;
-    if (!inside) count += 1;
-  }
-  return count;
-}
-
 export function computeProductionSheetLayout(stoneLayout, options = {}) {
   if (!stoneLayout || !Array.isArray(stoneLayout.stones)) {
     throw new TypeError('computeProductionSheetLayout requires a StoneLayout (an object with a stones array).');
