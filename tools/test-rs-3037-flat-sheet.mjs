@@ -450,8 +450,8 @@ await test('13. the switch button\'s click dispatches a real change event on #ob
   // Visibility: both toggle sites (updateObjectTemplateDetail()/renderImageStudio()) use the same
   // literal pattern -- a structural check, matching this codebase's convention for this kind of
   // pure DOM-wiring assertion.
-  assert.match(appJs, /el\('imageStudioSwitchToSheet'\)\.style\.display=isSheet\?'none':'inline-block'/);
-  assert.match(appJs, /el\('imageStudioSwitchToSheet'\)\.style\.display=currentObjectTemplate\(\)\.id==='sheet'\?'none':'inline-block'/);
+  assert.match(appJs, /el\('imageStudioSwitchToSheet'\)\.style\.display=isSheet\?'none':''/);
+  assert.match(appJs, /el\('imageStudioSwitchToSheet'\)\.style\.display=currentObjectTemplate\(\)\.id==='sheet'\?'none':''/);
 });
 
 // =================================================================================================
@@ -490,8 +490,8 @@ await test('14. #exportCup/#exportCombined: no-op with a status message under sh
     assert.equal(mugResult.exportCanvasCalls.length, 1, `expected #${id} to call exportCanvas() exactly once under mug`);
   }
 
-  assert.match(appJs, /el\('exportCup'\)\.style\.display=isSheet\?'none':'block'/);
-  assert.match(appJs, /el\('exportCombined'\)\.style\.display=isSheet\?'none':'block'/);
+  assert.match(appJs, /el\('exportCup'\)\.style\.display=isSheet\?'none':''/);
+  assert.match(appJs, /el\('exportCombined'\)\.style\.display=isSheet\?'none':''/);
 });
 
 if (failureCount === 0) {

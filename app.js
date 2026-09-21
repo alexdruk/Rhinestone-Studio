@@ -6186,12 +6186,15 @@ function updateObjectTemplateDetail(){
   // RS-3037: the Image panel's "Switch to Flat Sheet" action is only useful while some other
   // template is active -- also refreshed independently from renderImageStudio() itself (see its own
   // comment), since either function can run next depending on which Lightbox's onOpen fires.
-  el('imageStudioSwitchToSheet').style.display=isSheet?'none':'inline-block';
+  // RS-3037 2nd follow-up: button.btn is display:inline-flex in the stylesheet -- an explicit
+  // 'block'/'inline-block' show-value here would override it and visibly change these buttons'
+  // layout on every non-sheet project. '' hands display back to the stylesheet.
+  el('imageStudioSwitchToSheet').style.display=isSheet?'none':'';
   // RS-3037 follow-up: drawCup() no longer redraws #cup while Flat Sheet is active, so both PNG
   // exports that capture its pixels (cupCanvas directly, or via composeCombinedPreviewCanvas())
   // would otherwise ship a stale or blank image -- hide both while Flat Sheet is active.
-  el('exportCup').style.display=isSheet?'none':'block';
-  el('exportCombined').style.display=isSheet?'none':'block';
+  el('exportCup').style.display=isSheet?'none':'';
+  el('exportCombined').style.display=isSheet?'none':'';
   updateWorkspaceTabAvailability();
   if(isPlate){
     const rimWidthMm=computeRimWidthMm(project.plate.outerDiameterMm,project.plate.innerWellDiameterMm);
@@ -6246,7 +6249,7 @@ async function renderImageStudio(){
   // of each other (this one from the Image Trace Lightbox's own onOpen, that one from the Shapes
   // Lightbox's), so refreshing the toggle in only one would leave it stale whenever the other path
   // is what actually re-renders next.
-  el('imageStudioSwitchToSheet').style.display=currentObjectTemplate().id==='sheet'?'none':'inline-block';
+  el('imageStudioSwitchToSheet').style.display=currentObjectTemplate().id==='sheet'?'none':'';
   const l=selectedLayer();
   const canvas=el('imageStudioCanvas'),ctx=canvas.getContext('2d');
   if(!l||l.type!=='image'){
