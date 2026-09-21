@@ -5265,9 +5265,12 @@ el('importSvgFile').addEventListener('change',async e=>{const file=e.target.file
 // IMG-007-StudioShell.md. The Studio's own Trace group lets the operator adjust the six params
 // afterward, live against the real layer (no separate pre-commit preview state to keep in sync).
 function computeDefaultImagePlacement(naturalWidthPx,naturalHeightPx){
-  const PX_PER_MM=96/25.4; // CSS px/inch, the same fallback src/svg/** uses for unitless SVG sizing
+  // IMG-011: default an imported image to 200mm on its longer side, preserving aspect ratio, then
+  // clamp to the canvas (minus a 20mm margin) the same way a too-large image always has.
+  const TARGET_LONG_SIDE_MM=200;
   const maxW=project.canvas.width-20,maxH=project.canvas.height-20;
-  let w=naturalWidthPx/PX_PER_MM,h=naturalHeightPx/PX_PER_MM;
+  const scale=TARGET_LONG_SIDE_MM/Math.max(naturalWidthPx,naturalHeightPx);
+  let w=naturalWidthPx*scale,h=naturalHeightPx*scale;
   if(w>maxW||h>maxH){const s=Math.min(maxW/w,maxH/h);w*=s;h*=s}
   return{x:(project.canvas.width-w)/2,y:(project.canvas.height-h)/2,w,h}
 }
@@ -5280,7 +5283,7 @@ el('importImageFile').addEventListener('change',async e=>{
     const dataUrl=await readFileAsDataUrl(file);
     imageBufferCache.set(dataUrl,buffer);
     const{x,y,w,h}=computeDefaultImagePlacement(buffer.widthPx,buffer.heightPx);
-    const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:dataUrl,imageName:file.name,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,x,y,w,h,maskMode:'subject',threshold:DEFAULT_IMAGE_THRESHOLD,invert:false,transparent:'ignore',blurRadiusPx:0,maxWidthPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,maxHeightPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,stoneSize:selectedLayer().stoneSize||2,gap:selectedLayer().gap||.3,color:selectedLayer().color||'gold',rotationDeg:0,colorCount:1,seed:1,spread:1,edgeWidthMm:6,edgeThinning:1,sizeMode:'uniform'};
+    const layer={id:'image'+Date.now(),type:'image',visible:true,imageSrc:dataUrl,imageName:file.name,naturalWidthPx:buffer.widthPx,naturalHeightPx:buffer.heightPx,x,y,w,h,maskMode:'subject',threshold:DEFAULT_IMAGE_THRESHOLD,invert:false,transparent:'ignore',blurRadiusPx:0,maxWidthPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,maxHeightPx:DEFAULT_IMAGE_MAX_DIMENSION_PX,stoneSize:2,gap:selectedLayer().gap||.3,color:selectedLayer().color||'gold',rotationDeg:0,colorCount:6,fillMode:'staggered',seed:1,spread:1,edgeWidthMm:6,edgeThinning:1,sizeMode:'uniform'};
     commitHistory();
     project.layers.push(layer);
     selectedLayerId=layer.id;
@@ -5478,6 +5481,17 @@ function revealDualWorkspaceForLightbox(){
     persistActiveView('dual');
   }
 }
+// IMG-011: the Image menu shows only the 2D canvas (no 3D Object Preview) -- unlike every other
+// design-content Lightbox, which reveals Dual Workspace. Same structure as
+// revealDualWorkspaceForLightbox() above, just targeting '2d' instead of 'dual'.
+function revealCanvasOnlyForLightbox(){
+  const exitingDesign=drawingTool.isActive;
+  if(exitingDesign)setDrawMode(false);
+  if(exitingDesign||workspaceMode!=='2d'){
+    if(workspaceMode!=='2d')setWorkspaceMode('2d');
+    persistActiveView('2d');
+  }
+}
 el('menuText').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.text.open();setActiveTopMenuButton('menuText')};
 el('menuShapes').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.shapes.open();setActiveTopMenuButton('menuShapes')};
 el('menuMonogram').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.monogram.open();setActiveTopMenuButton('menuMonogram')};
@@ -5487,7 +5501,7 @@ el('menuMonogram').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.mono
 // in place (Gallery code/tests/fixtures stay intact), it is just unreachable via the UI for now.
 el('menuGallery').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.gallery.open();setActiveTopMenuButton('menuGallery')};
 el('menuImport').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.importBox.open();setActiveTopMenuButton('menuImport')};
-el('menuImageTrace').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.imagetrace.open();setActiveTopMenuButton('menuImageTrace')};
+el('menuImageTrace').onclick=()=>{revealCanvasOnlyForLightbox();lightboxes.imagetrace.open();setActiveTopMenuButton('menuImageTrace')};
 el('menuExport').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.exportBox.open();setActiveTopMenuButton('menuExport')};
 el('exportShortcut').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.exportBox.open();setActiveTopMenuButton('menuExport')};
 el('menuProdSheet').onclick=()=>{revealDualWorkspaceForLightbox();lightboxes.prodSheet.open();setActiveTopMenuButton('menuProdSheet')};
