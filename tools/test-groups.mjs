@@ -51,6 +51,7 @@ export const GROUPS = {
     'test-stone-color.mjs',
     'test-history-manager.mjs',
     'test-object-template.mjs',
+    'test-rs-3037-flat-sheet.mjs',
     'test-pdf-document.mjs',
     'test-object-dimensions.mjs',
     'test-object-geometry-builder.mjs',
@@ -290,6 +291,7 @@ export const GROUPS = {
   ],
   products: [
     'test-object-template.mjs',
+    'test-rs-3037-flat-sheet.mjs',
     'test-object-template-integration.mjs',
     'test-object-dimensions.mjs',
     'test-product-plate-round-dinner.mjs',
@@ -444,6 +446,7 @@ export const GROUPS = {
     'test-shape-fit.mjs',
     'test-shape-library.mjs',
     'test-object-template.mjs',
+    'test-rs-3037-flat-sheet.mjs',
     'test-svg-parser.mjs',
     'test-pdf-document.mjs',
     'test-render-export-pipeline.mjs',

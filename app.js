@@ -98,7 +98,7 @@ import { stoneLayoutToDxf } from './src/export/DxfExporter.js';
 import { computeProductionSheetLayout, productionSheetToSvg, productionSheetToPdf } from './src/export/ProductionSheetExporter.js';
 import { parseSvgDocument } from './src/svg/index.js';
 import { HistoryManager } from './src/history/index.js';
-import { getObjectTemplate, getSafeAreaRectMm, getPlateDefaults, getPlateColorOptions, getPlateColor, normalizePlateParams, computeRimWidthMm, getPlateDesignTargetGuide, getPlateDesignTargetMeta, PLATE_ROUND_DINNER_DEFINITION, VESSEL_PRODUCT_IDS, getVesselDefaults, getVesselDimensionRange, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel } from './src/products/index.js';
+import { getObjectTemplate, getSafeAreaRectMm, getPlateDefaults, getPlateColorOptions, getPlateColor, normalizePlateParams, computeRimWidthMm, getPlateDesignTargetGuide, getPlateDesignTargetMeta, PLATE_ROUND_DINNER_DEFINITION, VESSEL_PRODUCT_IDS, getVesselDefaults, getVesselDimensionRange, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel, getSheetDefaults, clampSheetDimensionMm } from './src/products/index.js';
 import { prepareImageField, maskFieldToRgba, labelsFieldToRgba, decodeImageFileToBuffer, decodeDataUrlToBuffer, readFileAsDataUrl, isSupportedImageFile } from './src/image/index.js';
 // RS-1009 (Alignment & Snapping): src/editing/** is a new, pure, DOM-free module -- multi-select,
 // align/distribute, and drag/keyboard snapping math over layer bounding boxes in mm. It has no
@@ -2345,6 +2345,12 @@ function selectedLayer(){return project.layers.find(l=>l.id===selectedLayerId)||
 // ObjectTemplate record. getObjectTemplate() itself falls back to 'mug' for any unknown/missing id,
 // so this never throws.
 function currentObjectTemplate(){return getObjectTemplate(project.product)}
+// RS-3037: the one shared predicate every "this is a flat, non-revolved template" gate reads (Front
+// View Frame hit-testing, the too-long-to-wrap-around-a-circumference check, and any future one) --
+// true for Plate and Sheet, matching this codebase's existing preference for one shared gate over
+// duplicated `kind==='plate'` conditions drifting out of sync across call sites (see
+// isAuthoredStoneFontId()'s own "one shared predicate" precedent).
+function isFlatObjectTemplate(t){return t.preview.kind==='plate'||t.preview.kind==='sheet'}
 // RS-1002: undo/redo history. HistoryManager (src/history/**) stores only serialized
 // {project,selectedLayerId} snapshots -- never the generated StoneLayout -- so history never
 // duplicates geometry, and geometry is always regenerated fresh from the restored project via
@@ -2528,6 +2534,11 @@ function syncSelectedControlsFromLayer(){
   // (undo/redo restore, Project JSON import, or a template switch away-and-back must never leave
   // these inputs showing a stale value that a later edit would silently write back).
   setLengthField('plateOuterDiameter',project.plate.outerDiameterMm);setLengthField('plateInnerWellDiameter',project.plate.innerWellDiameterMm);setLengthField('plateOverallHeight',project.plate.overallHeightMm);setLengthField('plateCenterDepth',project.plate.centerDepthMm);el('plateColor').value=project.plate.colorId;el('plateDesignTarget').value=project.plate.designTarget;
+  // RS-3037: project.canvas is likewise project-level -- while Flat Sheet is active, resync
+  // #sheetWidth/#sheetHeight from it for the same reason (undo/redo restore, Project JSON import,
+  // or a template switch away-and-back must never leave these inputs showing a stale value that a
+  // later writeSelectedControlsToLayer() would silently write back).
+  if(currentObjectTemplate().id==='sheet'){setLengthField('sheetWidth',project.canvas.width);setLengthField('sheetHeight',project.canvas.height)}
   // RS-2010: project.vessel is likewise project-level -- resync for the same reason as project.plate
   // just above.
   setLengthField('vesselBodyDiameter',project.vessel.bodyDiameterMm);setLengthField('vesselBodyHeight',project.vessel.bodyHeightMm);setLengthField('vesselTopDiameter',project.vessel.topDiameterMm);
@@ -2767,6 +2778,13 @@ function writeSelectedControlsToLayer(){
     project.vessel=normalizeVesselParams(vesselProductId,{bodyDiameterMm:readLengthField('vesselBodyDiameter'),topDiameterMm:readLengthField('vesselTopDiameter'),bodyHeightMm:readLengthField('vesselBodyHeight')});
     project.canvas=computeCanvasFromVessel(project.vessel);
   }
+  // RS-3037: sheet fields only read/written while Flat Sheet is active, mirroring the plate/vessel
+  // blocks above. project.canvas IS the sheet's production size (no project.sheet object -- see
+  // docs/specifications/RS-3037-FlatSheet.md, "Schema decision"); clampSheetDimensionMm() keeps a
+  // malformed typed value inside [20,500]mm.
+  if(currentObjectTemplate().id==='sheet'){
+    project.canvas={width:clampSheetDimensionMm(readLengthField('sheetWidth')),height:clampSheetDimensionMm(readLengthField('sheetHeight'))};
+  }
   project.name=el('projectName').value||DEFAULT_PROJECT_NAME;rotation=parseFloat(el('rotation').value)||0;zoom=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,(parseFloat(el('zoom').value)||100)/100))}
 // M14 (perf/move-drag-translate-fast-path): pure translation of an existing StoneLayout for the
 // move-drag fast path. Returns a NEW StoneLayout whose stones are fresh Stone copies of baseLayout's:
@@ -2887,8 +2905,12 @@ function drawLayout(){
   // cylindrical Front View Frame + rectangular safe-area guide -- neither applies to a flat
   // top-down disc (see drawPlateDesignTargetGuide()'s own header comment).
   const isPlate=currentObjectTemplate().preview.kind==='plate';
-  if(isPlate){drawPlateDesignTargetGuide(ctx,s,ox,oy,dpr)}else{drawFrontViewFrame(ctx,s,ox,oy,dpr);if(showSafeArea)drawSafeAreaGuide(ctx,s,ox,oy,dpr,getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height))}
-  drawSelection(ctx,s,ox,oy,dpr);drawGuides(ctx,s,ox,oy,dpr);ctx.fillStyle='#516071';ctx.font=`${12*dpr}px Arial`;ctx.fillText(`${layout.count} stones · ${formatLengthDisplay(layout.widthMm,project.units,1)}×${formatLengthDisplay(layout.heightMm,project.units,1)} ${unitSuffix(project.units)} · ${selectedLayer().textMode||''}`,20*dpr,h-18*dpr);el('fitNotice').textContent=isPlate?'Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step) · Blue guide shows the selected Design Target’s printable boundary.':'Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step) · Drag the amber Front View Frame to rotate the Object Preview.'}
+  // RS-3037: Flat Sheet is a third guide case -- flat like plate (no Front View Frame), but its
+  // printable boundary is the ordinary rectangular safe-area guide (like every cylindrical
+  // template), not plate's circular/annular Design Target guide.
+  const isSheet=currentObjectTemplate().preview.kind==='sheet';
+  if(isPlate){drawPlateDesignTargetGuide(ctx,s,ox,oy,dpr)}else if(isSheet){if(showSafeArea)drawSafeAreaGuide(ctx,s,ox,oy,dpr,getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height))}else{drawFrontViewFrame(ctx,s,ox,oy,dpr);if(showSafeArea)drawSafeAreaGuide(ctx,s,ox,oy,dpr,getSafeAreaRectMm(currentObjectTemplate(),project.canvas.width,project.canvas.height))}
+  drawSelection(ctx,s,ox,oy,dpr);drawGuides(ctx,s,ox,oy,dpr);ctx.fillStyle='#516071';ctx.font=`${12*dpr}px Arial`;ctx.fillText(`${layout.count} stones · ${formatLengthDisplay(layout.widthMm,project.units,1)}×${formatLengthDisplay(layout.heightMm,project.units,1)} ${unitSuffix(project.units)} · ${selectedLayer().textMode||''}`,20*dpr,h-18*dpr);el('fitNotice').textContent=isPlate?'Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step) · Blue guide shows the selected Design Target’s printable boundary.':(isSheet?'Flat Sheet: keep stones inside the dashed safe-area guide.':'Drag to move (Shift = constrain, Alt = duplicate) · Shift-click to multi-select · click empty canvas to clear · Arrow keys nudge (Shift = larger step) · Drag the amber Front View Frame to rotate the Object Preview.')}
 // RS-1004: a dashed guide rectangle for the active object template's safe design area, derived from
 // the current project.canvas size. This is a layer-agnostic editor overlay (like drawSelection()
 // below), not a CanvasRenderer2D.js change -- it reuses the exact mm->px transform
@@ -2988,9 +3010,10 @@ function drawFrontViewFrame(ctx,s,ox,oy,dpr){
 // View Frame band -- the same wrap-aware angular window drawFrontViewFrame() renders, expressed as
 // an angular distance so it needs no per-segment mm math and handles the edge-wrap case for free.
 function isPointerOnFrontViewFrame(mm){
-  // S-112: the plate has no Front View Frame (drawLayout() never draws one for it -- see
-  // drawPlateDesignTargetGuide()'s header comment), so it can never be the target of a frame drag.
-  if(currentObjectTemplate().preview.kind==='plate')return false;
+  // S-112/RS-3037: a plate/sheet has no Front View Frame (drawLayout() never draws one for either
+  // -- see drawPlateDesignTargetGuide()'s header comment), so neither can ever be the target of a
+  // frame drag.
+  if(isFlatObjectTemplate(currentObjectTemplate()))return false;
   if(mm.y<0||mm.y>project.canvas.height)return false;
   const canvasWidthMm=project.canvas.width;
   const pointerAzimuthRad=azimuthRadForCanvasXMm(mm.x,canvasWidthMm);
@@ -3117,10 +3140,11 @@ function isTextOutsidePrintableArea(l){
 function printableCircumferenceMm(){return circumferenceMm(project.canvas.width)}
 function isTextTooLongForObject(l){
   if(!l||l.type!=='text'||!l.text)return false;
-  // S-112: a plate is a flat surface, never wrapped around a circumference -- "too long to wrap
-  // around the object" is not a real manufacturing limitation for it (see printableCircumferenceMm()'s
-  // own header comment: this check exists only for cylindrical/revolved-vessel templates).
-  if(currentObjectTemplate().preview.kind==='plate')return false;
+  // S-112/RS-3037: a plate/sheet is a flat surface, never wrapped around a circumference -- "too
+  // long to wrap around the object" is not a real manufacturing limitation for either (see
+  // printableCircumferenceMm()'s own header comment: this check exists only for
+  // cylindrical/revolved-vessel templates).
+  if(isFlatObjectTemplate(currentObjectTemplate()))return false;
   return getLayerBBox(l).width>printableCircumferenceMm();
 }
 // Builds the too-long warning's detail copy (requirement 5: "must describe a real manufacturing
@@ -4042,7 +4066,10 @@ function rotatedHandlesFor(b,rotationDeg){
 // position/scale/orientation/proportions, subject only to normal cylindrical perspective. Wrap mode
 // still controls the Front View Frame overlay (drawFrontViewFrame(), frontViewFrameGeometry()) on
 // the 2D canvas, unchanged.
-function drawCup(){preview3D.update(layout,{cupColor:project.cupColor,objectTemplate:currentObjectTemplate(),canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height,plateParams:project.plate,vesselParams:project.vessel});preview3D.syncView(rotation,zoom)}
+// RS-3037: Flat Sheet has no 3D preview (no physical/3D counterpart, decision 4) -- returning here
+// before preview3D.update() is the one gate that keeps ObjectDimensions.js/ObjectGeometryBuilder.js
+// from ever seeing preview.kind==='sheet' (neither module learns a new kind for this milestone).
+function drawCup(){if(currentObjectTemplate().id==='sheet')return;preview3D.update(layout,{cupColor:project.cupColor,objectTemplate:currentObjectTemplate(),canvasWidthMm:project.canvas.width,canvasHeightMm:project.canvas.height,plateParams:project.plate,vesselParams:project.vessel});preview3D.syncView(rotation,zoom)}
 // S-001: keeps the Front/Left/Right/Back buttons' highlighted state synchronized with `rotation`
 // regardless of how it changed (view-button click, reset, slider, or manual cup-drag), since this
 // is called from updateAll() rather than duplicated at each rotation-changing call site.
@@ -4073,7 +4100,7 @@ function cylindricalCupStatsHtml(t){const{frameWidthMm}=frontViewFrameGeometry()
 // presence on Design's own canvas (drawingTool only draws/tracks 'path' layers). Falls back to a
 // neutral canvas/safe-area-only summary in that one case; every other view+selection combination,
 // including a 'path' layer selected and visible while Design is active, keeps the full stats.
-function updateStats(){const t=currentObjectTemplate(),isPlate=t.preview.kind==='plate';const safe=getSafeAreaRectMm(t,project.canvas.width,project.canvas.height);const sel=selectedLayer();const u=unitSuffix(project.units);if(drawingTool.isActive&&sel.type!=='path'){el('layoutStats').innerHTML=`<span>canvas: ${formatLengthDisplay(project.canvas.width,project.units,1)}×${formatLengthDisplay(project.canvas.height,project.units,1)} ${u}</span><span>safe area: ${formatLengthDisplay(safe.widthMm,project.units,1)}×${formatLengthDisplay(safe.heightMm,project.units,1)} ${u}</span><span>units: ${u}</span>`}else{el('layoutStats').innerHTML=`<b>${layout.count}</b> stones <span>${formatLengthDisplay(layout.widthMm,project.units,1)}×${formatLengthDisplay(layout.heightMm,project.units,1)} ${u}</span><span>canvas: ${formatLengthDisplay(project.canvas.width,project.units,1)}×${formatLengthDisplay(project.canvas.height,project.units,1)} ${u}</span><span>safe area: ${formatLengthDisplay(safe.widthMm,project.units,1)}×${formatLengthDisplay(safe.heightMm,project.units,1)} ${u}</span><span>units: ${u}</span>${selectionBoundsText()}<span>selected: ${escapeHtml(layerLabel(sel))}</span>`}el('cupStats').innerHTML=isPlate?plateCupStatsHtml(t):cylindricalCupStatsHtml(t);updateStoneColorSwatch()}
+function updateStats(){const t=currentObjectTemplate(),isPlate=t.preview.kind==='plate';const safe=getSafeAreaRectMm(t,project.canvas.width,project.canvas.height);const sel=selectedLayer();const u=unitSuffix(project.units);if(drawingTool.isActive&&sel.type!=='path'){el('layoutStats').innerHTML=`<span>canvas: ${formatLengthDisplay(project.canvas.width,project.units,1)}×${formatLengthDisplay(project.canvas.height,project.units,1)} ${u}</span><span>safe area: ${formatLengthDisplay(safe.widthMm,project.units,1)}×${formatLengthDisplay(safe.heightMm,project.units,1)} ${u}</span><span>units: ${u}</span>`}else{el('layoutStats').innerHTML=`<b>${layout.count}</b> stones <span>${formatLengthDisplay(layout.widthMm,project.units,1)}×${formatLengthDisplay(layout.heightMm,project.units,1)} ${u}</span><span>canvas: ${formatLengthDisplay(project.canvas.width,project.units,1)}×${formatLengthDisplay(project.canvas.height,project.units,1)} ${u}</span><span>safe area: ${formatLengthDisplay(safe.widthMm,project.units,1)}×${formatLengthDisplay(safe.heightMm,project.units,1)} ${u}</span><span>units: ${u}</span>${selectionBoundsText()}<span>selected: ${escapeHtml(layerLabel(sel))}</span>`}el('cupStats').innerHTML=isPlate?plateCupStatsHtml(t):(t.preview.kind==='sheet'?'':cylindricalCupStatsHtml(t));updateStoneColorSwatch()}
 // S-106: Combined Visual Preview PNG. Composites the two already-rendered, always-mounted canvas
 // elements (layoutCanvas/cupCanvas -- both keep a real, non-zero pixel backing store at all times
 // regardless of the active workspace tab, per the .tab-hidden/dual-mode invariant documented at
@@ -4842,7 +4869,7 @@ el('autoFit').addEventListener('input',()=>{
   const turningOn=el('autoFit').value==='on';
   el('autoFitOnHint').style.display=(l&&l.type==='text'&&!l.autoFit&&turningOn)?'block':'none';
 });
-const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgMaskMode','imgThreshold','imgInvert','imgTransparent','imgBlurRadius','imgMaxWidth','imgMaxHeight','imgColorCount','imgSeed','imgSpread','imgEdgeWidth','imgEdgeThinning','imgColorPick0','imgColorPick1','imgColorPick2','imgColorPick3','imgColorPick4','imgColorPick5','imgColorPick6','imgColorPick7','imgColorReset','textX','textY','textAlign','lineSpacing','letterSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail','weightSteps','imgBrightnessSteps','imgBrightnessThinning'];
+const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgMaskMode','imgThreshold','imgInvert','imgTransparent','imgBlurRadius','imgMaxWidth','imgMaxHeight','imgColorCount','imgSeed','imgSpread','imgEdgeWidth','imgEdgeThinning','imgColorPick0','imgColorPick1','imgColorPick2','imgColorPick3','imgColorPick4','imgColorPick5','imgColorPick6','imgColorPick7','imgColorReset','textX','textY','textAlign','lineSpacing','letterSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sheetWidth','sheetHeight','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail','weightSteps','imgBrightnessSteps','imgBrightnessThinning'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
 // RS-2002: Browse Fonts panel wiring. Toggling/closing never touches history (it only decides
@@ -4875,6 +4902,12 @@ el('objectType').addEventListener('change',()=>{commitHistory();const template=g
   // project.cupColor from the plate's default color id so the Object Preview immediately shows
   // the approved White, not whatever cupColor the previous template left behind.
   if(template.id==='plate'){project.plate=getPlateDefaults();project.cupColor=getPlateColor(project.plate.colorId).hex}
+  // RS-3037: switching to Flat Sheet resets project.canvas to the sheet's own default (150x150mm)
+  // -- the flat-sheet counterpart of the plate/vessel resets above. getSheetDefaults() is the
+  // canonical source (matching the else branch above, which already computes the same 150x150 from
+  // the template's own productionWidthMm/HeightMm) rather than duplicating the 150 default in two
+  // places.
+  if(template.id==='sheet'){project.canvas={width:getSheetDefaults().widthMm,height:getSheetDefaults().heightMm}}
   syncSelectedControlsFromLayer();updateAll(true)});el('layersList').addEventListener('click',e=>{const row=e.target.closest('.layer');if(!row)return;const id=row.dataset.layer,action=e.target.dataset.action;
   // RS-3013 Step 5 follow-up: a selected REGION (drawingTool.activeSelection) is Design-canvas-local
   // state that must be cleared here too whenever this row click actually MOVES the selection --
@@ -5294,6 +5327,10 @@ el('importImageFile').addEventListener('change',async e=>{
   }catch(error){console.error('Image import failed',error);el('status').textContent=`Image import failed: ${error.message}`}
 });
 el('imageStudioRemove').onclick=()=>{if(selectedLayer().type==='image')deleteLayer(selectedLayer().id)};
+// RS-3037: reuses the #objectType change handler's own reset logic (dispatching a real change
+// event) rather than duplicating it -- matches this codebase's stated preference for reuse over
+// duplication.
+el('imageStudioSwitchToSheet').onclick=()=>{el('objectType').value='sheet';el('objectType').dispatchEvent(new Event('change'))};
 // IMG-002: clears every row's colorMap override back to each cluster's own auto-detected nearestId.
 // Not part of the generic HISTORY_TRACKED_CONTROL_IDS 'input'/'change' wiring below (a button click
 // fires neither), so it commits its own history step and regenerates directly, the same pattern
@@ -5320,8 +5357,8 @@ el('exportLayout').onclick=()=>{if(!layout){el('status').textContent='Export fai
 el('exportDXF').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{download('rhinestone-template.dxf','application/dxf',stoneLayoutToDxf(layout,{widthMm:project.canvas.width,heightMm:project.canvas.height}))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{const regions=resolveImageExportRegions(project);download('rhinestone-layout.svg','image/svg+xml',stoneLayoutToSvg(layout,{widthMm:project.canvas.width,heightMm:project.canvas.height},{regions}))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 el('exportPNG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-layout.png',layoutCanvas)}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
-el('exportCup').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-cup-preview.png',cupCanvas)}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
-el('exportCombined').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-combined-preview.png',composeCombinedPreviewCanvas())}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+el('exportCup').onclick=()=>{if(currentObjectTemplate().id==='sheet'){el('status').textContent='Flat Sheet has no 3D preview to export.';return}if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-cup-preview.png',cupCanvas)}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+el('exportCombined').onclick=()=>{if(currentObjectTemplate().id==='sheet'){el('status').textContent='Flat Sheet has no 3D preview to export.';return}if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{exportCanvas('rhinestone-combined-preview.png',composeCombinedPreviewCanvas())}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
 // RS-1005: Production Sheet export. Page size/margin/mirror/registration-marks are view/export-
 // only options (like rotation/zoom) -- read live from their controls at click time, not part of
 // `project`, not undo/redo-tracked. gapMm is collected from every currently visible layer (the one
@@ -6124,6 +6161,7 @@ el('shapesTabTemplates').onclick=()=>setShapesTab('templates');
 function updateObjectTemplateDetail(){
   const t=currentObjectTemplate(),s=t.safeAreaInsetMm;
   const isPlate=t.preview.kind==='plate';
+  const isSheet=t.preview.kind==='sheet';
   const isVessel=VESSEL_PRODUCT_IDS.includes(t.id);
   const detailEl=el('objectTemplateDetail');
   const u=unitSuffix(project.units);
@@ -6135,11 +6173,29 @@ function updateObjectTemplateDetail(){
   // Dinner Plate template is active -- every other template's fields are unaffected.
   el('plateFields').style.display=isPlate?'block':'none';
   el('plateColorField').style.display=isPlate?'flex':'none';
-  el('cupColorField').style.display=isPlate?'none':'flex';
-  // S-112A: Wrap mode is a cylindrical-only concept (it sizes the Front View Frame band, which the
-  // plate never draws -- see drawLayout()) -- hidden whenever the Round Dinner Plate is the active
-  // template, unchanged for every other template.
-  el('wrapField').style.display=isPlate?'none':'flex';
+  // RS-3037: there is no Object Preview to color for a Flat Sheet either (decision 4, no 3D
+  // preview) -- #cupColorField is hidden for both flat kinds.
+  el('cupColorField').style.display=(isPlate||isSheet)?'none':'flex';
+  // S-112A/RS-3037: Wrap mode is a cylindrical-only concept (it sizes the Front View Frame band,
+  // which neither plate nor sheet ever draws -- see drawLayout()) -- hidden for both flat kinds,
+  // unchanged for every other template.
+  el('wrapField').style.display=(isPlate||isSheet)?'none':'flex';
+  // RS-3037: the sheet-only Width/Height field group, shown only while Flat Sheet is active --
+  // same pattern as #plateFields/#vesselFields above.
+  el('sheetFields').style.display=isSheet?'block':'none';
+  // RS-3037: the Image panel's "Switch to Flat Sheet" action is only useful while some other
+  // template is active -- also refreshed independently from renderImageStudio() itself (see its own
+  // comment), since either function can run next depending on which Lightbox's onOpen fires.
+  // RS-3037 2nd follow-up: button.btn is display:inline-flex in the stylesheet -- an explicit
+  // 'block'/'inline-block' show-value here would override it and visibly change these buttons'
+  // layout on every non-sheet project. '' hands display back to the stylesheet.
+  el('imageStudioSwitchToSheet').style.display=isSheet?'none':'';
+  // RS-3037 follow-up: drawCup() no longer redraws #cup while Flat Sheet is active, so both PNG
+  // exports that capture its pixels (cupCanvas directly, or via composeCombinedPreviewCanvas())
+  // would otherwise ship a stale or blank image -- hide both while Flat Sheet is active.
+  el('exportCup').style.display=isSheet?'none':'';
+  el('exportCombined').style.display=isSheet?'none':'';
+  updateWorkspaceTabAvailability();
   if(isPlate){
     const rimWidthMm=computeRimWidthMm(project.plate.outerDiameterMm,project.plate.innerWellDiameterMm);
     const targetName=getPlateDesignTargetMeta(project.plate.designTarget).name;
@@ -6189,6 +6245,11 @@ const IMAGE_STUDIO_LIVE_GROUP_IDS=['imageStudioGroupTrace','imageStudioGroupPosi
 async function renderImageStudio(){
   const token=++imageStudioRenderToken;
   if(!lightboxes.imagetrace.isOpen)return;
+  // RS-3037: also refreshed from updateObjectTemplateDetail() -- both functions run independently
+  // of each other (this one from the Image Trace Lightbox's own onOpen, that one from the Shapes
+  // Lightbox's), so refreshing the toggle in only one would leave it stale whenever the other path
+  // is what actually re-renders next.
+  el('imageStudioSwitchToSheet').style.display=currentObjectTemplate().id==='sheet'?'none':'';
   const l=selectedLayer();
   const canvas=el('imageStudioCanvas'),ctx=canvas.getContext('2d');
   if(!l||l.type!=='image'){
@@ -6334,7 +6395,14 @@ el('imageStudioView').addEventListener('change',renderImageStudio);
 // sizing fix keeps applying unchanged. updateAll(true) after a switch lets whichever canvas(es)
 // just became visible/resized pick up their real box size via resizeCanvas()/ResizeObserver.
 let workspaceMode='dual';
+// RS-3037: the single guard covering every path that can request Dual/Object Preview while Flat
+// Sheet is active (the two tabs, revealDualWorkspaceForLightbox(), setDrawMode(false) restoring
+// workspaceModeBeforeDrawing, and the boot-time bootActiveView resolution call below) -- Flat Sheet
+// has no 3D preview (decision 4), so either request resolves to '2d' instead. Runs before any of
+// this function's own DOM-toggle logic, and never calls persistActiveView() itself, so a saved
+// 'dual'/'preview' preference in localStorage survives untouched for the next non-sheet project.
 function setWorkspaceMode(mode,skipUpdate){
+  if(currentObjectTemplate().id==='sheet'&&(mode==='dual'||mode==='preview'))mode='2d';
   workspaceMode=mode;
   const show2D=mode==='dual'||mode==='2d',show3D=mode==='dual'||mode==='preview';
   el('viewTabDual').classList.toggle('active',mode==='dual');el('viewTabDual').setAttribute('aria-selected',String(mode==='dual'));
@@ -6345,6 +6413,22 @@ function setWorkspaceMode(mode,skipUpdate){
   el('toolbar2D').style.display=show2D?'flex':'none';el('toolbar3D').style.display=show3D?'flex':'none';
   el('layoutStats').style.display=show2D?'flex':'none';el('cupStats').style.display=show3D?'flex':'none';
   if(!skipUpdate)updateAll(true);
+}
+// RS-3037: disables the Dual Workspace/Object Preview tabs while Flat Sheet is active (a disabled
+// <button> doesn't fire its onclick, so no change to the tab handlers themselves is needed) and, if
+// the workspace is already showing Dual/Preview when sheet becomes active, forces it back to 2D.
+// Called from updateObjectTemplateDetail(), which already runs on every selection change, undo/redo
+// and import via renderLayerUI() -- no separate wiring needed for those paths. Must never call
+// updateAll() synchronously: this function itself runs INSIDE updateAll() (via renderLayerUI()), so
+// a synchronous updateAll() here would recurse; requestAnimationFrame() defers the redraw one frame.
+function updateWorkspaceTabAvailability(){
+  const isSheet=currentObjectTemplate().id==='sheet';
+  el('viewTabDual').disabled=isSheet;
+  el('viewTab3D').disabled=isSheet;
+  if(isSheet&&workspaceMode!=='2d'){
+    setWorkspaceMode('2d',true);
+    requestAnimationFrame(()=>updateAll(true));
+  }
 }
 // RS-3011 Step 4: which of Design/Dual Workspace/2D Canvas/Object Preview was last active, so a
 // page reload lands back where the user left off -- a client-side UI preference, not project data,
@@ -7112,6 +7196,11 @@ function refreshAllLengthFieldDisplays(previousUnits=project.units){
   setLengthField('vesselBodyDiameter',project.vessel.bodyDiameterMm);
   setLengthField('vesselBodyHeight',project.vessel.bodyHeightMm);
   setLengthField('vesselTopDiameter',project.vessel.topDiameterMm);
+  // RS-3037: unlike plate/vessel (their own project-level state objects, always present regardless
+  // of the active template), project.canvas is shared by every template -- only meaningful as
+  // "sheet width/height" while Flat Sheet is actually active, so this re-display is gated the same
+  // way syncSelectedControlsFromLayer()'s own sheet branch is.
+  if(currentObjectTemplate().id==='sheet'){setLengthField('sheetWidth',project.canvas.width);setLengthField('sheetHeight',project.canvas.height)}
   for(const id of['prodSheetMargin','shipLengthMm','shipWidthMm','shipHeightMm','monogramWidth','monogramHeight','monogramSizeMarginMm','drawSlotWidthMm']){
     const stashedMm=parseFloat(el(id).dataset.mmValue);
     if(Number.isFinite(stashedMm)){
