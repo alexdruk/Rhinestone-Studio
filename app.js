@@ -95,7 +95,7 @@ import { STONE_COLORS } from './src/renderer/StoneColors.js';
 import { listStoneSizes, findStoneSizeByDiameterMm, formatStoneSizeLabel, stoneSizeHeightMidpointMm, isHeightWithinStoneSizeRange, stoneSizeEntirelyExceedsPrintableHeight, stoneSizesFromBaseMm, stoneSizeRungsAvailable } from './src/renderer/StoneSizes.js';
 import { stoneLayoutToSvg } from './src/export/SvgExporter.js';
 import { stoneLayoutToDxf } from './src/export/DxfExporter.js';
-import { computeProductionSheetLayout, productionSheetToSvg, productionSheetToPdf } from './src/export/ProductionSheetExporter.js';
+import { computeProductionSheetLayout, productionSheetToSvg, productionSheetToPdf, countStonesOutsideProductionArea } from './src/export/ProductionSheetExporter.js';
 import { parseSvgDocument } from './src/svg/index.js';
 import { HistoryManager } from './src/history/index.js';
 import { getObjectTemplate, getSafeAreaRectMm, getPlateDefaults, getPlateColorOptions, getPlateColor, normalizePlateParams, computeRimWidthMm, getPlateDesignTargetGuide, getPlateDesignTargetMeta, PLATE_ROUND_DINNER_DEFINITION, VESSEL_PRODUCT_IDS, getVesselDefaults, getVesselDimensionRange, normalizeVesselParams, deriveLegacyVesselParams, computeCanvasFromVessel, getSheetDefaults, clampSheetDimensionMm } from './src/products/index.js';
@@ -5387,13 +5387,25 @@ function updateProdSheetReadabilityValidation(){
     const items=hits.map(({layer,heightMm,minHeightMm})=>`"${layerLabel(layer)}" (${formatLengthDisplay(heightMm,project.units,1)} ${u}, needs ${formatLengthDisplay(minHeightMm,project.units,1)} ${u} or taller)`).join('; ');
     message=`${hits.length} text layer${hits.length===1?'':'s'} on this sheet ${hits.length===1?'is':'are'} below the readability minimum for its stone size: ${items}. This will still export — consider a taller height or a smaller stone size before printing.`;
   }
+  // RS-3038: stones outside project.canvas are silently dropped off the printed template with no
+  // signal today (repro: import an image on a 200x200 Flat Sheet, then shrink the sheet to
+  // 150x150). Warn-only, same as the readability check above -- appended, never replacing it.
+  if(layout){
+    const outsideCount=countStonesOutsideProductionArea(layout,project.canvas.width,project.canvas.height);
+    if(outsideCount>0){
+      const w=formatLengthDisplay(project.canvas.width,project.units,1);
+      const h=formatLengthDisplay(project.canvas.height,project.units,1);
+      const outsideMessage=`${outsideCount} stone${outsideCount===1?' lies':'s lie'} partly or fully outside the ${w} × ${h} ${u} production area and will not be on the template. Move or resize the design, or enlarge the sheet.`;
+      message=message?`${message} ${outsideMessage}`:outsideMessage;
+    }
+  }
   validation.textContent=message;
   validation.classList.toggle('visible',Boolean(message));
 }
 function currentProductionSheetOptions(){const t=currentObjectTemplate(),isPlate=t.preview.kind==='plate';const plateFields=isPlate?{plateDesignTarget:getPlateDesignTargetMeta(project.plate.designTarget).name,plateOuterDiameterMm:project.plate.outerDiameterMm,plateInnerWellDiameterMm:project.plate.innerWellDiameterMm,plateRimWidthMm:computeRimWidthMm(project.plate.outerDiameterMm,project.plate.innerWellDiameterMm),plateOverallHeightMm:project.plate.overallHeightMm,plateWeightGrams:PLATE_ROUND_DINNER_DEFINITION.weightGrams.average,plateColorName:getPlateColor(project.plate.colorId).name}:{};return{projectName:project.name,objectType:t.displayName,productionWidthMm:project.canvas.width,productionHeightMm:project.canvas.height,gapMm:[...new Set(project.layers.filter(l=>l.visible).map(l=>l.gap))],pageSize:el('prodSheetPageSize').value,marginMm:readLengthField('prodSheetMargin')||0,mirror:el('prodSheetMirror').value==='on',registrationMarks:el('prodSheetRegMarks').value==='on',units:project.units,...plateFields}}
 // READ-010's readability floor is warn-only: a throw inside updateProdSheetReadabilityValidation()'s sweep must be caught and reported via the existing #status catch, not escape uncaught and silently disable the export button -- so the call sits inside try, after the !layout guard.
-el('exportProdSheetSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{updateProdSheetReadabilityValidation();download('rhinestone-production-sheet.svg','image/svg+xml',productionSheetToSvg(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
-el('exportProdSheetPDF').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{updateProdSheetReadabilityValidation();download('rhinestone-production-sheet.pdf','application/pdf',productionSheetToPdf(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+el('exportProdSheetSVG').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{updateProdSheetReadabilityValidation();download('rhinestone-production-sheet.svg','image/svg+xml',productionSheetToSvg(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`;const v=el('prodSheetValidation');v.textContent=`Export failed: ${error.message}`;v.classList.add('visible')}};
+el('exportProdSheetPDF').onclick=()=>{if(!layout){el('status').textContent='Export failed: layout is not ready yet.';return}try{updateProdSheetReadabilityValidation();download('rhinestone-production-sheet.pdf','application/pdf',productionSheetToPdf(layout,currentProductionSheetOptions()))}catch(error){el('status').textContent=`Export failed: ${error.message}`;const v=el('prodSheetValidation');v.textContent=`Export failed: ${error.message}`;v.classList.add('visible')}};
 // PNG has no dedicated src/export/** module (matching #exportPNG/#exportCup's existing "capture,
 // not a standalone exporter" precedent): it rasterizes the already-generated production-sheet SVG
 // via an offscreen Image+canvas at a fixed PRODUCTION_SHEET_PNG_DPI, so the raster's pixel
@@ -5412,7 +5424,14 @@ el('exportProdSheetPNG').onclick=async()=>{if(!layout){el('status').textContent=
   const ctx=c.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(img,0,0,c.width,c.height);
   URL.revokeObjectURL(svgUrl);
   exportCanvas('rhinestone-production-sheet.png',c)
-}catch(error){el('status').textContent=`Export failed: ${error.message}`}};
+}catch(error){el('status').textContent=`Export failed: ${error.message}`;const v=el('prodSheetValidation');v.textContent=`Export failed: ${error.message}`;v.classList.add('visible')}};
+// RS-3038: option-change refresh -- none of these four controls had a change listener before (they
+// were read-only-at-export-time, via currentProductionSheetOptions()); this both keeps the outside-
+// area/readability warning from going stale while the lightbox stays open across an edit, and clears
+// a stale "Export failed" message (written into #prodSheetValidation by the catch blocks above) once
+// the operator changes an option, per this milestone's "until the next export attempt or option
+// change" contract.
+for(const id of['prodSheetPageSize','prodSheetMargin','prodSheetMirror','prodSheetRegMarks']){el(id).addEventListener('change',()=>updateProdSheetReadabilityValidation())}
 // RS-1006: the previous custom pointerdown/pointermove drag-to-rotate handler on cupCanvas is
 // removed here -- OrbitControls (inside src/preview3d/Preview3DRenderer.js) now owns pointer
 // interaction on that canvas natively, and does strictly more (rotate, zoom, and pan, with

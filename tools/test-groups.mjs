@@ -93,6 +93,7 @@ export const GROUPS = {
     'test-product-vessel-dimensions.mjs',
     'test-examples-regression.mjs',
     'test-production-sheet-exporter.mjs',
+    'test-rs-3038-prod-sheet-messages.mjs',
     'test-crystal-color-integration.mjs',
     'test-image-trace-regression.mjs',
     'test-path-boolean-integration.mjs',
@@ -312,6 +313,7 @@ export const GROUPS = {
     // RS-3036: DXF cutting-template export (StoneLayout -> mm DXF, per-color layers).
     'test-rs3036-dxf-exporter.mjs',
     'test-production-sheet-exporter.mjs',
+    'test-rs-3038-prod-sheet-messages.mjs',
     'test-pdf-document.mjs',
     'test-export-combined-preview-png.mjs',
     // SVG import flattening -- flattenPathToContours() generalizing to paper.CompoundPath (holes)
