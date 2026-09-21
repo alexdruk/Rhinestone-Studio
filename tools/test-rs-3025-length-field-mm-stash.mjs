@@ -120,7 +120,7 @@ function makeFakeDom() {
 
 function buildSandbox(el, project) {
   const factory = new Function(
-    'el', 'project', 'formatLengthDisplay', 'displayValueToMm',
+    'el', 'project', 'formatLengthDisplay', 'displayValueToMm', 'currentObjectTemplate',
     `
     ${setLengthFieldSrc}
     ${stashTypedLengthFieldSrc}
@@ -128,7 +128,11 @@ function buildSandbox(el, project) {
     return { setLengthField, stashTypedLengthField, refreshAllLengthFieldDisplays };
     `
   );
-  return factory(el, project, formatLengthDisplay, displayValueToMm);
+  // RS-3037: refreshAllLengthFieldDisplays() now gates a new sheet-only #sheetWidth/#sheetHeight
+  // resync on currentObjectTemplate().id -- none of this file's scenarios concern Flat Sheet, so a
+  // minimal stub (never resolving to 'sheet') is enough to let the real extracted function body run
+  // unmodified.
+  return factory(el, project, formatLengthDisplay, displayValueToMm, () => ({ id: project.product || 'mug' }));
 }
 
 function makeProject(units) {

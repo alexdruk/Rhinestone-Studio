@@ -208,24 +208,27 @@ Script used for this measurement was ad hoc and not committed.
 
 ---
 
-## D. Test impact
+## D. Test impact (as implemented)
 
-Grepped `tools/*.mjs` for `OBJECT_TEMPLATE_IDS`, `listObjectTemplates`, `PREVIEW_KINDS`,
-`#objectType` options, and `viewTabDual`/`viewTab2D`/`viewTab3D` — 8 files matched.
+Grepped `tools/*.mjs` for `setWorkspaceMode`, `updateObjectTemplateDetail`, `drawCup`,
+`syncSelectedControlsFromLayer`, `refreshAllLengthFieldDisplays`, `isPointerOnFrontViewFrame`,
+`isTextTooLongForObject`, `updateStats`, `PREVIEW_KINDS`, `OBJECT_TEMPLATE_IDS`, and `objectType` —
+every `tools/*.mjs` file that extracts one of these functions into a `new Function` sandbox and
+would break on an undefined `currentObjectTemplate`/`isFlatObjectTemplate`, or that hardcodes a
+plate-only literal now made a three-way (plate/sheet/other) or four-way (add sheet) match, needed a
+fix. Fixes went to the test's sandbox stubs or stale literal-match assertions, never to production
+code.
 
-| File | What changes |
+| File | What changed |
 |---|---|
-| `tools/test-object-template.mjs:44-45` — `assert.deepEqual([...OBJECT_TEMPLATE_IDS].sort(), ['bottle','mug','plate','tumbler']); assert.equal(listObjectTemplates().length, 4);` | Must become `['bottle','mug','plate','sheet','tumbler']` and length `5` |
-| `tools/test-object-template.mjs:65` — `assert.ok(['mug','tumbler','bottle','plate'].includes(t.preview.kind), ...)` (inside the "every template has a valid `preview.kind`" loop, test 4) | Hardcoded array must gain `'sheet'` |
-| `tools/test-object-template-integration.mjs:115-119` (test 1, "index.html exposes `#objectType` with mug/tumbler/bottle options") | Only asserts those three values are *present* (`for (const value of ['mug','tumbler','bottle'])`), never that the option list is exhaustive — **not broken** by adding a 4th/5th option. No required change, though the test's own name/comment is now slightly stale (pre-existing staleness, since it already doesn't mention `plate` either — not introduced by this milestone). |
-| `tools/test-object-template-integration.mjs:264-276` (test 15, "the merged StoneLayout ... is identical across all three object templates") | Loops `for (const id of OBJECT_TEMPLATE_IDS)` — will automatically include `'sheet'` once registered, asserting generated stone positions are byte-identical to every other template. **No code change needed**, but this is exactly the kind of check that would catch a design mistake (e.g. accidentally letting `preview.kind` leak into `GeometryEngine`) — worth calling out as a regression guard that already covers RS-3037 for free. Test name says "all three," now stale to "all five" — cosmetic only. |
-| `tools/test-ui-shell-structure.mjs:441-447` — asserts `#viewTabDual`/`#viewTab2D`/`#viewTab3D` exist with their exact `onclick` source text | Unaffected — RS-3037's tab-disabling is a *dynamic* `.disabled` toggle keyed on the active template, not a change to the handlers' own source text or the tags' default (enabled) state. Verified: default project is Mug (decision 8), so this test's assertions (made against static `index.html`/`app.js` source, not runtime state) hold unchanged. |
-| `tools/test-product-plate-round-dinner.mjs:343` — `assert.match(indexHtml, /<select id="objectType">[\s\S]*?<option value="plate">Round Dinner Plate<\/option>/)` | Non-greedy `[\s\S]*?` stops at the *first* occurrence of the plate option; since decision 1 places the new Flat Sheet option *after* Plate, this regex is unaffected. Verified by inspection, not just assumed. |
-| `tools/test-production-sheet-exporter.mjs:282-297` (test 16, "every cylindrical object template ... fits A4/Letter/A3; the plate fits A3 and throws on A4/Letter") | Loops `for (const id of OBJECT_TEMPLATE_IDS)` with a binary `isPlate` branch: non-plate ids are asserted to fit A4/Letter/A3 without throwing; plate is asserted to throw on A4/Letter and fit only A3. Uses a fixed 2-stone fixture (`TWO_STONE_LAYOUT()`) at `template.productionWidthMm/HeightMm`. At 150×150 the sheet's default production size, this is well inside the 157.5mm 8-color/188.5mm 1-color fit envelope measured for decision 2, so `'sheet'` falls into the existing "non-plate, must not throw on A4/Letter" branch and genuinely does not throw there — **no change needed to this test**. |
-| `tools/rs-3011-step4-flash-check.mjs`, `tools/rs-3011-step4-flash-check-heavy.mjs`, `tools/rs-3011-step4-verify.mjs` | Playwright browser scripts (not `test-*.mjs`, so not part of `npm test`'s auto-discovery). They exercise the view tabs only against the **default-boot project**, which stays Mug (decision 8) — never set `product:'sheet'`. Unaffected. |
-
-No other `tools/*.mjs` file enumerates object templates, ids, counts, `#objectType` options,
-`PREVIEW_KINDS`, or the workspace tabs — confirmed by the grep above (8 files, all accounted for).
+| `tools/test-object-template.mjs` (test 1) — the sorted-id list and count | `['bottle','mug','plate','tumbler']`/`4` → `['bottle','mug','plate','sheet','tumbler']`/`5`. |
+| `tools/test-object-template.mjs` (test 4) — the hardcoded `preview.kind` allow-list | Gained `'sheet'`. |
+| `tools/test-product-plate-round-dinner.mjs` (tests 20, 22, 23, 25) | Four assertions matched literal source text that legitimately changed shape when plate-only gates were extended to also cover sheet: `el('cupColorField').style.display=isPlate?...` → `(isPlate\|\|isSheet)?...`; `el('wrapField').style.display=isPlate?...` → same; `drawLayout()`'s `if(isPlate){...}else{drawFrontViewFrame(...)}` → a three-way `if(isPlate){...}else if(isSheet){...}else{drawFrontViewFrame(...)}`; `isPointerOnFrontViewFrame()`/`isTextTooLongForObject()`'s `if(currentObjectTemplate().preview.kind==='plate')return false;` → `if(isFlatObjectTemplate(currentObjectTemplate()))return false;` (the new shared predicate). All four updated to match the new (still plate-covering) source; no behavior assertion was weakened. |
+| `tools/test-rs-3025-length-field-mm-stash.mjs` — `buildSandbox()`'s `new Function` factory | `refreshAllLengthFieldDisplays()` now references `currentObjectTemplate()` (the new sheet-resync branch) but that name wasn't a sandbox parameter — every scenario in this file would have thrown `ReferenceError: currentObjectTemplate is not defined`. Fixed by injecting a minimal stub (`() => ({ id: project.product || 'mug' })`) that never resolves to `'sheet'`, since none of this file's scenarios concern Flat Sheet. |
+| `tools/test-object-template-integration.mjs`, `tools/test-production-sheet-exporter.mjs`, `tools/test-ui-shell-structure.mjs` | Verified, unaffected — no edits needed. `test-object-template-integration.mjs`'s `OBJECT_TEMPLATE_IDS`-driven loops (byte-identical-StoneLayout, product/canvas/wrap round-trip) automatically cover `'sheet'` once registered. `test-production-sheet-exporter.mjs`'s test 16 loop treats `'sheet'` as a non-plate id (must fit A4/Letter/A3 without throwing) — true at its 150×150 default. `test-ui-shell-structure.mjs`'s view-tab assertions check static source/markup, unaffected by the new dynamic `.disabled` toggle. |
+| `tools/test-alignment-snapping-wiring.mjs`, `tools/test-auto-fit-default-toggle-warning.mjs`, `tools/test-autosave-recovery-wiring.mjs`, `tools/test-crystal-color-integration.mjs`, `tools/test-fill-algorithms-integration.mjs`, `tools/test-lightbox-movable-persistent.mjs`, `tools/test-mono-006-monogram-ui.mjs`, `tools/test-path-boolean-integration.mjs`, `tools/test-rs2012-text-gap-mixed-size-ux.mjs`, `tools/test-render-export-pipeline.mjs`, `tools/test-s200-app-integration.mjs`, `tools/test-shape-library-integration.mjs`, `tools/test-text-position-workflow.mjs`, `tools/test-variable-stone-sizes.mjs`, `tools/test-product-vessel-dimensions.mjs`, `tools/test-export-combined-preview-png.mjs`, `tools/test-gallery.mjs`, `tools/test-move-drag-fast-path-wiring.mjs`, `tools/test-architecture-module-boundaries.mjs` | Grepped and re-run; either they only run static regex/substring checks against the changed source (unaffected by the literal-text drift) or they inject `updateObjectTemplateDetail`/`drawCup`/etc. as opaque stub functions (`() => {}`) rather than extracting the real body — no sandbox gap. All pass unmodified. |
+| `tools/rs-3011-step4-flash-check.mjs`, `tools/rs-3011-step4-flash-check-heavy.mjs`, `tools/rs-3011-step4-verify.mjs` | Playwright browser scripts (not `test-*.mjs`), exercise the view tabs only against the default-boot project, which stays Mug (decision 8). Unaffected. |
+| `tools/test-rs-3037-flat-sheet.mjs` (new) | Items 1–13, see §E.2. Registered in `tools/test-groups.mjs`'s `core`, `products`, and `fast` groups (the same groups `test-object-template.mjs` belongs to). |
 
 ---
 
@@ -315,71 +318,75 @@ No other `tools/*.mjs` file enumerates object templates, ids, counts, `#objectTy
     tests together, following the `IMG-011`/`test-img-011-import-defaults.mjs` precedent (opt-in
     curated grouping — `npm test` auto-discovers the file regardless, per this repo's
     `test-*.mjs` convention).
-11. Update the 4 pre-existing test files identified in §D
-    (`test-object-template.mjs`, `test-production-sheet-exporter.mjs`, and verify — not necessarily
-    edit — `test-object-template-integration.mjs`/`test-product-plate-round-dinner.mjs`).
+11. Update the pre-existing test files identified in §D (`test-object-template.mjs`'s two
+    hardcoded id/kind lists; `test-product-plate-round-dinner.mjs`'s four stale plate-only literal
+    matches; `test-rs-3025-length-field-mm-stash.mjs`'s sandbox stub) — and verify, not necessarily
+    edit, every other file the §D grep turned up.
 12. Write `tools/test-rs-3037-flat-sheet.mjs` (see §E.2).
 
-### E.2 Test plan for `tools/test-rs-3037-flat-sheet.mjs`
+### E.2 Test plan for `tools/test-rs-3037-flat-sheet.mjs` (as implemented)
 
-1. `OBJECT_TEMPLATE_IDS` contains `'sheet'`; `getObjectTemplate('sheet').displayName==='Flat
-   Sheet'`; `listObjectTemplates().length===5`.
-2. `getObjectTemplate('sheet')` round-trips through `createObjectTemplate()` without throwing
-   (proves the `PREVIEW_KINDS`/factor-exemption fix in §A.1/§E.1 step 2 actually landed).
-3. `getObjectTemplate('sheet').productionWidthMm===150`,
-   `productionHeightMm===150`, `safeAreaInsetMm` is `{top:10,right:10,bottom:10,left:10}`.
-4. `getSafeAreaRectMm(getObjectTemplate('sheet'), 150, 150)` returns a positive interior
-   (`widthMm===130`, `heightMm===130`).
-5. `clampSheetDimensionMm()`: below 20 clamps to 20, above 500 clamps to 500, a value inside the
-   range passes through unchanged, a non-finite input falls back to the default (mirrors
-   `clampPlateDimensionMm()`'s own contract and its test coverage in
-   `tools/test-product-plate-round-dinner.mjs:108`).
-6. **Behavioral, through `validateProject()`** (extracted the same way as §C's probe script,
-   promoted into a real assertion, following the `tools/test-project-validation-security.mjs`
-   extraction precedent): a project JSON with `product:'sheet'`, `canvas:{width:150,
-   height:150}` round-trips with `resolved.product==='sheet'` (not `'mug'`) now that `'sheet'` is
-   registered — the mirror image of §C's pre-implementation measurement, proving the fallback goes
-   away once the id is real. Also assert `canvas:{width:20,height:20}` and `{width:500,height:500}`
-   both pass through unmodified (no throw, no silent clamp at this layer — confirms `validateProject()`
-   intentionally leaves the 20–500 clamp to the UI layer, per §B).
-7. **Behavioral, through `setWorkspaceMode()`**: extracted standalone (it needs no DOM beyond the
-   handful of elements it touches), given `mode:'dual'` under a sheet template, it resolves to
-   `'2d'` and does not call `persistActiveView()`; given `mode:'dual'` under a mug template, it
-   still resolves to `'dual'` as before.
-8. **Behavioral, through the `#objectType` change handler**: using the same `new Function(...)`
-   sandbox-with-a-fake-DOM technique as `tools/test-ui-import-autoswitch-regression.mjs`,
-   simulate selecting Flat Sheet from a Mug project: assert `project.product==='sheet'`,
-   `project.canvas` becomes the sheet default (150×150), and (via a stubbed
-   `el('viewTabDual').disabled`/`el('viewTab3D').disabled`) that `updateWorkspaceTabAvailability()`
-   actually ran. Then simulate switching back to Mug and assert the tabs re-enable and
-   `project.canvas` returns to the mug default.
-9. `drawCup()`/3D-preview guard: with a stubbed `preview3D.update` spy, assert it is **not called**
-   (or is a true no-op) when `currentObjectTemplate().id==='sheet'`, and **is** called for every
-   other template (regression guard against accidentally breaking mug/tumbler/bottle/plate).
-10. `isPointerOnFrontViewFrame()` and `isTextTooLongForObject()` both return `false` unconditionally
-    for a sheet template, mirroring the existing plate-only assertions this suite's precedent
-    (`test-object-template-integration.mjs`) already makes for plate.
-11. `drawLayout()`'s guide selection: for sheet, `drawSafeAreaGuide()` is called and
-    `drawFrontViewFrame()`/`drawPlateDesignTargetGuide()` are not (spy-based, same technique as #9).
-12. Production Sheet, measured boundary values (8 colors × 3 stone sizes, mirror and registration
-    marks on, default 10mm margin — see decision 2's own measurement): a 150×150 Flat Sheet fits
-    both A4 and Letter without throwing; 176×176 with the same 8 colors throws on both. (158×158
-    already throws on Letter alone at 8 colors — A4 alone still fits up to 175×175 — so 176 is used
-    here as the genuine both-throw boundary, not 158.) Also assert no plate-only header lines
-    (`plateHeaderLineTexts.length===0`, since `plateOuterDiameterMm` is never spread in) via a
-    `currentProductionSheetOptions()`-equivalent input with `objectType:'Flat Sheet'`.
-13. SVG/DXF/PNG export smoke test at the sheet's canvas size (150×150 and a non-default edited
-    size, e.g. 350×180) — output dimensions match `project.canvas`, no product-specific branch
-    fires.
-14. Backward compatibility: a project object shaped like a genuine pre-milestone save (`product:
-    'mug'`, no `sheet` field of any kind since none was ever added per §B) still validates and
-    regenerates identically before/after this milestone's `validateProject()`/`defaultProject()`
-    (byte-identical StoneLayout — reuses the existing `generateMergedLayout()` comparison idiom from
-    `test-object-template-integration.mjs`'s test 15/16).
-15. Image panel: the "Switch to Flat Sheet" action is present/visible only when the active template
-    is not `'sheet'`, and clicking it results in `project.product==='sheet'` (through the same
-    change-handler path exercised in #8, per the reuse decision in §E.1 step 9) without altering
-    the currently-selected image layer's own fields.
+Items 1–4 exercise `src/products/index.js` directly. Items 5–13 extract and **really execute** the
+real `app.js` source via `new Function` (app.js is a browser entry point, not `import()`-able
+directly under plain Node), matching this repo's established convention (see e.g.
+`tools/test-object-template-integration.mjs`, `tools/test-rs-3025-length-field-mm-stash.mjs`,
+`tools/test-ui-import-autoswitch-regression.mjs`). Items 6, 7, 8, 9, and 12 were mutation-tested:
+each item's matching production code was deliberately broken, the file was re-run to confirm that
+exact item (and only that item) failed, then the mutation was reverted and `git diff` reconfirmed
+clean.
+
+1. `OBJECT_TEMPLATE_IDS` contains `'sheet'`; `listObjectTemplates().length===5`;
+   `getObjectTemplate('sheet').displayName==='Flat Sheet'`.
+2. Sheet template: `productionWidthMm`/`productionHeightMm` are `150`, `safeAreaInsetMm` is
+   `{top:10,right:10,bottom:10,left:10}`, `wrap.default==='full'`, `preview.kind==='sheet'`.
+3. `getSafeAreaRectMm(getObjectTemplate('sheet'), 150, 150)` is `130` × `130`.
+4. `clampSheetDimensionMm()`: `5`→`20`, `900`→`500`, `180`→`180` (unchanged), `NaN`→`150`.
+5. **Behavioral, through the real extracted `validateProject()`** (same extraction as
+   `tools/test-object-template-integration.mjs`): a project JSON with `product:'sheet'` resolves to
+   `'sheet'` (not `'mug'`) at canvas `150×150`/`20×20`/`500×500`, with `canvas` passed through
+   unmodified in every case (no clamp at this layer — the 20–500 clamp is a UI-layer concern, per
+   §B); a `product:'mug'` project resolves exactly as before.
+6. **Behavioral, through the real extracted `#objectType` change handler**: switching mug→sheet
+   gives `product==='sheet'`, `canvas===150×150`, `wrap==='full'`; switching sheet→mug gives the
+   mug's vessel-derived canvas (`257.610597594363×85`).
+7. **Behavioral, sync-then-write round trip**: the real extracted sheet branches of
+   `syncSelectedControlsFromLayer()`/`refreshAllLengthFieldDisplays()` (resync) and
+   `writeSelectedControlsToLayer()` (write-back), plus the real extracted `setLengthField()`/
+   `readLengthField()` choke points — `product:'sheet'`, `canvas:300×180` survives resync then
+   write-back unchanged.
+8. **Behavioral, through the real extracted `setWorkspaceMode()`/`updateWorkspaceTabAvailability()`**:
+   `mode:'dual'` under a sheet template resolves to `'2d'` (under mug it stays `'dual'`);
+   `updateWorkspaceTabAvailability()` disables `#viewTabDual`/`#viewTab3D` for sheet, re-enables them
+   for mug, forces the workspace back to `'2d'` when sheet becomes active mid-session, and never
+   calls `updateAll()` synchronously (the redraw is deferred via `requestAnimationFrame()` — this
+   function runs *inside* `updateAll()` via `renderLayerUI()`, so a synchronous call would recurse).
+   `persistActiveView` is deliberately not injected into the sandbox at all: any reference to it
+   inside `setWorkspaceMode()`'s coercion would throw a `ReferenceError`, itself proof the coercion
+   never calls it.
+9. **Behavioral, through the real extracted `drawCup()`**: no `preview3D.update()` call for sheet;
+   does call it for mug and plate.
+10. **Behavioral, through the real extracted `isPointerOnFrontViewFrame()`/
+    `isTextTooLongForObject()`/`isFlatObjectTemplate()`**: both return `false` for sheet, and never
+    reach the frame/circumference geometry helpers they'd otherwise call (those helpers are injected
+    as throw-if-called spies).
+11. **Behavioral, guide-selection snippet from `drawLayout()`**: rather than extracting the whole
+    function (which draws stones/HUD text/canvas state unrelated to guide selection), only the
+    guide-selection statement itself (`const isPlate=...;const isSheet=...;if(isPlate){...}else
+    if(isSheet){...}else{...}`) is extracted and run with the three guide-drawing functions replaced
+    by spies: for sheet, `drawSafeAreaGuide()` is called (gated on `showSafeArea`, exactly like every
+    cylindrical template) and neither `drawFrontViewFrame()` nor `drawPlateDesignTargetGuide()` is;
+    plate and mug are asserted unaffected as a sanity check.
+12. **Production Sheet, measured literal boundary**: a real `computeProductionSheetLayout()` call
+    with an 8-colour (jet/siam/light-siam/rose/fuchsia/amethyst/sapphire/light-sapphire) × 3-size
+    (2/2.8/3.4mm) `StoneLayout`, mirror and registration marks on, `marginMm:10`, `gapMm:[0.1]`: a
+    150×150 sheet fits both A4 and Letter without throwing; a 158×158 sheet still fits A4 but throws
+    a `RangeError` on Letter (this is the real, measured boundary — not 176; 158×158 fits A4 up to
+    175×175 but Letter's shorter 279.4mm edge is exhausted first).
+13. The Image panel's "Switch to Flat Sheet" button: its real extracted `onclick` handler, run
+    against a fake `#objectType` element with a real `addEventListener`/`dispatchEvent`, fires a
+    genuine `change` event with `value==='sheet'` (not a hand-simulated one); its `style.display`
+    toggle in both `updateObjectTemplateDetail()` and `renderImageStudio()` is `'none'` while sheet
+    is active, `'inline-block'` otherwise.
 
 ---
 
