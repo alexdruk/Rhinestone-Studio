@@ -47,6 +47,12 @@ export {
 } from './ColorQuantize.js';
 
 export {
+  computeSubjectMask,
+  DEFAULT_SUBJECT_TOLERANCE_DE,
+  SUBJECT_ALPHA_PRESENCE_FRACTION
+} from './SubjectMask.js';
+
+export {
   maskFieldToRgba,
   labelsFieldToRgba
 } from './ImagePreviewRender.js';

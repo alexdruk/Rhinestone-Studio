@@ -1145,6 +1145,7 @@ nav.topmenu{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow-
         <details class="advanced-section" id="imageStudioGroupTrace" open>
           <summary>Trace</summary>
           <div id="imageControls">
+            <div class="field"><label for="imgMaskMode" title="Which pixels become the traced silhouette. Subject finds the photographed object itself; Threshold keeps the pre-existing dark-pixel behavior (best for logos and black text on white). Subject route: the Threshold slider below has no effect on the mask.">Mask</label><select id="imgMaskMode"><option value="threshold" selected>Threshold - keeps dark pixels</option><option value="subject">Subject - finds the photographed object</option></select></div>
             <div class="field"><label for="imgThreshold">Threshold (0-255)</label><input id="imgThreshold" type="range" min="0" max="255" step="1" value="128"></div>
             <div class="field-row-3">
               <div class="field"><label for="imgInvert">Invert</label><select id="imgInvert"><option value="off" selected>Off</option><option value="on">On</option></select></div>
