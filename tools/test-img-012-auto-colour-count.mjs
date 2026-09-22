@@ -186,7 +186,7 @@ function buildResolveImageColorCount(source, overrides = {}) {
   // eslint-disable-next-line no-new-func
   const built = new Function(
     'imageBufferCache', 'resolveImageTransparentMode', 'resolveImageMaskMode', 'prepareAutoColorField', 'chooseAutoColorCount', 'imageColorPalette',
-    `${source}\nreturn { resolveImageColorCount, autoColorCountCache };`
+    `${source}\nreturn { resolveImageColorCount, autoColorCountCache, autoColorCountLastResolved, setFrozen: (v) => { autoColorCountFrozen = v; } };`
   )(imageBufferCache, resolveImageTransparentMode, resolveImageMaskMode, prepareAutoColorFieldFn, chooseAutoColorCountFn, imageColorPaletteFn);
   return { ...built, imageBufferCache };
 }
@@ -398,7 +398,7 @@ await test("9. D2: computeImageColorField() for a subject-mode layer returns col
 
 // ---- Item 10: Studio hint text ----------------------------------------------------------------------
 function extractAutoHintSource(appJs) {
-  const marker = "const autoHintEl=el('imgColorCountAuto');\n  if(l.colorCount==='auto'){autoHintEl.textContent=`Auto: ${resolveImageColorCount(l)} colours`;autoHintEl.style.display=''}else{autoHintEl.style.display='none'}";
+  const marker = "const autoHintEl=el('imgColorCountAuto');\n  if(l.colorCount==='auto'){const autoResolvedCount=resolveImageColorCount(l);autoHintEl.textContent=`Auto: ${autoResolvedCount} ${autoResolvedCount===1?'colour':'colours'}`;autoHintEl.style.display=''}else{autoHintEl.style.display='none'}";
   assert.ok(appJs.includes(marker), 'expected renderImageStudio() to set the #imgColorCountAuto hint text');
   return marker;
 }
@@ -423,6 +423,75 @@ await test('10. Studio hint text reads exactly "Auto: 4 colours" for fixture 1 (
   // eslint-disable-next-line no-new-func
   new Function('el', 'l', 'resolveImageColorCount', source)(elHidden, { colorCount: 3 }, resolveImageColorCount);
   assert.equal(hiddenEl.style.display, 'none');
+});
+
+// ---- Item 11: freeze (D3 follow-up) ----------------------------------------------------------------
+await test('11. Freeze: while frozen, resolveImageColorCount() returns the earlier count without re-running the sweep; unfreezing re-runs it', () => {
+  const appJs = readFileSync();
+  const source = extractAutoColorCountResolverSource(appJs);
+
+  let sweepCalls = 0;
+  const imageBufferCache = new Map([['img1', { widthPx: 1, heightPx: 1, data: new Uint8ClampedArray(4) }]]);
+  const prepareAutoColorFieldSpy = () => ({ r: new Uint8ClampedArray(0), g: new Uint8ClampedArray(0), b: new Uint8ClampedArray(0), data: new Uint8ClampedArray(0) });
+  const chooseAutoColorCountSpy = () => { sweepCalls++; return { resolvedCount: 3, winnerK: 3, scores: [] }; };
+  const { resolveImageColorCount, setFrozen } = buildResolveImageColorCount(source, {
+    imageBufferCache, prepareAutoColorField: prepareAutoColorFieldSpy, chooseAutoColorCount: chooseAutoColorCountSpy
+  });
+
+  const layer = baseAutoLayer();
+  assert.equal(resolveImageColorCount(layer), 3, 'expected the first resolve to run the sweep and return its result');
+  assert.equal(sweepCalls, 1);
+
+  setFrozen(true);
+  const changed = baseAutoLayer({ blurRadiusPx: 9 });
+  assert.equal(resolveImageColorCount(changed), 3, 'expected the frozen call to return the earlier count regardless of the changed param');
+  assert.equal(sweepCalls, 1, 'expected the frozen call to not re-run the sweep');
+
+  setFrozen(false);
+  resolveImageColorCount(changed);
+  assert.equal(sweepCalls, 2, 'expected unfreezing to allow a fresh sweep for the now-current params');
+});
+
+// ---- Item 12: wiring (source check -- item 11 covers the actual freeze behaviour) -------------------
+await test('12. Wiring: app.js registers pointerdown/pointerup/change listeners on each freeze-list control that set autoColorCountFrozen as specified, and change also calls updateAll(true)', () => {
+  const appJs = readFileSync();
+  const marker = "const AUTO_COLOR_COUNT_FREEZE_CONTROL_IDS=['imgThreshold','imgBlurRadius','imgMaxWidth','imgMaxHeight'];\nfor(const id of AUTO_COLOR_COUNT_FREEZE_CONTROL_IDS){\n  el(id).addEventListener('pointerdown',()=>{autoColorCountFrozen=true});\n  el(id).addEventListener('pointerup',()=>{autoColorCountFrozen=false});\n  el(id).addEventListener('change',()=>{autoColorCountFrozen=false;updateAll(true)});\n}";
+  assert.ok(appJs.includes(marker), 'expected the exact freeze-control wiring block (pointerdown/pointerup/change on imgThreshold/imgBlurRadius/imgMaxWidth/imgMaxHeight) in app.js');
+});
+
+// ---- Item 13: app-path passthrough -------------------------------------------------------------------
+await test('13. App-path passthrough: resolveImageColorCount() returns exactly n for colorCount 1..8 and 1 for an absent value, never calling the sweep', () => {
+  const appJs = readFileSync();
+  const source = extractAutoColorCountResolverSource(appJs);
+
+  let sweepCalls = 0;
+  const chooseAutoColorCountSpy = () => { sweepCalls++; return { resolvedCount: 1, winnerK: 1, scores: [] }; };
+  const { resolveImageColorCount } = buildResolveImageColorCount(source, { chooseAutoColorCount: chooseAutoColorCountSpy });
+
+  for (let n = 1; n <= 8; n++) {
+    assert.equal(resolveImageColorCount(baseAutoLayer({ colorCount: n })), n, `expected colorCount:${n} to pass through unchanged`);
+  }
+  assert.equal(resolveImageColorCount(baseAutoLayer({ colorCount: undefined })), 1, 'expected an absent colorCount to resolve to 1');
+  assert.equal(sweepCalls, 0, 'expected numeric/absent colorCount to never invoke the sweep');
+});
+
+// ---- Item 14: hint singular/plural -------------------------------------------------------------------
+await test('14. Hint singular/plural: a resolved count of 1 reads "Auto: 1 colour"; 4 reads "Auto: 4 colours"', () => {
+  const appJs = readFileSync();
+  const source = extractAutoHintSource(appJs);
+
+  function run(resolvedCount) {
+    const hintEl = { textContent: '', style: {} };
+    const el = () => hintEl;
+    const resolveImageColorCount = () => resolvedCount;
+    const l = { colorCount: 'auto' };
+    // eslint-disable-next-line no-new-func
+    new Function('el', 'l', 'resolveImageColorCount', source)(el, l, resolveImageColorCount);
+    return hintEl.textContent;
+  }
+
+  assert.equal(run(1), 'Auto: 1 colour');
+  assert.equal(run(4), 'Auto: 4 colours');
 });
 
 console.log('IMG-012 auto colour count tests passed.');

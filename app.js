@@ -740,17 +740,17 @@ function imageColorPalette(){if(!imageColorPaletteCache)imageColorPaletteCache=O
 // colorMap pick are deliberately absent from the key, so editing them never invalidates it (decision
 // 5's "recomputes once per change of image, mask parameters, or working resolution").
 //
-// D3 UI-perf note (documented, not separately solved here): #imgThreshold is a range input firing
-// 'input' on every drag tick, and each tick's threshold value is technically a distinct key -- so
-// unlike imageColorFieldCache's single quantizeColors() call, a live threshold drag re-runs the full
-// 7-call sweep + ΔE scoring every tick under this plain design. Section D measured that sweep at
-// well under 500ms even unsubsampled at the shipped 400px default, and D4's every-3rd-pixel
-// subsampling already cuts the scoring cost further, but a real debounced/`change`-only recompute
-// would remove the per-tick cost entirely. Not built here: it would need the cache to deliberately
-// ignore an in-progress 'input' value until a trailing 'change', which would make key-based cache
-// invalidation (decision 5, tested directly below) unobservable from a plain resolveImageColorCount()
-// call -- the two requirements conflict for a cache with this simple, directly-testable shape. Left
-// as a follow-up if this proves too slow in practice.
+// D3 UI-perf follow-up (freeze, not the "not built" note this comment used to carry): #imgThreshold
+// is a range input firing 'input' on every drag tick, and each tick's threshold value is technically
+// a distinct key -- so unlike imageColorFieldCache's single quantizeColors() call, letting Auto's
+// 7-call sweep + ΔE scoring run on every drag tick would be a real per-frame cost. autoColorCountFrozen
+// (set true on 'pointerdown', false on 'pointerup'/'change' -- wired below, near
+// HISTORY_TRACKED_CONTROL_IDS) freezes resolveImageColorCount() to whatever it last actually
+// resolved for that layer (autoColorCountLastResolved) while a mask-slider drag is in progress,
+// regardless of what the key would compute to mid-drag; the trailing 'change' clears the freeze and
+// triggers one real recompute against the now-settled value. A keyboard edit to a number input fires
+// 'change' on every step (no drag in between), so it recomputes once per step -- accepted, since
+// there's no in-between value to freeze against.
 function autoColorCountKeyParts(layer){
   const maskMode=resolveImageMaskMode(layer.maskMode);
   const transparent=resolveImageTransparentMode(layer.transparent);
@@ -759,21 +759,26 @@ function autoColorCountKeyParts(layer){
   return parts.join('|');
 }
 const autoColorCountCache=new Map();
+// layer.id -> the last count actually resolved for it (sweep result or cache hit), read while frozen.
+const autoColorCountLastResolved=new Map();
+let autoColorCountFrozen=false;
 function resolveImageColorCount(layer){
   if(!layer||layer.type!=='image')return 1;
   const raw=layer.colorCount;
   if(raw==null)return 1;
   if(typeof raw==='number')return Math.max(1,Math.min(8,raw));
   if(raw!=='auto')return 1;
+  if(autoColorCountFrozen&&autoColorCountLastResolved.has(layer.id))return autoColorCountLastResolved.get(layer.id);
   const buffer=imageBufferCache.get(layer.imageSrc);
   if(!buffer)return 1;
   const key=autoColorCountKeyParts(layer);
   const cached=autoColorCountCache.get(key);
-  if(cached!=null)return cached;
+  if(cached!=null){autoColorCountLastResolved.set(layer.id,cached);return cached}
   const field=prepareAutoColorField(buffer,{threshold:layer.threshold,invert:layer.invert,blurRadiusPx:layer.blurRadiusPx,maxWidthPx:layer.maxWidthPx,maxHeightPx:layer.maxHeightPx,transparent:resolveImageTransparentMode(layer.transparent),maskMode:resolveImageMaskMode(layer.maskMode)});
   const{resolvedCount}=chooseAutoColorCount(field,imageColorPalette());
   autoColorCountCache.set(key,resolvedCount);
   if(autoColorCountCache.size>2)autoColorCountCache.delete(autoColorCountCache.keys().next().value);
+  autoColorCountLastResolved.set(layer.id,resolvedCount);
   return resolvedCount;
 }
 // IMG-002: recomputes the quantized color field (labels + colorGroups) for an image layer, purely
@@ -4935,6 +4940,17 @@ el('autoFit').addEventListener('input',()=>{
 });
 const HISTORY_TRACKED_CONTROL_IDS=['projectName','text','font','height','stoneSize','gap','stoneColor','cupColor','autoFit','wrap','textMode','shapeX','shapeY','shapeW','shapeH','svgMode','shapeFillMode','regionFillMode','imageFillMode','curveEnabled','curveRadiusMm','curveDirection','curveStartAngleDeg','curveSweepAngleDeg','curveAlignment','imgMaskMode','imgThreshold','imgInvert','imgTransparent','imgBlurRadius','imgMaxWidth','imgMaxHeight','imgColorCount','imgSeed','imgSpread','imgEdgeWidth','imgEdgeThinning','imgColorPick0','imgColorPick1','imgColorPick2','imgColorPick3','imgColorPick4','imgColorPick5','imgColorPick6','imgColorPick7','imgColorReset','textX','textY','textAlign','lineSpacing','letterSpacing','rotationDeg','shapeRotationDeg','shapeSides','shapePoints','shapeInnerRadius','shapeRingInner','plateOuterDiameter','plateInnerWellDiameter','plateOverallHeight','plateCenterDepth','plateColor','plateDesignTarget','vesselBodyDiameter','vesselBodyHeight','vesselTopDiameter','sheetWidth','sheetHeight','sizeMode','mixedAllowedSs6','mixedAllowedSs10','mixedAllowedSs16','mixedAllowedSs20','mixedAllowedSs30','mixedMinSize','mixedMaxSize','conservativeDetail','weightSteps','imgBrightnessSteps','imgBrightnessThinning'];
 for(const id of HISTORY_TRACKED_CONTROL_IDS){el(id).addEventListener('input',()=>{openHistorySession();updateAll()});el(id).addEventListener('change',()=>closeHistorySession())}
+// IMG-012 follow-up (D3 freeze): every mask-affecting Image control that is a range/number input --
+// #imgMaskMode/#imgInvert/#imgTransparent are <select>s (their own 'input'/'change' above already
+// fire together, no drag in between, so there's nothing to freeze) -- freezes Auto's resolved count
+// at its last real value for the duration of a drag, and forces one real recompute on release. See
+// resolveImageColorCount()'s own doc comment.
+const AUTO_COLOR_COUNT_FREEZE_CONTROL_IDS=['imgThreshold','imgBlurRadius','imgMaxWidth','imgMaxHeight'];
+for(const id of AUTO_COLOR_COUNT_FREEZE_CONTROL_IDS){
+  el(id).addEventListener('pointerdown',()=>{autoColorCountFrozen=true});
+  el(id).addEventListener('pointerup',()=>{autoColorCountFrozen=false});
+  el(id).addEventListener('change',()=>{autoColorCountFrozen=false;updateAll(true)});
+}
 for(const id of ['rotation','zoom'])el(id).addEventListener('input',()=>updateAll());
 // RS-2002: Browse Fonts panel wiring. Toggling/closing never touches history (it only decides
 // which fontId #font's native 'input'/'change' events -- wired above via HISTORY_TRACKED_CONTROL_IDS
@@ -6407,7 +6423,7 @@ async function renderImageStudio(){
   // internally (it returns null when that resolves to <=1, so re-resolve directly here for the "Auto:
   // 1 colour" case too, which colorField alone can't distinguish from "not Auto at all").
   const autoHintEl=el('imgColorCountAuto');
-  if(l.colorCount==='auto'){autoHintEl.textContent=`Auto: ${resolveImageColorCount(l)} colours`;autoHintEl.style.display=''}else{autoHintEl.style.display='none'}
+  if(l.colorCount==='auto'){const autoResolvedCount=resolveImageColorCount(l);autoHintEl.textContent=`Auto: ${autoResolvedCount} ${autoResolvedCount===1?'colour':'colours'}`;autoHintEl.style.display=''}else{autoHintEl.style.display='none'}
   for(let i=0;i<8;i++){
     const row=el(`imgColorGroup${i}`);
     const group=colorField?.colorGroups?.[i];

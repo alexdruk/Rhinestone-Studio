@@ -24,12 +24,15 @@ behaviour. The overrides:
   omitted from the key in that mode; `applyThreshold()` (`'threshold'` mode) reads `threshold`
   directly, so it's included only then. `invert`/`blurRadiusPx`/`maxWidthPx`/`maxHeightPx`/
   `transparent` are read unconditionally after either mask route in both modes. The cache is a flat
-  `key -> resolvedCount` map mirroring `imageColorFieldCache`'s own shape and 2-entry LRU cap exactly
-  — see `resolveImageColorCount()`'s own doc comment in `app.js` for the accepted trade-off this
-  implies for a live `#imgThreshold` drag (each tick's distinct value is a cache miss, unlike a
-  debounced/`change`-only recompute, which was considered and not built because it would make the
-  cache's key-invalidation behaviour — itself required and tested — unobservable from a plain
-  `resolveImageColorCount()` call).
+  `key -> resolvedCount` map mirroring `imageColorFieldCache`'s own shape and 2-entry LRU cap exactly.
+  A follow-up milestone added the freeze: `autoColorCountFrozen` (set on `'pointerdown'`, cleared on
+  `'pointerup'`/`'change'` for every mask-affecting Image control that is a range/number input —
+  `#imgThreshold`, `#imgBlurRadius`, `#imgMaxWidth`, `#imgMaxHeight`) makes
+  `resolveImageColorCount()` return whatever it last actually resolved for that layer
+  (`autoColorCountLastResolved`) for the duration of a drag, regardless of what the key would compute
+  to mid-drag, rather than re-running the 7-call sweep on every `'input'` tick; the trailing
+  `'change'` clears the freeze and triggers one real recompute against the now-settled value. See
+  `resolveImageColorCount()`'s own doc comment in `app.js`.
 - **D4:** confirms Task D's own subsampling decision as shipped (scoring subsamples every 3rd
   subject pixel; quantization itself runs on the full set) — no change from the design below.
 - **API note:** `prepareImageField()` itself was not widened to expose per-pixel colour (it has no
@@ -58,7 +61,8 @@ number manually is unchanged.
    **Superseded by D1 (this document's top note) before build:** among the `k` within 1% of the
    lowest mean, prefer the one with the most non-empty clusters (ties broken by the smallest `k`),
    and resolve to that winner's own cluster count rather than its `k`.
-3. The Studio shows the chosen count next to the control (e.g. "Auto: 5 colours").
+3. The Studio shows the chosen count next to the control (e.g. "Auto: 5 colours"; a follow-up
+   milestone added singular grammar for a resolved count of 1: "Auto: 1 colour").
 4. Saved projects are byte-identical: a stored numeric `colorCount` keeps meaning exactly that
    number; only new imports default to Auto. Every read site that sees an absent or numeric
    `colorCount` behaves as today.
