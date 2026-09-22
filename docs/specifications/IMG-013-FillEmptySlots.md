@@ -190,8 +190,6 @@ or `writeSelectedControlsToLayer()` to sync or read back. `fillGaps` is set exac
 time, by the `importImageFile` new-layer factory, and is otherwise a plain, permissive per-layer
 field with no UI path to change it. The analysis originally here (an `#imgColorReset`-pattern
 dedicated `onclick` recommendation) is moot under the override.
-`writeSelectedControlsToLayer()`. Listed as a site here because the task named it as one of the six,
-but under this recommendation it does not actually need a new line.
 
 **4. `resolveLayerShapeSource()` image branch — `app.js:3311-3317`.** Builds a `field` (via
 `prepareImageField()`) and returns `{kind:'field', field, xMm, yMm, widthMm, heightMm}` for Boolean
